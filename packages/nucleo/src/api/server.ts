@@ -34,7 +34,8 @@
 // | `GET /api/machines`           | The machines: this one and the remote ones, with state and alerts (api/telemetry.ts, #175) |
 // | `GET /api/telemetry`          | One machine's telemetry: current reading, series and alerts (`?machine=`, `?hours=1|12`; #175) |
 // | `POST /api/machines/<id>/reconnect` and `DELETE` | Reconnect a remote machine with the command of machines.json, and Cancel (api/telemetry.ts, #244) |
-// | `GET /api/tools`              | The Tools screen: CLIs, runtimes and containers, installed and latest versions, the catalog's actions (`?machine=`; api/tools.ts, #280) |
+// | `GET /api/tools`              | The Tools screen: CLIs, runtimes and containers, installed and latest versions, the catalog's actions, the jobs (`?machine=`; api/tools.ts, #280) |
+// | `POST /api/tools/<toolId>/actions/<actionId>`, `DELETE /api/tools/jobs/<jobId>` and `POST /api/tools/checks` | Run a catalog action as a job, cancel it, Verificar agora (api/tools.ts, src/tools/executor.ts, #280) |
 //
 // The old Portuguese routes and query parameters (the panel, open, attention and changes ones…) were
 // aliases of these until phase 6 of #173 (decision 0009): now they are 404 like any unknown path.
@@ -51,6 +52,9 @@
 // install's `POST /api/framework-install/<owner>/<repo>` (api/framework-install.ts, #184), and the machine
 // screen's Reconnect and Cancel, `POST` and `DELETE /api/machines/<id>/reconnect` (api/telemetry.ts, #244,
 // decision 0012).
+// The Tools writes (#280, decision 0014) are stricter: every non-GET request under `/api/tools` skips
+// the gate above and passes only `toolsWriteAllowed` (api/tools.ts): `Origin` exactly `http://<Host>`,
+// the exact raw path, and a request with NO Origin gets 403 too (unless layer 4's hook accepts it).
 // An outside site cannot get that `Origin`, nor send JSON without the CORS preflight, and the core does
 // not answer CORS. Writing to the decisions also requires `Content-Type: application/json` and the body
 // `{ "session": "<id>" }`, and it only reaches a
@@ -91,8 +95,8 @@ import { DEV_CONSOLE_ROUTE, respondDevConsole, type DevConsole } from './dev-con
 import { isTelemetryRoute, reconnectFromSameOrigin, RECONNECT_ROUTE, respondReconnect, respondTelemetry } from './telemetry.ts';
 import type { ReconnectControl } from '../telemetry/reconnect.ts';
 import type { TelemetryService } from '../telemetry/service.ts';
-import { isToolsRoute, respondTools } from './tools.ts';
-import type { ToolsService } from '../tools/service.ts';
+import { isToolsRoute, isToolsWrite, respondTools, respondToolsWrite, toolsWriteAllowed } from './tools.ts';
+import type { ToolsControl } from '../tools/executor.ts';
 
 export { API_VERSION };
 
@@ -158,8 +162,8 @@ export interface ApiOptions {
   telemetry?: TelemetryService | null;
   /** The reconnect of the remote machines (#244); without it, `POST /api/machines/<id>/reconnect` gives 404 or 409. */
   reconnect?: ReconnectControl | null;
-  /** The Tools screen (#280, decision 0014); without it, `/api/tools` gives 404. */
-  tools?: Pick<ToolsService, 'overview'> | null;
+  /** The Tools screen (#280, decision 0014): the executor (or only the service, read-only); without it, `/api/tools` gives 404. */
+  tools?: ToolsControl | null;
 }
 
 /** The `local_<uuid>` id of the Claude Desktop index, and nothing else. */
@@ -333,6 +337,14 @@ export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
   async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
     counters.requests++;
     const url = new URL(req.url ?? '/', `http://127.0.0.1:${port}`);
+    // The Tools writes have their own, stricter gate (no Origin is 403 too), never the one below.
+    if (isToolsWrite(req, url.pathname)) {
+      if (!toolsWriteAllowed(req, port, opts.tools?.acceptNoOriginActions?.() ?? false)) {
+        req.resume();
+        return send(res, 403, { error: 'origem não permitida' });
+      }
+      return respondToolsWrite(req, res, url, opts.tools);
+    }
     if (!allowedLocalRequest(req, port) && !sameOriginRead(req, port) && !sameOriginOpen(req, port) && !mesmaOrigemMovendo(req, port) && !sameOriginDecision(req, port) && !agentConfigWriteFromSameOrigin(req, port) && !frameworkInstallWriteFromSameOrigin(req, port) && !reconnectFromSameOrigin(req, port)) return send(res, 403, { error: 'origem não permitida' });
     if (url.pathname.startsWith(HOOKS_PATH)) return hooks(req, res);
     const openMatch = OPEN.exec(url.pathname);

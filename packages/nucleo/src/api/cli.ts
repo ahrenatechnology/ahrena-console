@@ -101,6 +101,7 @@ import { loopbackGet } from '../telemetry/adapters/loopback-http.ts';
 import type { TelemetryCollector } from '../telemetry/ports.ts';
 import { SqliteToolChecksStore } from '../tools/store.ts';
 import { ToolsService } from '../tools/service.ts';
+import { publishToolsChanges, ToolsExecutor, toolsLogFile } from '../tools/executor.ts';
 import { SIMULATED_WORKSTATION, SimulatedCollector, seedTelemetry } from '../simulator/telemetry.ts';
 
 const o = parseApiOptions(process.argv.slice(2));
@@ -475,7 +476,9 @@ const telemetryService = samplers.length > 0 || remoteMachines ? new TelemetrySe
 // The Tools screen (#280, decision 0014): this machine's CLIs, runtimes and containers, read with the
 // catalog's fixed probes; the latest versions only from the tool_checks cache (a check reads the
 // network). Not in --demo: the demo must not read the real machine.
+// The executor (layer 2) runs the catalog's actions as jobs and logs their masked output to tools.log.
 const toolsService = demo ? null : new ToolsService({ store: new SqliteToolChecksStore(sqlite.db), log });
+const toolsExecutor = toolsService ? new ToolsExecutor({ service: toolsService, logFile: toolsLogFile(dataDir), onChange: publishToolsChanges(changes), log }) : null;
 
 let historyReady = false;
 const follower =
@@ -529,7 +532,7 @@ const api: LocalApi = await startLocalApi({
   agentConfig,
   telemetry: telemetryService,
   reconnect: reconnectRunner,
-  tools: toolsService,
+  tools: toolsExecutor,
   load: () => ({
     history: follower ? (historyReady ? 'ready' : 'importing') : 'off',
     follower: follower?.stats() ?? null,

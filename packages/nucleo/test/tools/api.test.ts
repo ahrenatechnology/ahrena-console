@@ -65,7 +65,7 @@ describe('#280 GET /api/tools', () => {
     }
   });
 
-  test('the /ui reads it with its own Origin; another Origin gets 403; writes are not here yet', async () => {
+  test('the /ui reads it with its own Origin; another Origin gets 403; a write without Origin gets 403', async () => {
     const { service, run } = macService();
     const { get, origin, close } = await boot(service);
     try {
@@ -74,7 +74,7 @@ describe('#280 GET /api/tools', () => {
       assert.equal((await get('/api/tools', { origin: 'https://exemplo.dev' })).status, 403);
       assert.equal(run.calls.length, before, 'nothing ran');
       const post = await fetch(`${origin}/api/tools`, { method: 'POST' });
-      assert.equal(post.status, 405);
+      assert.equal(post.status, 403);
     } finally {
       await close();
     }
