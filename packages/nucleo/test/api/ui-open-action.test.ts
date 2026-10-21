@@ -341,3 +341,56 @@ describe('Sessions: the open icon in the row (C71)', () => {
     }
   });
 });
+
+// ---------- Dashboard (C71): the icon beside "Abrir ›" in the "precisam de você" inbox ----------
+
+describe('Dashboard: the open icon in the inbox (C71)', () => {
+  test('the icon sits beside "Abrir ›", outside any link; its click opens without following the card link; a remote card has none', async () => {
+    // @ts-expect-error: browser module, plain JavaScript
+    const dashboard = await import('../../ui/screens/dashboard.js');
+    const numbers = { sessions: { total: 2, active: 0, waiting: 2, withError: 0 }, agents: { active: 0, sessions: 0 }, subagents: { active: 0, sessions: 0 }, events: { today: 0, lastHour: 0, total: 0 }, cost: { usd: 0, days: 30, unpriced: [] } };
+    const attention = {
+      total: 2,
+      items: [
+        { session: UUID, title: 'Migração', project: 'motor-de-regras', level: 'needs', reason: 'permission', shortReason: 'Pede permissão', longReason: 'pede permissão', minutes: 2, machine: null, open: { target: 'terminal-live', command: COMMAND } },
+        { session: 'r1', title: 'Remota', project: 'painel', level: 'needs', reason: 'question', shortReason: 'Fez uma pergunta', longReason: 'x', minutes: 3, machine: { id: 'ws', label: 'ws-exemplo' }, open: { target: 'remote', command: null } },
+      ],
+    };
+    const area = documentoFalso.createElement('main');
+    const signal = new AbortController();
+    const w = stubWriter({ ok: true, opened: 'focused' });
+    const cleanup = await dashboard.mount(area, {
+      read: async (route: string) => (route === '/api/dashboard' ? { numbers, agents: [], activity: [] } : attention),
+      write: w.write,
+      signal: signal.signal,
+      onChange: () => {},
+      onRestart: () => {},
+      counter: () => {},
+      navigate: () => {},
+    });
+    try {
+      const minis = area.querySelectorAll('.mini');
+      assert.equal(minis.length, 2);
+      const actions = minis[0]!.querySelector('.dash-mini-actions')!;
+      assert.equal(texto(actions), 'Abrir ›');
+      const button = actions.querySelector('button')!;
+      assert.equal(button.getAttribute('aria-label'), 'Ir para o terminal');
+      assert.equal(button.closest('a'), null, 'the button is not inside a link');
+      assert.equal(actions.querySelector('a')!.getAttribute('href'), `/ui/sessions/${UUID}`, '"Abrir ›" still goes to the Detail');
+      let reached = 0;
+      minis[0]!.addEventListener('click', () => void reached++);
+      const ev = clickEvent();
+      button.dispatchEvent(ev);
+      assert.equal(ev.defaultPrevented, true);
+      assert.equal(reached, 0, 'the card does not see the click');
+      assert.deepEqual(w.calls.map((c) => c.route), [`/api/sessions/${UUID}/open`]);
+      w.release();
+      await settle();
+      assert.equal(texto(actions.querySelector('.open-status')), 'Terminal à frente');
+      assert.equal(minis[1]!.querySelectorAll('button').length, 0, 'remote: the foot names the machine, no icon');
+    } finally {
+      signal.abort();
+      cleanup?.();
+    }
+  });
+});
