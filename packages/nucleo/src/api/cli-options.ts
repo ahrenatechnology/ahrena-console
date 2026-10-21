@@ -22,8 +22,9 @@ export const HELP = `Usage: npm run api -- [options]
   --scan-interval <s>    The follower's fallback scan, in seconds. Default 30: fs.watch reports
                          each write at once; the scan only covers a missed report
   --no-desktop           Does not read the Claude Desktop session index
-  --no-github            The work shows only the branch, without calling GitHub, the project
-                         kanban (/api/project) answers 503 and the repositories (/api/repos) and the
+  --no-github            No GitHub at all: the work shows only the branch, the connection
+                         (/api/connections) is unavailable "github-off", the project kanban
+                         (/api/project) answers 503 and the repositories (/api/repos) and the
                          agent instructions (/api/agent-instructions) answer "sem-github"; the ADRs
                          and PDRs (/api/adrs, /api/pdrs) answer "no-github"
   --demo                 In-memory database with a simulator panel scenario, no history, no
@@ -35,6 +36,14 @@ export const HELP = `Usage: npm run api -- [options]
   --scenario <p1..p13>   The demo scenario (default p1), as in the wireframes. The demo also
                          writes the /ui Detail: a session asking for permission
                          (/ui/sessions/sim-detail-orders) and the tools of the scenario's session
+  --demo-github <state>  Under --demo, the GitHub connection's state, on the fake GitHub with an
+                         in-memory vault and a fake gh (never the real GitHub, Keychain or gh):
+                         connected (default), disconnected (Connect is approved after 3 s),
+                         pending (a code never approved), denied, expired (the code expires
+                         after 5 s), missing-scopes, blocked-orgs, no-client-id, no-vault, gh,
+                         gh-not-authenticated
+  --demo-project <p>     Under --demo, selected (default: the simulator's Project) or none (the
+                         kanban asks to choose one)
   --parent <pid>         Exits when this process goes away (the app or the extension), unless
                          another client is registered. When adopting, registers the pid as a client
   --replace              Also replaces a running core of this version on an ancestor commit. A
@@ -52,9 +61,14 @@ export const HELP = `Usage: npm run api -- [options]
                          --demo does not read it
   --help
 
-Project kanban (GET /api/project, POST /api/project/move): the Project in
-AHRENA_CONSOLE_PROJECT=owner/number, with the \`gh\` token (\`project\` scope) and the cache in the
-core's database. Without the variable there is no Project: the screen explains how to pick one.
+GitHub (decision 0011): the console connects by itself, with the OAuth device flow, and keeps the
+credential in the Keychain (macOS) or the Secret Service (Linux), never in a file. The OAuth App is
+AHRENA_CONSOLE_GITHUB_CLIENT_ID (none is built in yet: without it the connection is unavailable).
+AHRENA_CONSOLE_GITHUB_SOURCE=gh uses \`gh auth token\` instead (opt-in, for development).
+
+Project kanban (GET /api/project, POST /api/project/move): the Project chosen on the screen
+(GET /api/project/options, POST /api/project/selection). AHRENA_CONSOLE_PROJECT=owner/number, when
+set, wins over the choice. There is no default Project.
 
 If a core is already up for this installation, this one does not start another: it adopts the running one
 (prints the port and the version, warns if the code differs) and exits with 0. See src/owner/README.md.
@@ -79,6 +93,10 @@ export interface ApiCliOptions {
   noLock: boolean;
   noTelemetry: boolean;
   machines: string | undefined;
+  /** --demo-github: the connection state under --demo (src/simulator/demo-github-connection.ts). */
+  demoGithub: string | undefined;
+  /** --demo-project: `selected` or `none`. */
+  demoProject: string | undefined;
   help: boolean;
 }
 
@@ -102,6 +120,8 @@ export function parseApiOptions(args: string[]): ApiCliOptions {
       'no-lock': { type: 'boolean', default: false },
       'no-telemetry': { type: 'boolean', default: false },
       machines: { type: 'string' },
+      'demo-github': { type: 'string' },
+      'demo-project': { type: 'string' },
       help: { type: 'boolean', default: false },
     },
   });
@@ -122,6 +142,8 @@ export function parseApiOptions(args: string[]): ApiCliOptions {
     noLock: o['no-lock'],
     noTelemetry: o['no-telemetry'],
     machines: o.machines,
+    demoGithub: o['demo-github'],
+    demoProject: o['demo-project'],
     help: o.help,
   };
 }
