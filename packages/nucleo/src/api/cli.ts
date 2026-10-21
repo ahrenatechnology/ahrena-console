@@ -493,7 +493,7 @@ const api: LocalApi = await startLocalApi({
   commit,
   changes,
   decisionsUi,
-  project: { kanban: null, fonte: demo ? 'demo' : 'github', resolver: screens.project, options: screens.projectOptions, log },
+  project: { kanban: null, fonte: demo ? 'demo' : 'github', resolver: screens.project, options: screens.projectOptions, credentialSource: () => connection.credentialSource(), log },
   projectSelection: screens.project,
   connection,
   // --no-github keeps its own off / no-github answers; otherwise 409 github-not-connected before any call.

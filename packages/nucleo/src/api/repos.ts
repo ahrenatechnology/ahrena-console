@@ -91,7 +91,7 @@ import {
 import { send } from '../ingest/hooks/receiver.ts';
 import type { ChangeCursor } from '../changes/cursor.ts';
 import type { FleetReader } from '../mcp/fleet.ts';
-import { createFakeGithub, DEMO_GITHUB_DATA, demoGit, DEMO_EXTRA_SESSIONS } from '../simulator/fake-github.ts';
+import { createFakeGithub, DEMO_GITHUB_DATA, demoGit, DEMO_EXTRA_SESSIONS, FAKE_GITHUB_BASE } from '../simulator/fake-github.ts';
 import { chaveDoRepo, SessoesPorRepo } from './repos-sessions.ts';
 import { PERIODO_PADRAO, PERIODOS, type ComputedStat, type ListaDeRepos, type MetricasDoRepo, type Periodo, type SessoesDoRepo } from './repos-types.ts';
 
@@ -629,7 +629,7 @@ export function criarReposDoNucleo({ demo, semGithub, cache, frota, mudancas, lo
     noGithub: semGithub,
     github,
     demoFetch: () => createFakeGithub(DEMO_GITHUB_DATA, { delayMs: 120 }).fetch,
-    demoBase: 'https://github-falso.invalid',
+    demoBase: FAKE_GITHUB_BASE,
   });
   const sessoes = sessions ?? new SessoesPorRepo({
     frota,

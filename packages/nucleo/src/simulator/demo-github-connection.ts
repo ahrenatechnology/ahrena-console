@@ -23,7 +23,7 @@ import { GithubCallQueue } from '../github/call-queue.ts';
 import { GithubConnection } from '../github/connection/connection.ts';
 import { MemoryVault } from '../github/connection/vault.ts';
 import type { InstallationSettings } from '../settings/installation-settings.ts';
-import { createFakeGithub, DEMO_GITHUB_DATA, type FakeGithub, type FakeGithubAuth } from './fake-github.ts';
+import { createFakeGithub, DEMO_GITHUB_DATA, FAKE_GITHUB_BASE, type FakeGithub, type FakeGithubAuth } from './fake-github.ts';
 
 export const DEMO_GITHUB_STATES = ['connected', 'disconnected', 'pending', 'denied', 'expired', 'missing-scopes', 'blocked-orgs', 'no-client-id', 'no-vault', 'gh', 'gh-not-authenticated'] as const;
 export type DemoGithubState = (typeof DEMO_GITHUB_STATES)[number];
@@ -32,7 +32,7 @@ export type DemoGithubState = (typeof DEMO_GITHUB_STATES)[number];
 export const DEMO_GITHUB_TOKEN = 'gho_DEMO0not0a0real0token000000000000';
 export const DEMO_GITHUB_CLIENT_ID = 'demo-client-id';
 /** The fake GitHub's address (does not resolve: even if the fake failed, nothing reaches GitHub). */
-export const DEMO_GITHUB_BASE = 'https://github-falso.invalid';
+export const DEMO_GITHUB_BASE = FAKE_GITHUB_BASE;
 const DEMO_LOGIN = DEMO_GITHUB_DATA.login;
 
 /** `--demo-github`: absent → `connected`; an unknown state throws. */

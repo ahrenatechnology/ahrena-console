@@ -55,7 +55,7 @@ import { DISCOVERY_BATCH, RepoFilesSource, type RepoBlob, type RepoFilesDiscover
 import { GithubReposSource, NOME_DO_DONO, NOME_DO_REPO, SemGithubError } from '../github/repos-source.ts';
 import { send } from '../ingest/hooks/receiver.ts';
 import type { ChangeCursor } from '../changes/cursor.ts';
-import { createFakeGithub, DEMO_GITHUB_DATA } from '../simulator/fake-github.ts';
+import { createFakeGithub, DEMO_GITHUB_DATA, FAKE_GITHUB_BASE } from '../simulator/fake-github.ts';
 
 export const ADRS_ROUTE = '/api/adrs';
 export const PDRS_ROUTE = '/api/pdrs';
@@ -713,7 +713,7 @@ export function createCoreDecisions({ demo, noGithub, cache, changes, queue, acc
     noGithub,
     github,
     demoFetch: () => createFakeGithub(DEMO_GITHUB_DATA, { delayMs: 120 }).fetch,
-    demoBase: 'https://github-falso.invalid',
+    demoBase: FAKE_GITHUB_BASE,
   });
   const service = new DecisionsService({ source: transport ? new RepoFilesSource(transport) : null, accountRepos, cache, changes, queue, ...(log ? { log } : {}) });
   return { service, route: createDecisionsRoute(service) };

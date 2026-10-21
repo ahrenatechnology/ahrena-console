@@ -18,6 +18,7 @@
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { send } from '../ingest/hooks/receiver.ts';
+import { fromAnotherSite, fromOwnUi } from './same-origin.ts';
 import { GithubConnectionError, type GithubConnection } from '../github/connection/connection.ts';
 import { ProjectSelectionError, type ProjectEnvOverride, type ResolvedProjectSelection } from '../github/project-selection.ts';
 
@@ -38,17 +39,13 @@ export interface Refusal {
   body: { error: string };
 }
 
-/** A browser on another page: `cross-site` or `same-site` (a `<form>`, an `<img>`, a no-cors `fetch`). */
-export const fromAnotherSite = (req: IncomingMessage) => /^(cross-site|same-site)$/i.test(String(req.headers['sec-fetch-site'] ?? ''));
 
 /** Why a strict write is refused, or `null` when it comes from the /ui itself (the body size is checked while reading). */
 export function strictWriteRefusal(req: IncomingMessage, port: number, pathname: string): Refusal | null {
   if (req.method !== 'POST') return { status: 405, body: { error: 'method-not-allowed' } };
   const forbidden: Refusal = { status: 403, body: { error: 'forbidden' } };
   if (req.url !== pathname) return forbidden;
-  const host = req.headers.host;
-  if (host !== `127.0.0.1:${port}` && host !== `localhost:${port}`) return forbidden;
-  if (req.headers.origin !== `http://${host}`) return forbidden;
+  if (!fromOwnUi(req, port)) return forbidden;
   if (fromAnotherSite(req)) return forbidden;
   if (!/^application\/json\b/i.test(req.headers['content-type'] ?? '')) return { status: 415, body: { error: 'unsupported-media-type' } };
   if (Number(req.headers['content-length']) > MAX_BODY) return { status: 413, body: { error: 'too-large' } };

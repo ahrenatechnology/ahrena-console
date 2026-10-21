@@ -82,6 +82,7 @@
 // escrito. O diff mostra 3 linhas de contexto em volta do que muda.
 
 import { githubReposTransport, type GithubAccess } from './github-access.ts';
+import { fromAnotherSite } from './same-origin.ts';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import {
   AVAILABLE_PLATFORMS,
@@ -109,7 +110,7 @@ import { RepoFilesSource, type BlobRequest, type GithubTransport, type RepoFiles
 import { GithubReposSource, NOME_DO_DONO, NOME_DO_REPO, SemGithubError } from '../github/repos-source.ts';
 import { send } from '../ingest/hooks/receiver.ts';
 import type { ChangeCursor } from '../changes/cursor.ts';
-import { createFakeGithub, DEMO_GITHUB_DATA, fakeFrameworkRepo, type PullRequestTimeline } from '../simulator/fake-github.ts';
+import { createFakeGithub, DEMO_GITHUB_DATA, fakeFrameworkRepo, type PullRequestTimeline, FAKE_GITHUB_BASE } from '../simulator/fake-github.ts';
 import { repoKey } from './agent-instructions.ts';
 
 export const FRAMEWORK_INSTALL_ROUTE = '/api/framework-install';
@@ -806,7 +807,7 @@ export function createFrameworkInstallRoute(service: FrameworkInstallService): F
       return send(res, 200, await service.pullRequest(owner, repo));
     }
     if (req.method !== 'POST') return send(res, 405, { error: 'use POST' });
-    if (/^(cross-site|same-site)$/i.test(String(req.headers['sec-fetch-site'] ?? ''))) return send(res, 403, { error: 'origem não permitida' });
+    if (fromAnotherSite(req)) return send(res, 403, { error: 'origem não permitida' });
     if (!/^application\/json\b/i.test(req.headers['content-type'] ?? '')) return send(res, 415, { error: 'use application/json', code: 'bad-request' });
     const text = await readBody(req, MAX_INSTALL_BODY);
     if (text === null) {
@@ -853,7 +854,7 @@ export function createCoreFrameworkInstall({ demo, noGithub, cache, changes, que
     github,
     demoFetch: () =>
       createFakeGithub({ ...DEMO_GITHUB_DATA, repos: [...DEMO_GITHUB_DATA.repos, fakeFrameworkRepo(repo)] }, { delayMs: 120, pullRequestTimeline: DEMO_PULL_REQUEST_TIMELINE }).fetch,
-    demoBase: 'https://github-falso.invalid',
+    demoBase: FAKE_GITHUB_BASE,
   });
   const service = new FrameworkInstallService({ transport, cache, changes, queue, frameworkRepo: repo, pullRequestPollMs: demo ? 5_000 : 30_000, ...(log ? { log } : {}) });
   return { service, route: createFrameworkInstallRoute(service) };

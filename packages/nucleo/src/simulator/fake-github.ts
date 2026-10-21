@@ -935,6 +935,9 @@ const withFiles = (repo: FakeRepo): FakeRepo => {
 };
 
 /** The demo, as in wireframe C22: two orgs, the personal account and eight repositories. */
+/** The fake GitHub's address in the demo: it does not resolve, so even if the fake failed nothing reaches GitHub. */
+export const FAKE_GITHUB_BASE = 'https://fake-github.invalid';
+
 export const DEMO_GITHUB_DATA: FakeGithubData = {
   login: 'dev-sintetico',
   organizations: ['exemplo-labs', 'estudio-ficticio'],

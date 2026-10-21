@@ -135,6 +135,17 @@ describe('#241/AC-2 GET /api/connections and the github writes', () => {
     assert.deepEqual([noGh.status, noGh.json], [409, { error: 'gh-not-installed' }]);
   });
 
+  test('review 2 (decided): another site reading the status is 403, like the Project options', async () => {
+    for (const site of ['cross-site', 'same-site']) {
+      const r = await call(b.api, '/api/connections', { headers: { host: b.host, 'sec-fetch-site': site } });
+      assert.deepEqual([r.status, r.json], [403, { error: 'forbidden' }], site);
+    }
+    for (const site of ['same-origin', 'none']) {
+      const r = await call(b.api, '/api/connections', { headers: { host: b.host, 'sec-fetch-site': site } });
+      assert.equal(r.status, 200, site);
+    }
+  });
+
   test('connections is a change type for the /ui, kept out of MCP', () => {
     assert.ok((CHANGE_TYPES as readonly string[]).includes('connections'));
     assert.ok(!(MCP_CHANGE_TYPES as readonly string[]).includes('connections'));

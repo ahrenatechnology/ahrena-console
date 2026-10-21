@@ -228,10 +228,26 @@ describe('GET /api/project', () => {
     }
   });
 
-  const semCache = async (fetch: (u: unknown, init?: RequestInit) => Promise<Response>) => {
+  const semCache = async (fetch: (u: unknown, init?: RequestInit) => Promise<Response>, credentialSource: 'console' | 'gh' = 'gh') => {
     const { kanban } = doGithub(recordedBoard, fetch as unknown as ReturnType<typeof replayFetch>);
-    return subir({ kanban, fonte: 'github' });
+    return subir({ kanban, fonte: 'github', credentialSource: () => credentialSource });
   };
+  const noScope = async () => new Response(JSON.stringify({ errors: [{ type: 'INSUFFICIENT_SCOPES', message: "requires one of the following scopes: ['read:project']" }] }), { status: 200 });
+
+  test('#241 review 2: without the project scope under the console source, reconnect in Conexões (no gh command)', async () => {
+    const s = await semCache(noScope, 'console');
+    try {
+      const r = await pedir(s.api, '/api/project');
+      assert.equal(r.status, 401);
+      assert.equal(r.json.code, 'no-scope');
+      assert.equal(r.json.command, undefined);
+      assert.equal(r.json.scope, 'project');
+      assert.match(r.json.error, /reconecte o GitHub em Conexões/);
+      assert.doesNotMatch(r.json.error, /gh auth/);
+    } finally {
+      await s.fechar();
+    }
+  });
 
   test('GitHub fora sem cache: 502 github-down', async () => {
     const s = await semCache(async () => {
@@ -366,7 +382,7 @@ describe('POST /api/project/move', () => {
       return (respostas.move as () => Response)();
     }) as unknown as ReturnType<typeof replayFetch>;
     const { kanban } = doGithub(recordedBoard, fetch);
-    const s = await subir({ kanban, fonte: 'github' });
+    const s = await subir({ kanban, fonte: 'github', credentialSource: () => 'gh' });
     try {
       respostas.move = () => new Response(JSON.stringify({ errors: [{ type: 'INSUFFICIENT_SCOPES', message: "requires ['project']" }] }), { status: 200 });
       const r401 = await mover(s.api, { itemId: ITEM, optionId: IN_PROGRESS });

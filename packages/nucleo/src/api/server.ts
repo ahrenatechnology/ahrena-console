@@ -102,7 +102,8 @@ import { DEV_CONSOLE_ROUTE, respondDevConsole, type DevConsole } from './dev-con
 import { isTelemetryRoute, reconnectFromSameOrigin, RECONNECT_ROUTE, respondReconnect, respondTelemetry } from './telemetry.ts';
 import type { ReconnectControl } from '../telemetry/reconnect.ts';
 import type { TelemetryService } from '../telemetry/service.ts';
-import { CONNECTIONS_ROUTE, fromAnotherSite, PROJECT_SELECTION_ROUTE, respondConnections, respondProjectSelection, STRICT_WRITE_ROUTES, strictWriteRefusal, type ProjectSelectionTarget } from './connections-route.ts';
+import { fromAnotherSite, fromOwnUi } from './same-origin.ts';
+import { CONNECTIONS_ROUTE, PROJECT_SELECTION_ROUTE, respondConnections, respondProjectSelection, STRICT_WRITE_ROUTES, strictWriteRefusal, type ProjectSelectionTarget } from './connections-route.ts';
 import type { GithubConnection } from '../github/connection/connection.ts';
 
 export { API_VERSION };
@@ -223,15 +224,6 @@ const ID = /^[A-Za-z0-9_.:-]{1,128}$/;
 const PARAM = /^[A-Za-z0-9_.\[\]-]{1,64}$/;
 const CWD = /^\/[^\0\n]{0,1023}$/;
 const MAX_BODY = 4096;
-
-/** The request comes from our own `/ui`: `Origin` equal to `http://<Host>`, and the Host is ours. */
-function fromOwnUi(req: IncomingMessage, port: number): boolean {
-  const host = req.headers.host;
-  const origin = req.headers.origin;
-  if (typeof origin !== 'string') return false;
-  if (host !== `127.0.0.1:${port}` && host !== `localhost:${port}`) return false;
-  return origin === `http://${host}`;
-}
 
 /** Our own `/ui` reading: a same-origin `GET`. */
 const sameOriginRead = (req: IncomingMessage, port: number): boolean => req.method === 'GET' && fromOwnUi(req, port);
@@ -376,8 +368,9 @@ export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
       return respondConnections(req, res, url.pathname, opts.connection);
     }
     if (!allowedLocalRequest(req, port) && !sameOriginRead(req, port) && !sameOriginOpen(req, port) && !mesmaOrigemMovendo(req, port) && !sameOriginDecision(req, port) && !agentConfigWriteFromSameOrigin(req, port) && !frameworkInstallWriteFromSameOrigin(req, port) && !reconnectFromSameOrigin(req, port)) return send(res, 403, { error: 'origem não permitida' });
-    // The Project list spends GitHub quota: another site's page never gets it, connected or not.
-    if (url.pathname === PROJECT_OPTIONS_ROUTE && fromAnotherSite(req)) return send(res, 403, { error: 'forbidden' });
+    // The Project list spends GitHub quota and the connection status is the /ui's: another site's page
+    // never gets either, connected or not (#241 review 2).
+    if ((url.pathname === PROJECT_OPTIONS_ROUTE || url.pathname === CONNECTIONS_ROUTE) && fromAnotherSite(req)) return send(res, 403, { error: 'forbidden' });
     if (opts.githubConnected && isGithubScreenRoute(url.pathname) && !(await opts.githubConnected())) return send(res, 409, { error: 'github-not-connected' });
     if (url.pathname.startsWith(HOOKS_PATH)) return hooks(req, res);
     const openMatch = OPEN.exec(url.pathname);

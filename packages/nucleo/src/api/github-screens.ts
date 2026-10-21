@@ -30,7 +30,7 @@ import { ProjectResolver } from '../github/project-selection.ts';
 import type { FleetReader } from '../mcp/fleet.ts';
 import type { InstallationSettings } from '../settings/installation-settings.ts';
 import { DEV_CONSOLE_SIMULATOR_CONTEXTS, devConsoleSimulatorGit, SimulatedDevConsoleSource } from '../simulator/dev-console.ts';
-import { createFakeGithub, DEMO_GITHUB_DATA } from '../simulator/fake-github.ts';
+import { createFakeGithub, DEMO_GITHUB_DATA, FAKE_GITHUB_BASE } from '../simulator/fake-github.ts';
 import { SIMULATOR_PROJECT, SimulatorProject } from '../simulator/project.ts';
 
 export interface GithubScreensOptions {
@@ -125,7 +125,7 @@ export function createGithubScreens(o: GithubScreensOptions): GithubScreens {
     : new ProjectOptions({
         source: new GithubProjectOptionsSource(
           demo
-            ? { token: github?.token ?? 'demo', fetch: createFakeGithub(DEMO_GITHUB_DATA).fetch, url: 'https://github-falso.invalid/graphql' }
+            ? { token: github?.token ?? 'demo', fetch: createFakeGithub(DEMO_GITHUB_DATA).fetch, url: `${FAKE_GITHUB_BASE}/graphql` }
             : { token: github!.token, ...(github!.fetch ? { fetch: github!.fetch } : {}), ...(github!.url ? { url: github!.url } : {}) },
         ),
         cache,

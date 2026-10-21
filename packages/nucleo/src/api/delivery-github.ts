@@ -16,7 +16,7 @@ import { DELIVERY_FETCH_DAYS, GithubDeliverySource, type DeliveryRaw, type Deliv
 import type { ProjectBoard } from '../github/project.ts';
 import { DIA_MS, diaIso } from '../github/repos-calculo.ts';
 import { GithubReposSource, SemGithubError } from '../github/repos-source.ts';
-import { createFakeGithub, DEMO_DELIVERY_PROJECTS, DEMO_DELIVERY_GITHUB_DATA } from '../simulator/fake-github.ts';
+import { createFakeGithub, DEMO_DELIVERY_PROJECTS, DEMO_DELIVERY_GITHUB_DATA, FAKE_GITHUB_BASE } from '../simulator/fake-github.ts';
 import type { DeliveryOptions } from './analytics-route.ts';
 import type { DeliveryGithubRead, DeliveryGroup } from './delivery.ts';
 import type { SessoesPorRepo } from './repos-sessions.ts';
@@ -214,7 +214,7 @@ export function createCoreDelivery({ demo, noGithub, cache, queue, changes, sess
     noGithub,
     github,
     demoFetch: () => createFakeGithub(DEMO_DELIVERY_GITHUB_DATA, { delayMs: 120 }).fetch,
-    demoBase: 'https://fake-github.invalid',
+    demoBase: FAKE_GITHUB_BASE,
   });
   const source = transport ? new GithubDeliverySource(transport) : null;
   return {
