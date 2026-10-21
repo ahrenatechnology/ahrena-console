@@ -179,3 +179,103 @@ test('open-action.css: only open- classes, no colour by hand, loaded once by ind
   const page = readFileSync(`${UI_FOLDER}index.html`, 'utf8');
   assert.equal(page.match(/href="\/ui\/open-action\.css"/g)?.length, 1);
 });
+
+// ---------- The Detail (C70): the action in the header row, beside Atualizar, and nowhere else ----------
+
+describe('Detail: the open action in the header (C70)', () => {
+  const head = (extra: Record<string, unknown> = {}) => ({
+    session: {
+      id: UUID,
+      title: 'Retry com backoff na fila',
+      status: 'waiting',
+      attention: { level: 'idle', reason: 'turn_ended' },
+      since: new Date().toISOString(),
+      startedAt: new Date(Date.now() - 15 * 60_000).toISOString(),
+      model: 'claude-sonnet-5-5',
+      cwd: '/tmp/demo',
+      banner: null,
+    },
+    counts: { agents: 1, events: 96 },
+    cost: null,
+    branch: 'feat/9-retry',
+    endedAt: null,
+    command: null,
+    local: 'local_00000000-0000-4000-8000-000000000000',
+    opensSession: true,
+    open: { target: 'desktop', command: null },
+    ...extra,
+  });
+
+  async function mountDetail(data: Record<string, unknown>, write: (route: string, body: unknown) => Promise<unknown>) {
+    Object.assign(globalThis, { location: { hash: '', pathname: `/ui/sessions/${UUID}`, search: '' }, history: { replaceState() {} } });
+    // @ts-expect-error: browser module, plain JavaScript
+    const { mount } = await import('../../ui/screens/session-detail.js');
+    const area = documentoFalso.createElement('main');
+    const base = `/api/sessions/${UUID}`;
+    const abort = () => Object.assign(new Error('left'), { name: 'AbortError' });
+    const ctx = {
+      params: { id: UUID },
+      read: async (route: string) => {
+        if (route === base) return data;
+        throw abort();
+      },
+      write,
+      title() {},
+      onChange() {},
+      onRestart() {},
+      navigate() {},
+    };
+    const leave = await mount(area, ctx);
+    return { area, leave };
+  }
+
+  test('idle: the button sits in the header row, before Atualizar; the idle line has none', async () => {
+    const w = stubWriter({ ok: true, opened: 'desktop' });
+    const { area, leave } = await mountDetail(head(), w.write);
+    try {
+      const row = area.querySelector('.sd-row')!;
+      const kids = row.children;
+      const action = row.querySelector('.open-action')!;
+      assert.ok(action, 'the action is in the header row');
+      assert.equal(kids[kids.indexOf(action) + 1]!.getAttribute('class'), 'sd-refresh', 'right before Atualizar');
+      assert.equal(texto(action.querySelector('button')), 'Abrir no Claude Desktop');
+      const idle = area.querySelector('.sd-idle')!;
+      assert.ok(idle, 'the idle line is drawn');
+      assert.equal(idle.querySelectorAll('button').length, 0, 'no open button in the idle line');
+      action.querySelector('button')!.click();
+      assert.deepEqual(w.calls, [{ route: `/api/sessions/${UUID}/open`, body: {} }]);
+      w.release();
+    } finally {
+      leave?.();
+    }
+  });
+
+  test('blocked: the yellow band has no button; a terminal session says so in the header', async () => {
+    const blocked = head({
+      session: { ...head().session, attention: { level: 'blocked', reason: 'permission' }, banner: { type: 'permission', text: 'Pede permissão para npm run migrate', since: new Date().toISOString() } },
+      command: 'npm run migrate',
+      local: null,
+      open: { target: 'terminal', command: COMMAND },
+    });
+    const { area, leave } = await mountDetail(blocked, stubWriter({}).write);
+    try {
+      const band = area.querySelector('.sd-band')!;
+      assert.ok(band, 'the band is drawn');
+      assert.equal(band.querySelectorAll('button').length, 0, 'no open button in the band');
+      assert.equal(texto(area.querySelector('.sd-row .open-action button')), 'Abrir no terminal');
+      assert.equal(area.querySelectorAll('.open-action').length, 1, 'one action on the page');
+    } finally {
+      leave?.();
+    }
+  });
+
+  test('none: no button in the header', async () => {
+    const { area, leave } = await mountDetail(head({ open: { target: 'none', command: null } }), stubWriter({}).write);
+    try {
+      assert.equal(area.querySelectorAll('.open-action').length, 0);
+      assert.ok(area.querySelector('.sd-refresh'));
+    } finally {
+      leave?.();
+    }
+  });
+});
