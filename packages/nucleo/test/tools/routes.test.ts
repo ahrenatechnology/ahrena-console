@@ -93,7 +93,7 @@ describe('#280 the Tools writes', () => {
       const wrongType = await t.send('POST', path, body, { origin: t.origin, 'content-type': 'text/plain' });
       assert.equal(wrongType.status, 415);
       assert.equal(t.sp.calls.length, 0, 'nothing spawned');
-      assert.deepEqual((await t.overview()).jobs, { current: null, queue: [], recent: [] });
+      assert.deepEqual((await t.overview()).jobs, { current: null, queue: [], recent: [], batch: null });
     } finally {
       await t.close();
     }
@@ -172,7 +172,7 @@ describe('#280 the Tools writes', () => {
       const r = await t.send('POST', '/api/tools/checks', { machine: 'local' }, { origin: t.origin });
       assert.equal(r.status, 200);
       assert.equal(r.body.network, 'online');
-      assert.deepEqual(r.body.jobs, { current: null, queue: [], recent: [] });
+      assert.deepEqual(r.body.jobs, { current: null, queue: [], recent: [], batch: null });
       assert.equal((await t.send('POST', '/api/tools/checks', { machine: 'ws-exemplo' }, { origin: t.origin })).status, 404);
       await new Promise((r) => setImmediate(r));
       const w = await t.cursor.wait(start, { timeoutMs: 0 });

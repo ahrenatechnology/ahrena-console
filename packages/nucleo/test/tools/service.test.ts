@@ -27,7 +27,7 @@ describe('#280 ToolsService.overview without a check', () => {
     assert.deepEqual(o.managers, { homebrew: { present: true, install: null }, winget: { present: false }, apt: { present: false, listsUpdatedAt: null } });
     assert.equal(o.actionsAllowed, true);
     assert.deepEqual(o.mcp, { statusCheckedAt: null, servers: [] });
-    assert.deepEqual(o.jobs, { current: null, queue: [], recent: [] });
+    assert.deepEqual(o.jobs, { current: null, queue: [], recent: [], batch: null });
     assert.ok(o.items.every((i) => i.state !== 'ok'));
     assert.deepEqual(
       o.items.map((i) => [i.id, i.group, i.installed, i.source, i.state]),

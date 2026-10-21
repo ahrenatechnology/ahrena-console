@@ -33,7 +33,7 @@ function fakeHost(plans: Record<string, ToolActionView>, o: { installed?: Record
   const verified: string[] = [];
   let invalidated = 0;
   const host: ToolsHost = {
-    overview: async (machine) => (machine === 'local' ? ({ version: 1, jobs: { current: null, queue: [], recent: [] } } as unknown as ToolsOverview) : null),
+    overview: async (machine) => (machine === 'local' ? ({ version: 1, jobs: { current: null, queue: [], recent: [], batch: null } } as unknown as ToolsOverview) : null),
     check: async () => null,
     actionPlan: async (machine, toolId, actionId): Promise<ActionPlanResult> => {
       if (machine !== 'local') return { kind: 'unknown-machine' };
@@ -129,6 +129,30 @@ describe('#280 ToolsExecutor', () => {
     assert.deepEqual(executor.jobs('local').recent.map((j) => [j.toolId, j.state]), [['jq', 'succeeded'], ['gh', 'succeeded']]);
   });
 
+  test('batch: Atualizar N opens one, counts the ended jobs, closes when the queue drains', async () => {
+    const plans = Object.fromEntries(['gh', 'jq', 'rg'].map((t) => [`${t} update`, action([['brew', 'upgrade', t]])]));
+    const { executor, sp } = boot(plans);
+    assert.equal(executor.jobs('local').batch, null);
+    for (const t of ['gh', 'jq', 'rg']) await executor.act('local', t, 'update', '0123456789abcdef');
+    await executor.act('local', 'gh', 'update', '0123456789abcdef');
+    assert.deepEqual(executor.jobs('local').batch, { total: 3, done: 0 }, 'the repeated POST is not a new job');
+    await new Promise((r) => setImmediate(r));
+    sp.calls[0]!.child.exit(0);
+    await new Promise((r) => setTimeout(r, 20));
+    assert.deepEqual(executor.jobs('local').batch, { total: 3, done: 1 });
+    const rg = executor.jobs('local').queue.find((j) => j.toolId === 'rg')!;
+    executor.cancel(rg.id);
+    assert.deepEqual(executor.jobs('local').batch, { total: 3, done: 2 }, 'a canceled queued job counts as ended');
+    sp.calls[1]!.child.exit(1);
+    await executor.idle('local');
+    assert.equal(executor.jobs('local').batch, null);
+    await executor.act('local', 'gh', 'update', '0123456789abcdef');
+    assert.deepEqual(executor.jobs('local').batch, { total: 1, done: 0 }, 'a new batch');
+    await new Promise((r) => setImmediate(r));
+    sp.calls[2]!.child.exit(0);
+    await executor.idle('local');
+  });
+
   test('the same tool and action already queued gets that job back', async () => {
     const { executor, sp } = boot({ 'gh update': action([['brew', 'upgrade', 'gh']]) });
     const a = await executor.act('local', 'gh', 'update', '0123456789abcdef');
@@ -197,7 +221,7 @@ describe('#280 ToolsExecutor', () => {
     assert.equal((await executor.act('local', 'nope', 'update', '0123456789abcdef')).kind, 'unknown');
     assert.equal((await executor.act('ws-exemplo', 'gh', 'update', '0123456789abcdef')).kind, 'unknown-machine');
     assert.equal(sp.calls.length, 0);
-    assert.deepEqual(executor.jobs('local'), { current: null, queue: [], recent: [] });
+    assert.deepEqual(executor.jobs('local'), { current: null, queue: [], recent: [], batch: null });
   });
 
   test('timeout: SIGTERM to the group, SIGKILL 5 s later; timed-out; the next job runs', async () => {

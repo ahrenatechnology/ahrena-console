@@ -6,7 +6,8 @@
 //   (`ToolsService.actionPlan`). Another digest: 409 with the new plan, nothing runs. A plan that is
 //   not runnable (admin, invalid version, offline, no manager): refused, nothing runs.
 // - One job at a time per machine, FIFO (Atualizar N enqueues N). The same tool and action already
-//   queued or running gets that job back.
+//   queued or running gets that job back. `jobs.batch` (`{ total, done }`) opens with the first job
+//   enqueued on an idle queue and closes when the queue drains: the screen's "Atualizando 2 de 5".
 // - Each step: `spawn(argv[0], argv.slice(1), { shell: false, detached: true })` with argv[0]
 //   resolved on the login PATH, standard input closed, stdout and stderr piped, the user's home as
 //   the working directory and `toolsEnv` (runner.ts). Step 2 runs only if step 1 exits 0.
@@ -140,6 +141,7 @@ interface MachineJobs {
   current: ToolJob | null;
   queue: ToolJob[];
   recent: ToolJob[];
+  batch: { total: number; done: number } | null;
   idle: (() => void)[];
 }
 
@@ -188,14 +190,14 @@ export class ToolsExecutor implements ToolsControl {
 
   private jobsOf(machine: string): MachineJobs {
     let m = this.machines.get(machine);
-    if (!m) this.machines.set(machine, (m = { current: null, queue: [], recent: [], idle: [] }));
+    if (!m) this.machines.set(machine, (m = { current: null, queue: [], recent: [], batch: null, idle: [] }));
     return m;
   }
 
   /** `jobs` of `GET /api/tools`: copies, so a response never changes after it is built. */
   jobs(machine: string): JobsView<ToolJob> {
     const m = this.machines.get(machine);
-    return { current: m?.current ? copyJob(m.current) : null, queue: (m?.queue ?? []).map(copyJob), recent: (m?.recent ?? []).map(copyJob) };
+    return { current: m?.current ? copyJob(m.current) : null, queue: (m?.queue ?? []).map(copyJob), recent: (m?.recent ?? []).map(copyJob), batch: m?.batch ? { ...m.batch } : null };
   }
 
   async overview(machine: string): Promise<ToolsOverview | null> {
@@ -237,6 +239,8 @@ export class ToolsExecutor implements ToolsControl {
       logFile: this.logFile,
     };
     m.queue.push(job);
+    m.batch ??= { total: 0, done: 0 };
+    m.batch.total++;
     this.o.log?.(`tools (${machine}): ${job.actionId} ${job.toolId} queued (job ${job.id})`);
     this.changed(machine);
     const snapshot = copyJob(job);
@@ -253,8 +257,8 @@ export class ToolsExecutor implements ToolsControl {
         job!.endedAt = new Date(this.now()).toISOString();
         this.remember(m, job!);
         this.o.log?.(`tools (${machine}): job ${jobId} canceled before it started`);
-        this.changed(machine);
         this.wakeIdle(m);
+        this.changed(machine);
         return { kind: 'canceled', job: copyJob(job!) };
       }
       if (m.current?.id === jobId) {
@@ -297,13 +301,16 @@ export class ToolsExecutor implements ToolsControl {
     this.o.onChange?.(machine);
   }
 
+  /** An ended job: counted in the batch, kept in `recent`. */
   private remember(m: MachineJobs, job: ToolJob): void {
+    if (m.batch) m.batch.done++;
     m.recent.unshift(job);
     m.recent.length = Math.min(m.recent.length, RECENT_JOBS);
   }
 
   private wakeIdle(m: MachineJobs): void {
     if (m.current || m.queue.length > 0) return;
+    m.batch = null;
     for (const resolve of m.idle.splice(0)) resolve();
   }
 
@@ -322,8 +329,9 @@ export class ToolsExecutor implements ToolsControl {
         m.current = null;
         this.running.delete(job.id);
         this.remember(m, job);
-        this.changed(machine);
+        // The next job (its own change) or, with the queue drained, the batch closed; then this end's change.
         this.pump(machine);
+        this.changed(machine);
       });
   }
 

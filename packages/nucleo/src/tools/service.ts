@@ -94,6 +94,8 @@ export interface JobsView<J = unknown> {
   current: J | null;
   queue: J[];
   recent: J[];
+  /** Jobs enqueued back to back (Atualizar N): opens with the first, closes when the queue drains. */
+  batch: { total: number; done: number } | null;
 }
 
 const ACTION_VERBS: Record<ActionId, string> = { install: 'Instalar', update: 'Atualizar', start: 'Iniciar', stop: 'Parar' };
@@ -357,7 +359,7 @@ export class ToolsService {
       items,
       containers,
       mcp: { statusCheckedAt: null, servers: [] },
-      jobs: { current: null, queue: [], recent: [] },
+      jobs: { current: null, queue: [], recent: [], batch: null },
     };
   }
 
