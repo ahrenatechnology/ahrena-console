@@ -1,0 +1,6 @@
+{
+  "env": {
+    "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE": "20",
+    "CLAUDE_CODE_SUBAGENT_MODEL": "sonnet"
+  }
+}
