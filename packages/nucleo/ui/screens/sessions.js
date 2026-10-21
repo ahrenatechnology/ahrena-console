@@ -123,6 +123,14 @@ export function pageKeepingRow({ page, perPage, nextPerPage }) {
 }
 
 /**
+ * The page after a new page size. The first measure only corrects the CSS estimate: the page in the URL
+ * was written under the real size (Voltar from the Detalhe, a reload), so it stays. A resize keeps the row.
+ */
+export function pageAfterRefit({ page, perPage, nextPerPage, first }) {
+  return first ? page : pageKeepingRow({ page, perPage, nextPerPage });
+}
+
+/**
  * The room the rows have, in pixels: from the top of the rows to the bottom of the scrolling area,
  * minus its bottom padding, the gap and the pager below the table, and the card's bottom border.
  */
@@ -256,10 +264,11 @@ export async function mount(area, ctx) {
 
   /** A new page size keeps the first row on screen: the page follows the row, not its number. */
   function refit() {
+    const first = !fitted;
     fitted = true;
     const next = rowsThatFit();
     if (next === perPage) return false;
-    const page = pageKeepingRow({ page: state.page, perPage, nextPerPage: next });
+    const page = pageAfterRefit({ page: state.page, perPage, nextPerPage: next, first });
     perPage = next;
     if (page !== state.page) {
       state = { ...state, page };

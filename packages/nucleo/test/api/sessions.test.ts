@@ -11,7 +11,7 @@ import { displayStatus, type Session } from '../../src/model.ts';
 import { seedPanelScenario, PANEL_SESSION } from '../../src/simulator/panel.ts';
 import { simulate } from '../../src/simulator/index.ts';
 // @ts-expect-error: módulo do navegador, em JavaScript puro
-import { COLUMNS, cost, duration, stateFromQuery, band, age, shortId, queryFromState, listRoute, fitRows, pageKeepingRow, roomForRows, MIN_ROWS } from '../../ui/screens/sessions.js';
+import { COLUMNS, cost, duration, stateFromQuery, band, age, shortId, queryFromState, listRoute, fitRows, pageKeepingRow, pageAfterRefit, roomForRows, MIN_ROWS } from '../../ui/screens/sessions.js';
 // @ts-expect-error: idem
 import { findScreen } from '../../ui/screens.js';
 
@@ -272,6 +272,13 @@ describe('#28 a tela Sessões', () => {
     assert.equal(pageKeepingRow({ page: 4, perPage: 10, nextPerPage: 16 }), 2);
     assert.equal(pageKeepingRow({ page: 1, perPage: 10, nextPerPage: 16 }), 1);
     assert.equal(pageKeepingRow({ page: 2, perPage: 10, nextPerPage: 10 }), 2);
+  });
+
+  test('#279/AC-3: the first measure keeps the page of the URL; only a resize moves it', () => {
+    // Voltar from the Detalhe on page 5 at 12 rows: the first read guessed 16 from the CSS, the measure
+    // says 12 again, and the page stays 5 (rows 49–60), not 6.
+    assert.equal(pageAfterRefit({ page: 5, perPage: 16, nextPerPage: 12, first: true }), 5);
+    assert.equal(pageAfterRefit({ page: 5, perPage: 16, nextPerPage: 12, first: false }), 6);
   });
 
   test('os textos da linha: idade, duração, custo, faixa e id', () => {
