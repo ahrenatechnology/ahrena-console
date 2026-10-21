@@ -7,7 +7,7 @@
 //
 // | Answer                                 | Beside the button                                       |
 // | -------------------------------------- | ------------------------------------------------------- |
-// | in flight                              | "Abrindo…", the button disabled                         |
+// | in flight                              | "Abrindo…", the button aria-busy and refusing clicks    |
 // | 200 `{ opened: 'desktop' }`            | "Aberta no Claude Desktop", gone after SUCCESS_MS        |
 // | 200 `{ opened: 'terminal' }`           | "Aberta no terminal", gone after SUCCESS_MS              |
 // | 200 `{ opened: 'focused' }`            | "Terminal à frente", gone after SUCCESS_MS               |
@@ -83,13 +83,53 @@ const stop = (ev) => {
   ev.stopPropagation?.();
 };
 
+// ---------- The state of each session's open, kept across redraws ----------
+//
+// The screens redraw often (Sessions every second while changes stream, the wall and the Dashboard
+// after 400 ms, the Detail header on each change of its session), and each redraw builds a new
+// action. The state lives here, by session id, so a new action shows what the old one showed: busy
+// ("Abrindo…", a click refused), the failure with "Copiar comando" (until the next click, "Fechar" or
+// FAIL_MS) and the success (only for the time it has left).
+
+/** How long a failure stays when nobody clicks again or closes it. */
+export const FAIL_MS = 60_000;
+
+/** id → `{ kind: 'busy'|'ok'|'fail', text, command, until }`. */
+const states = new Map();
+/** id → the redraw functions of the actions built for it. */
+const views = new Map();
+
+/** The current state of a session's open, without DOM (`null`: nothing beside the button). */
+export function openStateOf(id, now = Date.now()) {
+  const st = states.get(id);
+  if (!st) return null;
+  if (st.until !== null && st.until <= now) {
+    states.delete(id);
+    return null;
+  }
+  return st;
+}
+
+/** Forgets every state (tests). */
+export function resetOpenStates() {
+  states.clear();
+  views.clear();
+}
+
+function setState(id, st) {
+  if (st) states.set(id, st);
+  else states.delete(id);
+  for (const draw of [...(views.get(id) ?? [])]) draw();
+}
+
 /**
  * The action for one session (`{ id, open }`), or `null` when there is nothing to open.
  * `size`: 'full' | 'small' | 'icon'. `write` swaps the transport (tests, the screen's `ctx.write`).
  */
-export function openAction(session, { size = 'full', write = defaultWrite, machine = null, className = null, successMs = SUCCESS_MS } = {}) {
+export function openAction(session, { size = 'full', write = defaultWrite, machine = null, className = null, successMs = SUCCESS_MS, failMs = FAIL_MS } = {}) {
   const d = describeOpenAction(session?.open, { machine });
   if (!d) return null;
+  const id = session.id;
   const compact = size === 'icon';
   const label = size === 'small' && d.smallLabel ? d.smallLabel : d.label;
   // Where the button cannot say "roda em…" beside it (wall foot, icon), the server icon says it.
@@ -111,41 +151,78 @@ export function openAction(session, { size = 'full', write = defaultWrite, machi
   const root = el('span', { class: `open-action open-size-${size}${className ? ` ${className}` : ''}`, 'data-open-target': d.target }, button, why, status);
   // Nothing inside the action reaches the card or the row around it.
   root.addEventListener('click', (ev) => ev.stopPropagation?.());
+  // Escape closes a failure (the icon's popover covers the rows below it).
+  root.addEventListener('keydown', (ev) => {
+    if (ev.key === 'Escape' && openStateOf(id)?.kind === 'fail') {
+      ev.stopPropagation?.();
+      setState(id, null);
+    }
+  });
 
   let timer = null;
-  let busy = false;
 
-  function show(kind, text, command = null) {
+  function draw() {
+    // A redraw dropped this action from the page: it stops listening.
+    if (root.isConnected === false && status.getAttribute('data-state') !== null) return void forget();
     clearTimeout(timer);
-    status.setAttribute('data-state', kind);
-    if (kind === 'idle') return void status.replaceChildren();
-    const msg = el('span', { class: `open-msg open-${kind}`, title: text }, text);
-    status.replaceChildren(...[msg, command ? copyButton(command, compact || size === 'small') : null].filter(Boolean));
-    if (kind === 'ok') timer = setTimeout(() => show('idle'), successMs);
+    const st = openStateOf(id);
+    // In flight: aria-disabled and aria-busy, not `disabled`, so the focus stays on the button.
+    if (st?.kind === 'busy') {
+      button.setAttribute('aria-disabled', 'true');
+      button.setAttribute('aria-busy', 'true');
+    } else {
+      button.removeAttribute('aria-busy');
+      if (!d.disabled) button.removeAttribute('aria-disabled');
+    }
+    status.setAttribute('data-state', st?.kind ?? 'idle');
+    if (!st) return void status.replaceChildren();
+    const msg = el('span', { class: `open-msg open-${st.kind}`, title: st.text }, st.text);
+    const copy = st.kind === 'fail' && st.command ? copyButton(st.command, compact || size === 'small') : null;
+    const close = st.kind === 'fail' && compact ? closeButton(() => setState(id, null)) : null;
+    status.replaceChildren(...[msg, copy, close].filter(Boolean));
+    if (st.until !== null) {
+      timer = setTimeout(draw, Math.max(0, st.until - Date.now()));
+      // In node (the tests) a pending fade does not hold the process open; browsers return a number.
+      timer?.unref?.();
+    }
   }
+
+  function forget() {
+    clearTimeout(timer);
+    views.get(id)?.delete(draw);
+    if (views.get(id)?.size === 0) views.delete(id);
+  }
+
+  if (!views.has(id)) views.set(id, new Set());
+  views.get(id).add(draw);
+  draw();
 
   button.addEventListener('click', async (ev) => {
     stop(ev);
-    if (d.disabled || busy) return;
-    busy = true;
-    button.setAttribute('disabled', '');
-    button.setAttribute('aria-busy', 'true');
-    show('busy', 'Abrindo…');
+    if (d.disabled || openStateOf(id)?.kind === 'busy') return;
+    // The next click clears a failure.
+    setState(id, { kind: 'busy', text: 'Abrindo…', command: null, until: null });
     let state;
     try {
-      state = stateOfAnswer(await openSession(session.id, { write }));
+      state = stateOfAnswer(await openSession(id, { write }));
     } catch (e) {
       if (e?.name === 'AbortError') state = null;
       else state = stateOfAnswer(null, e instanceof Error ? e : new Error(String(e)));
-    } finally {
-      busy = false;
-      button.removeAttribute('disabled');
-      button.removeAttribute('aria-busy');
     }
-    if (!state) return show('idle');
-    show(state.kind, state.text, state.kind === 'fail' ? state.command : null);
+    if (!state) return setState(id, null);
+    setState(id, { ...state, command: state.kind === 'fail' ? state.command : null, until: Date.now() + (state.kind === 'ok' ? successMs : failMs) });
   });
   return root;
+}
+
+/** "Fechar": the icon's failure popover goes away. */
+function closeButton(onClose) {
+  const b = el('button', { type: 'button', class: 'open-close', title: 'Fechar', 'aria-label': 'Fechar' }, icon('x'));
+  b.addEventListener('click', (ev) => {
+    stop(ev);
+    onClose();
+  });
+  return b;
 }
 
 /** "Copiar comando": the resume line to the clipboard, with "Copiado" as the answer. */

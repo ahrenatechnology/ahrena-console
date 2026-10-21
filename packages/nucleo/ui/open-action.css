@@ -5,7 +5,9 @@
 .open-action { display: inline-flex; align-items: center; gap: 8px; min-width: 0; position: relative; }
 .open-button[aria-disabled="true"], .open-icon[aria-disabled="true"] { opacity: .5; cursor: not-allowed; }
 .open-button[aria-disabled="true"]:hover { background: var(--surface); }
-.open-button:disabled { opacity: .7; cursor: progress; }
+/* In flight: aria-busy (not `disabled`, which would drop the keyboard focus); the icon does not spin. */
+.open-button[aria-busy="true"], .open-icon[aria-busy="true"] { opacity: .7; cursor: progress; }
+.open-button[aria-busy="true"] .icon { animation: none; }
 .open-why { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; color: var(--muted); white-space: nowrap; }
 
 /* The state beside the button: "Abrindo…", the success, or the error with "Copiar comando". */
@@ -30,8 +32,10 @@
 
 /* icon (Sessions row, Dashboard inbox): the icon alone; the state opens below it, to the left. */
 .open-icon { display: inline-grid; place-items: center; width: 26px; height: 26px; padding: 0; border-radius: 7px; border: 1px solid var(--border); background: var(--surface); color: var(--muted); flex: none; cursor: pointer; font: inherit; }
-.open-icon:hover:not([aria-disabled="true"]):not(:disabled) { color: var(--text); background: var(--raised); }
-.open-icon:focus-visible, .open-copy:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.open-icon:disabled { cursor: progress; color: var(--accent-text); }
+.open-icon:hover:not([aria-disabled="true"]) { color: var(--text); background: var(--raised); }
+.open-icon:focus-visible, .open-copy:focus-visible, .open-close:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.open-icon[aria-busy="true"] { color: var(--accent-text); }
 .open-icon .icon { font-size: 14px; }
 .open-size-icon .open-status { position: absolute; right: 0; top: calc(100% + 6px); z-index: 3; width: max-content; max-width: 260px; padding: 7px 9px; border-radius: 8px; background: var(--raised); border: 1px solid var(--border); white-space: normal; text-align: left; }
+.open-close { display: inline-grid; place-items: center; width: 22px; height: 22px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--muted); flex: none; cursor: pointer; font: inherit; }
+.open-close:hover { color: var(--text); background: var(--surface); }

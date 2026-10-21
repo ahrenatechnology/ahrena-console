@@ -3,13 +3,13 @@
 // here reaches a core, a terminal or the Claude Desktop.
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { describe, test } from 'node:test';
+import { afterEach, beforeEach, describe, test } from 'node:test';
 import { UI_FOLDER } from '../../src/api/ui.ts';
 import { documentoFalso, ElementoFalso, instalarDomFalso, texto } from './fake-dom.ts';
 
 instalarDomFalso();
 // @ts-expect-error: browser module, plain JavaScript
-const { describeOpenAction, openAction, openedText, openRoute, stateOfAnswer, SUCCESS_MS } = await import('../../ui/open-action.js');
+const { describeOpenAction, openAction, openedText, openRoute, openStateOf, resetOpenStates, stateOfAnswer, FAIL_MS, SUCCESS_MS } = await import('../../ui/open-action.js');
 // @ts-expect-error: idem
 const { ICON_NAMES } = await import('../../ui/dom.js');
 
@@ -36,6 +36,15 @@ function writeError(message: string, status: number, body: Record<string, unknow
 const settle = () => new Promise((ok) => setTimeout(ok, 0));
 const byClass = (root: ElementoFalso, c: string) => root.querySelectorAll(`.${c}`);
 const clickEvent = () => ({ type: 'click' }) as { type: string; defaultPrevented?: boolean };
+
+// The open state is kept by session id across redraws (module level): each test starts clean, and
+// the clipboard stub of a test does not leak into the next.
+const realNavigator = Object.getOwnPropertyDescriptor(globalThis, 'navigator');
+beforeEach(() => resetOpenStates());
+afterEach(() => {
+  if (realNavigator) Object.defineProperty(globalThis, 'navigator', realNavigator);
+});
+const stubClipboard = (writeText: (t: string) => Promise<void>) => Object.defineProperty(globalThis, 'navigator', { value: { clipboard: { writeText } }, configurable: true });
 
 describe('open action: what it shows per target', () => {
   test('the five targets: label, icon, title and disabled', () => {
@@ -99,7 +108,100 @@ describe('open action: what it shows per target', () => {
 });
 
 describe('open action: the click', () => {
-  test('busy "Abrindo…" with the button disabled, then the success beside it, gone after a while', async () => {
+  test('the clipboard refuses: "Não deu para copiar", data-copied false', async () => {
+    stubClipboard(async () => {
+      throw new Error('denied');
+    });
+    const w = stubWriter(writeError('Nenhum terminal respondeu', 502, { error: 'Nenhum terminal respondeu', command: COMMAND }));
+    w.release();
+    const root = openAction({ id: UUID, open: { target: 'terminal', command: COMMAND } }, { size: 'full', write: w.write }) as ElementoFalso;
+    root.querySelector('button')!.click();
+    await settle();
+    const copy = root.querySelector('.open-copy')!;
+    copy.click();
+    await settle();
+    assert.equal(texto(copy), 'Não deu para copiar');
+    assert.equal(copy.getAttribute('data-copied'), 'false');
+    assert.equal(copy.getAttribute('aria-label'), 'Não deu para copiar');
+  });
+
+  test('an AbortError (the screen left) goes back to idle, with nothing kept', async () => {
+    const w = stubWriter(Object.assign(new Error('left'), { name: 'AbortError' }));
+    w.release();
+    const root = openAction({ id: UUID, open: { target: 'desktop', command: null } }, { size: 'full', write: w.write }) as ElementoFalso;
+    root.querySelector('button')!.click();
+    await settle();
+    assert.equal(texto(root.querySelector('.open-status')), '');
+    assert.equal(root.querySelector('.open-status')!.getAttribute('data-state'), 'idle');
+    assert.equal(openStateOf(UUID), null);
+  });
+
+  test('small size: the failure with the icon-only "Copiar comando", labelled', async () => {
+    const w = stubWriter(writeError('Nenhum terminal respondeu', 409, { error: 'Nenhum terminal respondeu', command: COMMAND }));
+    w.release();
+    const root = openAction({ id: UUID, open: { target: 'terminal-live', command: COMMAND } }, { size: 'small', write: w.write }) as ElementoFalso;
+    root.querySelector('button')!.click();
+    await settle();
+    assert.equal(texto(root.querySelector('.open-fail')), 'Nenhum terminal respondeu');
+    const copy = root.querySelector('.open-copy')!;
+    assert.equal(texto(copy), '', 'icon only in the foot');
+    assert.equal(copy.getAttribute('aria-label'), 'Copiar comando');
+    assert.equal(byClass(root, 'open-close').length, 0, 'only the icon popover has Fechar');
+  });
+
+  test('the state survives a redraw: a second action for the same id shows the busy, refuses the click, then shows the failure with its copy', async () => {
+    const w = stubWriter(writeError('Nenhum terminal respondeu', 409, { error: 'Nenhum terminal respondeu', command: COMMAND }));
+    const session = { id: UUID, open: { target: 'terminal-live', command: COMMAND } };
+    const first = openAction(session, { size: 'icon', write: w.write }) as ElementoFalso;
+    first.querySelector('button')!.click();
+    // The screen redraws while the open is in flight.
+    const second = openAction(session, { size: 'icon', write: w.write }) as ElementoFalso;
+    assert.equal(texto(second.querySelector('.open-status')), 'Abrindo…');
+    assert.equal(second.querySelector('button')!.getAttribute('aria-busy'), 'true');
+    second.querySelector('button')!.click();
+    assert.equal(w.calls.length, 1, 'no second terminal');
+    w.release();
+    await settle();
+    assert.equal(texto(second.querySelector('.open-fail')), 'Nenhum terminal respondeu');
+    // And again after the answer: a third build still shows the failure and its copy.
+    const third = openAction(session, { size: 'icon', write: w.write }) as ElementoFalso;
+    assert.equal(texto(third.querySelector('.open-fail')), 'Nenhum terminal respondeu');
+    assert.equal(third.querySelectorAll('.open-copy').length, 1);
+    assert.ok(openStateOf(UUID).until - Date.now() <= FAIL_MS);
+    assert.equal(openStateOf(UUID, Date.now() + FAIL_MS + 1), null, 'gone after the long TTL');
+  });
+
+  test('icon size: the failure popover closes with Fechar and with Escape; the next click clears it', async () => {
+    const w = stubWriter(writeError('Nenhum terminal respondeu', 409, { error: 'Nenhum terminal respondeu', command: COMMAND }));
+    w.release();
+    const session = { id: UUID, open: { target: 'terminal-live', command: COMMAND } };
+    const root = openAction(session, { size: 'icon', write: w.write }) as ElementoFalso;
+    root.querySelector('button')!.click();
+    await settle();
+    const close = root.querySelector('.open-close')!;
+    assert.equal(close.getAttribute('aria-label'), 'Fechar');
+    close.click();
+    assert.equal(texto(root.querySelector('.open-status')), '');
+    assert.equal(openStateOf(UUID), null);
+
+    root.querySelector('button')!.click();
+    await settle();
+    assert.ok(root.querySelector('.open-fail'));
+    root.dispatchEvent({ type: 'keydown', key: 'Escape' });
+    assert.equal(texto(root.querySelector('.open-status')), '');
+
+    root.querySelector('button')!.click();
+    await settle();
+    const ok = stubWriter({ ok: true, opened: 'focused' });
+    const again = openAction(session, { size: 'icon', write: ok.write }) as ElementoFalso;
+    again.querySelector('button')!.click();
+    assert.equal(texto(again.querySelector('.open-status')), 'Abrindo…', 'the click replaced the failure');
+    ok.release();
+    await settle();
+    assert.equal(texto(again.querySelector('.open-status')), 'Terminal à frente');
+  });
+
+  test('busy "Abrindo…" with the button aria-busy (never `disabled`, which drops the focus), then the success beside it, gone after a while', async () => {
     for (const [target, opened, text] of [['desktop', 'desktop', 'Aberta no Claude Desktop'], ['terminal', 'terminal', 'Aberta no terminal'], ['terminal-live', 'focused', 'Terminal à frente']]) {
       const w = stubWriter({ ok: true, opened });
       const root = openAction({ id: UUID, open: { target, command: null } }, { size: 'full', write: w.write, successMs: 20 }) as ElementoFalso;
@@ -109,12 +211,15 @@ describe('open action: the click', () => {
       assert.equal(ev.defaultPrevented, true);
       assert.deepEqual(w.calls, [{ route: `/api/sessions/${UUID}/open`, body: {} }]);
       assert.equal(texto(root.querySelector('.open-status')), 'Abrindo…');
-      assert.ok(button.hasAttribute('disabled'));
+      assert.equal(button.getAttribute('aria-busy'), 'true');
+      assert.equal(button.getAttribute('aria-disabled'), 'true');
+      assert.ok(!button.hasAttribute('disabled'), 'the focus stays on the button');
       button.click();
       assert.equal(w.calls.length, 1, 'a click while in flight sends nothing');
       w.release();
       await settle();
-      assert.ok(!button.hasAttribute('disabled'));
+      assert.equal(button.getAttribute('aria-busy'), null);
+      assert.equal(button.getAttribute('aria-disabled'), null);
       assert.equal(texto(root.querySelector('.open-status')), text);
       assert.equal(byClass(root, 'open-copy').length, 0);
       await new Promise((ok) => setTimeout(ok, 40));
@@ -125,7 +230,7 @@ describe('open action: the click', () => {
 
   test('an error with a command shows the core text and "Copiar comando", which copies it', async () => {
     const copied: string[] = [];
-    Object.defineProperty(globalThis, 'navigator', { value: { clipboard: { writeText: async (t: string) => void copied.push(t) } }, configurable: true });
+    stubClipboard(async (t: string) => void copied.push(t));
     const w = stubWriter(writeError('Nenhum app de terminal respondeu', 502, { error: 'Nenhum app de terminal respondeu', command: COMMAND }));
     w.release();
     const root = openAction({ id: UUID, open: { target: 'terminal', command: COMMAND } }, { size: 'full', write: w.write }) as ElementoFalso;
