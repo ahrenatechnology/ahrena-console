@@ -44,6 +44,8 @@
 // exactly `http://<Host>`, JSON, at most 4 KiB, no cross-site or same-site `Sec-Fetch-Site`. A request
 // without `Origin` is 403 there, unlike the other writes. While GitHub is not connected, every
 // GitHub-backed screen route answers 409 `{ "error": "github-not-connected" }` without calling GitHub.
+// `GET /api/project/options` spends GitHub quota: a browser saying `Sec-Fetch-Site: cross-site` or
+// `same-site` gets 403 before that gate. The connection and the screens are wired in api/core-github.ts.
 //
 // The old Portuguese routes and query parameters (the panel, open, attention and changes ones…) were
 // aliases of these until phase 6 of #173 (decision 0009): now they are 404 like any unknown path.
@@ -86,7 +88,7 @@ import { responderKanban, KANBAN_ROUTE, type QuadroKanban } from './kanban.ts';
 import { EVENTS_ROUTE, responderEventos, type FeedDeEventos } from './events.ts';
 import { agentConfigWriteFromSameOrigin, AGENT_CONFIG_ROUTE, type AgentConfigRoute } from './agent-config.ts';
 import type { McpServer } from '../mcp/protocol.ts';
-import { criarRotaDoProjeto, ehDoProjeto, mesmaOrigemMovendo, type OpcoesDoProjeto } from './project.ts';
+import { criarRotaDoProjeto, ehDoProjeto, mesmaOrigemMovendo, PROJECT_OPTIONS_ROUTE, type OpcoesDoProjeto } from './project.ts';
 import { DETAIL_ROUTE, type LeiturasDoDetalhe } from './session-detail.ts';
 import type { FleetReader } from '../mcp/fleet.ts';
 import { montarAtencao, ATTENTION_ROUTE, type RemoteAttentionSource } from './attention-route.ts';
@@ -100,7 +102,7 @@ import { DEV_CONSOLE_ROUTE, respondDevConsole, type DevConsole } from './dev-con
 import { isTelemetryRoute, reconnectFromSameOrigin, RECONNECT_ROUTE, respondReconnect, respondTelemetry } from './telemetry.ts';
 import type { ReconnectControl } from '../telemetry/reconnect.ts';
 import type { TelemetryService } from '../telemetry/service.ts';
-import { CONNECTIONS_ROUTE, PROJECT_SELECTION_ROUTE, respondConnections, respondProjectSelection, STRICT_WRITE_ROUTES, strictWriteRefusal, type ProjectSelectionTarget } from './connections-route.ts';
+import { CONNECTIONS_ROUTE, fromAnotherSite, PROJECT_SELECTION_ROUTE, respondConnections, respondProjectSelection, STRICT_WRITE_ROUTES, strictWriteRefusal, type ProjectSelectionTarget } from './connections-route.ts';
 import type { GithubConnection } from '../github/connection/connection.ts';
 
 export { API_VERSION };
@@ -160,7 +162,7 @@ export interface ApiOptions {
   /** As ADRs e as PDRs dos repositórios (api/adrs.ts, #174); sem ela, `/api/adrs` e `/api/pdrs` dão 404. */
   decisions?: DecisionsRoute;
   /** The Dev Console (#177); turns on `GET /api/dev-console`. */
-  devConsole?: DevConsole;
+  devConsole?: Pick<DevConsole, 'overview' | 'view'>;
   /** The Agent Config screen (`createAgentConfigRoute`); without it, `/api/agent-config` gives 404. */
   agentConfig?: AgentConfigRoute;
   /** Machine telemetry (#175); without it, `/api/machines` and `/api/telemetry` give 404. */
@@ -374,6 +376,8 @@ export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
       return respondConnections(req, res, url.pathname, opts.connection);
     }
     if (!allowedLocalRequest(req, port) && !sameOriginRead(req, port) && !sameOriginOpen(req, port) && !mesmaOrigemMovendo(req, port) && !sameOriginDecision(req, port) && !agentConfigWriteFromSameOrigin(req, port) && !frameworkInstallWriteFromSameOrigin(req, port) && !reconnectFromSameOrigin(req, port)) return send(res, 403, { error: 'origem não permitida' });
+    // The Project list spends GitHub quota: another site's page never gets it, connected or not.
+    if (url.pathname === PROJECT_OPTIONS_ROUTE && fromAnotherSite(req)) return send(res, 403, { error: 'forbidden' });
     if (opts.githubConnected && isGithubScreenRoute(url.pathname) && !(await opts.githubConnected())) return send(res, 409, { error: 'github-not-connected' });
     if (url.pathname.startsWith(HOOKS_PATH)) return hooks(req, res);
     const openMatch = OPEN.exec(url.pathname);

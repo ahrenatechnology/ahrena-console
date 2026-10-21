@@ -219,6 +219,10 @@ describe('#241/AC-2 409 github-not-connected on every GitHub screen, with no out
         const r = await call(b.api, path, { method: 'POST', headers: b.ui, body: JSON.stringify(body) });
         assert.deepEqual([r.status, r.json], [409, { error: 'github-not-connected' }], path);
       }
+      for (const site of ['cross-site', 'same-site']) {
+        const r = await call(b.api, '/api/project/options', { headers: { host: b.host, 'sec-fetch-site': site } });
+        assert.equal(r.status, 403, `another site asking for the options is refused before the gate (${site})`);
+      }
       assert.deepEqual(sent, [], 'no request left');
       const st = await call(b.api, '/api/connections', { headers: { host: b.host } });
       assert.equal(st.json.github.state, 'disconnected');
