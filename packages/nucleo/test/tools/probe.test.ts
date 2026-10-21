@@ -97,6 +97,11 @@ describe('#280 source detection', () => {
     assert.equal(detectSource(entry('claude'), `${HOME}/.local/share/claude/versions/2.1.299`, ctx), 'native');
     assert.equal(detectSource(entry('aws'), '/usr/local/aws-cli/aws', ctx), 'official');
     assert.equal(detectSource(entry('git'), '/usr/bin/git', ctx), 'manual');
+    // A cask whose payload is a .pkg: the realpath is outside Homebrew, the link is not.
+    assert.equal(detectSource(entry('session-manager-plugin'), '/usr/local/sessionmanagerplugin/bin/session-manager-plugin', ctx, '/opt/homebrew/bin/session-manager-plugin'), 'homebrew');
+    assert.equal(detectSource(entry('session-manager-plugin'), '/usr/local/sessionmanagerplugin/bin/session-manager-plugin', ctx, '/usr/local/bin/session-manager-plugin'), 'manual');
+    // The realpath wins over the link: the AWS .pkg linked from /usr/local/bin stays official.
+    assert.equal(detectSource(entry('aws'), '/usr/local/aws-cli/aws', ctx, '/opt/homebrew/bin/aws'), 'official');
     // A prefix is a folder, not a string prefix.
     assert.equal(detectSource(entry('gh'), '/opt/homebrewx/bin/gh', ctx), 'manual');
   });

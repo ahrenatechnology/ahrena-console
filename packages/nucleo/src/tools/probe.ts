@@ -6,7 +6,7 @@
 //   (`execFile`, no shell, 5 s); the version is the probe regex's first group over stdout and stderr.
 // - The source is the `realpath` of the binary against each source's `binaryUnder` (in the catalog's
 //   order, for this platform and arch): `/opt/homebrew/...` is Homebrew, `~/.local/share/fnm/...` is
-//   fnm. No match: `manual` (no action). `{npmPrefix}` is the active Node's prefix, so a global npm
+//   fnm; then the path on the PATH itself. No match: `manual` (no action). `{npmPrefix}` is the active Node's prefix, so a global npm
 //   package is told apart from one of Homebrew.
 
 import { realpath as fsRealpath } from 'node:fs/promises';
@@ -62,15 +62,23 @@ export function npmPrefixOf(nodeRealPath: string, platform: Platform): string {
   return platform === 'win32' ? P.dirname(nodeRealPath) : P.dirname(P.dirname(nodeRealPath));
 }
 
-export function detectSource(entry: ToolEntry, realPath: string, ctx: Pick<ProbeContext, 'platform' | 'arch' | 'home' | 'npmPrefix'>): DetectedSourceId {
+/**
+ * The source of a binary: its realpath against each source's `binaryUnder`, in order; when none
+ * matches, the path found on the PATH itself (a Homebrew cask whose payload is a .pkg links
+ * `/opt/homebrew/bin/x` to a folder outside Homebrew); else `manual`.
+ */
+export function detectSource(entry: ToolEntry, realPath: string, ctx: Pick<ProbeContext, 'platform' | 'arch' | 'home' | 'npmPrefix'>, binaryPath: string | null = null): DetectedSourceId {
   const sources = sourcesFor(entry, ctx.platform, ctx.arch);
   if (entry.anySourcePath) return sources[0]?.id ?? 'manual';
-  for (const s of sources)
-    for (const raw of s.binaryUnder) {
-      const prefix = raw === NPM_PREFIX_TOKEN ? (ctx.npmPrefix ?? null) : expandHome(raw, ctx.home, ctx.platform);
-      if (prefix && isUnder(realPath, prefix, ctx.platform)) return s.id;
-    }
-  return 'manual';
+  const match = (path: string) => {
+    for (const s of sources)
+      for (const raw of s.binaryUnder) {
+        const prefix = raw === NPM_PREFIX_TOKEN ? (ctx.npmPrefix ?? null) : expandHome(raw, ctx.home, ctx.platform);
+        if (prefix && isUnder(path, prefix, ctx.platform)) return s.id;
+      }
+    return null;
+  };
+  return match(realPath) ?? (binaryPath && binaryPath !== realPath ? match(binaryPath) : null) ?? 'manual';
 }
 
 export async function probeTool(entry: ToolEntry, ctx: ProbeContext): Promise<Detection> {
@@ -79,7 +87,7 @@ export async function probeTool(entry: ToolEntry, ctx: ProbeContext): Promise<De
   const binaryPath = await which(entry.probe.argv[0]!, ctx.path, { platform: ctx.platform, ...(ctx.isExecutable ? { isExecutable: ctx.isExecutable } : {}) });
   if (!binaryPath) return none;
   const realPath = await (ctx.realpath ?? fsRealpath)(binaryPath).catch(() => binaryPath);
-  const sourceId = detectSource(entry, realPath, ctx);
+  const sourceId = detectSource(entry, realPath, ctx, binaryPath);
   const r = await ctx.run([binaryPath, ...entry.probe.argv.slice(1)], { timeoutMs: PROBE_TIMEOUT_MS, env: toolsEnv(ctx.path, ctx.env) }).catch(() => null);
   const installed = r ? parseVersion(entry.probe, `${r.stdout}\n${r.stderr}`) : null;
   const probeError = installed ? null : !r || (r.code === null && r.error) ? 'probe-failed' : 'no-version';
