@@ -1,6 +1,6 @@
 # 0011 · O console conecta ao GitHub sozinho: device flow, Keychain e a API direto
 
-- **Status:** proposta, a confirmar pelo Fernando junto com os wireframes C39 a C44
+- **Status:** aceita (o Fernando aprovou a decisão e os wireframes C39 a C44 em 21/10/2026)
 - **Data:** 2026-10-20
 - **Issue:** [#241](https://github.com/ahrenatechnology/ahrena-console/issues/241)
 - **Substitui:** em [0001](0001-github-consulta-cache.md), a credencial: "O adaptador local chama o GitHub com o token do `gh`". O cache, os TTLs, a fila única e o orçamento da 0001 continuam valendo.
