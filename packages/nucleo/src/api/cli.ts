@@ -99,6 +99,8 @@ import { RemoteMachines } from '../telemetry/remote-machines.ts';
 import { INVALID_MACHINES_FILE, publishReconnectChanges, reconnectLogFile, ReconnectRunner } from '../telemetry/reconnect.ts';
 import { loopbackGet } from '../telemetry/adapters/loopback-http.ts';
 import type { TelemetryCollector } from '../telemetry/ports.ts';
+import { SqliteToolChecksStore } from '../tools/store.ts';
+import { ToolsService } from '../tools/service.ts';
 import { SIMULATED_WORKSTATION, SimulatedCollector, seedTelemetry } from '../simulator/telemetry.ts';
 
 const o = parseApiOptions(process.argv.slice(2));
@@ -470,6 +472,11 @@ if (demo) {
 const machineEntries = (): MachineEntry[] => [localEntry, ...demoEntries, ...(remoteMachines?.list() ?? [])];
 const telemetryService = samplers.length > 0 || remoteMachines ? new TelemetryService({ store: sampleStore, tracker: alertTracker, machines: machineEntries }) : null;
 
+// The Tools screen (#280, decision 0014): this machine's CLIs, runtimes and containers, read with the
+// catalog's fixed probes; the latest versions only from the tool_checks cache (a check reads the
+// network). Not in --demo: the demo must not read the real machine.
+const toolsService = demo ? null : new ToolsService({ store: new SqliteToolChecksStore(sqlite.db), log });
+
 let historyReady = false;
 const follower =
   demo || o.noHistory
@@ -522,6 +529,7 @@ const api: LocalApi = await startLocalApi({
   agentConfig,
   telemetry: telemetryService,
   reconnect: reconnectRunner,
+  tools: toolsService,
   load: () => ({
     history: follower ? (historyReady ? 'ready' : 'importing') : 'off',
     follower: follower?.stats() ?? null,

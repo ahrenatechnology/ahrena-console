@@ -34,6 +34,7 @@
 // | `GET /api/machines`           | The machines: this one and the remote ones, with state and alerts (api/telemetry.ts, #175) |
 // | `GET /api/telemetry`          | One machine's telemetry: current reading, series and alerts (`?machine=`, `?hours=1|12`; #175) |
 // | `POST /api/machines/<id>/reconnect` and `DELETE` | Reconnect a remote machine with the command of machines.json, and Cancel (api/telemetry.ts, #244) |
+// | `GET /api/tools`              | The Tools screen: CLIs, runtimes and containers, installed and latest versions, the catalog's actions (`?machine=`; api/tools.ts, #280) |
 //
 // The old Portuguese routes and query parameters (the panel, open, attention and changes ones…) were
 // aliases of these until phase 6 of #173 (decision 0009): now they are 404 like any unknown path.
@@ -90,6 +91,8 @@ import { DEV_CONSOLE_ROUTE, respondDevConsole, type DevConsole } from './dev-con
 import { isTelemetryRoute, reconnectFromSameOrigin, RECONNECT_ROUTE, respondReconnect, respondTelemetry } from './telemetry.ts';
 import type { ReconnectControl } from '../telemetry/reconnect.ts';
 import type { TelemetryService } from '../telemetry/service.ts';
+import { isToolsRoute, respondTools } from './tools.ts';
+import type { ToolsService } from '../tools/service.ts';
 
 export { API_VERSION };
 
@@ -155,6 +158,8 @@ export interface ApiOptions {
   telemetry?: TelemetryService | null;
   /** The reconnect of the remote machines (#244); without it, `POST /api/machines/<id>/reconnect` gives 404 or 409. */
   reconnect?: ReconnectControl | null;
+  /** The Tools screen (#280, decision 0014); without it, `/api/tools` gives 404. */
+  tools?: Pick<ToolsService, 'overview'> | null;
 }
 
 /** The `local_<uuid>` id of the Claude Desktop index, and nothing else. */
@@ -367,6 +372,7 @@ export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
     if (opts.decisions && [ADRS_ROUTE, PDRS_ROUTE].some((r) => url.pathname === r || url.pathname.startsWith(`${r}/`))) return opts.decisions(res, url);
     if (url.pathname === DEV_CONSOLE_ROUTE && opts.devConsole) return respondDevConsole(res, url, opts.devConsole);
     if (isTelemetryRoute(url.pathname)) return respondTelemetry(res, url, opts.telemetry);
+    if (isToolsRoute(url.pathname)) return respondTools(res, url, opts.tools);
     if (url.pathname === LOAD_ROUTE) {
       return send(res, 200, {
         ...counters,
