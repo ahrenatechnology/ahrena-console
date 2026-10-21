@@ -97,6 +97,22 @@ describe('#280 ToolsService.overview without a check', () => {
     assert.deepEqual(c.actions.map((a) => [a.id, a.steps, a.runnable, a.admin]), [['stop', [['colima', 'stop']], true, false]]);
   });
 
+  test('the containers card is read with the 30 s probe snapshot: two overviews within 30 s run docker and colima once', async () => {
+    let now = NOW;
+    const { service, run } = macService({ now: () => now, extra: { probeCacheMs: 30_000 } });
+    const containerCommands = () => run.calls.map((a) => a.join(' ')).filter((c) => / (context show|status --json|ps -a|system df) /.test(`${c} `));
+    const first = (await service.overview())!.containers;
+    const once = containerCommands();
+    assert.equal(once.length, 4);
+    now += 29_000;
+    const second = (await service.overview())!.containers;
+    assert.deepEqual(containerCommands(), once, 'no container command runs again within 30 s');
+    assert.deepEqual(second, first);
+    now += 2_000;
+    await service.overview();
+    assert.equal(containerCommands().length, 8, 'a new snapshot reads the card again');
+  });
+
   test('Colima stopped offers Start; no Colima offers the install, with Docker Desktop found next to it, read only', async () => {
     const stopped = macService({ run: { '/opt/homebrew/bin/colima status --json': { code: 1, stderr: 'colima is not running' } } });
     const c1 = (await stopped.service.overview())!.containers;

@@ -1,7 +1,7 @@
 // The Tools screen's data (#280, decision 0014): `overview()` is the body of `GET /api/tools`, and
 // `check()` is Verificar agora (layer 2's `POST /api/tools/checks`).
 //
-// - `overview()` is local: the probes (cached 30 s), the managers present, the containers card, and
+// - `overview()` is local: the probes and the containers card (cached 30 s), the managers present, and
 //   the latest versions from the `tool_checks` cache when still valid (6 h). With no valid cache the
 //   latest is `null` and the state `checking`, never `ok`. No network read happens here.
 // - `check()` runs `brew update` when Homebrew is present (no password), then every latest reader
@@ -113,6 +113,8 @@ interface LocalSnapshot {
   detections: Map<string, Detection>;
   /** Manager executables on the login PATH: name → full path or null. */
   managers: Map<string, string | null>;
+  /** The containers card, read once per snapshot (and network state) so a request does not run docker. */
+  containers?: { network: NetworkState; view: Promise<ContainersView<ToolActionView>> };
 }
 
 const ITEM_GROUPS: readonly ToolGroup[] = ['cli', 'runtime'];
@@ -262,7 +264,7 @@ export class ToolsService {
     const nodeSource = snap.detections.get('node')?.sourceId ?? null;
     const items = this.catalog.filter((e) => ITEM_GROUPS.includes(e.group)).map((entry) => this.item(entry, snap, checks.get(entry.id), nodeSource, actionView));
 
-    const containers = await readContainers<ToolActionView>({
+    if (!snap.containers || snap.containers.network !== network) snap.containers = { network, view: readContainers<ToolActionView>({
       platform: this.platform,
       detections: snap.detections,
       run: this.run,
@@ -273,7 +275,8 @@ export class ToolsService {
         const d = snap.detections.get(toolId);
         return entry ? actionView(entry, actionId, { installed: d?.installed ?? null, sourceId: d?.sourceId ?? null }, null) : null;
       },
-    });
+    }) };
+    const containers = await snap.containers.view;
 
     return {
       version: TOOLS_API_VERSION,
