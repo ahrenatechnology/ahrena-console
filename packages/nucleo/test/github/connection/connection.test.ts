@@ -460,7 +460,7 @@ describe('#241/AC-3 the credential lives only in the vault', () => {
     assert.equal(await conn.token(), TOKEN);
   });
 
-  test('reconnecting as another login: the old credential serves until the new one replaces it; the old entry stays', async () => {
+  test('reconnecting as another login: the old credential serves until the new one replaces it; then the old entry is deleted', async () => {
     const s = setup({ seed: { 'dev-sintetico': TOKEN } });
     assert.equal(await s.conn.token(), TOKEN);
     s.auth.login = 'second-account';
@@ -476,7 +476,7 @@ describe('#241/AC-3 the credential lives only in the vault', () => {
     assert.deepEqual([st.state, st.login], ['connected', 'second-account']);
     assert.equal(await s.conn.token(), OTHER_TOKEN);
     assert.equal(s.settings.get('github.login'), 'second-account');
-    assert.deepEqual((await s.vault.inner.list()).sort(), ['dev-sintetico', 'second-account']);
+    assert.deepEqual(await s.vault.inner.list(), ['second-account'], 'no live token outlives its use (review 2, decided)');
     assert.equal(s.events.identity, identity + 1);
   });
 
@@ -833,5 +833,48 @@ describe('#241/AC-2 review L1, L2, L6', () => {
     await s.conn.setSource('console');
     await s.conn.disconnect();
     assert.equal(s.events.identity, 0);
+  });
+});
+
+describe('#241 review 2 (Argos)', () => {
+  test('H1: disconnect while a first-boot adoption waits on vault.list() stays disconnected', async () => {
+    let release: () => void = () => undefined;
+    const gate = new Promise<void>((r) => (release = r));
+    const vault = new SpyVault({ 'dev-sintetico': TOKEN });
+    const list = vault.list.bind(vault);
+    vault.list = async () => {
+      await gate;
+      return list();
+    };
+    const s = setup({ vault });
+    const first = s.conn.status();
+    assert.equal((await s.conn.disconnect()).state, 'disconnected');
+    release();
+    await first;
+    await s.conn.idle();
+    const st = await s.conn.status();
+    assert.equal(st.state, 'disconnected');
+    assert.equal(s.settings.get('github.login'), null);
+    await assert.rejects(s.conn.token(), GithubNotConnectedError);
+  });
+
+  test('reconnecting as the same login keeps its (overwritten) entry', async () => {
+    const s = setup({ seed: { 'dev-sintetico': TOKEN } });
+    await s.conn.token();
+    s.auth.token = OTHER_TOKEN;
+    await connect(s);
+    assert.deepEqual(await s.vault.inner.list(), ['dev-sintetico']);
+    assert.equal(await s.vault.inner.get('dev-sintetico'), OTHER_TOKEN);
+  });
+
+  test('a failed delete of the previous entry is logged, and the new connection stands', async () => {
+    const s = setup({ seed: { 'dev-sintetico': TOKEN } });
+    await s.conn.token();
+    s.auth.login = 'second-account';
+    s.auth.token = OTHER_TOKEN;
+    s.vault.fail.add('delete');
+    const st = await connect(s);
+    assert.deepEqual([st.state, st.login], ['connected', 'second-account']);
+    assert.ok(s.logs.some((l) => /previous vault entry could not be deleted/.test(l)));
   });
 });

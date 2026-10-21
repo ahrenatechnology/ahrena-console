@@ -13,7 +13,8 @@
 // Device flow: one at a time; the device code lives only here, in memory, and is dropped when the
 // flow ends for any reason. Polls honour `interval` and `slow_down`; expiry, `access_denied` and
 // GitHub errors end the flow with a machine code in `lastError`. Reconnecting while connected keeps
-// the old credential serving until the new one replaces it.
+// the old credential serving until the new one replaces it; reconnecting as another login then deletes
+// the previous login's vault entry.
 //
 // Nothing here ever logs, returns or throws the credential or the device code.
 
@@ -227,6 +228,11 @@ export class GithubConnection {
     }
   }
 
+  /** The source in use now (env > settings > console); no I/O. */
+  credentialSource(): GithubCredentialSource {
+    return this.sourceInfo().source;
+  }
+
   // ---- status ----
 
   async status(): Promise<GithubConnectionStatus> {
@@ -277,6 +283,8 @@ export class GithubConnection {
     // A stored null survives a restart: the single vault entry is adopted only on a first boot.
     this.settings.set('github.login', null);
     if (!login && this.credential === null) {
+      // A first-boot adoption may still be waiting on the vault: a new generation makes it give up.
+      this.forget();
       this.credentialLoad = Promise.resolve();
       if (hadFlow) this.onChange();
       return this.status();
@@ -540,6 +548,7 @@ export class GithubConnection {
       return;
     }
     const changed = this.login !== user.login || this.credential !== token;
+    const previous = this.login;
     this.dropFlow();
     this.generation++;
     this.credentialLoad = Promise.resolve();
@@ -553,6 +562,10 @@ export class GithubConnection {
     this.orgs = { checked: false, blocked: [] };
     this.checkOrgs(this.generation, token);
     this.log(`github: connected as ${user.login}`);
+    // Reconnected as another login: the previous entry goes, so no live token outlives its use.
+    if (previous && previous !== user.login) {
+      await this.vault!.delete(previous).catch(() => this.log('github: the previous vault entry could not be deleted'));
+    }
     if (changed) this.onIdentityChange();
     this.onChange();
   }
