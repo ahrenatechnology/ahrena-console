@@ -186,12 +186,19 @@ export async function loadAvailability(read, sessionIds, onEach = () => {}) {
           .finally(() => pending.delete(id));
         pending.set(id, p);
       }
+      let value;
       try {
-        onEach(id, await p);
+        value = await p;
       } catch (e) {
-        if (e?.name === 'AbortError') return;
-        throw e;
+        if (e?.name !== 'AbortError') throw e;
+        // The lookup was shared with a screen that left: ask again once, with this caller's own read.
+        value = await read(messagingRoute(id, 'messaging'))
+          .then((answer) => (typeof answer?.available === 'boolean' ? answer : null))
+          .catch((e2) => (e2?.name === 'AbortError' ? undefined : null));
+        if (value === undefined) return;
+        rememberAvailability(id, value);
       }
+      onEach(id, value);
     }
   }
   await Promise.all(Array.from({ length: Math.min(PARALLEL, queue.length) }, worker));
@@ -233,9 +240,14 @@ export function createComposeBox(ctx, sessionId, { head = () => null, openInDesk
   const placeholder = `Escreva para a sessão… (${kbd} envia)`;
 
   let availability = null;
-  /** The message being followed: `{ messageId, state, … }` from the core. */
+  /** This box's own message, from the 202 of its POST: `{ messageId, state, … }`. Only it touches the text. */
   let message = null;
-  /** A refusal or failure of the request itself: `{ kind, text }`. */
+  /**
+   * A message in flight that this box did not send (another tab, a reopened page): `{ messageId, text }`.
+   * The box waits for it to settle, with the text untouched, and then sends again normally.
+   */
+  let foreign = null;
+  /** A refusal or failure of the request itself: `{ kind, title, text }`. */
   let notice = null;
   let sending = false;
   let retryUntil = 0;
@@ -244,7 +256,7 @@ export function createComposeBox(ctx, sessionId, { head = () => null, openInDesk
   let wantFocus = false;
 
   const textarea = el('textarea', { class: 'sm-input', rows: '3', 'aria-label': 'Mensagem para a sessão', placeholder, spellcheck: 'true' });
-  const counter = el('span', { class: 'sm-count mono', 'aria-live': 'polite' });
+  const counter = el('span', { class: 'sm-count mono' });
   const field = el('div', { class: 'sm-field' }, textarea, counter);
   const dest = el('div', { class: 'sm-dest' });
   const status = el('div', { class: 'sm-status-slot' });
@@ -260,7 +272,7 @@ export function createComposeBox(ctx, sessionId, { head = () => null, openInDesk
 
   const text = () => textarea.value ?? '';
   const bytes = () => byteLength(text());
-  const sendable = () => availability?.available && !sending && text().trim().length > 0 && bytes() <= MAX_BYTES && Date.now() >= retryUntil;
+  const sendable = () => availability?.available && !sending && !foreign && text().trim().length > 0 && bytes() <= MAX_BYTES && Date.now() >= retryUntil;
 
   textarea.addEventListener('input', () => {
     // A new text after a settled message starts over: the old state no longer describes the box.
@@ -371,6 +383,8 @@ export function createComposeBox(ctx, sessionId, { head = () => null, openInDesk
       status.replaceChildren(statusLine({ kind: 'info', icon: 'info', title: why.title, text: why.text }));
       note.hidden = true;
       actions.replaceChildren(...(a.reason === 'no_live_process' ? openButton() : []), sendButton('Enviar', { enabled: false }));
+      // Nothing to focus: a box that turns on minutes later must not take the focus then.
+      wantFocus = false;
       return;
     }
 
@@ -385,8 +399,9 @@ export function createComposeBox(ctx, sessionId, { head = () => null, openInDesk
     const lines = [];
     const s = messageStatus(sending ? { state: 'sending' } : message);
     if (s) lines.push(statusLine(s));
+    if (foreign) lines.push(statusLine({ kind: 'wait', icon: 'clock', title: 'Outra mensagem a caminho.', text: foreign.text }));
     if (notice) lines.push(statusLine({ kind: notice.kind, icon: notice.kind === 'fail' ? 'error' : 'clock', title: notice.title, text: notice.text }));
-    if (!s && !notice) lines.push(permissionWarning());
+    if (!s && !notice && !foreign) lines.push(permissionWarning());
     status.replaceChildren(...lines.filter(Boolean));
 
     const send = [];
@@ -404,15 +419,17 @@ export function createComposeBox(ctx, sessionId, { head = () => null, openInDesk
     }
   }
 
+  const FOREIGN_TEXT = 'Ainda há uma mensagem a caminho desta sessão. Espere a confirmação.';
+
   async function readAvailability() {
     try {
       const a = await ctx.read(messagingRoute(sessionId, 'messaging'));
       availability = a;
       rememberAvailability(sessionId, a);
-      // A message in flight that this box does not follow (the page was reopened): follow it.
-      if (a.inFlight && !sending && message?.messageId !== a.inFlight) {
-        message = { messageId: a.inFlight, state: 'sending' };
-        follow();
+      // A message in flight that this box did not send (the page was reopened, another tab): wait for it.
+      if (a.inFlight && !sending && message?.messageId !== a.inFlight && foreign?.messageId !== a.inFlight) {
+        foreign = { messageId: a.inFlight, text: FOREIGN_TEXT };
+        watch(a.inFlight);
       }
     } catch (e) {
       if (e?.name === 'AbortError') return;
@@ -426,33 +443,50 @@ export function createComposeBox(ctx, sessionId, { head = () => null, openInDesk
     poll = null;
   }
 
-  function follow() {
+  /** The id being watched: this box's own message while it is sending, or else the foreign one. */
+  const watched = () => (message?.state === 'sending' ? message.messageId : (foreign?.messageId ?? null));
+
+  /** Asks for the state of message `id` until it settles; a failing core is asked less and less often, then given up on. */
+  function watch(id, failures = 0) {
     stopPolling();
-    const id = message?.messageId;
-    if (!id) return;
+    const delay = failures ? Math.min(timing.pollMs * 2 ** failures, timing.pollMs * 16) : timing.pollMs;
     poll = setTimeout(async () => {
       try {
         const m = await ctx.read(messagingRoute(sessionId, `messages/${encodeURIComponent(id)}`));
-        if (message?.messageId !== id) return;
+        if (watched() !== id) return;
+        if (m.state === 'sending') return void watch(id);
+        if (foreign?.messageId === id) {
+          // Not ours: the text stays as it is, and the box can send again.
+          foreign = null;
+          return void draw();
+        }
         settle(m);
       } catch (e) {
-        if (e?.name === 'AbortError' || message?.messageId !== id) return;
-        if (e?.status === 404) {
-          // The core restarted (or forgot it): nobody knows whether it arrived.
-          message = null;
-          notice = { kind: 'wait', title: 'Sem notícia da mensagem.', text: 'O núcleo reiniciou e não sabe mais dela. Veja na conversa se ela chegou antes de mandar de novo.' };
-          draw();
-          return;
-        }
-        follow();
+        if (e?.name === 'AbortError' || watched() !== id) return;
+        if (e?.status === 404 || failures >= 5) return void lost(id, e?.status === 404);
+        watch(id, failures + 1);
       }
-    }, timing.pollMs);
+    }, delay);
   }
 
+  /** The core forgot the message (it restarted) or stopped answering: nobody knows whether it arrived. */
+  function lost(id, forgotten) {
+    if (foreign?.messageId === id) foreign = null;
+    if (message?.messageId === id) message = null;
+    notice = {
+      kind: 'wait',
+      title: 'Sem notícia da mensagem.',
+      text: forgotten ? 'O núcleo reiniciou e não sabe mais dela. Veja na conversa se ela chegou antes de mandar de novo.' : 'O núcleo parou de responder sobre ela. Veja na conversa se ela chegou antes de mandar de novo.',
+    };
+    draw();
+  }
+
+  /** This box's own message changed state. */
   function settle(m) {
     message = m;
-    if (m.state === 'sending') return void (draw(), follow());
+    if (m.state === 'sending') return void (draw(), watch(m.messageId));
     stopPolling();
+    notice = null;
     // Delivered or sent: the text left the box. Not delivered: it stays, for "Tentar de novo".
     if (m.state === 'delivered' || m.state === 'sent_unconfirmed') textarea.value = '';
     if (m.state === 'delivered') onDelivered();
@@ -474,9 +508,9 @@ export function createComposeBox(ctx, sessionId, { head = () => null, openInDesk
       if (e?.name === 'AbortError') return;
       const reason = e?.body?.reason ?? null;
       if (reason === 'in_flight' && e.body.messageId) {
-        message = { messageId: e.body.messageId, state: 'sending' };
-        notice = { kind: 'wait', title: 'Ainda há uma mensagem a caminho.', text: e.message };
-        follow();
+        // Someone else's message is on the way: wait for it; this text stays in the box, unsent.
+        foreign = { messageId: e.body.messageId, text: e.message || FOREIGN_TEXT };
+        watch(e.body.messageId);
       } else if (reason === 'rate_limited') {
         const wait = Number(e.body.retryAfterMs) || e.retryIn || 10_000;
         retryUntil = Date.now() + wait;
@@ -500,7 +534,7 @@ export function createComposeBox(ctx, sessionId, { head = () => null, openInDesk
   return {
     node,
     /** Re-reads the availability (a live change of the session); the text and the message in flight stay. */
-    refresh: () => (sending || message?.state === 'sending' ? undefined : readAvailability()),
+    refresh: () => (sending || watched() ? undefined : readAvailability()),
     /** Focuses the text as soon as the box can take it ("Mandar mensagem" from a list). */
     focus() {
       wantFocus = true;

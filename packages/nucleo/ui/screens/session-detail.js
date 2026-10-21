@@ -508,6 +508,9 @@ function conversationTab(ctx, base, { head } = {}) {
     draw();
   });
   const bar = el('div', { class: 'sd-bar' }, selector, count, el('button', { type: 'button', class: 'btn outline', onClick: () => draw() }, icon('refresh'), 'Atualizar'));
+  // A re-draw replaces only this wrapper: the compose box is placed once per show and never moved, so a
+  // live change does not take the focus, the caret or an IME composition away from the person typing.
+  const content = el('div', { class: 'sd-conversation' });
 
   async function draw() {
     try {
@@ -516,10 +519,10 @@ function conversationTab(ctx, base, { head } = {}) {
       selector.replaceChildren(...c.agents.map((a) => el('option', { value: a.id, selected: a.id === c.agent }, a.name)));
       count.replaceChildren(icon('conversation'), `${num(c.total)} mensage${c.total === 1 ? 'm' : 'ns'}`);
       list.replaceChildren(...(c.messages.length ? c.messages.map(message) : [el('p', { class: 'sd-none' }, 'Nenhuma mensagem deste agente ainda.')]));
-      target?.replaceChildren(bar, list, composeBox().node);
+      content.replaceChildren(bar, list);
     } catch (e) {
       if (e.name === 'AbortError') return;
-      target?.replaceChildren(error({ title: 'Não deu para ler a conversa', text: e.message, retry: draw }), composeBox().node);
+      content.replaceChildren(error({ title: 'Não deu para ler a conversa', text: e.message, retry: draw }));
     }
   }
 
@@ -580,6 +583,7 @@ function conversationTab(ctx, base, { head } = {}) {
     async show(node) {
       target = node;
       await draw();
+      if (target === node) node.replaceChildren(content, composeBox().node);
       // "Mandar mensagem" from a list opens here with `?focus=message`: the box takes the focus once.
       if (new URLSearchParams(location.search).get('focus') === 'message') {
         history.replaceState(null, '', `${location.pathname}${location.hash}`);

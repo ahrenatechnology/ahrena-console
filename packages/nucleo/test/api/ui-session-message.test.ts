@@ -243,10 +243,16 @@ describe('#61/AC-1 C51: the compose box at the foot of the Detail\'s Conversa', 
 
   test('"Mandar mensagem" lands here with ?focus=message: the text takes the focus and the query leaves the URL', async () => {
     plans.set(DETAIL_SESSION, { processes: 1 });
-    const { box } = await openDetail(DETAIL_SESSION, `/ui/sessions/${DETAIL_SESSION}?focus=message#conversation`);
+    const { box, area } = await openDetail(DETAIL_SESSION, `/ui/sessions/${DETAIL_SESSION}?focus=message#conversation`);
     await until(() => documentoFalso.activeElement === one(box, 'textarea'), 'the focus');
     assert.equal(page.search, '');
     assert.equal(page.hash, '#conversation');
+    // A re-draw of the conversation (a live change, Atualizar) does not move the box: the focus stays.
+    const reads = requests.filter((r) => r.path.includes('/conversation')).length;
+    buttonNamed(one(area, '.sd-bar')!, /Atualizar/)!.click();
+    await until(() => requests.filter((r) => r.path.includes('/conversation')).length > reads, 'the re-draw');
+    await sleep(30);
+    assert.equal(documentoFalso.activeElement, one(box, 'textarea'), 'still focused after the re-draw');
   });
 });
 
@@ -318,9 +324,14 @@ describe('#61/AC-1 C52: the delivery states', () => {
     assert.equal(other.state, 'sending');
     type(box, 'e esta aqui');
     pressSend(box);
-    await until(() => /Ainda há uma mensagem a caminho/.test(texto(box)), 'the in-flight notice');
-    assert.match(texto(box), /Ainda há uma mensagem a caminho desta sessão\. Espere a confirmação\./);
-    await until(() => /sem confirmação/.test(texto(box)), 'the followed message settles');
+    await until(() => /Outra mensagem a caminho/.test(texto(box)), 'the in-flight notice');
+    assert.match(texto(box), /Outra mensagem a caminho\. Ainda há uma mensagem a caminho desta sessão\. Espere a confirmação\./);
+    assert.ok(disabled(one(box, '.sm-send')), 'Enviar waits for the other message');
+    await until(() => !/Outra mensagem a caminho/.test(texto(box)), 'the other message settles');
+    // Not this box's message: its text stays, nothing says it was sent, and Enviar is back.
+    assert.equal(one(box, 'textarea')!.value, 'e esta aqui');
+    assert.doesNotMatch(texto(box), /sem confirmação|Entregue|Não entregue/);
+    assert.ok(!disabled(one(box, '.sm-send')));
     assert.deepEqual(delivered.map((d) => d.text), ['da outra aba']);
   });
 
