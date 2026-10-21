@@ -10,6 +10,12 @@
 // the extension's or any other installation's, whatever port they are on. Without Node, the app does
 // not look for a core anywhere: it shows the A4 (stopped) menu.
 //
+// After an update, the previous version's core may still be up (issue #220: the MCP bridges registered
+// as its clients keep it alive after its app is gone). The owner replaces a core of an older version
+// on its own; the app checks the `version` of the start line against the core it bundles
+// (`packages/nucleo/package.json`) and refuses an older one, so the window never shows the old /ui.
+// The swap is silent; only a failure reaches the tray, as the stopped state's reason.
+//
 // On exit, the app signals nobody: the core it started has the app as `--parent`, exits within a
 // second of the app being gone, and deletes its own entry in the instance registry
 // (~/.ahrena-console/instances/) as it goes.
@@ -110,6 +116,7 @@ struct StartLine {
     installation: Option<String>,
     #[serde(rename = "dataDir")]
     data_dir: Option<String>,
+    version: Option<String>,
 }
 
 /// The `state` of the line.
@@ -130,9 +137,25 @@ fn start_state<'de, D: serde::Deserializer<'de>>(d: D) -> Result<StartState, D::
     })
 }
 
+/// -1, 0 or 1, comparing `a.b.c` by number; whatever comes after `-` or `+` does not count (as
+/// `compareVersions` in packages/nucleo/src/owner/probe.ts).
+pub fn compare_versions(a: &str, b: &str) -> std::cmp::Ordering {
+    let parts = |v: &str| -> Vec<u64> { v.split(['-', '+']).next().unwrap_or("").split('.').map(|p| p.parse().unwrap_or(0)).collect() };
+    let (x, y) = (parts(a), parts(b));
+    (0..x.len().max(y.len())).map(|i| x.get(i).unwrap_or(&0).cmp(y.get(i).unwrap_or(&0))).find(|o| o.is_ne()).unwrap_or(std::cmp::Ordering::Equal)
+}
+
+/// The version of the bundled core (`version` of `<core>/package.json`), if readable.
+pub fn bundled_version(core: &Path) -> Option<String> {
+    let text = std::fs::read_to_string(core.join("package.json")).ok()?;
+    serde_json::from_str::<serde_json::Value>(&text).ok()?.get("version")?.as_str().map(str::to_string)
+}
+
 /// Reads the last JSON line of `start --json`. A core that is up but says it belongs to another
 /// installation, or to another data folder than `data_dir`, is refused: the app only uses its own.
-pub fn read_start(output: &str, data_dir: Option<&Path>) -> Outcome {
+/// With `bundled` (the version of the core inside the app), a core of an older version is refused
+/// too (issue #220): the owner should have replaced it, and the window must not show its /ui.
+pub fn read_start(output: &str, data_dir: Option<&Path>, bundled: Option<&str>) -> Outcome {
     let line = output.lines().rev().find(|l| l.trim_start().starts_with('{')).unwrap_or("");
     let Ok(s) = serde_json::from_str::<StartLine>(line) else {
         return Outcome::stopped("O núcleo não respondeu ao subir");
@@ -150,6 +173,11 @@ pub fn read_start(output: &str, data_dir: Option<&Path>) -> Outcome {
         match s.data_dir.as_deref() {
             Some(got) if Path::new(got) == expected => {}
             got => return Outcome::stopped(format!("O núcleo que respondeu usa outra pasta de dados ({})", got.unwrap_or("sem pasta"))),
+        }
+    }
+    if let (Some(bundled), Some(running)) = (bundled, s.version.as_deref()) {
+        if compare_versions(running, bundled).is_lt() {
+            return Outcome::stopped(format!("O núcleo de pé é a versão {running}, mais velha que a do app ({bundled}), e não deu lugar ao novo"));
         }
     }
     Outcome::up(Core { port, pid: s.pid }, s.started.unwrap_or(false))
@@ -248,7 +276,7 @@ pub fn start_own_core(core: &Path, data_dir: Option<&Path>) -> Outcome {
                 command.env_remove(name);
             }
             match command.output() {
-                Ok(out) => read_start(&String::from_utf8_lossy(&out.stdout), data_dir),
+                Ok(out) => read_start(&String::from_utf8_lossy(&out.stdout), data_dir, bundled_version(core).as_deref()),
                 Err(e) => Outcome::stopped(format!("node: {e}")),
             }
         }
@@ -305,43 +333,43 @@ mod tests {
     #[test]
     fn reads_the_start_line_of_the_own_core() {
         let started = format!(r#"{{"state":"up","url":"http://127.0.0.1:53817","port":53817,"pid":4242,"version":"0.0.1","startedAt":"x","parent":777,"started":true,"commit":null,"installation":"app","dataDir":"{DIR}"}}"#);
-        assert_eq!(read_start(&started, Some(Path::new(DIR))), Outcome::up(Core { port: 53817, pid: Some(4242) }, true));
+        assert_eq!(read_start(&started, Some(Path::new(DIR)), None), Outcome::up(Core { port: 53817, pid: Some(4242) }, true));
         let adopted = format!(r#"{{"state":"up","port":53900,"pid":5151,"started":false,"warning":"versão mais velha","installation":"app","dataDir":"{DIR}/"}}"#);
-        assert_eq!(read_start(&format!("[log] something\n{adopted}\n"), Some(Path::new(DIR))), Outcome::up(Core { port: 53900, pid: Some(5151) }, false));
+        assert_eq!(read_start(&format!("[log] something\n{adopted}\n"), Some(Path::new(DIR)), None), Outcome::up(Core { port: 53900, pid: Some(5151) }, false));
         let no_dir_given = r#"{"state":"up","port":53817,"pid":1,"started":true,"installation":"app","dataDir":"/elsewhere"}"#;
-        assert!(read_start(no_dir_given, None).core.is_some());
+        assert!(read_start(no_dir_given, None, None).core.is_some());
     }
 
     #[test]
     fn refuses_a_core_of_another_installation_or_folder() {
         let dev = r#"{"state":"up","port":4720,"pid":1,"started":false,"installation":"dev","dataDir":"/Users/x/.ahrena-console"}"#;
-        let r = read_start(dev, Some(Path::new(DIR)));
+        let r = read_start(dev, Some(Path::new(DIR)), None);
         assert_eq!(r.core, None);
         assert!(matches!(r.state, CoreState::Stopped { ref reason, no_node: false } if reason.contains("dev")));
         let old = r#"{"state":"up","port":4720,"pid":1,"started":false}"#;
-        assert_eq!(read_start(old, Some(Path::new(DIR))).core, None, "a core from before #221 does not say it is the app's");
+        assert_eq!(read_start(old, Some(Path::new(DIR)), None).core, None, "a core from before #221 does not say it is the app's");
         let folder = r#"{"state":"up","port":53817,"pid":1,"started":true,"installation":"app","dataDir":"/tmp/other"}"#;
-        assert_eq!(read_start(folder, Some(Path::new(DIR))).core, None);
+        assert_eq!(read_start(folder, Some(Path::new(DIR)), None).core, None);
         let no_folder = r#"{"state":"up","port":53817,"pid":1,"started":true,"installation":"app"}"#;
-        assert_eq!(read_start(no_folder, Some(Path::new(DIR))).core, None, "fails closed without dataDir");
+        assert_eq!(read_start(no_folder, Some(Path::new(DIR)), None).core, None, "fails closed without dataDir");
     }
 
     #[test]
     fn reads_a_failed_start() {
         let stopped = r#"{"state":"stopped","reason":"o núcleo saiu com código 1","installation":"app"}"#;
-        let r = read_start(stopped, Some(Path::new(DIR)));
+        let r = read_start(stopped, Some(Path::new(DIR)), None);
         assert!(!r.started);
         assert!(matches!(r.state, CoreState::Stopped { ref reason, no_node: false } if reason.contains("código 1")));
-        assert!(matches!(read_start("", None).state, CoreState::Stopped { .. }));
-        assert_eq!(read_start(r#"{"state":"up","port":0,"installation":"app"}"#, None).core, None);
-        assert_eq!(read_start(r#"{"state":"starting","port":53817,"installation":"app"}"#, None).core, None);
+        assert!(matches!(read_start("", None, None).state, CoreState::Stopped { .. }));
+        assert_eq!(read_start(r#"{"state":"up","port":0,"installation":"app"}"#, None, None).core, None);
+        assert_eq!(read_start(r#"{"state":"starting","port":53817,"installation":"app"}"#, None, None).core, None);
     }
 
     #[test]
     fn the_portuguese_start_line_of_an_old_core_is_not_read() {
         // #173 phase 6: `estado`/`porta`/`subiu` are not read; the app runs the core it bundles.
         let old = format!(r#"{{"estado":"de-pe","porta":53817,"pid":1,"subiu":true,"installation":"app","dataDir":"{DIR}"}}"#);
-        let r = read_start(&old, Some(Path::new(DIR)));
+        let r = read_start(&old, Some(Path::new(DIR)), None);
         assert_eq!(r.core, None);
         assert!(matches!(r.state, CoreState::Stopped { .. }));
         let line = |t: &str| serde_json::from_str::<StartLine>(t).unwrap();
@@ -362,6 +390,43 @@ mod tests {
         assert!(!is_the_core(&v(r#"{"ok":true,"nome":"ahrena-console","versao":"0.1.0"}"#), None), "a core from before #173 phase 2b is not read since phase 6");
         assert!(!is_the_core(&v(r#"{"name":"outro"}"#), None));
         assert!(!is_the_core(&v(r#"{"ok":true}"#), None));
+    }
+
+    #[test]
+    fn versions_compare_by_number() {
+        use std::cmp::Ordering::*;
+        assert_eq!(compare_versions("0.0.1", "0.0.6"), Less);
+        assert_eq!(compare_versions("0.0.10", "0.0.9"), Greater);
+        assert_eq!(compare_versions("0.1", "0.1.0"), Equal);
+        assert_eq!(compare_versions("1.0.0-beta", "1.0.0"), Equal);
+        assert_eq!(compare_versions("garbage", "0.0.1"), Less);
+    }
+
+    #[test]
+    fn an_older_core_than_the_bundled_one_is_refused() {
+        // Issue #220: the app 0.0.6 adopted the 0.0.1 core of its previous version.
+        let adopted_old = format!(r#"{{"state":"up","port":53900,"pid":5151,"version":"0.0.1","started":false,"installation":"app","dataDir":"{DIR}"}}"#);
+        let r = read_start(&adopted_old, Some(Path::new(DIR)), Some("0.0.6"));
+        assert_eq!(r.core, None);
+        assert!(matches!(r.state, CoreState::Stopped { ref reason, no_node: false } if reason.contains("0.0.1") && reason.contains("0.0.6")), "{:?}", r.state);
+        // The same line without knowing the bundled version: adopted, as before.
+        assert!(read_start(&adopted_old, Some(Path::new(DIR)), None).core.is_some());
+        // Same or newer (a development core): adopted.
+        for v in ["0.0.6", "0.0.7", "0.1.0"] {
+            let line = format!(r#"{{"state":"up","port":53900,"pid":5151,"version":"{v}","started":false,"installation":"app","dataDir":"{DIR}"}}"#);
+            assert_eq!(read_start(&line, Some(Path::new(DIR)), Some("0.0.6")), Outcome::up(Core { port: 53900, pid: Some(5151) }, false), "{v}");
+        }
+        // The owner could not stop the old one: its reason reaches the tray.
+        let failed = r#"{"state":"stopped","reason":"o núcleo antigo (versão 0.0.1, pid 5151) não saiu para dar lugar a este","installation":"app"}"#;
+        let r = read_start(failed, Some(Path::new(DIR)), Some("0.0.6"));
+        assert!(matches!(r.state, CoreState::Stopped { ref reason, .. } if reason.contains("não saiu")));
+    }
+
+    #[test]
+    fn reads_the_bundled_version() {
+        let core = Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../../packages/nucleo"));
+        assert_eq!(bundled_version(core).as_deref(), Some(env!("CARGO_PKG_VERSION")), "the core follows the app (#261)");
+        assert_eq!(bundled_version(Path::new("/nonexistent")), None);
     }
 
     #[test]

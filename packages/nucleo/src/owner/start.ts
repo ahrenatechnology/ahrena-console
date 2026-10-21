@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { API_VERSION } from '../api/version.ts';
 import { registerClient } from './clients.ts';
 import { codeCommit, isOlderCommit } from './commit.ts';
-import { codeWarning, examine, planStart } from './owner.ts';
+import { codeWarning, examine, planStart, ReplaceError } from './owner.ts';
 import { sleep, probeCore } from './probe.ts';
 import { prepareDir, type Lock } from './lock.ts';
 import { DEFAULT_INSTALLATION, resolveDataDir, type Installation } from './installation.ts';
@@ -77,7 +77,14 @@ export async function startOrAdopt(o: StartOptions): Promise<StartOutput> {
     return { ...s, ...where };
   };
 
-  const plan = await planStart({ dir, ...code, replace: o.replace, log: o.log });
+  let plan: Awaited<ReturnType<typeof planStart>>;
+  try {
+    plan = await planStart({ dir, ...code, replace: o.replace, log: o.log });
+  } catch (e) {
+    // The older core did not give way (issue #220): say so, and start nothing next to it.
+    if (e instanceof ReplaceError) return { state: 'stopped', reason: e.reason, ...where };
+    throw e;
+  }
   if (plan.action === 'adopt') {
     return adopted(runningOutput(plan.lock, { started: false, commit: plan.view.commit, ...(plan.warning ? { warning: plan.warning } : {}) }));
   }
