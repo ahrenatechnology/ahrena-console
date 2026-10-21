@@ -1,6 +1,6 @@
-# 0013 · Ferramentas: o núcleo instala e atualiza só pelo catálogo, mostra o comando antes e nunca pede senha
+# 0014 · Ferramentas: o núcleo instala e atualiza só pelo catálogo, mostra o comando antes e nunca pede senha
 
-- **Status:** proposta, a confirmar pelo Fernando junto com os wireframes C57 a C61
+- **Status:** proposta, a confirmar pelo Fernando junto com os wireframes C72 a C76
 - **Data:** 2026-10-21
 - **Issue:** [#280](https://github.com/ahrenatechnology/ahrena-console/issues/280)
 - **Estende:** [0012](0012-remote-reconnect.md) (o núcleo roda um processo a pedido da `/ui`: lista de argumentos, sem shell, tempo limite, um por vez) e [0003](0003-responder-sessao.md) (mais escritas de mesma origem da `/ui`)

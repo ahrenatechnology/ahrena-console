@@ -517,7 +517,7 @@ main { min-width: 0; padding-block: 24px 80px; padding-left: max(16px, env(safe-
 .dl-age { text-align: right; color: var(--muted); }
 .dl-hm span { min-width: 48px; text-align: center; } .dl-zero { color: var(--muted); }
 .dl-faded > .cartao:nth-child(-n+2) { opacity: .55; }
-/* ---------- Ferramentas (C57 to C61, issue #280) ---------- */
+/* ---------- Ferramentas (C72 to C76, issue #280) ---------- */
 .tl-grid { align-items: stretch; }
 .tl-card { gap: 10px; }
 .tl-card h5 small .seg span { padding: 3px 8px; }
@@ -2579,7 +2579,7 @@ const APP = {
 // Catálogo de telas
 // =====================================================================
 // =====================================================================
-// TOOLS (C57 to C61, issue #280, decision 0013)
+// TOOLS (C72 to C76, issue #280, decision 0014)
 // =====================================================================
 // The núcleo reads each tool with a fixed probe and runs only the argv lists of its catalog.
 // The screen sends the item id and the action id; never a command.
@@ -2724,7 +2724,7 @@ function toolsScreen(w) {
   </div>`
 }
 
-// ---------- C58: install and update ----------
+// ---------- C73: install and update ----------
 const tlDialog = (title, rows, cmds, note, okLabel = 'Confirmar e rodar') => `<div class="tl-veil"><div class="cartao tl-dlg">
   <div class="tl-dlg-h">${ic('arrow-up-circle')}<b>${title}</b><span class="tl-x">${ic('x')}</span></div>
   ${tlKv(rows)}
@@ -2761,7 +2761,7 @@ const tlInstallScreens = () => `<div class="tl-flow">
     ${tlClip(tlCard('terminal', 'CLIs', '', tlCliTable(TL_CLI_MAC, { run: { claude: 'done', gh: 'update' } })), 260)}`)}</div>
 </div>`
 
-// ---------- C59: states of the screen ----------
+// ---------- C74: states of the screen ----------
 function toolsStatesScreen() {
   const okStats = [['CLIs', '11', 'todas em dia', 'terminal', 'var(--status-completed-text)'], ['Servidores MCP', '5', 'todos conectados', 'plug', 'var(--status-completed-text)'], ['Containers', 'Colima', 'rodando', 'container', 'var(--status-completed-text)']]
   return `${tlHeader('local', TL_SUB_MAC, tlCheckBtn)}
@@ -2789,7 +2789,7 @@ function toolsStatesScreen() {
   <div class="faixa tm-rc-band"><span class="ic">${ic('package-x')}</span><div class="tm-rc-text"><b>Sem o winget, o console só lê.</b> O winget vem no App Installer da Microsoft Store. Com ele, o catálogo usa <span class="mono">winget upgrade --id &lt;id&gt; --scope user</span>; um pacote que só instala para a máquina toda pede administrador e mostra o comando, como no 5.</div><span class="btn contorno">${ic('refresh-cw')}Verificar de novo</span></div>`
 }
 
-// ---------- C60: the Workstation ----------
+// ---------- C75: the Workstation ----------
 const TL_SUB_WS = 'ws-exemplo · Ubuntu 24.04 · lido do núcleo de lá pela porta 14720 · versões mais recentes verificadas lá às 09:05'
 function toolsRemoteScreen(w, actions) {
   const ro = !actions
@@ -2824,7 +2824,7 @@ const tlRemoteOffline = () => `${tlHeader('ws', 'ws-exemplo · Ubuntu 24.04 · �
   <div class="faixa erro"><span class="ic">${ic('wifi-off')}</span><div><b>Sem conexão com a Workstation.</b> Abaixo, a última leitura, desbotada. Nada roda lá enquanto ela estiver fora; Reconectar fica na tela da Workstation (C50).</div><span class="btn contorno">${ic('server')}Abrir a Workstation</span></div>
   <div class="tm-faded">${tlCard('terminal', 'CLIs', '', tlCliTable(TL_CLI_WS.slice(0, 4), { frozen: true }))}</div>`
 
-// ---------- C61: containers ----------
+// ---------- C76: containers ----------
 function toolsContainersScreen() {
   const card = (label, body) => `<div class="tl-ct-state"><div class="rotulo">${label}</div><div class="cartao tm-card tl-card">${body}</div></div>`
   const simple = (icon, title, badge, rows, cmd, btn, extra = '') => `<div class="tl-ct-head">${ic(icon)}<b>${title}</b>${badge}<span class="tl-ct-btn">${btn}</span></div>${rows ? tlKv(rows) : ''}${cmd ? `<div class="tl-cmdline">${cmd}</div>` : ''}${extra}`
@@ -2984,15 +2984,15 @@ const TELAS = [
     n: N(['O cabeçalho de PR do Kanban do projeto (C11): estado, CI e review.'], ['JSON quebrado não vira {} como no instalador antigo: o PR não sai e nada é escrito.']) },
   { id: 'console-pdrs', cod: 'C38', nome: 'PDR · decisões de produto', sub: 'A irmã de ADR (C28): as decisões de produto dos repositórios, com a mesma lista, a mesma busca e o mesmo filtro por status. Vêm de pastas só de PDR (docs/product-decisions) e das pastas mistas, pelo campo Tipo. A PDR aberta é a C30, com outro rótulo. Em 1100 e 1440.', html: () => `<div style="display:flex;flex-direction:column;gap:12px"><div class="rotulo">1100 px</div>${frameAt(1100, 'pdrs', telaPdrs(false))}<div class="rotulo">1440 px</div>${frameAt(1440, 'pdrs', telaPdrs(true))}</div>`,
     n: N(['A tela de ADR (C28), inteira: a mesma função desenha as duas.'], ['No grupo Decisões da barra ficam três itens: Das sessões (C20 e C21), ADR e PDR.', 'Numa pasta mista, como docs/decisoes, o campo Tipo separa: a linha do grupo diz isso.', 'Sem nenhum sinal, o registro fica como ADR.']) },
-  { id: 'console-tools', cod: 'C57', nome: 'Ferramentas · Esta máquina', sub: 'Feature Ferramentas (#280, decisão 0013), na seção Controle: o setup de desenvolvimento do Mac em quatro grupos. CLIs com a versão instalada, a mais recente e de onde veio; plataformas com quem gerencia cada uma; containers com o Colima e a VM; servidores MCP do Claude Code nos dois escopos, sem segredo nenhum. Cada item em dia, desatualizado, faltando, instalado à mão ou com falha. Em 1100 e 1440.', html: () => `<div class="fila">${bothWidths(w => frameAt(w, 'tools', toolsScreen(w)))}</div>`,
-    n: N(['Sem tela parecida no CCAM. O molde é o das máquinas (C24): cabeçalho, números em cima e cards em grade.'], ['Um seletor de máquina no cabeçalho, em vez de um item na barra por máquina: Ferramentas é uma tela só, e a Workstation é a mesma tela lida de lá (C60).', 'Atualizar 5 junta o que roda sem senha; o aws fica de fora porque veio do instalador oficial (C59, 5).', 'O MCP mostra o nome das variáveis contadas, nunca o valor, e só o host de uma URL.', 'O uso de disco do Docker e as stacks ficam na tela da máquina: aqui só a saúde do runtime e o link.']) },
-  { id: 'console-tools-install', cod: 'C58', nome: 'Ferramentas · instalar e atualizar', sub: 'O caminho de uma ação: o confirmar com o comando exato do catálogo (1, em 1100 e 1440), o Atualizar 5 com a lista inteira (1b), rodando com a saída ao vivo na linha do item e a fila (2), pronto (3) e falhou, com as últimas linhas e o log (4).', html: () => tlInstallScreens(),
+  { id: 'console-tools', cod: 'C72', nome: 'Ferramentas · Esta máquina', sub: 'Feature Ferramentas (#280, decisão 0014), na seção Controle: o setup de desenvolvimento do Mac em quatro grupos. CLIs com a versão instalada, a mais recente e de onde veio; plataformas com quem gerencia cada uma; containers com o Colima e a VM; servidores MCP do Claude Code nos dois escopos, sem segredo nenhum. Cada item em dia, desatualizado, faltando, instalado à mão ou com falha. Em 1100 e 1440.', html: () => `<div class="fila">${bothWidths(w => frameAt(w, 'tools', toolsScreen(w)))}</div>`,
+    n: N(['Sem tela parecida no CCAM. O molde é o das máquinas (C24): cabeçalho, números em cima e cards em grade.'], ['Um seletor de máquina no cabeçalho, em vez de um item na barra por máquina: Ferramentas é uma tela só, e a Workstation é a mesma tela lida de lá (C75).', 'Atualizar 5 junta o que roda sem senha; o aws fica de fora porque veio do instalador oficial (C74, 5).', 'O MCP mostra o nome das variáveis contadas, nunca o valor, e só o host de uma URL.', 'O uso de disco do Docker e as stacks ficam na tela da máquina: aqui só a saúde do runtime e o link.']) },
+  { id: 'console-tools-install', cod: 'C73', nome: 'Ferramentas · instalar e atualizar', sub: 'O caminho de uma ação: o confirmar com o comando exato do catálogo (1, em 1100 e 1440), o Atualizar 5 com a lista inteira (1b), rodando com a saída ao vivo na linha do item e a fila (2), pronto (3) e falhou, com as últimas linhas e o log (4).', html: () => tlInstallScreens(),
     n: N(['O andamento da C50 (Reconectar): passos, tempo contra o limite e Cancelar.'], ['A saída aparece na tela, ao contrário da C50: a de um gerenciador de pacotes não traz login nem código de dispositivo. Vai também para o tools.log, com permissão só do usuário.', 'Um por vez, em fila: dois gerenciadores ao mesmo tempo disputam o PATH e o disco, e a fila deixa a ordem visível.', 'O confirmar nomeia a entrada do catálogo (gh · update · homebrew): é o que a rota recebe, nunca o texto.']) },
-  { id: 'console-tools-states', cod: 'C59', nome: 'Ferramentas · estados', sub: 'Tudo em dia (1), verificando pela primeira vez, sem cache (2), sem rede, com o cache e a hora (3), macOS sem Homebrew (4), um item que precisa de sudo, aberto, com o comando para copiar (5) e Windows sem winget (6). Em 1100.', html: () => `<div class="fila">${frameAt(1100, 'tools', toolsStatesScreen())}</div>`,
+  { id: 'console-tools-states', cod: 'C74', nome: 'Ferramentas · estados', sub: 'Tudo em dia (1), verificando pela primeira vez, sem cache (2), sem rede, com o cache e a hora (3), macOS sem Homebrew (4), um item que precisa de sudo, aberto, com o comando para copiar (5) e Windows sem winget (6). Em 1100.', html: () => `<div class="fila">${frameAt(1100, 'tools', toolsStatesScreen())}</div>`,
     n: N(['EmptyState e a faixa de C19.'], ['O console nunca roda sudo nem pede senha: mostra o comando, com Copiar e Rodei, verificar de novo.', 'Não instala o Homebrew: o instalador pede senha. A tela diz isso e mostra o comando de brew.sh.', 'Sem a mais recente, a coluna fica vazia, nunca "em dia".']) },
-  { id: 'console-tools-remote', cod: 'C60', nome: 'Ferramentas · Workstation', sub: 'A mesma tela, lida do núcleo da Workstation. Só leitura, o padrão (1100): cada ação vira Copiar comando. Com ações ligadas lá, pela própria Workstation (1440): os botões dizem "lá" e o confirmar diz quem roda. Embaixo, a Workstation sem conexão, com a última leitura desbotada.', html: () => `<div class="tl-flow"><div class="tl-step"><div class="rotulo">1 · Só leitura, o padrão · 1100 px</div>${frameAt(1100, 'tools', toolsRemoteScreen(1100, false))}</div><div class="tl-step"><div class="rotulo">2 · Ações ligadas na Workstation · 1440 px</div>${frameAt(1440, 'tools', toolsRemoteScreen(1440, true))}</div><div class="tl-step"><div class="rotulo">2b · Confirmar na Workstation · 1100 px</div>${frameAt(1100, 'tools', `<div class="tl-veil-wrap">${tlClip(toolsRemoteScreen(1100, true), 640)}${tlRemoteConfirm}</div>`)}</div><div class="tl-step"><div class="rotulo">3 · Sem conexão · 1100 px</div>${frameAt(1100, 'tools', tlRemoteOffline(), 'off')}</div></div>`,
+  { id: 'console-tools-remote', cod: 'C75', nome: 'Ferramentas · Workstation', sub: 'A mesma tela, lida do núcleo da Workstation. Só leitura, o padrão (1100): cada ação vira Copiar comando. Com ações ligadas lá, pela própria Workstation (1440): os botões dizem "lá" e o confirmar diz quem roda. Embaixo, a Workstation sem conexão, com a última leitura desbotada.', html: () => `<div class="tl-flow"><div class="tl-step"><div class="rotulo">1 · Só leitura, o padrão · 1100 px</div>${frameAt(1100, 'tools', toolsRemoteScreen(1100, false))}</div><div class="tl-step"><div class="rotulo">2 · Ações ligadas na Workstation · 1440 px</div>${frameAt(1440, 'tools', toolsRemoteScreen(1440, true))}</div><div class="tl-step"><div class="rotulo">2b · Confirmar na Workstation · 1100 px</div>${frameAt(1100, 'tools', `<div class="tl-veil-wrap">${tlClip(toolsRemoteScreen(1100, true), 640)}${tlRemoteConfirm}</div>`)}</div><div class="tl-step"><div class="rotulo">3 · Sem conexão · 1100 px</div>${frameAt(1100, 'tools', tlRemoteOffline(), 'off')}</div></div>`,
     n: N(['A leitura remota da C25: o Mac lê o núcleo de lá pela porta do túnel.'], ['Quem libera ações é a Workstation, no config dela: o túnel faz o pedido do Mac parecer local lá, então o padrão é recusar.', 'Rodar lá é o núcleo de lá, com o catálogo de lá. O Mac só repassa o id do item e da ação.', 'No Linux o apt pede sudo: a maior parte das CLIs de lá fica em Precisa de sudo, mesmo com ações ligadas.']) },
-  { id: 'console-tools-containers', cod: 'C61', nome: 'Ferramentas · containers', sub: 'O card Containers em cada plataforma: Colima rodando (1), parado, com Iniciar (2), iniciando (3), nenhum runtime, com a proposta de instalar o Colima (4), Docker Engine parado no Linux, que pede sudo (5) e Windows, com o Podman Desktop como a proposta de código aberto (6). Em 1100.', html: () => `<div class="fila">${frameAt(1100, 'tools', toolsContainersScreen())}</div>`,
+  { id: 'console-tools-containers', cod: 'C76', nome: 'Ferramentas · containers', sub: 'O card Containers em cada plataforma: Colima rodando (1), parado, com Iniciar (2), iniciando (3), nenhum runtime, com a proposta de instalar o Colima (4), Docker Engine parado no Linux, que pede sudo (5) e Windows, com o Podman Desktop como a proposta de código aberto (6). Em 1100.', html: () => `<div class="fila">${frameAt(1100, 'tools', toolsContainersScreen())}</div>`,
     n: N(['Os números de Docker da C25 (Workstation): containers e disco.'], ['Aqui só a saúde do runtime e Iniciar / Parar. Uso por imagem, volumes e stacks com a sessão dona ficam na tela da máquina.', 'Docker Desktop achado é lido, nunca iniciado nem atualizado pelo console.', 'Windows é proposta: o Podman Desktop, com o WSL 2; ligar o WSL pede administrador.']) },
 ]
 
@@ -3019,7 +3019,7 @@ function montar() {
     <li><b>Onde o grafo vive (#146, a aprovar):</b> a proposta é um detalhe aberto pelo pé do card Subagentes, no lugar dos cards, como as decisões (P11). Dentro do card não cabe; numa seção própria, empurra o resto para baixo.</li>
     <li><b>Telemetria e Dev Console no app (decisão 0008, a aprovar):</b> cada máquina se mede com o próprio núcleo; o do Mac lê o da Workstation pela porta que o túnel encaminha; o app só mostra, sem subir túnel nem abrir login (A6, A7, C24 a C27). A reconexão revê esse ponto na decisão 0012. A barra lateral ganha Dev Console e a seção Máquinas, que aparece em todas as telas.</li>
     <li><b>Reconectar a máquina remota (#244, decisão 0012):</b> com <code>reconnect</code> no machines.json, o núcleo do Mac roda o comando que você escreveu, sem shell, um por vez e com tempo limite; a tela espera o login no navegador e relê a remota ao terminar (C50, A8). Aprovado em 20/10, com a saída só no log.</li>
-    <li><b>Ferramentas (#280, decisão 0013, a aprovar):</b> CLIs, servidores MCP, plataformas e containers desta máquina e da Workstation, na seção Controle. Instalar, atualizar, iniciar e parar rodam só o que está no catálogo do núcleo, sem shell, um por vez, depois de mostrar o comando; o que pede sudo vira comando para copiar. A Workstation é só leitura até ela mesma ligar as ações (C57 a C61).</li>
+    <li><b>Ferramentas (#280, decisão 0014, a aprovar):</b> CLIs, servidores MCP, plataformas e containers desta máquina e da Workstation, na seção Controle. Instalar, atualizar, iniciar e parar rodam só o que está no catálogo do núcleo, sem shell, um por vez, depois de mostrar o comando; o que pede sudo vira comando para copiar. A Workstation é só leitura até ela mesma ligar as ações (C72 a C76).</li>
     <li><b>Backlog:</b> Feed de atividade, Analytics completo, Workflows e o detalhe com o grafo de agentes estavam para depois da entrega. Entraram aqui a pedido do dono; o PM decide se viram itens da 0.0.1.</li></ol></section>`
   indice.innerHTML = htmlI; main.innerHTML = htmlM
   if (window.lucide) lucide.createIcons()
