@@ -299,6 +299,7 @@ const openInDesktop =
 // when a request comes). The terminal launchers write their `.command` files in the data folder (0700);
 // in the demo there are none, and the route answers with the command to copy.
 const liveProcesses = demo ? null : new LiveClaudeProcesses({ folders: async () => ((await profiles?.list()) ?? []).map((p) => p.dir) });
+const codex = demo ? null : new CodexIndex();
 const openDescriber = new SessionOpenDescriber({ live: liveProcesses });
 const openTerminal = demo ? null : createTerminalOpener({ dir: join(dataDir, 'terminal-resume') });
 const focusTerminal = demo ? null : createTerminalFocuser();
@@ -517,6 +518,7 @@ const api: LocalApi = await startLocalApi({
   },
   port: boundPort,
   log,
+  codex,
   openInDesktop,
   openDescriber,
   openTerminal,
@@ -535,7 +537,7 @@ const api: LocalApi = await startLocalApi({
   fleet: mcp.fleet,
   remoteAttention: () => remoteMachines?.list() ?? [],
   analytics: new RotaAnalytics({ storage, contas: accounts, versao: () => changes.current, delivery }),
-  sessions: new ListaDeSessoes({ codex: demo ? null : new CodexIndex(), storage, contas: accounts, desktop, resumos: listSummaries, open: openDescriber }),
+  sessions: new ListaDeSessoes({ codex, storage, contas: accounts, desktop, resumos: listSummaries, open: openDescriber }),
   history,
   kanban: new QuadroKanban({ storage, contas: accounts, desktop, resumos: listSummaries }),
   repos: repos.rota,

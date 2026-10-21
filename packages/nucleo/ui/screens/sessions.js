@@ -8,6 +8,7 @@
 import { header, el, icon } from '../dom.js';
 import { loading, error, errorBand, empty } from '../states.js';
 import { attentionBadges, attentionOf, statusWithoutAttention } from '../attention.js';
+import { sessionOrigin } from '../session-origin.js';
 import { openAction } from '../open-action.js';
 
 // The `status` and `order` values of `/api/sessions` (English since phase 2b of issue 173). issue 245: the
@@ -153,6 +154,7 @@ export function shortId(id) {
 // As colunas, na ordem; a classe dá a largura de cada uma (sessions.css).
 export const COLUMNS = [
   ['c-session', 'Sessão'],
+  ['c-origin', 'Origem'],
   ['c-status', 'Status'],
   ['c-activity', 'Última atividade'],
   ['c-duration', 'Duração'],
@@ -306,37 +308,21 @@ export async function mount(area, ctx) {
   function row(s) {
     const isCodex = s.provider === 'codex';
     const target = `/ui/sessions/${encodeURIComponent(s.id)}`;
-    const copy = isCodex && s.resumeCommand ? el('button', {
-      type: 'button', class: 'btn outline sessions-copy',
-      'aria-label': 'Ver comando para retomar no Codex CLI', title: 'Ver comando para retomar no Codex CLI',
-      onClick: ev => {
-        ev.stopPropagation();
-        const command = el('textarea', { readonly: true, 'aria-label': 'Comando de retomada', rows: 4 }, s.resumeCommand);
-        const dialog = el('dialog', { class: 'sessions-resume' },
-          el('h2', {}, 'Retomar no Codex CLI'),
-          el('p', {}, 'Execute este comando em um terminal. A conversa será retomada no CLI; a abertura no aplicativo ainda não foi validada.'),
-          command,
-          el('button', { class: 'btn', type: 'button', onClick: () => dialog.close() }, 'Fechar'));
-        dialog.addEventListener('close', () => dialog.remove(), { once: true });
-        document.body.append(dialog);
-        dialog.showModal();
-        command.select();
-      },
-    }, icon('terminal')) : null;
     const tr = el(
       'tr',
       { class: 'session-row' },
-      el('td', { class: 'nm' }, isCodex ? el('b', { title: s.title }, s.title) : el('a', { href: target, title: s.title }, el('b', {}, s.title)), el('small', {}, el('span', { class: 'mono' }, shortId(s.id)), el('span', { class: 'sessions-origin', title: s.group || 'Sem grupo' }, `${isCodex ? 'Codex' : 'Claude'} · ${s.group || 'Sem grupo'}`), account(s.account))),
+      el('td', { class: 'nm' }, isCodex ? el('b', { title: s.title }, s.title) : el('a', { href: target, title: s.title }, el('b', {}, s.title)), el('small', {}, el('span', { class: 'mono' }, shortId(s.id)), el('span', { class: 'sessions-origin', title: s.group || 'Sem grupo' }, s.group || 'Sem grupo'), account(s.account))),
+      el('td', { class: 'sessions-provider' }, sessionOrigin(s.provider)),
       el('td', { class: 'st' }, ...badgeEl(s.status, s.attention)),
       el('td', { class: 'c-muted', title: new Date(s.lastActivity).toLocaleString('pt-BR') }, age(s.lastActivity)),
       // Os dois pedaços não quebram por dentro: na coluna estreita, o tempo desce para a linha de baixo.
       el('td', { class: 'mono dur' }, s.running ? el('span', { class: 'c-active' }, 'rodando ·') : null, s.running ? ' ' : null, el('span', {}, isCodex ? '—' : duration(s.durationMs))),
-      el('td', { class: 'mono' }, isCodex ? '—' : String(s.agents)),
+      el('td', { class: 'mono sessions-agents' }, isCodex ? '—' : String(s.agents)),
       el('td', { class: 'mono' }, cost(s.costUsd)),
       // Corta no começo (o fim do caminho é o que distingue): o LRM mantém a barra inicial no lugar.
       el('td', { class: 'dir', title: s.cwd ?? '' }, s.cwd ? `\u200e${s.cwd}\u200e` : '—'),
       // Empty when there is nothing to open: the column keeps its width, the others stay aligned.
-      el('td', { class: 'sessions-open' }, isCodex ? copy : openAction({ id: s.id, open: s.open }, { size: 'icon', write: ctx.write })),
+      el('td', { class: 'sessions-open' }, openAction({ id: s.id, open: s.open }, { size: 'icon', write: ctx.write })),
     );
     tr.addEventListener('click', (ev) => {
       if (ev.target instanceof Element && ev.target.closest('a')) return;

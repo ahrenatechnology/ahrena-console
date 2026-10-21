@@ -19,7 +19,7 @@
 // Pure: no disk, no process. The live processes come from a reader (live-processes.ts) the describer
 // is given; without one, no session is live.
 
-export const OPEN_TARGETS = ['desktop', 'terminal', 'terminal-live', 'remote', 'none'] as const;
+export const OPEN_TARGETS = ['desktop', 'codex-desktop', 'terminal', 'terminal-live', 'remote', 'none'] as const;
 export type OpenTarget = (typeof OPEN_TARGETS)[number];
 
 /** The `open` field of every surface that describes a session. */

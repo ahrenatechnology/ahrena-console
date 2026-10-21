@@ -224,7 +224,7 @@ describe('Mural: a tela montada', () => {
       assert.doesNotMatch(area.textContent, /Esperando/);
 
       // Ativa: título + badge, projeto · branch, o que está fazendo, a grade e as barras.
-      assert.match(cards[0]!.textContent, /^Sessão ativa-1Ativaprojeto-exemplo · feat\/1-exemploRodar a bateria/);
+      assert.match(cards[0]!.textContent, /^Sessão ativa-1AtivaClaudeprojeto-exemplo · feat\/1-exemploRodar a bateria/);
       assert.match(cards[0]!.textContent, /ModeloOpusEsforçoaltoAgentes2Custo~1,84Plano 3\/5contexto 31%Detalhe ›$/);
       const [plano, contexto] = comClasse(cards[0]!, 'wall-bar');
       assert.equal(plano!.tag, 'progress');
@@ -233,7 +233,7 @@ describe('Mural: a tela montada', () => {
       assert.ok(!contexto!.classes.includes('wall-high'));
 
       // Blocked: "Precisa de você", the strong reason chip and what it asks; without a plan it is 0/0.
-      assert.match(cards[1]!.textContent, /Precisa de vocêprojeto-exemplo · feat\/1-exemploPede permissãoBash: npm run migrate/);
+      assert.match(cards[1]!.textContent, /Precisa de vocêClaudeprojeto-exemplo · feat\/1-exemploPede permissãoBash: npm run migrate/);
       assert.match(cards[1]!.textContent, /Esforço—.*Plano 0\/0/);
       assert.deepEqual(comClasse(cards[1]!, 'attention-pill-blocked').length, 1);
       assert.deepEqual(comClasse(cards[1]!, 'attention-chip').map((m) => m.classes.includes('attention-chip-light')), [false]);
@@ -507,4 +507,21 @@ test('o wall.css não estiliza classe de outra tela: as próprias levam wall-', 
   for (const outra of css.filter((a) => a.endsWith('.css') && !['wall.css', 'shell.css', 'brand.css'].includes(a))) {
     assert.deepEqual([...classes(outra)].filter((c) => minhas.includes(c)), [], `wall.css e ${outra} estilizam as mesmas classes`);
   }
+});
+
+
+test('Codex card shows its origin, unknown metrics and the native open action without a dead detail link', async () => {
+  const c = cardDeExemplo('codex-test', { provider: 'codex', group: 'Ahrena', status: 'unknown', state: 'unknown', attention: null,
+    activity: { type: 'idle', text: 'Estado de execução não disponível' }, agents: { active: 0, total: 0 }, plan: null, context: null,
+    open: { target: 'codex-desktop', command: null } });
+  const { area, sair } = await montarTela(async () => ({ ...MURAL, cards: [c] }));
+  try {
+    const card = comClasse(area, 'wall-card')[0]!;
+    assert.equal(comClasse(card, 'session-origin')[0]!.textContent, 'Codex');
+    assert.match(card.textContent, /Abrir no Codex/);
+    assert.equal(comClasse(card, 'wall-link').length, 0);
+    assert.equal(comClasse(card, 'wall-detail').length, 0);
+    assert.equal(comClasse(card, 'wall-bar')[0]!.getAttribute('aria-label'), 'Plano não disponível');
+    assert.ok(card.todos(e => e.getAttribute('title') === 'Quantidade de agentes não disponível').length);
+  } finally { await sair(); }
 });

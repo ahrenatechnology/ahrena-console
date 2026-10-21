@@ -37,7 +37,7 @@ test('real-shaped Codex index stays read-only, excludes archives, preserves grou
     assert.equal(result.items[0].provider, 'codex');
     assert.equal(result.items[0].status, 'unknown');
     assert.equal(result.items[0].costUsd, null);
-    assert.equal(result.items[0].open.target, 'none');
+    assert.equal(result.items[0].open.target, 'codex-desktop');
     assert.equal(result.counts.active, 0);
     assert.equal((await list.listar(pedidoDeSessoes(new URL('http://localhost/api/sessions?provider=claude')))).total, 0);
     assert.deepEqual(readFileSync(path), before);

@@ -70,6 +70,7 @@ import { API_VERSION } from './version.ts';
 import { MCP_PATH, createMcpRoute } from '../mcp/http.ts';
 import { isUiPath, respondUi } from './ui.ts';
 import { responderWorkflows } from './workflows.ts';
+import type { CodexIndex } from './codex-index.ts';
 import { muralDoPainel, WALL_ROUTE, responderMural } from './wall.ts';
 import { SESSIONS_ROUTE, responderSessoes, type ListaDeSessoes } from './sessions.ts';
 import { HISTORY_ROUTE, responderHistorico } from './history.ts';
@@ -99,6 +100,7 @@ import type { TelemetryService } from '../telemetry/service.ts';
 export { API_VERSION };
 
 export interface ApiOptions {
+  codex?: CodexIndex | null;
   panelBuilder: MontadorDoPainel;
   hooks: HookRouteOptions;
   host?: string;
@@ -283,9 +285,10 @@ export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
   const mcp = opts.mcp ? createMcpRoute(opts.mcp) : null;
   const projectRoute = criarRotaDoProjeto(opts.project ?? { kanban: null, fonte: 'github', log });
   const openDescriber = opts.openDescriber ?? new SessionOpenDescriber();
-  const wall = muralDoPainel(opts.panelBuilder, { open: openDescriber });
+  const wall = muralDoPainel(opts.panelBuilder, { open: openDescriber, codex: opts.codex });
   const remotes = (): readonly RemoteAttentionSource[] => (typeof opts.remoteAttention === 'function' ? opts.remoteAttention() : (opts.remoteAttention ?? []));
   const sessionOpen = createSessionOpenRoute({
+    codex: opts.codex,
     storage: opts.panelBuilder.storage,
     localOf:
       opts.localOf ??

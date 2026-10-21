@@ -65,10 +65,22 @@
 .wall-bar.wall-high::-moz-progress-bar { background: var(--status-error-dot); }
 
 /* Três por linha até a janela do app (1100 de largura); mais estreita, duas, depois uma. */
-@media (max-width: 900px) {
+@media (max-width: 1200px) {
   .wall-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 640px) {
   .wall-grid { grid-template-columns: minmax(0, 1fr); }
   .cc-head:has(.wall-seg) { flex-wrap: wrap; }
 }
+
+.wall-origin-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.wall-origin-row .wall-prj { min-width: 0; }
+.wall-b-unknown { color: var(--muted); white-space: normal; }
+.wall-seg { flex-wrap: wrap; }
+
+.wall-provider { color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 7px; padding: 6px 10px; font: inherit; }
+
+.wall-l1 { align-items: flex-start; }
+.wall-tt { white-space: normal; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow-wrap: anywhere; }
+.wall-foot { flex-wrap: wrap; }
+.cc-head:has(.wall-provider) { flex-wrap: wrap; }

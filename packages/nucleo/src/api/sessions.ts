@@ -205,12 +205,12 @@ export class ListaDeSessoes {
     // A porta já devolve por atividade, mais recentes primeiro; as outras ordens desempatam por ela.
     const sinal = pedido.sentido === 'desc' ? 1 : -1;
     if (pedido.ordem === 'duration') {
-      const dur = new Map(filtradas.map(({ s, codex }) => [s.id, codex ? -1 : duracaoDe(s, agora)]));
-      filtradas = [...filtradas].sort((a, b) => sinal * (dur.get(b.s.id)! - dur.get(a.s.id)!));
+      const dur = new Map(filtradas.map(entry => [entry, entry.codex ? -1 : duracaoDe(entry.s, agora)]));
+      filtradas = [...filtradas].sort((a, b) => sinal * (dur.get(b)! - dur.get(a)!));
     } else if (pedido.ordem === 'cost') {
-      const custo = new Map<string, number>();
-      for (const { s, codex } of filtradas) custo.set(s.id, codex ? -1 : (await this.custoDe(s)) ?? -1);
-      filtradas = [...filtradas].sort((a, b) => sinal * (custo.get(b.s.id)! - custo.get(a.s.id)!));
+      const custo = new Map<(typeof filtradas)[number], number>();
+      for (const entry of filtradas) custo.set(entry, entry.codex ? -1 : (await this.custoDe(entry.s)) ?? -1);
+      filtradas = [...filtradas].sort((a, b) => sinal * (custo.get(b)! - custo.get(a)!));
     } else filtradas = [...filtradas].sort((a, b) => sinal * (Date.parse(b.s.updatedAt) - Date.parse(a.s.updatedAt)) || a.s.id.localeCompare(b.s.id));
 
     const total = filtradas.length;
@@ -238,7 +238,7 @@ export class ListaDeSessoes {
         costUsd: codex ? null : await this.custoDe(s),
         cwd: s.cwd,
         account: conta ? { label: conta.label, color: conta.color } : null,
-        open: codex ? { target: 'none', command: null } : this.open.describe({ sessionId: s.id, cwd: s.cwd ?? desktop?.cwd ?? null, local: desktop?.localId ?? null }),
+        open: codex ? { target: 'codex-desktop', command: null } : this.open.describe({ sessionId: s.id, cwd: s.cwd ?? desktop?.cwd ?? null, local: desktop?.localId ?? null }),
       });
     }
     return { groups, sourceError: this.codex?.error ?? null, total, registered: todas.length, page: pagina, perPage, pages: paginas, directories: diretorios, counts, items: itens };

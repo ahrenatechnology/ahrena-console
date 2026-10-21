@@ -33,6 +33,8 @@
 // Branch: the Desktop's or `metadata.branch`; without them, what the work-by-branch already knows and,
 // last, just `git branch --show-current` in the folder, cached for 60 s, no GitHub (`branchDaPasta`).
 
+import type { CodexIndex } from './codex-index.ts';
+import { safeTitle } from '../mcp/output.ts';
 import { basename } from 'node:path';
 import type { ServerResponse } from 'node:http';
 import { send } from '../ingest/hooks/receiver.ts';
@@ -50,6 +52,7 @@ export const RECENTE_DO_MURAL_MS = DEFAULT_LIMITS.abandonMs;
 const PAGINA = 200;
 
 export interface OpcoesDoMural {
+  codex?: CodexIndex | null;
   painel: Pick<MontadorDoPainel, 'atualizarFontes' | 'leituraDaSessao' | 'desktopDaSessao'>;
   storage: StoragePort;
   agora?: () => number;
@@ -74,6 +77,7 @@ const PRECISA = new Set(['waiting', 'error']);
 const ATIVA = new Set(['active', 'delegating', 'background']);
 
 export class MontadorDoMural {
+  private readonly codex: CodexIndex | null;
   private readonly painel: OpcoesDoMural['painel'];
   private readonly storage: StoragePort;
   private readonly agora: () => number;
@@ -83,7 +87,8 @@ export class MontadorDoMural {
   private cache: { em: number; mural: Wall } | null = null;
   private rodando: Promise<Wall> | null = null;
 
-  constructor({ painel, storage, agora = Date.now, cacheMs = 2_000, recenteMs = RECENTE_DO_MURAL_MS, open = new SessionOpenDescriber() }: OpcoesDoMural) {
+  constructor({ codex = null, painel, storage, agora = Date.now, cacheMs = 2_000, recenteMs = RECENTE_DO_MURAL_MS, open = new SessionOpenDescriber() }: OpcoesDoMural) {
+    this.codex = codex;
     this.open = open;
     this.painel = painel;
     this.storage = storage;
@@ -118,7 +123,25 @@ export class MontadorDoMural {
       return b.updatedAt.localeCompare(a.updatedAt);
     });
     const cards = lidas.map(({ leitura }) => cardDe(leitura, this.open));
+    for (const thread of this.codex?.list() ?? []) {
+      // Match the wall's recent-activity window without treating it as a live execution signal.
+      if (agora - Date.parse(thread.updatedAt) > this.recenteMs) continue;
+      cards.push({ id: thread.id, provider: 'codex', group: thread.group,
+        title: safeTitle(thread.title) ?? thread.id, project: basename(thread.cwd), branch: null,
+        status: 'unknown', state: 'unknown', reason: null, urgent: false, attention: null,
+        since: thread.updatedAt, activity: { type: 'idle', text: 'Estado de execução não disponível' },
+        model: null, effort: null, agents: { active: 0, total: 0 }, cost: { usd: null, estimate: true },
+        plan: null, context: null, open: { target: 'codex-desktop', command: null } });
+    }
+    // Keep attention priority, then compare activity across both providers.
+    const cardRank = (c: WallCard) => c.attention?.level === 'blocked' ? 0 : c.attention?.level === 'idle' ? 1 : 2;
+    const updated = new Map(lidas.map(l => [l.leitura.sessao.id, l.updatedAt]));
+    cards.sort((a, b) => cardRank(a) - cardRank(b)
+      || (cardRank(a) === 0 ? Number(b.urgent) - Number(a.urgent) : 0)
+      || (cardRank(a) < 2 ? b.since.localeCompare(a.since)
+        : (b.provider === 'codex' ? b.since : updated.get(b.id) ?? b.since).localeCompare(a.provider === 'codex' ? a.since : updated.get(a.id) ?? a.since)));
     const mural: Wall = {
+      sourceError: this.codex?.error ?? null,
       version: 1,
       generatedAt: new Date(agora).toISOString(),
       count: {
@@ -169,6 +192,8 @@ function cardDe(leitura: LeituraDaSessao, open: SessionOpenDescriber): WallCard 
   const pasta = sessao.cwd ?? desktop?.cwd ?? null;
   return {
     id: sessao.id,
+    provider: 'claude',
+    group: null,
     title: sessao.title,
     project: pasta ? basename(pasta) : null,
     branch,
@@ -190,7 +215,7 @@ function cardDe(leitura: LeituraDaSessao, open: SessionOpenDescriber): WallCard 
 }
 
 /** O mural de um montador do painel, com a mesma porta e o mesmo relógio. */
-export function muralDoPainel(painel: MontadorDoPainel, opcoes: Pick<OpcoesDoMural, 'cacheMs' | 'recenteMs' | 'open'> = {}): MontadorDoMural {
+export function muralDoPainel(painel: MontadorDoPainel, opcoes: Pick<OpcoesDoMural, 'cacheMs' | 'recenteMs' | 'open' | 'codex'> = {}): MontadorDoMural {
   return new MontadorDoMural({ painel, storage: painel.storage, agora: painel.agora, ...opcoes });
 }
 

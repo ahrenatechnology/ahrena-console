@@ -14,6 +14,7 @@ export class CodexIndex {
   readonly path: string;
   error: string | null = null;
   constructor(path = join(process.env.CODEX_HOME || join(homedir(), '.codex'), 'state_5.sqlite')) { this.path = path; }
+  find(id: string): CodexThread | null { return this.list().find(thread => thread.id === id) ?? null; }
   list(): CodexThread[] {
     this.error = null;
     if (!existsSync(this.path)) return [];

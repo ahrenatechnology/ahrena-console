@@ -8,6 +8,7 @@
 import { header, el, icon } from '../dom.js';
 import { loading, error, errorBand, empty } from '../states.js';
 import { attentionOf, attentionOfItem, attentionPill, attentionTone, attentionDot, isBlocked, isIdle, reasonChip, statusWithoutAttention } from '../attention.js';
+import { sessionOrigin } from '../session-origin.js';
 import { openAction } from '../open-action.js';
 
 const STYLE = '/ui/dashboard.css';
@@ -186,7 +187,7 @@ function inbox(attention, agents, write) {
     el(
       'div',
       { class: 'card mini dash-mini', 'data-session': c.session, 'data-machine': c.machine?.id },
-      el('div', { class: 'l1' }, reasonChip(c.attention, { withError: true })),
+      el('div', { class: 'l1' }, sessionOrigin(c.provider), reasonChip(c.attention, { withError: true })),
       el('div', { class: 'n trunc' }, c.name),
       el('div', { class: 'x trunc' }, c.text),
       // C1 (issue 245): the model and the age in the foot, "Opus 5.5 · 2 min", beside "Abrir ›".
@@ -268,6 +269,7 @@ function agentCard(a, expanded, toggleOne) {
     el(
       'div',
       { class: 'footer' },
+      sessionOrigin(a.provider),
       a.model ? el('span', {}, icon('model'), modelName(a.model)) : null,
       el('span', {}, icon('coins'), cost(a.costUsd)),
       el('span', {}, icon('clock'), age(a.lastActivity)),
