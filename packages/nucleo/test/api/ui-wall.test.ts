@@ -406,7 +406,7 @@ describe('Mural: ao vivo com atividade contínua', () => {
 
   test('issue 285: each card has a foot with the open action and "Detalhe ›"; the button is never inside a link and does not navigate', async () => {
     const UUID = '4d2a9c35-1b7e-4c11-9d0a-2f6c8e1a7b30';
-    const comAbrir = {
+    const withOpen = {
       ...MURAL,
       cards: [
         cardDeExemplo(UUID, { open: { target: 'desktop', command: null } }),
@@ -415,43 +415,43 @@ describe('Mural: ao vivo com atividade contínua', () => {
         cardDeExemplo('sem-1', { open: { target: 'none', command: null } }),
       ],
     };
-    const escritas: string[] = [];
-    const navegou: string[] = [];
+    const writes: string[] = [];
+    const navigated: string[] = [];
     const area = new Elemento('main');
-    const sair = new AbortController();
-    const pronta = mount(area, {
+    const leave = new AbortController();
+    const ready = mount(area, {
       params: {},
-      signal: sair.signal,
-      read: async () => comAbrir,
-      write: async (rota: string) => (escritas.push(rota), { ok: true, opened: 'desktop' }),
+      signal: leave.signal,
+      read: async () => withOpen,
+      write: async (route: string) => (writes.push(route), { ok: true, opened: 'desktop' }),
       onChange: () => {},
       onRestart: () => {},
       counter: () => {},
-      titulo: () => {},
-      navigate: (r: string) => void navegou.push(r),
+      title: () => {},
+      navigate: (r: string) => void navigated.push(r),
       liveState: () => 'live',
     });
     try {
       await ate(() => comClasse(area, 'wall-card').length === 4);
-      const pes = comClasse(area, 'wall-foot');
-      assert.equal(pes.length, 4, 'every card has the foot');
+      const feet = comClasse(area, 'wall-foot');
+      assert.equal(feet.length, 4, 'every card has the foot');
       assert.deepEqual(
-        pes.map((p) => p.textContent),
+        feet.map((p) => p.textContent),
         ['Abrir no Claude DesktopDetalhe ›', 'Ir para o terminalDetalhe ›', 'Roda em outra máquina', 'Detalhe ›'],
         'remote: the disabled button says where, and no Detalhe; none: no button',
       );
-      assert.equal(comClasse(pes[2]!, 'open-button')[0]!.getAttribute('aria-disabled'), 'true');
-      assert.equal(comClasse(pes[0]!, 'wall-detail')[0]!.getAttribute('href'), `/ui/sessions/${UUID}`);
+      assert.equal(comClasse(feet[2]!, 'open-button')[0]!.getAttribute('aria-disabled'), 'true');
+      assert.equal(comClasse(feet[0]!, 'wall-detail')[0]!.getAttribute('href'), `/ui/sessions/${UUID}`);
       for (const a of area.todos((e) => e.tag === 'a')) assert.equal(a.todos((e) => e.tag === 'button').length, 0, 'no button inside a link');
-      comClasse(pes[0]!, 'open-button')[0]!.click();
-      await ate(() => escritas.length === 1);
-      assert.deepEqual(escritas, [`/api/sessions/${UUID}/open`]);
-      assert.deepEqual(navegou, [], 'the click does not navigate');
-      await ate(() => comClasse(pes[0]!, 'open-ok').length === 1);
-      assert.equal(comClasse(pes[0]!, 'open-ok')[0]!.textContent, 'Aberta no Claude Desktop');
+      comClasse(feet[0]!, 'open-button')[0]!.click();
+      await ate(() => writes.length === 1);
+      assert.deepEqual(writes, [`/api/sessions/${UUID}/open`]);
+      assert.deepEqual(navigated, [], 'the click does not navigate');
+      await ate(() => comClasse(feet[0]!, 'open-ok').length === 1);
+      assert.equal(comClasse(feet[0]!, 'open-ok')[0]!.textContent, 'Aberta no Claude Desktop');
     } finally {
-      sair.abort();
-      (await pronta)();
+      leave.abort();
+      (await ready)();
     }
   });
 
