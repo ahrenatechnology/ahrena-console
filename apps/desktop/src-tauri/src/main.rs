@@ -641,12 +641,13 @@ fn open_window(app: &AppHandle, path: Option<&str>) {
         let _ = w.set_focus();
         return;
     }
+    let (nav_state, new_window_state) = (shared.clone(), shared.clone());
     let window = WebviewWindowBuilder::new(app, "console", WebviewUrl::External(url))
         .title("Ahrena Console")
         .inner_size(1100.0, 760.0)
         // A link out of the /ui (github.com/login/device, Revogar no GitHub; #241) opens in the system
-        // browser, never inside this window: the window only ever shows the core's /ui.
-        .on_navigation(|url| match link_target(url) {
+        // browser, never inside this window: the window only ever shows this app's core's /ui.
+        .on_navigation(move |url| match link_target(url, core_port(&nav_state)) {
             LinkTarget::Core => true,
             LinkTarget::Browser => {
                 open_in_browser(url);
@@ -654,8 +655,8 @@ fn open_window(app: &AppHandle, path: Option<&str>) {
             }
             LinkTarget::Refused => false,
         })
-        .on_new_window(|url, _| {
-            if link_target(&url) == LinkTarget::Browser {
+        .on_new_window(move |url, _| {
+            if link_target(&url, core_port(&new_window_state)) == LinkTarget::Browser {
                 open_in_browser(&url);
             }
             tauri::webview::NewWindowResponse::Deny
@@ -669,26 +670,45 @@ fn open_window(app: &AppHandle, path: Option<&str>) {
 /// Where a URL the console window wants to show goes (#241).
 #[derive(Debug, PartialEq, Eq)]
 enum LinkTarget {
-    /// The core's own /ui (loopback http) or a blank page: stays in the window.
+    /// The /ui of this app's core (loopback http on its port), or a blank page: stays in the window.
     Core,
-    /// An https page out there: the system browser.
+    /// An https page on a host the /ui links to: the system browser.
     Browser,
-    /// Anything else (file:, javascript:, http to another host): nowhere.
+    /// Anything else (another local server, file:, javascript:, other hosts): nowhere.
     Refused,
 }
 
-fn link_target(url: &tauri::Url) -> LinkTarget {
+/// The hosts the /ui links out to: GitHub (repositories, PRs, the device flow, revoking the app) and
+/// the docs it cites. A page that wants anything else gets nothing.
+const BROWSER_HOSTS: &[&str] = &["github.com", "github.io", "claude.com"];
+
+fn core_port(state: &Shared) -> Option<u16> {
+    match state.lock().unwrap_or_else(std::sync::PoisonError::into_inner).core {
+        CoreState::Up { port } => Some(port),
+        _ => None,
+    }
+}
+
+fn link_target(url: &tauri::Url, core_port: Option<u16>) -> LinkTarget {
+    let host = url.host_str().unwrap_or("");
     match url.scheme() {
-        "http" if matches!(url.host_str(), Some("127.0.0.1" | "localhost")) => LinkTarget::Core,
+        "http" if matches!(host, "127.0.0.1" | "localhost") && core_port.is_some() && url.port() == core_port && (url.path() == "/ui" || url.path().starts_with("/ui/")) => LinkTarget::Core,
         "about" if url.as_str() == "about:blank" => LinkTarget::Core,
-        "https" if url.host_str().is_some() => LinkTarget::Browser,
+        "https" if url.username().is_empty() && url.port().is_none() && BROWSER_HOSTS.iter().any(|h| host == *h || host.ends_with(&format!(".{h}"))) => LinkTarget::Browser,
         _ => LinkTarget::Refused,
     }
 }
 
-/// `open <url>`: the URL goes as one argument, never through a shell.
+/// `/usr/bin/open <url>`: the URL goes as one argument, never through a shell; the child is reaped.
 fn open_in_browser(url: &tauri::Url) {
-    let _ = std::process::Command::new("open").arg(url.as_str()).spawn();
+    match std::process::Command::new("/usr/bin/open").arg(url.as_str()).spawn() {
+        Ok(mut child) => {
+            std::thread::spawn(move || {
+                let _ = child.wait();
+            });
+        }
+        Err(e) => eprintln!("[ahrena-console] could not open {} in the browser: {e}", url.host_str().unwrap_or("")),
+    }
 }
 
 /// Moves an existing console window to the `/ui` of the core on `port`, if it shows another port.
@@ -735,15 +755,25 @@ mod tests {
 
     #[test]
     fn links_out_of_the_ui_go_to_the_system_browser() {
-        let t = |u: &str| link_target(&u.parse().unwrap());
+        let t = |u: &str| link_target(&u.parse().unwrap(), Some(53817));
         assert_eq!(t("http://127.0.0.1:53817/ui/connections"), LinkTarget::Core);
         assert_eq!(t("http://localhost:53817/ui"), LinkTarget::Core);
         assert_eq!(t("about:blank"), LinkTarget::Core);
         assert_eq!(t("https://github.com/login/device"), LinkTarget::Browser);
         assert_eq!(t("https://github.com/settings/connections/applications/abc"), LinkTarget::Browser);
+        assert_eq!(t("https://docs.github.com/en/apps"), LinkTarget::Browser);
+        assert_eq!(t("https://adr.github.io/"), LinkTarget::Browser);
+        assert_eq!(t("http://127.0.0.1:4720/ui"), LinkTarget::Refused, "another local core");
+        assert_eq!(t("http://127.0.0.1:53817/api/connections"), LinkTarget::Refused, "not the /ui");
+        assert_eq!(t("http://127.0.0.1:53817/uix"), LinkTarget::Refused);
+        assert_eq!(t("https://evil.example/"), LinkTarget::Refused, "a host the /ui never links to");
+        assert_eq!(t("https://github.com.evil.example/"), LinkTarget::Refused);
+        assert_eq!(t("https://github.com@evil.example/"), LinkTarget::Refused);
+        assert_eq!(t("https://user@github.com/"), LinkTarget::Refused);
         assert_eq!(t("http://example.com/"), LinkTarget::Refused, "plain http to another host");
         assert_eq!(t("file:///etc/passwd"), LinkTarget::Refused);
         assert_eq!(t("javascript:alert(1)"), LinkTarget::Refused);
+        assert_eq!(link_target(&"http://127.0.0.1:53817/ui".parse().unwrap(), None), LinkTarget::Refused, "no core up");
     }
 
     #[test]
