@@ -152,11 +152,13 @@ function card(c, write) {
   return { node, link };
 }
 
-/** The foot (C71): the open action with its label and "Detalhe ›"; a remote session has no Detail here. */
+/**
+ * The foot (C71): the open action with its label and "Detalhe ›". Every card links to the Detail, as
+ * it did before issue 285 (the whole card was the link), so a remote one keeps "Detalhe ›" too.
+ */
 function foot(v, write) {
   const action = openAction({ id: v.id, open: v.open }, { size: 'small', write });
-  const remote = v.open?.target === 'remote';
-  return el('div', { class: 'wall-foot' }, action, remote ? null : el('a', { class: 'wall-detail', href: v.href, tabindex: '-1' }, 'Detalhe ›'));
+  return el('div', { class: 'wall-foot' }, action, el('a', { class: 'wall-detail', href: v.href, tabindex: '-1' }, 'Detalhe ›'));
 }
 
 // ---------- A tela ----------

@@ -437,8 +437,8 @@ describe('Mural: ao vivo com atividade contínua', () => {
       assert.equal(feet.length, 4, 'every card has the foot');
       assert.deepEqual(
         feet.map((p) => p.textContent),
-        ['Abrir no Claude DesktopDetalhe ›', 'Ir para o terminalDetalhe ›', 'Roda em outra máquina', 'Detalhe ›'],
-        'remote: the disabled button says where, and no Detalhe; none: no button',
+        ['Abrir no Claude DesktopDetalhe ›', 'Ir para o terminalDetalhe ›', 'Roda em outra máquinaDetalhe ›', 'Detalhe ›'],
+        'remote: the disabled button says where, and the card still links to the Detail like its title; none: no button',
       );
       assert.equal(comClasse(feet[2]!, 'open-button')[0]!.getAttribute('aria-disabled'), 'true');
       assert.equal(comClasse(feet[0]!, 'wall-detail')[0]!.getAttribute('href'), `/ui/sessions/${UUID}`);
