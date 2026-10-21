@@ -143,6 +143,51 @@ function cacheSuite(name: string, makeStore: () => CachePort) {
   });
 }
 
+function clearSuite(name: string, makeStore: () => CachePort) {
+  describe(`#241/AC-4 clearing the GitHub cache on an identity change (${name})`, () => {
+    test('clear drops every row, the rate-limit pause and what is in flight', async () => {
+      const now = clock();
+      const store = makeStore();
+      const cache = new GithubCache({ store, now });
+      await cache.get('a', 60_000, counter('va'));
+      await cache.get('b', 60_000, counter('vb'));
+      cache.pause(60_000);
+      await cache.clear();
+      assert.equal(await store.get('a'), null);
+      assert.equal(await store.get('b'), null);
+      assert.equal(cache.pauseLeftMs(), 0);
+      const f = counter('new');
+      assert.equal((await cache.get('a', 60_000, f)).value, 'new');
+      assert.equal(f.calls, 1);
+    });
+
+    test('a read in flight when the identity changed is neither stored nor served', async () => {
+      const now = clock();
+      const store = makeStore();
+      const cache = new GithubCache({ store, now });
+      await cache.get('k', 1, counter('old'));
+      now.add(10);
+      let release!: () => void;
+      const slow: Fetcher<string> = async () => {
+        await new Promise<void>((r) => (release = r));
+        return { value: 'read with the old identity' };
+      };
+      const reading = cache.get('k', 1, slow);
+      await new Promise((r) => setImmediate(r));
+      await cache.clear();
+      release();
+      await assert.rejects(reading, NoDataError);
+      assert.equal(await store.get('k'), null);
+      const f = counter('fresh');
+      assert.equal((await cache.get('k', 1, f)).value, 'fresh');
+      assert.equal(f.calls, 1, 'the in-flight read is not shared after clear');
+    });
+  });
+}
+
+clearSuite('memory', () => new MemoryCacheStore());
+clearSuite('SQLite', () => new SqliteCacheStore(new DatabaseSync(':memory:')));
+
 cacheSuite('memória', () => new MemoryCacheStore());
 cacheSuite('SQLite', () => new SqliteCacheStore(new DatabaseSync(':memory:')));
 

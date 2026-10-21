@@ -81,6 +81,7 @@
 // application/json`. Nenhum token entra na resposta, nos erros ou no log; o branch padrão nunca é
 // escrito. O diff mostra 3 linhas de contexto em volta do que muda.
 
+import { githubReposTransport, type GithubAccess } from './github-access.ts';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import {
   AVAILABLE_PLATFORMS,
@@ -835,25 +836,25 @@ export interface CoreFrameworkInstallOptions {
   /** O valor de `AHRENA_CONSOLE_FRAMEWORK_REPO`. */
   frameworkRepo?: string;
   log?: (message: string) => void;
+  /** The credential provider and transport (#241). Required outside the demo and `--no-github`; the demo takes only its token. */
+  github?: GithubAccess | null;
 }
 
 /** Na demo, o PR aberto evolui sozinho: o CI passa em 20 s e o review aprova em 45 s. */
 export const DEMO_PULL_REQUEST_TIMELINE: PullRequestTimeline = { checksAfterMs: 20_000, approvedAfterMs: 45_000 };
 
-/** Monta o serviço e a rota como o núcleo usa (cli.ts): token do `gh`, cache no banco, a fila do núcleo. */
-export function createCoreFrameworkInstall({ demo, noGithub, cache, changes, queue, frameworkRepo, log }: CoreFrameworkInstallOptions): { service: FrameworkInstallService; route: FrameworkInstallRoute } {
+/** Monta o serviço e a rota como o núcleo usa (cli.ts): a credencial do provedor (#241), cache no banco, a fila do núcleo. */
+export function createCoreFrameworkInstall({ demo, noGithub, cache, changes, queue, frameworkRepo, log, github }: CoreFrameworkInstallOptions): { service: FrameworkInstallService; route: FrameworkInstallRoute } {
   const repo = frameworkRepoFrom(frameworkRepo, log);
   // A demo aponta para um endereço que não resolve: mesmo que o falso falhasse, nada sai para o GitHub.
-  const transport = demo
-    ? new GithubReposSource({
-        token: 'demo',
-        fetch: createFakeGithub({ ...DEMO_GITHUB_DATA, repos: [...DEMO_GITHUB_DATA.repos, fakeFrameworkRepo(repo)] }, { delayMs: 120, pullRequestTimeline: DEMO_PULL_REQUEST_TIMELINE }).fetch,
-        url: 'https://github-falso.invalid/graphql',
-        api: 'https://github-falso.invalid',
-      })
-    : noGithub
-      ? null
-      : new GithubReposSource();
+  const transport = githubReposTransport({
+    demo,
+    noGithub,
+    github,
+    demoFetch: () =>
+      createFakeGithub({ ...DEMO_GITHUB_DATA, repos: [...DEMO_GITHUB_DATA.repos, fakeFrameworkRepo(repo)] }, { delayMs: 120, pullRequestTimeline: DEMO_PULL_REQUEST_TIMELINE }).fetch,
+    demoBase: 'https://github-falso.invalid',
+  });
   const service = new FrameworkInstallService({ transport, cache, changes, queue, frameworkRepo: repo, pullRequestPollMs: demo ? 5_000 : 30_000, ...(log ? { log } : {}) });
   return { service, route: createFrameworkInstallRoute(service) };
 }

@@ -77,6 +77,7 @@ import {
   reprocessarHistorico,
 } from './reprocessing.ts';
 import { criarReposDoNucleo } from './repos.ts';
+import type { GithubAccess } from './github-access.ts';
 import { createCoreDelivery } from './delivery-github.ts';
 import { createCoreAgentInstructions } from './agent-instructions.ts';
 import { createCoreFrameworkInstall, FRAMEWORK_REPO_ENV } from './framework-install.ts';
@@ -239,7 +240,10 @@ const machine = new SessionStateMachine({
   ...(demo ? { probe: null } : {}),
 });
 const desktop = demo || o.noDesktop ? null : new DesktopIndex();
-const workSource = demo ? new SimulatorWorkSource() : o.noGithub ? null : new GithubGraphqlSource({ token: () => ghCliToken() });
+// The GitHub credential provider of every GitHub-backed source (#241). Until the connection is wired
+// here, it is still `gh auth token`, passed explicitly: no source has a `gh` default any more.
+const githubAccess: GithubAccess | null = demo || o.noGithub ? null : { token: () => ghCliToken() };
+const workSource = demo ? new SimulatorWorkSource() : githubAccess ? new GithubGraphqlSource({ token: githubAccess.token }) : null;
 // A single GitHub cache, in the database, for the work and the repositories: a rate-limit pause holds for both.
 const githubCache = new GithubCache({ store: new SqliteCacheStore(storage.db) });
 const work = new TrabalhoPorBranch({
@@ -260,7 +264,7 @@ const projectCache = new GithubCache({ store: new SqliteCacheStore(storage.db) }
 const kanban = demo
   ? new GithubProject({ source: new SimulatorProject(), cache: projectCache, project: SIMULATOR_PROJECT })
   : chosenProject
-    ? createGithubProject({ project: chosenProject, cache: projectCache, token: () => ghCliToken() })
+    ? createGithubProject({ project: chosenProject, cache: projectCache, token: githubAccess!.token })
     : null;
 
 // The commit of the API's checkout, so the panel footer says which version is live.
@@ -357,7 +361,7 @@ const mcp = createMcpServer({ storage, accounts, desktop, log });
 mcp.server.register(waitForChanges({ changes, accounts }));
 // A single queue for the GitHub calls behind the screens (decision 0001, item 6): repositories and instructions.
 const githubQueue = new GithubCallQueue();
-const repos = criarReposDoNucleo({ demo, semGithub: o.noGithub, cache: githubCache, frota: mcp.fleet, mudancas: changes, log, queue: githubQueue });
+const repos = criarReposDoNucleo({ demo, semGithub: o.noGithub, cache: githubCache, frota: mcp.fleet, mudancas: changes, log, queue: githubQueue, github: githubAccess });
 // The Analytics Delivery tab (#266): the same GitHub cache and queue, the Repositories screen's session → repository,
 // the project kanban's Project (the demo has its own synthetic ones) and the account's repository list.
 const delivery = createCoreDelivery({
@@ -368,6 +372,7 @@ const delivery = createCoreDelivery({
   changes,
   sessions: repos.sessions,
   boards: async () => (kanban ? [await kanban.board()] : []),
+  github: githubAccess,
   accountRepos: async () => {
     const l = await repos.repos.lista();
     return l.groups.flatMap((g) => g.repos.map((r) => ({ fullName: r.fullName, lastPush: r.lastPush })));
@@ -375,9 +380,9 @@ const delivery = createCoreDelivery({
   log,
 });
 // The Instructions tab of a repository (#183): the fake GitHub under --demo; otherwise GitHub through the 0001 cache.
-const agentInstructions = createCoreAgentInstructions({ demo, noGithub: o.noGithub, cache: githubCache, changes, queue: githubQueue, log });
+const agentInstructions = createCoreAgentInstructions({ demo, noGithub: o.noGithub, cache: githubCache, changes, queue: githubQueue, log, github: githubAccess });
 // Instalar o Ahrena Framework por PR (#184): o GitHub falso no --demo (com as escritas); fora dele, o token do `gh`, o cache da 0001 e a mesma fila.
-const frameworkInstall = createCoreFrameworkInstall({ demo, noGithub: o.noGithub, cache: githubCache, changes, queue: githubQueue, frameworkRepo: process.env[FRAMEWORK_REPO_ENV], log });
+const frameworkInstall = createCoreFrameworkInstall({ demo, noGithub: o.noGithub, cache: githubCache, changes, queue: githubQueue, frameworkRepo: process.env[FRAMEWORK_REPO_ENV], log, github: githubAccess });
 // As ADRs e as PDRs (#174): a lista de repositórios da tela Repositórios, a descoberta comum, o cache da 0001 e a mesma fila.
 const recordDecisions = createCoreDecisions({
   demo,
@@ -386,6 +391,7 @@ const recordDecisions = createCoreDecisions({
   changes,
   queue: githubQueue,
   log,
+  github: githubAccess,
   accountRepos: async () => {
     const l = await repos.repos.lista();
     return { state: l.state, error: l.error, account: l.account, repos: l.groups.flatMap((g) => g.repos.map((r) => ({ owner: r.owner, name: r.name, lastPush: r.lastPush }))) };
@@ -398,7 +404,7 @@ const devConsole = createDevConsole({
   frota: mcp.fleet,
   decisions,
   cache: githubCache,
-  source: demo ? new SimulatedDevConsoleSource() : o.noGithub ? disabledDevConsoleSource() : new GithubDevConsoleSource(),
+  source: demo ? new SimulatedDevConsoleSource() : githubAccess ? new GithubDevConsoleSource({ token: githubAccess.token }) : disabledDevConsoleSource(),
   ...(demo ? { file: null, contexts: DEV_CONSOLE_SIMULATOR_CONTEXTS, git: devConsoleSimulatorGit } : {}),
 });
 

@@ -144,9 +144,36 @@ export interface QueryCost {
   remaining: number;
 }
 
+/**
+ * A GitHub credential: a fixed string (tests, demo) or the provider's function (#241: the
+ * connection's `token()`), asked on every request. The provider caches; the sources never do.
+ */
+export type GithubToken = string | (() => Promise<string>);
+
+/** What a GitHub-backed service needs to reach GitHub (#241): the credential provider and, for tests and the demo, the transport. */
+export interface GithubAccess {
+  token: GithubToken;
+  fetch?: typeof fetch;
+  /** GraphQL endpoint. */
+  url?: string;
+  /** REST base. */
+  api?: string;
+}
+
+/** Fails early when a source is built without a credential provider (there is no `gh` default any more). */
+export function requireGithubToken(token: GithubToken | undefined): GithubToken {
+  if (typeof token !== 'string' && typeof token !== 'function') throw new TypeError('GitHub source without a token provider');
+  return token;
+}
+
+/** The credential for one request. */
+export async function resolveGithubToken(token: GithubToken): Promise<string> {
+  return typeof token === 'string' ? token : token();
+}
+
 export interface GithubGraphqlSourceOptions {
-  /** Token, ou função que o obtém (ex.: `ghCliToken`). */
-  token: string | (() => Promise<string>);
+  /** The credential provider (#241), asked on every request. */
+  token: GithubToken;
   fetch?: typeof fetch;
   url?: string;
   now?: () => number;
@@ -164,9 +191,9 @@ interface GraphqlError {
 
 export class GithubGraphqlSource implements WorkSource {
   private readonly opts: GithubGraphqlSourceOptions;
-  private tokenValue: string | null = null;
 
   constructor(opts: GithubGraphqlSourceOptions) {
+    requireGithubToken(opts?.token);
     this.opts = opts;
   }
 
@@ -231,15 +258,8 @@ export class GithubGraphqlSource implements WorkSource {
     return toWorkDetail(issue);
   }
 
-  private async token(): Promise<string> {
-    if (this.tokenValue) return this.tokenValue;
-    const t = this.opts.token;
-    this.tokenValue = typeof t === 'string' ? t : await t();
-    return this.tokenValue;
-  }
-
   private async query<T>(operation: string, query: string, variables: Record<string, unknown>, { tolerateNotFound = false } = {}): Promise<T> {
-    const token = await this.token();
+    const token = await resolveGithubToken(this.opts.token);
     return retryOnGateway(() => githubGraphql<T>({ ...this.opts, token }, operation, query, variables, { tolerateNotFound }), { sleep: this.opts.sleep });
   }
 }

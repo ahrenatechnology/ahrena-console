@@ -44,6 +44,7 @@
 // O Markdown do repositório é dado: sai só na rota do registro, para a tela mostrar sem HTML. Nenhum
 // token entra na resposta, nem nos erros.
 
+import { githubReposTransport, type GithubAccess } from './github-access.ts';
 import type { ServerResponse } from 'node:http';
 import { chainOf, chains, linkAll, uniqueIds } from '../adrs/link.ts';
 import { DECISION_STATUSES, type ChainNode, type DecisionFormat, type DecisionGroup, type DecisionKind, type DecisionLinkView, type DecisionList, type DecisionRecordView, type DecisionsState, type DecisionStatus, type DecisionSummary, type DecisionTotals, type ParsedDecision, type RepoDecisions, type StatusCounts } from '../adrs/model.ts';
@@ -700,16 +701,20 @@ export interface CoreDecisionsOptions {
   /** A lista de repositórios da conta: a mesma da tela Repositórios. */
   accountRepos: () => Promise<AccountRepos>;
   log?: (message: string) => void;
+  /** The credential provider and transport (#241). Required outside the demo and `--no-github`; the demo takes only its token. */
+  github?: GithubAccess | null;
 }
 
-/** Monta o serviço e a rota como o núcleo usa (cli.ts): token do `gh`, cache no banco, a fila do núcleo. */
-export function createCoreDecisions({ demo, noGithub, cache, changes, queue, accountRepos, log }: CoreDecisionsOptions): { service: DecisionsService; route: DecisionsRoute } {
+/** Monta o serviço e a rota como o núcleo usa (cli.ts): a credencial do provedor (#241), cache no banco, a fila do núcleo. */
+export function createCoreDecisions({ demo, noGithub, cache, changes, queue, accountRepos, log, github }: CoreDecisionsOptions): { service: DecisionsService; route: DecisionsRoute } {
   // A demo aponta para um endereço que não resolve: mesmo que o falso falhasse, nada sai para o GitHub.
-  const transport = demo
-    ? new GithubReposSource({ token: 'demo', fetch: createFakeGithub(DEMO_GITHUB_DATA, { delayMs: 120 }).fetch, url: 'https://github-falso.invalid/graphql', api: 'https://github-falso.invalid' })
-    : noGithub
-      ? null
-      : new GithubReposSource();
+  const transport = githubReposTransport({
+    demo,
+    noGithub,
+    github,
+    demoFetch: () => createFakeGithub(DEMO_GITHUB_DATA, { delayMs: 120 }).fetch,
+    demoBase: 'https://github-falso.invalid',
+  });
   const service = new DecisionsService({ source: transport ? new RepoFilesSource(transport) : null, accountRepos, cache, changes, queue, ...(log ? { log } : {}) });
   return { service, route: createDecisionsRoute(service) };
 }
