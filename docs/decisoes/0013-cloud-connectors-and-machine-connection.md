@@ -1,6 +1,6 @@
 # 0013 · Conectores de nuvem e a conexão da máquina remota: o console entra pelas CLIs das nuvens, sem guardar credencial
 
-- **Status:** proposta, esperando o ok do Fernando nos wireframes C57 a C65, A9, A10 e P14
+- **Status:** proposta, esperando o ok do Fernando nos wireframes C57 a C67, A9, A10 e P14
 - **Data:** 2026-10-21
 - **Issues:** [#277](https://github.com/ahrenatechnology/ahrena-console/issues/277) (contas de nuvem) e [#278](https://github.com/ahrenatechnology/ahrena-console/issues/278) (a conexão da máquina remota)
 - **Revê:** em [0008](0008-machine-telemetry-and-dev-console.md), seção 6, "abrir login de nuvem" (passa a ser do console, só pela CLI da nuvem) e "subir, parar o túnel" (passa a ser do console, só pelo comando do usuário); em [0012](0012-remote-reconnect.md), seção 3, "o núcleo não lê a saída" (passa a procurar uma lista fechada de padrões no trecho do log da execução, sem mostrar nada dele)
@@ -34,6 +34,20 @@ A rota recebe um identificador (o `id` da máquina, o nome da sessão SSO) e o n
 - **Entrar** roda `aws sso login --sso-session <nome>` (ou `--profile <nome>` no formato antigo), com tempo limite de 5 min. A página que abre no navegador é da pessoa: o console não lê, não preenche e não acompanha, e só diz "aguardando o login no navegador" (como a 0012).
 - **Um login vale para todos os perfis da mesma sessão**, e a tela diz isso.
 - **GCP e Azure** entram depois no mesmo molde: `gcloud config configurations list` e `gcloud auth login`; `az account list` e `az login`.
+
+### 2a. Os perfis são de cada máquina
+
+O núcleo de **cada máquina** lê a configuração das CLIs **dela** (o `~/.aws/config` do Mac é um, o da Workstation é outro). O do Mac lê o da Workstation pelo leitor remoto que já existe (0008, seção 2: `GET /api/connectors` do núcleo de lá, pela porta do túnel), como lê o resto da tela.
+
+- **Na tela de cada máquina** (Esta máquina, Workstation), o card **Perfis de nuvem** mostra as sessões daquela máquina, o estado e Entrar ali mesmo (C66, C67).
+- **Conexões** é a visão de todas as máquinas: a lista de sessões ganha a coluna Máquina (C61), e a página da AWS tem o seletor Este Mac / Workstation (C58). Os dois lugares leem o mesmo estado; Entrar num muda o outro.
+- **O túnel depende de um perfil do Mac** (o SSM sai daqui): o `cloudProfile` da seção 4 aponta sempre para um perfil da máquina que roda o `connection.start`, este Mac. Os perfis da Workstation são os que ela usa para ela mesma (deploy, dados).
+
+**Entrar numa máquina remota é por código, mostrado no Mac.** O Mac pede ao núcleo de lá (`POST /api/machines/<id>/connectors/aws/sessions/<nome>/login`, de mesma origem aqui; o núcleo do Mac repassa só o nome, pelo túnel, como pedido local lá). O núcleo de lá roda `aws sso login --sso-session <nome> --use-device-code --no-browser`, da mesma lista fixa da seção 1, e da saída tira **só** duas coisas, por padrão estrito: a URL de verificação (precisa ser `https` num domínio da AWS) e o código do usuário (`^[A-Z0-9]{4}-[A-Z0-9]{4}$`). O resto vai para o log de lá. O Mac mostra o código e "Abrir a página de login", que abre a URL no navegador **deste Mac** (C67, estado 2). A credencial nasce na aws CLI de lá e nunca passa pelo Mac.
+
+- **Por que não abrir o navegador lá**: o núcleo de lá é um serviço sem tela (ou a tela de lá não é a que a pessoa está olhando); um navegador aberto lá esperaria por ninguém. É o mesmo padrão do código do GitHub na 0011 (C40).
+- **O código aparece na /ui**, que a 0012 evita para a saída de comando: é a exceção estreita de um campo de formato fixo, de vida curta (10 min), que só vale com o login da pessoa no navegador, e que ela precisa ver. Nada mais da saída sai do log.
+- **Sem login por código lá** (aws CLI antiga, ou núcleo de lá numa versão sem a rota), a tela **mostra o comando** para rodar num terminal de lá, com Copiar, e nada roda (C67, estado 4).
 
 ### 3. O estado da sessão, e a pergunta do "até quando"
 
@@ -75,7 +89,8 @@ O resultado vai na leitura da máquina (`placement: { provider, kind, region, zo
 ### 6. Rotas
 
 - `GET /api/connectors`: os conectores, o estado de cada um e, por conta ou sessão, o estado, o `expiresAt` (variante A), os perfis e o login em andamento. Nunca token, segredo ou saída de comando.
-- `POST` e `DELETE /api/connectors/aws/sessions/<nome>/login`: Entrar e Cancelar.
+- `POST` e `DELETE /api/connectors/aws/sessions/<nome>/login`: Entrar e Cancelar, nesta máquina.
+- `POST` e `DELETE /api/machines/<id>/connectors/aws/sessions/<nome>/login`: o mesmo na máquina remota, repassado ao núcleo de lá; o estado traz `deviceCode: { verificationUri, userCode, expiresAt }` enquanto espera.
 - `POST /api/machines/<id>/connection/start`, `/stop`, `/reconnect`, e `DELETE /api/machines/<id>/connection` (Cancelar o que roda). `POST /api/machines/<id>/reconnect` continua como alias da 0012.
 - Todas as escritas são **de mesma origem** (0003), como as da 0012: `Origin` igual ao do núcleo e `Host` em loopback; a bandeja chama sem `Origin`, como já faz. Outro `Origin` recebe 403 e nada roda, com teste.
 - As mudanças saem em `/api/mudancas` (`{ type: 'connector', key: 'aws' }`, `{ type: 'alert', key: '<id>:connection' }`).
@@ -83,7 +98,8 @@ O resultado vai na leitura da máquina (`placement: { provider, kind, region, zo
 ### 7. Onde aparece
 
 - **Barra lateral**: Conexões fica em Controle (como na #241), agora com um ponto que resume o pior estado dos conectores. As contas de nuvem **não** ganham seção própria agora (ver as alternativas). A Workstation, em Máquinas, mostra no ponto o estado da conexão.
-- **Conexões** (C57 a C61): o catálogo, o conector AWS com as sessões e os perfis, o login em andamento, os estados.
+- **Conexões** (C57 a C61): o catálogo, o conector AWS com as sessões e os perfis, o login em andamento, os estados, e a lista de sessões de todas as máquinas.
+- **Perfis de nuvem** na tela de cada máquina (C66, C67), com o login da Workstation por código.
 - **Tela da máquina** (C62 a C65): os cards Conexão e Onde roda no topo da C25; as faixas de falha com o motivo e a ação certa.
 - **Bandeja** (A9, A10): o bloco Nuvens e a linha da conexão em Máquinas; as notificações de sessão perto de expirar, expirada, e de queda com o motivo.
 - **Painel da sessão** (P14): uma linha no topo quando a sessão roda numa máquina cuja conexão caiu.

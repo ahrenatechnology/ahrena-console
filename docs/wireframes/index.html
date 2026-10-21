@@ -2656,7 +2656,7 @@ const SESS_VALID = {
   foot: `${ic('clock')}Faltam 7 h 12 min · entrou pelo console às 10:40 · conferida há 2 min`,
 }
 const clAwsHeader = (state = 'err') => `<div class="cl-crumb">Conexões ${ic('chevron-right')}<b>AWS</b></div>
-  ${cab('cloud', 'AWS', 'IAM Identity Center · lido de ~/.aws/config há 8 s · aws-cli 2.x no PATH do login', `${state === 'err' ? clPill.expired('5 h').replace('Expirada há 5 h', '1 sessão expirada') : ''}${atualizar}`)}`
+  ${cab('cloud', 'AWS', 'IAM Identity Center · lido de ~/.aws/config há 8 s · aws-cli 2.x no PATH do login', `<div class="seg"><span class="on">Este Mac</span><span>Workstation</span></div>${state === 'err' ? clPill.expired('5 h').replace('Expirada há 5 h', '1 sessão expirada') : ''}${atualizar}`)}`
 const awsProfilesScreen = w => `${clAwsHeader()}
   <div class="stats" style="grid-template-columns:repeat(4,minmax(0,1fr))">
     ${stat('Sessões SSO', '2', 'de ~/.aws/config', 'key-round', 'var(--accent-text)')}
@@ -2713,12 +2713,13 @@ const awsStatesScreen = () => `${clAwsHeader('ok').replace('lido de ~/.aws/confi
 const multiCloudScreen = w => `${clCab()}
   <div class="olhinho">Conectadas · 3</div>
   <div class="cl-grid" style="${clCols(w, 3, 3)}">${CONN_GITHUB()}${CONN_AWS('warn')}${CONN_GCP(true)}</div>
-  <div class="cartao cl-sess"><div class="cl-sh"><span class="c-accent">${ic('list')}</span><div class="cl-sn"><b>Todas as sessões de nuvem</b><small>a mais perto de expirar primeiro</small></div></div>
-    <table class="tabela"><thead><tr><th>Nuvem</th><th>Sessão</th><th>Contas e perfis</th><th>Estado</th><th></th></tr></thead><tbody>
-      <tr><td>AWS</td><td class="mono">sessao-exemplo</td><td>3 perfis · <span class="cl-chip">${ic('server')}Workstation</span></td><td>${clPill.expiring('14 min')}</td><td style="text-align:right"><span class="btn cheio">${ic('log-in')}Entrar</span></td></tr>
-      <tr><td>AWS</td><td class="mono">sessao-lab</td><td>2 perfis</td><td>${clPill.valid('18:40')}</td><td style="text-align:right"><span class="btn contorno">Entrar de novo</span></td></tr>
-      <tr><td>Google Cloud</td><td class="mono">config-exemplo</td><td>dev@exemplo.dev · projeto-exemplo</td><td>${clPill.valid('amanhã 09:00')}</td><td style="text-align:right"><span class="btn contorno">Entrar de novo</span></td></tr>
-      <tr><td>Google Cloud</td><td class="mono">config-pessoal</td><td>outra conta · projeto-pessoal</td><td>${clPill.never()}</td><td style="text-align:right"><span class="btn contorno">Entrar</span></td></tr>
+  <div class="cartao cl-sess"><div class="cl-sh"><span class="c-accent">${ic('list')}</span><div class="cl-sn"><b>Todas as sessões de nuvem</b><small>de todas as máquinas, a mais perto de expirar primeiro</small></div></div>
+    <table class="tabela"><thead><tr><th>Máquina</th><th>Nuvem</th><th>Sessão</th><th>Contas e perfis</th><th>Estado</th><th></th></tr></thead><tbody>
+      <tr><td>Workstation</td><td>AWS</td><td class="mono">sessao-exemplo</td><td>2 perfis · deploys de lá</td><td>${clPill.expired('9 h')}</td><td style="text-align:right"><span class="btn cheio">${ic('log-in')}Entrar</span></td></tr>
+      <tr><td>Este Mac</td><td>AWS</td><td class="mono">sessao-exemplo</td><td>3 perfis · <span class="cl-chip">${ic('cable')}túnel</span></td><td>${clPill.expiring('14 min')}</td><td style="text-align:right"><span class="btn cheio">${ic('log-in')}Entrar</span></td></tr>
+      <tr><td>Este Mac</td><td>AWS</td><td class="mono">sessao-lab</td><td>2 perfis</td><td>${clPill.valid('18:40')}</td><td style="text-align:right"><span class="btn contorno">Entrar de novo</span></td></tr>
+      <tr><td>Workstation</td><td>Google Cloud</td><td class="mono">config-exemplo</td><td>dev@exemplo.dev · projeto-exemplo</td><td>${clPill.valid('amanhã 09:00')}</td><td style="text-align:right"><span class="btn contorno">Entrar de novo</span></td></tr>
+      <tr><td>Este Mac</td><td>Google Cloud</td><td class="mono">config-pessoal</td><td>outra conta · projeto-pessoal</td><td>${clPill.never()}</td><td style="text-align:right"><span class="btn contorno">Entrar</span></td></tr>
     </tbody></table></div>
   <div class="olhinho">Adicionar uma conexão</div>
   <div class="cl-grid" style="${clCols(w, 2, 3)}">${CONN_AZURE()}${CONN_OTHER()}</div>`
@@ -2848,6 +2849,50 @@ function painelConexao() {
     <div class="pn-pe"><span class="mut">○ ${largo ? 'sem dados da Workstation desde 03:11' : 'sem dados de lá desde 03:11'}</span></div>`
   return `<div class="fila">${pane(38, miolo, '● Workstation fora')}${pane(121, miolo, '● Workstation sem conexão', 'a faixa usa a largura da grade no largo · <b>sem estouro</b>')}</div>`
 }
+
+
+// ---------- cloud profiles per machine (C66 and C67, #277): each núcleo reads its own machine ----------
+// rows: [cloud, session, profiles, pillHtml, actionHtml]
+const cpTable = rows => `<table class="tabela"><thead><tr><th>Nuvem</th><th>Sessão</th><th>Perfis</th><th>Estado</th><th></th></tr></thead><tbody>
+  ${rows.map(([c, s, p, pill, act]) => `<tr><td>${c}</td><td class="mono">${s}</td><td>${p}</td><td>${pill}</td><td style="text-align:right">${act}</td></tr>`).join('')}</tbody></table>`
+const cpCard = (w, { where, note, rows, band, foot, faded }) => `<div class="cartao cl-sess${faded ? ' tm-faded' : ''}" style="${spanAt(w, 2, 3)}">
+  <div class="cl-sh"><span class="c-accent">${ic('cloud')}</span><div class="cl-sn"><b>Perfis de nuvem</b><small>${where}</small></div><div class="cl-act"><span class="pn-link" style="font-size:12px">ver todas as máquinas em Conexões ›</span></div></div>
+  ${band || ''}${cpTable(rows)}<div class="cl-sf">${foot}</div></div>`
+const CP_MAC = [['AWS', 'sessao-exemplo', '3 perfis · <span class="cl-chip">' + ic('cable') + 'o túnel da Workstation usa</span>', clPill.expired('5 h'), `<span class="btn cheio">${ic('log-in')}Entrar</span>`],
+  ['AWS', 'sessao-lab', '2 perfis', clPill.valid('18:40'), '<span class="btn contorno">Entrar de novo</span>']]
+const CP_WS = (st) => [['AWS', 'sessao-exemplo', '2 perfis · deploys de lá', st === 'done' ? clPill.valid('16:20') : st === 'pending' ? clPill.running() : clPill.expired('9 h'),
+  st === 'pending' ? `<span class="btn contorno">${ic('x')}Cancelar</span>` : st === 'done' ? '<span class="btn contorno">Entrar de novo</span>' : `<span class="btn cheio">${ic('log-in')}Entrar</span>`],
+  ['Google Cloud', 'config-exemplo', 'projeto-exemplo', clPill.valid('amanhã 09:00'), '<span class="btn contorno">Entrar de novo</span>']]
+// C66 · Esta máquina
+const thisMachineProfiles = w => `${cab('monitor', 'Esta máquina', 'mac-exemplo · macOS 26 · 12 núcleos (8 P + 4 E) · 36 GB · lido há 4 s', hourToggle)}
+  <div class="tm-grid" style="${gridCols(w)}">${cpCard(w, { where: 'deste Mac · lidos do ~/.aws/config e das configurações do gcloud daqui', rows: CP_MAC, foot: `${ic('info')}Entrar abre o navegador deste Mac, como em Conexões (C59).` })}</div>
+  <div class="tm-rc-clip" style="max-height:260px"><div>${thisMachineScreen(w).slice(thisMachineScreen(w).indexOf('<div class="stats"'))}</div></div>`
+// C67 · Workstation: read from the núcleo over there, login by device code shown here
+const wsHead = () => mcHeader('up', 'lido há 6 s')
+const wsPending = `<div class="faixa tm-rc-band"><span class="ic">${ic('loader-2')}</span><div class="tm-rc-text"><b>Entrando na AWS na Workstation…</b> A aws CLI de lá espera você confirmar este código no navegador <b>deste Mac</b>:
+    <div style="display:flex;gap:12px;align-items:center;margin-top:10px"><span class="mono" style="font-size:22px;letter-spacing:.12em;color:var(--text);font-weight:600;padding:6px 14px;border:1px solid var(--border);border-radius:8px;background:var(--bg)">WXYZ-1234</span><span class="btn cheio">${ic('external-link')}Abrir a página de login</span><span class="btn contorno">${ic('copy')}Copiar o código</span></div>
+    <div class="tm-rc-time"><span class="tm-stack"><i style="width:22%;background:var(--status-waiting-dot)"></i></span><span>1:06 de 5:00 · o código vale 10 min</span></div>
+    <div class="tm-rc-cmd">Roda lá: aws sso login --sso-session sessao-exemplo --use-device-code --no-browser</div></div></div>`
+const wsDone = `<div class="faixa tm-rc-ok"><span class="ic">${ic('check-circle-2')}</span><div><b>A Workstation entrou na AWS às 08:20.</b> A sessão de lá vale até 16:20. A credencial ficou na aws CLI de lá; nada passou por este Mac.</div></div>`
+const wsFallback = `<div class="faixa tm-rc-band mc-neutral"><span class="ic">${ic('terminal-square')}</span><div class="tm-rc-text"><b>O núcleo de lá não sabe entrar sozinho.</b> A aws CLI da Workstation é anterior ao login por código (ou o núcleo de lá é de uma versão antiga). Rode num terminal de lá:
+    <div class="tm-config">aws sso login --sso-session sessao-exemplo --use-device-code</div></div><div class="tm-rc-actions"><span class="btn contorno">${ic('copy')}Copiar</span></div></div>`
+const wsProfiles = (w, st) => `${wsHead()}<div class="tm-grid" style="${gridCols(w)}">${cpCard(w, {
+  where: 'da Workstation · lidos pelo núcleo de lá, pelo túnel', rows: CP_WS(st), faded: st === 'down',
+  band: st === 'pending' ? wsPending : st === 'done' ? wsDone : st === 'fallback' ? wsFallback : '',
+  foot: st === 'down' ? `${ic('wifi-off')}Sem conexão: estes são os de 03:11. Entrar volta quando a Workstation responder.` : `${ic('info')}O túnel usa o perfil-dev <b>deste Mac</b> (C62); estes são os perfis que a Workstation usa para ela mesma.` })}</div>
+  ${mcRest(w, false)}`
+const cpScreens = () => `<div class="tm-rc">
+  ${rcRow([['1 · a sessão de lá expirou · 1100 px', clFrame(1100, 'machine-ws', wsProfiles(1100, 'offer'), 'ok', 'err')], ['1 · 1440 px', clFrame(1440, 'machine-ws', wsProfiles(1440, 'offer'), 'ok', 'err')]], [
+    '<b>Cada máquina tem os seus perfis</b>: o núcleo de cada uma lê o ~/.aws/config e o gcloud dela. O da Workstation chega pelo leitor remoto, como o resto da tela.',
+    'O túnel depende de um perfil <b>deste Mac</b> (o SSM sai daqui); os perfis da Workstation são os que ela usa para deploy, dados etc. A tela diz isso no pé do card.'])}
+  ${rcRow([['2 · entrando, com o código · 1100 px', clFrame(1100, 'machine-ws', wsProfiles(1100, 'pending'), 'ok', 'err')], ['3 · entrou · 1100 px', clFrame(1100, 'machine-ws', wsProfiles(1100, 'done'), 'ok', 'ok')]], [
+    '<b>Decisão: o login de lá é por código, mostrado aqui.</b> O núcleo de lá roda a aws CLI com <code>--use-device-code --no-browser</code>; não abre navegador lá, porque o núcleo é um serviço sem tela e você está no Mac.',
+    'Da saída, o núcleo de lá tira <b>só</b> a URL de verificação (precisa ser de um domínio da AWS) e o código (formato fixo); o resto vai para o log de lá. É o mesmo padrão do código do GitHub na C40.',
+    '"Abrir a página de login" abre a URL no navegador deste Mac. A credencial nasce na aws CLI de lá e nunca passa por aqui.'])}
+  ${rcRow([['4 · núcleo ou CLI antigos lá: o comando · 1100 px', clFrame(1100, 'machine-ws', wsProfiles(1100, 'fallback'), 'ok', 'err')], ['5 · sem conexão · 1100 px', clFrame(1100, 'machine-ws', wsProfiles(1100, 'down').replace(mcHeader('up', 'lido há 6 s'), mcHeader('down', 'última leitura às 03:11')), 'off', 'err')]], [
+    'Sem o login por código lá, a tela <b>mostra o comando</b> para rodar num terminal de lá, com Copiar. Nada roda.',
+    'Sem conexão, o card fica com a última leitura e sem Entrar.'])}
+</div>`
 
 // A9 and A10 · the tray: the Nuvens block and the Workstation's connection
 const trayHead = `${mi('Ahrena Console', 'cab')}${mi(`${ponto('completed')}Núcleo de pé · 127.0.0.1:4720`, 'off')}${msep}`
@@ -3019,6 +3064,9 @@ const TELAS = [
     n: N(['Nada.'], ['O motivo vem do conector: o perfil vinculado (cloudProfile) está expirado. Não é preciso rodar nada para saber.', 'A linha mono mostra os dois comandos antes do clique: o login fixo da aws CLI e o connection.start do arquivo.', 'Pergunta 3 da 0013: um clique para os dois (recomendado), ou dois botões.']) },
   { id: 'console-workstation-connection-states', cod: 'C64', nome: 'Workstation · subindo, parando e parada', sub: 'O andamento do clique da C63 (entrando na AWS, depois subindo o túnel), a confirmação de Parar o túnel e o estado parado por você, que não é queda. Em 1100.', html: () => mcStatesScreens(), n: '' },
   { id: 'console-workstation-connection-failing', cod: 'C65', nome: 'Workstation · por que caiu, e sem connection', sub: 'O aviso antes da queda (a sessão expira em 14 min), os motivos de uma falha em palavras simples, cada um com de onde veio e a ação certa, e a máquina que só tem o reconnect da #244, com o Onde roda desconhecido. Em 1100.', html: () => mcFailScreens(), n: '' },
+  { id: 'console-this-machine-cloud-profiles', cod: 'C66', nome: 'Esta máquina · Perfis de nuvem', sub: 'Feature Contas de nuvem (#277). Os perfis de nuvem são de cada máquina: a tela Esta máquina ganha o card Perfis de nuvem, com as sessões deste Mac, o estado e Entrar ali mesmo. O link leva a Conexões, que é a visão de todas as máquinas. Em 1100 e 1440.', html: () => `<div class="fila">${bothWidths(w => clFrame(w, 'machine-local', thisMachineProfiles(w), 'ok', 'err'))}</div>`,
+    n: N(['Nada.'], ['O mesmo dado de Conexões › AWS com o seletor em Este Mac (C58): os dois lugares leem o mesmo estado do núcleo daqui, e Entrar num muda o outro sem recarregar.', 'O chip diz que o túnel da Workstation depende desta sessão.']) },
+  { id: 'console-workstation-cloud-profiles', cod: 'C67', nome: 'Workstation · Perfis de nuvem', sub: 'Os perfis da própria Workstation, lidos pelo núcleo de lá. Entrar inicia a sessão lá: a aws CLI de lá roda o login por código, e o código aparece aqui para você confirmar no navegador deste Mac. Sem esse login lá, a tela mostra o comando. Em 1100 e 1440.', html: () => cpScreens(), n: '' },
   { id: 'console-dev-console', cod: 'C27', nome: 'Dev Console', sub: 'O placar de um contexto (um conjunto de repositórios): prontos para você, CI rodando, CI vermelho, sessões trabalhando e quem precisa de você; a fila de merge na ordem; o quadro das issues em seis colunas e o que foi mesclado. Em 1440 as seis colunas lado a lado; em 1100, quatro e duas embaixo, para nada rolar na horizontal.', html: () => `<div class="fila">${bothWidths(w => frameAt(w, 'dev', devConsoleScreen(w)))}</div>`,
     n: N(['Do Dev Console antigo: o seletor de contexto, a aba Fila de merge com todos os contextos, o placar de 5 números, "Depende de você", a fila na ordem de merge com os não prontos fechados, o quadro de 6 colunas com o critério de cada uma, e "mesclados nas últimas 24 h".'], ['Derivado no núcleo, sem sessão de PM gravando estado: "Delegada" é uma sessão aberta no branch da issue sem push, e "Depende de você" vem de /api/atencao e das decisões sugeridas.', '"Bloqueada" é a etiqueta blocked da issue; plano em andamento e a trilha da release ficaram de fora, porque dependiam de anotação.', 'O antigo rolava na horizontal (o quadro tinha 1110 px mínimos); aqui o quadro dobra em 1100.']) },
   { id: 'console-adrs', cod: 'C28', nome: 'ADR · decisões de arquitetura', sub: 'Os registros de decisão (ADRs) de todos os repositórios da conta, por repositório, com busca no texto e filtro por status. Em 1100 (a janela do app) e 1440.', html: () => `<div style="display:flex;flex-direction:column;gap:12px"><div class="rotulo">1100 px</div>${frameAt(1100, 'adrs', telaAdrs(false))}<div class="rotulo">1440 px</div>${frameAt(1440, 'adrs', telaAdrs(true))}</div>`,
@@ -3059,7 +3107,7 @@ const TELAS = [
     </div>`, n: '' },
   { id: 'console-clouds-states', cod: 'C60', nome: 'Conexões · sem nuvem, e os estados da AWS', sub: 'Sem nenhuma nuvem configurada: o card da AWS diz como criar um perfil com SSO, sem apontar para conta de ninguém (regra 5). Embaixo, o que não é o caminho feliz: sem a aws CLI, a v1, o ~/.aws/config com erro, um nome que não vai para a linha de comando, o estado desconhecido e o login que não terminou. Em 1100.', html: () => `<div style="display:flex;flex-direction:column;gap:12px"><div class="width-col"><div class="rotulo">1100 px · nenhuma nuvem configurada</div>${clFrame(1100, 'connections', connectionsNoCloud(), 'ok', 'none')}</div><div class="width-col"><div class="rotulo">1100 px · os estados da AWS</div>${clFrame(1100, 'connections', awsStatesScreen(), 'ok', 'warn')}</div></div>`,
     n: N(['Nada.'], ['Nenhum botão morto: sem CLI, sem perfil ou com o arquivo inválido, Entrar não aparece e o card diz o que fazer.', 'O nome que vai para a linha da aws passa por um padrão estreito; fora dele, o perfil aparece sem Entrar.']) },
-  { id: 'console-multi-cloud', cod: 'C61', nome: 'Conexões · várias nuvens', sub: 'Com AWS e Google Cloud (fase 2) conectados: um card por conector e a lista de todas as sessões de nuvem, a mais perto de expirar primeiro, com a ação de cada uma. Em 1100 e 1440.', html: () => `<div class="fila">${bothWidths(w => clFrame(w, 'connections', multiCloudScreen(w), 'ok', 'warn'))}</div>`,
+  { id: 'console-multi-cloud', cod: 'C61', nome: 'Conexões · várias nuvens', sub: 'Com AWS e Google Cloud (fase 2) conectados: um card por conector e a lista de todas as sessões de nuvem de todas as máquinas (este Mac e a Workstation), a mais perto de expirar primeiro, com a ação de cada uma. É aqui que as telas de cada máquina (C66, C67) se juntam. Em 1100 e 1440.', html: () => `<div class="fila">${bothWidths(w => clFrame(w, 'connections', multiCloudScreen(w), 'ok', 'warn'))}</div>`,
     n: N(['Nada.'], ['O mesmo molde para toda nuvem: a configuração da CLI dela (perfis da aws, configurações do gcloud, assinaturas do az), o estado da sessão e o login da CLI.', 'A lista junta as nuvens para responder "o que vai expirar"; o detalhe de cada uma continua no card dela.', 'Google Cloud e Azure são fases seguintes; o desenho mostra que cabem sem mudar a tela.']) },
 ]
 
@@ -3086,7 +3134,7 @@ function montar() {
     <li><b>Onde o grafo vive (#146, a aprovar):</b> a proposta é um detalhe aberto pelo pé do card Subagentes, no lugar dos cards, como as decisões (P11). Dentro do card não cabe; numa seção própria, empurra o resto para baixo.</li>
     <li><b>Telemetria e Dev Console no app (decisão 0008, a aprovar):</b> cada máquina se mede com o próprio núcleo; o do Mac lê o da Workstation pela porta que o túnel encaminha; o app só mostra, sem subir túnel nem abrir login (A6, A7, C24 a C27). A reconexão revê esse ponto na decisão 0012. A barra lateral ganha Dev Console e a seção Máquinas, que aparece em todas as telas.</li>
     <li><b>Reconectar a máquina remota (#244, decisão 0012):</b> com <code>reconnect</code> no machines.json, o núcleo do Mac roda o comando que você escreveu, sem shell, um por vez e com tempo limite; a tela espera o login no navegador e relê a remota ao terminar (C50, A8). Aprovado em 20/10, com a saída só no log.</li>
-    <li><b>Nuvens e a conexão da máquina (#277, #278, decisão 0013, a aprovar):</b> as contas de nuvem entram em Conexões, como conectores ao lado do GitHub (C57 a C61); o túnel vira a <code>connection</code> da máquina no machines.json, com Subir, Parar, o perfil de nuvem que ele exige e o motivo da queda em palavras simples (C62 a C65, A9, A10, P14). Perguntas em aberto: de onde vem o "até quando" da sessão SSO (variante A, só o expiresAt do cache da CLI, ou B, sem abrir o cache), Conexões ou uma seção Nuvens, um clique para entrar e subir, e Parar já na fase 1.</li>
+    <li><b>Nuvens e a conexão da máquina (#277, #278, decisão 0013, a aprovar):</b> as contas de nuvem entram em Conexões, como conectores ao lado do GitHub (C57 a C61); o túnel vira a <code>connection</code> da máquina no machines.json, com Subir, Parar, o perfil de nuvem que ele exige e o motivo da queda em palavras simples (C62 a C65, A9, A10, P14). Os perfis de nuvem são de cada máquina: Esta máquina e a Workstation ganham o card Perfis de nuvem, e o login de lá é por código mostrado aqui (C66, C67). Perguntas em aberto: de onde vem o "até quando" da sessão SSO (variante A, só o expiresAt do cache da CLI, ou B, sem abrir o cache), Conexões ou uma seção Nuvens, um clique para entrar e subir, e Parar já na fase 1.</li>
     <li><b>Backlog:</b> Feed de atividade, Analytics completo, Workflows e o detalhe com o grafo de agentes estavam para depois da entrega. Entraram aqui a pedido do dono; o PM decide se viram itens da 0.0.1.</li></ol></section>`
   indice.innerHTML = htmlI; main.innerHTML = htmlM
   if (window.lucide) lucide.createIcons()
