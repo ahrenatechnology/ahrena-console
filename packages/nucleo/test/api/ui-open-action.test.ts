@@ -279,3 +279,65 @@ describe('Detail: the open action in the header (C70)', () => {
     }
   });
 });
+
+// ---------- Sessions (C71): the icon in the row's last cell ----------
+
+describe('Sessions: the open icon in the row (C71)', () => {
+  const row = (id: string, open: Record<string, unknown> | undefined) => ({
+    id,
+    title: `Sessão ${id}`,
+    status: 'active',
+    attention: null,
+    lastActivity: new Date().toISOString(),
+    running: true,
+    durationMs: 12 * 60_000,
+    agents: 1,
+    costUsd: 1.84,
+    cwd: '/tmp/demo',
+    account: null,
+    open,
+  });
+  const LIST = {
+    items: [row(UUID, { target: 'desktop', command: null }), row('b91d04aa-0000-4000-8000-000000000001', { target: 'terminal', command: COMMAND }), row('c3f09b52-0000-4000-8000-000000000002', { target: 'terminal-live', command: COMMAND }), row('demo-1', { target: 'none', command: null })],
+    page: 1,
+    pages: 1,
+    total: 4,
+    perPage: 10,
+    registered: 4,
+    directories: [],
+    counts: {},
+  };
+
+  test('monitor, terminal and square terminal by target; none leaves the cell empty; the click opens without navigating the row', async () => {
+    Object.assign(globalThis, { location: { hash: '', pathname: '/ui/sessions', search: '' }, history: { replaceState() {} } });
+    // @ts-expect-error: browser module, plain JavaScript
+    const { mount } = await import('../../ui/screens/sessions.js');
+    const area = documentoFalso.createElement('main');
+    const navigated: string[] = [];
+    const w = stubWriter({ ok: true, opened: 'terminal' });
+    const leave = await mount(area, { params: {}, read: async () => LIST, write: w.write, navigate: (r: string) => void navigated.push(r), onChange() {}, onRestart() {}, title() {} });
+    try {
+      const cells = area.querySelectorAll('td.sessions-open');
+      assert.equal(cells.length, 4, 'every row keeps the cell');
+      assert.deepEqual(
+        cells.map((c) => c.querySelector('button')?.getAttribute('aria-label') ?? null),
+        ['Abrir no Claude Desktop', 'Abrir no terminal', 'Ir para o terminal', null],
+      );
+      assert.deepEqual(
+        cells.slice(0, 3).map((c) => c.querySelector('button')!.getAttribute('data-open-target')),
+        ['desktop', 'terminal', 'terminal-live'],
+      );
+      cells[1]!.querySelector('button')!.click();
+      assert.deepEqual(navigated, [], 'the row does not navigate');
+      assert.deepEqual(w.calls.map((c) => c.route), ['/api/sessions/b91d04aa-0000-4000-8000-000000000001/open']);
+      w.release();
+      await settle();
+      assert.equal(texto(cells[1]!.querySelector('.open-status')), 'Aberta no terminal');
+      // The rest of the row still opens the Detail.
+      cells[0]!.parentNode!.querySelector('td.st')!.click();
+      assert.deepEqual(navigated, [`/ui/sessions/${UUID}`]);
+    } finally {
+      leave?.();
+    }
+  });
+});
