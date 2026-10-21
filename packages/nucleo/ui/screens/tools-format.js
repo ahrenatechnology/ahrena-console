@@ -420,7 +420,7 @@ export function statCards(o) {
   return [
     { id: 'cli', label: 'CLIs', value: String(cli.length), sub: cliSub, icon: 'terminal', tone: 'accent' },
     { id: 'outdated', label: 'Desatualizadas', value: checking ? DASH : String(outdatedOnly), sub: outSub, icon: 'arrow-up-circle', tone: outdatedOnly ? 'warn' : 'muted' },
-    { id: 'missing', label: 'Faltando', value: checking ? DASH : String(missing.length), sub: missing.length ? `${missing.map((i) => i.id).join(', ')}${missing.some((i) => i.actions.some((a) => a.id === 'install' && a.runnable)) ? ' · o catálogo instala' : ''}` : 'nada faltando', icon: 'circle-dashed', tone: 'muted' },
+    { id: 'missing', label: 'Faltando', value: checking ? DASH : String(missing.length), sub: checking ? 'lendo o PATH' : missing.length ? `${missing.map((i) => i.id).join(', ')}${missing.some((i) => i.actions.some((a) => a.id === 'install' && a.runnable)) ? ' · o catálogo instala' : ''}` : 'nada faltando', icon: 'circle-dashed', tone: 'muted' },
     { id: 'mcp', label: 'Servidores MCP', value: String(servers.length), sub: mcpSub, icon: 'plug', tone: failed ? 'bad-text' : login ? 'warn' : 'ok' },
     { id: 'runtime', label: 'Plataformas', value: String(rt.length), sub: runtimeManual.length ? `${runtimeManual.length} instalada${runtimeManual.length === 1 ? '' : 's'} à mão (${runtimeManual.map((i) => i.label).join(', ')})` : rt.map((i) => i.label).join(', ') || 'nenhuma', icon: 'layers', tone: 'accent' },
     { id: 'containers', label: 'Containers', value: ctValue, sub: ctSub, icon: 'container', tone: c?.state === 'running' ? 'ok' : 'muted' },
