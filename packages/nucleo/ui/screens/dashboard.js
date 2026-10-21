@@ -8,6 +8,7 @@
 import { header, el, icon } from '../dom.js';
 import { loading, error, errorBand, empty } from '../states.js';
 import { attentionOf, attentionOfItem, attentionPill, attentionTone, attentionDot, isBlocked, isIdle, reasonChip, statusWithoutAttention } from '../attention.js';
+import { openAction } from '../open-action.js';
 
 const STYLE = '/ui/dashboard.css';
 // As rotas do núcleo, num lugar só. A da atenção é a `ATTENTION_ROUTE` de src/api/attention-route.ts (#87):
@@ -122,6 +123,8 @@ export function inboxCards(attention, agents) {
       // and does not link.
       machine,
       href: machine ? null : `/ui/sessions/${encodeURIComponent(i.session)}`,
+      // issue 285: where the session opens (`{ target, command }`), for the icon beside "Abrir ›".
+      open: i.open ?? null,
     };
   });
 }
@@ -169,7 +172,7 @@ function numberCard(c) {
   );
 }
 
-function inbox(attention, agents) {
+function inbox(attention, agents, write) {
   const total = blockedCount(attention);
   const title = el(
     'div',
@@ -181,16 +184,36 @@ function inbox(attention, agents) {
   if (!total) return el('section', { class: 'card inbox calm', 'aria-label': 'Precisam de você' }, title);
   const mini = inboxCards(attention, agents).map((c) =>
     el(
-      c.href ? 'a' : 'div',
-      { class: 'card mini', href: c.href, 'data-session': c.session, 'data-machine': c.machine?.id },
+      'div',
+      { class: 'card mini dash-mini', 'data-session': c.session, 'data-machine': c.machine?.id },
       el('div', { class: 'l1' }, reasonChip(c.attention, { withError: true })),
       el('div', { class: 'n trunc' }, c.name),
       el('div', { class: 'x trunc' }, c.text),
       // C1 (issue 245): the model and the age in the foot, "Opus 5.5 · 2 min", beside "Abrir ›".
-      el('div', { class: 'foot' }, c.machine ? el('span', { class: 'trunc', title: `Sessão da ${c.foot}` }, icon('server'), ` ${c.foot} · ${c.age}`) : el('span', { class: 'trunc' }, [c.foot, c.age].filter(Boolean).join(' · ')), c.href ? el('b', {}, 'Abrir ›') : null),
+      el(
+        'div',
+        { class: 'foot' },
+        c.machine ? el('span', { class: 'trunc', title: `Sessão da ${c.foot}` }, icon('server'), ` ${c.foot} · ${c.age}`) : el('span', { class: 'trunc' }, [c.foot, c.age].filter(Boolean).join(' · ')),
+        c.href ? miniActions(c, write) : null,
+      ),
     ),
   );
   return el('section', { class: 'card inbox', 'aria-label': 'Precisam de você' }, title, el('div', { class: 'grid4' }, ...mini));
+}
+
+/**
+ * C71 (issue 285): the icon that opens the session where it runs, then "Abrir ›", the link to the
+ * Detail stretched over the whole card (the card is a div, so the button is never inside a link).
+ * A remote card has neither: its foot already names the machine, and this core has no Detail for it.
+ */
+function miniActions(c, write) {
+  return el(
+    'span',
+    { class: 'dash-mini-actions' },
+    openAction({ id: c.session, open: c.open }, { size: 'icon', write }),
+    // Each link says which session it opens, not five "Abrir ›" in a row.
+    el('a', { class: 'dash-open-link', href: c.href, 'aria-label': c.name ? `Abrir ${c.name}` : 'Abrir a sessão' }, 'Abrir ›'),
+  );
 }
 
 /** The idle ones, apart and neutral: "3 ociosas · sem pressa", a light chip per session and the link. */
@@ -313,7 +336,7 @@ export async function mount(area, ctx) {
 
   function paint({ dashboard, atencao: attention }) {
     const parts = [head, el('div', { class: 'stats' }, ...cards(dashboard.numbers).map(numberCard))];
-    if (attention.ok) parts.push(inbox(attention.valor, dashboard.agents), idleRow(attention.valor));
+    if (attention.ok) parts.push(inbox(attention.valor, dashboard.agents, ctx.write), idleRow(attention.valor));
     else parts.push(errorBand({ title: 'Não deu para ler quem precisa de você.', text: attention.erro.message, action: { label: 'Tentar de novo', onClick: () => draw() } }));
     parts.push(el('div', { class: 'two' }, activeAgents(dashboard.agents, expanded, toggleOne), recentActivity(dashboard.activity)));
     area.replaceChildren(...parts.filter(Boolean));

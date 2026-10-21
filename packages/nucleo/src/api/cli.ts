@@ -99,6 +99,9 @@ import { RemoteMachines } from '../telemetry/remote-machines.ts';
 import { INVALID_MACHINES_FILE, publishReconnectChanges, reconnectLogFile, ReconnectRunner } from '../telemetry/reconnect.ts';
 import { loopbackGet } from '../telemetry/adapters/loopback-http.ts';
 import type { TelemetryCollector } from '../telemetry/ports.ts';
+import { LiveClaudeProcesses } from './live-processes.ts';
+import { SessionOpenDescriber } from './session-open.ts';
+import { createTerminalFocuser, createTerminalOpener } from './terminal-launch.ts';
 import { SIMULATED_WORKSTATION, SimulatedCollector, seedTelemetry } from '../simulator/telemetry.ts';
 
 const o = parseApiOptions(process.argv.slice(2));
@@ -290,6 +293,15 @@ const openInDesktop =
         new Promise<void>((resolve, reject) => execFile('open', [url], { timeout: 5_000 }, (err) => (err ? reject(err) : resolve())))
     : null;
 
+// #285: where each session opens. The live `claude` processes come from `<config>/sessions/<pid>.json` of
+// every configuration folder the profiles know (decision 0006; `profiles` is declared below and only read
+// when a request comes). The terminal launchers write their `.command` files in the data folder (0700);
+// in the demo there are none, and the route answers with the command to copy.
+const liveProcesses = demo ? null : new LiveClaudeProcesses({ folders: async () => ((await profiles?.list()) ?? []).map((p) => p.dir) });
+const openDescriber = new SessionOpenDescriber({ live: liveProcesses });
+const openTerminal = demo ? null : createTerminalOpener({ dir: join(dataDir, 'terminal-resume') });
+const focusTerminal = demo ? null : createTerminalFocuser();
+
 // The same `Accounts` in the panel and in the MCP: the "conta 1" label is the same on both surfaces.
 const accounts = new Accounts({ storage, ...(demo ? { file: null } : {}) });
 const panelBuilder = new MontadorDoPainel({
@@ -333,7 +345,7 @@ if (demo) {
 // #245: the Sessions list and the Kanban read the same event summaries (a waiting session's attention,
 // the last prompt), each session's events once; apart from the panel's, so as not to sweep its 64.
 const listSummaries = new ResumosDeSessao(storage, { maximo: 256 });
-const detail = new LeiturasDoDetalhe({ storage, montador: panelBuilder, ...(demo ? { local: demoLocal } : {}) });
+const detail = new LeiturasDoDetalhe({ storage, montador: panelBuilder, open: openDescriber, ...(demo ? { local: demoLocal } : {}) });
 
 // The history of the ended sessions (#33), with the Desktop index title when there is one.
 const history = new SessionHistory({ storage, decisions, titleOf: (s) => desktop?.sessionByCli(s.id)?.title ?? null });
@@ -505,6 +517,13 @@ const api: LocalApi = await startLocalApi({
   port: boundPort,
   log,
   openInDesktop,
+  openDescriber,
+  openTerminal,
+  focusTerminal,
+  localOf: async (id) => {
+    await desktop?.refresh();
+    return desktop?.sessionByCli(id)?.localId ?? (demo ? demoLocal(id) : null);
+  },
   mcp: mcp.server,
   commit,
   changes,
@@ -515,7 +534,7 @@ const api: LocalApi = await startLocalApi({
   fleet: mcp.fleet,
   remoteAttention: () => remoteMachines?.list() ?? [],
   analytics: new RotaAnalytics({ storage, contas: accounts, versao: () => changes.current, delivery }),
-  sessions: new ListaDeSessoes({ storage, contas: accounts, desktop, resumos: listSummaries }),
+  sessions: new ListaDeSessoes({ storage, contas: accounts, desktop, resumos: listSummaries, open: openDescriber }),
   history,
   kanban: new QuadroKanban({ storage, contas: accounts, desktop, resumos: listSummaries }),
   repos: repos.rota,

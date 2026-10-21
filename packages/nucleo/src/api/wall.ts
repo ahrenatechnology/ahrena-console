@@ -41,6 +41,7 @@ import type { Session } from '../model.ts';
 import type { StoragePort } from '../storage-port.ts';
 import type { DesktopSession } from './desktop-index.ts';
 import type { LeituraDaSessao, MontadorDoPainel } from './panel.ts';
+import { SessionOpenDescriber } from './session-open.ts';
 import type { WallCard, Wall } from './types.ts';
 
 export const WALL_ROUTE = '/api/wall';
@@ -56,6 +57,8 @@ export interface OpcoesDoMural {
   cacheMs?: number;
   /** An ended session stays on the wall this long after its last activity. Default: the watcher's `abandonMs` (180 min). */
   recenteMs?: number;
+  /** #285: each card's `open`; without it, no session counts as live in a terminal. */
+  open?: SessionOpenDescriber;
 }
 
 /** O critério de "aberta" (comentário do módulo), sem a porta: para o teste e para quem quiser. */
@@ -76,10 +79,12 @@ export class MontadorDoMural {
   private readonly agora: () => number;
   private readonly cacheMs: number;
   private readonly recenteMs: number;
+  private readonly open: SessionOpenDescriber;
   private cache: { em: number; mural: Wall } | null = null;
   private rodando: Promise<Wall> | null = null;
 
-  constructor({ painel, storage, agora = Date.now, cacheMs = 2_000, recenteMs = RECENTE_DO_MURAL_MS }: OpcoesDoMural) {
+  constructor({ painel, storage, agora = Date.now, cacheMs = 2_000, recenteMs = RECENTE_DO_MURAL_MS, open = new SessionOpenDescriber() }: OpcoesDoMural) {
+    this.open = open;
     this.painel = painel;
     this.storage = storage;
     this.agora = agora;
@@ -97,7 +102,7 @@ export class MontadorDoMural {
 
   private async montarAgora(): Promise<Wall> {
     const agora = this.agora();
-    await this.painel.atualizarFontes();
+    await Promise.all([this.painel.atualizarFontes(), this.open.refresh()]);
     const lidas: { leitura: LeituraDaSessao; updatedAt: string }[] = [];
     for (const session of await this.candidatas(agora)) {
       // O critério antes da leitura: a arquivada não paga custo, plano nem contexto.
@@ -112,7 +117,7 @@ export class MontadorDoMural {
       if (rank(x) === 1) return y.sessao.since.localeCompare(x.sessao.since);
       return b.updatedAt.localeCompare(a.updatedAt);
     });
-    const cards = lidas.map(({ leitura }) => cardDe(leitura));
+    const cards = lidas.map(({ leitura }) => cardDe(leitura, this.open));
     const mural: Wall = {
       version: 1,
       generatedAt: new Date(agora).toISOString(),
@@ -159,7 +164,7 @@ const urgenteDe = (l: LeituraDaSessao) => l.inbox.urgent || l.inbox.state === 'e
 /** O agente principal conta como um dos agentes da sessão (o wireframe mostra "1" na sessão sem subagentes). */
 const principalRodando = (estado: WallCard['state']) => estado === 'active' || estado === 'delegating' || estado === 'background';
 
-function cardDe(leitura: LeituraDaSessao): WallCard {
+function cardDe(leitura: LeituraDaSessao, open: SessionOpenDescriber): WallCard {
   const { sessao, desktop, branch, custo, plano, contexto, subagentes } = leitura;
   const pasta = sessao.cwd ?? desktop?.cwd ?? null;
   return {
@@ -180,11 +185,12 @@ function cardDe(leitura: LeituraDaSessao): WallCard {
     cost: { usd: custo?.usd ?? null, estimate: true },
     plan: plano ? { done: plano.done, total: plano.total, current: plano.current } : null,
     context: contexto ? { pct: contexto.pct, used: contexto.used, limit: contexto.limit, label: contexto.label } : null,
+    open: open.describe({ sessionId: sessao.id, cwd: pasta, local: desktop?.localId ?? null }),
   };
 }
 
 /** O mural de um montador do painel, com a mesma porta e o mesmo relógio. */
-export function muralDoPainel(painel: MontadorDoPainel, opcoes: Pick<OpcoesDoMural, 'cacheMs' | 'recenteMs'> = {}): MontadorDoMural {
+export function muralDoPainel(painel: MontadorDoPainel, opcoes: Pick<OpcoesDoMural, 'cacheMs' | 'recenteMs' | 'open'> = {}): MontadorDoMural {
   return new MontadorDoMural({ painel, storage: painel.storage, agora: painel.agora, ...opcoes });
 }
 
