@@ -205,9 +205,11 @@ export function createTerminalFocuser({ platform = process.platform, runner = sy
     let line: string;
     try {
       line = await runner.run('ps', ['-o', 'tty=', '-o', 'lstart=', '-p', String(proc.pid)], { env: { ...process.env, TZ: 'UTC', LC_ALL: 'C' } });
-    } catch {
-      // `ps -p` exits non-zero when there is no such process
-      return 'stale';
+    } catch (err) {
+      // Only `ps -p` exiting with 1 says there is no such process. A timeout (`killed`, no code), a spawn
+      // error (ENOENT, EAGAIN) or a signal says nothing about the session: it may still run, and resuming
+      // it would start a second `claude` on the same transcript.
+      return (err as { code?: unknown }).code === 1 ? 'stale' : 'not-found';
     }
     const { tty, start } = parsePsLine(line);
     if (!start) return 'stale';

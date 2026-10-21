@@ -7,6 +7,8 @@
 // | `desktop`       | `claude://claude.ai/epitaxy/<local_…>` through `openInDesktop`  | 200 `{ ok, opened: 'desktop' }`     |
 // | `terminal`      | a terminal resuming it (terminal-launch.ts)                     | 200 `{ ok, opened: 'terminal' }`    |
 // | `terminal-live` | the terminal tab where it runs, brought forward (macOS)         | 200 `{ ok, opened: 'focused' }`     |
+// |                 | its pid is gone or is another process now (stale): resumes it   | 200 `{ ok, opened: 'terminal' }`    |
+// |                 | as `terminal` does; a tab not found answers 409, never resumes  |                                     |
 // | `remote`        | nothing: it runs on another machine                             | 422 `{ error }`                     |
 // | `none`          | nothing: no folder to open it in                                | 422 `{ error }`                     |
 //

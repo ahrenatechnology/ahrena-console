@@ -170,11 +170,25 @@ describe('createTerminalFocuser', () => {
     assert.ok(!runner.calls.some((c) => c.file === 'osascript'));
   });
 
-  test('ps failing (no such process): stale; another platform: not-found; nothing else runs', async () => {
-    const failing: ProcessRunner = { run: async () => Promise.reject(new Error('no such process')), spawnDetached: async () => undefined };
+  test('ps exiting with 1 (no such process): stale; another platform: not-found; nothing else runs', async () => {
+    const gone = Object.assign(new Error('Command failed: ps'), { code: 1 });
+    const failing: ProcessRunner = { run: async () => Promise.reject(gone), spawnDetached: async () => undefined };
     assert.equal(await createTerminalFocuser({ platform: 'darwin', runner: failing })(proc), 'stale');
     const runner = fakeRunner();
     assert.equal(await createTerminalFocuser({ platform: 'linux', runner })(proc), 'not-found');
     assert.equal(runner.calls.length, 0);
+  });
+
+  test('ps failing for another reason (timeout, spawn error, signal): not-found, so a running session is never resumed', async () => {
+    const failures = [
+      Object.assign(new Error('timed out'), { killed: true, code: null, signal: 'SIGTERM' }),
+      Object.assign(new Error('spawn ps ENOENT'), { code: 'ENOENT' }),
+      Object.assign(new Error('spawn ps EAGAIN'), { code: 'EAGAIN' }),
+      new Error('no code at all'),
+    ];
+    for (const failure of failures) {
+      const runner: ProcessRunner = { run: async () => Promise.reject(failure), spawnDetached: async () => undefined };
+      assert.equal(await createTerminalFocuser({ platform: 'darwin', runner })(proc), 'not-found', failure.message);
+    }
   });
 });
