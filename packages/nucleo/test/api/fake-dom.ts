@@ -164,7 +164,9 @@ export class ElementoFalso extends NoFalso {
   dispatchEvent(ev: EventoFalso): boolean {
     ev.target ??= this;
     ev.preventDefault ??= () => void (ev.defaultPrevented = true);
-    for (let no: ElementoFalso | null = this; no; no = no.parentNode) {
+    let parado = false;
+    ev.stopPropagation ??= () => void (parado = true);
+    for (let no: ElementoFalso | null = this; no && !parado; no = no.parentNode) {
       ev.currentTarget = no;
       for (const f of no.ouvintes.get(ev.type) ?? []) f(ev);
     }
