@@ -5,6 +5,7 @@
 
 import { header, el, icon } from '../dom.js';
 import { loading, error, errorBand, empty } from '../states.js';
+import { attentionPill } from '../attention.js';
 
 /** Quantos dias cada página traz. */
 export const DAYS_PER_PAGE = 7;
@@ -100,12 +101,13 @@ const STATUS = {
   error: 'Com erro',
   abandoned: 'Abandonada',
   active: 'Ativa',
-  waiting: 'Esperando você',
 };
 
 function badge(status) {
+  // A closed session that ended waiting (issue 245): neutral "Ociosa", never the old "waiting for you".
+  if (status === 'waiting') return attentionPill({ level: 'idle', reason: null });
   const known = Object.hasOwn(STATUS, status);
-  return el('span', { class: `badge b-${known ? status : 'abandoned'}` }, el('span', { class: 'p' }), known ? STATUS[status] : String(status ?? '—'));
+  return el('span', { class: `badge b-${known ? status : 'abandoned'}` }, el('span', { class: 'p' }), known ? STATUS[status] : '—');
 }
 
 const sessionRoute = (id) => `/ui/sessions/${encodeURIComponent(id)}`;

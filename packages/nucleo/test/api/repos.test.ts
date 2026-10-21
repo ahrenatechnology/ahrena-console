@@ -261,6 +261,39 @@ describe('#104 CA3: consulta enxuta e cache da decisão 0001', () => {
     assert.match(l.error ?? '', /rede fora/);
   });
 
+  test('#269 AC-3: a list cut by a page that kept failing is ready, and the error says how many came and why', async () => {
+    class CutSource extends GithubReposSource {
+      override async lista() {
+        return { ...(await super.lista()), incomplete: { read: 4, total: 9, error: 'GitHub respondeu 502: HTTP 502' } };
+      }
+    }
+    const gh = createFakeGithub(dados(), { now: () => T0 });
+    const m = await montar({ fonte: new CutSource({ token: 'token-de-teste', fetch: gh.fetch, now: () => T0, api: 'https://falso.invalid', url: 'https://falso.invalid/graphql' }) });
+    const l = await listaPronta(m);
+    assert.equal(l.state, 'ready');
+    assert.equal(l.groups.flatMap((g) => g.repos).length, 4);
+    assert.equal(l.error, 'lista incompleta: 4 de 9 repositórios lidos, o resto falhou (GitHub respondeu 502: HTTP 502)');
+  });
+
+  test('#269: a cut list never replaces a longer one already shown; the old one stays, with the reason', async () => {
+    const cut = { on: false };
+    class CutSource extends GithubReposSource {
+      override async lista() {
+        const l = await super.lista();
+        return cut.on ? { ...l, repos: l.repos.slice(0, 2), incomplete: { read: 2, total: 4, error: 'GitHub respondeu 502: HTTP 502' } } : l;
+      }
+    }
+    const gh = createFakeGithub(dados(), { now: () => T0 });
+    const m = await montar({ fonte: new CutSource({ token: 'token-de-teste', fetch: gh.fetch, now: () => m.relogio.agora, api: 'https://falso.invalid', url: 'https://falso.invalid/graphql' }) });
+    assert.equal((await listaPronta(m)).summary.repositories, 4);
+    cut.on = true;
+    m.relogio.agora += TTL_DOS_REPOS.lista + MIN;
+    const l = await listaPronta(m);
+    assert.equal(l.state, 'ready');
+    assert.equal(l.summary.repositories, 4);
+    assert.match(l.error ?? '', /^lista incompleta: 2 de 4 repositórios lidos/);
+  });
+
   test('sem GitHub (desligado ou sem token do gh): estado "sem-github"', async () => {
     const desligado = await montar({ fonteNula: true });
     assert.equal((await desligado.repos.lista()).state, 'no-github');
@@ -474,6 +507,21 @@ describe('#105 CA1 a CA4: as métricas de um repositório', () => {
     assert.ok(depois.contributors && depois.lines);
   });
 
+  test('#269 AC-4: a PR sample cut by a page that kept failing still gives the metrics, and the error names the part', async () => {
+    class CutSource extends GithubReposSource {
+      override async detalhe(dono: string, nome: string, desde: string) {
+        const d = await super.detalhe(dono, nome, desde);
+        return d && { ...d, incomplete: ['amostra de PRs incompleta: 50 lidos, o resto falhou (GitHub respondeu 502: HTTP 502)'] };
+      }
+    }
+    const gh = createFakeGithub(dados(), { now: () => T0 });
+    const m = await montar({ fonte: new CutSource({ token: 'token-de-teste', fetch: gh.fetch, now: () => T0, api: 'https://falso.invalid', url: 'https://falso.invalid/graphql' }) });
+    const r = await metricasProntas(m, 'org-a', 'motor-de-regras');
+    assert.equal(r.state, 'ready');
+    assert.ok(r.prs);
+    assert.equal(r.error, 'amostra de PRs incompleta: 50 lidos, o resto falhou (GitHub respondeu 502: HTTP 502)');
+  });
+
   test('repositório que não existe: "nao-encontrado"', async () => {
     const m = await montar();
     assert.equal((await metricasProntas(m, 'org-a', 'nao-existe')).state, 'not-found');
@@ -547,10 +595,11 @@ describe('#104 e #105: a rota /api/repos no núcleo', () => {
     const d = await get('/api/repos/org-a/motor-de-regras');
     assert.equal(d.status, 200);
     assert.equal(d.corpo.period, '90d');
-    assert.equal((await get('/api/repos/org-a/motor-de-regras?periodo=1a')).corpo.period, '1y');
-    // The year is `1y`; the old value `1a` is still accepted under either parameter name.
     assert.equal((await get('/api/repos/org-a/motor-de-regras?period=1y')).corpo.period, '1y');
-    assert.equal((await get('/api/repos/org-a/motor-de-regras?period=1a')).corpo.period, '1y');
+    // The old Portuguese parameter name is ignored (the default period comes back), and the old
+    // value `1a` for the year is refused.
+    assert.equal((await get('/api/repos/org-a/motor-de-regras?periodo=1y')).corpo.period, '90d');
+    assert.equal((await get('/api/repos/org-a/motor-de-regras?period=1a')).status, 400);
   });
 
   test('dono, repo e período fora do padrão dão 400, e nada do pedido chega ao GitHub', async () => {
@@ -560,7 +609,7 @@ describe('#104 e #105: a rota /api/repos no núcleo', () => {
     for (const ruim of ['-org/x', 'org-/x', 'a--b/x', 'org/a%20b', 'org/a%3Bb', 'a%2Fb/c', `${'a'.repeat(40)}/x`, `org/${'r'.repeat(101)}`, 'org/%E0%A4%A']) {
       assert.equal((await get(`/api/repos/${ruim}`)).status, 400, ruim);
     }
-    const ruim = await get('/api/repos/org-a/motor-de-regras?periodo=2a');
+    const ruim = await get('/api/repos/org-a/motor-de-regras?period=2a');
     assert.equal(ruim.status, 400);
     assert.equal(ruim.corpo.error, 'period: um de 30d, 90d, 1y');
     assert.equal((await get('/api/repos/org-a/motor-de-regras/issues')).status, 404);
@@ -568,18 +617,18 @@ describe('#104 e #105: a rota /api/repos no núcleo', () => {
     assert.equal(m.chamadas.length, antes);
   });
 
-  test('?atualizar=1 relê o GitHub, mas respeita o mínimo de 30 s entre releituras forçadas', async () => {
+  test('?refresh=1 relê o GitHub, mas respeita o mínimo de 30 s entre releituras forçadas', async () => {
     await m.repos.esperar();
     await get('/api/repos');
     await m.repos.esperar();
     const listas = () => m.chamadas.filter((c) => c === 'GRAPHQL ReposLista').length;
     const antes = listas();
     m.relogio.agora += 10_000;
-    await get('/api/repos?atualizar=1');
+    await get('/api/repos?refresh=1');
     await m.repos.esperar();
     assert.equal(listas(), antes, 'releu antes de 30 s');
     m.relogio.agora += 21_000;
-    await get('/api/repos?atualizar=1');
+    await get('/api/repos?refresh=1');
     await m.repos.esperar();
     assert.equal(listas(), antes + 1);
   });

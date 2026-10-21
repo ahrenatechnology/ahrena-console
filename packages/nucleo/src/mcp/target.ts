@@ -142,12 +142,12 @@ export class CoreResolver {
     this.starting = this.o
       .start({ installation, dir: dataDir, port: startPort, parent, log })
       .then((r) => {
-        if (r.estado === 'de-pe' && typeof r.porta === 'number') {
-          this.lockCore = { port: r.porta, pid: typeof r.pid === 'number' ? r.pid : null, verified: false };
-          log?.(`core ${installation} at ${r.url} (${r.subiu ? 'started now' : 'adopted'})`);
+        if (r.state === 'up' && typeof r.port === 'number') {
+          this.lockCore = { port: r.port, pid: typeof r.pid === 'number' ? r.pid : null, verified: false };
+          log?.(`core ${installation} at ${r.url} (${r.started ? 'started now' : 'adopted'})`);
         } else {
           this.failedAt = Date.now();
-          log?.(`the core did not start: ${r.motivo ?? 'unknown reason'}`);
+          log?.(`the core did not start: ${r.reason ?? 'unknown reason'}`);
         }
       })
       .catch((e) => {

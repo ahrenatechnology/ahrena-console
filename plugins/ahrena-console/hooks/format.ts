@@ -1,6 +1,6 @@
 // Formatação do painel: tempo, modelo, tokens, custo e os glifos de status. Funções puras.
 
-import type { AwaitingReason, PanelDecision, DisplayStatus, DecisionScope, InboxState, Panel, PanelSession } from '../types'
+import type { AwaitingReason, PanelDecision, DisplayStatus, DecisionScope, InboxState, Panel, PanelSession, SessionAttention } from '../types'
 
 /** "agora", "40 s", "12 min", "4 h", "2 d". */
 /**
@@ -66,20 +66,53 @@ export function clockTime(ms: number): string {
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
 
-export const REASONS: Record<AwaitingReason, { glyph: string; label: string; urgent: boolean }> = {
-  notification: { glyph: '⛉', label: 'Pede permissão', urgent: true },
-  interrupted: { glyph: '⏸', label: 'Interrompida', urgent: true },
-  stop: { glyph: '↵', label: 'Sua vez', urgent: false },
-  session_start: { glyph: '›_', label: 'No prompt', urgent: false },
-}
-
 /** Os 5 status do console (docs/brand/tokens.json): o rótulo e o glifo de cada um. */
 export const STATUS: Record<DisplayStatus, { glyph: string; label: string }> = {
   active: { glyph: '●', label: 'Ativa' },
-  waiting: { glyph: '◐', label: 'Esperando você' },
+  // #245: the waiting session is shown by its attention (ATTENTION_STATUS); this is the blocked one.
+  waiting: { glyph: '◐', label: 'Precisa de você' },
   completed: { glyph: '✓', label: 'Concluída' },
   error: { glyph: '✕', label: 'Com erro' },
   abandoned: { glyph: '○', label: 'Abandonada' },
+}
+
+/** #245: the old waiting state split in two: blocked on you (yellow) and idle at the prompt (neutral). */
+export const ATTENTION_STATUS: Record<SessionAttention['level'], { glyph: string; pill: string; label: string; short: string }> = {
+  blocked: { glyph: '◐', pill: '●', label: 'Precisa de você', short: 'Precisa' },
+  idle: { glyph: '◌', pill: '○', label: 'Ociosa', short: 'Ociosa' },
+}
+
+/** The glyph of a session in text: its attention's when it waits (#245), its status's otherwise. */
+export function statusGlyph(s: { state: InboxState | 'unknown'; reason: AwaitingReason | null; attention?: SessionAttention | null }): string {
+  const attention = s.state === 'waiting' ? attentionOf(s) : null
+  return attention ? ATTENTION_STATUS[attention.level].glyph : STATUS[statusOf(s.state)].glyph
+}
+
+/** #245: the reasons of the core (P0), with the glyph of the chip. */
+export const ATTENTION_REASONS: Record<SessionAttention['reason'], { glyph: string; label: string }> = {
+  permission: { glyph: '⛉', label: 'Pede permissão' },
+  question: { glyph: '?', label: 'Pergunta' },
+  plan: { glyph: '☰', label: 'Plano para aprovar' },
+  decision: { glyph: '⚖', label: 'Decisão pedida' },
+  error: { glyph: '✕', label: 'Com erro' },
+  turn_ended: { glyph: '↵', label: 'Sua vez' },
+  interrupted: { glyph: '⏸', label: 'Interrompida' },
+  first_prompt: { glyph: '›_', label: 'No prompt' },
+}
+
+/**
+ * The attention of a session or a child: the core's (#245) or, from a core without it, derived
+ * from the state and the reason as the core does (a permission or a question arrives as
+ * `notification`; the end of the turn, Esc and the new session are idle).
+ */
+export function attentionOf(s: { state: InboxState | 'unknown'; reason: AwaitingReason | null; attention?: SessionAttention | null }): SessionAttention | null {
+  if (s.attention !== undefined) return s.attention
+  if (s.state === 'error') return { level: 'blocked', reason: 'error' }
+  if (s.state !== 'waiting') return null
+  if (s.reason === 'notification') return { level: 'blocked', reason: 'permission' }
+  if (s.reason === 'interrupted') return { level: 'idle', reason: 'interrupted' }
+  if (s.reason === 'stop') return { level: 'idle', reason: 'turn_ended' }
+  return { level: 'idle', reason: 'first_prompt' }
 }
 
 /** O status que as pílulas mostram: delegando e background são "Ativa". */
@@ -99,9 +132,11 @@ export function statusLine(p: Panel | null, offline: boolean): string {
   const outside = n ? needYouText(n) : 'ninguém mais'
   const d = p.decisions
   const dec = d?.resume ? ` · ${d.resume.n} decisões herdadas` : d?.current ? ` · ${d.current === 1 ? '1 decisão' : `${d.current} decisões`}` : ''
-  if (!s) return `ahrena-console ◐ No prompt${dec} · ${outside}`
-  const st = STATUS[statusOf(s.state)]
-  const label = s.status === 'waiting' && s.reason === 'session_start' ? 'No prompt' : st.label
+  if (!s) return `ahrena-console ◌ Ociosa · No prompt${dec} · ${outside}`
+  const attention = s.state === 'waiting' ? attentionOf(s) : null
+  // #245 (P2, P6): "◐ Precisa de você"; the idle one says why it sits, "◌ Ociosa · No prompt".
+  const st = attention ? ATTENTION_STATUS[attention.level] : STATUS[statusOf(s.state)]
+  const label = attention?.level === 'idle' ? `${st.label} · ${ATTENTION_REASONS[attention.reason].label}` : st.label
   const extra = s.state === 'delegating' ? ' · delegando' : ''
   return `ahrena-console ${st.glyph} ${label}${extra}${dec} · ${outside}`
 }

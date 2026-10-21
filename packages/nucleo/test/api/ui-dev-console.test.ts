@@ -75,7 +75,7 @@ beforeEach(async () => {
   await storage.appendEvent(event({ sessionId: s.id, id: 'permission-e1', agentId: 'permission:main', createdAt: minutesAgo(2), type: 'Notification', toolName: null, summary: 'Claude needs your permission', data: { notification_type: 'permission_prompt' } }));
   await registerDecision(
     decisions,
-    { sourceKey: 'q1', sessionId: 'working', topic: 'db', context: null, choice: 'SQLite em memória nos testes', alternatives: [], decidedBy: 'usuario', origin: 'pergunta', inferred: false, decidedAt: minutesAgo(1) },
+    { sourceKey: 'q1', sessionId: 'working', topic: 'db', context: null, choice: 'SQLite em memória nos testes', alternatives: [], decidedBy: 'user', origin: 'question', inferred: false, decidedAt: minutesAgo(1) },
     minutesAgo(1),
   );
 });
@@ -209,7 +209,7 @@ describe('Dev Console: pure parts', () => {
       ['CI rodando', 1],
       ['CI vermelho', 2],
       ['Trabalhando', 1],
-      ['Esperando você', 1],
+      ['Precisam de você', 1],
     ]);
     assert.equal(cards[1].sub, '#83');
     assert.equal(cards[2].sub, '#77 · #82 em conflito');
@@ -224,6 +224,17 @@ describe('Dev Console: pure parts', () => {
     assert.deepEqual([suggested.title, suggested.text], ['Decisão sugerida: 10 cards por coluna', 'Alternativa: 20 por coluna · de Kanban']);
     assert.equal(dependsOnYouCard({ kind: 'suggested-decision', choice: 'x', alternatives: ['y'], title: 'Kanban', repo: 'a/b', sessionId: 's', minutes: 6, issue: 61 }).text, 'Alternativa: y · de Kanban · #61');
     assert.deepEqual(v.mergeQueue.map((q) => queueNote(q, v.mergeQueue)), ['fecha #31', 'fecha #58 · base de #84', 'empilhado em #79']);
+  });
+
+  test('issue 245: the scoreboard counts only what blocks, the idle ones apart; board cards say precisa de você or ociosa', () => {
+    const { blockedSub, cardAttention } = screen;
+    assert.equal(blockedSub(2, 1, 1), '2 sessões, 1 decisão · 1 ociosa fora');
+    assert.equal(blockedSub(0, 0, 2), 'ninguém · 2 ociosas fora');
+    assert.equal(blockedSub(1, 0, 0), '1 sessão');
+    assert.deepEqual(cardAttention({ id: 's', attention: { level: 'idle', reason: 'turn_ended' }, waitingOnYou: false }), { level: 'idle', reason: 'turn_ended' });
+    assert.deepEqual(cardAttention({ id: 's', attention: null, waitingOnYou: true }), { level: 'blocked', reason: null }, 'an older core: waitingOnYou is blocked');
+    assert.equal(cardAttention({ id: 's', attention: null, waitingOnYou: false }), null);
+    assert.equal(cardAttention(null), null);
   });
 
   test('#179 live: only session, state, needs-you and decision changes re-read the screen', () => {

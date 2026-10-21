@@ -69,8 +69,8 @@ A cada 15 s, em cada sessão `active` ou `error`:
 3. **Abandono:** `active` parada há 180 min → `abandoned`.
 4. **Turno morto:** principal `working`, sem ferramenta, sem delegação nem subagente, 120 s sem sinal → `Interrupted`.
 
-As regras do vigia gravam um evento sintético (`id` começando por `estado:`, `data.sintetico = true`), que aparece no histórico da sessão. Evento sintético não conta como atividade: não mexe em `updatedAt`.
+As regras do vigia gravam um evento sintético (`id` começando por `state:`, `data.synthetic = true`), que aparece no histórico da sessão. Evento sintético não conta como atividade: não mexe em `updatedAt`.
 
-## O que fica em `metadata.estados`
+## O que fica em `metadata.states`
 
-`ultimoEvento` e `idsNoUltimoInstante` (ordem e duplicatas), `erroEm` (para a cura), `delegacoes` (por `tool_use_id`) e `background` (por id do processo). Quem grava a sessão deve preservar essa chave, como já faz com `importacao`. Ao gravar, a máquina relê a sessão e só troca os campos dela (status, `endedAt`, espera, `metadata.estados`).
+`lastEvent` e `idsAtLastInstant` (ordem e duplicatas), `errorAt` (para a cura), `delegations` (por `tool_use_id`) e `background` (por id do processo). Quem grava a sessão deve preservar essa chave, como já faz com `import`. Ao gravar, a máquina relê a sessão e só troca os campos dela (status, `endedAt`, espera, `metadata.states`).

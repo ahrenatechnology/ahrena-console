@@ -85,7 +85,7 @@ Object.assign(globalThis, {
 
 // @ts-expect-error: módulo do navegador, em JavaScript puro
 const tela = await import('../../ui/screens/dashboard.js');
-const { cards, inboxCards, cost, age, mount, modelName, quantity, inboxTitle } = tela;
+const { cards, inboxCards, cost, age, mount, modelName, quantity, inboxTitle, idleChips, idleTitle, sessionsDetail, blockedCount, idleCount } = tela;
 
 const comClasse = (raiz: No, c: string) => raiz.todos((e) => e.classes.includes(c));
 
@@ -113,9 +113,9 @@ describe('Dashboard: formatação', () => {
     assert.equal(modelName('outro-modelo'), 'outro-modelo');
     assert.equal(modelName(null), null);
   });
-  test('os seis cards, na ordem e com o texto do C1', () => {
+  test('the six cards, in order and with the C1 text: Sessões says who needs you and who is idle (issue 245)', () => {
     const c = cards({
-      sessions: { total: 12, active: 4, waiting: 4, withError: 1 },
+      sessions: { total: 12, active: 4, waiting: 4, withError: 1, blocked: 5, idle: 3 },
       agents: { active: 4, sessions: 4 },
       subagents: { active: 7, sessions: 3 },
       events: { today: 3200, lastHour: 412, total: 48_100 },
@@ -124,7 +124,7 @@ describe('Dashboard: formatação', () => {
     assert.deepEqual(
       c.map((x: { rotulo: string; valor: string; extra?: string; sub: string }) => [x.rotulo, x.valor, x.extra ?? null, x.sub]),
       [
-        ['Sessões', '12', '4 ativas', '4 esperando · 1 com erro'],
+        ['Sessões', '12', '4 ativas', '5 precisam de você · 3 ociosas'],
         ['Agentes ativos', '4', null, 'em 4 sessões'],
         ['Subagentes ativos', '7', null, 'em 3 sessões'],
         ['Eventos hoje', '3,2 mil', null, '+412 na última hora'],
@@ -133,15 +133,44 @@ describe('Dashboard: formatação', () => {
       ],
     );
   });
-  test('inbox: no máximo quatro, o pedido e o modelo vindos do card do agente', () => {
-    const item = (session: string, reason: string, minutes = 2) => ({ session, title: session, project: `p-${session}`, account: { label: 'equipe', color: '' }, level: 'needs', reason, shortReason: 'Pede permissão', longReason: 'pede permissão para usar Bash', since: '', minutes, local: null });
-    const atencao = { total: 5, items: [item('a', 'permission'), item('b', 'error', 0), item('c', 'your-turn'), item('d', 'plan'), item('e', 'question')] };
+  test('sessions detail: blocked and idle apart, nobody is "ninguém precisa de você" (issue 245)', () => {
+    assert.equal(sessionsDetail({ blocked: 1, idle: 0 }), '1 precisa de você');
+    assert.equal(sessionsDetail({ blocked: 0, idle: 1 }), '1 ociosa');
+    assert.equal(sessionsDetail({ blocked: 0, idle: 0 }), 'ninguém precisa de você');
+  });
+  test('inbox: only the blocked ones, at most five, the ask and the model from the agent card; the idle ones go to their own row (issue 245)', () => {
+    const blocked = (reason: string) => ({ level: 'blocked', reason });
+    const item = (session: string, attention: { level: string; reason: string }, minutes = 2) => ({ session, title: session, project: `p-${session}`, account: { label: 'equipe', color: '' }, level: attention.level === 'blocked' ? 'needs' : 'your-turn', reason: attention.reason, attention, shortReason: 'Pede permissão', longReason: 'pede permissão para usar Bash', since: '', minutes, local: null });
+    const atencao = {
+      total: 8,
+      blocked: 6,
+      idle: 2,
+      items: [item('a', blocked('permission')), item('b', blocked('error'), 0), item('c', { level: 'idle', reason: 'turn_ended' }), item('d', blocked('plan')), item('e', blocked('question')), item('f', blocked('decision')), item('g', blocked('permission')), item('h', { level: 'idle', reason: 'first_prompt' })],
+    };
     const c = inboxCards(atencao, [{ session: 'a', task: 'Bash: npm run migrate', model: 'claude-opus-5-5' }]);
-    assert.equal(c.length, 4);
+    assert.deepEqual(c.map((x: { session: string }) => x.session), ['a', 'b', 'd', 'e', 'f'], 'blocked only, in the route order, five at most');
     assert.deepEqual([c[0].name, c[0].text, c[0].foot, c[0].href], ['p-a', 'Bash: npm run migrate', 'Opus 5.5', '/ui/sessions/a']);
-    assert.deepEqual([c[1].text, c[1].foot, c[1].age, c[1].urgent], ['pede permissão para usar Bash', 'equipe', 'agora', true]);
+    assert.deepEqual([c[1].text, c[1].foot, c[1].age, c[1].attention], ['pede permissão para usar Bash', 'equipe', 'agora', { level: 'blocked', reason: 'error' }]);
+    assert.equal(blockedCount(atencao), 6);
+    assert.equal(idleCount(atencao), 2);
+    assert.equal(blockedCount({ items: atencao.items }), 6, 'without the number, the blocked items');
+    assert.deepEqual(idleChips(atencao).map((x: { session: string; name: string }) => [x.session, x.name]), [['c', 'p-c'], ['h', 'p-h']]);
     assert.equal(inboxTitle(1), '1 precisa de você');
     assert.equal(inboxTitle(4), '4 precisam de você');
+    assert.equal(idleTitle(1), '1 ociosa');
+    assert.equal(idleTitle(3), '3 ociosas');
+  });
+
+  test('waiting without attention (delegating) is "Ativa", not idle; the attention tones carry the dash- prefix (issue 245)', () => {
+    const { statusPill, cardToneClass } = tela;
+    const pill = statusPill('waiting', null);
+    assert.equal(pill.textContent, 'Ativa');
+    assert.ok(pill.classes.includes('b-active'));
+    assert.equal(statusPill('waiting', { level: 'idle', reason: 'turn_ended' }).textContent, 'Ociosa');
+    assert.equal(cardToneClass('waiting', null), 'st-active');
+    assert.equal(cardToneClass('waiting', { level: 'blocked', reason: 'permission' }), 'dash-st-blocked');
+    assert.equal(cardToneClass('waiting', { level: 'idle', reason: 'turn_ended' }), 'dash-st-idle');
+    assert.equal(cardToneClass('error', { level: 'blocked', reason: 'error' }), 'st-error');
   });
 });
 
@@ -179,7 +208,7 @@ describe('Dashboard: a tela montada sobre a API (simulador p1)', () => {
     return { area, contadores, sair: () => (sair.abort(), limpar()) };
   }
 
-  test('cabeçalho, os seis cards, a inbox, os agentes e a atividade', async () => {
+  test('header, the six cards, the blocked inbox, the idle row, the agents and the activity (issue 245)', async () => {
     const { area, contadores, sair } = await montarTela();
     try {
       const texto = area.textContent;
@@ -189,26 +218,37 @@ describe('Dashboard: a tela montada sobre a API (simulador p1)', () => {
         comClasse(area, 'stat').map((c) => c.getAttribute('data-card')),
         ['sessions', 'agents', 'subagents', 'events-today', 'events-total', 'cost'],
       );
-      assert.match(comClasse(area, 'stat')[0]!.textContent, /^Sessões31 ativa2 esperando$/);
+      assert.match(comClasse(area, 'stat')[0]!.textContent, /^Sessões31 ativa1 precisa de você · 1 ociosa$/);
       assert.match(comClasse(area, 'stat')[5]!.textContent, /~US\$ 1,84estimativa · 30 dias/);
 
       const inbox = comClasse(area, 'inbox')[0]!;
-      assert.match(inbox.textContent, /2 precisam de você/);
+      assert.match(inbox.textContent, /1 precisa de você/);
+      assert.match(inbox.textContent, /travadas até você agir · quem espera há mais tempo primeiro/);
       const minis = comClasse(inbox, 'mini');
-      assert.deepEqual(minis.map((m) => m.getAttribute('href')), ['/ui/sessions/sim-panel-motor-de-regras', '/ui/sessions/sim-panel-app-receitas']);
+      assert.deepEqual(minis.map((m) => m.getAttribute('href')), ['/ui/sessions/sim-panel-motor-de-regras'], 'only the blocked one');
       assert.match(minis[0]!.textContent, /Pede permissão.*motor-de-regras.*Bash: npm run migrate.*Opus 5\.5.*Abrir/);
-      assert.equal(contadores.dashboard, 2);
+      assert.equal(contadores.dashboard, 1, 'the sidebar number counts only who needs you');
+
+      const idle = comClasse(area, 'dash-idle')[0]!;
+      assert.match(idle.textContent, /^1 ociosa · sem pressaInterrompidaapp-receitasVer em Sessões$/);
+      assert.equal(comClasse(idle, 'attention-chip-light').length, 1);
+      assert.equal(idle.todos((e) => e.getAttribute('href') === '/ui/sessions?status=idle').length, 1, 'Ver em Sessões opens the idle filter');
 
       const agentes = comClasse(area, 'ac');
       assert.equal(agentes.length, 3);
       assert.equal(agentes[0]!.getAttribute('href'), `/ui/sessions/${PANEL_SESSION}`);
       assert.match(agentes[0]!.textContent, /Agente principal · Kanban de sessões no artefato.*ahrena-demo · 2 subagentes · 18 turnos.*Ativa/);
       assert.match(agentes[0]!.textContent, /Opus 5\.5.*~US\$ 1,84.*Rodar a bateria/);
-      assert.ok(agentes[1]!.classes.includes('st-waiting'));
+      assert.ok(agentes[1]!.classes.includes('dash-st-blocked'));
+      assert.match(agentes[1]!.textContent, /Precisa de você/);
+      assert.ok(agentes[2]!.classes.includes('dash-st-idle'));
+      assert.match(agentes[2]!.textContent, /Ociosa/);
 
       const linhas = comClasse(area, 'row');
       assert.deepEqual(linhas.map((l) => l.getAttribute('href')), ['/ui/sessions/sim-panel-motor-de-regras', '/ui/sessions/sim-panel-app-receitas']);
-      assert.match(linhas[0]!.textContent, /Esperando você.*Pede permissão: Bash npm run migrate.*motor-de-regras/);
+      assert.match(linhas[0]!.textContent, /Precisa de você.*Pede permissão: Bash npm run migrate.*motor-de-regras/);
+      assert.match(linhas[1]!.textContent, /Ociosa.*Interrompida \(Esc\).*app-receitas/);
+      assert.doesNotMatch(area.textContent, /Esperando/);
       assert.ok(comClasse(area, 'ttl').some((t) => t.todos((e) => e.getAttribute('href') === '/ui/sessions').length > 0), 'Ver tudo leva às Sessões');
     } finally {
       sair();
@@ -232,7 +272,7 @@ describe('Dashboard: a tela montada sobre a API (simulador p1)', () => {
     }
   });
 
-  test('sem a /api/atencao, o resto fica no ar e a inbox vira a faixa de erro', async () => {
+  test('sem a /api/attention, o resto fica no ar e a inbox vira a faixa de erro', async () => {
     const { area, sair } = await montarTela(async (rota) => {
       if (rota === tela.ATTENTION_ROUTE) throw Object.assign(new Error('O núcleo respondeu 404.'), { status: 404 });
       return (await fetch(`${api.url}${rota}`)).json();

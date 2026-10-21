@@ -33,6 +33,68 @@ pub struct MachineSummary {
     /// The `takenAt` of the newest stored reading (ISO 8601).
     #[serde(rename = "lastReadAt", default)]
     pub last_read_at: Option<String>,
+    /// The reconnect of a remote machine (#244, decision 0012); `None` for this machine, for a core
+    /// from before #244 and for a value that does not parse (read as "not configured").
+    #[serde(default, deserialize_with = "lenient_reconnect")]
+    pub reconnect: Option<Reconnect>,
+}
+
+/// The part of `reconnect` the tray reads (#244): whether a command is configured and whether one
+/// runs. The command itself, its output and its log stay with the core and the `/ui`.
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+pub struct Reconnect {
+    #[serde(default)]
+    pub configured: bool,
+    /// `idle`, `running`, `succeeded`, `failed`, `timed-out` or `canceled`.
+    #[serde(default)]
+    pub state: Option<String>,
+    #[serde(rename = "startedAt", default)]
+    pub started_at: Option<String>,
+}
+
+/// `reconnect` absent, `null` or of an unexpected shape is `None`: an older or newer core never
+/// makes `/api/machines` fail to parse.
+fn lenient_reconnect<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<Reconnect>, D::Error> {
+    let value = serde_json::Value::deserialize(d)?;
+    Ok(serde_json::from_value(value).ok())
+}
+
+/// The body of `POST /api/machines/<id>/reconnect` (202): `{ reconnect }`.
+#[derive(Deserialize)]
+struct ReconnectResponse {
+    #[serde(default, deserialize_with = "lenient_reconnect")]
+    reconnect: Option<Reconnect>,
+}
+
+/// The `reconnect` of the 202 answer, to show "Reconectando…" before the next read.
+pub fn reconnect_from_response(text: &str) -> Option<Reconnect> {
+    serde_json::from_str::<ReconnectResponse>(text).ok()?.reconnect
+}
+
+impl MachineSummary {
+    /// The machine has a reconnect command in machines.json.
+    pub fn reconnect_configured(&self) -> bool {
+        self.reconnect.as_ref().is_some_and(|r| r.configured)
+    }
+
+    /// A reconnect runs for this machine, from the tray or the window.
+    pub fn reconnect_running(&self) -> bool {
+        self.reconnect.as_ref().is_some_and(|r| r.state.as_deref() == Some("running"))
+    }
+}
+
+/// `POST` here starts the reconnect of `id`; `None` for an id that makes no path segment.
+pub fn reconnect_path(id: &str) -> Option<String> {
+    if matches!(id, "" | "." | "..") {
+        return None;
+    }
+    Some(format!("/api/machines/{}/reconnect", http::encode(id)))
+}
+
+/// `m:ss` from `started_at` to `now_ms`, as the running line counts it; `None` when it does not parse.
+pub fn running_for(started_at: &str, now_ms: u64) -> Option<String> {
+    let seconds = now_ms.saturating_sub(parse_iso_ms(started_at)?) / 1_000;
+    Some(format!("{}:{:02}", seconds / 60, seconds % 60))
 }
 
 /// The part of `GET /api/telemetry?machine=<id>` the tray reads.
@@ -276,6 +338,46 @@ mod tests {
         assert_eq!(machine_path("workstation"), "/ui/machines/workstation");
         assert_eq!(machine_path("a/b"), "/ui/machines/a%2Fb");
         assert_eq!(machine_path(".."), "/ui");
+    }
+
+    #[test]
+    fn reconnect_is_read_leniently() {
+        let one = |extra: &str| -> MachineSummary {
+            let json = format!(r#"[{{ "id": "workstation", "label": "Workstation", "state": "unreachable", "port": 14720 {extra} }}]"#);
+            summaries_from_json(&json).expect("parses").remove(0)
+        };
+        for older in ["", r#", "reconnect": null"#, r#", "reconnect": "x""#, r#", "reconnect": { "configured": "yes" }"#] {
+            let s = one(older);
+            assert_eq!(s.reconnect, None, "{older:?}");
+            assert!(!s.reconnect_configured() && !s.reconnect_running());
+        }
+        let s = one(
+            r#", "reconnect": { "configured": true, "command": ["/x/conectar.sh"], "timeoutSeconds": 180, "state": "running",
+                "startedAt": "2026-10-18T23:08:48.000Z", "endedAt": null, "exitCode": null, "startedBy": "local", "logFile": "/d/reconnect.log" }"#,
+        );
+        assert!(s.reconnect_configured() && s.reconnect_running());
+        assert_eq!(s.reconnect.unwrap().started_at.as_deref(), Some("2026-10-18T23:08:48.000Z"));
+        let idle = one(r#", "reconnect": { "configured": false, "state": "idle" }"#);
+        assert!(!idle.reconnect_configured() && !idle.reconnect_running());
+    }
+
+    #[test]
+    fn reconnect_response_and_path() {
+        let r = reconnect_from_response(r#"{ "reconnect": { "configured": true, "state": "running", "startedAt": null } }"#).unwrap();
+        assert_eq!((r.configured, r.state.as_deref()), (true, Some("running")));
+        assert_eq!(reconnect_from_response(r#"{ "error": "não configurado" }"#), None);
+        assert_eq!(reconnect_path("workstation").as_deref(), Some("/api/machines/workstation/reconnect"));
+        assert_eq!(reconnect_path("a/b").as_deref(), Some("/api/machines/a%2Fb/reconnect"));
+        assert_eq!(reconnect_path(".."), None);
+    }
+
+    #[test]
+    fn running_for_counts_minutes_and_seconds() {
+        let now = parse_iso_ms(NOW).unwrap();
+        assert_eq!(running_for("2026-10-18T23:08:48.000Z", now).as_deref(), Some("1:12"));
+        assert_eq!(running_for("2026-10-18T23:10:00.000Z", now).as_deref(), Some("0:00"));
+        assert_eq!(running_for("2026-10-18T23:11:00.000Z", now).as_deref(), Some("0:00"), "a clock ahead is zero");
+        assert_eq!(running_for("ontem", now), None);
     }
 
     #[test]

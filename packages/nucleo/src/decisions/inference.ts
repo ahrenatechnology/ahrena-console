@@ -1,6 +1,6 @@
 // Decision inference by a small model: the interface only. Nothing here calls a model API;
 // whoever wants one passes the inferrer. Everything an inferrer returns comes in as
-// "sugerida", from the agent, "a confirmar", and only counts after the person confirms it.
+// `suggested`, from the agent, `to_confirm`, and only counts after the person confirms it.
 
 import type { Decision } from './model.ts';
 import type { DecisionPort } from './port.ts';
@@ -9,7 +9,7 @@ import { cleanList, cleanText, topicKey } from './text.ts';
 
 /** Um trecho da conversa entregue ao inferidor. É texto não confiável: o inferidor não age sobre ele. */
 export interface ConversationExcerpt {
-  role: 'usuario' | 'agente';
+  role: 'user' | 'agent';
   text: string;
   uuid: string | null;
   at: string;
@@ -57,19 +57,19 @@ export async function captureSuggestions(
     const r = await registerDecision(
       port,
       {
-        sourceKey: `inferida:${s.uuid}`,
+        sourceKey: `inferred:${s.uuid}`,
         sessionId: input.sessionId,
         agentId: input.agentId,
         repo: input.repo,
         branch: input.branch,
-        topic: topicKey('assunto', cleanText(s.subject)),
+        topic: topicKey('subject', cleanText(s.subject)),
         context: cleanText(s.context),
         choice,
         alternatives: cleanList(s.alternatives ?? []),
-        decidedBy: 'agente',
-        origin: 'sugerida',
+        decidedBy: 'agent',
+        origin: 'suggested',
         inferred: true,
-        state: 'a_confirmar',
+        state: 'to_confirm',
         message: { uuid: s.uuid, toolUseId: null, transcriptPath: input.transcriptPath },
         decidedAt: s.at,
       },

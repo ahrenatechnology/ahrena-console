@@ -1,5 +1,5 @@
 // A tela Mural ao vivo da /ui (#34, C2): a formatação, o que cada card mostra e a montagem da tela
-// num DOM mínimo, com um Mural de exemplo (dados inventados) no lugar de `GET /api/mural`.
+// num DOM mínimo, com um Mural de exemplo (dados inventados) no lugar de `GET /api/wall`.
 import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
 import { describe, test } from 'node:test';
@@ -133,12 +133,12 @@ function cardDeExemplo(id: string, extra: Card = {}): Card {
 const MURAL = {
   version: 1,
   generatedAt: '2026-10-20T12:00:00Z',
-  count: { all: 5, waiting: 2, active: 1 },
+  count: { all: 5, waiting: 3, active: 1, blocked: 2, idle: 1 },
   cards: [
     cardDeExemplo('ativa-1'),
-    cardDeExemplo('espera-1', { status: 'waiting', state: 'waiting', reason: 'notification', urgent: true, activity: { type: 'permission', text: 'Bash: npm run migrate' }, effort: null, plan: null }),
-    cardDeExemplo('espera-2', { status: 'waiting', state: 'waiting', reason: 'stop', activity: { type: 'your-turn', text: 'Rodo os testes?' }, context: null }),
-    cardDeExemplo('erro-1', { status: 'error', state: 'error', urgent: true, activity: { type: 'error', text: 'API 529 · overloaded_error' }, context: { pct: 84, used: 168_000, limit: 200_000, label: '' } }),
+    cardDeExemplo('espera-1', { status: 'waiting', state: 'waiting', reason: 'notification', urgent: true, attention: { level: 'blocked', reason: 'permission' }, activity: { type: 'permission', text: 'Bash: npm run migrate' }, effort: null, plan: null }),
+    cardDeExemplo('espera-2', { status: 'waiting', state: 'waiting', reason: 'stop', attention: { level: 'idle', reason: 'turn_ended' }, activity: { type: 'your-turn', text: 'Rodo os testes?' }, context: null }),
+    cardDeExemplo('erro-1', { status: 'error', state: 'error', urgent: true, attention: { level: 'blocked', reason: 'error' }, activity: { type: 'error', text: 'API 529 · overloaded_error' }, context: { pct: 84, used: 168_000, limit: 200_000, label: '' } }),
     cardDeExemplo('feita-1', { title: '<b>negrito</b>', status: 'completed', state: 'completed', activity: { type: 'completed', text: '' }, cost: { usd: null, estimate: true }, model: null }),
   ],
 };
@@ -197,13 +197,13 @@ describe('Mural: formatação', () => {
 // ---------- A tela ----------
 
 describe('Mural: a tela montada', () => {
-  test('cabeçalho, seletor só com os rótulos e um card por sessão, cada um levando ao detalhe', async () => {
+  test('header, the selector with the blocked and idle counts and one card per session, each linking to the detail (#245)', async () => {
     const { area, sair } = await montarTela(async () => MURAL);
     try {
       await ate(() => comClasse(area, 'wall-card').length > 0);
       assert.match(area.textContent, /Mural ao vivo.*Um card por sessão aberta nesta máquina/);
       const filtros = area.todos((e) => e.getAttribute('data-filter') !== null);
-      assert.deepEqual(filtros.map((f) => f.textContent), ['Todas', 'Esperando', 'Ativas']);
+      assert.deepEqual(filtros.map((f) => f.textContent), ['Todas', 'Precisam de você · 2', 'Ociosas · 1', 'Ativas']);
       assert.equal(filtros[0]!.getAttribute('aria-pressed'), 'true');
       assert.ok(area.todos((e) => e.getAttribute('data-action') === 'refresh').length === 1, 'o Atualizar do wireframe');
 
@@ -214,7 +214,10 @@ describe('Mural: a tela montada', () => {
         cards.map((c) => c.getAttribute('href')),
         ['/ui/sessions/ativa-1', '/ui/sessions/espera-1', '/ui/sessions/espera-2', '/ui/sessions/erro-1', '/ui/sessions/feita-1'],
       );
-      assert.ok(cards[1]!.classes.includes('wall-st-waiting'));
+      assert.ok(cards[1]!.classes.includes('wall-st-blocked'));
+      assert.ok(cards[2]!.classes.includes('wall-st-idle'), 'idle: neutral edge');
+      assert.ok(cards[3]!.classes.includes('wall-st-error'));
+      assert.doesNotMatch(area.textContent, /Esperando/);
 
       // Ativa: título + badge, projeto · branch, o que está fazendo, a grade e as barras.
       assert.match(cards[0]!.textContent, /^Sessão ativa-1Ativaprojeto-exemplo · feat\/1-exemploRodar a bateria/);
@@ -225,16 +228,20 @@ describe('Mural: a tela montada', () => {
       assert.deepEqual([contexto!.getAttribute('value'), contexto!.getAttribute('max')], ['31', '100']);
       assert.ok(!contexto!.classes.includes('wall-high'));
 
-      // Esperando: chip do motivo + o que pede; sem plano é 0/0 e a barra vazia.
-      assert.match(cards[1]!.textContent, /Esperando vocêprojeto-exemplo · feat\/1-exemploPede permissãoBash: npm run migrate/);
+      // Blocked: "Precisa de você", the strong reason chip and what it asks; without a plan it is 0/0.
+      assert.match(cards[1]!.textContent, /Precisa de vocêprojeto-exemplo · feat\/1-exemploPede permissãoBash: npm run migrate/);
       assert.match(cards[1]!.textContent, /Esforço—.*Plano 0\/0/);
-      assert.deepEqual(comClasse(cards[1]!, 'wall-reason').map((m) => m.classes.includes('soft')), [false]);
+      assert.deepEqual(comClasse(cards[1]!, 'attention-pill-blocked').length, 1);
+      assert.deepEqual(comClasse(cards[1]!, 'attention-chip').map((m) => m.classes.includes('attention-chip-light')), [false]);
       assert.equal(comClasse(cards[1]!, 'wall-bar')[0]!.getAttribute('value'), '0');
-      assert.ok(comClasse(cards[2]!, 'wall-reason')[0]!.classes.includes('soft'), 'Sua vez é leve');
+      // Idle: neutral "Ociosa" pill and a light chip.
+      assert.deepEqual(comClasse(cards[2]!, 'attention-pill-idle').map((p) => p.textContent), ['Ociosa']);
+      assert.ok(comClasse(cards[2]!, 'attention-chip')[0]!.classes.includes('attention-chip-light'), 'Sua vez is light');
       assert.match(cards[2]!.textContent, /Sua vezRodo os testes\?.*contexto —$/);
 
       // Erro: o texto do erro; contexto 84% pinta a barra de erro.
       assert.match(cards[3]!.textContent, /Com erro.*API 529 · overloaded_error/);
+      assert.equal(comClasse(cards[3]!, 'attention-pill-error').length, 1, 'an error keeps the red pill');
       assert.ok(comClasse(cards[3]!, 'wall-bar')[1]!.classes.includes('wall-high'));
 
       // Concluída: "Terminou sem erro", sem modelo é traço, sem preço é traço.
@@ -245,14 +252,17 @@ describe('Mural: a tela montada', () => {
     }
   });
 
-  test('esperando sem motivo: só o texto da atividade, sem chip', async () => {
-    const semMotivo = cardDeExemplo('espera-3', { status: 'waiting', state: 'waiting', reason: null, activity: { type: 'your-turn', text: 'Aguardando você' } });
+  test('waiting without attention (delegating): "Ativa", not idle, no chip', async () => {
+    const semMotivo = cardDeExemplo('espera-3', { status: 'waiting', state: 'delegating', reason: null, attention: null, activity: { type: 'tool', text: 'Delegando ao subagente' } });
     const { area, sair } = await montarTela(async () => ({ ...MURAL, cards: [semMotivo] }));
     try {
       await ate(() => comClasse(area, 'wall-card').length === 1);
       const card = comClasse(area, 'wall-card')[0]!;
-      assert.equal(comClasse(card, 'wall-reason').length, 0);
-      assert.equal(comClasse(card, 'wall-row')[0]!.textContent, 'Aguardando você');
+      assert.equal(comClasse(card, 'attention-chip').length, 0);
+      assert.equal(comClasse(card, 'attention-pill').length, 0, 'not waiting on you: no attention pill');
+      assert.equal(comClasse(card, 'wall-b-active')[0]!.textContent, 'Ativa');
+      assert.ok(card.classes.includes('wall-st-active'));
+      assert.equal(comClasse(card, 'wall-row')[0]!.textContent, 'Delegando ao subagente');
     } finally {
       await sair();
     }
@@ -282,27 +292,29 @@ describe('Mural: a tela montada', () => {
     }
   });
 
-  test('o filtro troca no cliente, sem pedir de novo; filtro sem cards mostra o vazio dele', async () => {
-    const soAtivas = { ...MURAL, contagem: { todas: 1, esperando: 0, ativas: 1 }, cards: [MURAL.cards[0]] };
+  test('the filter switches on the client, without a new request; blocked and idle apart; an empty filter shows its empty state', async () => {
+    const soAtivas = { ...MURAL, count: { all: 1, waiting: 0, active: 1, blocked: 0, idle: 0 }, cards: [MURAL.cards[0]] };
     let dados: unknown = MURAL;
     const { area, rotas, sair } = await montarTela(async () => dados);
     try {
       await ate(() => comClasse(area, 'wall-card').length === 5);
       const botao = (id: string) => area.todos((e) => e.getAttribute('data-filter') === id)[0]!;
-      botao('esperando').click();
-      assert.deepEqual(comClasse(area, 'wall-card').map((c) => c.getAttribute('data-session')), ['espera-1', 'espera-2', 'erro-1'], 'o erro também precisa de você, como na contagem do núcleo');
-      assert.equal(botao('esperando').getAttribute('aria-pressed'), 'true');
-      assert.equal(botao('todas').getAttribute('aria-pressed'), 'false');
-      botao('ativas').click();
+      botao('blocked').click();
+      assert.deepEqual(comClasse(area, 'wall-card').map((c) => c.getAttribute('data-session')), ['espera-1', 'erro-1'], 'the error needs you too, as in the core count');
+      assert.equal(botao('blocked').getAttribute('aria-pressed'), 'true');
+      assert.equal(botao('all').getAttribute('aria-pressed'), 'false');
+      botao('idle').click();
+      assert.deepEqual(comClasse(area, 'wall-card').map((c) => c.getAttribute('data-session')), ['espera-2']);
+      botao('active').click();
       assert.deepEqual(comClasse(area, 'wall-card').map((c) => c.getAttribute('data-session')), ['ativa-1']);
       assert.deepEqual(rotas, ['/api/wall'], 'só a primeira leitura');
 
       dados = soAtivas;
       area.todos((e) => e.getAttribute('data-action') === 'refresh')[0]!.click();
       await ate(() => rotas.length === 2 && comClasse(area, 'wall-card').length === 1);
-      botao('esperando').click();
+      botao('blocked').click();
       assert.equal(comClasse(area, 'wall-card').length, 0);
-      assert.match(area.textContent, /Nenhuma sessão esperando você/);
+      assert.match(area.textContent, /Ninguém precisa de você agora/);
     } finally {
       await sair();
     }
@@ -314,7 +326,7 @@ describe('Mural: a tela montada', () => {
     try {
       assert.equal(comClasse(area, 'loading').length, 1);
       assert.equal(comClasse(area, 'loading')[0]!.getAttribute('aria-busy'), 'true');
-      soltar({ ...MURAL, contagem: { todas: 0, esperando: 0, ativas: 0 }, cards: [] });
+      soltar({ ...MURAL, count: { all: 0, waiting: 0, active: 0, blocked: 0, idle: 0 }, cards: [] });
       await pronta;
       assert.equal(comClasse(area, 'loading').length, 0);
       assert.match(area.textContent, /Nenhuma sessão aberta/);

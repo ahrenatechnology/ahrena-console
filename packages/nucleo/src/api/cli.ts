@@ -34,7 +34,7 @@ import { followTranscripts } from '../ingest/history/follower.ts';
 import { Profiles } from '../profiles/profiles.ts';
 import { registerClient } from '../owner/clients.ts';
 import { isOlderCommit } from '../owner/commit.ts';
-import { claimLock, codeWarning, planStart, watchParent } from '../owner/owner.ts';
+import { claimLock, codeWarning, planStart, ReplaceError, watchParent } from '../owner/owner.ts';
 import { waitForCore, isPidAlive, reservePort, releasePort } from '../owner/probe.ts';
 import { readLock, releaseLock, prepareDir } from '../owner/lock.ts';
 import { defaultDataDir, parseInstallation, resolveDataDir, resolvePort } from '../owner/installation.ts';
@@ -58,7 +58,6 @@ import { SessionHistory } from '../history/reading.ts';
 import { SIMULATOR_PROJECT, SimulatorProject } from '../simulator/project.ts';
 import { seedHistory } from '../simulator/history.ts';
 import { demoLocal, seedDetail } from '../simulator/detail.ts';
-import { upgradeDemoUrl } from '../simulator/legacy-ids.ts';
 import { mountDemoAgentConfig, knownProjects } from '../agent-config/index.ts';
 import { createAgentConfigRoute } from './agent-config.ts';
 import { Accounts } from './accounts.ts';
@@ -70,17 +69,21 @@ import { RotaAnalytics } from './analytics-route.ts';
 import { MontadorDoPainel } from './panel.ts';
 import {
   capturarDoTranscript,
-  LIMPEZA_DAS_DECISOES,
+  DECISION_NOISE_CLEANUP,
   limparDecisoes,
-  REPROCESSAMENTO,
-  REPROCESSAMENTO_DO_CONTEXTO,
+  PLANS_AND_DECISIONS_REPROCESSING,
+  CONTEXT_REPROCESSING,
   reprocessarContexto,
   reprocessarHistorico,
 } from './reprocessing.ts';
 import { criarReposDoNucleo } from './repos.ts';
+import { createCoreDelivery } from './delivery-github.ts';
 import { createCoreAgentInstructions } from './agent-instructions.ts';
+import { createCoreFrameworkInstall, FRAMEWORK_REPO_ENV } from './framework-install.ts';
+import { createCoreDecisions } from './adrs.ts';
 import { startLocalApi, API_VERSION, type LocalApi } from './server.ts';
 import { ListaDeSessoes } from './sessions.ts';
+import { ResumosDeSessao } from './summary.ts';
 import { FeedDeEventos } from './events.ts';
 import { TrabalhoPorBranch } from './work.ts';
 import { createDevConsole, disabledDevConsoleSource, GithubDevConsoleSource } from '../dev-console/index.ts';
@@ -90,8 +93,10 @@ import { collectorFor } from '../telemetry/adapters/system.ts';
 import { SqliteTelemetryStore } from '../telemetry/adapters/sqlite.ts';
 import { publishAlertChanges, TelemetrySampler } from '../telemetry/sampler.ts';
 import { localMachine, TelemetryService, type MachineEntry } from '../telemetry/service.ts';
-import { loadMachinesConfig } from '../telemetry/machines-config.ts';
+import { MachinesFileSource } from '../telemetry/machines-config.ts';
 import { publishRemoteAttentionChanges, RemoteMachine } from '../telemetry/remote.ts';
+import { RemoteMachines } from '../telemetry/remote-machines.ts';
+import { INVALID_MACHINES_FILE, publishReconnectChanges, reconnectLogFile, ReconnectRunner } from '../telemetry/reconnect.ts';
 import { loopbackGet } from '../telemetry/adapters/loopback-http.ts';
 import type { TelemetryCollector } from '../telemetry/ports.ts';
 import { SIMULATED_WORKSTATION, SimulatedCollector, seedTelemetry } from '../simulator/telemetry.ts';
@@ -109,8 +114,8 @@ const installation = parseInstallation(o.installation);
 const dataDir = resolveDataDir({ installation, dataDir: o.dataDir });
 const demo = o.demo;
 const parent = o.parent === undefined ? null : Number(o.parent);
-if (parent !== null && !(Number.isInteger(parent) && parent > 0)) throw new Error('--parent/--pai: a pid');
-if (parent !== null && !isPidAlive(parent)) throw new Error(`--parent/--pai: pid ${parent} does not exist`);
+if (parent !== null && !(Number.isInteger(parent) && parent > 0)) throw new Error('--parent: a pid');
+if (parent !== null && !isPidAlive(parent)) throw new Error(`--parent: pid ${parent} does not exist`);
 const useLock = !demo && !o.noLock;
 const commit = checkoutCommit();
 const code = { version: API_VERSION, commit, isOlderCommit };
@@ -133,7 +138,11 @@ function adopt(p: number, version: string, warning: string | null = null): never
 // Before opening the database: adopts the live core of this installation's lock, or recovers the lock
 // if it is an orphan.
 async function planOrAdopt(): Promise<void> {
-  const plan = await planStart({ ...code, dir: dataDir, replace: o.replace, log });
+  const plan = await planStart({ ...code, dir: dataDir, replace: o.replace, log }).catch((e: unknown) => {
+    if (!(e instanceof ReplaceError)) throw e;
+    log(e.reason);
+    process.exit(1);
+  });
   if (plan.action === 'adopt') adopt(plan.lock.port, plan.lock.version, plan.warning);
   if (plan.recovered) log(`orphan lock recovered: ${plan.recovered}`);
 }
@@ -159,7 +168,7 @@ if (useLock) {
 async function adoptPortHolder(): Promise<never> {
   const v = await waitForCore(port, 30_000);
   if (v && !useLock) {
-    log(`a porta ${port} já tem um núcleo (pid ${v.pid ?? '?'}); ${demo ? 'a --demo' : 'a --sem-trava'} precisa de uma porta livre: use --porta`);
+    log(`a porta ${port} já tem um núcleo (pid ${v.pid ?? '?'}); ${demo ? 'a --demo' : 'a --no-lock'} precisa de uma porta livre: use --port`);
     process.exit(1);
   }
   if (v) {
@@ -174,7 +183,7 @@ async function adoptPortHolder(): Promise<never> {
       log(`port ${port} has the core of another installation (pid ${v.pid}); this one (${installation}, ${dataDir}) needs a free port: use --port`);
       process.exit(1);
     }
-    const warning = [lockless ? 'o núcleo nesta porta não tem trava (uma --demo, uma --sem-trava ou um núcleo de antes da #86)' : null, codeWarning(v, code)];
+    const warning = [lockless ? 'o núcleo nesta porta não tem trava (uma --demo, uma --no-lock ou um núcleo de antes da #86)' : null, codeWarning(v, code)];
     adopt(port, v.version, warning.filter(Boolean).join('; ') || null);
   }
   log(`port ${port} is in use and does not answer as a core`);
@@ -321,6 +330,9 @@ if (demo) {
   await seedDetail(storage);
   await seedPanelHistory(storage, decisions, scenario);
 }
+// #245: the Sessions list and the Kanban read the same event summaries (a waiting session's attention,
+// the last prompt), each session's events once; apart from the panel's, so as not to sweep its 64.
+const listSummaries = new ResumosDeSessao(storage, { maximo: 256 });
 const detail = new LeiturasDoDetalhe({ storage, montador: panelBuilder, ...(demo ? { local: demoLocal } : {}) });
 
 // The history of the ended sessions (#33), with the Desktop index title when there is one.
@@ -350,8 +362,39 @@ mcp.server.register(waitForChanges({ changes, accounts }));
 // A single queue for the GitHub calls behind the screens (decision 0001, item 6): repositories and instructions.
 const githubQueue = new GithubCallQueue();
 const repos = criarReposDoNucleo({ demo, semGithub: o.noGithub, cache: githubCache, frota: mcp.fleet, mudancas: changes, log, queue: githubQueue });
+// The Analytics Delivery tab (#266): the same GitHub cache and queue, the Repositories screen's session → repository,
+// the project kanban's Project (the demo has its own synthetic ones) and the account's repository list.
+const delivery = createCoreDelivery({
+  demo,
+  noGithub: o.noGithub,
+  cache: githubCache,
+  queue: githubQueue,
+  changes,
+  sessions: repos.sessions,
+  boards: async () => (kanban ? [await kanban.board()] : []),
+  accountRepos: async () => {
+    const l = await repos.repos.lista();
+    return l.groups.flatMap((g) => g.repos.map((r) => ({ fullName: r.fullName, lastPush: r.lastPush })));
+  },
+  log,
+});
 // The Instructions tab of a repository (#183): the fake GitHub under --demo; otherwise GitHub through the 0001 cache.
 const agentInstructions = createCoreAgentInstructions({ demo, noGithub: o.noGithub, cache: githubCache, changes, queue: githubQueue, log });
+// Instalar o Ahrena Framework por PR (#184): o GitHub falso no --demo (com as escritas); fora dele, o token do `gh`, o cache da 0001 e a mesma fila.
+const frameworkInstall = createCoreFrameworkInstall({ demo, noGithub: o.noGithub, cache: githubCache, changes, queue: githubQueue, frameworkRepo: process.env[FRAMEWORK_REPO_ENV], log });
+// As ADRs e as PDRs (#174): a lista de repositórios da tela Repositórios, a descoberta comum, o cache da 0001 e a mesma fila.
+const recordDecisions = createCoreDecisions({
+  demo,
+  noGithub: o.noGithub,
+  cache: githubCache,
+  changes,
+  queue: githubQueue,
+  log,
+  accountRepos: async () => {
+    const l = await repos.repos.lista();
+    return { state: l.state, error: l.error, account: l.account, repos: l.groups.flatMap((g) => g.repos.map((r) => ({ owner: r.owner, name: r.name, lastPush: r.lastPush }))) };
+  },
+});
 
 // The Dev Console (#177): the synthetic context and the fake GitHub under --demo; otherwise GitHub through the 0001 cache.
 const devConsole = createDevConsole({
@@ -365,18 +408,22 @@ const devConsole = createDevConsole({
 
 // Machine telemetry (#175, decision 0008): one sample every 30 s, 12 h in the database, and each
 // alert that enters or exits on /api/changes. In --demo, the simulator's synthetic readings, with
-// 12 h already seeded, plus a synthetic "workstation". Outside the demo, each remote machine of
-// machines.json (#176) is read every 30 s through the port the user's tunnel forwards.
+// 12 h already seeded, plus a synthetic "workstation" (its reconnect stays `null`). Outside the demo,
+// each remote machine of machines.json (#176) is read every 30 s through the port the user's tunnel
+// forwards; the file is re-read live (#244, decision 0012): every 30 s by its modification time and
+// right before a reconnect, so a machine added, removed or changed applies without a restart.
 const sampleStore = new SqliteTelemetryStore(sqlite.db);
 const alertTracker = new AlertTracker();
-const machineEntries: MachineEntry[] = [localMachine()];
+const localEntry = localMachine();
+const demoEntries: MachineEntry[] = [];
 const samplers: TelemetrySampler[] = [];
-const remoteMachines: RemoteMachine[] = [];
+let remoteMachines: RemoteMachines<RemoteMachine> | null = null;
+let reconnectRunner: ReconnectRunner | null = null;
 function addSampler(machineId: string, collector: TelemetryCollector) {
   samplers.push(new TelemetrySampler({ machineId, collector, store: sampleStore, tracker: alertTracker, onAlertChange: publishAlertChanges(changes), log }));
 }
 if (demo) {
-  machineEntries.push({ ...SIMULATED_WORKSTATION, state: () => 'connected' });
+  demoEntries.push({ ...SIMULATED_WORKSTATION, state: () => 'connected' });
   await seedTelemetry(sampleStore, 'local', 'local');
   await seedTelemetry(sampleStore, SIMULATED_WORKSTATION.id, 'workstation');
   addSampler('local', new SimulatedCollector('local'));
@@ -385,28 +432,47 @@ if (demo) {
   const platformCollector = collectorFor();
   if (platformCollector) addSampler('local', platformCollector);
   else log(`telemetry: no collector for ${process.platform}`);
-  const machinesConfig = await loadMachinesConfig({ ...(o.machines ? { file: o.machines } : {}), log });
   const get = loopbackGet();
-  for (const config of machinesConfig.machines) {
-    if (config.port === boundPort) {
-      log(`machines: ${config.id} uses port ${config.port}, this core's own; skipped`);
-      continue;
-    }
-    const remote = new RemoteMachine({
-      config,
-      get,
-      store: sampleStore,
-      tracker: alertTracker,
-      onAlertChange: publishAlertChanges(changes),
-      onAttentionChange: publishRemoteAttentionChanges(changes),
-      log,
-    });
-    remoteMachines.push(remote);
-    machineEntries.push(remote);
-  }
-  if (remoteMachines.length > 0) log(`telemetry: ${remoteMachines.length} remote machine(s): ${remoteMachines.map((m) => `${m.id} on port ${m.port}`).join(', ')}`);
+  const onAlertChange = publishAlertChanges(changes);
+  const registry: RemoteMachines<RemoteMachine> = new RemoteMachines<RemoteMachine>({
+    source: new MachinesFileSource({ ...(o.machines ? { file: o.machines } : {}), log }),
+    ownPort: boundPort,
+    create: (config) =>
+      new RemoteMachine({
+        config,
+        get,
+        store: sampleStore,
+        tracker: alertTracker,
+        onAlertChange,
+        onAttentionChange: publishRemoteAttentionChanges(changes),
+        reconnectStatus: (id) => reconnectRunner?.status(id, registry.reconnectOf(id) ?? null) ?? null,
+        log,
+      }),
+    // A machine removed from the file closes its alerts, and the screen and the tray hear about it.
+    onRemoved: (id) => {
+      for (const alert of alertTracker.update(id, []).exited) onAlertChange({ machineId: id, alert, change: 'exited' });
+    },
+    onChange: publishReconnectChanges(changes),
+    log,
+  });
+  remoteMachines = registry;
+  reconnectRunner = new ReconnectRunner({
+    logFile: reconnectLogFile(dataDir),
+    // Always the freshest reading of the file: a command removed from it does not run.
+    // While the file is invalid, nothing runs, even if the last good reading had a command.
+    lookup: async (id) => {
+      await registry.refresh();
+      const config = registry.reconnectOf(id);
+      return config !== undefined && registry.fileInvalid() ? INVALID_MACHINES_FILE : config;
+    },
+    onSucceeded: (id) => void registry.get(id)?.readNow(),
+    onChange: publishReconnectChanges(changes),
+    log,
+  });
+  await registry.refresh();
 }
-const telemetryService = samplers.length > 0 || remoteMachines.length > 0 ? new TelemetryService({ store: sampleStore, tracker: alertTracker, machines: machineEntries }) : null;
+const machineEntries = (): MachineEntry[] => [localEntry, ...demoEntries, ...(remoteMachines?.list() ?? [])];
+const telemetryService = samplers.length > 0 || remoteMachines ? new TelemetryService({ store: sampleStore, tracker: alertTracker, machines: machineEntries }) : null;
 
 let historyReady = false;
 const follower =
@@ -447,18 +513,19 @@ const api: LocalApi = await startLocalApi({
   detail,
   events: new FeedDeEventos({ storage }),
   fleet: mcp.fleet,
-  remoteAttention: remoteMachines,
-  analytics: new RotaAnalytics({ storage, contas: accounts, versao: () => changes.current }),
-  sessions: new ListaDeSessoes({ storage, contas: accounts, desktop }),
+  remoteAttention: () => remoteMachines?.list() ?? [],
+  analytics: new RotaAnalytics({ storage, contas: accounts, versao: () => changes.current, delivery }),
+  sessions: new ListaDeSessoes({ storage, contas: accounts, desktop, resumos: listSummaries }),
   history,
-  kanban: new QuadroKanban({ storage, contas: accounts, desktop }),
+  kanban: new QuadroKanban({ storage, contas: accounts, desktop, resumos: listSummaries }),
   repos: repos.rota,
   agentInstructions: agentInstructions.route,
-  // The demo's old session ids (before #173) still open the session (src/simulator/legacy-ids.ts).
-  ...(demo ? { demoUrl: upgradeDemoUrl } : {}),
+  frameworkInstall: frameworkInstall.route,
+  decisions: recordDecisions.route,
   devConsole,
   agentConfig,
   telemetry: telemetryService,
+  reconnect: reconnectRunner,
   load: () => ({
     history: follower ? (historyReady ? 'ready' : 'importing') : 'off',
     follower: follower?.stats() ?? null,
@@ -518,7 +585,7 @@ const stopWatchingParent =
 // The initial import runs after the port already answers: the panel does not wait for the history.
 const stopWatcher = demo ? () => {} : machine.start();
 for (const a of samplers) a.start();
-for (const m of remoteMachines) m.start();
+remoteMachines?.start();
 if (follower) {
   follower
     .start()
@@ -534,20 +601,20 @@ if (follower) {
 // capture existed, the cleanup of what the old capture wrote that is not a decision, and the context
 // meters of the sessions imported before item 1.7.
 async function reprocessOnce() {
-  if (!storage.reprocessado(REPROCESSAMENTO)) {
+  if (!storage.isReprocessed(PLANS_AND_DECISIONS_REPROCESSING)) {
     const start = Date.now();
     const r = await reprocessarHistorico({ storage, decisoes: decisions, raiz: o.projects ?? defaultProjectsRoot(), log });
-    storage.marcarReprocessado(REPROCESSAMENTO, new Date().toISOString());
+    storage.markReprocessed(PLANS_AND_DECISIONS_REPROCESSING, new Date().toISOString());
     log(`reprocessed in ${Math.round((Date.now() - start) / 1000)} s: ${r.sessoes} sessions, ${r.planos} plans in ${r.comPlano}, ${r.decisoes} decisions`);
   }
-  if (!storage.reprocessado(LIMPEZA_DAS_DECISOES)) {
+  if (!storage.isReprocessed(DECISION_NOISE_CLEANUP)) {
     const r = await limparDecisoes(storage, decisions);
-    storage.marcarReprocessado(LIMPEZA_DAS_DECISOES, new Date().toISOString());
+    storage.markReprocessed(DECISION_NOISE_CLEANUP, new Date().toISOString());
     log(`decisions cleaned: ${r.ruido} outside the lists, ${r.encurtadas} with a shortened title`);
   }
-  if (!storage.reprocessado(REPROCESSAMENTO_DO_CONTEXTO)) {
+  if (!storage.isReprocessed(CONTEXT_REPROCESSING)) {
     const r = await reprocessarContexto({ storage, raiz: o.projects ?? defaultProjectsRoot(), log });
-    storage.marcarReprocessado(REPROCESSAMENTO_DO_CONTEXTO, new Date().toISOString());
+    storage.markReprocessed(CONTEXT_REPROCESSING, new Date().toISOString());
     log(`context meter rebuilt: ${r.medidores} meters in ${r.sessoes} sessions`);
   }
 }
@@ -559,7 +626,7 @@ async function shutdown() {
   unregister();
   if (lock && !('conflict' in lock)) releaseLock(lock.token, dataDir);
   await follower?.stop().catch(() => undefined);
-  await Promise.all([...samplers, ...remoteMachines].map((a) => a.stop()));
+  await Promise.all([...samplers.map((a) => a.stop()), remoteMachines?.stop()]);
   await api.close().catch(() => undefined);
   await storage.close();
   if (demoFolder) rmSync(demoFolder, { recursive: true, force: true });

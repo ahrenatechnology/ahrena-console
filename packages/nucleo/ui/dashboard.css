@@ -38,14 +38,27 @@
 /* ---------- precisam de você ---------- */
 .inbox { padding: 12px 14px; border-color: color-mix(in srgb, var(--status-waiting-dot) 45%, var(--border)); background: color-mix(in srgb, var(--status-waiting-badge) 45%, var(--surface)); }
 .inbox.calm { border-color: var(--border); background: var(--surface); }
-.inbox .grid4 { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-top: 10px; }
+.inbox .grid4 { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; margin-top: 10px; }
 .mini { padding: 10px 12px; height: 104px; line-height: 1.45; display: flex; flex-direction: column; gap: 4px; background: var(--surface); min-width: 0; }
 .mini:hover { border-color: var(--status-waiting-dot); }
-.mini .l1 { display: flex; gap: 6px; align-items: center; }
+.mini .l1 { display: flex; gap: 6px; align-items: center; min-width: 0; }
+.mini .l1 .attention-chip { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .mini .age { margin-left: auto; font-size: 11px; color: var(--muted); }
 .mini .n { font-size: 12.5px; font-weight: var(--weight-semibold); }
 .mini .x { font-size: 11.5px; color: var(--muted); }
-.mini .foot { margin-top: auto; display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); }
+.mini .foot { margin-top: auto; display: flex; justify-content: space-between; gap: 6px; font-size: 11px; color: var(--muted); white-space: nowrap; min-width: 0; }
+.mini .foot > span { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.mini .foot b { flex: none; }
+
+/* ---------- ociosas (issue 245): a neutral row apart, no fill, the reason in a light chip ---------- */
+.dash-idle { padding: 9px 14px; display: flex; align-items: center; gap: 14px; font-size: 12px; color: var(--muted); min-width: 0; }
+.dash-idle-title { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; flex: none; }
+.dash-idle-title b { color: var(--text); font-weight: var(--weight-medium); }
+.dash-idle-item { display: inline-flex; align-items: center; gap: 6px; min-width: 0; white-space: nowrap; overflow: hidden; flex: 0 1 auto; }
+.dash-idle-item .mono { font-family: var(--font-mono); font-size: 11.5px; }
+.dash-idle-link { margin-left: auto; white-space: nowrap; display: inline-flex; align-items: center; gap: 4px; color: var(--muted); flex: none; }
+.dash-idle-link:hover { color: var(--text); }
+.dash-idle-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .mini .foot b { color: var(--accent-text); font-weight: var(--weight-semibold); }
 
 /* ---------- agentes ativos e atividade ---------- */
@@ -59,7 +72,8 @@
 .ac { padding: 12px 14px; border-left: 3px solid var(--border); display: flex; flex-direction: column; gap: 8px; min-height: 148px; overflow: hidden; }
 .ac:hover { background: var(--raised); }
 .ac.st-active { border-left-color: var(--status-active-dot); }
-.ac.st-waiting { border-left-color: var(--status-waiting-dot); }
+.ac.dash-st-blocked { border-left-color: var(--status-waiting-dot); }
+.ac.dash-st-idle { border-left-color: color-mix(in srgb, var(--muted) 45%, var(--border)); }
 .ac.st-error { border-left-color: var(--status-error-dot); }
 .ac.st-completed { border-left-color: var(--status-completed-dot); }
 .ac.st-abandoned { border-left-color: var(--status-abandoned-dot); }
@@ -67,7 +81,7 @@
 .av { width: 28px; height: 28px; border-radius: 8px; background: var(--raised); display: grid; place-items: center; color: var(--muted); flex: none; font-size: 14px; }
 .ac .tt { font-size: 13px; font-weight: var(--weight-semibold); }
 .ac .meta, .child .meta { font-size: 11.5px; color: var(--muted); }
-.ac .l1 .badge { margin-left: auto; }
+.ac .l1 .badge, .ac .l1 .attention-pill { margin-left: auto; }
 .ac blockquote { margin: 0 0 0 4px; padding-left: 10px; border-left: 2px solid var(--border); font-size: 12px; color: var(--muted); font-style: italic; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .ac .footer { margin-top: auto; display: flex; gap: 14px; font-size: 11.5px; color: var(--muted); align-items: center; min-width: 0; }
 .ac .footer span { display: inline-flex; gap: 5px; align-items: center; white-space: nowrap; }
@@ -92,7 +106,8 @@
 
 /* A janela do app abre com 1100 de largura: até lá, tudo lado a lado, como no C1. */
 @media (max-width: 900px) {
-  .inbox .grid4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .inbox .grid4 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .dash-idle { flex-wrap: wrap; }
   .two { grid-template-columns: minmax(0, 1fr); }
 }
 @media (max-width: 720px) {

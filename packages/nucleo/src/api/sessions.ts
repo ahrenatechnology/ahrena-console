@@ -3,15 +3,17 @@
 //
 // | Parameter | Values                                                               | Default     |
 // | --------- | -------------------------------------------------------------------- | ----------- |
-// | `status`  | `all`, `active`, `waiting`, `completed`, `error`, `abandoned`        | `all`       |
+// | `status`  | `all`, `active`, `waiting`, `blocked`, `idle`, `completed`, `error`, `abandoned` | `all` |
 // | `search`  | text: title, id or directory, case-insensitive                       | —           |
 // | `dir`     | an exact directory (those in `directories` in the response)          | —           |
 // | `order`   | `activity`, `duration` or `cost`                                     | `activity`  |
 // | `direction` | `desc` or `asc`                                                    | `desc`      |
 // | `page`    | from 1, with `POR_PAGINA` items                                      | 1           |
 //
-// The old parameter names, values (`status=esperando`, `order=custo`) and route are aliases, and the
-// old route answers the body in its old keys: src/api/legacy-routes.ts (phase 2b of #173).
+// #245: each row carries `attention` (`blocked` or `idle`, with the reason, or `null`; src/api/attention.ts),
+// `status=blocked` and `status=idle` filter by it (`blocked` takes the errors too, as "Precisam de você"
+// does), and `counts` has one number per `status` value, with the search and the directory applied, for
+// the pills. The old route answers neither.
 //
 // Everything through the port and in-memory caches (decision 0004). A session's cost is redone only when
 // its `updatedAt` changes, and only for the page's sessions, unless the order is by cost.
@@ -27,14 +29,18 @@ import { safeTitle } from '../mcp/output.ts';
 import { displayStatus, type AwaitingReason, type DisplayStatus, type ModelPricing, type Session } from '../model.ts';
 import type { StoragePort } from '../storage-port.ts';
 import type { Accounts } from './accounts.ts';
+import { readSessionAttention, type SessionAttention } from './attention.ts';
 import type { DesktopIndex, DesktopSession } from './desktop-index.ts';
+import { ResumosDeSessao } from './summary.ts';
 
 export const SESSIONS_ROUTE = '/api/sessions';
 export const POR_PAGINA = 10;
 
-/** `all`, or one `DisplayStatus`. */
-export const FILTROS_DE_STATUS = ['all', 'active', 'waiting', 'completed', 'error', 'abandoned'] as const;
+/** `all`, one `DisplayStatus`, or one attention level (#245). */
+export const FILTROS_DE_STATUS = ['all', 'active', 'waiting', 'blocked', 'idle', 'completed', 'error', 'abandoned'] as const;
 export type FiltroDeStatus = (typeof FILTROS_DE_STATUS)[number];
+/** #245: the attention levels as `status` filter values. */
+const ATTENTION_FILTERS: readonly FiltroDeStatus[] = ['blocked', 'idle'];
 export const ORDENS = ['activity', 'duration', 'cost'] as const;
 export type Ordem = (typeof ORDENS)[number];
 
@@ -53,6 +59,8 @@ export interface LinhaDeSessao {
   status: DisplayStatus;
   /** Por que espera, quando espera (`notification`, `interrupted`, `stop`, `session_start`). */
   reason: AwaitingReason | null;
+  /** #245: `blocked` ("Precisa de você") or `idle` ("Ociosa"), with the reason; `null` when not waiting on you and not in error. */
+  attention: SessionAttention | null;
   lastActivity: string;
   start: string;
   /** Ativa ou esperando: a duração ainda corre. */
@@ -74,6 +82,8 @@ export interface ListaDeSessoesHttp {
   pages: number;
   /** Os diretórios do filtro, em ordem alfabética. */
   directories: string[];
+  /** #245: quantas cada valor de `status` traria, com a busca e o diretório: os números das pílulas. */
+  counts: Record<FiltroDeStatus, number>;
   items: LinhaDeSessao[];
 }
 
@@ -111,6 +121,8 @@ export interface OpcoesDaLista {
   storage: StoragePort;
   contas: Accounts;
   desktop?: DesktopIndex | null;
+  /** The event summaries the attention of a waiting session reads (#245); its own (256) without them. */
+  resumos?: ResumosDeSessao;
   agora?: () => number;
 }
 
@@ -119,38 +131,40 @@ export class ListaDeSessoes {
   private readonly contas: Accounts;
   private readonly desktop: DesktopIndex | null;
   private readonly agora: () => number;
+  private readonly resumos: ResumosDeSessao;
   private readonly custos = new Map<string, { updatedAt: string; usd: number | null }>();
 
-  constructor({ storage, contas, desktop = null, agora = Date.now }: OpcoesDaLista) {
+  constructor({ storage, contas, desktop = null, resumos, agora = Date.now }: OpcoesDaLista) {
     this.storage = storage;
     this.contas = contas;
     this.desktop = desktop;
+    this.resumos = resumos ?? new ResumosDeSessao(storage, { agora, maximo: 256 });
     this.agora = agora;
   }
 
   async listar(pedido: PedidoDeSessoes): Promise<ListaDeSessoesHttp> {
     await Promise.all([this.contas.refresh(), this.desktop?.refresh()]);
     const agora = this.agora();
-    const todas: { s: Session; desktop: DesktopSession | null; titulo: string }[] = [];
+    const todas: { s: Session; desktop: DesktopSession | null; titulo: string; status: DisplayStatus; attention: SessionAttention | null }[] = [];
     let cursor: string | null = null;
     do {
       const page = await this.storage.listSessions({ limit: 500, cursor });
       for (const s of page.items) {
         const desktop = this.desktop?.sessionByCli(s.id) ?? null;
-        todas.push({ s, desktop, titulo: tituloDe(s, desktop) });
+        todas.push({ s, desktop, titulo: tituloDe(s, desktop), status: displayStatus(s), attention: await this.attentionOf(s) });
       }
       cursor = page.nextCursor;
     } while (cursor);
 
     const diretorios = [...new Set(todas.map((t) => t.s.cwd).filter((c): c is string => !!c))].sort();
     const busca = pedido.busca?.toLowerCase() ?? null;
-    const alvo = pedido.status === 'all' ? null : pedido.status;
-    let filtradas = todas.filter(
+    const searched = todas.filter(
       ({ s, titulo }) =>
-        (!alvo || displayStatus(s) === alvo) &&
         (!pedido.dir || s.cwd === pedido.dir) &&
         (!busca || titulo.toLowerCase().includes(busca) || s.id.toLowerCase().includes(busca) || (s.cwd ?? '').toLowerCase().includes(busca)),
     );
+    const counts = Object.fromEntries(FILTROS_DE_STATUS.map((f) => [f, searched.filter((t) => passesFilter(t, f)).length])) as Record<FiltroDeStatus, number>;
+    let filtradas = searched.filter((t) => passesFilter(t, pedido.status));
 
     // A porta já devolve por atividade, mais recentes primeiro; as outras ordens desempatam por ela.
     const sinal = pedido.sentido === 'desc' ? 1 : -1;
@@ -167,14 +181,14 @@ export class ListaDeSessoes {
     const paginas = Math.max(1, Math.ceil(total / POR_PAGINA));
     const pagina = Math.min(pedido.pagina, paginas);
     const itens: LinhaDeSessao[] = [];
-    for (const { s, desktop, titulo } of filtradas.slice((pagina - 1) * POR_PAGINA, pagina * POR_PAGINA)) {
-      const status = displayStatus(s);
+    for (const { s, desktop, titulo, status, attention } of filtradas.slice((pagina - 1) * POR_PAGINA, pagina * POR_PAGINA)) {
       const conta = this.contas.ofSession(s, desktop);
       itens.push({
         id: s.id,
         title: titulo,
         status,
         reason: status === 'waiting' ? s.awaitingReason : null,
+        attention,
         lastActivity: s.updatedAt,
         start: s.startedAt,
         running: status === 'active' || status === 'waiting',
@@ -185,7 +199,14 @@ export class ListaDeSessoes {
         account: conta ? { label: conta.label, color: conta.color } : null,
       });
     }
-    return { total, registered: todas.length, page: pagina, perPage: POR_PAGINA, pages: paginas, directories: diretorios, items: itens };
+    return { total, registered: todas.length, page: pagina, perPage: POR_PAGINA, pages: paginas, directories: diretorios, counts, items: itens };
+  }
+
+  /** #245: only a waiting or errored session has attention; only a waiting one reads its agents and events. */
+  private async attentionOf(s: Session): Promise<SessionAttention | null> {
+    const status = displayStatus(s);
+    if (status !== 'waiting' && status !== 'error') return null;
+    return readSessionAttention(s, status === 'waiting' ? await this.storage.listAgents(s.id) : [], this.resumos);
   }
 
   private async custoDe(s: Session): Promise<number | null> {
@@ -195,6 +216,13 @@ export class ListaDeSessoes {
     this.custos.set(s.id, { updatedAt: s.updatedAt, usd });
     return usd;
   }
+}
+
+/** Whether a row passes a `status` filter: `all`, its displayed status, or its attention level (#245). */
+function passesFilter(t: { status: DisplayStatus; attention: SessionAttention | null }, filtro: FiltroDeStatus): boolean {
+  if (filtro === 'all') return true;
+  if (ATTENTION_FILTERS.includes(filtro)) return t.attention?.level === filtro;
+  return t.status === filtro;
 }
 
 /** O custo da sessão em US$: `null` quando há tokens de modelo sem preço; 0 sem tokens. O Kanban (#31) também usa. */

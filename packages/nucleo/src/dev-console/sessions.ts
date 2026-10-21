@@ -1,6 +1,6 @@
 // The Dev Console sessions (decision 0008, section 4): which repository and branch each session is
-// on, which belong to the context, who is working, who needs you (the `/api/attention` rule) and the
-// suggested decisions still unanswered. All derived: the repository comes from the folder's git
+// on, which belong to the context, who is working, who needs you (the `/api/attention` rule: only the
+// blocked ones, #245) and the suggested decisions still unanswered. All derived: the repository comes from the folder's git
 // remote, the branch from the Claude Desktop index or from git.
 
 import { dayOf } from '../cost/aggregation.ts';
@@ -8,6 +8,7 @@ import { gitDoSistema, issueDoBranch, repoDoRemote, type Git } from '../api/work
 import type { DecisionPort } from '../decisions/port.ts';
 import { decisionLabel } from '../decisions/registry.ts';
 import { needingYou } from '../mcp/tools/attention.ts';
+import { BLOCKED_REASONS } from '../api/attention.ts';
 import { LIVE_STATES, minutesSince, type FleetReader, type McpAttentionReason } from '../mcp/fleet.ts';
 import type { Session } from '../model.ts';
 import type { StoragePort } from '../storage-port.ts';
@@ -37,11 +38,11 @@ export function gitLocator({ git = gitDoSistema, ttlMs = 60_000, now = Date.now 
 }
 
 /**
- * The depends-on-you reasons: every `/api/attention` reason where the session needs you
- * (permission, question, plan, decision, error, interrupted), except your turn in the back and
- * forth (`turn_ended`) and a new session at its first prompt (`first_prompt`).
+ * The depends-on-you reasons: the blocked ones of `atencaoDe` (#245: permission, question, plan,
+ * decision, error). The idle ones (the turn ended, Esc, a new session at its first prompt) do not depend
+ * on you; they are counted apart (`Scoreboard.idle`).
  */
-export const DEPENDS_ON_YOU_REASONS = ['permission', 'question', 'plan', 'decision', 'error', 'interrupted'] as const satisfies readonly McpAttentionReason[];
+export const DEPENDS_ON_YOU_REASONS = BLOCKED_REASONS satisfies readonly McpAttentionReason[];
 export type DependsOnYouReason = (typeof DEPENDS_ON_YOU_REASONS)[number];
 const isDependsOnYouReason = (m: McpAttentionReason): m is DependsOnYouReason => (DEPENDS_ON_YOU_REASONS as readonly McpAttentionReason[]).includes(m);
 
@@ -139,7 +140,7 @@ export class DevConsoleSessions {
       const { repo, branch } = await this.where(s.session, s.desktop?.branch ?? null);
       if (!repo || !repos.has(repo)) continue;
       const w = waiting.get(s.session.id);
-      const reason = w && isDependsOnYouReason(w.reason) ? w.reason : null;
+      const reason = w && w.group === 'blocking' && isDependsOnYouReason(w.reason) ? w.reason : null;
       const estado = s.inbox.state;
       push(byRepo, repo, {
         id: s.session.id,
@@ -148,15 +149,16 @@ export class DevConsoleSessions {
         branch,
         working: LIVE_STATES.includes(estado) && estado !== 'waiting' && estado !== 'error',
         waitingOnYou: reason !== null,
+        attention: w ? { level: w.group === 'blocking' ? 'blocked' : 'idle', reason: w.reason } : null,
       });
       const issue = branch ? issueDoBranch(branch) : null;
       if (w && reason) {
         push(dependsOnYou, repo, { kind: 'session', sessionId: s.session.id, title: s.title, repo, issue, reason, reasonText: w.reasonText, since: w.waitingSince, minutes: w.waitingMinutes });
       }
       if (!this.decisions) continue;
-      const page = await this.decisions.listDecisions({ sessionId: s.session.id, states: ['a_confirmar'], limit: 50 });
+      const page = await this.decisions.listDecisions({ sessionId: s.session.id, states: ['to_confirm'], limit: 50 });
       for (const d of page.items) {
-        if (d.origin !== 'sugerida') continue;
+        if (d.origin !== 'suggested') continue;
         push(dependsOnYou, repo, {
           kind: 'suggested-decision',
           decisionId: d.id,
@@ -201,7 +203,7 @@ export class DevConsoleSessions {
    */
   private async decisionsTakenToday(sessionId: string, repo: string, today: string, now: number, push: (item: DecisionTodayItem) => void): Promise<void> {
     if (!this.decisions) return;
-    const page = await this.decisions.listDecisions({ sessionId, states: ['vigente'], limit: 50 });
+    const page = await this.decisions.listDecisions({ sessionId, states: ['current'], limit: 50 });
     for (const d of page.items) {
       if (dayOf(d.decidedAt, this.frota.timeZone) !== today) break;
       push({ decisionId: d.id, label: decisionLabel(d), choice: d.choice.slice(0, MAX_CHOICE), sessionId, repo, decidedAt: d.decidedAt, minutes: minutesSince(d.decidedAt, now) });

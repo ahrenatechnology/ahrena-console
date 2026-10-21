@@ -20,15 +20,15 @@ function decision(over: Partial<Decision> = {}): Decision {
     seq: 1,
     repo: '/repo/app',
     branch: 'feat/42-kanban',
-    topic: 'pergunta:banco',
+    topic: 'question:banco',
     context: 'Qual banco usar nos testes?',
     choice: 'SQLite em memória',
     alternatives: ['Postgres no Docker'],
-    decidedBy: 'usuario',
-    origin: 'pergunta',
+    decidedBy: 'user',
+    origin: 'question',
     inferred: false,
-    state: 'vigente',
-    scope: 'familia',
+    state: 'current',
+    scope: 'family',
     supersedes: null,
     supersededBy: null,
     message: { uuid: 'u-1', toolUseId: 'toolu_1', transcriptPath: '/home/dev/.claude/projects/-repo-app/s1.jsonl' },
@@ -76,7 +76,7 @@ describe('decisions: model and port', () => {
 
   test('CA3: accepts the wireframe states and discard', async () => {
     for (const [i, state] of DECISION_STATES.entries()) {
-      const d = decision({ id: `dec:${i}`, state, supersededBy: state === 'substituida' ? 'dec:x' : null });
+      const d = decision({ id: `dec:${i}`, state, supersededBy: state === 'superseded' ? 'dec:x' : null });
       await ctx.decisions.putDecision(d);
       assert.equal((await ctx.decisions.getDecision(d.id))?.state, state);
     }
@@ -87,10 +87,10 @@ describe('decisions: model and port', () => {
       { choice: '' },
       { origin: 'chute' as never },
       { scope: 'mundo' as never },
-      { state: 'substituida', supersededBy: null },
-      { state: 'vigente', supersededBy: 'dec:2' },
+      { state: 'superseded', supersededBy: null },
+      { state: 'current', supersededBy: 'dec:2' },
       { supersedes: 'dec:1' },
-      { origin: 'sugerida', decidedBy: 'usuario' },
+      { origin: 'suggested', decidedBy: 'user' },
       { decidedAt: '2026-11-02 12:00' },
       { seq: 0 },
       { alternatives: [''] },
@@ -118,7 +118,7 @@ describe('decisions: model and port', () => {
 
   test('filters by state and paginates by cursor', async () => {
     for (let i = 0; i < 5; i++) {
-      await ctx.decisions.putDecision(decision({ id: `d${i}`, seq: i + 1, decidedAt: at(i), state: i % 2 ? 'a_confirmar' : 'vigente' }));
+      await ctx.decisions.putDecision(decision({ id: `d${i}`, seq: i + 1, decidedAt: at(i), state: i % 2 ? 'to_confirm' : 'current' }));
     }
     const p1 = await ctx.decisions.listDecisions({ familyId: 's1', limit: 2 });
     assert.deepEqual(p1.items.map((d) => d.id), ['d4', 'd3']);
@@ -126,7 +126,7 @@ describe('decisions: model and port', () => {
     const p3 = await ctx.decisions.listDecisions({ familyId: 's1', limit: 2, cursor: p2.nextCursor });
     assert.deepEqual([...p2.items, ...p3.items].map((d) => d.id), ['d2', 'd1', 'd0']);
     assert.equal(p3.nextCursor, null);
-    const toConfirm = await ctx.decisions.listDecisions({ familyId: 's1', states: ['a_confirmar'] });
+    const toConfirm = await ctx.decisions.listDecisions({ familyId: 's1', states: ['to_confirm'] });
     assert.deepEqual(toConfirm.items.map((d) => d.id), ['d3', 'd1']);
     await assert.rejects(ctx.decisions.listDecisions({ familyId: 's1', cursor: 'lixo' }), RangeError);
   });
@@ -150,10 +150,10 @@ describe('decisions: model and port', () => {
     );
     assert.equal(d.familyId, 's1');
     assert.equal(d.seq, 1);
-    assert.equal(d.scope, 'familia');
-    assert.equal(d.state, 'vigente');
+    assert.equal(d.scope, 'family');
+    assert.equal(d.state, 'current');
     assert.deepEqual(d.message, { uuid: 'u-9', toolUseId: 'toolu_9', transcriptPath: null });
-    assert.equal(d.decidedBy, 'usuario');
+    assert.equal(d.decidedBy, 'user');
     assert.deepEqual(d.alternatives, ['SQLite em memória']);
   });
 });

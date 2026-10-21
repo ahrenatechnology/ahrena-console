@@ -7,37 +7,31 @@
 import { mainAgentId, subagentId } from '../ingest/history/importer.ts';
 import type { Agent, AwaitingReason, Session, SessionEvent } from '../model.ts';
 
-/**
- * Where the machine keeps what it must remember between events, inside `session.metadata`.
- * Persisted: the value and the field names of `MachineMemory` stay in Portuguese.
- */
-export const MEMORY_KEY = 'estados';
+/** Where the machine keeps what it must remember between events, inside `session.metadata`. */
+export const MEMORY_KEY = 'states';
 
-/**
- * An `Agent`/`Task` call in progress on the main agent (foreground subagent).
- * Its fields are the persisted shape in session metadata (`MachineMemory.delegacoes`): do not rename them.
- */
+/** An `Agent`/`Task` call in progress on the main agent (foreground subagent). Persisted in `MachineMemory.delegations`. */
 export interface Delegation {
-  desde: string;
-  descricao: string | null;
+  since: string;
+  description: string | null;
 }
 
-/** A `Bash` with `run_in_background` that is still running. Persisted fields. */
+/** A `Bash` with `run_in_background` that is still running. Persisted in `MachineMemory.background`. */
 export interface BackgroundProcess {
-  desde: string;
-  comando: string | null;
+  since: string;
+  command: string | null;
 }
 
 /** What the machine remembers, saved under `metadata[MEMORY_KEY]`. The field names are persisted data. */
 export interface MachineMemory {
   /** Time of the last applied event. An event older than this arrived late and does not change the state. */
-  ultimoEvento: string | null;
-  /** Ids already applied at the `ultimoEvento` time, so the same event is not applied twice. */
-  idsNoUltimoInstante: string[];
+  lastEvent: string | null;
+  /** Ids already applied at the `lastEvent` time, so the same event is not applied twice. */
+  idsAtLastInstant: string[];
   /** When the session went into `error`; activity after that heals the error. */
-  erroEm: string | null;
+  errorAt: string | null;
   /** By `tool_use_id`. */
-  delegacoes: Record<string, Delegation>;
+  delegations: Record<string, Delegation>;
   /** By the process id Claude Code returns (`backgroundTaskId`, `shellId`). */
   background: Record<string, BackgroundProcess>;
 }
@@ -61,6 +55,13 @@ export const BLOCKING_NOTIFICATIONS: readonly string[] = [
 ];
 /** Without `notification_type`, decide by the text. */
 const BLOCKING_TEXT = /permiss|approv|aprova|needs your (input|attention|approval)|precisa da sua/i;
+
+/** A `Notification` that blocks the agent: by its `notification_type` or, without one, by its text. */
+export function isBlockingNotification(type: string | null, summary: string | null, data: Readonly<Record<string, unknown>>): boolean {
+  if (type) return BLOCKING_NOTIFICATIONS.includes(type);
+  const message = typeof data.message === 'string' && data.message.length > 0 ? data.message : null;
+  return BLOCKING_TEXT.test(message ?? summary ?? '');
+}
 const INTERRUPTION_TEXT = /^\[Request interrupted by user/;
 
 /** Progress events: they prove the session moved on and heal an earlier error. */
@@ -84,32 +85,32 @@ const maxIso = (a: string, b: string): string => (a > b ? a : b);
 
 /** A memory with nothing in it. */
 export function emptyMemory(): MachineMemory {
-  return { ultimoEvento: null, idsNoUltimoInstante: [], erroEm: null, delegacoes: {}, background: {} };
+  return { lastEvent: null, idsAtLastInstant: [], errorAt: null, delegations: {}, background: {} };
 }
 
 /** Reads the memory saved in `metadata`, tolerating its absence and an old format. */
 export function readMemory(session: Pick<Session, 'metadata'>): MachineMemory {
   const m = obj(session.metadata?.[MEMORY_KEY]);
-  const ids = Array.isArray(m.idsNoUltimoInstante) ? m.idsNoUltimoInstante.filter((x): x is string => typeof x === 'string') : [];
+  const ids = Array.isArray(m.idsAtLastInstant) ? m.idsAtLastInstant.filter((x): x is string => typeof x === 'string') : [];
   return {
-    ultimoEvento: str(m.ultimoEvento),
-    idsNoUltimoInstante: ids,
-    erroEm: str(m.erroEm),
-    delegacoes: { ...(obj(m.delegacoes) as Record<string, Delegation>) },
+    lastEvent: str(m.lastEvent),
+    idsAtLastInstant: ids,
+    errorAt: str(m.errorAt),
+    delegations: { ...(obj(m.delegations) as Record<string, Delegation>) },
     background: { ...(obj(m.background) as Record<string, BackgroundProcess>) },
   };
 }
 
 /** Synthetic event: produced by the machine itself (watcher, probe), not by Claude Code. */
 export function isSynthetic(event: Pick<SessionEvent, 'data'>): boolean {
-  return obj(event.data).sintetico === true;
+  return obj(event.data).synthetic === true;
 }
 
 /** `true` when the event is older than the last applied one, or was already applied. */
 export function isStale(memory: MachineMemory, event: Pick<SessionEvent, 'id' | 'createdAt'>): boolean {
-  if (!memory.ultimoEvento) return false;
-  if (event.createdAt < memory.ultimoEvento) return true;
-  return event.createdAt === memory.ultimoEvento && memory.idsNoUltimoInstante.includes(event.id);
+  if (!memory.lastEvent) return false;
+  if (event.createdAt < memory.lastEvent) return true;
+  return event.createdAt === memory.lastEvent && memory.idsAtLastInstant.includes(event.id);
 }
 
 /** The main agent: the one of type `main`, or `<session>:main` when it does not exist yet. */
@@ -158,11 +159,11 @@ class Transition {
   }
 
   result(): SessionState {
-    if (this.m.ultimoEvento === null || this.at > this.m.ultimoEvento) {
-      this.m.ultimoEvento = this.at;
-      this.m.idsNoUltimoInstante = [this.e.id];
-    } else if (!this.m.idsNoUltimoInstante.includes(this.e.id)) {
-      this.m.idsNoUltimoInstante.push(this.e.id);
+    if (this.m.lastEvent === null || this.at > this.m.lastEvent) {
+      this.m.lastEvent = this.at;
+      this.m.idsAtLastInstant = [this.e.id];
+    } else if (!this.m.idsAtLastInstant.includes(this.e.id)) {
+      this.m.idsAtLastInstant.push(this.e.id);
     }
     if (!this.synthetic) this.s.updatedAt = maxIso(this.s.updatedAt, this.at);
     this.s.metadata = { ...this.s.metadata, [MEMORY_KEY]: this.m };
@@ -224,9 +225,9 @@ class Transition {
     if (this.d.source === 'compact') return;
     this.s.status = 'active';
     this.s.endedAt = null;
-    this.m.erroEm = null;
+    this.m.errorAt = null;
     // New process: what the previous one left running is no longer its own.
-    this.m.delegacoes = {};
+    this.m.delegations = {};
     this.m.background = {};
     const p = this.main();
     p.status = 'waiting';
@@ -259,7 +260,7 @@ class Transition {
     const toolUseId = this.toolUseId();
     if (this.e.toolName && DELEGATION_TOOLS.includes(this.e.toolName) && toolUseId) {
       const input = obj(this.d.tool_input);
-      this.m.delegacoes[toolUseId] = { desde: this.at, descricao: str(input.description) ?? str(input.subagent_type) };
+      this.m.delegations[toolUseId] = { since: this.at, description: str(input.description) ?? str(input.subagent_type) };
     }
   }
 
@@ -275,7 +276,7 @@ class Transition {
     // The tool ran: the permission, if there was one, was answered.
     this.clearWait();
     const toolUseId = this.toolUseId();
-    if (toolUseId) delete this.m.delegacoes[toolUseId];
+    if (toolUseId) delete this.m.delegations[toolUseId];
     this.backgroundProcesses();
   }
 
@@ -303,7 +304,7 @@ class Transition {
     p.currentTool = null;
     this.touch(p);
     // A foreground subagent call does not survive the end of the turn.
-    this.m.delegacoes = {};
+    this.m.delegations = {};
     this.startWait('stop');
   }
 
@@ -312,13 +313,13 @@ class Transition {
     p.status = 'waiting';
     p.currentTool = null;
     this.touch(p);
-    this.m.delegacoes = {};
+    this.m.delegations = {};
     this.startWait('interrupted');
   }
 
   private error(): void {
     this.s.status = 'error';
-    this.m.erroEm = this.at;
+    this.m.errorAt = this.at;
     const p = this.main();
     p.status = 'error';
     p.currentTool = null;
@@ -346,7 +347,7 @@ class Transition {
     this.s.status = status;
     this.s.endedAt = this.at;
     this.clearWait();
-    this.m.delegacoes = {};
+    this.m.delegations = {};
     this.m.background = {};
     for (const a of this.agents) {
       if (a.status === 'completed' || a.status === 'error') continue;
@@ -362,9 +363,9 @@ class Transition {
   /** Heals an error already overcome: progress after the error takes the session back to `active`. */
   private heal(): void {
     if (this.s.status !== 'error' || this.s.endedAt) return;
-    if (this.m.erroEm && this.at <= this.m.erroEm) return;
+    if (this.m.errorAt && this.at <= this.m.errorAt) return;
     this.s.status = 'active';
-    this.m.erroEm = null;
+    this.m.errorAt = null;
     const p = mainAgentOf({ session: this.s, agents: this.agents });
     if (p?.status === 'error') p.status = 'working';
   }
@@ -390,9 +391,7 @@ class Transition {
   }
 
   private blocking(): boolean {
-    const type = str(this.d.notification_type);
-    if (type) return BLOCKING_NOTIFICATIONS.includes(type);
-    return BLOCKING_TEXT.test(str(this.d.message) ?? this.e.summary ?? '');
+    return isBlockingNotification(str(this.d.notification_type), this.e.summary, this.d);
   }
 
   private toolUseId(): string | null {
@@ -406,7 +405,7 @@ class Transition {
     const tool = this.e.toolName;
     if (tool === 'Bash' && input.run_in_background === true && this.e.type !== 'PostToolUseFailure') {
       const id = str(response.backgroundTaskId) ?? str(response.shellId) ?? str(response.bash_id) ?? this.toolUseId();
-      if (id) this.m.background[id] = { desde: this.at, comando: str(input.command) };
+      if (id) this.m.background[id] = { since: this.at, command: str(input.command) };
       return;
     }
     const target = str(input.shell_id) ?? str(input.bash_id) ?? str(input.task_id);

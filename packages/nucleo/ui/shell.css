@@ -65,11 +65,38 @@ button { font: inherit; cursor: pointer; }
 
 /* ---------- peças comuns ---------- */
 .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; }
+/* Cards in the same row have the same height (UI rule 9, issue 255): a card in a screen stretches to its
+   grid row, even when the grid says align-items: start. :where() keeps the specificity of one class,
+   so a screen can still place one card on purpose. */
+:where(.cc-main) .card { align-self: stretch; }
+/* Short cards next to a long one stack in one column, in the wireframe's order, instead of leaving a
+   hole under one of them; the last one grows to the bottom of the row. */
+.card-column { display: flex; flex-direction: column; gap: inherit; min-width: 0; }
+.card-column > .card:last-child { flex: 1 1 auto; }
 .eyebrow { font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-weight: var(--weight-semibold); }
 .btn { display: inline-flex; align-items: center; gap: 7px; height: 30px; padding: 0 12px; border-radius: 8px; font-size: 12.5px; color: var(--text); background: transparent; border: 1px solid transparent; white-space: nowrap; }
 .btn.outline { border-color: var(--border); background: var(--surface); }
 .btn.outline:hover { background: var(--raised); }
 .btn.filled { background: var(--accent); color: var(--on-accent); font-weight: var(--weight-semibold); }
+
+/* ---------- attention (issue 245), drawn by attention.js on every screen ----------
+   blocked = "Precisa de você": yellow, highlighted. idle = "Ociosa": neutral, hollow dot, no fill.
+   error keeps the red pill. */
+.attention-pill { display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 9px; border-radius: 99px; font-size: 11.5px; font-weight: var(--weight-medium); white-space: nowrap; flex: none; vertical-align: middle; }
+.attention-pill-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex: none; }
+.attention-pill-blocked { background: var(--status-waiting-badge); color: var(--status-waiting-text); font-weight: var(--weight-semibold); }
+.attention-pill-idle { background: transparent; color: var(--muted); box-shadow: inset 0 0 0 1px var(--border); }
+.attention-pill-idle .attention-pill-dot { background: transparent; box-shadow: inset 0 0 0 1.5px currentColor; }
+.attention-pill-error { background: var(--status-error-badge); color: var(--status-error-text); }
+.attention-chip { display: inline-flex; align-items: center; gap: 4px; height: 18px; padding: 0 7px; border-radius: 99px; font-size: 10.5px; font-weight: var(--weight-semibold); white-space: nowrap; flex: none; vertical-align: middle;
+  background: color-mix(in srgb, var(--status-waiting-text) 16%, transparent); color: var(--status-waiting-text); }
+.attention-chip-light { font-weight: var(--weight-medium); background: transparent; color: var(--muted); box-shadow: inset 0 0 0 1px var(--border); }
+.attention-chip-error { background: color-mix(in srgb, var(--status-error-text) 16%, transparent); color: var(--status-error-text); }
+.attention-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex: none; }
+.attention-dot-blocked { background: var(--status-waiting-dot); }
+.attention-dot-idle { background: transparent; box-shadow: inset 0 0 0 1.5px var(--muted); }
+.attention-text-blocked { color: var(--status-waiting-text); }
+.attention-text-idle { color: var(--muted); }
 
 /* ---------- estados (C19) ---------- */
 .state { padding: 20px; min-height: 240px; }

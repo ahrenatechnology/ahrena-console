@@ -6,17 +6,18 @@ A moldura do console ([#26](https://github.com/ahrenatechnology/ahrena-console/i
 | --- | --- |
 | `index.html` | A página: barra lateral, logo, "Ao vivo" e porta. Toda rota `/ui/...` devolve esta página |
 | `app.js` | A moldura: monta a barra, roteia no cliente, liga o "Ao vivo" e abre a tela da rota |
-| `screens.js` | **O registro das telas** (`route`, `item`, `file`) e a troca das URLs antigas pelas novas (`legacyUrl`) |
-| `api.js` | A camada de leitura, `read(route)`, e de escrita: `write(route, body)` (POST JSON na `/api/`) e `openInDesktop(local)`. Por HTTP na janela; o artefato troca o transporte com `useReader()`, `useWriter()` e `useOpener()` |
+| `screens.js` | **O registro das telas** (`route`, `item`, `file`) |
+| `api.js` | A camada de leitura, `read(route)`, e de escrita: `write(route, body)` (POST JSON na `/api/`, ou DELETE com `{ method: 'DELETE' }`) e `openInDesktop(local)`. Por HTTP na janela; o artefato troca o transporte com `useReader()`, `useWriter()` e `useOpener()` |
 | `live.js` | Long polling em `GET /api/changes?since=<cursor>&wait=25` |
 | `states.js` | Os três estados de toda tela (C19): `loading`, `empty`, `error`, e a `errorBand` |
 | `dom.js` | `el()`, `icon()` e `header()` |
 | `shell.css` | O estilo da moldura. Toda cor é variável da marca |
+| `attention.js` | O vocabulário da atenção (#245), o mesmo em toda tela: "Precisa de você" (`attention.level` `blocked`, amarelo, com o motivo em chip forte: Pede permissão, Pergunta, Plano para aprovar, Decisão pedida; a de erro mantém a pílula vermelha "Com erro") e "Ociosa" (`idle`, neutra, ponto vazado, motivo em chip leve: Sua vez, Interrompida, No prompt). As classes `attention-*` ficam no `shell.css` |
 | `brand.css` | Gerado por `packages/marca` (não edite) |
 | `dashboard.css` | O estilo do Dashboard; a tela carrega o próprio arquivo, para não disputar `shell.css` |
 | `wall.css` | O estilo do Mural ao vivo; a tela carrega o próprio arquivo (classes `wall-`), para não disputar `shell.css` |
 | `sessions.css` | O estilo da tela Sessões, que a própria tela carrega: o estilo de uma tela fica num arquivo dela, fora do `shell.css` |
-| `screens/` | As telas, uma por arquivo. `agent-config.js` é a Agent Config (C16 e C17, #63). `dashboard.js` (C1, #27) lê `GET /api/dashboard` e `GET /api/attention`; `wall.js` (C2, #34) lê `GET /api/wall`, com o filtro Todas/Esperando/Ativas no cliente; `sessions.js` (C3, #28) lê `GET /api/sessions`, com o filtro e a ordem na query da URL (`?status=waiting&order=cost`; um favorito antigo com `esperando` ou `custo` ainda abre); `history.js` (C15, #33) lê `GET /api/history`; `workflows.js` (C14, #96) lê `GET /api/workflows?filter=&node=`, com o filtro e o nó no estado da tela; `repos.js` (C22) lê `GET /api/repos`; `repo.js` (C23) lê `GET /api/repos/<dono>/<repo>?period=`. O CSS de uma tela fica ao lado dela (`screens/session-detail.css`) ou em `ui/` (`dashboard.css`, `wall.css`, `sessions.css`, `history.css`, `repos.css`), carregado pela própria tela |
+| `screens/` | As telas, uma por arquivo. `agent-config.js` é a Agent Config (C16 e C17, #63). `dashboard.js` (C1, #27) lê `GET /api/dashboard` e `GET /api/attention`; `wall.js` (C2, #34) lê `GET /api/wall`, com o filtro Todas / Precisam de você / Ociosas / Ativas no cliente (#245); `sessions.js` (C3, #28) lê `GET /api/sessions`, com o filtro e a ordem na query da URL (`?status=blocked&order=cost`; `blocked` e `idle` são as pílulas "Precisam de você" e "Ociosas", #245; um favorito antigo com `waiting`, `esperando` ou `custo` ainda abre, `waiting` e `esperando` em `blocked`); `history.js` (C15, #33) lê `GET /api/history`; `workflows.js` (C14, #96) lê `GET /api/workflows?filter=&node=`, com o filtro e o nó no estado da tela; `repos.js` (C22) lê `GET /api/repos`; `repo.js` (C23) lê `GET /api/repos/<dono>/<repo>?period=`. O CSS de uma tela fica ao lado dela (`screens/session-detail.css`) ou em `ui/` (`dashboard.css`, `wall.css`, `sessions.css`, `history.css`, `repos.css`), carregado pela própria tela |
 | `screens/session-detail.js` | O Detalhe da sessão (#29 e #30): o topo do A5 e as abas Agentes, Conversa e Linha do tempo, sobre `GET /api/sessions/<id>…` (`src/api/session-detail.ts`). Uma aba nova é uma linha no registro `TABS_LIST` e um módulo `screens/session-detail-<tab>.js` que exporta `create(ctx, base, { head, setLabel })` (o contrato está no começo do `TABS_LIST`) |
 | `screens/kanban.js` | O Kanban ([#31](https://github.com/ahrenatechnology/ahrena-console/issues/31)): sessões ou agentes em colunas por status, só leitura, em `/ui/kanban` (`?view=agents` para os agentes) |
 | `kanban.css` | O estilo do Kanban, carregado pela tela só enquanto ela está aberta |
@@ -116,7 +117,7 @@ Uma tela pode ler a query (`location.search`), como o Kanban lê `?view=`. A mol
 | --- | --- |
 | `params` | Os `:parametros` da rota (`{ id }` no Detalhe), já validados |
 | `read(route)` | A camada de leitura, já com o `signal` da tela: sair da tela cancela o pedido |
-| `write(route, body)` | A camada de escrita (POST com JSON), com o mesmo `signal`. Só para tela que muda algo (o Kanban do projeto move cards; a Agent Config grava um `SKILL.md` em `POST /api/agent-config/skill`) |
+| `write(route, body)` | A camada de escrita (POST com JSON, ou DELETE com `{ method: 'DELETE' }`), com o mesmo `signal`. Só para tela que muda algo (o Kanban do projeto move cards; a Agent Config grava um `SKILL.md` em `POST /api/agent-config/skill`) |
 | `signal` | O `AbortSignal` que dispara quando a pessoa sai da tela |
 | `onChange(f)` | `f(changes)` a cada novidade do long polling (`{ type, key, sessionId, accountId, seq }`) |
 | `onRestart(f)` | `f()` quando a tela tem de reler tudo: núcleo reiniciado, cursor velho ou a conexão voltou |
@@ -135,22 +136,9 @@ Uma tela pode ler a query (`location.search`), como o Kanban lê `?view=`. A mol
 - **Sem estilo inline** (`style="..."`): a política de conteúdo bloqueia. Use classe. Largura que vem de dado (uma barra de progresso) sai de `<progress value max>` estilizado, como no Mural.
 - **Classe com o prefixo da tela** (`dec-*` nas Decisões): o CSS de cada tela fica carregado quando se troca de tela, e uma classe repetida em dois arquivos desmonta a outra. Compartilhadas, só as da moldura e os selos (`.badge`, `.b-*`, `.reason`, `.soft`, `.p`).
 - **Nada rola na horizontal** em 1100 nem em 1440 de janela: `min-width: 0` nos filhos de flex e grid, `overflow-wrap: anywhere` em título, branch, caminho e mono, `pre` com `white-space: pre-wrap`, sem `overflow-x: auto`.
+- **Cards na mesma linha têm a mesma altura** ([#255](https://github.com/ahrenatechnology/ahrena-console/issues/255)). O `shell.css` estica todo `.card` da tela até a altura da linha do grid (`:where(.cc-main) .card { align-self: stretch }`), mesmo num grid com `align-items: start`; o conteúdo fica em cima, e um card que é coluna flex pode dar a sobra a uma parte (o gráfico das máquinas cresce) ou mandar o rodapé para baixo com `margin-top: auto`. Quando um card é muito mais curto que o vizinho (um card pequeno ao lado de uma tabela longa), os curtos empilham num `.card-column` ao lado do longo, na ordem do wireframe, e o último cresce até o fim da linha; a tabela longa vai para uma linha só dela. Fora da regra: as raias de quadro (Kanban, Kanban do projeto, Dev Console) e os itens de uma lista. O teste (`test/api/ui.test.ts`) recusa um CSS de tela que tire um card da altura da linha.
 - Exceção: nos Repositórios, a largura das barras que vem de dado entra por variável CSS via CSSOM (`el.style.setProperty('--w', …)`), nunca por atributo `style` no HTML.
 
 ## As URLs antigas
 
-As URLs da /ui eram em pt-BR até a decisão 0009 (issue 173). As antigas continuam abrindo: antes de rotear, a moldura troca a URL antiga pela nova com `history.replaceState` (`legacyUrl` em `screens.js`), e o núcleo serve `/ui/telas/<arquivo>` como `/ui/screens/<arquivo>`. Os alias saem no PR final da migração.
-
-| Antiga | Nova |
-| --- | --- |
-| `/ui/sessoes`, `/ui/sessoes/<id>` | `/ui/sessions`, `/ui/sessions/<id>` |
-| `/ui/sessoes?busca=&ordem=&sentido=&pagina=`, `?status=esperando&ordem=custo` | `/ui/sessions?search=&order=&direction=&page=`, `?status=waiting&order=cost` |
-| `/ui/sessoes/<id>#agentes`, `#conversa`, `#tempo`, `#decisoes` | `/ui/sessions/<id>#agents`, `#conversation`, `#timeline`, `#decisions` |
-| `/ui/historico` | `/ui/history` |
-| `/ui/mural` | `/ui/wall` |
-| `/ui/projeto` | `/ui/project` |
-| `/ui/decisoes` | `/ui/decisions` |
-| `/ui/analytics/custo` | `/ui/analytics/cost` |
-| `/ui/kanban?visao=agentes` | `/ui/kanban?view=agents` (as colunas do Kanban e os filtros das Decisões não vão na URL da /ui: só a API os recebe, e aceita os valores antigos) |
-| `/ui/repos/<dono>/<repo>?periodo=1a` | `/ui/repos/<owner>/<repo>?period=1y` |
-| `/ui/telas/<arquivo>` | `/ui/screens/<arquivo>` |
+As URLs da /ui eram em pt-BR até a decisão 0009 (issue 173) e ficaram abrindo como alias até a fase 6. Agora uma URL antiga (`/ui/sessoes/<id>`, `/ui/telas/<arquivo>`) é uma URL desconhecida: a moldura mostra "Página não encontrada", e um arquivo antigo dá 404.

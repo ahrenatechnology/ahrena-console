@@ -10,6 +10,7 @@ import { loading, error, errorBand, empty } from '../states.js';
 import { openInDesktop } from '../api.js';
 import { create as workflowTab } from './session-detail-workflow.js';
 import { create as decisionsTab } from './session-detail-decisions.js';
+import { attentionOf, attentionPill, isBlocked, isIdle, reasonChip, reasonLabel, attentionDot, statusWithoutAttention } from '../attention.js';
 
 // ---------- Formatos ----------
 
@@ -66,19 +67,28 @@ function when(iso, now = new Date()) {
   return `${prefix}, ${HOUR.format(d)}`;
 }
 
-const STATUS = { active: 'Ativa', working: 'Ativa', waiting: 'Esperando você', error: 'Erro', completed: 'Concluída', abandoned: 'Abandonada' };
-const COLOR = { active: 'active', working: 'active', waiting: 'waiting', error: 'error', completed: 'completed', abandoned: 'abandoned' };
+// issue 245: a waiting session, agent or event is drawn by its attention ("Precisa de você" or "Ociosa").
+const STATUS = { active: 'Ativa', working: 'Ativa', error: 'Com erro', completed: 'Concluída', abandoned: 'Abandonada' };
+const COLOR = { active: 'active', working: 'active', error: 'error', completed: 'completed', abandoned: 'abandoned' };
+/** The timeline's status filter: the core's `waiting` takes both the blocked and the idle events. */
+const STATUS_FILTER = { ...STATUS, waiting: 'Precisa de você ou ociosa' };
 
-function statusPill(status, label = STATUS[status] ?? status) {
-  return el('span', { class: `sd-status sd-s-${COLOR[status] ?? 'abandoned'}` }, label);
+/** The pill: the attention when there is one; a waiting one without it is active; the rest by status. */
+function statusPill(status, attention = null) {
+  if (attentionOf(attention)) return attentionPill(attention);
+  const st = statusWithoutAttention(status);
+  return el('span', { class: `sd-status sd-s-${COLOR[st] ?? 'abandoned'}` }, STATUS[st] ?? '—');
 }
 
-/** O motivo da espera, como no A5: "Pede permissão", "Pergunta", "Sua vez"… */
-function reasonOf(session) {
-  if (session.status === 'error') return null;
-  if (session.banner?.type === 'permission') return 'Pede permissão';
-  if (session.banner?.type === 'question') return 'Pergunta';
-  return { interrupted: 'Interrompida', stop: 'Sua vez', session_start: 'No prompt', notification: 'Pede permissão' }[session.reason] ?? null;
+/** The idle line (issue 245): no band, only what happened and since when. */
+export function idleNote(attention, since, now = Date.now()) {
+  const when = since ? ago(since, now).replace('agora', 'menos de 1 min') : null;
+  const what = {
+    turn_ended: when ? `o turno terminou há ${when} e a vez é sua` : 'o turno terminou e a vez é sua',
+    interrupted: when ? `interrompida há ${when}, no meio do turno` : 'interrompida no meio do turno',
+    first_prompt: when ? `aberta no prompt há ${when}, sem o primeiro pedido` : 'aberta no prompt, sem o primeiro pedido',
+  }[attentionOf(attention)?.reason ?? ''];
+  return `Ociosa · ${what ?? 'a vez é sua'}. Nada trava a sessão.`;
 }
 
 /** Texto com `código` entre crases: cada pedaço vira nó de texto ou `<code>`, nunca HTML. */
@@ -194,7 +204,7 @@ export async function mount(area, ctx) {
   async function first() {
     area.replaceChildren(loading({ label: 'Carregando a sessão' }));
     if (!(await readHead())) return;
-    tab ??= headData.session.status === 'waiting' ? 'conversation' : 'agents';
+    tab ??= attentionOf(headData.session.attention) ? 'conversation' : 'agents';
     area.replaceChildren(top, tabs, body);
     drawTabs();
     body.replaceChildren(loading({ label: 'Carregando', blocks: 2 }));
@@ -225,15 +235,14 @@ export async function mount(area, ctx) {
 function drawTop(c, refresh) {
   const s = c.session;
   const now = Date.now();
-  const reason = reasonOf(s);
   const end = s.status === 'active' || s.status === 'waiting' ? now : Date.parse(c.endedAt ?? s.since);
   const row1 = el(
     'div',
     { class: 'sd-row' },
     el('a', { class: 'sd-back', href: '/ui/sessions', title: 'Voltar para Sessões', 'aria-label': 'Voltar para Sessões' }, icon('back')),
     el('h1', {}, s.title),
-    statusPill(s.status),
-    reason && s.status === 'waiting' ? el('span', { class: `sd-reason${s.urgent ? ' sd-urgent' : ''}` }, s.banner?.type === 'permission' ? icon('shield') : null, reason) : null,
+    statusPill(s.status, s.attention),
+    reasonChip(s.attention),
     el('button', { type: 'button', class: 'sd-refresh', title: 'Atualizar', 'aria-label': 'Atualizar', onClick: refresh }, icon('refresh')),
   );
   const pills = el(
@@ -246,22 +255,14 @@ function drawTop(c, refresh) {
     c.branch ? pill('branch', c.branch) : null,
   );
   const folder = s.cwd ? el('div', { class: 'sd-folder mono' }, icon('folder'), el('span', {}, s.cwd), copyButton(s.cwd, 'a pasta')) : null;
-  return [row1, pills, folder, s.banner ? band(c) : null].filter(Boolean);
+  // The yellow band only when the session is stuck (or stopped by an error); idle gets one muted line.
+  const blocked = isBlocked(s.attention) || s.status === 'error';
+  const notice = s.banner && blocked ? band(c) : isIdle(s.attention) ? idleLine(c) : null;
+  return [row1, pills, folder, notice].filter(Boolean);
 }
 
-/** O texto da faixa com o comando que pede permissão em `<code>`, montado pelo DOM. */
-function withCommand(text, command) {
-  const i = command ? text.indexOf(command) : -1;
-  if (i < 0) return withCode(text);
-  return [text.slice(0, i), el('code', { class: 'sd-code' }, command), text.slice(i + command.length)];
-}
-
-// The class of each tool state and of the band is its API value (`sd-e-<state>`, `sd-t-<type>`).
-const BAND_TITLE = { permission: 'Esperando você · Pede permissão.', question: 'Esperando você · Pergunta.', error: 'Erro.' };
-
-function band(c) {
-  const f = c.session.banner;
-  const notice = el('span', { class: 'sd-notice', role: 'status' });
+/** "Abrir no Claude Desktop", with the notice of a failure beside it. */
+function openButton(c, notice) {
   const button = el('button', { type: 'button', class: 'btn outline', disabled: !c.local, title: c.local ? null : 'Esta sessão não está no Claude Desktop' }, 'Abrir no Claude Desktop', icon('external'));
   button.addEventListener('click', async () => {
     notice.textContent = '';
@@ -273,23 +274,50 @@ function band(c) {
       notice.textContent = e.message;
     }
   });
+  return button;
+}
+
+function idleLine(c) {
+  const notice = el('span', { class: 'sd-notice', role: 'status' });
+  return el('section', { class: 'sd-idle', role: 'status' }, attentionDot('idle'), el('p', {}, idleNote(c.session.attention, c.session.since), notice), openButton(c, notice));
+}
+
+/** O texto da faixa com o comando que pede permissão em `<code>`, montado pelo DOM. */
+function withCommand(text, command) {
+  const i = command ? text.indexOf(command) : -1;
+  if (i < 0) return withCode(text);
+  return [text.slice(0, i), el('code', { class: 'sd-code' }, command), text.slice(i + command.length)];
+}
+
+// The class of each tool state and of the band is its API value (`sd-e-<state>`, `sd-t-<type>`).
+/** The band title: "Precisa de você · Pede permissão." or "Com erro." */
+export function bandTitle(session) {
+  if (session.banner?.type === 'error' || session.attention?.reason === 'error') return 'Com erro.';
+  const reason = reasonLabel(session.attention);
+  return reason ? `Precisa de você · ${reason}.` : 'Precisa de você.';
+}
+
+function band(c) {
+  const f = c.session.banner;
+  const notice = el('span', { class: 'sd-notice', role: 'status' });
+  const button = openButton(c, notice);
   return el(
     'section',
     { class: `sd-band sd-t-${f.type}`, role: f.type === 'error' ? 'alert' : 'status' },
     icon(f.type === 'error' ? 'error' : 'shield'),
-    el('p', {}, el('b', {}, BAND_TITLE[f.type] ?? ''), ' ', ...withCommand(f.text, c.command), `. Há ${ago(f.since).replace('agora', 'menos de 1 min')}.`, notice),
+    el('p', {}, el('b', {}, bandTitle(c.session)), ' ', ...withCommand(f.text, c.command), `. Há ${ago(f.since).replace('agora', 'menos de 1 min')}.`, notice),
     button,
   );
 }
 
 // ---------- Aba Agentes (C4) ----------
 
-function agentsTab(ctx, base) {
+function agentsTab(ctx, base, { head } = {}) {
   let target = null;
   async function draw() {
     try {
       const a = await ctx.read(`${base}/agents`);
-      target?.replaceChildren(...agents(a));
+      target?.replaceChildren(...agents(a, head?.()?.session?.attention ?? null));
     } catch (e) {
       if (e.name === 'AbortError') return;
       target?.replaceChildren(error({ title: 'Não deu para ler os agentes', text: e.message, retry: draw }));
@@ -309,7 +337,7 @@ function number(iconName, label, value, detail) {
   return el('div', { class: 'card sd-number' }, el('div', { class: 'eyebrow' }, icon(iconName), label), el('div', { class: 'sd-value' }, el('b', { class: 'mono' }, value), detail ? el('small', {}, detail) : null));
 }
 
-function agents(a) {
+function agents(a, sessionAttention = null) {
   const n = a.numbers;
   const numbers = el(
     'div',
@@ -360,7 +388,7 @@ function agents(a) {
     'section',
     { class: 'sd-tree' },
     el('div', { class: 'eyebrow' }, icon('robot'), `Agentes · ${a.agents.length}`),
-    ...a.agents.map((g) => node(g)),
+    ...a.agents.map((g) => node(g, sessionAttention)),
   );
 
   return [numbers, el('div', { class: 'sd-two' }, tools, tasks), flow, tree];
@@ -422,7 +450,8 @@ function tokenFlow(k) {
   return el('div', {}, bar, el('div', { class: 'sd-legend' }, ...parts.map(([cls, r, v]) => el('span', { class: `sd-f-${cls}` }, `${r} `, el('b', { class: 'mono' }, tokens(v))))));
 }
 
-function node(g) {
+/** An agent node; the main one carries the session's attention (issue 245), a subagent none. */
+function node(g, sessionAttention = null) {
   const end = g.end ? Date.parse(g.end) : Date.now();
   const sub =
     g.type === 'main'
@@ -434,7 +463,7 @@ function node(g) {
     el('span', { class: 'sd-ico' }, icon(g.type === 'main' ? 'robot' : 'subagent')),
     el('div', { class: 'sd-text' }, el('b', {}, g.name), el('small', {}, sub.filter(Boolean).join(' · '))),
     el('span', { class: 'mono sd-cost' }, g.costUsd === null ? '' : usd(g.costUsd)),
-    statusPill(g.status),
+    statusPill(g.status, g.type === 'main' && (g.status === 'waiting' || g.status === 'error') ? sessionAttention : null),
   );
 }
 
@@ -600,7 +629,7 @@ function timelineTab(ctx, base, { setLabel }) {
       const r = await ctx.read(query());
       last = r;
       setLabel(`${num(r.filtered)}/${num(r.total)}`);
-      options(selects.status, 'Status', r.options.status.map((s) => [s, STATUS[s]]), filters.status);
+      options(selects.status, 'Status', r.options.status.filter((s) => STATUS_FILTER[s]).map((s) => [s, STATUS_FILTER[s]]), filters.status);
       options(selects.type, 'Tipo de evento', r.options.types.map((t) => [t, t]), filters.type);
       options(selects.tool, 'Ferramenta', r.options.tools.map((t) => [t, t]), filters.tool);
       options(selects.agent, 'Agente', r.options.agents.map((a) => [a.id, a.name]), filters.agent);
@@ -626,7 +655,7 @@ function timelineTab(ctx, base, { setLabel }) {
       { type: 'button', class: 'sd-event-head', 'aria-expanded': isOpen ? 'true' : 'false' },
       icon(isOpen ? 'chevron-down' : 'chevron-right'),
       el('time', { class: 'mono', datetime: e.at, title: new Date(e.at).toLocaleString('pt-BR') }, ago(e.at)),
-      statusPill(e.status),
+      statusPill(e.status, e.attention),
       el('span', { class: 'mono sd-type' }, e.type),
       el('span', { class: 'sd-summary' }, e.summary ?? ''),
       e.tool ? el('span', { class: 'sd-chip mono' }, e.tool) : null,

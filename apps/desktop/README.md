@@ -41,6 +41,8 @@ Um núcleo por instalação, em porta aleatória ([decisão 0010](../../docs/dec
    ```
 
    A pasta de dados vem do Tauri (`app_data_dir`, a do identificador `dev.ahrena.console`). O dono **sobe** o núcleo em segundo plano numa porta que o sistema escolhe, ou **adota** o que já roda naquela pasta de dados (só a do app). O app lê da linha `--json` a `porta`, o `pid`, o `subiu`, e confere `installation` (`app`) e `dataDir` (a pasta do app): se vier outra, recusa e mostra o núcleo parado. O app tira do ambiente do núcleo `AHRENA_CONSOLE_DB`, `AHRENA_CONSOLE_DATA_DIR`, `AHRENA_CONSOLE_CORE_PORT` e `AHRENA_CONSOLE_PORT`, que um shell pode exportar para o núcleo de desenvolvimento.
+
+   **Depois de uma atualização** ([#220](https://github.com/ahrenatechnology/ahrena-console/issues/220)), o núcleo da versão anterior pode continuar de pé, mantido pelas pontes do MCP que se registraram como clientes dele. O dono não o adota: um núcleo de versão mais velha é parado (SIGTERM, depois SIGKILL) e o do app sobe no lugar; as pontes acham o novo pelo registro no pedido seguinte. O app ainda confere a `version` da linha `--json` com a do `packages/nucleo/package.json` que traz e recusa uma mais velha. A troca é calada: só uma falha aparece, como o motivo do núcleo parado na bandeja. Um núcleo da mesma versão ou mais novo continua adotado.
 2. **Pasta de dados:** `~/Library/Application Support/dev.ahrena.console/`, com o banco (`nucleo.sqlite`), o log (`nucleo.log`), os clientes (`clientes/`) e a trava (`nucleo.json`), além do `notifications.json` do app. O núcleo se registra em `~/.ahrena-console/instances/app-<pid>.json`, onde os hooks e o mod o acham.
 3. **Primeira vez:** com o banco do app vazio, o núcleo importa o histórico dos transcripts (`~/.claude/projects`) ao subir, como sempre fez; não precisa de opção.
 4. A bandeja, a janela (`/ui`) e todo pedido HTTP do app só falam com a porta do núcleo que ele subiu ou adotou, e cada conferência de que ele ainda responde olha também o `pid` do `/api/overview`. A porta muda a cada subida: se o núcleo cai e o app sobe outro, a janela aberta passa para a porta nova. Com o núcleo parado ou ainda subindo, "Abrir o console" não abre outro: procura o próprio de novo e abre a janela quando ele responder.
@@ -61,7 +63,7 @@ A bandeja lê `GET /api/attention` e espera mudanças em `GET /api/changes?since
 | [src-tauri/src/native.rs](src-tauri/src/native.rs) | O que o Tauri não expõe: o item alternativo do ⌥, a dica (conta e motivo) e o recuo, direto no `NSMenu` |
 | [src-tauri/src/http.rs](src-tauri/src/http.rs) | HTTP/1.0 cru com `127.0.0.1` |
 | [src-tauri/src/updater.rs](src-tauri/src/updater.rs) | O updater: checa ao abrir e a cada 6 h, instala e relança; só liga com a chave pública no `tauri.conf.json` |
-| [src-tauri/tests/configuration.rs](src-tauri/tests/configuration.rs) | A configuração da release: a mesma versão nos três arquivos, o endpoint do updater e o identificador |
+| [src-tauri/tests/configuration.rs](src-tauri/tests/configuration.rs) | A configuração da release: a mesma versão nos três arquivos e no núcleo, o endpoint do updater e o identificador |
 | [src-tauri/src/shell_path.rs](src-tauri/src/shell_path.rs) | O PATH do shell de login, para achar o `node` aberto pelo Finder |
 
 ## Rodar
@@ -94,14 +96,14 @@ No CI, o [app-ci.yml](../../.github/workflows/app-ci.yml) roda `cargo test`, `ca
 
 | Variável | Efeito |
 | --- | --- |
-| `AHRENA_CONSOLE_DEMO_PORT=<n>` | Não sobe núcleo: só mostra o desta porta (uma `npm run api -- --demo --port <n>`), para os prints. O nome antigo `AHRENA_NUCLEO_PORTA` continua aceito |
-| `AHRENA_CONSOLE_NODE=<caminho>` | Usa este `node`; vazio, finge que não há Node (para ver o A4). O nome antigo `AHRENA_NODE` continua aceito |
-| `AHRENA_CONSOLE_CORE_DIR=<pasta>` | Usa este `packages/nucleo` em vez do que vai no app. O nome antigo `AHRENA_NUCLEO_DIR` continua aceito |
-| `AHRENA_CONSOLE_OPEN_MENU_AFTER=<s>` | Abre o menu sozinho depois de tantos segundos (prints). O nome antigo `AHRENA_ABRIR_MENU` continua aceito |
-| `AHRENA_CONSOLE_DATA_DIR=<pasta>` | Grava e lê o `notifications.json` nesta pasta em vez do diretório de dados do app; o núcleo do app continua na pasta do app. O nome antigo `AHRENA_DADOS_DIR` continua aceito |
-| `AHRENA_CONSOLE_LAUNCH_ORIGIN=login\|manual` | Finge que o app abriu pelo login (só a bandeja) ou à mão (abre o console). O nome antigo `AHRENA_ORIGEM` continua aceito |
+| `AHRENA_CONSOLE_DEMO_PORT=<n>` | Não sobe núcleo: só mostra o desta porta (uma `npm run api -- --demo --port <n>`), para os prints |
+| `AHRENA_CONSOLE_NODE=<caminho>` | Usa este `node`; vazio, finge que não há Node (para ver o A4) |
+| `AHRENA_CONSOLE_CORE_DIR=<pasta>` | Usa este `packages/nucleo` em vez do que vai no app |
+| `AHRENA_CONSOLE_OPEN_MENU_AFTER=<s>` | Abre o menu sozinho depois de tantos segundos (prints) |
+| `AHRENA_CONSOLE_DATA_DIR=<pasta>` | Grava e lê o `notifications.json` nesta pasta em vez do diretório de dados do app; o núcleo do app continua na pasta do app |
+| `AHRENA_CONSOLE_LAUNCH_ORIGIN=login\|manual` | Finge que o app abriu pelo login (só a bandeja) ou à mão (abre o console) |
 
-Quando vêm o nome novo e o antigo, vale o novo.
+Os nomes antigos, em português (`AHRENA_NUCLEO_PORTA`, `AHRENA_NODE`…), saíram na fase 6 da #173.
 
 Pelo Finder, `open --env` passa as variáveis:
 
@@ -113,7 +115,7 @@ open --env AHRENA_CONSOLE_DEMO_PORT=4797 "src-tauri/target/release/bundle/macos/
 
 Para mantenedores. A release sai do [app-release.yml](../../.github/workflows/app-release.yml), com o `tauri-action`, num DMG por arquitetura (`aarch64` e `x64`), assinado ad hoc.
 
-1. Suba a versão nos três arquivos, iguais: `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml` e `package.json` (o `cargo test` confere).
+1. Suba a versão nos quatro arquivos, iguais: `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml`, `package.json` e o `packages/nucleo/package.json` do núcleo que vai dentro do app (o `cargo test` confere). O núcleo mostra essa versão no rodapé da /ui, no registro de instâncias e no MCP ([#261](https://github.com/ahrenatechnology/ahrena-console/issues/261)).
 2. Depois do merge, crie e envie a tag `app-vX.Y.Z` com essa versão. O workflow falha se a tag não bater com o `tauri.conf.json`.
 3. A release sai como **rascunho**, com os DMGs (e, com a chave do updater, os `.app.tar.gz`, `.sig` e o `latest.json`).
 4. Antes de publicar o rascunho à mão, abra o `latest.json` dele e confira que tem as duas plataformas, `darwin-aarch64` e `darwin-x86_64`: os dois jobs da matriz o atualizam em paralelo, e um pode sobrescrever o outro.
@@ -130,7 +132,7 @@ O app só se atualiza com uma chave própria, que assina cada versão. Uma vez:
 
 Sem o segredo, a build sai sem updater e o workflow avisa; com o segredo e a pública vazia, falha. **Perder a chave privada impede atualizar quem já instalou:** cada um teria de baixar o DMG de novo. Guarde-a também fora do GitHub.
 
-O app procura a versão nova em `releases/latest/download/latest.json`, isto é, na release marcada como **Latest** do repositório. A release do app tem de ser a Latest; qualquer outra release deste repositório deve sair sem marcar Latest, senão o app deixa de achar as atualizações.
+O app procura a versão nova em `releases/download/app-updates/latest.json`: a release fixa `app-updates`, que é só o canal de atualização. Quando um rascunho `app-v…` é publicado, o [app-updates.yml](../../.github/workflows/app-updates.yml) copia o `latest.json` dele para lá; rascunho nunca chega ao canal. Por isso não importa qual release é a **Latest** do repositório (a Latest é das releases do plugin). Para voltar o canal a uma versão anterior, rode o `app-updates` com a tag dela.
 
 ### Notarização
 

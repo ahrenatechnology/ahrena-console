@@ -1,6 +1,6 @@
-// The configuration the release depends on being right (issue #90): the same version in the three
-// files (the `app-v<version>` tag is checked against tauri.conf.json in CI), the updater pointing
-// at this repository's releases and the app's identifier.
+// The configuration the release depends on being right (issue #90): the same version in the app's
+// three files and in the core it bundles (#261; the `app-v<version>` tag is checked against
+// tauri.conf.json in CI), the updater pointing at this repository's releases and the app's identifier.
 
 use std::path::Path;
 
@@ -37,12 +37,23 @@ fn cargo_version() -> String {
     panic!("Cargo.toml without version in [package]")
 }
 
+fn npm_version(relative: &str) -> String {
+    json(relative)["version"].as_str().unwrap_or_else(|| panic!("{relative} without version")).to_string()
+}
+
 #[test]
 fn the_version_is_the_same_in_the_three_files() {
     let conf = conf()["version"].as_str().expect("tauri.conf.json without version").to_string();
-    let npm = json("../package.json")["version"].as_str().expect("package.json without version").to_string();
     assert_eq!(conf, cargo_version(), "tauri.conf.json and Cargo.toml");
-    assert_eq!(conf, npm, "tauri.conf.json and package.json");
+    assert_eq!(conf, npm_version("../package.json"), "tauri.conf.json and package.json");
+}
+
+/// One version for the product (#261): the core shows its package's version in the /ui footer, the
+/// instance registry and the MCP `serverInfo`, so it moves with the app's.
+#[test]
+fn the_bundled_core_has_the_apps_version() {
+    let conf = conf()["version"].as_str().expect("tauri.conf.json without version").to_string();
+    assert_eq!(conf, npm_version("../../../packages/nucleo/package.json"), "tauri.conf.json and packages/nucleo/package.json");
 }
 
 #[test]

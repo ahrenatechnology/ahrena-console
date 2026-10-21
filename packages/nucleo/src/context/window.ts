@@ -31,12 +31,12 @@ export function windowFor(
 ): ContextWindow {
   let window: ContextWindow;
   if ((model && LONG_SUFFIX.test(model)) || (sessionModel && LONG_SUFFIX.test(sessionModel))) {
-    window = { tokens: LONG_WINDOW, source: 'sufixo' };
+    window = { tokens: LONG_WINDOW, source: 'suffix' };
   } else {
     const fromModel = model ? WINDOWS_BY_MODEL.find((w) => w.pattern.test(model))?.tokens : undefined;
-    window = { tokens: fromModel ?? DEFAULT_WINDOW, source: 'modelo' };
+    window = { tokens: fromModel ?? DEFAULT_WINDOW, source: 'model' };
   }
-  if (largestSeen > window.tokens) window = { tokens: LONG_WINDOW, source: 'observado' };
+  if (largestSeen > window.tokens) window = { tokens: LONG_WINDOW, source: 'observed' };
   if (previous && previous.tokens > window.tokens) return previous;
   return window;
 }

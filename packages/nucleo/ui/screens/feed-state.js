@@ -4,13 +4,27 @@
 /** Quantas linhas a lista guarda em memória; o ao vivo corta as mais velhas além disso. */
 export const LIMIT = 500;
 
-/** Os status de evento que o núcleo devolve e como a moldura os escreve. */
+/**
+ * Os status de evento que o núcleo devolve e como o filtro os escreve. issue 245: `waiting` takes both the
+ * blocked and the idle events; each row says which one by its `attention` (see `rowPill`).
+ */
 export const STATUS = {
   active: 'Ativa',
-  waiting: 'Esperando você',
+  waiting: 'Precisa de você ou ociosa',
   completed: 'Concluída',
   error: 'Com erro',
 };
+
+/**
+ * The row pill (issue 245): `{ attention }` when the event stands for one ("Precisa de você", "Ociosa",
+ * "Com erro"), else `{ status }` (a waiting one without attention is idle; unknown is completed).
+ */
+export function rowPill(ev) {
+  const a = ev?.attention;
+  if (a && (a.level === 'blocked' || a.level === 'idle')) return { attention: { level: a.level, reason: typeof a.reason === 'string' ? a.reason : null } };
+  if (ev?.status === 'waiting') return { attention: { level: 'idle', reason: null } };
+  return { status: STATUS[ev?.status] ? ev.status : 'completed' };
+}
 
 /** O mesmo molde de id que a moldura aceita em `/ui/sessions/:id`. */
 const ID = /^[A-Za-z0-9_.:-]{1,128}$/;

@@ -46,5 +46,5 @@ export function merged(number: number, mergedAt: string, over: Partial<MergedPul
 }
 
 export function contextSession(id: string, over: Partial<ContextSession> = {}): ContextSession {
-  return { id, title: `sessão ${id}`, repo: REPO, branch: null, working: true, waitingOnYou: false, ...over };
+  return { id, title: `sessão ${id}`, repo: REPO, branch: null, working: true, waitingOnYou: false, attention: null, ...over };
 }

@@ -9,8 +9,7 @@
 // | `GET /api/sessions/<id>/conversation` | An agent's messages (`?agent=`, `?limit=`)                |
 // | `GET /api/sessions/<id>/events`       | The timeline, filtered and paginated (see `filtroDe`)     |
 //
-// `GET /api/sessions` (the list, no id) is not here: it belongs to the Sessions screen (#28). The old
-// `/api/sessoes/<id>[/agentes|/conversa|/eventos]` and parameter names are aliases (src/api/legacy-routes.ts).
+// `GET /api/sessions` (the list, no id) is not here: it belongs to the Sessions screen (#28).
 
 import type { ServerResponse } from 'node:http';
 import { send } from '../ingest/hooks/receiver.ts';
@@ -21,6 +20,7 @@ import { effectiveTokens } from '../pricing.ts';
 import type { StoragePort } from '../storage-port.ts';
 import type { MontadorDoPainel } from './panel.ts';
 import type { PanelCost, PanelPlan, PanelSession } from './types.ts';
+import { eventAttention, type SessionAttention } from './attention.ts';
 
 /** `/api/sessions/<id>` e as três abas; o id passa pelo mesmo padrão das outras rotas. */
 export const DETAIL_ROUTE = /^\/api\/sessions\/([^/]+)(?:\/(agents|conversation|events))?$/;
@@ -36,8 +36,7 @@ const MAX_FERRAMENTAS = 8;
 
 // ---------- Contrato ----------
 //
-// The JSON keys and fixed values are English (issue #173, phase 2b, layer 5); the old
-// `/api/sessoes/<id>[/agentes|/conversa|/eventos]` answer their old bodies through src/api/legacy-routes.ts.
+// The JSON keys and fixed values are English (issue #173, phase 2b, layer 5).
 // Names shown on the screen (`Agente principal`) stay pt-BR.
 
 export interface CabecaDoDetalhe {
@@ -136,6 +135,8 @@ export interface EventoDoDetalhe {
   summary: string | null;
   agent: { id: string; name: string } | null;
   status: Extract<DisplayStatus, 'active' | 'waiting' | 'error'>;
+  /** #245: what the event alone stands for (a blocking ask or an error, `blocked`; a turn end or Esc, `idle`), as in `/api/events`. */
+  attention: SessionAttention | null;
   /** O `data` do evento em JSON, cortado: o expandir da linha. */
   data: string | null;
 }
@@ -483,7 +484,7 @@ export class LeiturasDoDetalhe {
       if (f.ate && e.createdAt > f.ate) continue;
       const dados = emJson(e.data);
       if (f.q && ![e.summary, e.toolName, e.type, dados].some((t) => t?.toLowerCase().includes(f.q!))) continue;
-      itens.push({ id: e.id, at: e.createdAt, type: e.type, tool: e.toolName, summary: e.summary, agent: { id: agente, name: quem.nome(agente) }, status, data: dados });
+      itens.push({ id: e.id, at: e.createdAt, type: e.type, tool: e.toolName, summary: e.summary, agent: { id: agente, name: quem.nome(agente) }, status, attention: eventAttention(e), data: dados });
     }
 
     const comeco = f.antes ? itens.findIndex((e) => e.id === f.antes) + 1 : 0;

@@ -15,6 +15,12 @@ export type SessionActivity = {
 
 export type SessionBanner = { type: 'question' | 'permission' | 'error'; text: string; footer: string; since: string }
 
+/** #245: `blocked` ("Precisa de você") or `idle` ("Ociosa"), with the reason (packages/nucleo/src/api/attention.ts). */
+export type SessionAttention = {
+  level: 'blocked' | 'idle'
+  reason: 'permission' | 'question' | 'plan' | 'decision' | 'error' | 'turn_ended' | 'interrupted' | 'first_prompt'
+}
+
 export type PanelSession = {
   id: string
   title: string
@@ -24,6 +30,8 @@ export type PanelSession = {
   state: InboxState
   reason: AwaitingReason | null
   urgent: boolean
+  /** `null` when the session is not waiting on you and not in error; absent from a core before #245. */
+  attention?: SessionAttention | null
   since: string
   turn: number
   activity: SessionActivity
@@ -114,9 +122,12 @@ export type PanelWork = {
 
 export type NeedsYou = {
   id: string
-  /** #140: `needs`, bloqueada até você agir, com destaque; `your-turn`, o bate-bola comum, neutra. Núcleo antigo: ausente (conta como `needs`). */
-  level?: 'needs' | 'your-turn'
-  why?: 'permission' | 'question' | 'plan' | 'decision' | 'error' | 'your-turn' | 'interrupted' | 'no-prompt'
+  /**
+   * #245: `blocked` ("Precisa de você"), with highlight and in the count; `idle` ("Ociosa"), neutral.
+   * The core before #245 sends `needs` and `your-turn`; before #140, nothing (counts as blocked).
+   */
+  level?: 'blocked' | 'idle' | 'needs' | 'your-turn'
+  why?: SessionAttention['reason'] | 'your-turn' | 'no-prompt'
   /** `local_…` do Claude Desktop, para abrir a conversa; sem ele, a sessão é só de terminal. */
   local?: string | null
   title: string
@@ -134,7 +145,9 @@ export type NeedsYou = {
 export type PanelNeedYou = {
   /** Só as que precisam de você. */
   total: number
-  /** As que só estão na sua vez: fora da contagem. */
+  /** #245: the idle ones, out of the count. */
+  idle?: number
+  /** The idle ones as the core before #245 names them. */
   yourTurn?: number
   byAccount: { account: PanelAccount | null; n: number }[]
   family: NeedsYou[]

@@ -232,7 +232,7 @@ export function languages(list, max = 4) {
 /** O texto do estado `no-github`, igual nas duas telas. */
 export const NO_GITHUB = {
   titulo: 'O núcleo está sem o GitHub',
-  texto: 'Rode gh auth login no terminal (instale o gh se faltar) e reinicie o núcleo sem --sem-github.',
+  texto: 'Rode gh auth login no terminal (instale o gh se faltar) e reinicie o núcleo sem --no-github.',
 };
 
 export const COMPUTING = 'calculando…';

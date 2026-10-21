@@ -5,9 +5,7 @@
 // | `GET /api/workflows`              | KPIs, runs do Workflow tool e o grafo de orquestração         |
 // | `GET /api/sessions/<id>/workflow` | O grafo dos agentes da sessão, o laço e a linha do tempo (404 sem a sessão) |
 //
-// `GET /api/workflows?filter=all|active|completed&node=<id do nó>`: o filtro vale para a tela inteira
-// (`filtro=` and `no=` with the old values `todas|ativas|concluidas` and node ids, and
-// `/api/sessoes/<id>/workflow`, are aliases: src/api/legacy-routes.ts).
+// `GET /api/workflows?filter=all|active|completed&node=<id do nó>`: o filtro vale para a tela inteira.
 // `active` são as sessões com status `active`; `completed`, as que terminaram (`completed`, `error`,
 // `abandoned`). `node` é o clique num nó do grafo e é aplicado aqui, no núcleo: só ficam as sessões que
 // passam por aquele nó (`main` passa por todas), e os KPIs, os runs e o próprio grafo saem delas.
@@ -17,12 +15,12 @@
 // O modelo não tem "run do Workflow tool" nem "rodada de review". A representação é derivada do que
 // já existe, sem tabela nova:
 //
-// - Papel de um subagente: `Agent.metadata.workflow.papel` ou `Agent.metadata.papel`, quando há; senão,
+// - Papel de um subagente: `Agent.metadata.workflow.role` ou `Agent.metadata.role`, quando há; senão,
 //   pelo tipo: `subagentType` com "review"/"revis" (ex.: `code-reviewer`) é `review`, `general-purpose`
 //   é `dev`, e os outros ficam com o próprio tipo (`Explore`, `Plan`, `test-runner`...).
 // - Rodada: o n-ésimo review da sessão, na ordem em que começaram, é a rodada n; um dev é da rodada
 //   seguinte à do último review que começou antes dele (dev r1, review r1, dev r2...).
-// - Ajustes pedidos por um review: `metadata.workflow.ajustes` ou `metadata.ajustes` (número); senão, a
+// - Ajustes pedidos por um review: `metadata.workflow.adjustments` ou `metadata.adjustments` (número); senão, a
 //   última mensagem do subagente (`AssistantMessage` com o `agentId` dele): o último número logo antes de
 //   "ajustes"/"mudanças" (até duas palavras no meio: "3 pequenos ajustes" dá 3; "revisei 12 changes e
 //   peço 2 ajustes" dá 2), ou de "changes"/"issues" sem eles; "sem ajustes"/"nenhum ajuste" dá 0;
@@ -38,10 +36,10 @@
 //   `Agent.metadata.workflow.run` (simulador) ou, nos dados reais, de `Agent.metadata.toolUseId` (o
 //   importer grava o id da chamada que abriu o subagente) quando esse id é de um evento `ToolUse`/
 //   `PreToolUse` com `toolName` `Workflow` da sessão. A chamada dá o início e, se o `tool_input` estiver
-//   gravado, o nome (`name`/`workflow`), as fases (`fases`/`phases`), a volta (`volta`) e o modelo
+//   gravado, o nome (`name`/`workflow`), as fases (`phases`), a volta (`loop`) e o modelo
 //   (`model`); o `PostToolUse` ou o `ToolResult` com o mesmo id dá o fim (`PostToolUseFailure` ou
 //   `isError`: erro). Sem o `tool_input` (o importer hoje não guarda o da `Workflow`), o nome é
-//   `metadata.workflow.nome` ou "workflow", as fases são as distintas dos agentes (`metadata.workflow.fase`,
+//   `metadata.workflow.name` ou "workflow", as fases são as distintas dos agentes (`metadata.workflow.phase`,
 //   ou nenhuma) e o modelo é o da sessão. ATENÇÃO: o formato do Workflow tool no journal (nome da
 //   ferramenta, campos da entrada, como o subagente aponta para a chamada) não foi conferido contra dados
 //   reais; segue o que o importer grava para qualquer ferramenta.
@@ -51,7 +49,7 @@
 //   para não contar o mesmo contexto várias vezes. Ferramentas: as chamadas dele (o maior entre hooks
 //   `PreToolUse` e transcript `ToolUse`).
 // - Compactação de uma sessão: algum medidor de contexto com compactação (automática ou manual), ou o
-//   `metadata.contexto.estouros` do simulador.
+//   `metadata.context.overflows` do simulador.
 // - Origem: `Session.source` `resume` é "Retomada"; o resto, "Prompt novo".
 //
 // Grafo de orquestração: o volume de origem, principal, compactação e resultado é em sessões; o de um
@@ -74,8 +72,7 @@ import type { TrabalhoPorBranch } from './work.ts';
 
 // ---------- Contrato ----------
 //
-// The JSON keys and fixed values are English (issue #173, phase 2b, layer 5): `GET /api/workflows` has no
-// old alias, and the old `/api/sessoes/<id>/workflow` answers its old body through src/api/legacy-routes.ts.
+// The JSON keys and fixed values are English (issue #173, phase 2b, layer 5).
 // The labels shown on the screen (`label`, the edge labels `plano`/`diff`/`ajustes`, the node names) stay pt-BR.
 
 export const FILTROS_DOS_WORKFLOWS = ['all', 'active', 'completed'] as const;
@@ -234,7 +231,7 @@ const REVIEW = /review|revis/i;
 
 /** O papel do subagente no laço: `dev`, `review` ou o próprio tipo. */
 export function papelDe(a: Agent): string {
-  const m = str(wf(a)?.papel) ?? str(a.metadata?.papel);
+  const m = str(wf(a)?.role) ?? str(a.metadata?.role);
   if (m) return m;
   const t = a.subagentType ?? '';
   if (REVIEW.test(t)) return 'review';
@@ -257,7 +254,7 @@ const APROVADO = /(?<![\p{L}])(?:aprovad[oa]|approved|lgtm)(?![\p{L}])/iu;
 
 /** Ajustes pedidos por um review: dos metadados, ou da última mensagem dele. `null` sem como saber. */
 export function ajustesDe(a: Agent, eventos: readonly SessionEvent[] = []): number | null {
-  const m = inteiro(wf(a)?.ajustes) ?? inteiro(a.metadata?.ajustes);
+  const m = inteiro(wf(a)?.adjustments) ?? inteiro(a.metadata?.adjustments);
   if (m !== null) return m;
   let ultima: string | null = null;
   for (const e of eventos) if (e.agentId === a.id && e.type === 'AssistantMessage' && e.summary) ultima = e.summary;
@@ -542,7 +539,7 @@ function ferramentasDe(agentId: string, eventos: readonly SessionEvent[]): numbe
 
 const fasesDa = (v: unknown): string[] | null => {
   if (!Array.isArray(v)) return null;
-  const fases = v.map((f) => str(f) ?? str(obj(f)?.nome) ?? str(obj(f)?.name)).filter((f): f is string => f !== null);
+  const fases = v.map((f) => str(f) ?? str(obj(f)?.name)).filter((f): f is string => f !== null);
   return fases.length ? fases : null;
 };
 
@@ -585,9 +582,9 @@ export function runsDaSessao(x: SessaoDosWorkflows, agora: number): RunDoWorkflo
       const estado: EstadoDoAgenteDoRun = a.status === 'error' ? 'error' : a.status !== 'completed' ? 'running' : ajustes ? 'changes-requested' : 'completed';
       return {
         id: a.id,
-        label: str(wf(a)?.rotulo) ?? (rodada === null ? papel : `${papel}:r${rodada}`),
+        label: str(wf(a)?.label) ?? (rodada === null ? papel : `${papel}:r${rodada}`),
         type: a.subagentType,
-        phase: str(wf(a)?.fase),
+        phase: str(wf(a)?.phase),
         state: estado,
         changesRequested: ajustes,
         tokens: tokensDe(a, eventos),
@@ -596,7 +593,7 @@ export function runsDaSessao(x: SessaoDosWorkflows, agora: number): RunDoWorkflo
       };
     });
     const vistas = [...new Set(agentes.map((a) => a.phase).filter((f): f is string => f !== null))];
-    const fases = fasesDa(entrada?.fases) ?? fasesDa(entrada?.phases) ?? vistas;
+    const fases = fasesDa(entrada?.phases) ?? vistas;
     const inicio = chamada?.createdAt ?? membros[0].a.startedAt;
     const algumErro = membros.some((m) => m.a.status === 'error');
     const rodando = membros.some((m) => m.a.status === 'working' || m.a.status === 'waiting');
@@ -615,7 +612,7 @@ export function runsDaSessao(x: SessaoDosWorkflows, agora: number): RunDoWorkflo
     }
     runs.push({
       id,
-      name: str(entrada?.name) ?? str(entrada?.workflow) ?? str(wf(membros[0].a)?.nome) ?? 'workflow',
+      name: str(entrada?.name) ?? str(entrada?.workflow) ?? str(wf(membros[0].a)?.name) ?? 'workflow',
       state: estado,
       model: str(entrada?.model) ?? x.session.model,
       project: x.session.cwd ? basename(x.session.cwd) : null,
@@ -626,7 +623,7 @@ export function runsDaSessao(x: SessaoDosWorkflows, agora: number): RunDoWorkflo
       start: inicio,
       end: termino,
       phases: fases.map((name) => ({ name })),
-      loop: str(entrada?.volta) ?? voltaDe(agentes),
+      loop: str(entrada?.loop) ?? voltaDe(agentes),
       agents: agentes,
     });
   }
@@ -715,8 +712,8 @@ async function todosOsEventos(storage: StoragePort, sessionId: string): Promise<
 }
 
 async function compactou(storage: StoragePort, s: Session): Promise<boolean> {
-  const sim = obj(s.metadata?.contexto);
-  if ((inteiro(sim?.estouros) ?? 0) > 0) return true;
+  const sim = obj(s.metadata?.context);
+  if ((inteiro(sim?.overflows) ?? 0) > 0) return true;
   const medidores = await storage.listContextMeters(s.id);
   return medidores.some((m) => m.compactions > 0 || m.manualCompactions > 0);
 }

@@ -1,8 +1,4 @@
 // The simulator's command line: `npm run simulate -- --chaos`. See the package README.
-//
-// Old option names (`--banco`, `--sessoes`, `--duracao`, `--caos`, `--intensidade`, `--tempo-real`,
-// `--velocidade`, `--precos`) are still accepted until phase 6 of #173; the new one wins if both are
-// given.
 
 import { parseArgs } from 'node:util';
 import { openSqliteStorage } from '../adapters/sqlite/sqlite-storage.ts';
@@ -22,8 +18,6 @@ Generates synthetic sessions, agents, events and token usage and writes them thr
   --speed <x>           simulated minutes per clock minute, in real time (default: 30)
   --prices              writes illustrative prices for the simulated models without a price
   -h, --help            this help
-
-The old names (--banco, --sessoes, --duracao, --caos, --intensidade, --tempo-real, --velocidade, --precos) are accepted until phase 6.
 `;
 
 function number(name: string, value: string | undefined): number | undefined {
@@ -45,15 +39,6 @@ const { values: args } = parseArgs({
     speed: { type: 'string' },
     prices: { type: 'boolean', default: false },
     help: { type: 'boolean', short: 'h', default: false },
-    // Old names, accepted until phase 6.
-    banco: { type: 'string' },
-    sessoes: { type: 'string' },
-    duracao: { type: 'string' },
-    caos: { type: 'boolean', default: false },
-    intensidade: { type: 'string' },
-    'tempo-real': { type: 'boolean', default: false },
-    velocidade: { type: 'string' },
-    precos: { type: 'boolean', default: false },
   },
 });
 
@@ -62,15 +47,14 @@ if (args.help) {
   process.exit(0);
 }
 
-// The new name wins; the old one is the fallback.
-const db = args.db ?? args.banco ?? 'simulacao.sqlite';
-const sessions = args.sessions !== undefined ? number('sessions', args.sessions) : number('sessoes', args.sessoes);
-const duration = args.duration !== undefined ? number('duration', args.duration) : number('duracao', args.duracao);
-const intensity = args.intensity !== undefined ? number('intensity', args.intensity) : number('intensidade', args.intensidade);
-const speed = args.speed !== undefined ? number('speed', args.speed) : number('velocidade', args.velocidade);
-const chaos = args.chaos || args.caos;
-const prices = args.prices || args.precos;
-const realTime = args['real-time'] || args['tempo-real'];
+const db = args.db ?? 'simulacao.sqlite';
+const sessions = number('sessions', args.sessions);
+const duration = number('duration', args.duration);
+const intensity = number('intensity', args.intensity);
+const speed = number('speed', args.speed);
+const chaos = args.chaos;
+const prices = args.prices;
+const realTime = args['real-time'];
 
 const seed = args.seed ?? String(Math.floor(Math.random() * 1_000_000));
 const storage = openSqliteStorage({ path: db });

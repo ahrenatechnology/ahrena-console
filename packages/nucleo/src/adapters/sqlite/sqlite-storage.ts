@@ -282,13 +282,13 @@ export class SqliteStorage implements StoragePort {
     migrate(this.db, options.migrations ?? MIGRATIONS);
   }
 
-  /** Reprocessamento de dados já feito neste banco? Só do adaptador local, fora da porta. */
-  reprocessado(nome: string): boolean {
-    return this.db.prepare('SELECT 1 FROM reprocessamentos WHERE nome = ?').get(nome) !== undefined;
+  /** Was this data reprocessing already done in this database? Local adapter only, outside the port. */
+  isReprocessed(name: string): boolean {
+    return this.db.prepare('SELECT 1 FROM reprocessings WHERE name = ?').get(name) !== undefined;
   }
 
-  marcarReprocessado(nome: string, em: string): void {
-    this.db.prepare('INSERT OR REPLACE INTO reprocessamentos (nome, feito_em) VALUES (?, ?)').run(nome, em);
+  markReprocessed(name: string, doneAt: string): void {
+    this.db.prepare('INSERT OR REPLACE INTO reprocessings (name, done_at) VALUES (?, ?)').run(name, doneAt);
   }
 
   get schemaVersion(): number {

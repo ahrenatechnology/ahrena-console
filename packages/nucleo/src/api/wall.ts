@@ -12,9 +12,10 @@
 //   card stays on the wall as long as an idle session takes to be considered abandoned.
 // - `abandoned` never comes in.
 //
-// Order: first the ones that need you (state `waiting` or `error`), the urgent ones first (an error is
-// urgent, as in the panel's "precisam de você"), and among them the most recent request; then the
-// others, by the most recent activity.
+// Order (#245): first the ones that need you (`attention.level` `blocked`, errors included), the urgent
+// ones first (an error is urgent, as in the panel's "precisam de você"), and among them the most recent
+// request; then the idle ones (`idle`: the turn ended, Esc, at the prompt), the most recent first; then
+// the others, by the most recent activity.
 //
 // No import cycle: this module only imports types from panel.ts; server.ts builds the wall from
 // the panel builder (`muralDoPainel`).
@@ -26,7 +27,7 @@
 // requests wait for the same build, like the panel's "precisam de você".
 //
 // Effort: the `effort` of the Claude Desktop index (`local_*.json`, already read by DesktopIndex) and,
-// without it, `metadata.esforco` (the simulator writes it; the terminal ingestion does not know the effort yet).
+// without it, `metadata.effort` (the simulator writes it; the terminal ingestion does not know the effort yet).
 // A terminal-only session: `null`.
 //
 // Branch: the Desktop's or `metadata.branch`; without them, what the work-by-branch already knows and,
@@ -103,11 +104,12 @@ export class MontadorDoMural {
       if (!ehAberta(session, this.painel.desktopDaSessao(session.id), agora, this.recenteMs)) continue;
       lidas.push({ leitura: await this.painel.leituraDaSessao(session), updatedAt: session.updatedAt });
     }
-    const precisa = (l: LeituraDaSessao) => PRECISA.has(l.inbox.state);
+    const rank = (l: LeituraDaSessao) => (l.sessao.attention?.level === 'blocked' ? 0 : l.sessao.attention?.level === 'idle' ? 1 : 2);
     lidas.sort((a, b) => {
       const [x, y] = [a.leitura, b.leitura];
-      if (precisa(x) !== precisa(y)) return precisa(x) ? -1 : 1;
-      if (precisa(x)) return Number(urgenteDe(y)) - Number(urgenteDe(x)) || y.sessao.since.localeCompare(x.sessao.since);
+      if (rank(x) !== rank(y)) return rank(x) - rank(y);
+      if (rank(x) === 0) return Number(urgenteDe(y)) - Number(urgenteDe(x)) || y.sessao.since.localeCompare(x.sessao.since);
+      if (rank(x) === 1) return y.sessao.since.localeCompare(x.sessao.since);
       return b.updatedAt.localeCompare(a.updatedAt);
     });
     const cards = lidas.map(({ leitura }) => cardDe(leitura));
@@ -118,6 +120,8 @@ export class MontadorDoMural {
         all: cards.length,
         waiting: cards.filter((c) => PRECISA.has(c.state)).length,
         active: cards.filter((c) => ATIVA.has(c.state)).length,
+        blocked: cards.filter((c) => c.attention?.level === 'blocked').length,
+        idle: cards.filter((c) => c.attention?.level === 'idle').length,
       },
       cards,
     };
@@ -167,6 +171,7 @@ function cardDe(leitura: LeituraDaSessao): WallCard {
     state: sessao.state,
     reason: sessao.reason,
     urgent: urgenteDe(leitura),
+    attention: sessao.attention,
     since: sessao.since,
     activity: sessao.activity,
     model: sessao.model,

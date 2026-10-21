@@ -201,13 +201,20 @@ main { min-width: 0; padding-block: 24px 80px; padding-left: max(16px, env(safe-
 .b-completed { background: var(--status-completed-badge); color: var(--status-completed-text); }
 .b-error { background: var(--status-error-badge); color: var(--status-error-text); }
 .b-abandoned { background: var(--status-abandoned-badge); color: var(--status-abandoned-text); }
+/* attention (#245): blocked = "Precisa de você", yellow; idle = "Ociosa", neutral, hollow dot, no highlight */
+.b-blocked { background: var(--status-waiting-badge); color: var(--status-waiting-text); font-weight: 600; }
+.b-idle { background: transparent; color: var(--muted); box-shadow: inset 0 0 0 1px var(--border); }
+.b-idle .p { background: transparent; box-shadow: inset 0 0 0 1.5px currentColor; }
 .mot { display: inline-flex; align-items: center; gap: 4px; height: 18px; padding: 0 7px; margin-left: 2px; border-radius: 99px; font-size: 10.5px; font-weight: 600;
   background: color-mix(in srgb, var(--status-waiting-text) 16%, transparent); color: var(--status-waiting-text); }
-.mot.leve { font-weight: 500; }
+.mot.leve { font-weight: 500; background: transparent; color: var(--muted); box-shadow: inset 0 0 0 1px var(--border); }
+.mot.err { background: color-mix(in srgb, var(--status-error-text) 16%, transparent); color: var(--status-error-text); }
 .c-active { color: var(--status-active-text); } .c-waiting { color: var(--status-waiting-text); } .c-completed { color: var(--status-completed-text); }
+.c-blocked { color: var(--status-waiting-text); } .c-idle { color: var(--muted); }
 .c-error { color: var(--status-error-text); } .c-abandoned { color: var(--status-abandoned-text); } .c-muted { color: var(--muted); } .c-accent { color: var(--accent-text); }
 .d-active { background: var(--status-active-dot); } .d-waiting { background: var(--status-waiting-dot); } .d-completed { background: var(--status-completed-dot); }
 .d-error { background: var(--status-error-dot); } .d-abandoned { background: var(--status-abandoned-dot); }
+.d-blocked { background: var(--status-waiting-dot); } .d-idle { background: transparent; box-shadow: inset 0 0 0 1.5px var(--muted); }
 .ponto { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex: none; }
 .live { display: inline-flex; align-items: center; gap: 5px; height: 20px; padding: 0 8px; border-radius: 99px; font-size: 11px; font-weight: 500; background: var(--status-completed-badge); color: var(--status-completed-text); }
 .live::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
@@ -257,7 +264,7 @@ main { min-width: 0; padding-block: 24px 80px; padding-left: max(16px, env(safe-
 .agente { display: grid; grid-template-columns: 18px minmax(0, 1fr); gap: 6px; align-items: start; }
 .agente .exp { color: var(--muted); padding-top: 34px; font-size: 14px; }
 .ac { padding: 12px 14px; border-left: 3px solid var(--border); display: flex; flex-direction: column; gap: 8px; height: 148px; overflow: hidden; }
-.ac.st-active { border-left-color: var(--status-active-dot); } .ac.st-waiting { border-left-color: var(--status-waiting-dot); }
+.ac.st-active { border-left-color: var(--status-active-dot); } .ac.st-blocked { border-left-color: var(--status-waiting-dot); }
 .ac.st-error { border-left-color: var(--status-error-dot); } .ac.st-completed { border-left-color: var(--status-completed-dot); } .ac.st-abandoned { border-left-color: var(--status-abandoned-dot); }
 .ac .l1 { display: flex; gap: 10px; align-items: flex-start; }
 .ac .av { width: 28px; height: 28px; border-radius: 8px; background: var(--raised); display: grid; place-items: center; color: var(--muted); flex: none; font-size: 14px; }
@@ -296,7 +303,7 @@ main { min-width: 0; padding-block: 24px 80px; padding-left: max(16px, env(safe-
 .kc > * { flex: none; }
 .kc .badge { height: 20px; font-size: 11px; padding: 0 7px; } .kc .mot { font-size: 10px; height: 17px; }
 .kc { padding: 11px 12px; height: 196px; display: flex; flex-direction: column; gap: 7px; overflow: hidden; border-left: 3px solid var(--border); }
-.kc.st-active { border-left-color: var(--status-active-dot); } .kc.st-waiting { border-left-color: var(--status-waiting-dot); } .kc.st-completed { border-left-color: var(--status-completed-dot); }
+.kc.st-active { border-left-color: var(--status-active-dot); } .kc.st-blocked { border-left-color: var(--status-waiting-dot); } .kc.st-completed { border-left-color: var(--status-completed-dot); }
 .kc.st-error { border-left-color: var(--status-error-dot); } .kc.st-abandoned { border-left-color: var(--status-abandoned-dot); }
 .kc .l1 { display: flex; gap: 8px; align-items: flex-start; min-width: 0; }
 .kc .l1 .tt { font-size: 12.5px; font-weight: 600; } .kc .l1 small { display: block; color: var(--muted); font-family: var(--font-mono); font-size: 10.5px; }
@@ -355,7 +362,7 @@ main { min-width: 0; padding-block: 24px 80px; padding-left: max(16px, env(safe-
 /* mural */
 .mural { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
 .mc { padding: 14px; height: 214px; display: flex; flex-direction: column; gap: 9px; border-top: 3px solid var(--border); overflow: hidden; }
-.mc.st-active { border-top-color: var(--status-active-dot); } .mc.st-waiting { border-top-color: var(--status-waiting-dot); } .mc.st-error { border-top-color: var(--status-error-dot); }
+.mc.st-active { border-top-color: var(--status-active-dot); } .mc.st-blocked { border-top-color: var(--status-waiting-dot); } .mc.st-error { border-top-color: var(--status-error-dot); }
 .mc .l1 { display: flex; gap: 8px; align-items: center; } .mc .l1 .badge { margin-left: auto; }
 .mc .tt { font-size: 13.5px; font-weight: 600; } .mc .pj { font-family: var(--font-mono); font-size: 11px; color: var(--muted); }
 .mc .gr { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
@@ -394,7 +401,7 @@ main { min-width: 0; padding-block: 24px 80px; padding-left: max(16px, env(safe-
 .pc .ln { display: flex; align-items: center; gap: .8ch; min-width: 0; white-space: nowrap; }
 .pc .ln > .trunc { flex: 1; }
 .pc.st-active { border-color: color-mix(in srgb, var(--status-active-dot) 70%, var(--border)); }
-.pc.st-waiting { border-color: color-mix(in srgb, var(--status-waiting-dot) 75%, var(--border)); background: color-mix(in srgb, var(--status-waiting-badge) 55%, var(--surface)); }
+.pc.st-blocked, .pc.st-waiting { border-color: color-mix(in srgb, var(--status-waiting-dot) 75%, var(--border)); background: color-mix(in srgb, var(--status-waiting-badge) 55%, var(--surface)); }
 .pc.st-error { border-color: color-mix(in srgb, var(--status-error-dot) 75%, var(--border)); background: color-mix(in srgb, var(--status-error-badge) 55%, var(--surface)); }
 .pc.st-completed { border-color: color-mix(in srgb, var(--status-completed-dot) 70%, var(--border)); }
 .pc.st-abandoned { border-color: color-mix(in srgb, var(--status-abandoned-dot) 60%, var(--border)); }
@@ -485,6 +492,31 @@ main { min-width: 0; padding-block: 24px 80px; padding-left: max(16px, env(safe-
 .janela .tb .nm { flex: 1; text-align: center; color: var(--text); }
 .janela .cc { width: 100%; border: 0; border-radius: 0; overflow: hidden; }
 
+/* ---------- Analytics · Entregas (C54 to C56, issue #266) ---------- */
+.dl-bar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.dl-bar .campo { margin-left: auto; }
+.dl-card { padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.dl-grid { display: grid; gap: 10px; }
+.dl-small { border: 1px solid var(--border); border-radius: 10px; padding: 9px 11px 7px; background: var(--bg); min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.dl-small-top { display: flex; gap: 8px; align-items: baseline; font-size: 12px; }
+.dl-small-top b { font-weight: 500; min-width: 0; }
+.dl-small-top span { margin-left: auto; color: var(--muted); font-family: var(--font-mono); font-size: 10.5px; white-space: nowrap; }
+.dl-small-sub { font-size: 10.5px; color: var(--muted); font-family: var(--font-mono); }
+.dl-svg { width: 100%; height: 56px; display: block; }
+.dl-axis { display: flex; justify-content: space-between; font-size: 9.5px; color: var(--muted); font-family: var(--font-mono); }
+.dl-key-bar { display: inline-block; width: 10px; height: 10px; border-radius: 2px; background: var(--accent); }
+.dl-key-line { display: inline-block; width: 14px; border-top: 1.5px dashed var(--muted); }
+.dl-table th.n, .dl-table td.n, .dl-table td.dl-heat { text-align: right; }
+.dl-table td { padding: 8px 12px; } .dl-table th { padding: 8px 12px; }
+.dl-heat span { display: inline-block; min-width: 64px; padding: 3px 8px; border-radius: 6px; font-family: var(--font-mono); font-size: 11.5px; text-align: right; }
+.dl-none { color: var(--muted); font-family: var(--font-mono); padding-right: 20px !important; }
+.dl-open-bar { display: flex; gap: 10px; align-items: center; }
+.dl-open { display: flex; flex-direction: column; }
+.dl-open-row { display: grid; grid-template-columns: 18px 52px minmax(0, 1fr) minmax(0, 240px) 128px 44px; gap: 10px; align-items: center; padding: 7px 2px; border-bottom: 1px solid var(--border); font-size: 12.5px; }
+.dl-open-row .pill { justify-self: start; }
+.dl-age { text-align: right; color: var(--muted); }
+.dl-hm span { min-width: 48px; text-align: center; } .dl-zero { color: var(--muted); }
+.dl-faded > .cartao:nth-child(-n+2) { opacity: .55; }
 /* ---------- modo captura ---------- */
 body.captura .topo, body.captura .indice, body.captura .notas, body.captura .capitulo, body.captura .tela:not(.alvo), body.captura .perguntas, body.captura #perguntas { display: none !important; }
 body.captura .pagina { display: block; } body.captura main { padding: 20px 24px; display: inline-block; } body.captura .tela { margin: 0; }
@@ -563,6 +595,33 @@ body.captura[data-width="1100"] .width-col[data-w="1440"], body.captura[data-wid
 .tm-states > .cartao { min-width: 0; }
 .tm-stack { display: flex; height: 8px; border-radius: 99px; overflow: hidden; background: var(--raised); }
 .tm-stack i { display: block; height: 100%; }
+/* ---------- reconnect the remote machine (C50 and A8, issue #244, decision 0012) ---------- */
+.tm-rc { display: flex; flex-direction: column; gap: 28px; }
+.tm-rc-row { display: flex; gap: 24px; align-items: flex-start; }
+.tm-rc-note { position: static; width: 300px; flex: none; padding-top: 22px; display: flex; flex-direction: column; gap: 12px; }
+.tm-rc-note code { font-size: 11px; }
+.faixa .tm-rc-actions { margin-left: auto; display: flex; gap: 8px; flex: none; align-items: center; }
+.faixa .tm-rc-actions .btn { margin-left: 0; }
+.faixa.tm-rc-band { align-items: flex-start; }
+.faixa.tm-rc-band .ic { margin-top: 1px; }
+.tm-rc-text { min-width: 0; flex: 1; }
+.tm-rc-cmd { margin-top: 6px; font-family: var(--font-mono); font-size: 11px; color: var(--muted); overflow-wrap: anywhere; }
+.btn.tm-rc-off { opacity: .55; cursor: not-allowed; }
+.faixa.tm-rc-ok { background: color-mix(in srgb, var(--status-completed-badge) 70%, var(--surface)); border-color: color-mix(in srgb, var(--status-completed-dot) 50%, var(--border)); }
+.faixa.tm-rc-ok .ic, .faixa.tm-rc-ok b { color: var(--status-completed-text); }
+.tm-rc-steps { display: flex; gap: 8px; align-items: center; flex-wrap: nowrap; white-space: nowrap; margin-top: 8px; font-size: 11.5px; color: var(--muted); }
+.tm-rc-steps > span { display: inline-flex; gap: 5px; align-items: center; }
+.tm-rc-steps .done { color: var(--status-completed-text); }
+.tm-rc-steps .on { color: var(--text); font-weight: 600; }
+.tm-rc-time { display: flex; align-items: center; gap: 10px; margin-top: 8px; font-family: var(--font-mono); font-size: 11px; color: var(--muted); }
+.tm-rc-time .tm-stack { width: 200px; height: 6px; }
+.tm-rc-clip { max-height: 520px; overflow: hidden; -webkit-mask-image: linear-gradient(to bottom, #000 60%, transparent); mask-image: linear-gradient(to bottom, #000 60%, transparent); }
+.tm-rc-setup { padding: 16px 18px; display: flex; flex-direction: column; gap: 12px; }
+.tm-rc-setup h5 { margin: 0; font-size: 13.5px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+.tm-rc-setup ol { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 10px; font-size: 12.5px; }
+.tm-rc-setup ol li > span { color: var(--muted); }
+.tm-rc-setup .tm-config { margin-top: 6px; }
+.tm-rc-setup .tm-legend { gap: 8px 18px; }
 /* ---------- Dev Console (C27) ---------- */
 .dev-queue { list-style: none; margin: 0; padding: 0; counter-reset: dev; }
 .dev-queue li { counter-increment: dev; display: grid; grid-template-columns: 26px 170px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 9px 14px; border-bottom: 1px solid var(--border); font-size: 12.5px; }
@@ -588,6 +647,32 @@ body.captura[data-width="1100"] .width-col[data-w="1440"], body.captura[data-wid
 .dev-list > div:last-child { border-bottom: 0; }
 .dev-list b { font-family: var(--font-mono); font-size: 11.5px; color: var(--accent-text); font-weight: 500; }
 .dev-list .t { margin-left: auto; color: var(--muted); font-size: 11.5px; white-space: nowrap; }
+/* ---------- attention split (#245): "Precisa de você" and "Ociosa" ---------- */
+.dash-inbox-grid { grid-template-columns: repeat(5, minmax(0, 1fr)) !important; }
+.dash-inbox-grid .mini .pe { white-space: nowrap; gap: 6px; } .dash-inbox-grid .mini .pe span { overflow: hidden; text-overflow: ellipsis; min-width: 0; } .dash-inbox-grid .mini .pe b { flex: none; }
+.dash-idle { padding: 9px 14px; display: flex; align-items: center; gap: 14px; font-size: 12px; color: var(--muted); min-width: 0; }
+.dash-idle .dash-idle-t { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; color: var(--muted); }
+.dash-idle .dash-idle-t b { color: var(--text); font-weight: 500; }
+.dash-idle .dash-idle-i { display: inline-flex; align-items: center; gap: 6px; min-width: 0; white-space: nowrap; overflow: hidden; flex: 0 1 auto; }
+.mot { white-space: nowrap; flex: none; }
+.cc.w1100 .col .cab { letter-spacing: .03em; min-height: 32px; line-height: 1.25; }
+.cc.w1100 .col .cab > span:nth-child(2) { min-width: 0; } .cc.w1100 .col .cab .n { flex: none; }
+.cc.w1100 .kc .pe { grid-template-columns: auto auto; justify-content: space-between; gap: 3px 6px; } .cc.w1100 .kc .pe svg { display: none; }
+.cc.w1100 .kanban-session-card .pe span:nth-child(-n+2) { display: none; }
+.cc.w1100 .ac .rodape span { white-space: nowrap; } .cc.w1100 .ac .rodape .trunc { flex: 1; min-width: 0; display: block; }
+.dash-idle .dash-idle-i .mono { font-size: 11.5px; }
+.dash-idle .r { margin-left: auto; white-space: nowrap; display: inline-flex; align-items: center; gap: 4px; }
+.sessions-filters { flex-wrap: wrap; }
+.sessions-filters .seg span b { font-weight: 500; font-family: var(--font-mono); font-size: 10.5px; color: var(--muted); }
+.sessions-table td, .sessions-table th { padding-left: 10px; padding-right: 10px; }
+.mural-reason { display: flex; gap: 6px; align-items: center; min-width: 0; font-size: 11.5px; }
+.mc.st-idle { border-top-color: color-mix(in srgb, var(--muted) 45%, var(--border)); }
+.kc.st-idle, .ac.st-idle { border-left-color: color-mix(in srgb, var(--muted) 45%, var(--border)); }
+.kanban-col-idle { background: transparent; border-style: dashed; }
+.detail-idle-note { display: flex; gap: 10px; align-items: center; font-size: 12px; color: var(--muted); padding: 2px 2px; }
+.dev-card.idle { border-left-color: color-mix(in srgb, var(--muted) 45%, var(--border)); }
+.legend-attn { display: flex; flex-direction: column; gap: 8px; }
+.legend-attn .legend-attn-g { font-size: 11.5px; color: var(--muted); }
 </style>
 
 <header class="topo">
@@ -621,39 +706,53 @@ const ic = n => `<i data-lucide="${n}"></i>`
 // =====================================================================
 // Dados sintéticos (vocabulário de packages/nucleo/src/simulador)
 // =====================================================================
+// #245: the old waiting state splits in two. blocked = "Precisa de você" (the núcleo's `blocking` group, yellow, highlighted);
+// idle = "Ociosa" (the `your_turn` group, neutral, no highlight). Error keeps its own red status, and counts as blocking.
 const ST = {
-  active: { r: 'Ativa', g: '●' }, waiting: { r: 'Esperando você', g: '◐' }, completed: { r: 'Concluída', g: '✓' },
-  error: { r: 'Com erro', g: '✕' }, abandoned: { r: 'Abandonada', g: '○' },
+  active: { r: 'Ativa', p: 'Ativas', g: '●' }, blocked: { r: 'Precisa de você', p: 'Precisam de você', g: '◐' }, idle: { r: 'Ociosa', p: 'Ociosas', g: '◌' },
+  completed: { r: 'Concluída', p: 'Concluídas', g: '✓' }, error: { r: 'Com erro', p: 'Com erro', g: '✕' }, abandoned: { r: 'Abandonada', p: 'Abandonadas', g: '○' },
 }
+// The reasons, with the keys of the núcleo (packages/nucleo/src/mcp/README.md): group blocking or your_turn.
 const MOT = {
-  notification: { r: 'Pede permissão', u: true, ic: 'shield-alert' },
-  interrupted: { r: 'Interrompida', u: true, ic: 'pause-circle' },
-  stop: { r: 'Sua vez', u: false, ic: 'corner-down-left' },
-  session_start: { r: 'No prompt', u: false, ic: 'terminal' },
+  permission: { r: 'Pede permissão', group: 'blocking', ic: 'shield-alert' },
+  question: { r: 'Pergunta', group: 'blocking', ic: 'message-circle-question' },
+  plan: { r: 'Plano para aprovar', group: 'blocking', ic: 'list-checks' },
+  decision: { r: 'Decisão pedida', group: 'blocking', ic: 'hand' },
+  error: { r: 'Com erro', group: 'blocking', ic: 'x-circle' },
+  turn_ended: { r: 'Sua vez', group: 'your_turn', ic: 'corner-down-left' },
+  interrupted: { r: 'Interrompida', group: 'your_turn', ic: 'pause-circle' },
+  first_prompt: { r: 'No prompt', group: 'your_turn', ic: 'terminal' },
 }
 const S = [
   { id: '7f3a2c1e', nome: 'Kanban de sessões no artefato', pj: 'vitrine-demo', st: 'active', mo: 'Opus 5.5', esf: 'alto', custo: '1,84', dur: '12 min', idade: 'agora', ag: 2, sub: 1, turnos: 18, br: 'feat/42-kanban', msgs: ['agora roda os testes', 'cobre também o caso vazio'], tarefa: 'Rodar a bateria', plano: [3, 5], ctx: 31 },
-  { id: 'b91d04aa', nome: 'Migração do esquema de pedidos', pj: 'motor-de-regras', st: 'waiting', mot: 'notification', mo: 'Opus 5.5', esf: 'alto', custo: '2,10', dur: '34 min', idade: '2 min', ag: 3, sub: 0, turnos: 22, br: 'feat/58-pedidos', msgs: ['escreva a migração do esquema de pedidos', 'pode seguir'], pede: 'Bash: npm run migrate', plano: [4, 6], ctx: 54 },
-  { id: '2c8e6f10', nome: 'Filtro por categoria', pj: 'app-receitas', st: 'waiting', mot: 'interrupted', mo: 'Sonnet 5.5', esf: 'médio', custo: '0,88', dur: '21 min', idade: '6 min', ag: 1, sub: 0, turnos: 9, br: 'feat/12-filtro', msgs: ['implemente o filtro por categoria', 'deixa mais simples'], pede: 'Esc no meio do turno', plano: [2, 4], ctx: 22 },
-  { id: 'e04b7d93', nome: 'Retry com backoff na fila', pj: 'fila-de-tarefas', st: 'waiting', mot: 'stop', mo: 'Sonnet 5.5', esf: 'médio', custo: '0,41', dur: '15 min', idade: '1 min', ag: 1, sub: 0, turnos: 7, br: 'feat/9-retry', msgs: ['quebre o retry em uma função', 'faz o commit'], pede: '"Terminei a migração. Rodo os testes?"', plano: [5, 5], ctx: 18 },
+  { id: 'b91d04aa', nome: 'Migração do esquema de pedidos', pj: 'motor-de-regras', st: 'blocked', mot: 'permission', mo: 'Opus 5.5', esf: 'alto', custo: '2,10', dur: '34 min', idade: '2 min', ag: 3, sub: 0, turnos: 22, br: 'feat/58-pedidos', msgs: ['escreva a migração do esquema de pedidos', 'pode seguir'], pede: 'Bash: npm run migrate', plano: [4, 6], ctx: 54 },
+  { id: '2c8e6f10', nome: 'Filtro por categoria', pj: 'app-receitas', st: 'idle', mot: 'interrupted', mo: 'Sonnet 5.5', esf: 'médio', custo: '0,88', dur: '21 min', idade: '6 min', ag: 1, sub: 0, turnos: 9, br: 'feat/12-filtro', msgs: ['implemente o filtro por categoria', 'deixa mais simples'], pede: 'Esc no meio do turno', plano: [2, 4], ctx: 22 },
+  { id: 'e04b7d93', nome: 'Retry com backoff na fila', pj: 'fila-de-tarefas', st: 'idle', mot: 'turn_ended', mo: 'Sonnet 5.5', esf: 'médio', custo: '0,41', dur: '15 min', idade: '1 min', ag: 1, sub: 0, turnos: 7, br: 'feat/9-retry', msgs: ['quebre o retry em uma função', 'faz o commit'], pede: '"Fiz o commit. Rodo os testes?"', plano: [5, 5], ctx: 18 },
   { id: '5a61c2bf', nome: 'Relatório mensal mais rápido', pj: 'painel-de-metricas', st: 'error', mo: 'Opus 5.5', esf: 'alto', custo: '4,10', dur: '58 min', idade: '3 min', ag: 2, sub: 0, turnos: 23, br: 'perf/47-relatorio', msgs: ['otimize a consulta do relatório mensal', 'cobre também o caso vazio'], erro: 'API 529 · overloaded_error', plano: [3, 4], ctx: 84 },
+  { id: '4d2a9c35', nome: 'Cache das consultas do catálogo', pj: 'catalogo-exemplo', st: 'blocked', mot: 'question', mo: 'Opus 5.5', esf: 'alto', custo: '1,02', dur: '19 min', idade: '4 min', ag: 1, sub: 0, turnos: 8, br: 'perf/33-cache', msgs: ['acelere as consultas do catálogo', 'mede antes de mudar'], pede: 'Redis ou cache em memória? · 2 opções', plano: [2, 5], ctx: 29 },
+  { id: '8e17b6f2', nome: 'Lembretes por e-mail', pj: 'agenda-ficticia', st: 'blocked', mot: 'plan', mo: 'Opus 5.5', esf: 'alto', custo: '0,57', dur: '11 min', idade: '7 min', ag: 2, sub: 0, turnos: 4, br: 'feat/21-lembretes', msgs: ['planeje os lembretes por e-mail'], pede: 'Plano de 5 passos espera aprovação', plano: [0, 5], ctx: 15 },
+  { id: 'd6c0e4a9', nome: 'Exportar notas em Markdown', pj: 'cli-de-notas', st: 'blocked', mot: 'decision', mo: 'Sonnet 5.5', esf: 'médio', custo: '0,46', dur: '26 min', idade: '9 min', ag: 1, sub: 0, turnos: 12, br: 'feat/14-markdown', msgs: ['exporte as notas em Markdown', 'pode abrir o PR'], pede: 'Abro o PR agora ou espero o review do parser?', plano: [4, 4], ctx: 33 },
   { id: '91aa3e07', nome: 'Endpoint de exportação em CSV', pj: 'catalogo-exemplo', st: 'active', mo: 'Sonnet 5.5', esf: 'médio', custo: '0,73', dur: '6 min', idade: 'agora', ag: 1, sub: 0, turnos: 5, br: 'feat/31-csv', msgs: ['crie o endpoint de exportação em CSV'], tarefa: 'Escrever o serializador', plano: [1, 4], ctx: 12 },
   { id: 'c3f09b52', nome: 'Separar pagamentos em serviços', pj: 'motor-de-regras', st: 'active', mo: 'Opus 5.5', esf: 'alto', custo: '3,47', dur: '28 min', idade: 'agora', ag: 4, sub: 3, turnos: 9, br: 'refactor/pagamentos', msgs: ['quebre o módulo de pagamentos em serviços', 'explica a mudança antes de continuar'], tarefa: 'Extrair a cobrança', plano: [2, 6], ctx: 57 },
   { id: '0d7e81c4', nome: 'Paginação da listagem', pj: 'blog-estatico', st: 'completed', mo: 'Sonnet 5.5', esf: 'médio', custo: '0,62', dur: '20 min', idade: '1 h', ag: 1, sub: 0, turnos: 11, br: 'fix/5-paginacao', msgs: ['corrija a paginação da listagem'], plano: [4, 4], ctx: 0 },
   { id: '6b2f5a98', nome: 'Testes do parser de datas', pj: 'cli-de-notas', st: 'completed', mo: 'Haiku 5.5', esf: 'baixo', custo: '0,09', dur: '8 min', idade: '2 h', ag: 1, sub: 0, turnos: 6, br: 'test/datas', msgs: ['adicione testes ao parser de datas'], plano: [3, 3], ctx: 0 },
   { id: 'a8c4d117', nome: 'Configuração por variáveis de ambiente', pj: 'gateway-sandbox', st: 'abandoned', mo: 'Sonnet 5.5', esf: 'médio', custo: '0,35', dur: '3 h 10', idade: '4 h', ag: 1, sub: 0, turnos: 4, br: 'chore/env', msgs: ['migre a configuração para variáveis de ambiente'], plano: [1, 3], ctx: 0 },
-  { id: 'f5e2a6d0', nome: 'Layout da tela de cadastro', pj: 'agenda-ficticia', st: 'waiting', mot: 'session_start', mo: 'Sonnet 5.5', esf: 'médio', custo: '0,00', dur: '1 min', idade: 'agora', ag: 1, sub: 0, turnos: 0, br: 'main', msgs: [], pede: 'Sessão aberta, prompt vazio', plano: [0, 0], ctx: 0 },
+  { id: 'f5e2a6d0', nome: 'Layout da tela de cadastro', pj: 'agenda-ficticia', st: 'idle', mot: 'first_prompt', mo: 'Sonnet 5.5', esf: 'médio', custo: '0,00', dur: '1 min', idade: 'agora', ag: 1, sub: 0, turnos: 0, br: 'main', msgs: [], pede: 'Sessão aberta, prompt vazio', plano: [0, 0], ctx: 0 },
   { id: '3e9b1f6a', nome: 'Documentar a autenticação', pj: 'gateway-sandbox', st: 'completed', mo: 'Opus 5.5', esf: 'médio', custo: '1,12', dur: '41 min', idade: '5 h', ag: 2, sub: 1, turnos: 14, br: 'docs/auth', msgs: ['documente o fluxo de autenticação'], plano: [5, 5], ctx: 0 },
 ]
 const byId = id => S.find(s => s.id === id)
-// Decidido pelo dono: precisa de você = esperando (Pede permissão, Interrompida, Sua vez) + com erro. Urgentes primeiro.
-const PRECISAM = ['b91d04aa', '2c8e6f10', '5a61c2bf', 'e04b7d93'].map(byId)
+// #245: "precisam de você" is only what blocks the session (permission, question, plan, decision, error);
+// the núcleo orders the oldest wait first. The idle ones (your turn, interrupted, at the prompt) stay apart, neutral.
+const PRECISAM = ['d6c0e4a9', '8e17b6f2', '4d2a9c35', '5a61c2bf', 'b91d04aa'].map(byId)
+const OCIOSAS = ['2c8e6f10', 'e04b7d93', 'f5e2a6d0'].map(byId)
 
 // =====================================================================
 // Peças
 // =====================================================================
 const badge = (st, mot) => `<span class="badge b-${st}"><span class="p"></span>${ST[st].r}</span>${mot ? motChip(mot) : ''}`
-const motChip = mot => `<span class="mot${MOT[mot].u ? '' : ' leve'}">${ic(MOT[mot].ic)}${MOT[mot].r}</span>`
+// Blocking reasons: the strong chip (yellow; red for an error). Your-turn reasons: the light, neutral chip.
+const motChip = mot => `<span class="mot${MOT[mot].group === 'blocking' ? (mot === 'error' ? ' err' : '') : ' leve'}">${ic(MOT[mot].ic)}${MOT[mot].r}</span>`
+const sessionChip = s => s.mot ? motChip(s.mot) : motChip('error')
 const ponto = st => `<span class="ponto d-${st}"></span>`
 const barra = (pct, cor = 'var(--accent)') => `<div class="barra-h"><i style="width:${pct}%;background:${cor}"></i></div>`
 
@@ -679,7 +778,9 @@ function lado(ativo, q = 4, ws = 'ok') {
 const cab = (i, t, sub, acoes = '') => `<div class="cc-cab"><div class="ico">${ic(i)}</div><div><h4>${t} <span class="live">Ao vivo</span></h4><div class="sub">${sub}</div></div><div class="acoes">${acoes}</div></div>`
 const atualizar = `<span class="btn">${ic('refresh-cw')}Atualizar</span>`
 const stat = (rot, v, s, i, cor) => `<div class="cartao stat"><span class="rot">${rot}</span><span class="ic" style="color:${cor}">${ic(i)}</span><span class="v tab">${v}</span><span class="s">${s}</span></div>`
-const cc = (ativo, miolo, q) => `<div class="cc">${lado(ativo, q)}<div class="cc-main">${miolo}</div></div>`
+const cc = (ativo, miolo, q, w) => `<div class="cc${w ? ' w' + w : ''}">${lado(ativo, q)}<div class="cc-main">${miolo}</div></div>`
+// The screens #245 changes are shown at 1100 px, the width of the app window.
+const cc1100 = (ativo, miolo, q) => `<div class="width-col"><div class="rotulo">1100 px · a janela do app</div>${cc(ativo, miolo, q ?? 5, 1100)}</div>`
 
 function agentCard(s, aberto) {
   const sub = s.sub ? `<div class="subs">${ic('git-fork')} ${s.sub} subagente${s.sub > 1 ? 's' : ''}</div>` : ''
@@ -694,21 +795,21 @@ function agentCard(s, aberto) {
 // =====================================================================
 // CONSOLE (artefato e janela do app)
 // =====================================================================
-function telaDashboard(q = 4) {
+function telaDashboard(q = 5) {
   const ativos = [byId('7f3a2c1e'), byId('c3f09b52'), byId('b91d04aa')]
   const ativ = [
-    ['waiting', 'Pede permissão: Bash npm run migrate', 'motor-de-regras', 'agora'],
+    ['blocked', 'Pede permissão: Bash npm run migrate', 'motor-de-regras', 'agora'],
     ['active', 'Subagente test-runner iniciado', 'motor-de-regras', 'agora'],
     ['active', 'Turno concluído em 38,2 s', 'vitrine-demo', '12 s'],
-    ['waiting', 'Sua vez: "Rodo os testes?"', 'fila-de-tarefas', '1 min'],
+    ['idle', 'Sua vez: "Rodo os testes?"', 'fila-de-tarefas', '1 min'],
     ['error', 'Erro de API 529 · overloaded_error', 'painel-de-metricas', '3 min'],
-    ['waiting', 'Interrompida (Esc)', 'app-receitas', '6 min'],
+    ['blocked', 'Pergunta: Redis ou cache em memória?', 'catalogo-exemplo', '4 min'],
+    ['idle', 'Interrompida (Esc)', 'app-receitas', '6 min'],
     ['completed', 'Sessão encerrada', 'blog-estatico', '1 h'],
-    ['active', 'Sessão retomada', 'catalogo-exemplo', '1 h'],
   ]
   return `${cab('layout-dashboard', 'Dashboard', 'O agora das suas sessões', `<div class="seg"><span class="on">${ic('activity')}Monitor</span><span>${ic('gauge')}Saúde</span></div>${atualizar}`)}
   <div class="stats" style="grid-template-columns:repeat(3,minmax(0,1fr))">
-    ${stat('Sessões', '12<small>4 ativas</small>', '4 esperando · 1 com erro', 'folder-open', 'var(--accent-text)')}
+    ${stat('Sessões', '15<small>3 ativas</small>', '5 precisam de você · 3 ociosas', 'folder-open', 'var(--accent-text)')}
     ${stat('Agentes ativos', '4', 'em 4 sessões', 'bot', 'var(--status-active-text)')}
     ${stat('Subagentes ativos', '7', 'em 3 sessões', 'git-fork', 'var(--accent-text)')}
     ${stat('Eventos hoje', '3,2 mil', '+412 na última hora', 'zap', 'var(--status-waiting-text)')}
@@ -716,11 +817,14 @@ function telaDashboard(q = 4) {
     ${stat('Custo', '~US$ 41,20', 'estimativa · 30 dias', 'dollar-sign', 'var(--status-completed-text)')}
   </div>
   <div class="cartao inbox">
-    <div class="ttl">${ic('bell')}<span class="c-waiting">${q} precisam de você</span><span class="r">esperando e com erro · urgentes primeiro ${ic('chevron-right')}</span></div>
-    <div class="grade4">${PRECISAM.slice(0, q).map(s => `<div class="cartao mini"><div style="display:flex;gap:6px;align-items:center">${s.mot ? motChip(s.mot) : badge('error')}<span style="margin-left:auto;font-size:11px" class="c-muted">${s.idade}</span></div>
-      <div class="n trunc">${s.pj}</div><div class="x trunc">${s.pede ?? s.erro}</div><div class="pe"><span>${s.mo}</span><b>Abrir ›</b></div></div>`).join('')}
+    <div class="ttl">${ic('bell')}<span class="c-blocked">${q} precisam de você</span><span class="r">travadas até você agir · quem espera há mais tempo primeiro ${ic('chevron-right')}</span></div>
+    <div class="grade4 dash-inbox-grid">${PRECISAM.slice(0, q).map(s => `<div class="cartao mini"><div style="display:flex;min-width:0">${sessionChip(s)}</div>
+      <div class="n trunc">${s.pj}</div><div class="x trunc">${s.pede ?? s.erro}</div><div class="pe"><span>${s.mo} · ${s.idade}</span><b>Abrir ›</b></div></div>`).join('')}
     </div>
   </div>
+  <div class="cartao dash-idle"><span class="dash-idle-t"><span class="ponto d-idle"></span><b>${OCIOSAS.length} ociosas</b>· sem pressa</span>
+    ${OCIOSAS.map(s => `<span class="dash-idle-i">${motChip(s.mot)}<span class="mono trunc">${s.pj}</span></span>`).join('')}
+    <span class="r">Ver em Sessões ${ic('chevron-right')}</span></div>
   <div class="duas">
     <div style="display:flex;flex-direction:column;gap:10px"><div class="ttl">Agentes ativos<span class="r">Ver o quadro ${ic('arrow-right')}</span></div>${ativos.map(s => agentCard(s)).join('')}</div>
     <div style="display:flex;flex-direction:column;gap:10px"><div class="ttl">Atividade recente<span class="r">Ver tudo ${ic('arrow-right')}</span></div>
@@ -729,12 +833,12 @@ function telaDashboard(q = 4) {
 }
 
 function telaMural() {
-  const vivos = ['7f3a2c1e', 'c3f09b52', '91aa3e07', 'b91d04aa', '2c8e6f10', 'e04b7d93', '5a61c2bf', 'f5e2a6d0', '0d7e81c4'].map(byId)
-  return `${cab('layout-grid', 'Mural ao vivo', 'Um card por sessão aberta nesta máquina', `<div class="seg"><span class="on">Todas</span><span>Esperando</span><span>Ativas</span></div>${atualizar}`)}
+  const vivos = ['b91d04aa', '4d2a9c35', '8e17b6f2', '5a61c2bf', '7f3a2c1e', 'c3f09b52', 'e04b7d93', '2c8e6f10', 'f5e2a6d0'].map(byId)
+  return `${cab('layout-grid', 'Mural ao vivo', 'Um card por sessão aberta nesta máquina', `<div class="seg"><span class="on">Todas</span><span>Precisam de você · 5</span><span>Ociosas · 3</span><span>Ativas</span></div>${atualizar}`)}
   <div class="mural">${vivos.map(s => `<div class="cartao mc st-${s.st}">
     <div class="l1"><span class="tt trunc">${s.nome}</span>${badge(s.st)}</div>
     <div class="pj trunc">${s.pj} · ${s.br}</div>
-    ${s.mot ? `<div>${motChip(s.mot)} <span class="c-muted" style="font-size:11.5px">${s.pede}</span></div>` : s.erro ? `<div class="c-error" style="font-size:11.5px">${ic('x-circle')} ${s.erro}</div>` : (s.st === 'completed' ? `<div class="c-completed trunc" style="font-size:11.5px">${ic('check-circle-2')} Terminou sem erro</div>` : `<div class="c-muted trunc" style="font-size:11.5px">${ic('loader-2')} ${s.tarefa}</div>`)}
+    ${s.mot ? `<div class="mural-reason">${motChip(s.mot)}<span class="c-muted trunc">${s.pede}</span></div>` : s.erro ? `<div class="c-error" style="font-size:11.5px">${ic('x-circle')} ${s.erro}</div>` : (s.st === 'completed' ? `<div class="c-completed trunc" style="font-size:11.5px">${ic('check-circle-2')} Terminou sem erro</div>` : `<div class="c-muted trunc" style="font-size:11.5px">${ic('loader-2')} ${s.tarefa}</div>`)}
     <div class="gr"><div>Modelo<b>${s.mo.split(' ')[0]}</b></div><div>Esforço<b>${s.esf}</b></div><div>Agentes<b>${s.ag}</b></div><div>Custo<b>~${s.custo}</b></div></div>
     <div class="linhaplano"><span>Plano ${s.plano[0]}/${s.plano[1]}</span><span>contexto ${s.ctx}%</span></div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">${barra(s.plano[1] ? s.plano[0] / s.plano[1] * 100 : 0)}${barra(s.ctx, s.ctx >= 80 ? 'var(--status-error-dot)' : 'var(--accent)')}</div>
@@ -742,15 +846,17 @@ function telaMural() {
 }
 
 function telaSessoes() {
-  return `${cab('folder-open', 'Sessões', '12 sessões registradas', atualizar)}
-  <div class="cartao filtros"><span class="campo" style="flex:1">${ic('search')}Buscar sessões…</span><span class="campo" style="width:200px">Todos os projetos<span style="margin-left:auto">${ic('chevron-down')}</span></span>
-    <span class="campo" style="width:190px">Atividade: recente<span style="margin-left:auto">${ic('chevron-down')}</span></span><span class="campo">${ic('arrow-up-down')}</span>
-    <div class="seg"><span class="on">Todas</span><span>Ativas</span><span>Esperando</span><span>Concluídas</span><span>Erro</span><span>Abandonadas</span></div></div>
-  <div class="cartao"><table class="tabela"><thead><tr><th>Sessão</th><th>Status</th><th>Última atividade</th><th>Duração</th><th>Agentes</th><th>Custo</th><th>Diretório</th><th></th></tr></thead><tbody>
-  ${S.slice(0, 10).map(s => `<tr><td class="nm"><b>${s.nome}</b><small>${s.id}</small></td><td>${badge(s.st, s.mot)}</td><td class="c-muted">${s.idade === 'agora' ? 'agora' : 'há ' + s.idade}</td>
-    <td class="mono">${['active', 'waiting'].includes(s.st) ? '<span class="c-active">rodando</span> · ' : ''}${s.dur}</td><td class="mono">${s.ag}</td><td class="mono">~US$ ${s.custo}</td><td class="dir">/simulacao/${s.pj}</td><td class="c-muted">${ic('chevron-right')}</td></tr>`).join('')}
+  const rows = ['7f3a2c1e', 'b91d04aa', '4d2a9c35', '8e17b6f2', 'd6c0e4a9', '5a61c2bf', 'e04b7d93', '2c8e6f10', 'f5e2a6d0', '0d7e81c4'].map(byId)
+  const pill = (r, n, on) => `<span${on ? ' class="on"' : ''}>${r}${n != null ? ` <b>${n}</b>` : ''}</span>`
+  return `${cab('folder-open', 'Sessões', '15 sessões registradas', atualizar)}
+  <div class="cartao filtros sessions-filters"><span class="campo" style="flex:1;min-width:200px">${ic('search')}Buscar sessões…</span><span class="campo" style="width:180px">Todos os projetos<span style="margin-left:auto">${ic('chevron-down')}</span></span>
+    <span class="campo" style="width:170px">Atividade: recente<span style="margin-left:auto">${ic('chevron-down')}</span></span><span class="campo">${ic('arrow-up-down')}</span>
+    <div class="seg">${pill('Todas', 15, true)}${pill('Ativas', 3)}${pill('Precisam de você', 5)}${pill('Ociosas', 3)}${pill('Concluídas', 3)}${pill('Erro', 1)}${pill('Abandonadas', 1)}</div></div>
+  <div class="cartao"><table class="tabela sessions-table"><thead><tr><th>Sessão</th><th>Status</th><th>Atividade</th><th>Duração</th><th>Custo</th><th></th></tr></thead><tbody>
+  ${rows.map(s => `<tr><td class="nm"><b class="trunc" style="display:block;max-width:190px">${s.nome}</b><small class="trunc" style="display:block;max-width:190px">${s.id} · /simulacao/${s.pj}</small></td><td>${badge(s.st, s.mot)}</td><td class="c-muted">${s.idade === 'agora' ? 'agora' : 'há ' + s.idade}</td>
+    <td class="mono">${['active', 'blocked', 'idle'].includes(s.st) ? '<span class="c-active">rodando</span> · ' : ''}${s.dur}</td><td class="mono">~US$ ${s.custo}</td><td class="c-muted">${ic('chevron-right')}</td></tr>`).join('')}
   </tbody></table></div>
-  <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--muted)"><span>1–10 de 12</span><span style="display:flex;gap:6px"><span class="btn contorno">Anterior</span><span class="btn contorno">Próxima</span></span></div>`
+  <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--muted)"><span>1–10 de 15</span><span style="display:flex;gap:6px"><span class="btn contorno">Anterior</span><span class="btn contorno">Próxima</span></span></div>`
 }
 
 const detCab = s => `<div class="det-cab"><div class="l1"><span class="c-muted" style="font-size:18px">${ic('arrow-left')}</span><h4>${s.nome}</h4>${badge(s.st, s.mot)}<span style="margin-left:auto" class="c-muted">${ic('refresh-cw')}</span></div>
@@ -798,7 +904,7 @@ function anel(pct, tam) {
 function telaConversa() {
   const s = byId('b91d04aa')
   return `${detCab(s)}
-  <div class="faixa">${'<span class="ic">' + ic('shield-alert') + '</span>'}<div><b>Esperando você · Pede permissão.</b> O Claude quer rodar <code>npm run migrate</code> e aguarda sua aprovação na conversa. Há 2 min.</div><span class="btn contorno">Abrir no Claude Desktop ${ic('external-link')}</span></div>
+  <div class="faixa">${'<span class="ic">' + ic('shield-alert') + '</span>'}<div><b>Precisa de você · Pede permissão.</b> O Claude quer rodar <code>npm run migrate</code> e aguarda sua aprovação na conversa. Há 2 min.</div><span class="btn contorno">Abrir no Claude Desktop ${ic('external-link')}</span></div>
   ${abas(1, 3, '240/1.877')}
   <div style="display:flex;gap:10px;align-items:center"><span class="campo" style="width:260px">Agente principal<span style="margin-left:auto">${ic('chevron-down')}</span></span><span class="chip">${ic('message-square')}184 mensagens</span><span class="btn contorno">${ic('refresh-cw')}Atualizar</span></div>
   <div class="cartao" style="padding:16px 18px;display:flex;flex-direction:column;gap:16px">
@@ -814,13 +920,27 @@ function telaConversa() {
   </div>`
 }
 
+// #245: an idle session (turn ended) gets no yellow band: one muted line under the header, and the conversation.
+function telaConversaIdle() {
+  const s = byId('e04b7d93')
+  return `${detCab(s)}
+  <div class="detail-idle-note"><span class="ponto d-idle"></span><span>Ociosa · o turno terminou há 1 min e a vez é sua. Nada trava a sessão.</span><span class="btn contorno" style="margin-left:auto">Abrir no Claude Desktop ${ic('external-link')}</span></div>
+  ${abas(1, 1, '96/412')}
+  <div class="cartao" style="padding:16px 18px;display:flex;flex-direction:column;gap:16px">
+    <div class="msg"><span class="av eu">${ic('user')}</span><div><div class="quem">Você<span class="h">23:04</span></div><div class="corpo">quebre o retry em uma função e faz o commit</div></div></div>
+    <div class="msg"><span class="av">${ic('bot')}</span><div><div class="quem">Assistente<span class="chip">Sonnet 5.5</span><span class="chip">↓ 1,8 k · ↑ 420</span><span class="h">23:09</span></div>
+      <div class="corpo">Extraí <code>comBackoff()</code> em <code>src/fila/retry.ts</code> e fiz o commit. Rodo os testes?</div>
+      <div class="ferrbloco">${ic('chevron-right')}<span class="n">Bash</span><span class="cmd trunc">git commit -m "retry: extract backoff"</span><span class="ok">${ic('check-circle-2')}OK</span></div></div></div>
+  </div>`
+}
+
 function telaLinhaTempo() {
   const s = byId('b91d04aa')
   const ev = [
-    ['waiting', 'Notification', 'Pede permissão: Bash npm run migrate', 'Bash', 'agora'],
+    ['blocked', 'Notification', 'Pede permissão: Bash npm run migrate', 'Bash', 'agora'],
     ['active', 'PreToolUse', 'Bash: npm run migrate', 'Bash', '2 min'],
     ['active', 'UserPromptSubmit', '"pode seguir"', '', '3 min'],
-    ['waiting', 'Stop', 'Turno concluído em 41,7 s', '', '4 min'],
+    ['idle', 'Stop', 'Turno concluído em 41,7 s', '', '4 min'],
     ['active', 'PostToolUse', 'Bash: npm test -- pedidos (OK)', 'Bash', '4 min'],
     ['active', 'PostToolUse', 'Edit: migrations/0007_pedidos.sql', 'Edit', '5 min'],
     ['active', 'SubagentStop', 'Explore: mapear o esquema atual', 'Agent', '7 min'],
@@ -834,30 +954,34 @@ function telaLinhaTempo() {
 }
 
 function kanbanCard(s) {
-  return `<div class="cartao kc st-${s.st}"><div class="l1"><span class="av" style="width:24px;height:24px;border-radius:7px;background:var(--raised);display:grid;place-items:center;color:var(--muted);flex:none">${ic('folder')}</span>
+  return `<div class="cartao kc kanban-session-card st-${s.st}"><div class="l1"><span class="av" style="width:24px;height:24px;border-radius:7px;background:var(--raised);display:grid;place-items:center;color:var(--muted);flex:none">${ic('folder')}</span>
     <div class="trunc" style="flex:1"><div class="tt trunc">${s.nome}</div><small>${s.id}</small></div></div>
     <div>${badge(s.st, s.mot)}</div>
     <blockquote class="trunc">${s.msgs.at(-1) ?? '(prompt vazio)'}</blockquote><div class="cwd trunc">/simulacao/${s.pj}</div>
-    <div class="pe"><span>${ic('bot')}${s.ag} agente${s.ag > 1 ? 's' : ''}</span><span>${ic('cpu')}${s.mo}</span><span>${ic('coins')}~US$ ${s.custo}</span><span class="${['active', 'waiting'].includes(s.st) ? 'c-active' : ''}">${ic('timer')}${s.dur}</span></div></div>`
+    <div class="pe"><span>${ic('bot')}${s.ag} agente${s.ag > 1 ? 's' : ''}</span><span>${ic('cpu')}${s.mo}</span><span>${ic('coins')}~US$ ${s.custo}</span><span class="${['active', 'blocked', 'idle'].includes(s.st) ? 'c-active' : ''}">${ic('timer')}${s.dur}</span></div></div>`
 }
 function telaKanban() {
-  const cols = ['active', 'waiting', 'completed', 'error', 'abandoned']
+  // #245: the old waiting column splits in two. "Precisam de você" also takes the sessions with an error
+  // (a blocking reason in the núcleo), so the board keeps 5 columns and fits 1100 px.
+  const cols = [['active', ['active']], ['blocked', ['blocked', 'error']], ['idle', ['idle']], ['completed', ['completed']], ['abandoned', ['abandoned']]]
+  const order = ['blocked', 'error']
   return `${cab('kanban', 'Kanban', 'As sessões por status, só leitura', `<div class="seg"><span>Agentes</span><span class="on">Sessões</span></div>${atualizar}`)}
-  <div class="colunas" style="grid-template-columns:repeat(5,minmax(0,1fr))">${cols.map(st => {
-    const l = S.filter(s => s.st === st)
-    return `<div class="col"><div class="cab">${ponto(st)}<span class="c-${st}">${ST[st].r}</span><span class="n">${l.length}</span></div>${l.slice(0, 3).map(kanbanCard).join('')}${l.length > 3 ? `<div class="mais">mostrar mais ${l.length - 3}</div>` : ''}</div>`
+  <div class="colunas" style="grid-template-columns:repeat(5,minmax(0,1fr))">${cols.map(([st, sts]) => {
+    const l = S.filter(s => sts.includes(s.st)).sort((a, b) => order.indexOf(b.st) - order.indexOf(a.st))
+    return `<div class="col${st === 'idle' ? ' kanban-col-idle' : ''}"><div class="cab">${ponto(st)}<span class="c-${st}">${ST[st].p}</span><span class="n">${l.length}</span></div>${l.slice(0, 3).map(kanbanCard).join('')}${l.length > 3 ? `<div class="mais">mostrar mais ${l.length - 3}</div>` : ''}</div>`
   }).join('')}</div>`
 }
 function telaKanbanAgentes() {
   const ag = {
     working: [['Agente principal', 'Separar pagamentos em serviços', 'Opus 5.5', '28 min'], ['Explore', 'achar os usos de cobrar()', 'Haiku 5.5', '1 min'], ['code-reviewer', 'revisar o diff da extração', 'Sonnet 5.5', '40 s'], ['test-runner', 'rodar a bateria', 'Haiku 5.5', '12 s']],
-    waiting: [['Agente principal', 'Migração do esquema de pedidos', 'Opus 5.5', '2 min', 'notification'], ['Agente principal', 'Retry com backoff na fila', 'Sonnet 5.5', '1 min', 'stop'], ['Agente principal', 'Filtro por categoria', 'Sonnet 5.5', '6 min', 'interrupted']],
+    blocked: [['Agente principal', 'Migração do esquema de pedidos', 'Opus 5.5', '2 min', 'permission'], ['Agente principal', 'Cache das consultas do catálogo', 'Opus 5.5', '4 min', 'question']],
+    idle: [['Agente principal', 'Retry com backoff na fila', 'Sonnet 5.5', '1 min', 'turn_ended'], ['Agente principal', 'Filtro por categoria', 'Sonnet 5.5', '6 min', 'interrupted']],
     completed: [['Plan', 'plano da extração', 'Sonnet 5.5', '3 min'], ['Explore', 'mapear o esquema atual', 'Haiku 5.5', '7 min'], ['Agente principal', 'Paginação da listagem', 'Sonnet 5.5', '20 min']],
     error: [['test-runner', 'rodar a bateria do relatório', 'Haiku 5.5', '2 min']],
   }
-  const nome = { working: ['active', 'Trabalhando'], waiting: ['waiting', 'Esperando'], completed: ['completed', 'Concluídos'], error: ['error', 'Erro'] }
+  const nome = { working: ['active', 'Trabalhando'], blocked: ['blocked', 'Precisam de você'], idle: ['idle', 'Ociosos'], completed: ['completed', 'Concluídos'], error: ['error', 'Erro'] }
   return `${cab('kanban', 'Kanban', 'Os agentes por status, só leitura', `<div class="seg"><span class="on">Agentes</span><span>Sessões</span></div>${atualizar}`)}
-  <div class="colunas" style="grid-template-columns:repeat(4,minmax(0,1fr))">${Object.entries(ag).map(([k, l]) => `<div class="col"><div class="cab">${ponto(nome[k][0])}<span class="c-${nome[k][0]}">${nome[k][1]}</span><span class="n">${l.length}</span></div>
+  <div class="colunas" style="grid-template-columns:repeat(5,minmax(0,1fr))">${Object.entries(ag).map(([k, l]) => `<div class="col${k === 'idle' ? ' kanban-col-idle' : ''}"><div class="cab">${ponto(nome[k][0])}<span class="c-${nome[k][0]}">${nome[k][1]}</span><span class="n">${l.length}</span></div>
     ${l.map(([n, t, m, d, mot]) => `<div class="cartao kc st-${nome[k][0]}" style="height:128px"><div class="l1"><span class="av" style="width:24px;height:24px;border-radius:7px;background:var(--raised);display:grid;place-items:center;color:var(--muted)">${ic(n === 'Agente principal' ? 'bot' : 'git-fork')}</span><div class="trunc" style="flex:1"><div class="tt trunc">${n}</div><small class="trunc">${t}</small></div></div>
       <div>${badge(nome[k][0], mot)}</div><div class="pe"><span>${ic('cpu')}${m}</span><span>${ic('timer')}${d}</span></div></div>`).join('')}</div>`).join('')}</div>`
 }
@@ -927,20 +1051,21 @@ function telaProjeto() {
 // ---------- Feed de atividade ----------
 function telaFeed() {
   const ev = [
-    ['23:12', 'waiting', 'motor-de-regras', 'Migração do esquema de pedidos', 'principal', 'Pede permissão: Bash npm run migrate', 'Bash', 'agora'],
+    ['23:12', 'blocked', 'motor-de-regras', 'Migração do esquema de pedidos', 'principal', 'Pede permissão: Bash npm run migrate', 'Bash', 'agora'],
     ['23:12', 'active', 'motor-de-regras', 'Separar pagamentos em serviços', 'test-runner', 'Bash: npm test -- cobranca', 'Bash', 'agora', true],
     ['23:11', 'active', 'vitrine-demo', 'Kanban de sessões no artefato', 'principal', 'Turno concluído em 38,2 s', '', '12 s'],
-    ['23:11', 'waiting', 'fila-de-tarefas', 'Retry com backoff na fila', 'principal', 'Sua vez: "Terminei a migração. Rodo os testes?"', '', '1 min'],
+    ['23:11', 'idle', 'fila-de-tarefas', 'Retry com backoff na fila', 'principal', 'Sua vez: "Fiz o commit. Rodo os testes?"', '', '1 min'],
     ['23:09', 'error', 'painel-de-metricas', 'Relatório mensal mais rápido', 'principal', 'Erro de API 529 · overloaded_error', '', '3 min'],
     ['23:08', 'active', 'motor-de-regras', 'Separar pagamentos em serviços', 'code-reviewer', 'Read: src/cobranca/servico.ts', 'Read', '4 min'],
-    ['23:06', 'waiting', 'app-receitas', 'Filtro por categoria', 'principal', 'Interrompida (Esc)', '', '6 min'],
+    ['23:08', 'blocked', 'catalogo-exemplo', 'Cache das consultas do catálogo', 'principal', 'Pergunta: Redis ou cache em memória? · 2 opções', 'AskUserQuestion', '4 min'],
+    ['23:06', 'idle', 'app-receitas', 'Filtro por categoria', 'principal', 'Interrompida (Esc)', '', '6 min'],
   ]
   return `${cab('activity', 'Feed de atividade', 'Todos os eventos das sessões, ao vivo', `<span class="btn">${ic('pause')}Pausar</span>${atualizar}`)}
   <div class="cartao" style="padding:9px 14px;font-size:12px;color:var(--muted);display:flex;gap:8px;align-items:center">${ic('info')}<b style="color:var(--text);font-size:10.5px;letter-spacing:.08em">SOBRE EVENTOS, FILTROS E AGRUPAMENTO</b> · como ler as pílulas, o ciclo de vida e os filtros</div>
   <div class="cartao" style="padding:10px;display:flex;flex-direction:column;gap:8px"><div style="display:flex;gap:8px"><span class="campo" style="flex:1">${ic('filter')}Buscar no resumo, ferramenta, conteúdo…</span><span class="campo" style="width:150px">${ic('calendar')}De</span><span class="campo" style="width:150px">${ic('calendar')}Até</span></div>
     <div style="display:flex;gap:6px"><span class="chip">Status</span><span class="chip">Tipo de evento</span><span class="chip">Ferramenta</span><span class="chip">Sessão</span></div></div>
   <div class="cartao linhas">${ev.map(([h, st, pj, se, ag, f, fe, t, aberto]) => `<div class="linha"><span class="c-muted">${ic(aberto ? 'chevron-down' : 'chevron-right')}</span><span class="o mono" style="width:44px">${h}</span>${badge(st)}
-      <span class="o trunc" style="max-width:330px">${pj} › ${se} › ${ag}</span><span class="trunc" style="flex:1">${f}</span>${fe ? `<span class="chip">${fe}</span>` : ''}<span class="o" style="width:44px;text-align:right">${t}</span><span class="btn contorno" style="height:26px">Sessão ${ic('external-link')}</span></div>
+      <span class="o trunc" style="max-width:230px">${pj} › ${se} › ${ag}</span><span class="trunc" style="flex:1">${f}</span>${fe ? `<span class="chip">${fe}</span>` : ''}<span class="o" style="width:44px;text-align:right">${t}</span><span class="btn contorno" style="height:26px">Sessão ${ic('external-link')}</span></div>
     ${aberto ? `<div style="padding:4px 14px 14px 52px;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px;border-bottom:1px solid var(--border)">
       <div class="cartao" style="padding:10px 12px;background:var(--bg)"><div class="olhinho">Resumo</div><div class="ferrbloco" style="background:var(--surface)">${ic('terminal')}<span class="n">Bash</span><span class="cmd">npm test -- cobranca</span><span class="esp">${ic('loader-2')}rodando</span></div></div>
       <div style="display:grid;grid-template-columns:120px 1fr;gap:3px 10px;font-size:11.5px;font-family:var(--font-mono)">${[['Evento', 'PreToolUse'], ['Registrado', '18/10 23:12:04'], ['Sessão', 'c3f09b52-4e1'], ['Agente', 'test-runner · a7c2'], ['Ferramenta', 'Bash'], ['Call id', 'toolu_01Hx…9Qe']].map(([k, v]) => `<span class="c-muted">${k}</span><span>${v}</span>`).join('')}</div></div>` : ''}`).join('')}</div>`
@@ -989,6 +1114,120 @@ function telaAnalytics() {
   </div>`
 }
 
+// ---------- Analytics · Entregas (C54 to C56, issue #266) ----------
+// Per repository or per project, never per person: PRs merged per day (small multiples, each on its own scale),
+// lead time to merge, what is open and how old, and the Claude effort (session hours, estimated cost) of the same repository.
+const dlTabs = on => `<div class="seg" style="width:max-content">${['Visão geral', 'Custo', 'Entregas'].map((t, i) => `<span class="${i === on ? 'on' : ''}">${t}</span>`).join('')}</div>`
+const dlRand = seed => { let s = seed; return () => (s = (s * 9301 + 49297) % 233280) / 233280 }
+// [name, merged-per-day weight, Claude hours per day weight, merged, median lead time, open PRs, open issues, hours, cost]
+const DL_REPOS = [
+  ['motor-de-regras', 0.55, 0.8, 38, '6 h', 4, 9, 64.2, 128.4],
+  ['vitrine-demo', 0.35, 0.5, 24, '11 h', 3, 6, 38.5, 52.1],
+  ['painel-de-metricas', 0.25, 0.6, 15, '1,8 d', 2, 11, 41.0, 74.9],
+  ['gateway-sandbox', 0.2, 0.3, 11, '9 h', 1, 3, 17.6, 33.6],
+  ['catalogo-exemplo', 0.12, 0.25, 7, '3,2 d', 2, 5, 12.4, 21.8],
+  ['app-receitas', 0.08, 0, 4, '2,1 d', 1, 2, null, null],
+  ['fila-de-tarefas', 0, 0.2, 0, null, 2, 4, 6.3, 18.2],
+]
+const DL_PROJECTS = [
+  ['Loja de exemplo', ['vitrine-demo', 'catalogo-exemplo', 'gateway-sandbox'], 0.6, 0.9, 42, '13 h', 6, 14, 68.5, 107.5],
+  ['Plataforma de regras', ['motor-de-regras', 'fila-de-tarefas'], 0.55, 0.9, 38, '6 h', 6, 13, 70.5, 146.6],
+  ['Métricas', ['painel-de-metricas', 'app-receitas'], 0.3, 0.6, 19, '1,9 d', 3, 13, 41.0, 74.9],
+]
+function dlSeries(seed, wMerged, wHours, total) {
+  const r = dlRand(seed), merged = [], hours = []
+  for (let d = 0; d < 30; d++) {
+    const weekend = d % 7 === 5 || d % 7 === 6
+    merged.push(wMerged && !weekend ? Math.floor(r() * 4 * wMerged + (r() < wMerged ? 1 : 0)) : 0)
+    hours.push(wHours && !weekend ? +(r() * 6 * wHours + 0.4).toFixed(1) : 0)
+  }
+  const sum = merged.reduce((a, b) => a + b, 0)
+  if (total && sum !== total) { let diff = total - sum, i = 29; while (diff !== 0) { if (i % 7 < 5) { const step = diff > 0 ? 1 : (merged[i] > 0 ? -1 : 0); merged[i] += step; diff -= step } i = (i + 7) % 30 } }
+  return { merged, hours }
+}
+function dlSmall(name, sub, seed, wMerged, wHours, total) {
+  const { merged, hours } = dlSeries(seed, wMerged, wHours, total)
+  const peak = Math.max(...merged), maxH = Math.max(...hours, 1), W = 300, H = 64, bw = W / 30
+  const bars = merged.map((n, i) => n ? `<rect x="${(i * bw + 1).toFixed(1)}" y="${(H - n / peak * (H - 6)).toFixed(1)}" width="${(bw - 2.5).toFixed(1)}" height="${(n / peak * (H - 6)).toFixed(1)}" rx="1.5" fill="var(--accent)"/>` : '').join('')
+  const line = wHours ? `<polyline points="${hours.map((h, i) => `${(i * bw + bw / 2).toFixed(1)},${(H - h / maxH * (H - 6)).toFixed(1)}`).join(' ')}" fill="none" stroke="var(--muted)" stroke-opacity=".55" stroke-width="1.2" stroke-dasharray="3 2" vector-effect="non-scaling-stroke"/>` : ''
+  return `<div class="dl-small"><div class="dl-small-top"><b class="trunc">${name}</b><span>${total ? `pico ${peak} · total ${total}` : 'total 0'}</span></div>${sub ? `<div class="dl-small-sub trunc">${sub}</div>` : ''}
+    <svg viewBox="0 0 ${W} ${H + 1}" preserveAspectRatio="none" class="dl-svg" aria-hidden="true">${bars}${line}<line x1="0" x2="${W}" y1="${H + 0.5}" y2="${H + 0.5}" stroke="var(--border)" vector-effect="non-scaling-stroke"/></svg>
+    <div class="dl-axis"><span>21/09</span><span>20/10</span></div></div>`
+}
+const dlHeat = (v, max, txt) => v == null ? `<td class="dl-heat dl-none">—</td>` : `<td class="dl-heat"><span style="background:color-mix(in srgb, var(--accent) ${Math.round(12 + v / max * 58)}%, var(--surface))">${txt}</span></td>`
+const usd = v => `~US$ ${v.toFixed(2).replace('.', ',')}`
+function dlTable(rows, byProject) {
+  const mx = i => Math.max(...rows.map(r => r[i] ?? 0))
+  const off = byProject ? 1 : 0
+  return `<table class="tabela dl-table"><thead><tr><th>${byProject ? 'Projeto' : 'Repositório'}</th><th class="n">PRs mesclados</th><th class="n">Até o merge</th><th class="n">Abertos</th><th class="n">Horas do Claude</th><th class="n">Custo</th><th class="n">Custo por PR</th></tr></thead><tbody>
+    ${rows.map(r => { const [name] = r, merged = r[3 + off], lead = r[4 + off], oPr = r[5 + off], oIs = r[6 + off], h = r[7 + off], c = r[8 + off], per = c != null && merged ? c / merged : null
+      return `<tr><td class="nm"><b>${name}</b>${byProject ? `<small>${r[1].length} repositórios</small>` : ''}</td>${dlHeat(merged, mx(3 + off), merged)}<td class="mono n">${lead ?? '—'}</td><td class="mono n">${oPr} PRs · ${oIs} issues</td>
+        ${dlHeat(h, mx(7 + off), h != null ? `${String(h).replace('.', ',')} h` : '')}${dlHeat(c, mx(8 + off), c != null ? usd(c) : '')}${per == null ? `<td class="dl-heat dl-none">—</td>` : dlHeat(per, 5, usd(per))}</tr>` }).join('')}
+  </tbody></table>`
+}
+const DL_OPEN = [
+  ['issue', 312, 'Exportar o relatório em CSV', 'painel-de-metricas', 'sem PR', 'b-abandoned', '41 d'],
+  ['pr', 298, 'Trocar o motor de templates', 'catalogo-exemplo', 'rascunho', 'b-abandoned', '23 d'],
+  ['issue', 87, 'Retry com backoff na fila', 'fila-de-tarefas', 'PR #91 aberto', 'b-waiting', '19 d'],
+  ['pr', 1204, 'Separar pagamentos em serviços', 'motor-de-regras', 'CI ✕', 'b-error', '6 d'],
+  ['pr', 455, 'Cache das consultas do catálogo', 'catalogo-exemplo', 'esperando review', 'b-waiting', '4 d'],
+  ['pr', 1211, 'Migração do esquema de pedidos', 'motor-de-regras', 'aprovado', 'b-completed', '2 d'],
+]
+// Closed issues and reviews per repository, for the contribution heatmap (rows = repositories or projects, never people).
+const DL_EXTRA = { 'motor-de-regras': [21, 52], 'vitrine-demo': [12, 30], 'painel-de-metricas': [9, 18], 'gateway-sandbox': [6, 14], 'catalogo-exemplo': [4, 9], 'app-receitas': [3, 5], 'fila-de-tarefas': [1, 3] }
+const dlProjectOf = repo => DL_PROJECTS.find(p => p[1].includes(repo))[0]
+function dlContrib(byProject) {
+  const repo = n => DL_REPOS.find(r => r[0] === n)
+  const rows = byProject
+    ? DL_PROJECTS.map(([n, repos]) => [n, ...[r => r[5], r => r[3], r => r[6], r => DL_EXTRA[r[0]][0], r => DL_EXTRA[r[0]][1]].map(f => repos.reduce((a, x) => a + f(repo(x)), 0))])
+    : DL_REPOS.map(r => [r[0], r[5], r[3], r[6], DL_EXTRA[r[0]][0], DL_EXTRA[r[0]][1]])
+  const cell = (v, max) => `<td class="dl-heat dl-hm">${v ? `<span style="background:color-mix(in srgb, var(--accent) ${Math.round(14 + v / max * 70)}%, var(--surface))">${v}</span>` : '<span class="dl-zero">·</span>'}</td>`
+  return `<div class="cartao dl-card" style="padding-bottom:4px"><div class="ttl">Contribuições por tipo<span class="r">a cor mostra o peso de cada tipo dentro do próprio ${byProject ? 'projeto' : 'repositório'}</span></div>
+    <table class="tabela dl-table"><thead><tr><th>${byProject ? 'Projeto' : 'Repositório'}</th><th class="n">PRs abertos</th><th class="n">PRs mesclados</th><th class="n">Issues abertas</th><th class="n">Issues fechadas</th><th class="n">Revisões</th></tr></thead><tbody>
+    ${rows.map(([n, ...v]) => { const max = Math.max(...v, 1); return `<tr><td class="nm"><b>${n}</b></td>${v.map(x => cell(x, max)).join('')}</tr>` }).join('')}</tbody></table></div>`
+}
+function dlOpen(w, byProject) {
+  return `<div class="cartao dl-card"><div class="ttl">Em andamento<span class="r">55 abertos · os mais antigos primeiro</span></div>
+    <div class="dl-open-bar"><span class="campo" style="flex:1">${ic('search')}Buscar por título, repositório ou número</span><div class="seg"><span class="on">Todos</span><span>PRs</span><span>Issues</span></div></div>
+    <div class="dl-open">${DL_OPEN.map(([k, n, t, repo, st, cls, age]) => `<div class="dl-open-row"><span class="c-muted">${ic(k === 'pr' ? 'git-pull-request' : 'circle-dot')}</span><span class="mono c-muted">#${n}</span><span class="trunc">${t}</span><span class="mono c-muted trunc">${byProject ? `${dlProjectOf(repo)} · ${repo}` : repo}</span><span class="pill ${cls}">${st}</span><span class="mono dl-age">${age}</span></div>`).join('')}</div>
+    <div class="leg"><span>Mais 49 · role para ver</span></div></div>`
+}
+function telaEntregas(w, byProject = false) {
+  const cols = w === 1100 ? 3 : 4
+  const smalls = byProject
+    ? DL_PROJECTS.map(([n, repos, wm, wh, total], i) => dlSmall(n, repos.join(' · '), 11 + i * 7, wm, wh, total))
+    : DL_REPOS.map(([n, wm, wh, total], i) => dlSmall(n, '', 3 + i * 5, wm, wh, total))
+  return `${cab('bar-chart-3', 'Analytics', byProject ? 'O ritmo de entrega de cada GitHub Project, com o esforço do Claude nos repositórios dele' : 'O ritmo de entrega de cada repositório no GitHub, com o esforço do Claude no mesmo repositório', `<div class="seg"><span>7 dias</span><span class="on">30 dias</span><span>90 dias</span></div><span class="btn">${ic('download')}Exportar</span>`)}
+  <div class="dl-bar">${dlTabs(2)}<div class="seg"><span class="${byProject ? '' : 'on'}">Por repositório</span><span class="${byProject ? 'on' : ''}">Por projeto</span></div><span class="campo" style="width:220px">${byProject ? 'Todos os projetos' : 'Todos os repositórios'}<span style="margin-left:auto">${ic('chevron-down')}</span></span></div>
+  <div class="stats" style="${statCols(w)}">
+    ${stat('PRs mesclados', '99', '~3,3 por dia', 'git-merge', 'var(--status-completed-text)')}
+    ${stat('Até o merge', '9 h', 'mediana, do PR aberto ao merge', 'timer', 'var(--accent-text)')}
+    ${stat('Abertos', '55', '15 PRs · 40 issues', 'git-pull-request', 'var(--status-waiting-text)')}
+    ${stat('Horas do Claude', '180 h', 'em 6 dos 7 repositórios', 'clock', 'var(--accent-text)')}
+    ${stat('Custo', '~US$ 329', 'estimativa · 30 dias', 'dollar-sign', 'var(--status-completed-text)')}
+    ${stat('Custo por PR', '~US$ 3,32', 'custo ÷ PRs mesclados', 'scale', 'var(--accent-text)')}
+  </div>
+  ${dlContrib(byProject)}
+  <div class="cartao dl-card"><div class="ttl">Ritmo de entrega<span class="r">PRs mesclados por dia · últimos 30 dias</span></div>
+    <div class="leg"><span><i class="dl-key-bar"></i>PRs mesclados</span><span><i class="dl-key-line"></i>horas do Claude</span><span>Cada gráfico tem escala própria: o pico de cada ${byProject ? 'projeto' : 'repositório'} está no canto.</span></div>
+    <div class="dl-grid" style="grid-template-columns:repeat(${cols},minmax(0,1fr))">${smalls.join('')}</div></div>
+  <div class="cartao dl-card" style="padding-bottom:4px"><div class="ttl">Esforço e entrega<span class="r">${byProject ? 'o esforço do projeto é a soma dos repositórios dele' : 'a cor mostra o peso de cada valor na coluna'}</span></div>
+    ${dlTable(byProject ? DL_PROJECTS : DL_REPOS, byProject)}</div>
+  ${dlOpen(w, byProject)}`
+}
+function telaEntregasEstados() {
+  return `${cab('bar-chart-3', 'Analytics', 'O ritmo de entrega de cada repositório no GitHub, com o esforço do Claude no mesmo repositório', `<div class="seg"><span>7 dias</span><span class="on">30 dias</span><span>90 dias</span></div>`)}
+  <div class="dl-bar">${dlTabs(2)}</div>
+  <div class="rotulo">1 · GitHub não conectado</div>
+  <div class="cartao vazio" style="height:230px"><span class="ic">${ic('github')}</span><b>Conecte o GitHub para ver as entregas</b><span>A aba conta PRs e issues dos repositórios das suas sessões. Nada aparece até você conectar uma conta; o console não escolhe repositório por você.</span><span class="btn cheio">${ic('plug')}Conectar o GitHub</span></div>
+  <div class="rotulo">2 · GitHub fora ou limitando</div>
+  <div class="faixa erro"><span class="ic">${ic('x-circle')}</span><div><b>O GitHub não respondeu.</b> Mostrando os PRs e as issues em cache, lidos às 22:41. Horas e custo do Claude estão em dia: vêm das sessões desta máquina.</div><span class="btn contorno">Tentar agora</span></div>
+  <div class="stats dl-faded" style="grid-template-columns:repeat(3,minmax(0,1fr))">
+    ${stat('PRs mesclados', '97', 'até 22:41', 'git-merge', 'var(--status-completed-text)')}
+    ${stat('Até o merge', '9 h', 'mediana, até 22:41', 'timer', 'var(--accent-text)')}
+    ${stat('Horas do Claude', '180 h', 'agora', 'clock', 'var(--accent-text)')}
+  </div>`
+}
 // ---------- Workflows ----------
 const fase = n => `<span class="chip" style="font-family:var(--font-sans);color:var(--text)">${n}</span>`
 function grafoOrquestracao() {
@@ -1745,14 +1984,14 @@ function workstationBody(w) {
       <div class="tm-legend"><span><i style="background:var(--accent)"></i>Em uso</span><span><i style="background:var(--rose)"></i>Recuperável</span></div></div>
     <div class="cartao tm-card"><h5>${ic('folder-open')}Sessões do Claude lá<small>do /api/atencao de lá</small></h5>
       <table class="tabela"><tbody>
-        <tr><td class="nm"><b>Migração do esquema de pedidos</b><small>motor-de-regras · 2 min</small></td><td style="text-align:right">${badge('waiting')}</td></tr>
+        <tr><td class="nm"><b>Migração do esquema de pedidos</b><small>motor-de-regras · 2 min</small></td><td style="text-align:right">${badge('blocked')}</td></tr>
         <tr><td class="nm"><b>Relatório mensal mais rápido</b><small>painel-de-metricas · 3 min</small></td><td style="text-align:right">${badge('error')}</td></tr>
         <tr><td class="nm"><b>Endpoint de exportação em CSV</b><small>catalogo-exemplo · agora</small></td><td style="text-align:right">${badge('active')}</td></tr>
         <tr><td class="nm"><b>Separar pagamentos em serviços</b><small>motor-de-regras · agora</small></td><td style="text-align:right">${badge('active')}</td></tr>
       </tbody></table><span class="c-muted" style="font-size:11.5px">e mais 8 · as que esperam também vão para a bandeja</span></div>
     <div class="cartao tm-card" style="${spanAt(w, 2, 3)}"><h5>${ic('layers')}Stacks Docker e a sessão dona<small>a dona é a sessão aberta na pasta de onde a stack subiu</small></h5>
       <table class="tabela"><thead><tr><th>Stack</th><th>Containers</th><th>CPU</th><th>Portas</th><th>Sessão dona</th></tr></thead><tbody>
-        <tr><td class="mono">motor-regras-int</td><td class="mono">12</td><td class="mono">3,1 núcleos</td><td class="mono">18353</td><td>Migração do esquema de pedidos ${badge('waiting')}</td></tr>
+        <tr><td class="mono">motor-regras-int</td><td class="mono">12</td><td class="mono">3,1 núcleos</td><td class="mono">18353</td><td>Migração do esquema de pedidos ${badge('blocked')}</td></tr>
         <tr><td class="mono">painel-metricas</td><td class="mono">9</td><td class="mono">1,2 núcleo</td><td class="mono">14565</td><td>Relatório mensal mais rápido ${badge('error')}</td></tr>
         <tr><td class="mono">catalogo-local</td><td class="mono">8</td><td class="mono">0,8 núcleo</td><td class="mono">3000</td><td>Endpoint de exportação em CSV ${badge('active')}</td></tr>
         <tr><td class="mono">loja-validacao</td><td class="mono">15</td><td class="mono">0,4 núcleo</td><td class="mono">15432, 17233</td><td class="c-muted">nenhuma · parada há 2 dias</td></tr>
@@ -1776,13 +2015,93 @@ const workstationOfflineScreen = () => `${workstationHeader('off', 'última leit
   <div class="tm-faded">${workstationBody(1100)}</div>`
 const machineStatesScreen = () => `${cab('server', 'Workstation', 'Os outros estados de uma máquina remota')}
   <div class="tm-states" style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px">
-    <div class="cartao vazio" style="min-height:300px"><span class="ic" style="color:var(--status-waiting-text)">${ic('server-off')}</span><b>O túnel está de pé, mas o núcleo de lá não respondeu</b><span>A porta 14720 aceita a conexão e ninguém responde em 3 s. Suba o núcleo na Workstation:</span><span class="tm-config">node packages/nucleo/src/dono/cli.ts subir</span><span class="btn contorno">${ic('refresh-cw')}Tentar de novo</span></div>
+    <div class="cartao vazio" style="min-height:300px"><span class="ic" style="color:var(--status-waiting-text)">${ic('server-off')}</span><b>O túnel está de pé, mas o núcleo de lá não respondeu</b><span>A porta 14720 aceita a conexão e ninguém responde em 3 s. Suba o núcleo na Workstation:</span><span class="tm-config">node packages/nucleo/src/owner/cli.ts start</span><span class="btn contorno">${ic('refresh-cw')}Tentar de novo</span></div>
     <div class="cartao vazio" style="min-height:300px"><span class="ic">${ic('plug')}</span><b>Nenhuma máquina remota</b><span>Sem configuração, só esta máquina aparece. Para acompanhar outra, rode o núcleo nela, encaminhe a 4720 de lá por um túnel e grave:</span><span class="tm-config">~/.ahrena-console/machines.json
 { "machines": [{ "id": "workstation",
-  "rotulo": "Workstation", "porta": 14720 }] }</span></div>
+  "label": "Workstation", "port": 14720 }] }</span></div>
     <div class="cartao vazio" style="min-height:300px"><span class="ic" style="color:var(--status-waiting-text)">${ic('git-compare')}</span><b>Versão diferente lá</b><span>O núcleo de lá é a 0.0.1 e este é a 0.0.2. Mostramos o que as duas entendem; os cards que faltam ficam de fora até atualizar lá.</span></div>
   </div>
-  <div class="faixa"><span class="ic">${ic('info')}</span><div>O app <b>não sobe nem derruba o túnel</b>: só mostra. Subir, parar e encaminhar portas continua com a ferramenta que você já usa (decisão 0008).</div></div>`
+  <div class="faixa"><span class="ic">${ic('info')}</span><div>O app <b>não monta nem conhece o túnel</b>: subir, parar e encaminhar portas continua com a ferramenta que você já usa (decisão 0008). Com <code>reconnect</code> no machines.json, ele roda o comando que você escreveu para reconectar (decisão 0012, C50).</div></div>`
+
+// =====================================================================
+// RECONNECT the remote machine (C50, issue #244, decision 0012)
+// =====================================================================
+// The core runs the list the user wrote in machines.json ("reconnect.command"), nothing else.
+const RC_COMMAND = '/caminho/para/conectar.sh tunnel restart'
+const rcBadge = state => state === 'ok' ? '<span class="badge b-completed"><span class="p"></span>Conectada</span>'
+  : state === 'running' ? '<span class="badge b-waiting"><span class="p"></span>Reconectando</span>'
+  : '<span class="badge b-error"><span class="p"></span>Sem conexão</span>'
+const rcHeader = (state, readAt) => cab('server', 'Workstation', `ws-exemplo · Ubuntu 24.04 · 16 vCPUs · 62 GB · T4 · porta 14720 do Mac · ${readAt}`, `${rcBadge(state)}${hourToggle}`)
+const rcOfflineText = '<b>Sem conexão com a Workstation.</b> A porta 14720 deste Mac não aceita conexão: o túnel parece caído. Abaixo, a última leitura, de 22:41 (há 14 min). Tentamos de novo a cada 30 s.'
+const rcCmdLine = `<div class="tm-rc-cmd">Roda: ${RC_COMMAND} · até 3 min</div>`
+const rcBody = (w, faded) => `<div class="tm-rc-clip"><div${faded ? ' class="tm-faded"' : ''}>${workstationBody(w)}</div></div>`
+const rcSteps = at => `<div class="tm-rc-steps">${['rodando o comando', 'aguardando o login', 'lendo a Workstation'].map((s, i) =>
+  `<span class="${i < at ? 'done' : i === at ? 'on' : ''}">${ic(i < at ? 'check-circle-2' : i === at ? 'loader-2' : 'circle-dot')}${s}</span>`).join('<span>→</span>')}</div>`
+const rcTime = (elapsed, pct) => `<div class="tm-rc-time"><span class="tm-stack"><i style="width:${pct}%;background:var(--status-waiting-dot)"></i></span><span>${elapsed} de 3:00</span></div>`
+const rcErrorBand = (title, text, extra = '') => `<div class="faixa erro tm-rc-band"><span class="ic">${ic('x-circle')}</span><div class="tm-rc-text"><b>${title}</b> ${text}
+  <div class="tm-rc-cmd">A saída ficou no log da instalação: ~/.ahrena-console/reconnect.log</div>${extra}</div>
+  <div class="tm-rc-actions"><span class="btn cheio">${ic('refresh-cw')}Tentar de novo</span></div></div>`
+
+// 1. Offline, with reconnect configured
+const rcOfferScreen = w => `${rcHeader('off', 'última leitura às 22:41')}
+  <div class="faixa erro tm-rc-band"><span class="ic">${ic('wifi-off')}</span><div class="tm-rc-text">${rcOfflineText}${rcCmdLine}</div>
+    <div class="tm-rc-actions"><span class="btn contorno">Tentar agora</span><span class="btn cheio">${ic('plug')}Reconectar</span></div></div>
+  ${rcBody(w, true)}`
+// 2. Reconnecting (and 6: started from the tray)
+const rcRunningScreen = fromTray => `${rcHeader('running', 'última leitura às 22:41')}
+  <div class="faixa tm-rc-band"><span class="ic">${ic('loader-2')}</span><div class="tm-rc-text"><b>${fromTray ? 'Reconectando, pela bandeja…' : 'Reconectando…'}</b> aguardando o login no navegador. Se o comando abriu uma página de login, ela é sua: entre por lá e o console segue sozinho.
+    ${rcSteps(1)}${fromTray ? rcTime('0:40', 22) : rcTime('1:12', 40)}${rcCmdLine}</div>
+    <div class="tm-rc-actions"><span class="btn contorno">${ic('x')}Cancelar</span><span class="btn cheio tm-rc-off">${ic('loader-2')}${fromTray ? 'Um por vez' : 'Reconectando…'}</span></div></div>
+  ${rcBody(1100, true)}`
+// 3. Reconnected
+const rcDoneScreen = () => `${rcHeader('ok', 'lido há 4 s')}
+  <div class="faixa tm-rc-ok"><span class="ic">${ic('check-circle-2')}</span><div><b>Reconectada às 22:58</b> · a leitura voltou. O comando saiu com o código 0 depois de 1 min 26 s, e o núcleo leu a Workstation na hora.</div></div>
+  ${rcBody(1100, false)}`
+// 4. Failed: exit code and timeout (variant A, approved 20/10: the output stays in the log)
+const rcFailedScreen = () => `${rcHeader('off', 'última leitura às 22:41')}
+  <div class="olhinho">4a · o comando saiu com erro</div>
+  ${rcErrorBand('Não reconectou.', 'O comando saiu com o código 1 depois de 42 s. A Workstation continua sem conexão.')}
+  <div class="olhinho">4b · passou do tempo</div>
+  ${rcErrorBand('Não reconectou.', 'O comando passou de 3 min e foi encerrado. Se um login ficou aberto no navegador, ele não conta mais.')}
+  ${rcBody(1100, true)}`
+// 5. No reconnect configured
+const rcSetupScreen = () => `${rcHeader('off', 'última leitura às 22:41')}
+  <div class="faixa erro"><span class="ic">${ic('wifi-off')}</span><div>${rcOfflineText}</div><span class="btn contorno">Tentar agora</span></div>
+  <div class="cartao tm-rc-setup"><h5>${ic('plug')}Reconectar daqui</h5>
+    <span class="c-muted" style="font-size:12.5px">O console pode rodar, com um clique, o comando que você já usa para subir o túnel. Ele não sabe montar túnel nenhum: só roda o que você escrever.</span>
+    <ol><li><b>Tenha um comando que sobe o túnel.</b> <span>O seu script, o que você já roda no terminal.</span></li>
+      <li><b>Acrescente <code>reconnect</code> à máquina no machines.json.</b>
+        <div class="tm-config">~/.ahrena-console/machines.json
+{ "machines": [ { "id": "workstation", "label": "Workstation", "port": 14720,
+    "reconnect": { "command": ["/caminho/para/conectar.sh", "tunnel", "restart"],
+                   "timeoutSeconds": 180 } } ] }</div></li>
+      <li><b>Pronto.</b> <span>O console relê o arquivo ao salvar, sem reiniciar, e o botão Reconectar aparece aqui e na bandeja.</span></li></ol>
+    <div class="tm-legend"><span>${ic('list')} Uma lista, sem shell: o console roda exatamente o que está no arquivo.</span><span>${ic('lock')} Nada da tela vira comando.</span></div></div>
+  ${rcBody(1100, true)}`
+
+const rcNote = items => `<div class="anota tm-rc-note">${items.map(x => `<div>${x}</div>`).join('')}</div>`
+const rcRow = (frames, note) => `<div class="tm-rc-row">${frames.map(([label, f]) => `<div class="width-col"><div class="rotulo">${label}</div>${f}</div>`).join('')}${note ? rcNote(note) : ''}</div>`
+const reconnectScreens = () => `<div class="tm-rc">
+  ${rcRow([['1 · sem conexão, com reconexão configurada · 1100 px', frameAt(1100, 'machine-ws', rcOfferScreen(1100), 'off')], ['1 · 1440 px', frameAt(1440, 'machine-ws', rcOfferScreen(1440), 'off')]], [
+    '<b>Só roda o que você escreveu</b>: a lista <code>reconnect.command</code> do machines.json, exatamente, sem shell e sem interpolação. Nada digitado na tela vira comando: o botão só manda o id da máquina.',
+    'A linha mono repete a lista do arquivo e o tempo limite (<code>timeoutSeconds</code>), para você saber o que vai rodar <b>antes</b> de clicar.',
+    'O clique é um <b>POST de mesma origem</b>, a exceção da decisão 0003; outro Origin é recusado.',
+    'Reconectar é o botão principal; Tentar agora continua só relendo a porta, sem rodar nada.'])}
+  ${rcRow([['2 · reconectando · 1100 px', frameAt(1100, 'machine-ws', rcRunningScreen(false), 'off')], ['6 · já reconectando, começou pela bandeja · 1100 px', frameAt(1100, 'machine-ws', rcRunningScreen(true), 'off')]], [
+    'O núcleo roda o comando como <b>processo filho</b>, com o PATH do shell de login e nada além disso.',
+    '<b>Um por vez</b> por máquina: o segundo clique, daqui ou da bandeja (6), encontra o botão desligado e a mesma contagem.',
+    'O núcleo não vê o navegador: enquanto o processo roda, a faixa diz "aguardando o login", que é o caso comum. "Rodando o comando" fica feito quando o processo sobe.',
+    '<b>Cancelar</b> encerra o processo filho. Uma página de login já aberta no navegador fica lá, e é sua.',
+    '<b>Tempo limite</b>: o <code>timeoutSeconds</code> do arquivo. Passou, o núcleo encerra o processo e mostra a falha (4b).'])}
+  ${rcRow([['3 · reconectada · 1100 px', frameAt(1100, 'machine-ws', rcDoneScreen(), 'ok')], ['5 · sem reconexão configurada · 1100 px', frameAt(1100, 'machine-ws', rcSetupScreen(), 'off')]], [
+    'Saiu com 0: o núcleo relê a Workstation <b>na hora</b>, sem esperar os 30 s, e a tela volta ao normal (C25), com a faixa verde dizendo a hora.',
+    'Saiu com 0 e a porta ainda não responde: a tela volta ao estado 1, e a faixa diz que o comando terminou bem mas a Workstation não respondeu.',
+    'Sem <code>reconnect</code>, <b>nenhum botão morto</b> (5): o card ensina a configurar, e a C26 continua igual para quem não quer.'])}
+  ${rcRow([['4 · falhou · 1100 px', frameAt(1100, 'machine-ws', rcFailedScreen(), 'off')]], [
+    '<b>A saída vai para o log da instalação</b>, nunca para a /ui: o que o comando imprime pode ter conta, host ou token (issue #244, item 3). A tela diz só o código de saída, o tempo e onde está o log.',
+    'Aprovado em 20/10: só o código, o tempo e o log (variante A). As últimas linhas na tela (variante B) ficaram de fora.',
+    'Tentar de novo roda o mesmo comando outra vez; nada muda no arquivo.'])}
+</div>`
 
 // =====================================================================
 // DEV CONSOLE (C27)
@@ -1790,14 +2109,16 @@ const machineStatesScreen = () => `${cab('server', 'Workstation', 'Os outros est
 const DEV_COLUMNS = [
   ['todo', 'A fazer', 'aberta, sem branch nem sessão', 'abandoned', [[64, 'Exportar o catálogo em XLSX'], [66, 'Ordenar categorias pelo uso'], [70, 'Guia de contribuição']]],
   ['delegated', 'Delegada', 'sessão aberta no branch da issue, sem push', 'waiting', [[68, 'Cupom por categoria', 'Cupom por categoria · ws']]],
-  ['in-progress', 'Em desenvolvimento', 'o branch da issue está no remoto', 'active', [[61, 'Cobrança vira um serviço à parte', 'Separar pagamentos em serviços'], [72, 'Retry com backoff', 'Retry com backoff na fila', 1]]],
-  ['in-review', 'Em revisão', 'tem PR aberto que fecha a issue', 'active', [[31, 'Exportação em CSV', 'Endpoint de exportação em CSV', 0, ['#81', 'ok']], [58, 'Esquema de pedidos', 'Migração do esquema de pedidos', 1, ['#79', 'ok']], [47, 'Relatório mensal', 'Relatório mensal mais rápido', 0, ['#77', 'fal']]]],
+  ['in-progress', 'Em desenvolvimento', 'o branch da issue está no remoto', 'active', [[61, 'Cobrança vira um serviço à parte', 'Separar pagamentos em serviços'], [72, 'Retry com backoff', 'Retry com backoff na fila', 'idle']]],
+  ['in-review', 'Em revisão', 'tem PR aberto que fecha a issue', 'active', [[31, 'Exportação em CSV', 'Endpoint de exportação em CSV', 0, ['#81', 'ok']], [58, 'Esquema de pedidos', 'Migração do esquema de pedidos', 'blocked', ['#79', 'ok']], [47, 'Relatório mensal', 'Relatório mensal mais rápido', 0, ['#77', 'fal']]]],
   ['blocked', 'Bloqueada', 'etiqueta blocked na issue', 'error', [[55, 'Pagamento por PIX', '', 0, null, 'espera a conta do provedor']]],
   ['done', 'Feita', 'fechada nas últimas 24 h', 'completed', [[52, 'Paginação da listagem'], [50, 'Testes do parser de datas'], [49, 'Documentar a autenticação']]],
 ]
-function devCard([n, t, s, waiting, pr, note], column) {
+// attention: 'blocked' (the session needs you: yellow edge and chip) or 'idle' (its turn ended: neutral, light chip).
+function devCard([n, t, s, attention, pr, note], column) {
   if (column === 'done') return `<div class="cartao dev-card slim"><b>#${n}</b><span class="trunc">${t}</span></div>`
-  return `<div class="cartao dev-card${waiting ? ' waiting' : ''}${column === 'blocked' ? ' blocked' : ''}"><div class="n"><span>#${n}</span>${waiting ? '<span class="mot">espera você</span>' : ''}</div><div>${t}</div>
+  const chip = attention === 'blocked' ? '<span class="mot">precisa de você</span>' : attention === 'idle' ? '<span class="mot leve">ociosa</span>' : ''
+  return `<div class="cartao dev-card${attention === 'blocked' ? ' waiting' : attention === 'idle' ? ' idle' : ''}${column === 'blocked' ? ' blocked' : ''}"><div class="n"><span>#${n}</span>${chip}</div><div>${t}</div>
     <div class="s">${s ? `${ic('bot')}<span class="trunc">${s}</span>` : '<span>sem sessão</span>'}</div>${pr ? `<div class="s"><span class="mono c-accent">${pr[0]}</span>${ciPill(pr[1])}</div>` : ''}${note ? `<div class="s">${note}</div>` : ''}</div>`
 }
 function devBoard(w) {
@@ -1814,12 +2135,12 @@ function devConsoleScreen(w) {
     ${stat('CI rodando', '1', '#83 · há 4 min', 'loader', 'var(--status-waiting-text)')}
     <div class="cartao stat tm-bad"><span class="rot">CI vermelho</span><span class="ic" style="color:var(--status-error-text)">${ic('x-circle')}</span><span class="v tab">1</span><span class="s">#77 · testes</span></div>
     ${stat('Trabalhando', '4', '1 na Workstation', 'bot', 'var(--accent-text)')}
-    ${stat('Esperando você', '3', '2 sessões, 1 decisão', 'hand', 'var(--status-waiting-text)')}
+    ${stat('Precisam de você', '3', '2 sessões, 1 decisão · 1 ociosa fora', 'hand', 'var(--status-waiting-text)')}
   </div>
   <div class="cartao inbox"><div class="olhinho" style="color:var(--status-waiting-text)">${ic('hand')}Depende de você · 3</div>
     <div class="dev-depends" style="grid-template-columns:repeat(3,minmax(0,1fr))">
-      <div class="cartao mini"><span class="n">Migração do esquema de pedidos</span><span class="x">Pede permissão: Bash npm run migrate · #58</span><div class="pe"><span>motor-de-regras · Workstation</span><b>2 min</b></div></div>
-      <div class="cartao mini"><span class="n">Separar pagamentos em serviços</span><span class="x">Espera a aprovação do plano de 6 passos · #61</span><div class="pe"><span>motor-de-regras</span><b>9 min</b></div></div>
+      <div class="cartao mini"><span class="n trunc">Migração do esquema de pedidos</span><span class="x trunc">${motChip('permission')} Bash npm run migrate · #58</span><div class="pe"><span>motor-de-regras · Workstation</span><b>2 min</b></div></div>
+      <div class="cartao mini"><span class="n trunc">Separar pagamentos em serviços</span><span class="x trunc">${motChip('plan')} 6 passos · #61</span><div class="pe"><span>motor-de-regras</span><b>9 min</b></div></div>
       <div class="cartao mini"><span class="n">Decisão sugerida: 10 cards por coluna</span><span class="x">Alternativa: 20 por coluna · de Kanban de sessões</span><div class="pe"><span>vitrine-demo</span><b>6 min</b></div></div>
     </div></div>
   <div class="cartao"><div class="olhinho" style="padding:12px 14px 4px">${ic('git-merge')}Fila de merge, na ordem · de cima para baixo; o empilhado entra depois da base</div>
@@ -1851,8 +2172,8 @@ const P = {
     filhas: [],
   },
   esperando: {
-    st: 'waiting', mot: 'notification', status: '◐ Esperando você · ninguém mais', precisam: 0,
-    banner: { tipo: 'w', l1: `${badge('waiting', 'notification')}<span class="mut">pergunta · há 4 min</span>`, q: 'Nos testes de integração, sigo com <b>SQLite em memória</b> ou subo um <b>Postgres no Docker</b>?', l3: `<span class="mut">3 opções · responda na conversa ao lado</span>` },
+    st: 'blocked', mot: 'question', status: '◐ Precisa de você · ninguém mais', precisam: 0,
+    banner: { tipo: 'w', l1: `${badge('blocked', 'question')}<span class="mut">há 4 min</span>`, q: 'Nos testes de integração, sigo com <b>SQLite em memória</b> ou subo um <b>Postgres no Docker</b>?', l3: `<span class="mut">3 opções · responda na conversa ao lado</span>` },
     estado: { titulo: 'Testes de integração da API', l3: ['Opus 5.5', '26 min', 'turno 11'], l4: `<span class="c-waiting">${ic('message-circle-question')}</span><span class="trunc">pergunta pendente</span>` },
     met: { ctx: 48, usado: '96k/200k', custo: '~US$ 0,92', tokens: '↑610k ↓41k', bg: ['1', 'npm run dev'] },
     trab: { issue: 51, tt: 'Testes de integração', tipo: 'Tarefa técnica', sub: [0, 3], pr: null, prSt: 'branch sem push' },
@@ -1861,8 +2182,8 @@ const P = {
     filhas: [],
   },
   permissao: {
-    st: 'waiting', mot: 'notification', status: '◐ Esperando você · 1 precisa de você', precisam: 1,
-    banner: { tipo: 'w', l1: `${badge('waiting', 'notification')}<span class="mut">permissão · há 2 min</span>`, q: '<b>Bash</b> quer rodar <code>npm run migrate</code> em /simulacao/motor-de-regras', l3: `<span class="mut">permitir ou negar na conversa ao lado</span>` },
+    st: 'blocked', mot: 'permission', status: '◐ Precisa de você · 1 outra precisa de você', precisam: 1,
+    banner: { tipo: 'w', l1: `${badge('blocked', 'permission')}<span class="mut">há 2 min</span>`, q: '<b>Bash</b> quer rodar <code>npm run migrate</code> em /simulacao/motor-de-regras', l3: `<span class="mut">permitir ou negar na conversa ao lado</span>` },
     estado: { titulo: 'Migração do esquema de pedidos', l3: ['Opus 5.5', '34 min', 'turno 22'], l4: `<span class="c-waiting">${ic('shield-alert')}</span><span class="trunc">Bash: npm run migrate</span>` },
     met: { ctx: 54, usado: '108k/200k', custo: '~US$ 2,10', tokens: '↑1,4M ↓97k', bg: ['0', 'nenhum'] },
     trab: { issue: 58, tt: 'Esquema de pedidos', tipo: 'História', sub: [3, 5], pr: 91, prSt: 'aberto', ci: 'ok', rv: 'pe' },
@@ -1877,7 +2198,7 @@ const P = {
     trab: { issue: 63, tt: 'Separar pagamentos', tipo: 'História', sub: [2, 6], pr: 90, prSt: 'aberto', ci: 'rod', rv: 'ap' },
     plano: { f: 2, t: 6, atual: 'Extrair a cobrança', prox: ['Migrar os testes', '+2'] },
     subs: [['active', 'Explore', 'achar usos', '1 min'], ['active', 'code-reviewer', 'diff', '40 s'], ['active', 'test-runner', 'bateria', '12 s']], subsMais: '+1 concluído',
-    filhas: [['waiting', 'fila-de-tarefas', 'Sua vez'], ['active', 'catalogo-exemplo', '6 min'], ['completed', 'blog-estatico', '20 min']],
+    filhas: [['idle', 'fila-de-tarefas', 'Sua vez'], ['active', 'catalogo-exemplo', '6 min'], ['completed', 'blog-estatico', '20 min']],
   },
   erro: {
     st: 'error', status: '✕ Com erro · 2 precisam de você', precisam: 2,
@@ -1890,15 +2211,15 @@ const P = {
     filhas: [],
   },
   nova: {
-    dec: 0, st: 'waiting', mot: 'session_start', status: '◐ No prompt · 3 precisam de você', precisam: 3,
-    estado: { titulo: 'Sessão nova, sem transcript', l3: ['Sonnet 5.5', 'agora', 'turno 0'], l4: `<span class="c-waiting">${ic('terminal')}</span><span class="trunc">esperando o primeiro prompt</span>` },
+    dec: 0, st: 'idle', mot: 'first_prompt', status: '◌ Ociosa · No prompt · 3 precisam de você', precisam: 3,
+    estado: { titulo: 'Sessão nova, sem transcript', l3: ['Sonnet 5.5', 'agora', 'turno 0'], l4: `<span class="c-idle">${ic('terminal')}</span><span class="trunc">esperando o primeiro prompt</span>` },
     met: { ctx: 0, usado: '0/200k', custo: '~US$ 0,00', tokens: '—', bg: ['0', 'nenhum'] },
     trab: { issue: null, branch: 'main' },
     plano: null, subs: [], filhas: [],
   },
 }
 
-P.retomada = { ...P.nova, dec: 4, status: '◐ No prompt · 4 decisões herdadas · 3 precisam de você',
+P.retomada = { ...P.nova, dec: 4, status: '◌ Ociosa · No prompt · 4 decisões herdadas · 3 precisam de você',
   banner: { tipo: 'd', l1: `<span class="c-accent">${ic('git-commit-horizontal')}</span><b>4 decisões da sessão anterior continuam valendo</b>`, q: 'Esta sessão continua a <b>Kanban de sessões</b> depois de um <code>/clear</code>. As decisões vigentes foram injetadas no início (~620 tokens).', l3: `<span class="pn-link">ver as 4</span> <span class="mut">· desligar a injeção</span>` },
   estado: { ...P.nova.estado, titulo: 'Continuação de Kanban de sessões' }, trab: { issue: 42, tt: 'Kanban de sessões', tipo: 'História', sub: [2, 4], pr: 78, prSt: 'rascunho', ci: 'ok', rv: 'pe' } }
 function pnEstado(d) {
@@ -1943,13 +2264,13 @@ function pnSubs(l, mais) {
   const cont = l.reduce((a, [st]) => (a[st] = (a[st] ?? 0) + 1, a), {})
   const tot = l.length || 1
   return `<div class="pc"><div class="t">${ic('git-fork')}Subagentes<span class="r c-muted">${cont.active ?? 0} ativo${(cont.active ?? 0) === 1 ? '' : 's'}</span></div>
-    ${l.length ? `<div class="barra-h" style="height:5px">${['active', 'waiting', 'completed', 'error'].map(st => cont[st] ? `<i style="width:${cont[st] / tot * 100}%;background:var(--status-${st}-dot)"></i>` : '').join('')}</div>` : ''}
+    ${l.length ? `<div class="barra-h" style="height:5px">${['active', 'completed', 'error'].map(st => cont[st] ? `<i style="width:${cont[st] / tot * 100}%;background:var(--status-${st}-dot)"></i>` : '').join('')}</div>` : ''}
     ${l.length ? l.slice(0, 3).map(([st, n, t, d]) => `<div class="sub-ln"><span class="sq c-${st}">${ST[st].g}</span><span class="trunc"><b>${n}</b> <span class="mut">· ${t}</span></span><span class="mut">${d}</span></div>`).join('') : '<div class="ln mut">nenhum nesta sessão</div>'}
     ${mais ? `<div class="ln mut">${mais}</div>` : ''}</div>`
 }
 function pnFilhas(l) {
   return `<div class="pc"><div class="t">${ic('git-branch-plus')}Sessões filhas<span class="r c-muted">${l.length}</span></div>
-    ${l.length ? l.map(([st, n, x]) => `<div class="sub-ln"><span class="sq c-${st}">${ST[st].g}</span><span class="trunc"><b>${n}</b></span><span class="${st === 'waiting' ? 'c-waiting' : 'mut'}">${x}</span></div>`).join('') + `<div class="ln"><span class="pn-link">ver a árvore no artefato ›</span></div>` : '<div class="ln mut"><span class="trunc">nenhuma aberta por esta</span></div>'}</div>`
+    ${l.length ? l.map(([st, n, x]) => `<div class="sub-ln"><span class="sq c-${st}">${ST[st].g}</span><span class="trunc"><b>${n}</b></span><span class="${st === 'blocked' ? 'c-blocked' : 'mut'}">${x}</span></div>`).join('') + `<div class="ln"><span class="pn-link">ver a árvore no artefato ›</span></div>` : '<div class="ln mut"><span class="trunc">nenhuma aberta por esta</span></div>'}</div>`
 }
 function pnServidor(off) {
   return `<div class="pn-srv"><img src="${LOGO}" alt=""><div><b>Ahrena Console</b><small>127.0.0.1:4720${off ? ' · sem resposta' : ''}</small></div>
@@ -1958,7 +2279,7 @@ function pnServidor(off) {
 function pnPe(d, largo) {
   if (!d.precisam) return `<div class="pn-pe"><span class="c-muted">○ ninguém mais precisa de você</span></div>`
   const txt = d.precisam === 1 ? '1 precisa de você' : `${d.precisam} precisam de você`
-  const quem = largo ? `<span class="mut trunc">· ${d.quem ?? 'motor-de-regras (Pede permissão), app-receitas (Interrompida)'}</span>` : ''
+  const quem = largo ? `<span class="mut trunc">· ${d.quem ?? 'motor-de-regras (Pede permissão), painel-de-metricas (Com erro)'}</span>` : ''
   return `<div class="pn-pe tem"><span class="c-waiting">${ic('bell')}</span><b class="c-waiting">${txt}</b>${quem}<span class="pn-btn">Ver</span></div>`
 }
 function pane(cols, miolo, status, medida) {
@@ -1982,14 +2303,14 @@ function painel(nome) {
 }
 function painelPrecisam() {
   const card = s => `<div class="pc st-${s.st}"><div class="t">${ponto(s.st)}<span style="letter-spacing:0;text-transform:none;color:var(--text);font-size:12.5px" class="trunc">${s.pj}</span><span class="r c-muted">${s.idade}</span></div>
-    <div class="ln">${s.mot ? motChip(s.mot) : badge('error')}<span class="mut">${!s.mot || MOT[s.mot].u ? 'urgente' : ''}</span></div><div class="ln"><span class="trunc">${s.pede ?? s.erro}</span></div>
+    <div class="ln">${sessionChip(s)}</div><div class="ln"><span class="trunc">${s.pede ?? s.erro}</span></div>
     <div class="ln mut"><span class="trunc">${s.pj === 'painel-de-metricas' ? 'outro projeto' : s.pj === 'motor-de-regras' ? 'mãe desta' : 'filha desta'} · ${s.mo}</span></div>
     <div class="ln"><span class="pn-btn sec">Ir para a sessão</span></div></div>`
   const miolo = largo => {
-    const l = largo ? ['b91d04aa', '5a61c2bf', 'e04b7d93'].map(byId) : ['b91d04aa', 'e04b7d93'].map(byId)
+    const l = largo ? ['b91d04aa', '5a61c2bf', '4d2a9c35'].map(byId) : ['b91d04aa', '4d2a9c35'].map(byId)
     return `${pnServidor()}<div class="pn-sec">Precisam de você · ${l.length}<span style="margin-left:auto" class="pn-sel">${largo ? 'Máquina inteira' : 'Família'} ${ic('chevron-down')}</span></div>
       <div class="pn-grade" style="--cols:${largo ? 3 : 1}">${l.map(card).join('')}</div>
-      <div class="pn-pe"><span class="mut">urgentes primeiro${largo ? ' · esperando e com erro' : ''}</span><span class="pn-link" style="margin-left:auto">fechar</span></div>`
+      <div class="pn-pe"><span class="mut">mais antigas primeiro${largo ? ' · só o que trava; as ociosas ficam em "na sua vez"' : ''}</span><span class="pn-link" style="margin-left:auto">fechar</span></div>`
   }
   return `<div class="fila">${pane(38, miolo, '● Ativa · 3 precisam de você')}${pane(121, miolo, '● Ativa · 3 precisam de você')}</div>`
 }
@@ -2005,21 +2326,22 @@ function painelOffline() {
 function painelEstados() {
   const casos = [
     ['active', null, 'Kanban de sessões', ['Opus 5.5', '12 min'], `<span class="c-active">${ic('loader-2')}</span><span class="trunc">rodando Bash · npm test</span>`],
-    ['waiting', 'notification', 'Migração de pedidos', ['Opus 5.5', '2 min'], `<span class="trunc">Bash: npm run migrate</span>`],
-    ['waiting', 'interrupted', 'Filtro por categoria', ['Sonnet 5.5', '6 min'], `<span class="trunc">Esc no meio do turno</span>`],
-    ['waiting', 'stop', 'Retry com backoff', ['Sonnet 5.5', '1 min'], `<span class="trunc">"Rodo os testes?"</span>`],
-    ['waiting', 'session_start', 'Sessão nova', ['Sonnet 5.5', 'agora'], `<span class="trunc">prompt vazio</span>`],
+    ['blocked', 'permission', 'Migração de pedidos', ['Opus 5.5', '2 min'], `<span class="trunc">Bash: npm run migrate</span>`],
+    ['blocked', 'question', 'Cache do catálogo', ['Opus 5.5', '4 min'], `<span class="trunc">Redis ou cache em memória?</span>`],
+    ['idle', 'turn_ended', 'Retry com backoff', ['Sonnet 5.5', '1 min'], `<span class="trunc mut">"Rodo os testes?"</span>`],
+    ['idle', 'interrupted', 'Filtro por categoria', ['Sonnet 5.5', '6 min'], `<span class="trunc mut">Esc no meio do turno</span>`],
     ['completed', null, 'Paginação da listagem', ['Sonnet 5.5', '20 min'], `<span class="trunc mut">terminou sem erro · ~US$ 0,62</span>`],
     ['error', null, 'Relatório mensal', ['Opus 5.5', '3 min'], `<span class="trunc c-error">API 529 · overloaded</span>`],
     ['abandoned', null, 'Variáveis de ambiente', ['Sonnet 5.5', '4 h'], `<span class="trunc mut">180 min sem sinal</span>`],
     null,
   ]
-  const miolo = () => `<div class="pn-sec">Os 5 status e os 4 motivos · card "Esta sessão"</div><div class="pn-grade" style="--cols:3">${casos.map(c => c ? `<div class="pc st-${c[0]}"><div class="t">${ic('activity')}Esta sessão<span class="r c-muted">${c[3][1]}</span></div>
+  const miolo = () => `<div class="pn-sec">Os 6 status e os 8 motivos · card "Esta sessão"</div><div class="pn-grade" style="--cols:3">${casos.map(c => c ? `<div class="pc st-${c[0]}"><div class="t">${ic('activity')}Esta sessão<span class="r c-muted">${c[3][1]}</span></div>
       <div class="ln">${badge(c[0], c[1])}</div><div class="ln grande"><span class="trunc">${c[2]}</span></div><div class="ln mut">${c[3].join(' · ')}</div><div class="ln">${c[4]}</div></div>` :
-    `<div class="pc"><div class="t">${ic('info')}Regras</div><div class="ln mut"><span class="trunc">glifo, rótulo e cor juntos</span></div><div class="ln mut"><span class="trunc">urgente: chip em negrito</span></div><div class="ln mut"><span class="trunc">rosa nunca é status</span></div><div class="ln mut"><span class="trunc">erro e CI: o mesmo vermelho</span></div></div>`).join('')}</div>`
+    `<div class="pc"><div class="t">${ic('info')}Regras</div><div class="ln mut"><span class="trunc">glifo, rótulo e cor juntos</span></div><div class="ln mut"><span class="trunc">trava: amarelo, chip forte</span></div><div class="ln mut"><span class="trunc">ociosa: neutra, chip leve</span></div><div class="ln mut"><span class="trunc">rosa nunca é status</span></div><div class="ln mut"><span class="trunc">erro e CI: o mesmo vermelho</span></div></div>`).join('')}</div>`
   return `<div class="fila">${pane(121, miolo, '', `cards 34 col × 6 linhas · <b>sem estouro</b>`)}<div style="display:flex;flex-direction:column;gap:10px;padding-top:24px">
     <p class="rotulo">No console (pílulas)</p>${Object.keys(ST).map(k => `<div>${badge(k)}</div>`).join('')}
-    <p class="rotulo" style="margin-top:8px">Motivos do "Esperando você"</p>${Object.keys(MOT).map(k => `<div>${badge('waiting', k)} <span class="c-muted" style="font-size:12px;font-family:var(--font-mono)">${k}</span></div>`).join('')}</div></div>`
+    <p class="rotulo" style="margin-top:8px">Precisa de você · grupo <code>blocking</code></p>${Object.keys(MOT).filter(k => MOT[k].group === 'blocking').map(k => `<div>${k === 'error' ? badge('error') : badge('blocked', k)} <span class="c-muted" style="font-size:12px;font-family:var(--font-mono)">${k}</span></div>`).join('')}
+    <p class="rotulo" style="margin-top:8px">Ociosa · grupo <code>your_turn</code></p>${Object.keys(MOT).filter(k => MOT[k].group === 'your_turn').map(k => `<div>${badge('idle', k)} <span class="c-muted" style="font-size:12px;font-family:var(--font-mono)">${k}</span></div>`).join('')}</div></div>`
 }
 
 // =====================================================================
@@ -2164,55 +2486,80 @@ const msep = '<div class="msep"></div>'
 const menuPe = mi('Abrir o console', '', '⌘O') + mi('<span class="ck">✓</span>Notificações') + mi('<span class="ck">✓</span>Abrir no login') + msep + mi('Ahrena Console 0.0.1', 'off') + mi('Sair do Ahrena Console', '', '⌘Q')
 const APP = {
   zero: () => mbar(0, true) + `<div class="menu" style="right:226px">${mi('Ahrena Console', 'cab')}${mi(`${ponto('completed')}Núcleo de pé · 127.0.0.1:4720`, 'off')}${msep}
-    ${mi('<span class="ponto" style="box-shadow:inset 0 0 0 1.5px var(--muted)"></span>Ninguém precisa de você', 'off')}${mi(`${ponto('active')}4 ativas &nbsp; ${ponto('error')}nenhuma com erro`, 'off')}${msep}${menuPe}</div>
+    ${mi('<span class="ponto" style="box-shadow:inset 0 0 0 1.5px var(--muted)"></span>Ninguém precisa de você', 'off')}${mi(`${ponto('active')}4 ativas &nbsp; ${ponto('idle')}2 ociosas &nbsp; ${ponto('error')}nenhuma com erro`, 'off')}${msep}${menuPe}</div>
     <div class="anota" style="left:28px;bottom:24px;width:440px">Só o <b>ícone template</b>, sem número: o macOS pinta conforme a barra.<br>O menu é refeito a cada clique, como o <code>tray.ts</code> do CCAM.</div>`,
   tres: () => {
-    const lista = alt => `${mi(`${ponto('waiting')}<b>motor-de-regras</b><span class="mt">· ${alt ? 'Abrir no Claude Desktop' : 'Pede permissão · 2 min'}</span>`, 'foco')}
+    const lista = alt => `${mi(`${ponto('blocked')}<b>agenda-ficticia</b><span class="mt">· ${alt ? 'Abrir no Claude Desktop' : 'Plano para aprovar · 7 min'}</span>`)}
     ${mi(`${ponto('error')}<b>painel-de-metricas</b><span class="mt">· ${alt ? 'Abrir no Claude Desktop' : 'Com erro · 3 min'}</span>`)}
-    ${mi(`${ponto('waiting')}fila-de-tarefas<span class="mt">· ${alt ? 'Abrir no Claude Desktop' : 'Sua vez · 1 min'}</span>`)}`
+    ${mi(`${ponto('blocked')}<b>motor-de-regras</b><span class="mt">· ${alt ? 'Abrir no Claude Desktop' : 'Pede permissão · 2 min'}</span>`, 'foco')}`
     return mbar(3, true) + `<div class="menu" style="right:226px">${mi('Ahrena Console', 'cab')}${mi(`${ponto('completed')}Núcleo de pé · 127.0.0.1:4720`, 'off')}${msep}
     ${mi('3 precisam de você · abrir na janela', 'cab')}${lista(false)}${msep}
-    ${mi(`${ponto('active')}4 ativas`, 'off')}${msep}${menuPe}</div>
+    ${mi(`${ponto('active')}4 ativas &nbsp; ${ponto('idle')}2 ociosas`, 'off')}${msep}${menuPe}</div>
     <div class="menu" style="right:600px;width:330px">${mi('Com ⌥ pressionado', 'cab')}${msep}${mi('3 precisam de você · abrir no Claude Desktop', 'cab')}${lista(true)}</div>
-    <div class="anota" style="left:28px;bottom:20px;width:520px"><b>3</b> ao lado do ícone (<code>tray.set_title</code>): esperando e com erro, urgentes primeiro.<br>Clique: abre a sessão <b>na janela do app</b>. Com ⌥, o item diz <b>Abrir no Claude Desktop</b> (item alternativo nativo do macOS).</div>`
+    <div class="anota" style="left:28px;bottom:20px;width:520px"><b>3</b> ao lado do ícone (<code>tray.set_title</code>): só as que <b>precisam de você</b> (travadas ou com erro), quem espera há mais tempo primeiro. As <b>ociosas</b> não contam: viram uma linha cinza, sem item.<br>Clique: abre a sessão <b>na janela do app</b>. Com ⌥, o item diz <b>Abrir no Claude Desktop</b> (item alternativo nativo do macOS).</div>`
   },
   notif: () => mbar(3, false) + `
     <div class="notif" style="top:42px"><img src="${LOGO}" alt=""><div><div class="app">AHRENA CONSOLE<span>agora · ${ic('volume-2')}</span></div><div class="tit">motor-de-regras pede permissão</div><div>Bash: <code>npm run migrate</code></div></div>
       <div class="acoes"><span>Abrir</span><span>Abrir no Claude Desktop</span><span>Silenciar</span></div></div>
     <div class="notif" style="top:196px"><img src="${LOGO}" alt=""><div><div class="app">AHRENA CONSOLE<span>há 3 min · ${ic('volume-2')}</span></div><div class="tit">painel-de-metricas parou com erro</div><div>API 529 · overloaded_error</div></div></div>
-    <div class="notif" style="top:300px"><img src="${LOGO}" alt=""><div><div class="app">AHRENA CONSOLE<span>há 1 min · sem som</span></div><div class="tit">fila-de-tarefas: sua vez</div><div>“Terminei a migração. Rodo os testes?”</div></div></div>
-    <div class="anota" style="left:28px;top:64px;width:420px">Uma notificação quando a sessão <b>passa</b> a esperar ou para com erro, nunca a cada leitura.<br><br>Título: sessão e motivo. Corpo: o que ela pede.<br>
+    <div class="notif" style="top:300px"><img src="${LOGO}" alt=""><div><div class="app">AHRENA CONSOLE<span>há 4 min · ${ic('volume-2')}</span></div><div class="tit">catalogo-exemplo pergunta</div><div>Redis ou cache em memória? · 2 opções</div></div></div>
+    <div class="anota" style="left:28px;top:64px;width:420px">Uma notificação quando a sessão <b>passa a precisar de você</b> (pede permissão, pergunta, plano para aprovar, decisão pedida) ou para com erro, nunca a cada leitura.<br><br>Título: sessão e motivo. Corpo: o que ela pede.<br>
       <b>Abrir</b> abre na janela do app. <b>Abrir no Claude Desktop</b> diz isso com todas as letras. <b>Silenciar</b> cala só essa sessão (6.8).<br><br>
-      Com som: Pede permissão, Interrompida e Com erro. Sem som: Sua vez e No prompt.</div>`,
+      Todas com som. <b>Ociosa nunca notifica</b>: Sua vez, Interrompida e No prompt só aparecem no console e na linha cinza do menu.</div>`,
   parado: () => mbar(0, true) + `<div class="menu" style="right:226px">${mi('Ahrena Console', 'cab')}${mi(`${ponto('error')}Núcleo parado`, 'off')}${mi('<span class="ck"></span><span class="mt">Node não encontrado no PATH do login</span>', 'off')}${msep}
     ${mi('Como instalar o Node 24', 'foco')}${mi('Procurar o núcleo de novo', '')}${msep}${menuPe}</div>
     <div class="anota" style="left:28px;bottom:24px;width:460px">O app <b>adota</b> o núcleo que já roda (a extensão ou um terminal). Se ninguém subiu, ele sobe com o <code>node</code> da máquina.<br>Sem Node, avisa e deixa o núcleo para a extensão (decisão 0005).</div>`,
   machines: () => mbar(3, true) + `<div class="menu" style="right:186px;width:420px">${mi('Ahrena Console', 'cab')}${mi(`${ponto('completed')}Núcleo de pé · 127.0.0.1:4720`, 'off')}${msep}
     ${mi('3 precisam de você · abrir na janela', 'cab')}
-    ${mi(`${ponto('waiting')}<b>motor-de-regras</b><span class="mt">· Workstation · Pede permissão · 2 min</span>`)}
+    ${mi(`${ponto('blocked')}<b>agenda-ficticia</b><span class="mt">· Plano para aprovar · 7 min</span>`)}
     ${mi(`${ponto('error')}<b>painel-de-metricas</b><span class="mt">· Workstation · Com erro · 3 min</span>`)}
-    ${mi(`${ponto('waiting')}fila-de-tarefas<span class="mt">· Sua vez · 1 min</span>`)}${msep}
+    ${mi(`${ponto('blocked')}<b>motor-de-regras</b><span class="mt">· Workstation · Pede permissão · 2 min</span>`)}${msep}
     ${mi('Máquinas', 'cab')}
     ${mi(`${ponto('completed')}Este Mac<span class="mt">· CPU 34% · disco 61%</span>`)}
     ${mi(`${ponto('completed')}Workstation<span class="mt">· carga 24,6 de 16 · disco 86%</span>`, 'foco')}
     ${mi(`<span class="ck c-error">${ic('alert-triangle')}</span>CPU saturada há 12 min<span class="mt">· Workstation</span>`)}
     ${mi(`<span class="ck c-waiting">${ic('alert-triangle')}</span>Volume / em 86%<span class="mt">· Workstation</span>`)}${msep}
-    ${mi(`${ponto('active')}4 ativas · 5 na Workstation`, 'off')}${msep}${menuPe}</div>
+    ${mi(`${ponto('active')}4 ativas · 5 na Workstation &nbsp; ${ponto('idle')}2 ociosas`, 'off')}${msep}${menuPe}</div>
     <div class="anota" style="left:28px;top:56px;width:320px">O bloco <b>Máquinas</b>: uma linha por máquina (CPU e o volume mais cheio) e um item por alerta aberto. Clicar abre a janela na tela dela (C24, C25).<br><br>
-      As sessões da Workstation que esperam sobem para a lista de cima, com o rótulo; nelas não há ⌥ "Abrir no Claude Desktop".<br><br>
+      As sessões da Workstation que precisam de você sobem para a lista de cima, com o rótulo; nelas não há ⌥ "Abrir no Claude Desktop".<br><br>
       O <b>3</b> da barra é só de sessões. Alerta novo notifica uma vez, sem som.</div>
     <div class="notif" style="top:412px;left:28px;right:auto;width:320px"><img src="${LOGO}" alt=""><div><div class="app">AHRENA CONSOLE<span>há 12 min · sem som</span></div><div class="tit">Workstation: CPU saturada</div><div>Carga de 24,6 em 16 vCPUs há 5 min</div></div></div>`,
   machinesOffline: () => mbar(1, true) + `<div class="menu" style="right:186px;width:420px">${mi('Ahrena Console', 'cab')}${mi(`${ponto('completed')}Núcleo de pé · 127.0.0.1:4720`, 'off')}${msep}
-    ${mi('1 precisa de você · abrir na janela', 'cab')}${mi(`${ponto('waiting')}fila-de-tarefas<span class="mt">· Sua vez · 1 min</span>`)}${msep}
+    ${mi('1 precisa de você · abrir na janela', 'cab')}${mi(`${ponto('blocked')}<b>agenda-ficticia</b><span class="mt">· Plano para aprovar · 7 min</span>`)}${msep}
     ${mi('Máquinas', 'cab')}
     ${mi(`${ponto('completed')}Este Mac<span class="mt">· CPU 34% · disco 61%</span>`)}
     ${mi(`<span class="ponto" style="box-shadow:inset 0 0 0 1.5px var(--muted)"></span>Workstation<span class="mt">· sem conexão há 14 min</span>`, 'foco')}
     ${mi(`<span class="ck"></span><span class="mt">A porta 14720 não aceita conexão: o túnel parece caído</span>`, 'off')}${msep}
-    ${mi(`${ponto('active')}1 ativa`, 'off')}${msep}${menuPe}</div>
+    ${mi(`${ponto('active')}1 ativa &nbsp; ${ponto('idle')}2 ociosas`, 'off')}${msep}${menuPe}</div>
     <div class="anota" style="left:28px;top:56px;width:320px">Sem conexão, a Workstation fica em <b>cinza</b> com a idade da última leitura, e uma linha diz o que o núcleo viu (porta fechada, ou porta aberta sem núcleo do outro lado).<br><br>
-      Não há "Subir o túnel": o app só mostra (0005, 0008). Clicar abre a tela da Workstation com a última leitura (C26).<br><br>
-      As sessões de lá saem da lista de cima, porque não dá para saber se ainda esperam.</div>
+      Não há "Subir o túnel": o app não monta nem conhece o túnel (0005, 0008). Com <code>reconnect</code> configurado, a linha ganha Reconectar, que roda o comando que você escreveu (A8, decisão 0012). Clicar abre a tela da Workstation com a última leitura (C26).<br><br>
+      As sessões de lá saem da lista de cima, porque não dá para saber se ainda precisam de você.</div>
     <div class="notif" style="top:330px;left:28px;right:auto;width:320px"><img src="${LOGO}" alt=""><div><div class="app">AHRENA CONSOLE<span>há 14 min · sem som</span></div><div class="tit">Workstation sem conexão</div><div>A porta 14720 deste Mac parou de responder</div></div></div>`,
+  machinesReconnect: () => mbar(1, true) + `<div class="menu" style="right:186px;width:420px">${mi('Ahrena Console', 'cab')}${mi(`${ponto('completed')}Núcleo de pé · 127.0.0.1:4720`, 'off')}${msep}
+    ${mi('1 precisa de você · abrir na janela', 'cab')}${mi(`${ponto('blocked')}<b>agenda-ficticia</b><span class="mt">· Plano para aprovar · 7 min</span>`)}${msep}
+    ${mi('Máquinas', 'cab')}
+    ${mi(`${ponto('completed')}Este Mac<span class="mt">· CPU 34% · disco 61%</span>`)}
+    ${mi(`<span class="ponto" style="box-shadow:inset 0 0 0 1.5px var(--muted)"></span>Workstation<span class="mt">· sem conexão há 14 min</span>`)}
+    ${mi(`<span class="ck"></span><span class="mt">A porta 14720 não aceita conexão: o túnel parece caído</span>`, 'off')}
+    ${mi(`<span class="ck"></span>Reconectar a Workstation`, 'foco')}${msep}
+    ${mi(`${ponto('active')}1 ativa`, 'off')}${msep}${menuPe}</div>
+    <div class="anota" style="left:28px;top:56px;width:320px"><b>a.</b> Com <code>reconnect</code> na máquina, a linha dela ganha <b>Reconectar a Workstation</b>. Clicar roda o comando do arquivo no núcleo, como o botão da C50; a bandeja não roda nada sozinha.</div>
+    <div class="notif" style="top:196px;left:28px;right:auto;width:320px"><img src="${LOGO}" alt=""><div><div class="app">AHRENA CONSOLE<span>há 14 min · sem som</span></div><div class="tit">Workstation sem conexão</div><div>A porta 14720 deste Mac parou de responder</div></div>
+      <div class="acoes"><span>Reconectar</span><span>Abrir</span></div></div>
+    <div class="anota" style="left:28px;top:340px;width:320px"><b>c.</b> A notificação de "sem conexão" ganha a ação <b>Reconectar</b>, só quando há <code>reconnect</code>; sem ele, fica como na A7. <b>Abrir</b> leva à tela da Workstation (C50).</div>`,
+  machinesReconnecting: () => mbar(1, true) + `<div class="menu" style="right:186px;width:420px">${mi('Ahrena Console', 'cab')}${mi(`${ponto('completed')}Núcleo de pé · 127.0.0.1:4720`, 'off')}${msep}
+    ${mi('1 precisa de você · abrir na janela', 'cab')}${mi(`${ponto('blocked')}<b>agenda-ficticia</b><span class="mt">· Plano para aprovar · 7 min</span>`)}${msep}
+    ${mi('Máquinas', 'cab')}
+    ${mi(`${ponto('completed')}Este Mac<span class="mt">· CPU 34% · disco 61%</span>`)}
+    ${mi(`${ponto('waiting')}Workstation<span class="mt">· reconectando</span>`, 'foco')}
+    ${mi(`<span class="ck"></span>Reconectando… aguardando login · 1:12`, 'off')}${msep}
+    ${mi(`${ponto('active')}1 ativa`, 'off')}${msep}${menuPe}</div>
+    <div class="anota" style="left:28px;top:56px;width:320px"><b>b.</b> Enquanto o comando roda, o item fica <b>cinza e sem clique</b>, com a contagem: um por vez, daqui ou da janela. Clicar na linha da Workstation abre a C50, onde está o Cancelar.</div>
+    <div class="menu" style="left:28px;top:200px;width:320px">${mi('Sem reconnect configurado', 'cab')}${msep}
+      ${mi(`<span class="ponto" style="box-shadow:inset 0 0 0 1.5px var(--muted)"></span>Workstation<span class="mt">· sem conexão há 14 min</span>`)}
+      ${mi(`<span class="ck"></span><span class="mt">A porta 14720 não aceita conexão</span>`, 'off')}
+      ${mi(`<span class="ck"></span>Como reconectar daqui…`, 'foco')}</div>
+    <div class="anota" style="left:28px;top:330px;width:320px">Sem <code>reconnect</code>, nada de botão que não funciona: <b>Como reconectar daqui…</b> abre a C50 no estado 5, com o passo a passo do machines.json.</div>`,
   janela: () => mbar(3, false) + `<div class="janela"><div class="tb"><span class="sem"><i></i><i></i><i></i></span><span class="nm">Ahrena Console · motor-de-regras</span><span class="mono">127.0.0.1:4720/ui/sessoes/b91d04aa</span></div>${cc('sessoes', telaConversa())}</div>`,
 }
 
@@ -2323,7 +2670,7 @@ const NP_BASE = ['Sidebar da extensão VS Code (<code>vscode-extension/sidebar.j
 const NP_DIV = ['Mostra só esta sessão (decisão 0004), não a frota: a frota fica no console.', 'Cards de 34 colunas × 6 linhas em qualquer largura: o estreito empilha 1, o largo põe 3 por linha.']
 const TELAS = [
   { cap: 'painel', titulo: 'Painel lateral', desc: 'O mod do Claude Code, ao lado da conversa, no recorte por sessão da decisão 0004 (issues #35, #36 e #37). Desenhado com os elementos nativos do mod (Box, Text, Button, Select, Svg, Link), na fonte monoespaçada do app, em 38 e 121 colunas.' },
-  { id: 'painel-estados', cod: 'P0', nome: 'Os 5 status e os 4 motivos', sub: 'O card "Esta sessão" em cada status, e as mesmas pílulas como aparecem no console.', html: painelEstados,
+  { id: 'painel-estados', cod: 'P0', nome: 'Os 6 status e os 8 motivos', sub: 'O card "Esta sessão" em cada status, e as mesmas pílulas como aparecem no console. O antigo estado de espera virou dois: Precisa de você (trava, amarelo, chip forte) e Ociosa (sua vez, neutra, chip leve), issue #245.', html: painelEstados,
     n: N(['Os 5 status de sessão e a camada <code>waiting</code> com <code>awaiting_reason</code> (<code>StatusBadge.tsx</code>).', 'O chip do motivo dentro da pílula, como na coluna Status de Sessions ("At prompt").'],
       ['Cores da paleta do Ahrena: ativa é laranja e concluída é verde (no CCAM, ativa é verde e concluída é violeta).', 'Glifo e rótulo sempre junto da cor, porque o painel nativo pode perder a cor.']) },
   { id: 'painel-ativa', cod: 'P1', nome: 'Sessão ativa', sub: 'No meio de um turno, com um subagente, dois processos em background, plano pela metade e PR em rascunho. Duas outras sessões precisam de você.', html: () => painel('ativa'),
@@ -2356,41 +2703,43 @@ const TELAS = [
     n: N(['O agrupamento dos agentes por tipo, com a contagem.', 'Os aninhados do <code>parent_agent_id</code>, em qualquer profundidade.'], ['<b>Agrupar:</b> por onda, o que um mesmo turno da sessão disparou junto. Fora isso, a ordem é a do início.', '<b>Colapsar:</b> onda só de concluídos vira uma linha com a contagem e a barra da onda (um traço por subagente). ▸ abre, ▾ fecha (botões nativos).', '<b>Erro e ativo nunca somem:</b> o erro sai da onda recolhida e fica embaixo dela.', '<b>Aninhados:</b> até 2 níveis com trilho; do 3º para baixo, "+N aninhados" na linha do pai.', '<b>Paginar:</b> pela altura do painel, sem cortar uma linha. No estreito, ‹ 1/2 ›; no largo, cabe numa página.', 'O Select troca entre Todos e Ativos e erros.']) },
 
   { cap: 'app', titulo: 'App de bandeja (Tauri)', desc: 'O app da decisão 0005 (issues #87 e #88): bandeja, menu e notificação nativos do macOS, e a janela com a interface que o núcleo serve.' },
-  { id: 'app-bandeja-0', cod: 'A1', nome: 'Bandeja com 0 esperando', sub: 'Ninguém precisa de você: só o ícone na barra de menus.', html: () => `<div class="fila"><div class="mac">${APP.zero()}</div></div>`,
+  { id: 'app-bandeja-0', cod: 'A1', nome: 'Bandeja sem ninguém precisando de você', sub: 'Ninguém precisa de você: só o ícone na barra de menus. As ociosas aparecem só como contagem cinza no resumo.', html: () => `<div class="fila"><div class="mac">${APP.zero()}</div></div>`,
     n: N(['O menu da bandeja (<code>desktop/src/tray.ts</code>): título, "Listening on :4820" com ponto verde, o resumo, Open Dashboard ⌘O, Open at Login, Quit ⌘Q.', 'Ícone template preto, que o macOS pinta.'], ['Sem Restart Server, Show Logs e Open in Browser: o app adota o núcleo, não é dono dele.', 'O resumo fica no que pede ação (precisam de você, com erro), sem "eventos de hoje".']) },
-  { id: 'app-bandeja-3', cod: 'A2', nome: 'Bandeja com 3 esperando', sub: 'O número aparece ao lado do ícone. Clicar numa sessão abre na janela do app; com ⌥, o item vira "Abrir no Claude Desktop".', html: () => `<div class="fila"><div class="mac">${APP.tres()}</div></div>`,
-    n: N(['A ordem do menu do CCAM e o painel do Tabby com Live, Waiting e Errored.'], ['O número vai na barra de menus: é a atenção fora do Claude, o ganho do app (0005).', 'Sessão com erro entra na lista (decisão do dono), em vermelho.', 'Abrir no Claude Desktop é sempre explícito: um item alternativo com ⌥, nunca o clique padrão.', 'O número fica sem cor (ícone template); a cor vai na bolinha de cada item.']) },
-  { id: 'app-notificacao', cod: 'A3', nome: 'Notificação do sistema', sub: 'Quando uma sessão passa a esperar ou para com erro. Som só nos urgentes. Abrir vai para a janela do app; Abrir no Claude Desktop é uma ação à parte.', html: () => `<div class="fila"><div class="mac">${APP.notif()}</div></div>`,
-    n: N(['<code>useNotifications</code>: aviso para waiting e erro (lá, no navegador).'], ['Nativa do macOS, aparece com o Claude fechado.', 'Silenciar uma sessão, não tudo (6.8).', 'Som só para Pede permissão, Interrompida e Com erro.']) },
+  { id: 'app-bandeja-3', cod: 'A2', nome: 'Bandeja com 3 que precisam de você', sub: 'O número aparece ao lado do ícone e conta só quem precisa de você (#245); as ociosas ficam numa linha cinza, sem número e sem item. Clicar numa sessão abre na janela do app; com ⌥, o item vira "Abrir no Claude Desktop".', html: () => `<div class="fila"><div class="mac">${APP.tres()}</div></div>`,
+    n: N(['A ordem do menu do CCAM e o painel do Tabby com Live, Waiting e Errored.'], ['O número vai na barra de menus: é a atenção fora do Claude, o ganho do app (0005).', 'Sessão com erro entra na lista (decisão do dono), em vermelho.', 'Ociosa (Sua vez, Interrompida, No prompt) não entra no número nem na lista: só a contagem cinza (#245).', 'Abrir no Claude Desktop é sempre explícito: um item alternativo com ⌥, nunca o clique padrão.', 'O número fica sem cor (ícone template); a cor vai na bolinha de cada item.']) },
+  { id: 'app-notificacao', cod: 'A3', nome: 'Notificação do sistema', sub: 'Quando uma sessão passa a precisar de você ou para com erro; ociosa nunca notifica (#245). Abrir vai para a janela do app; Abrir no Claude Desktop é uma ação à parte.', html: () => `<div class="fila"><div class="mac">${APP.notif()}</div></div>`,
+    n: N(['<code>useNotifications</code>: aviso para waiting e erro (lá, no navegador).'], ['Nativa do macOS, aparece com o Claude fechado.', 'Silenciar uma sessão, não tudo (6.8).', 'Notifica só o que trava (Pede permissão, Pergunta, Plano para aprovar, Decisão pedida) e o erro, todos com som. Ociosa não notifica (#245).']) },
   { id: 'app-parado', cod: 'A4', nome: 'Núcleo parado', sub: 'Ninguém subiu o núcleo e não há Node no PATH do login.', html: () => `<div class="fila"><div class="mac">${APP.parado()}</div></div>`,
     n: N(['A adoção do servidor que já responde em <code>/api/health</code> e a correção do PATH (<code>shell-path.ts</code>).'], ['Não embute Node: avisa e deixa o núcleo para a extensão.']) },
   { id: 'app-janela', cod: 'A5', nome: 'A janela', sub: 'Clicar em motor-de-regras no menu abre a janela já no detalhe da sessão (127.0.0.1:4720/ui). O botão "Abrir no Claude Desktop" é o único caminho para o Claude. ⌘O abre no Dashboard.', html: () => `<div class="fila"><div class="mac alto">${APP.janela()}</div></div>`,
     n: N(['A janela do app desktop; fechar esconde e o app fica na bandeja (<code>main.ts</code>).', 'O Session Detail com a faixa de waiting.'], ['Não há uma terceira cópia de telas: é o console servido pelo núcleo.']) },
 
-  { id: 'app-machines', cod: 'A6', nome: 'Bandeja com a Workstation conectada e um alerta', sub: 'O bloco Máquinas: esta máquina e a remota, com o número que mais importa e os alertas abertos. As sessões da Workstation que esperam entram na lista de cima, com o rótulo da máquina.', html: () => `<div class="fila"><div class="mac">${APP.machines()}</div></div>`,
+  { id: 'app-machines', cod: 'A6', nome: 'Bandeja com a Workstation conectada e um alerta', sub: 'O bloco Máquinas: esta máquina e a remota, com o número que mais importa e os alertas abertos. As sessões da Workstation que precisam de você entram na lista de cima, com o rótulo da máquina.', html: () => `<div class="fila"><div class="mac">${APP.machines()}</div></div>`,
     n: N(['O menu do A2, igual; o CCAM não tem telemetria de máquina.', 'Do painel de telemetria antigo: a linha do túnel e o alerta de porta.'], ['Telemetria no menu só como resumo: o detalhe é a janela.', 'Alerta de máquina não entra no número da barra, que é de sessões.', 'Sem ações de túnel, login ou portas: o app só mostra (0008).']) },
   { id: 'app-machines-offline', cod: 'A7', nome: 'Bandeja com a Workstation sem conexão', sub: 'O túnel caiu: a Workstation fica em cinza, com a idade da última leitura e o que o núcleo viu. Uma notificação, sem som, na passagem.', html: () => `<div class="fila"><div class="mac">${APP.machinesOffline()}</div></div>`,
-    n: N(['Do painel de telemetria antigo: os estados da porta (respondendo, ninguém escuta lá, ocupada, fora do túnel).'], ['O painel antigo tinha "Subir o túnel"; aqui não, porque mudar o túnel pede uma confirmação que não cabe numa bandeja.']) },
+    n: N(['Do painel de telemetria antigo: os estados da porta (respondendo, ninguém escuta lá, ocupada, fora do túnel).'], ['O painel antigo tinha "Subir o túnel"; aqui não: o app não conhece o túnel. Reconectar, quando configurado, roda só o comando que você escreveu (A8).']) },
+  { id: 'app-machines-reconnect', cod: 'A8', nome: 'Bandeja: Reconectar', sub: 'Feature Reconectar a máquina remota (#244, decisão 0012). À esquerda, com reconnect configurado: o item Reconectar a Workstation e a notificação com a ação Reconectar. À direita, o comando rodando (cinza, sem clique) e, sem reconnect, o item que ensina a configurar.', html: () => `<div class="fila"><div class="mac">${APP.machinesReconnect()}</div><div class="mac">${APP.machinesReconnecting()}</div></div>`,
+    n: N(['Do painel de telemetria antigo: o "Subir o túnel" na linha da máquina; aqui o comando é o seu, não um que o app conhece.'], ['Só aparece com <code>reconnect</code> no machines.json; sem ele, um item leva ao passo a passo (C50, estado 5).', 'Um por vez: o item fica cinza com a contagem enquanto o comando roda, venha o clique daqui ou da janela.', 'Cancelar fica na janela: na bandeja não cabe confirmação.']) },
   { cap: 'console', titulo: 'Console (artefato)', desc: 'O console completo, que é também o que a janela do app mostra: todas as telas do CCAM que fazem sentido aqui, na mesma ordem da barra lateral dele. Moldura, cabeçalho, cards, tabelas e gráficos seguem o CCAM tela a tela.' },
-  { id: 'console-dashboard', cod: 'C1', nome: 'Dashboard', sub: '6 cards, "precisam de você" em destaque, agentes ativos e atividade recente (3.2).', html: () => `<div class="fila">${cc('dashboard', telaDashboard())}</div>`,
-    n: N(['Dashboard · Monitor: grade 3 × 2 de StatCard, Active Agents com AgentCard (borda na cor do status, duas últimas mensagens, modelo, custo, idade, id) e Recent Activity.', 'Cabeçalho de página com ícone, título, pílula Live e Refresh; segmented Monitor | Saúde.'], ['O inbox "precisam de você" entra entre os números e as listas, ideia do Podium.', 'Custo sempre com "~" e "estimativa".']) },
-  { id: 'console-mural', cod: 'C2', nome: 'Mural ao vivo', sub: 'Um card por sessão aberta, com status, modelo, esforço, plano, agentes, contexto e custo (3.9).', html: () => `<div class="fila">${cc('mural', telaMural())}</div>`,
-    n: N(['O SessionCard e as barras de progresso do Task Progress.'], ['O mural é do Podium; o CCAM não tem. Cards do mesmo tamanho, 3 por linha.']) },
-  { id: 'console-sessoes', cod: 'C3', nome: 'Sessões', sub: 'Tabela com busca, filtro por projeto, ordenação e pílulas de status (3.3).', html: () => `<div class="fila">${cc('sessoes', telaSessoes())}</div>`,
-    n: N(['Sessions: barra de filtros (busca, projeto, ordenação, pílulas) e a tabela com Session, Status com motivo, Last active, Duration, Agents, Cost e Directory.'], ['10 por página. Duração "rodando" em laranja.']) },
+  { id: 'console-dashboard', cod: 'C1', nome: 'Dashboard', sub: '6 cards, "precisam de você" em destaque (só o que trava, #245), as ociosas numa linha neutra à parte, agentes ativos e atividade recente (3.2).', html: () => `<div class="fila">${cc1100('dashboard', telaDashboard())}</div>`,
+    n: N(['Dashboard · Monitor: grade 3 × 2 de StatCard, Active Agents com AgentCard (borda na cor do status, duas últimas mensagens, modelo, custo, idade, id) e Recent Activity.', 'Cabeçalho de página com ícone, título, pílula Live e Refresh; segmented Monitor | Saúde.'], ['O inbox "precisam de você" entra entre os números e as listas, ideia do Podium.', 'Ociosas (#245): uma linha neutra logo abaixo do inbox, sem fundo amarelo, com o motivo em chip leve. Ficam visíveis sem disputar atenção.', 'Custo sempre com "~" e "estimativa".']) },
+  { id: 'console-mural', cod: 'C2', nome: 'Mural ao vivo', sub: 'Um card por sessão aberta, com status, modelo, esforço, plano, agentes, contexto e custo (3.9).', html: () => `<div class="fila">${cc1100('mural', telaMural())}</div>`,
+    n: N(['O SessionCard e as barras de progresso do Task Progress.'], ['O mural é do Podium; o CCAM não tem. Cards do mesmo tamanho, 3 por linha.', 'Precisa de você: borda amarela e chip forte. Ociosa: borda cinza e chip leve (#245).']) },
+  { id: 'console-sessoes', cod: 'C3', nome: 'Sessões', sub: 'Tabela com busca, filtro por projeto, ordenação e pílulas de status, com "Precisam de você" e "Ociosas" lado a lado (3.3, #245).', html: () => `<div class="fila">${cc1100('sessoes', telaSessoes())}</div>`,
+    n: N(['Sessions: barra de filtros (busca, projeto, ordenação, pílulas) e a tabela com Session, Status com motivo, Last active, Duration, Agents, Cost e Directory.'], ['10 por página. Duração "rodando" em laranja.', 'Em 1100 o diretório desce para baixo do nome, junto do id, e a coluna Agentes sai (fica no detalhe), para a tabela não rolar na horizontal.', 'As pílulas trazem a contagem. "Precisam de você" inclui as com erro, que também têm a sua pílula.']) },
   { id: 'console-det-agentes', cod: 'C4', nome: 'Detalhe · Agentes', sub: 'Números, ferramentas, tarefas, fluxo de tokens e a árvore de agentes com custo por nó (3.4).', html: () => `<div class="fila">${cc('sessoes', telaDetAgentes())}</div>`,
     n: N(['Session Detail · Agents: chips copiáveis, 6 KPIs, Top Tools, Task Progress, Token Flow e a árvore de agentes.'], ['Barras de ferramenta no laranja, sem uma cor por ferramenta: a paleta fica fechada.', 'Custo por nó da árvore.']) },
-  { id: 'console-det-conversa', cod: 'C5', nome: 'Detalhe · Conversa', sub: 'A sessão espera uma permissão: faixa amarela no topo e o bloco da ferramenta aguardando (3.5).', html: () => `<div class="fila">${cc('sessoes', telaConversa())}</div>`,
-    n: N(['Conversation: seletor de agente, mensagens com modelo e tokens, blocos de ferramenta que expandem, código inline.', 'A faixa amarela de waiting do Session Detail.'], ['"Abrir no Claude Desktop", com o nome inteiro, no lugar de responder ali: responder é o épico 9.']) },
-  { id: 'console-det-tempo', cod: 'C6', nome: 'Detalhe · Linha do tempo', sub: 'Os eventos da sessão, filtráveis e expansíveis (3.5).', html: () => `<div class="fila">${cc('sessoes', telaLinhaTempo())}</div>`,
+  { id: 'console-det-conversa', cod: 'C5', nome: 'Detalhe · Conversa', sub: 'Em cima, a sessão precisa de você (pede uma permissão): faixa amarela no topo e o bloco da ferramenta aguardando. Embaixo, uma sessão ociosa (o turno acabou): sem faixa, só uma linha neutra (3.5, #245).', html: () => `<div style="display:flex;flex-direction:column;gap:16px">${cc1100('sessoes', telaConversa())}${cc1100('sessoes', telaConversaIdle())}</div>`,
+    n: N(['Conversation: seletor de agente, mensagens com modelo e tokens, blocos de ferramenta que expandem, código inline.', 'A faixa amarela de waiting do Session Detail.'], ['"Abrir no Claude Desktop", com o nome inteiro, no lugar de responder ali: responder é o épico 9.', 'A faixa amarela só aparece quando a sessão trava. Ociosa não tem faixa (#245).']) },
+  { id: 'console-det-tempo', cod: 'C6', nome: 'Detalhe · Linha do tempo', sub: 'Os eventos da sessão, filtráveis e expansíveis (3.5).', html: () => `<div class="fila">${cc1100('sessoes', telaLinhaTempo())}</div>`,
     n: N(['Timeline: busca, intervalo De–Até, filtros Status, Event type, Tool e Agent, linhas que expandem com o chip da ferramenta.'], ['O tipo do hook aparece na linha, para ler a máquina de estados.']) },
   { id: 'console-det-workflow', cod: 'C7', nome: 'Detalhe · Workflow', sub: 'O grafo de agentes da sessão: o laço dev → review → ajustes → review, e a linha do tempo dos agentes em paralelo.', html: () => `<div class="fila">${cc('sessoes', telaDetWorkflow())}</div>`,
     n: N(['Session Drill-In da tela Workflows: árvore de agentes e timeline de ferramentas da sessão.', 'Concurrency Timeline: faixas por agente.', 'Dynamic Workflows dentro do Session Detail.'], ['Uma aba própria no detalhe, porque o laço dev/review é o que se quer ver numa sessão.', 'A volta do review para o dev é uma aresta tracejada em vermelho (ajustes pedidos), com o número da rodada no nó.']) },
-  { id: 'console-feed', cod: 'C8', nome: 'Feed de atividade', sub: 'Todos os eventos, ao vivo, com filtros, pausa e uma linha aberta com o detalhe.', html: () => `<div class="fila">${cc('feed', telaFeed())}</div>`,
+  { id: 'console-feed', cod: 'C8', nome: 'Feed de atividade', sub: 'Todos os eventos, ao vivo, com filtros, pausa e uma linha aberta com o detalhe.', html: () => `<div class="fila">${cc1100('feed', telaFeed())}</div>`,
     n: N(['Activity Feed: banner "About events", EventFilters (busca, De–Até, Status, Event type, Tool, Session), linhas com hora, pílula, breadcrumb projeto › sessão › agente, chip da ferramenta e Session ↗; EventDetail com resumo e chave-valor; Pause.'], ['No backlog estava para depois da entrega; entra no pacote a pedido do dono (precisa de item no épico 3).']) },
-  { id: 'console-kanban', cod: 'C9', nome: 'Kanban · sessões', sub: '5 colunas por status, só leitura, 3 cards e "mostrar mais" (3.6).', html: () => `<div class="fila">${cc('kanban', telaKanban())}</div>`,
-    n: N(['Kanban Board · Sessions: colunas com ponto, título em caixa alta e contador; SessionCard com id, última mensagem, cwd, agentes, modelo, custo e "running".'], ['Cards de altura fixa: nenhum cresce com o texto.']) },
-  { id: 'console-kanban-agentes', cod: 'C10', nome: 'Kanban · agentes', sub: '4 colunas: Trabalhando, Esperando, Concluídos e Erro (3.6).', html: () => `<div class="fila">${cc('kanban', telaKanbanAgentes())}</div>`,
+  { id: 'console-kanban', cod: 'C9', nome: 'Kanban · sessões', sub: '5 colunas por status, só leitura, 3 cards e "mostrar mais" (3.6). A antiga coluna de espera virou duas: "Precisam de você" (com as de erro) e "Ociosas", tracejada e neutra (#245).', html: () => `<div class="fila">${cc1100('kanban', telaKanban())}</div>`,
+    n: N(['Kanban Board · Sessions: colunas com ponto, título em caixa alta e contador; SessionCard com id, última mensagem, cwd, agentes, modelo, custo e "running".'], ['Cards de altura fixa: nenhum cresce com o texto.', 'Sem coluna "Com erro": a sessão com erro trava e vai para "Precisam de você", em vermelho, como no núcleo (grupo blocking). Assim o quadro fica em 5 colunas e cabe em 1100.']) },
+  { id: 'console-kanban-agentes', cod: 'C10', nome: 'Kanban · agentes', sub: '5 colunas: Trabalhando, Precisam de você, Ociosos, Concluídos e Erro (3.6, #245).', html: () => `<div class="fila">${cc1100('kanban', telaKanbanAgentes())}</div>`,
     n: N(['Kanban Board · Agents (<code>AGENT_COLUMNS</code>).'], ['"Trabalhando" usa o laranja de "Ativa".']) },
   { id: 'console-projeto', cod: 'C11', nome: 'Kanban do projeto', sub: 'O GitHub Project por Status; arrastar um card muda o Status no GitHub (3.10).', html: () => `<div class="fila">${cc('projeto', telaProjeto())}</div>`,
     n: N(['A moldura do Kanban Board.'], ['O CCAM não arrasta; aqui arrastar escreve no GitHub, com confirmação e Desfazer.', 'Tipo da issue, PR, CI e review no card.']) },
@@ -2398,6 +2747,12 @@ const TELAS = [
     n: N(['Analytics: 5 StatCards, Event Activity de 52 semanas, Last 30 Days, abas Cost / Token / Productivity, barras horizontais.'], ['O heatmap usa o laranja em 4 tons, sem o índigo do CCAM.', 'Custo virou a aba "Custo" desta tela (3.7); o resto entra a pedido do dono.']) },
   { id: 'console-custo', cod: 'C13', nome: 'Analytics · Custo', sub: 'Custo por dia, por modelo e por projeto (3.7).', html: () => `<div class="fila">${cc('analytics', telaCusto())}</div>`,
     n: N(['Analytics · Cost Analytics: linha diária com pico e total, donut por modelo, barras horizontais.'], ['Gráficos no laranja e nos seus tons, sem uma cor por série.', 'Custo sempre com "~" e "estimativa".']) },
+  { id: 'console-delivery', cod: 'C54', nome: 'Analytics · Entregas, por repositório', sub: 'Feature Entregas (#266): o ritmo de entrega de cada repositório no GitHub e o esforço do Claude no mesmo repositório, nunca por pessoa. O seletor Por repositório · Por projeto troca o eixo de tudo. Números do período, as contribuições por tipo (PRs abertos e mesclados, issues abertas e fechadas, revisões: linhas são repositórios, a cor é o peso dentro da linha), um gráfico pequeno por repositório com os PRs mesclados por dia (escala própria, pico e total no canto, horas do Claude tracejadas atrás), a tabela Esforço e entrega com o custo por PR mesclado, e o que está aberto, dos mais antigos primeiro, com busca. Em 1100 e 1440.', html: () => `<div style="display:flex;flex-direction:column;gap:12px"><div class="rotulo">1100 px · a janela do app</div>${frameAt(1100, 'analytics', telaEntregas(1100))}<div class="rotulo">1440 px</div>${frameAt(1440, 'analytics', telaEntregas(1440))}</div>`,
+    n: N(['Nada do CCAM: ele não lê o GitHub. As formas vêm de um painel de entregas que já usamos: os gráficos pequenos com pico e total, a tabela com a cor pelo peso e a lista dos abertos com busca.'], ['As linhas são repositórios ou projetos, nunca pessoas: no painel de referência as linhas são pessoas; aqui não há autor, responsável nem eixo por pessoa.', 'O repositório de uma sessão vem do cwd, como na tela Repositórios; sem sessão no período, horas e custo são "—", nunca zero.', 'Custo por PR é custo ÷ PRs mesclados: uma ponte entre os dois lados, não uma meta.']) },
+  { id: 'console-delivery-projects', cod: 'C55', nome: 'Analytics · Entregas, por projeto', sub: 'Por projeto: o mesmo seletor troca o eixo de toda a aba para os GitHub Projects que o console já lê (Kanban do projeto, C11), e um projeto junta issues e PRs de vários repositórios. As contribuições, o ritmo, o esforço e o custo do Claude e o Em andamento passam a ter uma linha por projeto. Cada gráfico diz os repositórios do projeto; o esforço do Claude de um projeto é a soma das sessões desses repositórios. Em 1100.', html: () => `<div class="fila">${frameAt(1100, 'analytics', telaEntregas(1100, true))}</div>`,
+    n: N(['—'], ['Um repositório em dois projetos conta nos dois; a soma dos projetos pode passar do total da aba.', 'Os itens de um projeto que não são de repositório (rascunhos do Project) não entram.']) },
+  { id: 'console-delivery-states', cod: 'C56', nome: 'Analytics · Entregas, estados', sub: 'Sem GitHub conectado: o estado vazio explica como conectar, sem escolher repositório por você (regra 5). GitHub fora ou limitando: o cache com a hora, e as horas e o custo do Claude em dia, que vêm das sessões. Em 1100.', html: () => `<div class="fila">${frameAt(1100, 'analytics', telaEntregasEstados())}</div>`,
+    n: N(['Os estados do C19.'], ['Só o lado do GitHub desbota: o lado do Claude é local e continua ao vivo.']) },
   { id: 'console-workflows', cod: 'C14', nome: 'Workflows', sub: 'KPIs de orquestração, os workflows dinâmicos (dev-review aberto, com fases e agentes) e o grafo de orquestração de todas as sessões.', html: () => `<div class="fila">${cc('workflows', telaWorkflows())}</div>`,
     n: N(['Workflows: 6 KPIs (profundidade, subagentes por sessão, sucesso, fluxo mais comum), Dynamic Workflows com chips de fase e tabela Agent / Phase / State / Tokens / Tools / Duration, e o Agent Orchestration Graph em colunas com arestas de espessura pelo volume.'], ['KPI "Rodadas de review por PR" no lugar de "Avg Compactions": é o que mede o laço dev/review.', 'Só o grafo de orquestração das 11 seções; as outras ficam para depois.']) },
   { id: 'console-historico', cod: 'C15', nome: 'Histórico', sub: 'Sessões encerradas por dia, com a ligação depois do /clear (3.8).', html: () => `<div class="fila">${cc('historico', telaHistorico())}</div>`,
@@ -2423,8 +2778,10 @@ const TELAS = [
   { id: 'console-workstation', cod: 'C25', nome: 'Workstation', sub: 'A mesma tela para a máquina remota, lida do núcleo de lá pela porta que o túnel encaminha: carga contra os vCPUs, volumes, Docker com o recuperável, stacks com a sessão dona, as sessões do Claude de lá e as portas, com a porta do Mac que encaminha cada uma.', html: () => `<div class="fila">${bothWidths(w => frameAt(w, 'machine-ws', workstationScreen(w)))}</div>`,
     n: N(['Do console da workstation antigo: volumes, recursos, Docker em uso e recuperável, stacks e a sessão dona, sessões do Claude lá, portas em escuta por interface e "o que pede atenção".'], ['Lido ao vivo do núcleo de lá, a cada 30 s; o antigo era escrito à mão a cada medição.', 'Fora: faturamento e créditos de nuvem (pedem credencial de uma conta), perfis de nuvem e worktrees (ficam para uma issue própria).', 'O nome da máquina e a porta vêm de ~/.ahrena-console/machines.json; nada aponta para uma máquina por padrão.']) },
   { id: 'console-workstation-offline', cod: 'C26', nome: 'Workstation sem conexão, e os outros estados', sub: 'Túnel caído: a faixa diz o que o núcleo viu e a tela mostra a última leitura, desbotada. Ao lado, o túnel de pé com o núcleo de lá parado, nenhuma máquina configurada e versão diferente.', html: () => `<div class="fila"><div class="width-col"><div class="rotulo">1100 px</div>${frameAt(1100, 'machine-ws', workstationOfflineScreen(), 'off')}</div><div class="width-col"><div class="rotulo">1100 px</div>${frameAt(1100, 'machine-ws', machineStatesScreen(), 'off')}</div></div>`,
-    n: N(['Os três estados do C19 (carregando, vazio e erro).', 'Do painel antigo: "Sem ligação com esta máquina" com o diagnóstico logo abaixo.'], ['Sem botão de subir o túnel nem o núcleo de lá: o app só mostra.', 'A última leitura fica no SQLite do Mac, então a tela abre com ela e diz a idade.']) },
-  { id: 'console-dev-console', cod: 'C27', nome: 'Dev Console', sub: 'O placar de um contexto (um conjunto de repositórios): prontos para você, CI rodando, CI vermelho, sessões trabalhando e quem espera; a fila de merge na ordem; o quadro das issues em seis colunas e o que foi mesclado. Em 1440 as seis colunas lado a lado; em 1100, quatro e duas embaixo, para nada rolar na horizontal.', html: () => `<div class="fila">${bothWidths(w => frameAt(w, 'dev', devConsoleScreen(w)))}</div>`,
+    n: N(['Os três estados do C19 (carregando, vazio e erro).', 'Do painel antigo: "Sem ligação com esta máquina" com o diagnóstico logo abaixo.'], ['Sem botão de subir o núcleo de lá. O túnel continua seu; Reconectar só aparece com o comando que você escreveu no machines.json (C50).', 'A última leitura fica no SQLite do Mac, então a tela abre com ela e diz a idade.']) },
+  { id: 'console-workstation-reconnect', cod: 'C50', nome: 'Reconectar a Workstation', sub: 'Feature Reconectar a máquina remota (#244, decisão 0012): o console roda o comando de reconexão que você escreveu no machines.json. Os seis estados: com reconexão configurada (1, em 1100 e 1440), reconectando (2), reconectada (3), falhou (4), sem reconexão configurada (5) e já reconectando pela bandeja (6). A última leitura aparece cortada embaixo; é a mesma da C25.', html: () => reconnectScreens(),
+    n: N(['Do painel de telemetria antigo: "Sem ligação com esta máquina" com o diagnóstico logo abaixo, como na C26.'], ['O console não sabe montar túnel nem fazer login: roda a lista do arquivo, sem shell, e só ela.', 'A saída do comando fica no log da instalação, nunca na tela (variante A); a B está desenhada para o dono escolher.', 'Um por vez por máquina, com tempo limite e Cancelar.']) },
+  { id: 'console-dev-console', cod: 'C27', nome: 'Dev Console', sub: 'O placar de um contexto (um conjunto de repositórios): prontos para você, CI rodando, CI vermelho, sessões trabalhando e quem precisa de você; a fila de merge na ordem; o quadro das issues em seis colunas e o que foi mesclado. Em 1440 as seis colunas lado a lado; em 1100, quatro e duas embaixo, para nada rolar na horizontal.', html: () => `<div class="fila">${bothWidths(w => frameAt(w, 'dev', devConsoleScreen(w)))}</div>`,
     n: N(['Do Dev Console antigo: o seletor de contexto, a aba Fila de merge com todos os contextos, o placar de 5 números, "Depende de você", a fila na ordem de merge com os não prontos fechados, o quadro de 6 colunas com o critério de cada uma, e "mesclados nas últimas 24 h".'], ['Derivado no núcleo, sem sessão de PM gravando estado: "Delegada" é uma sessão aberta no branch da issue sem push, e "Depende de você" vem de /api/atencao e das decisões sugeridas.', '"Bloqueada" é a etiqueta blocked da issue; plano em andamento e a trilha da release ficaram de fora, porque dependiam de anotação.', 'O antigo rolava na horizontal (o quadro tinha 1110 px mínimos); aqui o quadro dobra em 1100.']) },
   { id: 'console-adrs', cod: 'C28', nome: 'ADR · decisões de arquitetura', sub: 'Os registros de decisão (ADRs) de todos os repositórios da conta, por repositório, com busca no texto e filtro por status. Em 1100 (a janela do app) e 1440.', html: () => `<div style="display:flex;flex-direction:column;gap:12px"><div class="rotulo">1100 px</div>${frameAt(1100, 'adrs', telaAdrs(false))}<div class="rotulo">1440 px</div>${frameAt(1440, 'adrs', telaAdrs(true))}</div>`,
     n: N(['A lista agrupada do Histórico e de Decisões (C21), os StatCards e os filtros de Sessões.'], ['O CCAM não lê ADRs. A tela lê as pastas de ADR que a varredura de Repositórios (C22) já conhece, com o cache da decisão 0001.', 'Em 1440 a linha ganha a coluna das ligações e do que falta; em 1100 isso desce para baixo do título.', 'Repositórios sem ADR ficam numa linha só, no fim, com as pastas procuradas.']) },
@@ -2472,11 +2829,13 @@ function montar() {
     <li><b>Motivo de uma pergunta:</b> fica "Pede permissão" (<code>notification</code>), com o tipo dito na faixa.</li>
     <li><b>Clique numa sessão na bandeja:</b> abre na janela do app. Abrir no Claude Desktop é sempre explícito: item alternativo com ⌥ no menu, ação própria na notificação e botão no detalhe (A2, A3, A5).</li>
     <li><b>Barra de contexto:</b> laranja até 79%, vermelha a partir de 80%.</li>
-    <li><b>Som da notificação:</b> só nos urgentes (Pede permissão, Interrompida e Com erro).</li>
-    <li><b>Sessão com erro:</b> <b>entra</b> em "precisam de você" (decidido pelo dono). Ela parou e só anda com uma ação sua, como as que esperam; o design.md já diz que o vermelho é "falhou e precisa de você". Entra depois das urgentes que esperam e antes de "Sua vez", vai para a bandeja e notifica com som. "No prompt" fica de fora: a sessão acabou de abrir e você sabe disso.</li>
+    <li><b>A espera virou dois estados (#245, a aprovar):</b> <b>Precisa de você</b> é o que trava a sessão até você agir (Pede permissão, Pergunta, Plano para aprovar, Decisão pedida, Com erro), em amarelo, com destaque e sempre com o motivo. <b>Ociosa</b> é a sua vez no bate-bola (Sua vez, Interrompida, No prompt), em cor neutra, sem destaque e com o motivo em chip leve. O número da bandeja, o inbox do Dashboard e as notificações contam só "Precisa de você".</li>
+    <li><b>Notificação:</b> só quando a sessão passa a precisar de você ou para com erro, todas com som. Ociosa não notifica (#245).</li>
+    <li><b>Sessão com erro:</b> <b>entra</b> em "precisam de você" (decidido pelo dono). Ela parou e só anda com uma ação sua, como as travadas; o design.md já diz que o vermelho é "falhou e precisa de você". Mantém a pílula vermelha "Com erro", entra na ordem de quem espera há mais tempo, vai para a bandeja e notifica com som. "Sua vez", "Interrompida" e "No prompt" ficam de fora: são ociosas (#245).</li>
     <li><b>Decisões da sessão:</b> o escopo tem os três níveis (sessão, família e branch), trocados no mesmo seletor; as decisões vigentes chegam à sessão nova pelos dois caminhos, injetadas no início e pelo MCP quando o agente perguntar (P9, P10, C20 e C21).</li>
     <li><b>Onde o grafo vive (#146, a aprovar):</b> a proposta é um detalhe aberto pelo pé do card Subagentes, no lugar dos cards, como as decisões (P11). Dentro do card não cabe; numa seção própria, empurra o resto para baixo.</li>
-    <li><b>Telemetria e Dev Console no app (decisão 0008, a aprovar):</b> cada máquina se mede com o próprio núcleo; o do Mac lê o da Workstation pela porta que o túnel encaminha; o app só mostra, sem subir túnel nem abrir login (A6, A7, C24 a C27). A barra lateral ganha Dev Console e a seção Máquinas, que aparece em todas as telas.</li>
+    <li><b>Telemetria e Dev Console no app (decisão 0008, a aprovar):</b> cada máquina se mede com o próprio núcleo; o do Mac lê o da Workstation pela porta que o túnel encaminha; o app só mostra, sem subir túnel nem abrir login (A6, A7, C24 a C27). A reconexão revê esse ponto na decisão 0012. A barra lateral ganha Dev Console e a seção Máquinas, que aparece em todas as telas.</li>
+    <li><b>Reconectar a máquina remota (#244, decisão 0012):</b> com <code>reconnect</code> no machines.json, o núcleo do Mac roda o comando que você escreveu, sem shell, um por vez e com tempo limite; a tela espera o login no navegador e relê a remota ao terminar (C50, A8). Aprovado em 20/10, com a saída só no log.</li>
     <li><b>Backlog:</b> Feed de atividade, Analytics completo, Workflows e o detalhe com o grafo de agentes estavam para depois da entrega. Entraram aqui a pedido do dono; o PM decide se viram itens da 0.0.1.</li></ol></section>`
   indice.innerHTML = htmlI; main.innerHTML = htmlM
   if (window.lucide) lucide.createIcons()

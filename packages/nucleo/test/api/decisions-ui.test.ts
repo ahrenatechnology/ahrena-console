@@ -30,9 +30,6 @@ const VITRINE = 'sim-panel-vitrine-demo';
 const VITRINE_ONTEM = 'sim-panel-vitrine-yesterday';
 const JSON_ = { 'content-type': 'application/json' };
 
-/** O rascunho como a rota antiga `/api/decisoes/:id/promover` o responde: as chaves antigas (a nova responde `draft`, um `RascunhoDeRegistro`). */
-type RascunhoAntigo = Omit<RascunhoDeRegistro, 'path' | 'canWrite' | 'reason'> & { caminho: string; podeGravar: boolean; motivo: string | null };
-
 interface Cenario {
   storage: SqliteStorage;
   decisoes: SqliteDecisionStore;
@@ -75,7 +72,7 @@ async function cenario(opcoes: Partial<ConstructorParameters<typeof DecisoesDaUi
 
 const rotulos = (itens: DecisaoDaUi[]) => itens.map((i) => i.title);
 
-describe('C21: GET /api/decisoes (todas as decisões)', () => {
+describe('C21: GET /api/decisions (todas as decisões)', () => {
   let c: Cenario;
   before(async () => {
     c = await cenario();
@@ -152,8 +149,10 @@ describe('C21: GET /api/decisoes (todas as decisões)', () => {
     }
     const aConfirmar = (await c.ler<DecisoesDaPagina>('/api/decisions?state=to_confirm')).corpo;
     assert.deepEqual(aConfirmar.groups.map((g) => [g.title, g.total]), [['feat/42-kanban-de-sessoes', 1], ['feat/42-kanban', 1], ['perf/47-relatorio', 1]]);
-    // The old values still read the same on the new route (src/api/legacy-routes.ts).
-    assert.deepEqual((await c.ler<DecisoesDaPagina>('/api/decisions?estado=vigentes&agrupar=sessao')).corpo, (await c.ler<DecisoesDaPagina>('/api/decisions?state=current&groupBy=session')).corpo);
+    // The old parameters and values are gone (#173 phase 6): an old name is not read, an old value is a 400.
+    assert.deepEqual((await c.ler<DecisoesDaPagina>('/api/decisions?estado=vigentes&agrupar=sessao')).corpo, (await c.ler<DecisoesDaPagina>('/api/decisions')).corpo);
+    assert.deepEqual(await c.ler('/api/decisions?state=vigentes'), { status: 400, corpo: { error: 'state: all, current ou to_confirm' } });
+    assert.deepEqual(await c.ler('/api/decisions?groupBy=sessao'), { status: 400, corpo: { error: 'groupBy: branch, family ou session' } });
     assert.deepEqual(await c.ler('/api/decisions?state=descartada'), { status: 400, corpo: { error: 'state: all, current ou to_confirm' } });
     assert.deepEqual(await c.ler('/api/decisions?groupBy=conta'), { status: 400, corpo: { error: 'groupBy: branch, family ou session' } });
   });
@@ -197,12 +196,12 @@ describe('C21: a janela de 30 dias das substituídas', () => {
     const c = await cenario();
     try {
       const antes = (await c.ler<DecisoesDaPagina>('/api/decisions')).corpo.counts;
-      const vigentes = (await c.decisoes.listDecisions({ sessionId: 'sim-panel-motor-de-regras', states: ['vigente'] })).items;
+      const vigentes = (await c.decisoes.listDecisions({ sessionId: 'sim-panel-motor-de-regras', states: ['current'] })).items;
       assert.ok(vigentes.length >= 3);
       const ha = (dias: number) => new Date(AGORA - dias * 86_400_000).toISOString();
       const nova = vigentes[2]!.id;
-      await c.decisoes.putDecision({ ...vigentes[0]!, state: 'substituida', supersededBy: nova, updatedAt: ha(31) });
-      await c.decisoes.putDecision({ ...vigentes[1]!, state: 'substituida', supersededBy: nova, updatedAt: ha(29) });
+      await c.decisoes.putDecision({ ...vigentes[0]!, state: 'superseded', supersededBy: nova, updatedAt: ha(31) });
+      await c.decisoes.putDecision({ ...vigentes[1]!, state: 'superseded', supersededBy: nova, updatedAt: ha(29) });
       const depois = (await c.ler<DecisoesDaPagina>('/api/decisions')).corpo.counts;
       assert.equal(depois.current, antes.current - 2);
       assert.equal(depois.superseded30d, antes.superseded30d + 1, 'só a de 29 dias entra');
@@ -212,7 +211,7 @@ describe('C21: a janela de 30 dias das substituídas', () => {
   });
 });
 
-describe('C20: GET /api/sessoes/<id>/decisoes (a aba do Detalhe)', () => {
+describe('C20: GET /api/sessions/<id>/decisions (a aba do Detalhe)', () => {
   let c: Cenario;
   before(async () => {
     c = await cenario();
@@ -246,9 +245,11 @@ describe('C20: GET /api/sessoes/<id>/decisoes (a aba do Detalhe)', () => {
     assert.equal(aConfirmar.total, 7, 'o total da aba não depende do filtro');
     const busca = (await c.ler<DecisoesDaAba>(`/api/sessions/${VITRINE}/decisions?q=long%20polling`)).corpo;
     assert.deepEqual(rotulos(busca.items), ['Kanban atualiza por long polling']);
-    assert.equal((await c.ler(`/api/sessions/${VITRINE}/decisions?escopo=conta`)).status, 400);
+    assert.equal((await c.ler(`/api/sessions/${VITRINE}/decisions?scope=conta`)).status, 400);
     assert.deepEqual(await c.ler(`/api/sessions/${VITRINE}/decisions?state=x`), { status: 400, corpo: { error: 'state: all, current ou to_confirm' } });
-    assert.deepEqual((await c.ler(`/api/sessions/${VITRINE}/decisions?estado=a_confirmar`)).corpo, aConfirmar, 'the old value still reads the same');
+    // The old parameter and value are gone (#173 phase 6).
+    assert.equal((await c.ler(`/api/sessions/${VITRINE}/decisions?state=a_confirmar`)).status, 400);
+    assert.deepEqual((await c.ler(`/api/sessions/${VITRINE}/decisions?estado=a_confirmar`)).corpo, (await c.ler(`/api/sessions/${VITRINE}/decisions`)).corpo, 'the old name is not read');
     assert.equal((await c.ler('/api/sessions/n%C3%A3o-existe/decisions')).status, 400);
     assert.equal((await c.ler('/api/sessions/nao-existe/decisions')).status, 404);
     assert.equal((await c.ler(`/api/sessions/${VITRINE_ONTEM}/decisions`)).status, 200, 'a sessão que só a porta das decisões conhece');
@@ -310,26 +311,29 @@ describe('a própria /ui escreve nas decisões (exceção de origem, decisão 00
   });
   after(() => c.fechar());
 
-  const sugeridaDe = async (sessionId: string) => (await c.decisoes.listDecisions({ sessionId, states: ['a_confirmar'] })).items[0]!;
+  const sugeridaDe = async (sessionId: string) => (await c.decisoes.listDecisions({ sessionId, states: ['to_confirm'] })).items[0]!;
 
   test('Origin igual a http://<Host>, caminho exato e JSON: passa; o resto, 403 ou 415', async () => {
     const nossa = { ...JSON_, origin: `http://${c.host}` };
     const d = await sugeridaDe(VITRINE);
     const ok = await c.postar<{ decision: DecisaoDaUi }>(`/api/decisions/${d.id}/confirm`, { session: VITRINE }, nossa);
     assert.equal(ok.status, 200);
-    assert.equal((await c.decisoes.getDecision(d.id))?.state, 'vigente');
+    assert.equal((await c.decisoes.getDecision(d.id))?.state, 'current');
 
     const outra = await sugeridaDe('sim-panel-painel-de-metricas');
     for (const origin of ['http://evil.example', `https://${c.host}`, 'null', 'http://localhost:1', `http://${c.host}.exemplo.com`]) {
-      assert.equal((await c.postar(`/api/decisoes/${outra.id}/descartar`, { sessao: 'sim-panel-painel-de-metricas' }, { ...JSON_, origin })).status, 403, origin);
+      assert.equal((await c.postar(`/api/decisions/${outra.id}/dismiss`, { session: 'sim-panel-painel-de-metricas' }, { ...JSON_, origin })).status, 403, origin);
     }
-    assert.equal((await c.postar(`/api/decisoes/${outra.id}/descartar?x=1`, { sessao: 'sim-panel-painel-de-metricas' }, nossa)).status, 403, 'query na URL');
-    assert.equal((await c.postar(`/api/decisoes/${outra.id}/descartar`, { sessao: 'sim-panel-painel-de-metricas' }, { 'content-type': 'text/plain', origin: `http://${c.host}` })).status, 415);
-    assert.equal((await c.decisoes.getDecision(outra.id))?.state, 'a_confirmar', 'nada mudou');
+    assert.equal((await c.postar(`/api/decisions/${outra.id}/dismiss?x=1`, { session: 'sim-panel-painel-de-metricas' }, nossa)).status, 403, 'query na URL');
+    assert.equal((await c.postar(`/api/decisions/${outra.id}/dismiss`, { session: 'sim-panel-painel-de-metricas' }, { 'content-type': 'text/plain', origin: `http://${c.host}` })).status, 415);
+    assert.equal((await c.decisoes.getDecision(outra.id))?.state, 'to_confirm', 'nada mudou');
 
     // O promover também é da exceção; o resto das escritas e dos hooks, não.
-    assert.equal((await c.postar(`/api/decisoes/${outra.id}/promover`, { sessao: 'sim-panel-painel-de-metricas' }, nossa)).status, 200);
-    assert.equal((await c.postar(`/api/decisoes/${outra.id}/apagar`, { sessao: 'x' }, nossa)).status, 403);
+    assert.equal((await c.postar(`/api/decisions/${outra.id}/promote`, { session: 'sim-panel-painel-de-metricas' }, nossa)).status, 200);
+    assert.equal((await c.postar(`/api/decisions/${outra.id}/apagar`, { session: 'x' }, nossa)).status, 403);
+    // The old routes are not in the exception (#173 phase 6): they are gone.
+    assert.equal((await c.postar(`/api/decisoes/${outra.id}/descartar`, { session: 'sim-panel-painel-de-metricas' }, nossa)).status, 403);
+    assert.equal((await c.decisoes.getDecision(outra.id))?.state, 'to_confirm');
     const hook = JSON.stringify({ session_id: 'x', hook_event_name: 'SessionStart' });
     assert.equal((await c.postar('/api/hooks', hook, nossa)).status, 403);
   });
@@ -344,9 +348,9 @@ describe('a própria /ui escreve nas decisões (exceção de origem, decisão 00
           resolve(res.statusCode ?? 0);
         });
         r.on('error', reject);
-        r.end(JSON.stringify({ sessao: VITRINE }));
+        r.end(JSON.stringify({ session: VITRINE }));
       });
-    for (const caminho of ['/api/decisoes/../confirmar', '/api/decisoes/.../confirmar', '/api/decisoes/.x/promover', '/api/decisoes/-x/descartar']) {
+    for (const caminho of ['/api/decisions/../confirm', '/api/decisions/.../confirm', '/api/decisions/.x/promote', '/api/decisions/-x/dismiss']) {
       assert.equal(await cru(caminho), 403, caminho);
     }
   });
@@ -359,7 +363,7 @@ describe('a própria /ui escreve nas decisões (exceção de origem, decisão 00
   });
 });
 
-describe('POST /api/decisoes/<id>/promover', () => {
+describe('POST /api/decisions/<id>/promote', () => {
   const pastas: string[] = [];
   const pasta = async () => {
     const p = await mkdtemp(join(tmpdir(), 'ahrena-promover-'));
@@ -378,7 +382,7 @@ describe('POST /api/decisoes/<id>/promover', () => {
           sourceKey: `teste:${sessionId}`, sessionId, repo, branch: 'feat/9-relatorio', topic: 'relatorio:indice',
           context: 'A consulta do relatório mensal varre a tabela inteira. Qual índice?',
           choice: 'Índice composto em (mês, conta)', alternatives: ['view materializada', 'sem índice'],
-          decidedBy: 'usuario', origin: 'pergunta', inferred: false, decidedAt: new Date(AGORA - 5 * 60_000).toISOString(),
+          decidedBy: 'user', origin: 'question', inferred: false, decidedAt: new Date(AGORA - 5 * 60_000).toISOString(),
         },
         T0,
       )
@@ -398,24 +402,24 @@ describe('POST /api/decisoes/<id>/promover', () => {
     try {
       const repo = await repoComRegistros();
       const d = await comRepo(c, 'teste-promover', repo);
-      const rota = `/api/decisoes/${d.id}/promover`;
+      const rota = `/api/decisions/${d.id}/promote`;
 
-      const r = await c.postar<{ rascunho: RascunhoAntigo }>(rota, { sessao: 'teste-promover' });
+      const r = await c.postar<{ draft: RascunhoDeRegistro }>(rota, { session: 'teste-promover' });
       assert.equal(r.status, 200);
-      const { rascunho } = r.corpo;
-      assert.equal(rascunho.caminho, 'docs/decisoes/0008-indice-composto-em-mes-conta.md');
+      const { draft: rascunho } = r.corpo;
+      assert.equal(rascunho.path, 'docs/decisoes/0008-indice-composto-em-mes-conta.md');
       assert.equal(rascunho.repo, repo);
-      assert.equal(rascunho.podeGravar, true);
-      assert.equal(rascunho.motivo, null);
+      assert.equal(rascunho.canWrite, true);
+      assert.equal(rascunho.reason, null);
       assert.match(rascunho.markdown, /^# 0008 · Índice composto em \(mês, conta\)\n/);
       assert.match(rascunho.markdown, /\*\*Status:\*\* aceita/);
       assert.match(rascunho.markdown, /\*\*Data:\*\* 2026-11-02/);
       assert.match(rascunho.markdown, /## Contexto\n\nA consulta do relatório mensal varre a tabela inteira\. Qual índice\?/);
       assert.match(rascunho.markdown, /## Alternativas consideradas\n\n- view materializada\n- sem índice/);
       assert.match(rascunho.markdown, /\/ui\/sessions\/teste-promover/);
-      // Com caminho mas sem confirmar: continua rascunho.
-      assert.equal((await c.postar(rota, { sessao: 'teste-promover', caminho: rascunho.caminho })).status, 200);
-      assert.equal((await c.postar(rota, { sessao: 'teste-promover', confirmar: 'sim', caminho: rascunho.caminho })).status, 200);
+      // Com path mas sem confirm: continua rascunho.
+      assert.equal((await c.postar(rota, { session: 'teste-promover', path: rascunho.path })).status, 200);
+      assert.equal((await c.postar(rota, { session: 'teste-promover', confirm: 'sim', path: rascunho.path })).status, 200);
       assert.deepEqual((await readdir(join(repo, 'docs', 'decisoes'))).sort(), ['0001-primeira.md', '0007-setima.md']);
       assert.equal((await c.decisoes.getDecision(d.id))?.promotedTo, null);
 
@@ -424,37 +428,37 @@ describe('POST /api/decisoes/<id>/promover', () => {
         '../fora.md', 'docs/decisoes/../../fora.md', 'docs/decisoes/../0008-x.md', '/etc/0008-x.md', join(repo, 'docs/decisoes/0008-x.md'),
         'docs/outra/0008-x.md', 'docs\\decisoes\\0008-x.md', 'docs/decisoes/8-x.md', 'docs/decisoes/0008-x.txt', 'docs/decisoes/sub/0008-x.md', 42,
       ]) {
-        assert.equal((await c.postar(rota, { sessao: 'teste-promover', confirmar: true, caminho })).status, 400, String(caminho));
+        assert.equal((await c.postar(rota, { session: 'teste-promover', confirm: true, path: caminho })).status, 400, String(caminho));
       }
       assert.deepEqual((await readdir(join(repo, 'docs', 'decisoes'))).sort(), ['0001-primeira.md', '0007-setima.md']);
 
       // Arquivo que já existe: 409, sem sobrescrever.
-      assert.equal((await c.postar(rota, { sessao: 'teste-promover', confirmar: true, caminho: 'docs/decisoes/0007-setima.md' })).status, 409);
+      assert.equal((await c.postar(rota, { session: 'teste-promover', confirm: true, path: 'docs/decisoes/0007-setima.md' })).status, 409);
       assert.equal(await readFile(join(repo, 'docs', 'decisoes', '0007-setima.md'), 'utf8'), '# 0007 · Sétima\n');
       assert.equal((await c.decisoes.getDecision(d.id))?.promotedTo, null);
 
-      // The new route: `{ session, confirm, path }` → `{ decision, path }` (the old route above answers the old keys).
-      const feito = await c.postar<{ decision: DecisaoDaUi; path: string }>(`/api/decisions/${d.id}/promote`, { session: 'teste-promover', confirm: true, path: rascunho.caminho });
+      // `{ session, confirm, path }` → `{ decision, path }`.
+      const feito = await c.postar<{ decision: DecisaoDaUi; path: string }>(rota, { session: 'teste-promover', confirm: true, path: rascunho.path });
       assert.equal(feito.status, 201);
-      assert.equal(feito.corpo.path, rascunho.caminho);
-      assert.equal(feito.corpo.decision.promotedTo, rascunho.caminho);
-      assert.equal(await readFile(join(repo, rascunho.caminho), 'utf8'), rascunho.markdown);
-      assert.equal((await c.decisoes.getDecision(d.id))?.promotedTo, rascunho.caminho, 'markPromoted');
+      assert.equal(feito.corpo.path, rascunho.path);
+      assert.equal(feito.corpo.decision.promotedTo, rascunho.path);
+      assert.equal(await readFile(join(repo, rascunho.path), 'utf8'), rascunho.markdown);
+      assert.equal((await c.decisoes.getDecision(d.id))?.promotedTo, rascunho.path, 'markPromoted');
 
-      const depois = (await c.postar<{ rascunho: RascunhoAntigo }>(rota, { sessao: 'teste-promover' })).corpo.rascunho;
-      assert.equal(depois.podeGravar, false);
-      assert.match(depois.motivo!, /já promovida/);
-      assert.equal((await c.postar(rota, { sessao: 'teste-promover', confirmar: true, caminho: 'docs/decisoes/0009-de-novo.md' })).status, 409);
+      const depois = (await c.postar<{ draft: RascunhoDeRegistro }>(rota, { session: 'teste-promover' })).corpo.draft;
+      assert.equal(depois.canWrite, false);
+      assert.match(depois.reason!, /já promovida/);
+      assert.equal((await c.postar(rota, { session: 'teste-promover', confirm: true, path: 'docs/decisoes/0009-de-novo.md' })).status, 409);
 
-      assert.equal((await c.postar(rota, { sessao: 'outra-sessao' })).status, 404, 'a sessão não enxerga a decisão');
-      const novo = `/api/decisions/${d.id}/promote`;
-      const rascunhoNovo = await c.postar<{ draft: Record<string, unknown> }>(novo, { session: 'teste-promover' });
+      assert.equal((await c.postar(rota, { session: 'outra-sessao' })).status, 404, 'a sessão não enxerga a decisão');
+      const rascunhoNovo = await c.postar<{ draft: Record<string, unknown> }>(rota, { session: 'teste-promover' });
       assert.deepEqual(Object.keys(rascunhoNovo.corpo.draft), ['path', 'markdown', 'hash', 'repo', 'canWrite', 'reason']);
-      assert.deepEqual(await c.postar(novo, {}), { status: 400, corpo: { error: 'informe a sessão: { "session": "<id>" }' } });
-      assert.deepEqual(await c.postar(rota, {}), { status: 400, corpo: { error: 'informe a sessão: { "sessao": "<id>" }' } }, 'the old route cites the old key');
-      assert.deepEqual(await c.postar(novo, { session: 'teste-promover', confirm: true }), { status: 400, corpo: { error: 'informe o path: "docs/decisoes/NNNN-slug.md"' } });
-      assert.deepEqual(await c.postar(rota, { sessao: 'teste-promover', confirmar: true }), { status: 400, corpo: { error: 'informe o caminho: "docs/decisoes/NNNN-slug.md"' } });
-      assert.equal((await c.postar(rota, { sessao: 'teste-promover' }, { 'content-type': 'text/plain' })).status, 415);
+      assert.deepEqual(await c.postar(rota, {}), { status: 400, corpo: { error: 'informe a sessão: { "session": "<id>" }' } });
+      assert.deepEqual(await c.postar(rota, { session: 'teste-promover', confirm: true }), { status: 400, corpo: { error: 'informe o path: "docs/decisoes/NNNN-slug.md"' } });
+      // The old body and the old route are gone (#173 phase 6).
+      assert.deepEqual(await c.postar(rota, { sessao: 'teste-promover' }), { status: 400, corpo: { error: 'informe a sessão: { "session": "<id>" }' } }, 'the old key is not read');
+      assert.ok([403, 405].includes((await c.postar(`/api/decisoes/${d.id}/promover`, { session: 'teste-promover' })).status), 'the old route');
+      assert.equal((await c.postar(rota, { session: 'teste-promover' }, { 'content-type': 'text/plain' })).status, 415);
       assert.equal((await c.postar(rota, 'não é json')).status, 400);
     } finally {
       await c.fechar();
@@ -465,18 +469,18 @@ describe('POST /api/decisoes/<id>/promover', () => {
     const c = await cenario();
     try {
       const semRepo = await comRepo(c, 'teste-sem-repo', null);
-      const r1 = (await c.postar<{ rascunho: RascunhoAntigo }>(`/api/decisoes/${semRepo.id}/promover`, { sessao: 'teste-sem-repo' })).corpo.rascunho;
-      assert.equal(r1.podeGravar, false);
+      const r1 = (await c.postar<{ draft: RascunhoDeRegistro }>(`/api/decisions/${semRepo.id}/promote`, { session: 'teste-sem-repo' })).corpo.draft;
+      assert.equal(r1.canWrite, false);
       assert.equal(r1.repo, null);
-      assert.ok(r1.motivo);
-      assert.equal((await c.postar(`/api/decisoes/${semRepo.id}/promover`, { sessao: 'teste-sem-repo', confirmar: true, caminho: r1.caminho })).status, 409);
+      assert.ok(r1.reason);
+      assert.equal((await c.postar(`/api/decisions/${semRepo.id}/promote`, { session: 'teste-sem-repo', confirm: true, path: r1.path })).status, 409);
 
       const vazio = await pasta();
       const semPasta = await comRepo(c, 'teste-sem-pasta', vazio);
-      const r2 = (await c.postar<{ rascunho: RascunhoAntigo }>(`/api/decisoes/${semPasta.id}/promover`, { sessao: 'teste-sem-pasta' })).corpo.rascunho;
-      assert.equal(r2.podeGravar, false);
-      assert.match(r2.motivo!, /docs\/decisoes/);
-      assert.equal((await c.postar(`/api/decisoes/${semPasta.id}/promover`, { sessao: 'teste-sem-pasta', confirmar: true, caminho: r2.caminho })).status, 409);
+      const r2 = (await c.postar<{ draft: RascunhoDeRegistro }>(`/api/decisions/${semPasta.id}/promote`, { session: 'teste-sem-pasta' })).corpo.draft;
+      assert.equal(r2.canWrite, false);
+      assert.match(r2.reason!, /docs\/decisoes/);
+      assert.equal((await c.postar(`/api/decisions/${semPasta.id}/promote`, { session: 'teste-sem-pasta', confirm: true, path: r2.path })).status, 409);
       assert.deepEqual(await readdir(vazio), []);
 
       const repo = await pasta();
@@ -484,9 +488,9 @@ describe('POST /api/decisoes/<id>/promover', () => {
       await mkdir(join(repo, 'docs'));
       await symlink(fora, join(repo, 'docs', 'decisoes'));
       const comLink = await comRepo(c, 'teste-symlink', repo);
-      const r3 = (await c.postar<{ rascunho: RascunhoAntigo }>(`/api/decisoes/${comLink.id}/promover`, { sessao: 'teste-symlink' })).corpo.rascunho;
-      assert.equal(r3.podeGravar, false);
-      assert.equal((await c.postar(`/api/decisoes/${comLink.id}/promover`, { sessao: 'teste-symlink', confirmar: true, caminho: r3.caminho })).status, 400);
+      const r3 = (await c.postar<{ draft: RascunhoDeRegistro }>(`/api/decisions/${comLink.id}/promote`, { session: 'teste-symlink' })).corpo.draft;
+      assert.equal(r3.canWrite, false);
+      assert.equal((await c.postar(`/api/decisions/${comLink.id}/promote`, { session: 'teste-symlink', confirm: true, path: r3.path })).status, 400);
       assert.deepEqual(await readdir(fora), []);
 
       // O arquivo de destino como symlink para fora: a flag `wx` recusa (já existe).
@@ -495,7 +499,7 @@ describe('POST /api/decisoes/<id>/promover', () => {
       await writeFile(alvo, 'intacto\n');
       await symlink(alvo, join(repo2, 'docs', 'decisoes', '0008-indice-composto-em-mes-conta.md'));
       const comArquivo = await comRepo(c, 'teste-symlink-arquivo', repo2);
-      const r4 = await c.postar(`/api/decisoes/${comArquivo.id}/promover`, { sessao: 'teste-symlink-arquivo', confirmar: true, caminho: 'docs/decisoes/0008-indice-composto-em-mes-conta.md' });
+      const r4 = await c.postar(`/api/decisions/${comArquivo.id}/promote`, { session: 'teste-symlink-arquivo', confirm: true, path: 'docs/decisoes/0008-indice-composto-em-mes-conta.md' });
       assert.equal(r4.status, 409);
       assert.equal(await readFile(alvo, 'utf8'), 'intacto\n');
       assert.equal((await c.decisoes.getDecision(comArquivo.id))?.promotedTo, null);
@@ -508,14 +512,14 @@ describe('POST /api/decisoes/<id>/promover', () => {
     const c = await cenario();
     try {
       const repo = await repoComRegistros();
-      for (const state of ['descartada', 'revertida'] as const) {
+      for (const state of ['dismissed', 'reverted'] as const) {
         const d = await comRepo(c, `teste-${state}`, repo);
         await c.decisoes.putDecision({ ...d, state });
-        const rota = `/api/decisoes/${d.id}/promover`;
-        const r = await c.postar<{ error: string }>(rota, { sessao: `teste-${state}` });
+        const rota = `/api/decisions/${d.id}/promote`;
+        const r = await c.postar<{ error: string }>(rota, { session: `teste-${state}` });
         assert.equal(r.status, 409, state);
         assert.match(r.corpo.error, new RegExp(state));
-        assert.equal((await c.postar(rota, { sessao: `teste-${state}`, confirmar: true, caminho: 'docs/decisoes/0008-x.md' })).status, 409, state);
+        assert.equal((await c.postar(rota, { session: `teste-${state}`, confirm: true, path: 'docs/decisoes/0008-x.md' })).status, 409, state);
       }
       assert.deepEqual((await readdir(join(repo, 'docs', 'decisoes'))).sort(), ['0001-primeira.md', '0007-setima.md']);
     } finally {
@@ -528,7 +532,7 @@ describe('POST /api/decisoes/<id>/promover', () => {
     try {
       const repo = await repoComRegistros();
       const d = await comRepo(c, 'teste-numero', repo);
-      const r = await c.postar<{ error: string }>(`/api/decisoes/${d.id}/promover`, { sessao: 'teste-numero', confirmar: true, caminho: 'docs/decisoes/0007-outra.md' });
+      const r = await c.postar<{ error: string }>(`/api/decisions/${d.id}/promote`, { session: 'teste-numero', confirm: true, path: 'docs/decisoes/0007-outra.md' });
       assert.equal(r.status, 409);
       assert.match(r.corpo.error, /0007-setima\.md/);
       assert.deepEqual((await readdir(join(repo, 'docs', 'decisoes'))).sort(), ['0001-primeira.md', '0007-setima.md']);
@@ -542,19 +546,19 @@ describe('POST /api/decisoes/<id>/promover', () => {
     const c = await cenario();
     try {
       const relativo = await comRepo(c, 'teste-relativo', 'simulacao/relativo');
-      const r1 = (await c.postar<{ rascunho: RascunhoAntigo }>(`/api/decisoes/${relativo.id}/promover`, { sessao: 'teste-relativo' })).corpo.rascunho;
-      assert.equal(r1.podeGravar, false);
-      assert.match(r1.motivo!, /absoluta/);
-      assert.equal((await c.postar(`/api/decisoes/${relativo.id}/promover`, { sessao: 'teste-relativo', confirmar: true, caminho: r1.caminho })).status, 409);
+      const r1 = (await c.postar<{ draft: RascunhoDeRegistro }>(`/api/decisions/${relativo.id}/promote`, { session: 'teste-relativo' })).corpo.draft;
+      assert.equal(r1.canWrite, false);
+      assert.match(r1.reason!, /absoluta/);
+      assert.equal((await c.postar(`/api/decisions/${relativo.id}/promote`, { session: 'teste-relativo', confirm: true, path: r1.path })).status, 409);
 
       const repo = await pasta();
       await mkdir(join(repo, 'docs', 'de-verdade'), { recursive: true });
       await symlink(join(repo, 'docs', 'de-verdade'), join(repo, 'docs', 'decisoes'));
       const d = await comRepo(c, 'teste-symlink-dentro', repo);
-      const r2 = (await c.postar<{ rascunho: RascunhoAntigo }>(`/api/decisoes/${d.id}/promover`, { sessao: 'teste-symlink-dentro' })).corpo.rascunho;
-      assert.equal(r2.podeGravar, false);
-      assert.match(r2.motivo!, /symlink/);
-      assert.equal((await c.postar(`/api/decisoes/${d.id}/promover`, { sessao: 'teste-symlink-dentro', confirmar: true, caminho: r2.caminho })).status, 400);
+      const r2 = (await c.postar<{ draft: RascunhoDeRegistro }>(`/api/decisions/${d.id}/promote`, { session: 'teste-symlink-dentro' })).corpo.draft;
+      assert.equal(r2.canWrite, false);
+      assert.match(r2.reason!, /symlink/);
+      assert.equal((await c.postar(`/api/decisions/${d.id}/promote`, { session: 'teste-symlink-dentro', confirm: true, path: r2.path })).status, 400);
       assert.deepEqual(await readdir(join(repo, 'docs', 'de-verdade')), []);
     } finally {
       await c.fechar();
@@ -587,10 +591,10 @@ describe('POST /api/decisoes/<id>/promover', () => {
     try {
       const repo = await repoComRegistros();
       const d = await comRepo(c, 'teste-hash', repo);
-      const rota = `/api/decisoes/${d.id}/promover`;
-      const { rascunho } = (await c.postar<{ rascunho: RascunhoAntigo }>(rota, { sessao: 'teste-hash' })).corpo;
+      const rota = `/api/decisions/${d.id}/promote`;
+      const { draft: rascunho } = (await c.postar<{ draft: RascunhoDeRegistro }>(rota, { session: 'teste-hash' })).corpo;
       assert.equal(rascunho.hash, createHash('sha256').update(rascunho.markdown).digest('hex'));
-      const gravar = { sessao: 'teste-hash', confirmar: true, caminho: rascunho.caminho };
+      const gravar = { session: 'teste-hash', confirm: true, path: rascunho.path };
       for (const hash of ['x', 42, 'AB'.repeat(32)]) assert.equal((await c.postar(rota, { ...gravar, hash })).status, 400, String(hash));
 
       // A decisão mudou depois do rascunho: o markdown regerado não é o que a pessoa leu.
@@ -600,10 +604,10 @@ describe('POST /api/decisoes/<id>/promover', () => {
       assert.match(mudou.corpo.error, /o rascunho mudou, abra de novo/);
       assert.deepEqual((await readdir(join(repo, 'docs', 'decisoes'))).sort(), ['0001-primeira.md', '0007-setima.md']);
 
-      const { rascunho: novo } = (await c.postar<{ rascunho: RascunhoAntigo }>(rota, { sessao: 'teste-hash' })).corpo;
+      const { draft: novo } = (await c.postar<{ draft: RascunhoDeRegistro }>(rota, { session: 'teste-hash' })).corpo;
       assert.notEqual(novo.hash, rascunho.hash);
       assert.equal((await c.postar(rota, { ...gravar, hash: novo.hash })).status, 201);
-      assert.equal(await readFile(join(repo, novo.caminho), 'utf8'), novo.markdown);
+      assert.equal(await readFile(join(repo, novo.path), 'utf8'), novo.markdown);
     } finally {
       await c.fechar();
     }
@@ -615,7 +619,7 @@ describe('POST /api/decisoes/<id>/promover', () => {
     try {
       const repo = await repoComRegistros();
       const d = await comRepo(c, 'teste-injetado', repo);
-      const feito = await c.postar<{ caminho: string }>(`/api/decisoes/${d.id}/promover`, { sessao: 'teste-injetado', confirmar: true, caminho: 'docs/decisoes/0008-indice.md' });
+      const feito = await c.postar<{ path: string }>(`/api/decisions/${d.id}/promote`, { session: 'teste-injetado', confirm: true, path: 'docs/decisoes/0008-indice.md' });
       assert.equal(feito.status, 201);
       assert.equal(gravados.length, 1);
       assert.ok(gravados[0]![0].endsWith(join('docs', 'decisoes', '0008-indice.md')));

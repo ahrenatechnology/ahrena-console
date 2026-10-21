@@ -29,22 +29,10 @@ import {
 
 export const WAIT_FOR_CHANGES = 'wait_for_changes';
 
-/** The types MCP exposes: all but the GitHub screens' ones (`repos` and `agent-instructions`). */
-export const MCP_CHANGE_TYPES = CHANGE_TYPES.filter((t): t is Exclude<ChangeType, 'repos' | 'agent-instructions'> => t !== 'repos' && t !== 'agent-instructions');
+/** The types MCP exposes: all but the GitHub screens' ones (`repos`, `agent-instructions`, `framework-install` and `adrs`). */
+const GITHUB_SCREEN_TYPES = new Set<ChangeType>(['repos', 'agent-instructions', 'framework-install', 'adrs']);
+export const MCP_CHANGE_TYPES = CHANGE_TYPES.filter((t): t is Exclude<ChangeType, 'repos' | 'agent-instructions' | 'framework-install' | 'adrs'> => !GITHUB_SCREEN_TYPES.has(t));
 export type McpChangeType = (typeof MCP_CHANGE_TYPES)[number];
-
-/**
- * The Portuguese change types `types` took before #173 phase 2b, still accepted (and mapped to the
- * English ones) until phase 6; the answer always carries the English ones.
- */
-export const LEGACY_CHANGE_TYPES: Readonly<Record<string, McpChangeType>> = {
-  sessao: 'session',
-  estado: 'state',
-  'precisa-de-voce': 'needs-you',
-  plano: 'plan',
-  decisao: 'decision',
-  conta: 'account',
-};
 
 const ALLOWED_ARGS = ['cursor', 'timeout', 'sessions', 'account', 'types'] as const;
 const ID = /^[A-Za-z0-9_.:-]{1,128}$/;
@@ -107,8 +95,8 @@ export function waitForChanges({ changes, accounts }: WaitForChangesOptions): To
       },
       types: {
         type: 'array',
-        items: { type: 'string', enum: [...MCP_CHANGE_TYPES, ...Object.keys(LEGACY_CHANGE_TYPES)] },
-        description: `Só estes tipos de mudança: ${MCP_CHANGE_TYPES.join(', ')}. Os nomes antigos (${Object.keys(LEGACY_CHANGE_TYPES).join(', ')}) ainda valem.`,
+        items: { type: 'string', enum: [...MCP_CHANGE_TYPES] },
+        description: `Só estes tipos de mudança: ${MCP_CHANGE_TYPES.join(', ')}.`,
       },
     }),
     outputSchema: strictObject({
@@ -133,7 +121,7 @@ export function waitForChanges({ changes, accounts }: WaitForChangesOptions): To
         cursor: r.cursor,
         reset: r.reset,
         timedOut: r.timedOut,
-        changes: r.changes.flatMap((m) => (m.type === 'repos' || m.type === 'agent-instructions' ? [] : [toOutputChange(m as RecordedChange & { type: McpChangeType }, accountOf(m.accountId))])),
+        changes: r.changes.flatMap((m) => (GITHUB_SCREEN_TYPES.has(m.type) ? [] : [toOutputChange(m as RecordedChange & { type: McpChangeType }, accountOf(m.accountId))])),
       };
       return { text: summaryText(data), data: data as unknown as JsonObject };
     },
@@ -191,11 +179,10 @@ function parseArgs(args: JsonObject): WaitRequest {
     requestedAccounts = (l as string[]).map((x) => x.trim());
   }
   if (types != null) {
-    const normalized = Array.isArray(types) ? types.map((t) => (typeof t === 'string' && Object.hasOwn(LEGACY_CHANGE_TYPES, t) ? LEGACY_CHANGE_TYPES[t] : t)) : null;
-    if (!normalized || !normalized.every((t) => typeof t === 'string' && (MCP_CHANGE_TYPES as readonly string[]).includes(t))) {
+    if (!Array.isArray(types) || !types.every((t) => typeof t === 'string' && (MCP_CHANGE_TYPES as readonly string[]).includes(t))) {
       throw new ArgumentError(`types: uma lista com ${MCP_CHANGE_TYPES.join(', ')}`);
     }
-    if (normalized.length) filters.types = normalized as McpChangeType[];
+    if (types.length) filters.types = types as McpChangeType[];
   }
   // Without `types`, all the MCP ones: a `repos` change does not pass the filter and does not wake the wait.
   filters.types ??= MCP_CHANGE_TYPES;
