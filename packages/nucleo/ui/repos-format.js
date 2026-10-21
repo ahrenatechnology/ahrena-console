@@ -278,11 +278,12 @@ export function valueOrPending(value, data, field, format = (v) => String(v)) {
 
 /**
  * A mudança do Ao vivo que pede releitura: `repos`/`list` sempre; nas métricas, também a chave do
- * repositório (`owner/repo`), comparada sem caixa.
+ * repositório (`owner/repo`), comparada sem caixa; e toda mudança da conexão com o GitHub (`connections`, issue 241).
  */
 export function changeMatters(changes, key = null) {
   const mine = key ? key.toLowerCase() : null;
-  return (changes ?? []).some((m) => m.type === 'repos' && (m.key === 'list' || (mine !== null && String(m.key).toLowerCase() === mine)));
+  // issue 241: a transition of the GitHub connection (`connections`) changes what every GitHub screen can read.
+  return (changes ?? []).some((m) => m.type === 'connections' || (m.type === 'repos' && (m.key === 'list' || (mine !== null && String(m.key).toLowerCase() === mine))));
 }
 
 /** O card do fim das métricas: com escrita, `traffic` ("Tráfego e segurança"); sem, `community`. */

@@ -13,6 +13,7 @@ import { el, header, icon } from '../dom.js';
 import { loading, error, empty } from '../states.js';
 import { NO_GITHUB } from '../repos-format.js';
 import { ADR_FOLDERS, PDR_FOLDERS, HOW_TO_WRITE, foldersText, FORMAT_LABEL, KINDS, STATUS_FILTERS, decisionsChangeMatters, joinPt, kindOfPath, limitedBand, loadDecisionsStyle, recordRow, repoTabHref, segmented } from './adrs-common.js';
+import { connectEmptyFor, connectionChanged, isGithubNotConnected } from '../github-connect.js';
 
 const REREAD_MS = 5000;
 const PER_GROUP = 5;
@@ -197,6 +198,12 @@ export async function mount(area, ctx) {
     clearTimeout(timer);
     timer = null;
     band.replaceChildren();
+    if (isGithubNotConnected(failure)) {
+      stats.hidden = true;
+      filterCard.hidden = true;
+      accountChip.hidden = true;
+      return body.replaceChildren(connectEmptyFor(K.kind === 'pdr' ? 'pdrs' : 'adrs', ctx.navigate));
+    }
     if (failure && data?.state === 'ready') band.append(limitedBand({ error: `${failure.message}`, readAt: null, retryAt: null, plural: K.plural, onRetry: () => read() }));
     if (!data || data.state !== 'ready') {
       stats.hidden = true;
@@ -225,7 +232,7 @@ export async function mount(area, ctx) {
   }
 
   ctx.onChange((changes) => {
-    if (decisionsChangeMatters(changes, 'list')) read();
+    if (decisionsChangeMatters(changes, 'list') || connectionChanged(changes)) read();
   });
   ctx.onRestart(() => read());
 

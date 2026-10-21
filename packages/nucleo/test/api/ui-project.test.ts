@@ -162,7 +162,7 @@ describe('Kanban do projeto (C11)', () => {
     assert.deepEqual(tela.leituras, ['/api/project']);
     const cab = area.querySelector('header.cc-head')!;
     assert.match(texto(cab), /Kanban do projeto Ao vivo/);
-    assert.equal(texto(cab.querySelector('.sub')), 'GitHub Project “Ahrena Console” · por Status · arraste para mudar');
+    assert.equal(texto(cab.querySelector('.sub')), 'GitHub Project “Ahrena Console” · dono #3 · por Status · arraste para mudar');
     assert.equal(texto(cab.querySelector('.prj-milestone')), 'Marco: Todos os marcos M1 · Local M2 · Artefato');
     assert.ok(cab.querySelectorAll('button').some((b) => texto(b) === 'Atualizar'));
 
@@ -334,16 +334,18 @@ describe('Kanban do projeto (C11)', () => {
     assert.match(texto(caixa), /O núcleo subiu sem GitHub.*--no-github/);
   });
 
-  test('503 sem-projeto: estado vazio que explica como escolher o Project', async () => {
+  test('503 no-project (issue 241): the screen lists the Projects to choose from, with no environment variable to set', async () => {
     tela = await montarTela({
-      read: async () => {
+      read: async (rota) => {
+        if (rota === '/api/project/options') return { projects: [{ owner: 'dono', ownerType: 'user', number: 3, title: 'Ahrena Console', url: '', items: 7, hasStatusField: true, closed: false }], selection: null, envOverride: null, fetchedAt: '', stale: false, reason: null };
         throw erroDoNucleo(ReadError, 503, { error: 'Nenhum Project.', code: 'no-project' });
       },
     });
-    const caixa = tela.area.querySelector('section.state')!;
-    assert.equal(caixa.getAttribute('role'), null, 'não é erro, é vazio');
-    assert.match(texto(caixa), /Escolha o GitHub Project/);
-    assert.equal(texto(caixa.querySelector('code')!), 'AHRENA_CONSOLE_PROJECT=dono/número');
+    await esperar();
+    assert.deepEqual(tela.leituras, ['/api/project', '/api/project/options']);
+    assert.equal(texto(tela.area.querySelector('header .sub')), 'Escolha o GitHub Project que este quadro mostra');
+    assert.equal(tela.area.querySelectorAll('tr[data-project]').length, 1);
+    assert.doesNotMatch(texto(tela.area), /AHRENA_CONSOLE_PROJECT=/, 'no variable to set by hand');
   });
 
   test('502 sem cache: estado de erro com Tentar de novo, que lê de novo', async () => {

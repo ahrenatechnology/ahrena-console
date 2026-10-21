@@ -42,6 +42,7 @@ import {
 import { loadStyle, ciPill } from './repos.js';
 import { mountInstructions } from './agent-instructions.js';
 import { mountRepoDecisions } from './repo-adrs.js';
+import { connectEmptyFor, isGithubNotConnected } from '../github-connect.js';
 
 /** As abas com URL própria: a da rota (`:tab`) e a Métricas, sem segmento. */
 const TABS = ['metrics', 'adrs', 'instructions'];
@@ -452,6 +453,7 @@ export async function mount(area, ctx) {
     else band.replaceChildren();
     band.hidden = !band.firstChild;
 
+    if (isGithubNotConnected(failure)) return content.replaceChildren(connectEmptyFor('repo', ctx.navigate));
     if (e.tela === 'error') return content.replaceChildren(failure ? error({ text: failure.message, retry }) : error({ title: 'O GitHub não respondeu', text: data.error ?? 'A leitura do repositório falhou.', retry }));
     if (e.tela === 'loading') return content.replaceChildren(loading());
     if (e.tela === 'reading') return content.replaceChildren(loading({ label: 'Lendo o GitHub…' }));
@@ -475,6 +477,7 @@ export async function mount(area, ctx) {
     } catch (e) {
       if (e?.name === 'AbortError' || !stillValid()) return;
       failure = e instanceof Error ? e : new Error(String(e));
+      if (isGithubNotConnected(e)) data = null;
     }
     draw();
   }
