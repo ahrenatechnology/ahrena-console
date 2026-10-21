@@ -292,8 +292,8 @@ describe('UI rule 9 (#255): cards in the same row have the same height', () => {
 });
 
 describe('screen registry', () => {
-  test('the sidebar has Dashboard, Mural ao vivo, Sessões, the Feed, Kanban, Analytics, Workflows and Histórico; under Entrega Repositórios, the project Kanban and Dev Console; under Decisões, Das sessões, ADR and PDR; under Máquinas Esta máquina and, under Controle, Agent Config; the Detail opens by a session and lights Sessões', () => {
-    assert.deepEqual(SCREENS.filter((t: { item?: unknown }) => t.item).map((t: { id: string }) => t.id), ['dashboard', 'wall', 'sessions', 'feed', 'kanban', 'repos', 'project', 'dev-console', 'analytics', 'workflows', 'history', 'decisions', 'adrs', 'pdrs', 'this-machine', 'agent-config']);
+  test('the sidebar has Dashboard, Mural ao vivo, Sessões, the Feed, Kanban, Analytics, Workflows and Histórico; under Entrega Repositórios, the project Kanban and Dev Console; under Decisões, Das sessões, ADR and PDR; under Máquinas Esta máquina and, under Controle, Agent Config and Ferramentas; the Detail opens by a session and lights Sessões', () => {
+    assert.deepEqual(SCREENS.filter((t: { item?: unknown }) => t.item).map((t: { id: string }) => t.id), ['dashboard', 'wall', 'sessions', 'feed', 'kanban', 'repos', 'project', 'dev-console', 'analytics', 'workflows', 'history', 'decisions', 'adrs', 'pdrs', 'this-machine', 'agent-config', 'tools']);
     assert.deepEqual(
       sidebarSections().map((s: { id: string; label: string | null; items: { id: string }[] }) => [s.id, s.label, s.items.map((t) => t.id)]),
       [
@@ -301,7 +301,7 @@ describe('screen registry', () => {
         ['delivery', 'Entrega', ['repos', 'project', 'dev-console']],
         ['decisions', 'Decisões', ['decisions', 'adrs', 'pdrs']],
         ['machines', 'Máquinas', ['this-machine']],
-        ['control', 'Controle', ['agent-config']],
+        ['control', 'Controle', ['agent-config', 'tools']],
       ],
     );
     assert.equal(findScreen('/ui/decisions').screen.file, '/ui/screens/decisions.js');

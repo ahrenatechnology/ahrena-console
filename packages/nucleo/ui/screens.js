@@ -231,6 +231,17 @@ export const SCREENS = [
     file: '/ui/screens/machine.js',
   },
   { id: 'agent-config', route: '/ui/agent-config', item: { label: 'Agent Config', icon: 'bot', section: 'control' }, title: 'Agent Config', sub: 'Seu Claude Code: skills, subagentes, comandos, MCP, hooks e memória', icon: 'bot', file: '/ui/screens/agent-config.js' }, // #63
+  {
+    // Ferramentas (C72 to C76, issue 280, decision 0014): the CLIs, platforms, containers and MCP
+    // servers of this machine and of each remote, with install and update from the core's catalog.
+    id: 'tools',
+    route: '/ui/tools',
+    item: { label: 'Ferramentas', icon: 'wrench', section: 'control' },
+    title: 'Ferramentas',
+    sub: 'CLIs, plataformas, containers e servidores MCP das suas máquinas',
+    icon: 'wrench',
+    file: '/ui/screens/tools.js',
+  },
 ];
 
 // ---------- The remote machines in the sidebar (issue 178) ----------
