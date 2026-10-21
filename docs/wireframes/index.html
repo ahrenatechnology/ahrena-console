@@ -517,6 +517,61 @@ main { min-width: 0; padding-block: 24px 80px; padding-left: max(16px, env(safe-
 .dl-age { text-align: right; color: var(--muted); }
 .dl-hm span { min-width: 48px; text-align: center; } .dl-zero { color: var(--muted); }
 .dl-faded > .cartao:nth-child(-n+2) { opacity: .55; }
+/* ---------- Ferramentas (C72 to C76, issue #280) ---------- */
+.tl-grid { align-items: stretch; }
+.tl-card { gap: 10px; }
+.tl-card h5 small .seg span { padding: 3px 8px; }
+.tl-table td, .tl-table th { padding: 7px 10px; }
+.tl-table .nm small { display: block; white-space: normal; }
+.tl-table td.nm { white-space: normal; min-width: 150px; }
+.tl-r { text-align: right !important; }
+.tl-src { color: var(--muted); font-size: 12px; white-space: normal !important; max-width: 220px; }
+.tl-new { color: var(--status-waiting-text); font-weight: 600; }
+.tl-act { height: 26px; padding: 0 9px; font-size: 11.5px; }
+.tl-act.tl-sudo { color: var(--status-waiting-text); }
+.tl-off { opacity: .6; cursor: default; }
+.tl-none { font-size: 11.5px; display: inline-flex; gap: 4px; align-items: center; }
+.tl-dim td { opacity: .55; }
+.tl-inline-btn { display: inline-flex; gap: 4px; align-items: center; color: var(--accent-text); margin-left: 6px; }
+.tl-kv { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 7px 14px; font-size: 12.5px; align-items: center; }
+.tl-kv > span:nth-child(odd) { color: var(--muted); font-size: 11.5px; }
+.tl-ct-head { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.tl-ct-btn { margin-left: auto; }
+.tl-ct-head b { white-space: nowrap; }
+.tl-ct-state .tm-rc-steps { flex-wrap: wrap; white-space: normal; }
+.tl-cmdline { font-family: var(--font-mono); font-size: 11px; color: var(--muted); overflow-wrap: anywhere; }
+.tl-link { font-size: 12px; color: var(--accent-text); display: inline-flex; gap: 4px; align-items: center; margin-top: auto; }
+.tl-how { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 8px; font-size: 12px; color: var(--muted); }
+.tl-how b { color: var(--text); font-weight: 600; }
+.tl-how code { font-size: 11px; }
+.tl-how-wide { grid-column: 1 / -1; }
+.tl-how-wide .tl-how { flex-direction: row; gap: 24px; list-style: none; padding: 0; } .tl-how-wide .tl-how li { flex: 1; }
+.tl-veil-wrap { position: relative; }
+.tl-veil { position: absolute; inset: -20px -24px -24px; background: color-mix(in srgb, var(--bg) 62%, transparent); display: flex; justify-content: center; align-items: flex-start; padding-top: 110px; }
+.tl-dlg { width: 520px; padding: 18px 20px; display: flex; flex-direction: column; gap: 14px; box-shadow: 0 18px 50px rgba(0, 0, 0, .35); }
+.tl-dlg-h { display: flex; align-items: center; gap: 10px; font-size: 15px; } .tl-dlg-h .tl-x { margin-left: auto; color: var(--muted); }
+.tl-dlg-cmd { display: flex; flex-direction: column; gap: 6px; }
+.tl-dlg-cmd code, .tl-copy code { display: block; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; font-size: 12px; color: var(--text); overflow-wrap: anywhere; }
+.tl-dlg-note { display: flex; gap: 8px; font-size: 11.5px; color: var(--muted); align-items: flex-start; }
+.tl-dlg-note svg { color: var(--status-completed-text); flex: none; margin-top: 1px; }
+.tl-dlg-a { display: flex; justify-content: flex-end; gap: 8px; }
+.tl-clip { overflow: hidden; -webkit-mask-image: linear-gradient(to bottom, #000 72%, transparent); mask-image: linear-gradient(to bottom, #000 72%, transparent); }
+.tl-flow { display: flex; flex-direction: column; gap: 28px; }
+.tl-run td { padding: 0 0 10px !important; white-space: normal !important; }
+.tl-run-box { border: 1px solid var(--border); border-radius: 10px; background: var(--bg); padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; font-size: 12.5px; }
+.tl-run-top { display: flex; align-items: center; gap: 10px; } .tl-run-top .tm-rc-steps { margin-top: 0; } .tl-cancel { margin-left: auto; height: 26px; }
+.tl-out { font-family: var(--font-mono); font-size: 11px; line-height: 1.55; color: var(--muted); background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; display: flex; flex-direction: column; overflow-wrap: anywhere; }
+.tl-out-err { margin-top: 8px; color: var(--status-error-text); }
+.tl-caret { color: var(--accent-text); }
+.tl-run-foot { display: flex; align-items: center; gap: 12px; font-size: 11px; color: var(--muted); } .tl-run-foot .tm-stack { width: 160px; height: 6px; }
+.tl-queue { margin-left: auto; font-size: 11.5px; }
+.tl-sudo-box { border-color: color-mix(in srgb, var(--status-waiting-dot) 45%, var(--border)); }
+.tl-copy { display: flex; gap: 8px; align-items: center; margin-top: 6px; } .tl-copy code { flex: 1; min-width: 0; }
+.tl-skel { display: inline-block; width: 64px; height: 10px; border-radius: 5px; background: var(--raised); vertical-align: middle; }
+.tl-hint { font-size: 11.5px; color: var(--muted); }
+.tl-ct-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: stretch; }
+.tl-ct-state { display: flex; flex-direction: column; min-width: 0; }
+.tl-kv > span { min-width: 0; overflow-wrap: anywhere; } .tl-ct-state .cartao { flex: 1; }
 /* ---------- modo captura ---------- */
 body.captura .topo, body.captura .indice, body.captura .notas, body.captura .capitulo, body.captura .tela:not(.alvo), body.captura .perguntas, body.captura #perguntas { display: none !important; }
 body.captura .pagina { display: block; } body.captura main { padding: 20px 24px; display: inline-block; } body.captura .tela { margin: 0; }
@@ -763,7 +818,7 @@ function lado(ativo, q = 4, ws = 'ok') {
     ['-', '', 'Entrega'], ['repos', 'folder-git-2', 'Repositórios'], ['projeto', 'github', 'Kanban do projeto'], ['dev', 'gauge', 'Dev Console'],
     ['-', '', 'Decisões'], ['decisoes', 'git-commit-horizontal', 'Das sessões'], ['adrs', 'scroll-text', 'ADR'], ['pdrs', 'lightbulb', 'PDR'],
     ['-', '', 'Máquinas'], ['machine-local', 'monitor', 'Esta máquina'], ['machine-ws', 'server', 'Workstation'],
-    ['-', '', 'Controle'], ['config', 'bot', 'Agent Config'], ['run', 'play', 'Rodar agente'],
+    ['-', '', 'Controle'], ['config', 'bot', 'Agent Config'], ['run', 'play', 'Rodar agente'], ['tools', 'wrench', 'Ferramentas'], ['connections', 'plug', 'Conexões'],
   ]
   return `<aside class="cc-lado">
     <div class="cc-marca"><img src="${LOGO}" alt=""><div><b>Ahrena Console</b><small>Claude Code</small></div></div>
@@ -2665,6 +2720,423 @@ function sessionMessageUnavailableScreen(w) {
 // =====================================================================
 // Catálogo de telas
 // =====================================================================
+// ---------- Conexões: o console conecta ao GitHub sozinho (issue 241, decisão 0011) ----------
+// Device flow com o OAuth App da Ahrena, credencial no Keychain, e o "Conectar ao GitHub" nas telas
+// que dependem dele. Dados sintéticos: a conta é dev-sintetico, as organizações são as do simulador.
+const GH_FOOTER = () => `<div class="cartao">${ic('github')}<span>ahrena-console</span></div>`
+const ghFooter = state => ({
+  off: `<div class="cartao">${ic('github')}<span>GitHub</span><span class="c-waiting" style="margin-left:auto">conectar</span></div>`,
+  pending: `<div class="cartao">${ic('github')}<span>GitHub</span><span class="c-waiting" style="margin-left:auto">${ic('loader-2')} esperando</span></div>`,
+  on: `<div class="cartao">${ic('github')}<span>dev-sintetico</span><b style="margin-left:auto">conectado</b></div>`,
+}[state])
+const frameGh = (w, active, body, state = 'on') => frameAt(w, active, body).replace(GH_FOOTER(), ghFooter(state))
+const connCab = () => cab('plug', 'Conexões', 'As contas de fora que o console usa. A credencial nunca sai do Keychain.')
+const connRow = (k, v) => `<span class="c-muted">${k}</span><span style="min-width:0">${v}</span>`
+const ghProviderHead = (pill, actions) => `<div style="display:flex;gap:12px;align-items:center;min-width:0"><div class="ico" style="width:38px;height:38px;border-radius:10px;background:var(--raised);border:1px solid var(--border);display:grid;place-items:center;font-size:18px;flex:none">${ic('github')}</div>
+  <div style="min-width:0"><div style="display:flex;gap:8px;align-items:center"><b style="font-size:14px">GitHub</b>${pill}</div><div class="c-muted" style="font-size:12px">Repositórios, Kanban do projeto, Dev Console, Instruções, ADRs e PDRs</div></div><div style="margin-left:auto;display:flex;gap:8px">${actions}</div></div>`
+const SCOPES = [
+  ['repo', 'Ler os repositórios privados: issues, PRs, conteúdo, CI, tráfego e alertas. Abrir o PR do instalador.'],
+  ['read:org', 'Listar as suas organizações, os repositórios e os Projects delas.'],
+  ['project', 'Ler os Projects e mover um card no Kanban do projeto.'],
+]
+const scopeList = (granted = ['repo', 'read:org', 'project']) => `<div style="display:flex;flex-direction:column;gap:8px">${SCOPES.map(([s, why]) => {
+  const ok = granted.includes(s)
+  return `<div style="display:grid;grid-template-columns:22px 92px minmax(0,1fr);gap:8px;align-items:baseline;font-size:12px"><span class="${ok ? 'c-completed' : 'c-error'}">${ic(ok ? 'check' : 'x')}</span><code>${s}</code><span class="c-muted">${ok ? why : `<b class="c-error">falta</b> · ${why}`}</span></div>`
+}).join('')}</div>`
+const vaultCard = (extra = '') => `<div class="cartao" style="padding:12px 14px;display:flex;flex-direction:column;gap:8px"><div class="olhinho">${ic('key-round')}Onde fica a credencial</div>
+  <div style="display:grid;grid-template-columns:110px minmax(0,1fr);gap:4px 10px;font-size:12px">${connRow('Cofre', 'Keychain do macOS')}${connRow('Item', '<code>dev.ahrena.console.github</code>')}${extra}</div>
+  <span class="c-muted" style="font-size:11.5px">Nunca vai para arquivo, banco, log ou tela. Os núcleos do app e do terminal usam a mesma entrada.</span></div>`
+const sourceCard = (gh = false) => `<div class="cartao" style="padding:12px 14px;display:flex;flex-direction:column;gap:8px"><div class="olhinho">${ic('route')}Fonte da credencial</div>
+  <div class="seg"><span class="${gh ? '' : 'on'}">Ahrena Console</span><span class="${gh ? 'on' : ''}">Login do <code>gh</code> desta máquina</span></div>
+  <span class="c-muted" style="font-size:11.5px">${gh ? 'Usando o token do <code>gh auth</code>. Para quem já usa o <code>gh</code>; o app não depende dele.' : 'O padrão. O <code>gh</code> é opcional e aparece aqui só se estiver instalado.'}</span></div>`
+const usedBy = on => `<div class="cartao" style="padding:12px 14px;display:flex;flex-direction:column;gap:6px"><div class="olhinho">${ic('layers')}Telas que usam o GitHub</div>
+  ${[['folder-git-2', 'Repositórios'], ['github', 'Kanban do projeto'], ['gauge', 'Dev Console'], ['book-open-check', 'Instruções, ADRs e PDRs']].map(([i, n]) => `<div style="display:flex;gap:8px;align-items:center;font-size:12.5px"><span class="c-muted">${ic(i)}</span>${n}<span style="margin-left:auto" class="${on ? 'c-completed' : 'c-muted'}">${on ? 'funcionando' : 'esperando a conexão'}</span></div>`).join('')}</div>`
+
+// C39: desconectado, o ponto de partida.
+function connectionsOffScreen(w) {
+  const wide = w === 1440
+  return `${connCab()}
+  <div class="cartao" style="padding:16px 18px;display:flex;flex-direction:column;gap:14px">
+    ${ghProviderHead('<span class="pill b-waiting">não conectado</span>', `<span class="btn cheio">${ic('github')}Conectar ao GitHub</span>`)}
+    <div style="border-top:1px solid var(--border);padding-top:12px;display:grid;grid-template-columns:${wide ? 'minmax(0,1.3fr) minmax(0,1fr)' : 'minmax(0,1fr)'};gap:16px">
+      <div style="display:flex;flex-direction:column;gap:8px"><div class="olhinho">${ic('shield-check')}O que o console vai pedir ao GitHub</div>${scopeList()}
+        <span class="c-muted" style="font-size:11.5px">O console só escreve no GitHub em dois casos, sempre por um clique seu: mover um card e abrir o PR do instalador.</span></div>
+      ${wide ? `<div style="display:flex;flex-direction:column;gap:8px"><div class="olhinho">${ic('list-ordered')}Como funciona</div><ol style="margin:0;padding-left:18px;font-size:12px;line-height:1.7;color:var(--muted)"><li>O console mostra um código de 8 letras.</li><li>Você abre <b style="color:var(--text)">github.com/login/device</b>, cola o código e autoriza o <b style="color:var(--text)">Ahrena Console</b>.</li><li>A credencial vai direto para o Keychain. Ninguém digita nem vê.</li></ol></div>` : ''}
+    </div>
+  </div>
+  <div style="display:grid;grid-template-columns:${wide ? 'repeat(3,minmax(0,1fr))' : 'minmax(0,1fr) minmax(0,1fr)'};gap:12px;align-items:start">${vaultCard()}${sourceCard()}${wide ? usedBy(false) : ''}</div>
+  ${wide ? '' : usedBy(false)}`
+}
+
+// C40: o código do device flow, esperando a pessoa autorizar no github.com.
+function connectionsPendingScreen(w) {
+  const wide = w === 1440
+  const step = (n, t, body) => `<div style="display:flex;gap:12px;align-items:flex-start"><span style="width:24px;height:24px;border-radius:99px;background:var(--raised);border:1px solid var(--border);display:grid;place-items:center;font-size:11.5px;font-weight:600;flex:none">${n}</span><div style="display:flex;flex-direction:column;gap:8px;min-width:0;flex:1"><b style="font-size:13px">${t}</b>${body}</div></div>`
+  const code = `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><span class="mono" style="font-size:${wide ? 34 : 30}px;letter-spacing:.14em;font-weight:600;padding:8px 16px;border-radius:10px;background:var(--bg);border:1px solid var(--border)">WDJB-MJHT</span><span class="btn contorno">${ic('copy')}Copiar código</span></div>`
+  return `${connCab()}
+  <div class="cartao" style="padding:16px 18px;display:flex;flex-direction:column;gap:14px">
+    ${ghProviderHead(`<span class="pill b-waiting">${ic('loader-2')}esperando você</span>`, `<span class="btn contorno">Cancelar</span>`)}
+    <div style="border-top:1px solid var(--border);padding-top:14px;display:grid;grid-template-columns:${wide ? 'minmax(0,1.2fr) minmax(0,1fr)' : 'minmax(0,1fr)'};gap:20px">
+      <div style="display:flex;flex-direction:column;gap:16px">
+        ${step(1, 'Copie este código', code)}
+        ${step(2, 'Abra o GitHub e cole o código', `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><span class="btn cheio">${ic('external-link')}Abrir github.com/login/device</span><span class="c-muted" style="font-size:11.5px">abre no seu navegador, com a sua sessão do GitHub</span></div>`)}
+        ${step(3, 'Autorize o Ahrena Console', `<div class="c-muted" style="font-size:12px">O GitHub mostra o aplicativo <b style="color:var(--text)">Ahrena Console</b>, da organização <b style="color:var(--text)">ahrenatechnology</b>, e os escopos <code>repo</code>, <code>read:org</code> e <code>project</code>.</div>`)}
+        <div class="cartao" style="padding:10px 12px;background:var(--bg);display:flex;gap:10px;align-items:center;font-size:12.5px"><span class="c-waiting">${ic('loader-2')}</span><span>Esperando a autorização no GitHub. Esta tela muda sozinha.</span><span class="c-muted mono" style="margin-left:auto">expira em 14:12</span></div>
+      </div>
+      ${wide ? `<div style="display:flex;flex-direction:column;gap:12px"><div class="cartao" style="padding:12px 14px;display:flex;flex-direction:column;gap:8px;background:var(--bg)"><div class="olhinho">${ic('shield-alert')}Antes de colar</div>
+        <ul style="margin:0;padding-left:18px;font-size:12px;line-height:1.7;color:var(--muted)"><li>Confira que o endereço é <b style="color:var(--text)">github.com</b>.</li><li>O código serve só para isto e vale 15 minutos.</li><li>Ninguém do console pede esse código por mensagem. Se alguém pedir, não mande.</li></ul></div>${vaultCard()}</div>` : ''}
+    </div>
+  </div>
+  ${wide ? '' : `<span class="c-muted" style="font-size:11.5px">${ic('shield-alert')} Confira que o endereço é github.com. O código vale 15 minutos e serve só para isto.</span>`}`
+}
+
+// C41: conectado. Em 1440, a confirmação de Desconectar aberta.
+function connectionsOnScreen(w) {
+  const wide = w === 1440
+  const org = (n, ok) => `<div style="display:flex;gap:8px;align-items:center;font-size:12.5px;min-width:0"><span class="c-muted">${ic('building-2')}</span><span class="trunc">${n}</span><span style="margin-left:auto;white-space:nowrap" class="${ok ? 'c-completed' : 'c-waiting'}">${ok ? 'visível' : `bloqueia o aplicativo · <span class="c-accent">pedir aprovação ${ic('external-link')}</span>`}</span></div>`
+  const modal = `<div style="position:absolute;inset:0;background:color-mix(in srgb, var(--mono-black) 30%, transparent);display:flex;align-items:flex-end;justify-content:center;padding-bottom:40px">
+    <div class="cartao" style="width:440px;padding:18px 20px;display:flex;flex-direction:column;gap:12px;box-shadow:0 16px 40px color-mix(in srgb, var(--mono-black) 40%, transparent)">
+      <b style="font-size:15px">Desconectar dev-sintetico?</b>
+      <span class="c-muted" style="font-size:12.5px;line-height:1.6">Apagamos a credencial do Keychain e o que o console guardou do GitHub. Repositórios, Kanban do projeto, Dev Console e Instruções voltam a pedir a conexão.</span>
+      <div class="cartao" style="padding:10px 12px;background:var(--bg);font-size:12px;display:flex;gap:8px;align-items:flex-start"><span class="c-waiting">${ic('info')}</span><span>O Ahrena Console continua autorizado na sua conta do GitHub até você revogar lá. <span class="c-accent">Revogar no GitHub ${ic('external-link')}</span></span></div>
+      <div style="display:flex;justify-content:flex-end;gap:8px"><span class="btn contorno">Cancelar</span><span class="btn cheio" style="background:var(--status-error-text)">${ic('log-out')}Desconectar</span></div>
+    </div></div>`
+  return `<div style="position:relative;display:flex;flex-direction:column;gap:16px;${wide ? 'min-height:860px' : ''}">${connCab()}
+  <div class="cartao" style="padding:16px 18px;display:flex;flex-direction:column;gap:14px">
+    ${ghProviderHead('<span class="pill b-completed">conectado</span>', `<span class="btn contorno">${ic('refresh-cw')}Reconectar</span><span class="btn contorno">${ic('log-out')}Desconectar</span>`)}
+    <div style="border-top:1px solid var(--border);padding-top:12px;display:grid;grid-template-columns:${wide ? 'minmax(0,1fr) minmax(0,1fr) minmax(0,1fr)' : 'minmax(0,1fr) minmax(0,1fr)'};gap:18px">
+      <div style="display:flex;flex-direction:column;gap:8px"><div class="olhinho">${ic('user')}Conta</div>
+        <div style="display:flex;gap:10px;align-items:center"><span style="width:34px;height:34px;border-radius:99px;background:var(--raised);border:1px solid var(--border);display:grid;place-items:center" class="c-accent">${ic('user')}</span><div><b style="font-size:13.5px">dev-sintetico</b><div class="c-muted" style="font-size:11.5px">desde 20/10 14:02 · pelo device flow</div></div></div>
+        <div style="display:grid;grid-template-columns:110px minmax(0,1fr);gap:4px 10px;font-size:12px">${connRow('Limite', '<span class="mono">4.880 / 5.000</span> por hora')}${connRow('Última leitura', 'há 12 s')}</div></div>
+      <div style="display:flex;flex-direction:column;gap:8px"><div class="olhinho">${ic('shield-check')}Escopos concedidos</div>${scopeList()}</div>
+      ${wide ? `<div style="display:flex;flex-direction:column;gap:8px"><div class="olhinho">${ic('building-2')}Organizações</div>${org('exemplo-labs', true)}${org('estudio-ficticio', true)}${org('cliente-confidencial', false)}<span class="c-muted" style="font-size:11.5px">Uma organização que restringe aplicativos esconde os dados até o dono aprovar.</span></div>` : ''}
+    </div>
+  </div>
+  ${wide ? '' : `<div class="cartao" style="padding:12px 14px;display:flex;flex-direction:column;gap:6px"><div class="olhinho">${ic('building-2')}Organizações</div>${org('exemplo-labs', true)}${org('estudio-ficticio', true)}${org('cliente-confidencial', false)}</div>`}
+  <div style="display:grid;grid-template-columns:${wide ? 'repeat(3,minmax(0,1fr))' : 'minmax(0,1fr) minmax(0,1fr)'};gap:12px;align-items:start">${vaultCard(connRow('Conta', '<code>dev-sintetico</code>'))}${sourceCard()}${wide ? usedBy(true) : ''}</div>
+  ${wide ? modal : ''}</div>`
+}
+
+// C42: o "Conectar ao GitHub" nas telas que dependem dele. Um vazio só, com o que a tela faria.
+const connectEmpty = (what) => `<div class="cartao vazio" style="min-height:330px"><span class="ic">${ic('github')}</span><b>Conecte o console ao GitHub</b><span style="max-width:460px">${what}</span>
+  <span style="display:flex;gap:8px;margin-top:6px"><span class="btn cheio">${ic('github')}Conectar ao GitHub</span></span>
+  <span class="c-muted" style="font-size:11.5px;max-width:460px">Uma vez para todas as telas. Abre Conexões já com o código; a credencial fica no Keychain do macOS.</span></div>`
+const connectRepos = () => `${cab('folder-git-2', 'Repositórios', 'Organizações e repositórios da sua conta do GitHub')}${connectEmpty('Repositórios lê as organizações e os repositórios da sua conta: atividade, issues, PRs, CI e as sessões que mexem em cada um.')}`
+const connectProject = () => `${cab('github', 'Kanban do projeto', 'Um GitHub Project por Status')}${connectEmpty('O Kanban do projeto mostra um GitHub Project por Status, e arrastar um card muda o Status lá. Depois de conectar, você escolhe o Project.')}`
+const connectDev = () => `${cab('gauge', 'Dev Console', 'PRs, issues e sessões dos repositórios do contexto')}${connectEmpty('O Dev Console junta PRs, CI e issues dos repositórios do contexto com as sessões que trabalham neles.')}`
+const connectInstr = () => `${repoCab('instr').replace('<span class="pill b-waiting">CI …</span>', '').replace(/ \((\d+)\)/g, '')}${connectEmpty('As instruções dos agentes, as ADRs e as PDRs são lidas do repositório no GitHub. As sessões deste repositório continuam aqui, sem GitHub.')}`
+
+// C43: escolher o Project do Kanban, sem variável de ambiente. 1100: a lista; 1440: o quadro com Trocar aberto.
+const PROJECTS = [
+  ['Roadmap do app', 'exemplo-labs', 3, 65, 'Status', 'há 2 h', true],
+  ['Motor de regras · 4º tri', 'exemplo-labs', 7, 41, 'Status', 'ontem'],
+  ['Receitas v2', 'estudio-ficticio', 2, 23, 'Fase', 'há 3 dias'],
+  ['Pessoal', 'dev-sintetico', 1, 12, 'Status', 'há 1 semana'],
+  ['Pesquisa de UX', 'estudio-ficticio', 5, 8, null, 'há 2 semanas'],
+]
+function projectPickerScreen() {
+  return `${cab('github', 'Kanban do projeto', 'Escolha o GitHub Project que este quadro mostra')}
+  <div class="cartao filtros"><span class="campo" style="flex:1">${ic('search')}Buscar Projects…</span><div class="seg"><span class="on">Todos · 5</span><span>Seus</span><span>exemplo-labs</span><span>estudio-ficticio</span></div><span class="chip" style="font-family:var(--font-sans)">${ic('eye-off')}fechados ocultos</span></div>
+  <div class="cartao"><table class="tabela"><thead><tr><th style="width:32px"></th><th>Project</th><th>Itens</th><th>Colunas por</th><th>Atualizado</th></tr></thead><tbody>
+  ${PROJECTS.map(([n, o, num, it, f, at, sel]) => `<tr style="${sel ? 'background:color-mix(in srgb, var(--accent) 8%, transparent)' : ''}"><td><span class="${sel ? 'c-accent' : 'c-muted'}">${ic(sel ? 'circle-dot' : 'circle')}</span></td><td class="nm"><b>${n}</b><small>${o} · #${num}</small></td><td class="mono">${it}</td>
+    <td>${f ? `<span class="campo" style="height:26px;width:130px;display:inline-flex">${f}<span style="margin-left:auto">${ic('chevron-down')}</span></span>` : '<span class="c-waiting" style="font-size:12px">sem campo de seleção</span>'}</td><td class="c-muted">${at}</td></tr>`).join('')}
+  </tbody></table></div>
+  <div style="display:flex;gap:10px;align-items:center"><span class="c-muted" style="font-size:12px">${ic('info')} Fica nas preferências deste console. Você troca quando quiser, no cabeçalho do quadro.</span><span style="margin-left:auto" class="btn cheio">${ic('check')}Usar “Roadmap do app”</span></div>`
+}
+function projectSwitchScreen() {
+  const pop = `<div class="cartao" style="position:absolute;right:0;top:46px;width:380px;padding:8px;display:flex;flex-direction:column;gap:2px;z-index:2;box-shadow:0 12px 32px color-mix(in srgb, var(--mono-black) 35%, transparent)">
+    <span class="campo" style="height:30px;margin-bottom:4px">${ic('search')}Buscar Projects…</span>
+    ${PROJECTS.slice(0, 4).map(([n, o, num, it, f, at, sel]) => `<div style="display:flex;gap:8px;align-items:center;padding:7px 8px;border-radius:7px;font-size:12.5px;${sel ? 'background:var(--raised)' : ''}"><span class="${sel ? 'c-accent' : 'c-muted'}">${ic(sel ? 'check' : 'kanban')}</span><span class="trunc">${n}</span><span class="c-muted mono" style="margin-left:auto;font-size:11px">${o} #${num}</span></div>`).join('')}
+    <div style="border-top:1px solid var(--border);margin-top:4px;padding:8px 8px 2px;font-size:11.5px" class="c-muted">Colunas por <span class="campo" style="display:inline-flex;height:24px;width:110px;margin-left:6px">Status<span style="margin-left:auto">${ic('chevron-down')}</span></span></div></div>`
+  return telaProjeto()
+    .replace('GitHub Project “Ahrena Console” · por Status · arraste para mudar', 'GitHub Project “Roadmap do app” · exemplo-labs #3 · por Status · arraste para mudar')
+    .replace(`<span class="campo" style="width:200px">Marco: M1 · Local`, `<span style="position:relative"><span class="btn contorno">${ic('repeat')}Trocar de Project${ic('chevron-down')}</span>${pop}</span><span class="campo" style="width:200px">Marco: M1 · Local`)
+    .replace(/<div class="toast">[\s\S]*?<\/div><\/div>$/, '</div>')
+}
+
+// C44: os estados da conexão que não são o caminho feliz.
+function connectionsStatesScreen() {
+  const box = (label, pill, title, text, buttons = '') => `<div style="display:flex;flex-direction:column;gap:8px;min-width:0"><div class="olhinho">${label}</div>
+    <div class="cartao" style="padding:14px 16px;display:flex;flex-direction:column;gap:10px;min-height:190px">${ghProviderHead(pill, '')}
+      <div style="border-top:1px solid var(--border);padding-top:10px;display:flex;flex-direction:column;gap:6px"><b style="font-size:13px">${title}</b><span class="c-muted" style="font-size:12px;line-height:1.6">${text}</span></div>
+      <div style="display:flex;gap:8px;margin-top:auto;flex-wrap:wrap">${buttons}</div></div></div>`
+  return `${connCab()}
+  <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px">
+    ${box('Aplicativo não configurado', '<span class="pill b-waiting">indisponível</span>', 'Este console não tem o aplicativo do GitHub', 'Acontece num console montado do código antes do aplicativo da Ahrena existir. Quem montou define <code>AHRENA_CONSOLE_GITHUB_CLIENT_ID</code> com o Client ID de um OAuth App com device flow.', `<span class="btn cheio" style="opacity:.45">${ic('github')}Conectar ao GitHub</span><span class="btn contorno">${ic('external-link')}Como configurar</span>`)}
+    ${box('Sem cofre nesta máquina', '<span class="pill b-waiting">indisponível</span>', 'Não há onde guardar a credencial com segurança', 'Esta máquina não tem o Keychain do macOS nem o Secret Service do Linux. O console não guarda a credencial em arquivo, então não conecta. O <code>gh</code> está instalado e autenticado: dá para usar o login dele.', `<span class="btn contorno">${ic('terminal')}Usar o login do gh</span>`)}
+    ${box('Falta um escopo', '<span class="pill b-waiting">conectado, incompleto</span>', 'Falta o escopo project', `${scopeList(['repo', 'read:org'])}<span style="display:block;margin-top:6px">O Kanban do projeto não lê nem move cards. Reconectar pede os três escopos de novo.</span>`, `<span class="btn cheio">${ic('refresh-cw')}Reconectar</span>`)}
+    ${box('O código expirou, ou foi recusado', '<span class="pill b-error">não conectado</span>', 'O código expirou antes da autorização', 'Os 15 minutos passaram sem autorizar no GitHub. Se você clicou em <b>Cancel</b> no GitHub, a frase é "Você recusou no GitHub", e nada foi guardado.', `<span class="btn cheio">${ic('refresh-cw')}Gerar outro código</span>`)}
+  </div>
+  <div class="faixa"><span class="ic">${ic('terminal')}</span><div><b>Usando o login do <code>gh</code>.</b> A fonte desta máquina é o <code>gh auth</code>, escolhida em Conexões ou por <code>AHRENA_CONSOLE_GITHUB_SOURCE=gh</code>. Desconectar aqui não mexe no <code>gh</code>.</div><span class="btn contorno">Voltar ao padrão</span></div>
+  <div class="faixa"><span class="ic">${ic('info')}</span><div><b>AHRENA_CONSOLE_PROJECT está definida.</b> O Kanban do projeto mostra exemplo-labs #7 por ela, e a escolha da tela fica guardada para quando a variável sair.</div></div>`
+}
+
+// =====================================================================
+// TOOLS (C72 to C76, issue #280, decision 0014)
+// =====================================================================
+// The núcleo reads each tool with a fixed probe and runs only the argv lists of its catalog.
+// The screen sends the item id and the action id; never a command.
+const tlBadge = st => ({
+  ok: '<span class="badge b-completed"><span class="p"></span>Em dia</span>',
+  outdated: '<span class="badge b-waiting"><span class="p"></span>Desatualizada</span>',
+  missing: '<span class="badge b-abandoned"><span class="p"></span>Faltando</span>',
+  failed: '<span class="badge b-error"><span class="p"></span>Falhou</span>',
+  manual: '<span class="badge b-idle"><span class="p"></span>Instalada à mão</span>',
+  running: '<span class="badge b-active"><span class="p"></span>Atualizando</span>',
+  login: '<span class="badge b-waiting"><span class="p"></span>Precisa de login</span>',
+  connected: '<span class="badge b-completed"><span class="p"></span>Conectado</span>',
+  checking: '<span class="badge b-idle"><span class="p"></span>Verificando</span>',
+  na: '<span class="badge b-idle"><span class="p"></span>Não se aplica</span>',
+})[st]
+const tlAct = (a, remote) => ({
+  update: `<span class="btn contorno tl-act">${ic('arrow-up-circle')}${remote ? 'Atualizar lá' : 'Atualizar'}</span>`,
+  install: `<span class="btn contorno tl-act">${ic('download')}${remote ? 'Instalar lá' : 'Instalar'}</span>`,
+  sudo: `<span class="btn contorno tl-act tl-sudo">${ic('lock')}Precisa de sudo</span>`,
+  copy: `<span class="btn contorno tl-act">${ic('copy')}Copiar comando</span>`,
+  login: `<span class="btn contorno tl-act">${ic('external-link')}Entrar pelo /mcp</span>`,
+  config: `<span class="btn contorno tl-act">${ic('bot')}Ver no Agent Config</span>`,
+  busy: `<span class="btn contorno tl-act tl-off">${ic('loader-2')}Atualizando…</span>`,
+  queued: `<span class="btn contorno tl-act tl-off">${ic('clock')}Na fila</span>`,
+  done: `<span class="c-completed tl-none">${ic('check')}agora</span>`,
+  none: '<span class="c-muted tl-none">—</span>',
+})[a]
+const tlVer = v => v ? `<span class="mono">${v}</span>` : '<span class="c-muted">—</span>'
+const tlLatest = (inst, latest) => latest && inst !== latest ? `<span class="mono tl-new">${latest}</span>` : tlVer(latest)
+
+// [id, name, installed, latest, source, state, action, command]
+const TL_CLI_MAC = [
+  ['claude', 'Claude Code', '2.1.299', '2.1.312', 'instalador nativo', 'outdated', 'update', 'claude update'],
+  ['git', 'Git', '2.51.1', '2.51.1', 'Homebrew', 'ok', 'none'],
+  ['gh', 'GitHub CLI', '2.81.0', '2.83.1', 'Homebrew', 'outdated', 'update', 'brew upgrade gh'],
+  ['aws', 'AWS CLI', '2.31.12', '2.31.18', 'instalador oficial (.pkg)', 'manual', 'sudo', 'sudo installer -pkg AWSCLIV2.pkg -target /'],
+  ['session-manager-plugin', 'Plugin do SSM da AWS', '1.2.764.0', '1.2.764.0', 'Homebrew (cask)', 'ok', 'none'],
+  ['wrangler', 'Cloudflare Wrangler', '4.45.0', '4.47.2', 'npm global · Node do fnm', 'outdated', 'update', 'npm install -g wrangler@4.47.2'],
+  ['gcloud', 'Google Cloud CLI', null, '545.0.0', 'Homebrew (cask)', 'missing', 'install', 'brew install --cask gcloud-cli'],
+  ['docker', 'Docker CLI', '28.5.1', '28.5.1', 'Homebrew', 'ok', 'none'],
+  ['colima', 'Colima', '0.9.1', '0.9.1', 'Homebrew', 'ok', 'none'],
+  ['jq', 'jq', '1.8.1', '1.8.1', 'Homebrew', 'ok', 'none'],
+  ['rg', 'ripgrep', '15.1.0', '15.1.0', 'Homebrew', 'ok', 'none'],
+]
+const TL_CLI_WS = [
+  ['claude', 'Claude Code', '2.1.312', '2.1.312', 'instalador nativo', 'ok', 'none'],
+  ['git', 'Git', '2.43.0', '2.43.0', 'apt · Ubuntu', 'ok', 'none'],
+  ['gh', 'GitHub CLI', '2.80.0', '2.83.1', 'apt · repositório do GitHub CLI', 'outdated', 'sudo', 'sudo apt-get install --only-upgrade gh'],
+  ['aws', 'AWS CLI', '2.31.18', '2.31.18', 'instalador oficial (.zip)', 'ok', 'none'],
+  ['session-manager-plugin', 'Plugin do SSM da AWS', '1.2.764.0', '1.2.764.0', 'pacote .deb', 'ok', 'none'],
+  ['wrangler', 'Cloudflare Wrangler', '4.45.0', '4.47.2', 'npm global · Node do fnm', 'outdated', 'update', 'npm install -g wrangler@4.47.2'],
+  ['gcloud', 'Google Cloud CLI', '545.0.0', '545.0.0', 'apt · repositório do Google', 'ok', 'none'],
+  ['docker', 'Docker CLI', '28.5.1', '28.5.1', 'apt · Docker Engine', 'ok', 'none'],
+  ['colima', 'Colima', null, null, 'só no macOS', 'na', 'none'],
+  ['jq', 'jq', '1.7.1', '1.7.1', 'apt · Ubuntu', 'ok', 'none'],
+  ['rg', 'ripgrep', '14.1.0', '14.1.0', 'apt · Ubuntu', 'ok', 'none'],
+]
+// [name, binary, manager, installed, latest, state, action, command, note]
+const TL_RT_MAC = [
+  ['Node.js', 'node', 'fnm', '24.10.0', '24.11.0', 'outdated', 'update', 'fnm install 24.11.0 → fnm default 24.11.0', 'LTS 24 · a 22 também está instalada'],
+  ['TypeScript', 'tsc', 'npm global · Node do fnm', '5.9.3', '5.9.3', 'ok', 'none', '', 'o de cada projeto fica no package.json dele'],
+  ['Python', 'python3', 'uv · também pyenv (3.11.9)', '3.13.9', '3.14.0', 'outdated', 'update', 'uv python install 3.14', 'não troca o Python dos projetos'],
+  ['Rust', 'rustc', 'rustup · stable', '1.91.0', '1.91.0', 'ok', 'none', '', 'cargo 1.91.0'],
+  ['Go', 'go', 'Homebrew', '1.25.3', '1.25.3', 'ok', 'none', '', 'o toolchain do go.mod baixa sozinho'],
+]
+const TL_RT_WS = [
+  ['Node.js', 'node', 'fnm', '24.11.0', '24.11.0', 'ok', 'none', '', 'LTS 24'],
+  ['TypeScript', 'tsc', 'npm global · Node do fnm', '5.9.3', '5.9.3', 'ok', 'none', '', 'o de cada projeto fica no package.json dele'],
+  ['Python', 'python3', 'uv', '3.14.0', '3.14.0', 'ok', 'none', '', 'o python3 do Ubuntu (3.12) fica para o sistema'],
+  ['Rust', 'rustc', 'rustup · stable', '1.90.0', '1.91.0', 'outdated', 'update', 'rustup update stable', 'cargo 1.90.0'],
+  ['Go', 'go', 'tarball oficial em /usr/local/go', '1.25.1', '1.25.3', 'manual', 'sudo', 'sudo rm -rf /usr/local/go && sudo tar -C /usr/local -xzf go1.25.3.linux-amd64.tar.gz', 'em /usr/local, do root'],
+]
+// [name, scope, transport, source, state, action, note]
+const TL_MCP = [
+  ['ahrena-console', 'usuário', 'stdio', 'este app · 0.0.32', 'connected', 'none', 'atualiza junto com o app'],
+  ['github', 'usuário', 'http', 'api.githubcopilot.com', 'connected', 'none', 'cabeçalho Authorization · valor oculto'],
+  ['playwright', 'usuário', 'stdio', 'npm @playwright/mcp 0.0.41 → <span class="tl-new">0.0.43</span>', 'outdated', 'update', 'sem variáveis de ambiente'],
+  ['docs-exemplo', 'usuário', 'http', 'mcp.exemplo.dev', 'login', 'login', 'o login é do Claude Code, não do console'],
+  ['postgres-local', 'projeto · catalogo-exemplo', 'stdio', 'docker (comando)', 'failed', 'config', '3 variáveis de ambiente · valores ocultos'],
+]
+
+const tlCliTable = (rows, { remote = false, readOnly = false, run = null, frozen = false } = {}) => `<table class="tabela tl-table"><thead><tr><th>Ferramenta</th><th>Instalada</th><th>Mais recente</th><th>De onde veio</th><th>Estado</th><th class="tl-r">Ação</th></tr></thead><tbody>
+  ${rows.map(([id, name, inst, latest, src, st, act]) => {
+    const a = frozen ? 'none' : run?.[id] ?? (readOnly && act !== 'none' && act !== 'sudo' ? 'copy' : act)
+    const s = run?.[id] === 'busy' ? 'running' : run?.[id] === 'done' ? 'ok' : run?.[id] === 'update' ? 'failed' : st
+    return `<tr class="${st === 'na' ? 'tl-dim' : ''}"><td class="nm"><b>${name}</b><small>${id}</small></td><td>${tlVer(run?.[id] === 'done' ? latest : inst)}</td><td>${tlLatest(run?.[id] === 'done' ? latest : inst, latest)}</td><td class="tl-src">${src}</td><td>${tlBadge(s)}</td><td class="tl-r">${tlAct(a, remote)}</td></tr>${run?.after === id ? run.row : ''}` }).join('')}
+</tbody></table>`
+const tlRtTable = (rows, { remote = false, readOnly = false } = {}) => `<table class="tabela tl-table"><thead><tr><th>Plataforma</th><th>Quem gerencia</th><th>Instalada</th><th>Mais recente</th><th>Estado</th><th class="tl-r">Ação</th></tr></thead><tbody>
+  ${rows.map(([name, bin, mgr, inst, latest, st, act, , note]) => `<tr><td class="nm"><b>${name}</b><small>${bin} · ${note}</small></td><td class="tl-src">${mgr}</td><td>${tlVer(inst)}</td><td>${tlLatest(inst, latest)}</td><td>${tlBadge(st)}</td><td class="tl-r">${tlAct(readOnly && act === 'update' ? 'copy' : act, remote)}</td></tr>`).join('')}
+</tbody></table>`
+const tlMcpTable = (readOnly = false) => `<table class="tabela tl-table"><thead><tr><th>Servidor</th><th>Escopo · transporte</th><th>De onde</th><th>Estado</th><th class="tl-r">Ação</th></tr></thead><tbody>
+  ${TL_MCP.map(([n, scope, tr, src, st, act, note]) => `<tr><td class="nm"><b>${n}</b><small>${note}</small></td><td class="tl-src">${scope} · <span class="mono">${tr}</span></td><td class="tl-src">${src}</td><td>${tlBadge(st)}</td><td class="tl-r">${tlAct(readOnly && act === 'update' ? 'copy' : act)}</td></tr>`).join('')}
+</tbody></table>`
+
+const tlMachineSeg = on => `<div class="seg"><span class="${on === 'local' ? 'on' : ''}">${ic('monitor')}Esta máquina</span><span class="${on === 'ws' ? 'on' : ''}">${ic('server')}Workstation</span></div>`
+const tlHeader = (on, sub, acts = '') => cab('wrench', 'Ferramentas', sub, `${tlMachineSeg(on)}${acts}`)
+const tlCheckBtn = `<span class="btn contorno">${ic('refresh-cw')}Verificar agora</span>`
+const tlUpdateAll = n => `<span class="btn cheio">${ic('arrow-up-circle')}Atualizar ${n}</span>`
+const TL_SUB_MAC = 'macOS 26 · Apple M3 · verificado às 09:12, há 58 min, no cache do Homebrew, do npm e dos fornecedores'
+
+const tlStats = (w, items) => `<div class="stats" style="${statCols(w)}">${items.map(a => stat(...a)).join('')}</div>`
+const TL_STATS_MAC = [
+  ['CLIs', '11', '7 em dia · 1 instalada à mão', 'terminal', 'var(--accent-text)'],
+  ['Desatualizadas', '5', '3 CLIs · 2 plataformas · todas sem sudo', 'arrow-up-circle', 'var(--status-waiting-text)'],
+  ['Faltando', '1', 'gcloud · o catálogo instala', 'circle-dashed', 'var(--muted)'],
+  ['Servidores MCP', '5', '1 falhou · 1 precisa de login', 'plug', 'var(--status-error-text)'],
+  ['Plataformas', '5', 'Node, TypeScript, Python, Rust, Go', 'layers', 'var(--accent-text)'],
+  ['Containers', 'Colima', 'rodando · 3 containers no ar', 'container', 'var(--status-completed-text)'],
+]
+const tlCard = (icon, title, small, body, cls = '', style = '') => `<div class="cartao tm-card tl-card ${cls}" style="${style}"><h5>${ic(icon)}${title}${small ? `<small>${small}</small>` : ''}</h5>${body}</div>`
+const tlKv = rows => `<div class="tl-kv">${rows.map(([k, v]) => `<span>${k}</span><span>${v}</span>`).join('')}</div>`
+
+const tlContainersMac = (state = 'running') => {
+  const head = { running: '<span class="badge b-completed"><span class="p"></span>Rodando</span>', stopped: '<span class="badge b-idle"><span class="p"></span>Parado</span>', starting: '<span class="badge b-active"><span class="p"></span>Iniciando</span>' }[state]
+  const btn = state === 'running' ? `<span class="btn contorno">${ic('square')}Parar</span>` : state === 'stopped' ? `<span class="btn cheio">${ic('play')}Iniciar</span>` : `<span class="btn contorno tl-off">${ic('loader-2')}Iniciando…</span>`
+  return `<div class="tl-ct-head">${ic('container')}<b>Colima</b>${head}<span class="tl-ct-btn">${btn}</span></div>
+    ${tlKv([['Runtime', 'Colima 0.9.1 · Docker CLI 28.5.1 · perfil default'], ['Contexto do docker', '<span class="mono">colima</span> · em uso'],
+      ['VM', state === 'stopped' ? '<span class="c-muted">4 CPUs · 8 GB · parada há 2 h</span>' : '4 CPUs · 8 GB · aarch64 · vz'],
+      ['Disco da VM', `${tmMeter('', 31, 100, 'GB')}`],
+      ['Containers', state === 'running' ? '3 rodando · 5 parados' : '<span class="c-muted">0 rodando · 8 parados</span>'],
+      ['Imagens', '14,2 GB · 3,1 GB recuperável']])}
+    <div class="tl-cmdline">${state === 'running' ? 'Parar roda: colima stop' : 'Iniciar roda: colima start'} · sem senha</div>
+    <span class="tl-link">Uso de disco por imagem e as stacks: Esta máquina ${ic('chevron-right')}</span>`
+}
+const tlHowCard = () => tlCard('info', 'Como verificamos', '', `<ul class="tl-how">
+  <li><b>Instalada:</b> cada item tem uma sonda fixa no catálogo (<code>gh --version</code>). O caminho do binário diz de onde veio: <code>/opt/homebrew</code> é Homebrew, <code>~/.local/share/fnm</code> é fnm.</li>
+  <li><b>Mais recente:</b> dos metadados do gerenciador, sem baixar nada: o cache da API do Homebrew, <code>npm view</code>, <code>rustup check</code>, <code>uv python list</code>; para o que veio de instalador oficial, a lista de versões pública do fornecedor.</li>
+  <li><b>Cache:</b> guardado no banco do núcleo, com a hora, e refeito a cada 6 h ou em Verificar agora. Sem rede, a tela mostra o cache.</li>
+</ul>`)
+
+function toolsScreen(w) {
+  const mcp = tlCard('plug', 'Servidores MCP do Claude Code', `escopos usuário e projeto · estado lido às 09:12 · <span class="tl-inline-btn">${ic('refresh-cw')}Verificar conexões</span>`, tlMcpTable(), '', `grid-column:1/-1`)
+  const rt = tlCard('layers', 'Plataformas', 'a versão em uso no shell de login', tlRtTable(TL_RT_MAC), '', `grid-column:span ${w === 1100 ? 2 : 2}`)
+  const ct = tlCard('container', 'Containers', '', tlContainersMac(), '', `grid-column:span ${w === 1100 ? 1 : 1}`)
+  return `${tlHeader('local', TL_SUB_MAC, `${tlCheckBtn}${tlUpdateAll(5)}`)}
+  ${tlStats(w, TL_STATS_MAC)}
+  <div class="tm-grid tl-grid" style="${gridCols(w)}">
+    ${tlCard('terminal', 'CLIs', '<span class="seg"><span class="on">Todas 11</span><span>Pedem ação 5</span><span>Em dia 6</span></span>', tlCliTable(TL_CLI_MAC), '', 'grid-column:1/-1')}
+    ${w === 1100 ? `${rt.replace('span 2', '1/-1')}${ct}${tlHowCard()}` : `${rt}${ct}`}
+    ${mcp}
+    ${w === 1440 ? tlHowCard().replace('tl-card ', 'tl-card tl-how-wide ') : ''}
+  </div>`
+}
+
+// ---------- C73: install and update ----------
+const tlDialog = (title, rows, cmds, note, okLabel = 'Confirmar e rodar') => `<div class="tl-veil"><div class="cartao tl-dlg">
+  <div class="tl-dlg-h">${ic('arrow-up-circle')}<b>${title}</b><span class="tl-x">${ic('x')}</span></div>
+  ${tlKv(rows)}
+  <div class="tl-dlg-cmd"><div class="olhinho">Vai rodar, exatamente</div>${cmds.map(c => `<code>${c}</code>`).join('')}</div>
+  <div class="tl-dlg-note">${ic('shield-check')}<span>${note}</span></div>
+  <div class="tl-dlg-a"><span class="btn contorno">Cancelar</span><span class="btn cheio">${ic('play')}${okLabel}</span></div></div></div>`
+const tlConfirmGh = tlDialog('Atualizar o GitHub CLI', [['Onde', 'Esta máquina · como o seu usuário'], ['De onde', 'Homebrew · 2.81.0 → <span class="tl-new mono">2.83.1</span>'], ['Tempo limite', '10 min · Cancelar a qualquer momento']],
+  ['brew upgrade gh'], 'Do catálogo do núcleo (<span class="mono">gh · update · homebrew</span>), revisado no código. Não pede senha de administrador. Nada digitado na tela vira comando.')
+const tlConfirmAll = tlDialog('Atualizar 5 itens', [['Onde', 'Esta máquina · como o seu usuário'], ['Ordem', 'um de cada vez, na ordem abaixo'], ['Tempo limite', '10 min cada']],
+  ['claude update', 'brew upgrade gh', 'npm install -g wrangler@4.47.2', 'fnm install 24.11.0 <span class="c-muted">e depois</span> fnm default 24.11.0', 'uv python install 3.14'],
+  'Nenhum pede senha. O aws fica de fora: veio do instalador oficial e precisa de sudo (veja a linha dele).', 'Confirmar os 5')
+const tlFrame = (w, body, active = 'tools') => frameAt(w, active, body)
+const tlClip = (html, h = 560) => `<div class="tl-clip" style="max-height:${h}px">${html}</div>`
+const tlBase = (w, run) => `${tlHeader('local', TL_SUB_MAC, `${tlCheckBtn}<span class="btn cheio tl-off">${ic('loader-2')}Atualizando 2 de 5</span>`)}${tlStats(w, TL_STATS_MAC)}
+  ${tlCard('terminal', 'CLIs', '', tlCliTable(TL_CLI_MAC, { run }))}`
+const TL_OUT = ['==> Upgrading 1 outdated package:', 'gh 2.81.0 -> 2.83.1', '==> Fetching downloads for: gh', '==> Downloading https://ghcr.io/v2/homebrew/core/gh/manifests/2.83.1', '==> Pouring gh--2.83.1.arm64_tahoe.bottle.tar.gz']
+const tlRunRow = (lines, elapsed, pct, queue) => `<tr class="tl-run"><td colspan="6"><div class="tl-run-box">
+  <div class="tl-run-top">${rcSteps(1).replace(/rodando o comando/, 'baixando').replace(/aguardando o login/, 'instalando').replace(/lendo a Workstation/, 'conferindo a versão')}<span class="btn contorno tl-cancel">${ic('x')}Cancelar</span></div>
+  <div class="tl-out">${lines.map(l => `<span>${l}</span>`).join('')}<span class="tl-caret">▍</span></div>
+  <div class="tl-run-foot"><span class="tm-stack"><i style="width:${pct}%;background:var(--status-active-dot)"></i></span><span class="mono">${elapsed} de 10:00</span><span class="mono c-muted">brew upgrade gh</span>${queue ? `<span class="tl-queue">Na fila: ${queue}</span>` : ''}</div></div></td></tr>`
+const tlInstallScreens = () => `<div class="tl-flow">
+  <div class="tl-step"><div class="rotulo">1 · Confirmar · 1100 px</div>${tlFrame(1100, `<div class="tl-veil-wrap">${tlClip(toolsScreen(1100), 640)}${tlConfirmGh}</div>`)}</div>
+  <div class="tl-step"><div class="rotulo">1 · Confirmar · 1440 px</div>${tlFrame(1440, `<div class="tl-veil-wrap">${tlClip(toolsScreen(1440), 640)}${tlConfirmGh}</div>`)}</div>
+  <div class="tl-step"><div class="rotulo">1b · Atualizar 5 · a lista inteira antes de rodar · 1100 px</div>${tlFrame(1100, `<div class="tl-veil-wrap">${tlClip(toolsScreen(1100), 640)}${tlConfirmAll}</div>`)}</div>
+  <div class="tl-step"><div class="rotulo">2 · Rodando · a saída chega ao vivo, na linha do item · 1100 px</div>${tlFrame(1100, tlClip(tlBase(1100, { claude: 'done', gh: 'busy', wrangler: 'queued', after: 'gh', row: tlRunRow(TL_OUT, '0:18', 3, 'Cloudflare Wrangler, Node.js e Python') }), 1000))}</div>
+  <div class="tl-step"><div class="rotulo">3 · Pronto · 1100 px</div>${tlFrame(1100, `${tlHeader('local', TL_SUB_MAC, tlCheckBtn)}
+    <div class="faixa tm-rc-ok"><span class="ic">${ic('check-circle-2')}</span><div><b>GitHub CLI na 2.83.1.</b> <span class="mono">brew upgrade gh</span> saiu com o código 0 em 24 s, e o núcleo conferiu com <span class="mono">gh --version</span>. A saída fica no log: <span class="mono">~/.ahrena-console/tools.log</span></div></div>
+    ${tlClip(tlCard('terminal', 'CLIs', '', tlCliTable(TL_CLI_MAC, { run: { claude: 'done', gh: 'done' } })), 300)}`)}</div>
+  <div class="tl-step"><div class="rotulo">4 · Falhou · 1100 px</div>${tlFrame(1100, `${tlHeader('local', TL_SUB_MAC, tlCheckBtn)}
+    <div class="faixa erro tm-rc-band"><span class="ic">${ic('x-circle')}</span><div class="tm-rc-text"><b>Não atualizou o GitHub CLI.</b> <span class="mono">brew upgrade gh</span> saiu com o código 1 depois de 1 min 2 s. O gh continua na 2.81.0, que funciona.
+      <div class="tl-out tl-out-err"><span>Error: The following directories are not writable by your user:</span><span>/opt/homebrew/share/zsh/site-functions</span><span>You should change the ownership of these directories to your user.</span></div>
+      <div class="tm-rc-cmd">As últimas linhas da saída; o resto está em ~/.ahrena-console/tools.log. Corrigir a permissão pede sudo: o console não faz isso.</div></div>
+      <div class="tm-rc-actions"><span class="btn contorno">${ic('copy')}Copiar a saída</span><span class="btn cheio">${ic('refresh-cw')}Tentar de novo</span></div></div>
+    ${tlClip(tlCard('terminal', 'CLIs', '', tlCliTable(TL_CLI_MAC, { run: { claude: 'done', gh: 'update' } })), 260)}`)}</div>
+</div>`
+
+// ---------- C74: states of the screen ----------
+function toolsStatesScreen() {
+  const okStats = [['CLIs', '11', 'todas em dia', 'terminal', 'var(--status-completed-text)'], ['Servidores MCP', '5', 'todos conectados', 'plug', 'var(--status-completed-text)'], ['Containers', 'Colima', 'rodando', 'container', 'var(--status-completed-text)']]
+  return `${tlHeader('local', TL_SUB_MAC, tlCheckBtn)}
+  <div class="rotulo">1 · Tudo em dia</div>
+  <div class="faixa tm-rc-ok"><span class="ic">${ic('check-circle-2')}</span><div><b>Tudo em dia.</b> 11 CLIs, 5 servidores MCP, 5 plataformas e o Colima, verificados às 09:12. A próxima verificação é às 15:12, ou quando você pedir.</div></div>
+  <div class="stats" style="grid-template-columns:repeat(3,minmax(0,1fr))">${okStats.map(a => stat(...a)).join('')}</div>
+  <div class="rotulo">2 · Verificando, na primeira vez · sem cache ainda</div>
+  ${tlCard('terminal', 'CLIs', 'lendo as versões · 6 de 11', `<table class="tabela tl-table"><tbody>${TL_CLI_MAC.slice(0, 4).map(([id, n, inst, , src], i) => `<tr><td class="nm"><b>${n}</b><small>${id}</small></td><td>${i < 2 ? tlVer(inst) : '<span class="tl-skel"></span>'}</td><td><span class="tl-skel"></span></td><td class="tl-src">${i < 2 ? src : '<span class="tl-skel"></span>'}</td><td>${tlBadge('checking')}</td></tr>`).join('')}</tbody></table>
+    <div class="tl-cmdline">Instaladas vêm em segundos (é só a sonda local). As mais recentes esperam o gerenciador; até lá, a coluna fica vazia, nunca "em dia".</div>`)}
+  <div class="rotulo">3 · Sem rede</div>
+  <div class="faixa"><span class="ic">${ic('wifi-off')}</span><div><b>Sem rede.</b> As versões instaladas estão em dia (são lidas aqui). As mais recentes são do cache, de ontem às 18:40. Instalar e atualizar ficam desligados até a rede voltar.</div><span class="btn contorno">Tentar agora</span></div>
+  <div class="rotulo">4 · macOS sem Homebrew</div>
+  <div class="faixa tm-rc-band"><span class="ic">${ic('package-x')}</span><div class="tm-rc-text"><b>Sem Homebrew, o console só lê.</b> As CLIs e as versões aparecem, mas instalar e atualizar ficam desligados. O instalador do Homebrew pede a sua senha de administrador, então o console não roda: rode no Terminal e volte aqui.
+    <div class="tl-copy"><code>/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"</code><span class="btn contorno">${ic('copy')}Copiar</span></div>
+    <div class="tm-rc-cmd">É o comando de brew.sh. Leia antes de rodar.</div></div>
+    <div class="tm-rc-actions"><span class="btn contorno">${ic('refresh-cw')}Rodei, verificar de novo</span></div></div>
+  <div class="rotulo">5 · Precisa de sudo · o item aberto</div>
+  ${tlCard('terminal', 'CLIs', '', `<table class="tabela tl-table"><tbody><tr><td class="nm"><b>AWS CLI</b><small>aws</small></td><td>${tlVer('2.31.12')}</td><td>${tlLatest('2.31.12', '2.31.18')}</td><td class="tl-src">instalador oficial (.pkg)</td><td>${tlBadge('manual')}</td><td class="tl-r">${tlAct('sudo')}</td></tr>
+    <tr class="tl-run"><td colspan="6"><div class="tl-run-box tl-sudo-box">
+      <div><b>O console não roda este.</b> O aws veio do instalador oficial, em <span class="mono">/usr/local/aws-cli</span>, que é do root: atualizar pede a sua senha de administrador. Baixe o .pkg novo na página da AWS e rode no Terminal:</div>
+      <div class="tl-copy"><code>sudo installer -pkg AWSCLIV2.pkg -target /</code><span class="btn contorno">${ic('copy')}Copiar</span></div>
+      <div class="tm-rc-cmd">Ou passe o aws para o Homebrew (<span class="mono">brew install awscli</span>, depois de remover o .pkg): aí o console atualiza sem senha.</div>
+      <div><span class="btn contorno">${ic('refresh-cw')}Rodei, verificar de novo</span></div></div></td></tr></tbody></table>`)}
+  <div class="rotulo">6 · Windows sem winget</div>
+  <div class="faixa tm-rc-band"><span class="ic">${ic('package-x')}</span><div class="tm-rc-text"><b>Sem o winget, o console só lê.</b> O winget vem no App Installer da Microsoft Store. Com ele, o catálogo usa <span class="mono">winget upgrade --id &lt;id&gt; --scope user</span>; um pacote que só instala para a máquina toda pede administrador e mostra o comando, como no 5.</div><span class="btn contorno">${ic('refresh-cw')}Verificar de novo</span></div>`
+}
+
+// ---------- C75: the Workstation ----------
+const TL_SUB_WS = 'ws-exemplo · Ubuntu 24.04 · lido do núcleo de lá pela porta 14720 · versões mais recentes verificadas lá às 09:05'
+function toolsRemoteScreen(w, actions) {
+  const ro = !actions
+  const band = ro
+    ? `<div class="faixa"><span class="ic">${ic('eye')}</span><div><b>Só leitura.</b> A Workstation não aceita ações vindas deste Mac, e cada ação vira Copiar comando, para rodar num terminal de lá. Para ligar, na Workstation, grave <span class="mono">"tools": { "acceptRemoteActions": true }</span> no <span class="mono">~/.ahrena-console/config.json</span> de lá. A escolha é de quem está na máquina, não deste Mac.</div></div>`
+    : `<div class="faixa"><span class="ic">${ic('server')}</span><div><b>Ações ligadas na Workstation.</b> Quem roda é o núcleo de lá, com o catálogo de lá e como o seu usuário de lá. O confirmar diz "Roda na Workstation" e mostra o comando de lá. sudo continua com você.</div></div>`
+  const stats = [
+    ['CLIs', '10', '8 em dia · Colima não se aplica', 'terminal', 'var(--accent-text)'],
+    ['Desatualizadas', '3', 'gh (sudo) · wrangler · Rust', 'arrow-up-circle', 'var(--status-waiting-text)'],
+    ['Faltando', '0', 'nada faltando', 'circle-dashed', 'var(--muted)'],
+    ['Servidores MCP', '3', 'todos conectados', 'plug', 'var(--status-completed-text)'],
+    ['Plataformas', '5', '1 instalada à mão (Go)', 'layers', 'var(--accent-text)'],
+    ['Containers', 'Docker', 'Engine rodando · 106', 'container', 'var(--status-completed-text)'],
+  ]
+  const ct = `<div class="tl-ct-head">${ic('container')}<b>Docker Engine</b><span class="badge b-completed"><span class="p"></span>Rodando</span><span class="tl-ct-btn">${tlAct('sudo')}</span></div>
+    ${tlKv([['Runtime', 'Docker Engine 28.5.1 · systemd · containerd 2.1'], ['Containers', '38 rodando · 68 parados · 4 stacks'], ['Disco', '/var/lib/docker · 34 GB em uso · 31 GB recuperável']])}
+    <div class="tl-cmdline">Parar e iniciar o serviço pedem sudo: <span class="mono">sudo systemctl stop docker</span></div>
+    <span class="tl-link">Uso por imagem, volumes e stacks com a sessão dona: Workstation ${ic('chevron-right')}</span>`
+  return `${tlHeader('ws', TL_SUB_WS, `${tlCheckBtn}${actions ? `<span class="btn cheio">${ic('arrow-up-circle')}Atualizar 2 lá</span>` : ''}`)}
+  ${band}
+  ${tlStats(w, stats)}
+  <div class="tm-grid tl-grid" style="${gridCols(w)}">
+    ${tlCard('terminal', 'CLIs', '', tlCliTable(TL_CLI_WS, { remote: actions, readOnly: ro }), '', 'grid-column:1/-1')}
+    ${tlCard('layers', 'Plataformas', '', tlRtTable(TL_RT_WS, { remote: actions, readOnly: ro }), '', `grid-column:${w === 1100 ? '1/-1' : 'span 2'}`)}
+    ${tlCard('container', 'Containers', '', ct)}
+    ${tlCard('plug', 'Servidores MCP lá', 'escopo usuário de lá', `<table class="tabela tl-table"><tbody>${[['ahrena-console', 'stdio', 'este app · 0.0.32'], ['github', 'http', 'api.githubcopilot.com'], ['playwright', 'stdio', 'npm @playwright/mcp 0.0.43']].map(([n, t, s]) => `<tr><td class="nm"><b>${n}</b><small>${t} · ${s}</small></td><td class="tl-r">${tlBadge('connected')}</td></tr>`).join('')}</tbody></table>`, '', w === 1100 ? '' : 'grid-column:1/-1')}
+  </div>`
+}
+const tlRemoteConfirm = tlDialog('Atualizar o Rust na Workstation', [['Onde', '<b>Na Workstation</b> · pelo núcleo de lá · como o seu usuário de lá'], ['De onde', 'rustup · 1.90.0 → <span class="tl-new mono">1.91.0</span>'], ['Tempo limite', '15 min']],
+  ['rustup update stable'], 'Do catálogo do núcleo da Workstation, que é o mesmo código deste. Este Mac só manda o id do item e da ação; a Workstation aceitou ações remotas no config.json de lá.')
+const tlRemoteOffline = () => `${tlHeader('ws', 'ws-exemplo · Ubuntu 24.04 · última leitura às 22:41, há 14 min', '')}
+  <div class="faixa erro"><span class="ic">${ic('wifi-off')}</span><div><b>Sem conexão com a Workstation.</b> Abaixo, a última leitura, desbotada. Nada roda lá enquanto ela estiver fora; Reconectar fica na tela da Workstation (C50).</div><span class="btn contorno">${ic('server')}Abrir a Workstation</span></div>
+  <div class="tm-faded">${tlCard('terminal', 'CLIs', '', tlCliTable(TL_CLI_WS.slice(0, 4), { frozen: true }))}</div>`
+
+// ---------- C76: containers ----------
+function toolsContainersScreen() {
+  const card = (label, body) => `<div class="tl-ct-state"><div class="rotulo">${label}</div><div class="cartao tm-card tl-card">${body}</div></div>`
+  const simple = (icon, title, badge, rows, cmd, btn, extra = '') => `<div class="tl-ct-head">${ic(icon)}<b>${title}</b>${badge}<span class="tl-ct-btn">${btn}</span></div>${rows ? tlKv(rows) : ''}${cmd ? `<div class="tl-cmdline">${cmd}</div>` : ''}${extra}`
+  return `${tlHeader('local', TL_SUB_MAC, tlCheckBtn)}
+  <div class="tl-ct-grid">
+    ${card('1 · macOS · Colima rodando', tlContainersMac('running'))}
+    ${card('2 · macOS · Colima parado', tlContainersMac('stopped'))}
+    ${card('3 · macOS · iniciando', `${tlContainersMac('starting').split('<div class="tl-kv">')[0]}${rcSteps(1).replace(/rodando o comando/, 'subindo a VM').replace(/aguardando o login/, 'subindo o Docker').replace(/lendo a Workstation/, 'conferindo o docker')}<div class="tl-out"><span>INFO[0000] starting colima</span><span>INFO[0000] runtime: docker</span><span>INFO[0003] creating and starting ...  context=vm</span><span class="tl-caret">▍</span></div>${rcTime('0:21', 12).replace('3:00', '3:00')}`)}
+    ${card('4 · macOS · sem runtime', simple('container', 'Sem runtime', '<span class="badge b-abandoned"><span class="p"></span>Faltando</span>', null,
+      'Instalar roda: brew install colima docker · e depois Iniciar, que roda colima start', `<span class="btn cheio">${ic('download')}Instalar o Colima</span>`,
+      '<div class="tl-hint">A proposta é o Colima com o Docker CLI: código aberto e sem licença por empresa. Achamos o Docker Desktop? O console mostra o estado dele, mas não o inicia nem o atualiza.</div>'))}
+    ${card('5 · Linux · Docker Engine parado', simple('container', 'Docker Engine', '<span class="badge b-idle"><span class="p"></span>Parado</span>', [['Runtime', 'Docker Engine 28.5.1 · systemd'], ['Containers', '<span class="c-muted">0 rodando · 106 parados</span>']],
+      '', tlAct('sudo'), `<div class="tl-copy"><code>sudo systemctl start docker</code><span class="btn contorno">${ic('copy')}Copiar</span></div><div class="tl-hint">O serviço é do sistema: iniciar pede sudo, e o console não roda sudo. Docker sem root (rootless) é a alternativa que dispensa a senha.</div>`))}
+    ${card('6 · Windows · a proposta de código aberto', simple('container', 'Podman Desktop', '<span class="badge b-abandoned"><span class="p"></span>Faltando</span>', [['Achamos', 'Docker Desktop 4.48 · rodando · o console só lê'], ['Proposta', 'Podman Desktop, com a máquina do Podman no WSL 2']],
+      'Instalar roda: winget install --id RedHat.Podman-Desktop --scope user · Iniciar: podman machine start', `<span class="btn contorno">${ic('download')}Instalar</span>`,
+      '<div class="tl-hint">O Docker Desktop é comum, mas pede licença paga em empresa maior. O Podman Desktop é código aberto, e o <span class="mono">docker</span> continua funcionando pelo socket compatível. Ligar o WSL 2 pede administrador: se faltar, a tela mostra o comando.</div>'))}
+  </div>`
+}
+
 const N = (ccam, diverge) => `<div class="notas"><div class="nota ccam"><h4>Do CCAM</h4><ul>${ccam.map(x => `<li>${x}</li>`).join('')}</ul></div><div class="nota"><h4>Onde diverge, e por quê</h4><ul>${diverge.map(x => `<li>${x}</li>`).join('')}</ul></div></div>`
 const NP_BASE = ['Sidebar da extensão VS Code (<code>vscode-extension/sidebar.js</code>): cartão do servidor com a pílula <b>Online</b>, rótulo de seção com <b>auto · 5 s</b>, blocos de estatística com sparkline, barra empilhada de saúde dos agentes e a lista com ícone de status.']
 const NP_DIV = ['Mostra só esta sessão (decisão 0004), não a frota: a frota fica no console.', 'Cards de 34 colunas × 6 linhas em qualquer largura: o estreito empilha 1, o largo põe 3 por linha.']
@@ -2811,6 +3283,28 @@ const TELAS = [
     n: N(['Os estados de carregamento e de erro inline do C19, e o bloco de ferramenta "Rodando" da Conversa.'], ['O socket não responde nada: "Entregue" só vale quando o transcript mostra um turno novo depois do envio. Falha de conexão é "Não entregue" na hora.', 'Sem turno novo em 60 s, "Enviada, sem confirmação": a sessão pode estar segurando pela política de mensagens entre sessões. Não oferece reenviar, porque duplicaria.', 'O texto digitado só vive na caixa: na falha ele fica lá para tentar de novo; nunca volta de um log (a auditoria guarda o SHA-256, não o texto).', 'Na Conversa, a mensagem vem do próprio transcript, com a marca "de outra sessão · pelo console".']) },
   { id: 'console-session-message-unavailable', cod: 'C53', nome: 'Mandar mensagem · quando não dá', sub: 'Issue #61. Os casos em que a caixa fica desligada e diz por quê: sessão sem processo vivo (com Abrir no Claude Desktop), sessão em outra máquina e mais de um processo dizendo ser a mesma sessão. Embaixo, "precisam de você" no Dashboard e as linhas de Sessões com a ação Mandar mensagem, que abre o Detalhe na Conversa com a caixa em foco. Em 1100 e 1440.', html: () => `<div style="display:flex;flex-direction:column;gap:12px">${widthCol(1100, '1100 px', frameAt(1100, 'sessoes', sessionMessageUnavailableScreen(1100)))}${widthCol(1440, '1440 px', frameAt(1440, 'sessoes', sessionMessageUnavailableScreen(1440)))}</div>`,
     n: N(['O EmptyState com motivo e ação (C19).', 'O inbox "precisam de você" do Dashboard (C1) e a tabela de Sessões (C3).'], ['A caixa desligada fica no lugar, tracejada, com o motivo: quem procura o botão descobre por que não dá.', 'Sessão sem processo vivo não tem para onde entregar sem o núcleo retomar (9.8); a saída é abrir no Claude Desktop.', 'Outra máquina: a caixa fica desligada. A entrega pelo núcleo de lá é o #282; o Remote Control não serve, porque só uma sessão do Claude logada manda mensagem por ele.', 'Mais de um processo com o mesmo <code>sessionId</code> é recusa: entregar no errado é pior que não entregar.', '"Mandar mensagem" aparece só onde há um processo vivo aqui; numa sessão com erro sem processo, a linha diz "sem processo vivo". É um atalho para o Detalhe: nada é enviado da lista.']) },
+  { id: 'console-connections-off', cod: 'C39', nome: 'Conexões · desconectado', sub: 'Feature Conectar ao GitHub (#241, decisão 0011). A seção nova de Controle: o GitHub sem conexão, os escopos que o console vai pedir e por quê, onde a credencial vai ficar e a fonte (o console, ou o gh para quem já usa). Em 1100 e 1440.', html: () => `<div class="fila">${bothWidths(w => frameGh(w, 'connections', connectionsOffScreen(w), 'off'))}</div>`,
+    n: N(['Nada: o CCAM lê o GitHub com o gh da máquina.'], ['O console conecta sozinho, pelo device flow do OAuth App da Ahrena: o app instalado não depende do gh.', 'A barra ganha Conexões em Controle; o pé da barra diz se o GitHub está conectado.', 'Os escopos aparecem antes de conectar, cada um com o motivo.']) },
+  { id: 'console-connections-pending', cod: 'C40', nome: 'Conexões · o código do device flow', sub: 'Depois de Conectar: o código de 8 letras, o botão que abre github.com/login/device no navegador e a espera, que muda sozinha quando a pessoa autoriza. O código vale 15 minutos. Em 1100 e 1440.', html: () => `<div class="fila">${bothWidths(w => frameGh(w, 'connections', connectionsPendingScreen(w), 'pending'))}</div>`,
+    n: N(['—'], ['Quem pede o token ao GitHub é o núcleo; a /ui só mostra o código e acompanha o estado. O device_code nunca sai do núcleo.', 'Só a própria /ui começa o fluxo (Origin da mesma origem, decisão 0003): nenhum agente conecta pela pessoa.']) },
+  { id: 'console-connections-on', cod: 'C41', nome: 'Conexões · conectado', sub: 'Conectado como dev-sintetico: os escopos concedidos, as organizações (uma bloqueia o aplicativo, com o link para pedir aprovação), o limite da API, o Keychain e as telas que voltaram a funcionar. Em 1440, a confirmação de Desconectar, com o link para revogar no GitHub. Em 1100 e 1440.', html: () => `<div class="fila">${bothWidths(w => frameGh(w, 'connections', connectionsOnScreen(w), 'on'))}</div>`,
+    n: N(['—'], ['Desconectar apaga a entrada do Keychain e o cache do GitHub; revogar o aplicativo é no github.com, porque o console não tem o client secret.', 'Reconectar é o mesmo device flow, para quando falta um escopo.']) },
+  { id: 'console-connect-github', cod: 'C42', nome: 'Conectar ao GitHub nas telas', sub: 'Repositórios, Kanban do projeto, Dev Console e a aba Instruções sem conexão: o mesmo vazio, que diz o que a tela faria e leva a Conexões já com o código. Repositórios e Dev Console em 1100; Kanban do projeto e Instruções em 1440.', html: () => `<div style="display:flex;flex-direction:column;gap:12px"><div class="fila"><div class="width-col"><div class="rotulo">1100 px · Repositórios</div>${frameGh(1100, 'repos', connectRepos(), 'off')}</div><div class="width-col"><div class="rotulo">1100 px · Dev Console</div>${frameGh(1100, 'dev', connectDev(), 'off')}</div></div><div class="width-col"><div class="rotulo">1440 px · Kanban do projeto</div>${frameGh(1440, 'projeto', connectProject(), 'off')}</div><div class="width-col"><div class="rotulo">1440 px · Repositório · Instruções</div>${frameGh(1440, 'repos', connectInstr(), 'off')}</div></div>`,
+    n: N(['—'], ['Hoje essas telas mandam rodar gh auth login. Agora o vazio é um só, com um botão.', 'As ADRs e PDRs usam o mesmo vazio; as abas do repositório que não dependem do GitHub (Sessões, Decisões) continuam.']) },
+  { id: 'console-project-picker', cod: 'C43', nome: 'Kanban do projeto · escolher o Project', sub: 'Sem AHRENA_CONSOLE_PROJECT: a lista dos Projects que a conta enxerga (seus e das organizações), com busca, o campo que vira colunas e Usar. Em 1440, o quadro com Trocar de Project aberto no cabeçalho. Em 1100 e 1440.', html: () => `<div style="display:flex;flex-direction:column;gap:12px"><div class="rotulo">1100 px</div>${frameGh(1100, 'projeto', projectPickerScreen())}<div class="rotulo">1440 px</div>${frameGh(1440, 'projeto', projectSwitchScreen())}</div>`,
+    n: N(['O quadro do Kanban do projeto (C11).'], ['A escolha fica nas preferências da instalação, sem variável de ambiente; nada aponta para o Project da Ahrena.', 'Um Project sem campo de seleção não vira quadro: a linha diz isso.']) },
+  { id: 'console-connections-states', cod: 'C44', nome: 'Conexões · estados', sub: 'O que não é o caminho feliz: o console sem o aplicativo do GitHub configurado, a máquina sem cofre, um escopo faltando e o código expirado ou recusado. Embaixo, as faixas da fonte gh e de AHRENA_CONSOLE_PROJECT definida (esta no Kanban do projeto). Em 1100.', html: () => `<div class="fila">${frameGh(1100, 'connections', connectionsStatesScreen(), 'off')}</div>`,
+    n: N(['—'], ['Sem cofre o console não conecta: a credencial nunca vai para arquivo.', 'Sem o aplicativo configurado, Conectar fica desligado e a tela diz por quê; nada aponta para um aplicativo de outra pessoa.']) },
+  { id: 'console-tools', cod: 'C72', nome: 'Ferramentas · Esta máquina', sub: 'Feature Ferramentas (#280, decisão 0014), na seção Controle: o setup de desenvolvimento do Mac em quatro grupos. CLIs com a versão instalada, a mais recente e de onde veio; plataformas com quem gerencia cada uma; containers com o Colima e a VM; servidores MCP do Claude Code nos dois escopos, sem segredo nenhum. Cada item em dia, desatualizado, faltando, instalado à mão ou com falha. Em 1100 e 1440.', html: () => `<div class="fila">${bothWidths(w => frameAt(w, 'tools', toolsScreen(w)))}</div>`,
+    n: N(['Sem tela parecida no CCAM. O molde é o das máquinas (C24): cabeçalho, números em cima e cards em grade.'], ['Um seletor de máquina no cabeçalho, em vez de um item na barra por máquina: Ferramentas é uma tela só, e a Workstation é a mesma tela lida de lá (C75).', 'Atualizar 5 junta o que roda sem senha; o aws fica de fora porque veio do instalador oficial (C74, 5).', 'O MCP mostra o nome das variáveis contadas, nunca o valor, e só o host de uma URL.', 'O uso de disco do Docker e as stacks ficam na tela da máquina: aqui só a saúde do runtime e o link.']) },
+  { id: 'console-tools-install', cod: 'C73', nome: 'Ferramentas · instalar e atualizar', sub: 'O caminho de uma ação: o confirmar com o comando exato do catálogo (1, em 1100 e 1440), o Atualizar 5 com a lista inteira (1b), rodando com a saída ao vivo na linha do item e a fila (2), pronto (3) e falhou, com as últimas linhas e o log (4).', html: () => tlInstallScreens(),
+    n: N(['O andamento da C50 (Reconectar): passos, tempo contra o limite e Cancelar.'], ['A saída aparece na tela, ao contrário da C50: a de um gerenciador de pacotes não traz login nem código de dispositivo. Vai também para o tools.log, com permissão só do usuário.', 'Um por vez, em fila: dois gerenciadores ao mesmo tempo disputam o PATH e o disco, e a fila deixa a ordem visível.', 'O confirmar nomeia a entrada do catálogo (gh · update · homebrew): é o que a rota recebe, nunca o texto.']) },
+  { id: 'console-tools-states', cod: 'C74', nome: 'Ferramentas · estados', sub: 'Tudo em dia (1), verificando pela primeira vez, sem cache (2), sem rede, com o cache e a hora (3), macOS sem Homebrew (4), um item que precisa de sudo, aberto, com o comando para copiar (5) e Windows sem winget (6). Em 1100.', html: () => `<div class="fila">${frameAt(1100, 'tools', toolsStatesScreen())}</div>`,
+    n: N(['EmptyState e a faixa de C19.'], ['O console nunca roda sudo nem pede senha: mostra o comando, com Copiar e Rodei, verificar de novo.', 'Não instala o Homebrew: o instalador pede senha. A tela diz isso e mostra o comando de brew.sh.', 'Sem a mais recente, a coluna fica vazia, nunca "em dia".']) },
+  { id: 'console-tools-remote', cod: 'C75', nome: 'Ferramentas · Workstation', sub: 'A mesma tela, lida do núcleo da Workstation. Só leitura, o padrão (1100): cada ação vira Copiar comando. Com ações ligadas lá, pela própria Workstation (1440): os botões dizem "lá" e o confirmar diz quem roda. Embaixo, a Workstation sem conexão, com a última leitura desbotada.', html: () => `<div class="tl-flow"><div class="tl-step"><div class="rotulo">1 · Só leitura, o padrão · 1100 px</div>${frameAt(1100, 'tools', toolsRemoteScreen(1100, false))}</div><div class="tl-step"><div class="rotulo">2 · Ações ligadas na Workstation · 1440 px</div>${frameAt(1440, 'tools', toolsRemoteScreen(1440, true))}</div><div class="tl-step"><div class="rotulo">2b · Confirmar na Workstation · 1100 px</div>${frameAt(1100, 'tools', `<div class="tl-veil-wrap">${tlClip(toolsRemoteScreen(1100, true), 640)}${tlRemoteConfirm}</div>`)}</div><div class="tl-step"><div class="rotulo">3 · Sem conexão · 1100 px</div>${frameAt(1100, 'tools', tlRemoteOffline(), 'off')}</div></div>`,
+    n: N(['A leitura remota da C25: o Mac lê o núcleo de lá pela porta do túnel.'], ['Quem libera ações é a Workstation, no config dela: o túnel faz o pedido do Mac parecer local lá, então o padrão é recusar.', 'Rodar lá é o núcleo de lá, com o catálogo de lá. O Mac só repassa o id do item e da ação.', 'No Linux o apt pede sudo: a maior parte das CLIs de lá fica em Precisa de sudo, mesmo com ações ligadas.']) },
+  { id: 'console-tools-containers', cod: 'C76', nome: 'Ferramentas · containers', sub: 'O card Containers em cada plataforma: Colima rodando (1), parado, com Iniciar (2), iniciando (3), nenhum runtime, com a proposta de instalar o Colima (4), Docker Engine parado no Linux, que pede sudo (5) e Windows, com o Podman Desktop como a proposta de código aberto (6). Em 1100.', html: () => `<div class="fila">${frameAt(1100, 'tools', toolsContainersScreen())}</div>`,
+    n: N(['Os números de Docker da C25 (Workstation): containers e disco.'], ['Aqui só a saúde do runtime e Iniciar / Parar. Uso por imagem, volumes e stacks com a sessão dona ficam na tela da máquina.', 'Docker Desktop achado é lido, nunca iniciado nem atualizado pelo console.', 'Windows é proposta: o Podman Desktop, com o WSL 2; ligar o WSL pede administrador.']) },
 ]
 
 // =====================================================================
@@ -2836,6 +3330,7 @@ function montar() {
     <li><b>Onde o grafo vive (#146, a aprovar):</b> a proposta é um detalhe aberto pelo pé do card Subagentes, no lugar dos cards, como as decisões (P11). Dentro do card não cabe; numa seção própria, empurra o resto para baixo.</li>
     <li><b>Telemetria e Dev Console no app (decisão 0008, a aprovar):</b> cada máquina se mede com o próprio núcleo; o do Mac lê o da Workstation pela porta que o túnel encaminha; o app só mostra, sem subir túnel nem abrir login (A6, A7, C24 a C27). A reconexão revê esse ponto na decisão 0012. A barra lateral ganha Dev Console e a seção Máquinas, que aparece em todas as telas.</li>
     <li><b>Reconectar a máquina remota (#244, decisão 0012):</b> com <code>reconnect</code> no machines.json, o núcleo do Mac roda o comando que você escreveu, sem shell, um por vez e com tempo limite; a tela espera o login no navegador e relê a remota ao terminar (C50, A8). Aprovado em 20/10, com a saída só no log.</li>
+    <li><b>Ferramentas (#280, decisão 0014):</b> CLIs, servidores MCP, plataformas e containers desta máquina e da Workstation, na seção Controle. Instalar, atualizar, iniciar e parar rodam só o que está no catálogo do núcleo, sem shell, um por vez, depois de mostrar o comando; o que pede sudo vira comando para copiar. A Workstation é só leitura até ela mesma ligar as ações (C72 a C76). Aprovado em 21/10, como está.</li>
     <li><b>Backlog:</b> Feed de atividade, Analytics completo, Workflows e o detalhe com o grafo de agentes estavam para depois da entrega. Entraram aqui a pedido do dono; o PM decide se viram itens da 0.0.1.</li></ol></section>`
   indice.innerHTML = htmlI; main.innerHTML = htmlM
   if (window.lucide) lucide.createIcons()
