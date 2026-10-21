@@ -482,6 +482,7 @@ describe('Dashboard: the open icon in the inbox (C71)', () => {
       assert.equal(button.getAttribute('aria-label'), 'Ir para o terminal');
       assert.equal(button.closest('a'), null, 'the button is not inside a link');
       assert.equal(actions.querySelector('a')!.getAttribute('href'), `/ui/sessions/${UUID}`, '"Abrir ›" still goes to the Detail');
+      assert.equal(actions.querySelector('a')!.getAttribute('aria-label'), 'Abrir motor-de-regras', 'the link names its session');
       let reached = 0;
       minis[0]!.addEventListener('click', () => void reached++);
       const ev = clickEvent();

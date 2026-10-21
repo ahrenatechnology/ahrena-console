@@ -211,7 +211,8 @@ function miniActions(c, write) {
     'span',
     { class: 'dash-mini-actions' },
     openAction({ id: c.session, open: c.open }, { size: 'icon', write }),
-    el('a', { class: 'dash-open-link', href: c.href }, 'Abrir ›'),
+    // Each link says which session it opens, not five "Abrir ›" in a row.
+    el('a', { class: 'dash-open-link', href: c.href, 'aria-label': c.name ? `Abrir ${c.name}` : 'Abrir a sessão' }, 'Abrir ›'),
   );
 }
 
