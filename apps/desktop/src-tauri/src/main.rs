@@ -641,10 +641,54 @@ fn open_window(app: &AppHandle, path: Option<&str>) {
         let _ = w.set_focus();
         return;
     }
-    let window = WebviewWindowBuilder::new(app, "console", WebviewUrl::External(url)).title("Ahrena Console").inner_size(1100.0, 760.0).build();
+    let window = WebviewWindowBuilder::new(app, "console", WebviewUrl::External(url))
+        .title("Ahrena Console")
+        .inner_size(1100.0, 760.0)
+        // A link out of the /ui (github.com/login/device, Revogar no GitHub; #241) opens in the system
+        // browser, never inside this window: the window only ever shows the core's /ui.
+        .on_navigation(|url| match link_target(url) {
+            LinkTarget::Core => true,
+            LinkTarget::Browser => {
+                open_in_browser(url);
+                false
+            }
+            LinkTarget::Refused => false,
+        })
+        .on_new_window(|url, _| {
+            if link_target(&url) == LinkTarget::Browser {
+                open_in_browser(&url);
+            }
+            tauri::webview::NewWindowResponse::Deny
+        })
+        .build();
     if let Ok(w) = window {
         let _ = w.set_focus();
     }
+}
+
+/// Where a URL the console window wants to show goes (#241).
+#[derive(Debug, PartialEq, Eq)]
+enum LinkTarget {
+    /// The core's own /ui (loopback http) or a blank page: stays in the window.
+    Core,
+    /// An https page out there: the system browser.
+    Browser,
+    /// Anything else (file:, javascript:, http to another host): nowhere.
+    Refused,
+}
+
+fn link_target(url: &tauri::Url) -> LinkTarget {
+    match url.scheme() {
+        "http" if matches!(url.host_str(), Some("127.0.0.1" | "localhost")) => LinkTarget::Core,
+        "about" if url.as_str() == "about:blank" => LinkTarget::Core,
+        "https" if url.host_str().is_some() => LinkTarget::Browser,
+        _ => LinkTarget::Refused,
+    }
+}
+
+/// `open <url>`: the URL goes as one argument, never through a shell.
+fn open_in_browser(url: &tauri::Url) {
+    let _ = std::process::Command::new("open").arg(url.as_str()).spawn();
 }
 
 /// Moves an existing console window to the `/ui` of the core on `port`, if it shows another port.
@@ -687,7 +731,20 @@ fn notify(app: &AppHandle, notices: &[Notice]) {
 
 #[cfg(test)]
 mod tests {
-    use super::count_machine_misses;
+    use super::{count_machine_misses, link_target, LinkTarget};
+
+    #[test]
+    fn links_out_of_the_ui_go_to_the_system_browser() {
+        let t = |u: &str| link_target(&u.parse().unwrap());
+        assert_eq!(t("http://127.0.0.1:53817/ui/connections"), LinkTarget::Core);
+        assert_eq!(t("http://localhost:53817/ui"), LinkTarget::Core);
+        assert_eq!(t("about:blank"), LinkTarget::Core);
+        assert_eq!(t("https://github.com/login/device"), LinkTarget::Browser);
+        assert_eq!(t("https://github.com/settings/connections/applications/abc"), LinkTarget::Browser);
+        assert_eq!(t("http://example.com/"), LinkTarget::Refused, "plain http to another host");
+        assert_eq!(t("file:///etc/passwd"), LinkTarget::Refused);
+        assert_eq!(t("javascript:alert(1)"), LinkTarget::Refused);
+    }
 
     #[test]
     fn machine_block_drops_after_three_consecutive_misses() {
