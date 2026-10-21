@@ -12,6 +12,7 @@ import {
 import { renameLegacyGithubCacheKeys } from '../../github/sqlite-cache.ts';
 import { migrateJsonToEnglish } from './english-json.ts';
 import { TELEMETRY_MIGRATION_DESCRIPTION, TELEMETRY_MIGRATION_SQL } from '../../telemetry/migration.ts';
+import { TOOLS_MIGRATION_DESCRIPTION, TOOLS_MIGRATION_SQL } from '../../tools/migration.ts';
 
 export interface Migration {
   version: number;
@@ -262,6 +263,8 @@ export const MIGRATIONS: readonly Migration[] = [
     sql: '',
     up: migrateJsonToEnglish,
   },
+  // The Tools checks schema lives in its own folder (src/tools/migration.ts).
+  { version: 12, description: TOOLS_MIGRATION_DESCRIPTION, sql: TOOLS_MIGRATION_SQL },
 ];
 
 export function schemaVersion(db: DatabaseSync): number {

@@ -77,9 +77,11 @@ describe('#173 phase 5: English schema migration over a version 9 database', () 
     assert.equal(store.schemaVersion, LATEST);
   });
 
+  const TABLES_BORN_LATER = { tool_checks: 0 };
   test('every table keeps its rows, the GitHub cache included', () => {
     const expected = Object.fromEntries(Object.entries(countsBefore).map(([t, n]) => [RENAMED_TABLES[t] ?? t, n]));
-    assert.deepEqual(rowCounts(store.db), expected);
+    // Tables born in a later migration (12, #280) start empty.
+    assert.deepEqual(rowCounts(store.db), { ...expected, ...TABLES_BORN_LATER });
     for (const n of Object.values(countsBefore)) assert.ok(n > 0, 'the old database has rows in every table');
   });
 
