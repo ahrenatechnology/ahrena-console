@@ -231,8 +231,8 @@ export function languages(list, max = 4) {
 
 /** O texto do estado `no-github`, igual nas duas telas. */
 export const NO_GITHUB = {
-  titulo: 'O núcleo está sem o GitHub',
-  texto: 'Rode gh auth login no terminal (instale o gh se faltar) e reinicie o núcleo sem --no-github.',
+  title: 'O núcleo está sem o GitHub',
+  text: 'Esta leitura ficou sem credencial do GitHub: ou o núcleo foi iniciado com --no-github, ou a conexão caiu. Veja o estado em Conexões; com --no-github, reinicie o núcleo sem essa opção.',
 };
 
 export const COMPUTING = 'calculando…';

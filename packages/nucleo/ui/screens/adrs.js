@@ -214,7 +214,7 @@ export async function mount(area, ctx) {
         timer = setTimeout(read, REREAD_MS);
         return body.replaceChildren(loading({ label: 'Lendo o GitHub…' }));
       }
-      if (data.state === 'no-github') return body.replaceChildren(empty({ icon: 'github', title: NO_GITHUB.titulo, text: NO_GITHUB.texto }));
+      if (data.state === 'no-github') return body.replaceChildren(empty({ icon: 'github', ...NO_GITHUB }));
       return body.replaceChildren(error({ title: 'O GitHub não respondeu', text: data.error ?? `A leitura das ${K.plural} falhou.`, retry: () => read({ refresh: true }) }));
     }
     if (data.error) band.append(limitedBand({ error: data.error, readAt: data.readAt, retryAt: data.retryAt, plural: K.plural, onRetry: () => read({ refresh: true }) }));

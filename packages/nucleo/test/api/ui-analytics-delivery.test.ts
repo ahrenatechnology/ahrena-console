@@ -546,7 +546,8 @@ describe('Delivery: states', () => {
     try {
       const text = visible(area);
       assert.match(text, /Conecte o GitHub para ver as entregas/);
-      assert.match(text, /o console não escolhe repositório por você\. Rode gh auth login no terminal e reinicie o núcleo\./);
+      assert.match(text, /o console não escolhe repositório por você\. O núcleo está sem credencial do GitHub: veja o estado em Conexões ou, se ele subiu com --no-github, reinicie sem essa opção\./);
+      assert.doesNotMatch(text, /gh auth login/);
       assert.equal(withClass(area, 'an-stat').length, 0);
       assert.equal(byTag(area, 'select').length, 0, 'no repository picker without GitHub');
       assert.doesNotMatch(text, /sim-org/);

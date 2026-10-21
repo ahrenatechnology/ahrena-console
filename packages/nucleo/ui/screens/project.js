@@ -19,7 +19,8 @@ const STYLE = '/ui/project.css';
 const MOVE_ROUTE = '/api/project/move';
 const TOAST_MS = 8000;
 const LIVE_WAIT = 1000;
-const SCOPE_COMMAND = 'gh auth refresh -s project';
+// Conexões, where the console's own connection is reconnected with every scope (issue 241).
+const CONNECTIONS_UI = '/ui/connections';
 
 // O tipo da issue no GitHub vira o rótulo do wireframe; a cor vem da classe.
 const TYPES = new Map([
@@ -66,7 +67,12 @@ const hour = (ms) => {
 };
 
 const codeOf = (e) => e?.body?.code ?? null;
-const commandOf = (e) => e?.body?.command ?? (codeOf(e) === 'no-scope' ? SCOPE_COMMAND : null);
+// issue 241: the core sends `command` only for the gh source; the console's own connection is fixed in Conexões.
+const commandOf = (e) => (typeof e?.body?.command === 'string' && e.body.command ? e.body.command : null);
+const noScope = (e) => codeOf(e) === 'no-scope';
+/** "Reconectar" to Conexões, after the text of a band or a state (the console source's missing scope). */
+const reconnectLink = () => el('a', { class: 'prj-reconnect', href: CONNECTIONS_UI, 'data-action': 'reconnect' }, 'Reconectar em Conexões');
+const withReconnect = (node, on) => (on ? (node.querySelector('p')?.append(' ', reconnectLink()), node) : node);
 const cardName = (card) => (card.number != null ? `#${card.number}` : `“${card.title}”`);
 const waitOf = (e) => (e?.retryIn ? ` Tente de novo em ${Math.ceil(e.retryIn / 1000)} s.` : '');
 const withCommand = (node, command) => (command ? (node.querySelector('p')?.append(' ', el('code', { class: 'prj-command mono' }, command)), node) : node);
@@ -255,8 +261,17 @@ export async function mount(area, ctx) {
       return;
     }
     if (e?.status === 401 || code === 'no-scope') {
-      const box = error({ title: 'Falta o escopo project no gh', text: `${e.message} Rode o comando abaixo e tente de novo.`, retry: () => draw({ force: true }) });
-      box.insertBefore(el('code', { class: 'prj-command mono' }, commandOf(e)), box.lastChild);
+      const command = commandOf(e);
+      if (command) {
+        // The gh source: the token is gh's, and the gh command adds the scope.
+        const box = error({ title: 'Falta o escopo project no gh', text: `${e.message} Rode o comando abaixo e tente de novo.`, retry: () => draw({ force: true }) });
+        box.insertBefore(el('code', { class: 'prj-command mono' }, command), box.lastChild);
+        switchArea(box);
+        return;
+      }
+      // The console's own connection: Reconectar in Conexões asks for every scope again.
+      const box = error({ title: 'Falta o escopo project', text: 'A conexão do console com o GitHub não tem o escopo project, que o Kanban do projeto usa para ler e mover cards. Reconecte em Conexões; o GitHub pede os escopos de novo.', retry: () => draw({ force: true }) });
+      box.insertBefore(el('a', { class: 'btn outline', href: CONNECTIONS_UI, 'data-action': 'reconnect' }, icon('refresh'), 'Reconectar'), box.lastChild);
       switchArea(box);
       return;
     }
@@ -269,12 +284,13 @@ export async function mount(area, ctx) {
   /** As faixas de cima. Só são refeitas quando o que dizem muda: um alerta é anunciado uma vez. */
   function drawBands() {
     const bands = [];
-    if (notice) bands.push({ title: notice.title, text: notice.text, command: notice.command, action: { label: 'Fechar', onClick: () => ((notice = null), drawBoard()) } });
+    if (notice) bands.push({ title: notice.title, text: notice.text, command: notice.command, reconnect: notice.reconnect, action: { label: 'Fechar', onClick: () => ((notice = null), drawBoard()) } });
     if (readFailure) {
       bands.push({
         title: 'Não deu para reler o quadro.',
         text: `${readFailure.message} Mostrando a última leitura.${waitOf(readFailure)}`,
-        command: codeOf(readFailure) === 'no-scope' ? commandOf(readFailure) : null,
+        command: noScope(readFailure) ? commandOf(readFailure) : null,
+        reconnect: noScope(readFailure) && !commandOf(readFailure),
         action: { label: 'Tentar agora', onClick: () => draw({ force: true }) },
       });
     } else if (board.stale) {
@@ -286,13 +302,13 @@ export async function mount(area, ctx) {
       });
     }
     const env = board.envOverride ?? null;
-    const key = JSON.stringify([env, bands.map(({ title, text, command }) => [title, text, command])]);
+    const key = JSON.stringify([env, bands.map(({ title, text, command, reconnect }) => [title, text, command, Boolean(reconnect)])]);
     if (key === bandsKey) return;
     bandsKey = key;
     if (bands.length || env) bandsBox.removeAttribute('hidden');
     else bandsBox.setAttribute('hidden', '');
     // issue 241 (C44): AHRENA_CONSOLE_PROJECT decides the Project; the choice on screen waits for it to go.
-    bandsBox.replaceChildren(...(env ? [envBand(env)] : []), ...bands.map((f) => withCommand(errorBand(f), f.command)));
+    bandsBox.replaceChildren(...(env ? [envBand(env)] : []), ...bands.map((f) => withReconnect(withCommand(errorBand(f), f.command), f.reconnect)));
   }
 
   function drawBoard() {
@@ -468,11 +484,15 @@ export async function mount(area, ctx) {
     } catch (e) {
       if (e?.name === 'AbortError') return;
       moveHere(itemId, from, wasAt);
-      const command = codeOf(e) === 'no-scope' ? commandOf(e) : null;
+      const command = noScope(e) ? commandOf(e) : null;
+      const reconnect = noScope(e) && !command;
       notice = {
         title: `O GitHub não aceitou mover ${cardName(card)}.`,
-        text: `${e?.message ?? String(e)}${waitOf(e)} O card voltou para ${laneName(from)}.${command ? ' Rode:' : ''}`,
+        text: reconnect
+          ? `Falta o escopo project na conexão do console. O card voltou para ${laneName(from)}.`
+          : `${e?.message ?? String(e)}${waitOf(e)} O card voltou para ${laneName(from)}.${command ? ' Rode:' : ''}`,
         command,
+        reconnect,
       };
       // O quadro mudou por fora (404, 422) ou outro movimento está em voo: só a releitura acerta a tela.
       if (e?.status === 404 || e?.status === 422 || inFlight > 1) deferred = { force: Boolean(deferred?.force) };

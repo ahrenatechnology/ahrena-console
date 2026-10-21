@@ -561,7 +561,7 @@ export async function mountDelivery(area, ctx, { rereadMs = REREAD_MS } = {}) {
         empty({
           icon: 'github',
           title: 'Conecte o GitHub para ver as entregas',
-          text: 'A aba conta PRs e issues dos repositórios das suas sessões. Nada aparece até você conectar uma conta; o console não escolhe repositório por você. Rode gh auth login no terminal e reinicie o núcleo.',
+          text: 'A aba conta PRs e issues dos repositórios das suas sessões; o console não escolhe repositório por você. O núcleo está sem credencial do GitHub: veja o estado em Conexões ou, se ele subiu com --no-github, reinicie sem essa opção.',
           action: { label: 'Tentar de novo', icon: 'refresh', onClick: () => draw({ quiet: true }) },
         }),
       ];

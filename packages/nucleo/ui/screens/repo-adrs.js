@@ -166,7 +166,7 @@ export async function mountRepoDecisions(area, ctx, { owner, name, onCount = () 
         timer = setTimeout(read, REREAD_MS);
         return body.replaceChildren(loading({ label: 'Lendo o GitHub…' }));
       }
-      if (data.state === 'no-github') return body.replaceChildren(empty({ icon: 'github', title: NO_GITHUB.titulo, text: NO_GITHUB.texto }));
+      if (data.state === 'no-github') return body.replaceChildren(empty({ icon: 'github', ...NO_GITHUB }));
       if (data.state === 'not-found') return body.replaceChildren(empty({ icon: 'repos', title: 'Repositório não encontrado', text: `${key} não existe ou a conta do GitHub não tem acesso a ele.` }));
       return body.replaceChildren(error({ title: 'O GitHub não respondeu', text: data.error ?? 'A leitura das decisões falhou.', retry: () => read({ refresh: true }) }));
     }
