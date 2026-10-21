@@ -84,6 +84,7 @@ describe('API command line options (#173)', () => {
     assert.match(HELP, /AHRENA_CONSOLE_GITHUB_CLIENT_ID/);
     assert.match(HELP, /AHRENA_CONSOLE_GITHUB_SOURCE=gh/);
     assert.match(HELP, /AHRENA_CONSOLE_PROJECT/);
+    assert.match(HELP, /AHRENA_CONSOLE_VAULT=keychain\|secret-service\|memory\|none/);
     assert.doesNotMatch(HELP, /with the \`gh\` token/);
   });
 

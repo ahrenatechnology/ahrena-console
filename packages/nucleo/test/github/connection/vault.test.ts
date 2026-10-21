@@ -242,14 +242,22 @@ describe('#241/AC-3 chooseVault', () => {
     assert.equal(chooseVault({ platform: 'win32', env, exists: all }), null);
   });
 
-  test('AHRENA_CONSOLE_VAULT overrides, even under node --test', () => {
-    const t = { NODE_TEST_CONTEXT: 'child-v8' };
-    assert.equal(chooseVault({ platform: 'linux', env: { ...t, AHRENA_CONSOLE_VAULT: 'none' }, exists: all }), null);
+  test('AHRENA_CONSOLE_VAULT overrides outside the tests: keychain, secret-service, memory, none', () => {
+    assert.equal(chooseVault({ platform: 'linux', env: { AHRENA_CONSOLE_VAULT: 'none' }, exists: all }), null);
     assert.equal(chooseVault({ platform: 'darwin', env: { AHRENA_CONSOLE_VAULT: 'memory' }, exists: all })?.kind, 'memory');
-    assert.equal(chooseVault({ platform: 'linux', env: { ...t, AHRENA_CONSOLE_VAULT: 'keychain' }, exists: all })?.kind, 'keychain');
-    const ss = chooseVault({ platform: 'darwin', env: { ...t, AHRENA_CONSOLE_VAULT: 'secret-service', PATH: '/opt/bin' }, exists: all });
+    assert.equal(chooseVault({ platform: 'linux', env: { AHRENA_CONSOLE_VAULT: 'keychain' }, exists: all })?.kind, 'keychain');
+    const ss = chooseVault({ platform: 'darwin', env: { AHRENA_CONSOLE_VAULT: 'secret-service', PATH: '/opt/bin' }, exists: all });
     assert.equal(ss?.kind, 'secret-service');
     // an unknown value is ignored
+    assert.equal(chooseVault({ platform: 'darwin', env: { AHRENA_CONSOLE_VAULT: 'cofre' }, exists: all })?.kind, 'keychain');
+  });
+
+  test('review 2: under node --test only memory or none is honoured; keychain and secret-service never', () => {
+    const t = { NODE_TEST_CONTEXT: 'child-v8' };
+    assert.equal(chooseVault({ platform: 'linux', env: { ...t, AHRENA_CONSOLE_VAULT: 'none' }, exists: all }), null);
+    assert.equal(chooseVault({ platform: 'darwin', env: { ...t, AHRENA_CONSOLE_VAULT: 'memory' }, exists: all })?.kind, 'memory');
+    assert.equal(chooseVault({ platform: 'darwin', env: { ...t, AHRENA_CONSOLE_VAULT: 'keychain' }, exists: all })?.kind, 'memory');
+    assert.equal(chooseVault({ platform: 'linux', env: { ...t, AHRENA_CONSOLE_VAULT: 'secret-service', PATH: '/opt/bin', DBUS_SESSION_BUS_ADDRESS: 'x' }, exists: all })?.kind, 'memory');
     assert.equal(chooseVault({ platform: 'darwin', env: { ...t, AHRENA_CONSOLE_VAULT: 'cofre' }, exists: all })?.kind, 'memory');
   });
 

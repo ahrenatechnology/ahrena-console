@@ -65,6 +65,9 @@ GitHub (decision 0011): the console connects by itself, with the OAuth device fl
 credential in the Keychain (macOS) or the Secret Service (Linux), never in a file. The OAuth App is
 AHRENA_CONSOLE_GITHUB_CLIENT_ID (none is built in yet: without it the connection is unavailable).
 AHRENA_CONSOLE_GITHUB_SOURCE=gh uses \`gh auth token\` instead (opt-in, for development).
+AHRENA_CONSOLE_VAULT=keychain|secret-service|memory|none overrides the vault this platform has
+(memory keeps nothing across restarts; none makes the connection unavailable). Under node --test only
+memory or none is honoured, never the real Keychain or Secret Service.
 
 Project kanban (GET /api/project, POST /api/project/move): the Project chosen on the screen
 (GET /api/project/options, POST /api/project/selection). AHRENA_CONSOLE_PROJECT=owner/number, when
