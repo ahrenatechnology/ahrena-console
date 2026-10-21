@@ -82,6 +82,7 @@ import { createCoreAgentInstructions } from './agent-instructions.ts';
 import { createCoreFrameworkInstall, FRAMEWORK_REPO_ENV } from './framework-install.ts';
 import { createCoreDecisions } from './adrs.ts';
 import { startLocalApi, API_VERSION, type LocalApi } from './server.ts';
+import { CodexIndex } from './codex-index.ts';
 import { ListaDeSessoes } from './sessions.ts';
 import { ResumosDeSessao } from './summary.ts';
 import { FeedDeEventos } from './events.ts';
@@ -534,7 +535,7 @@ const api: LocalApi = await startLocalApi({
   fleet: mcp.fleet,
   remoteAttention: () => remoteMachines?.list() ?? [],
   analytics: new RotaAnalytics({ storage, contas: accounts, versao: () => changes.current, delivery }),
-  sessions: new ListaDeSessoes({ storage, contas: accounts, desktop, resumos: listSummaries, open: openDescriber }),
+  sessions: new ListaDeSessoes({ codex: demo ? null : new CodexIndex(), storage, contas: accounts, desktop, resumos: listSummaries, open: openDescriber }),
   history,
   kanban: new QuadroKanban({ storage, contas: accounts, desktop, resumos: listSummaries }),
   repos: repos.rota,
