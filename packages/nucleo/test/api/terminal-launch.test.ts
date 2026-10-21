@@ -116,13 +116,6 @@ describe('createTerminalOpener', () => {
     assert.deepEqual(runner.calls, [{ kind: 'spawn', file: '/usr/bin/x-terminal-emulator', args: ['-e', 'claude', '--resume', ID], cwd: "/w/it's" }]);
   });
 
-  test('Windows: wt.exe -d <cwd> claude --resume <id>', async () => {
-    const runner = fakeRunner();
-    const open = createTerminalOpener({ dir: root, platform: 'win32', runner, findExecutable: async (n) => (n === 'wt.exe' ? 'C:\\wt.exe' : null) });
-    assert.equal(await open({ sessionId: ID, cwd: '/w/app' }), 'opened');
-    assert.deepEqual(runner.calls[0]!.args, ['-d', '/w/app', 'claude', '--resume', ID]);
-  });
-
   test('no terminal program, or another platform: unsupported, nothing runs', async () => {
     for (const platform of ['linux', 'win32', 'freebsd'] as const) {
       const runner = fakeRunner();
@@ -147,41 +140,41 @@ describe('createTerminalFocuser', () => {
 
   test('macOS: ps in UTC, then osascript with the fixed script and the device as its only argument', async () => {
     const runner = fakeRunner((file) => (file === 'ps' ? 'ttys003  Tue Oct 20 04:00:34 2026\n' : 'Terminal\n'));
-    assert.equal(await createTerminalFocuser({ platform: 'darwin', runner })(proc), true);
+    assert.equal(await createTerminalFocuser({ platform: 'darwin', runner })(proc), 'focused');
     assert.deepEqual(runner.calls[0]!.args, ['-o', 'tty=', '-o', 'lstart=', '-p', '4242']);
     assert.equal(runner.calls[0]!.env?.TZ, 'UTC');
     assert.deepEqual(runner.calls[1], { kind: 'run', file: 'osascript', args: ['-e', TERMINAL_FOCUS_SCRIPT, '/dev/ttys003'], env: undefined });
     assert.equal(runner.calls.length, 2);
   });
 
-  test('not in Terminal: tries iTerm2; in neither: false', async () => {
+  test('not in Terminal: tries iTerm2; in neither: not-found', async () => {
     const answers = ['', 'iTerm2'];
     const runner = fakeRunner((file) => (file === 'ps' ? 'ttys003 Tue Oct 20 04:00:34 2026' : answers.shift()!));
-    assert.equal(await createTerminalFocuser({ platform: 'darwin', runner })(proc), true);
+    assert.equal(await createTerminalFocuser({ platform: 'darwin', runner })(proc), 'focused');
     assert.equal(runner.calls[2]!.args[1], ITERM_FOCUS_SCRIPT);
     const none = fakeRunner((file) => (file === 'ps' ? 'ttys003 Tue Oct 20 04:00:34 2026' : ''));
-    assert.equal(await createTerminalFocuser({ platform: 'darwin', runner: none })(proc), false);
+    assert.equal(await createTerminalFocuser({ platform: 'darwin', runner: none })(proc), 'not-found');
   });
 
   test('a tty that is not ttys<digits> never reaches osascript', async () => {
     for (const tty of ['??', 'console', 'ttys003;x']) {
       const runner = fakeRunner((file) => (file === 'ps' ? `${tty} Tue Oct 20 04:00:34 2026` : 'Terminal'));
-      assert.equal(await createTerminalFocuser({ platform: 'darwin', runner })(proc), false, tty);
+      assert.equal(await createTerminalFocuser({ platform: 'darwin', runner })(proc), 'not-found', tty);
       assert.ok(!runner.calls.some((c) => c.file === 'osascript'), tty);
     }
   });
 
-  test('a recycled pid (another start) is not the session', async () => {
+  test('a recycled pid (another start) is not the session: stale', async () => {
     const runner = fakeRunner((file) => (file === 'ps' ? 'ttys003 Wed Oct 21 09:00:00 2026' : 'Terminal'));
-    assert.equal(await createTerminalFocuser({ platform: 'darwin', runner })(proc), false);
+    assert.equal(await createTerminalFocuser({ platform: 'darwin', runner })(proc), 'stale');
     assert.ok(!runner.calls.some((c) => c.file === 'osascript'));
   });
 
-  test('ps failing, or another platform: false, nothing else runs', async () => {
+  test('ps failing (no such process): stale; another platform: not-found; nothing else runs', async () => {
     const failing: ProcessRunner = { run: async () => Promise.reject(new Error('no such process')), spawnDetached: async () => undefined };
-    assert.equal(await createTerminalFocuser({ platform: 'darwin', runner: failing })(proc), false);
+    assert.equal(await createTerminalFocuser({ platform: 'darwin', runner: failing })(proc), 'stale');
     const runner = fakeRunner();
-    assert.equal(await createTerminalFocuser({ platform: 'linux', runner })(proc), false);
+    assert.equal(await createTerminalFocuser({ platform: 'linux', runner })(proc), 'not-found');
     assert.equal(runner.calls.length, 0);
   });
 });

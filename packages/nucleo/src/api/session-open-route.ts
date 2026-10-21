@@ -79,6 +79,14 @@ export function createSessionOpenRoute(o: SessionOpenRouteOptions): SessionOpenR
     const open = o.describer.describe({ sessionId, cwd, local });
     const command = resumeCommand(cwd, sessionId);
 
+    async function resume() {
+      if (!isUsableCwd(cwd) || !(await isDirectory(cwd))) return send(res, 422, { error: 'A pasta da sessão não existe mais', command });
+      const result = o.openTerminal ? await o.openTerminal({ sessionId, cwd }) : 'unsupported';
+      if (result === 'unsupported') return send(res, 501, { error: 'Não há um terminal que o console saiba abrir aqui; copie o comando', command });
+      log(`session ${sessionId} opened in a terminal`);
+      return send(res, 200, { ok: true, opened: 'terminal' satisfies OpenedAs });
+    }
+
     try {
       switch (open.target) {
         case 'remote':
@@ -91,16 +99,17 @@ export function createSessionOpenRoute(o: SessionOpenRouteOptions): SessionOpenR
           log(`session ${sessionId} opened in the Claude Desktop`);
           return send(res, 200, { ok: true, opened: 'desktop' satisfies OpenedAs });
         }
-        case 'terminal': {
-          if (!isUsableCwd(cwd) || !(await isDirectory(cwd))) return send(res, 422, { error: 'A pasta da sessão não existe mais', command });
-          const result = o.openTerminal ? await o.openTerminal({ sessionId, cwd }) : 'unsupported';
-          if (result === 'unsupported') return send(res, 501, { error: 'Não há um terminal que o console saiba abrir aqui; copie o comando', command });
-          log(`session ${sessionId} opened in a terminal`);
-          return send(res, 200, { ok: true, opened: 'terminal' satisfies OpenedAs });
-        }
+        case 'terminal':
+          return await resume();
         case 'terminal-live': {
-          const focused = proc && o.focusTerminal ? await o.focusTerminal(proc) : false;
-          if (!focused) {
+          const focused = proc && o.focusTerminal ? await o.focusTerminal(proc) : 'not-found';
+          // The pid file outlived its `claude` (or the pid is another process now): nothing runs the
+          // session, so resuming it is safe and is what the button can still do.
+          if (focused === 'stale') {
+            log(`session ${sessionId}: its process is gone, resuming instead`);
+            return await resume();
+          }
+          if (focused === 'not-found') {
             log(`session ${sessionId}: its terminal was not found`);
             return send(res, 409, { error: 'Não achei a janela do terminal desta sessão; copie o comando', command });
           }

@@ -21,7 +21,7 @@ import {
   type Wall,
 } from '../../src/api/index.ts';
 import { SessionOpenDescriber, type LiveProcess, type SessionOpen } from '../../src/api/session-open.ts';
-import type { TerminalRequest } from '../../src/api/terminal-launch.ts';
+import type { FocusResult, TerminalRequest } from '../../src/api/terminal-launch.ts';
 import { FleetReader } from '../../src/mcp/index.ts';
 import { session } from '../fixtures.ts';
 
@@ -48,7 +48,7 @@ describe('#285 open the session where it runs', () => {
   let api: LocalApi;
   let host: string;
   let launches: Launches;
-  let focusAnswer = true;
+  let focusAnswer: FocusResult = 'focused';
   let terminalAnswer: 'opened' | 'unsupported' = 'opened';
   const now = Date.now();
   const recent = new Date(now - 3 * 60_000).toISOString();
@@ -173,15 +173,29 @@ describe('#285 open the session where it runs', () => {
 
     test('terminal-live not found: 409 with the command', async () => {
       fresh();
-      focusAnswer = false;
+      focusAnswer = 'not-found';
       try {
         const r = await post(LIVE);
         assert.equal(r.status, 409);
         const body = (await r.json()) as { error: string; command: string };
         assert.match(body.error, /terminal/);
         assert.equal(body.command, expected[LIVE]!.command);
+        assert.deepEqual(launches.terminal, [], 'a session that really runs is not resumed a second time');
       } finally {
-        focusAnswer = true;
+        focusAnswer = 'focused';
+      }
+    });
+
+    test('terminal-live whose process is gone (stale pid file): resumes in a new terminal', async () => {
+      fresh();
+      focusAnswer = 'stale';
+      try {
+        const r = await post(LIVE);
+        assert.equal(r.status, 200);
+        assert.deepEqual(await r.json(), { ok: true, opened: 'terminal' });
+        assert.deepEqual(launches.terminal, [{ sessionId: LIVE, cwd: liveDir }]);
+      } finally {
+        focusAnswer = 'focused';
       }
     });
 

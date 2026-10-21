@@ -9,8 +9,8 @@
 //   then `open <file>`, which runs it in whatever terminal the person has for `.command` files. The
 //   file removes itself when it runs, and each call removes the leftovers older than an hour.
 // - Linux, open: `x-terminal-emulator -e claude --resume <id>` in the folder, when it is on the PATH.
-// - Windows, open: `wt.exe -d <cwd> claude --resume <id>`, when it is on the PATH.
-// - Anything else: `unsupported`, and the route answers 501 with the command to copy.
+// - Anything else (Windows included: its folders are not POSIX paths): `unsupported`, and the route
+//   answers 501 with the command to copy.
 // - macOS, focus: `ps -o tty= -o lstart= -p <pid>` (in UTC, to compare with the `procStart` Claude Code
 //   wrote: a recycled pid is not the session), the tty strictly `ttys<digits>`, then `osascript` with a
 //   fixed script that takes `/dev/ttysNNN` as its only argument: Terminal.app's tabs first, then
@@ -31,8 +31,13 @@ export interface TerminalRequest {
 
 export type TerminalOpenResult = 'opened' | 'unsupported';
 export type TerminalOpener = (r: TerminalRequest) => Promise<TerminalOpenResult>;
-/** Brings forward the terminal tab of a live process; `false` when it is not found. */
-export type TerminalFocuser = (p: LiveProcess) => Promise<boolean>;
+/**
+ * Brings forward the terminal tab of a live process. `not-found`: the process is there but no tab of a
+ * terminal it knows holds it (or this platform cannot tell). `stale`: the pid is gone or is another
+ * process now (its start differs from `procStart`), so the session is not running after all.
+ */
+export type FocusResult = 'focused' | 'not-found' | 'stale';
+export type TerminalFocuser = (p: LiveProcess) => Promise<FocusResult>;
 
 /** How a program runs: always a file and a list of arguments. */
 export interface ProcessRunner {
@@ -133,12 +138,6 @@ export function createTerminalOpener({ dir, platform = process.platform, runner 
       await runner.spawnDetached(exe, ['-e', 'claude', '--resume', sessionId], { cwd });
       return 'opened';
     }
-    if (platform === 'win32') {
-      const exe = await findExecutable('wt.exe');
-      if (!exe) return 'unsupported';
-      await runner.spawnDetached(exe, ['-d', cwd, 'claude', '--resume', sessionId]);
-      return 'opened';
-    }
     return 'unsupported';
   };
 }
@@ -202,24 +201,26 @@ export interface TerminalFocuserOptions {
 
 export function createTerminalFocuser({ platform = process.platform, runner = systemRunner }: TerminalFocuserOptions = {}): TerminalFocuser {
   return async (proc) => {
-    if (platform !== 'darwin' || !Number.isInteger(proc.pid) || proc.pid <= 0) return false;
+    if (platform !== 'darwin' || !Number.isInteger(proc.pid) || proc.pid <= 0) return 'not-found';
     let line: string;
     try {
       line = await runner.run('ps', ['-o', 'tty=', '-o', 'lstart=', '-p', String(proc.pid)], { env: { ...process.env, TZ: 'UTC', LC_ALL: 'C' } });
     } catch {
-      return false;
+      // `ps -p` exits non-zero when there is no such process
+      return 'stale';
     }
     const { tty, start } = parsePsLine(line);
-    if (proc.procStart && start !== proc.procStart.replace(/\s+/g, ' ').trim()) return false;
+    if (!start) return 'stale';
+    if (proc.procStart && start !== proc.procStart.replace(/\s+/g, ' ').trim()) return 'stale';
     const device = ttyDevice(tty);
-    if (!device) return false;
+    if (!device) return 'not-found';
     for (const script of [TERMINAL_FOCUS_SCRIPT, ITERM_FOCUS_SCRIPT]) {
       try {
-        if ((await runner.run('osascript', ['-e', script, device], { timeoutMs: 10_000 })).trim()) return true;
+        if ((await runner.run('osascript', ['-e', script, device], { timeoutMs: 10_000 })).trim()) return 'focused';
       } catch {
         // that app is missing or refused: try the next one
       }
     }
-    return false;
+    return 'not-found';
   };
 }
