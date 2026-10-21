@@ -44,6 +44,7 @@ export function macTables() {
     '/opt/homebrew/bin/colima status --json': JSON.stringify({ display_name: 'colima', driver: 'macOS Virtualization.Framework', arch: 'aarch64', runtime: 'docker', cpu: 4, memory: 8589934592, disk: 107374182400 }),
     '/opt/homebrew/bin/docker context show': 'colima\n',
     '/opt/homebrew/bin/docker ps -a --format {{.State}}': 'running\nrunning\nrunning\nexited\nexited\nexited\nexited\ncreated\n',
+    '/opt/homebrew/bin/docker system df --format {{.Type}}\t{{.TotalCount}}\t{{.Active}}\t{{.Size}}\t{{.Reclaimable}}': 'Images\t14\t3\t14.2GB\t3.1GB (21%)\nContainers\t8\t3\t1.1GB\t0B (0%)\nLocal Volumes\t5\t2\t2.3GB\t0B (0%)\nBuild Cache\t0\t0\t0B\t0B\n',
     // Verificar agora
     '/opt/homebrew/bin/brew update': 'Already up-to-date.\n',
     '/opt/homebrew/bin/brew info --json=v2 --formula gh': brewInfo('gh', '2.83.1'),

@@ -37,6 +37,8 @@ export const LOCAL_TOOLS_MACHINE = 'local';
 const BREW_UPDATE_TIMEOUT_MS = 300_000;
 const PROBE_CACHE_MS = 30_000;
 const CHECK_CONCURRENCY = 4;
+/** Display only: the command from brew.sh for the person to run in the Terminal. */
+export const HOMEBREW_INSTALL_COMMAND = '/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"';
 
 export type ToolState = 'ok' | 'outdated' | 'missing' | 'manual' | 'failed' | 'checking' | 'na';
 export type BlockedReason = 'admin' | 'offline' | 'no-manager' | 'remote-read-only' | 'invalid-version';
@@ -72,11 +74,11 @@ export interface ToolItem {
 
 export interface ToolsOverview {
   version: number;
-  machine: { id: string; label: string; platform: Platform; os: string | null; arch: string };
+  machine: { id: string; label: string; platform: Platform; os: string | null; arch: string; host: string | null };
   checkedAt: string | null;
   nextCheckAt: string | null;
   network: NetworkState;
-  managers: { homebrew: { present: boolean }; winget: { present: boolean }; apt: { present: boolean; listsUpdatedAt: string | null } };
+  managers: { homebrew: { present: boolean; install: string | null }; winget: { present: boolean }; apt: { present: boolean; listsUpdatedAt: string | null } };
   actionsAllowed: boolean;
   items: ToolItem[];
   containers: ContainersView<ToolActionView>;
@@ -275,12 +277,12 @@ export class ToolsService {
 
     return {
       version: TOOLS_API_VERSION,
-      machine: { id: LOCAL_TOOLS_MACHINE, label: 'Esta máquina', platform: this.platform, os: await this.os(), arch: this.arch },
+      machine: { id: LOCAL_TOOLS_MACHINE, label: 'Esta máquina', platform: this.platform, os: await this.os(), arch: this.arch, host: null },
       checkedAt: checkedAtMs === null ? null : new Date(checkedAtMs).toISOString(),
       nextCheckAt: checkedAtMs === null ? null : new Date(checkedAtMs + CHECK_VALIDITY_MS).toISOString(),
       network,
       managers: {
-        homebrew: { present: snap.managers.get('brew') != null },
+        homebrew: this.homebrew(snap),
         winget: { present: this.platform === 'win32' && snap.managers.get('winget') != null },
         apt: await this.apt(snap),
       },
@@ -346,6 +348,12 @@ export class ToolsService {
       note,
       actions,
     };
+  }
+
+  /** Homebrew's own installer asks for the admin password: shown to copy (display only, never run). */
+  private homebrew(snap: LocalSnapshot): { present: boolean; install: string | null } {
+    const present = snap.managers.get('brew') != null;
+    return { present, install: !present && this.platform === 'darwin' ? HOMEBREW_INSTALL_COMMAND : null };
   }
 
   private async apt(snap: LocalSnapshot): Promise<{ present: boolean; listsUpdatedAt: string | null }> {

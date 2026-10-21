@@ -35,7 +35,7 @@ describe('#280 GET /api/tools', () => {
       const gcloud = items.find((i) => i.id === 'gcloud')!;
       const action = (gcloud.actions as Record<string, unknown>[])[0]!;
       assert.deepEqual(Object.keys(action), ['id', 'runnable', 'admin', 'blockedReason', 'steps', 'timeoutSeconds', 'targetVersion', 'planDigest']);
-      assert.deepEqual(Object.keys(body.containers as object), ['runtime', 'toolId', 'state', 'readOnly', 'version', 'vm', 'dockerContext', 'containers', 'actions']);
+      assert.deepEqual(Object.keys(body.containers as object), ['runtime', 'id', 'state', 'readOnly', 'version', 'vm', 'diskUsedBytes', 'dockerContext', 'containers', 'note', 'detected', 'actions']);
       assert.deepEqual(body.mcp, { statusCheckedAt: null, servers: [] });
       assert.equal((await get('/api/tools?machine=local')).status, 200);
     } finally {

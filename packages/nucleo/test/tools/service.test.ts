@@ -5,7 +5,9 @@ import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import { CHECK_VALIDITY_MS } from '../../src/tools/store.ts';
 import type { ToolItem, ToolsOverview } from '../../src/tools/service.ts';
-import { fakeFetch, fakeFs, HOME } from './doubles.ts';
+import { MemoryToolChecksStore } from '../../src/tools/store.ts';
+import { HOMEBREW_INSTALL_COMMAND, ToolsService } from '../../src/tools/service.ts';
+import { fakeFetch, fakeFs, fakeRunner, HOME } from './doubles.ts';
 import { macService, macTables, NOW, wsService } from './machines.ts';
 
 const item = (o: ToolsOverview, id: string): ToolItem => o.items.find((i) => i.id === id)!;
@@ -18,11 +20,11 @@ describe('#280 ToolsService.overview without a check', () => {
     assert.equal(fetchText.calls.length, 0);
     assert.deepEqual(run.calls.filter((a) => NETWORK_COMMANDS.test(a.join(' '))), []);
     assert.equal(o.version, 1);
-    assert.deepEqual(o.machine, { id: 'local', label: 'Esta máquina', platform: 'darwin', os: 'macOS 26.0.1', arch: 'arm64' });
+    assert.deepEqual(o.machine, { id: 'local', label: 'Esta máquina', platform: 'darwin', os: 'macOS 26.0.1', arch: 'arm64', host: null });
     assert.equal(o.checkedAt, null);
     assert.equal(o.nextCheckAt, null);
     assert.equal(o.network, 'unknown');
-    assert.deepEqual(o.managers, { homebrew: { present: true }, winget: { present: false }, apt: { present: false, listsUpdatedAt: null } });
+    assert.deepEqual(o.managers, { homebrew: { present: true, install: null }, winget: { present: false }, apt: { present: false, listsUpdatedAt: null } });
     assert.equal(o.actionsAllowed, true);
     assert.deepEqual(o.mcp, { statusCheckedAt: null, servers: [] });
     assert.deepEqual(o.jobs, { current: null, queue: [], recent: [] });
@@ -68,47 +70,74 @@ describe('#280 ToolsService.overview without a check', () => {
     assert.deepEqual(item(o, 'rust').actions, [], 'rustup is not installed through the catalog');
   });
 
-  test('the containers card: Colima running, its VM, the context, the counts and Stop', async () => {
+  test('the containers card: Colima running, its VM, the context, the counts, the disk and Stop', async () => {
     const { service } = macService();
     const c = (await service.overview())!.containers;
     assert.equal(c.runtime, 'colima');
-    assert.equal(c.toolId, 'container-colima');
+    assert.equal(c.id, 'container-colima');
     assert.equal(c.state, 'running');
     assert.equal(c.readOnly, false);
-    assert.equal(c.version, '0.9.1');
+    assert.equal(c.version, 'Colima 0.9.1 · Docker CLI 28.5.1 · perfil default');
     assert.deepEqual(c.vm, { cpus: 4, memoryBytes: 8589934592, diskBytes: 107374182400, arch: 'aarch64', vmType: 'vz' });
     assert.equal(c.dockerContext, 'colima');
     assert.deepEqual(c.containers, { running: 3, stopped: 5 });
+    assert.equal(c.diskUsedBytes, 14_200_000_000 + 1_100_000_000 + 2_300_000_000);
+    assert.equal(c.note, null);
+    assert.deepEqual(c.detected, []);
     assert.deepEqual(c.actions.map((a) => [a.id, a.steps, a.runnable, a.admin]), [['stop', [['colima', 'stop']], true, false]]);
   });
 
-  test('Colima stopped offers Start; no Colima offers the install; Docker Desktop is read only', async () => {
+  test('Colima stopped offers Start; no Colima offers the install, with Docker Desktop found next to it, read only', async () => {
     const stopped = macService({ run: { '/opt/homebrew/bin/colima status --json': { code: 1, stderr: 'colima is not running' } } });
     const c1 = (await stopped.service.overview())!.containers;
     assert.equal(c1.state, 'stopped');
     assert.equal(c1.vm, null);
     assert.equal(c1.containers, null);
+    assert.equal(c1.diskUsedBytes, null);
+    assert.equal(c1.version, 'Colima 0.9.1 · Docker CLI 28.5.1');
     assert.deepEqual(c1.actions.map((a) => [a.id, a.steps]), [['start', [['colima', 'start']]]]);
 
-    const none = macService({ links: { '/opt/homebrew/bin/colima': '/nowhere' }, run: { '/opt/homebrew/bin/colima version': { code: null, error: 'ENOENT' } } });
-    // A colima that does not answer its probe is not installed for the card.
+    const none = macService({ run: { '/opt/homebrew/bin/colima version': { code: null, error: 'ENOENT' } } });
     const c2 = (await none.service.overview())!.containers;
     assert.equal(c2.state, 'missing');
+    assert.equal(c2.note, 'A proposta é o Colima com o Docker CLI: código aberto e sem licença por empresa.');
+    assert.deepEqual(c2.detected, []);
     assert.deepEqual(c2.actions.map((a) => [a.id, a.steps]), [['install', [['brew', 'install', 'colima', 'docker']]]]);
 
     const desktop = macService({
-      links: { '/opt/homebrew/bin/colima': '/x', '/usr/local/bin/docker': '/Applications/Docker.app/Contents/Resources/bin/docker', '/opt/homebrew/bin/docker': '/Applications/Docker.app/Contents/Resources/bin/docker' },
+      links: { '/opt/homebrew/bin/docker': '/Applications/Docker.app/Contents/Resources/bin/docker' },
       run: {
         '/opt/homebrew/bin/colima version': { code: null, error: 'ENOENT' },
         '/opt/homebrew/bin/docker context show': 'desktop-linux\n',
-        '/opt/homebrew/bin/docker info --format {{.ServerVersion}}': '28.5.1\n',
+        '/opt/homebrew/bin/docker version --format {{.Server.Platform.Name}}': 'Docker Desktop 4.48.0 (207573)\n',
       },
     });
     const c3 = (await desktop.service.overview())!.containers;
-    assert.equal(c3.runtime, 'docker-desktop');
-    assert.equal(c3.readOnly, true);
-    assert.equal(c3.state, 'running');
-    assert.deepEqual(c3.actions, []);
+    assert.deepEqual([c3.runtime, c3.state, c3.readOnly], ['colima', 'missing', false]);
+    assert.deepEqual(c3.detected, [{ runtime: 'docker-desktop', version: '4.48.0', state: 'running' }]);
+  });
+
+  test('Windows: Podman missing with its winget install; Podman running with Stop', async () => {
+    const win = (links: Record<string, string>, run: Record<string, string>) => {
+      const fs = fakeFs(links);
+      return new ToolsService({ store: new MemoryToolChecksStore(), platform: 'win32', arch: 'x64', home: 'C:\\Users\\exemplo', env: {}, run: fakeRunner(run), fetchText: fakeFetch({}), loginPath: async () => 'C:\\bin', ...fs, now: () => NOW, probeCacheMs: 0 });
+    };
+    const missing = (await win({}, {}).overview())!;
+    assert.equal(missing.machine.os?.startsWith('Windows '), true);
+    assert.equal(item(missing, 'colima').state, 'na');
+    assert.deepEqual(missing.containers.actions.map((a) => [a.id, a.steps]), [['install', [['winget', 'install', '--id', 'RedHat.Podman-Desktop', '--scope', 'user']]]]);
+    assert.equal(missing.containers.actions[0]!.blockedReason, 'no-manager');
+    const podman = (await win({ 'C:\\bin\\podman.exe': 'C:\\bin\\podman.exe', 'C:\\bin\\winget.exe': 'C:\\bin\\winget.exe' }, { 'C:\\bin\\podman.exe --version': 'podman version 5.6.2\n', 'C:\\bin\\podman.exe machine inspect': '[{"Name":"podman-machine-default","State":"running"}]' }).overview())!;
+    assert.deepEqual([podman.containers.runtime, podman.containers.state, podman.containers.version], ['podman', 'running', 'Podman 5.6.2']);
+    assert.deepEqual(podman.containers.actions.map((a) => [a.id, a.steps, a.runnable]), [['stop', [['podman', 'machine', 'stop']], true]]);
+  });
+
+  test('without Homebrew on macOS, its install command is there to copy', async () => {
+    const fs = fakeFs(macTables().links);
+    const { service } = macService({ extra: { isExecutable: async (p: string) => p !== '/opt/homebrew/bin/brew' && fs.isExecutable(p) } });
+    const o = (await service.overview())!;
+    assert.deepEqual(o.managers.homebrew, { present: false, install: HOMEBREW_INSTALL_COMMAND });
+    assert.match(HOMEBREW_INSTALL_COMMAND, /^\/bin\/bash -c /);
   });
 });
 
@@ -243,7 +272,7 @@ describe('#280 ToolsService on the Linux workstation', () => {
     assert.deepEqual([colima.state, colima.note, colima.actions], ['na', 'só no macOS', []]);
     assert.equal(item(o, 'docker').state, 'ok');
     const c = o.containers;
-    assert.deepEqual([c.runtime, c.toolId, c.state, c.readOnly], ['docker-engine', 'container-docker-engine', 'stopped', false]);
+    assert.deepEqual([c.runtime, c.id, c.state, c.readOnly, c.version, c.note], ['docker-engine', 'container-docker-engine', 'stopped', false, 'Docker Engine 28.5.1 · systemd', 'O serviço é do sistema: iniciar e parar pedem sudo.']);
     assert.deepEqual(c.actions.map((a) => [a.id, a.steps, a.admin, a.runnable]), [['start', [['sudo', 'systemctl', 'start', 'docker']], true, false]]);
   });
 
