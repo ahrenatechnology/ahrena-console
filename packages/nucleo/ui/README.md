@@ -7,7 +7,9 @@ A moldura do console ([#26](https://github.com/ahrenatechnology/ahrena-console/i
 | `index.html` | A página: barra lateral, logo, "Ao vivo" e porta. Toda rota `/ui/...` devolve esta página |
 | `app.js` | A moldura: monta a barra, roteia no cliente, liga o "Ao vivo" e abre a tela da rota |
 | `screens.js` | **O registro das telas** (`route`, `item`, `file`) |
-| `api.js` | A camada de leitura, `read(route)`, e de escrita: `write(route, body)` (POST JSON na `/api/`, ou DELETE com `{ method: 'DELETE' }`) e `openInDesktop(local)`. Por HTTP na janela; o artefato troca o transporte com `useReader()`, `useWriter()` e `useOpener()` |
+| `api.js` | A camada de leitura, `read(route)`, e de escrita: `write(route, body)` (POST JSON na `/api/`, ou DELETE com `{ method: 'DELETE' }`). Por HTTP na janela; o artefato troca o transporte com `useReader()` e `useWriter()` |
+| `open-action.js` | Abrir a sessão onde ela roda ([#285](https://github.com/ahrenatechnology/ahrena-console/issues/285), C70 e C71): a mesma ação no cabeçalho do Detalhe, no pé do card do Mural, na linha de Sessões e no "precisam de você" do Dashboard. O alvo vem do núcleo (`open.target`: Claude Desktop, terminal, terminal já rodando, outra máquina ou nada); o clique é `write('/api/sessions/<uuid>/open', {})`, e ao lado do botão aparecem "Abrindo…", o sucesso (some em 4 s) ou o erro do núcleo com "Copiar comando" |
+| `open-action.css` | O estilo dessa ação (classes `open-`), carregado uma vez pelo `index.html` |
 | `live.js` | Long polling em `GET /api/changes?since=<cursor>&wait=25` |
 | `states.js` | Os três estados de toda tela (C19): `loading`, `empty`, `error`, e a `errorBand` |
 | `dom.js` | `el()`, `icon()` e `header()` |
@@ -129,8 +131,8 @@ Uma tela pode ler a query (`location.search`), como o Kanban lê `?view=`. A mol
 ## Regras
 
 - **Só 127.0.0.1.** A política de conteúdo do núcleo (`src/api/ui.ts`) bloqueia scripts, estilos, fontes e `fetch` de fora. Por isso a fonte é a do sistema quando a Poppins não está instalada.
-- **Toda leitura passa por `read()`, toda escrita por `write()`** (ou `openInDesktop()`), nunca por `fetch` direto: é o que deixa a mesma página rodar no artefato.
-- **As escritas com o `Origin` da página** são só três: o "Abrir no Claude Desktop" (`POST /open/<local_…>`), o mover card do Kanban do projeto e o `POST /api/agent-config/skill` da Agent Config.
+- **Toda leitura passa por `read()`, toda escrita por `write()`**, nunca por `fetch` direto: é o que deixa a mesma página rodar no artefato.
+- **As escritas com o `Origin` da página** são só três: o abrir a sessão onde ela roda (`POST /api/sessions/<uuid>/open`, com o caminho exato), o mover card do Kanban do projeto e o `POST /api/agent-config/skill` da Agent Config.
 - **Texto do núcleo entra por `textContent`** (`el()` já faz isso). Nada de `innerHTML` com dado.
 - **Sem cor escrita à mão:** só variáveis de `brand.css`. O teste (`test/api/ui.test.ts`) recusa hex, `rgb()` e endereço externo.
 - **Sem estilo inline** (`style="..."`): a política de conteúdo bloqueia. Use classe. Largura que vem de dado (uma barra de progresso) sai de `<progress value max>` estilizado, como no Mural.
