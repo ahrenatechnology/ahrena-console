@@ -1,0 +1,175 @@
+/* Ferramentas (C72 to C76, issue 280, decision 0014): the wireframe's look, ported. The screen puts
+   this sheet in the head when it opens (link[data-screen="tools"]) and removes it when the person
+   leaves; every own class starts with `tl-`, and the shared ones are the shell's and the seals
+   (`badge`, `p`, `b-*`), repeated here on purpose. Every color comes from brand.css. Nothing scrolls
+   horizontally from a 1100 px window: three stats and two columns up to 1299 px, six stats and three
+   columns from 1300 (the machine screens' breakpoint). Tables are fixed, with percentage columns. */
+
+/* ---------- seals: the same block as machine.css, on purpose ---------- */
+.badge { display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 9px; border-radius: 99px; font-size: 11.5px; font-weight: var(--weight-medium); white-space: nowrap; flex: none; }
+.badge .p { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.b-active { background: var(--status-active-badge); color: var(--status-active-text); }
+.b-waiting { background: var(--status-waiting-badge); color: var(--status-waiting-text); }
+.b-completed { background: var(--status-completed-badge); color: var(--status-completed-text); }
+.b-error { background: var(--status-error-badge); color: var(--status-error-text); }
+.b-abandoned { background: var(--status-abandoned-badge); color: var(--status-abandoned-text); }
+.tl-b-idle { background: var(--raised); color: var(--muted); }
+.tl-b-idle .p { background: transparent; border: 1.5px solid currentColor; }
+
+.tl-screen, .tl-body, .tl-faded { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.tl-faded { opacity: .5; filter: saturate(.3); }
+.tl-muted { color: var(--muted); }
+.tl-hint { margin: 0; font-size: 11.5px; color: var(--muted); overflow-wrap: anywhere; }
+.tl-new { color: var(--status-waiting-text); font-weight: var(--weight-semibold); }
+.tl-r { text-align: right !important; }
+
+/* ---------- the header: the machine selector and the filter ---------- */
+.tl-seg { display: inline-flex; padding: 2px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg); flex: none; }
+.tl-seg button { display: inline-flex; align-items: center; gap: 6px; border: 0; background: transparent; color: var(--muted); font-size: 12px; padding: 4px 10px; border-radius: 6px; white-space: nowrap; cursor: pointer; }
+.tl-seg button[aria-pressed="true"] { background: var(--raised); color: var(--text); }
+.tl-seg button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.tl-seg button b { font-weight: var(--weight-medium); font-family: var(--font-mono); font-size: 10.5px; color: var(--muted); }
+.tl-seg-small button { font-size: 11.5px; padding: 3px 8px; }
+
+/* ---------- the stats ---------- */
+.tl-stats { display: grid; gap: 12px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.tl-stat { padding: 14px 16px; min-height: 84px; display: flex; flex-direction: column; justify-content: space-between; gap: 2px; position: relative; min-width: 0; }
+.tl-stat-label { font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-weight: var(--weight-semibold); padding-right: 22px; }
+.tl-stat-ic { position: absolute; top: 13px; right: 14px; font-size: 17px; }
+.tl-stat-v { font-size: 24px; font-weight: var(--weight-semibold); font-family: var(--font-mono); letter-spacing: -.02em; line-height: 1.1; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.tl-stat-s { font-size: 11.5px; color: var(--muted); overflow-wrap: anywhere; }
+.tl-tone-accent { color: var(--accent-text); }
+.tl-tone-warn { color: var(--status-waiting-text); }
+.tl-tone-ok { color: var(--status-completed-text); }
+.tl-tone-bad-text { color: var(--status-error-text); }
+.tl-tone-muted { color: var(--muted); }
+
+/* ---------- the grid: CLIs and MCP full width; Plataformas full (2 columns) or two of three ---------- */
+.tl-grid { display: grid; gap: 16px; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: stretch; }
+.tl-span-full, .tl-platforms { grid-column: 1 / -1; }
+.tl-card { padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.tl-title { margin: 0; font-size: 13.5px; font-weight: var(--weight-semibold); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
+.tl-small { margin-left: auto; font-weight: var(--weight-regular); color: var(--muted); font-size: 11.5px; display: inline-flex; align-items: center; flex-wrap: wrap; gap: 2px; min-width: 0; }
+.tl-card p { margin: 0; font-size: 12.5px; }
+
+@media (min-width: 1300px) {
+  .tl-stats { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+  .tl-stats.tl-stats-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .tl-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .tl-platforms { grid-column: span 2; }
+  .tl-mcp-remote { grid-column: 1 / -1; }
+  .tl-how-card { grid-column: 1 / -1; order: 1; }
+  .tl-how-card .tl-how { flex-direction: row; gap: 24px; list-style: none; padding: 0; }
+  .tl-how-card .tl-how li { flex: 1; }
+}
+
+/* ---------- tables ---------- */
+.tl-table { width: 100%; border-collapse: collapse; font-size: 12.5px; table-layout: fixed; }
+.tl-table th { text-align: left; font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-weight: var(--weight-semibold); padding: 7px 10px; border-bottom: 1px solid var(--border); }
+.tl-table td { padding: 7px 10px; border-bottom: 1px solid var(--border); vertical-align: middle; overflow-wrap: anywhere; }
+.tl-table th:first-child, .tl-table td:first-child { padding-left: 0; }
+.tl-table th:last-child, .tl-table td:last-child { padding-right: 0; }
+.tl-table tr:last-child td { border-bottom: 0; }
+.tl-name b { display: block; font-weight: var(--weight-medium); }
+.tl-name small { display: block; color: var(--muted); font-size: 11px; white-space: normal; }
+.tl-src { color: var(--muted); font-size: 12px; }
+.tl-dim td { opacity: .55; }
+.tl-ver { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
+.tl-cols-cli th:nth-child(1) { width: 21%; }
+.tl-cols-cli th:nth-child(2), .tl-cols-cli th:nth-child(3) { width: 12%; }
+.tl-cols-cli th:nth-child(4) { width: 19%; }
+.tl-cols-cli th:nth-child(5) { width: 16%; }
+.tl-cols-runtime th:nth-child(1) { width: 25%; }
+.tl-cols-runtime th:nth-child(2) { width: 19%; }
+.tl-cols-runtime th:nth-child(3), .tl-cols-runtime th:nth-child(4) { width: 11%; }
+.tl-cols-runtime th:nth-child(5) { width: 16%; }
+.tl-cols-mcp th:nth-child(1) { width: 28%; }
+.tl-cols-mcp th:nth-child(2) { width: 18%; }
+.tl-cols-mcp th:nth-child(3) { width: 20%; }
+.tl-cols-mcp th:nth-child(4) { width: 15%; }
+.tl-mcp-remote .tl-cols-mcp th:nth-child(1) { width: 30%; }
+
+/* ---------- row actions ---------- */
+.tl-act { height: 26px; padding: 0 9px; font-size: 11.5px; gap: 5px; max-width: 100%; }
+.tl-act.tl-sudo { color: var(--status-waiting-text); }
+.btn.tl-off, .btn:disabled { opacity: .6; cursor: default; }
+.btn[aria-busy="true"] .icon { animation: tl-spin 1s linear infinite; }
+@keyframes tl-spin { to { transform: rotate(360deg); } }
+.tl-none { font-size: 11.5px; display: inline-flex; gap: 4px; align-items: center; }
+.tl-done { color: var(--status-completed-text); }
+.tl-inline-btn { height: auto; padding: 0; gap: 4px; color: var(--accent-text); font-size: 11.5px; cursor: pointer; }
+.tl-icon-btn { height: 26px; width: 26px; padding: 0; justify-content: center; color: var(--muted); }
+.tl-icon-btn:hover { color: var(--text); background: var(--raised); }
+
+/* ---------- the row under an item: the running job, the sudo commands ---------- */
+.tl-table tr.tl-run td { padding: 0 0 10px; }
+.tl-run-box { border: 1px solid var(--border); border-radius: 10px; background: var(--bg); padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; font-size: 12.5px; min-width: 0; }
+.tl-run-top { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.tl-steps { display: flex; gap: 6px 12px; align-items: center; flex-wrap: wrap; font-size: 11.5px; color: var(--muted); min-width: 0; }
+.tl-steps > span { display: inline-flex; gap: 5px; align-items: center; font-family: var(--font-mono); overflow-wrap: anywhere; }
+.tl-step-done { color: var(--status-completed-text); }
+.tl-step-on { color: var(--text); font-weight: var(--weight-semibold); }
+.tl-step-on .icon { animation: tl-spin 1s linear infinite; }
+.tl-cancel { margin-left: auto; height: 26px; flex: none; }
+.tl-out { font-size: 11px; line-height: 1.55; color: var(--muted); background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; display: flex; flex-direction: column; overflow-wrap: anywhere; min-width: 0; }
+.tl-out-error { margin-top: 8px; color: var(--status-error-text); }
+.tl-caret { color: var(--accent-text); }
+.tl-run-foot { display: flex; align-items: center; gap: 12px; font-size: 11px; color: var(--muted); flex-wrap: wrap; min-width: 0; }
+.tl-stack { display: flex; width: 160px; height: 6px; border-radius: 99px; overflow: hidden; background: var(--raised); flex: none; }
+.tl-stack i { display: block; height: 100%; width: var(--w, 0); background: var(--status-active-dot); }
+.tl-queue { margin-left: auto; font-size: 11.5px; }
+.tl-sudo-box { border-color: color-mix(in srgb, var(--status-waiting-dot) 45%, var(--border)); }
+.tl-copy { display: flex; gap: 8px; align-items: center; min-width: 0; }
+.tl-copy code, .tl-dialog-cmd code { display: block; flex: 1; min-width: 0; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; font-size: 12px; color: var(--text); overflow-wrap: anywhere; }
+.tl-sudo-box .tl-copy code { background: var(--surface); }
+.tl-skel { display: inline-block; width: 64px; height: 10px; border-radius: 5px; background: var(--raised); vertical-align: middle; }
+
+/* ---------- the bands on top ---------- */
+.tl-band { display: flex; align-items: flex-start; gap: 12px; padding: 10px 14px; border-radius: 12px; border: 1px solid var(--border); background: var(--surface); font-size: 13px; min-width: 0; }
+.tl-band-ic { font-size: 18px; line-height: 1; flex: none; margin-top: 1px; display: inline-flex; color: var(--muted); }
+.tl-band-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; overflow-wrap: anywhere; }
+.tl-band-text p { margin: 0; }
+.tl-band-actions { display: flex; gap: 8px; align-items: center; flex: none; flex-wrap: wrap; justify-content: flex-end; }
+.tl-band-ok { border-color: color-mix(in srgb, var(--status-completed-dot) 50%, var(--border)); background: color-mix(in srgb, var(--status-completed-badge) 70%, var(--surface)); }
+.tl-band-ok .tl-band-ic, .tl-band-ok .tl-band-text > p > b { color: var(--status-completed-text); }
+.tl-band-error { border-color: color-mix(in srgb, var(--status-error-dot) 50%, var(--border)); background: color-mix(in srgb, var(--status-error-badge) 70%, var(--surface)); }
+.tl-band-error .tl-band-ic, .tl-band-error .tl-band-text > p > b { color: var(--status-error-text); }
+.tl-band-warn { border-color: color-mix(in srgb, var(--status-waiting-dot) 50%, var(--border)); background: color-mix(in srgb, var(--status-waiting-badge) 60%, var(--surface)); }
+.tl-band-warn .tl-band-ic, .tl-band-warn .tl-band-text > p > b { color: var(--status-waiting-text); }
+
+/* ---------- containers ---------- */
+.tl-ct-head { display: flex; align-items: center; gap: 8px; font-size: 13px; flex-wrap: wrap; min-width: 0; }
+.tl-ct-head b { white-space: nowrap; }
+.tl-ct-btn { margin-left: auto; }
+.tl-kv { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 7px 14px; font-size: 12.5px; align-items: center; }
+.tl-kv > span { min-width: 0; overflow-wrap: anywhere; }
+.tl-kv > span:nth-child(odd) { color: var(--muted); font-size: 11.5px; }
+.tl-meter { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.tl-meter .mono { font-size: 11.5px; color: var(--muted); white-space: nowrap; }
+.tl-bar { -webkit-appearance: none; appearance: none; display: block; flex: 1; min-width: 60px; height: 8px; border: 0; border-radius: 99px; overflow: hidden; background: var(--raised); color: var(--accent); }
+.tl-bar::-webkit-progress-bar { background: var(--raised); border-radius: 99px; }
+.tl-bar::-webkit-progress-value { background: var(--accent); border-radius: 99px; }
+.tl-bar::-moz-progress-bar { background: var(--accent); border-radius: 99px; }
+.tl-cmdline { font-size: 11px; color: var(--muted); overflow-wrap: anywhere; }
+.tl-link { font-size: 12px; color: var(--accent-text); display: inline-flex; gap: 4px; align-items: center; margin-top: auto; text-decoration: none; }
+.tl-link:hover { text-decoration: underline; }
+
+/* ---------- Como verificamos ---------- */
+.tl-how { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 8px; font-size: 12px; color: var(--muted); }
+.tl-how b { color: var(--text); font-weight: var(--weight-semibold); }
+.tl-how code { font-size: 11px; font-family: var(--font-mono); }
+
+/* ---------- the confirm dialog ---------- */
+.tl-veil { position: fixed; inset: 0; z-index: 50; background: color-mix(in srgb, var(--bg) 62%, transparent); display: flex; justify-content: center; align-items: flex-start; padding: 110px 16px 16px; overflow-y: auto; }
+.tl-dialog { width: 520px; max-width: 100%; padding: 18px 20px; display: flex; flex-direction: column; gap: 14px; background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 18px 50px color-mix(in srgb, var(--bg) 70%, transparent); }
+.tl-dialog-head { display: flex; align-items: center; gap: 10px; font-size: 15px; color: var(--accent-text); }
+.tl-dialog-head b { color: var(--text); font-weight: var(--weight-semibold); min-width: 0; overflow-wrap: anywhere; }
+.tl-dialog-head .tl-icon-btn { margin-left: auto; }
+.tl-dialog-cmd { display: flex; flex-direction: column; gap: 6px; }
+.tl-cmd-label { display: block; font-family: var(--font-sans); font-size: 11px; color: var(--muted); margin-bottom: 2px; }
+.tl-dialog-note { display: flex; gap: 8px; font-size: 11.5px; color: var(--muted); align-items: flex-start; }
+.tl-dialog-note .icon { color: var(--status-completed-text); flex: none; margin-top: 1px; }
+.tl-dialog-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.tl-changed { margin: 0; display: flex; gap: 8px; align-items: flex-start; font-size: 12px; color: var(--status-waiting-text); }
+
+@media (prefers-reduced-motion: reduce) { .btn[aria-busy="true"] .icon, .tl-step-on .icon { animation: none; } }

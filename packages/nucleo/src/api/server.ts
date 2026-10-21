@@ -155,6 +155,8 @@ export interface ApiOptions {
   telemetry?: TelemetryService | null;
   /** The reconnect of the remote machines (#244); without it, `POST /api/machines/<id>/reconnect` gives 404 or 409. */
   reconnect?: ReconnectControl | null;
+  /** --demo only: the Ferramentas fixtures and their fake queue (src/simulator/tools.ts, issue 280). */
+  toolsDemo?: { allows(req: IncomingMessage, port: number): boolean; handle(req: IncomingMessage, res: ServerResponse, url: URL): Promise<boolean> } | null;
 }
 
 /** The `local_<uuid>` id of the Claude Desktop index, and nothing else. */
@@ -328,7 +330,7 @@ export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
   async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
     counters.requests++;
     const url = new URL(req.url ?? '/', `http://127.0.0.1:${port}`);
-    if (!allowedLocalRequest(req, port) && !sameOriginRead(req, port) && !sameOriginOpen(req, port) && !mesmaOrigemMovendo(req, port) && !sameOriginDecision(req, port) && !agentConfigWriteFromSameOrigin(req, port) && !frameworkInstallWriteFromSameOrigin(req, port) && !reconnectFromSameOrigin(req, port)) return send(res, 403, { error: 'origem não permitida' });
+    if (!allowedLocalRequest(req, port) && !sameOriginRead(req, port) && !sameOriginOpen(req, port) && !mesmaOrigemMovendo(req, port) && !sameOriginDecision(req, port) && !agentConfigWriteFromSameOrigin(req, port) && !frameworkInstallWriteFromSameOrigin(req, port) && !reconnectFromSameOrigin(req, port) && !opts.toolsDemo?.allows(req, port)) return send(res, 403, { error: 'origem não permitida' });
     if (url.pathname.startsWith(HOOKS_PATH)) return hooks(req, res);
     const openMatch = OPEN.exec(url.pathname);
     if (openMatch && req.method === 'POST') return openDirect(req, res, decodeURIComponent(openMatch[1]!));
@@ -344,6 +346,7 @@ export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
     if (opts.frameworkInstall && url.pathname.startsWith(`${FRAMEWORK_INSTALL_ROUTE}/`)) return opts.frameworkInstall(req, res, url);
     const reconnectMatch = RECONNECT_ROUTE.exec(url.pathname);
     if (reconnectMatch) return respondReconnect(req, res, reconnectMatch[1]!, opts.reconnect, opts.telemetry);
+    if (opts.toolsDemo && (await opts.toolsDemo.handle(req, res, url))) return;
     if (req.method !== 'GET') return send(res, 405, { error: 'use GET' });
     if (isUiPath(url.pathname)) return respondUi(res, url.pathname);
     const desktopMatch = OPEN_IN_DESKTOP.exec(url.pathname);

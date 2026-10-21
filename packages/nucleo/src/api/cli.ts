@@ -100,6 +100,7 @@ import { INVALID_MACHINES_FILE, publishReconnectChanges, reconnectLogFile, Recon
 import { loopbackGet } from '../telemetry/adapters/loopback-http.ts';
 import type { TelemetryCollector } from '../telemetry/ports.ts';
 import { SIMULATED_WORKSTATION, SimulatedCollector, seedTelemetry } from '../simulator/telemetry.ts';
+import { createToolsDemo } from '../simulator/tools.ts';
 
 const o = parseApiOptions(process.argv.slice(2));
 if (o.help) {
@@ -522,6 +523,8 @@ const api: LocalApi = await startLocalApi({
   agentConfig,
   telemetry: telemetryService,
   reconnect: reconnectRunner,
+  // Ferramentas (issue 280) under --demo: fixtures, never the real machine; the scenario picks a wireframe state.
+  toolsDemo: demo ? createToolsDemo({ scenario: process.env.AHRENA_CONSOLE_DEMO_TOOLS_SCENARIO }) : null,
   load: () => ({
     history: follower ? (historyReady ? 'ready' : 'importing') : 'off',
     follower: follower?.stats() ?? null,
