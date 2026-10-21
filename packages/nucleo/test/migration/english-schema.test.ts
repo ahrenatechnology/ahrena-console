@@ -37,6 +37,8 @@ import {
 
 const LATEST = MIGRATIONS.at(-1)!.version;
 const RENAMED_TABLES: Record<string, string> = { reprocessamentos: 'reprocessings' };
+/** Tables that later migrations add, empty (#241: the installation's settings). */
+const ADDED_TABLES: Record<string, number> = { installation_settings: 0 };
 /** Every Portuguese name and value the old schema had; none may remain in the new one. */
 const PORTUGUESE = [
   'reprocessamentos', 'nome', 'feito_em', 'faltando',
@@ -78,7 +80,7 @@ describe('#173 phase 5: English schema migration over a version 9 database', () 
   });
 
   test('every table keeps its rows, the GitHub cache included', () => {
-    const expected = Object.fromEntries(Object.entries(countsBefore).map(([t, n]) => [RENAMED_TABLES[t] ?? t, n]));
+    const expected = { ...Object.fromEntries(Object.entries(countsBefore).map(([t, n]) => [RENAMED_TABLES[t] ?? t, n])), ...ADDED_TABLES };
     assert.deepEqual(rowCounts(store.db), expected);
     for (const n of Object.values(countsBefore)) assert.ok(n > 0, 'the old database has rows in every table');
   });
