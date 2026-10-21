@@ -414,7 +414,8 @@ describe('Sessions: the open icon in the row (C71)', () => {
   };
 
   test('monitor, terminal and square terminal by target; none leaves the cell empty; the click opens without navigating the row', async () => {
-    Object.assign(globalThis, { location: { hash: '', pathname: '/ui/sessions', search: '' }, history: { replaceState() {} } });
+    // Sessões measures the window to fit its rows (issue 279): a ResizeObserver that never fires is enough here.
+    Object.assign(globalThis, { location: { hash: '', pathname: '/ui/sessions', search: '' }, history: { replaceState() {} }, ResizeObserver: class { observe() {} unobserve() {} disconnect() {} } });
     // @ts-expect-error: browser module, plain JavaScript
     const { mount } = await import('../../ui/screens/sessions.js');
     const area = documentoFalso.createElement('main');
