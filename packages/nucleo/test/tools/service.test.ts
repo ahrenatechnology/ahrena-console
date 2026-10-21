@@ -70,6 +70,16 @@ describe('#280 ToolsService.overview without a check', () => {
     assert.deepEqual(item(o, 'rust').actions, [], 'rustup is not installed through the catalog');
   });
 
+  test('the session-manager-plugin cask installs a .pkg: its install is admin and not runnable', async () => {
+    const { service } = macService();
+    const o = (await service.overview())!;
+    const [install] = item(o, 'session-manager-plugin').actions;
+    assert.deepEqual(
+      [install!.id, install!.steps, install!.runnable, install!.admin, install!.blockedReason],
+      ['install', [['brew', 'install', '--cask', 'session-manager-plugin']], false, true, 'admin'],
+    );
+  });
+
   test('the containers card: Colima running, its VM, the context, the counts, the disk and Stop', async () => {
     const { service } = macService();
     const c = (await service.overview())!.containers;
@@ -85,6 +95,22 @@ describe('#280 ToolsService.overview without a check', () => {
     assert.equal(c.note, null);
     assert.deepEqual(c.detected, []);
     assert.deepEqual(c.actions.map((a) => [a.id, a.steps, a.runnable, a.admin]), [['stop', [['colima', 'stop']], true, false]]);
+  });
+
+  test('the containers card is read with the 30 s probe snapshot: two overviews within 30 s run docker and colima once', async () => {
+    let now = NOW;
+    const { service, run } = macService({ now: () => now, extra: { probeCacheMs: 30_000 } });
+    const containerCommands = () => run.calls.map((a) => a.join(' ')).filter((c) => / (context show|status --json|ps -a|system df) /.test(`${c} `));
+    const first = (await service.overview())!.containers;
+    const once = containerCommands();
+    assert.equal(once.length, 4);
+    now += 29_000;
+    const second = (await service.overview())!.containers;
+    assert.deepEqual(containerCommands(), once, 'no container command runs again within 30 s');
+    assert.deepEqual(second, first);
+    now += 2_000;
+    await service.overview();
+    assert.equal(containerCommands().length, 8, 'a new snapshot reads the card again');
   });
 
   test('Colima stopped offers Start; no Colima offers the install, with Docker Desktop found next to it, read only', async () => {
@@ -125,7 +151,7 @@ describe('#280 ToolsService.overview without a check', () => {
     const missing = (await win({}, {}).overview())!;
     assert.equal(missing.machine.os?.startsWith('Windows '), true);
     assert.equal(item(missing, 'colima').state, 'na');
-    assert.deepEqual(missing.containers.actions.map((a) => [a.id, a.steps]), [['install', [['winget', 'install', '--id', 'RedHat.Podman-Desktop', '--scope', 'user']]]]);
+    assert.deepEqual(missing.containers.actions.map((a) => [a.id, a.steps]), [['install', [['winget', 'install', '--id', 'RedHat.Podman-Desktop', '--scope', 'user', '--silent', '--disable-interactivity']]]]);
     assert.equal(missing.containers.actions[0]!.blockedReason, 'no-manager');
     const podman = (await win({ 'C:\\bin\\podman.exe': 'C:\\bin\\podman.exe', 'C:\\bin\\winget.exe': 'C:\\bin\\winget.exe' }, { 'C:\\bin\\podman.exe --version': 'podman version 5.6.2\n', 'C:\\bin\\podman.exe machine inspect': '[{"Name":"podman-machine-default","State":"running"}]' }).overview())!;
     assert.deepEqual([podman.containers.runtime, podman.containers.state, podman.containers.version], ['podman', 'running', 'Podman 5.6.2']);

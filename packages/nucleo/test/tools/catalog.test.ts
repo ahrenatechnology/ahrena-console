@@ -14,9 +14,9 @@ const brewRows = (tool: string, formula: string, platforms: Platform[] = ['darwi
     [tool, p, 'arm64', 'homebrew', 'install', [['brew', 'install', formula]], false],
     [tool, p, 'arm64', 'homebrew', 'update', [['brew', 'upgrade', formula]], false],
   ]);
-const caskRows = (tool: string, cask: string): Row[] => [
-  [tool, 'darwin', 'arm64', 'homebrew', 'install', [['brew', 'install', '--cask', cask]], false],
-  [tool, 'darwin', 'arm64', 'homebrew', 'update', [['brew', 'upgrade', '--cask', cask]], false],
+const caskRows = (tool: string, cask: string, admin = false): Row[] => [
+  [tool, 'darwin', 'arm64', 'homebrew', 'install', [['brew', 'install', '--cask', cask]], admin],
+  [tool, 'darwin', 'arm64', 'homebrew', 'update', [['brew', 'upgrade', '--cask', cask]], admin],
 ];
 const aptRows = (tool: string, pkg: string): Row[] => [
   [tool, 'linux', 'arm64', 'apt', 'install', [['sudo', 'apt-get', 'install', pkg]], true],
@@ -42,7 +42,7 @@ const EXPECTED: Row[] = [
   ['aws', 'darwin', 'arm64', 'official', 'update', [['sudo', 'installer', '-pkg', 'AWSCLIV2.pkg', '-target', '/']], true],
   ['aws', 'linux', 'arm64', 'official', 'install', [['sudo', './aws/install']], true],
   ['aws', 'linux', 'arm64', 'official', 'update', [['sudo', './aws/install', '--bin-dir', '/usr/local/bin', '--install-dir', '/usr/local/aws-cli', '--update']], true],
-  ...caskRows('session-manager-plugin', 'session-manager-plugin'),
+  ...caskRows('session-manager-plugin', 'session-manager-plugin', true),
   ['session-manager-plugin', 'linux', 'arm64', 'official', 'install', [['sudo', 'dpkg', '-i', 'session-manager-plugin.deb']], true],
   ['session-manager-plugin', 'linux', 'arm64', 'official', 'update', [['sudo', 'dpkg', '-i', 'session-manager-plugin.deb']], true],
   ...npmRows('wrangler', 'wrangler'),
@@ -71,7 +71,7 @@ const EXPECTED: Row[] = [
   ['container-docker-engine', 'linux', 'arm64', 'apt', 'stop', [['sudo', 'systemctl', 'stop', 'docker']], true],
   ['container-docker-rootless', 'linux', 'arm64', 'official', 'start', [['systemctl', '--user', 'start', 'docker']], false],
   ['container-docker-rootless', 'linux', 'arm64', 'official', 'stop', [['systemctl', '--user', 'stop', 'docker']], false],
-  ['container-podman', 'win32', 'arm64', 'winget', 'install', [['winget', 'install', '--id', 'RedHat.Podman-Desktop', '--scope', 'user']], false],
+  ['container-podman', 'win32', 'arm64', 'winget', 'install', [['winget', 'install', '--id', 'RedHat.Podman-Desktop', '--scope', 'user', '--silent', '--disable-interactivity']], false],
   ['container-podman', 'win32', 'arm64', 'winget', 'start', [['podman', 'machine', 'start']], false],
   ['container-podman', 'win32', 'arm64', 'winget', 'stop', [['podman', 'machine', 'stop']], false],
   ...all('playwright', 'npm', 'update', [

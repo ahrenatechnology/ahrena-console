@@ -121,7 +121,9 @@ function brew(formula: string, platforms: readonly Platform[] = POSIX): ToolSour
   };
 }
 
-function brewCask(cask: string): ToolSource {
+/** A cask whose payload is a `.pkg` runs `sudo installer`: pass `{ admin: true }` (decision 0014 section 1). */
+function brewCask(cask: string, opts: { admin?: boolean } = {}): ToolSource {
+  const admin = opts.admin === true ? { admin: true } : {};
   return {
     id: 'homebrew',
     label: 'Homebrew (cask)',
@@ -130,8 +132,8 @@ function brewCask(cask: string): ToolSource {
     manager: 'brew',
     latest: { kind: 'homebrew-cask', cask },
     actions: {
-      install: { steps: [['brew', 'install', '--cask', cask]], timeoutSeconds: 900 },
-      update: { steps: [['brew', 'upgrade', '--cask', cask]], timeoutSeconds: 900 },
+      install: { steps: [['brew', 'install', '--cask', cask]], timeoutSeconds: 900, ...admin },
+      update: { steps: [['brew', 'upgrade', '--cask', cask]], timeoutSeconds: 900, ...admin },
     },
   };
 }
@@ -274,7 +276,8 @@ export const CATALOG: readonly ToolEntry[] = [
     group: 'cli',
     probe: { argv: ['session-manager-plugin', '--version'], version: /(\d+(?:\.\d+){1,3})/ },
     sources: [
-      brewCask('session-manager-plugin'),
+      // The cask installs session-manager-plugin.pkg: Homebrew runs `sudo installer`, so it is admin.
+      brewCask('session-manager-plugin', { admin: true }),
       {
         id: 'official',
         label: 'pacote .deb',
@@ -496,7 +499,7 @@ export const CATALOG: readonly ToolEntry[] = [
         manager: 'winget',
         latest: null,
         actions: {
-          install: { steps: [['winget', 'install', '--id', 'RedHat.Podman-Desktop', '--scope', 'user']], timeoutSeconds: 900 },
+          install: { steps: [['winget', 'install', '--id', 'RedHat.Podman-Desktop', '--scope', 'user', '--silent', '--disable-interactivity']], timeoutSeconds: 900 },
           start: { steps: [['podman', 'machine', 'start']], timeoutSeconds: 600 },
           stop: { steps: [['podman', 'machine', 'stop']], timeoutSeconds: 300 },
         },
