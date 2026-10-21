@@ -21,6 +21,8 @@ export interface RunResult {
 export interface RunOptions {
   timeoutMs: number;
   env?: NodeJS.ProcessEnv;
+  /** Working directory; default the núcleo's. */
+  cwd?: string;
 }
 
 export type ToolRunner = (argv: readonly string[], options: RunOptions) => Promise<RunResult>;
@@ -52,7 +54,7 @@ export const systemToolRunner: ToolRunner = (argv, options) =>
       child = execFile(
         argv[0]!,
         argv.slice(1),
-        { shell: false, timeout: options.timeoutMs, killSignal: 'SIGKILL', maxBuffer: MAX_OUTPUT_BYTES, env: options.env ?? toolsEnv(null), windowsHide: true, encoding: 'utf8' },
+        { shell: false, ...(options.cwd ? { cwd: options.cwd } : {}), timeout: options.timeoutMs, killSignal: 'SIGKILL', maxBuffer: MAX_OUTPUT_BYTES, env: options.env ?? toolsEnv(null), windowsHide: true, encoding: 'utf8' },
         (err, stdout, stderr) => {
           if (!err) return resolve({ code: 0, stdout, stderr, error: null });
           const e = err as NodeJS.ErrnoException & { killed?: boolean; code?: number | string };

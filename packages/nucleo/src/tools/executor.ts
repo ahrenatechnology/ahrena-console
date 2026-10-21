@@ -80,6 +80,8 @@ export interface ToolJob {
 export interface ToolsHost {
   overview(machine: string): Promise<ToolsOverview | null>;
   check(machine: string): Promise<ToolsOverview | null>;
+  /** Verificar conexões (layer 3): `claude mcp list`; optional for a host without MCP. */
+  mcpCheck?(machine: string): Promise<ToolsOverview | null>;
   actionPlan(machine: string, toolId: string, actionId: string): Promise<ActionPlanResult>;
   verify(machine: string, toolId: string): Promise<string | null>;
   invalidate(): void;
@@ -103,6 +105,8 @@ export interface ToolsControl {
   act?(machine: string, toolId: string, actionId: string, planDigest: string): Promise<ActResult>;
   cancel?(jobId: string): CancelJobResult;
   checkNow?(machine: string): Promise<CheckNowResult>;
+  /** Verificar conexões: `claude mcp list` (independent of the job queue: it changes nothing on disk). */
+  mcpCheckNow?(machine: string): Promise<CheckNowResult>;
   /**
    * Layer 4's hook: a loopback write with NO `Origin` (the tunnel) is accepted only when this says so
    * (`tools.acceptRemoteActions` in config.json). Default false: no Origin, 403.
@@ -174,6 +178,7 @@ export class ToolsExecutor implements ToolsControl {
   private readonly machines = new Map<string, MachineJobs>();
   private readonly running = new Map<string, Running>();
   private readonly checks = new Map<string, Promise<ToolsOverview | null>>();
+  private readonly mcpChecks = new Map<string, Promise<ToolsOverview | null>>();
 
   constructor(options: ToolsExecutorOptions) {
     this.o = options;
@@ -273,15 +278,26 @@ export class ToolsExecutor implements ToolsControl {
     return { kind: 'unknown' };
   }
 
-  async checkNow(machine: string): Promise<CheckNowResult> {
-    let p = this.checks.get(machine);
+  checkNow(machine: string): Promise<CheckNowResult> {
+    return this.waitForCheck(machine, this.checks, () => this.o.service.check(machine));
+  }
+
+  /** Verificar conexões: the service's `mcpCheck`, waited for like `checkNow`; a `tools` change when it ends. */
+  mcpCheckNow(machine: string): Promise<CheckNowResult> {
+    const service = this.o.service;
+    if (!service.mcpCheck) return Promise.resolve({ kind: 'unknown-machine' });
+    return this.waitForCheck(machine, this.mcpChecks, () => service.mcpCheck!(machine));
+  }
+
+  private async waitForCheck(machine: string, running: Map<string, Promise<ToolsOverview | null>>, start: () => Promise<ToolsOverview | null>): Promise<CheckNowResult> {
+    let p = running.get(machine);
     if (!p) {
-      p = this.o.service.check(machine);
-      this.checks.set(machine, p);
+      p = start();
+      running.set(machine, p);
       void p
         .catch(() => null)
         .then((body) => {
-          this.checks.delete(machine);
+          running.delete(machine);
           if (body) this.changed(machine);
         });
     }

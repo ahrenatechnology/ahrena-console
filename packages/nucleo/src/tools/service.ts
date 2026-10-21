@@ -9,7 +9,11 @@
 // - Each action carries its plan (plan.ts): the steps, the timeout, the target version and the
 //   `planDigest`; `runnable` is false with a `blockedReason` when it asks for sudo, has no valid
 //   version, the machine is offline or the source's manager is missing.
-// - Layer 1 serves this machine only (`local`); `mcp` stays empty until layer 3. `jobs` is filled by
+// - `mcp` (layer 3): the servers of Claude Code's config (mcp-config.ts, secrets dropped at parse),
+//   read with the snapshot; their state only from `mcpCheck()` (Verificar conexões, `claude mcp
+//   list`, mcp-status.ts), never on a read. `update` only for a server the catalog knows, in the user
+//   scope, with no env and no headers, pinned behind the latest (decision 0014 section 6).
+// - Layer 1 serves this machine only (`local`). `jobs` is filled by
 //   the executor (executor.ts, layer 2), which also asks here for the plan of a POST (`actionPlan`),
 //   for the process environment and for the re-probe after a job (`verify`).
 // - No automatic re-check: the network is read only on Verificar agora; after 6 h the states go back
@@ -17,6 +21,8 @@
 
 import { readFile as fsReadFile, realpath as fsRealpath, stat } from 'node:fs/promises';
 import { arch as osArch, homedir, release as osRelease } from 'node:os';
+import { join } from 'node:path';
+import { API_VERSION } from '../api/version.ts';
 import {
   appliesTo,
   CATALOG,
@@ -31,6 +37,8 @@ import {
 import { readContainers, type ContainersView } from './containers.ts';
 import { compareVersions, readLatest, usesNetwork } from './latest.ts';
 import { LoginPath, which, type IsExecutable } from './login-path.ts';
+import { readMcpServers, type McpScope, type McpServerConfig, type McpTransport } from './mcp-config.ts';
+import { MCP_LIST_TIMEOUT_MS, parseMcpList, type McpState } from './mcp-status.ts';
 import { buildPlan, sourceForAction } from './plan.ts';
 import { probeAll, type Detection } from './probe.ts';
 import { PROBE_TIMEOUT_MS, systemFetchText, systemToolRunner, toolsEnv, type FetchText, type ToolRunner } from './runner.ts';
@@ -41,6 +49,8 @@ export const LOCAL_TOOLS_MACHINE = 'local';
 const BREW_UPDATE_TIMEOUT_MS = 300_000;
 const PROBE_CACHE_MS = 30_000;
 const CHECK_CONCURRENCY = 4;
+/** The name Claude Code knows this app's own MCP server by (src/mcp/README.md). */
+export const OWN_MCP_SERVER = 'ahrena-console';
 /** Display only: the command from brew.sh for the person to run in the Terminal. */
 export const HOMEBREW_INSTALL_COMMAND = '/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"';
 
@@ -86,8 +96,30 @@ export interface ToolsOverview {
   actionsAllowed: boolean;
   items: ToolItem[];
   containers: ContainersView<ToolActionView>;
-  mcp: { statusCheckedAt: string | null; servers: unknown[] };
+  mcp: { statusCheckedAt: string | null; servers: McpServerView[] };
   jobs: JobsView;
+}
+
+/** An MCP server row (contract, UI request 3): names and counts, never a value. */
+export interface McpServerView {
+  /** The catalog id for the server the catalog knows (user scope), else `mcp-<12 hex>`. */
+  id: string;
+  name: string;
+  scope: McpScope;
+  project: string | null;
+  transport: McpTransport;
+  command: string | null;
+  package: string | null;
+  version: string | null;
+  latest: string | null;
+  host: string | null;
+  envCount: number;
+  envNames: string[];
+  headerCount: number;
+  headerNames: string[];
+  state: McpState;
+  note: string | null;
+  actions: ToolActionView[];
 }
 
 export interface JobsView<J = unknown> {
@@ -126,6 +158,13 @@ export interface ToolsServiceOptions {
   mtime?: (path: string) => Promise<number | null>;
   now?: () => number;
   probeCacheMs?: number;
+  /** Claude Code's `.claude.json`; default `$CLAUDE_CONFIG_DIR/.claude.json` or `~/.claude.json`. */
+  claudeJsonPath?: string;
+  /** The projects whose `.mcp.json` is read (the sessions' cwd, most recent first; capped). */
+  mcpProjects?: () => Promise<readonly string[]>;
+  /** This app's version, for its own MCP server's row. */
+  appVersion?: string;
+  mcpListTimeoutMs?: number;
   log?: (message: string) => void;
 }
 
@@ -137,6 +176,8 @@ interface LocalSnapshot {
   managers: Map<string, string | null>;
   /** The containers card, read once per snapshot (and network state) so a request does not run docker. */
   containers?: { network: NetworkState; view: Promise<ContainersView<ToolActionView>> };
+  /** The MCP servers of Claude Code's config, read once per snapshot. */
+  mcp?: Promise<McpServerConfig[]>;
 }
 
 const ITEM_GROUPS: readonly ToolGroup[] = ['cli', 'runtime'];
@@ -155,6 +196,9 @@ export class ToolsService {
   private checking: Promise<ToolsOverview> | null = null;
   private network: NetworkState = 'unknown';
   private osName: Promise<string | null> | null = null;
+  /** The last Verificar conexões: when, and each server name's state. Memory only. */
+  private mcpStatus: { checkedAt: number; states: Map<string, McpState> } | null = null;
+  private mcpChecking: Promise<ToolsOverview | null> | null = null;
 
   constructor(options: ToolsServiceOptions) {
     this.o = options;
@@ -182,9 +226,16 @@ export class ToolsService {
     if (machine !== LOCAL_TOOLS_MACHINE) return { kind: 'unknown-machine' };
     const entry = this.catalog.find((e) => e.id === toolId);
     const verb = ACTION_VERBS[actionId as ActionId];
-    if (!entry || !verb || (entry.group !== 'container' && !ITEM_GROUPS.includes(entry.group))) return { kind: 'unknown' };
+    if (!entry || !verb || (entry.group !== 'container' && entry.group !== 'mcp' && !ITEM_GROUPS.includes(entry.group))) return { kind: 'unknown' };
     const o = await this.build(await this.local(false));
-    const actions = entry.group === 'container' ? (o.containers.id === toolId ? o.containers.actions : []) : (o.items.find((i) => i.id === toolId)?.actions ?? []);
+    const actions =
+      entry.group === 'container'
+        ? o.containers.id === toolId
+          ? o.containers.actions
+          : []
+        : entry.group === 'mcp'
+          ? (o.mcp.servers.find((s) => s.id === toolId)?.actions ?? [])
+          : (o.items.find((i) => i.id === toolId)?.actions ?? []);
     const action = actions.find((a) => a.id === actionId);
     if (!action) return { kind: 'not-offered' };
     return { kind: 'plan', toolId, actionId: action.id, label: `${verb} ${entry.label}`, action };
@@ -202,7 +253,11 @@ export class ToolsService {
   async verify(machine: string, toolId: string): Promise<string | null> {
     if (machine !== LOCAL_TOOLS_MACHINE) return null;
     const snap = await this.local(true);
-    const installed = snap.detections.get(toolId)?.installed ?? null;
+    const entry = this.catalog.find((e) => e.id === toolId);
+    const installed =
+      entry?.group === 'mcp'
+        ? ((await this.mcpOf(snap)).find((s) => s.scope === 'user' && s.name === toolId)?.version ?? null)
+        : (snap.detections.get(toolId)?.installed ?? null);
     const rows = this.o.store.list(LOCAL_TOOLS_MACHINE);
     if (rows.some((r) => r.toolId === toolId && r.installed !== installed)) {
       this.o.store.replace(LOCAL_TOOLS_MACHINE, rows.map((r) => (r.toolId === toolId ? { ...r, installed } : r)));
@@ -229,6 +284,51 @@ export class ToolsService {
     if (machine !== LOCAL_TOOLS_MACHINE) return Promise.resolve(null);
     this.checking ??= this.runCheck().finally(() => (this.checking = null));
     return this.checking;
+  }
+
+  /**
+   * Verificar conexões: `claude mcp list` (no shell, the login PATH, the home as cwd, 60 s), read by
+   * server name; the states are kept in memory with the time. One at a time. Its output is never
+   * logged or returned: only the counts go to the log.
+   */
+  mcpCheck(machine: string = LOCAL_TOOLS_MACHINE): Promise<ToolsOverview | null> {
+    if (machine !== LOCAL_TOOLS_MACHINE) return Promise.resolve(null);
+    this.mcpChecking ??= this.runMcpCheck().finally(() => (this.mcpChecking = null));
+    return this.mcpChecking;
+  }
+
+  private async runMcpCheck(): Promise<ToolsOverview> {
+    const snap = await this.local(false);
+    const claude = snap.managers.get('claude') ?? (await this.which('claude', snap.path));
+    let states = new Map<string, McpState>();
+    if (!claude) this.o.log?.('tools: claude is not on the login PATH; the MCP states stay unknown');
+    else {
+      const r = await this.run([claude, 'mcp', 'list'], { timeoutMs: this.o.mcpListTimeoutMs ?? MCP_LIST_TIMEOUT_MS, env: this.env(snap.path), cwd: this.home }).catch(() => null);
+      states = parseMcpList(r?.stdout ?? '');
+      if (r?.code !== 0) this.o.log?.(`tools: claude mcp list did not finish (${r?.error ?? `exit ${r?.code ?? 'none'}`})`);
+    }
+    this.mcpStatus = { checkedAt: this.now(), states };
+    const count = (state: McpState) => [...states.values()].filter((v) => v === state).length;
+    this.o.log?.(`tools: MCP states read: ${count('connected')} connected, ${count('failed')} failed, ${count('needs-login')} need login, ${count('unknown')} unknown`);
+    return this.build(snap);
+  }
+
+  private claudeJsonPath(): string {
+    if (this.o.claudeJsonPath) return this.o.claudeJsonPath;
+    const dir = (this.o.env ?? process.env).CLAUDE_CONFIG_DIR;
+    return join(dir || this.home, '.claude.json');
+  }
+
+  /** The snapshot's MCP servers, read on first use. */
+  private mcpOf(snap: LocalSnapshot): Promise<McpServerConfig[]> {
+    snap.mcp ??= (async () => {
+      const projects = this.o.mcpProjects ? await this.o.mcpProjects().catch(() => []) : [];
+      return readMcpServers({ home: this.home, claudeJsonPath: this.claudeJsonPath(), projects, ...(this.o.log ? { log: this.o.log } : {}) });
+    })().catch((err) => {
+      this.o.log?.(`tools: MCP config not read (${(err as NodeJS.ErrnoException).code ?? 'error'})`);
+      return [];
+    });
+    return snap.mcp;
   }
 
   private async local(fresh: boolean): Promise<LocalSnapshot> {
@@ -346,6 +446,7 @@ export class ToolsService {
       },
     }) };
     const containers = await snap.containers.view;
+    const servers = (await this.mcpOf(snap)).map((s) => this.mcpRow(s, checks, actionView));
 
     return {
       version: TOOLS_API_VERSION,
@@ -361,7 +462,7 @@ export class ToolsService {
       actionsAllowed: network !== 'offline',
       items,
       containers,
-      mcp: { statusCheckedAt: null, servers: [] },
+      mcp: { statusCheckedAt: this.mcpStatus ? new Date(this.mcpStatus.checkedAt).toISOString() : null, servers },
       jobs: { current: null, queue: [], recent: [], batch: null },
     };
   }
@@ -418,6 +519,48 @@ export class ToolsService {
       source: sourceId,
       state,
       note,
+      actions,
+    };
+  }
+
+  /** One MCP server row: the catalog's latest for its package, its state, and `update` when decision §6 allows it. */
+  private mcpRow(
+    s: McpServerConfig,
+    checks: Map<string, ToolCheck>,
+    actionView: (entry: ToolEntry, actionId: ActionId, d: { installed: string | null; sourceId: DetectedSourceId | null }, latest: string | null) => ToolActionView | null,
+  ): McpServerView {
+    const entry = s.package
+      ? this.catalog.find((e) => e.group === 'mcp' && appliesTo(e, this.platform) && sourcesFor(e, this.platform, this.arch).some((src) => src.latest?.kind === 'npm' && src.latest.package === s.package))
+      : undefined;
+    // The catalog's steps name the server by the entry's id, in the user scope: only that server is the catalog's.
+    const own = entry && s.scope === 'user' && s.name === entry.id ? entry : null;
+    const source = own ? sourcesFor(own, this.platform, this.arch).find((src) => src.latest?.kind === 'npm') : undefined;
+    const check = entry ? checks.get(entry.id) : undefined;
+    const latest = check?.latest ?? null;
+    const state = this.mcpStatus?.states.get(s.name) ?? 'unknown';
+    const isApp = s.name === OWN_MCP_SERVER;
+    const actions: ToolActionView[] = [];
+    if (own && source && s.envCount === 0 && s.headerCount === 0 && s.version && latest && compareVersions(s.version, latest) < 0) {
+      const a = actionView(own, 'update', { installed: s.version, sourceId: source.id }, latest);
+      if (a) actions.push(a);
+    }
+    return {
+      id: own ? own.id : `mcp-${s.key}`,
+      name: s.name,
+      scope: s.scope,
+      project: s.project,
+      transport: s.transport,
+      command: s.command,
+      package: s.package,
+      version: isApp ? (this.o.appVersion ?? API_VERSION) : s.version,
+      latest,
+      host: s.host,
+      envCount: s.envCount,
+      envNames: [...s.envNames],
+      headerCount: s.headerCount,
+      headerNames: [...s.headerNames],
+      state,
+      note: isApp ? 'atualiza junto com o app' : state === 'needs-login' ? 'o login é do Claude Code, não do console' : null,
       actions,
     };
   }
