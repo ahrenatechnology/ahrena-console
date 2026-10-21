@@ -2,6 +2,7 @@
 // line and returns what matters to the core (event, title, cwd, model).
 // The format is undocumented; everything is read defensively and what is not recognised is ignored.
 
+import { createHash } from 'node:crypto';
 import type { TokenCounts } from '../../model.ts';
 
 /** Tamanho máximo do resumo de um evento. O transcript completo continua no arquivo. */
@@ -282,13 +283,29 @@ export interface PeerTurn {
   at: number;
   /** The pid of the process that wrote to the socket, as Claude Code verified it; `null` when the line has none. */
   verifiedPeerPid: number | null;
+  /**
+   * SHA-256 (hex) of the message body inside Claude Code's peer wrapping, to match the turn to the
+   * message that started it without keeping the text; `null` when the content has another shape.
+   */
+  bodySha256: string | null;
+}
+
+/** How Claude Code 2.1.302 wraps a peer message in the transcript (measured; see the contract test). */
+export const PEER_PREFIX = 'Another Claude session sent a message:\n';
+export const PEER_SUFFIX = '\n\nThis came from another Claude session';
+
+/** The body of a wrapped peer message, or `null` when the content is not in that shape. */
+export function peerBodyOf(content: string): string | null {
+  if (!content.startsWith(PEER_PREFIX)) return null;
+  const end = content.lastIndexOf(PEER_SUFFIX);
+  return end >= PEER_PREFIX.length ? content.slice(PEER_PREFIX.length, end) : null;
 }
 
 /**
  * The line of a message that arrived through the cross-session inbox: a `user` line whose `origin`
  * is `{ kind: "peer", verifiedPeerPid }` (Claude Code 2.1.302 also marks it `isMeta`, which is why
- * `parseLine` gives it no event). Only the origin and the time are read; the content, which has the
- * message's text, is not returned. `null` for any other line.
+ * `parseLine` gives it no event). Of the content, which has the message's text, only a hash of the
+ * body is returned. `null` for any other line.
  */
 export function peerTurnOf(raw: string): PeerTurn | null {
   // Cheap filter first: most lines are not peer turns, and some are large.
@@ -303,5 +320,11 @@ export function peerTurnOf(raw: string): PeerTurn | null {
   const timestamp = isoTimestamp(o.timestamp);
   if (!timestamp) return null;
   const pid = o.origin.verifiedPeerPid;
-  return { at: Date.parse(timestamp), verifiedPeerPid: Number.isInteger(pid) && (pid as number) > 0 ? (pid as number) : null };
+  const content = isObj(o.message) ? textOf(o.message.content) : null;
+  const body = content === null ? null : peerBodyOf(content);
+  return {
+    at: Date.parse(timestamp),
+    verifiedPeerPid: Number.isInteger(pid) && (pid as number) > 0 ? (pid as number) : null,
+    bodySha256: body === null ? null : createHash('sha256').update(body, 'utf8').digest('hex'),
+  };
 }

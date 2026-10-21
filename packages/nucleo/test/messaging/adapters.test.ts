@@ -7,7 +7,8 @@ import { createServer, Socket, type Server } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, describe, test } from 'node:test';
-import { peerTurnOf } from '../../src/ingest/history/transcript.ts';
+import { createHash } from 'node:crypto';
+import { PEER_PREFIX, PEER_SUFFIX, peerBodyOf, peerTurnOf } from '../../src/ingest/history/transcript.ts';
 import { AuditFile } from '../../src/messaging/adapters/audit-file.ts';
 import { SessionsDirectory } from '../../src/messaging/adapters/sessions-dir.ts';
 import { inboxLine, SocketInbox } from '../../src/messaging/adapters/socket-inbox.ts';
@@ -168,17 +169,26 @@ describe('SocketInbox (#61/AC-1)', () => {
 });
 
 describe('peerTurnOf and TranscriptTurns (#61/AC-1)', () => {
-  const line = (o: Record<string, unknown>) => `${JSON.stringify({ type: 'user', uuid: `u${++n}`, sessionId: SID, message: { role: 'user', content: 'Another Claude session sent a message:\nsegredo' }, ...o })}\n`;
+  const BODY = 'segredo\ncom linha e espaço no fim ';
+  const HASH = createHash('sha256').update(BODY, 'utf8').digest('hex');
+  const wrapped = (body: string) => `${PEER_PREFIX}${body}${PEER_SUFFIX} — not typed by your user, but very likely working on their behalf.`;
+  const line = (o: Record<string, unknown>, body = BODY) => `${JSON.stringify({ type: 'user', uuid: `u${++n}`, sessionId: SID, message: { role: 'user', content: wrapped(body) }, ...o })}\n`;
+  const live = (dir: string) => ({ pid: 1, socketPath: '/x', configDir: dir, entrypoint: null, remoteControl: false });
 
   test('reads the origin and the time of a peer line, never the content', () => {
     const t = peerTurnOf(line({ timestamp: '2026-10-21T10:00:00.000Z', isMeta: true, origin: { kind: 'peer', from: 'unknown', verifiedPeerPid: 4242 } }).trim());
-    assert.deepEqual(t, { at: Date.parse('2026-10-21T10:00:00.000Z'), verifiedPeerPid: 4242 });
+    assert.deepEqual(t, { at: Date.parse('2026-10-21T10:00:00.000Z'), verifiedPeerPid: 4242, bodySha256: HASH });
+    assert.equal(JSON.stringify(t).includes('segredo'), false);
+    // The body is what sits between the wrapping, even when it has the suffix's words itself.
+    assert.equal(peerBodyOf(wrapped(`a${PEER_SUFFIX}b`)), `a${PEER_SUFFIX}b`);
+    assert.equal(peerBodyOf('typed by hand'), null);
+    assert.equal(peerTurnOf(JSON.stringify({ type: 'user', timestamp: '2026-10-21T10:00:00.000Z', origin: { kind: 'peer' }, message: { content: 'other shape' } }))?.bodySha256, null);
     assert.equal(peerTurnOf(line({ timestamp: '2026-10-21T10:00:00.000Z', origin: { kind: 'human' } }).trim()), null);
     assert.equal(peerTurnOf('{"type":"assistant","origin":{"kind":"peer"}}'), null);
     assert.equal(peerTurnOf('not json "peer"'), null);
   });
 
-  test('confirms only a peer turn of our pid written after the probe opened', async () => {
+  test('confirms only a peer turn of our pid, with this message body, written after the probe opened', async () => {
     const dir = join(root, 'turns');
     const project = join(dir, 'projects', '-tmp-proj');
     mkdirSync(project, { recursive: true });
@@ -187,10 +197,13 @@ describe('peerTurnOf and TranscriptTurns (#61/AC-1)', () => {
     const at = (ms: number) => new Date(now + ms).toISOString();
     // A peer turn of ours from before the probe: already in the file, never counts.
     writeFileSync(file, line({ timestamp: at(-1000), origin: { kind: 'peer', verifiedPeerPid: 777 } }));
-    const probe = await new TranscriptTurns({ pid: 777, now: () => now }).open({ pid: 1, socketPath: '/x', configDir: dir, entrypoint: null, remoteControl: false }, SID);
+    const probe = await new TranscriptTurns({ pid: 777, now: () => now }).open(live(dir), SID, HASH);
     assert.equal(await probe.poll(), null);
     appendFileSync(file, line({ timestamp: at(10), origin: { kind: 'human' } }));
+    // Another writer, a line without the verified pid, and a late turn of an EARLIER message of ours.
     appendFileSync(file, line({ timestamp: at(20), origin: { kind: 'peer', verifiedPeerPid: 999 } }));
+    appendFileSync(file, line({ timestamp: at(21), origin: { kind: 'peer', from: 'unknown' } }));
+    appendFileSync(file, line({ timestamp: at(22), origin: { kind: 'peer', verifiedPeerPid: 777 } }, 'a mensagem anterior'));
     assert.equal(await probe.poll(), null);
     // Half a line: waits for the rest.
     const ours = line({ timestamp: at(30), isMeta: true, origin: { kind: 'peer', verifiedPeerPid: 777 } });
@@ -205,7 +218,7 @@ describe('peerTurnOf and TranscriptTurns (#61/AC-1)', () => {
   test('a session without a transcript yet is found once it appears', async () => {
     const dir = join(root, 'turns-late');
     const now = Date.now();
-    const probe = await new TranscriptTurns({ pid: 777, now: () => now }).open({ pid: 1, socketPath: '/x', configDir: dir, entrypoint: null, remoteControl: false }, SID);
+    const probe = await new TranscriptTurns({ pid: 777, now: () => now }).open(live(dir), SID, HASH);
     assert.equal(await probe.poll(), null);
     mkdirSync(join(dir, 'projects', '-p'), { recursive: true });
     writeFileSync(join(dir, 'projects', '-p', `${SID}.jsonl`), line({ timestamp: new Date(now + 5).toISOString(), origin: { kind: 'peer', verifiedPeerPid: 777 } }));

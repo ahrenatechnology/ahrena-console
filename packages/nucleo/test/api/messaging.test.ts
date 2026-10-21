@@ -14,6 +14,7 @@ import { join } from 'node:path';
 import { after, describe, test } from 'node:test';
 import { createHash } from 'node:crypto';
 import { openSqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
+import { PEER_PREFIX, PEER_SUFFIX } from '../../src/ingest/history/transcript.ts';
 import { Accounts, MontadorDoPainel, startLocalApi } from '../../src/api/index.ts';
 import { createMessagingRoute } from '../../src/api/messaging.ts';
 import { AuditFile } from '../../src/messaging/adapters/audit-file.ts';
@@ -72,7 +73,7 @@ async function boot({ processes = 1, confirm = true, fakeClock = false, remoteCo
         const got = buf.split('\n').filter(Boolean);
         lines.push(...got);
         // Like the CLI: the message becomes a peer user line marked with the writer's pid.
-        if (confirm) for (const l of got) appendFileSync(transcript, `${JSON.stringify({ type: 'user', uuid: `p${lines.length}`, isMeta: true, timestamp: new Date().toISOString(), sessionId, origin: { kind: 'peer', from: 'unknown', verifiedPeerPid: process.pid }, message: { role: 'user', content: `Another Claude session sent a message:\n${(JSON.parse(l) as { message: { content: string } }).message.content}` } })}\n`);
+        if (confirm) for (const l of got) appendFileSync(transcript, `${JSON.stringify({ type: 'user', uuid: `p${lines.length}`, isMeta: true, timestamp: new Date().toISOString(), sessionId, origin: { kind: 'peer', from: 'unknown', verifiedPeerPid: process.pid }, message: { role: 'user', content: `${PEER_PREFIX}${(JSON.parse(l) as { message: { content: string } }).message.content}${PEER_SUFFIX} — not typed by your user.` } })}\n`);
         c.end();
       });
     });
@@ -275,7 +276,8 @@ describe('#61/AC-1 POST /api/sessions/<id>/messages', () => {
       }
       assert.equal((await call(b.url, 'POST', `/api/sessions/${b.sessionId}/messages`, ui(b), '[1]')).json.reason, 'invalid_text');
       assert.equal((await post(b, 'a'.repeat(16 * 1024))).status, 413);
-      assert.equal((await call(b.url, 'POST', `/api/sessions/${b.sessionId}/messages`, { origin: `http://${b.host}`, 'content-type': 'text/plain' }, '{"text":"oi"}')).status, 415);
+      for (const type of ['text/plain', 'application/json-seq'])
+        assert.equal((await call(b.url, 'POST', `/api/sessions/${b.sessionId}/messages`, { origin: `http://${b.host}`, 'content-type': type }, '{"text":"oi"}')).status, 415, type);
       assert.equal((await post(b, 'oi'.repeat(10), ui(b))).status, 202);
       assert.equal(b.logs.join('\n').includes('a'.repeat(100)), false);
     } finally {

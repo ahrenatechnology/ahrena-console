@@ -24,13 +24,14 @@ export interface Inbox {
 
 /** Watches one session for the turn our message starts. Opened before the send, so it sees only what comes after. */
 export interface TurnProbe {
-  /** The time (ms) of the session's turn that came from this core, if it showed up since the last call; otherwise `null`. */
+  /** The time (ms) of the session's turn with this message, from this core, if it showed up since the last call; otherwise `null`. */
   poll(): Promise<number | null>;
   close(): void;
 }
 
 export interface TurnWatch {
-  open(process: LiveProcess, sessionId: string): Promise<TurnProbe>;
+  /** Watches for the turn of the message whose text hashes to `textSha256` (hex SHA-256). */
+  open(process: LiveProcess, sessionId: string, textSha256: string): Promise<TurnProbe>;
 }
 
 export interface AuditEntry {

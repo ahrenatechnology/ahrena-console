@@ -3,8 +3,8 @@
 // socket is documented, this line format is not (measured on CLI 2.1.302): the contract test in
 // test/messaging/contract-cli.test.ts checks it against the real CLI.
 //
-// The socket writes nothing back, not even for an invalid line: "written" only means the line left
-// for the kernel and the connection ended. No auth line is sent (optional outside Windows): the
+// The socket writes nothing back, not even for an invalid line: "written" only means the line was
+// handed to an open connection. No auth line is sent (optional outside Windows): the
 // core never reads the `.key` file. A failure carries a reason code, never the text.
 
 import { connect as netConnect, type Socket } from 'node:net';
@@ -49,8 +49,11 @@ export class SocketInbox implements Inbox {
         socket?.destroy();
         resolve(r);
       };
+      // From the moment the line is handed to the connection it may reach the session, even if the
+      // flush callback never runs (a timeout, an error after the kernel took the bytes): then it
+      // counts as written, and the confirmation decides between delivered and sent unconfirmed.
+      // Only a failure before the connection opened is "not delivered".
       let written = false;
-      // Past the timeout, a line already flushed counts as written: the session may just be slow to close.
       const timer = setTimeout(() => finish(written ? { ok: true } : { ok: false, reason: 'timeout' }), this.timeoutMs);
       try {
         socket = this.connect(socketPath);
@@ -59,10 +62,8 @@ export class SocketInbox implements Inbox {
       }
       socket.on('error', (e: NodeJS.ErrnoException) => finish(written ? { ok: true } : { ok: false, reason: failureOf(e) }));
       socket.once('connect', () => {
-        // `end` with the data: the callback runs once the line is flushed and the write side ends.
-        socket.end(inboxLine(text), () => {
-          written = true;
-        });
+        written = true;
+        socket.end(inboxLine(text));
       });
       // Wait for the session to close its side instead of dropping the connection at once: Claude
       // Code reads the writer's pid from the connection (LOCAL_PEERPID / SO_PEERCRED, the

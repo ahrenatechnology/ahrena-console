@@ -13,11 +13,12 @@
 import { createHash, randomUUID } from 'node:crypto';
 import {
   BurstLimit,
-  checkText,
   CONFIRM_WINDOW_MS,
+  isValidText,
   OutgoingMessage,
   resolveAvailability,
   type BurstLimitOptions,
+  type LiveProcess,
   type MessageView,
   type NotDeliveredReason,
   type Refusal,
@@ -94,7 +95,7 @@ export class Messaging {
   }
 
   async availability(sessionId: string, { otherMachine = false }: { otherMachine?: boolean } = {}): Promise<MessagingAvailability> {
-    const processes = otherMachine || this.platform === 'win32' ? [] : await this.live.find(sessionId);
+    const processes = otherMachine || this.platform === 'win32' ? [] : await this.live.find(sessionId).catch((e: unknown) => (this.log(`session ${sessionId}: cannot list the live processes (${(e as Error)?.name ?? 'error'})`), [] as LiveProcess[]));
     const a = resolveAvailability({ platform: this.platform, otherMachine, processes });
     const inFlight = this.inFlight.get(sessionId) ?? null;
     if (a.available) return { available: true, reason: null, entrypoint: a.process.entrypoint, remoteControl: a.process.remoteControl, processes: 1, inFlight };
@@ -104,41 +105,61 @@ export class Messaging {
   /** Sends what a person typed to the session's one live process on this machine. */
   async send(sessionId: string, text: unknown): Promise<SendResult> {
     const hash = typeof text === 'string' ? sha256(text) : null;
-    if (!checkText(text).ok) return this.refuse(sessionId, 'invalid_text', hash);
+    if (!isValidText(text)) return this.refuse(sessionId, 'invalid_text', hash);
+    const textSha256 = sha256(text);
+    if (this.closed) return this.refuse(sessionId, 'closing', textSha256);
     const busy = this.inFlight.get(sessionId);
-    if (busy) return { ...this.refuse(sessionId, 'in_flight', hash), messageId: busy };
+    if (busy) return { ...this.refuse(sessionId, 'in_flight', textSha256), messageId: busy };
     const now = this.now();
     const limit = this.burst.check(sessionId, now);
-    if (!limit.ok) return { ...this.refuse(sessionId, 'rate_limited', hash), retryAfterMs: limit.retryAfterMs };
+    if (!limit.ok) return { ...this.refuse(sessionId, 'rate_limited', textSha256), retryAfterMs: limit.retryAfterMs };
     this.burst.record(sessionId, now);
     this.prune(now);
 
-    const message = OutgoingMessage.create({ id: this.newId(), sessionId, textSha256: hash!, createdAt: now });
+    const message = OutgoingMessage.create({ id: this.newId(), sessionId, textSha256, createdAt: now });
     this.messages.set(message.id, message);
     this.inFlight.set(sessionId, message.id);
     try {
-      const a = resolveAvailability({ platform: this.platform, otherMachine: false, processes: this.platform === 'win32' ? [] : await this.live.find(sessionId) });
+      const processes = await this.findProcesses(message);
+      const a = resolveAvailability({ platform: this.platform, otherMachine: false, processes });
       if (!a.available) return this.accepted(this.fail(message, a.reason));
       // Opened before the write: only a turn after this point can confirm the message.
-      const probe = await this.turns.open(a.process, sessionId).catch((e: unknown) => {
+      const probe = await this.turns.open(a.process, sessionId, textSha256).catch((e: unknown) => {
         this.log(`message ${message.id}: cannot watch session ${sessionId} for the new turn (${(e as Error).message})`);
         return null;
       });
       const startedAt = this.now();
-      const r = await this.inbox.deliver(a.process.socketPath, text as string);
+      const r = await this.inbox.deliver(a.process.socketPath, text);
       if (!r.ok) {
         probe?.close();
         return this.accepted(this.fail(message, r.reason));
       }
       message.sent(startedAt);
       this.log(`message ${message.id} to session ${sessionId}: written to the inbox of pid ${a.process.pid}`);
-      void this.confirm(message, probe);
+      this.confirm(message, probe).catch((e: unknown) => {
+        this.log(`message ${message.id}: confirmation stopped (${(e as Error)?.name ?? 'error'})`);
+        this.release(message);
+      });
       return this.accepted(message);
     } catch (e) {
       // A port that broke its promise not to reject: the message did not go.
-      this.log(`message ${message.id} to session ${sessionId}: ${(e as Error).message}`);
+      this.log(`message ${message.id} to session ${sessionId}: ${(e as Error)?.name ?? 'error'}`);
       if (!message.settled) this.fail(message, 'socket_error');
       return this.accepted(message);
+    } finally {
+      // Whatever happened, a settled message never keeps the session busy.
+      if (message.settled) this.release(message);
+    }
+  }
+
+  /** The processes of the session; a failure to list them is "no live process" (logged), never thrown. */
+  private async findProcesses(message: OutgoingMessage): Promise<LiveProcess[]> {
+    if (this.platform === 'win32') return [];
+    try {
+      return await this.live.find(message.sessionId);
+    } catch (e) {
+      this.log(`message ${message.id}: cannot list the live processes (${(e as Error)?.name ?? 'error'})`);
+      return [];
     }
   }
 
@@ -162,13 +183,13 @@ export class Messaging {
           // The transcript's clock and ours are the same machine's, but its line may carry a time
           // a few ms before the write call returned: never before the send.
           message.delivered(Math.max(turnAt, sentAt));
-          return this.settle(message);
+          return this.settle(message, 'delivered');
         }
         await this.sleep(this.pollMs);
       }
       if (this.closed) return;
       message.unconfirmed(Math.max(this.now(), sentAt + CONFIRM_WINDOW_MS));
-      this.settle(message);
+      this.settle(message, 'sent_unconfirmed');
     } finally {
       probe?.close();
     }
@@ -176,19 +197,24 @@ export class Messaging {
 
   private fail(message: OutgoingMessage, reason: NotDeliveredReason): OutgoingMessage {
     message.notDelivered(reason, this.now());
-    this.settle(message);
+    this.settle(message, 'not_delivered');
     return message;
   }
 
-  private settle(message: OutgoingMessage): void {
-    const view = message.view();
+  /** Frees the session for the next message. Idempotent. */
+  private release(message: OutgoingMessage): void {
     if (this.inFlight.get(message.sessionId) === message.id) this.inFlight.delete(message.sessionId);
+  }
+
+  private settle(message: OutgoingMessage, outcome: 'delivered' | 'sent_unconfirmed' | 'not_delivered'): void {
+    const view = message.view();
+    this.release(message);
     this.audit.record({
       at: view.settledAt!,
       sessionId: message.sessionId,
       messageId: message.id,
       mechanism: 'inbox',
-      outcome: message.state as 'delivered' | 'sent_unconfirmed' | 'not_delivered',
+      outcome,
       reason: message.reason,
       textSha256: message.textSha256,
     });

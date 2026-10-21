@@ -2,10 +2,13 @@
 //
 // Measured on Claude Code CLI 2.1.302 (test/messaging/contract-cli.test.ts): a message that comes
 // through the inbox becomes a `user` line in `<configDir>/projects/<project>/<sessionId>.jsonl`
-// with `origin: { kind: "peer", verifiedPeerPid: <the writer's pid> }` and `isMeta: true`, and then
-// the session answers it. So "delivered" is that line, after the offset the probe took before the
-// send, with `verifiedPeerPid` equal to the core's pid (a line without the field also counts: older
-// or newer CLIs may not verify the peer).
+// with `origin: { kind: "peer", verifiedPeerPid: <the writer's pid> }` and `isMeta: true`, its
+// content the text wrapped as "Another Claude session sent a message:\n<text>\n\nThis came from…",
+// and then the session answers it. So "delivered" is that line, after the offset the probe took
+// before the send, with `verifiedPeerPid` equal to the core's pid AND the wrapped body hashing to
+// the message's SHA-256: every message has the same writer pid, so only the body tells a late turn
+// of an earlier message from this one. A line without the pid, or in another shape, never
+// confirms: the message then ends `sent_unconfirmed`, which is honest.
 //
 // The transcript follower (src/ingest/history) cannot show it: it follows only one projects root
 // and gives `isMeta` lines no event. This reads the same files with the same line reader
@@ -50,7 +53,7 @@ export class TranscriptTurns implements TurnWatch {
     this.now = now;
   }
 
-  async open(live: LiveProcess, sessionId: string): Promise<TurnProbe> {
+  async open(live: LiveProcess, sessionId: string, textSha256: string): Promise<TurnProbe> {
     const openedAt = this.now();
     let path = await findTranscript(live.configDir, sessionId);
     let offset = path ? ((await stat(path).catch(() => null))?.size ?? 0) : 0;
@@ -69,7 +72,7 @@ export class TranscriptTurns implements TurnWatch {
           offset = end;
           const turn = peerTurnOf(line);
           if (!turn || turn.at < openedAt - CLOCK_SLACK_MS) continue;
-          if (turn.verifiedPeerPid === null || turn.verifiedPeerPid === ours) return turn.at;
+          if (turn.verifiedPeerPid === ours && turn.bodySha256 === textSha256) return turn.at;
         }
         return null;
       },

@@ -27,8 +27,8 @@ export type NotDeliveredReason = UnavailableReason | DeliveryFailure;
 export const UNCONFIRMED_REASON = 'no_new_turn';
 export type MessageReason = NotDeliveredReason | typeof UNCONFIRMED_REASON;
 
-/** A request refused before any message exists. */
-export const REFUSALS = ['invalid_text', 'in_flight', 'rate_limited', 'ui_only'] as const;
+/** A request refused before any message exists (`closing`: the core is shutting down). */
+export const REFUSALS = ['invalid_text', 'in_flight', 'rate_limited', 'ui_only', 'closing'] as const;
 export type Refusal = (typeof REFUSALS)[number];
 
 /** The text limit, in UTF-8 bytes (decision 0003, #61). */
@@ -78,11 +78,15 @@ const utf8 = new TextEncoder();
 
 /** The text a person typed: a string with something besides blanks, at most `MAX_TEXT_BYTES` of UTF-8. */
 export function checkText(text: unknown): { ok: true; bytes: number } | { ok: false } {
-  if (typeof text !== 'string' || text.trim().length === 0) return { ok: false };
+  if (!isValidText(text)) return { ok: false };
+  return { ok: true, bytes: utf8.encode(text).length };
+}
+
+/** `checkText` as a type guard. */
+export function isValidText(text: unknown): text is string {
+  if (typeof text !== 'string' || text.trim().length === 0) return false;
   // A string longer than the limit in UTF-16 units is longer in UTF-8 too: no need to encode it.
-  if (text.length > MAX_TEXT_BYTES) return { ok: false };
-  const bytes = utf8.encode(text).length;
-  return bytes <= MAX_TEXT_BYTES ? { ok: true, bytes } : { ok: false };
+  return text.length <= MAX_TEXT_BYTES && utf8.encode(text).length <= MAX_TEXT_BYTES;
 }
 
 /** A transition the message's state does not allow: a bug in the caller, not a user error. */

@@ -5,8 +5,9 @@
 //    and an absolute `messagingSocketPath` that is a socket of ours;
 // 2. one line `{"type":"user","message":{"role":"user","content":…}}` on that socket, with no auth
 //    line and the `.key` file unreadable, becomes a new turn; the socket writes nothing back;
-// 3. the turn shows in the transcript as a `user` line with `origin.kind: "peer"` and
-//    `verifiedPeerPid` equal to the writer's pid, which `TranscriptTurns` reads as "delivered";
+// 3. the turn shows in the transcript as a `user` line with `origin.kind: "peer"`,
+//    `verifiedPeerPid` equal to the writer's pid and the text wrapped byte for byte in the measured
+//    envelope, which `TranscriptTurns` reads as "delivered";
 // 4. the `sessions/<pid>.json` disappears when the process exits.
 //
 // Skipped unless AHRENA_CONSOLE_CONTRACT_CLI=1. Runs with a temporary HOME, CLAUDE_CONFIG_DIR and
@@ -15,6 +16,7 @@
 // AHRENA_CONSOLE_CLAUDE_BIN picks another binary (default `claude` on the PATH).
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import { createServer as createHttpServer } from 'node:http';
 import { connect } from 'node:net';
@@ -138,7 +140,8 @@ test('#61/AC-2 contract: the inbox of a real claude CLI session, and the peer tu
   for (const k of keys) chmodSync(join(sessionsDir, k), 0o000);
 
   // 2 and 3. Through the use case with the real adapters: delivered by the peer turn.
-  const text = `from the console contract ${Date.now()}`;
+  // Newlines, quotes, accents and trailing blanks: the body must reach the transcript byte for byte.
+  const text = `from the console contract ${Date.now()}\nsecond line "quoted" é  `;
   const audit = join(tmp, 'audit.jsonl');
   const messaging = new Messaging({ live: new SessionsDirectory({ folders: async () => [{ dir: config }] }), inbox: new SocketInbox(), turns: new TranscriptTurns(), audit: new AuditFile(audit), pollMs: 100 });
   const sent = await messaging.send(sessionId, text);
@@ -162,6 +165,7 @@ test('#61/AC-2 contract: the inbox of a real claude CLI session, and the peer tu
   const line = JSON.parse(peer[0].l) as Record<string, unknown>;
   t.diagnostic(`peer line: isMeta ${String(line.isMeta)}, origin ${JSON.stringify(line.origin)}, turnOrigin ${String(line.turnOrigin)}, promptSource ${String(line.promptSource)}`);
   assert.equal(peer[0].turn!.verifiedPeerPid, process.pid);
+  assert.equal(peer[0].turn!.bodySha256, createHash('sha256').update(text, 'utf8').digest('hex'), 'the wrapped body is the text, byte for byte');
 
   // The socket writes nothing back, not even for an invalid line.
   const reply = await new Promise<string>((resolve, reject) => {

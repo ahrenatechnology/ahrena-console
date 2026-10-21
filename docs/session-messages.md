@@ -17,7 +17,7 @@ A mensagem entra pela caixa de entrada da mensageria entre sessões do Claude Co
 | Na tela | O que quer dizer |
 | --- | --- |
 | Enviando… | O núcleo entregou no socket e espera a sessão começar o turno da mensagem |
-| Entregue às HH:MM | O transcript da sessão mostra o turno que veio do núcleo, depois do envio |
+| Entregue às HH:MM | O transcript da sessão mostra, depois do envio, o turno que veio do núcleo com exatamente este texto |
 | Enviada, sem confirmação | Em 60 s a sessão não começou o turno. Ela pode estar segurando a mensagem pela política `crossSessionInbound`. O console **não reenvia** |
 | Não entregue | Nada chegou: sem processo vivo, mais de um processo, socket que sumiu ou recusou a conexão |
 

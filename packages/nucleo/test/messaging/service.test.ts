@@ -180,6 +180,36 @@ describe('Messaging.send (#61/AC-1, #61/AC-2)', () => {
     assert.ok(logs.length > 0);
   });
 
+  test('after close, a request is refused and nothing is written', async () => {
+    const { messaging, delivered } = setup();
+    messaging.close();
+    const r = await messaging.send('s1', 'oi');
+    assert.equal(r.kind === 'refused' && r.refusal, 'closing');
+    assert.equal(delivered.length, 0);
+  });
+
+  test('failing to list the processes is no_live_process, and the session is free again', async () => {
+    const { messaging } = setup();
+    (messaging as unknown as { live: { find: () => Promise<never> } }).live = { find: async () => Promise.reject(new Error('profiles broke')) };
+    const r = await messaging.send('s1', 'oi');
+    assert.deepEqual(r.kind === 'accepted' && [r.message.state, r.message.reason], ['not_delivered', 'no_live_process']);
+    assert.equal((await messaging.availability('s1')).reason, 'no_live_process');
+    assert.equal((await messaging.availability('s1')).inFlight, null);
+  });
+
+  test('an audit that throws during the confirmation neither crashes the core nor keeps the session busy', async () => {
+    const { messaging } = setup();
+    (messaging as unknown as { audit: { record: () => void } }).audit = {
+      record: () => {
+        throw new Error('disk full');
+      },
+    };
+    const r = await messaging.send('s1', 'oi');
+    assert.equal(r.kind, 'accepted');
+    for (let i = 0; i < 1000 && (await messaging.availability('s1')).inFlight; i++) await new Promise((res) => setImmediate(res));
+    assert.equal((await messaging.availability('s1')).inFlight, null);
+  });
+
   test('a message is only read through its own session', async () => {
     const { messaging } = setup();
     const r = await messaging.send('s1', 'oi');

@@ -18,7 +18,7 @@
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { send } from '../ingest/hooks/receiver.ts';
-import type { MessageView } from '../messaging/model.ts';
+import type { MessageView, UnavailableReason } from '../messaging/model.ts';
 import type { Messaging } from '../messaging/service.ts';
 import type { Session } from '../model.ts';
 import { LOCAL_MACHINE_ID, MACHINE_ID } from '../telemetry/model.ts';
@@ -56,7 +56,7 @@ export interface MessagingAvailabilityBody {
   version: 1;
   sessionId: string;
   available: boolean;
-  reason: 'no_live_process' | 'ambiguous' | 'other_machine' | 'unsupported_platform' | null;
+  reason: UnavailableReason | null;
   entrypoint: string | null;
   remoteControl: boolean;
   processes: number;
@@ -70,6 +70,7 @@ const ERRORS = {
   in_flight: 'Ainda há uma mensagem a caminho desta sessão. Espere a confirmação.',
   rate_limited: 'Muitas mensagens em pouco tempo. Espere um pouco e tente de novo.',
   ui_only: 'Mensagens só saem da tela do console.',
+  closing: 'O núcleo está fechando. Tente de novo quando ele voltar.',
 } as const;
 
 /** The body, or `null` as soon as it exceeds `max` (the rest is not kept). */
@@ -129,7 +130,7 @@ export function createMessagingRoute({ messaging, sessions }: MessagingRouteOpti
         req.resume();
         return send(res, 403, { error: ERRORS.ui_only, reason: 'ui_only' });
       }
-      if (!/^application\/json\b/i.test(req.headers['content-type'] ?? '')) {
+      if (!/^application\/json\s*(;|$)/i.test(req.headers['content-type'] ?? '')) {
         req.resume();
         return send(res, 415, { error: 'use application/json' });
       }
@@ -150,6 +151,7 @@ export function createMessagingRoute({ messaging, sessions }: MessagingRouteOpti
         res.setHeader('retry-after', String(Math.max(1, Math.ceil((r.retryAfterMs ?? 0) / 1000))));
         return send(res, 429, { error: ERRORS.rate_limited, reason: r.refusal, retryAfterMs: r.retryAfterMs ?? null });
       }
+      if (r.refusal === 'closing') return send(res, 503, { error: ERRORS.closing, reason: r.refusal });
       return send(res, 400, { error: ERRORS[r.refusal], reason: r.refusal });
     }
 
