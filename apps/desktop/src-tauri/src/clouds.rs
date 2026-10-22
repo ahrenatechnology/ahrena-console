@@ -315,7 +315,7 @@ pub mod tests {
 
     #[test]
     fn login_path_and_response() {
-        assert_eq!(login_path("sessao-exemplo").as_deref(), Some("/api/connectors/aws/sessions/sessao-exemplo/login"));
+        assert_eq!(login_path("example-session").as_deref(), Some("/api/connectors/aws/sessions/example-session/login"));
         for bad in ["", ".", "..", "a/b", "sessao com espaco", "a%2Fb", &"x".repeat(65)] {
             assert_eq!(login_path(bad), None, "{bad:?}");
         }
