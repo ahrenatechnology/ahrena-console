@@ -9,9 +9,13 @@
 // - Each action carries its plan (plan.ts): the steps, the timeout, the target version and the
 //   `planDigest`; `runnable` is false with a `blockedReason` when it asks for sudo, has no valid
 //   version, the machine is offline or the source's manager is missing.
-// - Layer 1 serves this machine only (`local`); `mcp` and `jobs` stay empty until layers 3 and 2.
+// - Layer 1 serves this machine only (`local`); `mcp` stays empty until layer 3. `jobs` is filled by
+//   the executor (executor.ts, layer 2), which also asks here for the plan of a POST (`actionPlan`),
+//   for the process environment and for the re-probe after a job (`verify`).
+// - No automatic re-check: the network is read only on Verificar agora; after 6 h the states go back
+//   to `checking` until the next one (decision of layer 2, #280).
 
-import { readFile as fsReadFile, stat } from 'node:fs/promises';
+import { readFile as fsReadFile, realpath as fsRealpath, stat } from 'node:fs/promises';
 import { arch as osArch, homedir, release as osRelease } from 'node:os';
 import {
   appliesTo,
@@ -83,8 +87,26 @@ export interface ToolsOverview {
   items: ToolItem[];
   containers: ContainersView<ToolActionView>;
   mcp: { statusCheckedAt: string | null; servers: unknown[] };
-  jobs: { current: unknown; queue: unknown[]; recent: unknown[] };
+  jobs: JobsView;
 }
+
+export interface JobsView<J = unknown> {
+  current: J | null;
+  queue: J[];
+  recent: J[];
+  /** Jobs enqueued back to back (Atualizar N): opens with the first, closes when the queue drains. */
+  batch: { total: number; done: number } | null;
+}
+
+const ACTION_VERBS: Record<ActionId, string> = { install: 'Instalar', update: 'Atualizar', start: 'Iniciar', stop: 'Parar' };
+
+/** What a POST asks to run, rebuilt from this núcleo's own detection and catalog. */
+export type ActionPlanResult =
+  | { kind: 'unknown-machine' }
+  | { kind: 'unknown' }
+  /** The tool is known but the action is not offered right now (e.g. update when already up to date). */
+  | { kind: 'not-offered' }
+  | { kind: 'plan'; toolId: string; actionId: ActionId; label: string; action: ToolActionView };
 
 export interface ToolsServiceOptions {
   store: ToolChecksStore;
@@ -153,6 +175,53 @@ export class ToolsService {
   async overview(machine: string = LOCAL_TOOLS_MACHINE): Promise<ToolsOverview | null> {
     if (machine !== LOCAL_TOOLS_MACHINE) return null;
     return this.build(await this.local(false));
+  }
+
+  /** The action of a tool as the screen sees it now (same plan, same `planDigest`), for a POST. */
+  async actionPlan(machine: string, toolId: string, actionId: string): Promise<ActionPlanResult> {
+    if (machine !== LOCAL_TOOLS_MACHINE) return { kind: 'unknown-machine' };
+    const entry = this.catalog.find((e) => e.id === toolId);
+    const verb = ACTION_VERBS[actionId as ActionId];
+    if (!entry || !verb || (entry.group !== 'container' && !ITEM_GROUPS.includes(entry.group))) return { kind: 'unknown' };
+    const o = await this.build(await this.local(false));
+    const actions = entry.group === 'container' ? (o.containers.id === toolId ? o.containers.actions : []) : (o.items.find((i) => i.id === toolId)?.actions ?? []);
+    const action = actions.find((a) => a.id === actionId);
+    if (!action) return { kind: 'not-offered' };
+    return { kind: 'plan', toolId, actionId: action.id, label: `${verb} ${entry.label}`, action };
+  }
+
+  /** Drops the probe cache: the next overview probes again. */
+  invalidate(): void {
+    this.snapshot = null;
+  }
+
+  /**
+   * After a job: probes again and records the new installed version in the machine's `tool_checks`
+   * row (its latest and time are kept). Returns the installed version now, or `null`.
+   */
+  async verify(machine: string, toolId: string): Promise<string | null> {
+    if (machine !== LOCAL_TOOLS_MACHINE) return null;
+    const snap = await this.local(true);
+    const installed = snap.detections.get(toolId)?.installed ?? null;
+    const rows = this.o.store.list(LOCAL_TOOLS_MACHINE);
+    if (rows.some((r) => r.toolId === toolId && r.installed !== installed)) {
+      this.o.store.replace(LOCAL_TOOLS_MACHINE, rows.map((r) => (r.toolId === toolId ? { ...r, installed } : r)));
+    }
+    return installed;
+  }
+
+  /** The environment of a tools process: `toolsEnv` with the login PATH. */
+  async processEnv(): Promise<NodeJS.ProcessEnv> {
+    return this.env(await this.loginPath());
+  }
+
+  /** An executable as a step names it: its path on the login PATH and that path's realpath (`null` when not found). */
+  async resolveExecutable(name: string): Promise<{ path: string | null; realPath: string | null }> {
+    const absolute = name.startsWith('/') || /^[A-Za-z]:[\\/]/.test(name);
+    const path = absolute ? name : await this.which(name, await this.loginPath());
+    if (!path) return { path: null, realPath: null };
+    const realPath = await (this.o.realpath ?? fsRealpath)(path).catch(() => null);
+    return { path, realPath };
   }
 
   /** Verificar agora: `brew update`, every latest reader, the cache replaced. One at a time. */
@@ -293,7 +362,7 @@ export class ToolsService {
       items,
       containers,
       mcp: { statusCheckedAt: null, servers: [] },
-      jobs: { current: null, queue: [], recent: [] },
+      jobs: { current: null, queue: [], recent: [], batch: null },
     };
   }
 
