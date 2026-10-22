@@ -9,6 +9,9 @@
 //   after it counts; the window ends in `sent_unconfirmed`, and nothing is ever resent.
 // - The text goes to the socket and nowhere else: not to the log, the audit, an error or the store.
 //   The records here keep its SHA-256 only. Messages live in memory: a restart forgets them.
+// - The audit has a line the moment the socket takes the text (`sent`), so text that reached a
+//   session is in the audit even if the core dies in the window; a second line says how it settled.
+//   `close()` writes `sent_unconfirmed` (reason `closing`) for every message still in its window.
 
 import { createHash, randomUUID } from 'node:crypto';
 import { basename } from 'node:path';
@@ -25,7 +28,7 @@ import {
   type Refusal,
   type UnavailableReason,
 } from './model.ts';
-import type { Inbox, LiveSessions, MessagingAudit, TurnProbe, TurnWatch } from './ports.ts';
+import type { AuditEntry, Inbox, LiveSessions, MessagingAudit, TurnProbe, TurnWatch } from './ports.ts';
 
 export interface MessagingOptions {
   live: LiveSessions;
@@ -84,6 +87,8 @@ export class Messaging {
   /** sessionId → id of the message in flight. */
   private readonly inFlight = new Map<string, string>();
   private closed = false;
+  /** Messages whose `closing` line is already in the audit. */
+  private readonly closedOut = new Set<string>();
 
   constructor(opts: MessagingOptions) {
     this.live = opts.live;
@@ -143,6 +148,7 @@ export class Messaging {
         return this.accepted(this.fail(message, r.reason));
       }
       message.sent(startedAt);
+      this.record({ at: new Date(startedAt).toISOString(), sessionId, messageId: message.id, mechanism: 'inbox', outcome: 'sent', reason: null, textSha256 });
       this.log(`message ${message.id} to session ${sessionId}: written to the inbox of pid ${a.process.pid}`);
       this.confirm(message, probe).catch((e: unknown) => {
         this.log(`message ${message.id}: confirmation stopped (${(e as Error)?.name ?? 'error'})`);
@@ -177,9 +183,32 @@ export class Messaging {
     return m && m.sessionId === sessionId ? m.view() : null;
   }
 
-  /** Stops the background confirmations (the core is shutting down). */
+  /**
+   * Stops the background confirmations (the core is shutting down). Every message the socket took
+   * whose window is still open gets its audit line now, `sent_unconfirmed` with reason `closing`,
+   * instead of being dropped; a message still on its way to the socket gets it when the write returns.
+   */
   close(): void {
     this.closed = true;
+    for (const m of this.messages.values()) if (!m.settled && m.sentAt !== null) this.closeOut(m);
+  }
+
+  /** The audit line of a message the core closed on in its window. Once per message. */
+  private closeOut(message: OutgoingMessage): void {
+    if (this.closedOut.has(message.id)) return;
+    this.closedOut.add(message.id);
+    this.release(message);
+    this.record({ at: new Date(this.now()).toISOString(), sessionId: message.sessionId, messageId: message.id, mechanism: 'inbox', outcome: 'sent_unconfirmed', reason: 'closing', textSha256: message.textSha256 });
+    this.log(`message ${message.id} to session ${message.sessionId}: sent_unconfirmed (closing)`);
+  }
+
+  /** An audit line that never throws: a broken audit must not change what the message did. */
+  private record(entry: AuditEntry): void {
+    try {
+      this.audit.record(entry);
+    } catch (e) {
+      this.log(`messaging audit: could not record (${(e as Error)?.name ?? 'error'})`);
+    }
   }
 
   private async confirm(message: OutgoingMessage, probe: TurnProbe | null): Promise<void> {
@@ -195,7 +224,7 @@ export class Messaging {
         }
         await this.sleep(this.pollMs);
       }
-      if (this.closed) return;
+      if (this.closed) return this.closeOut(message);
       message.unconfirmed(Math.max(this.now(), sentAt + CONFIRM_WINDOW_MS));
       this.settle(message, 'sent_unconfirmed');
     } finally {

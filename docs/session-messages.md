@@ -43,7 +43,7 @@ O socket não responde nada, nem para uma linha inválida. Por isso "Entregue" s
 - Só local: o hub nunca chama a máquina, e não há ferramenta MCP que mande mensagem.
 - O pedido é uma exceção de mesma origem da [decisão 0003](decisoes/0003-responder-sessao.md): só da própria `/ui`, nunca de outra página nem de um script sem `Origin`.
 - O núcleo nunca abre o arquivo `<pid>.<hash>.key` ao lado do `sessions/<pid>.json`: no macOS e no Linux o token é opcional e o socket já é restrito ao seu usuário. Ele só entrega num socket do próprio usuário, de um processo vivo, que não seja link simbólico.
-- **O texto nunca vai para log, mensagem de erro, auditoria nem banco.** A auditoria fica em `<pasta de dados>/messaging-audit.jsonl` (permissão `0600`), uma linha por mensagem: hora, sessão, id da mensagem, mecanismo `inbox`, resultado e motivo, e o SHA-256 do texto.
+- **O texto nunca vai para log, mensagem de erro, auditoria nem banco.** A auditoria fica em `<pasta de dados>/messaging-audit.jsonl` (permissão `0600`), com hora, sessão, id da mensagem, mecanismo `inbox`, resultado e motivo, e o SHA-256 do texto: uma linha no momento em que o socket aceita o texto (`sent`) e outra quando a mensagem se resolve (`delivered`, `sent_unconfirmed` ou `not_delivered`); se o núcleo fecha com a mensagem ainda na janela, a segunda linha é `sent_unconfirmed` com o motivo `closing`. Uma mensagem que nem chegou ao socket tem só a linha de quando se resolveu, e uma recusa, uma linha `refused`.
 - O estado de uma mensagem fica na memória do núcleo: se ele reiniciar, a tela perde o estado das mensagens em andamento.
 
 ## Para quem integra

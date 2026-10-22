@@ -1,6 +1,6 @@
 // `MessagingAudit` as a JSON Lines file in the core's data folder (#61, decision 0007's audit):
-// `<dataDir>/messaging-audit.jsonl`, `0600`, folder `0700`. One line per message, or per refused
-// request: time, session, message id, mechanism (`inbox`), outcome, reason and the text's SHA-256.
+// `<dataDir>/messaging-audit.jsonl`, `0600`, folder `0700`. One line when the socket takes a
+// message (`sent`) and one when it settles or the core closes on it, or one per refused request: time, session, message id, mechanism (`inbox`), outcome, reason and the text's SHA-256.
 // The text itself is never given to this adapter. A write that fails is logged, never thrown: the
 // audit must not change whether a message goes.
 

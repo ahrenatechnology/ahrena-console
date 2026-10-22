@@ -35,12 +35,16 @@ export interface TurnWatch {
 }
 
 export interface AuditEntry {
-  /** ISO time the message settled (or was refused). */
+  /**
+   * ISO time of the event: the socket took the line (`sent`), the message settled, the core closed
+   * with it in flight (`sent_unconfirmed`, reason `closing`), or the request was refused.
+   */
   at: string;
   sessionId: string;
   messageId: string | null;
   mechanism: 'inbox';
-  outcome: Exclude<MessageState, 'sending'> | 'refused';
+  /** `sent`: the socket took the line; a second line follows when the message settles or the core closes. */
+  outcome: Exclude<MessageState, 'sending'> | 'sent' | 'refused';
   reason: MessageReason | Refusal | null;
   /** SHA-256 of the text, hex; `null` when the request had no text string. */
   textSha256: string | null;

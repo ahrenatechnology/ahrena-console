@@ -107,7 +107,10 @@ describe('Messaging.send (#61/AC-1, #61/AC-2)', () => {
     const m = await settled(messaging, 's1', r.message.messageId);
     assert.equal(m.state, 'delivered');
     assert.equal(m.deliveredAt, '2026-10-21T10:00:00.500Z');
-    assert.deepEqual(audit, [{ at: m.settledAt, sessionId: 's1', messageId: r.message.messageId, mechanism: 'inbox', outcome: 'delivered', reason: null, textSha256: sha(SECRET) }]);
+    assert.deepEqual(audit, [
+      { at: m.sentAt, sessionId: 's1', messageId: r.message.messageId, mechanism: 'inbox', outcome: 'sent', reason: null, textSha256: sha(SECRET) },
+      { at: m.settledAt, sessionId: 's1', messageId: r.message.messageId, mechanism: 'inbox', outcome: 'delivered', reason: null, textSha256: sha(SECRET) },
+    ]);
   });
 
   test('without a new turn in 60 s: sent_unconfirmed, never resent', async () => {
@@ -120,7 +123,7 @@ describe('Messaging.send (#61/AC-1, #61/AC-2)', () => {
     assert.equal(m.reason, 'no_new_turn');
     assert.ok(Date.parse(m.settledAt!) - Date.parse(m.sentAt!) >= CONFIRM_WINDOW_MS);
     assert.equal(delivered.length, 1);
-    assert.equal(audit[0].outcome, 'sent_unconfirmed');
+    assert.deepEqual(audit.map((e) => e.outcome), ['sent', 'sent_unconfirmed']);
     assert.equal(closedProbes(), 1);
   });
 
@@ -193,6 +196,25 @@ describe('Messaging.send (#61/AC-1, #61/AC-2)', () => {
     const r = await messaging.send('s1', 'oi');
     assert.equal(r.kind === 'refused' && r.refusal, 'closing');
     assert.equal(delivered.length, 0);
+  });
+
+  test('close() inside the window audits the message that went: sent, then sent_unconfirmed (closing), with the hash', async () => {
+    const { messaging, audit } = setup({ turnAfterMs: null });
+    const r = await messaging.send('s1', SECRET);
+    assert.equal(r.kind === 'accepted' && r.message.state, 'sending');
+    const id = r.kind === 'accepted' ? r.message.messageId : '';
+    assert.deepEqual(audit.map((e) => [e.outcome, e.messageId, e.textSha256]), [['sent', id, sha(SECRET)]]);
+    messaging.close();
+    for (let i = 0; i < 20; i++) await new Promise((res) => setImmediate(res));
+    assert.deepEqual(
+      audit.map((e) => [e.outcome, e.reason, e.messageId, e.textSha256]),
+      [
+        ['sent', null, id, sha(SECRET)],
+        ['sent_unconfirmed', 'closing', id, sha(SECRET)],
+      ],
+    );
+    assert.equal(JSON.stringify(audit).includes(SECRET), false);
+    assert.equal((await messaging.availability('s1')).inFlight, null);
   });
 
   test('failing to list the processes is no_live_process, and the session is free again', async () => {

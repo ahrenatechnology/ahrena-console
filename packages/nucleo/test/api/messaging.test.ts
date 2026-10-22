@@ -233,9 +233,13 @@ describe('#61/AC-1 POST /api/sessions/<id>/messages', () => {
       assert.ok([null, r.json.messageId].includes(inFlight.json.inFlight));
       assert.equal((await call(b.url, 'GET', `/api/sessions/${b.sessionId}/messaging`)).json.inFlight, null);
 
-      // #61/AC-2: one audit line, with the hash, and the text in no log, audit, answer or database.
+      // #61/AC-2: an audit line when the socket took it and one when it settled, with the hash,
+      // and the text in no log, audit, answer or database.
       const audit = readFileSync(b.auditFile, 'utf8').trim().split('\n').map((l) => JSON.parse(l));
-      assert.deepEqual(audit, [{ at: settled.json.settledAt, sessionId: b.sessionId, messageId: r.json.messageId, mechanism: 'inbox', outcome: 'delivered', reason: null, textSha256: sha(SECRET) }]);
+      assert.deepEqual(audit, [
+        { at: settled.json.sentAt, sessionId: b.sessionId, messageId: r.json.messageId, mechanism: 'inbox', outcome: 'sent', reason: null, textSha256: sha(SECRET) },
+        { at: settled.json.settledAt, sessionId: b.sessionId, messageId: r.json.messageId, mechanism: 'inbox', outcome: 'delivered', reason: null, textSha256: sha(SECRET) },
+      ]);
       const everything = [b.logs.join('\n'), readFileSync(b.auditFile, 'utf8'), r.text, settled.text];
       for (const blob of everything) assert.equal(blob.includes(SECRET), false);
       await b.close();
