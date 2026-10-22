@@ -558,6 +558,8 @@ const apiPort = (api.server.address() as AddressInfo).port;
 
 const lock = useLock ? await claimLock({ dir: dataDir, port: apiPort, version: API_VERSION, parent }) : null;
 if (lock && 'conflict' in lock) {
+  // Jobs run in their own process groups: end them (SIGTERM, then SIGKILL) so none outlives the núcleo.
+  await toolsExecutor?.stopAll().catch(() => undefined);
   await api.close().catch(() => undefined);
   await storage.close();
   adopt(lock.conflict.port, lock.conflict.version);
