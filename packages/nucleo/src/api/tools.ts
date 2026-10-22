@@ -18,7 +18,9 @@
 //   job }` when it already ended (or is only verifying).
 // - `POST /api/tools/checks` `{ machine }`: Verificar agora. 200 with the body when the check ended
 //   within the wait, 202 with the current body otherwise (a `tools` change follows when it ends).
-// - `POST /api/tools/mcp/checks`: reserved for layer 3 (the same gate already covers it).
+// - `POST /api/tools/mcp/checks` `{ machine }`: Verificar conexões (`claude mcp list`, layer 3). Same
+//   answers as `checks`: 200 with the body when it ended within the wait, else 202 (a `tools` change
+//   follows). Its output never reaches the response: only each server's state.
 //
 // Every non-GET request under `/api/tools` goes through `toolsWriteAllowed` INSTEAD of the server's
 // usual gate: `Origin` exactly `http://<Host>`, Host `127.0.0.1:<port>` or `localhost:<port>`, the
@@ -115,6 +117,13 @@ export async function respondToolsWrite(req: IncomingMessage, res: ServerRespons
     return send(res, r.kind === 'done' ? 200 : 202, r.body);
   }
 
+  if (url.pathname === TOOLS_MCP_CHECKS_ROUTE) {
+    if (!tools.mcpCheckNow) return send(res, 404, NO_TOOLS);
+    const r = await tools.mcpCheckNow(machine);
+    if (r.kind === 'unknown-machine') return send(res, 404, { error: `máquina desconhecida: ${machine}` });
+    return send(res, r.kind === 'done' ? 200 : 202, r.body);
+  }
+
   const action = TOOLS_ACTION_ROUTE.exec(url.pathname);
   if (action && tools.act) {
     const [, toolId, actionId] = action as unknown as [string, string, string];
@@ -136,7 +145,7 @@ export async function respondToolsWrite(req: IncomingMessage, res: ServerRespons
         return send(res, 202, { job: r.job });
     }
   }
-  // Layer 3's `POST /api/tools/mcp/checks`, and the writes of a núcleo without the executor.
+  // The writes of a núcleo without the executor.
   send(res, 404, { error: 'não encontrado' });
 }
 
