@@ -13,8 +13,10 @@
 // `http://<Host>` with our Host, `Content-Type: application/json`, body up to `MAX_MESSAGE_BODY` (96 KiB and 64 bytes: room for
 // the `{"text":…}` envelope and the worst JSON escaping, 6 bytes per byte), and the decoded text up
 // to 16 KiB of UTF-8 (`MAX_TEXT_BYTES`, checked after parsing: `invalid_text`). Stricter than
-// the other writes: a request WITHOUT `Origin` (a loopback script) is refused too (`ui_only`), since
-// only text a person typed in the /ui may go; nothing batched, nothing generated.
+// the other writes: a request WITHOUT `Origin` is refused too (`ui_only`), since only text a person
+// typed in the /ui may go; nothing batched, nothing generated. `Origin` stops browsers, not local
+// processes: one that forges `Origin: http://<Host>` (even another macOS user's) still passes, as on
+// every /ui write. The defence for that is issue #302.
 //
 // The text is never logged, never in an error, never in the store: only its SHA-256 in the audit.
 
