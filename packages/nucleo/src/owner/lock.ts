@@ -3,8 +3,15 @@
 // item 4). Atomic write (temporary file and `rename`), readable
 // only by the owner (0600). The core writes it, once the port is already its own.
 //
-// The file keeps its Portuguese keys (`porta`, `versao`, `inicio`, `pai`): other installed cores
-// read it. `Lock` is the in-memory shape; `toFile` and `readLockFile` map the two.
+// The file has English keys (`port`, `version`, `startedAt`, `parent`, #274). Cores published before
+// #274 wrote and read Portuguese ones (`porta`, `versao`, `inicio`, `pai`), and during an app or mod
+// update one of them can still be up in the same folder. So, while the two generations coexist:
+//   - the core writes both sets of keys, so an older core still recognises the lock;
+//   - the core reads either set, English first, so it recognises a lock an older core wrote.
+// When the legacy keys go: once no published app and mod writes them. The first app (0.0.7) and mod
+// (0.0.36) that read English keys are the cutoff; the release after them (app 0.0.8, mod 0.0.37) drops
+// `LEGACY_KEYS` from `toFile` and `readLockFile`. Recorded in decision 0009, "Migração".
+// `Lock` is the in-memory shape; `toFile` and `readLockFile` map the two.
 
 import { randomBytes } from 'node:crypto';
 import { chmodSync, linkSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
@@ -23,17 +30,37 @@ export interface Lock {
   parent: number | null;
 }
 
-/** The lock as it is on disk. Its keys never change: other cores read the same file. */
+/** The lock as it is on disk. The `LEGACY_KEYS` are written only for cores older than #274. */
 interface LockFile {
   pid: number;
-  porta: number;
-  versao: string;
-  inicio: string;
+  port: number;
+  version: string;
+  startedAt: string;
   token: string;
-  pai: number | null;
+  parent: number | null;
+  /** @deprecated legacy key, see the header. */
+  porta?: number;
+  /** @deprecated legacy key, see the header. */
+  versao?: string;
+  /** @deprecated legacy key, see the header. */
+  inicio?: string;
+  /** @deprecated legacy key, see the header. */
+  pai?: number | null;
 }
 
-const toFile = (l: Lock): LockFile => ({ pid: l.pid, porta: l.port, versao: l.version, inicio: l.startedAt, token: l.token, pai: l.parent });
+const toFile = (l: Lock): LockFile => ({
+  pid: l.pid,
+  port: l.port,
+  version: l.version,
+  startedAt: l.startedAt,
+  token: l.token,
+  parent: l.parent,
+  // LEGACY_KEYS
+  porta: l.port,
+  versao: l.version,
+  inicio: l.startedAt,
+  pai: l.parent,
+});
 
 export const LOCK_FILE_NAME = 'nucleo.json';
 
@@ -79,10 +106,15 @@ function readLockFile(file: string): Lock | 'invalid' | null {
   }
   try {
     const t = JSON.parse(text) as Partial<LockFile>;
-    if (!isPositiveInt(t.pid) || !isPositiveInt(t.porta) || typeof t.versao !== 'string' || typeof t.inicio !== 'string' || typeof t.token !== 'string') {
+    // English keys first; LEGACY_KEYS fill in what an older core wrote.
+    const port = t.port ?? t.porta;
+    const version = t.version ?? t.versao;
+    const startedAt = t.startedAt ?? t.inicio;
+    const parent = t.parent ?? t.pai;
+    if (!isPositiveInt(t.pid) || !isPositiveInt(port) || typeof version !== 'string' || typeof startedAt !== 'string' || typeof t.token !== 'string') {
       return 'invalid';
     }
-    return { pid: t.pid!, port: t.porta!, version: t.versao, startedAt: t.inicio, token: t.token, parent: isPositiveInt(t.pai) ? t.pai! : null };
+    return { pid: t.pid!, port: port!, version, startedAt, token: t.token, parent: isPositiveInt(parent) ? parent! : null };
   } catch {
     return 'invalid';
   }
