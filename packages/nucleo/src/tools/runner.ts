@@ -30,6 +30,7 @@ export const PROBE_TIMEOUT_MS = 5_000;
 export const LATEST_TIMEOUT_MS = 20_000;
 export const FETCH_TIMEOUT_MS = 10_000;
 const MAX_OUTPUT_BYTES = 4 * 1024 * 1024;
+const MAX_FETCH_BYTES = 2 * 1024 * 1024;
 
 /** The environment of every tools process: the núcleo's, minus `AHRENA_CONSOLE_*`, with the login PATH. */
 export function toolsEnv(path: string | null, env: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
@@ -72,7 +73,23 @@ export const systemToolRunner: ToolRunner = (argv, options) =>
   });
 
 export const systemFetchText: FetchText = async (url, timeoutMs) => {
-  const r = await fetch(url, { signal: AbortSignal.timeout(timeoutMs), redirect: 'follow', headers: { accept: 'application/json, text/plain, */*' } });
+  const r = await fetch(url, { signal: AbortSignal.timeout(timeoutMs), redirect: 'error', headers: { accept: 'application/json, text/plain, */*' } });
   if (!r.ok) throw new Error(`http ${r.status}`);
-  return r.text();
+  const declared = Number(r.headers.get('content-length'));
+  if (declared > MAX_FETCH_BYTES) throw new Error('response too large');
+  const reader = r.body?.getReader();
+  if (!reader) return r.text();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > MAX_FETCH_BYTES) {
+      await reader.cancel().catch(() => undefined);
+      throw new Error('response too large');
+    }
+    chunks.push(value);
+  }
+  return Buffer.concat(chunks).toString('utf8');
 };
