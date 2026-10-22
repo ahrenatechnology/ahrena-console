@@ -54,6 +54,8 @@ fn run_for_path(mut command: Command) -> Option<String> {
             Ok(None) if Instant::now() < deadline => std::thread::sleep(Duration::from_millis(50)),
             _ => {
                 let _ = child.kill();
+                // Reap it, so the killed login shell does not stay a zombie until the app exits.
+                let _ = child.wait();
                 return None;
             }
         }
