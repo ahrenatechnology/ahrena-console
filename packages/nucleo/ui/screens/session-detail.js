@@ -10,6 +10,7 @@ import { loading, error, errorBand, empty } from '../states.js';
 import { openAction } from '../open-action.js';
 import { create as workflowTab } from './session-detail-workflow.js';
 import { create as decisionsTab } from './session-detail-decisions.js';
+import { createComposeBox } from './session-message.js';
 import { attentionOf, attentionPill, isBlocked, isIdle, reasonChip, reasonLabel, attentionDot, statusWithoutAttention } from '../attention.js';
 
 // ---------- Formatos ----------
@@ -458,9 +459,20 @@ const TOOL_STATE = {
   running: { rotulo: 'Rodando', icone: 'clock' },
 };
 
-function conversationTab(ctx, base) {
+function conversationTab(ctx, base, { head } = {}) {
   let target = null;
   let agent = null;
+  // #61: the compose box at the foot of the tab. It is made once and survives every re-draw of the
+  // list, so the text being typed and the message in flight stay.
+  let compose = null;
+  const composeBox = () =>
+    (compose ??= createComposeBox(ctx, ctx.params.id, {
+      head: () => head?.() ?? null,
+      // C53: a session with no live process offers the header's open action (issue 285) in the box too.
+      openControl: () => { const h = head?.(); return h?.open ? openAction({ id: ctx.params.id, open: h.open }, { size: 'full', className: 'sm-open', write: ctx.write }) : null; },
+      onDelivered: () => draw(),
+      onShowConversation: () => draw().then(() => list.lastElementChild?.scrollIntoView?.({ block: 'end' })),
+    }));
   const opened = new Set();
   const closed = new Set();
   const list = el('div', { class: 'card sd-messages' });
@@ -471,6 +483,9 @@ function conversationTab(ctx, base) {
     draw();
   });
   const bar = el('div', { class: 'sd-bar' }, selector, count, el('button', { type: 'button', class: 'btn outline', onClick: () => draw() }, icon('refresh'), 'Atualizar'));
+  // A re-draw replaces only this wrapper: the compose box is placed once per show and never moved, so a
+  // live change does not take the focus, the caret or an IME composition away from the person typing.
+  const content = el('div', { class: 'sd-conversation' });
 
   async function draw() {
     try {
@@ -479,10 +494,10 @@ function conversationTab(ctx, base) {
       selector.replaceChildren(...c.agents.map((a) => el('option', { value: a.id, selected: a.id === c.agent }, a.name)));
       count.replaceChildren(icon('conversation'), `${num(c.total)} mensage${c.total === 1 ? 'm' : 'ns'}`);
       list.replaceChildren(...(c.messages.length ? c.messages.map(message) : [el('p', { class: 'sd-none' }, 'Nenhuma mensagem deste agente ainda.')]));
-      target?.replaceChildren(bar, list);
+      content.replaceChildren(bar, list);
     } catch (e) {
       if (e.name === 'AbortError') return;
-      target?.replaceChildren(error({ title: 'Não deu para ler a conversa', text: e.message, retry: draw }));
+      content.replaceChildren(error({ title: 'Não deu para ler a conversa', text: e.message, retry: draw }));
     }
   }
 
@@ -540,12 +555,18 @@ function conversationTab(ctx, base) {
   }
 
   return {
-    show(node) {
+    async show(node) {
       target = node;
-      return draw();
+      await draw();
+      if (target === node) node.replaceChildren(content, composeBox().node);
+      // "Mandar mensagem" from a list opens here with `?focus=message`: the box takes the focus once.
+      if (new URLSearchParams(location.search).get('focus') === 'message') {
+        history.replaceState(null, '', `${location.pathname}${location.hash}`);
+        composeBox().focus();
+      }
     },
     hide: () => (target = null),
-    refresh: () => draw(),
+    refresh: () => (compose?.refresh(), draw()),
   };
 }
 

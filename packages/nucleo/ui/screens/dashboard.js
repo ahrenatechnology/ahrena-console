@@ -7,6 +7,7 @@
 
 import { header, el, icon } from '../dom.js';
 import { loading, error, errorBand, empty } from '../states.js';
+import { lastAvailability, loadAvailability, messageAction, useMessageStyle } from './session-message.js';
 import { attentionOf, attentionOfItem, attentionPill, attentionTone, attentionDot, isBlocked, isIdle, reasonChip, statusWithoutAttention } from '../attention.js';
 import { openAction } from '../open-action.js';
 
@@ -172,7 +173,7 @@ function numberCard(c) {
   );
 }
 
-function inbox(attention, agents, write) {
+function inbox(attention, agents, write, navigate = () => {}) {
   const total = blockedCount(attention);
   const title = el(
     'div',
@@ -182,22 +183,25 @@ function inbox(attention, agents, write) {
     el('a', { class: 'r', href: BLOCKED_SESSIONS_HREF }, 'travadas até você agir · quem espera há mais tempo primeiro', icon('chevron-right')),
   );
   if (!total) return el('section', { class: 'card inbox calm', 'aria-label': 'Precisam de você' }, title);
-  const mini = inboxCards(attention, agents).map((c) =>
-    el(
+  const mini = inboxCards(attention, agents).map((c) => {
+    // #61 (C53): with the availability known, the foot has "Mandar mensagem" (or "sem processo vivo")
+    // beside the open icon and "Abrir ›", and the age goes up beside the reason; unknown, it is the C1 foot.
+    const known = c.href ? lastAvailability(c.session) : undefined;
+    const action = known ? messageAction(c.session, known, navigate, { variant: 'link' }) : null;
+    const withAction = known !== undefined && known !== null;
+    const lead = withAction
+      ? (action ?? el('span', {}, ''))
+      : c.machine ? el('span', { class: 'trunc', title: `Sessão da ${c.foot}` }, icon('server'), ` ${c.foot} · ${c.age}`) : el('span', { class: 'trunc' }, [c.foot, c.age].filter(Boolean).join(' · '));
+    return el(
       'div',
-      { class: 'card mini dash-mini', 'data-session': c.session, 'data-machine': c.machine?.id },
-      el('div', { class: 'l1' }, reasonChip(c.attention, { withError: true })),
+      { class: `card mini dash-mini${withAction ? ' dash-mini-sm' : ''}`, 'data-session': c.session, 'data-machine': c.machine?.id },
+      el('div', { class: 'l1' }, reasonChip(c.attention, { withError: true }), withAction ? el('span', { class: 'age' }, c.age) : null),
       el('div', { class: 'n trunc' }, c.name),
       el('div', { class: 'x trunc' }, c.text),
       // C1 (issue 245): the model and the age in the foot, "Opus 5.5 · 2 min", beside "Abrir ›".
-      el(
-        'div',
-        { class: 'foot' },
-        c.machine ? el('span', { class: 'trunc', title: `Sessão da ${c.foot}` }, icon('server'), ` ${c.foot} · ${c.age}`) : el('span', { class: 'trunc' }, [c.foot, c.age].filter(Boolean).join(' · ')),
-        c.href ? miniActions(c, write) : null,
-      ),
-    ),
-  );
+      el('div', { class: 'foot' }, lead, c.href ? miniActions(c, write) : null),
+    );
+  });
   return el('section', { class: 'card inbox', 'aria-label': 'Precisam de você' }, title, el('div', { class: 'grid4' }, ...mini));
 }
 
@@ -320,6 +324,7 @@ function useStyle() {
 
 export async function mount(area, ctx) {
   useStyle();
+  useMessageStyle();
   const refresh = el('button', { type: 'button', class: 'btn', onClick: () => draw() }, icon('refresh'), 'Atualizar');
   const head = header({ icon: 'dashboard', title: 'Dashboard', sub: 'O agora das suas sessões', actions: [refresh] });
   area.replaceChildren(head, loading({ label: 'Lendo as sessões' }));
@@ -336,7 +341,7 @@ export async function mount(area, ctx) {
 
   function paint({ dashboard, atencao: attention }) {
     const parts = [head, el('div', { class: 'stats' }, ...cards(dashboard.numbers).map(numberCard))];
-    if (attention.ok) parts.push(inbox(attention.valor, dashboard.agents, ctx.write), idleRow(attention.valor));
+    if (attention.ok) parts.push(inbox(attention.valor, dashboard.agents, ctx.write, ctx.navigate), idleRow(attention.valor));
     else parts.push(errorBand({ title: 'Não deu para ler quem precisa de você.', text: attention.erro.message, action: { label: 'Tentar de novo', onClick: () => draw() } }));
     parts.push(el('div', { class: 'two' }, activeAgents(dashboard.agents, expanded, toggleOne), recentActivity(dashboard.activity)));
     area.replaceChildren(...parts.filter(Boolean));
@@ -358,6 +363,13 @@ export async function mount(area, ctx) {
     ctx.counter('dashboard', attention.ok ? blockedCount(attention.valor) : 0);
     last = { dashboard: d.value, atencao: attention };
     paint(last);
+    // #61: the availability of the local cards of the inbox (at most five), then one more paint.
+    if (attention.ok) {
+      const ids = inboxCards(attention.valor, d.value.agents).filter((c) => c.href).map((c) => c.session);
+      let changed = false;
+      await loadAvailability(ctx.read, ids, () => (changed = true)).catch(() => {});
+      if (changed && mine === request && !ctx.signal.aborted && last) paint(last);
+    }
   }
 
   // Uma rajada de mudanças vira uma releitura só.

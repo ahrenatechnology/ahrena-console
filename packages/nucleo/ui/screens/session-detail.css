@@ -47,6 +47,7 @@
 .sd-tab:hover { color: var(--text); }
 .sd-tab.on { color: var(--text); box-shadow: inset 0 -2px 0 var(--accent); }
 .sd-body { display: flex; flex-direction: column; gap: 14px; }
+.sd-conversation { display: contents; }
 .sd-none { margin: 0; padding: 14px 0; color: var(--muted); font-size: 12.5px; }
 
 /* ---------- Agentes (C4) ---------- */

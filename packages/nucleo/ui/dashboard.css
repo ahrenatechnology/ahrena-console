@@ -57,6 +57,15 @@
 .dash-open-link::after { content: ""; position: absolute; inset: 0; }
 .dash-open-link:focus-visible { outline: none; }
 .dash-mini:has(.dash-open-link:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* #61: with "Mandar mensagem" in the foot, the age goes up beside the reason (C53). A narrow card (five in
+   a row at 1100 px) keeps the reason and the actions whole: the age leaves, and "Abrir ›" keeps only its
+   stretched link (the whole card still opens the Detail). */
+.dash-mini-sm { container-type: inline-size; }
+.dash-mini-sm .l1 .age { flex: none; white-space: nowrap; }
+@container (max-width: 190px) {
+  .dash-mini-sm .l1 .age { display: none; }
+  .dash-mini-sm .dash-open-link { font-size: 0; }
+}
 
 /* ---------- ociosas (issue 245): a neutral row apart, no fill, the reason in a light chip ---------- */
 .dash-idle { padding: 9px 14px; display: flex; align-items: center; gap: 14px; font-size: 12px; color: var(--muted); min-width: 0; }

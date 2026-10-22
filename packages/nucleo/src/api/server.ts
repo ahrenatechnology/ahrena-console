@@ -35,6 +35,7 @@
 // | `GET /api/machines`           | The machines: this one and the remote ones, with state and alerts (api/telemetry.ts, #175) |
 // | `GET /api/telemetry`          | One machine's telemetry: current reading, series and alerts (`?machine=`, `?hours=1|12`; #175) |
 // | `POST /api/machines/<id>/reconnect` and `DELETE` | Reconnect a remote machine with the command of machines.json, and Cancel (api/telemetry.ts, #244) |
+// | `GET /api/sessions/<id>/messaging`, `POST /api/sessions/<id>/messages` and `GET /api/sessions/<id>/messages/<messageId>` | Send a message a person typed in the /ui to the session's live process, through Claude Code's cross-session inbox, and read its state (api/messaging.ts, src/messaging, #61) |
 // | `GET /api/tools`              | The Tools screen: CLIs, runtimes and containers, installed and latest versions, the catalog's actions, the jobs (`?machine=`; api/tools.ts, #280) |
 // | `POST /api/tools/<toolId>/actions/<actionId>`, `DELETE /api/tools/jobs/<jobId>` and `POST /api/tools/checks` | Run a catalog action as a job, cancel it, Verificar agora (api/tools.ts, src/tools/executor.ts, #280) |
 // | `GET /api/connections`        | The console's own GitHub connection: `{ github: <status> }` (api/connections-route.ts, #241) |
@@ -65,7 +66,8 @@
 // (api/session-open-route.ts), the Agent Config screen's `POST /api/agent-config/skill` (api/agent-config.ts), the framework
 // install's `POST /api/framework-install/<owner>/<repo>` (api/framework-install.ts, #184), and the machine
 // screen's Reconnect and Cancel, `POST` and `DELETE /api/machines/<id>/reconnect` (api/telemetry.ts, #244,
-// decision 0012).
+// decision 0012), and the Detail's Send, `POST /api/sessions/<id>/messages` (api/messaging.ts, #61), which
+// is stricter: without `Origin` it is refused too, since only text a person typed in the /ui may go.
 // The Tools writes (#280, decision 0014) are stricter: every non-GET request under `/api/tools` skips
 // the gate above and passes only `toolsWriteAllowed` (api/tools.ts): `Origin` exactly `http://<Host>`,
 // the exact raw path, and a request with NO Origin gets 403 too (unless layer 4's hook accepts it).
@@ -112,6 +114,7 @@ import { DEV_CONSOLE_ROUTE, respondDevConsole, type DevConsole } from './dev-con
 import { isTelemetryRoute, reconnectFromSameOrigin, RECONNECT_ROUTE, respondReconnect, respondTelemetry } from './telemetry.ts';
 import type { ReconnectControl } from '../telemetry/reconnect.ts';
 import type { TelemetryService } from '../telemetry/service.ts';
+import { MESSAGING_ROUTE, messagesWriteFromSameOrigin, type MessagingRoute } from './messaging.ts';
 import { isToolsRoute, isToolsWrite, respondTools, respondToolsWrite, toolsWriteAllowed } from './tools.ts';
 import type { ToolsControl } from '../tools/executor.ts';
 import { fromAnotherSite, fromOwnUi } from './same-origin.ts';
@@ -193,6 +196,8 @@ export interface ApiOptions {
   telemetry?: TelemetryService | null;
   /** The reconnect of the remote machines (#244); without it, `POST /api/machines/<id>/reconnect` gives 404 or 409. */
   reconnect?: ReconnectControl | null;
+  /** Sending a message to a live session (api/messaging.ts, #61); without it, those routes give 404. */
+  messaging?: MessagingRoute;
   /** The Tools screen (#280, decision 0014): the executor (or only the service, read-only); without it, `/api/tools` gives 404. */
   tools?: ToolsControl | null;
   /** The console's own GitHub connection (#241); turns on `/api/connections` and its writes. */
@@ -430,7 +435,7 @@ export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
       if (!opts.connection) return send(res, 404, { error: 'not-found' });
       return respondConnections(req, res, url.pathname, opts.connection);
     }
-    if (!allowedLocalRequest(req, port) && !sameOriginRead(req, port) && !sameOriginOpen(req, port) && !sameOriginSessionOpen(req, port) && !mesmaOrigemMovendo(req, port) && !sameOriginDecision(req, port) && !agentConfigWriteFromSameOrigin(req, port) && !frameworkInstallWriteFromSameOrigin(req, port) && !reconnectFromSameOrigin(req, port)) return send(res, 403, { error: 'origem não permitida' });
+    if (!allowedLocalRequest(req, port) && !sameOriginRead(req, port) && !sameOriginOpen(req, port) && !sameOriginSessionOpen(req, port) && !mesmaOrigemMovendo(req, port) && !sameOriginDecision(req, port) && !agentConfigWriteFromSameOrigin(req, port) && !frameworkInstallWriteFromSameOrigin(req, port) && !reconnectFromSameOrigin(req, port) && !messagesWriteFromSameOrigin(req, port)) return send(res, 403, { error: 'origem não permitida' });
     // The Project list spends GitHub quota and the connection status is the /ui's: another site's page
     // never gets either, connected or not (#241 review 2).
     if ((url.pathname === PROJECT_OPTIONS_ROUTE || url.pathname === CONNECTIONS_ROUTE) && fromAnotherSite(req)) return send(res, 403, { error: 'forbidden' });
@@ -453,6 +458,7 @@ export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
     if (opts.frameworkInstall && url.pathname.startsWith(`${FRAMEWORK_INSTALL_ROUTE}/`)) return opts.frameworkInstall(req, res, url);
     const reconnectMatch = RECONNECT_ROUTE.exec(url.pathname);
     if (reconnectMatch) return respondReconnect(req, res, reconnectMatch[1]!, opts.reconnect, opts.telemetry);
+    if (opts.messaging && MESSAGING_ROUTE.test(url.pathname)) return opts.messaging(req, res, url);
     if (req.method !== 'GET') return send(res, 405, { error: 'use GET' });
     if (isUiPath(url.pathname)) return respondUi(res, url.pathname);
     const desktopMatch = OPEN_IN_DESKTOP.exec(url.pathname);

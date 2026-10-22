@@ -47,17 +47,20 @@
  * O layout é fixo e as colunas dividem a largura em porcentagem, então nada empurra a tabela para
  * fora: o título quebra em até duas linhas, o motivo desce para baixo do status, o tempo da
  * duração desce para baixo do "rodando" e o diretório corta no começo, com o caminho inteiro no
- * title. Abaixo de 900 px o Diretório sai.
+ * title. #61 (C53): the Mensagem column takes the room of the Diretório up to 1240 px of window, where
+ * its button keeps only the icon (beside the open icon of issue 285 the label no longer fits 1100 px); below
+ * 900 px it leaves too, and the Detail's box stays the way to send.
  */
 .table { table-layout: fixed; }
-.table .c-session { width: 22%; }
-.table .c-status { width: 18%; }
-.table .c-activity { width: 11%; }
-.table .c-duration { width: 11%; }
-.table .c-agents { width: 9%; }
-.table .c-cost { width: 11%; }
-.table .c-dir { width: 13%; }
-.table .c-open { width: 5%; }
+.table .c-session { width: 19%; }
+.table .c-status { width: 15%; }
+.table .c-activity { width: 10%; }
+.table .c-duration { width: 9%; }
+.table .c-agents { width: 8%; }
+.table .c-cost { width: 9%; }
+.table .c-dir { width: 11%; }
+.table .c-message { width: 15%; }
+.table .c-open { width: 4%; }
 .table .nm, .table .st, .table .dur, .table th { white-space: normal; }
 .table th { overflow: hidden; text-overflow: ellipsis; letter-spacing: .05em; }
 .table .st { line-height: 1.9; }
@@ -66,8 +69,20 @@
 .table .dir { direction: rtl; text-align: left; font-family: var(--font-mono); font-size: 11px; color: var(--muted); }
 /* The open icon (issue 285): its state opens below it, over the row, so the cell does not clip it. */
 .table .sessions-open { padding-left: 0; text-align: right; overflow: visible; }
-@media (max-width: 900px) {
+.table .msg { padding-left: 4px; }
+@media (max-width: 1240px) {
   .table .c-dir, .table .dir { display: none; }
+  .table .c-session { width: 22%; }
+  .table .c-status { width: 17%; }
+  .table .c-activity { width: 11%; }
+  .table .c-duration { width: 11%; }
+  .table .c-agents { width: 9%; }
+  .table .c-cost { width: 11%; }
+  .table .c-message { width: 14%; }
+  .table .c-open { width: 5%; }
+}
+@media (max-width: 900px) {
+  .table .c-message, .table .msg { display: none; }
   .table th, .table td { padding-left: 6px; padding-right: 6px; }
   .table th { letter-spacing: .04em; }
   .table .c-session { width: 22%; }
