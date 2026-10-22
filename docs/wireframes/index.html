@@ -817,6 +817,16 @@ body.captura[data-width="1100"] .width-col[data-w="1440"], body.captura[data-wid
 .mc-reasons { display: flex; flex-direction: column; gap: 10px; }
 .mc-reasons .olhinho { margin-top: 4px; }
 .mc-from { font-size: 11px; color: var(--muted); margin-top: 4px; }
+/* ---------- sessions of every machine (C45 to C49, issue #243) ---------- */
+.machine-tag { display: inline-flex; align-items: center; gap: 4px; flex: none; color: var(--muted); font-family: var(--font-sans); font-size: 11px; font-weight: 400; white-space: nowrap; }
+.machine-tag svg { width: 12px; height: 12px; }
+.machine-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.filter-label { font-size: 11px; color: var(--muted); white-space: nowrap; margin-right: -4px; }
+.machine-filter .off { color: var(--status-abandoned-text); opacity: .75; }
+.with-tag { display: flex; gap: 8px; align-items: center; min-width: 0; }
+.with-tag > .trunc { min-width: 0; }
+.faixa.machine-offline { border-color: var(--border); }
+.status-group { display: inline-flex; gap: 8px; align-items: center; }
 </style>
 
 <header class="topo">
@@ -889,6 +899,19 @@ const byId = id => S.find(s => s.id === id)
 // the núcleo orders the oldest wait first. The idle ones (your turn, interrupted, at the prompt) stay apart, neutral.
 const PRECISAM = ['d6c0e4a9', '8e17b6f2', '4d2a9c35', '5a61c2bf', 'b91d04aa'].map(byId)
 const OCIOSAS = ['2c8e6f10', 'e04b7d93', 'f5e2a6d0'].map(byId)
+// Issue #243 (C45 to C49): the synthetic sessions that run on the Workstation. A screen drawn without
+// the `machines` option ({ ws: 'ok' | 'off' }) stays as it is in C1 to C15.
+const REMOTE_IDS = new Set(['b91d04aa', '5a61c2bf', '91aa3e07'])
+const isRemote = s => s.remote || REMOTE_IDS.has(s.id)
+const machineTag = () => `<span class="machine-tag">${ic('server')}Workstation</span>`
+// Where a row or card is too narrow for the word (Kanban card, Dashboard inbox, recent activity), only the icon, with the name in the tooltip.
+const machineIcon = () => `<span class="machine-tag" title="Workstation">${ic('server')}</span>`
+const tagFor = (machines, s) => machines && isRemote(s) ? machineTag() : ''
+const machineFilter = (ws = 'ok') => `<span class="filter-label">Máquina</span><div class="seg machine-filter"><span class="on">Todas</span><span>${ic('monitor')}Esta máquina</span>${ws === 'ok' ? `<span>${ic('server')}Workstation</span>` : `<span class="off">${ic('wifi-off')}Workstation</span>`}</div>`
+// Screens without a filter bar get the machine filter on its own row under the header, so the header keeps its width at 1100 px.
+const machineRow = ws => `<div class="machine-row">${machineFilter(ws)}</div>`
+// The neutral band of the Reconectar screens (C50), not the red one: in the lists a remote that is down is not this screen's error.
+const offlineNotice = () => `<div class="faixa mc-neutral machine-offline"><span class="ic">${ic('wifi-off')}</span><div><b>Workstation sem conexão desde 22:41 (há 14 min).</b> As sessões de lá voltam quando ela responder.</div><span class="btn contorno">Ver a Workstation ${ic('chevron-right')}</span></div>`
 
 // =====================================================================
 // Peças
@@ -926,11 +949,12 @@ const cc = (ativo, miolo, q, w) => `<div class="cc${w ? ' w' + w : ''}">${lado(a
 // The screens #245 changes are shown at 1100 px, the width of the app window.
 const cc1100 = (ativo, miolo, q) => `<div class="width-col"><div class="rotulo">1100 px · a janela do app</div>${cc(ativo, miolo, q ?? 5, 1100)}</div>`
 
-function agentCard(s, aberto) {
+function agentCard(s, aberto, machines) {
   const sub = s.sub ? `<div class="subs">${ic('git-fork')} ${s.sub} subagente${s.sub > 1 ? 's' : ''}</div>` : ''
+  const meta = `${s.pj} · ${s.sub} subagentes · ${s.turnos} turnos`
   return `<div class="agente"><span class="exp">${ic(s.sub ? 'chevron-right' : 'circle-dot')}</span><div>
     <div class="cartao ac st-${s.st}">
-      <div class="l1"><span class="av">${ic('bot')}</span><div class="trunc"><div class="tt trunc">Agente principal · ${s.nome}</div><div class="meta">${s.pj} · ${s.sub} subagentes · ${s.turnos} turnos</div></div>${badge(s.st)}</div>
+      <div class="l1"><span class="av">${ic('bot')}</span><div class="trunc"><div class="tt trunc">Agente principal · ${s.nome}</div>${machines ? `<div class="meta with-tag"><span class="trunc">${meta}</span>${tagFor(machines, s)}</div>` : `<div class="meta">${meta}</div>`}</div>${badge(s.st)}</div>
       <blockquote>${(s.msgs.length ? s.msgs : ['(sem mensagens)']).slice(-2).map(m => `<span class="trunc">${m}</span>`).join('')}</blockquote>
       <div class="rodape"><span>${ic('cpu')}${s.mo}</span><span>${ic('coins')}~US$ ${s.custo}</span><span>${ic('clock')}${s.idade}</span><span class="trunc">${s.tarefa ?? s.pede ?? s.erro ?? ''}</span><span class="id">${s.id}</span></div>
     </div>${sub}</div></div>`
@@ -939,22 +963,23 @@ function agentCard(s, aberto) {
 // =====================================================================
 // CONSOLE (artefato e janela do app)
 // =====================================================================
-function telaDashboard(q = 5) {
+function telaDashboard(q = 5, machines) {
   const ativos = [byId('7f3a2c1e'), byId('c3f09b52'), byId('b91d04aa')]
   const ativ = [
-    ['blocked', 'Pede permissão: Bash npm run migrate', 'motor-de-regras', 'agora'],
+    ['blocked', 'Pede permissão: Bash npm run migrate', 'motor-de-regras', 'agora', true],
     ['active', 'Subagente test-runner iniciado', 'motor-de-regras', 'agora'],
     ['active', 'Turno concluído em 38,2 s', 'vitrine-demo', '12 s'],
     ['idle', 'Sua vez: "Rodo os testes?"', 'fila-de-tarefas', '1 min'],
-    ['error', 'Erro de API 529 · overloaded_error', 'painel-de-metricas', '3 min'],
+    ['error', 'Erro de API 529 · overloaded_error', 'painel-de-metricas', '3 min', true],
     ['blocked', 'Pergunta: Redis ou cache em memória?', 'catalogo-exemplo', '4 min'],
     ['idle', 'Interrompida (Esc)', 'app-receitas', '6 min'],
     ['completed', 'Sessão encerrada', 'blog-estatico', '1 h'],
   ]
-  return `${cab('layout-dashboard', 'Dashboard', 'O agora das suas sessões', `<div class="seg"><span class="on">${ic('activity')}Monitor</span><span>${ic('gauge')}Saúde</span></div>${atualizar}`)}
+  const both = (one, two) => machines ? two : one
+  return `${cab('layout-dashboard', 'Dashboard', both('O agora das suas sessões', 'O agora das suas sessões, nas duas máquinas'), `<div class="seg"><span class="on">${ic('activity')}Monitor</span><span>${ic('gauge')}Saúde</span></div>${atualizar}`)}${machines ? machineRow(machines.ws) : ''}
   <div class="stats" style="grid-template-columns:repeat(3,minmax(0,1fr))">
-    ${stat('Sessões', '15<small>3 ativas</small>', '5 precisam de você · 3 ociosas', 'folder-open', 'var(--accent-text)')}
-    ${stat('Agentes ativos', '4', 'em 4 sessões', 'bot', 'var(--status-active-text)')}
+    ${stat('Sessões', '15<small>3 ativas</small>', both('5 precisam de você · 3 ociosas', '3 na Workstation · 5 precisam de você'), 'folder-open', 'var(--accent-text)')}
+    ${stat('Agentes ativos', '4', both('em 4 sessões', 'em 4 sessões · 1 na Workstation'), 'bot', 'var(--status-active-text)')}
     ${stat('Subagentes ativos', '7', 'em 3 sessões', 'git-fork', 'var(--accent-text)')}
     ${stat('Eventos hoje', '3,2 mil', '+412 na última hora', 'zap', 'var(--status-waiting-text)')}
     ${stat('Eventos no total', '48,1 mil', 'desde a importação', 'activity', 'var(--muted)')}
@@ -963,25 +988,25 @@ function telaDashboard(q = 5) {
   <div class="cartao inbox">
     <div class="ttl">${ic('bell')}<span class="c-blocked">${q} precisam de você</span><span class="r">travadas até você agir · quem espera há mais tempo primeiro ${ic('chevron-right')}</span></div>
     <div class="grade4 dash-inbox-grid">${PRECISAM.slice(0, q).map(s => `<div class="cartao mini"><div style="display:flex;min-width:0">${sessionChip(s)}</div>
-      <div class="n trunc">${s.pj}</div><div class="x trunc">${s.pede ?? s.erro}</div><div class="pe"><span>${s.mo} · ${s.idade}</span><b>Abrir ›</b></div></div>`).join('')}
+      ${machines ? `<div class="n with-tag"><span class="trunc">${s.pj}</span>${tagFor(machines, s) ? machineIcon() : ''}</div>` : `<div class="n trunc">${s.pj}</div>`}<div class="x trunc">${s.pede ?? s.erro}</div><div class="pe"><span>${s.mo} · ${s.idade}</span><b>Abrir ›</b></div></div>`).join('')}
     </div>
   </div>
   <div class="cartao dash-idle"><span class="dash-idle-t"><span class="ponto d-idle"></span><b>${OCIOSAS.length} ociosas</b>· sem pressa</span>
     ${OCIOSAS.map(s => `<span class="dash-idle-i">${motChip(s.mot)}<span class="mono trunc">${s.pj}</span></span>`).join('')}
     <span class="r">Ver em Sessões ${ic('chevron-right')}</span></div>
   <div class="duas">
-    <div style="display:flex;flex-direction:column;gap:10px"><div class="ttl">Agentes ativos<span class="r">Ver o quadro ${ic('arrow-right')}</span></div>${ativos.map(s => agentCard(s)).join('')}</div>
+    <div style="display:flex;flex-direction:column;gap:10px"><div class="ttl">Agentes ativos<span class="r">Ver o quadro ${ic('arrow-right')}</span></div>${ativos.map(s => agentCard(s, false, machines)).join('')}</div>
     <div style="display:flex;flex-direction:column;gap:10px"><div class="ttl">Atividade recente<span class="r">Ver tudo ${ic('arrow-right')}</span></div>
-      <div class="cartao linhas">${ativ.map(([st, f, pj, t]) => `<div class="linha">${badge(st)}<span class="trunc">${f}</span><span class="o mono">${pj}</span><span class="t">${t}</span></div>`).join('')}</div></div>
+      <div class="cartao linhas">${ativ.map(([st, f, pj, t, remote]) => `<div class="linha">${badge(st)}<span class="trunc">${f}</span>${machines ? `<span class="o mono trunc" style="flex:0 1 auto;min-width:48px">${pj}</span>${remote ? machineIcon() : ''}` : `<span class="o mono">${pj}</span>`}<span class="t">${t}</span></div>`).join('')}</div></div>
   </div>`
 }
 
-function telaMural() {
+function telaMural(machines) {
   const vivos = ['b91d04aa', '4d2a9c35', '8e17b6f2', '5a61c2bf', '7f3a2c1e', 'c3f09b52', 'e04b7d93', '2c8e6f10', 'f5e2a6d0'].map(byId)
-  return `${cab('layout-grid', 'Mural ao vivo', 'Um card por sessão aberta nesta máquina', `<div class="seg"><span class="on">Todas</span><span>Precisam de você · 5</span><span>Ociosas · 3</span><span>Ativas</span></div>${atualizar}`)}
+  return `${cab('layout-grid', 'Mural ao vivo', machines ? 'Um card por sessão aberta, nas duas máquinas' : 'Um card por sessão aberta nesta máquina', `<div class="seg"><span class="on">Todas</span><span>Precisam de você · 5</span><span>Ociosas · 3</span><span>Ativas</span></div>${atualizar}`)}${machines ? machineRow(machines.ws) : ''}
   <div class="mural">${vivos.map(s => `<div class="cartao mc st-${s.st}">
     <div class="l1"><span class="tt trunc">${s.nome}</span>${badge(s.st)}</div>
-    <div class="pj trunc">${s.pj} · ${s.br}</div>
+    ${machines ? `<div class="pj with-tag"><span class="trunc">${s.pj} · ${s.br}</span>${tagFor(machines, s)}</div>` : `<div class="pj trunc">${s.pj} · ${s.br}</div>`}
     ${s.mot ? `<div class="mural-reason">${motChip(s.mot)}<span class="c-muted trunc">${s.pede}</span></div>` : s.erro ? `<div class="c-error" style="font-size:11.5px">${ic('x-circle')} ${s.erro}</div>` : (s.st === 'completed' ? `<div class="c-completed trunc" style="font-size:11.5px">${ic('check-circle-2')} Terminou sem erro</div>` : `<div class="c-muted trunc" style="font-size:11.5px">${ic('loader-2')} ${s.tarefa}</div>`)}
     <div class="gr"><div>Modelo<b>${s.mo.split(' ')[0]}</b></div><div>Esforço<b>${s.esf}</b></div><div>Agentes<b>${s.ag}</b></div><div>Custo<b>~${s.custo}</b></div></div>
     <div class="linhaplano"><span>Plano ${s.plano[0]}/${s.plano[1]}</span><span>contexto ${s.ctx}%</span></div>
@@ -989,23 +1014,30 @@ function telaMural() {
   </div>`).join('')}</div>`
 }
 
-function telaSessoes() {
-  const rows = ['7f3a2c1e', 'b91d04aa', '4d2a9c35', '8e17b6f2', 'd6c0e4a9', '5a61c2bf', 'e04b7d93', '2c8e6f10', 'f5e2a6d0', '0d7e81c4'].map(byId)
+function telaSessoes(machines) {
+  const off = machines?.ws === 'off'
+  // Offline, the Workstation's sessions leave the list and the next local ones fill the page.
+  const rows = (off ? ['7f3a2c1e', '4d2a9c35', '8e17b6f2', 'd6c0e4a9', 'e04b7d93', '2c8e6f10', 'f5e2a6d0', 'c3f09b52', '0d7e81c4', '6b2f5a98']
+    : ['7f3a2c1e', 'b91d04aa', '4d2a9c35', '8e17b6f2', 'd6c0e4a9', '5a61c2bf', 'e04b7d93', '2c8e6f10', 'f5e2a6d0', '0d7e81c4']).map(byId)
+  const shown = off ? S.filter(s => !isRemote(s)) : S
+  const count = sts => shown.filter(s => sts.includes(s.st)).length
   const pill = (r, n, on) => `<span${on ? ' class="on"' : ''}>${r}${n != null ? ` <b>${n}</b>` : ''}</span>`
-  return `${cab('folder-open', 'Sessões', '15 sessões registradas', atualizar)}
+  const sub = !machines ? '15 sessões registradas' : off ? `${shown.length} sessões registradas nesta máquina` : '15 sessões registradas · 3 na Workstation'
+  return `${cab('folder-open', 'Sessões', sub, atualizar)}${off ? `
+  ${offlineNotice()}` : ''}
   <div class="cartao filtros sessions-filters"><span class="campo" style="flex:1;min-width:200px">${ic('search')}Buscar sessões…</span><span class="campo" style="width:180px">Todos os projetos<span style="margin-left:auto">${ic('chevron-down')}</span></span>
     <span class="campo" style="width:170px">Atividade: recente<span style="margin-left:auto">${ic('chevron-down')}</span></span><span class="campo">${ic('arrow-up-down')}</span>
-    <div class="seg">${pill('Todas', 15, true)}${pill('Ativas', 3)}${pill('Precisam de você', 5)}${pill('Ociosas', 3)}${pill('Concluídas', 3)}${pill('Erro', 1)}${pill('Abandonadas', 1)}</div></div>
+    ${machines ? `<div class="machine-row" style="flex-basis:100%">${machineFilter(machines.ws)}<span class="status-group"><span class="filter-label" style="margin-left:6px">Status</span>` : ''}<div class="seg">${pill('Todas', shown.length, true)}${pill('Ativas', count(['active']))}${pill('Precisam de você', count(['blocked', 'error']))}${pill('Ociosas', count(['idle']))}${pill('Concluídas', count(['completed']))}${pill('Erro', count(['error']))}${pill('Abandonadas', count(['abandoned']))}</div>${machines ? '</span></div>' : ''}</div>
   <div class="cartao"><table class="tabela sessions-table"><thead><tr><th>Sessão</th><th>Status</th><th>Atividade</th><th>Duração</th><th>Custo</th><th></th></tr></thead><tbody>
-  ${rows.map(s => `<tr><td class="nm"><b class="trunc" style="display:block;max-width:190px">${s.nome}</b><small class="trunc" style="display:block;max-width:190px">${s.id} · /simulacao/${s.pj}</small></td><td>${badge(s.st, s.mot)}</td><td class="c-muted">${s.idade === 'agora' ? 'agora' : 'há ' + s.idade}</td>
+  ${rows.map(s => `<tr><td class="nm"><b class="trunc" style="display:block;max-width:190px">${s.nome}</b>${tagFor(machines, s) ? `<small class="with-tag" style="max-width:190px"><span class="trunc">${s.id} · /simulacao/${s.pj}</span>${machineTag()}</small>` : `<small class="trunc" style="display:block;max-width:190px">${s.id} · /simulacao/${s.pj}</small>`}</td><td>${badge(s.st, s.mot)}</td><td class="c-muted">${s.idade === 'agora' ? 'agora' : 'há ' + s.idade}</td>
     <td class="mono">${['active', 'blocked', 'idle'].includes(s.st) ? '<span class="c-active">rodando</span> · ' : ''}${s.dur}</td><td class="mono">~US$ ${s.custo}</td><td class="c-muted">${ic('chevron-right')}</td></tr>`).join('')}
   </tbody></table></div>
-  <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--muted)"><span>1–10 de 15</span><span style="display:flex;gap:6px"><span class="btn contorno">Anterior</span><span class="btn contorno">Próxima</span></span></div>`
+  <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--muted)"><span>1–${rows.length} de ${shown.length}</span><span style="display:flex;gap:6px"><span class="btn contorno">Anterior</span><span class="btn contorno">Próxima</span></span></div>`
 }
 
-const detCab = s => `<div class="det-cab"><div class="l1"><span class="c-muted" style="font-size:18px">${ic('arrow-left')}</span><h4>${s.nome}</h4>${badge(s.st, s.mot)}<span style="margin-left:auto" class="c-muted">${ic('refresh-cw')}</span></div>
-  <div class="chips"><span class="chip">${s.id}-4e1 ${ic('copy')}</span><span class="chip">${ic('cpu')}${s.mo}</span><span class="chip">${ic('clock')}hoje, 22:41 (${s.dur})</span><span class="chip custo">~US$ ${s.custo}</span><span class="chip">${ic('git-branch')}${s.br}</span></div>
-  <div class="cwd">${ic('folder')}/simulacao/${s.pj} ${ic('copy')}</div></div>`
+const detCab = (s, machines) => `<div class="det-cab"><div class="l1"><span class="c-muted" style="font-size:18px">${ic('arrow-left')}</span><h4>${s.nome}</h4>${badge(s.st, s.mot)}<span style="margin-left:auto" class="c-muted">${ic('refresh-cw')}</span></div>
+  <div class="chips"><span class="chip">${s.id}-4e1 ${ic('copy')}</span><span class="chip">${ic('cpu')}${s.mo}</span><span class="chip">${ic('clock')}hoje, 22:41 (${s.dur})</span><span class="chip custo">~US$ ${s.custo}</span><span class="chip">${ic('git-branch')}${s.br}</span>${tagFor(machines, s) ? `<span class="chip">${ic('server')}Workstation</span>` : ''}</div>
+  <div class="cwd">${ic('folder')}/simulacao/${s.pj} ${ic('copy')}</div>${tagFor(machines, s) ? `<div class="cwd" style="font-family:var(--font-sans)">${ic('cable')}Lida do núcleo da Workstation, pelo túnel · há 6 s</div>` : ''}</div>`
 const abas = (on, n = 4, ev = '186/1.204') => `<div class="abas"><span class="${on === 0 ? 'on' : ''}">${ic('bot')}Agentes (${n})</span><span class="${on === 1 ? 'on' : ''}">${ic('message-square')}Conversa</span><span class="${on === 2 ? 'on' : ''}">${ic('list')}Linha do tempo (${ev})</span><span class="${on === 3 ? 'on' : ''}">${ic('workflow')}Workflow</span><span class="${on === 4 ? 'on' : ''}">${ic('git-commit-horizontal')}Decisões (4)</span></div>`
 
 function telaDetAgentes() {
@@ -1045,10 +1077,11 @@ function anel(pct, tam) {
     <text x="50%" y="54%" text-anchor="middle" style="font-size:${tam / 5}px;fill:var(--text)">${pct}%</text></svg>`
 }
 
-function telaConversa() {
+function telaConversa(machines) {
   const s = byId('b91d04aa')
-  return `${detCab(s)}
-  <div class="faixa">${'<span class="ic">' + ic('shield-alert') + '</span>'}<div><b>Precisa de você · Pede permissão.</b> O Claude quer rodar <code>npm run migrate</code> e aguarda sua aprovação na conversa. Há 2 min.</div><span class="btn contorno">Abrir no Claude Desktop ${ic('external-link')}</span></div>
+  const remote = tagFor(machines, s)
+  return `${detCab(s, machines)}
+  <div class="faixa">${'<span class="ic">' + ic('shield-alert') + '</span>'}<div><b>Precisa de você · Pede permissão.</b> O Claude quer rodar <code>npm run migrate</code> e aguarda sua aprovação na conversa${remote ? ', que roda na Workstation' : ''}. Há 2 min.</div>${remote ? '' : `<span class="btn contorno">Abrir no Claude Desktop ${ic('external-link')}</span>`}</div>
   ${abas(1, 3, '240/1.877')}
   <div style="display:flex;gap:10px;align-items:center"><span class="campo" style="width:260px">Agente principal<span style="margin-left:auto">${ic('chevron-down')}</span></span><span class="chip">${ic('message-square')}184 mensagens</span><span class="btn contorno">${ic('refresh-cw')}Atualizar</span></div>
   <div class="cartao" style="padding:16px 18px;display:flex;flex-direction:column;gap:16px">
@@ -1097,22 +1130,24 @@ function telaLinhaTempo() {
   <div class="cartao linhas">${ev.map(([st, t, f, fe, h]) => `<div class="linha"><span class="c-muted">${ic('chevron-right')}</span><span class="o mono" style="width:52px">${h}</span>${badge(st)}<span class="o mono" style="width:120px">${t}</span><span class="trunc">${f}</span>${fe ? `<span class="chip" style="margin-left:auto">${fe}</span>` : ''}</div>`).join('')}</div>`
 }
 
-function kanbanCard(s) {
-  return `<div class="cartao kc kanban-session-card st-${s.st}"><div class="l1"><span class="av" style="width:24px;height:24px;border-radius:7px;background:var(--raised);display:grid;place-items:center;color:var(--muted);flex:none">${ic('folder')}</span>
+function kanbanCard(s, machines) {
+  // A Kanban card is too narrow at 1100 px for the text tag: a remote card swaps the avatar's folder for the server icon.
+  const remote = tagFor(machines, s)
+  return `<div class="cartao kc kanban-session-card st-${s.st}"><div class="l1"><span class="av" style="width:24px;height:24px;border-radius:7px;background:var(--raised);display:grid;place-items:center;color:var(--muted);flex:none"${remote ? ' title="Workstation"' : ''}>${ic(remote ? 'server' : 'folder')}</span>
     <div class="trunc" style="flex:1"><div class="tt trunc">${s.nome}</div><small>${s.id}</small></div></div>
     <div>${badge(s.st, s.mot)}</div>
     <blockquote class="trunc">${s.msgs.at(-1) ?? '(prompt vazio)'}</blockquote><div class="cwd trunc">/simulacao/${s.pj}</div>
     <div class="pe"><span>${ic('bot')}${s.ag} agente${s.ag > 1 ? 's' : ''}</span><span>${ic('cpu')}${s.mo}</span><span>${ic('coins')}~US$ ${s.custo}</span><span class="${['active', 'blocked', 'idle'].includes(s.st) ? 'c-active' : ''}">${ic('timer')}${s.dur}</span></div></div>`
 }
-function telaKanban() {
+function telaKanban(machines) {
   // #245: the old waiting column splits in two. "Precisam de você" also takes the sessions with an error
   // (a blocking reason in the núcleo), so the board keeps 5 columns and fits 1100 px.
   const cols = [['active', ['active']], ['blocked', ['blocked', 'error']], ['idle', ['idle']], ['completed', ['completed']], ['abandoned', ['abandoned']]]
   const order = ['blocked', 'error']
-  return `${cab('kanban', 'Kanban', 'As sessões por status, só leitura', `<div class="seg"><span>Agentes</span><span class="on">Sessões</span></div>${atualizar}`)}
+  return `${cab('kanban', 'Kanban', machines ? 'As sessões das duas máquinas por status, só leitura' : 'As sessões por status, só leitura', `<div class="seg"><span>Agentes</span><span class="on">Sessões</span></div>${atualizar}`)}${machines ? machineRow(machines.ws) : ''}
   <div class="colunas" style="grid-template-columns:repeat(5,minmax(0,1fr))">${cols.map(([st, sts]) => {
     const l = S.filter(s => sts.includes(s.st)).sort((a, b) => order.indexOf(b.st) - order.indexOf(a.st))
-    return `<div class="col${st === 'idle' ? ' kanban-col-idle' : ''}"><div class="cab">${ponto(st)}<span class="c-${st}">${ST[st].p}</span><span class="n">${l.length}</span></div>${l.slice(0, 3).map(kanbanCard).join('')}${l.length > 3 ? `<div class="mais">mostrar mais ${l.length - 3}</div>` : ''}</div>`
+    return `<div class="col${st === 'idle' ? ' kanban-col-idle' : ''}"><div class="cab">${ponto(st)}<span class="c-${st}">${ST[st].p}</span><span class="n">${l.length}</span></div>${l.slice(0, 3).map(s => kanbanCard(s, machines)).join('')}${l.length > 3 ? `<div class="mais">mostrar mais ${l.length - 3}</div>` : ''}</div>`
   }).join('')}</div>`
 }
 function telaKanbanAgentes() {
@@ -1163,14 +1198,14 @@ function telaCusto() {
   <div class="cartao" style="padding:14px 16px"><div class="ttl">Por projeto<span class="r">30 dias</span></div><div style="margin-top:8px">${pj.map(([n, v]) => `<div class="ferr" style="grid-template-columns:150px minmax(0,1fr) 90px"><span class="n trunc">${n}</span>${barra(v / 128.4 * 100)}<span class="q">~US$ ${v.toFixed(2).replace('.', ',')}</span></div>`).join('')}</div></div>`
 }
 
-function telaHistorico() {
+function telaHistorico(machines) {
   const dias = [['Hoje · sábado, 18 out', [byId('0d7e81c4'), byId('6b2f5a98'), byId('3e9b1f6a')]], ['Ontem · sexta, 17 out', [
-    { nome: 'Cliente HTTP trocado por fetch nativo', pj: 'gateway-sandbox', st: 'completed', dur: '52 min', custo: '1,96', id: '8e1f0c22', mo: 'Opus 5.5', cont: 'b91d04aa' },
-    { nome: 'Teste intermitente do carrinho', pj: 'vitrine-demo', st: 'error', dur: '17 min', custo: '0,54', id: '4b7a9d31', mo: 'Sonnet 5.5' },
+    { nome: 'Cliente HTTP trocado por fetch nativo', pj: 'gateway-sandbox', st: 'completed', dur: '52 min', custo: '1,96', id: '8e1f0c22', mo: 'Opus 5.5', cont: 'b91d04aa', remote: true },
+    { nome: 'Teste intermitente do carrinho', pj: 'vitrine-demo', st: 'error', dur: '17 min', custo: '0,54', id: '4b7a9d31', mo: 'Sonnet 5.5', remote: true },
     { nome: 'Atualizar dependências', pj: 'vitrine-demo', st: 'completed', dur: '9 min', custo: '0,21', id: '1c5e7f84', mo: 'Haiku 5.5' }]]]
-  return `${cab('history', 'Histórico', 'Sessões encerradas, por dia', `<span class="campo" style="width:220px">${ic('search')}Buscar…</span>`)}
+  return `${cab('history', 'Histórico', machines ? 'Sessões encerradas nas duas máquinas, por dia' : 'Sessões encerradas, por dia', `<span class="campo" style="width:220px">${ic('search')}Buscar…</span>`)}${machines ? machineRow(machines.ws) : ''}
   ${dias.map(([d, l]) => `<div style="display:flex;flex-direction:column;gap:8px"><div class="olhinho">${ic('calendar')}${d}<span style="margin-left:auto;letter-spacing:0;text-transform:none;font-weight:400">${l.length} sessões</span></div>
-    <div class="cartao linhas">${l.map(s => `<div class="linha">${badge(s.st)}<div class="trunc" style="flex:1"><b style="font-weight:500">${s.nome}</b> <span class="o mono">${s.id}</span>${s.cont ? `<div class="o">${ic('corner-down-right')} continuou depois do <code>/clear</code> em <span class="c-accent">Migração do esquema de pedidos</span></div>` : ''}</div>
+    <div class="cartao linhas">${l.map(s => `<div class="linha">${badge(s.st)}<div class="trunc" style="flex:1">${machines ? `<div class="with-tag"><span class="trunc"><b style="font-weight:500">${s.nome}</b> <span class="o mono">${s.id}</span></span>${tagFor(machines, s)}</div>` : `<b style="font-weight:500">${s.nome}</b> <span class="o mono">${s.id}</span>`}${s.cont ? `<div class="o">${ic('corner-down-right')} continuou depois do <code>/clear</code> em <span class="c-accent">Migração do esquema de pedidos</span></div>` : ''}</div>
       <span class="o mono" style="width:140px">${s.pj}</span><span class="o mono" style="width:80px">${s.mo}</span><span class="o mono" style="width:60px">${s.dur}</span><span class="mono" style="width:80px;text-align:right">~US$ ${s.custo}</span><span class="c-muted">${ic('chevron-right')}</span></div>`).join('')}</div></div>`).join('')}`
 }
 
@@ -1193,23 +1228,23 @@ function telaProjeto() {
 }
 
 // ---------- Feed de atividade ----------
-function telaFeed() {
+function telaFeed(machines) {
   const ev = [
-    ['23:12', 'blocked', 'motor-de-regras', 'Migração do esquema de pedidos', 'principal', 'Pede permissão: Bash npm run migrate', 'Bash', 'agora'],
+    ['23:12', 'blocked', 'motor-de-regras', 'Migração do esquema de pedidos', 'principal', 'Pede permissão: Bash npm run migrate', 'Bash', 'agora', false, true],
     ['23:12', 'active', 'motor-de-regras', 'Separar pagamentos em serviços', 'test-runner', 'Bash: npm test -- cobranca', 'Bash', 'agora', true],
     ['23:11', 'active', 'vitrine-demo', 'Kanban de sessões no artefato', 'principal', 'Turno concluído em 38,2 s', '', '12 s'],
     ['23:11', 'idle', 'fila-de-tarefas', 'Retry com backoff na fila', 'principal', 'Sua vez: "Fiz o commit. Rodo os testes?"', '', '1 min'],
-    ['23:09', 'error', 'painel-de-metricas', 'Relatório mensal mais rápido', 'principal', 'Erro de API 529 · overloaded_error', '', '3 min'],
+    ['23:09', 'error', 'painel-de-metricas', 'Relatório mensal mais rápido', 'principal', 'Erro de API 529 · overloaded_error', '', '3 min', false, true],
     ['23:08', 'active', 'motor-de-regras', 'Separar pagamentos em serviços', 'code-reviewer', 'Read: src/cobranca/servico.ts', 'Read', '4 min'],
     ['23:08', 'blocked', 'catalogo-exemplo', 'Cache das consultas do catálogo', 'principal', 'Pergunta: Redis ou cache em memória? · 2 opções', 'AskUserQuestion', '4 min'],
     ['23:06', 'idle', 'app-receitas', 'Filtro por categoria', 'principal', 'Interrompida (Esc)', '', '6 min'],
   ]
-  return `${cab('activity', 'Feed de atividade', 'Todos os eventos das sessões, ao vivo', `<span class="btn">${ic('pause')}Pausar</span>${atualizar}`)}
+  return `${cab('activity', 'Feed de atividade', machines ? 'Todos os eventos das sessões das duas máquinas, ao vivo' : 'Todos os eventos das sessões, ao vivo', `<span class="btn">${ic('pause')}Pausar</span>${atualizar}`)}${machines ? machineRow(machines.ws) : ''}
   <div class="cartao" style="padding:9px 14px;font-size:12px;color:var(--muted);display:flex;gap:8px;align-items:center">${ic('info')}<b style="color:var(--text);font-size:10.5px;letter-spacing:.08em">SOBRE EVENTOS, FILTROS E AGRUPAMENTO</b> · como ler as pílulas, o ciclo de vida e os filtros</div>
   <div class="cartao" style="padding:10px;display:flex;flex-direction:column;gap:8px"><div style="display:flex;gap:8px"><span class="campo" style="flex:1">${ic('filter')}Buscar no resumo, ferramenta, conteúdo…</span><span class="campo" style="width:150px">${ic('calendar')}De</span><span class="campo" style="width:150px">${ic('calendar')}Até</span></div>
     <div style="display:flex;gap:6px"><span class="chip">Status</span><span class="chip">Tipo de evento</span><span class="chip">Ferramenta</span><span class="chip">Sessão</span></div></div>
-  <div class="cartao linhas">${ev.map(([h, st, pj, se, ag, f, fe, t, aberto]) => `<div class="linha"><span class="c-muted">${ic(aberto ? 'chevron-down' : 'chevron-right')}</span><span class="o mono" style="width:44px">${h}</span>${badge(st)}
-      <span class="o trunc" style="max-width:230px">${pj} › ${se} › ${ag}</span><span class="trunc" style="flex:1">${f}</span>${fe ? `<span class="chip">${fe}</span>` : ''}<span class="o" style="width:44px;text-align:right">${t}</span><span class="btn contorno" style="height:26px">Sessão ${ic('external-link')}</span></div>
+  <div class="cartao linhas">${ev.map(([h, st, pj, se, ag, f, fe, t, aberto, remote]) => `<div class="linha"><span class="c-muted">${ic(aberto ? 'chevron-down' : 'chevron-right')}</span><span class="o mono" style="width:44px">${h}</span>${badge(st)}
+      ${machines ? `<span class="o with-tag" style="max-width:230px">${remote ? `${machineTag()}<span>›</span>` : ''}<span class="trunc">${pj} › ${se} › ${ag}</span></span>` : `<span class="o trunc" style="max-width:230px">${pj} › ${se} › ${ag}</span>`}<span class="trunc" style="flex:1">${f}</span>${fe ? `<span class="chip">${fe}</span>` : ''}<span class="o" style="width:44px;text-align:right">${t}</span><span class="btn contorno" style="height:26px">Sessão ${ic('external-link')}</span></div>
     ${aberto ? `<div style="padding:4px 14px 14px 52px;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px;border-bottom:1px solid var(--border)">
       <div class="cartao" style="padding:10px 12px;background:var(--bg)"><div class="olhinho">Resumo</div><div class="ferrbloco" style="background:var(--surface)">${ic('terminal')}<span class="n">Bash</span><span class="cmd">npm test -- cobranca</span><span class="esp">${ic('loader-2')}rodando</span></div></div>
       <div style="display:grid;grid-template-columns:120px 1fr;gap:3px 10px;font-size:11.5px;font-family:var(--font-mono)">${[['Evento', 'PreToolUse'], ['Registrado', '18/10 23:12:04'], ['Sessão', 'c3f09b52-4e1'], ['Agente', 'test-runner · a7c2'], ['Ferramenta', 'Bash'], ['Call id', 'toolu_01Hx…9Qe']].map(([k, v]) => `<span class="c-muted">${k}</span><span>${v}</span>`).join('')}</div></div>` : ''}`).join('')}</div>`
@@ -2034,7 +2069,7 @@ function telaVazios() {
 // =====================================================================
 // Uma janela em duas bothWidths: 1100 (a do app) e 1440. O conteúdo é o mesmo; muda quantas colunas cabem.
 const bothWidths = (fn, ws) => [1100, 1440].map(w => `<div class="width-col"><div class="rotulo">${w} px</div>${fn(w)}</div>`).join('')
-const frameAt = (w, active, body, ws = 'ok') => `<div class="cc w${w}">${lado(active, 3, ws)}<div class="cc-main">${body}</div></div>`
+const frameAt = (w, active, body, ws = 'ok', q = 3) => `<div class="cc w${w}">${lado(active, q, ws)}<div class="cc-main">${body}</div></div>`
 const wave = (seed, n, base, amp) => Array.from({ length: n }, (_, i) => Math.max(0, base + amp * Math.sin(seed + i * 0.31) * Math.cos(seed * 0.7 + i * 0.09) + amp * 0.35 * Math.sin(i * 1.3 + seed)))
 function tmSeries(series, { max, limit, h = 120 } = {}) {
   const W = 600, y = v => (h - 4 - v / max * (h - 14)).toFixed(1)
@@ -3855,6 +3890,18 @@ const TELAS = [
     n: N(['O quadro do Kanban do projeto (C11).'], ['A escolha fica nas preferências da instalação, sem variável de ambiente; nada aponta para o Project da Ahrena.', 'Um Project sem campo de seleção não vira quadro: a linha diz isso.']) },
   { id: 'console-connections-states', cod: 'C44', nome: 'Conexões · estados', sub: 'O que não é o caminho feliz: o console sem o aplicativo do GitHub configurado, a máquina sem cofre, um escopo faltando e o código expirado ou recusado. Embaixo, as faixas da fonte gh e de AHRENA_CONSOLE_PROJECT definida (esta no Kanban do projeto). Em 1100.', html: () => `<div class="fila">${frameGh(1100, 'connections', connectionsStatesScreen(), 'off')}</div>`,
     n: N(['—'], ['Sem cofre o console não conecta: a credencial nunca vai para arquivo.', 'Sem o aplicativo configurado, Conectar fica desligado e a tela diz por quê; nada aponta para um aplicativo de outra pessoa.']) },
+
+  // ---------- sessions of every machine (issue #243): the existing screens, drawn with the `machines` option ----------
+  { id: 'console-sessions-machines', cod: 'C45', nome: 'Sessões com todas as máquinas', sub: 'Feature sessões de todas as máquinas (#243). Sessões junta as desta máquina e as da Workstation. A barra de filtros ganha o filtro de máquina, Todas · Esta máquina · Workstation, com Todas por padrão; cada linha remota leva o rótulo da máquina, e as locais não levam nada. Em 1100 e 1440.', html: () => `<div class="fila">${bothWidths(w => frameAt(w, 'sessoes', telaSessoes({ ws: 'ok' })))}</div>`,
+    n: N(['A tabela e a barra de filtros de Sessions (C3), com a busca, o projeto, a ordenação e as pílulas de status.', 'Da bandeja (A6): o rótulo "Workstation" em cinza ao lado da sessão remota.'], ['O CCAM só conhece uma máquina; o filtro e o rótulo são daqui.', 'O filtro fica na URL (<code>?machine=</code>), como os outros: um link aberto de novo mostra o mesmo recorte.', 'O filtro é um segmentado, como o de status, porque hoje são duas máquinas; com mais de três, vira um seletor (a aprovar).', 'Só a linha remota leva rótulo: as locais são a maioria, e um rótulo em cada linha vira ruído.', 'Em 1100, a barra de filtros dobra em duas linhas: busca e seletores em cima, máquina e status embaixo, para nada rolar na horizontal.', 'Os contadores das pílulas de status (#245: Precisam de você e Ociosas lado a lado) contam a máquina escolhida no filtro.']) },
+  { id: 'console-wall-kanban-machines', cod: 'C46', nome: 'Mural e Kanban com todas as máquinas', sub: 'O mesmo filtro de máquina, numa linha abaixo do cabeçalho do Mural e do Kanban, e o rótulo em cada card remoto. Os cards continuam com a altura fixa: no Mural o rótulo entra na linha do projeto, sem linha nova; no Kanban, onde o card é estreito, o ícone da pasta vira o do servidor. Em 1100.', html: () => `<div class="fila"><div class="width-col"><div class="rotulo">1100 px · Mural</div>${frameAt(1100, 'mural', telaMural({ ws: 'ok' }))}</div><div class="width-col"><div class="rotulo">1100 px · Kanban</div>${frameAt(1100, 'kanban', telaKanban({ ws: 'ok' }))}</div></div>`,
+    n: N(['O Mural (C2) e o Kanban · sessões (C9), com os cards de altura fixa.'], ['Essas telas não têm barra de filtros: o filtro de máquina fica numa linha logo abaixo do cabeçalho, para o cabeçalho não apertar em 1100.', 'No Mural, o rótulo divide a linha com o projeto, e é o projeto que encurta, nunca o rótulo.', 'No Kanban, em 1100, o card tem 130 px e o rótulo escrito deixaria o diretório em "/…": o card remoto troca o ícone da pasta pelo do servidor, com "Workstation" na dica (a aprovar).', 'O Kanban · agentes (C10) segue o filtro, sem rótulo no card de agente: o rótulo fica na sessão.']) },
+  { id: 'console-dashboard-feed-history-machines', cod: 'C47', nome: 'Dashboard, Feed e Histórico com todas as máquinas', sub: 'O filtro de máquina numa linha abaixo do cabeçalho das três. Os números do Dashboard contam as duas máquinas e dizem quantas são da Workstation; o rótulo aparece em "precisam de você", nos agentes ativos e na atividade recente, no começo do caminho do Feed e nas linhas do Histórico. Em 1100.', html: () => `<div class="fila"><div class="width-col"><div class="rotulo">1100 px · Dashboard</div>${frameAt(1100, 'dashboard', telaDashboard(5, { ws: 'ok' }), 'ok', 5)}</div><div class="width-col"><div class="rotulo">1100 px · Feed</div>${frameAt(1100, 'feed', telaFeed({ ws: 'ok' }))}</div><div class="width-col"><div class="rotulo">1100 px · Histórico</div>${frameAt(1100, 'historico', telaHistorico({ ws: 'ok' }))}</div></div>`,
+    n: N(['O Dashboard (C1), o Feed de atividade (C8) e o Histórico (C15).', 'Da bandeja (A6): o total com a parte remota dita ("4 ativas · 5 na Workstation", que conta as ativas; aqui, "3 na Workstation" conta as sessões registradas de lá).'], ['Com Todas, os números somam as duas máquinas e o subtítulo diz quantas são da Workstation; com uma máquina escolhida, contam só ela.', 'No Feed, o rótulo abre o caminho (Workstation › projeto › sessão › agente): é o nível de cima.', '"Precisam de você" (só o que trava a sessão, #245) junta as duas máquinas, como a bandeja já faz; a linha das ociosas também.', 'No "precisam de você" (cinco por linha desde a #245) e na atividade recente vai só o ícone do servidor, com "Workstation" na dica, como no Kanban: o nome escrito apertaria o projeto até sumir (a aprovar).']) },
+  { id: 'console-sessions-machine-offline', cod: 'C48', nome: 'Workstation sem conexão nas listas', sub: 'O túnel caiu. As sessões da Workstation saem da lista, e um aviso neutro, sem o vermelho de erro, diz desde quando e que elas voltam sozinhas. No filtro, a Workstation fica em cinza com o ícone de sem conexão. A lista desta máquina segue normal. Em 1100 e 1440.', html: () => `<div class="fila">${bothWidths(w => frameAt(w, 'sessoes', telaSessoes({ ws: 'off' }), 'off'))}</div>`,
+    n: N(['O C26 (a tela da Workstation sem conexão) e o estado da bandeja (A7): cinza e a idade da última leitura.'], ['O aviso é a faixa neutra do Reconectar (C50), não a faixa vermelha do C26: nas listas, a remota fora do ar não é um erro desta tela, e o que está aqui funciona.', 'As sessões de lá saem da lista em vez de aparecerem desbotadas: a última leitura de uma lista envelhece rápido e engana mais do que ajuda. A tela da Workstation (C26) é onde a última leitura fica.', '"Ver a Workstation" abre o C26, com o diagnóstico; o aviso não tem botão de subir o túnel.', 'Com a Workstation escolhida no filtro, a lista fica vazia com o mesmo aviso.']) },
+  { id: 'console-remote-session-detail', cod: 'C49', nome: 'Detalhe de uma sessão remota', sub: 'O detalhe da sessão da Workstation, lido do núcleo de lá pelo túnel: o chip "Workstation" no cabeçalho, uma linha que diz de onde veio, e sem "Abrir no Claude Desktop", que só abre sessões deste Mac. Em 1100.', html: () => `<div class="fila">${frameAt(1100, 'sessoes', telaConversa({ ws: 'ok' }))}</div>`,
+    n: N(['O detalhe · Conversa (C5), com a faixa de "Precisa de você".', 'Da bandeja (A6): a sessão remota sem o ⌥ "Abrir no Claude Desktop".'], ['Sem "Abrir no Claude Desktop": o Claude Desktop deste Mac não abre uma sessão que roda na Workstation. Com o botão no cabeçalho do C70, a sessão remota fica com o caso "outra máquina" de lá: desligado, com Copiar comando.', 'As abas (Agentes, Linha do tempo, Workflow, Decisões) leem o núcleo de lá do mesmo jeito.', 'Se a Workstation cair com o detalhe aberto, o aviso neutro do C48 entra no topo e o detalhe fica com a última leitura, com a idade dela no aviso. Nas listas a última leitura sai (C48); aqui fica, porque é uma sessão só, aberta de propósito, como no painel (P14) (a aprovar).']) },
   { id: 'console-open-detail', cod: 'C70', nome: 'Detalhe · Abrir a sessão', sub: 'O cabeçalho do Detalhe ganha, ao lado de Atualizar, o botão que leva à própria sessão, precise ela de você ou não. O rótulo diz o alvo: <b>Abrir no Claude Desktop</b> para a sessão que o Desktop conhece; <b>Abrir no terminal</b> para a do <code>claude</code> no terminal, que abre o terminal padrão retomando a sessão na pasta dela. Embaixo, os quatro casos (Desktop, terminal, terminal ainda rodando, outra máquina com o botão desligado) e o que aparece depois do clique. Em 1100 e 1440.', html: () => `<div style="display:flex;flex-direction:column;gap:12px">${osCol('1100 px · sessão do Claude Desktop, ociosa', frameAt(1100, 'sessoes', openDetailScreen()))}${osCol('1100 px · os casos', frameAt(1100, 'sessoes', openDetailCasesScreen()))}${osCol('1440 px', frameAt(1440, 'sessoes', openDetailScreen()))}</div>`,
     n: N(['O cabeçalho do Session Detail com os chips (C5); o "Abrir no Claude Desktop" que já existe na faixa e na linha de ociosa.'], ['O botão sai da faixa e da linha de ociosa e vai para o cabeçalho, sempre no mesmo lugar, inclusive em sessão ativa ou concluída.', 'O alvo vem do núcleo: sessão no índice do Claude Desktop (tem <code>local_…</code>) abre lá pelo <code>/open/&lt;local_…&gt;</code> que o mod e a bandeja já usam; sessão só com transcript retoma no terminal.', 'Terminal: o núcleo monta <code>claude --resume &lt;id&gt;</code> na pasta da sessão, com o id e a pasta que ele mesmo leu, nunca com texto da tela. No macOS abre no app de terminal padrão; no Linux e no Windows, o terminal conhecido, senão Copiar comando.', 'Terminal com o <code>claude</code> ainda rodando: retomar abriria uma segunda cópia da mesma sessão. A proposta é <b>Ir para o terminal</b> (traz à frente a janela do Terminal ou do iTerm2 que tem o processo), e Copiar comando quando não achar.', 'Outra máquina: desligado, com "roda em ws-exemplo", e Copiar comando para rodar lá.', 'POST da mesma origem (decisão 0003), como o <code>/open</code> de hoje.']) },
   { id: 'console-open-wall', cod: 'C71', nome: 'Mural, Sessões e Dashboard · Abrir a sessão', sub: 'Cada card do Mural ao vivo ganha um pé com a mesma ação do Detalhe, com o rótulo do alvo, e "Detalhe ›" ao lado. Em Sessões e no "precisam de você" do Dashboard não cabe o rótulo: vai só o ícone (monitor para o Claude Desktop, terminal para o terminal), com o título dizendo a ação. Mural em 1100 e 1440; Sessões e Dashboard em 1100.', html: () => `<div style="display:flex;flex-direction:column;gap:12px">${osCol('1100 px · Mural ao vivo', frameAt(1100, 'mural', openWallScreen()))}${osCol('1440 px · Mural ao vivo', frameAt(1440, 'mural', openWallScreen()))}${osCol('1100 px · Dashboard e Sessões', frameAt(1100, 'sessoes', openRowsScreen()))}</div>`,
@@ -3896,6 +3943,7 @@ function montar() {
     <li><b>Reconectar a máquina remota (#244, decisão 0012):</b> com <code>reconnect</code> no machines.json, o núcleo do Mac roda o comando que você escreveu, sem shell, um por vez e com tempo limite; a tela espera o login no navegador e relê a remota ao terminar (C50, A8). Aprovado em 20/10, com a saída só no log.</li>
     <li><b>Nuvens e a conexão da máquina (#277, #278, decisão 0013, a aprovar):</b> as contas de nuvem entram em Conexões, como conectores ao lado do GitHub (C57 a C61); o túnel vira a <code>connection</code> da máquina no machines.json, com Subir, Parar, o perfil de nuvem que ele exige e o motivo da queda em palavras simples (C62 a C65, A9, A10, P14). Os perfis de nuvem são de cada máquina: Esta máquina e a Workstation ganham o card Perfis de nuvem, e o login de lá é por código mostrado aqui (C66, C67). Perguntas em aberto: de onde vem o "até quando" da sessão SSO (variante A, só o expiresAt do cache da CLI, ou B, sem abrir o cache), Conexões ou uma seção Nuvens, um clique para entrar e subir, e Parar já na fase 1.</li>
     <li><b>Ferramentas (#280, decisão 0014):</b> CLIs, servidores MCP, plataformas e containers desta máquina e da Workstation, na seção Controle. Instalar, atualizar, iniciar e parar rodam só o que está no catálogo do núcleo, sem shell, um por vez, depois de mostrar o comando; o que pede sudo vira comando para copiar. A Workstation é só leitura até ela mesma ligar as ações (C72 a C76). Aprovado em 21/10, como está.</li>
+    <li><b>Sessões de todas as máquinas (#243, a aprovar):</b> o filtro de máquina (Todas · Esta máquina · Workstation, Todas por padrão, na URL) entra em Sessões, Mural, Kanban, Histórico, Feed e Dashboard; o rótulo "Workstation" vai só nas linhas e cards remotos; sem conexão, as sessões de lá saem das listas com um aviso neutro; o detalhe remoto não tem "Abrir no Claude Desktop" (C45 a C49).</li>
     <li><b>Backlog:</b> Feed de atividade, Analytics completo, Workflows e o detalhe com o grafo de agentes estavam para depois da entrega. Entraram aqui a pedido do dono; o PM decide se viram itens da 0.0.1.</li></ol></section>`
   indice.innerHTML = htmlI; main.innerHTML = htmlM
   if (window.lucide) lucide.createIcons()
