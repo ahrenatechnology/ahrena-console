@@ -182,15 +182,16 @@ describe('#280 ToolsExecutor', () => {
     assert.equal(ok.executor.jobs('local').recent[0]!.step, 1);
   });
 
-  test('an admin plan is refused: failed, nothing spawned', async () => {
-    const { executor, sp } = boot({ 'aws update': action([['sudo', 'installer', '-pkg', 'AWSCLIV2.pkg', '-target', '/']], { admin: true }) });
-    // A plan the service marks runnable by mistake still never spawns.
-    await executor.act('local', 'aws', 'update', '0123456789abcdef');
-    await executor.idle('local');
-    assert.equal(sp.calls.length, 0);
-    const job = executor.jobs('local').recent[0]!;
-    assert.equal(job.state, 'failed');
-    assert.match(job.output[0]!, /^Recusado: este passo pede administrador/);
+  test('an admin plan is refused whatever its argv[0]: blocked, nothing queued, nothing spawned', async () => {
+    for (const argv of [['installer', '-pkg', 'AWSCLIV2.pkg', '-target', '/'], ['launchctl', 'bootstrap', 'system', '/Library/LaunchDaemons/x.plist'], ['sudo', 'installer', '-pkg', 'a.pkg']]) {
+      // A plan the service marks runnable by mistake, but `admin`: the mark alone refuses it.
+      const { executor, sp } = boot({ 'aws update': action([argv], { admin: true, runnable: true }) });
+      const r = await executor.act('local', 'aws', 'update', '0123456789abcdef');
+      await executor.idle('local');
+      assert.equal(r.kind, 'blocked', argv[0]);
+      assert.equal(sp.calls.length, 0, argv[0]);
+      assert.deepEqual(executor.jobs('local'), { current: null, queue: [], recent: [], batch: null });
+    }
   });
 
   for (const exe of ['sudo', 'doas', 'pkexec', 'su', 'runas', 'osascript']) {
@@ -300,6 +301,103 @@ describe('#280 ToolsExecutor', () => {
     assert.equal(maskSecrets('--client-secret=xyz other'), '--client-secret=*** other');
     assert.equal(maskSecrets('"apiKey": "k-123"'), '"apiKey": "***"');
     assert.equal(maskSecrets('==> Upgrading gh 2.81.0 -> 2.83.1'), '==> Upgrading gh 2.81.0 -> 2.83.1');
+  });
+
+  test('maskSecrets: flag with a separate value, bare tokens, Cookie', () => {
+    assert.equal(maskSecrets('gh auth login --token ghp_abcdefghijklmnopqrstuvwxyz0123456789 --web'), 'gh auth login --token *** --web');
+    assert.equal(maskSecrets('tool --password hunter2 run'), 'tool --password *** run');
+    assert.equal(maskSecrets('tool --token --verbose'), 'tool --token --verbose');
+    assert.equal(maskSecrets('using ghp_abcdefghijklmnopqrstuvwxyz0123456789 now'), 'using *** now');
+    assert.equal(maskSecrets('github_pat_11ABCDEFG0abcdefghijklmnop_qrstuvwxyz0123456789 x'), '*** x');
+    assert.equal(maskSecrets('//registry/:_authToken=npm_abcdefghijklmnopqrstuvwxyz0123456789'), '//registry/:_authToken=***');
+    assert.equal(maskSecrets('npm_abcdefghijklmnopqrstuvwxyz0123456789'), '***');
+    assert.equal(maskSecrets('npm_config_registry is set'), 'npm_config_registry is set');
+    assert.equal(maskSecrets('Cookie: session=abc; theme=dark'), 'Cookie: ***');
+    assert.equal(maskSecrets('Set-Cookie: sid=zzz; HttpOnly'), 'Set-Cookie: ***');
+  });
+
+  test('a credential split by the 4000-character cut stays masked (job, tools.log), in one line and across chunks', async () => {
+    const pad = 'x'.repeat(3980);
+    const { executor, logFile } = boot({ 'gh update': action([['brew', 'upgrade', 'gh']]) }, (call) => {
+      // 1: a complete line whose credential the cut would split.
+      call.child.out(`${pad} https://user:s3cretpassw0rd@github.com/o/r\n`);
+      // 2: an overlong line with no newline yet, cut inside a token=, its rest arriving in the next chunk.
+      call.child.out(`${'y'.repeat(3995)} token=ab`);
+      call.child.out('cdefLEAKED more\nafter the long line\n');
+      call.child.exit(0);
+    });
+    await executor.act('local', 'gh', 'update', '0123456789abcdef');
+    await executor.idle('local');
+    const out = executor.jobs('local').recent[0]!.output;
+    const log = readFileSync(logFile, 'utf8');
+    for (const text of [out.join('\n'), log]) {
+      for (const leak of ['s3cret', 'user:', 'token=ab', 'cdef', 'LEAKED']) assert.equal(text.includes(leak), false, `${leak} leaked`);
+      assert.match(text, /https:\/\/\*\*\*@github/);
+      assert.match(text, /after the long line/);
+    }
+    assert.ok(out.every((l) => l.length <= 4001), 'no line past the cut');
+  });
+
+  test('stopAll: the queue is canceled, the running group gets SIGTERM then SIGKILL, and tools.log gets the end footer', async () => {
+    mock.timers.enable({ apis: ['setTimeout'] });
+    try {
+      const { executor, sp, logFile } = boot({ 'gh update': action([['brew', 'upgrade', 'gh']]), 'jq update': action([['brew', 'upgrade', 'jq']]) });
+      await executor.act('local', 'gh', 'update', '0123456789abcdef');
+      await executor.act('local', 'jq', 'update', '0123456789abcdef');
+      await flush();
+      assert.equal(sp.calls.length, 1);
+      const pid = sp.calls[0]!.child.pid;
+      let stopped = false;
+      const stopping = executor.stopAll().then(() => (stopped = true));
+      assert.deepEqual(sp.kills, [{ pid, signal: 'SIGTERM' }]);
+      mock.timers.tick(4_999);
+      await flush();
+      assert.equal(stopped, false, 'waits for the grace period');
+      mock.timers.tick(1);
+      assert.deepEqual(sp.kills.map((k) => k.signal), ['SIGTERM', 'SIGKILL']);
+      await flush();
+      await stopping;
+      assert.equal(sp.calls.length, 1, 'the queued job never started');
+      assert.deepEqual(executor.jobs('local').recent.map((j) => [j.toolId, j.state]), [['gh', 'canceled'], ['jq', 'canceled']]);
+      assert.match(readFileSync(logFile, 'utf8').trimEnd().split('\n').at(-1)!, /^\S+ local job [a-f0-9]{12} end canceled exit none after \d+ s \(core shut down\)$/);
+    } finally {
+      mock.timers.reset();
+    }
+  });
+
+  test('stopAll with nothing running resolves at once, and a later act does not spawn', async () => {
+    const { executor, sp } = boot({ 'gh update': action([['brew', 'upgrade', 'gh']]) });
+    await executor.stopAll();
+    await executor.act('local', 'gh', 'update', '0123456789abcdef');
+    await flush();
+    assert.equal(sp.calls.length, 0);
+  });
+
+  test('Verificar agora waits for the running job and keeps the next one waiting until the check ends', async () => {
+    const { host } = fakeHost({ 'gh update': action([['brew', 'upgrade', 'gh']]), 'jq update': action([['brew', 'upgrade', 'jq']]) });
+    const sp = fakeSpawn();
+    let checks = 0;
+    let finish: (b: ToolsOverview) => void = () => {};
+    host.check = () => {
+      checks++;
+      return new Promise((r) => (finish = r));
+    };
+    const executor = new ToolsExecutor({ service: host, logFile: join(dir, 'serial.log'), spawn: sp.spawn, killGroup: sp.killGroup, checkWaitMs: 5, log: () => {} });
+    await executor.act('local', 'gh', 'update', '0123456789abcdef');
+    await executor.act('local', 'jq', 'update', '0123456789abcdef');
+    await flush();
+    const check = await executor.checkNow('local');
+    assert.equal(check.kind, 'running');
+    assert.equal(checks, 0, 'not while a job runs');
+    sp.calls[0]!.child.exit(0);
+    await flush();
+    assert.equal(checks, 1, 'the check starts when the job ends');
+    assert.equal(sp.calls.length, 1, 'and the queue waits for it');
+    finish({ version: 1 } as unknown as ToolsOverview);
+    await flush();
+    assert.equal(sp.calls.length, 2, 'then the next job runs');
+    sp.calls[1]!.child.exit(0);
+    await executor.idle('local');
   });
 
   test('tools.log rotates to tools.log.1 past the limit; the last 200 lines stay on the job', async () => {

@@ -491,7 +491,10 @@ export class ToolsService {
 
     let state: ToolState;
     let note: string | null = entry.note ?? null;
-    if (d?.binaryPath && !installed) {
+    if (d?.probeError === 'shim-not-readable') {
+      state = 'manual';
+      note = 'no Windows a sonda não lê esta ferramenta (atalho .cmd)';
+    } else if (d?.binaryPath && !installed) {
       state = 'failed';
       note = 'a sonda não leu a versão instalada';
     } else if (!installed) state = 'missing';

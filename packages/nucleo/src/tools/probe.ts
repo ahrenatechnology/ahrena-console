@@ -22,7 +22,7 @@ export interface Detection {
   binaryPath: string | null;
   realPath: string | null;
   sourceId: DetectedSourceId | null;
-  /** `probe-failed` (it did not run), `no-version` (it ran, the regex did not match) or `null`. */
+  /** `shim-not-readable` (a Windows .cmd/.bat, never spawned), `probe-failed` (it did not run), `no-version` (it ran, the regex did not match) or `null`. */
   probeError: string | null;
 }
 
@@ -88,6 +88,9 @@ export async function probeTool(entry: ToolEntry, ctx: ProbeContext): Promise<De
   if (!binaryPath) return none;
   const realPath = await (ctx.realpath ?? fsRealpath)(binaryPath).catch(() => binaryPath);
   const sourceId = detectSource(entry, realPath, ctx, binaryPath);
+  // Node refuses to spawn a .cmd/.bat without a shell (EINVAL), and the probe never uses one: the tool is
+  // shown as manual, not failed.
+  if (ctx.platform === 'win32' && /\.(cmd|bat)$/i.test(binaryPath)) return { toolId: entry.id, installed: null, binaryPath, realPath, sourceId: 'manual', probeError: 'shim-not-readable' };
   const r = await ctx.run([binaryPath, ...entry.probe.argv.slice(1)], { timeoutMs: PROBE_TIMEOUT_MS, env: toolsEnv(ctx.path, ctx.env) }).catch(() => null);
   const installed = r ? parseVersion(entry.probe, `${r.stdout}\n${r.stderr}`) : null;
   const probeError = installed ? null : !r || (r.code === null && r.error) ? 'probe-failed' : 'no-version';

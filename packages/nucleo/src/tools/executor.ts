@@ -11,9 +11,9 @@
 // - Each step: `spawn(argv[0], argv.slice(1), { shell: false, detached: true })` with argv[0]
 //   resolved on the login PATH, standard input closed, stdout and stderr piped, the user's home as
 //   the working directory and `toolsEnv` (runner.ts). Step 2 runs only if step 1 exits 0.
-// - Before the first spawn, a job whose plan is `admin`, or any of whose steps has an argv[0] (or its
-//   realpath) named sudo, doas, pkexec, su, runas or osascript, fails with nothing spawned, even if
-//   the catalog forgot the mark.
+// - A plan marked `admin` is refused by `act` (`blocked`, nothing queued, whatever its argv[0]). And
+//   before the first spawn, a job any of whose steps has an argv[0] (or its realpath) named sudo,
+//   doas, pkexec, su, runas or osascript fails with nothing spawned, even if the catalog forgot the mark.
 // - Timeout per step (the plan's, 600 s by default, 1800 at most) and Cancel: SIGTERM to the process
 //   group, SIGKILL to the group 5 s later; the state changes at once (`timed-out`, `canceled`).
 // - After the last step exits 0: phase `verifying`, the tool is probed again and the new installed
@@ -24,8 +24,13 @@
 //   and a footer line per job, like reconnect.log.
 // - Every state change calls `onChange(machine)`: a `tools` change keyed by the machine on
 //   /api/changes (`publishToolsChanges`; HTTP only, filtered out of MCP).
-// - Verificar agora (`checkNow`): `ToolsService.check`, one at a time; waits a little for it, then
-//   answers with the current body and a `tools` change follows when it ends.
+// - Verificar agora (`checkNow`): `ToolsService.check`, one at a time and serialized with the queue:
+//   it waits for the running job to end, and no job starts while it runs (`brew update` would rewrite
+//   the formula cache under a `brew upgrade`, and a check that began before a job's verify would write
+//   the old `installed` back). It waits a little for the answer, then answers with the current body and
+//   a `tools` change follows when it ends.
+// - `stopAll` (the núcleo's shutdown): the queue is canceled, the running group gets SIGTERM and, after
+//   the grace period, SIGKILL; the `end canceled` footer reaches tools.log. No step outlives the núcleo.
 // - No scheduled re-check: the network is read only on Verificar agora (layer 1 left it out; layer 2
 //   keeps it so). After 6 h the states go back to `checking`.
 
@@ -147,6 +152,8 @@ interface MachineJobs {
   recent: ToolJob[];
   batch: { total: number; done: number } | null;
   idle: (() => void)[];
+  /** `checkNow` waits here for the running job to end. */
+  afterCurrent: (() => void)[];
 }
 
 export function toolsLogFile(dataDir: string): string {
@@ -158,6 +165,12 @@ const MASKS: [RegExp, string | ((...m: string[]) => string)][] = [
   // Authorization: Basic xxx / Bearer xxx / a bare value
   [/\b((?:proxy-)?authorization)(\s*[:=]\s*)(?:(basic|bearer|token|digest)\s+)?[^\s,;]+/gi, (_m, name, sep, scheme) => `${name}${sep}${scheme ? `${scheme} ` : ''}***`],
   [/\b(bearer)\s+[A-Za-z0-9._~+/=-]+/gi, '$1 ***'],
+  // Cookie: a=b; c=d (the whole value), Set-Cookie too
+  [/\b((?:set-)?cookie)(\s*[:=]\s*)[^\r\n]+/gi, '$1$2***'],
+  // bare GitHub and npm tokens
+  [/\b(?:gh[pousr]_|github_pat_|npm_)[A-Za-z0-9_]{20,}/g, '***'],
+  // --token VALUE, -password VALUE (the value in the next word, unless that is another flag)
+  [new RegExp(`(^|\\s)(--?${SECRET_NAME})(\\s+)(?!-)\\S+`, 'gi'), '$1$2$3***'],
   // scheme://user:pass@host and scheme://token@host
   [/\b([a-z][a-z0-9+.-]*:\/\/)[^\s/@'"]+@/gi, '$1***@'],
   // token=…, password: …, --api-key=…, "secret": "…", X-Amz-Signature=…
@@ -179,6 +192,8 @@ export class ToolsExecutor implements ToolsControl {
   private readonly running = new Map<string, Running>();
   private readonly checks = new Map<string, Promise<ToolsOverview | null>>();
   private readonly mcpChecks = new Map<string, Promise<ToolsOverview | null>>();
+  private readonly endNotes = new Map<string, string>();
+  private closing = false;
 
   constructor(options: ToolsExecutorOptions) {
     this.o = options;
@@ -195,7 +210,7 @@ export class ToolsExecutor implements ToolsControl {
 
   private jobsOf(machine: string): MachineJobs {
     let m = this.machines.get(machine);
-    if (!m) this.machines.set(machine, (m = { current: null, queue: [], recent: [], batch: null, idle: [] }));
+    if (!m) this.machines.set(machine, (m = { current: null, queue: [], recent: [], batch: null, idle: [], afterCurrent: [] }));
     return m;
   }
 
@@ -221,7 +236,8 @@ export class ToolsExecutor implements ToolsControl {
     const r = await this.o.service.actionPlan(machine, toolId, actionId);
     if (r.kind !== 'plan') return r;
     if (r.action.planDigest !== planDigest) return { kind: 'stale', plan: r.action };
-    if (!r.action.runnable) return { kind: 'blocked', plan: r.action };
+    // The núcleo never runs an admin step, whatever its argv[0] (decision 0014 section 3).
+    if (!r.action.runnable || r.action.admin) return { kind: 'blocked', plan: r.action };
     const m = this.jobsOf(machine);
     const same = [m.current, ...m.queue].find((j) => j && j.toolId === r.toolId && j.actionId === r.actionId && (j.state === 'queued' || j.state === 'running'));
     if (same) return { kind: 'queued', job: copyJob(same) };
@@ -292,13 +308,16 @@ export class ToolsExecutor implements ToolsControl {
   private async waitForCheck(machine: string, running: Map<string, Promise<ToolsOverview | null>>, start: () => Promise<ToolsOverview | null>): Promise<CheckNowResult> {
     let p = running.get(machine);
     if (!p) {
-      p = start();
+      // The regular check is registered at once, so no job starts meanwhile; it waits for the running one.
+      // The MCP check only runs `claude mcp list`, so it goes straight away.
+      p = running === this.checks ? this.afterCurrentJob(machine).then(start) : start();
       running.set(machine, p);
       void p
         .catch(() => null)
         .then((body) => {
           running.delete(machine);
           if (body) this.changed(machine);
+          this.pump(machine);
         });
     }
     let timer: ReturnType<typeof setTimeout> | null = null;
@@ -311,6 +330,37 @@ export class ToolsExecutor implements ToolsControl {
     if (waited.done) return waited.body ? { kind: 'done', body: { ...waited.body, jobs: this.jobs(machine) } } : { kind: 'unknown-machine' };
     const body = await this.overview(machine);
     return body ? { kind: 'running', body } : { kind: 'unknown-machine' };
+  }
+
+  private afterCurrentJob(machine: string): Promise<void> {
+    const m = this.jobsOf(machine);
+    if (!m.current) return Promise.resolve();
+    return new Promise((resolve) => m.afterCurrent.push(resolve));
+  }
+
+  /**
+   * The núcleo's shutdown: cancels what is queued, ends the running group (SIGTERM, SIGKILL after the
+   * grace) and resolves when every job has ended and written its footer to tools.log. Nothing starts after.
+   */
+  async stopAll(): Promise<void> {
+    this.closing = true;
+    const waits: Promise<void>[] = [];
+    for (const [machine, m] of this.machines) {
+      for (const job of m.queue.splice(0)) {
+        job.state = 'canceled';
+        job.endedAt = new Date(this.now()).toISOString();
+        this.remember(m, job);
+      }
+      const job = m.current;
+      if (job) {
+        this.endNotes.set(job.id, 'core shut down');
+        if (job.state === 'running') this.stop(job, 'canceled');
+      }
+      this.wakeIdle(m);
+      if (job) waits.push(this.idle(machine));
+      this.changed(machine);
+    }
+    await Promise.all(waits);
   }
 
   private changed(machine: string): void {
@@ -333,6 +383,8 @@ export class ToolsExecutor implements ToolsControl {
   private pump(machine: string): void {
     const m = this.jobsOf(machine);
     if (m.current) return;
+    if (this.closing) return this.wakeIdle(m);
+    if (this.checks.has(machine)) return;
     const job = m.queue.shift();
     if (!job) return this.wakeIdle(m);
     m.current = job;
@@ -345,6 +397,7 @@ export class ToolsExecutor implements ToolsControl {
         m.current = null;
         this.running.delete(job.id);
         this.remember(m, job);
+        for (const resolve of m.afterCurrent.splice(0)) resolve();
         // The next job (its own change) or, with the queue drained, the batch closed; then this end's change.
         this.pump(machine);
         this.changed(machine);
@@ -403,7 +456,9 @@ export class ToolsExecutor implements ToolsControl {
     } finally {
       const seconds = Math.round((this.now() - startedMs) / 1000);
       this.o.log?.(`tools (${job.machine}): job ${job.id} ${job.state}${job.exitCode === null ? '' : ` (exit ${job.exitCode})`} after ${seconds} s`);
-      this.closeLog(fd, job, `end ${job.state} exit ${job.exitCode === null ? 'none' : job.exitCode} after ${seconds} s`);
+      const note = this.endNotes.get(job.id);
+      this.endNotes.delete(job.id);
+      this.closeLog(fd, job, `end ${job.state} exit ${job.exitCode === null ? 'none' : job.exitCode} after ${seconds} s${note ? ` (${note})` : ''}`);
     }
   }
 
@@ -501,7 +556,9 @@ export class ToolsExecutor implements ToolsControl {
 
   /** One output line: masked, kept (last 200) and appended to tools.log. */
   private emit(job: ToolJob, fd: number | null, raw: string): void {
-    const text = maskSecrets(raw.length > MAX_LINE_CHARS ? `${raw.slice(0, MAX_LINE_CHARS)}…` : raw);
+    // Mask the whole line first and cut after: a cut inside a credential would defeat the mask.
+    const masked = maskSecrets(raw);
+    const text = masked.length > MAX_LINE_CHARS ? `${masked.slice(0, MAX_LINE_CHARS)}…` : masked;
     job.output.push(text);
     if (job.output.length > JOB_OUTPUT_LINES) job.output.splice(0, job.output.length - JOB_OUTPUT_LINES);
     if (fd !== null) {
@@ -569,18 +626,29 @@ function copyJob(j: ToolJob): ToolJob {
 function readLines(stream: NodeJS.ReadableStream & { setEncoding?: (e: BufferEncoding) => unknown }, line: (text: string) => void): Promise<void> {
   return new Promise((resolve) => {
     let buf = '';
+    // Past the cut with no newline yet: the line was emitted (masked, then cut); the rest of it is dropped
+    // up to the next line break, never emitted as a line of its own (a secret could straddle the boundary).
+    let dropping = false;
     const flush = (all: boolean) => {
       const parts = buf.split(/\r\n|\n|\r(?!$)/);
       buf = all ? '' : (parts.pop() ?? '');
       if (!all && buf.length > MAX_LINE_CHARS) {
         parts.push(buf);
         buf = '';
+        dropping = true;
       }
       for (const p of parts) if (p.trim() !== '') line(p.replace(/\r$/, ''));
     };
     stream.setEncoding?.('utf8');
     stream.on('data', (chunk: string | Buffer) => {
-      buf += typeof chunk === 'string' ? chunk : chunk.toString('utf8');
+      let text = typeof chunk === 'string' ? chunk : chunk.toString('utf8');
+      if (dropping) {
+        const brk = text.search(/\r\n|\n|\r/);
+        if (brk < 0) return;
+        text = text.slice(brk).replace(/^(?:\r\n|\n|\r)/, '');
+        dropping = false;
+      }
+      buf += text;
       flush(false);
     });
     const end = () => {

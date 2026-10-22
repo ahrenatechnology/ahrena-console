@@ -204,7 +204,9 @@ const fnmSteps = [
   ['fnm', 'install', VERSION_TOKEN],
   ['fnm', 'default', VERSION_TOKEN],
 ];
-const uvSteps = [['uv', 'python', 'install', VERSION_TOKEN]];
+const uvInstallSteps = [['uv', 'python', 'install', VERSION_TOKEN]];
+// `uv python install 3.13` is a no-op once 3.13.x is there; only `upgrade` moves the patch.
+const uvUpdateSteps = [['uv', 'python', 'upgrade', VERSION_TOKEN]];
 
 export const CATALOG: readonly ToolEntry[] = [
   // ---- CLIs ------------------------------------------------------------------------------------
@@ -377,8 +379,8 @@ export const CATALOG: readonly ToolEntry[] = [
         manager: 'uv',
         latest: { kind: 'uv-python' },
         actions: {
-          install: { steps: uvSteps, timeoutSeconds: 900, versionFormat: 'major.minor' },
-          update: { steps: uvSteps, timeoutSeconds: 900, versionFormat: 'major.minor' },
+          install: { steps: uvInstallSteps, timeoutSeconds: 900, versionFormat: 'major.minor' },
+          update: { steps: uvUpdateSteps, timeoutSeconds: 900, versionFormat: 'major.minor' },
         },
       },
       // Read only: the console shows it and never changes it.
