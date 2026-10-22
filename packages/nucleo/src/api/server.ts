@@ -32,6 +32,7 @@
 // | `GET /api/agent-instructions/<owner>/<repo>` and `/file?path=` | A repository's Instructions tab: instruction files, `@imports`, `.claude/` and `.mcp.json` (`?refresh=1`; api/agent-instructions.ts, #183) |
 // | `GET /api/framework-install/<owner>/<repo>/plan`, `/pull-request` and `POST /api/framework-install/<owner>/<repo>` | Install the Ahrena Framework in a repository through a PR: the preview with the diff, the PR state and opening the PR (api/framework-install.ts, #184) |
 // | `GET /api/agent-config`, `GET` and `POST /api/agent-config/skill` | The Agent Config screen (api/agent-config.ts, src/agent-config, #63): what is in the configuration folders and editing a skill, with backup |
+// | `?machine=` on the lists above and on the Detail | The sessions of every machine, merged, or of one (api/machine-sessions.ts, #243) |
 // | `GET /api/machines`           | The machines: this one and the remote ones, with state and alerts (api/telemetry.ts, #175) |
 // | `GET /api/telemetry`          | One machine's telemetry: current reading, series and alerts (`?machine=`, `?hours=1|12`; #175) |
 // | `POST /api/machines/<id>/reconnect` and `DELETE` | Reconnect a remote machine with the command of machines.json, and Cancel (api/telemetry.ts, #244) |
@@ -106,6 +107,8 @@ import { SessionOpenDescriber } from './session-open.ts';
 import { createSessionOpenRoute, SESSION_OPEN_FROM_UI, SESSION_OPEN_ROUTE } from './session-open-route.ts';
 import type { TerminalFocuser, TerminalOpener } from './terminal-launch.ts';
 import { montarDashboard, DASHBOARD_ROUTE } from './dashboard-route.ts';
+import { createMachineSessionsRoute } from './machine-sessions.ts';
+import type { MachineReader } from './machine-reader.ts';
 import { RotaAnalytics } from './analytics-route.ts';
 import { REPOS_ROUTE, type RotaDosRepos } from './repos.ts';
 import { AGENT_INSTRUCTIONS_ROUTE, type AgentInstructionsRoute } from './agent-instructions.ts';
@@ -196,6 +199,8 @@ export interface ApiOptions {
   agentConfig?: AgentConfigRoute;
   /** Machine telemetry (#175); without it, `/api/machines` and `/api/telemetry` give 404. */
   telemetry?: TelemetryService | null;
+  /** #243: reads the remote machines' lists for `?machine=` (api/machine-sessions.ts); without it, only this machine. */
+  machineReader?: MachineReader | null;
   /** The reconnect of the remote machines (#244); without it, `POST /api/machines/<id>/reconnect` gives 404 or 409. */
   reconnect?: ReconnectControl | null;
   /** Sending a message to a live session (api/messaging.ts, #61); without it, those routes give 404. */
@@ -333,6 +338,7 @@ export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
   const projectRoute = criarRotaDoProjeto(opts.project ?? { kanban: null, fonte: 'github', log });
   const openDescriber = opts.openDescriber ?? new SessionOpenDescriber();
   const wall = muralDoPainel(opts.panelBuilder, { open: openDescriber });
+  const machineSessions = createMachineSessionsRoute({ reader: opts.machineReader, telemetry: opts.telemetry, local: { sessions: opts.sessions, wall, kanban: opts.kanban, history: opts.history, events: opts.events, dashboard: opts.fleet ? () => montarDashboard(opts.fleet!) : null } });
   const remotes = (): readonly RemoteAttentionSource[] => (typeof opts.remoteAttention === 'function' ? opts.remoteAttention() : (opts.remoteAttention ?? []));
   const sessionOpen = createSessionOpenRoute({
     storage: opts.panelBuilder.storage,
@@ -445,6 +451,7 @@ export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
     if ((url.pathname === PROJECT_OPTIONS_ROUTE || url.pathname === CONNECTIONS_ROUTE) && fromAnotherSite(req)) return send(res, 403, { error: 'forbidden' });
     if (opts.githubConnected && isGithubScreenRoute(url.pathname) && !(await opts.githubConnected())) return send(res, 409, { error: 'github-not-connected' });
     if (url.pathname.startsWith(HOOKS_PATH)) return hooks(req, res);
+    if (req.method === 'GET' && (await machineSessions(res, url))) return;
     const openMatch = OPEN.exec(url.pathname);
     if (openMatch && req.method === 'POST') return openDirect(req, res, decodeURIComponent(openMatch[1]!));
     const sessionOpenMatch = SESSION_OPEN_ROUTE.exec(url.pathname);
