@@ -8,6 +8,7 @@
 // GitHub down or rate limited: the cache's last read (up to 24 h) is served with `status: 'stale'`,
 // the reason and the read time. No token (`gh` without login): `disconnected` while nothing is cached.
 
+import { githubReposTransport, type GithubAccess } from './github-access.ts';
 import type { NewChange } from '../changes/cursor.ts';
 import { GithubCache, NoDataError } from '../github/cache.ts';
 import { GithubCallQueue } from '../github/call-queue.ts';
@@ -15,7 +16,7 @@ import { DELIVERY_FETCH_DAYS, GithubDeliverySource, type DeliveryRaw, type Deliv
 import type { ProjectBoard } from '../github/project.ts';
 import { DIA_MS, diaIso } from '../github/repos-calculo.ts';
 import { GithubReposSource, SemGithubError } from '../github/repos-source.ts';
-import { createFakeGithub, DEMO_DELIVERY_PROJECTS, DEMO_DELIVERY_GITHUB_DATA } from '../simulator/fake-github.ts';
+import { createFakeGithub, DEMO_DELIVERY_PROJECTS, DEMO_DELIVERY_GITHUB_DATA, FAKE_GITHUB_BASE } from '../simulator/fake-github.ts';
 import type { DeliveryOptions } from './analytics-route.ts';
 import type { DeliveryGithubRead, DeliveryGroup } from './delivery.ts';
 import type { SessoesPorRepo } from './repos-sessions.ts';
@@ -177,6 +178,8 @@ export interface CoreDeliveryOptions {
   boards: () => Promise<Pick<ProjectBoard, 'owner' | 'number' | 'title' | 'lanes'>[]>;
   accountRepos: DeliveryOptions['accountRepos'];
   log?: (message: string) => void;
+  /** The credential provider and transport (#241). Required outside the demo and `--no-github`; the demo takes only its token. */
+  github?: GithubAccess | null;
 }
 
 /**
@@ -204,13 +207,16 @@ export function latestProjects(boards: CoreDeliveryOptions['boards'], changes: C
 }
 
 /** The Delivery tab's sources as the core wires them (cli.ts). */
-export function createCoreDelivery({ demo, noGithub, cache, queue, changes, sessions, boards, accountRepos, log }: CoreDeliveryOptions): DeliveryOptions {
+export function createCoreDelivery({ demo, noGithub, cache, queue, changes, sessions, boards, accountRepos, log, github }: CoreDeliveryOptions): DeliveryOptions {
   // The demo points to an address that does not resolve: even if the fake failed, nothing goes to GitHub.
-  const source = demo
-    ? new GithubDeliverySource(new GithubReposSource({ token: 'demo', fetch: createFakeGithub(DEMO_DELIVERY_GITHUB_DATA, { delayMs: 120 }).fetch, url: 'https://fake-github.invalid/graphql', api: 'https://fake-github.invalid' }))
-    : noGithub
-      ? null
-      : new GithubDeliverySource(new GithubReposSource());
+  const transport = githubReposTransport({
+    demo,
+    noGithub,
+    github,
+    demoFetch: () => createFakeGithub(DEMO_DELIVERY_GITHUB_DATA, { delayMs: 120 }).fetch,
+    demoBase: FAKE_GITHUB_BASE,
+  });
+  const source = transport ? new GithubDeliverySource(transport) : null;
   return {
     github: new DeliveryGithub({ source, cache, queue, changes, ...(log ? { log } : {}) }),
     repoOfCwd: (cwd) => sessions.repoDe(cwd),

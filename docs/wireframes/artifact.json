@@ -4,9 +4,14 @@
       "file": "index.html",
       "title": "Wireframes do Ahrena Console",
       "files": [],
-      "links": {},
-      "capabilities": {}
+      "links": {
+        "max": "https://claude.ai/artifact/CPKDYpdfpGeh2pMDqXpHub"
+      },
+      "capabilities": {},
+      "home": "max"
     }
   },
-  "publishOrder": ["wireframes"]
+  "publishOrder": [
+    "wireframes"
+  ]
 }

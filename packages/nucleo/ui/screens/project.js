@@ -11,13 +11,16 @@
 
 import { header, el, icon } from '../dom.js';
 import { loading, error, errorBand, empty } from '../states.js';
+import { connectEmptyFor, connectionChanged, isGithubNotConnected } from '../github-connect.js';
+import { createSwitch, envBand, loadPickerStyle, mountPicker } from './project-picker.js';
 
 const ROUTE = '/api/project';
 const STYLE = '/ui/project.css';
 const MOVE_ROUTE = '/api/project/move';
 const TOAST_MS = 8000;
 const LIVE_WAIT = 1000;
-const SCOPE_COMMAND = 'gh auth refresh -s project';
+// Conexões, where the console's own connection is reconnected with every scope (issue 241).
+const CONNECTIONS_UI = '/ui/connections';
 
 // O tipo da issue no GitHub vira o rótulo do wireframe; a cor vem da classe.
 const TYPES = new Map([
@@ -64,10 +67,17 @@ const hour = (ms) => {
 };
 
 const codeOf = (e) => e?.body?.code ?? null;
-const commandOf = (e) => e?.body?.command ?? (codeOf(e) === 'no-scope' ? SCOPE_COMMAND : null);
+// issue 241: the core sends `command` only for the gh source; the console's own connection is fixed in Conexões.
+const commandOf = (e) => (typeof e?.body?.command === 'string' && e.body.command ? e.body.command : null);
+const noScope = (e) => codeOf(e) === 'no-scope';
+/** "Reconectar" to Conexões, after the text of a band or a state (the console source's missing scope). */
+const reconnectLink = () => el('a', { class: 'prj-reconnect', href: CONNECTIONS_UI, 'data-action': 'reconnect' }, 'Reconectar em Conexões');
+const withReconnect = (node, on) => (on ? (node.querySelector('p')?.append(' ', reconnectLink()), node) : node);
 const cardName = (card) => (card.number != null ? `#${card.number}` : `“${card.title}”`);
 const waitOf = (e) => (e?.retryIn ? ` Tente de novo em ${Math.ceil(e.retryIn / 1000)} s.` : '');
 const withCommand = (node, command) => (command ? (node.querySelector('p')?.append(' ', el('code', { class: 'prj-command mono' }, command)), node) : node);
+
+const setHidden = (node, hidden) => (hidden ? node.setAttribute('hidden', '') : node.removeAttribute('hidden'));
 
 /** O CSS da tela, uma vez por página (fica carregado quando se troca de tela). */
 function loadStyle() {
@@ -78,6 +88,7 @@ function loadStyle() {
 
 export async function mount(area, ctx) {
   loadStyle();
+  loadPickerStyle();
   let board = null; // o último quadro (do núcleo ou com o movimento otimista aplicado)
   let milestone = '';
   let readFailure = null; // leitura que falhou com um quadro já na tela
@@ -93,6 +104,7 @@ export async function mount(area, ctx) {
   let liveTimer = null;
   let focus = null; // itemId que recebe o foco no próximo desenho (movimento pelo teclado)
   let bandsKey = '';
+  let mode = 'loading'; // 'board', 'picker' (C43), 'connect' (C42), 'saving' or 'other'
 
   // ---------- a estrutura (fica de pé entre os redesenhos) ----------
 
@@ -102,14 +114,24 @@ export async function mount(area, ctx) {
     drawBoard();
   });
   const refreshButton = el('button', { type: 'button', class: 'btn', onClick: () => draw({ force: true }) }, icon('refresh'), 'Atualizar');
+  // issue 241 (C43 1440): "Trocar de Project" in the header; hidden while AHRENA_CONSOLE_PROJECT decides.
+  const projectSwitch = createSwitch(ctx, {
+    current: () => board?.selection ?? board?.project ?? null,
+    onSaved: () => {
+      board = null;
+      draw();
+    },
+    onNotConnected: () => showConnect(),
+  });
   // O cabeçalho fica: a pílula "Ao vivo" é dele, e a moldura a mantém em dia.
   const head = header({
     icon: 'github',
     title: 'Kanban do projeto',
     sub: 'GitHub Project · por Status · arraste para mudar',
-    actions: [el('label', { class: 'prj-milestone' }, el('span', {}, 'Marco:'), selector, icon('chevron-down')), refreshButton],
+    actions: [projectSwitch.node, el('label', { class: 'prj-milestone' }, el('span', {}, 'Marco:'), selector, icon('chevron-down')), refreshButton],
   });
   const sub = head.querySelector('.sub');
+  const actionsBox = head.querySelector('.actions');
   // O toast mora numa região viva fixa, logo depois do cabeçalho: o leitor de tela anuncia o que entra
   // nela, e o Tab chega ao Desfazer sem atravessar o quadro. Foco ou mouse em cima seguram o tempo.
   const toastBox = el('div', { class: 'prj-toast-box', role: 'status', 'aria-live': 'polite' });
@@ -122,7 +144,11 @@ export async function mount(area, ctx) {
   let screenShape = false;
 
   function drawHeader() {
-    if (sub) sub.textContent = `GitHub Project “${board.project?.title ?? ''}” · por Status · arraste para mudar`;
+    const p = board.project ?? {};
+    const where = p.owner && p.number ? ` · ${p.owner} #${p.number}` : '';
+    if (sub) sub.textContent = `GitHub Project “${p.title ?? ''}”${where} · por ${p.field || 'Status'} · arraste para mudar`;
+    if (actionsBox) setHidden(actionsBox, false);
+    setHidden(projectSwitch.node, Boolean(board.envOverride));
     const milestones = Array.isArray(board.milestones) ? board.milestones : [];
     if (milestone && !milestones.includes(milestone)) milestone = '';
     selector.replaceChildren(el('option', { value: '' }, 'Todos os marcos'), ...milestones.map((m) => el('option', { value: m }, m)));
@@ -132,6 +158,38 @@ export async function mount(area, ctx) {
   function switchArea(...nodes) {
     screenShape = false;
     area.replaceChildren(head, ...nodes);
+  }
+
+  /** A screen without a board (the picker, "Conectar ao GitHub", an error): the board's actions go away. */
+  function boardless(subText, ...nodes) {
+    mode = 'other';
+    projectSwitch.close();
+    if (actionsBox) setHidden(actionsBox, true);
+    if (sub && subText) sub.textContent = subText;
+    switchArea(...nodes);
+  }
+
+  /** C42: the console is not connected to GitHub (409 `github-not-connected`). */
+  function showConnect() {
+    board = null;
+    boardless('Um GitHub Project por Status', connectEmptyFor('project', ctx.navigate));
+    mode = 'connect';
+  }
+
+  /** C43 1100: no Project chosen yet (503 `no-project`): the list to choose from. */
+  function showPicker() {
+    board = null;
+    if (mode === 'picker') return; // already choosing: a re-read must not wipe the choice in progress
+    const box = el('div', { class: 'pp-picker' });
+    boardless('Escolha o GitHub Project que este quadro mostra', box);
+    mode = 'picker';
+    mountPicker(box, ctx, {
+      onSaved: () => {
+        mode = 'saving';
+        draw();
+      },
+      onNotConnected: () => showConnect(),
+    });
   }
 
   // ---------- leitura ----------
@@ -144,16 +202,19 @@ export async function mount(area, ctx) {
     }
     const mine = ++latestRead;
     pendingReads++;
-    if (!board) switchArea(loading({ label: 'Lendo o GitHub Project' }));
+    if (!board && mode !== 'picker' && mode !== 'connect') switchArea(loading({ label: 'Lendo o GitHub Project' }));
     if (force) refreshButton.setAttribute('aria-busy', 'true');
     try {
       const fresh = await ctx.read(force ? `${ROUTE}?refresh=1` : ROUTE);
       if (mine !== latestRead) return;
       board = fresh;
       readFailure = null;
+      mode = 'board';
       drawBoard();
     } catch (e) {
       if (e?.name === 'AbortError' || mine !== latestRead) return;
+      // Disconnected while the board was open: what is on screen came with the old credential.
+      if (isGithubNotConnected(e)) return showConnect();
       if (board) {
         readFailure = e;
         drawBoard();
@@ -186,18 +247,11 @@ export async function mount(area, ctx) {
 
   function drawFailure(e) {
     const code = codeOf(e);
-    if (code === 'no-project') {
-      const box = empty({
-        icon: 'github',
-        title: 'Escolha o GitHub Project',
-        text: 'Nenhum Project foi configurado. Suba o núcleo com a variável abaixo, com o dono (organização ou pessoa) e o número do Project, como na URL .../projects/<número>. O token do gh precisa do escopo project.',
-      });
-      box.append(el('code', { class: 'prj-command mono' }, 'AHRENA_CONSOLE_PROJECT=dono/número'));
-      switchArea(box);
-      return;
-    }
+    if (isGithubNotConnected(e)) return showConnect();
+    if (code === 'no-project') return showPicker();
     if (e?.status === 503 || code === 'off') {
-      switchArea(
+      boardless(
+        null,
         empty({
           icon: 'github',
           title: 'O núcleo subiu sem GitHub',
@@ -207,8 +261,17 @@ export async function mount(area, ctx) {
       return;
     }
     if (e?.status === 401 || code === 'no-scope') {
-      const box = error({ title: 'Falta o escopo project no gh', text: `${e.message} Rode o comando abaixo e tente de novo.`, retry: () => draw({ force: true }) });
-      box.insertBefore(el('code', { class: 'prj-command mono' }, commandOf(e)), box.lastChild);
+      const command = commandOf(e);
+      if (command) {
+        // The gh source: the token is gh's, and the gh command adds the scope.
+        const box = error({ title: 'Falta o escopo project no gh', text: `${e.message} Rode o comando abaixo e tente de novo.`, retry: () => draw({ force: true }) });
+        box.insertBefore(el('code', { class: 'prj-command mono' }, command), box.lastChild);
+        switchArea(box);
+        return;
+      }
+      // The console's own connection: Reconectar in Conexões asks for every scope again.
+      const box = error({ title: 'Falta o escopo project', text: 'A conexão do console com o GitHub não tem o escopo project, que o Kanban do projeto usa para ler e mover cards. Reconecte em Conexões; o GitHub pede os escopos de novo.', retry: () => draw({ force: true }) });
+      box.insertBefore(el('a', { class: 'btn outline', href: CONNECTIONS_UI, 'data-action': 'reconnect' }, icon('refresh'), 'Reconectar'), box.lastChild);
       switchArea(box);
       return;
     }
@@ -221,12 +284,13 @@ export async function mount(area, ctx) {
   /** As faixas de cima. Só são refeitas quando o que dizem muda: um alerta é anunciado uma vez. */
   function drawBands() {
     const bands = [];
-    if (notice) bands.push({ title: notice.title, text: notice.text, command: notice.command, action: { label: 'Fechar', onClick: () => ((notice = null), drawBoard()) } });
+    if (notice) bands.push({ title: notice.title, text: notice.text, command: notice.command, reconnect: notice.reconnect, action: { label: 'Fechar', onClick: () => ((notice = null), drawBoard()) } });
     if (readFailure) {
       bands.push({
         title: 'Não deu para reler o quadro.',
         text: `${readFailure.message} Mostrando a última leitura.${waitOf(readFailure)}`,
-        command: codeOf(readFailure) === 'no-scope' ? commandOf(readFailure) : null,
+        command: noScope(readFailure) ? commandOf(readFailure) : null,
+        reconnect: noScope(readFailure) && !commandOf(readFailure),
         action: { label: 'Tentar agora', onClick: () => draw({ force: true }) },
       });
     } else if (board.stale) {
@@ -237,12 +301,14 @@ export async function mount(area, ctx) {
         action: { label: 'Tentar agora', onClick: () => draw({ force: true }) },
       });
     }
-    const key = JSON.stringify(bands.map(({ title, text, command }) => [title, text, command]));
+    const env = board.envOverride ?? null;
+    const key = JSON.stringify([env, bands.map(({ title, text, command, reconnect }) => [title, text, command, Boolean(reconnect)])]);
     if (key === bandsKey) return;
     bandsKey = key;
-    if (bands.length) bandsBox.removeAttribute('hidden');
+    if (bands.length || env) bandsBox.removeAttribute('hidden');
     else bandsBox.setAttribute('hidden', '');
-    bandsBox.replaceChildren(...bands.map((f) => withCommand(errorBand(f), f.command)));
+    // issue 241 (C44): AHRENA_CONSOLE_PROJECT decides the Project; the choice on screen waits for it to go.
+    bandsBox.replaceChildren(...(env ? [envBand(env)] : []), ...bands.map((f) => withReconnect(withCommand(errorBand(f), f.command), f.reconnect)));
   }
 
   function drawBoard() {
@@ -418,11 +484,15 @@ export async function mount(area, ctx) {
     } catch (e) {
       if (e?.name === 'AbortError') return;
       moveHere(itemId, from, wasAt);
-      const command = codeOf(e) === 'no-scope' ? commandOf(e) : null;
+      const command = noScope(e) ? commandOf(e) : null;
+      const reconnect = noScope(e) && !command;
       notice = {
         title: `O GitHub não aceitou mover ${cardName(card)}.`,
-        text: `${e?.message ?? String(e)}${waitOf(e)} O card voltou para ${laneName(from)}.${command ? ' Rode:' : ''}`,
+        text: reconnect
+          ? `Falta o escopo project na conexão do console. O card voltou para ${laneName(from)}.`
+          : `${e?.message ?? String(e)}${waitOf(e)} O card voltou para ${laneName(from)}.${command ? ' Rode:' : ''}`,
         command,
+        reconnect,
       };
       // O quadro mudou por fora (404, 422) ou outro movimento está em voo: só a releitura acerta a tela.
       if (e?.status === 404 || e?.status === 422 || inFlight > 1) deferred = { force: Boolean(deferred?.force) };
@@ -465,7 +535,9 @@ export async function mount(area, ctx) {
   // ---------- ao vivo ----------
 
   ctx.onRestart(() => draw());
-  ctx.onChange(() => {
+  ctx.onChange((changes) => {
+    // While choosing the Project only the connection matters: the list is the picker's.
+    if (mode === 'picker' && !connectionChanged(changes)) return;
     clearTimeout(liveTimer);
     liveTimer = setTimeout(() => draw(), LIVE_WAIT);
   });

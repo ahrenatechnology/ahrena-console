@@ -24,7 +24,7 @@
 // `alert` (#175, src/telemetry): a machine alert that enters or exits; the key is `<machine>:<alert>`,
 // with no session and no account.
 // The values are English since #173 phase 2b; the old Portuguese ones left in phase 6.
-export const CHANGE_TYPES = ['session', 'state', 'needs-you', 'plan', 'decision', 'account', 'repos', 'alert', 'agent-instructions', 'framework-install', 'adrs'] as const;
+export const CHANGE_TYPES = ['session', 'state', 'needs-you', 'plan', 'decision', 'account', 'repos', 'alert', 'agent-instructions', 'framework-install', 'adrs', 'connections'] as const;
 export type ChangeType = (typeof CHANGE_TYPES)[number];
 
 export interface RecordedChange {
