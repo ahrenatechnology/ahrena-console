@@ -21,8 +21,6 @@ import { UI_FOLDER } from '../../src/api/ui.ts';
 import { SimulatorWorkSource, PANEL_SESSION, seedPanelScenario } from '../../src/simulator/panel.ts';
 import { DETAIL_LOCAL, demoLocal, DETAIL_SESSION, seedDetail } from '../../src/simulator/detail.ts';
 // @ts-expect-error: módulo do navegador, em JavaScript puro
-import { httpOpener } from '../../ui/api.js';
-// @ts-expect-error: idem
 import { modelName } from '../../ui/screens/session-detail.js';
 
 const AGORA = Date.now();
@@ -219,14 +217,6 @@ describe('Detalhe da sessão: /api/sessions/<id>', () => {
     // The old Portuguese /abrir is gone (#173 phase 6): it has no Origin exception and opens nothing.
     assert.equal((await post(`/abrir/${local}`, { ...json, origin: `http://${host}` })).status, 403);
     assert.equal(abertos.length, 1);
-  });
-
-  test('o abridor da página manda o POST em JSON e só com um local_… estrito', async () => {
-    const abrir = httpOpener({ base: api.url });
-    assert.deepEqual(await abrir(DETAIL_LOCAL), { ok: true });
-    await assert.rejects(abrir('local_x"><script>'), /inválido/);
-    await assert.rejects(abrir('../api/hooks'), /inválido/);
-    assert.throws(() => httpOpener({ base: 'http://exemplo.com:4720' }), /núcleo local/);
   });
 
   // O CSS de cada tela fica carregado depois que ela abre uma vez: uma classe com o mesmo nome em

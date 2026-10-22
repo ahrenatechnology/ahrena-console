@@ -30,7 +30,12 @@
 .sessions-pill-count:empty { display: none; }
 
 /* ---------- tabela ---------- */
-.sessions-body { display: flex; flex-direction: column; gap: 12px; }
+/*
+ * Issue 279: the page holds the rows that fit in the window (screens/sessions.js). Before the first table,
+ * these sizes give the count: one row, the table header and the pager. After it, the real rows do.
+ */
+.sessions-body { display: flex; flex-direction: column; gap: 12px;
+  --sessions-row-height: 50px; --sessions-head-height: 37px; --sessions-footer-height: 30px; }
 .table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
 .table th { text-align: left; font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-weight: var(--weight-semibold); padding: 12px 10px; border-bottom: 1px solid var(--border); }
 .table td { padding: 11px 10px; border-bottom: 1px solid var(--border); vertical-align: middle; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -46,31 +51,32 @@
  */
 .table { table-layout: fixed; }
 .table .c-session { width: 22%; }
-.table .c-status { width: 20%; }
+.table .c-status { width: 18%; }
 .table .c-activity { width: 11%; }
 .table .c-duration { width: 11%; }
 .table .c-agents { width: 9%; }
 .table .c-cost { width: 11%; }
 .table .c-dir { width: 13%; }
-.table .c-arrow { width: 3%; }
+.table .c-open { width: 5%; }
 .table .nm, .table .st, .table .dur, .table th { white-space: normal; }
 .table th { overflow: hidden; text-overflow: ellipsis; letter-spacing: .05em; }
 .table .st { line-height: 1.9; }
 .table .dur { font-size: 12px; }
 .table .dur > span { white-space: nowrap; }
 .table .dir { direction: rtl; text-align: left; font-family: var(--font-mono); font-size: 11px; color: var(--muted); }
-.table .arrow { padding-left: 0; text-align: right; }
+/* The open icon (issue 285): its state opens below it, over the row, so the cell does not clip it. */
+.table .sessions-open { padding-left: 0; text-align: right; overflow: visible; }
 @media (max-width: 900px) {
   .table .c-dir, .table .dir { display: none; }
   .table th, .table td { padding-left: 6px; padding-right: 6px; }
   .table th { letter-spacing: .04em; }
-  .table .c-session { width: 23%; }
+  .table .c-session { width: 22%; }
   .table .c-status { width: 23%; }
   .table .c-activity { width: 12%; }
   .table .c-duration { width: 13%; }
-  .table .c-agents { width: 11%; }
+  .table .c-agents { width: 10%; }
   .table .c-cost { width: 14%; }
-  .table .c-arrow { width: 4%; }
+  .table .c-open { width: 6%; }
 }
 
 .table .session-row { cursor: pointer; }

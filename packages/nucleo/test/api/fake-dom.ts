@@ -1,6 +1,6 @@
 // A minimal DOM to mount the /ui screens in node, with no dependency: only what `dom.js`, `states.js`
 // and the screens use (creating nodes, attributes, classes, bubbling events and a `querySelector` of simple
-// selectors: tag, `.class`, `[attribute]`, `[attribute="value"]` and descendant). Also `closest`,
+// selectors: tag, `.class`, `[attribute]`, `[attribute="value"]` and descendant; `stopPropagation` stops the bubbling). Also `closest`,
 // `contains`, `firstChild`, `style.setProperty` (a CSS variable through CSSOM) and a `document.head`.
 
 type Ouvinte = (ev: EventoFalso) => void;
@@ -11,6 +11,7 @@ export interface EventoFalso {
   currentTarget?: ElementoFalso;
   defaultPrevented?: boolean;
   preventDefault?: () => void;
+  stopPropagation?: () => void;
   [k: string]: unknown;
 }
 
@@ -164,7 +165,9 @@ export class ElementoFalso extends NoFalso {
   dispatchEvent(ev: EventoFalso): boolean {
     ev.target ??= this;
     ev.preventDefault ??= () => void (ev.defaultPrevented = true);
-    for (let no: ElementoFalso | null = this; no; no = no.parentNode) {
+    let stopped = false;
+    ev.stopPropagation ??= () => void (stopped = true);
+    for (let no: ElementoFalso | null = this; no && !stopped; no = no.parentNode) {
       ev.currentTarget = no;
       for (const f of no.ouvintes.get(ev.type) ?? []) f(ev);
     }

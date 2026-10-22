@@ -90,11 +90,13 @@ A `API_VERSION` muda pouco, e dois checkouts da mesma versão podem ser códigos
 | O núcleo no ar | Sem `--replace` | Com `--replace` |
 | --- | --- | --- |
 | Mesma versão e commit, ou versão mais nova | Adota | Adota |
-| Versão mais velha | Avisa e adota | Para o velho e sobe |
+| Versão mais velha | Para o velho e sobe | Para o velho e sobe |
 | Mesma versão, commit ancestral deste | Avisa e adota | Para o velho e sobe |
 | Mesma versão, outro commit (mais novo ou de outro branch) | Avisa e adota | Avisa e adota: para trocar, `stop` antes |
 
-Ninguém fica sem núcleo por causa da versão. Parar o velho é SIGTERM e, depois de 10 s, SIGKILL. Sem git (o app empacotado), não há commit, e só a versão conta.
+A versão mais velha é trocada sem pedir ([#220](https://github.com/ahrenatechnology/ahrena-console/issues/220)): o app atualizado achou de pé o núcleo da versão anterior, que as pontes do MCP mantinham vivo como clientes, adotou-o e mostrou a /ui velha. Os clientes registrados ficam na pasta de dados e passam a valer para o núcleo novo; as pontes o acham pelo registro no pedido seguinte.
+
+Parar o velho é SIGTERM e, depois de 10 s, SIGKILL. Se ele não sai (ou se a porta deixa de responder com o pid dele, e então ninguém o sinaliza), o `start` não sobe outro ao lado: sai com 1 e `{"state":"stopped","reason":"o núcleo antigo (versão …, pid …) não saiu para dar lugar a este"}`, e o app mostra esse motivo na bandeja. Sem git (o app empacotado), não há commit, e só a versão conta.
 
 ## A regra do `--parent`
 
@@ -148,7 +150,7 @@ O `scripts/medir-carga.mjs` sobe com `--no-lock` numa porta à parte.
 [test/owner/owner.test.ts](../../test/owner/owner.test.ts) sobe núcleos de verdade, cada um com um `HOME` falso numa pasta temporária e numa porta livre:
 - duas e três subidas ao mesmo tempo dão um núcleo só;
 - trava órfã por pid morto, por porta muda e por pid reaproveitado, sem sinalizar o processo estranho;
-- versão mais velha e commit diferente, com e sem `--replace` (na API) e `replace`;
+- versão mais velha trocada sem `--replace`, também com uma ponte registrada como cliente, e a troca que falha; commit diferente, com e sem `replace`;
 - `--demo` e `--no-lock` com a porta ocupada;
 - a pasta 0700, a trava exclusiva e a liberação que devolve a trava alheia;
 - pai morto com e sem cliente registrado;
