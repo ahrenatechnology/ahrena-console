@@ -36,6 +36,12 @@
 // - `GET /api/events` (C47, the feed): each machine's page, merged newest first, so a page holds up to
 //   `limit` events of EACH machine. `cursor` and `older` become one opaque cursor for all of them
 //   (`after` and `before` take it back); a machine that has nothing older is left out of `older`.
+//   A `before` page is not globally ordered against the previous page: each machine continues from
+//   its own cursor (a machine's cursor cannot resume in the middle of its page), so the /ui inserts
+//   the events by `createdAt` rather than appending them. On `after`, a machine with no entry in the
+//   cursor (down or slow at load, a machine that joins during live polling) is read from its first
+//   page: it contributes its newest page once, merged with the rest, and its `cursor` enters the new
+//   one; the /ui places those events by `createdAt` too. An `after` answer carries `options: null`.
 //   `options.sessions` carry their machine; types and tools are joined.
 // - `GET /api/history` (C47): the days of every machine merged (a day of both has both machines'
 //   sessions, newest end first), cut at `days`, with `next` for the following page. A remote's day is
@@ -229,44 +235,44 @@ class MachineSessionsRoute {
   }
 
   // `/api/sessions`
-  private async sessions(pedido: PedidoDeSessoes, chosen: Chosen[]) {
+  private async sessions(request: PedidoDeSessoes, chosen: Chosen[]) {
     if (chosen.length === 1 && chosen[0]!.tag.id === LOCAL_MACHINE_ID) {
-      const l = await this.o.local.sessions!.listar(pedido);
+      const l = await this.o.local.sessions!.listar(request);
       const tag = chosen[0]!.tag;
       return { ...l, items: l.items.map((i) => withMachine(i, tag)), byMachine: [{ id: tag.id, registered: l.registered, total: l.total }] };
     }
-    const depth = Math.min(pedido.pagina * pedido.perPage, MAX_MERGE_ROWS);
+    const depth = Math.min(request.pagina * request.perPage, MAX_MERGE_ROWS);
     const parts = await Promise.all(
       chosen.map(async (c) => {
         if (!c.source) {
           if (c.tag.id !== LOCAL_MACHINE_ID) return null;
-          const l = await this.o.local.sessions!.listar({ ...pedido, pagina: 1, perPage: depth });
+          const l = await this.o.local.sessions!.listar({ ...request, pagina: 1, perPage: depth });
           return { id: c.tag.id, items: l.items.map((i) => withMachine(i, c.tag)) as Record<string, unknown>[], total: l.total, registered: l.registered, directories: l.directories, counts: l.counts as Record<string, number> };
         }
-        return this.remote(c, (source, reader) => remoteSessions(source, reader, pedido, depth, c.tag));
+        return this.remote(c, (source, reader) => remoteSessions(source, reader, request, depth, c.tag));
       }),
     );
     const got = parts.filter((p) => p !== null);
-    const sign = pedido.sentido === 'desc' ? 1 : -1;
+    const sign = request.sentido === 'desc' ? 1 : -1;
     const key = (r: Record<string, unknown>): number =>
-      pedido.ordem === 'duration' ? Number(r.durationMs) : pedido.ordem === 'cost' ? (typeof r.costUsd === 'number' ? r.costUsd : -1) : Date.parse(String(r.lastActivity));
+      request.ordem === 'duration' ? Number(r.durationMs) : request.ordem === 'cost' ? (typeof r.costUsd === 'number' ? r.costUsd : -1) : Date.parse(String(r.lastActivity));
     const merged = mergeOrdered(
       got.map((p) => p.items),
       (a, b) => sign * (key(b) - key(a)) || 0,
     );
     const total = got.reduce((n, p) => n + p.total, 0);
-    const pages = Math.max(1, Math.ceil(total / pedido.perPage));
-    const page = Math.min(pedido.pagina, pages);
+    const pages = Math.max(1, Math.ceil(total / request.perPage));
+    const page = Math.min(request.pagina, pages);
     const counts = Object.fromEntries(FILTROS_DE_STATUS.map((f) => [f, got.reduce((n, p) => n + (p.counts[f] ?? 0), 0)])) as Record<FiltroDeStatus, number>;
     return {
       total,
       registered: got.reduce((n, p) => n + p.registered, 0),
       page,
-      perPage: pedido.perPage,
+      perPage: request.perPage,
       pages,
       directories: [...new Set(got.flatMap((p) => p.directories))].sort().slice(0, MAX_DIRECTORIES),
       counts,
-      items: merged.slice((page - 1) * pedido.perPage, page * pedido.perPage),
+      items: merged.slice((page - 1) * request.perPage, page * request.perPage),
       byMachine: got.map((p) => ({ id: p.id, registered: p.registered, total: p.total })),
     };
   }
@@ -301,15 +307,15 @@ class MachineSessionsRoute {
   }
 
   // `/api/kanban`
-  private async kanban(pedido: PedidoDoKanban, chosen: Chosen[]) {
+  private async kanban(request: PedidoDoKanban, chosen: Chosen[]) {
     if (chosen.length === 1 && chosen[0]!.tag.id === LOCAL_MACHINE_ID) {
-      const board = await this.o.local.kanban!.montar(pedido);
+      const board = await this.o.local.kanban!.montar(request);
       const tag = chosen[0]!.tag;
       return { ...board, columns: board.columns.map((col) => ({ ...col, items: col.items.map((i) => withMachine(i, tag)) })) };
     }
-    const pages = pedido.coluna ? Math.min(pedido.pagina, MAX_REMOTE_PAGES) : 1;
-    const asks = Array.from({ length: pages }, (_, i) => ({ ...pedido, pagina: i + 1 }));
-    const kind: RowKind = pedido.visao === 'sessions' ? 'kanban-session' : 'kanban-agent';
+    const pages = request.coluna ? Math.min(request.pagina, MAX_REMOTE_PAGES) : 1;
+    const asks = Array.from({ length: pages }, (_, i) => ({ ...request, pagina: i + 1 }));
+    const kind: RowKind = request.visao === 'sessions' ? 'kanban-session' : 'kanban-agent';
     const parts = await Promise.all(
       chosen.map(async (c) => {
         if (!c.source) {
@@ -325,9 +331,9 @@ class MachineSessionsRoute {
       }),
     );
     const got = parts.filter((p) => p !== null);
-    const all: readonly { id: string; label: string }[] = pedido.visao === 'sessions' ? COLUNAS_DAS_SESSOES : COLUNAS_DOS_AGENTES;
-    const ids = all.filter((col) => !pedido.coluna || col.id === pedido.coluna);
-    const page = pedido.coluna ? pedido.pagina : 1;
+    const all: readonly { id: string; label: string }[] = request.visao === 'sessions' ? COLUNAS_DAS_SESSOES : COLUNAS_DOS_AGENTES;
+    const ids = all.filter((col) => !request.coluna || col.id === request.coluna);
+    const page = request.coluna ? request.pagina : 1;
     const columns = ids.map(({ id, label }) => {
       const total = got.reduce((n, p) => n + (p.get(id)?.total ?? 0), 0);
       const merged = mergeOrdered(
@@ -337,7 +343,7 @@ class MachineSessionsRoute {
       const start = (page - 1) * KANBAN_PER_PAGE;
       return { id, label, total, page, hasMore: total > page * KANBAN_PER_PAGE, items: merged.slice(start, start + KANBAN_PER_PAGE) };
     });
-    return { view: pedido.visao, perPage: KANBAN_PER_PAGE, columns };
+    return { view: request.visao, perPage: KANBAN_PER_PAGE, columns };
   }
 
   // `/api/history`
@@ -383,8 +389,13 @@ class MachineSessionsRoute {
         const map = incoming[name];
         if (!map) continue;
         const c = map[id];
-        // A machine with nothing older (or not in the cursor) is out of this `before` page.
-        if (typeof c !== 'string') return null;
+        if (typeof c !== 'string') {
+          // A machine with nothing older (or not in the cursor) is out of this `before` page.
+          if (name === 'before') return null;
+          // On `after`, a machine with no place yet (down at load, back now) is read from its first page.
+          p.delete(name);
+          continue;
+        }
         p.set(name, c);
       }
       return p;
@@ -530,27 +541,27 @@ interface SessionsPart {
   counts: Record<string, number>;
 }
 
-function sessionsQuery(pedido: PedidoDeSessoes, page: number): string {
+function sessionsQuery(request: PedidoDeSessoes, page: number): string {
   const q = new URLSearchParams();
-  if (pedido.status !== 'all') q.set('status', pedido.status);
-  if (pedido.busca) q.set('search', pedido.busca);
-  if (pedido.dir) q.set('dir', pedido.dir);
-  if (pedido.ordem !== 'activity') q.set('order', pedido.ordem);
-  if (pedido.sentido !== 'desc') q.set('direction', pedido.sentido);
+  if (request.status !== 'all') q.set('status', request.status);
+  if (request.busca) q.set('search', request.busca);
+  if (request.dir) q.set('dir', request.dir);
+  if (request.ordem !== 'activity') q.set('order', request.ordem);
+  if (request.sentido !== 'desc') q.set('direction', request.sentido);
   q.set('page', String(page));
   q.set('perPage', String(REMOTE_PER_PAGE));
   return `${SESSIONS_ROUTE}?${q}`;
 }
 
 /** The remote's filtered rows, as deep as `depth`: page 1, then the pages it still needs, in parallel. */
-async function remoteSessions(source: RemoteSessionSource, reader: MachineReader, pedido: PedidoDeSessoes, depth: number, tag: MachineTag): Promise<SessionsPart | null> {
-  const first = await reader.read(source, sessionsQuery(pedido, 1));
+async function remoteSessions(source: RemoteSessionSource, reader: MachineReader, request: PedidoDeSessoes, depth: number, tag: MachineTag): Promise<SessionsPart | null> {
+  const first = await reader.read(source, sessionsQuery(request, 1));
   if (!isObject(first) || !Array.isArray(first.items) || !isCount(first.total) || !isCount(first.registered)) return null;
   // A núcleo from before #279 ignores `perPage` and says how many it gave.
   const perPage = isCount(first.perPage) && first.perPage > 0 ? first.perPage : Math.max(1, first.items.length);
   const pages = isCount(first.pages) && first.pages > 0 ? first.pages : Math.ceil(first.total / perPage);
   const needed = Math.min(Math.ceil(depth / perPage), pages, MAX_REMOTE_PAGES);
-  const rest = await Promise.all(Array.from({ length: Math.max(0, needed - 1) }, (_, i) => reader.read(source, sessionsQuery(pedido, i + 2))));
+  const rest = await Promise.all(Array.from({ length: Math.max(0, needed - 1) }, (_, i) => reader.read(source, sessionsQuery(request, i + 2))));
   const raw = [first, ...rest].flatMap((b) => (isObject(b) && Array.isArray(b.items) ? b.items : []));
   const counts = isObject(first.counts) ? Object.fromEntries(FILTROS_DE_STATUS.map((f) => [f, remoteCount((first.counts as Record<string, unknown>)[f])])) : {};
   const directories = Array.isArray(first.directories) ? first.directories.filter((d): d is string => typeof d === 'string' && d.startsWith('/') && d.length <= 1024).slice(0, MAX_DIRECTORIES) : [];

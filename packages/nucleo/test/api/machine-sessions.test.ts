@@ -27,7 +27,7 @@ const WS = { id: 'ws-test', label: 'Workstation' };
 interface Core {
   storage: SqliteStorage;
   api: LocalApi;
-  lista: ListaDeSessoes;
+  sessions: ListaDeSessoes;
 }
 
 /** A núcleo over a simulated database: every list route and the Detail. */
@@ -35,24 +35,24 @@ async function startCore(seed: number, extra: Partial<ApiOptions> = {}, storage?
   const own = !storage;
   storage ??= openSqliteStorage({ path: ':memory:' });
   if (own) await simulate(storage, { seed, sessions: 14, chaos: true, prices: true, now: () => NOW });
-  const contas = new Accounts({ storage, file: null });
-  const frota = new FleetReader({ storage, accounts: contas, now: () => NOW, timeZone: 'UTC' });
-  const montador = new MontadorDoPainel({ storage, contas, desktop: null, trabalho: null, agora: () => NOW });
-  const lista = new ListaDeSessoes({ storage, contas, agora: () => NOW });
+  const accounts = new Accounts({ storage, file: null });
+  const fleet = new FleetReader({ storage, accounts, now: () => NOW, timeZone: 'UTC' });
+  const panelBuilder = new MontadorDoPainel({ storage, contas: accounts, desktop: null, trabalho: null, agora: () => NOW });
+  const sessionList = new ListaDeSessoes({ storage, contas: accounts, agora: () => NOW });
   const api = await startLocalApi({
-    panelBuilder: montador,
+    panelBuilder,
     hooks: { storage },
     port: 0,
     log: () => {},
-    sessions: lista,
-    kanban: new QuadroKanban({ storage, contas, agora: () => NOW }),
+    sessions: sessionList,
+    kanban: new QuadroKanban({ storage, contas: accounts, agora: () => NOW }),
     history: new SessionHistory({ storage, timeZone: 'UTC' }),
     events: new FeedDeEventos({ storage }),
-    fleet: frota,
-    detail: new LeiturasDoDetalhe({ storage, montador, agora: () => NOW }),
+    fleet,
+    detail: new LeiturasDoDetalhe({ storage, montador: panelBuilder, agora: () => NOW }),
     ...extra,
   });
-  return { storage, api, lista };
+  return { storage, api, sessions: sessionList };
 }
 
 /** The tunnel in front of the remote núcleo. */
@@ -137,7 +137,7 @@ beforeEach(async () => {
   clock = NOW;
   const storage = openSqliteStorage({ path: ':memory:' });
   await simulate(storage, { seed: 176, sessions: 14, chaos: true, prices: true, now: () => NOW });
-  local = { storage, api: null as unknown as LocalApi, lista: null as unknown as ListaDeSessoes };
+  local = { storage, api: null as unknown as LocalApi, sessions: null as unknown as ListaDeSessoes };
   local = await startCore(0, await bootLocal(), storage);
 });
 afterEach(async () => {
@@ -164,7 +164,7 @@ describe('#243 ?machine= on /api/sessions', () => {
         assert.doesNotMatch(a, /"machines?"/, path);
       }
       const r = await fetch(`${local.api.url}/api/sessions`).then((x) => x.text());
-      assert.equal(r, JSON.stringify(await local.lista.listar({ status: 'all', busca: null, dir: null, ordem: 'activity', sentido: 'desc', pagina: 1, perPage: 10 })));
+      assert.equal(r, JSON.stringify(await local.sessions.listar({ status: 'all', busca: null, dir: null, ordem: 'activity', sentido: 'desc', pagina: 1, perPage: 10 })));
     } finally {
       await plain.api.close();
     }
@@ -172,7 +172,7 @@ describe('#243 ?machine= on /api/sessions', () => {
   });
 
   test('machine=all merges both machines, then paginates; counts, directories and byMachine cover both', async () => {
-    const own = await local.lista.listar({ status: 'all', busca: null, dir: null, ordem: 'activity', sentido: 'desc', pagina: 1, perPage: 100 });
+    const own = await local.sessions.listar({ status: 'all', busca: null, dir: null, ordem: 'activity', sentido: 'desc', pagina: 1, perPage: 100 });
     const theirs = await remoteGet('/api/sessions?perPage=100');
     const { first, items } = await allPages('machine=all&perPage=5');
     assert.equal(first.total, own.total + theirs.total);
@@ -207,13 +207,13 @@ describe('#243 ?machine= on /api/sessions', () => {
   test('machine=all keeps the filters and the order on both machines', async () => {
     const { first, items } = await allPages('machine=all&status=completed&order=duration&direction=asc&perPage=4');
     const theirs = await remoteGet('/api/sessions?status=completed&perPage=100');
-    assert.equal(first.total, (await local.lista.listar({ status: 'completed', busca: null, dir: null, ordem: 'activity', sentido: 'desc', pagina: 1, perPage: 10 })).total + theirs.total);
+    assert.equal(first.total, (await local.sessions.listar({ status: 'completed', busca: null, dir: null, ordem: 'activity', sentido: 'desc', pagina: 1, perPage: 10 })).total + theirs.total);
     for (const i of items) assert.equal(i.status, 'completed');
     for (let k = 1; k < items.length; k++) assert.ok(items[k - 1].durationMs <= items[k].durationMs, 'shortest first');
   });
 
   test('machine=local gives only this machine, marked; machine=<remote> only the remote', async () => {
-    const own = await local.lista.listar({ status: 'all', busca: null, dir: null, ordem: 'activity', sentido: 'desc', pagina: 1, perPage: 10 });
+    const own = await local.sessions.listar({ status: 'all', busca: null, dir: null, ordem: 'activity', sentido: 'desc', pagina: 1, perPage: 10 });
     const l = await get('/api/sessions?machine=local');
     assert.equal(l.status, 200);
     assert.deepEqual(
@@ -409,6 +409,22 @@ describe('#243 ?machine= on the other lists', () => {
     assert.equal(next.options, null);
     assert.equal((await get('/api/events?machine=all&before=not-a-cursor')).status, 400);
     assert.equal((await get('/api/events?machine=all&limit=999')).status, 400);
+  });
+
+  test('events: a remote down at load joins the live feed when it comes back', async () => {
+    status = { state: 'unreachable', reason: 'port-closed', version: null };
+    const r = (await get('/api/events?machine=all&limit=5')).body;
+    assert.ok(r.events.every((e: { machine: { id: string } }) => e.machine.id === 'local'));
+    const cursor = decodeCursor(r.cursor);
+    assert.ok(cursor && typeof cursor.local === 'string');
+    assert.equal(cursor?.['ws-test'] ?? null, null);
+    status = { state: 'connected', reason: null, version: 1 };
+    const live = (await get(`/api/events?machine=all&limit=5&after=${r.cursor}`)).body;
+    assert.ok(live.events.some((e: { machine: { id: string } }) => e.machine.id === 'ws-test'));
+    for (let k = 1; k < live.events.length; k++) assert.ok(live.events[k - 1].createdAt >= live.events[k].createdAt);
+    assert.equal(live.options, null);
+    const next = decodeCursor(live.cursor);
+    assert.equal(typeof next?.['ws-test'], 'string');
   });
 
   test('history: the days of both machines, newest first, with the page cursor', async () => {
