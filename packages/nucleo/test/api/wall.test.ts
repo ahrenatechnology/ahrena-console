@@ -79,14 +79,14 @@ describe('mural ao vivo (#34)', () => {
     assert.deepEqual(
       mural.cards.map((c) => c.id),
       [
-        // Precisam de você: urgentes e erro, o pedido mais recente primeiro; depois a sua vez.
-        sim('motor-de-regras'), sim('painel-de-metricas'), sim('app-receitas'), sim('fila-de-tarefas'),
+        // Precisam de você: urgentes e erro, o pedido mais recente primeiro; depois as ociosas (#245), a mais recente primeiro.
+        sim('motor-de-regras'), sim('painel-de-metricas'), sim('fila-de-tarefas'), sim('app-receitas'),
         // As outras, pela atividade mais recente; a concluída há 20 min ainda está aberta.
         PANEL_SESSION, sim('catalogo-exemplo'), sim('blog-estatico'),
       ],
     );
-    assert.deepEqual(mural.count, { all: 7, waiting: 4, active: 2 });
-    const [permissao, erro, , suaVez] = mural.cards;
+    assert.deepEqual(mural.count, { all: 7, waiting: 4, active: 2, blocked: 2, idle: 2 });
+    const [permissao, erro, suaVez] = mural.cards;
     assert.deepEqual([permissao.status, permissao.state, permissao.reason, permissao.urgent, permissao.activity.type], ['waiting', 'waiting', 'notification', true, 'permission']);
     assert.deepEqual([erro.status, erro.state, erro.urgent, erro.activity.type], ['error', 'error', true, 'error']);
     assert.equal(erro.since, iso(3));
@@ -169,7 +169,7 @@ describe('mural ao vivo (#34)', () => {
     assert.equal(esta.effort, 'max', 'o Desktop vale mais que a metadata');
     assert.equal(esta.branch, 'feat/63-do-desktop');
     assert.equal(mural.cards.some((c) => c.id === sim('catalogo-exemplo')), false, 'a arquivada no Desktop sai do mural');
-    assert.deepEqual(mural.count, { all: 6, waiting: 4, active: 1 });
+    assert.deepEqual(mural.count, { all: 6, waiting: 4, active: 1, blocked: 2, idle: 2 });
     await storage.close();
   });
 
@@ -198,11 +198,13 @@ describe('mural ao vivo (#34)', () => {
       assert.match(r.headers.get('content-type') ?? '', /application\/json/);
       const mural = (await r.json()) as Wall;
       assert.equal(mural.version, 1);
-      // The old route answers the old keys (#173 phase 2b; its golden has the whole body).
-      assert.equal(((await (await fetch(`${api.url}/api/mural`)).json()) as { versao: number }).versao, 1);
       assert.equal(mural.cards.length, 7);
-      assert.equal((await fetch(`${api.url}/api/mural`, { headers: { origin: 'https://exemplo.com' } })).status, 403);
-      assert.equal((await fetch(`${api.url}/api/mural`, { method: 'POST' })).status, 405);
+      assert.equal((await fetch(`${api.url}/api/wall`, { headers: { origin: 'https://exemplo.com' } })).status, 403);
+      assert.equal((await fetch(`${api.url}/api/wall`, { method: 'POST' })).status, 405);
+      // The old Portuguese route is gone (#173 phase 6).
+      const antiga = await fetch(`${api.url}/api/mural`);
+      assert.equal(antiga.status, 404);
+      assert.deepEqual(await antiga.json(), { error: 'não encontrado' });
     } finally {
       await api.close();
       await storage.close();

@@ -17,7 +17,7 @@ import { ReadError, httpWriter, httpReader } from '../../ui/api.js';
 // @ts-expect-error: same
 import { startLive } from '../../ui/live.js';
 // @ts-expect-error: same
-import { findScreen, legacyUrl, litItem, machineItems, MACHINES_ROUTE, SECTIONS, sidebarSections, SCREENS } from '../../ui/screens.js';
+import { findScreen, litItem, machineItems, MACHINES_ROUTE, SECTIONS, sidebarSections, SCREENS } from '../../ui/screens.js';
 // @ts-expect-error: same
 import * as agentConfigScreen from '../../ui/screens/agent-config.js';
 
@@ -69,7 +69,7 @@ describe('/ui in the core', () => {
     await sqlite.close();
   });
 
-  test('/ui, /ui/sessions and /ui/sessions/<id> (and the old /ui/sessoes/<id>) return the same page, with the content policy', async () => {
+  test('/ui, /ui/sessions and /ui/sessions/<id> (and any other /ui URL, like the old /ui/sessoes/<id>) return the same page, with the content policy', async () => {
     const page = readFileSync(`${UI_FOLDER}index.html`, 'utf8');
     for (const path of ['/ui', '/ui/', '/ui/sessions', `/ui/sessions/${PANEL_SESSION}`, '/ui/sessoes', `/ui/sessoes/${PANEL_SESSION}`, '/ui/historico', '/ui/analytics/custo', '/ui/qualquer/coisa', '/ui/agent-config', '/ui/agent-config?tab=skills&project=%2Fx']) {
       const r = await fetchPath(api.url, path);
@@ -92,12 +92,8 @@ describe('/ui in the core', () => {
     assert.equal(screen.status, 200);
     assert.match(String(screen.headers['content-type']), /^text\/javascript/);
     assert.match(screen.body, /export async function mount/);
-    // The old folder (`/ui/telas/`) serves the same file until the aliases leave (#173).
-    const legacy = await fetchPath(api.url, '/ui/telas/agent-config.js');
-    assert.equal(legacy.status, 200);
-    assert.match(String(legacy.headers['content-type']), /^text\/javascript/);
-    assert.equal(legacy.body, screen.body);
-    assert.equal((await fetchPath(api.url, '/ui/telas/nada.js')).status, 404);
+    // The old folder (`/ui/telas/`) left with the aliases (#173, phase 6).
+    assert.equal((await fetchPath(api.url, '/ui/telas/agent-config.js')).status, 404);
     const css = await fetchPath(api.url, '/ui/agent-config.css');
     assert.equal(css.status, 200);
     assert.match(String(css.headers['content-type']), /^text\/css/);
@@ -128,6 +124,10 @@ describe('/ui in the core', () => {
   const LINK_TARGETS: Record<string, string[]> = {
     'screens/agent-instructions.js': ['https://docs.claude.com/en/docs/claude-code/memory'],
     'screens/agent-instructions-markdown.js': ['https://github.com/${repo.split('],
+    // ADR e PDR (#174): "Como escrever uma ADR", no vazio.
+    'screens/adrs-common.js': ['https://adr.github.io/'],
+    // Conexões (issue 241): "Como configurar", when the console has no OAuth App (C44).
+    'screens/connections.js': ['https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/authorizing-oauth-apps#device-flow'],
   };
   const externalUrls = (file: string, text: string) => {
     const allowed = LINK_TARGETS[file] ?? [];
@@ -162,7 +162,6 @@ describe('/ui in the core', () => {
         // What the CSP (`style-src 'self'`) blocks is the `style` attribute: `{ style: … }` in el(),
         // `style="…"` and `setAttribute('style', …)`. It lets the CSSOM (`x.style.setProperty`) through.
         assert.doesNotMatch(text, /(?<![.\w-])style\s*[=:]|['"]style['"]|innerHTML|insertAdjacentHTML|\bfetch\(/, `screens/${a} usa estilo inline, HTML ou fetch`);
-        for (const [, css] of text.matchAll(/href: '\/ui\/telas\/([a-z0-9-]+\.css)'/g)) assert.ok(screens.includes(css!), `screens/${a} carrega ${css}, que não existe`);
       }
     }
     const page = readFileSync(`${UI_FOLDER}index.html`, 'utf8');
@@ -173,9 +172,9 @@ describe('/ui in the core', () => {
     const read = httpReader({ base: api.url });
     const overview = await read('/api/overview');
     assert.equal(overview.name, 'ahrena-console');
-    // `nome` stays beside `name` until phase 6 of #173: the installed app reads it.
-    assert.equal(overview.nome, 'ahrena-console');
-    const panel = await read(`/api/painel/${PANEL_SESSION}`);
+    // The old Portuguese key `nome` is gone (#173, phase 6).
+    assert.equal(overview.nome, undefined);
+    const panel = await read(`/api/panel/${PANEL_SESSION}`);
     assert.ok(JSON.stringify(panel).includes(PANEL_SESSION), 'o painel da sessão do simulador');
 
     await assert.rejects(read('/api/nao-existe'), (e: InstanceType<typeof ReadError>) => e instanceof ReadError && e.status === 404);
@@ -252,20 +251,72 @@ describe('/ui in the core', () => {
   });
 });
 
+describe('UI rule 9 (#255): cards in the same row have the same height', () => {
+  const rules = (css: string) =>
+    [...css.replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/([^{}]+)\{([^{}]*)\}/g)].map((m) => ({ selectors: m[1]!.split(',').map((x) => x.trim()), body: m[2]! }));
+  const screenFiles = (ext: string) =>
+    readdirSync(UI_FOLDER, { recursive: true })
+      .map(String)
+      .filter((a) => a.endsWith(ext) && !['shell.css', 'brand.css'].includes(a));
+
+  test('shell.css stretches every card of a screen to its grid row and stacks short cards in .card-column', () => {
+    const shell = rules(readFileSync(`${UI_FOLDER}shell.css`, 'utf8'));
+    const body = (selector: string) => shell.find((r) => r.selectors.includes(selector))?.body ?? '';
+    // One class of specificity, so a screen that has to place one card still can.
+    assert.match(body(':where(.cc-main) .card'), /align-self:\s*stretch/);
+    assert.match(body('.card-column'), /display:\s*flex;[^}]*flex-direction:\s*column/);
+    assert.match(body('.card-column > .card:last-child'), /flex:\s*1/);
+  });
+
+  test('no screen CSS takes a card out of its row height', () => {
+    // Every class a screen gives together with `card` (class: 'card tm-card …').
+    const cardClasses = new Set(['card']);
+    for (const a of screenFiles('.js')) {
+      const js = readFileSync(`${UI_FOLDER}${a}`, 'utf8');
+      for (const [, list] of js.matchAll(/class: [`'"]([^`'"]*)[`'"]/g)) {
+        const names = list!.replace(/\$\{[^}]*\}/g, ' ').split(/\s+/).filter(Boolean);
+        if (names.includes('card')) for (const n of names) cardClasses.add(n);
+      }
+    }
+    assert.ok(cardClasses.has('tm-card') && cardClasses.size > 20);
+    const optOuts: string[] = [];
+    for (const a of screenFiles('.css')) {
+      for (const r of rules(readFileSync(`${UI_FOLDER}${a}`, 'utf8'))) {
+        if (!/align-self:\s*(?!stretch|auto)[a-z-]+/.test(r.body)) continue;
+        for (const sel of r.selectors) {
+          const last = sel.split(/[\s>+~]+/).pop() ?? '';
+          if ([...last.matchAll(/\.([\w-]+)/g)].some(([, c]) => cardClasses.has(c!))) optOuts.push(`${a}: ${sel}`);
+        }
+      }
+    }
+    assert.deepEqual(optOuts, []);
+  });
+});
+
 describe('screen registry', () => {
-  test('the sidebar has Dashboard, Mural ao vivo, Sessões, the Feed, Kanban, Analytics, Workflows and Histórico; under Entrega Repositórios, the project Kanban and Dev Console; under Decisões, Das sessões; under Máquinas Esta máquina and, under Controle, Agent Config; the Detail opens by a session and lights Sessões', () => {
-    assert.deepEqual(SCREENS.filter((t: { item?: unknown }) => t.item).map((t: { id: string }) => t.id), ['dashboard', 'wall', 'sessions', 'feed', 'kanban', 'repos', 'project', 'dev-console', 'analytics', 'workflows', 'history', 'decisions', 'this-machine', 'agent-config']);
+  test('the sidebar has Dashboard, Mural ao vivo, Sessões, the Feed, Kanban, Analytics, Workflows and Histórico; under Entrega Repositórios, the project Kanban and Dev Console; under Decisões, Das sessões, ADR and PDR; under Máquinas Esta máquina and, under Controle, Agent Config and Conexões; the Detail opens by a session and lights Sessões', () => {
+    assert.deepEqual(SCREENS.filter((t: { item?: unknown }) => t.item).map((t: { id: string }) => t.id), ['dashboard', 'wall', 'sessions', 'feed', 'kanban', 'repos', 'project', 'dev-console', 'analytics', 'workflows', 'history', 'decisions', 'adrs', 'pdrs', 'this-machine', 'agent-config', 'connections']);
     assert.deepEqual(
       sidebarSections().map((s: { id: string; label: string | null; items: { id: string }[] }) => [s.id, s.label, s.items.map((t) => t.id)]),
       [
         ['main', null, ['dashboard', 'wall', 'sessions', 'feed', 'kanban', 'analytics', 'workflows', 'history']],
         ['delivery', 'Entrega', ['repos', 'project', 'dev-console']],
-        ['decisions', 'Decisões', ['decisions']],
+        ['decisions', 'Decisões', ['decisions', 'adrs', 'pdrs']],
         ['machines', 'Máquinas', ['this-machine']],
-        ['control', 'Controle', ['agent-config']],
+        ['control', 'Controle', ['agent-config', 'connections']],
       ],
     );
     assert.equal(findScreen('/ui/decisions').screen.file, '/ui/screens/decisions.js');
+    // ADR e PDR (#174): a mesma tela de lista; o registro aberto acende o item do tipo.
+    assert.equal(findScreen('/ui/adrs').screen.file, '/ui/screens/adrs.js');
+    assert.equal(findScreen('/ui/pdrs').screen.file, '/ui/screens/adrs.js');
+    const adr = findScreen('/ui/adrs/exemplo-labs/motor-de-regras/0008-regras-em-tabela');
+    assert.deepEqual([adr.screen.id, adr.screen.highlights, adr.params], ['adr', 'adrs', { owner: 'exemplo-labs', repo: 'motor-de-regras', id: '0008-regras-em-tabela' }]);
+    assert.equal(findScreen('/ui/pdrs/a/b/PDR-001-x').screen.highlights, 'pdrs');
+    // O id do registro é o nome do arquivo: acento e espaço valem ali, e só ali.
+    assert.equal(findScreen(`/ui/adrs/a/b/${encodeURIComponent('0004-decisão de fila')}`).params.id, '0004-decisão de fila');
+    assert.equal(findScreen(`/ui/repos/${encodeURIComponent('dono ruim')}/b`), null);
+    assert.equal(findScreen('/ui/repos/a/b/adrs').screen.id, 'repo-tab');
     assert.equal(findScreen('/ui/wall').screen.id, 'wall');
     assert.equal(findScreen('/ui/workflows').screen.id, 'workflows');
     assert.equal(findScreen('/ui/feed').screen.file, '/ui/screens/feed.js');
@@ -280,8 +331,10 @@ describe('screen registry', () => {
     assert.equal(findScreen('/ui/sessions/a%20b'), null);
     assert.equal(findScreen('/ui/kanban').screen.id, 'kanban');
     assert.equal(findScreen('/ui/dev-console').screen.file, '/ui/screens/dev-console.js');
+    // Conexões (issue 241): the last item of Controle, with an English route.
+    assert.equal(findScreen('/ui/connections').screen.file, '/ui/screens/connections.js');
     assert.equal(findScreen('/ui/nao-existe'), null);
-    // The old URLs match nothing: the shell swaps them for the new one first (legacyUrl).
+    // The old URLs match nothing: the shell shows "Página não encontrada" (#173, phase 6).
     for (const old of ['/ui/sessoes', '/ui/sessoes/b91d04aa-4e1', '/ui/historico', '/ui/mural', '/ui/projeto', '/ui/decisoes']) assert.equal(findScreen(old), null, old);
   });
 
@@ -429,47 +482,10 @@ describe('screen registry', () => {
     }
   });
 
-  test('an old /ui URL becomes the new one: path, query and the detail tab (decision 0009, #173)', () => {
-    const at = (url: string) => {
-      const u = new URL(url, 'http://127.0.0.1:4720');
-      return legacyUrl({ pathname: u.pathname, search: u.search, hash: u.hash });
-    };
-    const pairs: [string, string][] = [
-      ['/ui/sessoes', '/ui/sessions'],
-      ['/ui/sessoes/c3f09b52', '/ui/sessions/c3f09b52'],
-      ['/ui/sessoes/sim-detalhe-pedidos#conversa', '/ui/sessions/sim-detalhe-pedidos#conversation'],
-      ['/ui/sessoes/a#agentes', '/ui/sessions/a#agents'],
-      ['/ui/sessoes/a#tempo', '/ui/sessions/a#timeline'],
-      ['/ui/sessoes/a#decisoes', '/ui/sessions/a#decisions'],
-      ['/ui/sessoes/a#workflow', '/ui/sessions/a#workflow'],
-      ['/ui/sessions/a#decisoes', '/ui/sessions/a#decisions'],
-      ['/ui/sessoes?status=esperando&busca=oi&ordem=custo&sentido=asc&pagina=2', '/ui/sessions?status=waiting&search=oi&order=cost&direction=asc&page=2'],
-      ...(
-        [['todas', 'all'], ['ativas', 'active'], ['esperando', 'waiting'], ['concluidas', 'completed'], ['erro', 'error'], ['abandonadas', 'abandoned']] as const
-      ).map(([old, status]): [string, string] => [`/ui/sessions?status=${old}`, `/ui/sessions?status=${status}`]),
-      ...([['atividade', 'activity'], ['duracao', 'duration'], ['custo', 'cost']] as const).map(([old, order]): [string, string] => [`/ui/sessoes?ordem=${old}`, `/ui/sessions?order=${order}`]),
-      ['/ui/historico', '/ui/history'],
-      ['/ui/mural', '/ui/wall'],
-      ['/ui/projeto', '/ui/project'],
-      ['/ui/decisoes', '/ui/decisions'],
-      ['/ui/analytics/custo', '/ui/analytics/cost'],
-      ['/ui/kanban?visao=agentes', '/ui/kanban?view=agents'],
-      ['/ui/repos/exemplo-labs/vitrine-demo?periodo=1a', '/ui/repos/exemplo-labs/vitrine-demo?period=1y'],
-      ['/ui/repos/exemplo-labs/vitrine-demo?periodo=30d', '/ui/repos/exemplo-labs/vitrine-demo?period=30d'],
-    ];
-    for (const [old, next] of pairs) {
-      assert.equal(at(old), next, old);
-      assert.equal(at(next), null, `${next} stays`);
-      assert.ok(findScreen(new URL(next, 'http://x').pathname), next);
-    }
-    // The new name wins over the old one; nothing else is touched.
-    assert.equal(at('/ui/kanban?visao=agentes&view=sessions'), '/ui/kanban?view=sessions');
-    for (const url of ['/ui', '/ui/feed', '/ui/agent-config?tab=skills&project=%2Fx', '/ui/sessions?dir=%2Fa%2Fb', '/ui/analytics', '/ui/nao-existe', '/ui/sessionsx']) assert.equal(at(url), null, url);
-  });
-
-  test('the shell swaps an old URL for the new one with replaceState before routing', () => {
+  test('the shell routes the URL as it came: no old /ui URL is swapped any more (#173, phase 6)', () => {
     const app = readFileSync(`${UI_FOLDER}app.js`, 'utf8');
-    assert.match(app, /const next = legacyUrl\(location\);\n\s+if \(next\) history\.replaceState\(history\.state, '', next\);\n\s+const found = findScreen\(location\.pathname\);/);
+    assert.doesNotMatch(app, /legacyUrl|replaceState/);
+    assert.match(app, /const found = findScreen\(location\.pathname\);\n\s+if \(!found\) \{[\s\S]{0,200}Página não encontrada/);
   });
 });
 

@@ -1,5 +1,5 @@
-// What says a core is alive: the pid exists and the port answers `/api/overview` with the name
-// (`name`, or `nome` on a core from before #173 phase 2b) `ahrena-console`. One without the other
+// What says a core is alive: the pid exists and the port answers `/api/overview` with the `name`
+// `ahrena-console`. One without the other
 // is an orphan lock (the pid was reused, or the port changed).
 
 import { get } from 'node:http';
@@ -39,10 +39,9 @@ export function probe(port: number, timeoutMs = 1000): Promise<CoreView | null> 
       });
       res.on('end', () => {
         try {
-          // `name`/`version` since #173 phase 2b; an older core answers only `nome`/`versao`.
-          const v = JSON.parse(body) as { name?: unknown; version?: unknown; nome?: unknown; versao?: unknown; pid?: unknown; commit?: unknown };
-          const name = typeof v.name === 'string' ? v.name : v.nome;
-          const version = typeof v.version === 'string' ? v.version : v.versao;
+          const v = JSON.parse(body) as { name?: unknown; version?: unknown; pid?: unknown; commit?: unknown };
+          const name = v.name;
+          const version = v.version;
           resolve(
             typeof name === 'string'
               ? {

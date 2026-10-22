@@ -11,6 +11,8 @@
 // 5. notifies through a system notification whoever starts needing you (A3, notifications.rs);
 // 5a. reads the machines and their telemetry (`/api/machines`, `/api/telemetry`) for the "Máquinas"
 //     block (A6, A7, machines.rs) and notifies, silently, a new machine alert (#180);
+// 5b. under a remote without connection, offers "Reconectar", which asks the core to run the
+//     machine's reconnect command (`POST /api/machines/<id>/reconnect`, #244, decision 0012, A8);
 // 6. with the updater key in tauri.conf.json, looks for a new version on opening and every 6 h
 //    (updater.rs) and offers it in the menu;
 // 7. opened by hand, also opens the console; opened at login, stays in the tray only (login.rs).
@@ -101,7 +103,7 @@ fn main() {
         .manage(CoreLoop(Mutex::new(wake)))
         .setup(move |app| {
             // The launch Apple Event is still in progress here, in `applicationDidFinishLaunching`.
-            let variable = core::env_var("AHRENA_CONSOLE_LAUNCH_ORIGIN", "AHRENA_ORIGEM");
+            let variable = core::env_var("AHRENA_CONSOLE_LAUNCH_ORIGIN");
             let (origin, source) = login::detect(variable.as_deref(), login::launch_event());
             eprintln!("[ahrena-console] origin: {} ({source})", origin.name());
             let open_at_launch = login::opens_window_at_launch(origin);
@@ -114,7 +116,7 @@ fn main() {
             #[cfg(target_os = "macos")]
             {
                 let main_thread = objc2::MainThreadMarker::new().expect("Tauri's setup runs on the main thread");
-                native_notice::start(app.handle(), native_notice::Handlers { open: open_window_at, open_in_desktop, silence }, main_thread);
+                native_notice::start(app.handle(), native_notice::Handlers { open: open_window_at, open_in_desktop, silence, reconnect }, main_thread);
             }
             TrayIconBuilder::with_id(TRAY)
                 .icon(Image::from_bytes(ICON)?)
@@ -434,6 +436,8 @@ fn native_menu(app: &AppHandle, items: &[Item]) -> tauri::Result<Menu<Wry>> {
             }
             // The row and the alerts of one machine share its id; `#n` keeps each menu id unique.
             Item::Machine { id: machine, text, dot } => Box::new(IconMenuItem::with_id(app, format!("{}{machine}#{n}", menu::MACHINE), text, true, Some(dot_image(*dot)), None::<&str>)?),
+            Item::MachineLink { id: machine, text } => Box::new(MenuItem::with_id(app, format!("{}{machine}#{n}", menu::MACHINE), text, true, None::<&str>)?),
+            Item::Reconnect { id: machine, text } => Box::new(MenuItem::with_id(app, format!("{}{machine}#{n}", menu::RECONNECT), text, true, None::<&str>)?),
             Item::Action { id, text, shortcut } => Box::new(MenuItem::with_id(app, *id, text, true, *shortcut)?),
             Item::Check { id, text, checked } => Box::new(CheckMenuItem::with_id(app, *id, *text, true, *checked, None::<&str>)?),
             Item::Separator => Box::new(PredefinedMenuItem::separator(app)?),
@@ -458,7 +462,7 @@ fn tweaks(items: &[Item]) -> Vec<native::Tweak> {
                     t.push(Tweak::Tooltip { title: alternate.clone(), tooltip: tooltip.clone() });
                 }
             }
-            Item::Detail(d) => t.push(Tweak::Indent(d.clone())),
+            Item::Detail(d) | Item::MachineLink { text: d, .. } | Item::Reconnect { text: d, .. } => t.push(Tweak::Indent(d.clone())),
             _ => {}
         }
     }
@@ -490,10 +494,10 @@ fn dot_image(d: Dot) -> Image<'static> {
     Image::new_owned(rgba, SIDE, SIDE)
 }
 
-/// `AHRENA_CONSOLE_OPEN_MENU_AFTER=<s>` (old name `AHRENA_ABRIR_MENU`) opens the menu by itself
+/// `AHRENA_CONSOLE_OPEN_MENU_AFTER=<s>` opens the menu by itself
 /// after that many seconds, for the tray screenshots and hand tests without clicking.
 fn open_menu_later(app: &AppHandle) {
-    let Some(seconds) = core::env_var("AHRENA_CONSOLE_OPEN_MENU_AFTER", "AHRENA_ABRIR_MENU").and_then(|s| s.parse::<u64>().ok()) else { return };
+    let Some(seconds) = core::env_var("AHRENA_CONSOLE_OPEN_MENU_AFTER").and_then(|s| s.parse::<u64>().ok()) else { return };
     let app = app.clone();
     std::thread::spawn(move || {
         std::thread::sleep(Duration::from_secs(seconds));
@@ -525,6 +529,10 @@ fn click(app: &AppHandle, id: &str) {
         }
         menu::ID_INSTALL_NODE => {
             let _ = std::process::Command::new("open").arg("https://nodejs.org/en/download").spawn();
+        }
+        _ if id.starts_with(menu::RECONNECT) => {
+            let machine = id[menu::RECONNECT.len()..].split('#').next().unwrap_or("");
+            reconnect(app, machine);
         }
         _ if id.starts_with(menu::MACHINE) => {
             let machine = id[menu::MACHINE.len()..].split('#').next().unwrap_or("");
@@ -564,6 +572,39 @@ fn open_in_desktop(app: &AppHandle, local: Option<String>) {
     });
 }
 
+/// "Reconectar" in the menu or in the notification (#244): `POST /api/machines/<id>/reconnect`, with
+/// no `Origin` and a loopback `Host`, like `POST /open/<local_…>`. Only the id goes: the command is
+/// the one in machines.json, which the core reads. The 202 brings the state, so "Reconectando…"
+/// shows before the next read; a 409 (the command left the file) opens the machine's screen, which
+/// explains how to set it up.
+fn reconnect(app: &AppHandle, machine: &str) {
+    let shared = app.state::<Shared>().inner().clone();
+    let port = match shared.lock().unwrap_or_else(std::sync::PoisonError::into_inner).core {
+        CoreState::Up { port } => port,
+        _ => return,
+    };
+    let Some(path) = machines::reconnect_path(machine) else { return };
+    let (app, machine) = (app.clone(), machine.to_string());
+    std::thread::spawn(move || match http::post_json(port, &path, "{}") {
+        Some(r) if r.status == 202 => {
+            if let Some(reconnect) = machines::reconnect_from_response(&r.body) {
+                change(&app, &shared, |s| {
+                    for m in s.machines.iter_mut().flatten().filter(|m| m.summary.id == machine) {
+                        m.summary.reconnect = Some(reconnect.clone());
+                    }
+                });
+            }
+        }
+        Some(r) if r.status == 409 => {
+            eprintln!("[ahrena-console] reconnect {machine}: not configured");
+            let handle = app.clone();
+            let screen = machines::machine_path(&machine);
+            let _ = app.run_on_main_thread(move || open_window_at(&handle, &screen));
+        }
+        r => eprintln!("[ahrena-console] reconnect {machine}: {}", r.map(|r| format!("{} {}", r.status, r.body)).unwrap_or_else(|| "no answer".into())),
+    });
+}
+
 fn open_console(app: &AppHandle) {
     open_window(app, None);
 }
@@ -600,9 +641,73 @@ fn open_window(app: &AppHandle, path: Option<&str>) {
         let _ = w.set_focus();
         return;
     }
-    let window = WebviewWindowBuilder::new(app, "console", WebviewUrl::External(url)).title("Ahrena Console").inner_size(1100.0, 760.0).build();
+    let (nav_state, new_window_state) = (shared.clone(), shared.clone());
+    let window = WebviewWindowBuilder::new(app, "console", WebviewUrl::External(url))
+        .title("Ahrena Console")
+        .inner_size(1100.0, 760.0)
+        // A link out of the /ui (github.com/login/device, Revogar no GitHub; #241) opens in the system
+        // browser, never inside this window: the window only ever shows this app's core's /ui.
+        .on_navigation(move |url| match link_target(url, core_port(&nav_state)) {
+            LinkTarget::Core => true,
+            LinkTarget::Browser => {
+                open_in_browser(url);
+                false
+            }
+            LinkTarget::Refused => false,
+        })
+        .on_new_window(move |url, _| {
+            if link_target(&url, core_port(&new_window_state)) == LinkTarget::Browser {
+                open_in_browser(&url);
+            }
+            tauri::webview::NewWindowResponse::Deny
+        })
+        .build();
     if let Ok(w) = window {
         let _ = w.set_focus();
+    }
+}
+
+/// Where a URL the console window wants to show goes (#241).
+#[derive(Debug, PartialEq, Eq)]
+enum LinkTarget {
+    /// The /ui of this app's core (loopback http on its port), or a blank page: stays in the window.
+    Core,
+    /// An https page on a host the /ui links to: the system browser.
+    Browser,
+    /// Anything else (another local server, file:, javascript:, other hosts): nowhere.
+    Refused,
+}
+
+/// The hosts the /ui links out to: GitHub (repositories, PRs, the device flow, revoking the app) and
+/// the docs it cites. A page that wants anything else gets nothing.
+const BROWSER_HOSTS: &[&str] = &["github.com", "github.io", "claude.com"];
+
+fn core_port(state: &Shared) -> Option<u16> {
+    match state.lock().unwrap_or_else(std::sync::PoisonError::into_inner).core {
+        CoreState::Up { port } => Some(port),
+        _ => None,
+    }
+}
+
+fn link_target(url: &tauri::Url, core_port: Option<u16>) -> LinkTarget {
+    let host = url.host_str().unwrap_or("");
+    match url.scheme() {
+        "http" if matches!(host, "127.0.0.1" | "localhost") && core_port.is_some() && url.port() == core_port && (url.path() == "/ui" || url.path().starts_with("/ui/")) => LinkTarget::Core,
+        "about" if url.as_str() == "about:blank" => LinkTarget::Core,
+        "https" if url.username().is_empty() && url.port().is_none() && BROWSER_HOSTS.iter().any(|h| host == *h || host.ends_with(&format!(".{h}"))) => LinkTarget::Browser,
+        _ => LinkTarget::Refused,
+    }
+}
+
+/// `/usr/bin/open <url>`: the URL goes as one argument, never through a shell; the child is reaped.
+fn open_in_browser(url: &tauri::Url) {
+    match std::process::Command::new("/usr/bin/open").arg(url.as_str()).spawn() {
+        Ok(mut child) => {
+            std::thread::spawn(move || {
+                let _ = child.wait();
+            });
+        }
+        Err(e) => eprintln!("[ahrena-console] could not open {} in the browser: {e}", url.host_str().unwrap_or("")),
     }
 }
 
@@ -646,7 +751,30 @@ fn notify(app: &AppHandle, notices: &[Notice]) {
 
 #[cfg(test)]
 mod tests {
-    use super::count_machine_misses;
+    use super::{count_machine_misses, link_target, LinkTarget};
+
+    #[test]
+    fn links_out_of_the_ui_go_to_the_system_browser() {
+        let t = |u: &str| link_target(&u.parse().unwrap(), Some(53817));
+        assert_eq!(t("http://127.0.0.1:53817/ui/connections"), LinkTarget::Core);
+        assert_eq!(t("http://localhost:53817/ui"), LinkTarget::Core);
+        assert_eq!(t("about:blank"), LinkTarget::Core);
+        assert_eq!(t("https://github.com/login/device"), LinkTarget::Browser);
+        assert_eq!(t("https://github.com/settings/connections/applications/abc"), LinkTarget::Browser);
+        assert_eq!(t("https://docs.github.com/en/apps"), LinkTarget::Browser);
+        assert_eq!(t("https://adr.github.io/"), LinkTarget::Browser);
+        assert_eq!(t("http://127.0.0.1:4720/ui"), LinkTarget::Refused, "another local core");
+        assert_eq!(t("http://127.0.0.1:53817/api/connections"), LinkTarget::Refused, "not the /ui");
+        assert_eq!(t("http://127.0.0.1:53817/uix"), LinkTarget::Refused);
+        assert_eq!(t("https://evil.example/"), LinkTarget::Refused, "a host the /ui never links to");
+        assert_eq!(t("https://github.com.evil.example/"), LinkTarget::Refused);
+        assert_eq!(t("https://github.com@evil.example/"), LinkTarget::Refused);
+        assert_eq!(t("https://user@github.com/"), LinkTarget::Refused);
+        assert_eq!(t("http://example.com/"), LinkTarget::Refused, "plain http to another host");
+        assert_eq!(t("file:///etc/passwd"), LinkTarget::Refused);
+        assert_eq!(t("javascript:alert(1)"), LinkTarget::Refused);
+        assert_eq!(link_target(&"http://127.0.0.1:53817/ui".parse().unwrap(), None), LinkTarget::Refused, "no core up");
+    }
 
     #[test]
     fn machine_block_drops_after_three_consecutive_misses() {

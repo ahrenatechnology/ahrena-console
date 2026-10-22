@@ -25,7 +25,7 @@ import type { Accounts } from './accounts.ts';
 import { DecisoesDaSessao, type AcaoNaDecisao, type AlvoDasDecisoes } from './decisions.ts';
 import type { DesktopIndex, DesktopSession } from './desktop-index.ts';
 import { ResumosDeSessao, iniciosDosTurnos, type ResumoDosEventos } from './summary.ts';
-import { atencaoDe, type MotivoDaAtencao, type NivelDeAtencao } from './attention.ts';
+import { atencaoDe, sessionAttention, type MotivoDaAtencao, type NivelDeAtencao } from './attention.ts';
 import type {
   SessionActivity,
   PanelAccount,
@@ -89,6 +89,8 @@ export interface OpcoesDoPainel {
   commitDaPasta?: () => string | null;
   /** A API abre a sessão no Claude Desktop (`POST /open/<local_…>`): no macOS. */
   abreSessao?: boolean;
+  /** The version in the footer, `API_VERSION` by default; a test can pin one. */
+  version?: string;
 }
 
 type Porta = StoragePort;
@@ -146,6 +148,7 @@ export class MontadorDoPainel {
   private readonly custoMs: number;
   private readonly precisamMs: number;
   private readonly apelido: (sessionId: string) => string;
+  private readonly version: string;
   private readonly commit: string | null;
   private readonly commitDaPasta: () => string | null;
   private readonly abreSessao: boolean;
@@ -156,7 +159,8 @@ export class MontadorDoPainel {
   private sessoesRecentes: { em: number; sessoes: Session[] } | null = null;
   private precisamRodando: Promise<Candidata[]> | null = null;
 
-  constructor({ storage, contas, desktop, trabalho, decisoes = null, agora = Date.now, custoMs = 30_000, precisamMs = 4_000, apelido = (id) => id, commit = null, commitDaPasta = () => null, abreSessao = false }: OpcoesDoPainel) {
+  constructor({ storage, contas, desktop, trabalho, decisoes = null, agora = Date.now, custoMs = 30_000, precisamMs = 4_000, apelido = (id) => id, commit = null, commitDaPasta = () => null, abreSessao = false, version = API_VERSION }: OpcoesDoPainel) {
+    this.version = version;
     this.commit = commit;
     this.commitDaPasta = commitDaPasta;
     this.abreSessao = abreSessao;
@@ -234,7 +238,7 @@ export class MontadorDoPainel {
 
     return {
       version: 1,
-      api: { version: API_VERSION, commit: this.commit, folder: this.commitDaPasta(), opensSession: this.abreSessao },
+      api: { version: this.version, commit: this.commit, folder: this.commitDaPasta(), opensSession: this.abreSessao },
       generatedAt: new Date(agora).toISOString(),
       session: sessao,
       context: session ? contextoDe(session, resumo!, await this.storage.listContextMeters(session.id)) : null,
@@ -340,6 +344,7 @@ export class MontadorDoPainel {
       state: inbox.state,
       reason: inbox.reason,
       urgent: inbox.urgent,
+      attention: sessionAttention(inbox, r),
       since: desde,
       turn: Math.max(r.promptsHook, r.promptsTranscript),
       activity: atividade,
@@ -362,6 +367,7 @@ export class MontadorDoPainel {
       state: 'waiting',
       reason: 'session_start',
       urgent: false,
+      attention: sessionAttention({ status: 'waiting', state: 'waiting', reason: 'session_start', needsYou: true }, null),
       since: iso,
       turn: 0,
       activity: { type: 'prompt', text: 'esperando o primeiro prompt' },
@@ -528,7 +534,7 @@ export class MontadorDoPainel {
         account: this.contas.ofSession(c.session, c.desktop),
       });
     }
-    // Quem precisa de você antes de quem só está na sua vez (#140); dentro de cada nível, as urgentes
+    // Quem precisa de você antes das ociosas (#140, #245); dentro de cada nível, as urgentes
     // e, entre elas, o pedido mais recente, que é o que a pessoa lembra.
     const peso = (i: NeedsYouItem) => (i.level === 'needs' ? 1 : 0)
     itens.sort((a, b) => peso(b) - peso(a) || Number(b.urgent) - Number(a.urgent) || b.since.localeCompare(a.since));

@@ -25,15 +25,18 @@ import type {
   PanelResume,
   PanelSession,
   PanelSubagent,
+  SessionAttention,
   PanelWork,
   View,
 } from '../types'
 import {
   SCOPES,
   DECISION_STATES,
-  REASONS,
   ORIGINS,
   STATUS,
+  ATTENTION_STATUS,
+  ATTENTION_REASONS,
+  attentionOf,
   truncate,
   decisionsText,
   since,
@@ -59,13 +62,14 @@ import { gridHeight, CARD_BORDER, SPACE, CARD_LINES, textLines } from './height'
 import { GRAPH_STATE, shortCount, buildGraph, paginate, type GraphState, type GraphLine } from './graph'
 import { paleta, status as STATUS_COR } from './brand'
 import { charsFor, columns, fit, kids, type Node } from './fit'
+import { LEGACY_PORT } from './discover'
 
 export const CARD_W = 34
 /** Todo card tem a mesma altura, ~190 px no Desktop (ver CARD_LINES): a borda e as linhas de conteúdo. */
 export const CARD_H = CARD_BORDER + CARD_LINES
 export const GAP = 2
 /** A versão deste plugin; o teste do núcleo confere com o plugin.json. */
-export const PLUGIN_VERSION = '0.0.32'
+export const PLUGIN_VERSION = '0.0.35'
 const KPI_W = 15
 /** No estreito, quantos cards de decisão cabem antes do rodapé "+N". */
 const DECISIONS_WHEN_NARROW = 3
@@ -98,6 +102,8 @@ const STATUS_COLOR = {
   error: { color: RED_TEXT, background: BADGE.red, border: RED },
   abandoned: { color: STATUS_COR.abandoned.dark.text, background: BADGE.gray, border: BORDER },
 } as const
+/** #245: the idle session ("Ociosa"): neutral, no yellow, a chip barely darker than the card. */
+const IDLE_COLOR = { color: GRAY, background: KPI_BG, border: BORDER } as const
 
 /** Os elementos que o desenho usa, da tabela da superfície. */
 export type Elements = {
@@ -245,9 +251,23 @@ function statusPill(c: DrawContext, key: string, state: PanelSession['state'] | 
   return pill(c, key, `● ${STATUS[st].label}`, color.color, color.background)
 }
 
-function reasonPill(c: DrawContext, key: string, reason: NonNullable<PanelSession['reason']>) {
-  const m = REASONS[reason]
-  return pill(c, key, `${m.glyph} ${m.label}`, YELLOW, BADGE.yellow, m.urgent)
+/**
+ * #245: how a session or a child shows: blocked on you ("● Precisa de você", yellow, tinted) or idle
+ * ("○ Ociosa", neutral); any other state, its console status. The error keeps "Com erro" in red.
+ */
+function statusLook(s: { state: PanelSession['state'] | PanelChild['state']; reason: PanelSession['reason']; attention?: SessionAttention | null }) {
+  const st = statusOf(s.state)
+  const attention = st === 'waiting' || st === 'error' ? attentionOf(s) : null
+  const idle = st === 'waiting' && attention?.level === 'idle'
+  if (idle) return { st, attention, idle, pill: `${ATTENTION_STATUS.idle.pill} ${ATTENTION_STATUS.idle.label}`, short: `${ATTENTION_STATUS.idle.pill} ${ATTENTION_STATUS.idle.short}`, color: IDLE_COLOR, tinted: false }
+  const short = st === 'waiting' ? `● ${ATTENTION_STATUS.blocked.short}` : `● ${STATUS[st].label}`
+  return { st, attention, idle, pill: `● ${STATUS[st].label}`, short, color: STATUS_COLOR[st], tinted: st === 'waiting' || st === 'error' }
+}
+
+/** #245: the reason chip: strong and yellow when it blocks, light and neutral when idle (P0). */
+function attentionPill(c: DrawContext, key: string, a: SessionAttention) {
+  const m = ATTENTION_REASONS[a.reason]
+  return a.level === 'blocked' ? pill(c, key, `${m.glyph} ${m.label}`, YELLOW, BADGE.yellow, true) : pill(c, key, `${m.glyph} ${m.label}`, GRAY, KPI_BG)
 }
 
 /**
@@ -389,7 +409,7 @@ const opensDirectly = (c: DrawContext, local: string | null | undefined) => !!lo
 
 export function sessionUrl(c: Pick<DrawContext, 'core'>, local: string | null | undefined): string | null {
   if (!local || !DESKTOP_LOCAL.test(local)) return null
-  const port = c.core.split(':')[1] ?? '4720'
+  const port = c.core.split(':')[1] ?? String(LEGACY_PORT)
   return `http://localhost:${port}/open/${local}`
 }
 
@@ -475,11 +495,14 @@ function banner(c: DrawContext, s: PanelSession, width: number, narrow: boolean)
   const { Box, Text } = c.el
   const error = f.type === 'error'
   const color = error ? STATUS_COLOR.error : STATUS_COLOR.waiting
+  // The banner is a question, a permission or an error: always blocked on you.
+  const found = attentionOf(s)
+  const attention: SessionAttention = found?.level === 'blocked' ? found : { level: 'blocked', reason: f.type === 'error' ? 'error' : f.type }
   return (
     <Box key="banner" flexDirection="column" width={width} borderStyle="round" borderColor={color.border} backgroundColor={color.background} paddingX={1} gap="xs">
       <Box flexDirection="row" gap={1} flexWrap="wrap" alignItems="center">
         {error ? statusPill(c, 'banner-status', 'error') : statusPill(c, 'banner-status', 'waiting')}
-        {!error && s.reason && reasonPill(c, 'banner-reason', s.reason)}
+        {!error && attention && attentionPill(c, 'banner-reason', attention)}
         {(!narrow || error) && (
           <Text mono size="caption">
             {error ? `${ago(f.since, c.now)} · turno ${s.turn}` : `${BANNER_WORD[f.type]} · ${ago(f.since, c.now)}`}
@@ -552,9 +575,7 @@ export function modelLine(s: Pick<PanelSession, 'model' | 'startedAt' | 'turn'>,
  */
 function sessionCard(c: DrawContext, s: PanelSession) {
   const { Box, Text } = c.el
-  const st = statusOf(s.state)
-  const color = STATUS_COLOR[st]
-  const tinted = st === 'waiting' || st === 'error'
+  const { st, attention, color, tinted, pill: statusText, short } = statusLook(s)
   const a = s.activity
   const activityColor =
     a.type === 'error' ? RED_TEXT : a.type === 'tool' || a.type === 'delegating' ? ORANGE : a.type === 'completed' || a.type === 'abandoned' ? undefined : YELLOW
@@ -568,8 +589,8 @@ function sessionCard(c: DrawContext, s: PanelSession) {
       // Uma linha só, em qualquer estado (ver pilulasDaSessao): duas pills largas quebravam a linha, e
       // o card de altura fixa esmagava a linha do modelo.
       <Box flexDirection="row" gap={1} flexWrap="nowrap">
-        {sessionPills(st === 'waiting' ? s.reason : null, statusOf(s.state)).map((x, i) =>
-          i === 0 ? pill(c, 'status', x.text, color.color, color.background) : pill(c, 'reason', x.text, YELLOW, BADGE.yellow, REASONS[s.reason!].urgent),
+        {sessionPills(statusText, st === 'waiting' ? attention : null, short).map((x, i) =>
+          i === 0 ? pill(c, 'status', x.text, color.color, color.background) : attentionPill(c, 'reason', attention!),
         )}
       </Box>,
       // O título nunca corta: até 2 linhas; com 2, a última mensagem sai para o card não crescer.
@@ -596,15 +617,14 @@ function sessionCard(c: DrawContext, s: PanelSession) {
 
 /**
  * As pills do card Esta sessão, numa linha que cabe em UNCUT_COLUMNS. Cada pill ocupa o texto e
- * um espaço de cada lado; entre elas, uma coluna. Sem caber, "Esperando você" vira "Esperando" e,
+ * um espaço de cada lado; entre elas, uma coluna. Sem caber, "Precisa de você" vira "Precisa" e,
  * por último, o status fica só com o glifo: o motivo, que diz por que a sessão espera, fica inteiro.
  */
-export function sessionPills(reason: PanelSession['reason'] | null, st: ReturnType<typeof statusOf>): { text: string }[] {
-  const status = `● ${STATUS[st].label}`
-  if (!reason) return [{ text: status }]
-  const m = REASONS[reason]
+export function sessionPills(status: string, attention: SessionAttention | null, short = status): { text: string }[] {
+  if (!attention) return [{ text: status }]
+  const m = ATTENTION_REASONS[attention.reason]
   const fullReason = `${m.glyph} ${m.label}`
-  const options: [string, string][] = [[status, fullReason], ['● Esperando', fullReason], ['●', fullReason]]
+  const options: [string, string][] = [[status, fullReason], [short, fullReason], [ATTENTION_STATUS[attention.level].pill, fullReason]]
   const width = ([a, b]: [string, string]) => [...a].length + 2 + 1 + [...b].length + 2
   const [a, b] = options.find((o) => width(o) <= UNCUT_COLUMNS) ?? options.at(-1)!
   return [{ text: a }, { text: b }]
@@ -1108,29 +1128,29 @@ function sessionName(c: DrawContext, key: string, title: string, local: string |
   )
 }
 
-/** Onde a filha entra na lista: trabalhando, precisando de você, na sua vez ou parada. */
-export type ChildGroup = 'working' | 'needs' | 'your-turn' | 'stopped' | 'archived'
+/** Onde a filha entra na lista: trabalhando, precisando de você, ociosa (#245) ou parada. */
+export type ChildGroup = 'working' | 'blocked' | 'idle' | 'stopped' | 'archived'
 
 export function childGroup(f: PanelChild): ChildGroup {
   // #145: a arquivada no Desktop vem por último, seja qual for o estado em que parou.
   if (f.archived) return 'archived'
   if (f.state === 'active' || f.state === 'delegating' || f.state === 'background') return 'working'
-  if (f.state === 'error') return 'needs'
-  // Uma permissão ou uma pergunta chega como `notification`; o fim do turno e o Esc são a sua vez.
-  if (f.state === 'waiting') return f.reason === 'notification' ? 'needs' : 'your-turn'
+  if (f.state === 'error') return 'blocked'
+  // Uma permissão ou uma pergunta chega como `notification`; o fim do turno, o Esc e o primeiro prompt são ociosas.
+  if (f.state === 'waiting') return attentionOf(f)?.level === 'blocked' ? 'blocked' : 'idle'
   return 'stopped'
 }
 
-const CHILD_ORDER: ChildGroup[] = ['working', 'needs', 'your-turn', 'stopped', 'archived']
+const CHILD_ORDER: ChildGroup[] = ['working', 'blocked', 'idle', 'stopped', 'archived']
 
 /** O que vem depois do nome, em cor neutra: o que a filha que trabalha está fazendo. */
 const childDoing = (f: PanelChild) => (childGroup(f) === 'working' ? (f.doing ?? null) : null)
 
-/** A coluna da direita (P1): o tempo, ou o estado que pede você, em âmbar ("Sua vez", "Precisa"). */
+/** A coluna da direita (P1): o tempo, o que pede você, em âmbar ("Precisa"), ou "Ociosa", neutra (#245). */
 function childRight(f: PanelChild, now: number): { text: string; color?: string } {
   const group = childGroup(f)
-  if (group === 'your-turn') return { text: 'Sua vez', color: YELLOW }
-  if (group === 'needs') return { text: f.state === 'error' ? 'Erro' : 'Precisa', color: f.state === 'error' ? RED_TEXT : YELLOW }
+  if (group === 'idle') return { text: ATTENTION_STATUS.idle.label, color: GRAY }
+  if (group === 'blocked') return { text: f.state === 'error' ? 'Erro' : 'Precisa', color: f.state === 'error' ? RED_TEXT : YELLOW }
   // Na coluna de 7: "arquiv." (na lista completa, "· arquivada" vai depois do nome).
   if (group === 'archived') return { text: 'arquiv.' }
   return { text: since(f.since, now) }
@@ -1139,8 +1159,8 @@ function childRight(f: PanelChild, now: number): { text: string; color?: string 
 /** Uma filha (P1): "glifo nome … estado ou tempo"; na lista completa, a que trabalha com o que faz depois do nome. */
 function childLine(c: DrawContext, f: PanelChild, max: number, full = false, withDoing = true) {
   const { Box, Text } = c.el
-  const st = statusOf(f.state)
-  const g = st === 'waiting' ? '◐' : st === 'completed' ? '✓' : st === 'error' ? '✕' : st === 'abandoned' ? '○' : '●'
+  const { st, color, attention } = statusLook(f)
+  const g = st === 'waiting' ? ATTENTION_STATUS[attention?.level ?? 'blocked'].glyph : st === 'completed' ? '✓' : st === 'error' ? '✕' : st === 'abandoned' ? '○' : '●'
   // No card (P1) é "nome … tempo"; o que ela está fazendo aparece na lista completa.
   const doing = withDoing ? childDoing(f) : null
   const right = childRight(f, c.now)
@@ -1151,7 +1171,7 @@ function childLine(c: DrawContext, f: PanelChild, max: number, full = false, wit
     right.text,
     full,
     <Box flexDirection="row" flexShrink={1} minWidth={0}>
-      <Text mono size="footnote" color={STATUS_COLOR[st].color}>
+      <Text mono size="footnote" color={color.color}>
         {g}{' '}
       </Text>
       <Box flexShrink={1} minWidth={0}>
@@ -1291,7 +1311,7 @@ const AROUND_GRAPH = 2 + 4 + 1 + 1 + 2 + 2 + 2 + 2 + 1 + 5
 const SUB_COLOR = (s: PanelSubagent['status']) => (s === 'completed' ? GREEN : s === 'error' ? RED : ORANGE)
 const SUB_GLYPH = (s: PanelSubagent['status']) => (s === 'completed' ? '✓' : s === 'error' ? '✕' : '●')
 const SUB_STATE = (s: PanelSubagent['status']) => (s === 'completed' ? 'concluído' : s === 'error' ? 'com erro' : 'ativo')
-const SESSION_STATE: Record<ReturnType<typeof statusOf>, string> = { active: 'ativa', waiting: 'esperando', completed: 'concluída', error: 'com erro', abandoned: 'abandonada' }
+const SESSION_STATE: Record<ReturnType<typeof statusOf>, string> = { active: 'ativa', waiting: 'precisa', completed: 'concluída', error: 'com erro', abandoned: 'abandonada' }
 
 /** O minuto da sessão, como na régua: "33′". */
 const sessionMinute = (t0: number, t: number) => `${Math.max(0, Math.round((t - t0) / 60_000))}′`
@@ -1472,7 +1492,10 @@ function graphScreen(c: DrawContext, p: Panel, g: ReturnType<typeof grid>, narro
     ),
     { state: 'estado', start: 'início', time: wide ? 'duração' : 'tempo' },
   )
-  const st = s ? statusOf(s.state) : 'active'
+  const look = s ? statusLook(s) : null
+  const st = look?.st ?? 'active'
+  const idle = look?.idle ?? false
+  const color = look?.color ?? STATUS_COLOR.active
   const root = graphLine(
     c,
     'graph-root',
@@ -1482,8 +1505,8 @@ function graphScreen(c: DrawContext, p: Panel, g: ReturnType<typeof grid>, narro
       <Text weight="bold">Esta sessão</Text>
       {wide && s?.model ? <Text dimColor> · {model(s.model)}</Text> : null}
     </Text>,
-    <Svg source={graphBarSvg(w, t0, c.now, t0, null, STATUS_COLOR[st].border)} alt="esta sessão" width={w} height={GRAPH_BAR_H} />,
-    { state: SESSION_STATE[st], stateColor: st === 'active' ? ORANGE : STATUS_COLOR[st].color, start: '0′', time: duration(c.now - t0) },
+    <Svg source={graphBarSvg(w, t0, c.now, t0, null, color.border)} alt="esta sessão" width={w} height={GRAPH_BAR_H} />,
+    { state: idle ? 'ociosa' : SESSION_STATE[st], stateColor: st === 'active' ? ORANGE : color.color, start: '0′', time: duration(c.now - t0) },
   )
   const lines = pg.lines.map((l) => (l.type === 'wave' ? waveLine(c, l, wide, t0, state) : nodeLine(c, l, wide, t0)))
   const after = pg.after ? (
@@ -1545,21 +1568,23 @@ function graphScreen(c: DrawContext, p: Panel, g: ReturnType<typeof grid>, narro
 
 // --- Linha de baixo: "N precisam de você" ---
 
-/** O nível da sessão em "precisam de você"; núcleo antigo, sem o campo: conta como precisa. */
-const needs = (i: NeedsYou) => i.level !== 'your-turn'
+/**
+ * Whether the session in "precisam de você" is blocked on you (#245): `blocked`, or `needs` from the
+ * core before #245; a core before #140, without the field, counts it as blocked. Idle never counts.
+ */
+const needs = (i: NeedsYou) => i.level !== 'idle' && i.level !== 'your-turn'
 
-/** O que bloqueia, dito curto: o motivo da espera ou o erro. */
-const WHY: Record<NonNullable<NeedsYou['why']>, string> = {
-  permission: 'Pede permissão',
-  question: 'Pergunta',
-  plan: 'Plano para aprovar',
-  decision: 'Pede decisão',
-  error: 'Com erro',
-  'your-turn': 'Sua vez',
-  interrupted: 'Interrompida',
-  'no-prompt': 'No prompt',
+/** The core before #245 names two idle reasons its own way. */
+const WHY_KEY: Record<NonNullable<NeedsYou['why']>, SessionAttention['reason']> = {
+  ...(Object.fromEntries(Object.keys(ATTENTION_REASONS).map((k) => [k, k])) as Record<SessionAttention['reason'], SessionAttention['reason']>),
+  'your-turn': 'turn_ended',
+  'no-prompt': 'first_prompt',
 }
-const whyOf = (i: NeedsYou) => (i.why ? WHY[i.why] : i.state === 'error' ? 'Com erro' : i.reason ? REASONS[i.reason].label : 'Esperando')
+/** The attention of an item of the list: its level and reason or, from an old core, its state. */
+const itemAttention = (i: NeedsYou): SessionAttention =>
+  i.why ? { level: needs(i) ? 'blocked' : 'idle', reason: WHY_KEY[i.why] } : (attentionOf({ state: i.state, reason: i.reason }) ?? { level: 'blocked', reason: 'permission' })
+/** O que bloqueia, dito curto: o motivo da espera ou o erro. */
+const whyOf = (i: NeedsYou) => ATTENTION_REASONS[itemAttention(i).reason].label
 
 /**
  * "Precisam de você" (#140): o destaque é só de quem está bloqueada até você agir (permissão,
@@ -1577,7 +1602,7 @@ const namesThatNeed = (p: Panel) =>
 /** As partes da linha de quem precisa de você: o que desenha e o que a estimativa da altura mede. */
 function needYouParts(p: Panel, narrow: boolean) {
   const n = p.needYou.total
-  const yourTurnN = p.needYou.yourTurn ?? 0
+  const yourTurnN = p.needYou.idle ?? p.needYou.yourTurn ?? 0
   const onTurn = yourTurnN ? `${yourTurnN} na sua vez` : ''
   const names = !narrow && n > 0 ? namesThatNeed(p) : ''
   const isMain = n === 0 ? '○ ninguém mais precisa de você' : `🔔 ${needYouText(n)}`
@@ -2059,9 +2084,10 @@ function decisionScreen(c: DrawContext, g: ReturnType<typeof grid>) {
 function needsYouCard(c: DrawContext, i: NeedsYou) {
   const { Box, Text, Button, Link } = c.el
   const error = i.state === 'error'
-  // A sua vez em cor neutra (#140): sem o amarelo de quem está bloqueada.
+  // A ociosa em cor neutra (#140, #245): sem o amarelo de quem está bloqueada.
   const neutral = { color: GRAY, background: CARD_BG, border: BORDER }
   const color = !needs(i) ? neutral : error ? STATUS_COLOR.error : STATUS_COLOR.waiting
+  const attention = itemAttention(i)
   const relation = i.relation === 'parent' ? 'mãe desta' : i.relation === 'child' ? 'filha desta' : i.relation === 'sibling' ? 'irmã desta' : i.sameProject ? 'mesmo projeto' : 'outro projeto'
   return cardBox(
     c,
@@ -2084,15 +2110,7 @@ function needsYouCard(c: DrawContext, i: NeedsYou) {
         </Text>
       </Box>,
       <Box flexDirection="row" gap={1} alignItems="center">
-        {!needs(i)
-          ? pill(c, 'mt', `↵ ${whyOf(i)}`, GRAY, BADGE.gray)
-          : error
-            ? statusPill(c, 'st', 'error')
-            : i.why
-              ? pill(c, 'mt', whyOf(i), YELLOW, BADGE.yellow, true)
-              : i.reason
-                ? reasonPill(c, 'mt', i.reason)
-                : null}
+        {needs(i) && error ? statusPill(c, 'st', 'error') : attentionPill(c, 'mt', { ...attention, level: needs(i) ? 'blocked' : 'idle' })}
         {i.urgent && (
           <Text mono size="caption" dimColor>
             urgente
@@ -2161,7 +2179,7 @@ function needYouScreen(c: DrawContext, p: Panel, g: ReturnType<typeof grid>, nar
     ) : null,
     didNotFit(c, 'did-not-fit', items.length - shown.length),
     <Box key="footer-need-you" flexDirection="row" justifyContent="space-between" alignItems="center" width={g.width} borderStyle="round" borderColor={BORDER} backgroundColor={CARD_BG} paddingX={1}>
-      <Text mono wrap="truncate-end">urgentes primeiro{narrow ? '' : ' · esperando e com erro'}</Text>
+      <Text mono wrap="truncate-end">urgentes primeiro{narrow ? '' : ' · só o que trava; as ociosas ficam em "sua vez"'}</Text>
       <Button key="close-need-you" plain onPress={c.actions.close}>
         <Text color={ORANGE} underline>
           ← voltar

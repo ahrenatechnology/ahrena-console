@@ -60,7 +60,7 @@ Com nenhum núcleo respondendo, a ponte responde sozinha `initialize`, `ping` e 
 | `--port <n>` | Fala só com aquela porta: sem registro, sem subir (o modo antigo) |
 | `AHRENA_CONSOLE_CORE_PORT` ou `AHRENA_CONSOLE_PORT` | A porta forçada do núcleo que ela sobe, em vez da aleatória. A ponte não tem mais a 4720 como padrão |
 
-Os nomes antigos (`--porta`, `--sem-subir`) ainda valem até a fase 6 da #173.
+Os nomes antigos (`--porta`, `--sem-subir`) saíram na fase 6 da #173: uma opção desconhecida é erro.
 
 ## Protocolo
 
@@ -84,24 +84,24 @@ Comum às duas:
 
 ### `sessions_needing_attention`
 
-As sessões que esperam por você, em dois grupos, como o dono pediu. A divisão é a do "precisam de você" do painel: `atencaoDe` em [src/api/attention.ts](../api/attention.ts) (#140), usada pelas duas superfícies, para que contem igual.
+As sessões que precisam de você e as ociosas, em dois grupos, como o dono pediu. A divisão é a do "precisam de você" do painel: `atencaoDe` em [src/api/attention.ts](../api/attention.ts) (#140), usada por todas as superfícies, para que contem igual. Na tela (#245), `blocking` é "Precisa de você" e `your_turn` é "Ociosa"; os valores de `group` e o esquema de saída são o contrato publicado e não mudam.
 
 | `group` | `reason` | Quando |
 | --- | --- | --- |
-| `blocking` (trava a sessão até você agir) | `permission` | Uma ferramenta pediu permissão (`tool` diz qual) |
+| `blocking` ("Precisa de você": trava a sessão até você agir) | `permission` | Uma ferramenta pediu permissão (`tool` diz qual) |
 | | `question` | `AskUserQuestion` sem resposta, ou diálogo de input (`questionOptions`) |
 | | `plan` | `ExitPlanMode` sem resposta: o plano espera aprovação |
 | | `decision` | O fechamento do turno no Desktop (`wrap_up`) pediu uma decisão (`ask`) ou disse que trava (`blocked`) |
 | | `error` | A sessão parou num erro (`errorCode`) |
-| `your_turn` (sua vez no bate-bola) | `turn_ended` | O turno acabou e a vez é sua |
+| `your_turn` ("Ociosa": o turno acabou, nada trava) | `turn_ended` | O turno acabou e a vez é sua |
 | | `interrupted` | Esc no meio do turno, ou o vigia viu o turno morrer |
 | | `first_prompt` | A sessão abriu e espera o primeiro prompt |
 
-Delegando (esperando subagentes) e em background (processo rodando depois do turno) não entram: a vez não é sua de verdade (1.5). Cada item traz `waitingSince` e `waitingMinutes`, a conta, o modelo e `open`: `claude --resume <id>`, a pasta e, quando o Desktop conhece a sessão, o `local_…` dela e `desktopLink` (`claude://claude.ai/epitaxy/<local_…>`), que abre a conversa no Claude Desktop. Travadas primeiro; em cada grupo, quem espera há mais tempo primeiro. Os totais (`total`, `blocking`, `yourTurn`, `byAccount`) contam todos os grupos; `group` filtra só os itens.
+Delegando (esperando subagentes) e em background (processo rodando depois do turno) não entram: a vez não é sua de verdade (1.5). Cada item traz `waitingSince` e `waitingMinutes`, a conta, o modelo e `open`: `claude --resume <id>`, a pasta e, quando o Desktop conhece a sessão, o `local_…` dela e `desktopLink` (`claude://claude.ai/epitaxy/<local_…>`), que abre a conversa no Claude Desktop. As que precisam de você primeiro; em cada grupo, quem está assim há mais tempo primeiro. Os totais (`total`, `blocking`, `yourTurn`, `byAccount`) contam todos os grupos; `group` filtra só os itens. O texto abre com "4 sessões precisam de você e 3 estão ociosas." e lista os grupos sob "Precisam de você:" e "Ociosas:".
 
 ### `fleet_overview`
 
-`totals` e `byAccount` com as sessões vivas por estado (`active`, `waiting`, `delegating`, `background`, `error`), as `completed` e `abandoned` de hoje, quantas precisam de você (com a divisão `blocking`/`yourTurn`) e o custo estimado de hoje (1.6), no fuso da máquina. Custo e contagens somam entre contas; limites de uso nunca entram. `activeSessions` lista as vivas, mais recentes primeiro, paginadas. O filtro `account` vale para os totais e para a lista.
+`totals` e `byAccount` com as sessões vivas por estado (`active`, `waiting`, `delegating`, `background`, `error`), as `completed` e `abandoned` de hoje, quantas precisam de você e quantas estão ociosas (`needingAttention`: `blocking` e `yourTurn`, com `total` somando as duas) e o custo estimado de hoje (1.6), no fuso da máquina. Custo e contagens somam entre contas; limites de uso nunca entram. `activeSessions` lista as vivas, mais recentes primeiro, paginadas. O filtro `account` vale para os totais e para a lista.
 
 ## Acrescentar uma ferramenta
 

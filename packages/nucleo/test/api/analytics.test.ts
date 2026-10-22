@@ -1,11 +1,11 @@
-// A tela Analytics (#95 e #32): `GET /api/analytics` (Visão geral) e `GET /api/analytics/cost` (Custo; a rota antiga `/api/analytics/custo` responde o corpo antigo),
+// A tela Analytics (#95 e #32): `GET /api/analytics` (Visão geral) e `GET /api/analytics/cost` (Custo),
 // com fixtures sintéticas, relógio fixo e o histórico simulado da --demo.
 
 import assert from 'node:assert/strict';
 import { request } from 'node:http';
 import { after, before, describe, test } from 'node:test';
 import { openSqliteStorage, type SqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
-import { Accounts, startLocalApi, MontadorDoPainel, normalizeLegacyUrl, TrabalhoPorBranch, type LocalApi } from '../../src/api/index.ts';
+import { Accounts, startLocalApi, MontadorDoPainel, TrabalhoPorBranch, type LocalApi } from '../../src/api/index.ts';
 import { DAYS_ERROR, RotaAnalytics, TZ_ERROR } from '../../src/api/analytics-route.ts';
 import type { TokenCounts } from '../../src/model.ts';
 import { seedHistory } from '../../src/simulator/history.ts';
@@ -67,9 +67,8 @@ function rota(storage: SqliteStorage, relogio = { agora: AGORA }) {
   return new RotaAnalytics({ storage, contas: new Accounts({ storage, file: null }), agora: () => relogio.agora });
 }
 
-// The handlers read the English parameters; the old ones in these strings pass through the alias map.
 async function pedirRota(r: RotaAnalytics, caminho: string) {
-  return r.responder(normalizeLegacyUrl(new URL(caminho, 'http://127.0.0.1')));
+  return r.responder(new URL(caminho, 'http://127.0.0.1'));
 }
 
 /** As respostas lidas nos testes. */
@@ -135,8 +134,8 @@ describe('GET /api/analytics (Visão geral)', () => {
     assert.equal(a.days.find((d: Json) => d.day === '2026-10-20').events, 6);
   });
 
-  test('?fuso= muda o dia: 01:30 UTC de hoje é ontem em São Paulo', async () => {
-    const v = (await pedirRota(rota(storage), '/api/analytics?fuso=America/Sao_Paulo')).corpo as Json;
+  test('?tz= muda o dia: 01:30 UTC de hoje é ontem em São Paulo', async () => {
+    const v = (await pedirRota(rota(storage), '/api/analytics?tz=America/Sao_Paulo')).corpo as Json;
     assert.equal(v.timeZone, 'America/Sao_Paulo');
     const de = (dia: string) => v.last30.days.find((d: Json) => d.day === dia)?.sessions;
     assert.equal(de('2026-10-20'), 1);
@@ -145,7 +144,7 @@ describe('GET /api/analytics (Visão geral)', () => {
 
   test('fuso inválido e caminho desconhecido', async () => {
     const r = rota(storage);
-    for (const f of ['Marte/Base', '../etc', 'a'.repeat(80)]) assert.equal((await pedirRota(r, `/api/analytics?fuso=${encodeURIComponent(f)}`)).status, 400, f);
+    for (const f of ['Marte/Base', '../etc', 'a'.repeat(80)]) assert.equal((await pedirRota(r, `/api/analytics?tz=${encodeURIComponent(f)}`)).status, 400, f);
     assert.equal((await pedirRota(r, '/api/analytics/outra')).status, 404);
   });
 
@@ -158,7 +157,7 @@ describe('GET /api/analytics (Visão geral)', () => {
     const b = (await pedirRota(r, '/api/analytics')).corpo as Json;
     assert.equal(b.generatedAt, a.generatedAt);
     assert.equal(b.numbers.events.total, 11);
-    const outroFuso = (await pedirRota(r, '/api/analytics?fuso=America/Sao_Paulo')).corpo as Json;
+    const outroFuso = (await pedirRota(r, '/api/analytics?tz=America/Sao_Paulo')).corpo as Json;
     assert.notEqual(outroFuso.generatedAt, a.generatedAt);
     relogio.agora += 20_000;
     assert.equal(((await pedirRota(r, '/api/analytics')).corpo as Json).generatedAt, a.generatedAt, '25 s: ainda a mesma');
@@ -191,9 +190,9 @@ describe('GET /api/analytics (Visão geral)', () => {
 
   test('o fuso volta na forma canônica, na resposta e na chave do cache', async () => {
     const r = rota(storage);
-    const a = (await pedirRota(r, '/api/analytics?fuso=america/sao_paulo')).corpo as Json;
+    const a = (await pedirRota(r, '/api/analytics?tz=america/sao_paulo')).corpo as Json;
     assert.equal(a.timeZone, 'America/Sao_Paulo');
-    const b = (await pedirRota(r, '/api/analytics?fuso=America/Sao_Paulo')).corpo as Json;
+    const b = (await pedirRota(r, '/api/analytics?tz=America/Sao_Paulo')).corpo as Json;
     assert.equal(b, a, 'a mesma entrada do cache');
   });
 
@@ -298,9 +297,8 @@ describe('as rotas no servidor', () => {
     const ruim = await pedir(api.url, '/api/analytics/cost?days=12');
     assert.equal(ruim.status, 400);
     assert.equal(JSON.parse(ruim.corpo).error, DAYS_ERROR);
-    // The old route answers the old error, naming the old parameter.
-    const antiga = await pedir(api.url, '/api/analytics/custo?dias=12');
-    assert.equal(JSON.parse(antiga.corpo).error, 'dias: 7, 30 ou 90');
+    // The old route is gone (#173, phase 6).
+    assert.equal((await pedir(api.url, '/api/analytics/custo?dias=12')).status, 404);
     assert.equal(JSON.parse((await pedir(api.url, '/api/analytics/cost?tz=nada')).corpo).error, TZ_ERROR);
     assert.equal((await pedir(api.url, '/api/analytics', { origin: 'http://outro.example' })).status, 403);
     const host = new URL(api.url).host;

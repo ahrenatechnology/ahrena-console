@@ -200,8 +200,8 @@ describe('API das decisões em 127.0.0.1', () => {
       assert.equal((await post(`/api/decisions/${encodeURIComponent(alheia.id)}/confirm`, { session: 'qualquer' })).status, 404);
       assert.equal((await decisoes.getDecision(alheia.id))?.state, 'to_confirm');
       assert.equal((await post(`/api/decisions/nao-existe/confirm`, { session: 'qualquer' })).status, 404);
-      // The old body `{ sessao }` is read on the new route too.
-      assert.equal((await post(`/api/decisions/nao-existe/confirm`, { sessao: 'qualquer' })).status, 404);
+      // The old body `{ sessao }` is gone (#173 phase 6): without `session`, 400.
+      assert.equal((await post(`/api/decisions/nao-existe/confirm`, { sessao: 'qualquer' })).status, 400);
     } finally {
       await api.close();
       await storage.close();
@@ -278,23 +278,26 @@ describe('API das decisões em 127.0.0.1', () => {
     }
   });
 
-  test('#131: /abrir/<local_…> redireciona para a conversa no Claude Desktop; outro id, não', async () => {
+  test('#131: /open/<local_…> redireciona para a conversa no Claude Desktop; outro id, não', async () => {
     const { storage, montador } = await cenario();
     const api = await startLocalApi({ panelBuilder: montador, hooks: { storage }, port: 0, log: () => {} });
     try {
       const local = 'local_00000000-0000-4000-8000-0000000000f1';
-      const r = await fetch(`${api.url}/abrir/${local}`, { redirect: 'manual' });
+      const r = await fetch(`${api.url}/open/${local}`, { redirect: 'manual' });
       assert.equal(r.status, 302);
       assert.equal(r.headers.get('location'), `claude://claude.ai/epitaxy/${local}`);
-      assert.equal((await fetch(`${api.url}/abrir/javascript:alert(1)`, { redirect: 'manual' })).status, 404);
-      assert.equal((await fetch(`${api.url}/abrir/local_x"><script>`, { redirect: 'manual' })).status, 404);
+      assert.equal((await fetch(`${api.url}/open/javascript:alert(1)`, { redirect: 'manual' })).status, 404);
+      assert.equal((await fetch(`${api.url}/open/local_x"><script>`, { redirect: 'manual' })).status, 404);
+      // The old route `/abrir/<id>` is gone (#173 phase 6).
+      const antiga = await fetch(`${api.url}/abrir/${local}`, { redirect: 'manual' });
+      assert.deepEqual([antiga.status, await antiga.json()], [404, { error: 'não encontrado' }]);
     } finally {
       await api.close();
       await storage.close();
     }
   });
 
-  test('#131: POST /abrir/<local_…> abre a sessão no Claude Desktop pelo `open`, só com id estrito, JSON e 127.0.0.1', async () => {
+  test('#131: POST /open/<local_…> abre a sessão no Claude Desktop pelo `open`, só com id estrito, JSON e 127.0.0.1', async () => {
     const { storage, montador } = await cenario();
     const abertos: string[] = [];
     let falhar = false;
@@ -306,14 +309,18 @@ describe('API das decisões em 127.0.0.1', () => {
     const post = (caminho: string, headers: Record<string, string> = { 'content-type': 'application/json' }) => fetch(`${api.url}${caminho}`, { method: 'POST', headers, body: '{}' });
     const local = 'local_00000000-0000-4000-8000-0000000000f1';
     try {
-      assert.equal((await post(`/abrir/${local}`)).status, 200);
+      assert.equal((await post(`/open/${local}`)).status, 200);
       assert.deepEqual(abertos, [`claude://claude.ai/epitaxy/${local}`]);
-      assert.equal((await post(`/abrir/${local}`, { 'content-type': 'text/plain' })).status, 415);
-      assert.equal((await post(`/abrir/${local}`, { 'content-type': 'application/json', origin: 'https://exemplo.com' })).status, 403);
-      assert.equal((await post('/abrir/local_curto')).status, 400);
-      assert.equal((await post(`/abrir/${encodeURIComponent(`${local};rm -rf`)}`)).status, 400);
+      assert.equal((await post(`/open/${local}`, { 'content-type': 'text/plain' })).status, 415);
+      assert.equal((await post(`/open/${local}`, { 'content-type': 'application/json', origin: 'https://exemplo.com' })).status, 403);
+      assert.equal((await post('/open/local_curto')).status, 400);
+      assert.equal((await post(`/open/${encodeURIComponent(`${local};rm -rf`)}`)).status, 400);
       falhar = true;
-      assert.equal((await post(`/abrir/${local}`)).status, 502);
+      assert.equal((await post(`/open/${local}`)).status, 502);
+      assert.equal(abertos.length, 1);
+      // The old route `/abrir/<id>` is gone (#173 phase 6): refused, and nothing is opened.
+      falhar = false;
+      assert.ok([403, 405].includes((await post(`/abrir/${local}`)).status));
       assert.equal(abertos.length, 1);
     } finally {
       await api.close();
@@ -321,7 +328,7 @@ describe('API das decisões em 127.0.0.1', () => {
     // Sem quem abra (fora do macOS): 501, e o painel fica com o link de reserva.
     const semOpen = await startLocalApi({ panelBuilder: montador, hooks: { storage }, port: 0, log: () => {} });
     try {
-      assert.equal((await fetch(`${semOpen.url}/abrir/${local}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' })).status, 501);
+      assert.equal((await fetch(`${semOpen.url}/open/${local}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' })).status, 501);
       assert.equal(((await (await fetch(`${semOpen.url}/api/panel/qualquer`)).json()) as Panel).api.opensSession, false);
     } finally {
       await semOpen.close();

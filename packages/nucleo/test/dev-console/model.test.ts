@@ -130,7 +130,7 @@ describe('board columns', () => {
       openPullRequests: [pr(81, { closes: [31], headRefName: 'feat/31-csv', ci: 'FAILURE' })],
       remoteBranches: new Map([[REPO, ['main', 'feat/61-cobranca', 'fix/issue-72', 'feat/31-csv']]]),
       sessions: [
-        contextSession('s68', { branch: 'feat/68-cupom', waitingOnYou: true, working: false }),
+        contextSession('s68', { branch: 'feat/68-cupom', waitingOnYou: true, working: false, attention: { level: 'blocked', reason: 'permission' } }),
         contextSession('s61', { branch: 'feat/61-cobranca' }),
         contextSession('outro-repo', { repo: OTHER_REPO, branch: 'feat/64-x' }),
       ],
@@ -142,7 +142,7 @@ describe('board columns', () => {
     assert.deepEqual(numbers(board['in-review']), [31]);
     assert.deepEqual(numbers(board.blocked), [55]);
     assert.deepEqual(numbers(board.done), [50, 52]);
-    assert.deepEqual(board.delegated[0].session, { id: 's68', title: 'sessão s68', waitingOnYou: true });
+    assert.deepEqual(board.delegated[0].session, { id: 's68', title: 'sessão s68', waitingOnYou: true, attention: { level: 'blocked', reason: 'permission' } });
     assert.equal(board['in-progress'][0].session?.id, 's61');
     assert.deepEqual(board['in-review'][0].pullRequest, { number: 81, url: `https://github.com/${REPO}/pull/81`, isDraft: false });
     assert.equal(board['in-review'][0].ci, 'failing');
@@ -169,10 +169,10 @@ describe('scoreboard and merged', () => {
     const s = buildScoreboard({
       queue: buildMergeQueue(prs),
       openPullRequests: prs,
-      sessions: [contextSession('a'), contextSession('b', { working: false, waitingOnYou: true })],
+      sessions: [contextSession('a'), contextSession('b', { working: false, waitingOnYou: true }), contextSession('c', { working: false, attention: { level: 'idle', reason: 'turn_ended' } })],
       dependsOnYou: 2,
     });
-    assert.deepEqual(s, { ready: 1, ciRunning: 1, ciFailingOrConflict: 2, sessionsWorking: 1, waitingOnYou: 2 });
+    assert.deepEqual(s, { ready: 1, ciRunning: 1, ciFailingOrConflict: 2, sessionsWorking: 1, waitingOnYou: 2, idle: 1 });
   });
 
   test('#177/AC-2 merged in the last 24 h, most recent first', () => {

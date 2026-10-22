@@ -9,8 +9,7 @@
 // | `GET /api/sessions/<id>/conversation` | An agent's messages (`?agent=`, `?limit=`)                |
 // | `GET /api/sessions/<id>/events`       | The timeline, filtered and paginated (see `filtroDe`)     |
 //
-// `GET /api/sessions` (the list, no id) is not here: it belongs to the Sessions screen (#28). The old
-// `/api/sessoes/<id>[/agentes|/conversa|/eventos]` and parameter names are aliases (src/api/legacy-routes.ts).
+// `GET /api/sessions` (the list, no id) is not here: it belongs to the Sessions screen (#28).
 
 import type { ServerResponse } from 'node:http';
 import { send } from '../ingest/hooks/receiver.ts';
@@ -21,6 +20,8 @@ import { effectiveTokens } from '../pricing.ts';
 import type { StoragePort } from '../storage-port.ts';
 import type { MontadorDoPainel } from './panel.ts';
 import type { PanelCost, PanelPlan, PanelSession } from './types.ts';
+import { eventAttention, type SessionAttention } from './attention.ts';
+import { SessionOpenDescriber, type SessionOpen } from './session-open.ts';
 
 /** `/api/sessions/<id>` e as três abas; o id passa pelo mesmo padrão das outras rotas. */
 export const DETAIL_ROUTE = /^\/api\/sessions\/([^/]+)(?:\/(agents|conversation|events))?$/;
@@ -36,8 +37,7 @@ const MAX_FERRAMENTAS = 8;
 
 // ---------- Contrato ----------
 //
-// The JSON keys and fixed values are English (issue #173, phase 2b, layer 5); the old
-// `/api/sessoes/<id>[/agentes|/conversa|/eventos]` answer their old bodies through src/api/legacy-routes.ts.
+// The JSON keys and fixed values are English (issue #173, phase 2b, layer 5).
 // Names shown on the screen (`Agente principal`) stay pt-BR.
 
 export interface CabecaDoDetalhe {
@@ -51,6 +51,8 @@ export interface CabecaDoDetalhe {
   local: string | null;
   /** A API abre a conversa no Claude Desktop (`POST /open/<local_…>`): no macOS. */
   opensSession: boolean;
+  /** #285: where the head's open button goes (Claude Desktop, a terminal, the live terminal) and the command to copy. */
+  open: SessionOpen;
   /** O comando ou o alvo da ferramenta que pede permissão, para a faixa mostrar em código; `null` sem pedido. */
   command: string | null;
   /** Quando acabou: o fim gravado, ou a última atividade da que não está mais ativa. `null` ativa. */
@@ -136,6 +138,8 @@ export interface EventoDoDetalhe {
   summary: string | null;
   agent: { id: string; name: string } | null;
   status: Extract<DisplayStatus, 'active' | 'waiting' | 'error'>;
+  /** #245: what the event alone stands for (a blocking ask or an error, `blocked`; a turn end or Esc, `idle`), as in `/api/events`. */
+  attention: SessionAttention | null;
   /** O `data` do evento em JSON, cortado: o expandir da linha. */
   data: string | null;
 }
@@ -157,6 +161,8 @@ export interface OpcoesDoDetalhe {
   agora?: () => number;
   /** O `local_…` de uma sessão, além do índice do Desktop (a demonstração dá um sintético). */
   local?: (sessionId: string) => string | null;
+  /** #285: the head's `open`; without it, no session counts as live in a terminal. */
+  open?: SessionOpenDescriber;
 }
 
 type Json = Record<string, unknown>;
@@ -249,8 +255,10 @@ export class LeiturasDoDetalhe {
   private readonly montador: MontadorDoPainel;
   private readonly agora: () => number;
   private readonly local: (sessionId: string) => string | null;
+  private readonly open: SessionOpenDescriber;
 
-  constructor({ storage, montador, agora = Date.now, local = () => null }: OpcoesDoDetalhe) {
+  constructor({ storage, montador, agora = Date.now, local = () => null, open = new SessionOpenDescriber() }: OpcoesDoDetalhe) {
+    this.open = open;
     this.storage = storage;
     this.montador = montador;
     this.agora = agora;
@@ -283,6 +291,8 @@ export class LeiturasDoDetalhe {
     const painel = await this.montador.montar({ sessionId: session.id }, { literal: true });
     const [agentes, eventos] = await Promise.all([this.storage.listAgents(session.id), this.todosOsEventos(session.id)]);
     const local = this.montador.localDe(session.id) ?? this.local(session.id);
+    await this.open.refresh();
+    const desktopLocal = local && LOCAL.test(local) ? local : null;
     const pede = painel.session?.banner?.type === 'permission' ? (await this.montador.resumos.ler(session.id, session.updatedAt)).ultimaFerramenta : null;
     return {
       version: 1,
@@ -290,8 +300,9 @@ export class LeiturasDoDetalhe {
       session: painel.session!,
       cost: painel.cost,
       branch: painel.session?.branch ?? painel.work?.branch ?? null,
-      local: local && LOCAL.test(local) ? local : null,
+      local: desktopLocal,
       opensSession: painel.api.opensSession,
+      open: this.open.describe({ sessionId: session.id, cwd: session.cwd ?? painel.session?.cwd ?? null, local: desktopLocal }),
       command: pede?.resumo ?? null,
       endedAt: session.endedAt ?? (session.status === 'active' ? null : session.updatedAt),
       counts: { agents: agentes.length, events: eventos.length },
@@ -483,7 +494,7 @@ export class LeiturasDoDetalhe {
       if (f.ate && e.createdAt > f.ate) continue;
       const dados = emJson(e.data);
       if (f.q && ![e.summary, e.toolName, e.type, dados].some((t) => t?.toLowerCase().includes(f.q!))) continue;
-      itens.push({ id: e.id, at: e.createdAt, type: e.type, tool: e.toolName, summary: e.summary, agent: { id: agente, name: quem.nome(agente) }, status, data: dados });
+      itens.push({ id: e.id, at: e.createdAt, type: e.type, tool: e.toolName, summary: e.summary, agent: { id: agente, name: quem.nome(agente) }, status, attention: eventAttention(e), data: dados });
     }
 
     const comeco = f.antes ? itens.findIndex((e) => e.id === f.antes) + 1 : 0;

@@ -13,6 +13,7 @@
 import { el, icon } from '../dom.js';
 import { loading } from '../states.js';
 import { ago } from '../repos-format.js';
+import { connectEmptyFor, isGithubNotConnected } from '../github-connect.js';
 
 const REREAD_MS = 5000;
 const OTHERS_SHOWN = 4;
@@ -270,6 +271,7 @@ export function mountInstallFlow(area, ctx, { owner, name, plan: first, step: fi
       if (d.state === 'loading') timer = setTimeout(() => reread(), REREAD_MS);
     } catch (e) {
       if (e?.name === 'AbortError' || !alive || n !== request) return;
+      if (isGithubNotConnected(e)) return notConnected();
       notice = { tone: 'err', title: 'Não recalculamos o plano.', text: `${e?.message ?? e}. A escolha anterior continua valendo.` };
     }
     busy = false;
@@ -290,6 +292,12 @@ export function mountInstallFlow(area, ctx, { owner, name, plan: first, step: fi
   function close() {
     leave();
     onClose?.();
+  }
+
+  /** issue 241: the connection went away mid-flow: nothing is written, and the flow says how to connect. */
+  function notConnected() {
+    leave();
+    root.replaceChildren(connectEmptyFor('framework-install', ctx.navigate));
   }
 
   function leave() {
@@ -582,6 +590,10 @@ export function mountInstallFlow(area, ctx, { owner, name, plan: first, step: fi
       if (r.status === 'already-open') notice = { tone: 'wait', title: 'O PR já estava aberto.', text: 'Mostrando o PR de instalação que já existe.', iconName: 'info' };
     } catch (e) {
       if (!alive || e?.name === 'AbortError') return;
+      if (isGithubNotConnected(e)) {
+        sending = false;
+        return notConnected();
+      }
       const code = e?.body?.code;
       if (code === 'plan-changed') {
         notice = { tone: 'wait', title: 'O repositório mudou desde a prévia.', text: 'Recarregamos a prévia com o que está no GitHub agora; confira e abra o PR de novo.' };

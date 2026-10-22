@@ -1,16 +1,22 @@
 // A tela Sessões (C3, #28): a tabela das sessões com busca, filtro por diretório, ordenação, as
-// pílulas de status e 10 por página. Filtro, ordem e página vão para o servidor (`GET /api/sessions`,
-// src/api/sessions.ts) e ficam na query da URL, para o Voltar do Detalhe cair no mesmo lugar.
-// A linha leva ao Detalhe, `/ui/sessions/<id>`.
+// pílulas de status e as linhas que cabem na altura da janela (issue 279; no mínimo 10). Filtro, ordem
+// e página vão para o servidor (`GET /api/sessions`, src/api/sessions.ts) e ficam na query da URL, para
+// o Voltar do Detalhe cair no mesmo lugar.
+// A linha leva ao Detalhe, `/ui/sessions/<id>`. The last column is the icon that opens the session
+// where it runs (C71, issue 285); its click stays in the cell and never navigates the row.
 
 import { header, el, icon } from '../dom.js';
 import { loading, error, errorBand, empty } from '../states.js';
+import { attentionBadges, attentionOf, statusWithoutAttention } from '../attention.js';
+import { openAction } from '../open-action.js';
 
-// The `status` and `order` values of `/api/sessions` (English since phase 2b of issue 173).
+// The `status` and `order` values of `/api/sessions` (English since phase 2b of issue 173). issue 245: the
+// old waiting pill split in two, "Precisam de você" (`blocked`, with the errors) and "Ociosas" (`idle`).
 export const PILLS = [
   ['all', 'Todas'],
   ['active', 'Ativas'],
-  ['waiting', 'Esperando'],
+  ['blocked', 'Precisam de você'],
+  ['idle', 'Ociosas'],
   ['completed', 'Concluídas'],
   ['error', 'Erro'],
   ['abandoned', 'Abandonadas'],
@@ -25,30 +31,24 @@ const ORDERS = {
 
 export const STATUS = {
   active: 'Ativa',
-  waiting: 'Esperando você',
   completed: 'Concluída',
   error: 'Com erro',
   abandoned: 'Abandonada',
 };
 
-// Os motivos da espera, como no wireframe: os dois primeiros travam a sessão (urgentes).
-export const REASONS = {
-  notification: { rotulo: 'Pede permissão', icone: 'permission', urgente: true },
-  interrupted: { rotulo: 'Interrompida', icone: 'interrupted', urgente: true },
-  stop: { rotulo: 'Sua vez', icone: 'your-turn', urgente: false },
-  session_start: { rotulo: 'No prompt', icone: 'no-prompt', urgente: false },
-};
+/** An old bookmark's `?status=waiting` opens the ones that need you. */
+const STATUS_ALIASES = { waiting: 'blocked' };
 
 const DEFAULTS = { status: 'all', search: '', dir: '', order: 'activity', direction: 'desc', page: 1 };
 
 /**
  * The screen state from the query (`?status=waiting&page=2`); what is not valid falls back to the
- * default. An old bookmark's values (`esperando`, `custo`) were swapped by the shell (`legacyUrl`).
+ * default.
  */
 export function stateFromQuery(query) {
   const p = new URLSearchParams(query);
   const page = Number(p.get('page'));
-  const status = p.get('status');
+  const status = STATUS_ALIASES[p.get('status') ?? ''] ?? p.get('status');
   const order = p.get('order');
   return {
     status: PILLS.some(([v]) => v === status) ? status : DEFAULTS.status,
@@ -68,9 +68,10 @@ export function queryFromState(state) {
   return q ? `?${q}` : '';
 }
 
-/** A rota da API para o estado: sempre com status, ordem, sentido e página. */
-export function listRoute(state) {
+/** A rota da API para o estado: sempre com status, ordem, sentido e página; `perPage` quando há. */
+export function listRoute(state, perPage = null) {
   const p = new URLSearchParams({ status: state.status, order: state.order, direction: state.direction, page: String(state.page) });
+  if (perPage) p.set('perPage', String(perPage));
   if (state.search.trim()) p.set('search', state.search.trim());
   if (state.dir) p.set('dir', state.dir);
   return `/api/sessions?${p}`;
@@ -108,6 +109,37 @@ export function band({ total, page, perPage }) {
   return `${from}–${Math.min(total, page * perPage)} de ${total}`;
 }
 
+// Issue 279: the page size follows the window height, never below the old 10 nor above the API's 100.
+export const MIN_ROWS = 10;
+export const MAX_ROWS = 100;
+
+/** How many rows of `rowHeight` fit in `available` pixels, between `min` and `max`. */
+export function fitRows({ available, rowHeight, min = MIN_ROWS, max = MAX_ROWS }) {
+  if (!(rowHeight > 0) || !Number.isFinite(available)) return min;
+  return Math.min(max, Math.max(min, Math.floor(available / rowHeight)));
+}
+
+/** The page that still shows the first row of `page` once the page size goes from `perPage` to `nextPerPage`. */
+export function pageKeepingRow({ page, perPage, nextPerPage }) {
+  return Math.floor(((page - 1) * perPage) / nextPerPage) + 1;
+}
+
+/**
+ * The page after a new page size. The first measure only corrects the CSS estimate: the page in the URL
+ * was written under the real size (Voltar from the Detalhe, a reload), so it stays. A resize keeps the row.
+ */
+export function pageAfterRefit({ page, perPage, nextPerPage, first }) {
+  return first ? page : pageKeepingRow({ page, perPage, nextPerPage });
+}
+
+/**
+ * The room the rows have, in pixels: from the top of the rows to the bottom of the scrolling area,
+ * minus its bottom padding, the gap and the pager below the table, and the card's bottom border.
+ */
+export function roomForRows({ rowsTop, areaBottom, paddingBottom, gap, footerHeight, border = 1 }) {
+  return areaBottom - paddingBottom - rowsTop - gap - footerHeight - border;
+}
+
 /** O id curto da linha: os 8 primeiros de um UUID; o id inteiro nos outros casos. */
 export function shortId(id) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(id) ? id.slice(0, 8) : id;
@@ -122,7 +154,7 @@ export const COLUMNS = [
   ['c-agents', 'Agentes'],
   ['c-cost', 'Custo'],
   ['c-dir', 'Diretório'],
-  ['c-arrow', ''],
+  ['c-open', ''],
 ];
 
 const COLOR = /^#[0-9a-f]{3,8}$/i;
@@ -135,12 +167,19 @@ function selector(label, options, value, onChange) {
   return el('label', { class: 'field' }, s, icon('open-list'));
 }
 
-function badgeEl(status, reason) {
-  const m = reason ? REASONS[reason] : null;
-  return [
-    el('span', { class: `badge b-${status}` }, el('span', { class: 'p' }), STATUS[status] ?? status),
-    m ? el('span', { class: m.urgente ? 'reason' : 'reason soft' }, icon(m.icone), m.rotulo) : null,
-  ];
+/** The status cell: the attention pill and its reason (issue 245), or the status badge. */
+export function badgeEl(status, attention) {
+  if (attentionOf(attention)) return attentionBadges(attention);
+  // Waiting without attention does not wait on the person (delegating…): "Ativa". Nothing raw on screen.
+  const st = statusWithoutAttention(status);
+  if (!Object.hasOwn(STATUS, st)) return [];
+  return [el('span', { class: `badge b-${st}` }, el('span', { class: 'p' }), STATUS[st])];
+}
+
+/** "Precisam de você 5": the pill label and the count of `counts` (none when the core did not say). */
+export function pillCount(counts, status) {
+  const n = counts?.[status];
+  return Number.isInteger(n) ? String(n) : null;
 }
 
 function account(c) {
@@ -151,14 +190,21 @@ function account(c) {
 }
 
 export async function mount(area, ctx) {
-  // O estilo da tela, uma vez por página.
-  if (!document.querySelector('link[data-screen="sessions"]')) {
-    document.head.append(el('link', { rel: 'stylesheet', href: '/ui/sessions.css', 'data-screen': 'sessions' }));
+  // O estilo da tela, uma vez por página. Issue 279: the row count measures the styled screen, so the first
+  // read waits for it.
+  let sheet = document.querySelector('link[data-screen="sessions"]');
+  if (!sheet) {
+    sheet = el('link', { rel: 'stylesheet', href: '/ui/sessions.css', 'data-screen': 'sessions' });
+    sheet.loaded = new Promise((done) => (sheet.onload = sheet.onerror = done));
+    document.head.append(sheet);
   }
 
   let state = stateFromQuery(location.search);
   let last = null;
   let request = 0;
+  // Issue 279: the rows that fit; measured again after the first table and on every resize.
+  let perPage = MIN_ROWS;
+  let fitted = false;
 
   const head = header({
     icon: 'sessions',
@@ -180,18 +226,68 @@ export async function mount(area, ctx) {
   const orderSlot = el('span', { class: 'order-slot' });
   const invert = el('button', { type: 'button', class: 'field square', 'aria-label': 'Inverter a ordem', title: 'Inverter a ordem', onClick: () => change({ direction: state.direction === 'desc' ? 'asc' : 'desc', page: 1 }) }, icon('invert'));
   const pills = el('div', { class: 'seg', role: 'group', 'aria-label': 'Status' });
-  for (const [v, label] of PILLS) pills.append(el('button', { type: 'button', 'data-status': v, onClick: () => change({ status: v, page: 1 }) }, label));
+  for (const [v, label] of PILLS) pills.append(el('button', { type: 'button', 'data-status': v, onClick: () => change({ status: v, page: 1 }) }, label, el('b', { class: 'sessions-pill-count' })));
   const filters = el('div', { class: 'card filters' }, searchField, dirSlot, orderSlot, invert, pills);
 
   const body = el('div', { class: 'sessions-body' }, loading({ label: 'Carregando as sessões' }));
   area.replaceChildren(head, filters, body);
 
-  function drawFilters(directories) {
+  function drawFilters(directories, counts = null) {
     const dirs = state.dir && !directories.includes(state.dir) ? [...directories, state.dir] : directories;
     dirSlot.replaceChildren(selector('Diretório', [['', 'Todos os projetos'], ...dirs.map((d) => [d, lastPart(d)])], state.dir, (dir) => change({ dir, page: 1 })));
     orderSlot.replaceChildren(selector('Ordenar por', Object.entries(ORDERS).map(([v, r]) => [v, r[state.direction]]), state.order, (order) => change({ order: order, page: 1 })));
-    for (const b of pills.children) b.setAttribute('aria-pressed', String(b.dataset.status === state.status));
+    for (const b of pills.children) {
+      b.setAttribute('aria-pressed', String(b.dataset.status === state.status));
+      const n = b.querySelector('.sessions-pill-count');
+      if (n) n.replaceChildren(pillCount(counts, b.dataset.status) ?? '');
+    }
   }
+
+  /** The rows that fit now: real row heights once a table is on screen, the CSS sizes before that. */
+  function rowsThatFit() {
+    const scroller = area.closest('.cc-main');
+    if (!scroller || !body.isConnected) return perPage;
+    const css = getComputedStyle(body);
+    const px = (name) => parseFloat(css.getPropertyValue(name)) || 0;
+    const tbody = body.querySelector('.table tbody');
+    const rows = tbody ? [...tbody.rows] : [];
+    const top = scroller.getBoundingClientRect().top - scroller.scrollTop;
+    const rowsTop = tbody ? tbody.getBoundingClientRect().top : body.getBoundingClientRect().top + px('--sessions-head-height');
+    const rowHeight = rows.length ? rows.reduce((sum, r) => sum + r.getBoundingClientRect().height, 0) / rows.length : px('--sessions-row-height');
+    const available = roomForRows({
+      rowsTop: rowsTop - top,
+      areaBottom: scroller.clientHeight,
+      paddingBottom: parseFloat(getComputedStyle(scroller).paddingBottom) || 0,
+      gap: px('row-gap'),
+      footerHeight: body.querySelector('.sessions-footer')?.getBoundingClientRect().height || px('--sessions-footer-height'),
+    });
+    return fitRows({ available, rowHeight });
+  }
+
+  /** A new page size keeps the first row on screen: the page follows the row, not its number. */
+  function refit() {
+    const first = !fitted;
+    fitted = true;
+    const next = rowsThatFit();
+    if (next === perPage) return false;
+    const page = pageAfterRefit({ page: state.page, perPage, nextPerPage: next, first });
+    perPage = next;
+    if (page !== state.page) {
+      state = { ...state, page };
+      history.replaceState(null, '', `${location.pathname}${queryFromState(state)}`);
+    }
+    return true;
+  }
+
+  // The scrolling area changes size with the window (and the filters wrap with its width).
+  let resizeWait = null;
+  const resizing = new ResizeObserver(() => {
+    clearTimeout(resizeWait);
+    resizeWait = setTimeout(() => {
+      if (last?.items.length && refit()) read();
+    }, 150);
+  });
+  resizing.observe(area.closest('.cc-main') ?? area);
 
   function change(partial) {
     state = { ...state, ...partial };
@@ -206,7 +302,7 @@ export async function mount(area, ctx) {
       'tr',
       { class: 'session-row' },
       el('td', { class: 'nm' }, el('a', { href: target, title: s.title }, el('b', {}, s.title)), el('small', {}, el('span', { class: 'mono' }, shortId(s.id)), account(s.account))),
-      el('td', { class: 'st' }, ...badgeEl(s.status, s.reason)),
+      el('td', { class: 'st' }, ...badgeEl(s.status, s.attention)),
       el('td', { class: 'c-muted', title: new Date(s.lastActivity).toLocaleString('pt-BR') }, age(s.lastActivity)),
       // Os dois pedaços não quebram por dentro: na coluna estreita, o tempo desce para a linha de baixo.
       el('td', { class: 'mono dur' }, s.running ? el('span', { class: 'c-active' }, 'rodando ·') : null, s.running ? ' ' : null, el('span', {}, duration(s.durationMs))),
@@ -214,7 +310,8 @@ export async function mount(area, ctx) {
       el('td', { class: 'mono' }, cost(s.costUsd)),
       // Corta no começo (o fim do caminho é o que distingue): o LRM mantém a barra inicial no lugar.
       el('td', { class: 'dir', title: s.cwd ?? '' }, s.cwd ? `\u200e${s.cwd}\u200e` : '—'),
-      el('td', { class: 'c-muted arrow' }, icon('chevron-right')),
+      // Empty when there is nothing to open: the column keeps its width, the others stay aligned.
+      el('td', { class: 'sessions-open' }, openAction({ id: s.id, open: s.open }, { size: 'icon', write: ctx.write })),
     );
     tr.addEventListener('click', (ev) => {
       if (ev.target instanceof Element && ev.target.closest('a')) return;
@@ -252,8 +349,13 @@ export async function mount(area, ctx) {
       state = { ...state, page: list.page };
       history.replaceState(null, '', `${location.pathname}${queryFromState(state)}`);
     }
-    drawFilters(list.directories);
-    if (list.items.length) return body.replaceChildren(table(list), footer(list));
+    drawFilters(list.directories, list.counts);
+    if (list.items.length) {
+      body.replaceChildren(table(list), footer(list));
+      // The first table measures the real rows; a different count reads the page again, once.
+      if (!fitted && refit()) read();
+      return;
+    }
     const filtering = state.status !== 'all' || state.search.trim() || state.dir;
     body.replaceChildren(
       filtering
@@ -265,7 +367,7 @@ export async function mount(area, ctx) {
   async function read() {
     const mine = ++request;
     try {
-      const list = await ctx.read(listRoute(state));
+      const list = await ctx.read(listRoute(state, perPage));
       if (mine !== request) return;
       last = list;
       draw(list);
@@ -291,8 +393,13 @@ export async function mount(area, ctx) {
   ctx.onRestart(() => read());
 
   drawFilters([]);
+  await sheet.loaded;
+  // Before the first table, the CSS sizes give the count, so the first read already fills the window.
+  perPage = rowsThatFit();
   await read();
   return () => {
+    resizing.disconnect();
+    clearTimeout(resizeWait);
     clearTimeout(searchWait);
     clearTimeout(liveWait);
   };

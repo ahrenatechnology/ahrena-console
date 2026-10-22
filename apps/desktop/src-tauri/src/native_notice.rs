@@ -3,8 +3,9 @@
 // Tauri's notification plugin has `on_action` and `register_action_types` on desktop, but on macOS
 // it only reports the click through `NSUserNotification` (deprecated), with the actions in an
 // "Opções" menu. Here the app uses `UNUserNotificationCenter`: it registers the category with
-// "Abrir", "Abrir no Claude Desktop" and "Silenciar", puts the session and the `local_…` in
-// `userInfo`, asks for the presentation also with the app in the foreground and answers through
+// "Abrir", "Abrir no Claude Desktop" and "Silenciar" (and, for a machine that went down with a
+// reconnect command, "Reconectar" and "Abrir", #244), puts the session, the `local_…` and the
+// machine in `userInfo`, asks for the presentation also with the app in the foreground and answers through
 // the delegate.
 //
 // `UNUserNotificationCenter` kills the process when the app does not run from a bundle (a plain
@@ -17,9 +18,8 @@
 // it; window work goes through `run_on_main_thread`.
 //
 // Notifications already delivered stay in the Notification Center across an app update. Those of a
-// version from before #173 (phase 4) carry the Portuguese category, action ids and `userInfo` key:
-// the legacy category is still registered and `respond` still reads them, until the end of the
-// aliases (#173 phase 6).
+// version from before #173 phase 4 (app 0.0.1) carry the Portuguese category, action ids
+// and `userInfo` key, which are not read since phase 6: their buttons do nothing.
 
 use std::cell::RefCell;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -42,23 +42,20 @@ const SESSION_CATEGORY: &str = "session";
 /// A machine alert (#180): only "Abrir", the machine has no Claude Desktop conversation to open
 /// nor a session to silence.
 const MACHINE_CATEGORY: &str = "machine";
+/// "<label> sem conexão" of a machine with a reconnect command (#244, A8): "Reconectar" and "Abrir".
+const MACHINE_RECONNECT_CATEGORY: &str = "machine-reconnect";
 /// A remote session (#180): "Abrir" and "Silenciar", no "Abrir no Claude Desktop".
 const REMOTE_SESSION_CATEGORY: &str = "remote-session";
 const OPEN_ACTION: &str = "open";
 const OPEN_IN_DESKTOP_ACTION: &str = "open-in-desktop";
 const SILENCE_ACTION: &str = "silence";
+const RECONNECT_ACTION: &str = "reconnect";
 const SESSION_KEY: &str = "session";
 const LOCAL_KEY: &str = "local";
 /// The `/ui` path "Abrir" leads to (#180); without it, the session's screen.
 const PATH_KEY: &str = "path";
-
-/// The session category, the action ids and the session key of a notification delivered by an app
-/// from before #173 (phase 4).
-const LEGACY_SESSION_CATEGORY: &str = "sessao";
-const LEGACY_OPEN_ACTION: &str = "abrir";
-const LEGACY_OPEN_IN_DESKTOP_ACTION: &str = "abrir-no-desktop";
-const LEGACY_SILENCE_ACTION: &str = "silenciar";
-const LEGACY_SESSION_KEY: &str = "sessao";
+/// The machine id "Reconectar" sends (#244); the only thing it sends.
+const MACHINE_KEY: &str = "machine";
 
 /// What each answer does; it comes from main.rs, which has the state and the window.
 pub struct Handlers {
@@ -68,6 +65,8 @@ pub struct Handlers {
     pub open_in_desktop: fn(&AppHandle, Option<String>),
     /// "Silenciar": silences the session and saves.
     pub silence: fn(&AppHandle, &str),
+    /// "Reconectar" (#244): asks the core to run the machine's reconnect command.
+    pub reconnect: fn(&AppHandle, &str),
 }
 
 static APP: OnceLock<(AppHandle, Handlers)> = OnceLock::new();
@@ -139,10 +138,11 @@ pub fn start(app: &AppHandle, handlers: Handlers, _main: MainThreadMarker) -> bo
         Action::Open => action(OPEN_ACTION, "Abrir", UNNotificationActionOptions::Foreground),
         Action::OpenInDesktop => action(OPEN_IN_DESKTOP_ACTION, "Abrir no Claude Desktop", UNNotificationActionOptions::empty()),
         Action::Silence => action(SILENCE_ACTION, "Silenciar", UNNotificationActionOptions::empty()),
+        // In the background: the command may open a login in the browser; the window stays as is.
+        Action::Reconnect => action(RECONNECT_ACTION, "Reconectar", UNNotificationActionOptions::empty()),
     };
-    // One category per kind of notice, with the actions `Origin::actions` gives it, plus the legacy
-    // session category, so a notification delivered before the update keeps its buttons.
-    let categories: Vec<_> = [(Origin::Session, category(Origin::Session)), (Origin::RemoteSession, category(Origin::RemoteSession)), (Origin::Machine, category(Origin::Machine)), (Origin::Session, LEGACY_SESSION_CATEGORY)]
+    // One category per kind of notice, with the actions `Origin::actions` gives it.
+    let categories: Vec<_> = [(Origin::Session, category(Origin::Session)), (Origin::RemoteSession, category(Origin::RemoteSession)), (Origin::Machine, category(Origin::Machine)), (Origin::MachineReconnect, category(Origin::MachineReconnect))]
         .into_iter()
         .map(|(o, id)| {
             let actions = NSArray::from_retained_slice(&o.actions().iter().map(|a| button(*a)).collect::<Vec<_>>());
@@ -184,6 +184,10 @@ pub fn send(n: &Notice) {
         keys.push(NSString::from_str(LOCAL_KEY));
         values.push(NSString::from_str(local));
     }
+    if let Some(machine) = &n.machine {
+        keys.push(NSString::from_str(MACHINE_KEY));
+        values.push(NSString::from_str(machine));
+    }
     let keys: Vec<&NSString> = keys.iter().map(|k| &**k).collect();
     let values: Vec<&NSString> = values.iter().map(|v| &**v).collect();
     let info = NSDictionary::<NSString, NSString>::from_slices(&keys, &values);
@@ -206,6 +210,7 @@ fn category(o: Origin) -> &'static str {
         Origin::Session => SESSION_CATEGORY,
         Origin::RemoteSession => REMOTE_SESSION_CATEGORY,
         Origin::Machine => MACHINE_CATEGORY,
+        Origin::MachineReconnect => MACHINE_RECONNECT_CATEGORY,
     }
 }
 
@@ -227,22 +232,25 @@ fn read(info: &NSDictionary, key: &str) -> Option<String> {
 fn respond(response: &UNNotificationResponse) {
     let Some((app, handlers)) = APP.get() else { return };
     let info = response.notification().request().content().userInfo();
-    let Some(session) = read(&info, SESSION_KEY).or_else(|| read(&info, LEGACY_SESSION_KEY)) else { return };
+    let Some(session) = read(&info, SESSION_KEY) else { return };
     let local = read(&info, LOCAL_KEY);
     // A notice from before #180 has no path: the session's screen, as then.
     let path = read(&info, PATH_KEY).unwrap_or_else(|| notifications::session_path(&session));
     let action = response.actionIdentifier();
-    let is = |ids: [&str; 2]| ids.iter().any(|id| action.isEqualToString(&NSString::from_str(id)));
+    let is = |id: &str| action.isEqualToString(&NSString::from_str(id));
     // SAFETY: a UserNotifications constant, read after the framework has loaded.
     let default = unsafe { UNNotificationDefaultActionIdentifier };
-    let (open, open_in_desktop, silence) = (handlers.open, handlers.open_in_desktop, handlers.silence);
+    let (open, open_in_desktop, silence, reconnect) = (handlers.open, handlers.open_in_desktop, handlers.silence, handlers.reconnect);
     let handle = app.clone();
-    let work: Box<dyn FnOnce() + Send> = if action.isEqualToString(default) || is([OPEN_ACTION, LEGACY_OPEN_ACTION]) {
+    let work: Box<dyn FnOnce() + Send> = if action.isEqualToString(default) || is(OPEN_ACTION) {
         Box::new(move || open(&handle, &path))
-    } else if is([OPEN_IN_DESKTOP_ACTION, LEGACY_OPEN_IN_DESKTOP_ACTION]) {
+    } else if is(OPEN_IN_DESKTOP_ACTION) {
         Box::new(move || open_in_desktop(&handle, local))
-    } else if is([SILENCE_ACTION, LEGACY_SILENCE_ACTION]) {
+    } else if is(SILENCE_ACTION) {
         Box::new(move || silence(&handle, &session))
+    } else if is(RECONNECT_ACTION) {
+        let Some(machine) = read(&info, MACHINE_KEY) else { return };
+        Box::new(move || reconnect(&handle, &machine))
     } else {
         return;
     };

@@ -40,6 +40,7 @@
 // O texto do repositório é dado: só sai na rota do arquivo, para a tela mostrar. Dos hooks sai o
 // evento, o matcher e a quantidade, nunca o comando. Nenhum token entra na resposta, nem nos erros.
 
+import { githubReposTransport, type GithubAccess } from './github-access.ts';
 import type { ServerResponse } from 'node:http';
 import { importsOf, importTarget, isInstructionFile, MAX_IMPORT_DEPTH } from '../agent-instructions/imports.ts';
 import type { AgentInstructions, InstructionFileView, InstructionsContent, InstructionsState } from '../agent-instructions/model.ts';
@@ -50,7 +51,7 @@ import { isInterestingPath, MAX_TREE_PATHS, RepoFilesSource, validPath, type Blo
 import { GithubReposSource, NOME_DO_DONO, NOME_DO_REPO, SemGithubError } from '../github/repos-source.ts';
 import { send } from '../ingest/hooks/receiver.ts';
 import type { ChangeCursor } from '../changes/cursor.ts';
-import { createFakeGithub, DEMO_GITHUB_DATA } from '../simulator/fake-github.ts';
+import { createFakeGithub, DEMO_GITHUB_DATA, FAKE_GITHUB_BASE } from '../simulator/fake-github.ts';
 
 export const AGENT_INSTRUCTIONS_ROUTE = '/api/agent-instructions';
 
@@ -429,7 +430,7 @@ export function createAgentInstructionsRoute(service: AgentInstructionsService):
 export interface CoreAgentInstructionsOptions {
   /** Demonstração: o GitHub falso (src/simulator/fake-github.ts), nunca a API real. */
   demo: boolean;
-  /** `--sem-github`: as respostas vêm com `state: 'no-github'`. */
+  /** `--no-github`: as respostas vêm com `state: 'no-github'`. */
   noGithub: boolean;
   /** O cache do GitHub do núcleo, o mesmo dos repositórios e do trabalho. */
   cache: GithubCache;
@@ -437,16 +438,20 @@ export interface CoreAgentInstructionsOptions {
   /** A fila das chamadas ao GitHub, a mesma dos repositórios. */
   queue: GithubCallQueue;
   log?: (message: string) => void;
+  /** The credential provider and transport (#241). Required outside the demo and `--no-github`; the demo takes only its token. */
+  github?: GithubAccess | null;
 }
 
-/** Monta o serviço e a rota como o núcleo usa (cli.ts): token do `gh`, cache no banco, a fila do núcleo. */
-export function createCoreAgentInstructions({ demo, noGithub, cache, changes, queue, log }: CoreAgentInstructionsOptions): { service: AgentInstructionsService; route: AgentInstructionsRoute } {
+/** Monta o serviço e a rota como o núcleo usa (cli.ts): a credencial do provedor (#241), cache no banco, a fila do núcleo. */
+export function createCoreAgentInstructions({ demo, noGithub, cache, changes, queue, log, github }: CoreAgentInstructionsOptions): { service: AgentInstructionsService; route: AgentInstructionsRoute } {
   // A demo aponta para um endereço que não resolve: mesmo que o falso falhasse, nada sai para o GitHub.
-  const transport = demo
-    ? new GithubReposSource({ token: 'demo', fetch: createFakeGithub(DEMO_GITHUB_DATA, { delayMs: 120 }).fetch, url: 'https://github-falso.invalid/graphql', api: 'https://github-falso.invalid' })
-    : noGithub
-      ? null
-      : new GithubReposSource();
+  const transport = githubReposTransport({
+    demo,
+    noGithub,
+    github,
+    demoFetch: () => createFakeGithub(DEMO_GITHUB_DATA, { delayMs: 120 }).fetch,
+    demoBase: FAKE_GITHUB_BASE,
+  });
   const service = new AgentInstructionsService({ source: transport ? new RepoFilesSource(transport) : null, cache, changes, queue, ...(log ? { log } : {}) });
   return { service, route: createAgentInstructionsRoute(service) };
 }

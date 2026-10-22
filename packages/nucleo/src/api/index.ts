@@ -21,29 +21,14 @@ export { MontadorDoMural, ehAberta, muralDoPainel, responderMural, RECENTE_DO_MU
 export { ResumosDeSessao, aplicarEvento, iniciosDosTurnos, resumoVazio, type ResumoDosEventos, type ItemDoPlano } from './summary.ts';
 export { TrabalhoPorBranch, gitDoSistema, issueDoBranch, repoDoRemote, type Git, type OpcoesDoTrabalho } from './work.ts';
 export { startLocalApi, API_VERSION, PANEL_ROUTE, OPEN_ROUTE, LOAD_ROUTE, DECISIONS_ROUTE, type LocalApi, type ApiOptions } from './server.ts';
-export {
-  LEGACY_BODIES,
-  LEGACY_PARAMS,
-  legacyRequestBody,
-  legacyResponseFor,
-  legacyRouteOf,
-  normalizeLegacyPath,
-  normalizeLegacyQuery,
-  normalizeLegacyUrl,
-  rawPathnameOf,
-  translateBody,
-  type LegacyBodySpec,
-  type LegacyRoute,
-  type LegacyRouteSpec,
-} from './legacy-routes.ts';
 export * from './workflows.ts';
 export { criarRotaDoProjeto, quadroDe, mesmaOrigemMovendo, PROJECT_ROUTE, PROJECT_MOVE_ROUTE, type CardDoProjeto, type KanbanDoProjeto, type OpcoesDoProjeto, type QuadroDoProjeto } from './project.ts';
 export { LeiturasDoDetalhe, DETAIL_ROUTE, filtroDe, type CabecaDoDetalhe, type AgentesDoDetalhe, type ConversaDoDetalhe, type EventosDoDetalhe, type OpcoesDoDetalhe } from './session-detail.ts';
 export { FeedDeEventos, EVENTS_ROUTE, statusDoEvento, TIPOS_POR_STATUS, type EventoDoFeed, type RespostaDoFeed, type StatusDoEvento } from './events.ts';
 export { montarAtencao, MOTIVO_CURTO, remoteAttentionItems, ATTENTION_ROUTE, type ItemDaAtencao, type RemoteAttentionSource, type RespostaDaAtencao } from './attention-route.ts';
 export { montarDashboard, MontadorDoDashboard, DASHBOARD_ROUTE, type RespostaDoDashboard, type AgenteDoDashboard, type AtividadeDoDashboard, type NumerosDoDashboard } from './dashboard-route.ts';
-export { ListaDeSessoes, SESSIONS_ROUTE, POR_PAGINA, FILTROS_DE_STATUS, ORDENS, pedidoDeSessoes, type LinhaDeSessao, type ListaDeSessoesHttp, type PedidoDeSessoes } from './sessions.ts';
-export { QuadroKanban, pedidoDoKanban, rotuloDoModelo, colunaDoAgente, COLUNAS_DAS_SESSOES, COLUNAS_DOS_AGENTES, type CardDeAgente, type CardDeSessao, type Coluna, type KanbanHttp, type PedidoDoKanban } from './kanban.ts';
+export { ListaDeSessoes, SESSIONS_ROUTE, POR_PAGINA, PER_PAGE_MAX, FILTROS_DE_STATUS, ORDENS, pedidoDeSessoes, type LinhaDeSessao, type ListaDeSessoesHttp, type PedidoDeSessoes } from './sessions.ts';
+export { QuadroKanban, pedidoDoKanban, rotuloDoModelo, colunaDoAgente, sessionColumnOf, COLUNAS_DAS_SESSOES, COLUNAS_DOS_AGENTES, type CardDeAgente, type CardDeSessao, type Coluna, type KanbanHttp, type PedidoDoKanban } from './kanban.ts';
 export {
   createFrameworkInstallRoute,
   createCoreFrameworkInstall,
@@ -56,5 +41,6 @@ export {
   type InstallAnswer,
   type PullRequestAnswer,
 } from './framework-install.ts';
+export { createDecisionsRoute, createCoreDecisions, DecisionsService, ADRS_ROUTE, PDRS_ROUTE, type AccountRepos, type DecisionsRoute, type RecordAnswer } from './adrs.ts';
 export { createAgentConfigRoute, agentConfigWriteFromSameOrigin, MAX_SKILL_BODY, AGENT_CONFIG_ROUTE, SKILL_ROUTE, type AgentConfigOptions, type AgentConfigRoute } from './agent-config.ts';
 export { MACHINES_ROUTE, TELEMETRY_ROUTE, isTelemetryRoute, readTelemetryRequest, respondTelemetry } from './telemetry.ts';

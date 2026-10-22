@@ -200,7 +200,7 @@ describe('Instructions (C32): the tab on the repository screen', () => {
   test('the tab row has Instructions after Decisions, open, and Metrics becomes a link', async () => {
     const { area, reads } = await mountTab(standard());
     const tabs = area.querySelector('nav.repo-tabs')!.children.map((t) => texto(t));
-    assert.deepEqual(tabs, ['Métricas', 'Issues (12)', 'PRs (3)', 'CI', 'Sessões (5)', 'Decisões', 'Instruções']);
+    assert.deepEqual(tabs, ['Métricas', 'Issues (12)', 'PRs (3)', 'CI', 'Sessões (5)', 'Decisões', 'ADRs', 'Instruções']);
     assert.equal(texto(area.querySelector('nav.repo-tabs [aria-current="page"]')), 'Instruções');
     const metrics = area.querySelectorAll('nav.repo-tabs a').find((a) => texto(a) === 'Métricas')!;
     assert.equal(metrics.getAttribute('href'), '/ui/repos/exemplo-labs/vitrine-demo');

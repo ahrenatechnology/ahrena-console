@@ -43,20 +43,8 @@ class HttpError extends Error {
   }
 }
 
-/** Per-response rewrites of the JSON body (`rewriteJsonBodies`). */
-const bodyRewrites = new WeakMap<ServerResponse, (body: unknown) => unknown>();
-
-/**
- * Every JSON body `send` writes on `res` goes through `rewrite` first. The API server sets it once per
- * request, before routing, for the old Portuguese routes (the back-translator, src/api/legacy-routes.ts).
- */
-export function rewriteJsonBodies(res: ServerResponse, rewrite: (body: unknown) => unknown): void {
-  bodyRewrites.set(res, rewrite);
-}
-
 export function send(res: ServerResponse, status: number, body: unknown): void {
-  const rewrite = bodyRewrites.get(res);
-  const text = JSON.stringify(rewrite ? rewrite(body) : body);
+  const text = JSON.stringify(body);
   res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'content-length': Buffer.byteLength(text) });
   res.end(text);
 }

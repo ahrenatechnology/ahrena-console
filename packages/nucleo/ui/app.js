@@ -5,8 +5,9 @@ import { write, read } from './api.js';
 import { startLive } from './live.js';
 import { header, el, icon } from './dom.js';
 import { error, empty } from './states.js';
-import { findScreen, legacyUrl, litItem } from './screens.js';
+import { findScreen, litItem } from './screens.js';
 import { createNav } from './nav.js';
+import { createGithubFooter, connectionChanged } from './github-connect.js';
 
 const nav = document.getElementById('nav');
 const area = document.getElementById('content');
@@ -23,6 +24,10 @@ const { readMachines, highlight, counter } = createNav({ nav, read });
 // A remote's state also changes without an alert (another version over there): re-read now and then.
 setInterval(readMachines, 60_000);
 
+// The GitHub connection in the footer (ghFooter, issue 241): read now, on every `connections` change and on restart.
+const githubFooter = createGithubFooter({ node: document.getElementById('github'), read });
+githubFooter.refresh();
+
 // ---------- Live ----------
 
 let version = null;
@@ -35,6 +40,7 @@ let connected = false;
 function restart() {
   readVersion();
   readMachines();
+  githubFooter.refresh();
   if (!connected) return void (connected = true);
   if (screenFailed) return open();
   for (const f of listeners.restart) f();
@@ -77,6 +83,7 @@ startLive({
   onChange(changes) {
     // A machine that goes down or comes back (`<id>:machine-unreachable`) changes its dot.
     if (changes.some((c) => c.type === 'alert')) readMachines();
+    if (connectionChanged(changes)) githubFooter.refresh();
     for (const f of listeners.change) f(changes);
   },
 });
@@ -87,8 +94,10 @@ let leaving = null;
 let screenFailed = false;
 
 // `route` may carry the query (`/ui/agent-config?tab=skills`): it stays in the URL for the screen to read.
-function navigate(route) {
-  if (route !== location.pathname + location.search) history.pushState(null, '', route);
+// `state` goes into the history entry: a screen can tell a navigation from this page apart from a link
+// another site opened (Conexões starts the device flow only on the C42 button's state).
+function navigate(route, state = null) {
+  if (state || route !== location.pathname + location.search) history.pushState(state, '', route);
   open();
 }
 
@@ -97,9 +106,6 @@ async function open() {
   const leave = new AbortController();
   leaving = leave;
   screenFailed = false;
-  // An old URL (`/ui/sessoes/<id>`) becomes the new one, in place, before routing.
-  const next = legacyUrl(location);
-  if (next) history.replaceState(history.state, '', next);
   const found = findScreen(location.pathname);
   if (!found) {
     highlight(null);

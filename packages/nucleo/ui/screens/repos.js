@@ -9,6 +9,7 @@
 import { header, el, icon } from '../dom.js';
 import { loading, error, errorBand, empty } from '../states.js';
 import { screenState, filterRepos, integer, changeMatters, SORTS, percentage, relative, NO_GITHUB, sparkline, hasList, DASH, VISIBILITIES } from '../repos-format.js';
+import { connectEmptyFor, isGithubNotConnected } from '../github-connect.js';
 
 const SVG = 'http://www.w3.org/2000/svg';
 const REREAD_MS = 5000;
@@ -224,6 +225,7 @@ export async function mount(area, ctx) {
     accountChip.hidden = !data?.account;
     accountChip.replaceChildren(icon('github'), `conta: ${data?.account ?? ''}`);
 
+    if (isGithubNotConnected(failure)) return area.replaceChildren(head, connectEmptyFor('repos', ctx.navigate));
     const e = screenState({ dados: data, falha: failure, temDado: hasList(data) });
     if (e.reler) timer = setTimeout(read, REREAD_MS);
     if (e.tela === 'error') return area.replaceChildren(head, failure ? error({ text: failure.message, retry }) : error({ title: 'O GitHub não respondeu', text: data.error ?? 'A leitura dos repositórios falhou.', retry: () => (area.replaceChildren(head, loading()), read({ forcar: true })) }));
@@ -261,6 +263,8 @@ export async function mount(area, ctx) {
     } catch (e) {
       if (e?.name === 'AbortError' || n !== request) return;
       failure = e instanceof Error ? e : new Error(String(e));
+      // issue 241: without the connection, what is on screen came with another credential.
+      if (isGithubNotConnected(e)) data = null;
     }
     draw();
   }

@@ -7,9 +7,7 @@
 // | `POST /api/decisions/<id>/promote`     | The "Promover a registro": a draft, or writes with `confirm` |
 //
 // The JSON keys and fixed values are English since #173 phase 2b (`state` `all|current|to_confirm`,
-// `groupBy` `branch|family|session`, the promote body `{ session, confirm, path, hash }`). The old
-// `/api/decisoes`, `/api/sessoes/<id>/decisoes`, `/api/decisoes/<id>/promover`, their parameter names
-// (`estado`, `agrupar`, `grupo`, `escopo`), values and bodies are aliases: src/api/legacy-routes.ts.
+// `groupBy` `branch|family|session`, the promote body `{ session, confirm, path, hash }`).
 //
 // Reads and writes only through the decisions port; scope, account and chain belong to
 // `DecisoesDaSessao` and src/decisions/registry.ts, not here.
@@ -37,7 +35,6 @@ import { currentDecisionsFor, decisionLabel, familyOf, markPromoted } from '../d
 import type { Page, StoragePort } from '../storage-port.ts';
 import { DecisoesDaSessao, ErroDaDecisao, ESCOPOS_DAS_DECISOES, paraOPainel, rotuloPorId, type AlvoDasDecisoes } from './decisions.ts';
 import type { PanelDecision, PanelDecisionScope } from './types.ts';
-import { legacyRequestBody, rawPathnameOf } from './legacy-routes.ts';
 
 /** The Decisions page of the /ui (C21). */
 export const DECISIONS_PAGE_ROUTE = '/api/decisions';
@@ -613,18 +610,17 @@ export async function responderDecisoesDaUi(req: IncomingMessage, res: ServerRes
     if (!id || !ID.test(id)) return send(res, 400, { error: 'id de decisão inválido' }), true;
     const texto = await lerCorpo(req);
     if (texto === null) return send(res, 413, { error: 'corpo grande demais' }), true;
-    // The body is `{ session, confirm, path, hash }`; the old `{ sessao, confirmar, caminho }` is read
-    // too, on the new path as well (the old path translates it through `legacyRequestBody`).
-    let corpo: { session?: unknown; confirm?: unknown; path?: unknown; hash?: unknown; sessao?: unknown; confirmar?: unknown; caminho?: unknown } | null;
+    // The body is `{ session, confirm, path, hash }`.
+    let corpo: { session?: unknown; confirm?: unknown; path?: unknown; hash?: unknown } | null;
     try {
-      corpo = legacyRequestBody(rawPathnameOf(req.url), JSON.parse(texto)) as typeof corpo;
+      corpo = JSON.parse(texto) as typeof corpo;
     } catch {
       return send(res, 400, { error: 'JSON inválido' }), true;
     }
-    const sessao = corpo?.session ?? corpo?.sessao;
+    const sessao = corpo?.session;
     if (typeof sessao !== 'string' || !ID.test(sessao)) return send(res, 400, { error: PROMOTE_SESSION_ERROR }), true;
     try {
-      const r = await ui.promover(id, sessao, { confirm: corpo?.confirm ?? corpo?.confirmar, path: corpo?.path ?? corpo?.caminho, hash: corpo?.hash });
+      const r = await ui.promover(id, sessao, { confirm: corpo?.confirm, path: corpo?.path, hash: corpo?.hash });
       if (r.status === 201) log(`decisão ${id} promovida para ${r.corpo.path} pela sessão ${sessao}`);
       send(res, r.status, r.corpo);
     } catch (err) {

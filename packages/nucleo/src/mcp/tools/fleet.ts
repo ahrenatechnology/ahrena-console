@@ -78,7 +78,8 @@ export function fleetOverview(fleet: FleetReader): Tool {
     title: 'Visão geral das sessões',
     description:
       'Visão geral das sessões do Claude Code desta máquina: totais por estado (active, waiting, delegating, background, error, ' +
-      'e completed/abandoned de hoje) e por conta, quantas precisam de você, o custo estimado de hoje e as sessões vivas, ' +
+      'e completed/abandoned de hoje) e por conta, quantas precisam de você (blocking) e quantas estão ociosas (yourTurn), ' +
+      'o custo estimado de hoje e as sessões vivas, ' +
       'paginadas. Filtro opcional account. Não devolve texto das conversas.',
     inputSchema: objectSchema({ ...COMMON_ARGS }),
     outputSchema: strictObject({
@@ -204,11 +205,11 @@ function summaryText(
   const t = d.totals;
   const l: string[] = [];
   l.push(`Hoje (${d.day}): ${t.live} ${t.live === 1 ? 'sessão viva' : 'sessões vivas'} (${stateSummary(t)}); ${t.completedToday} concluídas e ${t.abandonedToday} abandonadas hoje.`);
-  l.push(`Precisam de você: ${t.needingAttention.total} (${t.needingAttention.blocking} travando o agente, ${t.needingAttention.yourTurn} na sua vez).`);
+  l.push(`Precisam de você: ${t.needingAttention.blocking}; ociosas: ${t.needingAttention.yourTurn}.`);
   l.push(`Custo de hoje (estimativa): ${dollars(t.costTodayUsd)}${t.unpricedModels.length > 0 ? `; sem preço: ${t.unpricedModels.join(', ')}` : ''}.`);
   if (d.byAccount.length > 1) {
     l.push('Por conta:');
-    for (const c of d.byAccount) l.push(`- ${accountLabel(c.account)}: ${c.live} vivas, ${c.needingAttention.total} precisam de você, ${dollars(c.costTodayUsd)} hoje`);
+    for (const c of d.byAccount) l.push(`- ${accountLabel(c.account)}: ${c.live} vivas, ${c.needingAttention.blocking} precisam de você, ${c.needingAttention.yourTurn} ociosas, ${dollars(c.costTodayUsd)} hoje`);
   }
   if (d.activeSessions.items.length > 0) {
     l.push('Sessões vivas:');

@@ -25,16 +25,19 @@ import { SqliteDecisionStore } from '../decisions/sqlite.ts';
 import { SessionStateMachine } from '../states/machine.ts';
 import { createMcpServer } from '../mcp/index.ts';
 import { GithubCache } from '../github/cache.ts';
-import { ghCliToken, GithubGraphqlSource } from '../github/github-source.ts';
+import { GithubGraphqlSource } from '../github/github-source.ts';
 import { SqliteCacheStore } from '../github/sqlite-cache.ts';
 import { GithubCallQueue } from '../github/call-queue.ts';
-import { createGithubProject, GithubProject, type ProjectRef } from '../github/project.ts';
+import { chooseVault, GithubConnection, GithubNotConnectedError } from '../github/connection/index.ts';
+import { parseProjectEnv, PROJECT_ENV } from '../github/project-selection.ts';
+import { SqliteInstallationSettings } from '../settings/installation-settings.ts';
+import { createDemoGithubConnection, parseDemoGithubState } from '../simulator/demo-github-connection.ts';
 import { defaultProjectsRoot } from '../ingest/history/files.ts';
 import { followTranscripts } from '../ingest/history/follower.ts';
 import { Profiles } from '../profiles/profiles.ts';
 import { registerClient } from '../owner/clients.ts';
 import { isOlderCommit } from '../owner/commit.ts';
-import { claimLock, codeWarning, planStart, watchParent } from '../owner/owner.ts';
+import { claimLock, codeWarning, planStart, ReplaceError, watchParent } from '../owner/owner.ts';
 import { waitForCore, isPidAlive, reservePort, releasePort } from '../owner/probe.ts';
 import { readLock, releaseLock, prepareDir } from '../owner/lock.ts';
 import { defaultDataDir, parseInstallation, resolveDataDir, resolvePort } from '../owner/installation.ts';
@@ -55,10 +58,8 @@ import {
 import { seedDemoWorkflows } from '../simulator/workflows.ts';
 import { seedPanelHistory } from '../simulator/history-ended.ts';
 import { SessionHistory } from '../history/reading.ts';
-import { SIMULATOR_PROJECT, SimulatorProject } from '../simulator/project.ts';
 import { seedHistory } from '../simulator/history.ts';
 import { demoLocal, seedDetail } from '../simulator/detail.ts';
-import { upgradeDemoUrl } from '../simulator/legacy-ids.ts';
 import { mountDemoAgentConfig, knownProjects } from '../agent-config/index.ts';
 import { createAgentConfigRoute } from './agent-config.ts';
 import { Accounts } from './accounts.ts';
@@ -77,24 +78,28 @@ import {
   reprocessarContexto,
   reprocessarHistorico,
 } from './reprocessing.ts';
-import { criarReposDoNucleo } from './repos.ts';
-import { createCoreAgentInstructions } from './agent-instructions.ts';
-import { createCoreFrameworkInstall, FRAMEWORK_REPO_ENV } from './framework-install.ts';
+import type { GithubAccess } from './github-access.ts';
+import { FRAMEWORK_REPO_ENV } from './framework-install.ts';
+import { createCoreGithub, type CoreGithub } from './core-github.ts';
 import { startLocalApi, API_VERSION, type LocalApi } from './server.ts';
 import { ListaDeSessoes } from './sessions.ts';
+import { ResumosDeSessao } from './summary.ts';
 import { FeedDeEventos } from './events.ts';
 import { TrabalhoPorBranch } from './work.ts';
-import { createDevConsole, disabledDevConsoleSource, GithubDevConsoleSource } from '../dev-console/index.ts';
-import { DEV_CONSOLE_SIMULATOR_CONTEXTS, devConsoleSimulatorGit, SimulatedDevConsoleSource } from '../simulator/dev-console.ts';
 import { AlertTracker } from '../telemetry/alerts.ts';
 import { collectorFor } from '../telemetry/adapters/system.ts';
 import { SqliteTelemetryStore } from '../telemetry/adapters/sqlite.ts';
 import { publishAlertChanges, TelemetrySampler } from '../telemetry/sampler.ts';
 import { localMachine, TelemetryService, type MachineEntry } from '../telemetry/service.ts';
-import { loadMachinesConfig } from '../telemetry/machines-config.ts';
+import { MachinesFileSource } from '../telemetry/machines-config.ts';
 import { publishRemoteAttentionChanges, RemoteMachine } from '../telemetry/remote.ts';
+import { RemoteMachines } from '../telemetry/remote-machines.ts';
+import { INVALID_MACHINES_FILE, publishReconnectChanges, reconnectLogFile, ReconnectRunner } from '../telemetry/reconnect.ts';
 import { loopbackGet } from '../telemetry/adapters/loopback-http.ts';
 import type { TelemetryCollector } from '../telemetry/ports.ts';
+import { LiveClaudeProcesses } from './live-processes.ts';
+import { SessionOpenDescriber } from './session-open.ts';
+import { createTerminalFocuser, createTerminalOpener } from './terminal-launch.ts';
 import { SIMULATED_WORKSTATION, SimulatedCollector, seedTelemetry } from '../simulator/telemetry.ts';
 
 const o = parseApiOptions(process.argv.slice(2));
@@ -109,9 +114,14 @@ const port = resolvePort(o.port);
 const installation = parseInstallation(o.installation);
 const dataDir = resolveDataDir({ installation, dataDir: o.dataDir });
 const demo = o.demo;
+// Checked before anything starts: a wrong --demo-github, --demo-project or AHRENA_CONSOLE_PROJECT stops here.
+const demoGithubState = parseDemoGithubState(o.demoGithub);
+if (o.demoProject !== undefined && o.demoProject !== 'selected' && o.demoProject !== 'none') throw new Error('--demo-project: selected or none');
+if (!demo && (o.demoGithub !== undefined || o.demoProject !== undefined)) throw new Error('--demo-github and --demo-project only apply with --demo');
+parseProjectEnv(process.env[PROJECT_ENV] ?? '');
 const parent = o.parent === undefined ? null : Number(o.parent);
-if (parent !== null && !(Number.isInteger(parent) && parent > 0)) throw new Error('--parent/--pai: a pid');
-if (parent !== null && !isPidAlive(parent)) throw new Error(`--parent/--pai: pid ${parent} does not exist`);
+if (parent !== null && !(Number.isInteger(parent) && parent > 0)) throw new Error('--parent: a pid');
+if (parent !== null && !isPidAlive(parent)) throw new Error(`--parent: pid ${parent} does not exist`);
 const useLock = !demo && !o.noLock;
 const commit = checkoutCommit();
 const code = { version: API_VERSION, commit, isOlderCommit };
@@ -134,7 +144,11 @@ function adopt(p: number, version: string, warning: string | null = null): never
 // Before opening the database: adopts the live core of this installation's lock, or recovers the lock
 // if it is an orphan.
 async function planOrAdopt(): Promise<void> {
-  const plan = await planStart({ ...code, dir: dataDir, replace: o.replace, log });
+  const plan = await planStart({ ...code, dir: dataDir, replace: o.replace, log }).catch((e: unknown) => {
+    if (!(e instanceof ReplaceError)) throw e;
+    log(e.reason);
+    process.exit(1);
+  });
   if (plan.action === 'adopt') adopt(plan.lock.port, plan.lock.version, plan.warning);
   if (plan.recovered) log(`orphan lock recovered: ${plan.recovered}`);
 }
@@ -160,7 +174,7 @@ if (useLock) {
 async function adoptPortHolder(): Promise<never> {
   const v = await waitForCore(port, 30_000);
   if (v && !useLock) {
-    log(`a porta ${port} já tem um núcleo (pid ${v.pid ?? '?'}); ${demo ? 'a --demo' : 'a --sem-trava'} precisa de uma porta livre: use --porta`);
+    log(`a porta ${port} já tem um núcleo (pid ${v.pid ?? '?'}); ${demo ? 'a --demo' : 'a --no-lock'} precisa de uma porta livre: use --port`);
     process.exit(1);
   }
   if (v) {
@@ -175,7 +189,7 @@ async function adoptPortHolder(): Promise<never> {
       log(`port ${port} has the core of another installation (pid ${v.pid}); this one (${installation}, ${dataDir}) needs a free port: use --port`);
       process.exit(1);
     }
-    const warning = [lockless ? 'o núcleo nesta porta não tem trava (uma --demo, uma --sem-trava ou um núcleo de antes da #86)' : null, codeWarning(v, code)];
+    const warning = [lockless ? 'o núcleo nesta porta não tem trava (uma --demo, uma --no-lock ou um núcleo de antes da #86)' : null, codeWarning(v, code)];
     adopt(port, v.version, warning.filter(Boolean).join('; ') || null);
   }
   log(`port ${port} is in use and does not answer as a core`);
@@ -235,29 +249,24 @@ const machine = new SessionStateMachine({
   ...(demo ? { probe: null } : {}),
 });
 const desktop = demo || o.noDesktop ? null : new DesktopIndex();
-const workSource = demo ? new SimulatorWorkSource() : o.noGithub ? null : new GithubGraphqlSource({ token: () => ghCliToken() });
-// A single GitHub cache, in the database, for the work and the repositories: a rate-limit pause holds for both.
+// The installation settings (#241, decision 0011 §8): the GitHub login, the credential source and the
+// Project chosen on the screen. Never a credential.
+const settings = new SqliteInstallationSettings(sqlite.db);
+// A single queue for the GitHub calls (decision 0001, item 6): the connection's, the screens' and the work's.
+const githubQueue = new GithubCallQueue();
+// A single GitHub cache, in the database, for the work and every screen: a rate-limit pause holds for all.
 const githubCache = new GithubCache({ store: new SqliteCacheStore(storage.db) });
+// The core's GitHub (#241, src/api/core-github.ts): the connection, the credential provider and the
+// GitHub-backed screens, built below once the fleet exists. The work by branch takes the same credential.
+let coreGithub: CoreGithub | null = null;
+const githubAccess: GithubAccess | null =
+  o.noGithub && !demo ? null : { token: () => (coreGithub ? coreGithub.connection.token() : Promise.reject(new GithubNotConnectedError())) };
+const workSource = demo ? new SimulatorWorkSource() : githubAccess ? new GithubGraphqlSource({ token: githubAccess.token }) : null;
 const work = new TrabalhoPorBranch({
   fonte: workSource,
   cache: githubCache,
   ...(demo ? { git: SimulatorWorkSource.git } : {}),
 });
-// The project kanban (#80): C11's fake GitHub under --demo; otherwise the Project of AHRENA_CONSOLE_PROJECT.
-// Without the variable there is no default Project: the screen explains how to pick one.
-function projectFromEnv(value = process.env.AHRENA_CONSOLE_PROJECT ?? ''): ProjectRef | null {
-  if (!value.trim()) return null;
-  const m = /^([A-Za-z0-9][A-Za-z0-9-]{0,38})\/(\d{1,9})$/.exec(value.trim());
-  if (!m) throw new Error(`AHRENA_CONSOLE_PROJECT: owner/number, like my-org/3 (got "${value}")`);
-  return { owner: m[1], number: Number(m[2]) };
-}
-const chosenProject = demo || o.noGithub ? null : projectFromEnv();
-const projectCache = new GithubCache({ store: new SqliteCacheStore(storage.db) });
-const kanban = demo
-  ? new GithubProject({ source: new SimulatorProject(), cache: projectCache, project: SIMULATOR_PROJECT })
-  : chosenProject
-    ? createGithubProject({ project: chosenProject, cache: projectCache, token: () => ghCliToken() })
-    : null;
 
 // The commit of the API's checkout, so the panel footer says which version is live.
 function checkoutCommit(): string | null {
@@ -281,6 +290,15 @@ const openInDesktop =
     ? (url: string) =>
         new Promise<void>((resolve, reject) => execFile('open', [url], { timeout: 5_000 }, (err) => (err ? reject(err) : resolve())))
     : null;
+
+// #285: where each session opens. The live `claude` processes come from `<config>/sessions/<pid>.json` of
+// every configuration folder the profiles know (decision 0006; `profiles` is declared below and only read
+// when a request comes). The terminal launchers write their `.command` files in the data folder (0700);
+// in the demo there are none, and the route answers with the command to copy.
+const liveProcesses = demo ? null : new LiveClaudeProcesses({ folders: async () => ((await profiles?.list()) ?? []).map((p) => p.dir) });
+const openDescriber = new SessionOpenDescriber({ live: liveProcesses });
+const openTerminal = demo ? null : createTerminalOpener({ dir: join(dataDir, 'terminal-resume') });
+const focusTerminal = demo ? null : createTerminalFocuser();
 
 // The same `Accounts` in the panel and in the MCP: the "conta 1" label is the same on both surfaces.
 const accounts = new Accounts({ storage, ...(demo ? { file: null } : {}) });
@@ -322,7 +340,10 @@ if (demo) {
   await seedDetail(storage);
   await seedPanelHistory(storage, decisions, scenario);
 }
-const detail = new LeiturasDoDetalhe({ storage, montador: panelBuilder, ...(demo ? { local: demoLocal } : {}) });
+// #245: the Sessions list and the Kanban read the same event summaries (a waiting session's attention,
+// the last prompt), each session's events once; apart from the panel's, so as not to sweep its 64.
+const listSummaries = new ResumosDeSessao(storage, { maximo: 256 });
+const detail = new LeiturasDoDetalhe({ storage, montador: panelBuilder, open: openDescriber, ...(demo ? { local: demoLocal } : {}) });
 
 // The history of the ended sessions (#33), with the Desktop index title when there is one.
 const history = new SessionHistory({ storage, decisions, titleOf: (s) => desktop?.sessionByCli(s.id)?.title ?? null });
@@ -348,38 +369,57 @@ profileTimer?.unref();
 // New tools (e.g. `wait_for_changes`, 2.4) come in here with `mcp.server.register(...)`.
 const mcp = createMcpServer({ storage, accounts, desktop, log });
 mcp.server.register(waitForChanges({ changes, accounts }));
-// A single queue for the GitHub calls behind the screens (decision 0001, item 6): repositories and instructions.
-const githubQueue = new GithubCallQueue();
-const repos = criarReposDoNucleo({ demo, semGithub: o.noGithub, cache: githubCache, frota: mcp.fleet, mudancas: changes, log, queue: githubQueue });
-// The Instructions tab of a repository (#183): the fake GitHub under --demo; otherwise GitHub through the 0001 cache.
-const agentInstructions = createCoreAgentInstructions({ demo, noGithub: o.noGithub, cache: githubCache, changes, queue: githubQueue, log });
-// Instalar o Ahrena Framework por PR (#184): o GitHub falso no --demo (com as escritas); fora dele, o token do `gh`, o cache da 0001 e a mesma fila.
-const frameworkInstall = createCoreFrameworkInstall({ demo, noGithub: o.noGithub, cache: githubCache, changes, queue: githubQueue, frameworkRepo: process.env[FRAMEWORK_REPO_ENV], log });
-
-// The Dev Console (#177): the synthetic context and the fake GitHub under --demo; otherwise GitHub through the 0001 cache.
-const devConsole = createDevConsole({
-  storage,
-  frota: mcp.fleet,
-  decisions,
+// Every GitHub-backed screen (#241, src/api/github-screens.ts): the Repositories screen, the Instructions
+// tab (#183), the framework install (#184), the ADRs and PDRs (#174), the Dev Console (#177), the Delivery
+// tab (#266), the project kanban (#80) and the list of Projects to choose from; under --demo, each screen's
+// fake GitHub. The kanban's Project: AHRENA_CONSOLE_PROJECT > the one chosen on the screen > the demo's
+// (unless --demo-project none) > none.
+// The console's own GitHub connection (#241, decision 0011): the device flow, the vault of this platform
+// (Keychain on macOS, Secret Service on Linux, none elsewhere; touched only when GitHub is first needed),
+// the client id of AHRENA_CONSOLE_GITHUB_CLIENT_ID (the built-in one is still empty) and the opt-in `gh`
+// source (AHRENA_CONSOLE_GITHUB_SOURCE=gh). Under --demo, the same connection on the fake GitHub, in the
+// state of --demo-github, never the real GitHub, Keychain or gh. An identity change clears github_cache
+// and rebuilds every screen (and forgets the work by branch).
+coreGithub = await createCoreGithub({
+  demo,
+  noGithub: o.noGithub && !demo,
+  connection: async (hooks) =>
+    demo
+      ? (await createDemoGithubConnection(demoGithubState, { settings, queue: githubQueue, ...hooks, log })).connection
+      : new GithubConnection({ vault: chooseVault(), settings, env: process.env, off: o.noGithub, queue: githubQueue, ...hooks, log }),
   cache: githubCache,
-  source: demo ? new SimulatedDevConsoleSource() : o.noGithub ? disabledDevConsoleSource() : new GithubDevConsoleSource(),
-  ...(demo ? { file: null, contexts: DEV_CONSOLE_SIMULATOR_CONTEXTS, git: devConsoleSimulatorGit } : {}),
+  queue: githubQueue,
+  changes,
+  fleet: mcp.fleet,
+  storage,
+  decisions,
+  settings,
+  env: process.env,
+  frameworkRepo: process.env[FRAMEWORK_REPO_ENV],
+  demoProject: o.demoProject !== 'none',
+  onReset: () => work.forget(),
+  log,
 });
+const { connection, screens } = coreGithub;
 
 // Machine telemetry (#175, decision 0008): one sample every 30 s, 12 h in the database, and each
 // alert that enters or exits on /api/changes. In --demo, the simulator's synthetic readings, with
-// 12 h already seeded, plus a synthetic "workstation". Outside the demo, each remote machine of
-// machines.json (#176) is read every 30 s through the port the user's tunnel forwards.
+// 12 h already seeded, plus a synthetic "workstation" (its reconnect stays `null`). Outside the demo,
+// each remote machine of machines.json (#176) is read every 30 s through the port the user's tunnel
+// forwards; the file is re-read live (#244, decision 0012): every 30 s by its modification time and
+// right before a reconnect, so a machine added, removed or changed applies without a restart.
 const sampleStore = new SqliteTelemetryStore(sqlite.db);
 const alertTracker = new AlertTracker();
-const machineEntries: MachineEntry[] = [localMachine()];
+const localEntry = localMachine();
+const demoEntries: MachineEntry[] = [];
 const samplers: TelemetrySampler[] = [];
-const remoteMachines: RemoteMachine[] = [];
+let remoteMachines: RemoteMachines<RemoteMachine> | null = null;
+let reconnectRunner: ReconnectRunner | null = null;
 function addSampler(machineId: string, collector: TelemetryCollector) {
   samplers.push(new TelemetrySampler({ machineId, collector, store: sampleStore, tracker: alertTracker, onAlertChange: publishAlertChanges(changes), log }));
 }
 if (demo) {
-  machineEntries.push({ ...SIMULATED_WORKSTATION, state: () => 'connected' });
+  demoEntries.push({ ...SIMULATED_WORKSTATION, state: () => 'connected' });
   await seedTelemetry(sampleStore, 'local', 'local');
   await seedTelemetry(sampleStore, SIMULATED_WORKSTATION.id, 'workstation');
   addSampler('local', new SimulatedCollector('local'));
@@ -388,28 +428,47 @@ if (demo) {
   const platformCollector = collectorFor();
   if (platformCollector) addSampler('local', platformCollector);
   else log(`telemetry: no collector for ${process.platform}`);
-  const machinesConfig = await loadMachinesConfig({ ...(o.machines ? { file: o.machines } : {}), log });
   const get = loopbackGet();
-  for (const config of machinesConfig.machines) {
-    if (config.port === boundPort) {
-      log(`machines: ${config.id} uses port ${config.port}, this core's own; skipped`);
-      continue;
-    }
-    const remote = new RemoteMachine({
-      config,
-      get,
-      store: sampleStore,
-      tracker: alertTracker,
-      onAlertChange: publishAlertChanges(changes),
-      onAttentionChange: publishRemoteAttentionChanges(changes),
-      log,
-    });
-    remoteMachines.push(remote);
-    machineEntries.push(remote);
-  }
-  if (remoteMachines.length > 0) log(`telemetry: ${remoteMachines.length} remote machine(s): ${remoteMachines.map((m) => `${m.id} on port ${m.port}`).join(', ')}`);
+  const onAlertChange = publishAlertChanges(changes);
+  const registry: RemoteMachines<RemoteMachine> = new RemoteMachines<RemoteMachine>({
+    source: new MachinesFileSource({ ...(o.machines ? { file: o.machines } : {}), log }),
+    ownPort: boundPort,
+    create: (config) =>
+      new RemoteMachine({
+        config,
+        get,
+        store: sampleStore,
+        tracker: alertTracker,
+        onAlertChange,
+        onAttentionChange: publishRemoteAttentionChanges(changes),
+        reconnectStatus: (id) => reconnectRunner?.status(id, registry.reconnectOf(id) ?? null) ?? null,
+        log,
+      }),
+    // A machine removed from the file closes its alerts, and the screen and the tray hear about it.
+    onRemoved: (id) => {
+      for (const alert of alertTracker.update(id, []).exited) onAlertChange({ machineId: id, alert, change: 'exited' });
+    },
+    onChange: publishReconnectChanges(changes),
+    log,
+  });
+  remoteMachines = registry;
+  reconnectRunner = new ReconnectRunner({
+    logFile: reconnectLogFile(dataDir),
+    // Always the freshest reading of the file: a command removed from it does not run.
+    // While the file is invalid, nothing runs, even if the last good reading had a command.
+    lookup: async (id) => {
+      await registry.refresh();
+      const config = registry.reconnectOf(id);
+      return config !== undefined && registry.fileInvalid() ? INVALID_MACHINES_FILE : config;
+    },
+    onSucceeded: (id) => void registry.get(id)?.readNow(),
+    onChange: publishReconnectChanges(changes),
+    log,
+  });
+  await registry.refresh();
 }
-const telemetryService = samplers.length > 0 || remoteMachines.length > 0 ? new TelemetryService({ store: sampleStore, tracker: alertTracker, machines: machineEntries }) : null;
+const machineEntries = (): MachineEntry[] => [localEntry, ...demoEntries, ...(remoteMachines?.list() ?? [])];
+const telemetryService = samplers.length > 0 || remoteMachines ? new TelemetryService({ store: sampleStore, tracker: alertTracker, machines: machineEntries }) : null;
 
 let historyReady = false;
 const follower =
@@ -442,27 +501,38 @@ const api: LocalApi = await startLocalApi({
   port: boundPort,
   log,
   openInDesktop,
+  openDescriber,
+  openTerminal,
+  focusTerminal,
+  localOf: async (id) => {
+    await desktop?.refresh();
+    return desktop?.sessionByCli(id)?.localId ?? (demo ? demoLocal(id) : null);
+  },
   mcp: mcp.server,
   commit,
   changes,
   decisionsUi,
-  project: { kanban, fonte: demo ? 'demo' : 'github', semProjeto: !demo && !o.noGithub && !chosenProject, log },
+  project: { kanban: null, fonte: demo ? 'demo' : 'github', resolver: screens.project, options: screens.projectOptions, credentialSource: () => connection.credentialSource(), log },
+  projectSelection: screens.project,
+  connection,
+  // --no-github keeps its own off / no-github answers; otherwise 409 github-not-connected before any call.
+  githubConnected: coreGithub.connected,
   detail,
   events: new FeedDeEventos({ storage }),
   fleet: mcp.fleet,
-  remoteAttention: remoteMachines,
-  analytics: new RotaAnalytics({ storage, contas: accounts, versao: () => changes.current }),
-  sessions: new ListaDeSessoes({ storage, contas: accounts, desktop }),
+  remoteAttention: () => remoteMachines?.list() ?? [],
+  analytics: new RotaAnalytics({ storage, contas: accounts, versao: () => changes.current, delivery: screens.delivery }),
+  sessions: new ListaDeSessoes({ storage, contas: accounts, desktop, resumos: listSummaries, open: openDescriber }),
   history,
-  kanban: new QuadroKanban({ storage, contas: accounts, desktop }),
-  repos: repos.rota,
-  agentInstructions: agentInstructions.route,
-  frameworkInstall: frameworkInstall.route,
-  // The demo's old session ids (before #173) still open the session (src/simulator/legacy-ids.ts).
-  ...(demo ? { demoUrl: upgradeDemoUrl } : {}),
-  devConsole,
+  kanban: new QuadroKanban({ storage, contas: accounts, desktop, resumos: listSummaries }),
+  repos: screens.repos,
+  agentInstructions: screens.agentInstructions,
+  frameworkInstall: screens.frameworkInstall,
+  decisions: screens.decisions,
+  devConsole: screens.devConsole,
   agentConfig,
   telemetry: telemetryService,
+  reconnect: reconnectRunner,
   load: () => ({
     history: follower ? (historyReady ? 'ready' : 'importing') : 'off',
     follower: follower?.stats() ?? null,
@@ -522,7 +592,7 @@ const stopWatchingParent =
 // The initial import runs after the port already answers: the panel does not wait for the history.
 const stopWatcher = demo ? () => {} : machine.start();
 for (const a of samplers) a.start();
-for (const m of remoteMachines) m.start();
+remoteMachines?.start();
 if (follower) {
   follower
     .start()
@@ -558,12 +628,13 @@ async function reprocessOnce() {
 
 async function shutdown() {
   stopWatcher();
+  connection.close();
   if (profileTimer) clearInterval(profileTimer);
   stopWatchingParent();
   unregister();
   if (lock && !('conflict' in lock)) releaseLock(lock.token, dataDir);
   await follower?.stop().catch(() => undefined);
-  await Promise.all([...samplers, ...remoteMachines].map((a) => a.stop()));
+  await Promise.all([...samplers.map((a) => a.stop()), remoteMachines?.stop()]);
   await api.close().catch(() => undefined);
   await storage.close();
   if (demoFolder) rmSync(demoFolder, { recursive: true, force: true });

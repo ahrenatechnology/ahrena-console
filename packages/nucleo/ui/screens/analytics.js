@@ -1,5 +1,7 @@
 // A tela Analytics (#95 e #32, C12 e C13): a Visão geral em /ui/analytics e o Custo em
-// /ui/analytics/cost. The two tabs are the same screen; the tab comes from `ctx.params.tab`.
+// /ui/analytics/cost. The tabs are the same screen; the tab comes from `ctx.params.tab`. The
+// Delivery tab (/ui/analytics/delivery, C54 to C56, issue 266) lives in analytics-delivery.js,
+// imported on demand by `mount` (it imports the shared pieces from here).
 //
 // - Lê `GET /api/analytics?tz=` (Visão geral) e `GET /api/analytics/cost?days=&tz=` (Custo),
 //   sempre por `ctx.ler`, com o fuso do navegador.
@@ -14,9 +16,12 @@ import { loading, error, errorBand, empty } from '../states.js';
 
 export const OVERVIEW_ROUTE = '/api/analytics';
 export const COST_ROUTE = '/api/analytics/cost';
+export const DELIVERY_ROUTE = '/api/analytics/delivery';
 export const PERIODS = [7, 30, 90];
+/** The Delivery tab's axes: per repository or per GitHub Project (the core's `GROUP_BYS`). */
+export const GROUP_BYS = ['repo', 'project'];
 const STYLE = '/ui/analytics.css';
-const REREAD_MS = 4000;
+export const REREAD_MS = 4000;
 
 const OVERVIEW_SUB = 'Uso, custo e produtividade das sessões';
 const COST_SUB = 'Custo estimado pelo transcript, com o preço de cada modelo';
@@ -314,7 +319,7 @@ function donut(byModel, total, days) {
 
 // ---------- Peças ----------
 
-function stat({ id, rotulo: label, valor: value, sub, icone: name, cor: color, contas: accounts = null, dica: title = null }) {
+export function stat({ id, rotulo: label, valor: value, sub, icone: name, cor: color, contas: accounts = null, dica: title = null }) {
   return el(
     'div',
     { class: 'card an-stat', 'data-card': id, title: title },
@@ -326,7 +331,7 @@ function stat({ id, rotulo: label, valor: value, sub, icone: name, cor: color, c
   );
 }
 
-function card(title, right, ...body) {
+export function card(title, right, ...body) {
   return el('section', { class: 'card an-card' }, el('div', { class: 'an-ttl' }, el('h2', {}, title), right ? el('span', { class: 'an-r' }, right) : null), ...body);
 }
 
@@ -340,9 +345,15 @@ function list(rows, emptyText) {
   );
 }
 
-function tabs(current) {
+export function tabs(current) {
   const tab = (id, label, href) => el('a', { href, class: current === id ? 'an-on' : null, 'aria-current': current === id ? 'page' : null }, label);
-  return el('nav', { class: 'an-seg an-tabs', 'aria-label': 'Abas do Analytics' }, tab('overview', 'Visão geral', '/ui/analytics'), tab('cost', 'Custo', '/ui/analytics/cost'));
+  return el(
+    'nav',
+    { class: 'an-seg an-tabs', 'aria-label': 'Abas do Analytics' },
+    tab('overview', 'Visão geral', '/ui/analytics'),
+    tab('cost', 'Custo', '/ui/analytics/cost'),
+    tab('delivery', 'Entregas', '/ui/analytics/delivery'),
+  );
 }
 
 function footer(left, right) {
@@ -484,7 +495,7 @@ export function fileName(tab, data, days) {
   return tab === 'cost' ? `ahrena-analytics-cost-${days}d-${day}.json` : `ahrena-analytics-${day}.json`;
 }
 
-function download(name, data) {
+export function download(name, data) {
   const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
   el('a', { href: url, download: name }).click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
@@ -492,12 +503,12 @@ function download(name, data) {
 
 // ---------- A tela ----------
 
-function loadStyle() {
+export function loadStyle() {
   if (typeof document.querySelector === 'function' && document.querySelector(`link[href="${STYLE}"]`)) return;
   document.head?.append(el('link', { rel: 'stylesheet', href: STYLE }));
 }
 
-function browserTimeZone() {
+export function browserTimeZone() {
   try {
     return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
   } catch {
@@ -505,7 +516,7 @@ function browserTimeZone() {
   }
 }
 
-function timeOf(iso, timeZone) {
+export function timeOf(iso, timeZone) {
   const t = Date.parse(iso ?? '');
   if (!Number.isFinite(t)) return null;
   try {
@@ -519,9 +530,20 @@ function timeOf(iso, timeZone) {
 const WEEKDAY_LABELS = { mon: 'seg', tue: 'ter', wed: 'qua', thu: 'qui', fri: 'sex', sat: 'sáb', sun: 'dom' };
 export const dayLabel = (day) => WEEKDAY_LABELS[day] ?? day;
 
+/** The screen's header; on a narrow window the actions go down a line (`an-head`). */
+export function analyticsHeader(sub, actions = []) {
+  const c = header({ icon: 'analytics', title: 'Analytics', sub, actions });
+  c.setAttribute('class', 'cc-head an-head');
+  return c;
+}
+
 export async function mount(area, ctx, { releituraMs: rereadMs = REREAD_MS } = {}) {
   loadStyle();
   const requested = ctx.params?.tab;
+  if (requested === 'delivery') {
+    const { mountDelivery } = await import('./analytics-delivery.js');
+    return mountDelivery(area, ctx, { rereadMs });
+  }
   const tab = requested === undefined ? 'overview' : requested === 'cost' ? 'cost' : null;
   const sub = tab === 'cost' ? COST_SUB : OVERVIEW_SUB;
   const timeZone = browserTimeZone();
@@ -531,11 +553,7 @@ export async function mount(area, ctx, { releituraMs: rereadMs = REREAD_MS } = {
   let turn = 0;
   let wait = null;
 
-  const head = (actions = []) => {
-    const c = header({ icon: 'analytics', title: 'Analytics', sub, actions });
-    c.setAttribute('class', 'cc-head an-head'); // an-cab: as ações descem numa janela estreita
-    return c;
-  };
+  const head = (actions = []) => analyticsHeader(sub, actions);
 
   if (!tab) {
     ctx.title?.('Analytics');

@@ -11,11 +11,12 @@ import { loopbackGet, REMOTE_HOST_HEADER, REMOTE_TIMEOUT_MS } from '../../src/te
 import { SqliteTelemetryStore } from '../../src/telemetry/adapters/sqlite.ts';
 import { SAMPLE_INTERVAL_MS, TELEMETRY_VERSION, type Alert } from '../../src/telemetry/model.ts';
 import type { RemoteGet } from '../../src/telemetry/ports.ts';
-import { englishAttentionBody, publishRemoteAttentionChanges, RemoteMachine, type RemoteMachineOptions } from '../../src/telemetry/remote.ts';
+import { publishRemoteAttentionChanges, RemoteMachine, type RemoteMachineOptions } from '../../src/telemetry/remote.ts';
 import { publishAlertChanges } from '../../src/telemetry/sampler.ts';
 import { TelemetryService } from '../../src/telemetry/service.ts';
-import { attentionBody, closedPort, oldAttentionBody, oldRemoteItem, remoteItem, startFakeRemote, startMuteServer, type FakeRemote } from './fake-remote.ts';
+import { attentionBody, closedPort, remoteItem, startFakeRemote, startMuteServer, type FakeRemote } from './fake-remote.ts';
 import { reading, T0 } from './reading.ts';
+import { startDemoApi } from '../api/demo-api.ts';
 
 /** Short, and only for the servers that never answer or close at once, so they do not wait 3 s. */
 const MUTE_TIMEOUT_MS = 150;
@@ -311,50 +312,42 @@ describe('#176/AC-6 the remote sessions that need you', () => {
   });
 });
 
-describe('#173 phase 2b: a remote núcleo from before the English keys', () => {
-  test('its Portuguese attention answer is kept as the English one, and its changes are published', async () => {
-    const f = await fake({ current: remoteReading(), attention: oldAttentionBody([oldRemoteItem('s1')], { ativas: 3, comErro: 1 }) });
+describe('#173: the remote núcleo is read in English', () => {
+  test("a current núcleo's own /api/attention is read as it answers: the items, the counts and the changes", async () => {
+    // The real attention route of a núcleo (the --demo one, p4) answers /api/attention; the fake
+    // remote answers only the telemetry the reader asks first.
+    const demo = await startDemoApi();
+    cleanup.push(() => demo.close());
+    const f = await fake({ current: remoteReading() });
+    const loopback = loopbackGet({ timeoutMs: READ_TIMEOUT_MS });
+    const get: RemoteGet = async (port, path) => {
+      if (path !== '/api/attention') return loopback(port, path);
+      const r = await fetch(`${demo.api.url}${path}`);
+      return { kind: 'response', status: r.status, body: await r.json() };
+    };
+    const served = (await (await fetch(`${demo.api.url}/api/attention`)).json()) as { items: { session: string }[]; active: number; withError: number };
+    assert.ok(served.items.length > 0, 'the demo has sessions that need you');
+    const { remote, cursor } = setup(f.port, { get });
+    const start = cursor.current;
+    await remote.pollOnce();
+    const read = remote.attention() as { items: { session: string }[]; active: number; withError: number };
+    assert.deepEqual(read.items.map((i) => i.session), served.items.map((i) => i.session));
+    assert.deepEqual([read.active, read.withError], [served.active, served.withError]);
+    const entered = await cursor.wait(start, { timeoutMs: 0 });
+    assert.deepEqual(
+      entered.changes.filter((m) => m.type === 'needs-you').map((m) => m.key).sort(),
+      served.items.map((i) => `ws-exemplo:${i.session}`).sort(),
+    );
+  });
+
+  test('a núcleo from before #173 phase 2b (Portuguese keys) shows no attention: its reader left in phase 6', async () => {
+    const old = { ativas: 3, comErro: 1, itens: [{ sessao: 's1', nivel: 'precisa', motivo: 'permissao', minutos: 5, machine: null }] };
+    const f = await fake({ current: remoteReading(), attention: old });
     const { remote, cursor } = setup(f.port);
     const start = cursor.current;
     await remote.pollOnce();
-    assert.deepEqual(remote.attention(), {
-      active: 3,
-      withError: 1,
-      items: [
-        {
-          session: 's1',
-          title: 'Sessão s1',
-          project: 'projeto-exemplo',
-          account: { label: 'equipe', color: '#3366ff' },
-          level: 'needs',
-          reason: 'permission',
-          longReason: 'pede permissão para usar Bash',
-          since: '2026-11-02T11:55:00.000Z',
-          minutes: 5,
-          local: 'local_00000000-0000-4000-8000-000000000009',
-          machine: null,
-        },
-      ],
-    });
-    const entered = await cursor.wait(start, { timeoutMs: 0 });
-    assert.deepEqual(entered.changes.map((m) => [m.type, m.key]), [['needs-you', 'ws-exemplo:s1']]);
-  });
-
-  test('every old level and reason reads as the new one; an English body and unknown values pass untouched', () => {
-    const levels = { precisa: 'needs', 'sua-vez': 'your-turn' };
-    const reasons = { permissao: 'permission', pergunta: 'question', plano: 'plan', decisao: 'decision', erro: 'error', 'sua-vez': 'your-turn', interrompida: 'interrupted', 'no-prompt': 'no-prompt', outro: 'outro' };
-    for (const [old, now] of Object.entries(levels)) {
-      const r = englishAttentionBody(oldAttentionBody([oldRemoteItem('s', { nivel: old })])) as { items: { level: string }[] };
-      assert.equal(r.items[0]!.level, now, old);
-    }
-    for (const [old, now] of Object.entries(reasons)) {
-      const r = englishAttentionBody(oldAttentionBody([oldRemoteItem('s', { motivo: old })])) as { items: { reason: string }[] };
-      assert.equal(r.items[0]!.reason, now, old);
-    }
-    const english = attentionBody([remoteItem('s1')]);
-    assert.equal(englishAttentionBody(english), english);
-    const oldNoAccount = englishAttentionBody(oldAttentionBody([oldRemoteItem('s', { conta: null }), 'not an item'])) as { items: unknown[] };
-    assert.equal((oldNoAccount.items[0] as { account: unknown }).account, null);
-    assert.equal(oldNoAccount.items[1], 'not an item');
+    assert.equal((remote.attention() as { items?: unknown }).items, undefined);
+    const after = await cursor.wait(start, { timeoutMs: 0 });
+    assert.deepEqual(after.changes.filter((m) => m.type === 'needs-you'), []);
   });
 });

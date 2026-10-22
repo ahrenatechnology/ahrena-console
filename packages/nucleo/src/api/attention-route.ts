@@ -18,12 +18,14 @@
 
 import { LIVE_STATES, type FleetReader, type McpAttentionReason } from '../mcp/fleet.ts';
 import { needingYou } from '../mcp/tools/attention.ts';
+import { BLOCKED_REASONS, type SessionAttention } from './attention.ts';
+import { SessionOpenDescriber, type SessionOpen } from './session-open.ts';
 import type { NeedsYouItem } from './types.ts';
 import { paleta } from '../../../marca/gerado/marca.ts';
 
 export const ATTENTION_ROUTE = '/api/attention';
 
-/** O nível: o que trava a sessão (`needs`) e o que é só a sua vez; os valores do painel. */
+/** O nível: o que trava a sessão (`needs`) e o que é ociosa (`your-turn`); os valores do painel. */
 export type AttentionLevel = NeedsYouItem['level'];
 /** O motivo, com os valores do "precisam de você" do painel. */
 export type AttentionReason = NeedsYouItem['why'];
@@ -38,6 +40,15 @@ const MOTIVO: Record<McpAttentionReason, AttentionReason> = {
   interrupted: 'interrupted',
   first_prompt: 'no-prompt',
 };
+
+/** The panel's reason as the English attention's (#245): the inverse of `MOTIVO`. */
+const SESSION_REASON = Object.fromEntries(Object.entries(MOTIVO).map(([mcp, panel]) => [panel, mcp])) as Record<AttentionReason, McpAttentionReason>;
+
+/** The English attention (#245) of an item from its panel reason (the level follows from it). */
+function attentionOf(reason: AttentionReason): SessionAttention {
+  const r = SESSION_REASON[reason];
+  return { level: (BLOCKED_REASONS as readonly string[]).includes(r) ? 'blocked' : 'idle', reason: r };
+}
 
 /** O motivo em poucas palavras, como a bandeja mostra ("Pede permissão · 2 min"). */
 export const MOTIVO_CURTO: Record<AttentionReason, string> = {
@@ -59,6 +70,8 @@ export interface ItemDaAtencao {
   account: { label: string; color: string } | null;
   level: AttentionLevel;
   reason: AttentionReason;
+  /** #245: `blocked` ("Precisa de você") or `idle` ("Ociosa"), with the English reason; the same as `level` and `reason`. */
+  attention: SessionAttention;
   /** A frase curta em pt-BR (`MOTIVO_CURTO`). */
   shortReason: string;
   /** A frase do MCP ("pede permissão para usar Bash"); nunca texto da conversa. */
@@ -69,6 +82,11 @@ export interface ItemDaAtencao {
   local: string | null;
   /** The remote machine the session runs on (#176); `null` for this machine. */
   machine: { id: string; label: string } | null;
+  /**
+   * #285: where the item's open icon goes and the command to copy. A remote machine's item is always
+   * `{ target: 'remote', command: null }`: nothing a remote sends becomes a command here.
+   */
+  open: SessionOpen;
 }
 
 /** A remote machine whose sessions enter the list (#176, `RemoteMachine` in src/telemetry/remote.ts). */
@@ -91,8 +109,7 @@ const MAX_REMOTE_COUNT = 10_000;
 
 /**
  * The remote's items that have this route's shape, marked with the machine; at most 200. The body is
- * the English one: a remote núcleo that still answers in Portuguese is read through
- * `englishAttentionBody` (src/telemetry/remote.ts) before it gets here.
+ * the English one (a remote núcleo from before #173 phase 2b has no `items` and adds nothing).
  */
 export function remoteAttentionItems(body: unknown, machine: { id: string; label: string }): ItemDaAtencao[] {
   const items = isObject(body) && Array.isArray(body.items) ? body.items.slice(0, 200) : [];
@@ -105,6 +122,8 @@ export function remoteAttentionItems(body: unknown, machine: { id: string; label
     const since = text(i.since, 40);
     if (!session || !since || !Number.isFinite(Date.parse(since)) || typeof i.reason !== 'string' || !Object.hasOwn(MOTIVO_CURTO, reason) || !ATTENTION_LEVELS.includes(level)) continue;
     if (!Number.isFinite(i.minutes) || (i.minutes as number) < 0) continue;
+    // #245: the level must be the one its reason implies, or the counts and `attention` would disagree.
+    if ((attentionOf(reason).level === 'blocked') !== (level === 'needs')) continue;
     const account =
       isObject(i.account) && typeof i.account.label === 'string' && typeof i.account.color === 'string'
         ? { label: i.account.label.slice(0, 40), color: HEX.test(i.account.color) ? i.account.color : NEUTRAL_ACCOUNT_COLOR }
@@ -116,12 +135,14 @@ export function remoteAttentionItems(body: unknown, machine: { id: string; label
       account,
       level,
       reason,
+      attention: attentionOf(reason),
       shortReason: MOTIVO_CURTO[reason],
       longReason: text(i.longReason, 300) ?? MOTIVO_CURTO[reason],
       since,
       minutes: i.minutes as number,
       local: null,
       machine: { id: machine.id, label: machine.label },
+      open: { target: 'remote', command: null },
     });
   }
   return out;
@@ -131,19 +152,28 @@ export interface RespostaDaAtencao {
   generatedAt: string;
   /** Para `GET /api/changes?since=`; `null` quando o núcleo subiu sem o cursor. */
   cursor: string | null;
-  /** Todas as da lista: o número da barra de menus. */
+  /** Todas as da lista, as que precisam de você e as ociosas. */
   total: number;
   /** As de nível `needs`. */
   needs: number;
   yourTurn: number;
+  /** #245: as que precisam de você (`attention.level` `blocked`, igual a `needs`): o número da barra de menus. */
+  blocked: number;
+  /** #245: as ociosas (`attention.level` `idle`, igual a `yourTurn`): sem número e sem notificação. */
+  idle: number;
   /** Vivas trabalhando (ativas, delegando, em segundo plano). */
   active: number;
   withError: number;
   items: ItemDaAtencao[];
 }
 
-export async function montarAtencao(frota: FleetReader, cursor: string | null, remotes: readonly RemoteAttentionSource[] = []): Promise<RespostaDaAtencao> {
-  const lista = await needingYou(frota, null);
+export async function montarAtencao(
+  frota: FleetReader,
+  cursor: string | null,
+  remotes: readonly RemoteAttentionSource[] = [],
+  open: SessionOpenDescriber = new SessionOpenDescriber(),
+): Promise<RespostaDaAtencao> {
+  const [lista] = await Promise.all([needingYou(frota, null), open.refresh()]);
   const items = lista.map((i): ItemDaAtencao => {
     const reason = MOTIVO[i.reason];
     return {
@@ -153,12 +183,14 @@ export async function montarAtencao(frota: FleetReader, cursor: string | null, r
       account: i.account ? { label: i.account.label, color: i.account.color } : null,
       level: i.group === 'blocking' ? 'needs' : 'your-turn',
       reason,
+      attention: { level: i.group === 'blocking' ? 'blocked' : 'idle', reason: i.reason },
       shortReason: MOTIVO_CURTO[reason],
       longReason: i.reasonText,
       since: i.waitingSince,
       minutes: i.waitingMinutes,
       local: i.open.desktopSessionId,
       machine: null,
+      open: open.describe({ sessionId: i.sessionId, cwd: i.open.cwd, local: i.open.desktopSessionId }),
     };
   });
   let active = 0;
@@ -171,7 +203,7 @@ export async function montarAtencao(frota: FleetReader, cursor: string | null, r
       if (Number.isInteger(body.withError) && (body.withError as number) >= 0) withError += Math.min(body.withError as number, MAX_REMOTE_COUNT);
     }
   }
-  // Esperando você (0) antes de parada num erro (1), antes da sua vez (2).
+  // Precisa de você (0) antes de parada num erro (1), antes das ociosas (2).
   const grupo = (i: ItemDaAtencao) => (i.level === 'your-turn' ? 2 : i.reason === 'error' ? 1 : 0);
   items.sort((a, b) => grupo(a) - grupo(b) || a.since.localeCompare(b.since) || a.session.localeCompare(b.session) || (a.machine?.id ?? '').localeCompare(b.machine?.id ?? ''));
   for (const s of await frota.live()) {
@@ -185,6 +217,8 @@ export async function montarAtencao(frota: FleetReader, cursor: string | null, r
     total: items.length,
     needs,
     yourTurn: items.length - needs,
+    blocked: needs,
+    idle: items.length - needs,
     active,
     withError,
     items,

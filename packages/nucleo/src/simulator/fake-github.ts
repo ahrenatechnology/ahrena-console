@@ -5,7 +5,8 @@
 //
 // It imitates what the screens depend on from GitHub: ETag and 304 with `If-None-Match`, 202 while a
 // statistic "computes" (`computeFirst`), 403 on traffic and on alerts without write access.
-// A repository's files (`files`, #183) answer the discovery (`RepoFilesDiscovery`), the content
+// A repository's files (`files`, #183) answer the discovery (`RepoFilesDiscovery`, up to 20 repositories
+// per query, with the 23 decision folders of #174), the content
 // batches (`RepoBlobs`, by `oid` or by `<commit>:<path>`) and the recursive tree
 // (`git/trees/HEAD?recursive=1`), with Git's `oid` (SHA-1 of `blob <size>\0<text>`).
 // The framework install (#184) adds the writes: `FrameworkInstallTarget` (permission, the default
@@ -13,6 +14,8 @@
 // `CommitInstallFiles` and `OpenInstallPullRequest`. Each write is recorded in `writes` (the tests read
 // it); the default branch is never moved by them. An opened PR's CI and review evolve with the clock
 // (`pullRequestTimeline`), synthetically.
+// With `auth` (#241) it also answers the console's own connection: the OAuth device flow, `/user`,
+// `/user/orgs` and the org access check (fake-github-auth.ts).
 // Names follow the simulator's vocabulary (vocabulary.ts): orgs `exemplo-labs` and
 // `estudio-ficticio`, account `dev-sintetico`, projects under /simulacao.
 
@@ -21,6 +24,11 @@ import { SeededRandom, hash32 } from './random.ts';
 import { ROOT } from './vocabulary.ts';
 import { catalogSnapshot, MARKETPLACE_PATH } from '../framework-install/catalog.ts';
 import { DEFAULT_FRAMEWORK_REPO } from '../framework-install/model.ts';
+import { DECISION_DIRS } from '../adrs/parse.ts';
+import { DEMO_DECISION_FILES } from './demo-decisions.ts';
+import { createFakeGithubAuthRoutes, type FakeGithubAuth, type FakeGithubAuthState } from './fake-github-auth.ts';
+
+export type { FakeGithubAuth, FakeGithubAuthState } from './fake-github-auth.ts';
 
 export interface FakeRepo {
   owner: string;
@@ -77,6 +85,8 @@ export interface FakeGithubOptions {
   /** Delay of each answer, in ms (the demo shows the "loading"). */
   delayMs?: number;
   pullRequestTimeline?: PullRequestTimeline;
+  /** The console's own connection (#241): device flow, `/user`, `/user/orgs`, `/orgs/<org>/repos`. */
+  auth?: FakeGithubAuth;
 }
 
 /** A write the fake received (#184), in order. */
@@ -119,6 +129,8 @@ export interface FakeGithub {
   refs(owner: string, name: string): Record<string, string>;
   /** A próxima mutação com este nome (`CreateInstallBranch`, `CommitInstallFiles`, `OpenInstallPullRequest`) falha, sem escrever (#184). */
   failNext(operation: string): void;
+  /** With `auth` (#241): the device codes handed out and the polls per code. */
+  auth: FakeGithubAuthState | null;
 }
 
 /** A GraphQL error the fake answers with (`errors`), as GitHub does for a refused mutation. */
@@ -291,7 +303,7 @@ const searchSince = (q: string, field: string) => {
 };
 const withoutInternals = (o: Record<string, unknown>) => Object.fromEntries(Object.entries(o).filter(([k]) => !k.startsWith('_')));
 
-export function createFakeGithub(data: FakeGithubData, { now = Date.now, delayMs = 0, pullRequestTimeline = {} }: FakeGithubOptions = {}): FakeGithub {
+export function createFakeGithub(data: FakeGithubData, { now = Date.now, delayMs = 0, pullRequestTimeline = {}, auth }: FakeGithubOptions = {}): FakeGithub {
   const calls: string[] = [];
   const writes: FakeWrite[] = [];
   const pullRequests: FakePullRequest[] = [];
@@ -335,6 +347,8 @@ export function createFakeGithub(data: FakeGithubData, { now = Date.now, delayMs
       dotClaudeMd: blob('.claude/CLAUDE.md'),
       mcpJson: blob('.mcp.json'),
       claudeDir: g.folders.has('.claude') ? { entries: entries('.claude', 1) } : null,
+      // As 23 pastas de decisão (#174), um apelido por pasta: só o primeiro nível, como o GitHub.
+      ...Object.fromEntries(DECISION_DIRS.map((dir, k) => [`dir${k}`, g.folders.has(dir) ? { entries: entries(dir, 3) } : g.oids.has(dir) ? {} : null])),
     };
   };
 
@@ -455,19 +469,25 @@ export function createFakeGithub(data: FakeGithubData, { now = Date.now, delayMs
     const v = body.variables ?? {};
     const install = installOperation(op, v);
     if (install !== null) return install;
+    if (op === 'ProjectOptions') return projectOptions(data, rateLimit);
     if (op === 'ReposLista') {
       return {
         rateLimit,
         viewer: {
           login: data.login,
           organizations: { nodes: data.organizations.map((login) => ({ login })) },
-          repositories: { pageInfo: { hasNextPage: false, endCursor: null }, nodes: data.repos.map((x) => rawRepo(x, now())) },
+          repositories: { totalCount: data.repos.length, pageInfo: { hasNextPage: false, endCursor: null }, nodes: data.repos.map((x) => rawRepo(x, now())) },
         },
       };
     }
     if (op === 'RepoFilesDiscovery') {
-      const repo = find(v.owner, v.name);
-      return { rateLimit, repository: repo ? discovery(repo) : null };
+      // Um lote de até 20 repositórios (`$o<i>`, `$n<i>`), cada um sob `r<i>` (#174).
+      const out: Record<string, unknown> = { rateLimit };
+      for (let i = 0; typeof v[`o${i}`] === 'string'; i++) {
+        const repo = find(v[`o${i}`], v[`n${i}`]);
+        out[`r${i}`] = repo ? discovery(repo) : null;
+      }
+      return out;
     }
     if (op === 'RepoBlobs') {
       const repo = find(v.owner, v.name);
@@ -499,6 +519,8 @@ export function createFakeGithub(data: FakeGithubData, { now = Date.now, delayMs
       return { rateLimit, repository: out };
     }
     if (op === 'ReposResumo') return { rateLimit, review: { issueCount: data.awaitingReview }, fechadas: { issueCount: data.closedThisWeek } };
+    if (op === 'RepoDelivery') return delivery(v);
+    if (op === 'RepoDeliveryPage') return { rateLimit, search: empty() };
     if (op === 'RepoDetalhe') {
       const repo = find(v.o, v.r);
       if (!repo) return { rateLimit, repository: null, prs: empty(), fechadas: empty(), abertas: empty(), mergeados: empty(), fechadosSemMerge: empty() };
@@ -533,6 +555,36 @@ export function createFakeGithub(data: FakeGithubData, { now = Date.now, delayMs
       };
     }
     return null;
+  }
+
+  /** The Delivery tab's read (#266): no author, no assignee, as src/github/delivery-source.ts asks. */
+  function delivery(v: Record<string, string>): unknown {
+    const repo = find(v.o, v.r);
+    if (!repo) return { rateLimit, repository: null, prs: empty(), issues: empty(), open: empty() };
+    const s = seriesOf(repo);
+    const k = `${repo.owner}/${repo.name}`;
+    const prsSince = searchSince(v.prs, 'updated');
+    const issuesSince = searchSince(v.issues, 'updated');
+    const prs = s.prs
+      .filter((p) => (p._updated as number) >= prsSince)
+      .map((p) => {
+        const reviews = p.reviews as { totalCount: number; nodes: { createdAt: string }[] };
+        const first = reviews.nodes[0] ? Date.parse(reviews.nodes[0].createdAt) : 0;
+        return { createdAt: p.createdAt, mergedAt: p.mergedAt, reviews: { nodes: Array.from({ length: reviews.totalCount }, (_, j) => ({ submittedAt: iso(first + j * 3_600_000) })) } };
+      });
+    const open = deliveryOpenItems(repo, s, now());
+    const openIssues = open.filter((o) => o.__typename === 'Issue');
+    const issues = [
+      ...s.closed.filter((i) => Date.parse(i.closedAt as string) >= issuesSince).map((i) => ({ createdAt: i.createdAt, closedAt: i.closedAt })),
+      ...openIssues.filter((i) => Date.parse(i.createdAt) >= issuesSince).map((i) => ({ createdAt: i.createdAt, closedAt: null })),
+    ];
+    return {
+      rateLimit,
+      repository: { nameWithOwner: k, issues: { totalCount: repo.issues }, pullRequests: { totalCount: repo.prs } },
+      prs: page(prs),
+      issues: page(issues),
+      open: { issueCount: open.length, nodes: open.slice(0, 50) },
+    };
   }
 
   function rest(path: string): { status: number; body?: unknown } {
@@ -595,9 +647,28 @@ export function createFakeGithub(data: FakeGithubData, { now = Date.now, delayMs
     return { status: 404, body: { message: 'Not Found' } };
   }
 
+  const authRoutes = auth
+    ? createFakeGithubAuthRoutes(auth, {
+        now,
+        calls,
+        organizations: () => data.organizations,
+        repoNames: (org) => {
+          const names = data.repos.filter((r) => r.owner.toLowerCase() === org.toLowerCase()).map((r) => r.name);
+          return names.length > 0 || data.organizations.includes(org) ? names : null;
+        },
+      })
+    : null;
   const fake = async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
     if (delayMs > 0) await new Promise((r) => setTimeout(r, delayMs));
     const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url);
+    if (authRoutes) {
+      const answer = authRoutes.answer(url, init);
+      if (answer) return answer;
+      if (!authRoutes.authorized(init)) {
+        calls.push(`UNAUTHORIZED ${url.pathname}`);
+        return Response.json({ message: 'Bad credentials' }, { status: 401 });
+      }
+    }
     if (url.pathname.endsWith('/graphql') && init?.method === 'POST') {
       let answer: unknown;
       try {
@@ -624,9 +695,39 @@ export function createFakeGithub(data: FakeGithubData, { now = Date.now, delayMs
     writes,
     pullRequests,
     failNext: (operation) => void failures.add(operation),
+    auth: authRoutes?.state ?? null,
     refs: (owner, name) => {
       const repo = find(owner, name);
       return repo ? Object.fromEntries([...branchesOf(repo)].map(([b, x]) => [b, x.oid])) : {};
+    },
+  };
+}
+
+/**
+ * The Projects the fake account sees (#241, `ProjectOptions`): the simulator's Project `exemplo/3`
+ * (organization, with Status), one of the person's without a Status field and one closed.
+ */
+function projectOptions(data: FakeGithubData, rateLimit: unknown): unknown {
+  const node = (owner: string, type: 'User' | 'Organization', number: number, title: string, items: number, status: boolean, closed = false) => ({
+    number,
+    title,
+    url: `https://github.com/${type === 'User' ? 'users' : 'orgs'}/${owner}/projects/${number}`,
+    closed,
+    owner: { __typename: type, login: owner },
+    items: { totalCount: items },
+    field: status ? { __typename: 'ProjectV2SingleSelectField' } : null,
+  });
+  return {
+    rateLimit,
+    viewer: {
+      login: data.login,
+      projectsV2: { nodes: [node(data.login, 'User', 1, 'Notas soltas', 4, false), node(data.login, 'User', 2, 'Arquivo de 2025', 12, true, true)] },
+      organizations: {
+        nodes: [
+          { login: 'exemplo', projectsV2: { nodes: [node('exemplo', 'Organization', 3, 'Ahrena Console', 12, true)] } },
+          ...data.organizations.map((login) => ({ login, projectsV2: { nodes: [] } })),
+        ],
+      },
     },
   };
 }
@@ -656,6 +757,61 @@ function buildGit(repo: FakeRepo): GitFake {
   }
   const tree = oidOf(`tree ${[...oids].sort().map(([p, o]) => `${p}:${o}`).join('\n')}`);
   return { files, oids, folders, tree, commit: oidOf(`commit ${repo.owner}/${repo.name}:${tree}`) };
+}
+
+const OPEN_TITLES = [
+  'Exportar o relatório em CSV',
+  'Trocar o motor de templates',
+  'Retry com backoff na fila',
+  'Separar pagamentos em serviços',
+  'Cache das consultas do catálogo',
+  'Migração do esquema de pedidos',
+  'Paginação na listagem de itens',
+  'Mensagem de erro mais clara no login',
+  'Atualizar as dependências de build',
+  'Teste de carga do endpoint de busca',
+  'Documentar a configuração local',
+  'Filtro por data no histórico',
+] as const;
+
+/**
+ * A repository's open PRs and issues for the Delivery tab (#266), the oldest first: the series' open
+ * PRs (the newest, `repo.prs`) and `repo.issues` issues opened up to 60 days ago, with synthetic
+ * titles and states. Deterministic by repository.
+ */
+function deliveryOpenItems(repo: FakeRepo, s: Series, now: number) {
+  const r = new SeededRandom(`${repo.owner}/${repo.name}:open`);
+  const url = `https://github.com/${repo.owner}/${repo.name}`;
+  const prs = s.prs
+    .filter((p) => p.state === 'OPEN')
+    .map((p, i) => {
+      const number = 200 + i * 3;
+      const draft = i % 4 === 1;
+      const ci = repo.ci === 'FAILURE' && i === 0 ? 'FAILURE' : 'SUCCESS';
+      return {
+        __typename: 'PullRequest' as const,
+        number,
+        title: OPEN_TITLES[(number + repo.name.length) % OPEN_TITLES.length],
+        url: `${url}/pull/${number}`,
+        createdAt: p.createdAt as string,
+        isDraft: draft,
+        reviewDecision: i % 3 === 2 ? ('APPROVED' as const) : ('REVIEW_REQUIRED' as const),
+        commits: { nodes: [{ commit: { statusCheckRollup: { state: ci } } }] },
+      };
+    });
+  const issues = Array.from({ length: repo.issues }, (_, i) => {
+    const number = 20 + i * 5;
+    const linked = i % 5 === 2 && prs[0] ? prs[0].number : null;
+    return {
+      __typename: 'Issue' as const,
+      number,
+      title: OPEN_TITLES[(number * 7 + repo.name.length) % OPEN_TITLES.length],
+      url: `${url}/issues/${number}`,
+      createdAt: iso(now - r.int(1, 60 * 24) * 3_600_000),
+      closedByPullRequestsReferences: { nodes: linked ? [{ number: linked, state: 'OPEN' }] : [] },
+    };
+  });
+  return [...prs, ...issues].sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt));
 }
 
 const empty = () => ({ issueCount: 0, pageInfo: { hasNextPage: false, endCursor: null }, nodes: [] });
@@ -769,11 +925,19 @@ export const DEMO_INSTRUCTION_FILES: Record<string, { files: Record<string, stri
 };
 
 const withFiles = (repo: FakeRepo): FakeRepo => {
-  const extra = DEMO_INSTRUCTION_FILES[`${repo.owner}/${repo.name}`];
-  return extra ? { ...repo, files: extra.files, ...(extra.truncatedTree ? { truncatedTree: true } : {}) } : repo;
+  const key = `${repo.owner}/${repo.name}`;
+  const extra = DEMO_INSTRUCTION_FILES[key];
+  // Os registros de decisão (#174) somam-se aos arquivos de instrução; sem nenhum dos dois, fica só o README.
+  const decisions = DEMO_DECISION_FILES[key];
+  if (!extra && !decisions) return repo;
+  const files = { ...(extra?.files ?? { 'README.md': `# ${repo.name}\n` }), ...decisions };
+  return { ...repo, files, ...(extra?.truncatedTree ? { truncatedTree: true } : {}) };
 };
 
 /** The demo, as in wireframe C22: two orgs, the personal account and eight repositories. */
+/** The fake GitHub's address in the demo: it does not resolve, so even if the fake failed nothing reaches GitHub. */
+export const FAKE_GITHUB_BASE = 'https://fake-github.invalid';
+
 export const DEMO_GITHUB_DATA: FakeGithubData = {
   login: 'dev-sintetico',
   organizations: ['exemplo-labs', 'estudio-ficticio'],
@@ -815,6 +979,29 @@ export function fakeFrameworkRepo(fullName: string = DEFAULT_FRAMEWORK_REPO): Fa
   }
   return { owner, name, isPrivate: false, language: 'Markdown', permission: 'READ', pushMin: 60, issues: 0, prs: 0, ci: 'SUCCESS', commitsPerWeek: 5, files };
 }
+
+/**
+ * The Delivery tab's fake GitHub (#266): the demo's repositories plus one that no simulated session
+ * works in (`portal-de-ajuda` is not a simulator project), so the tab shows a repository without Claude
+ * hours. Only the Delivery read uses it; the Repositories screen keeps `DEMO_GITHUB_DATA`.
+ */
+export const DEMO_DELIVERY_GITHUB_DATA: FakeGithubData = {
+  ...DEMO_GITHUB_DATA,
+  repos: [
+    ...DEMO_GITHUB_DATA.repos,
+    { owner: 'estudio-ficticio', name: 'portal-de-ajuda', isPrivate: true, language: 'TypeScript', permission: 'WRITE', pushMin: 5 * 60, issues: 5, prs: 2, ci: 'SUCCESS', commitsPerWeek: 7 },
+  ],
+};
+
+/**
+ * The demo's GitHub Projects for the Delivery tab (#266, wireframe C55): three projects over the
+ * Delivery fake's repositories, with `gateway-sandbox` in two of them. The key is the Project's `owner/number`.
+ */
+export const DEMO_DELIVERY_PROJECTS: { key: string; label: string; repos: string[] }[] = [
+  { key: 'exemplo-labs/7', label: 'Loja de exemplo', repos: ['exemplo-labs/vitrine-demo', 'estudio-ficticio/catalogo-exemplo', 'exemplo-labs/gateway-sandbox'] },
+  { key: 'exemplo-labs/8', label: 'Plataforma de regras', repos: ['exemplo-labs/motor-de-regras', 'exemplo-labs/gateway-sandbox'] },
+  { key: 'estudio-ficticio/2', label: 'Métricas', repos: ['exemplo-labs/painel-de-metricas', 'estudio-ficticio/app-receitas', 'estudio-ficticio/portal-de-ajuda'] },
+];
 
 /** The demo's fake git: `/simulacao/<project>` is a clone of the repository with the same name, if there is one. */
 export function demoGit(data: FakeGithubData = DEMO_GITHUB_DATA) {

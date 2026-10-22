@@ -13,13 +13,13 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { instanceId, isPidAlive, listInstances, readLock, removeInstance, verifyInstance, writeInstance, type Installation, type Instance } from '../../src/owner/index.ts';
+import { instanceId, isPidAlive, liveClients, listInstances, readLock, removeInstance, verifyInstance, writeInstance, writeLock, type Installation, type Instance } from '../../src/owner/index.ts';
 import { chooseInstance, shouldStartOwn } from '../../src/mcp/target.ts';
 
 const ROOT = fileURLToPath(new URL('../../', import.meta.url));
 const MCP_CLI = join(ROOT, 'src/mcp/cli.ts');
 const CORE_CLI = join(ROOT, 'src/owner/cli.ts');
-const HOOKS_ONLY = ['--sem-historico', '--sem-desktop', '--sem-github', '--no-telemetry'];
+const HOOKS_ONLY = ['--no-history', '--no-desktop', '--no-github', '--no-telemetry'];
 const CORE_VARS = ['AHRENA_CONSOLE_PORT', 'AHRENA_CONSOLE_CORE_PORT', 'AHRENA_CONSOLE_DB', 'AHRENA_CONSOLE_DATA_DIR', 'AHRENA_CONSOLE_HOME', 'XDG_DATA_HOME', 'APPDATA'];
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -331,7 +331,7 @@ describe('the MCP stdio bridge and the instance registry', { timeout: 90_000 }, 
     let out = '';
     start.stdout!.on('data', (c) => (out += c));
     await new Promise((r) => start.once('close', r));
-    const legacy = JSON.parse(out) as { pid: number; porta: number };
+    const legacy = JSON.parse(out) as { pid: number; port: number };
     try {
       // As a core from before #221: up, with its lock, but without a registry entry.
       assert.ok(removeInstance(instanceId('mcpb', legacy.pid), { home: consoleDir }));
@@ -347,11 +347,45 @@ describe('the MCP stdio bridge and the instance registry', { timeout: 90_000 }, 
     }
   });
 
+  test('an older core of its installation replaced by `core start`: the bridge moves to the new one (#220)', async () => {
+    const env: NodeJS.ProcessEnv = { ...process.env, HOME: home };
+    for (const name of CORE_VARS) delete env[name];
+    const dataDir = join(home, 'app-data');
+    const start = async () => {
+      const p = spawn(process.execPath, ['--disable-warning=ExperimentalWarning', CORE_CLI, 'start', '--installation', 'app', '--data-dir', dataDir, '--json', '--', ...HOOKS_ONLY], { env, stdio: ['ignore', 'pipe', 'ignore'] });
+      let out = '';
+      p.stdout!.on('data', (c) => (out += c));
+      await new Promise((r) => p.once('close', r));
+      return JSON.parse(out) as { pid: number; started: boolean; version: string };
+    };
+    const old = await start();
+    // As the core of the previous app version.
+    const lock = readLock(dataDir);
+    assert.ok(lock && lock !== 'invalid');
+    writeLock({ ...lock, version: '0.0.0' }, dataDir);
+
+    const b = bridge('--installation', 'app', '--data-dir', dataDir);
+    const before = await b.call();
+    assert.equal(before.isError, false, before.text);
+    assert.ok(liveClients(dataDir).includes(b.proc.pid!), 'the bridge is a client of the old core');
+
+    const fresh = await start();
+    assert.equal(fresh.started, true);
+    assert.notEqual(fresh.pid, old.pid);
+    assert.ok(!isPidAlive(old.pid), 'the old core was stopped');
+
+    const after = await b.call();
+    assert.equal(after.isError, false, `${after.text}\n${b.stderr()}`);
+    assert.deepEqual(listInstances({ home: consoleDir }).map((i) => i.pid), [fresh.pid], 'only the new core, and the bridge started none');
+    assert.ok(liveClients(dataDir).includes(b.proc.pid!), 'still a client, so the new core stays up for it');
+    await b.close();
+  });
+
   test('with no core and --no-start, the call says how to start one', async () => {
     const b = bridge('--no-start');
     const r = await b.call();
     assert.equal(r.isError, true);
-    assert.match(r.text, /npm run nucleo -- subir/);
+    assert.match(r.text, /npm run core -- start/);
     await b.close();
   });
 

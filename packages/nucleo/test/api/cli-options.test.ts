@@ -1,11 +1,11 @@
-// The API command line options (src/api/cli-options.ts): the English names, the old Portuguese ones
-// still accepted until phase 6 of #173 (src/owner/start.ts passes `--porta` and `--pai`), and the new
-// one winning when both are given.
+// The API command line options (src/api/cli-options.ts): the English names; the old Portuguese ones
+// left in phase 6 of #173 and are refused like any unknown option.
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { describe, test } from 'node:test';
 import { HELP, parseApiOptions } from '../../src/api/cli-options.ts';
+import { DEMO_GITHUB_STATES } from '../../src/simulator/demo-github-connection.ts';
 
 const CLI = fileURLToPath(new URL('../../src/api/cli.ts', import.meta.url));
 
@@ -28,14 +28,14 @@ describe('API command line options (#173)', () => {
       noLock: false,
       noTelemetry: false,
       machines: undefined,
+      demoGithub: undefined,
+      demoProject: undefined,
       help: false,
     });
   });
 
-  test('the new names and the old ones give the same options', () => {
-    const fresh = parseApiOptions(['--port', '4799', '--db', '/tmp/x.sqlite', '--projects', '/p', '--scan-interval', '5', '--no-history', '--no-desktop', '--no-github', '--demo', '--scenario', 'p4', '--parent', '123', '--replace', '--no-lock', '--no-telemetry', '--machines', '/m.json']);
-    const old = parseApiOptions(['--porta', '4799', '--banco', '/tmp/x.sqlite', '--projetos', '/p', '--varredura', '5', '--sem-historico', '--sem-desktop', '--sem-github', '--demo', '--cenario', 'p4', '--pai', '123', '--substituir', '--sem-trava', '--no-telemetry', '--machines', '/m.json']);
-    assert.deepEqual(old, fresh);
+  test('every English name', () => {
+    const fresh = parseApiOptions(['--port', '4799', '--db', '/tmp/x.sqlite', '--projects', '/p', '--scan-interval', '5', '--no-history', '--no-desktop', '--no-github', '--demo', '--scenario', 'p4', '--parent', '123', '--replace', '--no-lock', '--no-telemetry', '--machines', '/m.json', '--demo-github', 'pending', '--demo-project', 'none']);
     assert.deepEqual(fresh, {
       port: '4799',
       installation: undefined,
@@ -53,17 +53,15 @@ describe('API command line options (#173)', () => {
       noLock: true,
       noTelemetry: true,
       machines: '/m.json',
+      demoGithub: 'pending',
+      demoProject: 'none',
       help: false,
     });
   });
 
-  test('the new name wins over the old one, in either order', () => {
-    for (const args of [
-      ['--port', '1', '--porta', '2', '--db', 'new.sqlite', '--banco', 'old.sqlite', '--projects', '/new', '--projetos', '/old', '--scan-interval', '7', '--varredura', '9', '--scenario', 'p2', '--cenario', 'p3', '--parent', '11', '--pai', '22'],
-      ['--porta', '2', '--port', '1', '--banco', 'old.sqlite', '--db', 'new.sqlite', '--projetos', '/old', '--projects', '/new', '--varredura', '9', '--scan-interval', '7', '--cenario', 'p3', '--scenario', 'p2', '--pai', '22', '--parent', '11'],
-    ]) {
-      const o = parseApiOptions(args);
-      assert.deepEqual([o.port, o.db, o.projects, o.scanInterval, o.scenario, o.parent], ['1', 'new.sqlite', '/new', '7', 'p2', '11'], args.join(' '));
+  test('the old Portuguese names are refused (#173, phase 6)', () => {
+    for (const old of ['--porta', '--banco', '--projetos', '--varredura', '--sem-historico', '--sem-desktop', '--sem-github', '--cenario', '--pai', '--substituir', '--sem-trava']) {
+      assert.throws(() => parseApiOptions([old, '1']), /Unknown option/, old);
     }
   });
 
@@ -73,12 +71,21 @@ describe('API command line options (#173)', () => {
     assert.equal(o.dataDir, '/data/app');
   });
 
-  test('the help lists the new names, hides the old ones and says they are accepted until phase 6', () => {
-    for (const name of ['--port <n>', '--installation <i>', '--data-dir <folder>', '--db <file>', '--projects <folder>', '--scan-interval <s>', '--no-history', '--no-desktop', '--no-github', '--demo', '--scenario <p1..p13>', '--parent <pid>', '--replace', '--no-lock', '--no-telemetry', '--machines <file>', '--help']) assert.ok(HELP.includes(name), name);
+  test('the help lists the English names and none of the old ones', () => {
+    for (const name of ['--port <n>', '--installation <i>', '--data-dir <folder>', '--db <file>', '--projects <folder>', '--scan-interval <s>', '--no-history', '--no-desktop', '--no-github', '--demo', '--scenario <p1..p13>', '--parent <pid>', '--replace', '--no-lock', '--no-telemetry', '--machines <file>', '--demo-github <state>', '--demo-project <p>', '--help']) assert.ok(HELP.includes(name), name);
     assert.doesNotMatch(HELP, /^\s+--(porta|banco|projetos|varredura|sem-historico|sem-desktop|sem-github|cenario|pai|substituir|sem-trava)\b/m);
-    assert.match(HELP, /The old names \(--porta, --banco, --projetos, --varredura, --sem-historico, --sem-desktop, --sem-github, --cenario, --pai, --substituir, --sem-trava\) are accepted until phase 6\./);
+    assert.doesNotMatch(HELP, /old names|--porta|--sem-/);
     const out = execFileSync(process.execPath, ['--disable-warning=ExperimentalWarning', CLI, '--help'], { encoding: 'utf8' });
     assert.equal(out, HELP);
+  });
+
+  test('#241: the help lists every --demo-github state and says the demo never reaches the real GitHub or Keychain', () => {
+    for (const state of DEMO_GITHUB_STATES) assert.ok(HELP.includes(state), state);
+    assert.match(HELP, /AHRENA_CONSOLE_GITHUB_CLIENT_ID/);
+    assert.match(HELP, /AHRENA_CONSOLE_GITHUB_SOURCE=gh/);
+    assert.match(HELP, /AHRENA_CONSOLE_PROJECT/);
+    assert.match(HELP, /AHRENA_CONSOLE_VAULT=keychain\|secret-service\|memory\|none/);
+    assert.doesNotMatch(HELP, /with the \`gh\` token/);
   });
 
   test('an unknown option is refused', () => {

@@ -162,7 +162,7 @@ describe('Kanban do projeto (C11)', () => {
     assert.deepEqual(tela.leituras, ['/api/project']);
     const cab = area.querySelector('header.cc-head')!;
     assert.match(texto(cab), /Kanban do projeto Ao vivo/);
-    assert.equal(texto(cab.querySelector('.sub')), 'GitHub Project “Ahrena Console” · por Status · arraste para mudar');
+    assert.equal(texto(cab.querySelector('.sub')), 'GitHub Project “Ahrena Console” · dono #3 · por Status · arraste para mudar');
     assert.equal(texto(cab.querySelector('.prj-milestone')), 'Marco: Todos os marcos M1 · Local M2 · Artefato');
     assert.ok(cab.querySelectorAll('button').some((b) => texto(b) === 'Atualizar'));
 
@@ -275,6 +275,60 @@ describe('Kanban do projeto (C11)', () => {
     assert.equal(texto(tela.area.querySelector('.error-band code')), 'gh auth refresh -s project');
   });
 
+  // issue 241: the console source's 401 has `scope` and no `command`: the fix is Reconectar in Conexões.
+  const CONSOLE_NO_SCOPE = { error: 'sem permissão no GitHub Project: falta o escopo project; reconecte o GitHub em Conexões', code: 'no-scope', scope: 'project' };
+
+  test('issue 241: a move refused for the scope on the console connection offers Reconectar in Conexões, no gh command', async () => {
+    tela = await montarTela({
+      read: async () => quadroFalso(),
+      write: async () => {
+        throw erroDoNucleo(WriteError, 401, CONSOLE_NO_SCOPE);
+      },
+    });
+    arrastar(tela, 'I-35', 'In Progress');
+    await esperar();
+    assert.deepEqual(tela.nomesNaRaia('Ready'), ['I-35']);
+    const band = tela.area.querySelector('.error-band')!;
+    assert.match(texto(band), /O GitHub não aceitou mover #35\. Falta o escopo project na conexão do console\. O card voltou para Ready\. Reconectar em Conexões/);
+    assert.equal(band.querySelector('code'), null, 'no terminal command');
+    assert.equal(band.querySelector('a[data-action="reconnect"]')!.getAttribute('href'), '/ui/connections');
+    assert.doesNotMatch(texto(tela.area), /gh auth refresh/);
+  });
+
+  test('issue 241: a re-read refused for the scope on the console connection keeps the board with a Reconectar band', async () => {
+    let n = 0;
+    tela = await montarTela({
+      read: async () => {
+        if (n++ === 0) return quadroFalso();
+        throw erroDoNucleo(ReadError, 401, CONSOLE_NO_SCOPE);
+      },
+    });
+    tela.area.querySelectorAll('button').find((b) => texto(b) === 'Atualizar')!.click();
+    await esperar();
+    await esperar();
+    const band = tela.area.querySelector('.error-band')!;
+    assert.match(texto(band), /Não deu para reler o quadro\..*Reconectar em Conexões/);
+    assert.equal(band.querySelector('a[data-action="reconnect"]')!.getAttribute('href'), '/ui/connections');
+    assert.equal(band.querySelector('code'), null);
+    assert.equal(tela.area.querySelectorAll('section.prj-col').length, 6, 'the last board stays');
+  });
+
+  test('issue 241: a re-read refused for the scope on the gh source keeps the gh command in the band', async () => {
+    let n = 0;
+    tela = await montarTela({
+      read: async () => {
+        if (n++ === 0) return quadroFalso();
+        throw erroDoNucleo(ReadError, 401, { error: 'O token do gh não tem o escopo project.', code: 'no-scope', scope: 'project', command: 'gh auth refresh -s project' });
+      },
+    });
+    tela.area.querySelectorAll('button').find((b) => texto(b) === 'Atualizar')!.click();
+    await esperar();
+    await esperar();
+    const band = tela.area.querySelector('.error-band')!;
+    assert.equal(texto(band.querySelector('code')), 'gh auth refresh -s project');
+    assert.equal(band.querySelector('a[data-action="reconnect"]'), null);
+  });
+
   test('a raia "Sem status" não aceita card, e soltar na mesma raia não escreve', async () => {
     tela = await montarTela({ read: async () => quadroFalso() });
     const sobre = arrastar(tela, 'I-80', 'Sem status');
@@ -323,6 +377,22 @@ describe('Kanban do projeto (C11)', () => {
     assert.ok(caixa.querySelector('button'), 'Tentar de novo');
   });
 
+  test('issue 241: 401 for the scope on the console connection: Falta o escopo project, Reconectar to Conexões and Tentar de novo', async () => {
+    tela = await montarTela({
+      read: async () => {
+        throw erroDoNucleo(ReadError, 401, { error: 'sem permissão no GitHub Project: falta o escopo project; reconecte o GitHub em Conexões', code: 'no-scope', scope: 'project' });
+      },
+    });
+    const caixa = tela.area.querySelector('section.state')!;
+    assert.equal(texto(caixa.querySelector('h2')), 'Falta o escopo project');
+    assert.match(texto(caixa), /Reconecte em Conexões/);
+    assert.equal(caixa.querySelector('code'), null, 'no gh command for the console source');
+    const reconnect = caixa.querySelector('a[data-action="reconnect"]')!;
+    assert.equal(reconnect.getAttribute('href'), '/ui/connections');
+    assert.equal(texto(reconnect), 'Reconectar');
+    assert.ok(caixa.querySelector('button'), 'Tentar de novo');
+  });
+
   test('503 desligado: estado vazio explicando que o núcleo subiu sem GitHub', async () => {
     tela = await montarTela({
       read: async () => {
@@ -331,19 +401,21 @@ describe('Kanban do projeto (C11)', () => {
     });
     const caixa = tela.area.querySelector('section.state')!;
     assert.equal(caixa.getAttribute('role'), null, 'não é erro, é vazio');
-    assert.match(texto(caixa), /O núcleo subiu sem GitHub.*--sem-github/);
+    assert.match(texto(caixa), /O núcleo subiu sem GitHub.*--no-github/);
   });
 
-  test('503 sem-projeto: estado vazio que explica como escolher o Project', async () => {
+  test('503 no-project (issue 241): the screen lists the Projects to choose from, with no environment variable to set', async () => {
     tela = await montarTela({
-      read: async () => {
+      read: async (rota) => {
+        if (rota === '/api/project/options') return { projects: [{ owner: 'dono', ownerType: 'user', number: 3, title: 'Ahrena Console', url: '', items: 7, hasStatusField: true, closed: false }], selection: null, envOverride: null, fetchedAt: '', stale: false, reason: null };
         throw erroDoNucleo(ReadError, 503, { error: 'Nenhum Project.', code: 'no-project' });
       },
     });
-    const caixa = tela.area.querySelector('section.state')!;
-    assert.equal(caixa.getAttribute('role'), null, 'não é erro, é vazio');
-    assert.match(texto(caixa), /Escolha o GitHub Project/);
-    assert.equal(texto(caixa.querySelector('code')!), 'AHRENA_CONSOLE_PROJECT=dono/número');
+    await esperar();
+    assert.deepEqual(tela.leituras, ['/api/project', '/api/project/options']);
+    assert.equal(texto(tela.area.querySelector('header .sub')), 'Escolha o GitHub Project que este quadro mostra');
+    assert.equal(tela.area.querySelectorAll('tr[data-project]').length, 1);
+    assert.doesNotMatch(texto(tela.area), /AHRENA_CONSOLE_PROJECT=/, 'no variable to set by hand');
   });
 
   test('502 sem cache: estado de erro com Tentar de novo, que lê de novo', async () => {
@@ -371,7 +443,7 @@ describe('Kanban do projeto (C11)', () => {
     tela = await montarTela({
       read: async () => {
         if (n++ === 0) return quadroFalso();
-        throw new ReadError('O núcleo em 127.0.0.1 não respondeu', { route: '/api/projeto' });
+        throw new ReadError('O núcleo em 127.0.0.1 não respondeu', { route: '/api/project' });
       },
     });
     for (const f of tela.onRestart) f();
@@ -529,9 +601,9 @@ describe('a camada de escrita', () => {
       base: 'http://127.0.0.1:4720',
       fetch: async (url: URL, init: RequestInit) => (pedidos.push({ url: String(url), init }), new Response(JSON.stringify({ ok: true }), { status: 200 })),
     });
-    assert.deepEqual(await write('/api/projeto/mover', { itemId: 'I-1', optionId: 'rv' }), { ok: true });
+    assert.deepEqual(await write('/api/project/move', { itemId: 'I-1', optionId: 'rv' }), { ok: true });
     const [p] = pedidos;
-    assert.equal(p!.url, 'http://127.0.0.1:4720/api/projeto/mover');
+    assert.equal(p!.url, 'http://127.0.0.1:4720/api/project/move');
     assert.equal(p!.init.method, 'POST');
     assert.equal(p!.init.credentials, 'omit');
     assert.equal((p!.init.headers as Record<string, string>)['content-type'], 'application/json');
@@ -543,7 +615,7 @@ describe('a camada de escrita', () => {
     const fetch = async () => (chamou++, new Response('{}'));
     const write = httpWriter({ base: 'http://127.0.0.1:4720', fetch });
     await assert.rejects(write('/ui', {}), (e: Error) => e instanceof WriteError && /rota fora da API/.test(e.message));
-    await assert.rejects(write('https://exemplo.com/api/projeto/mover', {}), /rota fora da API/);
+    await assert.rejects(write('https://exemplo.com/api/project/move', {}), /rota fora da API/);
     await assert.rejects(write('/api/../../ui', {}), /rota fora do núcleo/);
     assert.throws(() => httpWriter({ base: 'http://exemplo.com:4720', fetch }), /só escreve no núcleo local/);
     assert.throws(() => httpWriter({ base: 'https://127.0.0.1:4720', fetch }), /só escreve no núcleo local/);
@@ -555,7 +627,7 @@ describe('a camada de escrita', () => {
       base: 'http://localhost:4720',
       fetch: async () => new Response(JSON.stringify({ error: 'Calma.', code: 'rate-limited' }), { status: 429, headers: { 'retry-after': '7' } }),
     });
-    await assert.rejects(write('/api/projeto/mover', {}), (e: InstanceType<typeof WriteError>) => {
+    await assert.rejects(write('/api/project/move', {}), (e: InstanceType<typeof WriteError>) => {
       assert.ok(e instanceof ReadError, 'é também um ReadError');
       assert.equal(e.name, 'WriteError');
       assert.equal(e.status, 429);
@@ -565,6 +637,6 @@ describe('a camada de escrita', () => {
       return true;
     });
     const fora = httpWriter({ base: 'http://127.0.0.1:1', fetch: async () => Promise.reject(new TypeError('fetch failed')) });
-    await assert.rejects(fora('/api/projeto/mover', {}), (e: InstanceType<typeof WriteError>) => e.status === 0 && /não respondeu/.test(e.message));
+    await assert.rejects(fora('/api/project/move', {}), (e: InstanceType<typeof WriteError>) => e.status === 0 && /não respondeu/.test(e.message));
   });
 });

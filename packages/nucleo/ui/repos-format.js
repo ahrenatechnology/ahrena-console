@@ -231,8 +231,8 @@ export function languages(list, max = 4) {
 
 /** O texto do estado `no-github`, igual nas duas telas. */
 export const NO_GITHUB = {
-  titulo: 'O núcleo está sem o GitHub',
-  texto: 'Rode gh auth login no terminal (instale o gh se faltar) e reinicie o núcleo sem --sem-github.',
+  title: 'O núcleo está sem o GitHub',
+  text: 'Esta leitura ficou sem credencial do GitHub: ou o núcleo foi iniciado com --no-github, ou a conexão caiu. Veja o estado em Conexões; com --no-github, reinicie o núcleo sem essa opção.',
 };
 
 export const COMPUTING = 'calculando…';
@@ -278,11 +278,12 @@ export function valueOrPending(value, data, field, format = (v) => String(v)) {
 
 /**
  * A mudança do Ao vivo que pede releitura: `repos`/`list` sempre; nas métricas, também a chave do
- * repositório (`owner/repo`), comparada sem caixa.
+ * repositório (`owner/repo`), comparada sem caixa; e toda mudança da conexão com o GitHub (`connections`, issue 241).
  */
 export function changeMatters(changes, key = null) {
   const mine = key ? key.toLowerCase() : null;
-  return (changes ?? []).some((m) => m.type === 'repos' && (m.key === 'list' || (mine !== null && String(m.key).toLowerCase() === mine)));
+  // issue 241: a transition of the GitHub connection (`connections`) changes what every GitHub screen can read.
+  return (changes ?? []).some((m) => m.type === 'connections' || (m.type === 'repos' && (m.key === 'list' || (mine !== null && String(m.key).toLowerCase() === mine))));
 }
 
 /** O card do fim das métricas: com escrita, `traffic` ("Tráfego e segurança"); sem, `community`. */

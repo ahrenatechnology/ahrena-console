@@ -15,11 +15,13 @@
 //   the attention route (api/attention-route.ts), which marks them with this machine. A session that
 //   enters or leaves it is published too, so the tray refreshes.
 // - `GET` only, never overlapping, injectable timers and clock; in tests, `pollOnce()` directly.
+// - `readNow()` reads at once, outside the 30 s round (after a reconnect that exited 0, #244), joining
+//   a read already in flight; `reconnect()` is the machine's reconnect status, from the runner.
 
 import type { ChangeCursor } from '../changes/cursor.ts';
 import { machineUnreachableAlert, type AlertChange, type AlertTracker } from './alerts.ts';
 import type { RemoteMachineConfig } from './machines-config.ts';
-import { RETENTION_MS, SAMPLE_INTERVAL_MS, TELEMETRY_VERSION, type Alert, type AlertKind, type MachineState, type TelemetryReading } from './model.ts';
+import { RETENTION_MS, SAMPLE_INTERVAL_MS, TELEMETRY_VERSION, type Alert, type AlertKind, type MachineState, type ReconnectStatus, type TelemetryReading } from './model.ts';
 import type { RemoteGet, TelemetryStore } from './ports.ts';
 import { systemTimers, type SamplerTimers } from './sampler.ts';
 import type { MachineEntry, MachineStatus } from './service.ts';
@@ -46,6 +48,8 @@ export interface RemoteMachineOptions {
   retentionMs?: number;
   timers?: SamplerTimers;
   log?: (message: string) => void;
+  /** The machine's reconnect (#244); without it, `null`. */
+  reconnectStatus?: (machineId: string) => ReconnectStatus | null;
 }
 
 const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -124,45 +128,9 @@ export function remoteAlerts(v: unknown): Alert[] {
   return out;
 }
 
-// A remote núcleo released before #173 phase 2b answers `/api/attention` with the Portuguese body
-// (the one the old `/api/atencao` keeps until phase 6): `itens[{ sessao, titulo, projeto, conta {
-// rotulo, cor }, nivel, motivo, motivoLongo, desde, minutos, local, machine }]`, `ativas`, `comErro`.
-// `englishAttentionBody` reads it as the English one, so the attention route and the changes read one
-// shape; a body that already has `items` passes untouched.
-const OLD_ATTENTION_LEVELS: Readonly<Record<string, string>> = { precisa: 'needs', 'sua-vez': 'your-turn' };
-const OLD_ATTENTION_REASONS: Readonly<Record<string, string>> = {
-  permissao: 'permission',
-  pergunta: 'question',
-  plano: 'plan',
-  decisao: 'decision',
-  erro: 'error',
-  'sua-vez': 'your-turn',
-  interrompida: 'interrupted',
-};
-const englishValue = (map: Readonly<Record<string, string>>, v: unknown) => (typeof v === 'string' && Object.hasOwn(map, v) ? map[v] : v);
-
-/** A remote attention answer with the English keys and values (src/api/attention-route.ts `RespostaDaAtencao`). */
-export function englishAttentionBody(body: Record<string, unknown>): Record<string, unknown> {
-  if (Array.isArray(body.items) || !Array.isArray(body.itens)) return body;
-  const items = body.itens.slice(0, 200).map((i) =>
-    isObject(i)
-      ? {
-          session: i.sessao,
-          title: i.titulo,
-          project: i.projeto,
-          account: isObject(i.conta) ? { label: i.conta.rotulo, color: i.conta.cor } : i.conta,
-          level: englishValue(OLD_ATTENTION_LEVELS, i.nivel),
-          reason: englishValue(OLD_ATTENTION_REASONS, i.motivo),
-          longReason: i.motivoLongo,
-          since: i.desde,
-          minutes: i.minutos,
-          local: i.local,
-          machine: i.machine,
-        }
-      : i,
-  );
-  return { active: body.ativas, withError: body.comErro, items };
-}
+// The remote's `/api/attention` is read in its English shape (`items[{ session, level, reason, … }]`,
+// `active`, `withError`), the one every núcleo answers since #173 phase 2b; a remote older than that
+// has no `items` and shows no attention (the Portuguese reader left in phase 6).
 
 /** The sessions in a remote attention answer and the reason of each (for what entered, left or changed). */
 function attentionSessions(body: unknown): Map<string, string> {
@@ -212,6 +180,15 @@ export class RemoteMachine implements MachineEntry {
 
   get running(): boolean {
     return this.timer !== null;
+  }
+
+  reconnect(): ReconnectStatus | null {
+    return this.o.reconnectStatus?.(this.id) ?? null;
+  }
+
+  /** Reads now, outside the 30 s round; joins a read already in flight. */
+  readNow(): Promise<MachineStatus> {
+    return this.tick();
   }
 
   /** Reads now and then every `intervalMs`. Calling it again does not start another timer. */
@@ -268,7 +245,7 @@ export class RemoteMachine implements MachineEntry {
       }
       alerts = remoteAlerts(t.body.alerts);
       const a = await get(this.port, REMOTE_ATTENTION_PATH);
-      attention = a.kind === 'response' && a.status === 200 && isObject(a.body) ? englishAttentionBody(a.body) : null;
+      attention = a.kind === 'response' && a.status === 200 && isObject(a.body) ? a.body : null;
     }
     if (next.state === 'unreachable' && next.reason) alerts.push(machineUnreachableAlert(this.label, this.port, next.reason, new Date(now).toISOString()));
 

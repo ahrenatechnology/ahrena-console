@@ -14,6 +14,8 @@
 
 import { el, header as screenHeader, icon } from '../dom.js';
 import { empty, error, errorBand, loading as loadingState } from '../states.js';
+import { attentionOf, isBlocked, isIdle, reasonChip } from '../attention.js';
+import { connectEmptyFor, connectionChanged, isGithubNotConnected } from '../github-connect.js';
 
 const RELOAD_MS = 30_000;
 const DEBOUNCE_MS = 400;
@@ -153,15 +155,29 @@ export function scoreboardCards(view) {
     },
     { id: 'working', label: 'Trabalhando', value: s.sessionsWorking, sub: s.sessionsWorking === 1 ? 'sessão ativa' : 'sessões ativas', icon: 'bot', tone: 'accent', alert: false },
     {
-      id: 'waiting',
-      label: 'Esperando você',
+      // issue 245: only what blocks (sessions and decisions); the idle ones of the context stay apart.
+      id: 'blocked',
+      label: 'Precisam de você',
       value: s.waitingOnYou,
-      sub: [sessions ? plural(sessions, 'sessão', 'sessões') : null, decisions ? plural(decisions, 'decisão', 'decisões') : null].filter(Boolean).join(', ') || 'ninguém',
+      sub: blockedSub(sessions, decisions, s.idle),
       icon: 'hand',
       tone: 'waiting',
       alert: false,
     },
   ];
+}
+
+/** "2 sessões, 1 decisão · 1 ociosa fora"; nothing blocked is "ninguém". */
+export function blockedSub(sessions, decisions, idle) {
+  const blocked = [sessions ? plural(sessions, 'sessão', 'sessões') : null, decisions ? plural(decisions, 'decisão', 'decisões') : null].filter(Boolean).join(', ') || 'ninguém';
+  const n = Number.isInteger(idle) ? idle : 0;
+  return n ? `${blocked} · ${n} ${n === 1 ? 'ociosa' : 'ociosas'} fora` : blocked;
+}
+
+/** The attention of a board card's session: its `attention`, or `waitingOnYou` from an older core. */
+export function cardAttention(session) {
+  if (!session) return null;
+  return attentionOf(session.attention) ?? (session.waitingOnYou ? { level: 'blocked', reason: null } : null);
 }
 
 const capitalize = (t) => (t ? t[0].toUpperCase() + t.slice(1) : '');
@@ -235,6 +251,18 @@ function scoreboard(view) {
   );
 }
 
+/**
+ * The text of a "Depende de você" card: a session's reason goes in the chip (C27, issue 245) and the text
+ * continues it ("[Pede permissão] para usar Bash · #58"); a decision keeps its text.
+ */
+export function dependText(d, c) {
+  const chip = d.kind === 'session' ? reasonChip({ level: 'blocked', reason: d.reason }, { withError: true }) : null;
+  if (!chip) return [c.text];
+  const label = chip.textContent.toLowerCase();
+  const text = c.text.toLowerCase().startsWith(label) ? c.text.slice(label.length).trimStart() : c.text;
+  return [chip, ' ', text];
+}
+
 function dependsOnYou(view) {
   const items = view.dependsOnYou;
   const body = items.length
@@ -247,7 +275,7 @@ function dependsOnYou(view) {
             'a',
             { class: 'card dev-depend', href: c.href, 'data-focus': `depend:${d.kind}:${d.sessionId}:${d.decisionId ?? ''}` },
             el('span', { class: 'dev-depend-title' }, c.title),
-            el('span', { class: 'dev-depend-text' }, c.text),
+            el('span', { class: 'dev-depend-text' }, ...dependText(d, c)),
             el('span', { class: 'dev-depend-foot' }, el('span', {}, c.where), el('b', {}, c.minutes)),
           );
         }),
@@ -305,11 +333,15 @@ function mergeQueue(queue, rest, title, opts) {
 function boardCard(card, column) {
   const num = external(card.url, `#${card.number}`, 'dev-num');
   if (column === 'done') return el('div', { class: 'card dev-card dev-card-slim' }, num, el('span', { class: 'dev-trunc' }, card.title));
-  const waiting = card.session?.waitingOnYou;
+  // issue 245: blocked = yellow edge and a strong chip; idle = neutral edge and a light chip.
+  const attention = cardAttention(card.session);
+  const blocked = isBlocked(attention);
+  const idle = isIdle(attention);
+  const chip = blocked ? el('span', { class: 'attention-chip dev-card-chip' }, 'precisa de você') : idle ? el('span', { class: 'attention-chip attention-chip-light dev-card-chip' }, 'ociosa') : null;
   return el(
     'div',
-    { class: `card dev-card${waiting ? ' dev-card-waiting' : ''}${column === 'blocked' ? ' dev-card-blocked' : ''}` },
-    el('div', { class: 'dev-card-head' }, num, waiting ? pill('espera você', 'waiting') : null),
+    { class: `card dev-card${blocked ? ' dev-card-waiting' : idle ? ' dev-card-idle' : ''}${column === 'blocked' ? ' dev-card-blocked' : ''}` },
+    el('div', { class: 'dev-card-head' }, num, chip),
     el('div', { class: 'dev-card-title' }, card.title),
     el(
       'div',
@@ -556,6 +588,13 @@ export async function mount(area, ctx) {
     } catch (e) {
       if (e?.name === 'AbortError' || mine !== seq) return;
       loading = false;
+      // issue 241: not connected to GitHub. The board on screen came with the old credential: it goes.
+      if (isGithubNotConnected(e)) {
+        overview = null;
+        view = null;
+        area.replaceChildren(header, connectEmptyFor('dev-console', ctx.navigate));
+        return;
+      }
       if (!overview) area.replaceChildren(header, error({ text: e?.message ?? String(e), retry: () => (area.replaceChildren(header, loadingState({ label: 'Lendo o Dev Console' })), read()) }));
       else {
         failure = e?.message ?? String(e);
@@ -570,7 +609,7 @@ export async function mount(area, ctx) {
   }
 
   ctx.onChange((changes) => {
-    if (!touchesDevConsole(changes) || ctx.signal.aborted) return;
+    if ((!touchesDevConsole(changes) && !connectionChanged(changes)) || ctx.signal.aborted) return;
     clearTimeout(debounce);
     debounce = setTimeout(read, DEBOUNCE_MS);
   });

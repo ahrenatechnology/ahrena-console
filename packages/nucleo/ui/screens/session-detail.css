@@ -9,16 +9,17 @@
 .sd-back, .sd-refresh { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 8px; color: var(--muted); font-size: 18px; background: transparent; border: 0; flex: none; }
 .sd-back:hover, .sd-refresh:hover { color: var(--text); background: var(--raised); }
 .sd-refresh { margin-left: auto; }
+/* C70 (issue 285): the open action takes the push to the right; Atualizar stays beside it. */
+.sd-open { margin-left: auto; flex: 0 1 auto; justify-content: flex-end; flex-wrap: wrap; }
+.sd-open + .sd-refresh { margin-left: 0; }
 .sd-back:focus-visible, .sd-refresh:focus-visible, .sd-copy:focus-visible, .sd-tab:focus-visible, .sd-tool-head:focus-visible, .sd-event-head:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 .sd-status { display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 9px; border-radius: 99px; font-size: 12px; font-weight: var(--weight-medium); white-space: nowrap; flex: none; }
 .sd-status::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
 .sd-s-active { background: var(--status-active-badge); color: var(--status-active-text); }
-.sd-s-waiting { background: var(--status-waiting-badge); color: var(--status-waiting-text); }
 .sd-s-error { background: var(--status-error-badge); color: var(--status-error-text); }
 .sd-s-completed { background: var(--status-completed-badge); color: var(--status-completed-text); }
 .sd-s-abandoned { background: var(--status-abandoned-badge); color: var(--status-abandoned-text); }
-.sd-reason { display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 9px; border-radius: 99px; font-size: 11.5px; font-weight: var(--weight-semibold); background: var(--status-waiting-badge); color: var(--status-waiting-text); flex: none; }
 
 .sd-pills { display: flex; flex-wrap: wrap; gap: 8px; padding-left: 42px; }
 .sd-pill { display: inline-flex; align-items: center; gap: 7px; height: 26px; padding: 0 10px; border-radius: 7px; border: 1px solid var(--border); background: var(--surface); font-size: 12px; color: var(--muted); white-space: nowrap; }
@@ -34,10 +35,9 @@
 .sd-band b { color: var(--status-waiting-text); font-weight: var(--weight-semibold); }
 .sd-band.sd-t-error { border-color: var(--status-error-dot); background: var(--status-error-badge); }
 .sd-band.sd-t-error > .icon, .sd-band.sd-t-error b { color: var(--status-error-text); }
-.sd-band .btn { flex: none; height: 34px; }
-.sd-band .btn[disabled] { opacity: .55; cursor: not-allowed; }
-.sd-notice { display: block; color: var(--status-error-text); font-size: 12px; }
-.sd-notice:empty { display: none; }
+/* issue 245: an idle session gets no band, only this muted line. */
+.sd-idle { display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--muted); padding: 2px; }
+.sd-idle p { margin: 0; flex: 1; min-width: 0; }
 .sd-code { font-family: var(--font-mono); font-size: .92em; color: var(--accent-text); background: var(--raised); padding: 1px 5px; border-radius: 4px; }
 
 /* ---------- abas ---------- */
@@ -161,7 +161,7 @@ select.sd-chip.on { color: var(--accent-text); border-color: var(--accent); }
 .sd-event-head .sd-type { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sd-event-head .sd-summary { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sd-event-head .sd-chip { display: inline-flex; align-items: center; }
-.sd-event-head .sd-status { justify-self: start; }
+.sd-event-head .sd-status, .sd-event-head .attention-pill { justify-self: start; }
 .sd-pre.sd-data { margin: 0 16px 14px 44px; }
 .sd-footer { display: flex; align-items: center; justify-content: space-between; gap: 10px; color: var(--muted); font-size: 12px; }
 
@@ -175,6 +175,6 @@ select.sd-chip.on { color: var(--accent-text); border-color: var(--accent); }
   .sd-numbers { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .sd-select { min-width: 0; flex: 1; }
   .sd-event-head { grid-template-columns: 16px 52px minmax(0, 1fr); }
-  .sd-event-head .sd-status, .sd-event-head .sd-chip, .sd-event-head .sd-type { display: none; }
+  .sd-event-head .sd-status, .sd-event-head .attention-pill, .sd-event-head .sd-chip, .sd-event-head .sd-type { display: none; }
   .sd-node.sd-sub { margin-left: 16px; }
 }

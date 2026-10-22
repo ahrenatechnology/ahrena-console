@@ -10,7 +10,7 @@
 
 // The sidebar blocks: the everyday screens (no title), then Delivery, Decisions, Machines and
 // Control. A block without items does not show. Decisions holds the session decisions ("Das sessões")
-// and, later, the architecture (ADR) and product (PDR) records.
+// and the architecture (ADR) and product (PDR) records of the repositories (issue 174).
 export const SECTIONS = [
   { id: 'main', label: null },
   { id: 'delivery', label: 'Entrega' },
@@ -168,6 +168,48 @@ export const SCREENS = [
     file: '/ui/screens/decisions.js', // issue 103
   },
   {
+    // As decisões de arquitetura dos repositórios da conta (C28, issue 174).
+    id: 'adrs',
+    route: '/ui/adrs',
+    item: { label: 'ADR', icon: 'scroll-text', section: 'decisions' },
+    title: 'ADR',
+    sub: 'Decisões de arquitetura dos repositórios da sua conta',
+    icon: 'scroll-text',
+    file: '/ui/screens/adrs.js',
+  },
+  {
+    // As decisões de produto (C38): a mesma tela, com outro rótulo.
+    id: 'pdrs',
+    route: '/ui/pdrs',
+    item: { label: 'PDR', icon: 'lightbulb', section: 'decisions' },
+    title: 'PDR',
+    sub: 'Decisões de produto dos repositórios da sua conta',
+    icon: 'lightbulb',
+    file: '/ui/screens/adrs.js',
+  },
+  {
+    // Um registro aberto (C30): /ui/adrs/<owner>/<repo>/<id>; acende ADR.
+    id: 'adr',
+    route: '/ui/adrs/:owner/:repo/:id',
+    // O id é o nome do arquivo: acento e espaço valem (`0004-decisão de fila`).
+    params: { id: 'record' },
+    highlights: 'adrs',
+    title: 'ADR',
+    sub: null,
+    icon: 'scroll-text',
+    file: '/ui/screens/adr-record.js',
+  },
+  {
+    id: 'pdr',
+    route: '/ui/pdrs/:owner/:repo/:id',
+    params: { id: 'record' },
+    highlights: 'pdrs',
+    title: 'PDR',
+    sub: null,
+    icon: 'lightbulb',
+    file: '/ui/screens/adr-record.js',
+  },
+  {
     // This machine (C24, issue 178): always in the sidebar, before the remote ones.
     id: 'this-machine',
     route: '/ui/machines/local',
@@ -189,6 +231,16 @@ export const SCREENS = [
     file: '/ui/screens/machine.js',
   },
   { id: 'agent-config', route: '/ui/agent-config', item: { label: 'Agent Config', icon: 'bot', section: 'control' }, title: 'Agent Config', sub: 'Seu Claude Code: skills, subagentes, comandos, MCP, hooks e memória', icon: 'bot', file: '/ui/screens/agent-config.js' }, // #63
+  {
+    // The console's own connections (C39 to C44, issue 241): GitHub, by the device flow.
+    id: 'connections',
+    route: '/ui/connections',
+    item: { label: 'Conexões', icon: 'plug', section: 'control' },
+    title: 'Conexões',
+    sub: 'As contas de fora que o console usa',
+    icon: 'plug',
+    file: '/ui/screens/connections.js',
+  },
 ];
 
 // ---------- The remote machines in the sidebar (issue 178) ----------
@@ -248,6 +300,9 @@ export function sidebarSections(screens = SCREENS, sections = SECTIONS) {
 
 // A session id or a GitHub name (dot, hyphen and underscore); `.` and `..` never.
 const ID = /^[A-Za-z0-9_.:-]{1,128}$/;
+// The other parameter shapes a screen may ask for in `params` (issue 174: o id de um registro de
+// decisão é o nome do arquivo, com acento e espaço; nunca barra nem caractere de controle).
+const PARAM_SHAPES = { record: /^[^/\u0000-\u001f]{1,200}$/u };
 
 /** The screen and the parameters of a path, or `null` when none matches. */
 export function findScreen(path, screens = SCREENS) {
@@ -263,77 +318,13 @@ export function findScreen(path, screens = SCREENS) {
         try {
           value = decodeURIComponent(parts[i]);
         } catch {}
-        if (ID.test(value) && value !== '.' && value !== '..') params[pattern[i].slice(1)] = value;
+        const name = pattern[i].slice(1);
+        const shape = PARAM_SHAPES[screen.params?.[name]] ?? ID;
+        if (shape.test(value) && value !== '.' && value !== '..') params[name] = value;
         else matches = false;
       } else matches = pattern[i] === parts[i];
     }
     if (matches) return { screen, params };
   }
   return null;
-}
-
-// ---------- The old /ui URLs (decision 0009, issue 173) ----------
-//
-// Old links, bookmarks, the app and the published mod still open `/ui/sessoes/<id>` and the other
-// Portuguese URLs. The shell swaps them for the new one (`history.replaceState`) before routing.
-// This table is the only place that knows them; it leaves with the other aliases in the last phase.
-
-const LEGACY_PATHS = [
-  ['/ui/sessoes', '/ui/sessions'],
-  ['/ui/historico', '/ui/history'],
-  ['/ui/mural', '/ui/wall'],
-  ['/ui/projeto', '/ui/project'],
-  ['/ui/decisoes', '/ui/decisions'],
-  ['/ui/analytics/custo', '/ui/analytics/cost'],
-];
-
-// Query parameters of each screen: old name → new name, and old value → new value.
-const LEGACY_QUERY = {
-  sessions: {
-    keys: { busca: 'search', ordem: 'order', sentido: 'direction', pagina: 'page' },
-    values: {
-      status: { todas: 'all', ativas: 'active', esperando: 'waiting', concluidas: 'completed', erro: 'error', abandonadas: 'abandoned' },
-      order: { atividade: 'activity', duracao: 'duration', custo: 'cost' },
-    },
-  },
-  kanban: { keys: { visao: 'view' }, values: { view: { agentes: 'agents', sessoes: 'sessions' } } },
-  repo: { keys: { periodo: 'period' }, values: { period: { '1a': '1y' } } },
-};
-
-// The tabs of the session detail, in the hash.
-const LEGACY_DETAIL_TABS = { agentes: 'agents', conversa: 'conversation', tempo: 'timeline', decisoes: 'decisions' };
-
-/**
- * The new URL for an old /ui URL (`{ pathname, search, hash }`), as `path + query + hash`, or `null`
- * when the URL is already the new one.
- */
-export function legacyUrl({ pathname, search = '', hash = '' }) {
-  let path = pathname;
-  for (const [old, next] of LEGACY_PATHS) {
-    if (path === old || path.startsWith(`${old}/`)) {
-      path = next + path.slice(old.length);
-      break;
-    }
-  }
-  const found = findScreen(path);
-  const rules = found ? LEGACY_QUERY[found.screen.id] : null;
-  let query = search;
-  if (rules && search) {
-    const old = new URLSearchParams(search);
-    const next = new URLSearchParams();
-    let changed = false;
-    for (const [k, v] of old) {
-      const key = rules.keys[k] ?? k;
-      const value = rules.values?.[key]?.[v] ?? v;
-      changed ||= key !== k || value !== v;
-      if (key !== k && old.has(key)) continue; // the new name wins
-      next.append(key, value);
-    }
-    const s = next.toString();
-    if (changed) query = s ? `?${s}` : '';
-  }
-  let tab = hash;
-  if (found?.screen.id === 'session-detail' && LEGACY_DETAIL_TABS[hash.slice(1)]) tab = `#${LEGACY_DETAIL_TABS[hash.slice(1)]}`;
-  if (path === pathname && query === search && tab === hash) return null;
-  return `${path}${query}${tab}`;
 }

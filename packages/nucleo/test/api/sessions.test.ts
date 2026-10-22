@@ -11,12 +11,12 @@ import { displayStatus, type Session } from '../../src/model.ts';
 import { seedPanelScenario, PANEL_SESSION } from '../../src/simulator/panel.ts';
 import { simulate } from '../../src/simulator/index.ts';
 // @ts-expect-error: módulo do navegador, em JavaScript puro
-import { COLUMNS, cost, duration, stateFromQuery, band, age, shortId, queryFromState, listRoute } from '../../ui/screens/sessions.js';
+import { COLUMNS, cost, duration, stateFromQuery, band, age, shortId, queryFromState, listRoute, fitRows, pageKeepingRow, pageAfterRefit, roomForRows, MIN_ROWS } from '../../ui/screens/sessions.js';
 // @ts-expect-error: idem
 import { findScreen } from '../../ui/screens.js';
 
 const AGORA = Date.parse('2026-05-01T12:00:00.000Z');
-const PADRAO: PedidoDeSessoes = { status: 'all', busca: null, dir: null, ordem: 'activity', sentido: 'desc', pagina: 1 };
+const PADRAO: PedidoDeSessoes = { status: 'all', busca: null, dir: null, ordem: 'activity', sentido: 'desc', pagina: 1, perPage: 10 };
 
 function pedir(url: string, caminho: string, headers: Record<string, string> = {}): Promise<{ status: number; corpo: string }> {
   const { hostname, port } = new URL(url);
@@ -80,6 +80,15 @@ describe('#28 GET /api/sessions com o simulador', () => {
     const alem = await listar({ pagina: 99 });
     assert.equal(alem.page, p1.pages);
     assert.ok(alem.items.length > 0);
+  });
+
+  test('#279/AC-4: perPage sets the page size, and the pages follow it', async () => {
+    const p = await listar({ perPage: 7, pagina: 2 });
+    assert.equal(p.perPage, 7);
+    assert.equal(p.items.length, 7);
+    assert.equal(p.pages, Math.ceil(sessoes.length / 7));
+    const { itens } = await tudo();
+    assert.deepEqual(p.items.map((s) => s.id), itens.slice(7, 14).map((s) => s.id));
   });
 
   test('cada pílula traz só o seu status, e as cinco somam o total', async () => {
@@ -172,34 +181,40 @@ describe('#28 GET /api/sessions com o simulador', () => {
     assert.equal(ok.status, 200);
     const corpo = JSON.parse(ok.corpo) as ListaDeSessoesHttp;
     assert.ok(corpo.items.every((s) => s.status === 'waiting'));
-    // The old values are still accepted (ENGLISH_VALUES_BY_PATH), on the new route too.
-    assert.equal((await pedir(api.url, '/api/sessions?status=esperando&order=custo&direction=asc&page=1')).corpo, ok.corpo);
     const erros: Record<string, string> = {
-      'status=nenhuma': 'status: um de all, active, waiting, completed, error, abandoned',
+      'status=nenhuma': 'status: um de all, active, waiting, blocked, idle, completed, error, abandoned',
       'order=nome': 'order: um de activity, duration, cost',
       'direction=lado': 'direction: um de desc, asc',
       'page=0': 'page: um inteiro a partir de 1',
       'page=1.5': 'page: um inteiro a partir de 1',
+      'perPage=0': 'perPage: um inteiro de 1 a 100',
+      'perPage=101': 'perPage: um inteiro de 1 a 100',
+      'perPage=2.5': 'perPage: um inteiro de 1 a 100',
       'dir=relativo': 'dir: um caminho absoluto',
       [`search=${'x'.repeat(201)}`]: 'search grande demais',
+      // The old Portuguese values are refused (#173, phase 6).
+      'status=esperando': 'status: um de all, active, waiting, blocked, idle, completed, error, abandoned',
+      'order=custo': 'order: um de activity, duration, cost',
     };
     for (const [q, error] of Object.entries(erros)) {
       const r = await pedir(api.url, `/api/sessions?${q}`);
       assert.equal(r.status, 400, q);
       assert.deepEqual(JSON.parse(r.corpo), { error }, q);
     }
-    for (const q of ['status=nenhuma', 'ordem=nome', 'sentido=lado', 'pagina=0', 'pagina=1.5', 'dir=relativo', `busca=${'x'.repeat(201)}`]) {
-      const r = await pedir(api.url, `/api/sessoes?${q}`);
-      assert.equal(r.status, 400, q);
-      assert.ok(JSON.parse(r.corpo).error, q);
+    // The old Portuguese parameter names are ignored: a bad value under them is not even read.
+    const padrao = await pedir(api.url, '/api/sessions');
+    for (const q of ['ordem=nome', 'sentido=lado', 'pagina=0', `busca=${'x'.repeat(201)}`]) {
+      assert.deepEqual(await pedir(api.url, `/api/sessions?${q}`), padrao, q);
     }
+    // The old Portuguese route is gone.
+    assert.deepEqual(await pedir(api.url, '/api/sessoes'), { status: 404, corpo: JSON.stringify({ error: 'não encontrado' }) });
     const host = new URL(api.url).host;
-    assert.equal((await pedir(api.url, '/api/sessoes', { origin: `http://${host}` })).status, 200);
-    assert.equal((await pedir(api.url, '/api/sessoes', { origin: 'https://exemplo.com' })).status, 403);
+    assert.equal((await pedir(api.url, '/api/sessions', { origin: `http://${host}` })).status, 200);
+    assert.equal((await pedir(api.url, '/api/sessions', { origin: 'https://exemplo.com' })).status, 403);
   });
 
   test('pedidoDeSessoes: os padrões', () => {
-    assert.deepEqual(pedidoDeSessoes(new URL('http://x/api/sessoes')), PADRAO);
+    assert.deepEqual(pedidoDeSessoes(new URL('http://x/api/sessions')), PADRAO);
     assert.deepEqual(pedidoDeSessoes(new URL('http://x/api/sessions?search=%20oi%20&dir=/a/b&page=3')), { ...PADRAO, busca: 'oi', dir: '/a/b', pagina: 3 });
   });
 });
@@ -214,12 +229,14 @@ describe('#28 a tela Sessões', () => {
     assert.equal(findScreen(`/ui/sessions/${encodeURIComponent(PANEL_SESSION)}`).screen.id, 'session-detail');
   });
 
-  test('o estado vai e volta pela query da URL; o que não vale cai no padrão', () => {
-    const e = stateFromQuery('?status=waiting&search=oi&dir=/simulacao/x&order=cost&direction=asc&page=2');
-    assert.deepEqual(e, { status: 'waiting', search: 'oi', dir: '/simulacao/x', order: 'cost', direction: 'asc', page: 2 });
+  test('the state goes and comes back through the URL query; what is not valid falls back to the default; waiting opens blocked (issue 245)', () => {
+    const e = stateFromQuery('?status=blocked&search=oi&dir=/simulacao/x&order=cost&direction=asc&page=2');
+    assert.deepEqual(e, { status: 'blocked', search: 'oi', dir: '/simulacao/x', order: 'cost', direction: 'asc', page: 2 });
     assert.deepEqual(stateFromQuery(queryFromState(e)), e);
-    assert.equal(queryFromState(e), '?status=waiting&search=oi&dir=%2Fsimulacao%2Fx&order=cost&direction=asc&page=2', 'the address bar carries the new values');
-    // An old bookmark's values (`esperando`, `custo`) are the shell's job (legacyUrl, ui.test.ts).
+    assert.equal(queryFromState(e), '?status=blocked&search=oi&dir=%2Fsimulacao%2Fx&order=cost&direction=asc&page=2', 'the address bar carries the new values');
+    assert.equal(stateFromQuery('?status=waiting').status, 'blocked', 'an old bookmark of the waiting pill opens the ones that need you');
+    // The old Portuguese values are not read (#173, phase 6): they fall back to the default.
+    assert.deepEqual(stateFromQuery('?status=esperando&order=custo'), stateFromQuery(''));
     assert.equal(queryFromState(stateFromQuery('')), '');
     assert.deepEqual(stateFromQuery('?status=x&order=y&direction=z&page=-1&dir=rel'), stateFromQuery(''));
   });
@@ -228,8 +245,40 @@ describe('#28 a tela Sessões', () => {
     const rota = listRoute({ status: 'error', search: ' a b ', dir: '/d', order: 'duration', direction: 'desc', page: 2 });
     const url = new URL(rota, 'http://127.0.0.1');
     assert.equal(url.pathname, '/api/sessions');
-    assert.deepEqual(pedidoDeSessoes(url), { status: 'error', busca: 'a b', dir: '/d', ordem: 'duration', sentido: 'desc', pagina: 2 });
+    assert.deepEqual(pedidoDeSessoes(url), { status: 'error', busca: 'a b', dir: '/d', ordem: 'duration', sentido: 'desc', pagina: 2, perPage: 10 });
+    const sized = new URL(listRoute(stateFromQuery(''), 17), 'http://x');
+    assert.equal(pedidoDeSessoes(sized).perPage, 17, '#279: the screen sends the rows that fit');
     assert.ok(!new URL(listRoute(stateFromQuery('')), 'http://x').searchParams.has('search'));
+  });
+
+  test('#279/AC-1, AC-2: the rows that fit the window, never below 10 nor above 100', () => {
+    // 1920×1080 in the demo: rows start at 183.5 px, the area is 1080 tall with 24 px of padding.
+    const room = roomForRows({ rowsTop: 183.5, areaBottom: 1080, paddingBottom: 24, gap: 12, footerHeight: 30 });
+    assert.equal(room, 829.5);
+    assert.equal(fitRows({ available: room, rowHeight: 50 }), 16);
+    // 1100×760: fewer than 10 fit, the page keeps the old 10.
+    assert.equal(fitRows({ available: 420, rowHeight: 66 }), MIN_ROWS);
+    assert.equal(fitRows({ available: 100_000, rowHeight: 50 }), 100);
+    // Nothing measured (hidden, no style yet): the minimum, never NaN or 0.
+    assert.equal(fitRows({ available: NaN, rowHeight: 50 }), MIN_ROWS);
+    assert.equal(fitRows({ available: 800, rowHeight: 0 }), MIN_ROWS);
+    assert.equal(fitRows({ available: -50, rowHeight: 50 }), MIN_ROWS);
+  });
+
+  test('#279/AC-3: a new page size keeps the first row on screen, not the page number', () => {
+    // Page 3 of 16 starts at row 33; with 10 per page, row 33 is on page 4 (31–40).
+    assert.equal(pageKeepingRow({ page: 3, perPage: 16, nextPerPage: 10 }), 4);
+    // Page 4 of 10 starts at row 31; with 16 per page, row 31 is on page 2 (17–32).
+    assert.equal(pageKeepingRow({ page: 4, perPage: 10, nextPerPage: 16 }), 2);
+    assert.equal(pageKeepingRow({ page: 1, perPage: 10, nextPerPage: 16 }), 1);
+    assert.equal(pageKeepingRow({ page: 2, perPage: 10, nextPerPage: 10 }), 2);
+  });
+
+  test('#279/AC-3: the first measure keeps the page of the URL; only a resize moves it', () => {
+    // Voltar from the Detalhe on page 5 at 12 rows: the first read guessed 16 from the CSS, the measure
+    // says 12 again, and the page stays 5 (rows 49–60), not 6.
+    assert.equal(pageAfterRefit({ page: 5, perPage: 16, nextPerPage: 12, first: true }), 5);
+    assert.equal(pageAfterRefit({ page: 5, perPage: 16, nextPerPage: 12, first: false }), 6);
   });
 
   test('os textos da linha: idade, duração, custo, faixa e id', () => {
@@ -271,8 +320,8 @@ describe('#28 a tela Sessões', () => {
     assert.match(css.slice(corte), /\.table \.c-dir, \.table \.dir \{ display: none; \}/);
     assert.doesNotMatch(css, /overflow-x:\s*auto/, 'a tabela não rola');
     // Mínimos em px, com o respiro das células (20 px na larga, 12 na estreita).
-    const MINIMO: Record<string, number> = { 'c-session': 180, 'c-status': 140, 'c-activity': 90, 'c-duration': 85, 'c-agents': 74, 'c-cost': 85, 'c-dir': 100, 'c-arrow': 24 };
-    const MINIMO_ESTREITO: Record<string, number> = { ...MINIMO, 'c-session': 130, 'c-activity': 70, 'c-duration': 75, 'c-agents': 60, 'c-cost': 80 };
+    const MINIMO: Record<string, number> = { 'c-session': 180, 'c-status': 140, 'c-activity': 90, 'c-duration': 85, 'c-agents': 74, 'c-cost': 85, 'c-dir': 100, 'c-open': 36 };
+    const MINIMO_ESTREITO: Record<string, number> = { ...MINIMO, 'c-open': 32, 'c-session': 130, 'c-activity': 70, 'c-duration': 75, 'c-agents': 60, 'c-cost': 80 };
     for (const c of classes) {
       assert.ok((largas[c]! / 100) * 830 >= MINIMO[c]!, `${c} em 1100: ${(largas[c]! / 100) * 830} px`);
       if (c !== 'c-dir') assert.ok((estreitas[c]! / 100) * 610 >= MINIMO_ESTREITO[c]!, `${c} em 880: ${(estreitas[c]! / 100) * 610} px`);
@@ -296,13 +345,13 @@ describe('#28 a tela Sessões', () => {
 
   // A mesma regra para a tela Workflows (#96), a aba Workflow do detalhe (#97), o Dev Console (#179)
   // e as Máquinas (#178), contra todo CSS da /ui (também os de ui/screens/), e toda classe própria delas com o prefixo da tela.
-  test('o CSS de Workflows, da aba Workflow, do Dev Console, das Máquinas (#178) e das Instruções (#183) só tem classe própria com prefixo, e nenhuma de outra tela', () => {
+  test('o CSS de Workflows, da aba Workflow, do Dev Console, das Máquinas (#178), das Instruções (#183), de Conexões e do seletor de Project (issue 241) só tem classe própria com prefixo, e nenhuma de outra tela', () => {
     const classes = (arquivo: string) => new Set([...readFileSync(`${UI_FOLDER}${arquivo}`, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/\.([a-z][a-z0-9-]*)/g)].map((m) => m[1]!));
     const SELOS = new Set(['badge', 'p', 'reason', 'soft', 'b-active', 'b-waiting', 'b-completed', 'b-error', 'b-abandoned']);
     const daMoldura = classes('shell.css');
     const todos = [...readdirSync(UI_FOLDER), ...readdirSync(`${UI_FOLDER}screens`).map((a) => `screens/${a}`)].filter((a) => a.endsWith('.css') && !['shell.css', 'brand.css'].includes(a));
     // The machine screens (issue 178): `tm-`.
-    for (const [arquivo, prefixo] of [['screens/workflows.css', 'wf-'], ['screens/session-detail-workflow.css', 'wfd-'], ['screens/dev-console.css', 'dev-'], ['screens/machine.css', 'tm-'], ['screens/agent-instructions.css', 'ins-'], ['screens/framework-install.css', 'fwi-']] as const) {
+    for (const [arquivo, prefixo] of [['screens/workflows.css', 'wf-'], ['screens/session-detail-workflow.css', 'wfd-'], ['screens/dev-console.css', 'dev-'], ['screens/machine.css', 'tm-'], ['screens/agent-instructions.css', 'ins-'], ['screens/framework-install.css', 'fwi-'], ['screens/adrs.css', 'adr-'], ['screens/connections.css', 'conn-'], ['screens/project-picker.css', 'pp-']] as const) {
       const minhas = [...classes(arquivo)].filter((c) => !daMoldura.has(c) && !SELOS.has(c));
       assert.deepEqual(minhas.filter((c) => !c.startsWith(prefixo) || (prefixo === 'wf-' && c.startsWith('wfd-'))), [], `${arquivo}: classe sem o prefixo ${prefixo}`);
       for (const outra of todos.filter((a) => a !== arquivo)) {

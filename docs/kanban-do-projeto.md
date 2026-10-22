@@ -19,8 +19,8 @@ O quadro segue a [decisão 0001](decisoes/0001-github-consulta-cache.md):
 
 ## Configuração
 
-- **Qual Project:** a variável `AHRENA_CONSOLE_PROJECT=dono/número`, sem padrão. No núcleo, use `createGithubProject({ project: { owner, number } })` (ver o [README do núcleo](../packages/nucleo/README.md#kanban-de-um-project)).
-- **Permissão:** o token do `gh` precisa do escopo `project` para ler e para mover. Sem ele, o painel mostra o erro com o comando que resolve:
+- **Qual Project:** o escolhido na própria tela do Kanban do projeto (#241, [decisão 0011](decisoes/0011-github-device-flow-keychain.md) §7), guardado nas preferências da instalação. `AHRENA_CONSOLE_PROJECT=dono/número`, quando definida, vence a escolha, com um aviso na tela. Não há Project padrão. No núcleo, use `createGithubProject({ project: { owner, number } })` (ver o [README do núcleo](../packages/nucleo/README.md#kanban-de-um-project)).
+- **Permissão:** a credencial precisa do escopo `project` para ler e para mover. Com a conexão do próprio console (a padrão), ela já é pedida; se faltar, a tela manda reconectar o GitHub em Conexões. Só quem escolheu a fonte `gh` (`AHRENA_CONSOLE_GITHUB_SOURCE=gh`) vê o comando:
 
   ```bash
   gh auth refresh -s project
@@ -41,41 +41,43 @@ Sem o painel, as mesmas rotas respondem direto do núcleo de teste: `GET /api/ka
 
 ## No núcleo (#80, wireframe C11)
 
-A API local do núcleo (`npm run api`, em `packages/nucleo`) serve o mesmo quadro para a interface em `/ui`, em pt-BR ([src/api/projeto.ts](../packages/nucleo/src/api/projeto.ts)):
+A API local do núcleo (`npm run api`, em `packages/nucleo`) serve o mesmo quadro para a interface em `/ui`, com as chaves em inglês e os textos de tela em pt-BR ([src/api/project.ts](../packages/nucleo/src/api/project.ts)):
 
 | Rota | O quê |
 | --- | --- |
-| `GET /api/projeto` | O quadro: `projeto`, `raias` (cada uma com os `cards`), `marcos`, `total`, `lidoEm`, `desatualizado`, `motivo` e `fonte` (`github` ou `demo`). `?forcar=1` é o botão Atualizar (mínimo de 30 s) |
-| `POST /api/projeto/mover` | `{ "itemId": "PVTI_…", "optionId": "<raia>" }`. Devolve `{ quadro, movido: { itemId, de, para } }`. Desfazer é outro mover com a raia `de` |
+| `GET /api/project` | O quadro: `project`, `lanes` (cada uma com os `cards`), `milestones`, `total`, `fetchedAt`, `stale`, `reason` e `source` (`github` ou `demo`). `?refresh=1` é o botão Atualizar (mínimo de 30 s) |
+| `POST /api/project/move` | `{ "itemId": "PVTI_…", "optionId": "<raia>" }`. Devolve `{ board, moved: { itemId, from, to } }`. Desfazer é outro mover com a raia `from` |
 
-Cada card traz o tipo da issue, número, título, marco, sub-issues (`feitas`/`total`), o PR (`numero`, `ci`: `ok`/`falhou`/`rodando`, `review`: `aprovado`/`ajustes`/`pendente`) e a raia (`raiaId`).
+Cada card traz o tipo da issue, número, título, marco, sub-issues (`done`/`total`), o PR (`number`, `ci`: `ok`/`failed`/`running`, `review`: `approved`/`changes-requested`/`pending`) e a raia (`laneId`).
 
-Os erros têm o corpo `{ "error": "...", "codigo": "..." }`:
+Os erros têm o corpo `{ "error": "...", "code": "..." }`:
 
-| Status | `codigo` | Quando |
+| Status | `code` | Quando |
 | --- | --- | --- |
-| 400 | `invalido` | Corpo ou ids fora do padrão |
-| 401 | `sem-escopo` | O token do `gh` não tem o escopo `project`; o corpo traz `"comando": "gh auth refresh -s project"` |
-| 404 | `item-desconhecido` | O item não está no Project |
-| 422 | `raia-desconhecida` | A opção não existe no campo Status |
-| 429 | `limitado` | O GitHub limitou e não há cache; com `Retry-After` |
-| 502 | `github-fora` / `github-recusou` | O GitHub falhou sem nada no cache (GET), ou recusou a mutação (mover) |
-| 503 | `desligado` | O núcleo subiu com `--sem-github` |
+| 400 | `invalid` | Corpo ou ids fora do padrão |
+| 401 | `no-scope` | A credencial não tem o escopo `project` (o corpo traz `"scope": "project"`). Na conexão do console, a mensagem manda reconectar em Conexões; na fonte `gh`, o corpo traz também `"command": "gh auth refresh -s project"` |
+| 409 | `github-not-connected` | O GitHub não está conectado (corpo `{ "error": "github-not-connected" }`, sem `code`); nada sai para o GitHub |
+| 404 | `unknown-item` | O item não está no Project |
+| 422 | `unknown-lane` | A opção não existe no campo Status |
+| 429 | `rate-limited` | O GitHub limitou e não há cache; com `Retry-After` |
+| 502 | `github-down` / `github-refused` | O GitHub falhou sem nada no cache (GET), ou recusou a mutação (mover) |
+| 503 | `off` | O núcleo subiu com `--no-github` |
+| 503 | `no-project` | Nenhum Project escolhido |
 
-Com o GitHub fora e o quadro no cache, o GET responde 200 com `desatualizado: true` e o `motivo`.
+Com o GitHub fora e o quadro no cache, o GET responde 200 com `stale: true` e o `reason`.
 
 **Origem.** Como as outras rotas, o núcleo recusa `Host` que não seja `127.0.0.1:<porta>` ou `localhost:<porta>` ([decisão 0003](decisoes/0003-responder-sessao.md)). O mover é a única escrita que aceita `Origin`, e só o da própria `/ui` (`http://<Host>`). Pede ainda `Content-Type: application/json` (415 sem ele) e corpo de até 4096 bytes (413).
 
-**Configuração.** O Project vem de `AHRENA_CONSOLE_PROJECT=dono/número`, com o token do `gh` e o cache no banco do núcleo. Sem a variável, as rotas respondem 503 `sem-projeto` e a tela mostra como escolher o Project. `--sem-github` desliga o quadro (503 `desligado`).
+**Configuração.** O Project é o escolhido na tela (`GET /api/project/options` lista os que a conta enxerga; `POST /api/project/selection` guarda a escolha). `AHRENA_CONSOLE_PROJECT=dono/número` vence a escolha quando definida. A credencial é a da conexão do console com o GitHub (#241), e o cache fica no banco do núcleo. Sem Project escolhido, as rotas respondem 503 `no-project` e a tela lista os Projects para escolher. `--no-github` desliga o quadro (503 `off`). O quadro diz de onde veio o Project em `selection.from` (`env`, `settings` ou `demo`) e traz `envOverride` quando a variável vence.
 
 **Demo.** A `--demo` traz um GitHub falso com o quadro do wireframe C11: o Project "Ahrena Console", as raias Backlog, Ready, In Progress, In Review e Done, e os 11 cards. Mover funciona em memória, até o processo sair:
 
 ```bash
 cd packages/nucleo
-npm run api -- --demo --cenario p4 --porta 4794
-curl -s http://127.0.0.1:4794/api/projeto
+npm run api -- --demo --scenario p4 --port 4794
+curl -s http://127.0.0.1:4794/api/project
 curl -s -X POST -H 'content-type: application/json' \
-  -d '{"itemId":"PVTI_simulado80","optionId":"e4f5a6b7"}' http://127.0.0.1:4794/api/projeto/mover
+  -d '{"itemId":"PVTI_simulado80","optionId":"e4f5a6b7"}' http://127.0.0.1:4794/api/project/move
 ```
 
-Os testes ([test/api/projeto.test.ts](../packages/nucleo/test/api/projeto.test.ts)) usam a leitura gravada do Project e um GitHub falso: nunca chamam a API real nem movem cards de verdade.
+Os testes ([test/api/project.test.ts](../packages/nucleo/test/api/project.test.ts)) usam a leitura gravada do Project e um GitHub falso: nunca chamam a API real nem movem cards de verdade.

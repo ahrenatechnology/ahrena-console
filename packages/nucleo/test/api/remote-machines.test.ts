@@ -76,8 +76,8 @@ describe('#176/AC-3 GET /api/machines with one remote', () => {
     const r = await get('/api/machines');
     assert.equal(r.status, 200);
     assert.deepEqual(await r.json(), [
-      { id: 'local', label: 'Esta máquina', state: 'connected', reason: null, version: 1, port: null, lastReadAt: null, alerts: 0 },
-      { id: 'ws-exemplo', label: 'Workstation', state: 'connected', reason: null, version: 1, port: remoteCore!.port, lastReadAt: READ_AT_ISO, alerts: 0 },
+      { id: 'local', label: 'Esta máquina', state: 'connected', reason: null, version: 1, port: null, lastReadAt: null, alerts: 0, reconnect: null },
+      { id: 'ws-exemplo', label: 'Workstation', state: 'connected', reason: null, version: 1, port: remoteCore!.port, lastReadAt: READ_AT_ISO, alerts: 0, reconnect: null },
     ]);
 
     const port = remoteCore!.port;
@@ -93,6 +93,7 @@ describe('#176/AC-3 GET /api/machines with one remote', () => {
       port,
       lastReadAt: READ_AT_ISO,
       alerts: 1,
+      reconnect: null,
     });
   });
 });

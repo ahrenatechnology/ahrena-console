@@ -1,11 +1,14 @@
 // Dashboard (C1, #27): os seis números, "precisam de você" em destaque, os agentes ativos com os
 // subagentes e a atividade recente. Lê `GET /api/dashboard` e `GET /api/attention` (#87).
-// O título da inbox conta o `total` da atenção (trava + sua vez), como o C1 e a barra de menus.
+// issue 245: the inbox counts only the blocked sessions (`blocked` of the attention, the menu bar number);
+// the idle ones go to a neutral row below it, with the reason in a light chip.
 //
 // As funções sem DOM (formatação e o que cada parte mostra) saem exportadas para o teste.
 
 import { header, el, icon } from '../dom.js';
 import { loading, error, errorBand, empty } from '../states.js';
+import { attentionOf, attentionOfItem, attentionPill, attentionTone, attentionDot, isBlocked, isIdle, reasonChip, statusWithoutAttention } from '../attention.js';
+import { openAction } from '../open-action.js';
 
 const STYLE = '/ui/dashboard.css';
 // As rotas do núcleo, num lugar só. A da atenção é a `ATTENTION_ROUTE` de src/api/attention-route.ts (#87):
@@ -15,12 +18,15 @@ export const ATTENTION_ROUTE = '/api/attention';
 /** Releitura depois de uma rajada de mudanças, e a releitura de fundo das idades ("2 min"). */
 const DEBOUNCE_MS = 400;
 const BACKGROUND_MS = 30_000;
-const IN_INBOX = 4;
+const IN_INBOX = 5;
+const IN_IDLE_ROW = 3;
 
-export const STATUS_LABEL = { active: 'Ativa', waiting: 'Esperando você', completed: 'Concluída', error: 'Com erro', abandoned: 'Abandonada' };
-const SUBAGENT_STATUS = { working: 'active', waiting: 'waiting', completed: 'completed', error: 'error' };
-// The `reason` values of `/api/attention` are the icon names.
-const REASON_ICON = new Set(['permission', 'question', 'plan', 'decision', 'error', 'your-turn', 'interrupted', 'no-prompt']);
+export const STATUS_LABEL = { active: 'Ativa', completed: 'Concluída', error: 'Com erro', abandoned: 'Abandonada' };
+// A subagent has no attention of its own (issue 245): a waiting one does not wait on the person, so it is active.
+const SUBAGENT_STATUS = { working: 'active', waiting: 'active', completed: 'completed', error: 'error' };
+/** The sessions screen filtered on the idle ones, and on the blocked ones. */
+export const IDLE_SESSIONS_HREF = '/ui/sessions?status=idle';
+export const BLOCKED_SESSIONS_HREF = '/ui/sessions?status=blocked';
 
 // ---------- Formatação ----------
 
@@ -62,9 +68,8 @@ const inSessions = (n) => `em ${plural(n, 'sessão', 'sessões')}`;
 /** Os seis cards, na ordem do C1. */
 export function cards(numbers) {
   const { sessions, agents, subagents, events, cost: c } = numbers;
-  const detail = [sessions.waiting ? `${sessions.waiting} esperando` : null, sessions.withError ? `${sessions.withError} com erro` : null].filter(Boolean);
   return [
-    { id: 'sessions', rotulo: 'Sessões', icone: 'sessions', cor: 'accent', valor: integer.format(sessions.total), extra: `${sessions.active} ${sessions.active === 1 ? 'ativa' : 'ativas'}`, sub: detail.length ? detail.join(' · ') : 'nenhuma esperando' },
+    { id: 'sessions', rotulo: 'Sessões', icone: 'sessions', cor: 'accent', valor: integer.format(sessions.total), extra: `${sessions.active} ${sessions.active === 1 ? 'ativa' : 'ativas'}`, sub: sessionsDetail(sessions) },
     { id: 'agents', rotulo: 'Agentes ativos', icone: 'bot', cor: 'active', valor: integer.format(agents.active), sub: inSessions(agents.sessions) },
     { id: 'subagents', rotulo: 'Subagentes ativos', icone: 'subagent', cor: 'accent', valor: integer.format(subagents.active), sub: inSessions(subagents.sessions) },
     { id: 'events-today', rotulo: 'Eventos hoje', icone: 'events', cor: 'waiting', valor: quantity(events.today), sub: `+${quantity(events.lastHour)} na última hora` },
@@ -80,21 +85,36 @@ export function cards(numbers) {
   ];
 }
 
+/** "5 precisam de você · 3 ociosas"; without either, "ninguém precisa de você". */
+export function sessionsDetail(sessions) {
+  const blocked = Number(sessions.blocked) || 0;
+  const idle = Number(sessions.idle) || 0;
+  const parts = [blocked ? `${blocked} ${blocked === 1 ? 'precisa' : 'precisam'} de você` : null, idle ? `${idle} ${idle === 1 ? 'ociosa' : 'ociosas'}` : null].filter(Boolean);
+  return parts.length ? parts.join(' · ') : 'ninguém precisa de você';
+}
+
+/** The blocked items of `/api/attention`, in its order (the oldest wait first). */
+export const blockedItems = (attention) => (attention?.items ?? []).filter((i) => isBlocked(attentionOfItem(i)));
+/** The idle items of `/api/attention`. */
+export const idleItems = (attention) => (attention?.items ?? []).filter((i) => isIdle(attentionOfItem(i)));
+/** How many need you: the `blocked` number of the route, or the blocked items. */
+export const blockedCount = (attention) => (Number.isInteger(attention?.blocked) ? attention.blocked : blockedItems(attention).length);
+/** How many are idle: the `idle` number of the route, or the idle items. */
+export const idleCount = (attention) => (Number.isInteger(attention?.idle) ? attention.idle : idleItems(attention).length);
+
 /**
  * Os cartões do "precisam de você": a ordem e o texto da `/api/attention`; o pedido ("Bash: npm run
  * migrate") e o modelo vêm do card do agente, quando a sessão está entre os ativos.
  */
 export function inboxCards(attention, agents) {
   const bySession = new Map((agents ?? []).map((a) => [a.session, a]));
-  return attention.items.slice(0, IN_INBOX).map((i) => {
+  return blockedItems(attention).slice(0, IN_INBOX).map((i) => {
     const machine = i.machine && typeof i.machine.id === 'string' ? { id: i.machine.id, label: typeof i.machine.label === 'string' && i.machine.label ? i.machine.label : i.machine.id } : null;
     // A remote session is not in this core's agents: its model would be another session's.
     const a = machine ? undefined : bySession.get(i.session);
     return {
       session: i.session,
-      reason: i.reason,
-      shortReason: i.shortReason,
-      urgent: i.level === 'needs',
+      attention: attentionOfItem(i),
       age: i.minutes < 1 ? 'agora' : `${i.minutes} min`,
       name: i.project ?? i.title,
       text: (i.reason === 'permission' && a?.task) || i.longReason,
@@ -103,19 +123,42 @@ export function inboxCards(attention, agents) {
       // and does not link.
       machine,
       href: machine ? null : `/ui/sessions/${encodeURIComponent(i.session)}`,
+      // issue 285: where the session opens (`{ target, command }`), for the icon beside "Abrir ›".
+      open: i.open ?? null,
     };
   });
 }
 
 export const inboxTitle = (total) => (total === 0 ? 'Ninguém precisa de você agora' : `${total} ${total === 1 ? 'precisa' : 'precisam'} de você`);
+export const idleTitle = (total) => `${total} ${total === 1 ? 'ociosa' : 'ociosas'}`;
+
+/** The idle row: the reason and the project of the first ones. */
+export function idleChips(attention) {
+  return idleItems(attention)
+    .slice(0, IN_IDLE_ROW)
+    .map((i) => ({ session: i.session, attention: attentionOfItem(i), name: i.project ?? i.title ?? '' }));
+}
 
 // ---------- Peças ----------
 
-const badge = (status) => el('span', { class: `badge b-${status}` }, el('span', { class: 'p' }), STATUS_LABEL[status] ?? status);
+const badge = (status) => el('span', { class: `badge b-${status}` }, el('span', { class: 'p' }), STATUS_LABEL[status] ?? '');
 
-function reasonChip(c) {
-  if (c.reason === 'error') return badge('error');
-  return el('span', { class: `reason${c.urgent ? '' : ' soft'}` }, icon(REASON_ICON.has(c.reason) ? c.reason : 'your-turn'), c.shortReason);
+/**
+ * The pill of a card or a row: the attention when there is one (Precisa de você, Ociosa, Com erro);
+ * a waiting one without it does not wait on the person and is active; the rest by status.
+ */
+export function statusPill(status, attention) {
+  if (attentionOf(attention)) return attentionPill(attention);
+  return badge(statusWithoutAttention(status));
+}
+
+/** The edge color of an agent card: the attention tone, or the status (waiting without attention is active). */
+const cardTone = (status, attention) => attentionTone(attention) ?? statusWithoutAttention(status);
+
+/** The edge class of an agent card: the two attention tones carry the screen prefix, the legacy ones keep `st-`. */
+export function cardToneClass(status, attention) {
+  const tone = cardTone(status, attention);
+  return tone === 'blocked' || tone === 'idle' ? `dash-st-${tone}` : `st-${tone}`;
 }
 
 function numberCard(c) {
@@ -129,27 +172,61 @@ function numberCard(c) {
   );
 }
 
-function inbox(attention, agents) {
-  const total = attention.total;
+function inbox(attention, agents, write) {
+  const total = blockedCount(attention);
   const title = el(
     'div',
     { class: 'ttl' },
     icon('bell'),
     el('span', { class: total ? 'c-waiting' : 'c-dim' }, inboxTitle(total)),
-    el('a', { class: 'r', href: '/ui/sessions' }, 'esperando e com erro · urgentes primeiro', icon('chevron-right')),
+    el('a', { class: 'r', href: BLOCKED_SESSIONS_HREF }, 'travadas até você agir · quem espera há mais tempo primeiro', icon('chevron-right')),
   );
   if (!total) return el('section', { class: 'card inbox calm', 'aria-label': 'Precisam de você' }, title);
   const mini = inboxCards(attention, agents).map((c) =>
     el(
-      c.href ? 'a' : 'div',
-      { class: 'card mini', href: c.href, 'data-session': c.session, 'data-machine': c.machine?.id },
-      el('div', { class: 'l1' }, reasonChip(c), el('span', { class: 'age' }, c.age)),
+      'div',
+      { class: 'card mini dash-mini', 'data-session': c.session, 'data-machine': c.machine?.id },
+      el('div', { class: 'l1' }, reasonChip(c.attention, { withError: true })),
       el('div', { class: 'n trunc' }, c.name),
       el('div', { class: 'x trunc' }, c.text),
-      el('div', { class: 'foot' }, c.machine ? el('span', { class: 'trunc', title: `Sessão da ${c.foot}` }, icon('server'), ` ${c.foot}`) : el('span', {}, c.foot), c.href ? el('b', {}, 'Abrir ›') : null),
+      // C1 (issue 245): the model and the age in the foot, "Opus 5.5 · 2 min", beside "Abrir ›".
+      el(
+        'div',
+        { class: 'foot' },
+        c.machine ? el('span', { class: 'trunc', title: `Sessão da ${c.foot}` }, icon('server'), ` ${c.foot} · ${c.age}`) : el('span', { class: 'trunc' }, [c.foot, c.age].filter(Boolean).join(' · ')),
+        c.href ? miniActions(c, write) : null,
+      ),
     ),
   );
   return el('section', { class: 'card inbox', 'aria-label': 'Precisam de você' }, title, el('div', { class: 'grid4' }, ...mini));
+}
+
+/**
+ * C71 (issue 285): the icon that opens the session where it runs, then "Abrir ›", the link to the
+ * Detail stretched over the whole card (the card is a div, so the button is never inside a link).
+ * A remote card has neither: its foot already names the machine, and this core has no Detail for it.
+ */
+function miniActions(c, write) {
+  return el(
+    'span',
+    { class: 'dash-mini-actions' },
+    openAction({ id: c.session, open: c.open }, { size: 'icon', write }),
+    // Each link says which session it opens, not five "Abrir ›" in a row.
+    el('a', { class: 'dash-open-link', href: c.href, 'aria-label': c.name ? `Abrir ${c.name}` : 'Abrir a sessão' }, 'Abrir ›'),
+  );
+}
+
+/** The idle ones, apart and neutral: "3 ociosas · sem pressa", a light chip per session and the link. */
+function idleRow(attention) {
+  const total = idleCount(attention);
+  if (!total) return null;
+  return el(
+    'section',
+    { class: 'card dash-idle', 'aria-label': 'Ociosas' },
+    el('span', { class: 'dash-idle-title' }, attentionDot('idle'), el('b', {}, idleTitle(total)), ' · sem pressa'),
+    ...idleChips(attention).map((c) => el('span', { class: 'dash-idle-item', 'data-session': c.session }, reasonChip(c.attention), el('span', { class: 'mono trunc' }, c.name))),
+    el('a', { class: 'dash-idle-link', href: IDLE_SESSIONS_HREF }, 'Ver em Sessões', icon('chevron-right')),
+  );
 }
 
 function tree(a) {
@@ -163,7 +240,7 @@ function tree(a) {
         el('span', { class: 'av' }, icon('subagent')),
         el('div', { class: 'trunc' }, el('b', {}, s.type ?? 'Subagente'), s.task ? el('span', { class: 'meta' }, ` · ${s.task}`) : null),
         el('span', { class: 'age' }, age(s.until ?? s.since)),
-        badge(SUBAGENT_STATUS[s.status] ?? 'active'),
+        statusPill(SUBAGENT_STATUS[s.status] ?? 'active', null),
       ),
     ),
   );
@@ -179,13 +256,13 @@ function agentCard(a, expanded, toggleOne) {
   const messages = a.messages.length ? a.messages : ['(sem mensagens)'];
   const card = el(
     'a',
-    { class: `card ac st-${a.status}`, href: `/ui/sessions/${encodeURIComponent(a.session)}`, 'data-session': a.session },
+    { class: `card ac ${cardToneClass(a.status, a.attention)}`, href: `/ui/sessions/${encodeURIComponent(a.session)}`, 'data-session': a.session },
     el(
       'div',
       { class: 'l1' },
       el('span', { class: 'av' }, icon('bot')),
       el('div', { class: 'trunc' }, el('div', { class: 'tt trunc' }, `Agente principal · ${a.title}`), el('div', { class: 'meta trunc' }, [a.project, plural(n, 'subagente', 'subagentes'), plural(a.turns, 'turno', 'turnos')].filter(Boolean).join(' · '))),
-      badge(a.status),
+      statusPill(a.status, a.attention),
     ),
     el('blockquote', {}, ...messages.map((m) => el('span', { class: 'trunc' }, m))),
     el(
@@ -224,7 +301,7 @@ function recentActivity(activity) {
         el(
           'a',
           { class: 'row', href: `/ui/sessions/${encodeURIComponent(l.session)}`, 'data-session': l.session },
-          badge(l.status),
+          statusPill(l.status, l.attention),
           el('span', { class: 'trunc' }, l.text),
           l.project ? el('span', { class: 'o mono trunc' }, l.project) : null,
           el('span', { class: 't' }, age(l.at)),
@@ -259,10 +336,10 @@ export async function mount(area, ctx) {
 
   function paint({ dashboard, atencao: attention }) {
     const parts = [head, el('div', { class: 'stats' }, ...cards(dashboard.numbers).map(numberCard))];
-    if (attention.ok) parts.push(inbox(attention.valor, dashboard.agents));
+    if (attention.ok) parts.push(inbox(attention.valor, dashboard.agents, ctx.write), idleRow(attention.valor));
     else parts.push(errorBand({ title: 'Não deu para ler quem precisa de você.', text: attention.erro.message, action: { label: 'Tentar de novo', onClick: () => draw() } }));
     parts.push(el('div', { class: 'two' }, activeAgents(dashboard.agents, expanded, toggleOne), recentActivity(dashboard.activity)));
-    area.replaceChildren(...parts);
+    area.replaceChildren(...parts.filter(Boolean));
   }
 
   async function draw() {
@@ -277,7 +354,8 @@ export async function mount(area, ctx) {
     }
     if (a.status === 'rejected' && a.reason?.name === 'AbortError') return;
     const attention = a.status === 'fulfilled' ? { ok: true, valor: a.value } : { ok: false, erro: a.reason };
-    ctx.counter('dashboard', attention.ok ? attention.valor.total : 0);
+    // The sidebar number counts only who needs you (issue 245), as the menu bar.
+    ctx.counter('dashboard', attention.ok ? blockedCount(attention.valor) : 0);
     last = { dashboard: d.value, atencao: attention };
     paint(last);
   }

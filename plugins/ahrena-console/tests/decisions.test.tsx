@@ -284,7 +284,7 @@ test('P10: the resume banner shows only when the core sends it, in both widths',
   await narrow.press({ key: 'show-resume' })
   expect(await narrow.find({ key: 'decisions-scope' })).toBeDefined()
   await narrow.unmount()
-  expect(f.status.at(-1)).toBe('ahrena-console ◐ No prompt · 4 decisões herdadas · 2 precisam de você')
+  expect(f.status.at(-1)).toBe('ahrena-console ◌ Ociosa · No prompt · 4 decisões herdadas · 2 precisam de você')
 })
 
 test('#131: clicking the title opens the whole decision, with "← voltar" to the list', async ($, on) => {

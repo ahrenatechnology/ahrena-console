@@ -1,6 +1,6 @@
 {
   "name": "@ahrena-console/nucleo",
-  "version": "0.0.1",
+  "version": "0.0.6",
   "description": "Núcleo do Ahrena Console: modelo de dados, portas e adaptadores",
   "license": "Apache-2.0",
   "private": true,
@@ -8,11 +8,9 @@
   "exports": {
     ".": "./src/index.ts",
     "./simulator": "./src/simulator/index.ts",
-    "./simulador": "./src/simulator/index.ts",
     "./api": "./src/api/index.ts",
     "./mcp": "./src/mcp/index.ts",
-    "./owner": "./src/owner/index.ts",
-    "./dono": "./src/owner/index.ts"
+    "./owner": "./src/owner/index.ts"
   },
   "engines": {
     "node": ">=24"
@@ -20,11 +18,9 @@
   "scripts": {
     "test": "node --test --disable-warning=ExperimentalWarning \"test/**/*.test.ts\"",
     "simulate": "node --disable-warning=ExperimentalWarning src/simulator/cli.ts",
-    "simular": "node --disable-warning=ExperimentalWarning src/simulator/cli.ts",
     "api": "node --disable-warning=ExperimentalWarning src/api/cli.ts",
     "mcp": "node --disable-warning=ExperimentalWarning src/mcp/cli.ts",
-    "core": "node --disable-warning=ExperimentalWarning src/owner/cli.ts",
-    "nucleo": "node --disable-warning=ExperimentalWarning src/owner/cli.ts"
+    "core": "node --disable-warning=ExperimentalWarning src/owner/cli.ts"
   },
   "devDependencies": {
     "@modelcontextprotocol/sdk": "1.20.2"

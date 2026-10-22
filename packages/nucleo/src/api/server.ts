@@ -17,7 +17,7 @@
 // | `GET /api/events`             | The activity feed, all sessions (api/events.ts, #94)      |
 // | `GET /api/attention`          | Who needs you, across all accounts (the tray, #87)        |
 // | `GET /api/dashboard`          | The Dashboard's numbers, active agents and activity (C1, #27) |
-// | `GET /api/analytics` and `/api/analytics/cost` | The Analytics screen (`?tz=`, `?days=`; api/analytics-route.ts, #95 and #32) |
+// | `GET /api/analytics`, `/api/analytics/cost` and `/api/analytics/delivery` | The Analytics screen (`?tz=`, `?days=`, `?groupBy=`, `?key=`; api/analytics-route.ts, #95, #32 and #266) |
 // | `GET /api/sessions`           | The Sessions screen's list, paginated and filtered (api/sessions.ts, #28) |
 // | `GET /api/history`            | The ended sessions by day (`?before=`, `?days=`, `?search=`; api/history.ts, #33) |
 // | `GET /ui` and `/ui/*`         | The console's interface (api/ui.ts, folder `ui/`, #26)    |
@@ -26,6 +26,7 @@
 // | `GET /api/project`            | The GitHub Project kanban (api/project.ts, #80); `?refresh=1` re-reads |
 // | `POST /api/project/move`      | Changes a card's Status: `{ itemId, optionId }` (api/project.ts) |
 // | `GET /api/sessions/<id>` and `/agents`, `/conversation`, `/events` | The session Detail in the /ui (api/session-detail.ts, #29 and #30) |
+// | `POST /api/sessions/<id>/open` | Opens the session where it runs: Claude Desktop, a terminal resuming it, or its live terminal brought forward; the núcleo picks the target (api/session-open-route.ts, #285) |
 // | `GET /api/decisions`, `GET /api/sessions/<id>/decisions` and `POST /api/decisions/<id>/promote` | The /ui's Decisions page and tab and the "Promover a registro" (api/decisions-ui.ts, #103) |
 // | `GET /api/repos` and `/api/repos/<owner>/<repo>` | GitHub repositories and metrics (`?period=`, `?refresh=1`; api/repos.ts, #104, #105) |
 // | `GET /api/agent-instructions/<owner>/<repo>` and `/file?path=` | A repository's Instructions tab: instruction files, `@imports`, `.claude/` and `.mcp.json` (`?refresh=1`; api/agent-instructions.ts, #183) |
@@ -33,15 +34,22 @@
 // | `GET /api/agent-config`, `GET` and `POST /api/agent-config/skill` | The Agent Config screen (api/agent-config.ts, src/agent-config, #63): what is in the configuration folders and editing a skill, with backup |
 // | `GET /api/machines`           | The machines: this one and the remote ones, with state and alerts (api/telemetry.ts, #175) |
 // | `GET /api/telemetry`          | One machine's telemetry: current reading, series and alerts (`?machine=`, `?hours=1|12`; #175) |
+// | `POST /api/machines/<id>/reconnect` and `DELETE` | Reconnect a remote machine with the command of machines.json, and Cancel (api/telemetry.ts, #244) |
+// | `GET /api/connections`        | The console's own GitHub connection: `{ github: <status> }` (api/connections-route.ts, #241) |
+// | `POST /api/connections/github/start`, `/cancel`, `/disconnect`, `/source` | Device flow, Cancel, Disconnect and the credential source (#241, decision 0011) |
+// | `GET /api/project/options`    | The Projects the account sees, to choose the kanban's (`?refresh=1`; api/project.ts, #241) |
+// | `POST /api/project/selection` | Stores the chosen Project: `{ owner, number, field? }` (#241) |
 //
-// The old Portuguese routes and query parameters (`/api/painel/<id>`, `/api/sessao/<id>`, `/abrir/<id>`,
-// `/api/atencao`, `/api/mudancas?desde=&espera=`…) answer as aliases of these, with the same response:
-// `normalizeLegacyUrl` (api/legacy-routes.ts, the only place that knows them) runs before the routing
-// (issue #173, phase 1). They leave in phase 6, after the published mod and the installed app migrate.
-// Since phase 2b the JSON is English, and an old route still answers its old body and takes its old
-// request body: `handle` sets the route's back-translator (`legacyResponseFor`) on the response, and
-// `send` applies it to every JSON it writes, errors included; the writes read the body through
-// `legacyRequestBody`.
+// #241 (decision 0011 §6): the five writes `POST /api/connections/github/(start|cancel|disconnect|source)`
+// and `POST /api/project/selection` are accepted ONLY from the /ui itself: exact path, our Host, `Origin`
+// exactly `http://<Host>`, JSON, at most 4 KiB, no cross-site or same-site `Sec-Fetch-Site`. A request
+// without `Origin` is 403 there, unlike the other writes. While GitHub is not connected, every
+// GitHub-backed screen route answers 409 `{ "error": "github-not-connected" }` without calling GitHub.
+// `GET /api/project/options` spends GitHub quota: a browser saying `Sec-Fetch-Site: cross-site` or
+// `same-site` gets 403 before that gate. The connection and the screens are wired in api/core-github.ts.
+//
+// The old Portuguese routes and query parameters (the panel, open, attention and changes ones…) were
+// aliases of these until phase 6 of #173 (decision 0009): now they are 404 like any unknown path.
 //
 // `?local=`, `?account=`, `?org=`, `?model=` and `?cwd=` on the panel are what it reads from its own session;
 // `?decisions=<scope>` brings the open decision list in the same request.
@@ -50,18 +58,20 @@
 // even on a same-origin `fetch`). A write with `Origin` is still refused, except three, only with `Origin`
 // exactly `http://<Host>` and the exact path (no query): the Detail's "Abrir no Claude Desktop",
 // `POST /open/<local_…>`, the project Kanban's `POST /api/project/move` (api/project.ts) and the
-// decisions through the /ui (#103), `POST /api/decisions/<id>/(confirm|dismiss|adjust|undo|promote)`, 
-// the Agent Config screen's `POST /api/agent-config/skill` (api/agent-config.ts) and the framework
-// install's `POST /api/framework-install/<owner>/<repo>` (api/framework-install.ts, #184). The old aliases
-// (`/abrir/…`, `/api/projeto/mover`, `/api/decisoes/<id>/<action>`) go through the same rules.
+// decisions through the /ui (#103), `POST /api/decisions/<id>/(confirm|dismiss|adjust|undo|promote)`,
+// the "Abrir no Claude Desktop / no terminal / Ir para o terminal" of #285, `POST /api/sessions/<uuid>/open`
+// (api/session-open-route.ts), the Agent Config screen's `POST /api/agent-config/skill` (api/agent-config.ts), the framework
+// install's `POST /api/framework-install/<owner>/<repo>` (api/framework-install.ts, #184), and the machine
+// screen's Reconnect and Cancel, `POST` and `DELETE /api/machines/<id>/reconnect` (api/telemetry.ts, #244,
+// decision 0012).
 // An outside site cannot get that `Origin`, nor send JSON without the CORS preflight, and the core does
 // not answer CORS. Writing to the decisions also requires `Content-Type: application/json` and the body
-// `{ "session": "<id>" }` (the old `{ "sessao" }` is still read, on every path), and it only reaches a
+// `{ "session": "<id>" }`, and it only reaches a
 // decision that session sees, from its account.
 
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import type { AddressInfo, Server as NetServer } from 'node:net';
-import { allowedLocalRequest, createHookRoute, HOOKS_PATH, rewriteJsonBodies, send, type HookRouteOptions } from '../ingest/hooks/receiver.ts';
+import { allowedLocalRequest, createHookRoute, HOOKS_PATH, send, type HookRouteOptions } from '../ingest/hooks/receiver.ts';
 import type { ChangeCursor } from '../changes/cursor.ts';
 import { CHANGES_ROUTE, serveChanges } from '../changes/http.ts';
 import { ErroDaDecisao, ESCOPOS_DAS_DECISOES, type AcaoNaDecisao } from './decisions.ts';
@@ -80,19 +90,26 @@ import { responderKanban, KANBAN_ROUTE, type QuadroKanban } from './kanban.ts';
 import { EVENTS_ROUTE, responderEventos, type FeedDeEventos } from './events.ts';
 import { agentConfigWriteFromSameOrigin, AGENT_CONFIG_ROUTE, type AgentConfigRoute } from './agent-config.ts';
 import type { McpServer } from '../mcp/protocol.ts';
-import { criarRotaDoProjeto, ehDoProjeto, mesmaOrigemMovendo, type OpcoesDoProjeto } from './project.ts';
+import { criarRotaDoProjeto, ehDoProjeto, mesmaOrigemMovendo, PROJECT_OPTIONS_ROUTE, type OpcoesDoProjeto } from './project.ts';
 import { DETAIL_ROUTE, type LeiturasDoDetalhe } from './session-detail.ts';
 import type { FleetReader } from '../mcp/fleet.ts';
-import { montarAtencao, ATTENTION_ROUTE, type RemoteAttentionSource } from './attention-route.ts';
+import { montarAtencao, remoteAttentionItems, ATTENTION_ROUTE, type RemoteAttentionSource } from './attention-route.ts';
+import { SessionOpenDescriber } from './session-open.ts';
+import { createSessionOpenRoute, SESSION_OPEN_FROM_UI, SESSION_OPEN_ROUTE } from './session-open-route.ts';
+import type { TerminalFocuser, TerminalOpener } from './terminal-launch.ts';
 import { montarDashboard, DASHBOARD_ROUTE } from './dashboard-route.ts';
 import { RotaAnalytics } from './analytics-route.ts';
-import { legacyRequestBody, legacyResponseFor, normalizeLegacyPath, normalizeLegacyUrl, rawPathnameOf } from './legacy-routes.ts';
 import { REPOS_ROUTE, type RotaDosRepos } from './repos.ts';
 import { AGENT_INSTRUCTIONS_ROUTE, type AgentInstructionsRoute } from './agent-instructions.ts';
 import { FRAMEWORK_INSTALL_ROUTE, frameworkInstallWriteFromSameOrigin, type FrameworkInstallRoute } from './framework-install.ts';
+import { ADRS_ROUTE, PDRS_ROUTE, type DecisionsRoute } from './adrs.ts';
 import { DEV_CONSOLE_ROUTE, respondDevConsole, type DevConsole } from './dev-console.ts';
-import { isTelemetryRoute, respondTelemetry } from './telemetry.ts';
+import { isTelemetryRoute, reconnectFromSameOrigin, RECONNECT_ROUTE, respondReconnect, respondTelemetry } from './telemetry.ts';
+import type { ReconnectControl } from '../telemetry/reconnect.ts';
 import type { TelemetryService } from '../telemetry/service.ts';
+import { fromAnotherSite, fromOwnUi } from './same-origin.ts';
+import { CONNECTIONS_ROUTE, PROJECT_SELECTION_ROUTE, respondConnections, respondProjectSelection, STRICT_WRITE_ROUTES, strictWriteRefusal, type ProjectSelectionTarget } from './connections-route.ts';
+import type { GithubConnection } from '../github/connection/connection.ts';
 
 export { API_VERSION };
 
@@ -116,6 +133,17 @@ export interface ApiOptions {
    * `POST /open/<local_…>` answers 501 and the panel keeps the fallback link.
    */
   openInDesktop?: ((url: string) => Promise<void>) | null;
+  /**
+   * #285: the `open` of the wall, the attention items and `POST /api/sessions/<id>/open`, with this
+   * machine's live `claude` processes. Without it, no session is `terminal-live`.
+   */
+  openDescriber?: SessionOpenDescriber;
+  /** #285: opens a terminal resuming a session; without it, a terminal session gets 501 with the command. */
+  openTerminal?: TerminalOpener | null;
+  /** #285: brings forward the terminal of a live session; without it, 409 with the command. */
+  focusTerminal?: TerminalFocuser | null;
+  /** #285: the Claude Desktop's `local_…` of a session for the open route; default the panel builder's index. */
+  localOf?: (sessionId: string) => Promise<string | null> | string | null;
   /** O servidor MCP em `/mcp` (src/mcp). Sem ele, `/mcp` dá 404. */
   mcp?: McpServer;
   /** The commit of the running code, in `/api/overview`: whoever starts another core compares (src/owner). */
@@ -130,8 +158,8 @@ export interface ApiOptions {
   events?: FeedDeEventos;
   /** The MCP fleet reader; turns on `GET /api/attention`. */
   fleet?: FleetReader;
-  /** The remote machines whose sessions also enter `GET /api/attention` (#176). */
-  remoteAttention?: readonly RemoteAttentionSource[];
+  /** The remote machines whose sessions also enter `GET /api/attention` (#176); a function follows machines.json live (#244). */
+  remoteAttention?: readonly RemoteAttentionSource[] | (() => readonly RemoteAttentionSource[]);
   /** A tela Analytics (#95, #32); liga `GET /api/analytics` e `/api/analytics/cost`. */
   analytics?: RotaAnalytics;
   /** The Sessions screen's list; turns on `GET /api/sessions`. */
@@ -148,17 +176,41 @@ export interface ApiOptions {
   agentInstructions?: AgentInstructionsRoute;
   /** Instalar o Ahrena Framework num repositório por PR (api/framework-install.ts, #184); sem ela, `/api/framework-install` dá 404. */
   frameworkInstall?: FrameworkInstallRoute;
-  /**
-   * Demo only (#173): rewrites the old simulator session ids of a URL to the current ones
-   * (src/simulator/legacy-ids.ts), after the old routes became the new ones.
-   */
-  demoUrl?: (url: URL) => URL;
+  /** As ADRs e as PDRs dos repositórios (api/adrs.ts, #174); sem ela, `/api/adrs` e `/api/pdrs` dão 404. */
+  decisions?: DecisionsRoute;
   /** The Dev Console (#177); turns on `GET /api/dev-console`. */
-  devConsole?: DevConsole;
+  devConsole?: Pick<DevConsole, 'overview' | 'view'>;
   /** The Agent Config screen (`createAgentConfigRoute`); without it, `/api/agent-config` gives 404. */
   agentConfig?: AgentConfigRoute;
   /** Machine telemetry (#175); without it, `/api/machines` and `/api/telemetry` give 404. */
   telemetry?: TelemetryService | null;
+  /** The reconnect of the remote machines (#244); without it, `POST /api/machines/<id>/reconnect` gives 404 or 409. */
+  reconnect?: ReconnectControl | null;
+  /** The console's own GitHub connection (#241); turns on `/api/connections` and its writes. */
+  connection?: GithubConnection | null;
+  /** Where `POST /api/project/selection` stores the chosen Project (#241); without it, 503 `off`. */
+  projectSelection?: ProjectSelectionTarget | null;
+  /**
+   * #241: whether GitHub is connected (the connection's `connected()`, no network). When given and false,
+   * every GitHub-backed screen route answers 409 `github-not-connected` before any GitHub call. Not
+   * given under --no-github, so those routes keep their `off` / `no-github` answers.
+   */
+  githubConnected?: (() => Promise<boolean>) | null;
+}
+
+/** The GitHub-backed screen routes the 409 `github-not-connected` gate covers (#241). */
+export function isGithubScreenRoute(pathname: string): boolean {
+  const under = (base: string) => pathname === base || pathname.startsWith(`${base}/`);
+  return (
+    under(REPOS_ROUTE) ||
+    pathname.startsWith(`${AGENT_INSTRUCTIONS_ROUTE}/`) ||
+    under(ADRS_ROUTE) ||
+    under(PDRS_ROUTE) ||
+    pathname === DEV_CONSOLE_ROUTE ||
+    (ehDoProjeto(pathname)) ||
+    pathname.startsWith(`${FRAMEWORK_INSTALL_ROUTE}/`) ||
+    pathname === '/api/analytics/delivery'
+  );
 }
 
 /** The `local_<uuid>` id of the Claude Desktop index, and nothing else. */
@@ -189,33 +241,35 @@ const PARAM = /^[A-Za-z0-9_.\[\]-]{1,64}$/;
 const CWD = /^\/[^\0\n]{0,1023}$/;
 const MAX_BODY = 4096;
 
-/** The request comes from our own `/ui`: `Origin` equal to `http://<Host>`, and the Host is ours. */
-function fromOwnUi(req: IncomingMessage, port: number): boolean {
-  const host = req.headers.host;
-  const origin = req.headers.origin;
-  if (typeof origin !== 'string') return false;
-  if (host !== `127.0.0.1:${port}` && host !== `localhost:${port}`) return false;
-  return origin === `http://${host}`;
-}
-
 /** Our own `/ui` reading: a same-origin `GET`. */
 const sameOriginRead = (req: IncomingMessage, port: number): boolean => req.method === 'GET' && fromOwnUi(req, port);
 
 /**
- * The Detail's "Abrir no Claude Desktop": only `POST /open/<local_…>` (or the alias `/abrir/<local_…>`)
- * from the same origin, with the raw URL exactly like that (no query, no `..`). The rest of decision 0003
+ * The Detail's "Abrir no Claude Desktop": only `POST /open/<local_…>` from the same origin, with the raw URL exactly like that (no query, no `..`). The rest of decision 0003
  * holds as in the other writes: JSON (`openDirect` checks it) and the strict id.
  */
 const sameOriginOpen = (req: IncomingMessage, port: number): boolean =>
-  req.method === 'POST' && /^\/open\/local_[0-9a-f-]{36}$/.test(normalizeLegacyPath(req.url ?? '')) && fromOwnUi(req, port);
+  req.method === 'POST' && /^\/open\/local_[0-9a-f-]{36}$/.test(req.url ?? '') && fromOwnUi(req, port);
+
+/** #285's open button: only `POST /api/sessions/<uuid>/open`, the exact raw path (a query gives 403), from the same origin. */
+const sameOriginSessionOpen = (req: IncomingMessage, port: number): boolean =>
+  req.method === 'POST' && SESSION_OPEN_FROM_UI.test(req.url ?? '') && fromOwnUi(req, port);
+
+/** `decodeURIComponent`, or the raw text when it is malformed (the id check then refuses it). */
+function decodeSegment(s: string): string {
+  try {
+    return decodeURIComponent(s);
+  } catch {
+    return s;
+  }
+}
 
 /**
- * Our own `/ui` deciding (#103): only `POST /api/decisions/<id>/<action>` (or the alias
- * `/api/decisoes/<id>/<ação>`), with the exact raw path (a query gives 403) and from the same origin. The id
+ * Our own `/ui` deciding (#103): only `POST /api/decisions/<id>/<action>`, with the exact raw path (a query gives 403) and from the same origin. The id
  * starts with an alphanumeric: `/api/decisions/../confirm` does not pass. The mandatory JSON stays with the handler (415).
  */
 const sameOriginDecision = (req: IncomingMessage, port: number): boolean =>
-  req.method === 'POST' && DECISION_WRITE_FROM_UI.test(normalizeLegacyPath(req.url ?? '')) && fromOwnUi(req, port);
+  req.method === 'POST' && DECISION_WRITE_FROM_UI.test(req.url ?? '') && fromOwnUi(req, port);
 
 /** The decision list scope of a parameter, or `null`. */
 const scopeOf = (v: string | null): PanelDecisionScope | null => (ESCOPOS_DAS_DECISOES.includes(v as PanelDecisionScope) ? (v as PanelDecisionScope) : null);
@@ -259,7 +313,24 @@ export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
   const hooks = createHookRoute(opts.hooks);
   const mcp = opts.mcp ? createMcpRoute(opts.mcp) : null;
   const projectRoute = criarRotaDoProjeto(opts.project ?? { kanban: null, fonte: 'github', log });
-  const wall = muralDoPainel(opts.panelBuilder);
+  const openDescriber = opts.openDescriber ?? new SessionOpenDescriber();
+  const wall = muralDoPainel(opts.panelBuilder, { open: openDescriber });
+  const remotes = (): readonly RemoteAttentionSource[] => (typeof opts.remoteAttention === 'function' ? opts.remoteAttention() : (opts.remoteAttention ?? []));
+  const sessionOpen = createSessionOpenRoute({
+    storage: opts.panelBuilder.storage,
+    localOf:
+      opts.localOf ??
+      (async (id) => {
+        await opts.panelBuilder.atualizarFontes();
+        return opts.panelBuilder.localDe(id);
+      }),
+    describer: openDescriber,
+    openInDesktop: opts.openInDesktop,
+    openTerminal: opts.openTerminal,
+    focusTerminal: opts.focusTerminal,
+    isRemote: (id) => remotes().some((r) => remoteAttentionItems(r.attention(), r).some((i) => i.session === id)),
+    log,
+  });
   const counters = { requests: 0, panel: 0, panelMs: 0 };
   let port = 0;
 
@@ -282,8 +353,7 @@ export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
   }
 
   // A write: JSON only, with the session in the body; the panel builder checks the session sees the decision. The body
-  // is `{ session, text }`; the old `{ sessao, texto }` is read too, on the new path as well (the old
-  // path translates it through `legacyRequestBody`), so a client can move to the new route first.
+  // is `{ session, text }`.
   async function decide(req: IncomingMessage, res: ServerResponse, id: string, action: AcaoNaDecisao, url: URL) {
     if (!/^application\/json\b/i.test(req.headers['content-type'] ?? '')) return send(res, 415, { error: 'use application/json' });
     if (!ID.test(id)) return send(res, 400, { error: 'id de decisão inválido' });
@@ -292,9 +362,9 @@ export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
     let session: unknown;
     let adjustment: unknown;
     try {
-      const body = legacyRequestBody(rawPathnameOf(req.url), JSON.parse(text)) as { session?: unknown; text?: unknown; sessao?: unknown; texto?: unknown } | null;
-      session = body?.session ?? body?.sessao;
-      adjustment = body?.text ?? body?.texto;
+      const body = JSON.parse(text) as { session?: unknown; text?: unknown } | null;
+      session = body?.session;
+      adjustment = body?.text;
     } catch {
       return send(res, 400, { error: 'JSON inválido' });
     }
@@ -334,24 +404,25 @@ export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
 
   async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
     counters.requests++;
-    // The old routes and parameters become the new ones here, before any check (api/legacy-routes.ts).
-    const raw = new URL(req.url ?? '/', `http://127.0.0.1:${port}`);
-    const normalized = normalizeLegacyUrl(raw);
-    const url = opts.demoUrl ? opts.demoUrl(normalized) : normalized;
-    // An old route answers its old body: every JSON written from here on, errors included, goes
-    // through its back-translator (new → old keys and values).
-    const toLegacy = legacyResponseFor(raw.pathname);
-    if (toLegacy) rewriteJsonBodies(res, toLegacy);
-    if (!allowedLocalRequest(req, port) && !sameOriginRead(req, port) && !sameOriginOpen(req, port) && !mesmaOrigemMovendo(req, port) && !sameOriginDecision(req, port) && !agentConfigWriteFromSameOrigin(req, port) && !frameworkInstallWriteFromSameOrigin(req, port)) return send(res, 403, { error: 'origem não permitida' });
-    // Demo: a /ui page asked by an old session id goes to its new URL (query kept), so the page and
-    // its live refresh work with the current id.
-    if (url !== normalized && url.pathname !== normalized.pathname && req.method === 'GET' && url.pathname.startsWith('/ui/')) {
-      res.writeHead(302, { location: `${url.pathname}${url.search}`, 'cache-control': 'no-store', 'content-length': 0 });
-      return void res.end();
+    const url = new URL(req.url ?? '/', `http://127.0.0.1:${port}`);
+    // #241: the five writes only the /ui itself makes, checked before anything else.
+    if (STRICT_WRITE_ROUTES.has(url.pathname)) {
+      const refusal = strictWriteRefusal(req, port, url.pathname);
+      if (refusal) return send(res, refusal.status, refusal.body);
+      if (url.pathname === PROJECT_SELECTION_ROUTE) return respondProjectSelection(req, res, opts.projectSelection ?? null);
+      if (!opts.connection) return send(res, 404, { error: 'not-found' });
+      return respondConnections(req, res, url.pathname, opts.connection);
     }
+    if (!allowedLocalRequest(req, port) && !sameOriginRead(req, port) && !sameOriginOpen(req, port) && !sameOriginSessionOpen(req, port) && !mesmaOrigemMovendo(req, port) && !sameOriginDecision(req, port) && !agentConfigWriteFromSameOrigin(req, port) && !frameworkInstallWriteFromSameOrigin(req, port) && !reconnectFromSameOrigin(req, port)) return send(res, 403, { error: 'origem não permitida' });
+    // The Project list spends GitHub quota and the connection status is the /ui's: another site's page
+    // never gets either, connected or not (#241 review 2).
+    if ((url.pathname === PROJECT_OPTIONS_ROUTE || url.pathname === CONNECTIONS_ROUTE) && fromAnotherSite(req)) return send(res, 403, { error: 'forbidden' });
+    if (opts.githubConnected && isGithubScreenRoute(url.pathname) && !(await opts.githubConnected())) return send(res, 409, { error: 'github-not-connected' });
     if (url.pathname.startsWith(HOOKS_PATH)) return hooks(req, res);
     const openMatch = OPEN.exec(url.pathname);
     if (openMatch && req.method === 'POST') return openDirect(req, res, decodeURIComponent(openMatch[1]!));
+    const sessionOpenMatch = SESSION_OPEN_ROUTE.exec(url.pathname);
+    if (sessionOpenMatch) return sessionOpen(req, res, decodeSegment(sessionOpenMatch[1]!));
     if (opts.decisionsUi && (await responderDecisoesDaUi(req, res, url, opts.decisionsUi, log))) return;
     const actionMatch = DECISION_ACTION.exec(url.pathname);
     if (actionMatch) {
@@ -359,21 +430,22 @@ export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
       return decide(req, res, decodeURIComponent(actionMatch[1]!), DECISION_ACTIONS[actionMatch[2]!]!, url);
     }
     if (mcp && url.pathname === MCP_PATH) return mcp(req, res);
+    if (url.pathname === CONNECTIONS_ROUTE && opts.connection) return respondConnections(req, res, url.pathname, opts.connection);
     if (ehDoProjeto(url.pathname)) return projectRoute(req, res, url);
     if (opts.agentConfig && (url.pathname === AGENT_CONFIG_ROUTE || url.pathname.startsWith(`${AGENT_CONFIG_ROUTE}/`))) return opts.agentConfig(req, res, url);
     if (opts.frameworkInstall && url.pathname.startsWith(`${FRAMEWORK_INSTALL_ROUTE}/`)) return opts.frameworkInstall(req, res, url);
+    const reconnectMatch = RECONNECT_ROUTE.exec(url.pathname);
+    if (reconnectMatch) return respondReconnect(req, res, reconnectMatch[1]!, opts.reconnect, opts.telemetry);
     if (req.method !== 'GET') return send(res, 405, { error: 'use GET' });
     if (isUiPath(url.pathname)) return respondUi(res, url.pathname);
     const desktopMatch = OPEN_IN_DESKTOP.exec(url.pathname);
     if (desktopMatch) return redirectToDesktop(res, desktopMatch[1]!);
     // `pid` proves who holds the port: whoever reads the lock only stops the core if its pid is this one (src/owner).
-    // `nome` and `versao` stay beside `name` and `version` until phase 6 of #173: the installed app
-    // (v.get("nome") == "ahrena-console") and the `dono` of an older checkout read them.
-    if (url.pathname === '/api/overview') return send(res, 200, { ok: true, name: 'ahrena-console', version: API_VERSION, pid: process.pid, commit: opts.commit ?? null, nome: 'ahrena-console', versao: API_VERSION });
+    if (url.pathname === '/api/overview') return send(res, 200, { ok: true, name: 'ahrena-console', version: API_VERSION, pid: process.pid, commit: opts.commit ?? null });
     if (url.pathname === CHANGES_ROUTE && opts.changes) return serveChanges(res, url, opts.changes);
     if (url.pathname === WALL_ROUTE) return responderMural(res, wall);
     if (url.pathname === EVENTS_ROUTE && opts.events) return responderEventos(res, url, opts.events);
-    if (url.pathname === ATTENTION_ROUTE && opts.fleet) return send(res, 200, await montarAtencao(opts.fleet, opts.changes?.current ?? null, opts.remoteAttention));
+    if (url.pathname === ATTENTION_ROUTE && opts.fleet) return send(res, 200, await montarAtencao(opts.fleet, opts.changes?.current ?? null, remotes(), openDescriber));
     if (url.pathname === DASHBOARD_ROUTE && opts.fleet) return send(res, 200, await montarDashboard(opts.fleet));
     if (opts.analytics && RotaAnalytics.atende(url.pathname)) {
       const r = await opts.analytics.responder(url);
@@ -384,6 +456,7 @@ export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
     if (url.pathname === KANBAN_ROUTE && opts.kanban) return responderKanban(res, url, opts.kanban);
     if (opts.repos && (url.pathname === REPOS_ROUTE || url.pathname.startsWith(`${REPOS_ROUTE}/`))) return opts.repos(res, url);
     if (opts.agentInstructions && url.pathname.startsWith(`${AGENT_INSTRUCTIONS_ROUTE}/`)) return opts.agentInstructions(res, url);
+    if (opts.decisions && [ADRS_ROUTE, PDRS_ROUTE].some((r) => url.pathname === r || url.pathname.startsWith(`${r}/`))) return opts.decisions(res, url);
     if (url.pathname === DEV_CONSOLE_ROUTE && opts.devConsole) return respondDevConsole(res, url, opts.devConsole);
     if (isTelemetryRoute(url.pathname)) return respondTelemetry(res, url, opts.telemetry);
     if (url.pathname === LOAD_ROUTE) {
