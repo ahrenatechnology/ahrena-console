@@ -67,7 +67,6 @@ export interface LinhaDeSessao {
   provider?: 'claude' | 'codex';
   group?: string;
   groupKey?: string;
-  groupKey?: string;
   status: DisplayStatus | 'unknown';
   /** Por que espera, quando espera (`notification`, `interrupted`, `stop`, `session_start`). */
   reason: AwaitingReason | null;
