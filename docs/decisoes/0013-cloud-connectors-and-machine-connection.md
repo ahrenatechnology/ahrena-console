@@ -47,6 +47,7 @@ O núcleo de **cada máquina** lê a configuração das CLIs **dela** (o `~/.aws
 
 - **Por que não abrir o navegador lá**: o núcleo de lá é um serviço sem tela (ou a tela de lá não é a que a pessoa está olhando); um navegador aberto lá esperaria por ninguém. É o mesmo padrão do código do GitHub na 0011 (C40).
 - **O código aparece na /ui**, que a 0012 evita para a saída de comando: é a exceção estreita de um campo de formato fixo, de vida curta (10 min), que só vale com o login da pessoa no navegador, e que ela precisa ver. Nada mais da saída sai do log.
+- **Quem atende na porta do túnel não é autenticado.** Com o túnel caído, outro usuário do sistema no mesmo Mac pode ocupar a porta e se passar pelo núcleo de lá, inclusive servindo um código de dispositivo de uma autorização dele. Um Mac de um usuário só (o caso de uso) está fora desse risco, que fica fora do escopo da fase 1. O núcleo do Mac fecha o caminho barato: só aceita um código cuja URL esteja no portal daquela sessão (`startUrlHost`) ou na página de dispositivo do SSO da região dela, e a tela mostra o portal ao lado do código. Autenticar os dois lados do túnel (parear o Mac com o núcleo remoto) é a [#315](https://github.com/ahrenatechnology/ahrena-console/issues/315).
 - **Sem login por código lá** (aws CLI antiga, ou núcleo de lá numa versão sem a rota), a tela **mostra o comando** para rodar num terminal de lá, com Copiar, e nada roda (C67, estado 4).
 
 ### 3. O estado da sessão, e a pergunta do "até quando"

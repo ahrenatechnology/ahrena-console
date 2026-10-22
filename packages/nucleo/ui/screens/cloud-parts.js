@@ -175,6 +175,15 @@ const steps = (on) =>
     ]),
   );
 
+// The host the person is about to confirm on (decision 0013 §2a: the núcleo only keeps a code on the session's portal).
+function portalHost(uri) {
+  try {
+    return new URL(uri).hostname;
+  } catch {
+    return '';
+  }
+}
+
 function deviceCodeBand(session, where, now) {
   const l = session.login;
   const dc = l.deviceCode;
@@ -188,6 +197,7 @@ function deviceCodeBand(session, where, now) {
       el('b', {}, 'deste Mac'),
       ':',
       el('div', { class: 'cl-code-row' }, el('span', { class: 'mono cl-user-code', 'aria-label': `Código ${dc.userCode}` }, dc.userCode), open, copyButton(dc.userCode, 'Copiar o código')),
+      el('div', { class: 'cl-portal' }, 'A página é do portal ', el('b', { class: 'mono' }, portalHost(dc.verificationUri)), session.startUrlHost ? `, o da sessão ${session.name}. Confira antes de confirmar.` : '. Confira antes de confirmar.'),
     );
     const c = loginClock(l, now);
     const left = deviceCodeLeft(dc, now);

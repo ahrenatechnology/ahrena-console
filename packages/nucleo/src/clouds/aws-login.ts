@@ -77,6 +77,23 @@ export function acceptVerificationUri(candidate: string): string | null {
   return url.href;
 }
 
+/**
+ * The Mac's check on a remote núcleo's device code (decision 0013 §2a, review of #310): the
+ * verification URL must be on that session's own portal (`startUrlHost`) or on the SSO device page
+ * of that session's region (`device.sso.<region>.amazonaws.com`). It closes the cheap path of a
+ * process squatting the tunnel port and serving any AWS URL; a full impostor is #315's (pairing).
+ */
+export function deviceCodeOnSessionPortal(verificationUri: string, startUrlHost: string | null, region: string | null): boolean {
+  let host: string;
+  try {
+    host = new URL(verificationUri).hostname;
+  } catch {
+    return false;
+  }
+  if (startUrlHost && host === startUrlHost.toLowerCase()) return true;
+  return !!region && /^[a-z0-9-]{1,32}$/.test(region) && host === `device.sso.${region}.amazonaws.com`;
+}
+
 /** The first accepted URI and the first user code in the CLI's stdout; anything else is ignored. */
 export function extractDeviceCode(stdout: string): { verificationUri: string | null; userCode: string | null } {
   let verificationUri: string | null = null;

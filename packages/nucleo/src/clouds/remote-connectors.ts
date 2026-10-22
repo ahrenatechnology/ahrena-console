@@ -16,7 +16,7 @@ import { REMOTE_HOST_HEADER, REMOTE_TIMEOUT_MS } from '../telemetry/adapters/loo
 import type { RemoteGetResult } from '../telemetry/ports.ts';
 import { SAFE_CLI_NAME } from './aws-config.ts';
 import { CONNECTOR_STATES, SESSION_STATES } from './aws-connector.ts';
-import { acceptVerificationUri, LOGIN_MODES, USER_CODE } from './aws-login.ts';
+import { acceptVerificationUri, deviceCodeOnSessionPortal, LOGIN_MODES, USER_CODE } from './aws-login.ts';
 
 export const REMOTE_CONNECTORS_PATH = '/api/connectors';
 export const MAX_REMOTE_SESSIONS = 100;
@@ -60,6 +60,13 @@ function sanitizeLogin(v: unknown): Record<string, unknown> | null {
   };
 }
 
+/** A device code whose URL is not on the session's portal is dropped (deviceCodeOnSessionPortal). */
+function onSessionPortal(login: Record<string, unknown> | null, startUrlHost: string | null, region: string | null): Record<string, unknown> | null {
+  const dc = login?.deviceCode as { verificationUri: string } | null | undefined;
+  if (!login || !dc || deviceCodeOnSessionPortal(dc.verificationUri, startUrlHost, region)) return login;
+  return { ...login, deviceCode: null };
+}
+
 function sanitizeAws(v: Record<string, unknown>): Record<string, unknown> | null {
   const state = oneOf(v.state, CONNECTOR_STATES);
   if (!state) return null;
@@ -89,7 +96,7 @@ function sanitizeAws(v: Record<string, unknown>): Record<string, unknown> | null
         expiresAt: iso(s.expiresAt),
         checkedAt: iso(s.checkedAt),
         profiles,
-        login: sanitizeLogin(s.login),
+        login: onSessionPortal(sanitizeLogin(s.login), text(s.startUrlHost, 253), text(s.region, 64)),
       },
     ];
   });
