@@ -7,7 +7,7 @@
 
 import { el, icon } from '../dom.js';
 import { loading, error, errorBand, empty } from '../states.js';
-import { openInDesktop } from '../api.js';
+import { openAction } from '../open-action.js';
 import { create as workflowTab } from './session-detail-workflow.js';
 import { create as decisionsTab } from './session-detail-decisions.js';
 import { attentionOf, attentionPill, isBlocked, isIdle, reasonChip, reasonLabel, attentionDot, statusWithoutAttention } from '../attention.js';
@@ -182,7 +182,7 @@ export async function mount(area, ctx) {
     try {
       headData = await ctx.read(base);
       ctx.title(headData.session.title);
-      top.replaceChildren(...drawTop(headData, refreshAll));
+      top.replaceChildren(...drawTop(headData, refreshAll, ctx.write));
       drawTabs();
       return true;
     } catch (e) {
@@ -232,7 +232,7 @@ export async function mount(area, ctx) {
 
 // ---------- Topo (A5) ----------
 
-function drawTop(c, refresh) {
+function drawTop(c, refresh, write) {
   const s = c.session;
   const now = Date.now();
   const end = s.status === 'active' || s.status === 'waiting' ? now : Date.parse(c.endedAt ?? s.since);
@@ -243,6 +243,8 @@ function drawTop(c, refresh) {
     el('h1', {}, s.title),
     statusPill(s.status, s.attention),
     reasonChip(s.attention),
+    // C70 (issue 285): the open action beside Atualizar, whether the session needs you or not.
+    openAction({ id: s.id, open: c.open }, { size: 'full', className: 'sd-open', write }),
     el('button', { type: 'button', class: 'sd-refresh', title: 'Atualizar', 'aria-label': 'Atualizar', onClick: refresh }, icon('refresh')),
   );
   const pills = el(
@@ -261,25 +263,8 @@ function drawTop(c, refresh) {
   return [row1, pills, folder, notice].filter(Boolean);
 }
 
-/** "Abrir no Claude Desktop", with the notice of a failure beside it. */
-function openButton(c, notice) {
-  const button = el('button', { type: 'button', class: 'btn outline', disabled: !c.local, title: c.local ? null : 'Esta sessão não está no Claude Desktop' }, 'Abrir no Claude Desktop', icon('external'));
-  button.addEventListener('click', async () => {
-    notice.textContent = '';
-    try {
-      await openInDesktop(c.local);
-    } catch (e) {
-      // Sem quem abra (fora do macOS, ou a demonstração): o link de reserva leva ao `claude://`.
-      if (e.status === 501) return void (location.href = `/open/${c.local}`);
-      notice.textContent = e.message;
-    }
-  });
-  return button;
-}
-
 function idleLine(c) {
-  const notice = el('span', { class: 'sd-notice', role: 'status' });
-  return el('section', { class: 'sd-idle', role: 'status' }, attentionDot('idle'), el('p', {}, idleNote(c.session.attention, c.session.since), notice), openButton(c, notice));
+  return el('section', { class: 'sd-idle', role: 'status' }, attentionDot('idle'), el('p', {}, idleNote(c.session.attention, c.session.since)));
 }
 
 /** O texto da faixa com o comando que pede permissão em `<code>`, montado pelo DOM. */
@@ -299,14 +284,11 @@ export function bandTitle(session) {
 
 function band(c) {
   const f = c.session.banner;
-  const notice = el('span', { class: 'sd-notice', role: 'status' });
-  const button = openButton(c, notice);
   return el(
     'section',
     { class: `sd-band sd-t-${f.type}`, role: f.type === 'error' ? 'alert' : 'status' },
     icon(f.type === 'error' ? 'error' : 'shield'),
-    el('p', {}, el('b', {}, bandTitle(c.session)), ' ', ...withCommand(f.text, c.command), `. Há ${ago(f.since).replace('agora', 'menos de 1 min')}.`, notice),
-    button,
+    el('p', {}, el('b', {}, bandTitle(c.session)), ' ', ...withCommand(f.text, c.command), `. Há ${ago(f.since).replace('agora', 'menos de 1 min')}.`),
   );
 }
 

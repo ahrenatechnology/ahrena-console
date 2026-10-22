@@ -478,7 +478,7 @@ describe('#266 DeliveryGithub: the screen learns of every outcome', () => {
 describe('#266 the fake GitHub answers the delivery read', () => {
   test('#266/AC-2/AC-4: RepoDelivery through the real adapter: merges, reviews and open items, and two demo projects sharing a repository', async () => {
     const fake = createFakeGithub(DEMO_DELIVERY_GITHUB_DATA, { now: () => NOW });
-    const source = new GithubDeliverySource(new GithubReposSource({ token: 'demo', fetch: fake.fetch, url: 'https://github-falso.invalid/graphql', api: 'https://github-falso.invalid' }));
+    const source = new GithubDeliverySource(new GithubReposSource({ token: 'demo', fetch: fake.fetch, url: 'https://fake-github.invalid/graphql', api: 'https://fake-github.invalid' }));
     const d = await source.delivery('exemplo-labs', 'motor-de-regras', '2026-07-21');
     assert.ok(d);
     assert.equal(d.repo, 'exemplo-labs/motor-de-regras');

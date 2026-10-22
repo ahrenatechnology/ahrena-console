@@ -87,7 +87,7 @@ describe('GraphQL adapter', () => {
     for (const q of Object.values(DEV_CONSOLE_QUERIES)) assert.match(q, /pageInfo \{ hasNextPage \}/);
   });
 
-  test('#177/AC-5 a 401 forgets the cached token, and the next read asks gh again', async () => {
+  test('#177/AC-5 #241/AC-3 the token is asked on every read, so the read after a 401 uses a new one', async () => {
     let asked = 0;
     let status = 401;
     const f = (async () =>
@@ -99,7 +99,7 @@ describe('GraphQL adapter', () => {
     status = 200;
     assert.deepEqual((await source.branches(REPO)).names, ['main']);
     await source.branches(REPO);
-    assert.equal(asked, 2, 'asked for the token again only after the 401');
+    assert.equal(asked, 3, 'one token per read: the connection caches it');
   });
 
   test('searchDate drops the milliseconds', () => {

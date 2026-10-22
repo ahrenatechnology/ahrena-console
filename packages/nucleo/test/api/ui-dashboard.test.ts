@@ -225,7 +225,9 @@ describe('Dashboard: a tela montada sobre a API (simulador p1)', () => {
       assert.match(inbox.textContent, /1 precisa de você/);
       assert.match(inbox.textContent, /travadas até você agir · quem espera há mais tempo primeiro/);
       const minis = comClasse(inbox, 'mini');
-      assert.deepEqual(minis.map((m) => m.getAttribute('href')), ['/ui/sessions/sim-panel-motor-de-regras'], 'only the blocked one');
+      assert.deepEqual(minis.map((m) => m.getAttribute('data-session')), ['sim-panel-motor-de-regras'], 'only the blocked one');
+      // issue 285: the card is a div; "Abrir ›" is the link to the Detail.
+      assert.deepEqual(minis.flatMap((m) => m.todos((e) => e.tag === 'a').map((a) => a.getAttribute('href'))), ['/ui/sessions/sim-panel-motor-de-regras']);
       assert.match(minis[0]!.textContent, /Pede permissão.*motor-de-regras.*Bash: npm run migrate.*Opus 5\.5.*Abrir/);
       assert.equal(contadores.dashboard, 1, 'the sidebar number counts only who needs you');
 

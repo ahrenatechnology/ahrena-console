@@ -37,6 +37,10 @@ export class SqliteCacheStore implements CachePort {
   async delete(key: string): Promise<void> {
     this.db.prepare('DELETE FROM github_cache WHERE key = ?').run(key);
   }
+
+  async clear(): Promise<void> {
+    this.db.exec('DELETE FROM github_cache');
+  }
 }
 
 /** The English key of a cache key written before #173 phase 5, or `null` if it has no Portuguese segment. */

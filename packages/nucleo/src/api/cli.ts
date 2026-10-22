@@ -25,16 +25,19 @@ import { SqliteDecisionStore } from '../decisions/sqlite.ts';
 import { SessionStateMachine } from '../states/machine.ts';
 import { createMcpServer } from '../mcp/index.ts';
 import { GithubCache } from '../github/cache.ts';
-import { ghCliToken, GithubGraphqlSource } from '../github/github-source.ts';
+import { GithubGraphqlSource } from '../github/github-source.ts';
 import { SqliteCacheStore } from '../github/sqlite-cache.ts';
 import { GithubCallQueue } from '../github/call-queue.ts';
-import { createGithubProject, GithubProject, type ProjectRef } from '../github/project.ts';
+import { chooseVault, GithubConnection, GithubNotConnectedError } from '../github/connection/index.ts';
+import { parseProjectEnv, PROJECT_ENV } from '../github/project-selection.ts';
+import { SqliteInstallationSettings } from '../settings/installation-settings.ts';
+import { createDemoGithubConnection, parseDemoGithubState } from '../simulator/demo-github-connection.ts';
 import { defaultProjectsRoot } from '../ingest/history/files.ts';
 import { followTranscripts } from '../ingest/history/follower.ts';
 import { Profiles } from '../profiles/profiles.ts';
 import { registerClient } from '../owner/clients.ts';
 import { isOlderCommit } from '../owner/commit.ts';
-import { claimLock, codeWarning, planStart, watchParent } from '../owner/owner.ts';
+import { claimLock, codeWarning, planStart, ReplaceError, watchParent } from '../owner/owner.ts';
 import { waitForCore, isPidAlive, reservePort, releasePort } from '../owner/probe.ts';
 import { readLock, releaseLock, prepareDir } from '../owner/lock.ts';
 import { defaultDataDir, parseInstallation, resolveDataDir, resolvePort } from '../owner/installation.ts';
@@ -55,7 +58,6 @@ import {
 import { seedDemoWorkflows } from '../simulator/workflows.ts';
 import { seedPanelHistory } from '../simulator/history-ended.ts';
 import { SessionHistory } from '../history/reading.ts';
-import { SIMULATOR_PROJECT, SimulatorProject } from '../simulator/project.ts';
 import { seedHistory } from '../simulator/history.ts';
 import { demoLocal, seedDetail } from '../simulator/detail.ts';
 import { mountDemoAgentConfig, knownProjects } from '../agent-config/index.ts';
@@ -76,18 +78,14 @@ import {
   reprocessarContexto,
   reprocessarHistorico,
 } from './reprocessing.ts';
-import { criarReposDoNucleo } from './repos.ts';
-import { createCoreDelivery } from './delivery-github.ts';
-import { createCoreAgentInstructions } from './agent-instructions.ts';
-import { createCoreFrameworkInstall, FRAMEWORK_REPO_ENV } from './framework-install.ts';
-import { createCoreDecisions } from './adrs.ts';
+import type { GithubAccess } from './github-access.ts';
+import { FRAMEWORK_REPO_ENV } from './framework-install.ts';
+import { createCoreGithub, type CoreGithub } from './core-github.ts';
 import { startLocalApi, API_VERSION, type LocalApi } from './server.ts';
 import { ListaDeSessoes } from './sessions.ts';
 import { ResumosDeSessao } from './summary.ts';
 import { FeedDeEventos } from './events.ts';
 import { TrabalhoPorBranch } from './work.ts';
-import { createDevConsole, disabledDevConsoleSource, GithubDevConsoleSource } from '../dev-console/index.ts';
-import { DEV_CONSOLE_SIMULATOR_CONTEXTS, devConsoleSimulatorGit, SimulatedDevConsoleSource } from '../simulator/dev-console.ts';
 import { AlertTracker } from '../telemetry/alerts.ts';
 import { collectorFor } from '../telemetry/adapters/system.ts';
 import { SqliteTelemetryStore } from '../telemetry/adapters/sqlite.ts';
@@ -101,6 +99,9 @@ import { loopbackGet } from '../telemetry/adapters/loopback-http.ts';
 import type { TelemetryCollector } from '../telemetry/ports.ts';
 import { SqliteToolChecksStore } from '../tools/store.ts';
 import { ToolsService } from '../tools/service.ts';
+import { LiveClaudeProcesses } from './live-processes.ts';
+import { SessionOpenDescriber } from './session-open.ts';
+import { createTerminalFocuser, createTerminalOpener } from './terminal-launch.ts';
 import { SIMULATED_WORKSTATION, SimulatedCollector, seedTelemetry } from '../simulator/telemetry.ts';
 
 const o = parseApiOptions(process.argv.slice(2));
@@ -115,6 +116,11 @@ const port = resolvePort(o.port);
 const installation = parseInstallation(o.installation);
 const dataDir = resolveDataDir({ installation, dataDir: o.dataDir });
 const demo = o.demo;
+// Checked before anything starts: a wrong --demo-github, --demo-project or AHRENA_CONSOLE_PROJECT stops here.
+const demoGithubState = parseDemoGithubState(o.demoGithub);
+if (o.demoProject !== undefined && o.demoProject !== 'selected' && o.demoProject !== 'none') throw new Error('--demo-project: selected or none');
+if (!demo && (o.demoGithub !== undefined || o.demoProject !== undefined)) throw new Error('--demo-github and --demo-project only apply with --demo');
+parseProjectEnv(process.env[PROJECT_ENV] ?? '');
 const parent = o.parent === undefined ? null : Number(o.parent);
 if (parent !== null && !(Number.isInteger(parent) && parent > 0)) throw new Error('--parent: a pid');
 if (parent !== null && !isPidAlive(parent)) throw new Error(`--parent: pid ${parent} does not exist`);
@@ -140,7 +146,11 @@ function adopt(p: number, version: string, warning: string | null = null): never
 // Before opening the database: adopts the live core of this installation's lock, or recovers the lock
 // if it is an orphan.
 async function planOrAdopt(): Promise<void> {
-  const plan = await planStart({ ...code, dir: dataDir, replace: o.replace, log });
+  const plan = await planStart({ ...code, dir: dataDir, replace: o.replace, log }).catch((e: unknown) => {
+    if (!(e instanceof ReplaceError)) throw e;
+    log(e.reason);
+    process.exit(1);
+  });
   if (plan.action === 'adopt') adopt(plan.lock.port, plan.lock.version, plan.warning);
   if (plan.recovered) log(`orphan lock recovered: ${plan.recovered}`);
 }
@@ -241,29 +251,24 @@ const machine = new SessionStateMachine({
   ...(demo ? { probe: null } : {}),
 });
 const desktop = demo || o.noDesktop ? null : new DesktopIndex();
-const workSource = demo ? new SimulatorWorkSource() : o.noGithub ? null : new GithubGraphqlSource({ token: () => ghCliToken() });
-// A single GitHub cache, in the database, for the work and the repositories: a rate-limit pause holds for both.
+// The installation settings (#241, decision 0011 §8): the GitHub login, the credential source and the
+// Project chosen on the screen. Never a credential.
+const settings = new SqliteInstallationSettings(sqlite.db);
+// A single queue for the GitHub calls (decision 0001, item 6): the connection's, the screens' and the work's.
+const githubQueue = new GithubCallQueue();
+// A single GitHub cache, in the database, for the work and every screen: a rate-limit pause holds for all.
 const githubCache = new GithubCache({ store: new SqliteCacheStore(storage.db) });
+// The core's GitHub (#241, src/api/core-github.ts): the connection, the credential provider and the
+// GitHub-backed screens, built below once the fleet exists. The work by branch takes the same credential.
+let coreGithub: CoreGithub | null = null;
+const githubAccess: GithubAccess | null =
+  o.noGithub && !demo ? null : { token: () => (coreGithub ? coreGithub.connection.token() : Promise.reject(new GithubNotConnectedError())) };
+const workSource = demo ? new SimulatorWorkSource() : githubAccess ? new GithubGraphqlSource({ token: githubAccess.token }) : null;
 const work = new TrabalhoPorBranch({
   fonte: workSource,
   cache: githubCache,
   ...(demo ? { git: SimulatorWorkSource.git } : {}),
 });
-// The project kanban (#80): C11's fake GitHub under --demo; otherwise the Project of AHRENA_CONSOLE_PROJECT.
-// Without the variable there is no default Project: the screen explains how to pick one.
-function projectFromEnv(value = process.env.AHRENA_CONSOLE_PROJECT ?? ''): ProjectRef | null {
-  if (!value.trim()) return null;
-  const m = /^([A-Za-z0-9][A-Za-z0-9-]{0,38})\/(\d{1,9})$/.exec(value.trim());
-  if (!m) throw new Error(`AHRENA_CONSOLE_PROJECT: owner/number, like my-org/3 (got "${value}")`);
-  return { owner: m[1], number: Number(m[2]) };
-}
-const chosenProject = demo || o.noGithub ? null : projectFromEnv();
-const projectCache = new GithubCache({ store: new SqliteCacheStore(storage.db) });
-const kanban = demo
-  ? new GithubProject({ source: new SimulatorProject(), cache: projectCache, project: SIMULATOR_PROJECT })
-  : chosenProject
-    ? createGithubProject({ project: chosenProject, cache: projectCache, token: () => ghCliToken() })
-    : null;
 
 // The commit of the API's checkout, so the panel footer says which version is live.
 function checkoutCommit(): string | null {
@@ -287,6 +292,15 @@ const openInDesktop =
     ? (url: string) =>
         new Promise<void>((resolve, reject) => execFile('open', [url], { timeout: 5_000 }, (err) => (err ? reject(err) : resolve())))
     : null;
+
+// #285: where each session opens. The live `claude` processes come from `<config>/sessions/<pid>.json` of
+// every configuration folder the profiles know (decision 0006; `profiles` is declared below and only read
+// when a request comes). The terminal launchers write their `.command` files in the data folder (0700);
+// in the demo there are none, and the route answers with the command to copy.
+const liveProcesses = demo ? null : new LiveClaudeProcesses({ folders: async () => ((await profiles?.list()) ?? []).map((p) => p.dir) });
+const openDescriber = new SessionOpenDescriber({ live: liveProcesses });
+const openTerminal = demo ? null : createTerminalOpener({ dir: join(dataDir, 'terminal-resume') });
+const focusTerminal = demo ? null : createTerminalFocuser();
 
 // The same `Accounts` in the panel and in the MCP: the "conta 1" label is the same on both surfaces.
 const accounts = new Accounts({ storage, ...(demo ? { file: null } : {}) });
@@ -331,7 +345,7 @@ if (demo) {
 // #245: the Sessions list and the Kanban read the same event summaries (a waiting session's attention,
 // the last prompt), each session's events once; apart from the panel's, so as not to sweep its 64.
 const listSummaries = new ResumosDeSessao(storage, { maximo: 256 });
-const detail = new LeiturasDoDetalhe({ storage, montador: panelBuilder, ...(demo ? { local: demoLocal } : {}) });
+const detail = new LeiturasDoDetalhe({ storage, montador: panelBuilder, open: openDescriber, ...(demo ? { local: demoLocal } : {}) });
 
 // The history of the ended sessions (#33), with the Desktop index title when there is one.
 const history = new SessionHistory({ storage, decisions, titleOf: (s) => desktop?.sessionByCli(s.id)?.title ?? null });
@@ -357,52 +371,38 @@ profileTimer?.unref();
 // New tools (e.g. `wait_for_changes`, 2.4) come in here with `mcp.server.register(...)`.
 const mcp = createMcpServer({ storage, accounts, desktop, log });
 mcp.server.register(waitForChanges({ changes, accounts }));
-// A single queue for the GitHub calls behind the screens (decision 0001, item 6): repositories and instructions.
-const githubQueue = new GithubCallQueue();
-const repos = criarReposDoNucleo({ demo, semGithub: o.noGithub, cache: githubCache, frota: mcp.fleet, mudancas: changes, log, queue: githubQueue });
-// The Analytics Delivery tab (#266): the same GitHub cache and queue, the Repositories screen's session → repository,
-// the project kanban's Project (the demo has its own synthetic ones) and the account's repository list.
-const delivery = createCoreDelivery({
+// Every GitHub-backed screen (#241, src/api/github-screens.ts): the Repositories screen, the Instructions
+// tab (#183), the framework install (#184), the ADRs and PDRs (#174), the Dev Console (#177), the Delivery
+// tab (#266), the project kanban (#80) and the list of Projects to choose from; under --demo, each screen's
+// fake GitHub. The kanban's Project: AHRENA_CONSOLE_PROJECT > the one chosen on the screen > the demo's
+// (unless --demo-project none) > none.
+// The console's own GitHub connection (#241, decision 0011): the device flow, the vault of this platform
+// (Keychain on macOS, Secret Service on Linux, none elsewhere; touched only when GitHub is first needed),
+// the client id of AHRENA_CONSOLE_GITHUB_CLIENT_ID (the built-in one is still empty) and the opt-in `gh`
+// source (AHRENA_CONSOLE_GITHUB_SOURCE=gh). Under --demo, the same connection on the fake GitHub, in the
+// state of --demo-github, never the real GitHub, Keychain or gh. An identity change clears github_cache
+// and rebuilds every screen (and forgets the work by branch).
+coreGithub = await createCoreGithub({
   demo,
-  noGithub: o.noGithub,
+  noGithub: o.noGithub && !demo,
+  connection: async (hooks) =>
+    demo
+      ? (await createDemoGithubConnection(demoGithubState, { settings, queue: githubQueue, ...hooks, log })).connection
+      : new GithubConnection({ vault: chooseVault(), settings, env: process.env, off: o.noGithub, queue: githubQueue, ...hooks, log }),
   cache: githubCache,
   queue: githubQueue,
   changes,
-  sessions: repos.sessions,
-  boards: async () => (kanban ? [await kanban.board()] : []),
-  accountRepos: async () => {
-    const l = await repos.repos.lista();
-    return l.groups.flatMap((g) => g.repos.map((r) => ({ fullName: r.fullName, lastPush: r.lastPush })));
-  },
-  log,
-});
-// The Instructions tab of a repository (#183): the fake GitHub under --demo; otherwise GitHub through the 0001 cache.
-const agentInstructions = createCoreAgentInstructions({ demo, noGithub: o.noGithub, cache: githubCache, changes, queue: githubQueue, log });
-// Instalar o Ahrena Framework por PR (#184): o GitHub falso no --demo (com as escritas); fora dele, o token do `gh`, o cache da 0001 e a mesma fila.
-const frameworkInstall = createCoreFrameworkInstall({ demo, noGithub: o.noGithub, cache: githubCache, changes, queue: githubQueue, frameworkRepo: process.env[FRAMEWORK_REPO_ENV], log });
-// As ADRs e as PDRs (#174): a lista de repositórios da tela Repositórios, a descoberta comum, o cache da 0001 e a mesma fila.
-const recordDecisions = createCoreDecisions({
-  demo,
-  noGithub: o.noGithub,
-  cache: githubCache,
-  changes,
-  queue: githubQueue,
-  log,
-  accountRepos: async () => {
-    const l = await repos.repos.lista();
-    return { state: l.state, error: l.error, account: l.account, repos: l.groups.flatMap((g) => g.repos.map((r) => ({ owner: r.owner, name: r.name, lastPush: r.lastPush }))) };
-  },
-});
-
-// The Dev Console (#177): the synthetic context and the fake GitHub under --demo; otherwise GitHub through the 0001 cache.
-const devConsole = createDevConsole({
+  fleet: mcp.fleet,
   storage,
-  frota: mcp.fleet,
   decisions,
-  cache: githubCache,
-  source: demo ? new SimulatedDevConsoleSource() : o.noGithub ? disabledDevConsoleSource() : new GithubDevConsoleSource(),
-  ...(demo ? { file: null, contexts: DEV_CONSOLE_SIMULATOR_CONTEXTS, git: devConsoleSimulatorGit } : {}),
+  settings,
+  env: process.env,
+  frameworkRepo: process.env[FRAMEWORK_REPO_ENV],
+  demoProject: o.demoProject !== 'none',
+  onReset: () => work.forget(),
+  log,
 });
+const { connection, screens } = coreGithub;
 
 // Machine telemetry (#175, decision 0008): one sample every 30 s, 12 h in the database, and each
 // alert that enters or exits on /api/changes. In --demo, the simulator's synthetic readings, with
@@ -508,24 +508,35 @@ const api: LocalApi = await startLocalApi({
   port: boundPort,
   log,
   openInDesktop,
+  openDescriber,
+  openTerminal,
+  focusTerminal,
+  localOf: async (id) => {
+    await desktop?.refresh();
+    return desktop?.sessionByCli(id)?.localId ?? (demo ? demoLocal(id) : null);
+  },
   mcp: mcp.server,
   commit,
   changes,
   decisionsUi,
-  project: { kanban, fonte: demo ? 'demo' : 'github', semProjeto: !demo && !o.noGithub && !chosenProject, log },
+  project: { kanban: null, fonte: demo ? 'demo' : 'github', resolver: screens.project, options: screens.projectOptions, credentialSource: () => connection.credentialSource(), log },
+  projectSelection: screens.project,
+  connection,
+  // --no-github keeps its own off / no-github answers; otherwise 409 github-not-connected before any call.
+  githubConnected: coreGithub.connected,
   detail,
   events: new FeedDeEventos({ storage }),
   fleet: mcp.fleet,
   remoteAttention: () => remoteMachines?.list() ?? [],
-  analytics: new RotaAnalytics({ storage, contas: accounts, versao: () => changes.current, delivery }),
-  sessions: new ListaDeSessoes({ storage, contas: accounts, desktop, resumos: listSummaries }),
+  analytics: new RotaAnalytics({ storage, contas: accounts, versao: () => changes.current, delivery: screens.delivery }),
+  sessions: new ListaDeSessoes({ storage, contas: accounts, desktop, resumos: listSummaries, open: openDescriber }),
   history,
   kanban: new QuadroKanban({ storage, contas: accounts, desktop, resumos: listSummaries }),
-  repos: repos.rota,
-  agentInstructions: agentInstructions.route,
-  frameworkInstall: frameworkInstall.route,
-  decisions: recordDecisions.route,
-  devConsole,
+  repos: screens.repos,
+  agentInstructions: screens.agentInstructions,
+  frameworkInstall: screens.frameworkInstall,
+  decisions: screens.decisions,
+  devConsole: screens.devConsole,
   agentConfig,
   telemetry: telemetryService,
   reconnect: reconnectRunner,
@@ -625,6 +636,7 @@ async function reprocessOnce() {
 
 async function shutdown() {
   stopWatcher();
+  connection.close();
   if (profileTimer) clearInterval(profileTimer);
   stopWatchingParent();
   unregister();

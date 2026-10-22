@@ -15,6 +15,7 @@
 import { el, header as screenHeader, icon } from '../dom.js';
 import { empty, error, errorBand, loading as loadingState } from '../states.js';
 import { attentionOf, isBlocked, isIdle, reasonChip } from '../attention.js';
+import { connectEmptyFor, connectionChanged, isGithubNotConnected } from '../github-connect.js';
 
 const RELOAD_MS = 30_000;
 const DEBOUNCE_MS = 400;
@@ -587,6 +588,13 @@ export async function mount(area, ctx) {
     } catch (e) {
       if (e?.name === 'AbortError' || mine !== seq) return;
       loading = false;
+      // issue 241: not connected to GitHub. The board on screen came with the old credential: it goes.
+      if (isGithubNotConnected(e)) {
+        overview = null;
+        view = null;
+        area.replaceChildren(header, connectEmptyFor('dev-console', ctx.navigate));
+        return;
+      }
       if (!overview) area.replaceChildren(header, error({ text: e?.message ?? String(e), retry: () => (area.replaceChildren(header, loadingState({ label: 'Lendo o Dev Console' })), read()) }));
       else {
         failure = e?.message ?? String(e);
@@ -601,7 +609,7 @@ export async function mount(area, ctx) {
   }
 
   ctx.onChange((changes) => {
-    if (!touchesDevConsole(changes) || ctx.signal.aborted) return;
+    if ((!touchesDevConsole(changes) && !connectionChanged(changes)) || ctx.signal.aborted) return;
     clearTimeout(debounce);
     debounce = setTimeout(read, DEBOUNCE_MS);
   });

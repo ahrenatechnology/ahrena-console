@@ -19,6 +19,7 @@
 import { LIVE_STATES, type FleetReader, type McpAttentionReason } from '../mcp/fleet.ts';
 import { needingYou } from '../mcp/tools/attention.ts';
 import { BLOCKED_REASONS, type SessionAttention } from './attention.ts';
+import { SessionOpenDescriber, type SessionOpen } from './session-open.ts';
 import type { NeedsYouItem } from './types.ts';
 import { paleta } from '../../../marca/gerado/marca.ts';
 
@@ -81,6 +82,11 @@ export interface ItemDaAtencao {
   local: string | null;
   /** The remote machine the session runs on (#176); `null` for this machine. */
   machine: { id: string; label: string } | null;
+  /**
+   * #285: where the item's open icon goes and the command to copy. A remote machine's item is always
+   * `{ target: 'remote', command: null }`: nothing a remote sends becomes a command here.
+   */
+  open: SessionOpen;
 }
 
 /** A remote machine whose sessions enter the list (#176, `RemoteMachine` in src/telemetry/remote.ts). */
@@ -136,6 +142,7 @@ export function remoteAttentionItems(body: unknown, machine: { id: string; label
       minutes: i.minutes as number,
       local: null,
       machine: { id: machine.id, label: machine.label },
+      open: { target: 'remote', command: null },
     });
   }
   return out;
@@ -160,8 +167,13 @@ export interface RespostaDaAtencao {
   items: ItemDaAtencao[];
 }
 
-export async function montarAtencao(frota: FleetReader, cursor: string | null, remotes: readonly RemoteAttentionSource[] = []): Promise<RespostaDaAtencao> {
-  const lista = await needingYou(frota, null);
+export async function montarAtencao(
+  frota: FleetReader,
+  cursor: string | null,
+  remotes: readonly RemoteAttentionSource[] = [],
+  open: SessionOpenDescriber = new SessionOpenDescriber(),
+): Promise<RespostaDaAtencao> {
+  const [lista] = await Promise.all([needingYou(frota, null), open.refresh()]);
   const items = lista.map((i): ItemDaAtencao => {
     const reason = MOTIVO[i.reason];
     return {
@@ -178,6 +190,7 @@ export async function montarAtencao(frota: FleetReader, cursor: string | null, r
       minutes: i.waitingMinutes,
       local: i.open.desktopSessionId,
       machine: null,
+      open: open.describe({ sessionId: i.sessionId, cwd: i.open.cwd, local: i.open.desktopSessionId }),
     };
   });
   let active = 0;

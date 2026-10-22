@@ -318,24 +318,64 @@ describe('start or adopt', { timeout: 60_000 }, () => {
 });
 
 describe('version', { timeout: 60_000 }, () => {
-  test('older core: warns and adopts; with --replace, replaces', async () => {
+  test('older version: replaced without --replace (#220)', async () => {
     const port = await freePort();
     const old = api(port);
     const t = await liveLock();
     writeLock({ ...t, version: '0.0.0' }, dir);
 
-    const warned = await api(port).done;
-    assert.equal(warned.code, 0);
-    assert.match(warned.stderr, new RegExp(`versão 0\\.0\\.0, mais velha que esta \\(${VERSION}\\).*--replace`));
-    assert.match(warned.stdout, /\(adotado\)/);
-    assert.ok(isPidAlive(t.pid), 'without --replace, the old one stays');
-
-    const fresh = api(port, '--replace');
+    const fresh = api(port);
     await until(() => old.proc.exitCode !== null || old.proc.signalCode !== null);
     const t2 = await liveLock();
     assert.equal(t2.pid, fresh.proc.pid);
     assert.equal(t2.version, API_VERSION);
     assert.ok(!isPidAlive(t.pid));
+  });
+
+  test('older version kept up by a registered client: `start` replaces it and the client stays registered (#220)', async () => {
+    const parent = idle();
+    const bridge = idle();
+    api(await freePort(), '--parent', String(parent.pid));
+    const t = await liveLock();
+    // What the MCP bridge does: it registers as a client, so the old core ignores "parent gone".
+    registerClient(bridge.pid!, dir);
+    writeLock({ ...t, version: '0.0.0' }, dir);
+    parent.kill('SIGKILL');
+
+    const app = idle();
+    const r = await core('start', '--parent', String(app.pid), '--json', '--', ...HOOKS_ONLY).done;
+    assert.equal(r.code, 0, r.stderr);
+    const j = JSON.parse(r.stdout);
+    assert.equal(j.started, true);
+    assert.equal(j.version, API_VERSION);
+    assert.notEqual(j.pid, t.pid);
+    assert.match(r.stderr, /replacing the core 0\.0\.0/);
+    assert.ok(!isPidAlive(t.pid), 'the old core is gone');
+    assert.ok(liveClients(dir).includes(bridge.pid!), 'the bridge is still a client of the new core');
+  });
+
+  test('older version that does not give way: start says why and starts nothing (#220)', async () => {
+    const port = await freePort();
+    // A fake core: answers with its pid once (examine), then with another (the stop check), so
+    // stopCore refuses to signal it.
+    const fake = spawn(
+      process.execPath,
+      [
+        '-e',
+        `let n = 0; require('node:http').createServer((q, s) => s.end(JSON.stringify({ name: 'ahrena-console', version: '0.0.0', pid: n++ ? 1 : process.pid }))).listen(${port}, '127.0.0.1', () => console.log('ok'));`,
+      ],
+      { stdio: ['ignore', 'pipe', 'ignore'] },
+    );
+    children.push(fake);
+    await new Promise((r) => fake.stdout!.once('data', r));
+    writeLock({ pid: fake.pid!, port, version: '0.0.0', startedAt: new Date().toISOString(), token: newToken(), parent: null }, dir);
+
+    const r = await core('start', '--json', '--', ...HOOKS_ONLY).done;
+    assert.equal(r.code, 1, r.stderr);
+    const j = JSON.parse(r.stdout);
+    assert.equal(j.state, 'stopped');
+    assert.match(j.reason, /o núcleo antigo \(versão 0\.0\.0, pid \d+\) não saiu/);
+    assert.ok(isPidAlive(fake.pid!), 'nothing signals what is not the core');
   });
 
   test('a core of the same version or newer is adopted without a warning', async () => {

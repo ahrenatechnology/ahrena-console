@@ -8,7 +8,8 @@
 // | `dir`     | an exact directory (those in `directories` in the response)          | —           |
 // | `order`   | `activity`, `duration` or `cost`                                     | `activity`  |
 // | `direction` | `desc` or `asc`                                                    | `desc`      |
-// | `page`    | from 1, with `POR_PAGINA` items                                      | 1           |
+// | `page`    | from 1, with `perPage` items                                         | 1           |
+// | `perPage` | from 1 to `PER_PAGE_MAX`: the screen asks for the rows that fit (#279) | `POR_PAGINA` |
 //
 // #245: each row carries `attention` (`blocked` or `idle`, with the reason, or `null`; src/api/attention.ts),
 // `status=blocked` and `status=idle` filter by it (`blocked` takes the errors too, as "Precisam de você"
@@ -31,10 +32,13 @@ import type { StoragePort } from '../storage-port.ts';
 import type { Accounts } from './accounts.ts';
 import { readSessionAttention, type SessionAttention } from './attention.ts';
 import type { DesktopIndex, DesktopSession } from './desktop-index.ts';
+import { SessionOpenDescriber, type SessionOpen } from './session-open.ts';
 import { ResumosDeSessao } from './summary.ts';
 
 export const SESSIONS_ROUTE = '/api/sessions';
 export const POR_PAGINA = 10;
+/** #279: the most rows one page may ask for. */
+export const PER_PAGE_MAX = 100;
 
 /** `all`, one `DisplayStatus`, or one attention level (#245). */
 export const FILTROS_DE_STATUS = ['all', 'active', 'waiting', 'blocked', 'idle', 'completed', 'error', 'abandoned'] as const;
@@ -51,6 +55,7 @@ export interface PedidoDeSessoes {
   ordem: Ordem;
   sentido: 'desc' | 'asc';
   pagina: number;
+  perPage: number;
 }
 
 export interface LinhaDeSessao {
@@ -71,6 +76,8 @@ export interface LinhaDeSessao {
   costUsd: number | null;
   cwd: string | null;
   account: { label: string; color: string } | null;
+  /** #285: where the row's open icon goes and the command to copy. */
+  open: SessionOpen;
 }
 
 export interface ListaDeSessoesHttp {
@@ -107,6 +114,8 @@ export function pedidoDeSessoes(url: URL): PedidoDeSessoes {
   if (dir !== null && !CAMINHO.test(dir)) throw new ErroDoPedido('dir: um caminho absoluto');
   const pagina = Number(p.get('page') || 1);
   if (!Number.isInteger(pagina) || pagina < 1 || pagina > 100_000) throw new ErroDoPedido('page: um inteiro a partir de 1');
+  const perPage = Number(p.get('perPage') || POR_PAGINA);
+  if (!Number.isInteger(perPage) || perPage < 1 || perPage > PER_PAGE_MAX) throw new ErroDoPedido(`perPage: um inteiro de 1 a ${PER_PAGE_MAX}`);
   return {
     status: um('status', FILTROS_DE_STATUS, 'all'),
     busca: busca || null,
@@ -114,6 +123,7 @@ export function pedidoDeSessoes(url: URL): PedidoDeSessoes {
     ordem: um('order', ORDENS, 'activity'),
     sentido: um('direction', ['desc', 'asc'] as const, 'desc'),
     pagina,
+    perPage,
   };
 }
 
@@ -124,6 +134,8 @@ export interface OpcoesDaLista {
   /** The event summaries the attention of a waiting session reads (#245); its own (256) without them. */
   resumos?: ResumosDeSessao;
   agora?: () => number;
+  /** #285: each row's `open`; without it, no session counts as live in a terminal. */
+  open?: SessionOpenDescriber;
 }
 
 export class ListaDeSessoes {
@@ -132,9 +144,11 @@ export class ListaDeSessoes {
   private readonly desktop: DesktopIndex | null;
   private readonly agora: () => number;
   private readonly resumos: ResumosDeSessao;
+  private readonly open: SessionOpenDescriber;
   private readonly custos = new Map<string, { updatedAt: string; usd: number | null }>();
 
-  constructor({ storage, contas, desktop = null, resumos, agora = Date.now }: OpcoesDaLista) {
+  constructor({ storage, contas, desktop = null, resumos, agora = Date.now, open = new SessionOpenDescriber() }: OpcoesDaLista) {
+    this.open = open;
     this.storage = storage;
     this.contas = contas;
     this.desktop = desktop;
@@ -143,7 +157,7 @@ export class ListaDeSessoes {
   }
 
   async listar(pedido: PedidoDeSessoes): Promise<ListaDeSessoesHttp> {
-    await Promise.all([this.contas.refresh(), this.desktop?.refresh()]);
+    await Promise.all([this.contas.refresh(), this.desktop?.refresh(), this.open.refresh()]);
     const agora = this.agora();
     const todas: { s: Session; desktop: DesktopSession | null; titulo: string; status: DisplayStatus; attention: SessionAttention | null }[] = [];
     let cursor: string | null = null;
@@ -178,10 +192,11 @@ export class ListaDeSessoes {
     } else if (pedido.sentido === 'asc') filtradas = [...filtradas].reverse();
 
     const total = filtradas.length;
-    const paginas = Math.max(1, Math.ceil(total / POR_PAGINA));
+    const { perPage } = pedido;
+    const paginas = Math.max(1, Math.ceil(total / perPage));
     const pagina = Math.min(pedido.pagina, paginas);
     const itens: LinhaDeSessao[] = [];
-    for (const { s, desktop, titulo, status, attention } of filtradas.slice((pagina - 1) * POR_PAGINA, pagina * POR_PAGINA)) {
+    for (const { s, desktop, titulo, status, attention } of filtradas.slice((pagina - 1) * perPage, pagina * perPage)) {
       const conta = this.contas.ofSession(s, desktop);
       itens.push({
         id: s.id,
@@ -197,9 +212,10 @@ export class ListaDeSessoes {
         costUsd: await this.custoDe(s),
         cwd: s.cwd,
         account: conta ? { label: conta.label, color: conta.color } : null,
+        open: this.open.describe({ sessionId: s.id, cwd: s.cwd ?? desktop?.cwd ?? null, local: desktop?.localId ?? null }),
       });
     }
-    return { total, registered: todas.length, page: pagina, perPage: POR_PAGINA, pages: paginas, directories: diretorios, counts, items: itens };
+    return { total, registered: todas.length, page: pagina, perPage, pages: paginas, directories: diretorios, counts, items: itens };
   }
 
   /** #245: only a waiting or errored session has attention; only a waiting one reads its agents and events. */

@@ -32,8 +32,9 @@ const HELP = `Usage: npm run core -- <command> [options] [-- API options]
                       system picks a free port, announced in the output). If a core is up, its port wins
   --parent <pid>      For start: the core exits when this process is gone, unless another client
                       is registered. When adopting, registers the pid as a client
-  --replace           For start: replaces the core that is up if it is older than this one (version
-                      or ancestor commit). For other code, only warns
+  --replace           For start: also replaces the core that is up if it runs an ancestor commit of
+                      this version. A core of an older version is always replaced; other code only
+                      warns
   --json              One JSON line on stdout, for the app and the extension
   --help
 
