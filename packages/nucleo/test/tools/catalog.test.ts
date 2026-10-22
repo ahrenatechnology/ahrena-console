@@ -59,7 +59,7 @@ const EXPECTED: Row[] = [
   ...all('node', 'fnm', 'update', [['fnm', 'install', V], ['fnm', 'default', V]]),
   ...npmRows('tsc', 'typescript'),
   ...all('python', 'uv', 'install', [['uv', 'python', 'install', '9.8']]),
-  ...all('python', 'uv', 'update', [['uv', 'python', 'install', '9.8']]),
+  ...all('python', 'uv', 'update', [['uv', 'python', 'upgrade', '9.8']]),
   ...all('rust', 'rustup', 'update', [['rustup', 'update', 'stable']]),
   ...brewRows('go', 'go'),
   ['go', 'linux', 'x64', 'official', 'update', [['sudo', 'rm', '-rf', '/usr/local/go'], ['sudo', 'tar', '-C', '/usr/local', '-xzf', `go${V}.linux-amd64.tar.gz`]], true],

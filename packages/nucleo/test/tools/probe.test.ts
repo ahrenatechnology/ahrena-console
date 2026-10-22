@@ -43,6 +43,14 @@ describe('#280 login PATH', () => {
     assert.equal(await which('gh', 'C:\\x;C:\\tools', { platform: 'win32', isExecutable: win.isExecutable }), 'C:\\tools\\gh.exe');
   });
 
+  test('win32: the extensionless npm shim is skipped when PATHEXT entries exist', async () => {
+    const win = fakeFs({ 'C:\\npm\\wrangler': 'C:\\npm\\wrangler', 'C:\\npm\\wrangler.cmd': 'C:\\npm\\wrangler.cmd' });
+    assert.equal(await which('wrangler', 'C:\\npm', { platform: 'win32', isExecutable: win.isExecutable }), 'C:\\npm\\wrangler.cmd');
+    assert.equal(await which('wrangler', 'C:\\npm', { platform: 'win32', pathExt: ';', isExecutable: win.isExecutable }), 'C:\\npm\\wrangler');
+    const only = fakeFs({ 'C:\\npm\\wrangler': 'C:\\npm\\wrangler' });
+    assert.equal(await which('wrangler', 'C:\\npm', { platform: 'win32', isExecutable: only.isExecutable }), null);
+  });
+
   test('~ is expanded in code', () => {
     assert.equal(expandHome('~/.local/share/fnm', HOME, 'darwin'), `${HOME}/.local/share/fnm`);
     assert.equal(expandHome('~', HOME, 'darwin'), HOME);
@@ -166,10 +174,41 @@ describe('#280 probe', () => {
     assert.ok(run.calls.every((argv) => argv[0]!.startsWith('/')), 'always the full path');
   });
 
+  test('win32: a .cmd shim is never spawned; the tool reads as manual with a probe error, not failed', async () => {
+    const wfs = fakeFs({ 'C:\\npm\\wrangler': 'C:\\npm\\wrangler', 'C:\\npm\\wrangler.cmd': 'C:\\npm\\wrangler.cmd' });
+    const wrun = fakeRunner({});
+    const d = await probeTool(entry('wrangler'), { platform: 'win32', arch: 'x64', home: 'C:\\Users\\exemplo', path: 'C:\\npm', run: wrun, ...wfs });
+    assert.equal(wrun.calls.length, 0);
+    assert.equal(d.binaryPath, 'C:\\npm\\wrangler.cmd');
+    assert.equal(d.sourceId, 'manual');
+    assert.equal(d.installed, null);
+    assert.equal(d.probeError, 'shim-not-readable');
+  });
+
   test('an entry for another platform is not probed', async () => {
     const before = run.calls.length;
     const d = await probeTool(entry('colima'), { ...ctx, platform: 'linux' });
     assert.equal(d.installed, null);
     assert.equal(run.calls.length, before);
+  });
+});
+
+describe('#280 systemFetchText', () => {
+  test('refuses redirects and caps the body at 2 MB', async () => {
+    const { systemFetchText } = await import('../../src/tools/runner.ts');
+    const real = globalThis.fetch;
+    let seen: RequestInit | undefined;
+    try {
+      globalThis.fetch = (async (_u: unknown, init?: RequestInit) => {
+        seen = init;
+        return new Response('x'.repeat(3 * 1024 * 1024));
+      }) as typeof fetch;
+      await assert.rejects(systemFetchText('https://example.test/a', 1000), /too large/);
+      assert.equal(seen?.redirect, 'error');
+      globalThis.fetch = (async () => new Response('ok')) as typeof fetch;
+      assert.equal(await systemFetchText('https://example.test/a', 1000), 'ok');
+    } finally {
+      globalThis.fetch = real;
+    }
   });
 });

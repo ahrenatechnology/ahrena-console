@@ -100,7 +100,9 @@ export async function which(name: string, path: string, o: WhichOptions = {}): P
   const isExecutable = o.isExecutable ?? systemIsExecutable;
   const P = platform === 'win32' ? win32 : posix;
   if (name.includes('/') || name.includes('\\')) return null;
-  const exts = platform === 'win32' ? ['', ...(o.pathExt ?? '.COM;.EXE;.BAT;.CMD').split(';').filter(Boolean).map((e) => e.toLowerCase())] : [''];
+  // On Windows an extensionless file is npm's sh shim, which cmd cannot run: it counts only when PATHEXT is empty.
+  const winExts = platform === 'win32' ? (o.pathExt ?? '.COM;.EXE;.BAT;.CMD').split(';').filter(Boolean).map((e) => e.toLowerCase()) : [];
+  const exts = winExts.length > 0 ? winExts : [''];
   for (const dir of path.split(platform === 'win32' ? ';' : ':')) {
     if (!dir) continue;
     for (const ext of exts) {
