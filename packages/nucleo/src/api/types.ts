@@ -370,6 +370,7 @@ export interface PanelDecisions {
  * machine. "Open" and the order are in api/wall.ts. Dates in ISO 8601 (UTC).
  */
 export interface Wall {
+  sourceError?: string | null;
   version: 1;
   generatedAt: string;
   /**
@@ -393,14 +394,16 @@ export interface Wall {
 export interface WallCard {
   /** Id da sessão: o card leva a `/ui/sessions/<id>`. */
   id: string;
+  provider?: 'claude' | 'codex';
+  group?: string | null;
   /** Like `PanelSession.title`. */
   title: string;
   /** O nome da pasta da sessão (basename do cwd); `null` sem pasta. */
   project: string | null;
   branch: string | null;
   /** O badge. */
-  status: DisplayStatus;
-  state: InboxState;
+  status: DisplayStatus | 'unknown';
+  state: InboxState | 'unknown';
   reason: AwaitingReason | null;
   /** Espera `notification` ou `interrupted`, e o erro (like `NeedsYouItem.urgent`). */
   urgent: boolean;

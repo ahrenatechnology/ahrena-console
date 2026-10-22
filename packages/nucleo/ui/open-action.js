@@ -25,13 +25,13 @@ import { write as defaultWrite } from './api.js';
 /** How long a success stays beside the button. */
 export const SUCCESS_MS = 4000;
 
-const OPENED_TEXT = { desktop: 'Aberta no Claude Desktop', terminal: 'Aberta no terminal', focused: 'Terminal à frente' };
+const OPENED_TEXT = { 'codex-desktop': 'Abertura solicitada ao Codex', desktop: 'Aberta no Claude Desktop', terminal: 'Aberta no terminal', focused: 'Terminal à frente' };
 
 /** The text of a success, by the route's `opened`. */
 export const openedText = (opened) => OPENED_TEXT[opened] ?? 'Aberta';
 
 /** The write route of a session's open. */
-export const openRoute = (id) => `/api/sessions/${encodeURIComponent(id)}/open`;
+export const openRoute = (id, target = null) => `/api/${target === 'codex-desktop' ? 'codex/' : ''}sessions/${encodeURIComponent(id)}/open`;
 
 /**
  * What the action shows for an `open` descriptor, without DOM; `null` when there is nothing to show
@@ -39,6 +39,8 @@ export const openRoute = (id) => `/api/sessions/${encodeURIComponent(id)}/open`;
  */
 export function describeOpenAction(open, { machine = null } = {}) {
   switch (open?.target) {
+    case 'codex-desktop':
+      return { target: 'codex-desktop', label: 'Abrir no Codex', icon: 'monitor', external: true, title: 'Abre a conversa no aplicativo Codex', disabled: false, where: null };
     case 'desktop':
       return { target: 'desktop', label: 'Abrir no Claude Desktop', icon: 'monitor', external: true, title: 'Abre a conversa no Claude Desktop', disabled: false, where: null };
     case 'terminal':
@@ -65,8 +67,8 @@ export function describeOpenAction(open, { machine = null } = {}) {
 }
 
 /** Asks the core to open the session: the answer (`{ ok, opened }`) or the `WriteError` it threw. */
-export function openSession(id, { write = defaultWrite } = {}) {
-  return write(openRoute(id), {});
+export function openSession(id, { write = defaultWrite, target = null } = {}) {
+  return write(openRoute(id, target), {});
 }
 
 /** The state after an answer, without DOM: `{ kind: 'ok', text }` or `{ kind: 'fail', text, command }`. */
@@ -129,7 +131,7 @@ function setState(id, st) {
 export function openAction(session, { size = 'full', write = defaultWrite, machine = null, className = null, successMs = SUCCESS_MS, failMs = FAIL_MS } = {}) {
   const d = describeOpenAction(session?.open, { machine });
   if (!d) return null;
-  const id = session.id;
+  const id = d.target === 'codex-desktop' ? `codex:${session.id}` : session.id;
   const compact = size === 'icon';
   const label = size === 'small' && d.smallLabel ? d.smallLabel : d.label;
   // Where the button cannot say "roda em…" beside it (wall foot, icon), the server icon says it.
@@ -204,7 +206,7 @@ export function openAction(session, { size = 'full', write = defaultWrite, machi
     setState(id, { kind: 'busy', text: 'Abrindo…', command: null, until: null });
     let state;
     try {
-      state = stateOfAnswer(await openSession(id, { write }));
+      state = stateOfAnswer(await openSession(session.id, { write, target: d.target }));
     } catch (e) {
       if (e?.name === 'AbortError') state = null;
       else state = stateOfAnswer(null, e instanceof Error ? e : new Error(String(e)));

@@ -9,6 +9,7 @@
 import { header, el, icon } from '../dom.js';
 import { loading, error, errorBand, empty } from '../states.js';
 import { attentionOf, attentionPill, attentionTone, isBlocked, isIdle, reasonChip, statusWithoutAttention } from '../attention.js';
+import { sessionOrigin } from '../session-origin.js';
 import { openAction } from '../open-action.js';
 
 const STYLE = '/ui/wall.css';
@@ -18,7 +19,7 @@ export const DEBOUNCE_MS = 400;
 /** Contexto a partir daqui pinta a barra com a cor de erro. */
 export const HIGH_CONTEXT = 80;
 
-export const STATUS_LABEL = { active: 'Ativa', completed: 'Concluída', error: 'Com erro', abandoned: 'Abandonada' };
+export const STATUS_LABEL = { unknown: 'Sem estado', active: 'Ativa', completed: 'Concluída', error: 'Com erro', abandoned: 'Abandonada' };
 const EFFORTS = { low: 'baixo', medium: 'médio', high: 'alto', xhigh: 'muito alto', max: 'máximo' };
 
 // The same groups as the core's `count` (issue 245): blocked (errors included), idle, active.
@@ -72,22 +73,23 @@ export function cardContent(c) {
   else row = { tipo: 'fazendo', texto: c.activity?.text ?? '' };
   return {
     id: c.id,
-    href: `/ui/sessions/${encodeURIComponent(c.id)}`,
+    provider: c.provider ?? 'claude',
+    href: c.provider === 'codex' ? null : `/ui/sessions/${encodeURIComponent(c.id)}`,
     open: c.open ?? null,
     status: c.status,
     attention,
-    tone: attentionTone(attention) ?? statusWithoutAttention(c.status),
+    tone: c.status === 'unknown' ? 'unknown' : attentionTone(attention) ?? statusWithoutAttention(c.status),
     title: c.title,
-    origem: [c.project, c.branch].filter(Boolean).join(' · ') || '—',
+    origem: [c.group, c.project, c.branch].filter(Boolean).join(' · ') || '—',
     linha: row,
     grade: [
       ['Modelo', modelName(c.model)],
       ['Esforço', effort(c.effort)],
-      ['Agentes', String(c.agents?.total ?? 0)],
+      ['Agentes', c.provider === 'codex' ? '—' : String(c.agents?.total ?? 0)],
       ['Custo', cost(c.cost?.usd)],
     ],
     agents: c.agents ?? { active: 0, total: 0 },
-    plan: { done: plan.done, total: plan.total, label: `Plano ${plan.done}/${plan.total}`, current: c.plan?.current ?? null },
+    plan: { done: plan.done, total: plan.total, label: c.provider === 'codex' ? 'Plano não disponível' : `Plano ${plan.done}/${plan.total}`, current: c.plan?.current ?? null },
     context: { pct, label: pct === null ? 'contexto —' : `contexto ${pct}%`, high: pct !== null && pct >= HIGH_CONTEXT },
   };
 }
@@ -102,7 +104,7 @@ function useStyle() {
 /** The pill: the attention (Precisa de você, Ociosa, Com erro) or the status. */
 function badge(v) {
   if (v.attention) return attentionPill(v.attention, { extraClass: 'wall-pill' });
-  const st = statusWithoutAttention(v.status);
+  const st = v.status === 'unknown' ? 'unknown' : statusWithoutAttention(v.status);
   return el('span', { class: `wall-badge wall-pill wall-b-${st}` }, el('span', { class: 'p' }), STATUS_LABEL[st] ?? '');
 }
 
@@ -126,25 +128,25 @@ function bar({ valor: value, max, rotulo: label, alto: high = false, tipo: type 
  */
 function card(c, write) {
   const v = cardContent(c);
-  const link = el('a', { class: 'wall-tt wall-trunc wall-link', href: v.href, title: v.title, 'data-session': v.id }, v.title);
+  const link = el(v.href ? 'a' : 'span', { class: `wall-tt wall-trunc${v.href ? ' wall-link' : ''}`, href: v.href, tabindex: v.href ? null : '0', title: v.title, 'data-session': v.id }, v.title);
   const node = el(
     'div',
     { class: `card wall-card wall-st-${v.tone}`, 'data-session': v.id },
     el('div', { class: 'wall-l1' }, link, badge(v)),
-    el('div', { class: 'wall-prj wall-trunc' }, v.origem),
+    el('div', { class: 'wall-origin-row' }, sessionOrigin(v.provider), el('span', { class: 'wall-prj wall-trunc', title: v.origem }, v.origem)),
     cardRow(v.linha),
     el(
       'div',
       { class: 'wall-gr' },
       ...v.grade.map(([label, value]) =>
-        el('div', label === 'Agentes' ? { title: `${v.agents.active} ativos de ${v.agents.total}` } : label === 'Custo' ? { title: value === '—' ? 'Sem preço para o modelo' : `US$ ${value.slice(1)}, estimado` } : {}, label, el('b', { class: 'wall-trunc' }, value)),
+        el('div', label === 'Agentes' ? { title: v.provider === 'codex' ? 'Quantidade de agentes não disponível' : `${v.agents.active} ativos de ${v.agents.total}` } : label === 'Custo' ? { title: value === '—' ? 'Sem preço para o modelo' : `US$ ${value.slice(1)}, estimado` } : {}, label, el('b', { class: 'wall-trunc' }, value)),
       ),
     ),
     el('div', { class: 'wall-planrow' }, el('span', { title: v.plan.current ?? null }, v.plan.label), el('span', {}, v.context.label)),
     el(
       'div',
       { class: 'wall-bars' },
-      bar({ tipo: 'plan', valor: v.plan.done, max: v.plan.total, rotulo: `Plano: ${v.plan.done} de ${v.plan.total}` }),
+      bar({ tipo: 'plan', valor: v.plan.done, max: v.plan.total, rotulo: v.provider === 'codex' ? 'Plano não disponível' : `Plano: ${v.plan.done} de ${v.plan.total}` }),
       bar({ tipo: 'context', valor: v.context.pct ?? 0, max: 100, alto: v.context.high, rotulo: v.context.pct === null ? 'Contexto: sem leitura' : `Contexto: ${v.context.pct}%` }),
     ),
     foot(v, write),
@@ -158,7 +160,7 @@ function card(c, write) {
  */
 function foot(v, write) {
   const action = openAction({ id: v.id, open: v.open }, { size: 'small', write });
-  return el('div', { class: 'wall-foot' }, action, el('a', { class: 'wall-detail', href: v.href, tabindex: '-1' }, 'Detalhe ›'));
+  return el('div', { class: 'wall-foot' }, action, v.href ? el('a', { class: 'wall-detail', href: v.href, tabindex: '-1' }, 'Detalhe ›') : null);
 }
 
 // ---------- A tela ----------
@@ -166,6 +168,7 @@ function foot(v, write) {
 export async function mount(area, ctx) {
   useStyle();
   let filter = 'all';
+  let provider = 'all';
   let wall = null;
   let failure = null;
   let request = 0;
@@ -182,8 +185,10 @@ export async function mount(area, ctx) {
       return b;
     }),
   );
+  const origin = el('select', { class: 'wall-provider', 'aria-label': 'Origem', onChange: ev => { provider = ev.target.value; draw(); } },
+    el('option', { value: 'all' }, 'Claude e Codex'), el('option', { value: 'claude' }, 'Claude'), el('option', { value: 'codex' }, 'Codex'));
   const refresh = el('button', { type: 'button', class: 'btn', 'data-action': 'refresh', onClick: () => read() }, icon('refresh'), 'Atualizar');
-  const head = header({ icon: 'wall', title: 'Mural ao vivo', sub: 'Um card por sessão aberta nesta máquina', actions: [selector, refresh] });
+  const head = header({ icon: 'wall', title: 'Mural ao vivo', sub: 'Um card por sessão aberta nesta máquina', actions: [origin, selector, refresh] });
 
   function choose(id) {
     filter = id;
@@ -198,15 +203,15 @@ export async function mount(area, ctx) {
     }
     for (const f of FILTERS) buttons.get(f.id).replaceChildren(filterLabel(f, wall.count));
     const f = FILTERS.find((x) => x.id === filter);
-    const cards = (wall.cards ?? []).filter(f.passa);
-    const band = failure ? errorBand({ title: 'O mural não atualizou.', text: failure.message, action: { label: 'Tentar de novo', onClick: () => read() } }) : null;
+    const cards = (wall.cards ?? []).filter(c => (provider === 'all' || (c.provider ?? 'claude') === provider) && f.passa(c));
+    const band = wall.sourceError ? errorBand({ title: 'Codex indisponível', text: wall.sourceError }) : failure ? errorBand({ title: 'O mural não atualizou.', text: failure.message, action: { label: 'Tentar de novo', onClick: () => read() } }) : null;
     const built = cards.map((c) => card(c, ctx.write));
     const nodes = built.map((b) => b.node);
     // The keyboard lands on the card's link (the title stretched over the card).
     const links = built.map((b) => b.link);
     const body = cards.length
       ? el('div', { class: 'wall-grid' }, ...nodes)
-      : empty({ icon: 'wall', title: f.vazio, text: filter === 'all' ? 'Abra uma sessão do Claude Code nesta máquina e ela aparece aqui.' : 'Troque o filtro para ver as outras.' });
+      : empty({ icon: 'wall', title: f.vazio, text: filter === 'all' ? 'As sessões Claude e as conversas Codex com atividade recente aparecem aqui.' : 'Troque o filtro para ver as outras.' });
     // Redesenhar troca os cards: o foco do teclado volta ao card da mesma sessão.
     const focused = globalThis.document?.activeElement?.closest?.('[data-session]')?.getAttribute('data-session') ?? null;
     area.replaceChildren(...[head, band, body].filter(Boolean));
@@ -236,7 +241,9 @@ export async function mount(area, ctx) {
     }, DEBOUNCE_MS);
   });
 
+  const refreshTimer = setInterval(() => read(), 30000);
+  refreshTimer.unref?.();
   draw();
   await read();
-  return () => clearTimeout(wait);
+  return () => { clearInterval(refreshTimer); clearTimeout(wait); };
 }

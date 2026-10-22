@@ -7,6 +7,7 @@
 
 import { el, icon } from '../dom.js';
 import { loading, error, errorBand, empty } from '../states.js';
+import { sessionOrigin } from '../session-origin.js';
 import { openAction } from '../open-action.js';
 import { create as workflowTab } from './session-detail-workflow.js';
 import { create as decisionsTab } from './session-detail-decisions.js';
@@ -250,6 +251,7 @@ function drawTop(c, refresh, write) {
   const pills = el(
     'div',
     { class: 'sd-pills' },
+    sessionOrigin(s.provider),
     pill(null, s.id.slice(0, 12), copyButton(s.id, 'o id da sessão')),
     s.model ? pill('port', modelName(s.model)) : null,
     pill('clock', `${when(s.startedAt)} (${duration(end - Date.parse(s.startedAt))})`),

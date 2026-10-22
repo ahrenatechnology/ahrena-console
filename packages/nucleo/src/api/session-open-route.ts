@@ -24,15 +24,17 @@ import { stat } from 'node:fs/promises';
 import { send } from '../ingest/hooks/receiver.ts';
 import type { StoragePort } from '../storage-port.ts';
 import { isUsableCwd, resumeCommand, SESSION_ID_PATTERN, type SessionOpenDescriber } from './session-open.ts';
+import type { CodexIndex } from './codex-index.ts';
 import type { TerminalFocuser, TerminalOpener } from './terminal-launch.ts';
 
-export const SESSION_OPEN_ROUTE = /^\/api\/sessions\/([^/]+)\/open$/;
+export const SESSION_OPEN_ROUTE = /^\/api\/(?:codex\/)?sessions\/([^/]+)\/open$/;
 /** The raw URL the /ui posts: the UUID and nothing else (decision 0003). */
-export const SESSION_OPEN_FROM_UI = /^\/api\/sessions\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/open$/i;
+export const SESSION_OPEN_FROM_UI = /^\/api\/(?:codex\/)?sessions\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/open$/i;
 
-export type OpenedAs = 'desktop' | 'terminal' | 'focused';
+export type OpenedAs = 'codex-desktop' | 'desktop' | 'terminal' | 'focused';
 
 export interface SessionOpenRouteOptions {
+  codex?: Pick<CodexIndex, 'find' | 'error'> | null;
   storage: Pick<StoragePort, 'getSession'>;
   /** The Claude Desktop's `local_…` of a session, its index already refreshed; `null` when it does not know it. */
   localOf: (sessionId: string) => Promise<string | null> | string | null;
@@ -69,6 +71,18 @@ export function createSessionOpenRoute(o: SessionOpenRouteOptions): SessionOpenR
     if (!SESSION_ID_PATTERN.test(rawId)) return send(res, 400, { error: 'id de sessão inválido' });
     const sessionId = rawId;
 
+    if (req.url?.startsWith('/api/codex/')) {
+      const thread = o.codex?.find(sessionId);
+      if (o.codex?.error) return send(res, 503, { error: o.codex.error });
+      if (!thread) return send(res, 404, { error: 'O núcleo não conhece esta sessão Codex' });
+      if (!o.openInDesktop) return send(res, 501, { error: 'Abrir no Codex não está disponível nesta máquina' });
+      try {
+        await o.openInDesktop(`codex://threads/${thread.id}`);
+        return send(res, 200, { ok: true, opened: 'codex-desktop' satisfies OpenedAs });
+      } catch {
+        return send(res, 502, { error: 'Não foi possível solicitar a abertura no Codex. Verifique se o aplicativo está instalado.' });
+      }
+    }
     const session = await o.storage.getSession(sessionId);
     if (!session) {
       if (o.isRemote?.(sessionId)) return send(res, 422, { error: 'A sessão roda em outra máquina' });

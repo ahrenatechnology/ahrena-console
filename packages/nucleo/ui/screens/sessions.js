@@ -8,6 +8,7 @@
 import { header, el, icon } from '../dom.js';
 import { loading, error, errorBand, empty } from '../states.js';
 import { attentionBadges, attentionOf, statusWithoutAttention } from '../attention.js';
+import { sessionOrigin } from '../session-origin.js';
 import { openAction } from '../open-action.js';
 
 // The `status` and `order` values of `/api/sessions` (English since phase 2b of issue 173). issue 245: the
@@ -30,6 +31,7 @@ const ORDERS = {
 };
 
 export const STATUS = {
+  unknown: 'Estado não disponível',
   active: 'Ativa',
   completed: 'Concluída',
   error: 'Com erro',
@@ -52,6 +54,8 @@ export function stateFromQuery(query) {
   const order = p.get('order');
   return {
     status: PILLS.some(([v]) => v === status) ? status : DEFAULTS.status,
+    ...(p.get('provider') ? { provider: p.get('provider') } : {}),
+    ...(p.get('group') ? { group: p.get('group') } : {}),
     search: (p.get('search') ?? '').slice(0, 200),
     dir: (p.get('dir') ?? '').startsWith('/') ? p.get('dir') : '',
     order: Object.hasOwn(ORDERS, order ?? '') ? order : DEFAULTS.order,
@@ -73,6 +77,8 @@ export function listRoute(state, perPage = null) {
   const p = new URLSearchParams({ status: state.status, order: state.order, direction: state.direction, page: String(state.page) });
   if (perPage) p.set('perPage', String(perPage));
   if (state.search.trim()) p.set('search', state.search.trim());
+  if (state.provider) p.set('provider', state.provider);
+  if (state.group) p.set('group', state.group);
   if (state.dir) p.set('dir', state.dir);
   return `/api/sessions?${p}`;
 }
@@ -148,6 +154,7 @@ export function shortId(id) {
 // As colunas, na ordem; a classe dá a largura de cada uma (sessions.css).
 export const COLUMNS = [
   ['c-session', 'Sessão'],
+  ['c-origin', 'Origem'],
   ['c-status', 'Status'],
   ['c-activity', 'Última atividade'],
   ['c-duration', 'Duração'],
@@ -171,7 +178,7 @@ function selector(label, options, value, onChange) {
 export function badgeEl(status, attention) {
   if (attentionOf(attention)) return attentionBadges(attention);
   // Waiting without attention does not wait on the person (delegating…): "Ativa". Nothing raw on screen.
-  const st = statusWithoutAttention(status);
+  const st = status === 'unknown' ? 'unknown' : statusWithoutAttention(status);
   if (!Object.hasOwn(STATUS, st)) return [];
   return [el('span', { class: `badge b-${st}` }, el('span', { class: 'p' }), STATUS[st])];
 }
@@ -227,7 +234,9 @@ export async function mount(area, ctx) {
   const invert = el('button', { type: 'button', class: 'field square', 'aria-label': 'Inverter a ordem', title: 'Inverter a ordem', onClick: () => change({ direction: state.direction === 'desc' ? 'asc' : 'desc', page: 1 }) }, icon('invert'));
   const pills = el('div', { class: 'seg', role: 'group', 'aria-label': 'Status' });
   for (const [v, label] of PILLS) pills.append(el('button', { type: 'button', 'data-status': v, onClick: () => change({ status: v, page: 1 }) }, label, el('b', { class: 'sessions-pill-count' })));
-  const filters = el('div', { class: 'card filters' }, searchField, dirSlot, orderSlot, invert, pills);
+  const providerSlot = selector('Origem', [['all', 'Claude e Codex'], ['claude', 'Claude'], ['codex', 'Codex']], state.provider || 'all', provider => change({ provider, group: '', page: 1 }));
+  const groupSlot = el('span', {});
+  const filters = el('div', { class: 'card filters' }, searchField, providerSlot, groupSlot, dirSlot, orderSlot, invert, pills);
 
   const body = el('div', { class: 'sessions-body' }, loading({ label: 'Carregando as sessões' }));
   area.replaceChildren(head, filters, body);
@@ -297,16 +306,18 @@ export async function mount(area, ctx) {
 
   // ---------- tabela ----------
   function row(s) {
+    const isCodex = s.provider === 'codex';
     const target = `/ui/sessions/${encodeURIComponent(s.id)}`;
     const tr = el(
       'tr',
       { class: 'session-row' },
-      el('td', { class: 'nm' }, el('a', { href: target, title: s.title }, el('b', {}, s.title)), el('small', {}, el('span', { class: 'mono' }, shortId(s.id)), account(s.account))),
+      el('td', { class: 'nm' }, isCodex ? el('b', { title: s.title }, s.title) : el('a', { href: target, title: s.title }, el('b', {}, s.title)), el('small', {}, el('span', { class: 'mono' }, shortId(s.id)), el('span', { class: 'sessions-origin', title: s.group || 'Sem grupo' }, s.group || 'Sem grupo'), account(s.account))),
+      el('td', { class: 'sessions-provider' }, sessionOrigin(s.provider)),
       el('td', { class: 'st' }, ...badgeEl(s.status, s.attention)),
       el('td', { class: 'c-muted', title: new Date(s.lastActivity).toLocaleString('pt-BR') }, age(s.lastActivity)),
       // Os dois pedaços não quebram por dentro: na coluna estreita, o tempo desce para a linha de baixo.
-      el('td', { class: 'mono dur' }, s.running ? el('span', { class: 'c-active' }, 'rodando ·') : null, s.running ? ' ' : null, el('span', {}, duration(s.durationMs))),
-      el('td', { class: 'mono' }, String(s.agents)),
+      el('td', { class: 'mono dur' }, s.running ? el('span', { class: 'c-active' }, 'rodando ·') : null, s.running ? ' ' : null, el('span', {}, isCodex ? '—' : duration(s.durationMs))),
+      el('td', { class: 'mono sessions-agents' }, isCodex ? '—' : String(s.agents)),
       el('td', { class: 'mono' }, cost(s.costUsd)),
       // Corta no começo (o fim do caminho é o que distingue): o LRM mantém a barra inicial no lugar.
       el('td', { class: 'dir', title: s.cwd ?? '' }, s.cwd ? `\u200e${s.cwd}\u200e` : '—'),
@@ -315,6 +326,7 @@ export async function mount(area, ctx) {
     );
     tr.addEventListener('click', (ev) => {
       if (ev.target instanceof Element && ev.target.closest('a')) return;
+      if (isCodex) return;
       ctx.navigate(target);
     });
     return tr;
@@ -350,18 +362,21 @@ export async function mount(area, ctx) {
       history.replaceState(null, '', `${location.pathname}${queryFromState(state)}`);
     }
     drawFilters(list.directories, list.counts);
+    groupSlot.replaceChildren(selector('Grupo', [['', 'Todos os grupos'], ...(list.groups || []).map(g => [g.key, g.label])], state.group || '', group => change({ group, page: 1 })));
     if (list.items.length) {
       body.replaceChildren(table(list), footer(list));
+      if (list.sourceError) body.prepend(errorBand({ title: 'Codex indisponível', text: list.sourceError }));
       // The first table measures the real rows; a different count reads the page again, once.
       if (!fitted && refit()) read();
       return;
     }
-    const filtering = state.status !== 'all' || state.search.trim() || state.dir;
+    const filtering = state.status !== 'all' || state.search.trim() || state.dir || state.group || (state.provider && state.provider !== 'all');
     body.replaceChildren(
       filtering
-        ? empty({ title: 'Nenhuma sessão com esses filtros', text: 'Mude a busca, o diretório ou o status.', action: { label: 'Limpar os filtros', onClick: () => ((search.value = ''), change({ status: 'all', search: '', dir: '', page: 1 })) } })
-        : empty({ icon: 'sessions', title: 'Nenhuma sessão ainda', text: 'As sessões do Claude Code desta máquina aparecem aqui assim que o núcleo as vê.' }),
+        ? empty({ title: 'Nenhuma sessão com esses filtros', text: 'Mude a busca, o diretório ou o status.', action: { label: 'Limpar os filtros', onClick: () => ((search.value = ''), change({ status: 'all', search: '', dir: '', group: '', provider: 'all', page: 1 })) } })
+        : empty({ icon: 'sessions', title: 'Nenhuma sessão ainda', text: 'As sessões do Claude e do Codex desta máquina aparecem aqui assim que o núcleo as vê.' }),
     );
+    if (list.sourceError) body.prepend(errorBand({ title: 'Codex indisponível', text: list.sourceError }));
   }
 
   async function read() {
@@ -392,12 +407,14 @@ export async function mount(area, ctx) {
   });
   ctx.onRestart(() => read());
 
+  const refreshTimer = setInterval(() => read(), 30000);
   drawFilters([]);
   await sheet.loaded;
   // Before the first table, the CSS sizes give the count, so the first read already fills the window.
   perPage = rowsThatFit();
   await read();
   return () => {
+    clearInterval(refreshTimer);
     resizing.disconnect();
     clearTimeout(resizeWait);
     clearTimeout(searchWait);

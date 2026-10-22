@@ -146,3 +146,8 @@ button { font: inherit; cursor: pointer; }
   .cc-foot { margin: 0 0 0 auto; padding: 0; flex-direction: row; }
   .cc-main { padding: 16px; }
 }
+
+/* Session origin stays readable beside ids, models and aggregate cards. */
+.session-origin { display: inline-flex; flex: none; align-items: center; min-height: 24px; padding: 2px 9px; border: 1px solid var(--border); border-radius: 6px; font-size: 12px; font-weight: 600; line-height: 1.4; white-space: nowrap; color: var(--text); background: var(--raised); }
+.session-origin[data-provider="claude"] { color: var(--orange-100); background: var(--orange-900); border-color: var(--orange-700); }
+.session-origin[data-provider="codex"] { color: var(--mono-white); background: var(--gray-700); border-color: var(--gray-300); }
