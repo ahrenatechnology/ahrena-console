@@ -143,10 +143,29 @@ describe('lock', () => {
     assert.equal(t.token.length, 64);
   });
 
-  test('the file keeps its keys (other installed cores read it)', () => {
+  test('a new core writes English keys, plus the legacy ones for an older core still up (#274)', () => {
     const t: Lock = { pid: 123, port: 4799, version: '0.0.1', startedAt: '2026-10-19T12:00:00.000Z', token: 'abc', parent: 777 };
     writeLock(t, dir);
-    assert.deepEqual(JSON.parse(readFileSync(lockFilePath(dir), 'utf8')), { pid: 123, porta: 4799, versao: '0.0.1', inicio: '2026-10-19T12:00:00.000Z', token: 'abc', pai: 777 });
+    assert.deepEqual(JSON.parse(readFileSync(lockFilePath(dir), 'utf8')), {
+      pid: 123, port: 4799, version: '0.0.1', startedAt: '2026-10-19T12:00:00.000Z', token: 'abc', parent: 777,
+      porta: 4799, versao: '0.0.1', inicio: '2026-10-19T12:00:00.000Z', pai: 777,
+    });
+  });
+
+  test('reads a lock an older core wrote, with Portuguese keys only (#274)', () => {
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(lockFilePath(dir), JSON.stringify({ pid: 123, porta: 4799, versao: '0.0.6', inicio: '2026-10-19T12:00:00.000Z', token: 'abc', pai: 777 }));
+    assert.deepEqual(readLock(dir), { pid: 123, port: 4799, version: '0.0.6', startedAt: '2026-10-19T12:00:00.000Z', token: 'abc', parent: 777 });
+    writeFileSync(lockFilePath(dir), JSON.stringify({ pid: 123, porta: 4799, versao: '0.0.6', inicio: 'x', token: 'abc', pai: null }));
+    assert.equal((readLock(dir) as Lock).parent, null);
+  });
+
+  test('reads a lock with English keys only, and English wins over a legacy key (#274)', () => {
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(lockFilePath(dir), JSON.stringify({ pid: 5, port: 4800, version: '0.0.8', startedAt: 'y', token: 't', parent: null }));
+    assert.deepEqual(readLock(dir), { pid: 5, port: 4800, version: '0.0.8', startedAt: 'y', token: 't', parent: null });
+    writeFileSync(lockFilePath(dir), JSON.stringify({ pid: 5, port: 4800, porta: 1, version: '0.0.8', startedAt: 'y', token: 't', parent: null }));
+    assert.equal((readLock(dir) as Lock).port, 4800);
   });
 
   test('no file is null; a file that is not a lock is invalid', () => {
