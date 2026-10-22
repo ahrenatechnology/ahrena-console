@@ -16,7 +16,7 @@ import { createHash } from 'node:crypto';
 import { openSqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
 import { PEER_PREFIX, PEER_SUFFIX } from '../../src/ingest/history/transcript.ts';
 import { Accounts, MontadorDoPainel, startLocalApi } from '../../src/api/index.ts';
-import { createMessagingRoute } from '../../src/api/messaging.ts';
+import { createMessagingRoute, MAX_MESSAGE_BODY } from '../../src/api/messaging.ts';
 import { AuditFile } from '../../src/messaging/adapters/audit-file.ts';
 import { SessionsDirectory } from '../../src/messaging/adapters/sessions-dir.ts';
 import { SocketInbox } from '../../src/messaging/adapters/socket-inbox.ts';
@@ -283,7 +283,7 @@ describe('#61/AC-1 POST /api/sessions/<id>/messages', () => {
     }
   });
 
-  test('#61/AC-1 Invalid text is 400 invalid_text; a body past 16 KiB is 413; not JSON is 415', async () => {
+  test('#61/AC-1 Invalid text is 400 invalid_text; a body past MAX_MESSAGE_BODY is 413; not JSON is 415', async () => {
     const b = await boot();
     try {
       for (const text of ['', '   ', 42, null]) {
@@ -291,11 +291,26 @@ describe('#61/AC-1 POST /api/sessions/<id>/messages', () => {
         assert.deepEqual([r.status, r.json.reason], [400, 'invalid_text'], JSON.stringify(text));
       }
       assert.equal((await call(b.url, 'POST', `/api/sessions/${b.sessionId}/messages`, ui(b), '[1]')).json.reason, 'invalid_text');
-      assert.equal((await post(b, 'a'.repeat(16 * 1024))).status, 413);
+      assert.equal((await call(b.url, 'POST', `/api/sessions/${b.sessionId}/messages`, ui(b), `{"text":"${'a'.repeat(MAX_MESSAGE_BODY)}"}`)).status, 413);
       for (const type of ['text/plain', 'application/json-seq'])
         assert.equal((await call(b.url, 'POST', `/api/sessions/${b.sessionId}/messages`, { origin: `http://${b.host}`, 'content-type': type }, '{"text":"oi"}')).status, 415, type);
       assert.equal((await post(b, 'oi'.repeat(10), ui(b))).status, 202);
       assert.equal(b.logs.join('\n').includes('a'.repeat(100)), false);
+    } finally {
+      await b.close();
+    }
+  });
+
+  test('#61/AC-1 The 16 KiB limit is on the decoded text: 16384 bytes with newlines is 202, 16385 is 400 invalid_text', async () => {
+    const b = await boot({ confirm: false });
+    try {
+      // Each newline costs 2 body bytes and each quote 2: the body is past 16 KiB, the text is not.
+      const full = 'ab\n"'.repeat(16 * 1024 / 4);
+      assert.equal(Buffer.byteLength(full), 16 * 1024);
+      const r = await post(b, full);
+      assert.equal(r.status, 202, JSON.stringify(r.json));
+      const over = await post(b, `${full}a`);
+      assert.deepEqual([over.status, over.json.reason], [400, 'invalid_text']);
     } finally {
       await b.close();
     }

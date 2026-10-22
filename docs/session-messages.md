@@ -39,7 +39,7 @@ O socket não responde nada, nem para uma linha inválida. Por isso "Entregue" s
 
 ## Limites e segurança
 
-- Só texto escrito por uma pessoa na `/ui`: de 1 byte a 16 KiB, uma mensagem por vez por sessão (a próxima espera a confirmação da anterior), no máximo 5 por minuto por sessão e 20 por minuto no total.
+- Só texto escrito por uma pessoa na `/ui`: de 1 byte a 16 KiB em UTF-8, contados no texto e não no corpo do pedido (o corpo pode ir a 96 KiB e 64 bytes, a folga para o escape do JSON: quebras de linha e aspas não encurtam o texto), uma mensagem por vez por sessão (a próxima espera a confirmação da anterior), no máximo 5 por minuto por sessão e 20 por minuto no total.
 - Só local: o hub nunca chama a máquina, e não há ferramenta MCP que mande mensagem.
 - O pedido é uma exceção de mesma origem da [decisão 0003](decisoes/0003-responder-sessao.md): só da própria `/ui`, nunca de outra página nem de um script sem `Origin`.
 - O núcleo nunca abre o arquivo `<pid>.<hash>.key` ao lado do `sessions/<pid>.json`: no macOS e no Linux o token é opcional e o socket já é restrito ao seu usuário. Ele só entrega num socket do próprio usuário, de um processo vivo, que não seja link simbólico.

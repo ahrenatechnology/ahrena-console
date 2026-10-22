@@ -10,7 +10,9 @@
 //
 // The POST is a same-origin exception of decision 0003 (`messagesWriteFromSameOrigin`, called in
 // server.ts `handle`): only `POST`, the exact raw path (no query, no encoding), `Origin` exactly
-// `http://<Host>` with our Host, `Content-Type: application/json`, body up to 16 KiB. Stricter than
+// `http://<Host>` with our Host, `Content-Type: application/json`, body up to `MAX_MESSAGE_BODY` (96 KiB and 64 bytes: room for
+// the `{"text":…}` envelope and the worst JSON escaping, 6 bytes per byte), and the decoded text up
+// to 16 KiB of UTF-8 (`MAX_TEXT_BYTES`, checked after parsing: `invalid_text`). Stricter than
 // the other writes: a request WITHOUT `Origin` (a loopback script) is refused too (`ui_only`), since
 // only text a person typed in the /ui may go; nothing batched, nothing generated.
 //
@@ -18,7 +20,7 @@
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { send } from '../ingest/hooks/receiver.ts';
-import type { MessageView, UnavailableReason } from '../messaging/model.ts';
+import { MAX_TEXT_BYTES, type MessageView, type UnavailableReason } from '../messaging/model.ts';
 import type { Messaging } from '../messaging/service.ts';
 import type { Session } from '../model.ts';
 import { LOCAL_MACHINE_ID, MACHINE_ID } from '../telemetry/model.ts';
@@ -27,8 +29,13 @@ import { LOCAL_MACHINE_ID, MACHINE_ID } from '../telemetry/model.ts';
 export const MESSAGING_ROUTE = /^\/api\/sessions\/([^/]+)\/(messaging|messages)(?:\/([^/]+))?$/;
 /** The exact raw path the same-origin exception accepts. */
 const MESSAGES_RAW_PATH = /^\/api\/sessions\/[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}\/messages$/;
-/** The POST body limit (decision 0003, #61). */
-export const MAX_MESSAGE_BODY = 16 * 1024;
+/**
+ * The POST body limit (decision 0003, #61), still bounded before parsing. The text limit is on the
+ * decoded text (`MAX_TEXT_BYTES`, 16 KiB of UTF-8); the body has headroom for the `{"text":…}`
+ * envelope and for JSON escaping at its worst (`\u00XX`, 6 bytes for 1), so a text within 16 KiB is
+ * never refused by the body cap, however many newlines or quotes it has.
+ */
+export const MAX_MESSAGE_BODY = 6 * MAX_TEXT_BYTES + 64;
 
 const ID = /^[A-Za-z0-9_.:-]{1,128}$/;
 const MESSAGE_ID = /^[A-Za-z0-9-]{1,64}$/;
@@ -121,7 +128,7 @@ function tooLarge(req: IncomingMessage, res: ServerResponse): void {
   req.once('close', () => clearTimeout(cutoff));
   req.resume();
   res.setHeader('connection', 'close');
-  send(res, 413, { error: 'Mensagem grande demais: até 16 KiB.' });
+  send(res, 413, { error: 'Pedido grande demais: o texto vai até 16 KiB.' });
 }
 
 export function createMessagingRoute({ messaging, sessions, accounts = null, log = () => {} }: MessagingRouteOptions): MessagingRoute {
