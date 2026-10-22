@@ -6,7 +6,7 @@ import { openSqliteStorage, type SqliteStorage } from '../../src/adapters/sqlite
 import { Accounts, startLocalApi, MontadorDoDashboard, MontadorDoPainel, montarDashboard, type LocalApi } from '../../src/api/index.ts';
 import { FleetReader } from '../../src/mcp/index.ts';
 import { seedPanelScenario, PANEL_SESSION } from '../../src/simulator/panel.ts';
-import { at, event } from '../fixtures.ts';
+import { at, event, session } from '../fixtures.ts';
 import { NOW, seed } from '../mcp/helpers.ts';
 
 let storage: SqliteStorage;
@@ -131,6 +131,50 @@ describe('MontadorDoDashboard', () => {
     assert.deepEqual(d.numbers.events, { today: 0, lastHour: 0, total: 0 });
     assert.equal(d.numbers.cost.usd, 0);
     assert.deepEqual([d.agents, d.activity], [[], []]);
+  });
+});
+
+// #311: the build is incremental (events and cost slices per session) and yields to the event loop.
+describe('MontadorDoDashboard at scale (#311)', () => {
+  const withUsage = (id: string, sessionId: string, messageId: string, min: number) =>
+    event({ id, sessionId, agentId: `${sessionId}:main`, type: 'ToolUse', toolName: 'Bash', summary: null, createdAt: at(min), data: { usage: { messageId, model: 'claude-opus-5-5', tokens: { input: 1000, output: 500, cacheRead: 0, cacheWrite5m: 0, cacheWrite1h: 0 } } } });
+
+  test('the response after incremental changes is the one a cold build gives, cost included', async () => {
+    let agora = NOW;
+    await seed(storage);
+    const frota = frotaEm(() => agora);
+    const m = new MontadorDoDashboard({ frota, cacheMs: 0, custoMs: 0 });
+    const antes = await m.montar();
+    const s = (await storage.getSession('trabalhando'))!;
+    await storage.appendEvent(withUsage('u1', s.id, 'msg-1', 1));
+    await storage.appendEvent(withUsage('u2', s.id, 'msg-2', 2));
+    await storage.putSession({ ...s, updatedAt: at(2) });
+    agora = Date.parse(at(2));
+    const incremental = await m.montar();
+    const frio = await new MontadorDoDashboard({ frota: frotaEm(() => agora), cacheMs: 0, custoMs: 0 }).montar();
+    assert.deepEqual(incremental, frio);
+    assert.notEqual(incremental.numbers.cost.usd, antes.numbers.cost.usd);
+    assert.deepEqual(Object.keys(incremental), ['generatedAt', 'day', 'timeZone', 'numbers', 'agents', 'activity']);
+    assert.deepEqual(Object.keys(incremental.numbers), ['sessions', 'agents', 'subagents', 'events', 'cost']);
+  });
+
+  test('a build over many sessions gives the event loop back', async () => {
+    for (let i = 0; i < 60; i++) {
+      const id = `bulk-${i}`;
+      await storage.putSession(session({ id, status: 'completed', startedAt: at(-60), updatedAt: at(-30 + (i % 20)) }));
+      await storage.appendEvent(withUsage(`${id}-u`, id, `${id}-m`, -20));
+    }
+    let voltas = 0;
+    let rodando = true;
+    const marca = (): void => {
+      voltas++;
+      if (rodando) setImmediate(marca);
+    };
+    setImmediate(marca);
+    const d = await new MontadorDoDashboard({ frota: frotaEm(() => NOW), fatiaMs: 0 }).montar();
+    rodando = false;
+    assert.equal(d.numbers.sessions.total, 60);
+    assert.ok(voltas >= 60, `the event loop turned only ${voltas} times during the build`);
   });
 });
 
