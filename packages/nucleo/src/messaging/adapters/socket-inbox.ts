@@ -6,10 +6,17 @@
 // The socket writes nothing back, not even for an invalid line: "written" only means the line was
 // handed to an open connection. No auth line is sent (optional outside Windows): the
 // core never reads the `.key` file. A failure carries a reason code, never the text.
+//
+// Right before `connect` the path is checked again (`checkSocketPath`, socket-check.ts): a socket of
+// ours in a directory only we can write. The check in `SessionsDirectory.find` ran before the probe's
+// disk I/O; this one leaves only the time between its `lstat` and `connect`, which reopens the path
+// by name (Node has no connect on a file descriptor). That remaining window is open only to whoever
+// can write an ancestor of the socket's directory, or root; it is accepted, see socket-check.ts.
 
 import { connect as netConnect, type Socket } from 'node:net';
 import type { DeliveryFailure } from '../model.ts';
 import type { DeliveryResult, Inbox } from '../ports.ts';
+import { checkSocketPath, CORE_UID, type SocketCheck } from './socket-check.ts';
 
 /** The one line the inbox reads for a user message. `JSON.stringify` escapes the newlines of the text. */
 export function inboxLine(text: string): string {
@@ -21,6 +28,8 @@ export interface SocketInboxOptions {
   timeoutMs?: number;
   /** For the tests: opens the connection. */
   connect?: (path: string) => Socket;
+  /** The check right before `connect`. Default `checkSocketPath` with the core's uid. */
+  check?: (path: string) => Promise<SocketCheck>;
 }
 
 function failureOf(err: NodeJS.ErrnoException): DeliveryFailure {
@@ -32,13 +41,22 @@ function failureOf(err: NodeJS.ErrnoException): DeliveryFailure {
 export class SocketInbox implements Inbox {
   private readonly timeoutMs: number;
   private readonly connect: (path: string) => Socket;
+  private readonly check: (path: string) => Promise<SocketCheck>;
 
-  constructor({ timeoutMs = 2000, connect = (path) => netConnect(path) }: SocketInboxOptions = {}) {
+  constructor({ timeoutMs = 2000, connect = (path) => netConnect(path), check = (path) => checkSocketPath(path, CORE_UID) }: SocketInboxOptions = {}) {
     this.timeoutMs = timeoutMs;
     this.connect = connect;
+    this.check = check;
   }
 
-  deliver(socketPath: string, text: string): Promise<DeliveryResult> {
+  async deliver(socketPath: string, text: string): Promise<DeliveryResult> {
+    const checked = await this.check(socketPath).catch((): SocketCheck => 'not_ours');
+    if (checked === 'gone') return { ok: false, reason: 'socket_gone' };
+    if (checked !== 'ok') return { ok: false, reason: 'socket_error' };
+    return this.write(socketPath, text);
+  }
+
+  private write(socketPath: string, text: string): Promise<DeliveryResult> {
     return new Promise((resolve) => {
       let done = false;
       let socket: Socket;

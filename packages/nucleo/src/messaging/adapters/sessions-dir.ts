@@ -10,7 +10,8 @@
 //   file name's and whose `sessionId` is the one asked;
 // - the pid is alive and ours (`process.kill(pid, 0)`; `EPERM` is another user's process);
 // - `messagingSocketPath` is an absolute, normalized path whose `lstat` is a socket (so not a
-//   symlink) owned by the core's uid.
+//   symlink) owned by the core's uid, in a directory of ours that only we can write
+//   (`checkSocketPath`, socket-check.ts, which `SocketInbox` runs again right before `connect`).
 //
 // `bridgeSessionId` (Remote Control on) is only tested for presence; its value is never kept.
 
@@ -18,6 +19,7 @@ import { lstat, readdir, readFile } from 'node:fs/promises';
 import { isAbsolute, join, normalize } from 'node:path';
 import type { LiveProcess } from '../model.ts';
 import type { LiveSessions } from '../ports.ts';
+import { checkSocketPath } from './socket-check.ts';
 
 const SESSION_FILE = /^(\d{1,10})\.json$/;
 const MAX_FILE_BYTES = 64 * 1024;
@@ -86,9 +88,7 @@ export class SessionsDirectory implements LiveSessions {
       if (!this.isAlive(pid)) return null;
       const socketPath = o.messagingSocketPath;
       if (typeof socketPath !== 'string' || socketPath.includes('\0') || !isAbsolute(socketPath) || normalize(socketPath) !== socketPath) return null;
-      const sock = await lstat(socketPath);
-      if (!sock.isSocket()) return null;
-      if (this.uid !== null && sock.uid !== this.uid) return null;
+      if ((await checkSocketPath(socketPath, this.uid)) !== 'ok') return null;
       const entrypoint = typeof o.entrypoint === 'string' && ENTRYPOINT.test(o.entrypoint) ? o.entrypoint : null;
       const remoteControl = typeof o.bridgeSessionId === 'string' && o.bridgeSessionId.length > 0;
       return { pid, socketPath, configDir, accountId, entrypoint, remoteControl };

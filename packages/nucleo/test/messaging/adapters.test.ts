@@ -2,7 +2,7 @@
 // in temporary folders. Never the real ~/.claude, never a real session's socket.
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { appendFileSync, chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
+import { appendFileSync, chmodSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, statSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs';
 import { createServer, Socket, type Server } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -11,6 +11,7 @@ import { createHash } from 'node:crypto';
 import { PEER_PREFIX, PEER_SUFFIX, peerBodyOf, peerTurnOf } from '../../src/ingest/history/transcript.ts';
 import { AuditFile } from '../../src/messaging/adapters/audit-file.ts';
 import { SessionsDirectory } from '../../src/messaging/adapters/sessions-dir.ts';
+import { checkSocketPath } from '../../src/messaging/adapters/socket-check.ts';
 import { inboxLine, SocketInbox } from '../../src/messaging/adapters/socket-inbox.ts';
 import { TranscriptTurns } from '../../src/messaging/adapters/transcript-turns.ts';
 
@@ -24,8 +25,8 @@ after(async () => {
 
 let n = 0;
 /** A fake inbox: a Unix socket server in a temp folder that keeps every line it gets. */
-async function fakeInbox(): Promise<{ path: string; lines: string[] }> {
-  const path = join(root, `s${++n}.sock`);
+async function fakeInbox(dir = root): Promise<{ path: string; lines: string[] }> {
+  const path = join(dir, `s${++n}.sock`);
   const lines: string[] = [];
   const server = createServer((c) => {
     let buf = '';
@@ -138,6 +139,17 @@ describe('SessionsDirectory (#61/AC-1)', () => {
     assert.deepEqual(await sessions.find(SID), []);
   });
 
+  test('a socket in a directory the group or others can write is not ours (TOCTOU defence)', async () => {
+    const dir = configDir('open-parent');
+    const open = mkdtempSync(join(root, 'o'));
+    const { path } = await fakeInbox(open);
+    chmodSync(open, 0o777);
+    writeSession(dir, process.pid, { messagingSocketPath: path });
+    assert.deepEqual(await new SessionsDirectory({ folders: async () => [{ dir }] }).find(SID), []);
+    chmodSync(open, 0o700);
+    assert.equal((await new SessionsDirectory({ folders: async () => [{ dir }] }).find(SID)).length, 1);
+  });
+
   test('two folders each with a live process of the session: both come back (ambiguous upstream)', async () => {
     const a = configDir('amb-a');
     const b = configDir('amb-b');
@@ -150,7 +162,81 @@ describe('SessionsDirectory (#61/AC-1)', () => {
   });
 });
 
+describe('checkSocketPath (#61, TOCTOU between discovery and connect)', () => {
+  const uid = process.getuid?.() ?? null;
+
+  test('a socket of ours in a directory of ours that only we can write is ok; 0755 is ok too', async () => {
+    const dir = mkdtempSync(join(root, 'k'));
+    const { path } = await fakeInbox(dir);
+    assert.equal(await checkSocketPath(path, uid), 'ok');
+    chmodSync(dir, 0o755);
+    assert.equal(await checkSocketPath(path, uid), 'ok');
+  });
+
+  test('a parent the group or others can write, or owned by another uid, is not_ours', async () => {
+    const dir = mkdtempSync(join(root, 'k'));
+    const { path } = await fakeInbox(dir);
+    for (const mode of [0o777, 0o770, 0o702, 0o1777]) {
+      chmodSync(dir, mode);
+      assert.equal(await checkSocketPath(path, uid), 'not_ours', mode.toString(8));
+    }
+    chmodSync(dir, 0o700);
+    assert.equal(await checkSocketPath(path, (uid ?? 0) + 1), 'not_ours');
+  });
+
+  test('a parent that is a symlink to a directory of ours is not_ours', async () => {
+    const dir = mkdtempSync(join(root, 'k'));
+    const { path } = await fakeInbox(dir);
+    const link = join(root, `l${++n}`);
+    symlinkSync(dir, link);
+    assert.equal(await checkSocketPath(join(link, path.split('/').pop()!), uid), 'not_ours');
+  });
+
+  test('a socket replaced by a regular file or a symlink is not_ours; a missing one or folder is gone', async () => {
+    const dir = mkdtempSync(join(root, 'k'));
+    const { path } = await fakeInbox(dir);
+    const other = await fakeInbox(dir);
+    unlinkSync(path);
+    assert.equal(await checkSocketPath(path, uid), 'gone');
+    symlinkSync(other.path, path);
+    assert.equal(await checkSocketPath(path, uid), 'not_ours');
+    unlinkSync(path);
+    writeFileSync(path, '');
+    assert.equal(await checkSocketPath(path, uid), 'not_ours');
+    assert.equal(await checkSocketPath(join(root, 'no-such-dir', 'x.sock'), uid), 'gone');
+  });
+});
+
 describe('SocketInbox (#61/AC-1)', () => {
+  test('re-checks the path right before connect: a socket swapped for a symlink after discovery gets nothing', async () => {
+    const dir = mkdtempSync(join(root, 'k'));
+    const target = await fakeInbox(dir);
+    const decoy = await fakeInbox(dir);
+    const discovered = join(dir, `d${++n}.sock`);
+    renameSync(target.path, discovered);
+    assert.equal(await checkSocketPath(discovered), 'ok');
+    // Between discovery and delivery the socket is swapped for a symlink to another listener.
+    unlinkSync(discovered);
+    symlinkSync(decoy.path, discovered);
+    let connected = false;
+    const r = await new SocketInbox({ connect: (p) => ((connected = true), new Socket().connect(p)) }).deliver(discovered, 'oi');
+    assert.deepEqual(r, { ok: false, reason: 'socket_error' });
+    assert.equal(connected, false);
+    assert.deepEqual([target.lines, decoy.lines], [[], []]);
+  });
+
+  test('a socket in a directory others can write is not connected to', async () => {
+    const dir = mkdtempSync(join(root, 'k'));
+    const { path, lines } = await fakeInbox(dir);
+    chmodSync(dir, 0o777);
+    let connected = false;
+    const r = await new SocketInbox({ connect: (p) => ((connected = true), new Socket().connect(p)) }).deliver(path, 'oi');
+    chmodSync(dir, 0o700);
+    assert.deepEqual(r, { ok: false, reason: 'socket_error' });
+    assert.equal(connected, false);
+    assert.deepEqual(lines, []);
+  });
+
   test('writes exactly one stream-json user line, newlines of the text escaped', async () => {
     const { path, lines } = await fakeInbox();
     const r = await new SocketInbox().deliver(path, 'linha 1\nlinha 2 "aspas" é');
@@ -171,7 +257,7 @@ describe('SocketInbox (#61/AC-1)', () => {
   });
 
   test('a connection that never opens is a timeout', async () => {
-    const r = await new SocketInbox({ timeoutMs: 30, connect: () => new Socket() }).deliver('/never', 'oi');
+    const r = await new SocketInbox({ timeoutMs: 30, connect: () => new Socket(), check: async () => 'ok' }).deliver('/never', 'oi');
     assert.deepEqual(r, { ok: false, reason: 'timeout' });
   });
 });
