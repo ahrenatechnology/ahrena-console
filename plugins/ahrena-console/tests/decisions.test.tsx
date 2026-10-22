@@ -27,6 +27,8 @@ function fakes(on: any, base: Panel = SCENARIOS.p9, conversation: 'full' | 'comp
   const lists = copy(P9_LISTS) as Record<DecisionScope, DecisionList>
   const outside = new Map<string, PanelDecision>()
   on('http.fetch', async (_$: unknown, e: { url: string; init?: { method?: string; headers?: Record<string, string>; body?: string } }) => {
+    // The orders of the console (#61) have their own clock and their own test (orders.test.tsx).
+    if (/\/api\/sessions\/[^/]+\/commands/.test(e.url)) return { value: { status: 200, ok: true, headers: {}, text: '{"orders":[]}' } }
     requests.push({ method: e.init?.method ?? 'GET', url: e.url, headers: e.init?.headers, body: e.init?.body })
     const url = new URL(e.url)
     const action = /^\/api\/decisions\/([^/]+)\/(confirm|dismiss|adjust|undo)$/.exec(url.pathname)

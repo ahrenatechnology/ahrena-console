@@ -16,6 +16,7 @@ import { draw, decisionScopeOf, type Actions, type Elements } from './render'
 import { GRAPH_STATE, type GraphState } from './graph'
 import { UNDO_MS, decisionsText, statusLine, model, unarchiveRequest, needYouText, statusGlyph, tokens } from './format'
 import { LEGACY_CORE, discoverCore } from './discover'
+import { ORDERS_EVERY_MS, pollOrders } from './orders'
 
 // Id próprio: `ahrena-console` foi o do painel de teste (spikes/painel-teste), e o engine guarda
 // por id o painel que a pessoa já abriu.
@@ -285,6 +286,33 @@ function startPolling($: Engine) {
   void tick($)
 }
 
+// As ordens do console (#61): um relógio próprio, de toda sessão com o mod, e não só com o painel aberto.
+let ordersTimer: { cancel: () => void } | undefined
+let ordersBusy = false
+
+function startOrders($: Engine) {
+  if (ordersTimer) return
+  ordersTimer = $.clock.every(ORDERS_EVERY_MS, () => {
+    if (ordersBusy) return
+    ordersBusy = true
+    // With the panel open, its own tick keeps `core` right (one lookup per tick); without it, this one does.
+    void (timer ? Promise.resolve(core) : resolveCore($))
+      .then((c) => pollOrders($, c))
+      .catch(() => {
+        // sem núcleo, o próximo tick tenta de novo (e procura o núcleo outra vez)
+        resolved = false
+      })
+      .finally(() => {
+        ordersBusy = false
+      })
+  })
+}
+
+function stopOrders() {
+  ordersTimer?.cancel()
+  ordersTimer = undefined
+}
+
 function stopPolling($: Engine) {
   if (!timer) return
   timer.cancel()
@@ -527,6 +555,7 @@ export const register: Register = (on, options) => {
     panelQuery = undefined
     await $.command.register({ name: 'console', description: 'Abre o painel do Ahrena Console: esta sessão e quem precisa de você' })
     if ((await ourPane($).catch(() => undefined))?.isPlaced) startPolling($)
+    startOrders($)
     return next(e)
   })
 
@@ -590,6 +619,7 @@ export const register: Register = (on, options) => {
 
   on('session.end', async ($, e, next) => {
     stopPolling($)
+    stopOrders()
     return next(e)
   })
 
