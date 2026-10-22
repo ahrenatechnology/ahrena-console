@@ -11,6 +11,8 @@ import type { EngineInterface as Engine } from 'claude-code'
 
 export const ORDERS_EVERY_MS = 4000
 
+let refusedOnce = false
+
 type Kind = 'compact' | 'clear' | 'remote-control'
 interface Order {
   orderId: string
@@ -71,6 +73,11 @@ export async function runOrder($: Engine, core: string, sessionId: string, order
 export async function pollOrders($: Engine, core: string): Promise<void> {
   const sessionId = await $.session.id()
   const res = await $.http.fetch(`http://${core}/api/sessions/${encodeURIComponent(sessionId)}/commands`)
+  if (res.status === 403 && !refusedOnce) {
+    // O núcleo recusou a busca: se o fetch do engine mandar `Sec-Fetch-Site`, nenhuma ordem chega. Avisa uma vez.
+    refusedOnce = true
+    $.ui.toast('O núcleo recusou a busca de ordens do console (403): /compact, /clear e Remote control pelo console não vão chegar a esta sessão.')
+  }
   if (!res.ok) return
   for (const order of parseOrders(res.text)) void runOrder($, core, sessionId, order)
 }
