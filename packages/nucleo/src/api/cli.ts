@@ -104,6 +104,9 @@ import { RemoteMachines } from '../telemetry/remote-machines.ts';
 import { INVALID_MACHINES_FILE, publishReconnectChanges, reconnectLogFile, ReconnectRunner } from '../telemetry/reconnect.ts';
 import { loopbackGet } from '../telemetry/adapters/loopback-http.ts';
 import type { TelemetryCollector } from '../telemetry/ports.ts';
+import { SqliteToolChecksStore } from '../tools/store.ts';
+import { ToolsService } from '../tools/service.ts';
+import { publishToolsChanges, ToolsExecutor, toolsLogFile } from '../tools/executor.ts';
 import { LiveClaudeProcesses } from './live-processes.ts';
 import { SessionOpenDescriber } from './session-open.ts';
 import { createTerminalFocuser, createTerminalOpener } from './terminal-launch.ts';
@@ -488,6 +491,12 @@ const messaging = demo
       audit: new AuditFile(messagingAuditFile(dataDir), log),
       log,
     });
+// The Tools screen (#280, decision 0014): this machine's CLIs, runtimes and containers, read with the
+// catalog's fixed probes; the latest versions only from the tool_checks cache (a check reads the
+// network). Not in --demo: the demo must not read the real machine.
+// The executor (layer 2) runs the catalog's actions as jobs and logs their masked output to tools.log.
+const toolsService = demo ? null : new ToolsService({ store: new SqliteToolChecksStore(sqlite.db), log });
+const toolsExecutor = toolsService ? new ToolsExecutor({ service: toolsService, logFile: toolsLogFile(dataDir), onChange: publishToolsChanges(changes), log }) : null;
 
 let historyReady = false;
 const follower =
@@ -553,6 +562,7 @@ const api: LocalApi = await startLocalApi({
   telemetry: telemetryService,
   reconnect: reconnectRunner,
   messaging: createMessagingRoute({ messaging, sessions: storage, accounts, log }),
+  tools: toolsExecutor,
   load: () => ({
     history: follower ? (historyReady ? 'ready' : 'importing') : 'off',
     follower: follower?.stats() ?? null,
@@ -567,6 +577,8 @@ const apiPort = (api.server.address() as AddressInfo).port;
 
 const lock = useLock ? await claimLock({ dir: dataDir, port: apiPort, version: API_VERSION, parent }) : null;
 if (lock && 'conflict' in lock) {
+  // Jobs run in their own process groups: end them (SIGTERM, then SIGKILL) so none outlives the núcleo.
+  await toolsExecutor?.stopAll().catch(() => undefined);
   await api.close().catch(() => undefined);
   await storage.close();
   adopt(lock.conflict.port, lock.conflict.version);
@@ -656,6 +668,8 @@ async function shutdown() {
   if (lock && !('conflict' in lock)) releaseLock(lock.token, dataDir);
   await follower?.stop().catch(() => undefined);
   await Promise.all([...samplers.map((a) => a.stop()), remoteMachines?.stop()]);
+  // #280: the jobs run detached, so they would outlive the core; stop them and write their footers first.
+  await toolsExecutor?.stopAll().catch(() => undefined);
   await api.close().catch(() => undefined);
   await storage.close();
   if (demoFolder) rmSync(demoFolder, { recursive: true, force: true });

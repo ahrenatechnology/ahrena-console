@@ -36,6 +36,8 @@
 // | `GET /api/telemetry`          | One machine's telemetry: current reading, series and alerts (`?machine=`, `?hours=1|12`; #175) |
 // | `POST /api/machines/<id>/reconnect` and `DELETE` | Reconnect a remote machine with the command of machines.json, and Cancel (api/telemetry.ts, #244) |
 // | `GET /api/sessions/<id>/messaging`, `POST /api/sessions/<id>/messages` and `GET /api/sessions/<id>/messages/<messageId>` | Send a message a person typed in the /ui to the session's live process, through Claude Code's cross-session inbox, and read its state (api/messaging.ts, src/messaging, #61) |
+// | `GET /api/tools`              | The Tools screen: CLIs, runtimes and containers, installed and latest versions, the catalog's actions, the jobs (`?machine=`; api/tools.ts, #280) |
+// | `POST /api/tools/<toolId>/actions/<actionId>`, `DELETE /api/tools/jobs/<jobId>` and `POST /api/tools/checks` | Run a catalog action as a job, cancel it, Verificar agora (api/tools.ts, src/tools/executor.ts, #280) |
 // | `GET /api/connections`        | The console's own GitHub connection: `{ github: <status> }` (api/connections-route.ts, #241) |
 // | `POST /api/connections/github/start`, `/cancel`, `/disconnect`, `/source` | Device flow, Cancel, Disconnect and the credential source (#241, decision 0011) |
 // | `GET /api/project/options`    | The Projects the account sees, to choose the kanban's (`?refresh=1`; api/project.ts, #241) |
@@ -66,6 +68,9 @@
 // screen's Reconnect and Cancel, `POST` and `DELETE /api/machines/<id>/reconnect` (api/telemetry.ts, #244,
 // decision 0012), and the Detail's Send, `POST /api/sessions/<id>/messages` (api/messaging.ts, #61), which
 // is stricter: without `Origin` it is refused too, since only text a person typed in the /ui may go.
+// The Tools writes (#280, decision 0014) are stricter: every non-GET request under `/api/tools` skips
+// the gate above and passes only `toolsWriteAllowed` (api/tools.ts): `Origin` exactly `http://<Host>`,
+// the exact raw path, and a request with NO Origin gets 403 too (unless layer 4's hook accepts it).
 // An outside site cannot get that `Origin`, nor send JSON without the CORS preflight, and the core does
 // not answer CORS. Writing to the decisions also requires `Content-Type: application/json` and the body
 // `{ "session": "<id>" }`, and it only reaches a
@@ -110,6 +115,8 @@ import { isTelemetryRoute, reconnectFromSameOrigin, RECONNECT_ROUTE, respondReco
 import type { ReconnectControl } from '../telemetry/reconnect.ts';
 import type { TelemetryService } from '../telemetry/service.ts';
 import { MESSAGING_ROUTE, messagesWriteFromSameOrigin, type MessagingRoute } from './messaging.ts';
+import { isToolsRoute, isToolsWrite, respondTools, respondToolsWrite, toolsWriteAllowed } from './tools.ts';
+import type { ToolsControl } from '../tools/executor.ts';
 import { fromAnotherSite, fromOwnUi } from './same-origin.ts';
 import { CONNECTIONS_ROUTE, PROJECT_SELECTION_ROUTE, respondConnections, respondProjectSelection, STRICT_WRITE_ROUTES, strictWriteRefusal, type ProjectSelectionTarget } from './connections-route.ts';
 import type { GithubConnection } from '../github/connection/connection.ts';
@@ -191,6 +198,8 @@ export interface ApiOptions {
   reconnect?: ReconnectControl | null;
   /** Sending a message to a live session (api/messaging.ts, #61); without it, those routes give 404. */
   messaging?: MessagingRoute;
+  /** The Tools screen (#280, decision 0014): the executor (or only the service, read-only); without it, `/api/tools` gives 404. */
+  tools?: ToolsControl | null;
   /** The console's own GitHub connection (#241); turns on `/api/connections` and its writes. */
   connection?: GithubConnection | null;
   /** Where `POST /api/project/selection` stores the chosen Project (#241); without it, 503 `off`. */
@@ -410,6 +419,14 @@ export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
   async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
     counters.requests++;
     const url = new URL(req.url ?? '/', `http://127.0.0.1:${port}`);
+    // The Tools writes have their own, stricter gate (no Origin is 403 too), never the one below.
+    if (isToolsWrite(req, url.pathname)) {
+      if (!toolsWriteAllowed(req, port, opts.tools?.acceptNoOriginActions?.() ?? false)) {
+        req.resume();
+        return send(res, 403, { error: 'origem não permitida' });
+      }
+      return respondToolsWrite(req, res, url, opts.tools);
+    }
     // #241: the five writes only the /ui itself makes, checked before anything else.
     if (STRICT_WRITE_ROUTES.has(url.pathname)) {
       const refusal = strictWriteRefusal(req, port, url.pathname);
@@ -465,6 +482,7 @@ export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
     if (opts.decisions && [ADRS_ROUTE, PDRS_ROUTE].some((r) => url.pathname === r || url.pathname.startsWith(`${r}/`))) return opts.decisions(res, url);
     if (url.pathname === DEV_CONSOLE_ROUTE && opts.devConsole) return respondDevConsole(res, url, opts.devConsole);
     if (isTelemetryRoute(url.pathname)) return respondTelemetry(res, url, opts.telemetry);
+    if (isToolsRoute(url.pathname)) return respondTools(res, url, opts.tools);
     if (url.pathname === LOAD_ROUTE) {
       return send(res, 200, {
         ...counters,
