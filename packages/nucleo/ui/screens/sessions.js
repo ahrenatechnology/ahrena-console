@@ -362,7 +362,7 @@ export async function mount(area, ctx) {
       history.replaceState(null, '', `${location.pathname}${queryFromState(state)}`);
     }
     drawFilters(list.directories, list.counts);
-    groupSlot.replaceChildren(selector('Grupo', [['', 'Todos os grupos'], ...(list.groups || []).map(g => [g, g])], state.group || '', group => change({ group, page: 1 })));
+    groupSlot.replaceChildren(selector('Grupo', [['', 'Todos os grupos'], ...(list.groups || []).map(g => [g.key, g.label])], state.group || '', group => change({ group, page: 1 })));
     if (list.items.length) {
       body.replaceChildren(table(list), footer(list));
       if (list.sourceError) body.prepend(errorBand({ title: 'Codex indisponível', text: list.sourceError }));

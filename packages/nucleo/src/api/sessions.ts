@@ -22,7 +22,7 @@
 // `safeTitle`, as in the MCP.
 
 import type { ServerResponse } from 'node:http';
-import { CodexIndex } from './codex-index.ts';
+import type { CodexIndex, CodexThread } from './codex-index.ts';
 import { basename } from 'node:path';
 import { send } from '../ingest/hooks/receiver.ts';
 import { sessionCostSlices, costReport } from '../cost/aggregation.ts';
@@ -66,7 +66,8 @@ export interface LinhaDeSessao {
   title: string;
   provider?: 'claude' | 'codex';
   group?: string;
-  resumeCommand?: string | null;
+  groupKey?: string;
+  groupKey?: string;
   status: DisplayStatus | 'unknown';
   /** Por que espera, quando espera (`notification`, `interrupted`, `stop`, `session_start`). */
   reason: AwaitingReason | null;
@@ -88,7 +89,7 @@ export interface LinhaDeSessao {
 
 export interface ListaDeSessoesHttp {
   sourceError?: string | null;
-  groups?: string[];
+  groups?: { key: string; label: string }[];
   total: number;
   /** Todas as sessões registradas, sem filtro: o "12 sessões registradas" do cabeçalho. */
   registered: number;
@@ -172,7 +173,7 @@ export class ListaDeSessoes {
   async listar(pedido: PedidoDeSessoes): Promise<ListaDeSessoesHttp> {
     await Promise.all([this.contas.refresh(), this.desktop?.refresh(), this.open.refresh()]);
     const agora = this.agora();
-    const todas: { s: Session; desktop: DesktopSession | null; titulo: string; status: DisplayStatus | 'unknown'; attention: SessionAttention | null; codex?: import('./codex-index.ts').CodexThread }[] = [];
+    const todas: { s: Session; desktop: DesktopSession | null; titulo: string; status: DisplayStatus | 'unknown'; attention: SessionAttention | null; codex?: CodexThread }[] = [];
     let cursor: string | null = null;
     do {
       const page = await this.storage.listSessions({ limit: 500, cursor });
@@ -189,15 +190,19 @@ export class ListaDeSessoes {
         endedAt: null, awaitingInputSince: null, awaitingReason: null, accountId: null, accountSource: null, metadata: {} },
         desktop: null, titulo: safeTitle(thread.title) ?? thread.id, status: 'unknown', attention: null, codex: thread });
     }
-    const groupOf = (t: typeof todas[number]) => t.codex?.group ?? (t.s.cwd ? `Pasta: ${basename(t.s.cwd)}` : 'Sem grupo');
-    const groups = [...new Set(todas.filter(t => !pedido.provider || pedido.provider === 'all' || pedido.provider === (t.codex ? 'codex' : 'claude')).map(groupOf))].sort();
+    // The key is what the group filter sends; the label is the screen text. A Codex section named "Pasta: x" must not merge with a Claude folder.
+    const groupOf = (t: typeof todas[number]): { key: string; label: string } =>
+      t.codex ? (t.codex.group ? { key: `section:${t.codex.group}`, label: t.codex.group } : { key: 'none', label: 'Sem grupo' })
+        : t.s.cwd ? { key: `folder:${basename(t.s.cwd)}`, label: `Pasta: ${basename(t.s.cwd)}` } : { key: 'none', label: 'Sem grupo' };
+    const groups = [...new Map(todas.filter(t => !pedido.provider || pedido.provider === 'all' || pedido.provider === (t.codex ? 'codex' : 'claude')).map(t => [groupOf(t).key, groupOf(t)])).values()]
+      .sort((a, b) => a.label.localeCompare(b.label));
     const diretorios = [...new Set(todas.map((t) => t.s.cwd).filter((c): c is string => !!c))].sort();
     const busca = pedido.busca?.toLowerCase() ?? null;
     const searched = todas.filter(
       (t) => { const { s, titulo } = t; return (!pedido.provider || pedido.provider === 'all' || pedido.provider === (t.codex ? 'codex' : 'claude')) &&
-        (!pedido.group || pedido.group === groupOf(t)) &&
+        (!pedido.group || pedido.group === groupOf(t).key) &&
         (!pedido.dir || s.cwd === pedido.dir) &&
-        (!busca || titulo.toLowerCase().includes(busca) || s.id.toLowerCase().includes(busca) || (s.cwd ?? '').toLowerCase().includes(busca) || groupOf(t).toLowerCase().includes(busca)); },
+        (!busca || titulo.toLowerCase().includes(busca) || s.id.toLowerCase().includes(busca) || (s.cwd ?? '').toLowerCase().includes(busca) || groupOf(t).label.toLowerCase().includes(busca)); },
     );
     const counts = Object.fromEntries(FILTROS_DE_STATUS.map((f) => [f, searched.filter((t) => passesFilter(t, f)).length])) as Record<FiltroDeStatus, number>;
     let filtradas = searched.filter((t) => passesFilter(t, pedido.status));
@@ -225,8 +230,8 @@ export class ListaDeSessoes {
         id: s.id,
         title: titulo,
         provider: codex ? 'codex' : 'claude',
-        group: groupOf(entry),
-        ...(codex ? { resumeCommand: codex.command } : {}),
+        group: groupOf(entry).label,
+        groupKey: groupOf(entry).key,
         status,
         reason: status === 'waiting' ? s.awaitingReason : null,
         attention,

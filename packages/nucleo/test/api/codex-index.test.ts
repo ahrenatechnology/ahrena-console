@@ -9,7 +9,7 @@ import { ListaDeSessoes, pedidoDeSessoes } from '../../src/api/sessions.ts';
 import { Accounts } from '../../src/api/accounts.ts';
 import { openSqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
 const id = '01a15e4a-c337-7f23-b905-728305a91a8a';
-test('real-shaped Codex index stays read-only, excludes archives, preserves groups and safely quotes resume', async () => {
+test('real-shaped Codex index stays read-only, excludes archives, preserves groups and finds by id', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'codex-index-'));
   const path = join(dir, 'index.sqlite');
   const db = new DatabaseSync(path);
@@ -30,10 +30,12 @@ test('real-shaped Codex index stays read-only, excludes archives, preserves grou
     assert.equal(rows.length, 1);
     assert.equal(rows[0].title, 'PM Codex');
     assert.equal(rows[0].group, 'Ahrena');
-    assert.equal(rows[0].command, `cd '/work/a'\\''$(touch bad)' && codex resume ${id}`);
+    assert.equal(index.find(rows[0].id)?.title, 'PM Codex');
+    assert.equal(index.find('00000000-0000-4000-8000-000000000000'), null);
     const list = new ListaDeSessoes({ storage, contas: new Accounts({ storage, file: null }), codex: index });
-    const result = await list.listar(pedidoDeSessoes(new URL('http://localhost/api/sessions?provider=codex&group=Ahrena')));
+    const result = await list.listar(pedidoDeSessoes(new URL('http://localhost/api/sessions?provider=codex&group=section%3AAhrena')));
     assert.equal(result.total, 1);
+    assert.equal((await list.listar(pedidoDeSessoes(new URL('http://localhost/api/sessions?group=folder%3AAhrena')))).total, 0, 'a Claude folder key never matches a Codex section');
     assert.equal(result.items[0].provider, 'codex');
     assert.equal(result.items[0].status, 'unknown');
     assert.equal(result.items[0].costUsd, null);

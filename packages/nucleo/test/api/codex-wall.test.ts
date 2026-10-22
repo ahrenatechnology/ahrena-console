@@ -12,7 +12,7 @@ const CLAUDE_ID = '11111111-1111-4111-8111-111111111111';
 test('wall labels both providers and routes opening only to the verified local source', async () => {
   const now = Date.now();
   const recent = new Date(now - 1000).toISOString();
-  const thread: CodexThread = { id: ID, title: 'Codex PM', cwd: '/work', group: 'Ahrena', createdAt: recent, updatedAt: recent, command: `codex resume ${ID}` };
+  const thread: CodexThread = { id: ID, title: 'Codex PM', cwd: '/work', group: 'Ahrena', createdAt: recent, updatedAt: recent };
   let available = true;
   let launcherFails = false;
   const source = { list: () => available ? [thread] : [], find: (id: string) => available && id === ID ? thread : null, error: null } as CodexIndex;
