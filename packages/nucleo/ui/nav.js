@@ -4,9 +4,12 @@
 // `readMachines()` reads `GET /api/machines` and, when the list changed, draws the sidebar again with
 // `machineItems(list)` added: each remote is an item of the Máquinas block, after "Esta máquina",
 // with its state dot. The counters (the "4" of the Dashboard) and the lit item survive the redraw.
+// `readConnectors()` reads `GET /api/connectors` (issue 277) and puts on Conexões the dot that sums up the
+// worst cloud connector; a core without the route (404) shows no dot.
 
 import { el, icon } from './dom.js';
 import { machineItems, MACHINES_ROUTE, SCREENS, sidebarSections } from './screens.js';
+import { CONNECTORS_ROUTE, connectorsDot } from './screens/cloud-format.js';
 
 /** The state of a remote machine, said on its dot: the color alone does not say it. */
 export const MACHINE_STATE_LABELS = { connected: 'Conectada', unreachable: 'Sem conexão', 'incompatible-version': 'Versão diferente', 'not-configured': 'Sem configuração' };
@@ -17,6 +20,8 @@ export function createNav({ nav, read, screens = SCREENS }) {
   const counts = new Map();
   let lit = null;
   let remoteItems = [];
+  // The dots that are not a machine's: `id → { state, label }` (Conexões, issue 277).
+  const dots = new Map();
 
   function draw() {
     items.clear();
@@ -30,8 +35,8 @@ export function createNav({ nav, read, screens = SCREENS }) {
       );
       for (const screen of section.items) {
         const q = el('span', { class: 'q', hidden: true });
-        const stateLabel = screen.state ? (MACHINE_STATE_LABELS[screen.state] ?? screen.state) : null;
-        const dot = screen.state ? el('span', { class: 'cc-nav-dot', 'data-state': screen.state, role: 'img', 'aria-label': stateLabel, title: stateLabel }) : null;
+        const mark = screen.state ? { state: screen.state, label: MACHINE_STATE_LABELS[screen.state] ?? screen.state } : (dots.get(screen.id) ?? null);
+        const dot = mark ? el('span', { class: 'cc-nav-dot', 'data-state': mark.state, role: 'img', 'aria-label': mark.label, title: mark.label }) : null;
         const a = el('a', { class: 'cc-nav', href: screen.route, 'data-screen': screen.id }, icon(screen.item.icon), el('span', { class: 'cc-nav-label' }, screen.item.label), dot, q);
         items.set(screen.id, { a, q });
         group.append(a);
@@ -77,6 +82,22 @@ export function createNav({ nav, read, screens = SCREENS }) {
     draw();
   }
 
+  async function readConnectors() {
+    let next;
+    try {
+      next = connectorsDot(await read(CONNECTORS_ROUTE));
+    } catch (e) {
+      // A core without the cloud routes (404): no dot. Offline: the dot stays as it was.
+      if (e?.status !== 404) return;
+      next = null;
+    }
+    const before = dots.get('connections') ?? null;
+    if (JSON.stringify(before) === JSON.stringify(next)) return;
+    if (next) dots.set('connections', next);
+    else dots.delete('connections');
+    draw();
+  }
+
   draw();
-  return { draw, readMachines, highlight, counter };
+  return { draw, readMachines, readConnectors, highlight, counter };
 }

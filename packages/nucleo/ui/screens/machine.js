@@ -79,6 +79,7 @@ import {
   volumeLine,
   yOf,
 } from './machine-format.js';
+import { cloudProfiles } from './cloud-profiles.js';
 
 const STYLE = '/ui/screens/machine.css';
 const SVG = 'http://www.w3.org/2000/svg';
@@ -536,6 +537,8 @@ export async function mount(area, ctx) {
   // reconnect state it failed on (a new state from the core hides it).
   let pending = null;
   let problem = null;
+  // The "Perfis de nuvem" card (issue 277, C66 and C67): its own module, which reads and polls by itself.
+  const cloud = cloudProfiles(ctx, id);
 
   const hourButtons = WINDOWS.map((h) => el('button', { type: 'button', 'aria-pressed': String(h === hours), 'data-hours': h, onClick: () => setHours(h) }, `${h} h`));
   const toggle = el('div', { class: 'tm-seg', role: 'group', 'aria-label': 'Janela do gráfico' }, ...hourButtons);
@@ -584,7 +587,7 @@ export async function mount(area, ctx) {
     const ownPort = Number(globalThis.location?.port) || null;
     const body = data.reading || local || remoteCondition(machine) === null ? machineBody(data, { local, filter, setFilter, now, ownPort }) : [];
     const shown = condition.faded && data.reading ? [el('div', { class: 'tm-faded', 'aria-label': 'Última leitura guardada' }, ...body)] : body;
-    replaceKeepingFocus(head, ...condition.parts, ...shown);
+    replaceKeepingFocus(head, ...condition.parts, cloud.node(label), ...shown);
   }
 
   // A repaint (a filter, the 30 s re-read) rebuilds the buttons: the focus goes back to the same one.

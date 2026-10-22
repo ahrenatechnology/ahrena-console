@@ -155,6 +155,9 @@ const ICONS = {
   x: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
   // Conexões (issue 241): Desconectar.
   'log-out': '<path d="m16 17 5-5-5-5"/><path d="M21 12H9"/><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>',
+  // The cloud connectors (issue 277): the cloud and Entrar.
+  cloud: '<path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/>',
+  'log-in': '<path d="m10 17 5-5-5-5"/><path d="M15 12H3"/><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/>',
 };
 // The detail's Workflow tab registers the icon as `graph`: the same drawing as `workflows`.
 ICONS.graph = ICONS.workflows;
