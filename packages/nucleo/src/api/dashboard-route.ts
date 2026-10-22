@@ -207,8 +207,8 @@ export class MontadorDoDashboard {
     const hoje = this.frota.today();
     const vivas = await this.frota.live();
     this.sliceDeadline = performance.now() + this.sliceMs;
-    const desde = this.inicioDoCusto(hoje);
-    const idsVivas = new Set(vivas.map((v) => v.session.id));
+    const desde = this.costStart(hoje);
+    const liveIds = new Set(vivas.map((v) => v.session.id));
 
     // Todas as sessões, mais recentes primeiro: os eventos de cada uma e a atividade das últimas.
     let totalDeSessoes = 0;
@@ -222,7 +222,7 @@ export class MontadorDoDashboard {
         totalDeSessoes++;
         vistas.add(s.id);
         sessionsByRecency.push({ id: s.id, updatedAt: s.updatedAt });
-        await this.ler(s.id, s.updatedAt, agora, idsVivas.has(s.id) || dayOf(s.updatedAt, fuso) >= desde);
+        await this.ler(s.id, s.updatedAt, agora, liveIds.has(s.id) || dayOf(s.updatedAt, fuso) >= desde);
         await this.yieldLoop();
         if (recentes.length < SESSOES_NA_ATIVIDADE) recentes.push({ id: s.id, projeto: projectOf(s), status: s.status === 'completed' ? 'completed' : s.status === 'abandoned' ? 'abandoned' : 'active' });
       }
@@ -372,7 +372,7 @@ export class MontadorDoDashboard {
     this.leituras.set(id, l);
   }
 
-  private inicioDoCusto(hoje: string): string {
+  private costStart(hoje: string): string {
     return dayOf(new Date(Date.parse(`${hoje}T12:00:00Z`) - (DIAS_DO_CUSTO - 1) * 24 * HORA).toISOString(), 'UTC');
   }
 

@@ -145,7 +145,7 @@ describe('MontadorDoDashboard at scale (#311)', () => {
     await seed(storage);
     const frota = frotaEm(() => agora);
     const m = new MontadorDoDashboard({ frota, cacheMs: 0, custoMs: 0 });
-    const antes = await m.montar();
+    const before = await m.montar();
     const s = (await storage.getSession('trabalhando'))!;
     await storage.appendEvent(withUsage('u1', s.id, 'msg-1', 1));
     await storage.appendEvent(withUsage('u2', s.id, 'msg-2', 2));
@@ -154,7 +154,7 @@ describe('MontadorDoDashboard at scale (#311)', () => {
     const incremental = await m.montar();
     const cold = await new MontadorDoDashboard({ frota: frotaEm(() => agora), cacheMs: 0, custoMs: 0 }).montar();
     assert.deepEqual(incremental, cold);
-    assert.notEqual(incremental.numbers.cost.usd, antes.numbers.cost.usd);
+    assert.notEqual(incremental.numbers.cost.usd, before.numbers.cost.usd);
     assert.deepEqual(Object.keys(incremental), ['generatedAt', 'day', 'timeZone', 'numbers', 'agents', 'activity']);
     assert.deepEqual(Object.keys(incremental.numbers), ['sessions', 'agents', 'subagents', 'events', 'cost']);
   });
@@ -164,11 +164,11 @@ describe('MontadorDoDashboard at scale (#311)', () => {
     await storage.putSession(session({ id, status: 'completed', startedAt: at(-60), updatedAt: at(-30) }));
     await storage.appendEvent(withUsage('b-u', id, 'b-m', -20));
     const m = new MontadorDoDashboard({ frota: frotaEm(() => NOW), cacheMs: 0, custoMs: 0 });
-    const antes = await m.montar();
+    const before = await m.montar();
     await storage.putTokenUsage(usage({ sessionId: id, tokens: { input: 5_000_000, output: 500, cacheRead: 0, cacheWrite5m: 0, cacheWrite1h: 0 }, updatedAt: at(-10) }));
-    const depois = await m.montar();
-    assert.ok((depois.numbers.cost.usd ?? 0) > (antes.numbers.cost.usd ?? 0));
-    assert.deepEqual(depois, await new MontadorDoDashboard({ frota: frotaEm(() => NOW), cacheMs: 0, custoMs: 0 }).montar());
+    const after = await m.montar();
+    assert.ok((after.numbers.cost.usd ?? 0) > (before.numbers.cost.usd ?? 0));
+    assert.deepEqual(after, await new MontadorDoDashboard({ frota: frotaEm(() => NOW), cacheMs: 0, custoMs: 0 }).montar());
   });
 
   test('the cost of sessions with several pages of events is the one aggregateCost gives', async () => {
@@ -177,8 +177,8 @@ describe('MontadorDoDashboard at scale (#311)', () => {
       for (let i = 0; i < n; i++) await storage.appendEvent(withUsage(`${id}-u${i}`, id, `${id}-m${i % 300}`, -80 + (i % 70)));
     }
     const d = await new MontadorDoDashboard({ frota: frotaEm(() => NOW) }).montar();
-    const direto = await aggregateCost(storage, { since: '2026-10-04', until: '2026-11-02', timeZone: 'UTC' });
-    assert.equal(d.numbers.cost.usd, Math.round((direto.total.costUsd ?? 0) * 100) / 100);
+    const direct = await aggregateCost(storage, { since: '2026-10-04', until: '2026-11-02', timeZone: 'UTC' });
+    assert.equal(d.numbers.cost.usd, Math.round((direct.total.costUsd ?? 0) * 100) / 100);
   });
 
   test('a build over many sessions gives the event loop back', async () => {
