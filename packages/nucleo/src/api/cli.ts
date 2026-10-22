@@ -650,6 +650,8 @@ async function shutdown() {
   if (lock && !('conflict' in lock)) releaseLock(lock.token, dataDir);
   await follower?.stop().catch(() => undefined);
   await Promise.all([...samplers.map((a) => a.stop()), remoteMachines?.stop()]);
+  // #280: the jobs run detached, so they would outlive the core; stop them and write their footers first.
+  await toolsExecutor?.stopAll().catch(() => undefined);
   await api.close().catch(() => undefined);
   await storage.close();
   if (demoFolder) rmSync(demoFolder, { recursive: true, force: true });
