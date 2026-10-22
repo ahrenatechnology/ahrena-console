@@ -1,0 +1,58 @@
+/* Choosing the Project of the project kanban (C43, C44, issue 241): loaded by ui/screens/project-picker.js.
+   Every class is pp-*; only brand.css variables. */
+.pp-picker { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.pp-bands { display: flex; flex-direction: column; gap: 8px; }
+.pp-filters { display: flex; gap: 10px; align-items: center; padding: 8px; flex-wrap: wrap; }
+.pp-search { display: flex; align-items: center; gap: 8px; height: 34px; padding: 0 12px; border-radius: 9px; background: var(--bg); border: 1px solid var(--border); color: var(--muted); font-size: 12.5px; flex: 1 1 220px; min-width: 0; }
+.pp-search:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
+.pp-search-input { border: 0; background: transparent; color: var(--text); font: inherit; flex: 1; min-width: 0; outline: none; }
+.pp-seg { display: flex; gap: 2px; padding: 3px; border-radius: 9px; background: var(--bg); border: 1px solid var(--border); flex-wrap: wrap; min-width: 0; }
+.pp-seg-option { border: 0; background: transparent; color: var(--muted); font-size: 12px; padding: 5px 10px; border-radius: 7px; white-space: nowrap; }
+.pp-seg-option.on { background: var(--raised); color: var(--text); }
+.pp-seg-option:hover { color: var(--text); }
+.pp-chip { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border-radius: 99px; background: transparent; border: 1px solid var(--border); color: var(--muted); font-size: 11.5px; white-space: nowrap; }
+.pp-chip[aria-pressed="true"] { color: var(--text); background: var(--raised); }
+.pp-seg-option:focus-visible, .pp-chip:focus-visible, .pp-radio:focus-visible, .pp-field:focus-visible, .pp-pop-item:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.pp-table-card { padding: 0; overflow: hidden; }
+.pp-table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 12.5px; }
+.pp-table .pp-c-radio { width: 44px; }
+.pp-table .pp-c-items { width: 90px; }
+.pp-table .pp-c-field { width: 34%; }
+.pp-table th { text-align: left; font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-weight: var(--weight-semibold); padding: 12px 10px; border-bottom: 1px solid var(--border); }
+.pp-table td { padding: 10px; border-bottom: 1px solid var(--border); vertical-align: middle; min-width: 0; }
+.pp-table tbody tr:last-child td { border-bottom: 0; }
+.pp-row { cursor: pointer; }
+.pp-row:hover { background: var(--raised); }
+.pp-row.on { background: color-mix(in srgb, var(--accent) 8%, transparent); }
+.pp-radio { accent-color: var(--accent); margin: 0 0 0 6px; cursor: pointer; }
+.pp-name b { display: block; font-weight: var(--weight-semibold); overflow-wrap: anywhere; }
+.pp-name small { color: var(--muted); font-size: 11px; overflow-wrap: anywhere; }
+.pp-field { width: 100%; max-width: 160px; height: 28px; padding: 0 10px; border-radius: 7px; background: var(--bg); border: 1px solid var(--border); color: var(--text); font: inherit; font-size: 12px; }
+.pp-nofield { display: block; margin-top: 4px; color: var(--status-waiting-text); font-size: 11.5px; }
+.pp-foot { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.pp-foot .btn { margin-left: auto; }
+.pp-foot .btn[disabled] { opacity: .45; cursor: not-allowed; }
+.pp-hint { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; margin: 0; min-width: 0; }
+
+/* "Trocar de Project" (C43 1440): the popover under the button. */
+.pp-switch { position: relative; display: inline-flex; }
+.pp-pop { position: absolute; right: 0; top: calc(100% + 8px); width: 380px; max-width: calc(100vw - 48px); padding: 8px; display: flex; flex-direction: column; gap: 2px; z-index: 5; box-shadow: 0 12px 32px color-mix(in srgb, var(--mono-black) 35%, transparent); }
+.pp-pop .pp-search { flex: none; height: 30px; margin-bottom: 4px; }
+.pp-pop-items { display: flex; flex-direction: column; gap: 2px; max-height: 320px; overflow-y: auto; }
+.pp-pop-item { display: flex; gap: 8px; align-items: center; padding: 7px 8px; border-radius: 7px; font-size: 12.5px; border: 0; background: transparent; color: var(--text); text-align: left; min-width: 0; }
+.pp-pop-item:hover, .pp-pop-item.on { background: var(--raised); }
+.pp-pop-owner { margin-left: auto; font-size: 11px; white-space: nowrap; }
+.pp-trunc { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pp-muted { color: var(--muted); }
+.pp-accent { color: var(--accent-text); }
+.pp-pop-msg:empty { display: none; }
+.pp-pop-error { margin: 4px 8px; font-size: 12px; color: var(--status-error-text); }
+.pp-pop-field { display: flex; align-items: center; gap: 8px; border-top: 1px solid var(--border); margin-top: 4px; padding: 8px 8px 2px; font-size: 11.5px; color: var(--muted); }
+.pp-pop-field .pp-field { width: 130px; }
+
+/* AHRENA_CONSOLE_PROJECT set (C44). */
+.pp-band { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-radius: 12px; border: 1px solid var(--status-waiting-dot); background: var(--status-waiting-badge); font-size: 13px; }
+.pp-band p { margin: 0; flex: 1; min-width: 0; line-height: 1.6; }
+.pp-band b { color: var(--status-waiting-text); font-weight: var(--weight-semibold); }
+.pp-band-ic { color: var(--status-waiting-text); font-size: 18px; display: inline-flex; }

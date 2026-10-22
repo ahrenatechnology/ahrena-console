@@ -113,6 +113,11 @@ export class TrabalhoPorBranch {
     return e.valor;
   }
 
+  /** #241: the GitHub identity changed: forget every work read with it (the git branches stay). */
+  forget(): void {
+    this.entradas.clear();
+  }
+
   /** O último trabalho conhecido de `cwd`, sem atualizar: quem lê muitas pastas (o mural) não dispara git nem GitHub. */
   espiar(cwd: string | null, branchDoDesktop: string | null = null): PanelWork | null {
     if (!cwd && !branchDoDesktop) return null;

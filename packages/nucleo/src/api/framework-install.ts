@@ -81,6 +81,8 @@
 // application/json`. Nenhum token entra na resposta, nos erros ou no log; o branch padrão nunca é
 // escrito. O diff mostra 3 linhas de contexto em volta do que muda.
 
+import { githubReposTransport, type GithubAccess } from './github-access.ts';
+import { fromAnotherSite } from './same-origin.ts';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import {
   AVAILABLE_PLATFORMS,
@@ -108,7 +110,7 @@ import { RepoFilesSource, type BlobRequest, type GithubTransport, type RepoFiles
 import { GithubReposSource, NOME_DO_DONO, NOME_DO_REPO, SemGithubError } from '../github/repos-source.ts';
 import { send } from '../ingest/hooks/receiver.ts';
 import type { ChangeCursor } from '../changes/cursor.ts';
-import { createFakeGithub, DEMO_GITHUB_DATA, fakeFrameworkRepo, type PullRequestTimeline } from '../simulator/fake-github.ts';
+import { createFakeGithub, DEMO_GITHUB_DATA, fakeFrameworkRepo, type PullRequestTimeline, FAKE_GITHUB_BASE } from '../simulator/fake-github.ts';
 import { repoKey } from './agent-instructions.ts';
 
 export const FRAMEWORK_INSTALL_ROUTE = '/api/framework-install';
@@ -805,7 +807,7 @@ export function createFrameworkInstallRoute(service: FrameworkInstallService): F
       return send(res, 200, await service.pullRequest(owner, repo));
     }
     if (req.method !== 'POST') return send(res, 405, { error: 'use POST' });
-    if (/^(cross-site|same-site)$/i.test(String(req.headers['sec-fetch-site'] ?? ''))) return send(res, 403, { error: 'origem não permitida' });
+    if (fromAnotherSite(req)) return send(res, 403, { error: 'origem não permitida' });
     if (!/^application\/json\b/i.test(req.headers['content-type'] ?? '')) return send(res, 415, { error: 'use application/json', code: 'bad-request' });
     const text = await readBody(req, MAX_INSTALL_BODY);
     if (text === null) {
@@ -835,25 +837,25 @@ export interface CoreFrameworkInstallOptions {
   /** O valor de `AHRENA_CONSOLE_FRAMEWORK_REPO`. */
   frameworkRepo?: string;
   log?: (message: string) => void;
+  /** The credential provider and transport (#241). Required outside the demo and `--no-github`; the demo takes only its token. */
+  github?: GithubAccess | null;
 }
 
 /** Na demo, o PR aberto evolui sozinho: o CI passa em 20 s e o review aprova em 45 s. */
 export const DEMO_PULL_REQUEST_TIMELINE: PullRequestTimeline = { checksAfterMs: 20_000, approvedAfterMs: 45_000 };
 
-/** Monta o serviço e a rota como o núcleo usa (cli.ts): token do `gh`, cache no banco, a fila do núcleo. */
-export function createCoreFrameworkInstall({ demo, noGithub, cache, changes, queue, frameworkRepo, log }: CoreFrameworkInstallOptions): { service: FrameworkInstallService; route: FrameworkInstallRoute } {
+/** Monta o serviço e a rota como o núcleo usa (cli.ts): a credencial do provedor (#241), cache no banco, a fila do núcleo. */
+export function createCoreFrameworkInstall({ demo, noGithub, cache, changes, queue, frameworkRepo, log, github }: CoreFrameworkInstallOptions): { service: FrameworkInstallService; route: FrameworkInstallRoute } {
   const repo = frameworkRepoFrom(frameworkRepo, log);
   // A demo aponta para um endereço que não resolve: mesmo que o falso falhasse, nada sai para o GitHub.
-  const transport = demo
-    ? new GithubReposSource({
-        token: 'demo',
-        fetch: createFakeGithub({ ...DEMO_GITHUB_DATA, repos: [...DEMO_GITHUB_DATA.repos, fakeFrameworkRepo(repo)] }, { delayMs: 120, pullRequestTimeline: DEMO_PULL_REQUEST_TIMELINE }).fetch,
-        url: 'https://github-falso.invalid/graphql',
-        api: 'https://github-falso.invalid',
-      })
-    : noGithub
-      ? null
-      : new GithubReposSource();
+  const transport = githubReposTransport({
+    demo,
+    noGithub,
+    github,
+    demoFetch: () =>
+      createFakeGithub({ ...DEMO_GITHUB_DATA, repos: [...DEMO_GITHUB_DATA.repos, fakeFrameworkRepo(repo)] }, { delayMs: 120, pullRequestTimeline: DEMO_PULL_REQUEST_TIMELINE }).fetch,
+    demoBase: FAKE_GITHUB_BASE,
+  });
   const service = new FrameworkInstallService({ transport, cache, changes, queue, frameworkRepo: repo, pullRequestPollMs: demo ? 5_000 : 30_000, ...(log ? { log } : {}) });
   return { service, route: createFrameworkInstallRoute(service) };
 }

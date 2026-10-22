@@ -29,9 +29,9 @@ import {
 
 export const WAIT_FOR_CHANGES = 'wait_for_changes';
 
-/** The types MCP exposes: all but the screen-only ones (the GitHub screens' `repos`, `agent-instructions`, `framework-install`, `adrs`, and the Tools screen's `tools`). */
-type ScreenOnlyType = 'repos' | 'agent-instructions' | 'framework-install' | 'adrs' | 'tools';
-const SCREEN_ONLY_TYPES = new Set<ChangeType>(['repos', 'agent-instructions', 'framework-install', 'adrs', 'tools'] satisfies ScreenOnlyType[]);
+/** The types MCP exposes: all but the screen-only ones (the GitHub screens' `repos`, `agent-instructions`, `framework-install`, `adrs`, the /ui's `connections` (#241) and the Tools screen's `tools`). */
+type ScreenOnlyType = 'repos' | 'agent-instructions' | 'framework-install' | 'adrs' | 'connections' | 'tools';
+const SCREEN_ONLY_TYPES = new Set<ChangeType>(['repos', 'agent-instructions', 'framework-install', 'adrs', 'connections', 'tools'] satisfies ScreenOnlyType[]);
 export const MCP_CHANGE_TYPES = CHANGE_TYPES.filter((t): t is Exclude<ChangeType, ScreenOnlyType> => !SCREEN_ONLY_TYPES.has(t));
 export type McpChangeType = (typeof MCP_CHANGE_TYPES)[number];
 

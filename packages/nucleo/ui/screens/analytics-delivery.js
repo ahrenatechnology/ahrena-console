@@ -17,6 +17,7 @@ import { el, icon } from '../dom.js';
 import { loading, error, errorBand, empty } from '../states.js';
 import { githubUrl } from '../repos-format.js';
 import { analyticsHeader, browserTimeZone, card, DELIVERY_ROUTE, download, GROUP_BYS, PERIODS, quantity, REREAD_MS, stat, tabs, usd } from './analytics.js';
+import { connectEmptyFor, isGithubNotConnected } from '../github-connect.js';
 
 const DEFAULTS = { days: 30, groupBy: 'repo', key: null };
 const PATH = '/ui/analytics/delivery';
@@ -560,7 +561,7 @@ export async function mountDelivery(area, ctx, { rereadMs = REREAD_MS } = {}) {
         empty({
           icon: 'github',
           title: 'Conecte o GitHub para ver as entregas',
-          text: 'A aba conta PRs e issues dos repositórios das suas sessões. Nada aparece até você conectar uma conta; o console não escolhe repositório por você. Rode gh auth login no terminal e reinicie o núcleo.',
+          text: 'A aba conta PRs e issues dos repositórios das suas sessões; o console não escolhe repositório por você. O núcleo está sem credencial do GitHub: veja o estado em Conexões ou, se ele subiu com --no-github, reinicie sem essa opção.',
           action: { label: 'Tentar de novo', icon: 'refresh', onClick: () => draw({ quiet: true }) },
         }),
       ];
@@ -622,6 +623,15 @@ export async function mountDelivery(area, ctx, { rereadMs = REREAD_MS } = {}) {
       area.replaceChildren(...nodes);
     } catch (e) {
       if (e?.name === 'AbortError' || mine !== turn) return;
+      // issue 241: not connected to GitHub: the shared "Conectar ao GitHub", under the Analytics tabs.
+      if (isGithubNotConnected(e)) {
+        nodes = null;
+        nodesQuery = null;
+        lastShape = null;
+        failBand = null;
+        area.replaceChildren(head(), tabs('delivery'), connectEmptyFor('delivery', ctx.navigate));
+        return;
+      }
       if (quiet && nodes && nodesQuery === deliveryQuery(state)) {
         // Only the band goes in: the screen below stays in place (and a focused search box keeps its focus).
         failBand?.remove();

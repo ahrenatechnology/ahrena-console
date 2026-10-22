@@ -21,6 +21,7 @@ import type { StoragePort } from '../storage-port.ts';
 import type { MontadorDoPainel } from './panel.ts';
 import type { PanelCost, PanelPlan, PanelSession } from './types.ts';
 import { eventAttention, type SessionAttention } from './attention.ts';
+import { SessionOpenDescriber, type SessionOpen } from './session-open.ts';
 
 /** `/api/sessions/<id>` e as três abas; o id passa pelo mesmo padrão das outras rotas. */
 export const DETAIL_ROUTE = /^\/api\/sessions\/([^/]+)(?:\/(agents|conversation|events))?$/;
@@ -50,6 +51,8 @@ export interface CabecaDoDetalhe {
   local: string | null;
   /** A API abre a conversa no Claude Desktop (`POST /open/<local_…>`): no macOS. */
   opensSession: boolean;
+  /** #285: where the head's open button goes (Claude Desktop, a terminal, the live terminal) and the command to copy. */
+  open: SessionOpen;
   /** O comando ou o alvo da ferramenta que pede permissão, para a faixa mostrar em código; `null` sem pedido. */
   command: string | null;
   /** Quando acabou: o fim gravado, ou a última atividade da que não está mais ativa. `null` ativa. */
@@ -158,6 +161,8 @@ export interface OpcoesDoDetalhe {
   agora?: () => number;
   /** O `local_…` de uma sessão, além do índice do Desktop (a demonstração dá um sintético). */
   local?: (sessionId: string) => string | null;
+  /** #285: the head's `open`; without it, no session counts as live in a terminal. */
+  open?: SessionOpenDescriber;
 }
 
 type Json = Record<string, unknown>;
@@ -250,8 +255,10 @@ export class LeiturasDoDetalhe {
   private readonly montador: MontadorDoPainel;
   private readonly agora: () => number;
   private readonly local: (sessionId: string) => string | null;
+  private readonly open: SessionOpenDescriber;
 
-  constructor({ storage, montador, agora = Date.now, local = () => null }: OpcoesDoDetalhe) {
+  constructor({ storage, montador, agora = Date.now, local = () => null, open = new SessionOpenDescriber() }: OpcoesDoDetalhe) {
+    this.open = open;
     this.storage = storage;
     this.montador = montador;
     this.agora = agora;
@@ -284,6 +291,8 @@ export class LeiturasDoDetalhe {
     const painel = await this.montador.montar({ sessionId: session.id }, { literal: true });
     const [agentes, eventos] = await Promise.all([this.storage.listAgents(session.id), this.todosOsEventos(session.id)]);
     const local = this.montador.localDe(session.id) ?? this.local(session.id);
+    await this.open.refresh();
+    const desktopLocal = local && LOCAL.test(local) ? local : null;
     const pede = painel.session?.banner?.type === 'permission' ? (await this.montador.resumos.ler(session.id, session.updatedAt)).ultimaFerramenta : null;
     return {
       version: 1,
@@ -291,8 +300,9 @@ export class LeiturasDoDetalhe {
       session: painel.session!,
       cost: painel.cost,
       branch: painel.session?.branch ?? painel.work?.branch ?? null,
-      local: local && LOCAL.test(local) ? local : null,
+      local: desktopLocal,
       opensSession: painel.api.opensSession,
+      open: this.open.describe({ sessionId: session.id, cwd: session.cwd ?? painel.session?.cwd ?? null, local: desktopLocal }),
       command: pede?.resumo ?? null,
       endedAt: session.endedAt ?? (session.status === 'active' ? null : session.updatedAt),
       counts: { agents: agentes.length, events: eventos.length },

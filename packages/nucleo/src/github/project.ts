@@ -17,7 +17,7 @@
 // leitura só por página, e o TTL de 2 min não muda: com o quadro aberto, ~90 pontos por hora.
 
 import { GITHUB_TTL, RateLimitedError, type GithubCache } from './cache.ts';
-import { ghCliToken, githubGraphql, GithubScopeError, type GithubGraphqlSourceOptions } from './github-source.ts';
+import { githubGraphql, GithubScopeError, requireGithubToken, resolveGithubToken, type GithubGraphqlSourceOptions } from './github-source.ts';
 import { workKey, type CiState, type LinkedPullRequest, type PullRequestState, type ReviewDecision } from './work.ts';
 
 /** Qual Project: dono (organização ou pessoa) e número, como na URL `.../projects/3`. */
@@ -266,12 +266,12 @@ const permission = (err: unknown): never => {
   throw err;
 };
 
-/** Adaptador GraphQL do Project, com o token do `gh`. */
+/** Adaptador GraphQL do Project; a credencial vem do provedor (#241), a cada pedido. */
 export class GithubProjectSource implements ProjectSource {
   private readonly opts: GithubGraphqlSourceOptions;
-  private tokenValue: string | null = null;
 
   constructor(opts: GithubGraphqlSourceOptions) {
+    requireGithubToken(opts?.token);
     this.opts = opts;
   }
 
@@ -312,11 +312,8 @@ export class GithubProjectSource implements ProjectSource {
   }
 
   private async call<T>(operation: string, query: string, variables: Record<string, unknown>): Promise<T> {
-    if (!this.tokenValue) {
-      const t = this.opts.token;
-      this.tokenValue = typeof t === 'string' ? t : await t();
-    }
-    return githubGraphql<T>({ ...this.opts, token: this.tokenValue }, operation, query, variables).catch(permission);
+    const token = await resolveGithubToken(this.opts.token);
+    return githubGraphql<T>({ ...this.opts, token }, operation, query, variables).catch(permission);
   }
 }
 
@@ -404,7 +401,7 @@ export interface CreateGithubProjectOptions extends Partial<GithubGraphqlSourceO
   cache: GithubCache;
 }
 
-/** Monta o kanban do Project com o adaptador GraphQL (token do `gh` por padrão), sobre o cache dado. */
-export function createGithubProject({ project, cache, token = () => ghCliToken(), ...rest }: CreateGithubProjectOptions): GithubProject {
-  return new GithubProject({ source: new GithubProjectSource({ token, ...rest }), cache, project });
+/** Monta o kanban do Project com o adaptador GraphQL, sobre o cache dado; `token` é o provedor da credencial (#241). */
+export function createGithubProject({ project, cache, token, ...rest }: CreateGithubProjectOptions): GithubProject {
+  return new GithubProject({ source: new GithubProjectSource({ token: requireGithubToken(token), ...rest }), cache, project });
 }

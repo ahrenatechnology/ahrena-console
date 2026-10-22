@@ -3,7 +3,7 @@
 // do pacote, seção "Trabalho do GitHub".
 
 import { GithubCache, MemoryCacheStore, type CachePort } from './cache.ts';
-import { ghCliToken, GithubGraphqlSource, type GithubGraphqlSourceOptions } from './github-source.ts';
+import { GithubGraphqlSource, requireGithubToken, type GithubGraphqlSourceOptions } from './github-source.ts';
 import { GithubWork } from './work-service.ts';
 
 export * from './work.ts';
@@ -22,9 +22,9 @@ export interface CreateGithubWorkOptions extends Partial<GithubGraphqlSourceOpti
   store?: CachePort;
 }
 
-/** Monta o serviço com o adaptador GraphQL (token do `gh` por padrão) e o cache. */
-export function createGithubWork({ filter, store = new MemoryCacheStore(), token = () => ghCliToken(), now, ...rest }: CreateGithubWorkOptions): GithubWork {
-  const source = new GithubGraphqlSource({ token, now, ...rest });
+/** Monta o serviço com o adaptador GraphQL e o cache; `token` é o provedor da credencial (#241). */
+export function createGithubWork({ filter, store = new MemoryCacheStore(), token, now, ...rest }: CreateGithubWorkOptions): GithubWork {
+  const source = new GithubGraphqlSource({ token: requireGithubToken(token), now, ...rest });
   const cache = new GithubCache({ store, now });
   return new GithubWork({ source, cache, filter, now });
 }

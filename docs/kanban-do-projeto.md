@@ -19,8 +19,8 @@ O quadro segue a [decisão 0001](decisoes/0001-github-consulta-cache.md):
 
 ## Configuração
 
-- **Qual Project:** a variável `AHRENA_CONSOLE_PROJECT=dono/número`, sem padrão. No núcleo, use `createGithubProject({ project: { owner, number } })` (ver o [README do núcleo](../packages/nucleo/README.md#kanban-de-um-project)).
-- **Permissão:** o token do `gh` precisa do escopo `project` para ler e para mover. Sem ele, o painel mostra o erro com o comando que resolve:
+- **Qual Project:** o escolhido na própria tela do Kanban do projeto (#241, [decisão 0011](decisoes/0011-github-device-flow-keychain.md) §7), guardado nas preferências da instalação. `AHRENA_CONSOLE_PROJECT=dono/número`, quando definida, vence a escolha, com um aviso na tela. Não há Project padrão. No núcleo, use `createGithubProject({ project: { owner, number } })` (ver o [README do núcleo](../packages/nucleo/README.md#kanban-de-um-project)).
+- **Permissão:** a credencial precisa do escopo `project` para ler e para mover. Com a conexão do próprio console (a padrão), ela já é pedida; se faltar, a tela manda reconectar o GitHub em Conexões. Só quem escolheu a fonte `gh` (`AHRENA_CONSOLE_GITHUB_SOURCE=gh`) vê o comando:
 
   ```bash
   gh auth refresh -s project
@@ -55,18 +55,20 @@ Os erros têm o corpo `{ "error": "...", "code": "..." }`:
 | Status | `code` | Quando |
 | --- | --- | --- |
 | 400 | `invalid` | Corpo ou ids fora do padrão |
-| 401 | `no-scope` | O token do `gh` não tem o escopo `project`; o corpo traz `"command": "gh auth refresh -s project"` |
+| 401 | `no-scope` | A credencial não tem o escopo `project` (o corpo traz `"scope": "project"`). Na conexão do console, a mensagem manda reconectar em Conexões; na fonte `gh`, o corpo traz também `"command": "gh auth refresh -s project"` |
+| 409 | `github-not-connected` | O GitHub não está conectado (corpo `{ "error": "github-not-connected" }`, sem `code`); nada sai para o GitHub |
 | 404 | `unknown-item` | O item não está no Project |
 | 422 | `unknown-lane` | A opção não existe no campo Status |
 | 429 | `rate-limited` | O GitHub limitou e não há cache; com `Retry-After` |
 | 502 | `github-down` / `github-refused` | O GitHub falhou sem nada no cache (GET), ou recusou a mutação (mover) |
 | 503 | `off` | O núcleo subiu com `--no-github` |
+| 503 | `no-project` | Nenhum Project escolhido |
 
 Com o GitHub fora e o quadro no cache, o GET responde 200 com `stale: true` e o `reason`.
 
 **Origem.** Como as outras rotas, o núcleo recusa `Host` que não seja `127.0.0.1:<porta>` ou `localhost:<porta>` ([decisão 0003](decisoes/0003-responder-sessao.md)). O mover é a única escrita que aceita `Origin`, e só o da própria `/ui` (`http://<Host>`). Pede ainda `Content-Type: application/json` (415 sem ele) e corpo de até 4096 bytes (413).
 
-**Configuração.** O Project vem de `AHRENA_CONSOLE_PROJECT=dono/número`, com o token do `gh` e o cache no banco do núcleo. Sem a variável, as rotas respondem 503 `no-project` e a tela mostra como escolher o Project. `--no-github` desliga o quadro (503 `off`).
+**Configuração.** O Project é o escolhido na tela (`GET /api/project/options` lista os que a conta enxerga; `POST /api/project/selection` guarda a escolha). `AHRENA_CONSOLE_PROJECT=dono/número` vence a escolha quando definida. A credencial é a da conexão do console com o GitHub (#241), e o cache fica no banco do núcleo. Sem Project escolhido, as rotas respondem 503 `no-project` e a tela lista os Projects para escolher. `--no-github` desliga o quadro (503 `off`). O quadro diz de onde veio o Project em `selection.from` (`env`, `settings` ou `demo`) e traz `envOverride` quando a variável vence.
 
 **Demo.** A `--demo` traz um GitHub falso com o quadro do wireframe C11: o Project "Ahrena Console", as raias Backlog, Ready, In Progress, In Review e Done, e os 11 cards. Mover funciona em memória, até o processo sair:
 

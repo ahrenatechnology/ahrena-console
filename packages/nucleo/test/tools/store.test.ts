@@ -1,4 +1,4 @@
-// #280 layer 1, decision 0014 section 2: migration 12 creates `tool_checks`; the store replaces a
+// #280 layer 1, decision 0014 section 2: migration 13 creates `tool_checks`; the store replaces a
 // machine's rows at once and a check is valid for 6 h.
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
@@ -10,8 +10,8 @@ const NOW = Date.parse('2026-10-21T09:12:00.000Z');
 const check = (toolId: string, checkedAt = NOW): ToolCheck => ({ toolId, sourceId: 'homebrew', installed: '2.81.0', latest: '2.83.1', checkedAt, error: null });
 
 describe('#280 tool_checks', () => {
-  test('migration 12 is the last one and adds the table', () => {
-    assert.equal(MIGRATIONS.at(-1)?.version, 12);
+  test('migration 13 is the last one and adds the table', () => {
+    assert.equal(MIGRATIONS.at(-1)?.version, 13);
     const storage = openSqliteStorage({ path: ':memory:' });
     const cols = (storage.db.prepare('PRAGMA table_info(tool_checks)').all() as { name: string }[]).map((c) => c.name);
     assert.deepEqual(cols, ['machine_id', 'tool_id', 'source_id', 'installed', 'latest', 'checked_at', 'error']);

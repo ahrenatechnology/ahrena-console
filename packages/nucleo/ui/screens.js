@@ -231,6 +231,16 @@ export const SCREENS = [
     file: '/ui/screens/machine.js',
   },
   { id: 'agent-config', route: '/ui/agent-config', item: { label: 'Agent Config', icon: 'bot', section: 'control' }, title: 'Agent Config', sub: 'Seu Claude Code: skills, subagentes, comandos, MCP, hooks e memória', icon: 'bot', file: '/ui/screens/agent-config.js' }, // #63
+  {
+    // The console's own connections (C39 to C44, issue 241): GitHub, by the device flow.
+    id: 'connections',
+    route: '/ui/connections',
+    item: { label: 'Conexões', icon: 'plug', section: 'control' },
+    title: 'Conexões',
+    sub: 'As contas de fora que o console usa',
+    icon: 'plug',
+    file: '/ui/screens/connections.js',
+  },
 ];
 
 // ---------- The remote machines in the sidebar (issue 178) ----------

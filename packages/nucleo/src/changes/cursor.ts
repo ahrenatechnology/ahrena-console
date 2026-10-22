@@ -26,7 +26,7 @@
 // `tools` (#280, decision 0014): the Tools screen of a machine changed (a job moved, a check ended); the
 // key is the machine id (`local`). Only the HTTP route exposes it, like `repos`.
 // The values are English since #173 phase 2b; the old Portuguese ones left in phase 6.
-export const CHANGE_TYPES = ['session', 'state', 'needs-you', 'plan', 'decision', 'account', 'repos', 'alert', 'agent-instructions', 'framework-install', 'adrs', 'tools'] as const;
+export const CHANGE_TYPES = ['session', 'state', 'needs-you', 'plan', 'decision', 'account', 'repos', 'alert', 'agent-instructions', 'framework-install', 'adrs', 'connections', 'tools'] as const;
 export type ChangeType = (typeof CHANGE_TYPES)[number];
 
 export interface RecordedChange {
