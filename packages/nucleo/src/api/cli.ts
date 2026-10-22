@@ -103,6 +103,7 @@ import { publishRemoteAttentionChanges, RemoteMachine } from '../telemetry/remot
 import { RemoteMachines } from '../telemetry/remote-machines.ts';
 import { INVALID_MACHINES_FILE, publishReconnectChanges, reconnectLogFile, ReconnectRunner } from '../telemetry/reconnect.ts';
 import { loopbackGet } from '../telemetry/adapters/loopback-http.ts';
+import { MACHINE_READ_ADAPTER_TIMEOUT_MS, MachineReader } from './machine-reader.ts';
 import type { TelemetryCollector } from '../telemetry/ports.ts';
 import { SqliteToolChecksStore } from '../tools/store.ts';
 import { ToolsService } from '../tools/service.ts';
@@ -560,6 +561,7 @@ const api: LocalApi = await startLocalApi({
   devConsole: screens.devConsole,
   agentConfig,
   telemetry: telemetryService,
+  machineReader: new MachineReader({ get: loopbackGet({ timeoutMs: MACHINE_READ_ADAPTER_TIMEOUT_MS }), machines: () => remoteMachines?.list() ?? [] }),
   reconnect: reconnectRunner,
   messaging: createMessagingRoute({ messaging, sessions: storage, accounts, log }),
   tools: toolsExecutor,
