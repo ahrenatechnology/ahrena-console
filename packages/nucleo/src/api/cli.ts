@@ -106,6 +106,7 @@ import { loopbackGet } from '../telemetry/adapters/loopback-http.ts';
 import type { TelemetryCollector } from '../telemetry/ports.ts';
 import { SqliteToolChecksStore } from '../tools/store.ts';
 import { ToolsService } from '../tools/service.ts';
+import { MAX_MCP_PROJECTS } from '../tools/mcp-config.ts';
 import { publishToolsChanges, ToolsExecutor, toolsLogFile } from '../tools/executor.ts';
 import { LiveClaudeProcesses } from './live-processes.ts';
 import { SessionOpenDescriber } from './session-open.ts';
@@ -495,7 +496,8 @@ const messaging = demo
 // catalog's fixed probes; the latest versions only from the tool_checks cache (a check reads the
 // network). Not in --demo: the demo must not read the real machine.
 // The executor (layer 2) runs the catalog's actions as jobs and logs their masked output to tools.log.
-const toolsService = demo ? null : new ToolsService({ store: new SqliteToolChecksStore(sqlite.db), log });
+// The MCP servers (layer 3): Claude Code's ~/.claude.json and the .mcp.json of the sessions' projects (capped).
+const toolsService = demo ? null : new ToolsService({ store: new SqliteToolChecksStore(sqlite.db), mcpProjects: () => knownProjects(storage, MAX_MCP_PROJECTS), log });
 const toolsExecutor = toolsService ? new ToolsExecutor({ service: toolsService, logFile: toolsLogFile(dataDir), onChange: publishToolsChanges(changes), log }) : null;
 
 let historyReady = false;
