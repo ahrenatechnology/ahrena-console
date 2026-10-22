@@ -1,6 +1,6 @@
 # 0013 · Conectores de nuvem e a conexão da máquina remota: o console entra pelas CLIs das nuvens, sem guardar credencial
 
-- **Status:** proposta, esperando o ok do Fernando nos wireframes C57 a C67, A9, A10 e P14
+- **Status:** aceita com as quatro respostas recomendadas, a confirmar pelo Fernando (wireframes C57 a C67, A9, A10 e P14 aprovados no #283, em 22/10)
 - **Data:** 2026-10-21
 - **Issues:** [#277](https://github.com/ahrenatechnology/ahrena-console/issues/277) (contas de nuvem) e [#278](https://github.com/ahrenatechnology/ahrena-console/issues/278) (a conexão da máquina remota)
 - **Revê:** em [0008](0008-machine-telemetry-and-dev-console.md), seção 6, "abrir login de nuvem" (passa a ser do console, só pela CLI da nuvem) e "subir, parar o túnel" (passa a ser do console, só pelo comando do usuário); em [0012](0012-remote-reconnect.md), seção 3, "o núcleo não lê a saída" (passa a procurar uma lista fechada de padrões no trecho do log da execução, sem mostrar nada dele)
@@ -119,6 +119,13 @@ O resultado vai na leitura da máquina (`placement: { provider, kind, region, zo
 - Quem pode escrever no `~/.aws/config` escolhe o nome que vai para a linha do `aws`, limitado pelo padrão da seção 1. É a mesma pessoa que já roda o `aws` no terminal.
 - O motivo da queda depende de padrões de texto de ferramentas que mudam; a lista é testada com saídas gravadas e, quando nada casa, a tela cai no código de saída, que é o que existe hoje.
 - O Argos faz a revisão de segurança das rotas, do parser do `~/.aws/config` e, na variante A, do leitor do cache.
+
+## Respostas (as recomendadas, a confirmar pelo Fernando)
+
+1. **"Até quando":** variante A. O núcleo lê só o `expiresAt` do cache da aws CLI, com o teste de vazamento.
+2. **Conexões em Controle** é o lugar único das contas; sem seção Nuvens.
+3. **Um clique** para "Entrar na AWS e subir o túnel" quando o SSO expirou.
+4. **Parar o túnel** entra na fase 1, com confirmação, pela tela e pela bandeja.
 
 ## Perguntas para o Fernando
 
