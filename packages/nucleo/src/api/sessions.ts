@@ -32,6 +32,7 @@ import type { StoragePort } from '../storage-port.ts';
 import type { Accounts } from './accounts.ts';
 import { readSessionAttention, type SessionAttention } from './attention.ts';
 import type { DesktopIndex, DesktopSession } from './desktop-index.ts';
+import { SessionOpenDescriber, type SessionOpen } from './session-open.ts';
 import { ResumosDeSessao } from './summary.ts';
 
 export const SESSIONS_ROUTE = '/api/sessions';
@@ -75,6 +76,8 @@ export interface LinhaDeSessao {
   costUsd: number | null;
   cwd: string | null;
   account: { label: string; color: string } | null;
+  /** #285: where the row's open icon goes and the command to copy. */
+  open: SessionOpen;
 }
 
 export interface ListaDeSessoesHttp {
@@ -131,6 +134,8 @@ export interface OpcoesDaLista {
   /** The event summaries the attention of a waiting session reads (#245); its own (256) without them. */
   resumos?: ResumosDeSessao;
   agora?: () => number;
+  /** #285: each row's `open`; without it, no session counts as live in a terminal. */
+  open?: SessionOpenDescriber;
 }
 
 export class ListaDeSessoes {
@@ -139,9 +144,11 @@ export class ListaDeSessoes {
   private readonly desktop: DesktopIndex | null;
   private readonly agora: () => number;
   private readonly resumos: ResumosDeSessao;
+  private readonly open: SessionOpenDescriber;
   private readonly custos = new Map<string, { updatedAt: string; usd: number | null }>();
 
-  constructor({ storage, contas, desktop = null, resumos, agora = Date.now }: OpcoesDaLista) {
+  constructor({ storage, contas, desktop = null, resumos, agora = Date.now, open = new SessionOpenDescriber() }: OpcoesDaLista) {
+    this.open = open;
     this.storage = storage;
     this.contas = contas;
     this.desktop = desktop;
@@ -150,7 +157,7 @@ export class ListaDeSessoes {
   }
 
   async listar(pedido: PedidoDeSessoes): Promise<ListaDeSessoesHttp> {
-    await Promise.all([this.contas.refresh(), this.desktop?.refresh()]);
+    await Promise.all([this.contas.refresh(), this.desktop?.refresh(), this.open.refresh()]);
     const agora = this.agora();
     const todas: { s: Session; desktop: DesktopSession | null; titulo: string; status: DisplayStatus; attention: SessionAttention | null }[] = [];
     let cursor: string | null = null;
@@ -205,6 +212,7 @@ export class ListaDeSessoes {
         costUsd: await this.custoDe(s),
         cwd: s.cwd,
         account: conta ? { label: conta.label, color: conta.color } : null,
+        open: this.open.describe({ sessionId: s.id, cwd: s.cwd ?? desktop?.cwd ?? null, local: desktop?.localId ?? null }),
       });
     }
     return { total, registered: todas.length, page: pagina, perPage, pages: paginas, directories: diretorios, counts, items: itens };

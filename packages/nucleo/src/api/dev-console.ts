@@ -16,7 +16,7 @@ export type { DevConsole };
 
 export const DEV_CONSOLE_ROUTE = '/api/dev-console';
 
-export async function respondDevConsole(res: ServerResponse, url: URL, devConsole: DevConsole): Promise<void> {
+export async function respondDevConsole(res: ServerResponse, url: URL, devConsole: Pick<DevConsole, 'overview' | 'view'>): Promise<void> {
   const context = url.searchParams.get('context');
   if (context === null) return send(res, 200, await devConsole.overview());
   if (!CONTEXT_ID.test(context)) return send(res, 400, { error: 'context: um id de ~/.ahrena-console/dev-console.json ou owner/repo' });

@@ -352,9 +352,11 @@ describe('repos na /ui: o que a tela mostra', () => {
   });
 
   test('sem GitHub: um texto só, que diz como configurar', () => {
-    assert.match(NO_GITHUB.texto, /gh auth login/);
-    assert.match(NO_GITHUB.texto, /--no-github/);
-    assert.match(NO_GITHUB.titulo, /sem o GitHub/);
+    // issue 241: no terminal command; --no-github or a dropped connection, and Conexões.
+    assert.doesNotMatch(NO_GITHUB.text, /gh auth login/);
+    assert.match(NO_GITHUB.text, /--no-github/);
+    assert.match(NO_GITHUB.text, /Conexões/);
+    assert.match(NO_GITHUB.title, /sem o GitHub/);
   });
 });
 

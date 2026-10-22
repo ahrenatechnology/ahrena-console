@@ -46,21 +46,25 @@
 .mini .age { margin-left: auto; font-size: 11px; color: var(--muted); }
 .mini .n { font-size: 12.5px; font-weight: var(--weight-semibold); }
 .mini .x { font-size: 11.5px; color: var(--muted); }
-.mini .foot { margin-top: auto; display: flex; justify-content: space-between; gap: 6px; font-size: 11px; color: var(--muted); white-space: nowrap; min-width: 0; }
+.mini .foot { margin-top: auto; display: flex; justify-content: space-between; align-items: center; gap: 6px; font-size: 11px; color: var(--muted); white-space: nowrap; min-width: 0; }
 .mini .foot > span { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
-.mini .foot b { flex: none; }
-/* The card is one link, stretched over it from the name; "Mandar mensagem" (#61) sits above it. */
-.dash-mini-linked { position: relative; }
-.dash-mini-link { color: inherit; display: block; }
-.dash-mini-link::after { content: ""; position: absolute; inset: 0; border-radius: inherit; }
-.dash-mini-link:focus-visible { outline: 0; }
-.dash-mini-linked:has(.dash-mini-link:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* C71 (issue 285): the open icon, then "Abrir ›", the Detail link stretched over the card. */
+.dash-mini { position: relative; }
+.mini .foot > .dash-mini-actions { display: inline-flex; align-items: center; gap: 6px; flex: none; overflow: visible; }
+.dash-mini-actions .open-action { position: relative; z-index: 1; }
+.dash-mini-actions .open-icon { width: 22px; height: 22px; border-radius: 6px; }
+.dash-open-link { color: var(--accent-text); font-weight: var(--weight-semibold); white-space: nowrap; }
+.dash-open-link::after { content: ""; position: absolute; inset: 0; }
+.dash-open-link:focus-visible { outline: none; }
+.dash-mini:has(.dash-open-link:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
 /* #61: with "Mandar mensagem" in the foot, the age goes up beside the reason (C53). A narrow card (five in
-   a row at 1100 px) keeps the reason and the action whole: the age and "Abrir ›" leave (the card is the link). */
+   a row at 1100 px) keeps the reason and the actions whole: the age leaves, and "Abrir ›" keeps only its
+   stretched link (the whole card still opens the Detail). */
 .dash-mini-sm { container-type: inline-size; }
 .dash-mini-sm .l1 .age { flex: none; white-space: nowrap; }
 @container (max-width: 190px) {
-  .dash-mini-sm .l1 .age, .dash-mini-sm .foot b { display: none; }
+  .dash-mini-sm .l1 .age { display: none; }
+  .dash-mini-sm .dash-open-link { font-size: 0; }
 }
 
 /* ---------- ociosas (issue 245): a neutral row apart, no fill, the reason in a light chip ---------- */
@@ -72,7 +76,6 @@
 .dash-idle-link { margin-left: auto; white-space: nowrap; display: inline-flex; align-items: center; gap: 4px; color: var(--muted); flex: none; }
 .dash-idle-link:hover { color: var(--text); }
 .dash-idle-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.mini .foot b { color: var(--accent-text); font-weight: var(--weight-semibold); }
 
 /* ---------- agentes ativos e atividade ---------- */
 .two { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 16px; align-items: start; }

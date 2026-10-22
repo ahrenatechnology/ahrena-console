@@ -14,7 +14,7 @@ import { UI_FOLDER } from '../../src/api/ui.ts';
 import type { LiveProcess } from '../../src/messaging/model.ts';
 import type { DeliveryResult } from '../../src/messaging/ports.ts';
 import { Messaging } from '../../src/messaging/service.ts';
-import { DETAIL_LOCAL, DETAIL_SESSION } from '../../src/simulator/detail.ts';
+import { DETAIL_SESSION } from '../../src/simulator/detail.ts';
 import { ElementoFalso, documentoFalso, instalarDomFalso, texto } from './fake-dom.ts';
 import { startDemoApi, type DemoApi } from './demo-api.ts';
 
@@ -38,7 +38,7 @@ Object.assign(globalThis, {
 });
 
 // @ts-expect-error: browser modules, plain JavaScript
-const { httpReader, httpWriter, httpOpener, useOpener } = await import('../../ui/api.js');
+const { httpReader, httpWriter } = await import('../../ui/api.js');
 // @ts-expect-error: idem
 const message = await import('../../ui/screens/session-message.js');
 // @ts-expect-error: idem
@@ -115,7 +115,6 @@ before(async () => {
   };
   read = httpReader({ base: demo.api.url, fetch: recording(false) });
   write = httpWriter({ base: demo.api.url, fetch: recording(true) });
-  useOpener(httpOpener({ base: demo.api.url, fetch: recording(true) }));
   message.timing.pollMs = 15;
 });
 after(async () => {
@@ -393,9 +392,10 @@ describe('#61/AC-1 C53: the box off, and why', () => {
     assert.ok(disabled(one(box, '.sm-send')));
     const open = buttonNamed(box, /Abrir no Claude Desktop/)!;
     assert.ok(open && !disabled(open));
+    // The Detail's open action of #285, the same as in the header: its click is the core's open route.
+    assert.ok(open.closest('.open-action'), 'the shared open action');
     open.click();
-    await until(() => demo.opened.length === 1, 'the Desktop asked to open');
-    assert.match(demo.opened[0]!, new RegExp(DETAIL_LOCAL.replace('local_', '')));
+    await until(() => requests.some((r) => r.method === 'POST' && r.path === `/api/sessions/${DETAIL_SESSION}/open`), 'the open route asked');
     assert.ok(one(area, '.sd-band'), 'the Detail keeps its band');
   });
 
@@ -464,7 +464,7 @@ describe('#61/AC-1 C53: "Mandar mensagem" on Sessões and on the Dashboard', () 
     try {
       await until(() => all(area, '.sm-link-action').length === 1, 'the action');
       const card = all(area, '.mini').find((m) => m.getAttribute('data-session') === DETAIL_SESSION)!;
-      assert.equal(one(card, 'a.dash-mini-link')!.getAttribute('href'), `/ui/sessions/${DETAIL_SESSION}`);
+      assert.equal(one(card, 'a.dash-open-link')!.getAttribute('href'), `/ui/sessions/${DETAIL_SESSION}`);
       assert.equal(all(card, 'a').length, 1, 'one link; the action is a button beside it, not inside it');
       assert.match(texto(one(card, '.foot')), /^Mandar mensagem Abrir ›$/);
       one(card, '.sm-link-action')!.click();

@@ -126,6 +126,8 @@ describe('/ui in the core', () => {
     'screens/agent-instructions-markdown.js': ['https://github.com/${repo.split('],
     // ADR e PDR (#174): "Como escrever uma ADR", no vazio.
     'screens/adrs-common.js': ['https://adr.github.io/'],
+    // Conexões (issue 241): "Como configurar", when the console has no OAuth App (C44).
+    'screens/connections.js': ['https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/authorizing-oauth-apps#device-flow'],
   };
   const externalUrls = (file: string, text: string) => {
     const allowed = LINK_TARGETS[file] ?? [];
@@ -292,8 +294,8 @@ describe('UI rule 9 (#255): cards in the same row have the same height', () => {
 });
 
 describe('screen registry', () => {
-  test('the sidebar has Dashboard, Mural ao vivo, Sessões, the Feed, Kanban, Analytics, Workflows and Histórico; under Entrega Repositórios, the project Kanban and Dev Console; under Decisões, Das sessões, ADR and PDR; under Máquinas Esta máquina and, under Controle, Agent Config; the Detail opens by a session and lights Sessões', () => {
-    assert.deepEqual(SCREENS.filter((t: { item?: unknown }) => t.item).map((t: { id: string }) => t.id), ['dashboard', 'wall', 'sessions', 'feed', 'kanban', 'repos', 'project', 'dev-console', 'analytics', 'workflows', 'history', 'decisions', 'adrs', 'pdrs', 'this-machine', 'agent-config']);
+  test('the sidebar has Dashboard, Mural ao vivo, Sessões, the Feed, Kanban, Analytics, Workflows and Histórico; under Entrega Repositórios, the project Kanban and Dev Console; under Decisões, Das sessões, ADR and PDR; under Máquinas Esta máquina and, under Controle, Agent Config and Conexões; the Detail opens by a session and lights Sessões', () => {
+    assert.deepEqual(SCREENS.filter((t: { item?: unknown }) => t.item).map((t: { id: string }) => t.id), ['dashboard', 'wall', 'sessions', 'feed', 'kanban', 'repos', 'project', 'dev-console', 'analytics', 'workflows', 'history', 'decisions', 'adrs', 'pdrs', 'this-machine', 'agent-config', 'connections']);
     assert.deepEqual(
       sidebarSections().map((s: { id: string; label: string | null; items: { id: string }[] }) => [s.id, s.label, s.items.map((t) => t.id)]),
       [
@@ -301,7 +303,7 @@ describe('screen registry', () => {
         ['delivery', 'Entrega', ['repos', 'project', 'dev-console']],
         ['decisions', 'Decisões', ['decisions', 'adrs', 'pdrs']],
         ['machines', 'Máquinas', ['this-machine']],
-        ['control', 'Controle', ['agent-config']],
+        ['control', 'Controle', ['agent-config', 'connections']],
       ],
     );
     assert.equal(findScreen('/ui/decisions').screen.file, '/ui/screens/decisions.js');
@@ -329,6 +331,8 @@ describe('screen registry', () => {
     assert.equal(findScreen('/ui/sessions/a%20b'), null);
     assert.equal(findScreen('/ui/kanban').screen.id, 'kanban');
     assert.equal(findScreen('/ui/dev-console').screen.file, '/ui/screens/dev-console.js');
+    // Conexões (issue 241): the last item of Controle, with an English route.
+    assert.equal(findScreen('/ui/connections').screen.file, '/ui/screens/connections.js');
     assert.equal(findScreen('/ui/nao-existe'), null);
     // The old URLs match nothing: the shell shows "Página não encontrada" (#173, phase 6).
     for (const old of ['/ui/sessoes', '/ui/sessoes/b91d04aa-4e1', '/ui/historico', '/ui/mural', '/ui/projeto', '/ui/decisoes']) assert.equal(findScreen(old), null, old);

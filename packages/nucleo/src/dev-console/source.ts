@@ -11,7 +11,7 @@
 // GraphQL has no ETag (decision 0001): the key stores `etag: null` and the TTL does the work.
 // Every connection reads `pageInfo.hasNextPage`: with more than one page, the read is `truncated`.
 
-import { ghCliToken, githubGraphql, retryOnGateway, type GithubGraphqlSourceOptions } from '../github/github-source.ts';
+import { githubGraphql, requireGithubToken, resolveGithubToken, retryOnGateway, type GithubGraphqlSourceOptions } from '../github/github-source.ts';
 import type { CiState, ReviewDecision } from '../github/work.ts';
 import type { IssueFact, Mergeable, MergedPullRequestFact, PullRequestFact } from './model.ts';
 
@@ -127,10 +127,11 @@ export function toIssueFact(repo: string, i: RawIssue): IssueFact {
 
 export class GithubDevConsoleSource implements DevConsoleSource {
   private readonly opts: GithubGraphqlSourceOptions;
-  private tokenValue: string | null = null;
 
-  constructor(opts: Partial<GithubGraphqlSourceOptions> = {}) {
-    this.opts = { token: () => ghCliToken(), ...opts };
+  /** `token` is the credential provider (#241), asked on every read; there is no `gh` default. */
+  constructor(opts: GithubGraphqlSourceOptions) {
+    requireGithubToken(opts?.token);
+    this.opts = opts;
   }
 
   async pullRequests(repo: string, mergedSince: string): Promise<RepoPullRequests> {
@@ -169,26 +170,10 @@ export class GithubDevConsoleSource implements DevConsoleSource {
   }
 
   private async query<T>(operation: string, query: string, variables: Record<string, unknown>): Promise<T> {
-    if (!this.tokenValue) {
-      const t = this.opts.token;
-      this.tokenValue = typeof t === 'string' ? t : await t();
-    }
-    // A 401 means an expired or replaced token: forget the cached one, and the next read asks `gh` again.
-    const doFetch = this.opts.fetch ?? fetch;
-    let unauthorized = false;
-    const watching: typeof fetch = async (input, init) => {
-      const res = await doFetch(input, init);
-      if (res.status === 401) unauthorized = true;
-      return res;
-    };
-    const token = this.tokenValue;
-    try {
-      // Every Dev Console call is a read, so a 502/503/504 is retried (#269).
-      return await retryOnGateway(() => githubGraphql<T>({ ...this.opts, fetch: watching, token }, operation, query, variables), { sleep: this.opts.sleep });
-    } catch (err) {
-      if (unauthorized) this.tokenValue = null;
-      throw err;
-    }
+    // One token per read: after a 401 the next read already asks the provider again (#241).
+    const token = await resolveGithubToken(this.opts.token);
+    // Every Dev Console call is a read, so a 502/503/504 is retried (#269).
+    return retryOnGateway(() => githubGraphql<T>({ ...this.opts, token }, operation, query, variables), { sleep: this.opts.sleep });
   }
 }
 

@@ -29,9 +29,9 @@ import {
 
 export const WAIT_FOR_CHANGES = 'wait_for_changes';
 
-/** The types MCP exposes: all but the GitHub screens' ones (`repos`, `agent-instructions`, `framework-install` and `adrs`). */
-const GITHUB_SCREEN_TYPES = new Set<ChangeType>(['repos', 'agent-instructions', 'framework-install', 'adrs']);
-export const MCP_CHANGE_TYPES = CHANGE_TYPES.filter((t): t is Exclude<ChangeType, 'repos' | 'agent-instructions' | 'framework-install' | 'adrs'> => !GITHUB_SCREEN_TYPES.has(t));
+/** The types MCP exposes: all but the GitHub screens' ones (`repos`, `agent-instructions`, `framework-install`, `adrs`) and the /ui's `connections` (#241). */
+const GITHUB_SCREEN_TYPES = new Set<ChangeType>(['repos', 'agent-instructions', 'framework-install', 'adrs', 'connections']);
+export const MCP_CHANGE_TYPES = CHANGE_TYPES.filter((t): t is Exclude<ChangeType, 'repos' | 'agent-instructions' | 'framework-install' | 'adrs' | 'connections'> => !GITHUB_SCREEN_TYPES.has(t));
 export type McpChangeType = (typeof MCP_CHANGE_TYPES)[number];
 
 const ALLOWED_ARGS = ['cursor', 'timeout', 'sessions', 'account', 'types'] as const;

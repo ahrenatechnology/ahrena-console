@@ -19,6 +19,7 @@ import { loading, error, errorBand, empty } from '../states.js';
 import { ago, NO_GITHUB } from '../repos-format.js';
 import { blobUrl, IMPORT_ICON, IMPORT_STATUS, renderMarkdown } from './agent-instructions-markdown.js';
 import { canInstall, installCard, installChangeMatters, installEmptyButton, loadInstallStyle, mountInstallFlow, planRoute } from './framework-install.js';
+import { connectEmptyFor, connectionChanged, isGithubNotConnected } from '../github-connect.js';
 
 const REREAD_MS = 5000;
 const SEARCH_MIN = 2;
@@ -296,6 +297,10 @@ export async function mountInstructions(area, ctx, { owner, name }) {
     if (flow) return;
     const hasData = data && data.state === 'ready';
     band.replaceChildren();
+    if (isGithubNotConnected(failure)) {
+      warnings.replaceChildren();
+      return body.replaceChildren(connectEmptyFor('instructions', ctx.navigate));
+    }
     if (failure && hasData) band.append(errorBand({ title: 'Sem conexão com o núcleo.', text: `${failure.message}. Mostrando a última leitura.`, action: { label: 'Tentar de novo', onClick: () => read() } }));
     else if (hasData && data.error) band.append(errorBand({ title: 'GitHub com problema.', text: `${data.error}. Mostrando a leitura${data.readAt ? ` de ${new Date(data.readAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}` : ' anterior'}.`, action: { label: 'Tentar agora', onClick: () => read({ refresh: true }) } }));
     if (hasData && data.truncated) band.append(truncatedBand());
@@ -307,7 +312,7 @@ export async function mountInstructions(area, ctx, { owner, name }) {
         timer = setTimeout(read, REREAD_MS);
         return body.replaceChildren(loading({ label: 'Lendo o GitHub…' }));
       }
-      if (data.state === 'no-github') return body.replaceChildren(empty({ icon: 'github', title: NO_GITHUB.titulo, text: NO_GITHUB.texto }));
+      if (data.state === 'no-github') return body.replaceChildren(empty({ icon: 'github', ...NO_GITHUB }));
       if (data.state === 'not-found') return body.replaceChildren(empty({ icon: 'repos', title: 'Repositório não encontrado', text: `${key} não existe ou a conta do GitHub não tem acesso a ele.` }));
       return body.replaceChildren(error({ title: 'O GitHub não respondeu', text: data.error ?? 'A leitura das instruções falhou.', retry: () => read({ refresh: true }) }));
     }
@@ -571,7 +576,7 @@ export async function mountInstructions(area, ctx, { owner, name }) {
 
   // ---------- ao vivo ----------
   ctx.onChange((changes) => {
-    if (instructionsChangeMatters(changes, key)) {
+    if (instructionsChangeMatters(changes, key) || connectionChanged(changes)) {
       views.clear();
       read();
     }

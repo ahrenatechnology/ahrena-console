@@ -727,7 +727,96 @@ body.captura[data-width="1100"] .width-col[data-w="1440"], body.captura[data-wid
 .detail-idle-note { display: flex; gap: 10px; align-items: center; font-size: 12px; color: var(--muted); padding: 2px 2px; }
 .dev-card.idle { border-left-color: color-mix(in srgb, var(--muted) 45%, var(--border)); }
 .legend-attn { display: flex; flex-direction: column; gap: 8px; }
+/* ---------- open the session where it runs (C70 and C71) ---------- */
+.os-col { display: flex; flex-direction: column; gap: 6px; }
+.os-act { display: inline-flex; align-items: center; gap: 8px; margin-left: auto; flex: none; position: relative; }
+.os-act + .c-muted { margin-left: 0 !important; }
+.btn.os-off { opacity: .5; cursor: not-allowed; }
+.os-why { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; color: var(--muted); white-space: nowrap; }
+.os-icon { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--muted); }
+.os-icon.os-sm { width: 24px; height: 24px; border-radius: 6px; }
+.os-tip { position: absolute; right: 0; top: 36px; z-index: 2; width: 330px; padding: 9px 11px; border-radius: 8px; background: var(--raised); border: 1px solid var(--border); font-size: 11.5px; line-height: 1.5; color: var(--muted); white-space: normal; box-shadow: 0 6px 18px rgba(0,0,0,.25); }
+.os-tip code { font-family: var(--font-mono); font-size: 11px; color: var(--text); }
+.os-case { padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
+.os-case .olhinho { margin-bottom: 2px; }
+.os-case.os-tall { padding-bottom: 92px; }
+.os-states { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.os-state { padding: 10px 12px; display: flex; align-items: center; gap: 10px; font-size: 12px; line-height: 1.45; min-width: 0; }
+.os-state svg { flex: none; }
+.os-state .btn { margin-left: auto; height: 26px; flex: none; }
+.os-state.os-ok svg, .os-state.os-ok b { color: var(--status-completed-text); }
+.os-state.os-fail svg, .os-state.os-fail b { color: var(--status-error-text); }
+.os-state.os-busy svg, .os-state.os-busy b { color: var(--accent-text); }
+.os-wall .mc { height: 252px; }
+.os-foot { margin-top: auto; display: flex; align-items: center; gap: 8px; padding-top: 9px; border-top: 1px solid var(--border); min-width: 0; }
+.os-foot .btn { height: 26px; padding: 0 9px; font-size: 12px; }
+.os-foot .os-why { margin-left: auto; overflow: hidden; text-overflow: ellipsis; }
+.os-foot .os-detail { margin-left: auto; font-size: 12px; color: var(--muted); flex: none; }
+.os-pe { display: flex; align-items: center; gap: 6px; }
+.os-pe b { margin-left: 0; }
 .legend-attn .legend-attn-g { font-size: 11.5px; color: var(--muted); }
+/* ---------- cloud connectors (C57 to C61, issue #277, decision 0013) ---------- */
+.cl-grid { display: grid; gap: 14px; }
+.cl-conn { padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.cl-conn .cl-top { display: flex; gap: 10px; align-items: center; }
+.cl-conn .cl-logo { width: 34px; height: 34px; border-radius: 9px; display: grid; place-items: center; background: var(--raised); color: var(--accent-text); font-size: 17px; flex: none; }
+.cl-conn .cl-name { font-weight: 600; font-size: 14px; }
+.cl-conn .cl-name small { display: block; font-weight: 400; color: var(--muted); font-size: 11.5px; }
+.cl-conn .cl-top { flex-wrap: wrap; }
+.cl-conn .cl-name { flex: 1; min-width: 150px; }
+.cl-conn .cl-top .badge { margin-left: auto; }
+.cl-sess .tabela td { white-space: normal; }
+.cl-sess .tabela td:last-child, .cl-sess .tabela td.mono { white-space: nowrap; }
+.cl-conn .cl-lines { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
+.cl-conn .cl-lines b { color: var(--text); font-weight: 500; }
+.cl-conn .cl-foot { margin-top: auto; display: flex; gap: 8px; align-items: center; }
+.cl-conn .cl-foot .mono { font-size: 11px; color: var(--muted); margin-right: auto; }
+.cl-conn.cl-soon { border-style: dashed; background: transparent; }
+.cl-conn.cl-soon .cl-logo { color: var(--muted); }
+.cl-sess { padding: 0; display: flex; flex-direction: column; min-width: 0; }
+.cl-sess .cl-sh { display: flex; gap: 12px; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--border); }
+.cl-sess .cl-sh .cl-sn { min-width: 0; }
+.cl-sess .cl-sh .cl-sn b { display: block; font-size: 13.5px; }
+.cl-sess .cl-sh .cl-sn small { color: var(--muted); font-size: 11.5px; }
+.cl-sess .cl-sh .cl-act { margin-left: auto; display: flex; gap: 8px; align-items: center; flex: none; }
+.cl-sess .tabela td, .cl-sess .tabela th { padding: 8px 16px; }
+.cl-sess .cl-sf { margin-top: auto; padding: 9px 16px; border-top: 1px dashed var(--border); font-size: 11.5px; color: var(--muted); display: flex; gap: 8px; align-items: center; }
+.cl-sess .faixa { margin: 12px 16px 0; }
+.cl-sess.cl-bad { border-color: color-mix(in srgb, var(--status-error-dot) 45%, var(--border)); }
+.cl-crumb { font-size: 12px; color: var(--muted); display: flex; gap: 6px; align-items: center; margin-bottom: -8px; }
+.cl-crumb b { color: var(--text); font-weight: 500; }
+.cl-lock { display: flex; gap: 8px; align-items: center; font-size: 11.5px; color: var(--muted); }
+.cl-chip { display: inline-flex; align-items: center; gap: 5px; height: 20px; padding: 0 8px; border-radius: 99px; font-size: 11px; background: var(--raised); color: var(--text); white-space: nowrap; }
+.cl-states { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.cl-states > .cartao { min-width: 0; min-height: 250px; }
+.cl-states .vazio .ic { font-size: 22px; }
+.cl-states .vazio b { color: var(--text); }
+/* ---------- the remote machine's connection (C62 to C65, issue #278, decision 0013) ---------- */
+.mc-card { padding: 14px 16px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.mc-card h5 { margin: 0; font-size: 13.5px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+.mc-card h5 .mc-act { margin-left: auto; display: flex; gap: 8px; }
+.mc-trio { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.mc-trio > div { border: 1px solid var(--border); border-radius: 10px; padding: 9px 11px; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.mc-trio .k { font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+.mc-trio .v { font-size: 13px; font-weight: 600; display: flex; gap: 6px; align-items: center; white-space: nowrap; }
+.mc-trio .s { font-size: 11.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mc-trio .ok { color: var(--status-completed-text); } .mc-trio .bad { color: var(--status-error-text); } .mc-trio .warn { color: var(--status-waiting-text); } .mc-trio .off { color: var(--muted); }
+.mc-cmds { font-family: var(--font-mono); font-size: 11px; color: var(--muted); display: flex; flex-direction: column; gap: 2px; overflow-wrap: anywhere; }
+.mc-kv { display: grid; gap: 8px 16px; font-size: 12.5px; }
+.mc-kv > div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.mc-kv .k { font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+.mc-kv .v { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mc-src { font-size: 11.5px; color: var(--muted); margin-top: auto; }
+.mc-dialog { position: relative; padding: 18px 20px; display: flex; flex-direction: column; gap: 12px; max-width: 520px; margin: 8px auto; box-shadow: 0 14px 44px color-mix(in srgb, var(--mono-black) 40%, transparent); }
+.mc-dialog h5 { margin: 0; font-size: 14px; }
+.mc-dialog p { margin: 0; font-size: 12.5px; color: var(--muted); }
+.mc-dialog .mc-dact { display: flex; gap: 8px; justify-content: flex-end; }
+.btn.mc-danger { background: var(--status-error-dot); color: var(--on-accent); font-weight: 600; }
+.faixa.mc-neutral { background: var(--surface); }
+.faixa.mc-neutral .ic, .faixa.mc-neutral b { color: var(--text); }
+.mc-reasons { display: flex; flex-direction: column; gap: 10px; }
+.mc-reasons .olhinho { margin-top: 4px; }
+.mc-from { font-size: 11px; color: var(--muted); margin-top: 4px; }
 </style>
 
 <header class="topo">
@@ -2718,8 +2807,447 @@ function sessionMessageUnavailableScreen(w) {
 }
 
 // =====================================================================
+// Open the session where it runs (C70 and C71): Claude Desktop, a terminal resuming it, or nothing on
+// another machine. The núcleo picks the target: a session the Claude Desktop index knows (its local_…)
+// opens there; a session with only a transcript resumes in a terminal. Synthetic data only.
+// =====================================================================
+// Where each synthetic session runs. 'cli-live' = a `claude` process still running in a terminal here.
+const OS_WHERE = { b91d04aa: 'desktop', '8e17b6f2': 'desktop', e04b7d93: 'desktop', '2c8e6f10': 'desktop', f5e2a6d0: 'desktop', '4d2a9c35': 'cli-live', '7f3a2c1e': 'cli-live', '5a61c2bf': 'cli', c3f09b52: 'remote', '91aa3e07': 'cli', d6c0e4a9: 'desktop', '0d7e81c4': 'cli' }
+const osCol = (label, body) => `<div class="os-col"><div class="rotulo">${label}</div>${body}</div>`
+const osResume = s => `cd /simulacao/${s.pj} && claude --resume ${s.id}-4e1…`
+const osTip = s => `<span class="os-tip">Abre o app de terminal padrão e roda <code>claude --resume ${s.id}-4e1…</code> em <code>/simulacao/${s.pj}</code>. O comando é montado pelo núcleo com o id e a pasta da sessão.</span>`
+/** The action for one session, in the Detail header (`size` 'full') or a wall card foot ('small'). */
+function osAction(s, { size = 'full', tip = false } = {}) {
+  const w = OS_WHERE[s.id] ?? 'desktop'
+  const sm = size === 'small'
+  if (w === 'desktop') return `<span class="btn contorno">${ic('monitor')}Abrir no Claude Desktop${sm ? '' : ' ' + ic('external-link')}</span>`
+  if (w === 'cli') return `<span class="btn contorno">${ic('terminal')}Abrir no terminal${sm ? '' : ' ' + ic('external-link')}</span>${tip ? osTip(s) : ''}`
+  if (w === 'cli-live') return `<span class="btn contorno" title="Já roda num terminal (pid 4182): traz a janela dele à frente">${ic('terminal-square')}Ir para o terminal</span>`
+  if (sm) return `<span class="btn contorno os-off" title="A sessão roda em outra máquina">${ic('server')}Roda em ws-exemplo</span><span class="os-icon os-sm" title="Copiar comando">${ic('copy')}</span>`
+  return `<span class="btn contorno os-off">${ic('terminal')}Abrir no terminal</span><span class="os-why">${ic('server')}roda em ws-exemplo</span><span class="os-icon" title="Copiar comando">${ic('copy')}</span>`
+}
+/** The Detail header with the open action beside Atualizar. */
+const osDetCab = (s, opts = {}) => `<div class="det-cab"><div class="l1"><span class="c-muted" style="font-size:18px">${ic('arrow-left')}</span><h4 class="trunc">${s.nome}</h4>${badge(s.st, s.mot)}<span class="os-act">${osAction(s, opts)}</span><span class="c-muted">${ic('refresh-cw')}</span></div>
+  <div class="chips"><span class="chip">${s.id}-4e1 ${ic('copy')}</span><span class="chip">${ic('cpu')}${s.mo}</span><span class="chip">${ic('clock')}hoje, 22:41 (${s.dur})</span><span class="chip custo">~US$ ${s.custo}</span><span class="chip">${ic('git-branch')}${s.br}</span></div>
+  <div class="cwd">${ic('folder')}/simulacao/${s.pj} ${ic('copy')}</div></div>`
+
+function openDetailScreen() {
+  const s = byId('e04b7d93')
+  return `${osDetCab(s)}
+  <div class="detail-idle-note"><span class="ponto d-idle"></span><span>Ociosa · o turno terminou há 1 min e a vez é sua. Nada trava a sessão.</span></div>
+  ${abas(1, 1, '96/412')}
+  <div class="cartao" style="padding:16px 18px;display:flex;flex-direction:column;gap:16px">
+    <div class="msg"><span class="av eu">${ic('user')}</span><div><div class="quem">Você<span class="h">23:04</span></div><div class="corpo">quebre o retry em uma função e faz o commit</div></div></div>
+    <div class="msg"><span class="av">${ic('bot')}</span><div><div class="quem">Assistente<span class="chip">Sonnet 5.5</span><span class="chip">↓ 1,8 k · ↑ 420</span><span class="h">23:09</span></div>
+      <div class="corpo">Extraí <code>comBackoff()</code> em <code>src/fila/retry.ts</code> e fiz o commit. Rodo os testes?</div>
+      <div class="ferrbloco">${ic('chevron-right')}<span class="n">Bash</span><span class="cmd trunc">git commit -m "retry: extract backoff"</span><span class="ok">${ic('check-circle-2')}OK</span></div></div></div>
+  </div>`
+}
+
+function openDetailCasesScreen() {
+  const caseOf = (n, title, s, opts = {}, extra = '') => `<div class="cartao os-case${opts.tip ? ' os-tall' : ''}"><div class="olhinho">${n} · ${title}</div>${osDetCab(s, opts)}${extra}</div>`
+  const state = (kind, icon, html, action = '') => `<div class="cartao os-state os-${kind}">${ic(icon)}<div>${html}</div>${action}</div>`
+  const copy = `<span class="btn contorno">${ic('copy')}Copiar comando</span>`
+  return `${cab('external-link', 'Abrir a sessão · cada caso', 'O botão do cabeçalho muda pelo lugar onde a sessão roda; quem decide é o núcleo')}
+  ${caseOf(1, 'Claude Desktop: o índice do Desktop conhece a sessão', byId('b91d04aa'))}
+  ${caseOf(2, 'Terminal: só há o transcript, nenhum processo vivo', byId('5a61c2bf'), { tip: true })}
+  ${caseOf(3, 'Terminal com o claude ainda rodando nesta máquina', byId('4d2a9c35'))}
+  ${caseOf(4, 'Outra máquina: o botão fica desligado e diz onde roda', byId('c3f09b52'))}
+  <div class="olhinho">${ic('mouse-pointer-click')}Depois do clique, ao lado do botão</div>
+  <div class="os-states">
+    ${state('busy', 'loader-2', '<b>Abrindo…</b> O núcleo pediu ao sistema para abrir.')}
+    ${state('ok', 'check-circle-2', '<b>Aberta no Terminal às 23:14.</b> Some em 4 s.')}
+    ${state('fail', 'x-circle', '<b>Não abriu.</b> Nenhum app de terminal respondeu. Cole o comando num terminal.', copy)}
+    ${state('', 'info', '<b>Fora do macOS sem terminal conhecido</b> (Linux sem <code>x-terminal-emulator</code>): o botão vira Copiar comando.', copy)}
+  </div>`
+}
+
+function openWallScreen() {
+  const vivos = ['b91d04aa', '4d2a9c35', '8e17b6f2', '5a61c2bf', '7f3a2c1e', 'c3f09b52', 'e04b7d93', '2c8e6f10', 'f5e2a6d0'].map(byId)
+  return `${cab('layout-grid', 'Mural ao vivo', 'Um card por sessão aberta nesta máquina', `<div class="seg"><span class="on">Todas</span><span>Precisam de você · 5</span><span>Ociosas · 3</span><span>Ativas</span></div>${atualizar}`)}
+  <div class="mural os-wall">${vivos.map(s => `<div class="cartao mc st-${s.st}">
+    <div class="l1"><span class="tt trunc">${s.nome}</span>${badge(s.st)}</div>
+    <div class="pj trunc">${s.pj} · ${s.br}</div>
+    ${s.mot ? `<div class="mural-reason">${motChip(s.mot)}<span class="c-muted trunc">${s.pede}</span></div>` : s.erro ? `<div class="c-error" style="font-size:11.5px">${ic('x-circle')} ${s.erro}</div>` : `<div class="c-muted trunc" style="font-size:11.5px">${ic('loader-2')} ${s.tarefa}</div>`}
+    <div class="gr"><div>Modelo<b>${s.mo.split(' ')[0]}</b></div><div>Esforço<b>${s.esf}</b></div><div>Agentes<b>${s.ag}</b></div><div>Custo<b>~${s.custo}</b></div></div>
+    <div class="linhaplano"><span>Plano ${s.plano[0]}/${s.plano[1]}</span><span>contexto ${s.ctx}%</span></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">${barra(s.plano[1] ? s.plano[0] / s.plano[1] * 100 : 0)}${barra(s.ctx, s.ctx >= 80 ? 'var(--status-error-dot)' : 'var(--accent)')}</div>
+    <div class="os-foot">${osAction(s, { size: 'small' })}${OS_WHERE[s.id] === 'remote' ? '' : '<span class="os-detail">Detalhe ›</span>'}</div>
+  </div>`).join('')}</div>`
+}
+
+function openRowsScreen() {
+  const iconOf = s => { const w = OS_WHERE[s.id]; return w === 'desktop' ? ['monitor', 'Abrir no Claude Desktop'] : w === 'cli' ? ['terminal', 'Abrir no terminal'] : w === 'cli-live' ? ['terminal-square', 'Ir para o terminal'] : ['copy', 'Roda em ws-exemplo: copiar comando'] }
+  const btn = (s, sm) => { const [i, t] = iconOf(s); return `<span class="os-icon${sm ? ' os-sm' : ''}" title="${t}">${ic(i)}</span>` }
+  const need = PRECISAM.map(s => `<div class="cartao mini"><div style="display:flex;min-width:0">${sessionChip(s)}</div>
+      <div class="n trunc">${s.pj}</div><div class="x trunc">${s.pede ?? s.erro}</div><div class="pe"><span>${s.mo} · ${s.idade}</span><span class="os-pe">${btn(s, true)}<b>Abrir ›</b></span></div></div>`).join('')
+  const rows = ['7f3a2c1e', 'b91d04aa', '4d2a9c35', '5a61c2bf', 'c3f09b52', 'e04b7d93', '0d7e81c4'].map(byId)
+  return `${cab('folder-open', 'Sessões e Dashboard · a mesma ação, só o ícone', 'Na linha não cabe o rótulo: o ícone diz o alvo e o título dele diz o resto')}
+  <div class="cartao inbox">
+    <div class="ttl">${ic('bell')}<span class="c-blocked">5 precisam de você</span><span class="r">Dashboard · o ícone abre a sessão; "Abrir ›" continua levando ao Detalhe</span></div>
+    <div class="grade4 dash-inbox-grid">${need}</div>
+  </div>
+  <div class="cartao"><table class="tabela sessions-table"><thead><tr><th>Sessão</th><th>Status</th><th>Atividade</th><th>Duração</th><th>Custo</th><th></th></tr></thead><tbody>
+  ${rows.map(s => `<tr><td class="nm"><b class="trunc" style="display:block;max-width:190px">${s.nome}</b><small class="trunc" style="display:block;max-width:190px">${s.id} · /simulacao/${s.pj}</small></td><td>${badge(s.st, s.mot)}</td><td class="c-muted">${s.idade === 'agora' ? 'agora' : 'há ' + s.idade}</td>
+    <td class="mono">${['active', 'blocked', 'idle'].includes(s.st) ? '<span class="c-active">rodando</span> · ' : ''}${s.dur}</td><td class="mono">~US$ ${s.custo}</td><td>${btn(s)}</td></tr>`).join('')}
+  </tbody></table></div>`
+}
+
+// =====================================================================
 // Catálogo de telas
 // =====================================================================
+
+// =====================================================================
+// CLOUD CONNECTORS (C57 to C61, issue #277) and the remote machine's CONNECTION (C62 to C65, issue #278),
+// decision 0013. Everything here is a placeholder: no real account, profile, region, host or instance.
+// =====================================================================
+// The sidebar of these screens: Conexões in Controle (from #241), with a dot that sums up the connectors,
+// and a line in the foot. conn: 'ok' | 'warn' | 'err' | 'none'.
+const CL_DOT = { ok: 'completed', warn: 'waiting', err: 'error', none: 'abandoned' }
+const CL_FOOT = { ok: 'AWS · sessões válidas', warn: 'AWS · expira em 14 min', err: 'AWS · 1 expirada', none: 'Nenhuma nuvem' }
+function clSide(active, ws, conn) {
+  let h = lado(active, 3, ws)
+  // Conexões is already in Controle (#241); these screens add the dot that sums up the connectors.
+  h = h.replace(/Conexões<\/div>/, `Conexões<span class="ponto tm-dot d-${CL_DOT[conn]}"></span></div>`)
+  return h.replace(/<\/div>\s*<\/aside>\s*$/, `<div class="cartao">${ic('cloud')}<span>${CL_FOOT[conn]}</span><span class="ponto d-${CL_DOT[conn]}" style="margin-left:auto"></span></div></div></aside>`)
+}
+const clFrame = (w, active, body, ws = 'ok', conn = 'ok') => `<div class="cc w${w}">${clSide(active, ws, conn)}<div class="cc-main">${body}</div></div>`
+// Session state pills
+const clPill = {
+  valid: t => `<span class="badge b-completed"><span class="p"></span>Válida até ${t}</span>`,
+  expiring: t => `<span class="badge b-waiting"><span class="p"></span>Expira em ${t}</span>`,
+  expired: t => `<span class="badge b-error"><span class="p"></span>Expirada há ${t}</span>`,
+  never: () => '<span class="badge b-idle"><span class="p"></span>Nunca entrou</span>',
+  unknown: () => '<span class="badge b-abandoned"><span class="p"></span>Desconhecida</span>',
+  running: () => '<span class="badge b-waiting"><span class="p"></span>Entrando…</span>',
+}
+const clCab = () => cab('plug', 'Conexões', 'As contas de fora que o console usa. As credenciais ficam com as CLIs de cada nuvem e com o Keychain: o console nunca as guarda nem mostra.')
+const clConn = (logo, name, sub, pill, lines, foot, soon) => `<div class="cartao cl-conn${soon ? ' cl-soon' : ''}">
+  <div class="cl-top"><span class="cl-logo">${ic(logo)}</span><div class="cl-name">${name}<small>${sub}</small></div>${pill}</div>
+  <div class="cl-lines">${lines.map(l => `<span>${l}</span>`).join('')}</div>
+  <div class="cl-foot">${foot}</div></div>`
+const CONN_GITHUB = () => clConn('github', 'GitHub', 'device flow · Keychain (#241)', '<span class="badge b-completed"><span class="p"></span>Conectado</span>',
+  ['Como <b>dev-sintetico</b> · 3 organizações', 'Escopos repo, read:org, project'], '<span class="mono">limite 4.812 de 5.000</span><span class="btn contorno">Abrir</span>')
+const CONN_AWS = (state = 'err') => clConn('cloud', 'AWS', 'IAM Identity Center (SSO) · aws CLI v2', state === 'err' ? '<span class="badge b-error"><span class="p"></span>1 sessão expirada</span>' : state === 'warn' ? '<span class="badge b-waiting"><span class="p"></span>1 expira em 14 min</span>' : '<span class="badge b-completed"><span class="p"></span>Sessões válidas</span>',
+  [`<b>2 sessões SSO</b> · 6 perfis lidos do ~/.aws/config`, state === 'err' ? 'sessao-exemplo expirou às 03:10 · usada pela Workstation' : 'sessao-exemplo e sessao-lab válidas'],
+  `<span class="mono">aws-cli 2.x · PATH do login</span>${state === 'err' ? '<span class="btn cheio">' + ic('log-in') + 'Entrar</span>' : ''}<span class="btn contorno">Abrir</span>`)
+const CONN_GCP = on => on
+  ? clConn('cloud-cog', 'Google Cloud', 'gcloud · configurações · fase 2', '<span class="badge b-completed"><span class="p"></span>Conectado</span>',
+    ['<b>2 configurações</b> · conta dev@exemplo.dev', 'config-exemplo ativa · projeto-exemplo'], '<span class="mono">gcloud 5xx · PATH do login</span><span class="btn contorno">Abrir</span>')
+  : clConn('cloud-cog', 'Google Cloud', 'gcloud · configurações', '<span class="badge b-idle"><span class="p"></span>Em breve</span>',
+    ['Fase 2: as configurações do gcloud, a conta de cada uma e o gcloud auth login.'], '<span class="btn contorno tm-rc-off">Adicionar</span>', true)
+const CONN_AZURE = () => clConn('cloudy', 'Azure', 'az · assinaturas', '<span class="badge b-idle"><span class="p"></span>Em breve</span>',
+  ['Depois do GCP: as assinaturas do az account list e o az login.'], '<span class="btn contorno tm-rc-off">Adicionar</span>', true)
+const CONN_OTHER = () => clConn('plus', 'Outra nuvem', 'um conector é um PR', '',
+  ['O catálogo é fixo no código: nada de conector de fora rodando comandos. Falta uma? Abra uma issue.'], '<span class="btn contorno">Pedir um conector</span>', true)
+const clCols = (w, n1100, n1440) => `grid-template-columns:repeat(${w === 1100 ? n1100 : n1440},minmax(0,1fr))`
+
+// C57 · the catalog
+const connectionsCatalog = w => `${clCab()}
+  <div class="olhinho">Conectadas · 2</div>
+  <div class="cl-grid" style="${clCols(w, 2, 3)}">${CONN_GITHUB()}${CONN_AWS('err')}</div>
+  <div class="olhinho">Adicionar uma conexão</div>
+  <div class="cl-grid" style="${clCols(w, 3, 3)}">${CONN_GCP(false)}${CONN_AZURE()}${CONN_OTHER()}</div>
+  <div class="cl-lock">${ic('lock')}Entrar roda o login da CLI de cada nuvem, que abre o seu navegador. O console lê a configuração dela e o estado da sessão; nada digitado aqui vira comando.</div>`
+
+// C58 · AWS: sessions and profiles
+const clProfiles = rows => `<table class="tabela"><thead><tr><th>Perfil</th><th>Conta</th><th>Papel</th><th>Região</th><th>Usado por</th></tr></thead><tbody>
+  ${rows.map(([p, a, r, g, u]) => `<tr><td class="mono">${p}</td><td>${a}</td><td class="mono">${r}</td><td class="mono">${g}</td><td>${u || '<span class="c-muted">—</span>'}</td></tr>`).join('')}</tbody></table>`
+const clSession = ({ name, portal, pill, act, rows, foot, bad, band }) => `<div class="cartao cl-sess${bad ? ' cl-bad' : ''}">
+  <div class="cl-sh"><span class="c-accent">${ic('key-round')}</span><div class="cl-sn"><b>${name}</b><small>sso-session · portal ${portal} · ${rows.length} perfis</small></div><div class="cl-act">${pill}${act}</div></div>
+  ${band || ''}${clProfiles(rows)}<div class="cl-sf">${foot}</div></div>`
+const SESS_EXPIRED = {
+  name: 'sessao-exemplo', portal: 'portal-exemplo', bad: true, pill: clPill.expired('5 h'), act: `<span class="btn cheio">${ic('log-in')}Entrar</span>`,
+  rows: [['perfil-dev', 'conta-exemplo-dev', 'PapelDev', 'regiao-exemplo-1', '<span class="cl-chip">' + ic('server') + 'Workstation · túnel</span>'], ['perfil-dev-leitura', 'conta-exemplo-dev', 'PapelLeitura', 'regiao-exemplo-1'], ['perfil-homolog', 'conta-exemplo-homolog', 'PapelDev', 'regiao-exemplo-2']],
+  foot: `${ic('info')}Expirou às 03:10. Um login vale para os 3 perfis desta sessão.`,
+}
+const SESS_VALID = {
+  name: 'sessao-lab', portal: 'portal-lab', pill: clPill.valid('18:40'), act: `<span class="btn contorno">${ic('refresh-cw')}Entrar de novo</span>`,
+  rows: [['perfil-lab', 'conta-exemplo-lab', 'PapelAdmin', 'regiao-exemplo-1'], ['perfil-lab-dados', 'conta-exemplo-dados', 'PapelDados', 'regiao-exemplo-1']],
+  foot: `${ic('clock')}Faltam 7 h 12 min · entrou pelo console às 10:40 · conferida há 2 min`,
+}
+const clAwsHeader = (state = 'err') => `<div class="cl-crumb">Conexões ${ic('chevron-right')}<b>AWS</b></div>
+  ${cab('cloud', 'AWS', 'IAM Identity Center · lido de ~/.aws/config há 8 s · aws-cli 2.x no PATH do login', `<div class="seg"><span class="on">Este Mac</span><span>Workstation</span></div>${state === 'err' ? clPill.expired('5 h').replace('Expirada há 5 h', '1 sessão expirada') : ''}${atualizar}`)}`
+const awsProfilesScreen = w => `${clAwsHeader()}
+  <div class="stats" style="grid-template-columns:repeat(4,minmax(0,1fr))">
+    ${stat('Sessões SSO', '2', 'de ~/.aws/config', 'key-round', 'var(--accent-text)')}
+    ${stat('Perfis', '6', '5 com SSO · 1 com chave', 'users', 'var(--accent-text)')}
+    ${stat('Válida', '1', 'sessao-lab até 18:40', 'check-circle-2', 'var(--status-completed-text)')}
+    ${stat('Expirada', '1', 'sessao-exemplo · a Workstation usa', 'x-circle', 'var(--status-error-text)')}
+  </div>
+  <div class="cl-grid" style="${clCols(w, 1, 1)}">${clSession(SESS_EXPIRED)}${clSession(SESS_VALID)}</div>
+  <div class="cartao cl-sess"><div class="cl-sh"><span class="c-muted">${ic('key')}</span><div class="cl-sn"><b>Fora do escopo</b><small>perfis com chave de acesso, sem SSO</small></div></div>
+    <table class="tabela"><tbody><tr><td class="mono">perfil-chave-antiga</td><td class="c-muted" style="white-space:normal">Chave de acesso no ~/.aws/credentials: o console não abre esse arquivo, não mostra estado e não oferece Entrar.</td></tr></tbody></table></div>
+  <div class="cl-lock">${ic('lock')}O console lê o ~/.aws/config e, da sessão, só a hora em que ela expira. Token e chave ficam com a aws CLI; nada disso sai para a tela, o log ou o banco.</div>`
+
+// C59 · logging in
+const SESS_RUNNING = Object.assign({}, SESS_EXPIRED, {
+  pill: clPill.running(), act: `<span class="btn contorno">${ic('x')}Cancelar</span>`,
+  band: `<div class="faixa tm-rc-band"><span class="ic">${ic('loader-2')}</span><div class="tm-rc-text"><b>Entrando em sessao-exemplo…</b> aguardando o login no navegador. A página que abriu é sua: entre por lá e o console segue sozinho.
+    <div class="tm-rc-steps">${['rodando o login da aws CLI', 'aguardando o navegador', 'conferindo a sessão'].map((s, i) => `<span class="${i < 1 ? 'done' : i === 1 ? 'on' : ''}">${ic(i < 1 ? 'check-circle-2' : i === 1 ? 'loader-2' : 'circle-dot')}${s}</span>`).join('<span>→</span>')}</div>
+    <div class="tm-rc-time"><span class="tm-stack"><i style="width:16%;background:var(--status-waiting-dot)"></i></span><span>0:48 de 5:00</span></div>
+    <div class="tm-rc-cmd">Roda: aws sso login --sso-session sessao-exemplo · até 5 min</div></div></div>`,
+})
+const SESS_DONE = Object.assign({}, SESS_EXPIRED, {
+  bad: false, pill: clPill.valid('16:14'), act: `<span class="btn contorno">${ic('refresh-cw')}Entrar de novo</span>`,
+  band: `<div class="faixa tm-rc-ok"><span class="ic">${ic('check-circle-2')}</span><div><b>Entrou às 08:14.</b> A sessão vale até 16:14, para os 3 perfis. A Workstation, que usa o perfil-dev, já pode subir o túnel.</div></div>`,
+  foot: `${ic('clock')}Faltam 8 h · conferida agora`,
+})
+const SESS_FAILED = Object.assign({}, SESS_EXPIRED, {
+  band: `<div class="faixa erro tm-rc-band"><span class="ic">${ic('x-circle')}</span><div class="tm-rc-text"><b>O login não terminou.</b> Passou de 5 min sem resposta do navegador e o console encerrou a aws CLI. A sessão continua expirada.
+    <div class="tm-rc-cmd">A saída ficou no log da instalação: ~/.ahrena-console/reconnect.log</div></div></div>`,
+})
+const awsLoginScreen = sess => `${clAwsHeader(sess === SESS_DONE ? 'ok' : 'err')}${clSession(sess)}${clSession(SESS_VALID)}`
+
+// C60 · states, and no cloud configured
+const connectionsNoCloud = () => `${clCab()}
+  <div class="olhinho">Conectadas · 1</div>
+  <div class="cl-grid" style="${clCols(1100, 2, 3)}">${CONN_GITHUB()}
+    <div class="cartao vazio" style="border-style:dashed;background:transparent"><span class="ic">${ic('cloud-off')}</span><b>Nenhuma nuvem conectada</b><span>Adicione uma abaixo. O console não aponta para conta de ninguém: ele lê o que a CLI da nuvem já tem nesta máquina.</span></div></div>
+  <div class="olhinho">Adicionar uma conexão</div>
+  <div class="cl-grid" style="${clCols(1100, 2, 3)}">
+    ${clConn('cloud', 'AWS', 'IAM Identity Center (SSO) · aws CLI v2', '<span class="badge b-idle"><span class="p"></span>Não configurada</span>',
+      ['Achamos a aws CLI v2 no PATH do login, mas o ~/.aws/config não tem nenhum perfil com SSO.', 'Para criar um, no terminal: <span class="mono">aws configure sso</span>. O console relê o arquivo sozinho e o card sobe para Conectadas.'], '<span class="mono">aws-cli 2.x · PATH do login</span><span class="btn cheio">' + ic('plus') + 'Adicionar</span>')}
+    ${CONN_GCP(false)}${CONN_AZURE()}${CONN_OTHER()}</div>`
+const clState = (icon, color, title, text, extra = '') => `<div class="cartao vazio"><span class="ic" style="color:${color}">${ic(icon)}</span><b>${title}</b><span>${text}</span>${extra}</div>`
+const awsStatesScreen = () => `${clAwsHeader('ok').replace('lido de ~/.aws/config há 8 s · aws-cli 2.x no PATH do login', 'os estados que não são o caminho feliz')}
+  <div class="cl-states">
+    ${clState('terminal-square', 'var(--status-waiting-text)', 'aws CLI não encontrada', 'O PATH do shell de login não tem a aws. Instale a v2 e o console acha sozinho.', '<span class="tm-config">brew install awscli</span>')}
+    ${clState('git-compare', 'var(--status-waiting-text)', 'aws CLI v1', 'A v1 não tem o login do IAM Identity Center. Atualize para a v2; até lá, os perfis aparecem sem estado.')}
+    ${clState('file-warning', 'var(--status-error-text)', 'O ~/.aws/config tem um erro', 'Linha 14: seção sem nome. Mostramos a última leitura boa, de 08:02, e Entrar fica desligado até corrigir.')}
+    ${clState('ban', 'var(--muted)', 'Nome que o console não usa', 'O perfil "dev prod" tem espaço no nome. Ele aparece, mas sem Entrar: o nome vai para a linha da aws, e só letras, números, ponto, hífen e sublinhado passam.')}
+    ${clState('help-circle', 'var(--muted)', 'Estado desconhecido', 'A aws respondeu com um erro que não é de sessão (rede, por exemplo). Tentamos de novo em 5 min; Entrar continua disponível.')}
+    ${clState('hourglass', 'var(--status-error-text)', 'O login não terminou', 'Passou de 5 min, ou você clicou Cancelar. O console encerrou a aws CLI; a página no navegador, se ficou aberta, não vale mais.', '<span class="btn contorno">' + ic('refresh-cw') + 'Tentar de novo</span>')}
+  </div>`
+
+// C61 · several clouds
+const multiCloudScreen = w => `${clCab()}
+  <div class="olhinho">Conectadas · 3</div>
+  <div class="cl-grid" style="${clCols(w, 3, 3)}">${CONN_GITHUB()}${CONN_AWS('warn')}${CONN_GCP(true)}</div>
+  <div class="cartao cl-sess"><div class="cl-sh"><span class="c-accent">${ic('list')}</span><div class="cl-sn"><b>Todas as sessões de nuvem</b><small>de todas as máquinas, a mais perto de expirar primeiro</small></div></div>
+    <table class="tabela"><thead><tr><th>Máquina</th><th>Nuvem</th><th>Sessão</th><th>Contas e perfis</th><th>Estado</th><th></th></tr></thead><tbody>
+      <tr><td>Workstation</td><td>AWS</td><td class="mono">sessao-exemplo</td><td>2 perfis · deploys de lá</td><td>${clPill.expired('9 h')}</td><td style="text-align:right"><span class="btn cheio">${ic('log-in')}Entrar</span></td></tr>
+      <tr><td>Este Mac</td><td>AWS</td><td class="mono">sessao-exemplo</td><td>3 perfis · <span class="cl-chip">${ic('cable')}túnel</span></td><td>${clPill.expiring('14 min')}</td><td style="text-align:right"><span class="btn cheio">${ic('log-in')}Entrar</span></td></tr>
+      <tr><td>Este Mac</td><td>AWS</td><td class="mono">sessao-lab</td><td>2 perfis</td><td>${clPill.valid('18:40')}</td><td style="text-align:right"><span class="btn contorno">Entrar de novo</span></td></tr>
+      <tr><td>Workstation</td><td>Google Cloud</td><td class="mono">config-exemplo</td><td>dev@exemplo.dev · projeto-exemplo</td><td>${clPill.valid('amanhã 09:00')}</td><td style="text-align:right"><span class="btn contorno">Entrar de novo</span></td></tr>
+      <tr><td>Este Mac</td><td>Google Cloud</td><td class="mono">config-pessoal</td><td>outra conta · projeto-pessoal</td><td>${clPill.never()}</td><td style="text-align:right"><span class="btn contorno">Entrar</span></td></tr>
+    </tbody></table></div>
+  <div class="olhinho">Adicionar uma conexão</div>
+  <div class="cl-grid" style="${clCols(w, 2, 3)}">${CONN_AZURE()}${CONN_OTHER()}</div>`
+
+// ---------- the Workstation's connection ----------
+const MC_START = '/caminho/para/conectar.sh tunnel start'
+const MC_STOP = '/caminho/para/conectar.sh tunnel stop'
+const mcBadge = st => ({ up: '<span class="badge b-completed"><span class="p"></span>Conectada</span>', down: '<span class="badge b-error"><span class="p"></span>Sem conexão</span>', starting: '<span class="badge b-waiting"><span class="p"></span>Subindo o túnel</span>', stopped: '<span class="badge b-idle"><span class="p"></span>Parada por você</span>' })[st]
+const mcHeader = (st, readAt) => cab('server', 'Workstation', `ws-exemplo · Ubuntu 24.04 · 16 vCPUs · 62 GB · AWS · regiao-exemplo-1 · porta 14720 do Mac · ${readAt}`, `${mcBadge(st)}${hourToggle}`)
+const mcTrio = ([t, c, s]) => `<div class="mc-trio">${[['Túnel', ...t], ['Sessão AWS', ...c], ['Núcleo de lá', ...s]].map(([k, cls, ico, v, sub]) => `<div><span class="k">${k}</span><span class="v ${cls}">${ic(ico)}${v}</span><span class="s">${sub}</span></div>`).join('')}</div>`
+const mcPorts = state => `<table class="tabela"><thead><tr><th>No Mac</th><th>Lá</th><th>Estado</th><th>O que é</th></tr></thead><tbody>
+  ${[['14720', '4720', 'Núcleo da Workstation'], ['13000', '3000', 'vite · catalogo-exemplo'], ['15173', '5173', 'nada escuta na 5173 de lá'], ['18080', '8080', 'painel-metricas']].map(([a, b, c], i) =>
+    `<tr><td class="mono">${a}</td><td class="mono">${b}</td><td>${tmPort(state === 'up' ? ['up', 'up', 'idle', 'up'][i] : 'down')}</td><td${state === 'up' ? '' : ' class="c-muted"'}>${c}</td></tr>`).join('')}</tbody></table>`
+const mcCmds = `<div class="mc-cmds"><span>subir: ${MC_START}</span><span>parar: ${MC_STOP}</span><span>nuvem: aws · perfil-dev (sessao-exemplo)</span></div>`
+const MC_TRIO = {
+  up: [['ok', 'check-circle-2', 'No ar', 'há 3 h 12 min · ssh ws-exemplo · 4 portas'], ['ok', 'key-round', 'Válida até 18:40', 'perfil-dev · faltam 7 h'], ['ok', 'activity', 'Respondendo', '38 ms · lido há 6 s']],
+  expiring: [['ok', 'check-circle-2', 'No ar', 'há 9 h 50 min · 4 portas'], ['warn', 'alert-triangle', 'Expira em 14 min', 'perfil-dev · o túnel cai junto'], ['ok', 'activity', 'Respondendo', '41 ms · lido há 4 s']],
+  down: [['bad', 'x-circle', 'Fora', 'desde 03:11 · nenhum processo ssh'], ['bad', 'key-round', 'Expirada há 5 h', 'perfil-dev · expirou às 03:10'], ['off', 'circle-dashed', 'Sem leitura', 'a última é de 03:11']],
+  starting: [['warn', 'loader-2', 'Subindo', 'rodando o comando de subir'], ['ok', 'key-round', 'Válida até 16:14', 'entrou agora'], ['off', 'circle-dashed', 'Sem leitura', 'a última é de 03:11']],
+  stopped: [['off', 'pause-circle', 'Parado por você', 'às 19:02 · quedas não avisam'], ['ok', 'key-round', 'Válida até 18:40', 'perfil-dev'], ['off', 'circle-dashed', 'Sem leitura', 'a última é de 19:02']],
+}
+const mcActions = st => st === 'up' || st === 'expiring' ? `<span class="btn contorno">${ic('refresh-cw')}Reconectar</span><span class="btn contorno">${ic('square')}Parar o túnel</span>`
+  : st === 'stopped' ? `<span class="btn cheio">${ic('play')}Subir o túnel</span>` : ''
+const mcConnCard = (w, st) => `<div class="cartao mc-card" style="${spanAt(w, 2, 2)}"><h5>${ic('cable')}Conexão<small class="c-muted" style="font-weight:400;font-size:11.5px">túnel SSH sobre AWS SSM</small><span class="mc-act">${mcActions(st)}</span></h5>
+  ${mcTrio(MC_TRIO[st])}${mcPorts(st === 'up' || st === 'expiring' ? 'up' : 'down')}${mcCmds}</div>`
+const mcPlacement = (w, known = true, stale) => {
+  const kv = known
+    ? [['Provedor', 'AWS'], ['Tipo', 'Instância gerenciada (SSM)'], ['Região', 'regiao-exemplo-1'], ['Id', 'mi-0exemplo000000']]
+    : [['Provedor', 'desconhecido'], ['Tipo', 'desconhecido'], ['Região', 'desconhecida'], ['Id', '—']]
+  const cols = w === 1100 ? 4 : 1
+  return `<div class="cartao mc-card" style="${spanAt(w, 2, 1)}"><h5>${ic('map-pin')}Onde roda<small class="c-muted" style="margin-left:auto;font-weight:400;font-size:11.5px">lido pelo núcleo de lá</small></h5>
+    <div class="mc-kv" style="grid-template-columns:repeat(${cols},minmax(0,1fr))">${kv.map(([k, v]) => `<div><span class="k">${k}</span><span class="v${known ? '' : ' c-muted'}${k === 'Id' ? ' mono' : ''}">${v}</span></div>`).join('')}</div>
+    <div class="mc-src">${known ? `Fonte: registro do agente SSM (sem metadados de instância nesta máquina) · ${stale ? 'da última leitura, às 03:11' : 'lido às 08:02'}` : 'Nem metadados de instância, nem registro do agente SSM, nem DMI: não chutamos.'}</div></div>`
+}
+const mcTop = (w, st, known, stale) => `<div class="tm-grid" style="${gridCols(w)};align-items:stretch">${mcConnCard(w, st)}${mcPlacement(w, known, stale)}</div>`
+const mcRest = (w, faded) => `<div class="tm-rc-clip" style="max-height:300px"><div${faded ? ' class="tm-faded"' : ''}>${workstationBody(w)}</div></div>`
+
+// C62 · tunnel up
+const mcUpScreen = w => `${mcHeader('up', 'lido há 6 s')}${mcTop(w, 'up', true)}${mcRest(w, false)}`
+// C63 · tunnel down, SSO expired
+const mcExpiredBand = `<div class="faixa erro tm-rc-band"><span class="ic">${ic('key-round')}</span><div class="tm-rc-text"><b>Túnel fora · SSO expirado há 5 h.</b> A sessão sessao-exemplo, que o perfil-dev usa, expirou às 03:10, e o túnel caiu às 03:11. Entre na AWS e o console sobe o túnel em seguida.
+  <div class="tm-rc-cmd">Roda: aws sso login --sso-session sessao-exemplo, depois ${MC_START}</div></div>
+  <div class="tm-rc-actions"><span class="btn contorno">${ic('log-in')}Só entrar</span><span class="btn cheio">${ic('log-in')}Entrar na AWS e subir o túnel</span></div></div>`
+const mcDownScreen = w => `${mcHeader('down', 'última leitura às 03:11')}${mcExpiredBand}${mcTop(w, 'down', true, true)}${mcRest(w, true)}`
+// C64 · starting, stopping, stopped
+const mcSteps = at => `<div class="tm-rc-steps">${['entrando na AWS', 'subindo o túnel', 'lendo a Workstation'].map((s, i) =>
+  `<span class="${i < at ? 'done' : i === at ? 'on' : ''}">${ic(i < at ? 'check-circle-2' : i === at ? 'loader-2' : 'circle-dot')}${s}</span>`).join('<span>→</span>')}</div>`
+const mcLoggingIn = () => `${mcHeader('down', 'última leitura às 03:11')}
+  <div class="faixa tm-rc-band"><span class="ic">${ic('loader-2')}</span><div class="tm-rc-text"><b>Entrando na AWS…</b> aguardando o login no navegador. Quando terminar, o console sobe o túnel sozinho.
+    ${mcSteps(0)}<div class="tm-rc-time"><span class="tm-stack"><i style="width:16%;background:var(--status-waiting-dot)"></i></span><span>0:48 de 5:00</span></div></div>
+    <div class="tm-rc-actions"><span class="btn contorno">${ic('x')}Cancelar</span></div></div>
+  ${mcTop(1100, 'down', true, true)}`
+const mcStarting = () => `${mcHeader('starting', 'última leitura às 03:11')}
+  <div class="faixa tm-rc-band"><span class="ic">${ic('loader-2')}</span><div class="tm-rc-text"><b>Subindo o túnel…</b> a sessão AWS vale até 16:14; agora roda o comando de subir.
+    ${mcSteps(1)}<div class="tm-rc-time"><span class="tm-stack"><i style="width:9%;background:var(--status-waiting-dot)"></i></span><span>0:16 de 3:00</span></div><div class="tm-rc-cmd">Roda: ${MC_START} · até 3 min</div></div>
+    <div class="tm-rc-actions"><span class="btn contorno">${ic('x')}Cancelar</span></div></div>
+  ${mcTop(1100, 'starting', true, true)}`
+const mcStopConfirm = () => `${mcHeader('up', 'lido há 6 s')}
+  <div class="cartao mc-dialog"><h5>Parar o túnel da Workstation?</h5>
+    <p>As 4 portas param de encaminhar para este Mac. As 12 sessões do Claude lá continuam rodando, mas você perde a vista delas daqui até subir de novo.</p>
+    <div class="tm-rc-cmd">Roda: ${MC_STOP} · até 3 min</div>
+    <div class="mc-dact"><span class="btn contorno">Cancelar</span><span class="btn mc-danger">${ic('square')}Parar o túnel</span></div></div>
+  <div class="tm-faded">${mcTop(1100, 'up', true)}</div>`
+const mcStopped = () => `${mcHeader('stopped', 'última leitura às 19:02')}
+  <div class="faixa mc-neutral"><span class="ic">${ic('pause-circle')}</span><div><b>Túnel parado por você às 19:02.</b> A Workstation não some: a última leitura fica embaixo, e não avisamos queda até você subir de novo.</div></div>
+  ${mcTop(1100, 'stopped', true, true)}`
+// C65 · failing: the reason in plain words, the expiring warning, no connection configured, unknown placement
+const mcReason = (icon, title, text, from, actions) => `<div class="faixa erro tm-rc-band"><span class="ic">${ic(icon)}</span><div class="tm-rc-text"><b>${title}</b> ${text}<div class="mc-from">${from}</div></div><div class="tm-rc-actions">${actions}</div></div>`
+const mcReasonsScreen = () => `${mcHeader('down', 'última leitura às 22:41')}
+  <div class="mc-reasons">
+    <div class="olhinho">Antes da queda · aviso</div>
+    <div class="faixa tm-rc-band"><span class="ic">${ic('alert-triangle')}</span><div class="tm-rc-text"><b>A sessão AWS expira em 14 min.</b> O túnel da Workstation cai junto. Entre agora e ele continua no ar.<div class="mc-from">do estado do perfil-dev no conector AWS</div></div><div class="tm-rc-actions"><span class="btn cheio">${ic('log-in')}Entrar na AWS</span></div></div>
+    <div class="olhinho">O último comando de subir falhou · o motivo</div>
+    ${mcReason('plug-zap', 'Porta 14720 ocupada no Mac.', 'O node (pid 812) deste Mac segura a porta que o túnel usa; o encaminhamento não sobe.', 'da sonda da porta', `<span class="btn contorno">Ver em Esta máquina</span><span class="btn cheio">${ic('refresh-cw')}Tentar de novo</span>`)}
+    ${mcReason('radio-tower', 'Agente SSM da Workstation offline.', 'A AWS diz que a máquina não está conectada ao SSM: ela pode estar desligada, parada ou sem rede. Ligue-a pelo console do provedor e tente de novo.', 'de um padrão conhecido no log desta execução (alvo não conectado)', `<span class="btn cheio">${ic('refresh-cw')}Tentar de novo</span>`)}
+    ${mcReason('help-circle', 'Host desconhecido no ~/.ssh/config.', 'O ssh não achou o apelido que o seu comando usa. Confira o ~/.ssh/config deste Mac.', 'de um padrão conhecido no log desta execução', `<span class="btn cheio">${ic('refresh-cw')}Tentar de novo</span>`)}
+    ${mcReason('key', 'Chave SSH recusada.', 'A Workstation recusou a chave deste Mac.', 'de um padrão conhecido no log desta execução', `<span class="btn cheio">${ic('refresh-cw')}Tentar de novo</span>`)}
+    ${mcReason('x-circle', 'O comando saiu com o código 255.', 'Nenhum motivo conhecido apareceu. A saída ficou no log da instalação: ~/.ahrena-console/reconnect.log', 'nenhum padrão reconheceu a saída', `<span class="btn cheio">${ic('refresh-cw')}Tentar de novo</span>`)}
+    <div class="faixa tm-rc-band"><span class="ic">${ic('server-off')}</span><div class="tm-rc-text"><b>Túnel no ar, núcleo de lá parado.</b> A porta 14720 aceita a conexão e ninguém responde. Suba o núcleo na Workstation.<div class="mc-from">da sonda da porta (o mesmo caso da C26)</div></div><div class="tm-rc-actions"><span class="btn contorno">${ic('refresh-cw')}Tentar agora</span></div></div>
+  </div>`
+const mcSetupScreen = () => `${rcHeader('off', 'última leitura às 22:41')}
+  <div class="faixa erro tm-rc-band"><span class="ic">${ic('wifi-off')}</span><div class="tm-rc-text">${rcOfflineText}${rcCmdLine}</div><div class="tm-rc-actions"><span class="btn cheio">${ic('plug')}Reconectar</span></div></div>
+  <div class="tm-grid" style="${gridCols(1100)}">
+    <div class="cartao tm-rc-setup" style="${spanAt(1100, 2, 2)}"><h5>${ic('cable')}Conexão<span class="c-muted" style="margin-left:auto;font-weight:400;font-size:11.5px">só com o reconnect da #244</span></h5>
+      <span class="c-muted" style="font-size:12.5px">Esta máquina tem só o <code>reconnect</code>: o Reconectar continua igual. Com uma <code>connection</code>, ganha Subir, Parar, o estado da sessão de nuvem que o túnel exige e o motivo da queda.</span>
+      <div class="tm-config">~/.ahrena-console/machines.json
+{ "machines": [ { "id": "workstation", "label": "Workstation", "port": 14720,
+    "connection": {
+      "start": { "command": ["/caminho/para/conectar.sh", "tunnel", "start"], "timeoutSeconds": 180 },
+      "stop":  { "command": ["/caminho/para/conectar.sh", "tunnel", "stop"] },
+      "cloudProfile": { "connector": "aws", "profile": "perfil-dev" } } } ] }</div>
+      <div class="tm-legend"><span>${ic('list')} Listas, sem shell: só roda o que está no arquivo.</span><span>${ic('link')} O perfil precisa existir em Conexões › AWS.</span><span>${ic('lock')} Nada da tela vira comando.</span></div></div>
+    ${mcPlacement(1100, false)}
+  </div>`
+const mcNote = rcNote
+const mcRow = rcRow
+const mcStatesScreens = () => `<div class="tm-rc">
+  ${mcRow([['1 · entrando na AWS, pelo botão da C63 · 1100 px', clFrame(1100, 'machine-ws', mcLoggingIn(), 'off', 'err')], ['2 · subindo o túnel · 1100 px', clFrame(1100, 'machine-ws', mcStarting(), 'off', 'ok')]], [
+    '<b>Um clique, duas etapas</b>: o login do conector AWS (o mesmo da C59) e, se sair com 0, o <code>connection.start</code> do machines.json. Se o login falhar, o túnel não roda.',
+    'Cancelar encerra a etapa que roda; a página do navegador, se abriu, é sua.',
+    'Quando termina, o núcleo relê a Workstation na hora e a tela vai para a C62.'])}
+  ${mcRow([['3 · Parar o túnel, a confirmação · 1100 px', clFrame(1100, 'machine-ws', mcStopConfirm(), 'ok', 'ok')], ['4 · parado por você · 1100 px', clFrame(1100, 'machine-ws', mcStopped(), 'off', 'ok')]], [
+    '<b>Parar pede confirmação</b> e diz o que se perde: as portas e a vista das sessões de lá.',
+    'Parado por você não é queda: o ponto da barra fica cinza, nada notifica e a bandeja mostra "parada".',
+    'Sem <code>connection.stop</code>, não há botão Parar.'])}
+</div>`
+const mcFailScreens = () => `<div class="tm-rc">
+  ${mcRow([['O motivo, em palavras simples · 1100 px', clFrame(1100, 'machine-ws', mcReasonsScreen(), 'off', 'warn')]], [
+    '<b>De onde vem o motivo</b>, nesta ordem: o estado do perfil no conector (SSO expirado, C63), as sondas de porta (ocupada, núcleo parado) e, depois que um comando falha, uma <b>lista fechada de padrões</b> no trecho do log daquela execução.',
+    'A tela mostra <b>só a frase da lista</b> e diz de onde ela veio; nenhuma linha do log sai do arquivo (decisão 0012, variante A).',
+    'Nada casou: o código de saída, como hoje.',
+    'O aviso de 15 min aparece no card, na bandeja e numa notificação sem som, antes de o túnel cair.'])}
+  ${mcRow([['Sem connection, e onde roda desconhecido · 1100 px', clFrame(1100, 'machine-ws', mcSetupScreen(), 'off', 'ok')]], [
+    'Uma máquina só com o <code>reconnect</code> da #244 continua igual: o card ensina a ganhar o resto, sem botão morto.',
+    '<b>Onde roda</b> sem metadados de instância, sem registro do agente SSM e sem DMI: "desconhecido", e a fonte diz por quê.'])}
+</div>`
+
+// P14 · the session panel (mod), on a session that runs on the Workstation
+function painelConexao() {
+  const miolo = largo => `${pnServidor()}<div class="pn-sec">Esta sessão<span class="r">auto · 5 s</span></div>
+    <div class="pn-banner e"><div class="l1"><span class="c-error">${ic('cable')}</span> <b>${largo ? 'Workstation sem conexão' : 'Sem conexão'}</b> · SSO expirado</div>
+      <div class="q mut">${largo ? 'Esta sessão roda na Workstation. O que você vê é a última leitura, de 03:11; o túnel caiu quando a sessão AWS expirou.' : 'Roda na Workstation · última leitura 03:11'}</div>
+      <div><span class="pn-link">resolver no console ›</span></div></div>
+    <div class="pc st-abandoned" style="${largo ? 'width:106ch' : ''}"><div class="t">${ic('folder-open')}Esta sessão<span class="r c-muted">03:11</span></div>
+      <div class="ln"><span class="grande trunc">Migração do esquema de pedidos</span></div>
+      <div class="ln mut"><span class="trunc">motor-de-regras · Workstation · sem leitura nova</span></div></div>
+    <div class="pn-pe"><span class="mut">○ ${largo ? 'sem dados da Workstation desde 03:11' : 'sem dados de lá desde 03:11'}</span></div>`
+  return `<div class="fila">${pane(38, miolo, '● Workstation fora')}${pane(121, miolo, '● Workstation sem conexão', 'a faixa usa a largura da grade no largo · <b>sem estouro</b>')}</div>`
+}
+
+
+// ---------- cloud profiles per machine (C66 and C67, #277): each núcleo reads its own machine ----------
+// rows: [cloud, session, profiles, pillHtml, actionHtml]
+const cpTable = rows => `<table class="tabela"><thead><tr><th>Nuvem</th><th>Sessão</th><th>Perfis</th><th>Estado</th><th></th></tr></thead><tbody>
+  ${rows.map(([c, s, p, pill, act]) => `<tr><td>${c}</td><td class="mono">${s}</td><td>${p}</td><td>${pill}</td><td style="text-align:right">${act}</td></tr>`).join('')}</tbody></table>`
+const cpCard = (w, { where, note, rows, band, foot, faded }) => `<div class="cartao cl-sess${faded ? ' tm-faded' : ''}" style="${spanAt(w, 2, 3)}">
+  <div class="cl-sh"><span class="c-accent">${ic('cloud')}</span><div class="cl-sn"><b>Perfis de nuvem</b><small>${where}</small></div><div class="cl-act"><span class="pn-link" style="font-size:12px">ver todas as máquinas em Conexões ›</span></div></div>
+  ${band || ''}${cpTable(rows)}<div class="cl-sf">${foot}</div></div>`
+const CP_MAC = [['AWS', 'sessao-exemplo', '3 perfis · <span class="cl-chip">' + ic('cable') + 'o túnel da Workstation usa</span>', clPill.expired('5 h'), `<span class="btn cheio">${ic('log-in')}Entrar</span>`],
+  ['AWS', 'sessao-lab', '2 perfis', clPill.valid('18:40'), '<span class="btn contorno">Entrar de novo</span>']]
+const CP_WS = (st) => [['AWS', 'sessao-exemplo', '2 perfis · deploys de lá', st === 'done' ? clPill.valid('16:20') : st === 'pending' ? clPill.running() : clPill.expired('9 h'),
+  st === 'pending' ? `<span class="btn contorno">${ic('x')}Cancelar</span>` : st === 'done' ? '<span class="btn contorno">Entrar de novo</span>' : `<span class="btn cheio">${ic('log-in')}Entrar</span>`],
+  ['Google Cloud', 'config-exemplo', 'projeto-exemplo', clPill.valid('amanhã 09:00'), '<span class="btn contorno">Entrar de novo</span>']]
+// C66 · Esta máquina
+const thisMachineProfiles = w => `${cab('monitor', 'Esta máquina', 'mac-exemplo · macOS 26 · 12 núcleos (8 P + 4 E) · 36 GB · lido há 4 s', hourToggle)}
+  <div class="tm-grid" style="${gridCols(w)}">${cpCard(w, { where: 'deste Mac · lidos do ~/.aws/config e das configurações do gcloud daqui', rows: CP_MAC, foot: `${ic('info')}Entrar abre o navegador deste Mac, como em Conexões (C59).` })}</div>
+  <div class="tm-rc-clip" style="max-height:260px"><div>${thisMachineScreen(w).slice(thisMachineScreen(w).indexOf('<div class="stats"'))}</div></div>`
+// C67 · Workstation: read from the núcleo over there, login by device code shown here
+const wsHead = () => mcHeader('up', 'lido há 6 s')
+const wsPending = `<div class="faixa tm-rc-band"><span class="ic">${ic('loader-2')}</span><div class="tm-rc-text"><b>Entrando na AWS na Workstation…</b> A aws CLI de lá espera você confirmar este código no navegador <b>deste Mac</b>:
+    <div style="display:flex;gap:12px;align-items:center;margin-top:10px"><span class="mono" style="font-size:22px;letter-spacing:.12em;color:var(--text);font-weight:600;padding:6px 14px;border:1px solid var(--border);border-radius:8px;background:var(--bg)">WXYZ-1234</span><span class="btn cheio">${ic('external-link')}Abrir a página de login</span><span class="btn contorno">${ic('copy')}Copiar o código</span></div>
+    <div class="tm-rc-time"><span class="tm-stack"><i style="width:22%;background:var(--status-waiting-dot)"></i></span><span>1:06 de 5:00 · o código vale 10 min</span></div>
+    <div class="tm-rc-cmd">Roda lá: aws sso login --sso-session sessao-exemplo --use-device-code --no-browser</div></div></div>`
+const wsDone = `<div class="faixa tm-rc-ok"><span class="ic">${ic('check-circle-2')}</span><div><b>A Workstation entrou na AWS às 08:20.</b> A sessão de lá vale até 16:20. A credencial ficou na aws CLI de lá; nada passou por este Mac.</div></div>`
+const wsFallback = `<div class="faixa tm-rc-band mc-neutral"><span class="ic">${ic('terminal-square')}</span><div class="tm-rc-text"><b>O núcleo de lá não sabe entrar sozinho.</b> A aws CLI da Workstation é anterior ao login por código (ou o núcleo de lá é de uma versão antiga). Rode num terminal de lá:
+    <div class="tm-config">aws sso login --sso-session sessao-exemplo --use-device-code</div></div><div class="tm-rc-actions"><span class="btn contorno">${ic('copy')}Copiar</span></div></div>`
+const wsProfiles = (w, st) => `${wsHead()}<div class="tm-grid" style="${gridCols(w)}">${cpCard(w, {
+  where: 'da Workstation · lidos pelo núcleo de lá, pelo túnel', rows: CP_WS(st), faded: st === 'down',
+  band: st === 'pending' ? wsPending : st === 'done' ? wsDone : st === 'fallback' ? wsFallback : '',
+  foot: st === 'down' ? `${ic('wifi-off')}Sem conexão: estes são os de 03:11. Entrar volta quando a Workstation responder.` : `${ic('info')}O túnel usa o perfil-dev <b>deste Mac</b> (C62); estes são os perfis que a Workstation usa para ela mesma.` })}</div>
+  ${mcRest(w, false)}`
+const cpScreens = () => `<div class="tm-rc">
+  ${rcRow([['1 · a sessão de lá expirou · 1100 px', clFrame(1100, 'machine-ws', wsProfiles(1100, 'offer'), 'ok', 'err')], ['1 · 1440 px', clFrame(1440, 'machine-ws', wsProfiles(1440, 'offer'), 'ok', 'err')]], [
+    '<b>Cada máquina tem os seus perfis</b>: o núcleo de cada uma lê o ~/.aws/config e o gcloud dela. O da Workstation chega pelo leitor remoto, como o resto da tela.',
+    'O túnel depende de um perfil <b>deste Mac</b> (o SSM sai daqui); os perfis da Workstation são os que ela usa para deploy, dados etc. A tela diz isso no pé do card.'])}
+  ${rcRow([['2 · entrando, com o código · 1100 px', clFrame(1100, 'machine-ws', wsProfiles(1100, 'pending'), 'ok', 'err')], ['3 · entrou · 1100 px', clFrame(1100, 'machine-ws', wsProfiles(1100, 'done'), 'ok', 'ok')]], [
+    '<b>Decisão: o login de lá é por código, mostrado aqui.</b> O núcleo de lá roda a aws CLI com <code>--use-device-code --no-browser</code>; não abre navegador lá, porque o núcleo é um serviço sem tela e você está no Mac.',
+    'Da saída, o núcleo de lá tira <b>só</b> a URL de verificação (precisa ser de um domínio da AWS) e o código (formato fixo); o resto vai para o log de lá. É o mesmo padrão do código do GitHub na C40.',
+    '"Abrir a página de login" abre a URL no navegador deste Mac. A credencial nasce na aws CLI de lá e nunca passa por aqui.'])}
+  ${rcRow([['4 · núcleo ou CLI antigos lá: o comando · 1100 px', clFrame(1100, 'machine-ws', wsProfiles(1100, 'fallback'), 'ok', 'err')], ['5 · sem conexão · 1100 px', clFrame(1100, 'machine-ws', wsProfiles(1100, 'down').replace(mcHeader('up', 'lido há 6 s'), mcHeader('down', 'última leitura às 03:11')), 'off', 'err')]], [
+    'Sem o login por código lá, a tela <b>mostra o comando</b> para rodar num terminal de lá, com Copiar. Nada roda.',
+    'Sem conexão, o card fica com a última leitura e sem Entrar.'])}
+</div>`
+
+// A9 and A10 · the tray: the Nuvens block and the Workstation's connection
+const trayHead = `${mi('Ahrena Console', 'cab')}${mi(`${ponto('completed')}Núcleo de pé · 127.0.0.1:4720`, 'off')}${msep}`
+const APP_CL = {
+  up: () => mbar(1, true) + `<div class="menu" style="right:186px;width:440px">${trayHead}
+    ${mi('1 precisa de você · abrir na janela', 'cab')}${mi(`${ponto('blocked')}<b>agenda-ficticia</b><span class="mt">· Plano para aprovar · 7 min</span>`)}${msep}
+    ${mi('Máquinas', 'cab')}
+    ${mi(`${ponto('completed')}Este Mac<span class="mt">· CPU 34% · disco 61%</span>`)}
+    ${mi(`${ponto('completed')}Workstation<span class="mt">· túnel no ar há 9 h 50 min · 4 portas</span>`)}${msep}
+    ${mi('Nuvens', 'cab')}
+    ${mi(`${ponto('waiting')}AWS · sessao-exemplo<span class="mt">· expira em 14 min · a Workstation usa</span>`)}
+    ${mi(`<span class="ck"></span>Entrar na AWS (sessao-exemplo)`, 'foco')}
+    ${mi(`${ponto('completed')}AWS · sessao-lab<span class="mt">· válida até 18:40</span>`)}${msep}
+    ${mi(`${ponto('active')}1 ativa · 5 na Workstation`, 'off')}${msep}${menuPe}</div>
+    <div class="anota" style="left:28px;top:56px;width:300px"><b>a.</b> O bloco <b>Nuvens</b> tem uma linha por sessão de nuvem, a mais perto de expirar primeiro. Só as que pedem algo ganham item de ação: <b>Entrar</b> roda o login da CLI, como na C59.<br><br>
+      A linha da Workstation em Máquinas diz o estado do túnel. Clicar abre a C62.<br><br>
+      Sem nenhuma nuvem configurada, o bloco não aparece.</div>`,
+  down: () => mbar(1, true) + `<div class="menu" style="right:186px;width:440px">${trayHead}
+    ${mi('Máquinas', 'cab')}
+    ${mi(`${ponto('completed')}Este Mac<span class="mt">· CPU 34% · disco 61%</span>`)}
+    ${mi(`<span class="ponto" style="box-shadow:inset 0 0 0 1.5px var(--muted)"></span>Workstation<span class="mt">· sem conexão desde 03:11</span>`)}
+    ${mi(`<span class="ck c-error">${ic('key-round')}</span><span class="mt">Túnel fora: SSO expirado há 5 h</span>`, 'off')}
+    ${mi(`<span class="ck"></span>Entrar na AWS e subir o túnel`, 'foco')}${msep}
+    ${mi('Nuvens', 'cab')}
+    ${mi(`${ponto('error')}AWS · sessao-exemplo<span class="mt">· expirada há 5 h</span>`)}
+    ${mi(`${ponto('completed')}AWS · sessao-lab<span class="mt">· válida até 18:40</span>`)}${msep}
+    ${mi(`${ponto('idle')}2 ociosas`, 'off')}${msep}${menuPe}</div>
+    <div class="anota" style="left:28px;top:56px;width:300px"><b>b.</b> Com o SSO expirado, a linha da Workstation diz o <b>motivo</b> e a ação certa: <b>Entrar na AWS e subir o túnel</b>, o mesmo botão da C63.<br><br>
+      Com outro motivo (porta ocupada, agente SSM offline), a linha diz qual e a ação é <b>Reconectar</b> (A8).</div>
+    <div class="menu" style="left:28px;top:250px;width:300px">${mi('Enquanto roda', 'cab')}${msep}
+      ${mi(`${ponto('waiting')}Workstation<span class="mt">· entrando na AWS</span>`)}
+      ${mi(`<span class="ck"></span>Aguardando o navegador · 0:48`, 'off')}
+      ${mi(`<span class="ck"></span><span class="mt">depois: subir o túnel</span>`, 'off')}</div>
+    <div class="anota" style="left:28px;top:384px;width:300px">Cinza e sem clique enquanto roda, como na A8: um por vez, daqui ou da janela. O Cancelar fica na janela (C64).</div>`,
+  notifs: () => mbar(1, false) + `
+    <div class="notif" style="top:44px"><img src="${LOGO}" alt=""><div><div class="app">AHRENA CONSOLE<span>agora · sem som</span></div><div class="tit">Sessão da AWS expira em 15 min</div><div>sessao-exemplo · a Workstation cai junto</div></div><div class="acoes"><span>Entrar</span><span>Abrir</span></div></div>
+    <div class="notif" style="top:166px"><img src="${LOGO}" alt=""><div><div class="app">AHRENA CONSOLE<span>03:11 · sem som</span></div><div class="tit">Workstation sem conexão: SSO expirado</div><div>A sessão AWS do perfil-dev expirou às 03:10</div></div><div class="acoes"><span>Entrar e subir</span><span>Abrir</span></div></div>
+    <div class="notif" style="top:288px"><img src="${LOGO}" alt=""><div><div class="app">AHRENA CONSOLE<span>há 2 min · sem som</span></div><div class="tit">Workstation sem conexão: porta ocupada</div><div>node deste Mac segura a porta 14720</div></div><div class="acoes"><span>Reconectar</span><span>Abrir</span></div></div>
+    <div class="anota" style="left:28px;top:56px;width:470px"><b>As notificações</b> dizem o motivo no título e trazem a ação que resolve: <b>Entrar</b> (só o login), <b>Entrar e subir</b> (login e túnel) ou <b>Reconectar</b>. <b>Abrir</b> leva à tela da Workstation ou a Conexões › AWS.<br><br>
+      Uma vez por motivo e <b>sem som</b>: não é sessão travada (#245). O aviso de 15 min sai uma vez por sessão SSO.<br><br>
+      Túnel <b>parado por você</b> não notifica. A volta ("Workstation conectada") não notifica: o ponto da barra fica verde.<br><br>
+      Fora do horário, a notificação de expiração da madrugada é a mesma; ela espera na Central de Notificações até de manhã.</div>`,
+}
+
 // ---------- Conexões: o console conecta ao GitHub sozinho (issue 241, decisão 0011) ----------
 // Device flow com o OAuth App da Ahrena, credencial no Keychain, e o "Conectar ao GitHub" nas telas
 // que dependem dele. Dados sintéticos: a conta é dev-sintetico, as organizações são as do simulador.
@@ -3174,6 +3702,8 @@ const TELAS = [
   { id: 'painel-grafo-caotico', cod: 'P13', nome: 'Grafo da sessão, caótico', sub: '25 subagentes em 5 ondas, um com erro, e um general-purpose que disparou os seus. Ondas concluídas ficam recolhidas numa linha; a onda com ativos fica aberta; o erro fica sempre à vista.', html: () => painelGrafo('caotico'),
     n: N(['O agrupamento dos agentes por tipo, com a contagem.', 'Os aninhados do <code>parent_agent_id</code>, em qualquer profundidade.'], ['<b>Agrupar:</b> por onda, o que um mesmo turno da sessão disparou junto. Fora isso, a ordem é a do início.', '<b>Colapsar:</b> onda só de concluídos vira uma linha com a contagem e a barra da onda (um traço por subagente). ▸ abre, ▾ fecha (botões nativos).', '<b>Erro e ativo nunca somem:</b> o erro sai da onda recolhida e fica embaixo dela.', '<b>Aninhados:</b> até 2 níveis com trilho; do 3º para baixo, "+N aninhados" na linha do pai.', '<b>Paginar:</b> pela altura do painel, sem cortar uma linha. No estreito, ‹ 1/2 ›; no largo, cabe numa página.', 'O Select troca entre Todos e Ativos e erros.']) },
 
+  { id: 'painel-connection', cod: 'P14', nome: 'Sessão numa máquina sem conexão', sub: 'Feature A conexão da máquina remota (#278). Numa sessão que roda na Workstation, quando o túnel caiu: uma faixa com o motivo (SSO expirado) e o link para resolver no console. O painel não roda nada.', html: painelConexao,
+    n: N(['Nada.'], ['O mod não sobe túnel nem entra na AWS: a página do Claude Desktop não é a origem da /ui, e as escritas são de mesma origem (0003). O link abre a janela do app na C63, onde está o botão.', 'Sessões deste Mac não mostram a faixa.']) },
   { cap: 'app', titulo: 'App de bandeja (Tauri)', desc: 'O app da decisão 0005 (issues #87 e #88): bandeja, menu e notificação nativos do macOS, e a janela com a interface que o núcleo serve.' },
   { id: 'app-bandeja-0', cod: 'A1', nome: 'Bandeja sem ninguém precisando de você', sub: 'Ninguém precisa de você: só o ícone na barra de menus. As ociosas aparecem só como contagem cinza no resumo.', html: () => `<div class="fila"><div class="mac">${APP.zero()}</div></div>`,
     n: N(['O menu da bandeja (<code>desktop/src/tray.ts</code>): título, "Listening on :4820" com ponto verde, o resumo, Open Dashboard ⌘O, Open at Login, Quit ⌘Q.', 'Ícone template preto, que o macOS pinta.'], ['Sem Restart Server, Show Logs e Open in Browser: o app adota o núcleo, não é dono dele.', 'O resumo fica no que pede ação (precisam de você, com erro), sem "eventos de hoje".']) },
@@ -3192,6 +3722,9 @@ const TELAS = [
     n: N(['Do painel de telemetria antigo: os estados da porta (respondendo, ninguém escuta lá, ocupada, fora do túnel).'], ['O painel antigo tinha "Subir o túnel"; aqui não: o app não conhece o túnel. Reconectar, quando configurado, roda só o comando que você escreveu (A8).']) },
   { id: 'app-machines-reconnect', cod: 'A8', nome: 'Bandeja: Reconectar', sub: 'Feature Reconectar a máquina remota (#244, decisão 0012). À esquerda, com reconnect configurado: o item Reconectar a Workstation e a notificação com a ação Reconectar. À direita, o comando rodando (cinza, sem clique) e, sem reconnect, o item que ensina a configurar.', html: () => `<div class="fila"><div class="mac">${APP.machinesReconnect()}</div><div class="mac">${APP.machinesReconnecting()}</div></div>`,
     n: N(['Do painel de telemetria antigo: o "Subir o túnel" na linha da máquina; aqui o comando é o seu, não um que o app conhece.'], ['Só aparece com <code>reconnect</code> no machines.json; sem ele, um item leva ao passo a passo (C50, estado 5).', 'Um por vez: o item fica cinza com a contagem enquanto o comando roda, venha o clique daqui ou da janela.', 'Cancelar fica na janela: na bandeja não cabe confirmação.']) },
+  { id: 'app-clouds-connection', cod: 'A9', nome: 'Bandeja: Nuvens e a conexão da Workstation', sub: 'Features Contas de nuvem (#277) e A conexão da máquina remota (#278), decisão 0013. À esquerda, o túnel no ar e o bloco Nuvens com a sessão que expira em 14 min e Entrar. À direita, de manhã: o túnel fora por SSO expirado, com Entrar na AWS e subir o túnel, e o item cinza enquanto roda.', html: () => `<div class="fila"><div class="mac">${APP_CL.up()}</div><div class="mac">${APP_CL.down()}</div></div>`,
+    n: N(['Nada.'], ['A bandeja roda o mesmo que a janela, pela mesma rota local (sem Origin, Host em loopback, como a A8).', 'O número da barra continua só de sessões: nuvem e túnel não contam.']) },
+  { id: 'app-clouds-notifications', cod: 'A10', nome: 'Notificações da nuvem e da conexão', sub: 'A sessão que vai expirar, a queda por SSO expirado e a queda por porta ocupada: o motivo no título e a ação que resolve. Todas sem som.', html: () => `<div class="fila"><div class="mac">${APP_CL.notifs()}</div></div>`, n: '' },
   { cap: 'console', titulo: 'Console (artefato)', desc: 'O console completo, que é também o que a janela do app mostra: todas as telas do CCAM que fazem sentido aqui, na mesma ordem da barra lateral dele. Moldura, cabeçalho, cards, tabelas e gráficos seguem o CCAM tela a tela.' },
   { id: 'console-dashboard', cod: 'C1', nome: 'Dashboard', sub: '6 cards, "precisam de você" em destaque (só o que trava, #245), as ociosas numa linha neutra à parte, agentes ativos e atividade recente (3.2).', html: () => `<div class="fila">${cc1100('dashboard', telaDashboard())}</div>`,
     n: N(['Dashboard · Monitor: grade 3 × 2 de StatCard, Active Agents com AgentCard (borda na cor do status, duas últimas mensagens, modelo, custo, idade, id) e Recent Activity.', 'Cabeçalho de página com ícone, título, pílula Live e Refresh; segmented Monitor | Saúde.'], ['O inbox "precisam de você" entra entre os números e as listas, ideia do Podium.', 'Ociosas (#245): uma linha neutra logo abaixo do inbox, sem fundo amarelo, com o motivo em chip leve. Ficam visíveis sem disputar atenção.', 'Custo sempre com "~" e "estimativa".']) },
@@ -3253,6 +3786,15 @@ const TELAS = [
     n: N(['Os três estados do C19 (carregando, vazio e erro).', 'Do painel antigo: "Sem ligação com esta máquina" com o diagnóstico logo abaixo.'], ['Sem botão de subir o núcleo de lá. O túnel continua seu; Reconectar só aparece com o comando que você escreveu no machines.json (C50).', 'A última leitura fica no SQLite do Mac, então a tela abre com ela e diz a idade.']) },
   { id: 'console-workstation-reconnect', cod: 'C50', nome: 'Reconectar a Workstation', sub: 'Feature Reconectar a máquina remota (#244, decisão 0012): o console roda o comando de reconexão que você escreveu no machines.json. Os seis estados: com reconexão configurada (1, em 1100 e 1440), reconectando (2), reconectada (3), falhou (4), sem reconexão configurada (5) e já reconectando pela bandeja (6). A última leitura aparece cortada embaixo; é a mesma da C25.', html: () => reconnectScreens(),
     n: N(['Do painel de telemetria antigo: "Sem ligação com esta máquina" com o diagnóstico logo abaixo, como na C26.'], ['O console não sabe montar túnel nem fazer login: roda a lista do arquivo, sem shell, e só ela.', 'A saída do comando fica no log da instalação, nunca na tela (variante A); a B está desenhada para o dono escolher.', 'Um por vez por máquina, com tempo limite e Cancelar.']) },
+  { id: 'console-workstation-connection', cod: 'C62', nome: 'Workstation · a conexão no ar', sub: 'Feature A conexão da máquina remota (#278, decisão 0013). O túnel vira uma conexão de primeira classe da máquina: o card Conexão (túnel, a sessão AWS que ele exige e o núcleo de lá, as portas, os comandos do machines.json) e o card Onde roda (provedor, tipo, região, lidos pelo núcleo de lá), no topo da C25. Em 1100 e 1440.', html: () => `<div class="fila">${bothWidths(w => clFrame(w, 'machine-ws', mcUpScreen(w), 'ok', 'ok'))}</div>`,
+    n: N(['Nada: o CCAM não conhece túnel nem nuvem.'], ['O estado vem do que o núcleo já lê (o processo ssh e a sonda de cada porta, C24), do núcleo de lá e do perfil vinculado em Conexões › AWS; nenhum comando novo de sonda.', 'Reconectar e Parar rodam só os comandos do machines.json (connection.start e connection.stop), como o reconnect da 0012.', 'O cabeçalho ganha o provedor e a região do card Onde roda.', 'Em 1100 o Onde roda vira uma linha inteira, com os campos lado a lado: dois cards curtos lado a lado deixariam o da Conexão alto e o outro vazio (regra 9).']) },
+  { id: 'console-workstation-sso-expired', cod: 'C63', nome: 'Workstation · túnel fora, SSO expirado', sub: 'De manhã: a sessão SSO expirou de noite e o túnel caiu junto. A faixa diz o motivo em palavras simples e oferece um clique só, Entrar na AWS e subir o túnel; Só entrar fica ao lado. O card Conexão mostra os três lados fora e o Onde roda fica com a última leitura. Em 1100 e 1440.', html: () => `<div class="fila">${bothWidths(w => clFrame(w, 'machine-ws', mcDownScreen(w), 'off', 'err'))}</div>`,
+    n: N(['Nada.'], ['O motivo vem do conector: o perfil vinculado (cloudProfile) está expirado. Não é preciso rodar nada para saber.', 'A linha mono mostra os dois comandos antes do clique: o login fixo da aws CLI e o connection.start do arquivo.', 'Pergunta 3 da 0013: um clique para os dois (recomendado), ou dois botões.']) },
+  { id: 'console-workstation-connection-states', cod: 'C64', nome: 'Workstation · subindo, parando e parada', sub: 'O andamento do clique da C63 (entrando na AWS, depois subindo o túnel), a confirmação de Parar o túnel e o estado parado por você, que não é queda. Em 1100.', html: () => mcStatesScreens(), n: '' },
+  { id: 'console-workstation-connection-failing', cod: 'C65', nome: 'Workstation · por que caiu, e sem connection', sub: 'O aviso antes da queda (a sessão expira em 14 min), os motivos de uma falha em palavras simples, cada um com de onde veio e a ação certa, e a máquina que só tem o reconnect da #244, com o Onde roda desconhecido. Em 1100.', html: () => mcFailScreens(), n: '' },
+  { id: 'console-this-machine-cloud-profiles', cod: 'C66', nome: 'Esta máquina · Perfis de nuvem', sub: 'Feature Contas de nuvem (#277). Os perfis de nuvem são de cada máquina: a tela Esta máquina ganha o card Perfis de nuvem, com as sessões deste Mac, o estado e Entrar ali mesmo. O link leva a Conexões, que é a visão de todas as máquinas. Em 1100 e 1440.', html: () => `<div class="fila">${bothWidths(w => clFrame(w, 'machine-local', thisMachineProfiles(w), 'ok', 'err'))}</div>`,
+    n: N(['Nada.'], ['O mesmo dado de Conexões › AWS com o seletor em Este Mac (C58): os dois lugares leem o mesmo estado do núcleo daqui, e Entrar num muda o outro sem recarregar.', 'O chip diz que o túnel da Workstation depende desta sessão.']) },
+  { id: 'console-workstation-cloud-profiles', cod: 'C67', nome: 'Workstation · Perfis de nuvem', sub: 'Os perfis da própria Workstation, lidos pelo núcleo de lá. Entrar inicia a sessão lá: a aws CLI de lá roda o login por código, e o código aparece aqui para você confirmar no navegador deste Mac. Sem esse login lá, a tela mostra o comando. Em 1100 e 1440.', html: () => cpScreens(), n: '' },
   { id: 'console-dev-console', cod: 'C27', nome: 'Dev Console', sub: 'O placar de um contexto (um conjunto de repositórios): prontos para você, CI rodando, CI vermelho, sessões trabalhando e quem precisa de você; a fila de merge na ordem; o quadro das issues em seis colunas e o que foi mesclado. Em 1440 as seis colunas lado a lado; em 1100, quatro e duas embaixo, para nada rolar na horizontal.', html: () => `<div class="fila">${bothWidths(w => frameAt(w, 'dev', devConsoleScreen(w)))}</div>`,
     n: N(['Do Dev Console antigo: o seletor de contexto, a aba Fila de merge com todos os contextos, o placar de 5 números, "Depende de você", a fila na ordem de merge com os não prontos fechados, o quadro de 6 colunas com o critério de cada uma, e "mesclados nas últimas 24 h".'], ['Derivado no núcleo, sem sessão de PM gravando estado: "Delegada" é uma sessão aberta no branch da issue sem push, e "Depende de você" vem de /api/atencao e das decisões sugeridas.', '"Bloqueada" é a etiqueta blocked da issue; plano em andamento e a trilha da release ficaram de fora, porque dependiam de anotação.', 'O antigo rolava na horizontal (o quadro tinha 1110 px mínimos); aqui o quadro dobra em 1100.']) },
   { id: 'console-adrs', cod: 'C28', nome: 'ADR · decisões de arquitetura', sub: 'Os registros de decisão (ADRs) de todos os repositórios da conta, por repositório, com busca no texto e filtro por status. Em 1100 (a janela do app) e 1440.', html: () => `<div style="display:flex;flex-direction:column;gap:12px"><div class="rotulo">1100 px</div>${frameAt(1100, 'adrs', telaAdrs(false))}<div class="rotulo">1440 px</div>${frameAt(1440, 'adrs', telaAdrs(true))}</div>`,
@@ -3283,6 +3825,24 @@ const TELAS = [
     n: N(['Os estados de carregamento e de erro inline do C19, e o bloco de ferramenta "Rodando" da Conversa.'], ['O socket não responde nada: "Entregue" só vale quando o transcript mostra um turno novo depois do envio. Falha de conexão é "Não entregue" na hora.', 'Sem turno novo em 60 s, "Enviada, sem confirmação": a sessão pode estar segurando pela política de mensagens entre sessões. Não oferece reenviar, porque duplicaria.', 'O texto digitado só vive na caixa: na falha ele fica lá para tentar de novo; nunca volta de um log (a auditoria guarda o SHA-256, não o texto).', 'Na Conversa, a mensagem vem do próprio transcript, com a marca "de outra sessão · pelo console".']) },
   { id: 'console-session-message-unavailable', cod: 'C53', nome: 'Mandar mensagem · quando não dá', sub: 'Issue #61. Os casos em que a caixa fica desligada e diz por quê: sessão sem processo vivo (com Abrir no Claude Desktop), sessão em outra máquina e mais de um processo dizendo ser a mesma sessão. Embaixo, "precisam de você" no Dashboard e as linhas de Sessões com a ação Mandar mensagem, que abre o Detalhe na Conversa com a caixa em foco. Em 1100 e 1440.', html: () => `<div style="display:flex;flex-direction:column;gap:12px">${widthCol(1100, '1100 px', frameAt(1100, 'sessoes', sessionMessageUnavailableScreen(1100)))}${widthCol(1440, '1440 px', frameAt(1440, 'sessoes', sessionMessageUnavailableScreen(1440)))}</div>`,
     n: N(['O EmptyState com motivo e ação (C19).', 'O inbox "precisam de você" do Dashboard (C1) e a tabela de Sessões (C3).'], ['A caixa desligada fica no lugar, tracejada, com o motivo: quem procura o botão descobre por que não dá.', 'Sessão sem processo vivo não tem para onde entregar sem o núcleo retomar (9.8); a saída é abrir no Claude Desktop.', 'Outra máquina: a caixa fica desligada. A entrega pelo núcleo de lá é o #282; o Remote Control não serve, porque só uma sessão do Claude logada manda mensagem por ele.', 'Mais de um processo com o mesmo <code>sessionId</code> é recusa: entregar no errado é pior que não entregar.', '"Mandar mensagem" aparece só onde há um processo vivo aqui; numa sessão com erro sem processo, a linha diz "sem processo vivo". É um atalho para o Detalhe: nada é enviado da lista.']) },
+  { id: 'console-connections-catalog', cod: 'C57', nome: 'Conexões · o catálogo de conectores', sub: 'Feature Contas de nuvem (#277, decisão 0013). A seção Conexões da #241 vira um catálogo: um conector por conta de fora (GitHub, AWS, depois Google Cloud e Azure), cada um com o seu estado, e um lugar só para entrar. A AWS tem uma sessão expirada, com Entrar no próprio card. Em 1100 e 1440.', html: () => `<div class="fila">${bothWidths(w => clFrame(w, 'connections', connectionsCatalog(w), 'ok', 'err'))}</div>`,
+    n: N(['Nada: o CCAM não entra em conta nenhuma.'], ['Por que em Conexões, e não numa seção Nuvens: hoje são contas, perfis e sessão, o mesmo assunto e o mesmo modelo de segurança do GitHub (entrar numa conta de fora). Quando vier informação da nuvem (instâncias, custo), ela ganha item em Máquinas; entrar continua aqui.', 'O ponto de Conexões na barra resume o pior estado; o pé da barra diz qual.', 'Catálogo fixo no código: "Adicionar" liga a leitura de um conector, não instala nada de fora.']) },
+  { id: 'console-aws-profiles', cod: 'C58', nome: 'Conexões · AWS, sessões e perfis', sub: 'Os perfis do ~/.aws/config agrupados pela sso-session: um login vale para todos os perfis da sessão. Por sessão: o estado (válida até, expirada há), Entrar, e os perfis com conta, papel, região e quem usa (a Workstation). Perfis com chave de acesso ficam fora do escopo. Em 1100 e 1440.', html: () => `<div class="fila">${bothWidths(w => clFrame(w, 'connections', awsProfilesScreen(w), 'ok', 'err'))}</div>`,
+    n: N(['Nada.'], ['Agrupar pela sso-session é o que a aws CLI faz: o aws sso login vale para a sessão, e a tela diz isso no pé do card.', 'Válida ou não vem do aws sts get-caller-identity a cada 5 min; a hora do fim vem do cache da CLI, só o expiresAt (pergunta 1 da 0013, variante A). Na variante B, a linha vira "entrou às 10:40, há 3 h".', 'O console nunca abre o ~/.aws/credentials.', 'As sessões ficam uma embaixo da outra também em 1440: lado a lado, a tabela de perfis não cabe sem rolar (regra 2).']) },
+  { id: 'console-aws-login', cod: 'C59', nome: 'Conexões · AWS, entrando', sub: 'Depois de Entrar: o núcleo roda o login da aws CLI, que abre o navegador, e a tela espera com o tempo contra o limite e Cancelar. Ao terminar, os três perfis da sessão ficam válidos. Se o login não terminar, o console encerra a CLI e diz isso, sem mostrar a saída. Em 1100.', html: () => `<div class="tm-rc">
+      ${rcRow([['1 · aguardando o navegador · 1100 px', clFrame(1100, 'connections', awsLoginScreen(SESS_RUNNING), 'ok', 'err')], ['2 · entrou · 1100 px', clFrame(1100, 'connections', awsLoginScreen(SESS_DONE), 'ok', 'ok')]], [
+        'O comando é um <b>modelo fixo no código</b>: aws sso login --sso-session &lt;nome&gt;. O nome vem do ~/.aws/config que o núcleo acabou de ler, não do pedido; a rota recebe só o nome e confere que ele está no arquivo.',
+        'Sem shell, um por sessão de cada vez, até 5 min, saída no log da instalação (0012).',
+        'O núcleo não vê o navegador: "aguardando o navegador" é o tempo em que a CLI espera.',
+        'Ao sair com 0, o núcleo confere a sessão na hora; a Workstation, que usa o perfil-dev, sabe que já pode subir o túnel.'])}
+      ${rcRow([['3 · o login não terminou · 1100 px', clFrame(1100, 'connections', awsLoginScreen(SESS_FAILED), 'ok', 'err')]], [
+        'Passou do tempo ou Cancelar: o console encerra o processo e a sessão continua expirada.',
+        'Como na 0012, a tela diz o que houve e onde está o log; a saída de um login tem conta e URL e não vem para a /ui.'])}
+    </div>`, n: '' },
+  { id: 'console-clouds-states', cod: 'C60', nome: 'Conexões · sem nuvem, e os estados da AWS', sub: 'Sem nenhuma nuvem configurada: o card da AWS diz como criar um perfil com SSO, sem apontar para conta de ninguém (regra 5). Embaixo, o que não é o caminho feliz: sem a aws CLI, a v1, o ~/.aws/config com erro, um nome que não vai para a linha de comando, o estado desconhecido e o login que não terminou. Em 1100.', html: () => `<div style="display:flex;flex-direction:column;gap:12px"><div class="width-col"><div class="rotulo">1100 px · nenhuma nuvem configurada</div>${clFrame(1100, 'connections', connectionsNoCloud(), 'ok', 'none')}</div><div class="width-col"><div class="rotulo">1100 px · os estados da AWS</div>${clFrame(1100, 'connections', awsStatesScreen(), 'ok', 'warn')}</div></div>`,
+    n: N(['Nada.'], ['Nenhum botão morto: sem CLI, sem perfil ou com o arquivo inválido, Entrar não aparece e o card diz o que fazer.', 'O nome que vai para a linha da aws passa por um padrão estreito; fora dele, o perfil aparece sem Entrar.']) },
+  { id: 'console-multi-cloud', cod: 'C61', nome: 'Conexões · várias nuvens', sub: 'Com AWS e Google Cloud (fase 2) conectados: um card por conector e a lista de todas as sessões de nuvem de todas as máquinas (este Mac e a Workstation), a mais perto de expirar primeiro, com a ação de cada uma. É aqui que as telas de cada máquina (C66, C67) se juntam. Em 1100 e 1440.', html: () => `<div class="fila">${bothWidths(w => clFrame(w, 'connections', multiCloudScreen(w), 'ok', 'warn'))}</div>`,
+    n: N(['Nada.'], ['O mesmo molde para toda nuvem: a configuração da CLI dela (perfis da aws, configurações do gcloud, assinaturas do az), o estado da sessão e o login da CLI.', 'A lista junta as nuvens para responder "o que vai expirar"; o detalhe de cada uma continua no card dela.', 'Google Cloud e Azure são fases seguintes; o desenho mostra que cabem sem mudar a tela.']) },
   { id: 'console-connections-off', cod: 'C39', nome: 'Conexões · desconectado', sub: 'Feature Conectar ao GitHub (#241, decisão 0011). A seção nova de Controle: o GitHub sem conexão, os escopos que o console vai pedir e por quê, onde a credencial vai ficar e a fonte (o console, ou o gh para quem já usa). Em 1100 e 1440.', html: () => `<div class="fila">${bothWidths(w => frameGh(w, 'connections', connectionsOffScreen(w), 'off'))}</div>`,
     n: N(['Nada: o CCAM lê o GitHub com o gh da máquina.'], ['O console conecta sozinho, pelo device flow do OAuth App da Ahrena: o app instalado não depende do gh.', 'A barra ganha Conexões em Controle; o pé da barra diz se o GitHub está conectado.', 'Os escopos aparecem antes de conectar, cada um com o motivo.']) },
   { id: 'console-connections-pending', cod: 'C40', nome: 'Conexões · o código do device flow', sub: 'Depois de Conectar: o código de 8 letras, o botão que abre github.com/login/device no navegador e a espera, que muda sozinha quando a pessoa autoriza. O código vale 15 minutos. Em 1100 e 1440.', html: () => `<div class="fila">${bothWidths(w => frameGh(w, 'connections', connectionsPendingScreen(w), 'pending'))}</div>`,
@@ -3295,6 +3855,10 @@ const TELAS = [
     n: N(['O quadro do Kanban do projeto (C11).'], ['A escolha fica nas preferências da instalação, sem variável de ambiente; nada aponta para o Project da Ahrena.', 'Um Project sem campo de seleção não vira quadro: a linha diz isso.']) },
   { id: 'console-connections-states', cod: 'C44', nome: 'Conexões · estados', sub: 'O que não é o caminho feliz: o console sem o aplicativo do GitHub configurado, a máquina sem cofre, um escopo faltando e o código expirado ou recusado. Embaixo, as faixas da fonte gh e de AHRENA_CONSOLE_PROJECT definida (esta no Kanban do projeto). Em 1100.', html: () => `<div class="fila">${frameGh(1100, 'connections', connectionsStatesScreen(), 'off')}</div>`,
     n: N(['—'], ['Sem cofre o console não conecta: a credencial nunca vai para arquivo.', 'Sem o aplicativo configurado, Conectar fica desligado e a tela diz por quê; nada aponta para um aplicativo de outra pessoa.']) },
+  { id: 'console-open-detail', cod: 'C70', nome: 'Detalhe · Abrir a sessão', sub: 'O cabeçalho do Detalhe ganha, ao lado de Atualizar, o botão que leva à própria sessão, precise ela de você ou não. O rótulo diz o alvo: <b>Abrir no Claude Desktop</b> para a sessão que o Desktop conhece; <b>Abrir no terminal</b> para a do <code>claude</code> no terminal, que abre o terminal padrão retomando a sessão na pasta dela. Embaixo, os quatro casos (Desktop, terminal, terminal ainda rodando, outra máquina com o botão desligado) e o que aparece depois do clique. Em 1100 e 1440.', html: () => `<div style="display:flex;flex-direction:column;gap:12px">${osCol('1100 px · sessão do Claude Desktop, ociosa', frameAt(1100, 'sessoes', openDetailScreen()))}${osCol('1100 px · os casos', frameAt(1100, 'sessoes', openDetailCasesScreen()))}${osCol('1440 px', frameAt(1440, 'sessoes', openDetailScreen()))}</div>`,
+    n: N(['O cabeçalho do Session Detail com os chips (C5); o "Abrir no Claude Desktop" que já existe na faixa e na linha de ociosa.'], ['O botão sai da faixa e da linha de ociosa e vai para o cabeçalho, sempre no mesmo lugar, inclusive em sessão ativa ou concluída.', 'O alvo vem do núcleo: sessão no índice do Claude Desktop (tem <code>local_…</code>) abre lá pelo <code>/open/&lt;local_…&gt;</code> que o mod e a bandeja já usam; sessão só com transcript retoma no terminal.', 'Terminal: o núcleo monta <code>claude --resume &lt;id&gt;</code> na pasta da sessão, com o id e a pasta que ele mesmo leu, nunca com texto da tela. No macOS abre no app de terminal padrão; no Linux e no Windows, o terminal conhecido, senão Copiar comando.', 'Terminal com o <code>claude</code> ainda rodando: retomar abriria uma segunda cópia da mesma sessão. A proposta é <b>Ir para o terminal</b> (traz à frente a janela do Terminal ou do iTerm2 que tem o processo), e Copiar comando quando não achar.', 'Outra máquina: desligado, com "roda em ws-exemplo", e Copiar comando para rodar lá.', 'POST da mesma origem (decisão 0003), como o <code>/open</code> de hoje.']) },
+  { id: 'console-open-wall', cod: 'C71', nome: 'Mural, Sessões e Dashboard · Abrir a sessão', sub: 'Cada card do Mural ao vivo ganha um pé com a mesma ação do Detalhe, com o rótulo do alvo, e "Detalhe ›" ao lado. Em Sessões e no "precisam de você" do Dashboard não cabe o rótulo: vai só o ícone (monitor para o Claude Desktop, terminal para o terminal), com o título dizendo a ação. Mural em 1100 e 1440; Sessões e Dashboard em 1100.', html: () => `<div style="display:flex;flex-direction:column;gap:12px">${osCol('1100 px · Mural ao vivo', frameAt(1100, 'mural', openWallScreen()))}${osCol('1440 px · Mural ao vivo', frameAt(1440, 'mural', openWallScreen()))}${osCol('1100 px · Dashboard e Sessões', frameAt(1100, 'sessoes', openRowsScreen()))}</div>`,
+    n: N(['O card do Mural (C2), a tabela de Sessões (C3) e o inbox do Dashboard (C1).'], ['No Mural o card cresce uma linha para caber o pé; os cards da mesma linha continuam com a mesma altura (regra 9).', 'O clique no botão abre a sessão; o resto do card continua levando ao Detalhe.', 'Na sessão de outra máquina o pé diz onde ela roda e oferece só Copiar comando.', 'Em Sessões o ícone toma o lugar da seta do fim da linha (a linha inteira continua levando ao Detalhe), para nada rolar na horizontal em 1100; no Dashboard o ícone fica ao lado de "Abrir ›", que segue indo ao Detalhe.']) },
   { id: 'console-tools', cod: 'C72', nome: 'Ferramentas · Esta máquina', sub: 'Feature Ferramentas (#280, decisão 0014), na seção Controle: o setup de desenvolvimento do Mac em quatro grupos. CLIs com a versão instalada, a mais recente e de onde veio; plataformas com quem gerencia cada uma; containers com o Colima e a VM; servidores MCP do Claude Code nos dois escopos, sem segredo nenhum. Cada item em dia, desatualizado, faltando, instalado à mão ou com falha. Em 1100 e 1440.', html: () => `<div class="fila">${bothWidths(w => frameAt(w, 'tools', toolsScreen(w)))}</div>`,
     n: N(['Sem tela parecida no CCAM. O molde é o das máquinas (C24): cabeçalho, números em cima e cards em grade.'], ['Um seletor de máquina no cabeçalho, em vez de um item na barra por máquina: Ferramentas é uma tela só, e a Workstation é a mesma tela lida de lá (C75).', 'Atualizar 5 junta o que roda sem senha; o aws fica de fora porque veio do instalador oficial (C74, 5).', 'O MCP mostra o nome das variáveis contadas, nunca o valor, e só o host de uma URL.', 'O uso de disco do Docker e as stacks ficam na tela da máquina: aqui só a saúde do runtime e o link.']) },
   { id: 'console-tools-install', cod: 'C73', nome: 'Ferramentas · instalar e atualizar', sub: 'O caminho de uma ação: o confirmar com o comando exato do catálogo (1, em 1100 e 1440), o Atualizar 5 com a lista inteira (1b), rodando com a saída ao vivo na linha do item e a fila (2), pronto (3) e falhou, com as últimas linhas e o log (4).', html: () => tlInstallScreens(),
@@ -3330,6 +3894,7 @@ function montar() {
     <li><b>Onde o grafo vive (#146, a aprovar):</b> a proposta é um detalhe aberto pelo pé do card Subagentes, no lugar dos cards, como as decisões (P11). Dentro do card não cabe; numa seção própria, empurra o resto para baixo.</li>
     <li><b>Telemetria e Dev Console no app (decisão 0008, a aprovar):</b> cada máquina se mede com o próprio núcleo; o do Mac lê o da Workstation pela porta que o túnel encaminha; o app só mostra, sem subir túnel nem abrir login (A6, A7, C24 a C27). A reconexão revê esse ponto na decisão 0012. A barra lateral ganha Dev Console e a seção Máquinas, que aparece em todas as telas.</li>
     <li><b>Reconectar a máquina remota (#244, decisão 0012):</b> com <code>reconnect</code> no machines.json, o núcleo do Mac roda o comando que você escreveu, sem shell, um por vez e com tempo limite; a tela espera o login no navegador e relê a remota ao terminar (C50, A8). Aprovado em 20/10, com a saída só no log.</li>
+    <li><b>Nuvens e a conexão da máquina (#277, #278, decisão 0013, a aprovar):</b> as contas de nuvem entram em Conexões, como conectores ao lado do GitHub (C57 a C61); o túnel vira a <code>connection</code> da máquina no machines.json, com Subir, Parar, o perfil de nuvem que ele exige e o motivo da queda em palavras simples (C62 a C65, A9, A10, P14). Os perfis de nuvem são de cada máquina: Esta máquina e a Workstation ganham o card Perfis de nuvem, e o login de lá é por código mostrado aqui (C66, C67). Perguntas em aberto: de onde vem o "até quando" da sessão SSO (variante A, só o expiresAt do cache da CLI, ou B, sem abrir o cache), Conexões ou uma seção Nuvens, um clique para entrar e subir, e Parar já na fase 1.</li>
     <li><b>Ferramentas (#280, decisão 0014):</b> CLIs, servidores MCP, plataformas e containers desta máquina e da Workstation, na seção Controle. Instalar, atualizar, iniciar e parar rodam só o que está no catálogo do núcleo, sem shell, um por vez, depois de mostrar o comando; o que pede sudo vira comando para copiar. A Workstation é só leitura até ela mesma ligar as ações (C72 a C76). Aprovado em 21/10, como está.</li>
     <li><b>Backlog:</b> Feed de atividade, Analytics completo, Workflows e o detalhe com o grafo de agentes estavam para depois da entrega. Entraram aqui a pedido do dono; o PM decide se viram itens da 0.0.1.</li></ol></section>`
   indice.innerHTML = htmlI; main.innerHTML = htmlM

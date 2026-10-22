@@ -562,9 +562,11 @@ describe('Dashboard: remote sessions (supports #176/#178): the machine label and
     });
     try {
       const minis = area.querySelectorAll('.mini');
-      // The local card is one link, stretched from its name (#61: the message action sits beside it).
-      assert.ok(minis[0]!.querySelector('a.dash-mini-link')?.getAttribute('href'));
-      assert.equal(minis[1]!.querySelector('a'), null);
+      // issue 285: the card is a div; a local one carries the "Abrir ›" link, a remote one none.
+      assert.equal(minis[0]!.querySelector('a.dash-open-link')!.getAttribute('href'), '/ui/sessions/l1');
+      assert.equal(minis[1]!.tagName, 'DIV');
+      assert.equal(minis[1]!.querySelectorAll('a').length, 0);
+      assert.equal(minis[1]!.querySelectorAll('button').length, 0, 'no open icon for a remote session');
       assert.equal(minis[1]!.getAttribute('data-machine'), WS.id);
       assert.match(texto(minis[1]!), /Workstation · 2 min$/);
       assert.doesNotMatch(texto(minis[1]!), /Abrir/);

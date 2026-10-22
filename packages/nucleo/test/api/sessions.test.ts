@@ -305,9 +305,9 @@ describe('#28 a tela Sessões', () => {
   // A janela do app abre com 1100 px (#150): sem a barra (220) e o respiro (2 × 24 + 2 de borda),
   // a tabela tem 830 px; abaixo de 900 px de janela, 610 px. Cada coluna precisa do mínimo que o texto
   // mais largo dela pede (medido no navegador), senão corta ou rola. #61 (C53): the Mensagem column
-  // takes the room of the Diretório and of the arrow up to 1240 px of window (971 px of table above
-  // it); below 900 px it keeps only the icon.
-  test('the table fits 1100 px without horizontal scroll; up to 1240 px Mensagem takes the room of Diretório and the arrow, and below 900 px it keeps only the icon', () => {
+  // takes the room of the Diretório up to 1240 px of window (971 px of table above it), with only the
+  // icon of its button beside the open icon (#285); below 900 px it leaves too.
+  test('the table fits 1100 px without horizontal scroll; up to 1240 px Mensagem takes the room of Diretório, and below 900 px it leaves', () => {
     const css = readFileSync(`${UI_FOLDER}sessions.css`, 'utf8');
     const mid = css.indexOf('@media (max-width: 1240px)');
     const corte = css.indexOf('@media (max-width: 900px)');
@@ -317,20 +317,24 @@ describe('#28 a tela Sessões', () => {
     const midWidths = { ...largas, ...larguras(css.slice(mid, corte)) };
     const estreitas = { ...midWidths, ...larguras(css.slice(corte)) };
     const classes = COLUMNS.map(([c]: [string]) => c);
-    const withoutDir = classes.filter((c: string) => c !== 'c-dir' && c !== 'c-arrow');
+    const withoutDir = classes.filter((c: string) => c !== 'c-dir');
+    const narrowColumns = withoutDir.filter((c: string) => c !== 'c-message');
     assert.deepEqual(Object.keys(largas).sort(), [...classes].sort(), 'toda coluna tem largura');
     assert.equal(classes.reduce((t: number, c: string) => t + largas[c]!, 0), 100);
-    assert.equal(withoutDir.reduce((t: number, c: string) => t + midWidths[c]!, 0), 100, 'sem o Diretório e a seta, o resto soma 100');
-    assert.equal(withoutDir.reduce((t: number, c: string) => t + estreitas[c]!, 0), 100, 'abaixo de 900 px também');
+    assert.equal(withoutDir.reduce((t: number, c: string) => t + midWidths[c]!, 0), 100, 'sem o Diretório, o resto soma 100');
+    assert.equal(narrowColumns.reduce((t: number, c: string) => t + estreitas[c]!, 0), 100, 'abaixo de 900 px, sem a Mensagem, também');
     assert.match(css, /\.table \{ table-layout: fixed; \}/);
-    assert.match(css.slice(mid, corte), /\.table \.c-dir, \.table \.dir, \.table \.c-arrow, \.table \.arrow \{ display: none; \}/);
+    assert.match(css.slice(mid, corte), /\.table \.c-dir, \.table \.dir \{ display: none; \}/);
+    assert.match(css.slice(corte), /\.table \.c-message, \.table \.msg \{ display: none; \}/);
     assert.doesNotMatch(css, /overflow-x:\s*auto/, 'a tabela não rola');
     // Mínimos em px, com o respiro das células (20 px na larga, 12 na estreita).
-    const MINIMO: Record<string, number> = { 'c-session': 180, 'c-status': 140, 'c-activity': 90, 'c-duration': 85, 'c-agents': 74, 'c-cost': 85, 'c-dir': 100, 'c-message': 145, 'c-arrow': 24 };
-    const MINIMO_ESTREITO: Record<string, number> = { ...MINIMO, 'c-session': 130, 'c-activity': 70, 'c-duration': 75, 'c-agents': 60, 'c-cost': 80, 'c-message': 36 };
+    const MINIMO: Record<string, number> = { 'c-session': 180, 'c-status': 140, 'c-activity': 90, 'c-duration': 85, 'c-agents': 74, 'c-cost': 85, 'c-dir': 100, 'c-message': 145, 'c-open': 36 };
+    // Up to 1240 px the message button is only its icon, and the cell still holds "sem processo vivo".
+    const MINIMO_MEIO: Record<string, number> = { ...MINIMO, 'c-message': 110 };
+    const MINIMO_ESTREITO: Record<string, number> = { ...MINIMO, 'c-open': 32, 'c-session': 130, 'c-activity': 70, 'c-duration': 75, 'c-agents': 60, 'c-cost': 80 };
     for (const c of classes) assert.ok((largas[c]! / 100) * 971 >= MINIMO[c]!, `${c} em 1241: ${(largas[c]! / 100) * 971} px`);
-    for (const c of withoutDir) {
-      assert.ok((midWidths[c]! / 100) * 830 >= MINIMO[c]!, `${c} em 1100: ${(midWidths[c]! / 100) * 830} px`);
+    for (const c of withoutDir) assert.ok((midWidths[c]! / 100) * 830 >= MINIMO_MEIO[c]!, `${c} em 1100: ${(midWidths[c]! / 100) * 830} px`);
+    for (const c of narrowColumns) {
       assert.ok((estreitas[c]! / 100) * 610 >= MINIMO_ESTREITO[c]!, `${c} em 880: ${(estreitas[c]! / 100) * 610} px`);
     }
   });
@@ -352,13 +356,13 @@ describe('#28 a tela Sessões', () => {
 
   // A mesma regra para a tela Workflows (#96), a aba Workflow do detalhe (#97), o Dev Console (#179)
   // e as Máquinas (#178), contra todo CSS da /ui (também os de ui/screens/), e toda classe própria delas com o prefixo da tela.
-  test('o CSS de Workflows, da aba Workflow, do Dev Console, das Máquinas (#178) e das Instruções (#183) só tem classe própria com prefixo, e nenhuma de outra tela', () => {
+  test('o CSS de Workflows, da aba Workflow, do Dev Console, das Máquinas (#178), das Instruções (#183), de Conexões e do seletor de Project (issue 241) só tem classe própria com prefixo, e nenhuma de outra tela', () => {
     const classes = (arquivo: string) => new Set([...readFileSync(`${UI_FOLDER}${arquivo}`, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/\.([a-z][a-z0-9-]*)/g)].map((m) => m[1]!));
     const SELOS = new Set(['badge', 'p', 'reason', 'soft', 'b-active', 'b-waiting', 'b-completed', 'b-error', 'b-abandoned']);
     const daMoldura = classes('shell.css');
     const todos = [...readdirSync(UI_FOLDER), ...readdirSync(`${UI_FOLDER}screens`).map((a) => `screens/${a}`)].filter((a) => a.endsWith('.css') && !['shell.css', 'brand.css'].includes(a));
     // The machine screens (issue 178): `tm-`.
-    for (const [arquivo, prefixo] of [['screens/workflows.css', 'wf-'], ['screens/session-detail-workflow.css', 'wfd-'], ['screens/dev-console.css', 'dev-'], ['screens/machine.css', 'tm-'], ['screens/agent-instructions.css', 'ins-'], ['screens/framework-install.css', 'fwi-'], ['screens/adrs.css', 'adr-']] as const) {
+    for (const [arquivo, prefixo] of [['screens/workflows.css', 'wf-'], ['screens/session-detail-workflow.css', 'wfd-'], ['screens/dev-console.css', 'dev-'], ['screens/machine.css', 'tm-'], ['screens/agent-instructions.css', 'ins-'], ['screens/framework-install.css', 'fwi-'], ['screens/adrs.css', 'adr-'], ['screens/connections.css', 'conn-'], ['screens/project-picker.css', 'pp-']] as const) {
       const minhas = [...classes(arquivo)].filter((c) => !daMoldura.has(c) && !SELOS.has(c));
       assert.deepEqual(minhas.filter((c) => !c.startsWith(prefixo) || (prefixo === 'wf-' && c.startsWith('wfd-'))), [], `${arquivo}: classe sem o prefixo ${prefixo}`);
       for (const outra of todos.filter((a) => a !== arquivo)) {

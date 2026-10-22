@@ -230,11 +230,11 @@ const isMac = () => /Mac|iPhone|iPad/.test(globalThis.navigator?.platform ?? glo
 
 /**
  * The compose box of a session. `head()` is the Detail's top (`GET /api/sessions/<id>`): title,
- * `local` for "Abrir no Claude Desktop", the permission banner and its command. `openInDesktop(local)`
- * opens the conversation in Claude Desktop (the Detail's action); `onDelivered()` re-reads the conversation.
+ * `open` for the open action, the permission banner and its command. `openControl()` draws the Detail's
+ * open action (issue 285) for a session with no live process, or `null`; `onDelivered()` re-reads the conversation.
  * Returns `{ node, refresh(), focus() }`.
  */
-export function createComposeBox(ctx, sessionId, { head = () => null, openInDesktop = null, onDelivered = () => {}, onShowConversation = () => {} } = {}) {
+export function createComposeBox(ctx, sessionId, { head = () => null, openControl = () => null, onDelivered = () => {}, onShowConversation = () => {} } = {}) {
   useMessageStyle();
   const kbd = isMac() ? '⌘↵' : 'Ctrl↵';
   const placeholder = `Escreva para a sessão… (${kbd} envia)`;
@@ -329,21 +329,6 @@ export function createComposeBox(ctx, sessionId, { head = () => null, openInDesk
     ];
   }
 
-  function openButton() {
-    const local = head()?.local ?? null;
-    const failure = el('span', { class: 'sm-open-notice', role: 'status' });
-    const b = el('button', { type: 'button', class: 'btn outline', disabled: !local || !openInDesktop, title: local ? null : 'Esta sessão não está no Claude Desktop' }, 'Abrir no Claude Desktop', icon('external'));
-    b.addEventListener('click', async () => {
-      failure.textContent = '';
-      try {
-        await openInDesktop(local);
-      } catch (e) {
-        failure.textContent = e?.message ?? 'Não deu para abrir.';
-      }
-    });
-    return [failure, b];
-  }
-
   function permissionWarning() {
     const h = head();
     if (h?.session?.banner?.type !== 'permission' || !availability?.blockedOnPerson) return null;
@@ -382,7 +367,7 @@ export function createComposeBox(ctx, sessionId, { head = () => null, openInDesk
       textarea.placeholder = 'Mandar mensagem desligado nesta sessão';
       status.replaceChildren(statusLine({ kind: 'info', icon: 'info', title: why.title, text: why.text }));
       note.hidden = true;
-      actions.replaceChildren(...(a.reason === 'no_live_process' ? openButton() : []), sendButton('Enviar', { enabled: false }));
+      actions.replaceChildren(...(a.reason === 'no_live_process' ? [openControl()].filter(Boolean) : []), sendButton('Enviar', { enabled: false }));
       // Nothing to focus: a box that turns on minutes later must not take the focus then.
       wantFocus = false;
       return;

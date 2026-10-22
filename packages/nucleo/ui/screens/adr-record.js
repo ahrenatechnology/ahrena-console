@@ -16,6 +16,7 @@ import { el, icon } from '../dom.js';
 import { loading, error, empty } from '../states.js';
 import { blobUrl, renderMarkdown } from './agent-instructions-markdown.js';
 import { FORMAT_LABEL, KIND_REASON, KINDS, STATUS_LABEL, chainList, dateBr, decisionsChangeMatters, kindOfPath, linkLabel, loadDecisionsStyle, recordHref, recordNumber, repoTabHref, segmented, statusPill } from './adrs-common.js';
+import { connectEmptyFor, connectionChanged, isGithubNotConnected } from '../github-connect.js';
 
 /** As seções estruturadas, na ordem da tela: id, título, ícone e se pode faltar. */
 export const SECTIONS = [
@@ -236,6 +237,7 @@ export async function mount(area, ctx) {
   }
 
   function draw() {
+    if (isGithubNotConnected(failure)) return root.replaceChildren(connectEmptyFor('record', ctx.navigate));
     if (failure && !data) return root.replaceChildren(error({ text: failure.message, retry: () => (root.replaceChildren(loading()), read()) }));
     if (!data) return root.replaceChildren(loading());
     ctx.title(`${recordNumber(data.number)} ${data.title}`);
@@ -246,7 +248,7 @@ export async function mount(area, ctx) {
   }
 
   ctx.onChange((changes) => {
-    if (decisionsChangeMatters(changes, key)) read();
+    if (decisionsChangeMatters(changes, key) || connectionChanged(changes)) read();
   });
   ctx.onRestart(() => read());
 

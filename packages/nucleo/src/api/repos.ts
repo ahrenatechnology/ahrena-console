@@ -49,6 +49,7 @@
 // período, e os totais pelo `issueCount`) e o REST listado em src/github/repos-source.ts. As
 // sessões vêm do próprio núcleo (repos-sessions.ts).
 
+import { githubReposTransport, type GithubAccess } from './github-access.ts';
 import type { ServerResponse } from 'node:http';
 import { GithubCache, MemoryCacheStore } from '../github/cache.ts';
 import { GithubCallQueue } from '../github/call-queue.ts';
@@ -90,7 +91,7 @@ import {
 import { send } from '../ingest/hooks/receiver.ts';
 import type { ChangeCursor } from '../changes/cursor.ts';
 import type { FleetReader } from '../mcp/fleet.ts';
-import { createFakeGithub, DEMO_GITHUB_DATA, demoGit, DEMO_EXTRA_SESSIONS } from '../simulator/fake-github.ts';
+import { createFakeGithub, DEMO_GITHUB_DATA, demoGit, DEMO_EXTRA_SESSIONS, FAKE_GITHUB_BASE } from '../simulator/fake-github.ts';
 import { chaveDoRepo, SessoesPorRepo } from './repos-sessions.ts';
 import { PERIODO_PADRAO, PERIODOS, type ComputedStat, type ListaDeRepos, type MetricasDoRepo, type Periodo, type SessoesDoRepo } from './repos-types.ts';
 
@@ -616,17 +617,21 @@ export interface OpcoesDosReposDoNucleo {
   log?: (mensagem: string) => void;
   /** A fila das chamadas ao GitHub, dividida com as instruções dos agentes. */
   queue?: GithubCallQueue;
+  /** The credential provider and transport (#241). Required outside the demo and `--no-github`; the demo takes only its token. */
+  github?: GithubAccess | null;
 }
 
-/** Monta o serviço e a rota como o núcleo usa (cli.ts): token do `gh`, cache no banco, sessões do núcleo. */
-export function criarReposDoNucleo({ demo, semGithub, cache, frota, mudancas, log, queue }: OpcoesDosReposDoNucleo): { repos: ReposDoGithub; rota: RotaDosRepos; sessions: SessoesPorRepo } {
+/** Monta o serviço e a rota como o núcleo usa (cli.ts): a credencial do provedor (#241), cache no banco, sessões do núcleo. */
+export function criarReposDoNucleo({ demo, semGithub, cache, frota, mudancas, log, queue, github, sessions }: OpcoesDosReposDoNucleo & { sessions?: SessoesPorRepo }): { repos: ReposDoGithub; rota: RotaDosRepos; sessions: SessoesPorRepo } {
   // A demo aponta para um endereço que não resolve: mesmo que o falso falhasse, nada sai para o GitHub.
-  const fonte = demo
-    ? new GithubReposSource({ token: 'demo', fetch: createFakeGithub(DEMO_GITHUB_DATA, { delayMs: 120 }).fetch, url: 'https://github-falso.invalid/graphql', api: 'https://github-falso.invalid' })
-    : semGithub
-      ? null
-      : new GithubReposSource();
-  const sessoes = new SessoesPorRepo({
+  const fonte = githubReposTransport({
+    demo,
+    noGithub: semGithub,
+    github,
+    demoFetch: () => createFakeGithub(DEMO_GITHUB_DATA, { delayMs: 120 }).fetch,
+    demoBase: FAKE_GITHUB_BASE,
+  });
+  const sessoes = sessions ?? new SessoesPorRepo({
     frota,
     aoDescobrir: () => mudancas.record({ type: 'repos', key: LIST_CHANGE_KEY, sessionId: null, accountId: null }),
     ...(demo ? { git: demoGit(), extras: DEMO_EXTRA_SESSIONS } : {}),

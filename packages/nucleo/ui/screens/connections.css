@@ -1,0 +1,124 @@
+/* Conexões (C39 to C41, C44, issue 241): loaded by ui/screens/connections.js. Every class is conn-*;
+   only brand.css variables. Below 1300 px of window (the app opens at 1100) the wireframe's 1100 layout:
+   one column in the card, the organizations in their own card and "Telas que usam o GitHub" in a row of
+   its own; from 1300 px, the 1440 layout. */
+
+.conn-card { padding: 16px 18px; display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.conn-head { display: flex; gap: 12px; align-items: center; min-width: 0; }
+.conn-logo { width: 38px; height: 38px; border-radius: 10px; background: var(--raised); border: 1px solid var(--border); display: grid; place-items: center; font-size: 18px; flex: none; }
+.conn-name { min-width: 0; flex: 1 1 auto; }
+.conn-name .conn-muted { margin: 0; font-size: 12px; }
+.conn-title { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.conn-title b { font-size: 14px; font-weight: var(--weight-semibold); }
+.conn-actions { margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.conn-body { border-top: 1px solid var(--border); padding-top: 12px; display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+
+.conn-pill { display: inline-flex; align-items: center; gap: 5px; height: 20px; padding: 0 8px; border-radius: 99px; font-size: 11px; font-weight: var(--weight-semibold); white-space: nowrap; }
+.conn-pill-waiting { background: var(--status-waiting-badge); color: var(--status-waiting-text); }
+.conn-pill-completed { background: var(--status-completed-badge); color: var(--status-completed-text); }
+.conn-pill-error { background: var(--status-error-badge); color: var(--status-error-text); }
+.conn-pill .icon, .conn-spin .icon { animation: conn-turn 1s linear infinite; }
+@keyframes conn-turn { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .conn-pill .icon, .conn-spin .icon { animation: none; } }
+
+.conn-eyebrow { display: flex; align-items: center; gap: 6px; }
+.conn-muted { color: var(--muted); margin: 0; font-size: 12.5px; line-height: 1.6; overflow-wrap: anywhere; }
+.conn-small { font-size: 11.5px; }
+.conn-code { font-size: 11.5px; overflow-wrap: anywhere; }
+.conn-ok { color: var(--status-completed-text); }
+.conn-bad { color: var(--status-error-text); }
+.conn-warn { color: var(--status-waiting-text); flex: none; }
+.conn-trunc { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.conn-link { color: var(--accent-text); white-space: nowrap; }
+.conn-link:hover { text-decoration: underline; }
+.conn-link .icon, .conn-link-btn .icon { font-size: 12px; }
+
+.conn-section { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.conn-split { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
+.conn-three { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 18px; }
+
+.conn-scopes { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.conn-scope { display: grid; grid-template-columns: 22px 92px minmax(0, 1fr); gap: 8px; align-items: baseline; font-size: 12px; }
+.conn-scope .conn-muted { font-size: 12px; line-height: 1.5; }
+.conn-steps-list { margin: 0; padding-left: 18px; font-size: 12px; line-height: 1.7; color: var(--muted); }
+.conn-steps-list b { color: var(--text); font-weight: var(--weight-semibold); }
+
+.conn-message { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.conn-message-title { font-size: 13px; font-weight: var(--weight-semibold); }
+.conn-buttons { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
+.conn-link-btn { color: var(--text); }
+:where(.conn-card, .conn-dialog, .conn-band) .btn[disabled] { opacity: .45; cursor: not-allowed; }
+.btn.conn-danger { background: var(--status-error-text); color: var(--surface); }
+
+/* C40: the code and the steps. */
+.conn-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 16px; }
+.conn-step { display: flex; gap: 12px; align-items: flex-start; min-width: 0; }
+.conn-step-n { width: 24px; height: 24px; border-radius: 99px; background: var(--raised); border: 1px solid var(--border); display: grid; place-items: center; font-size: 11.5px; font-weight: var(--weight-semibold); flex: none; }
+.conn-step-body { display: flex; flex-direction: column; gap: 8px; min-width: 0; flex: 1; }
+.conn-step-body > b { font-size: 13px; font-weight: var(--weight-semibold); }
+.conn-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; min-width: 0; }
+.conn-user-code { font-size: 30px; letter-spacing: .14em; font-weight: var(--weight-semibold); padding: 8px 16px; border-radius: 10px; background: var(--bg); border: 1px solid var(--border); user-select: all; }
+.conn-waiting { display: flex; gap: 10px; align-items: center; padding: 10px 12px; border-radius: 12px; background: var(--bg); border: 1px solid var(--border); font-size: 12.5px; margin-top: 4px; flex-wrap: wrap; }
+.conn-spin { color: var(--status-waiting-text); display: inline-flex; }
+.conn-expires { margin-left: auto; white-space: nowrap; }
+.conn-side { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.conn-inset { padding: 12px 14px; border-radius: 12px; background: var(--bg); border: 1px solid var(--border); display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.conn-pending-note { display: flex; gap: 6px; align-items: center; }
+
+/* C41: account and organizations. */
+.conn-account { display: flex; gap: 10px; align-items: center; min-width: 0; }
+.conn-avatar { width: 34px; height: 34px; border-radius: 99px; background: var(--raised); border: 1px solid var(--border); display: grid; place-items: center; color: var(--accent-text); flex: none; }
+.conn-account-name { display: flex; flex-direction: column; min-width: 0; }
+.conn-account-name b { font-size: 13.5px; font-weight: var(--weight-semibold); }
+.conn-orgs { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.conn-org { display: flex; gap: 8px; align-items: center; font-size: 12.5px; min-width: 0; }
+.conn-org-state { margin-left: auto; color: var(--status-waiting-text); font-size: 12px; text-align: right; }
+
+/* The three small cards: vault, source and the screens that use GitHub. */
+.conn-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
+.conn-grid > .conn-used { grid-column: 1 / -1; }
+.conn-small-card { padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.conn-kv { display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 4px 10px; font-size: 12px; }
+.conn-k { color: var(--muted); }
+.conn-v { min-width: 0; overflow-wrap: anywhere; }
+.conn-seg { display: flex; padding: 3px; border-radius: 9px; background: var(--bg); border: 1px solid var(--border); gap: 2px; flex-wrap: wrap; }
+.conn-seg-option { border: 0; background: transparent; color: var(--muted); font-size: 12px; padding: 5px 10px; border-radius: 7px; display: inline-flex; gap: 4px; align-items: center; }
+.conn-seg-option.on { background: var(--raised); color: var(--text); cursor: default; }
+.conn-seg-option:not(.on):not([disabled]):hover { color: var(--text); }
+.conn-seg-option[disabled]:not(.on) { opacity: .55; cursor: not-allowed; }
+.conn-seg-option:focus-visible, .conn-link:focus-visible, .conn-used-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.conn-used-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.conn-used-list li { display: flex; gap: 8px; align-items: center; font-size: 12.5px; }
+.conn-used-list li > span:last-child { margin-left: auto; white-space: nowrap; font-size: 12px; }
+.conn-used-link { display: inline-flex; gap: 8px; align-items: center; min-width: 0; }
+.conn-used-link:hover { color: var(--accent-text); }
+
+/* C44: the gh source band. */
+.conn-band { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-radius: 12px; border: 1px solid var(--status-waiting-dot); background: var(--status-waiting-badge); font-size: 13px; }
+.conn-band p { margin: 0; flex: 1; min-width: 0; line-height: 1.6; }
+.conn-band b { color: var(--status-waiting-text); font-weight: var(--weight-semibold); }
+.conn-band-ic { color: var(--status-waiting-text); font-size: 18px; display: inline-flex; }
+
+/* The Disconnect confirmation (C41, 1440). */
+.conn-overlay { position: fixed; inset: 0; z-index: 20; display: flex; align-items: center; justify-content: center; padding: 24px; background: color-mix(in srgb, var(--mono-black) 30%, transparent); }
+.conn-dialog { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; width: min(440px, 100%); padding: 18px 20px; display: flex; flex-direction: column; gap: 12px; box-shadow: 0 16px 40px color-mix(in srgb, var(--mono-black) 40%, transparent); }
+.conn-dialog-title { font-size: 15px; font-weight: var(--weight-semibold); }
+.conn-dialog-note { flex-direction: row; align-items: flex-start; font-size: 12px; line-height: 1.6; }
+.conn-dialog-buttons { justify-content: flex-end; }
+
+.conn-wide-only { display: none; }
+@media (min-width: 1300px) {
+  .conn-wide-only { display: flex; }
+  .conn-narrow-only { display: none; }
+  .conn-split { grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); }
+  .conn-split-pending { grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 20px; }
+  .conn-three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .conn-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .conn-grid > .conn-used { grid-column: auto; }
+  .conn-user-code { font-size: 34px; }
+}
+@media (max-width: 760px) {
+  .conn-three, .conn-grid { grid-template-columns: minmax(0, 1fr); }
+  .conn-head { flex-wrap: wrap; }
+}
+.conn-strong { color: var(--text); font-weight: var(--weight-semibold); }

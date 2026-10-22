@@ -5,6 +5,7 @@
 // Dates in ISO 8601 (UTC); the panel computes "how long ago" with its own clock.
 
 import type { SessionAttention } from './attention.ts';
+import type { SessionOpen } from './session-open.ts';
 import type { AccountSource, AwaitingReason, DisplayStatus } from '../model.ts';
 import type { InboxState } from '../states/inbox.ts';
 
@@ -418,4 +419,6 @@ export interface WallCard {
   cost: { usd: number | null; estimate: true };
   plan: { done: number; total: number; current: string | null } | null;
   context: { pct: number; used: number; limit: number; label: string } | null;
+  /** #285: where the card's open button goes (Claude Desktop, a terminal, the live terminal) and the command to copy. */
+  open: SessionOpen;
 }
