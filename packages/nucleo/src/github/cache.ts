@@ -15,6 +15,8 @@ export interface CachePort {
   get(key: string): Promise<CacheEntry | null>;
   set(key: string, entry: CacheEntry): Promise<void>;
   delete(key: string): Promise<void>;
+  /** Deletes every entry (#241: the GitHub identity changed). */
+  clear(): Promise<void>;
 }
 
 export class MemoryCacheStore implements CachePort {
@@ -27,6 +29,9 @@ export class MemoryCacheStore implements CachePort {
   }
   async delete(key: string): Promise<void> {
     this.entries.delete(key);
+  }
+  async clear(): Promise<void> {
+    this.entries.clear();
   }
 }
 
@@ -111,6 +116,9 @@ export interface GithubCacheOptions {
   minForcedRefreshMs?: number;
 }
 
+/** Why a read that started before `clear()` gives no data. pt-BR: it may reach the screen. */
+const IDENTITY_CHANGED = 'sem dados: a conexão com o GitHub mudou';
+
 export class GithubCache {
   readonly store: CachePort;
   private readonly now: () => number;
@@ -118,6 +126,8 @@ export class GithubCache {
   private readonly minForcedRefreshMs: number;
   private readonly inflight = new Map<string, Promise<CacheResult<unknown>>>();
   private blockedUntil = 0;
+  /** Bumped by `clear()`: a read started before it is neither stored nor served. */
+  private generation = 0;
 
   constructor({ store, now = Date.now, maxStaleMs = MAX_STALE_MS, minForcedRefreshMs = MIN_FORCED_REFRESH_MS }: GithubCacheOptions) {
     this.store = store;
@@ -151,16 +161,35 @@ export class GithubCache {
     if (hit && age < (force ? Math.min(ttlMs, this.minForcedRefreshMs) : ttlMs)) return fresh(hit);
     if (this.now() < this.blockedUntil) return this.fallback(hit, 'GitHub limitou as chamadas');
 
+    const generation = this.generation;
     let p = this.inflight.get(key) as Promise<CacheResult<T>> | undefined;
     if (!p) {
-      p = this.refresh(key, hit, fetcher).finally(() => this.inflight.delete(key));
+      const mine = this.refresh(key, hit, fetcher, generation).finally(() => {
+        if (this.inflight.get(key) === mine) this.inflight.delete(key);
+      });
+      p = mine;
       this.inflight.set(key, p);
     }
     try {
-      return await p;
+      const r = await p;
+      if (generation !== this.generation) throw new NoDataError(IDENTITY_CHANGED);
+      return r;
     } catch (err) {
+      if (generation !== this.generation) throw err instanceof NoDataError ? err : new NoDataError(IDENTITY_CHANGED, { cause: err });
       return this.fallback(hit, err instanceof Error ? err.message : String(err), err);
     }
+  }
+
+  /**
+   * #241: the GitHub identity changed (disconnect, another login, another source). Every entry goes,
+   * with the rate-limit pause and the reads in flight: nothing read with the previous credential is
+   * served afterwards. One credential is active per installation, so this is all the keys.
+   */
+  async clear(): Promise<void> {
+    this.generation++;
+    this.inflight.clear();
+    this.blockedUntil = 0;
+    await this.store.clear();
   }
 
   /** Lê o que está guardado, sem chamar o GitHub. `null` se não há ou passou de 24 h. */
@@ -186,16 +215,17 @@ export class GithubCache {
     await this.store.delete(key);
   }
 
-  private async refresh<T>(key: string, hit: CacheEntry<T> | null, fetcher: Fetcher<T>): Promise<CacheResult<T>> {
+  private async refresh<T>(key: string, hit: CacheEntry<T> | null, fetcher: Fetcher<T>, generation: number): Promise<CacheResult<T>> {
     try {
       const r = await fetcher({ etag: hit?.etag ?? null });
+      if (generation !== this.generation) throw new NoDataError(IDENTITY_CHANGED);
       if (r.notModified && !hit) throw new Error('GitHub respondeu 304 sem dado no cache');
       const value = r.notModified ? hit!.value : (r.value as T);
       const entry: CacheEntry<T> = { value, fetchedAt: this.now(), etag: r.etag ?? hit?.etag ?? null };
       await this.store.set(key, entry);
       return fresh(entry);
     } catch (err) {
-      if (err instanceof RateLimitedError) this.blockedUntil = this.now() + err.retryAfterMs;
+      if (err instanceof RateLimitedError && generation === this.generation) this.blockedUntil = this.now() + err.retryAfterMs;
       throw err;
     }
   }

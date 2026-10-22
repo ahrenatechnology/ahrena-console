@@ -14,6 +14,7 @@ A moldura do console ([#26](https://github.com/ahrenatechnology/ahrena-console/i
 | `states.js` | Os três estados de toda tela (C19): `loading`, `empty`, `error`, e a `errorBand` |
 | `dom.js` | `el()`, `icon()` e `header()` |
 | `shell.css` | O estilo da moldura. Toda cor é variável da marca |
+| `github-connect.js` | A conexão com o GitHub em toda tela (issue 241): o vazio "Conectar ao GitHub" (C42, `connectEmptyFor(tela, ctx.navigate)`), que toda tela que lê o GitHub mostra quando a rota responde 409 `{ error: "github-not-connected" }` e cujo botão abre `/ui/connections?start=1` (Conexões já pedindo o código); o pé da barra (`createGithubFooter`: "GitHub · conectar", "esperando", "<login> · conectado"); `connectionChanged(changes)`, a mudança `connections` de `/api/changes` que faz as telas relerem; e as frases em pt-BR dos códigos da conexão. As classes `ghc-*` e `cc-gh*` ficam no `shell.css` |
 | `attention.js` | O vocabulário da atenção (#245), o mesmo em toda tela: "Precisa de você" (`attention.level` `blocked`, amarelo, com o motivo em chip forte: Pede permissão, Pergunta, Plano para aprovar, Decisão pedida; a de erro mantém a pílula vermelha "Com erro") e "Ociosa" (`idle`, neutra, ponto vazado, motivo em chip leve: Sua vez, Interrompida, No prompt). As classes `attention-*` ficam no `shell.css` |
 | `brand.css` | Gerado por `packages/marca` (não edite) |
 | `dashboard.css` | O estilo do Dashboard; a tela carrega o próprio arquivo, para não disputar `shell.css` |
@@ -38,7 +39,10 @@ A moldura do console ([#26](https://github.com/ahrenatechnology/ahrena-console/i
 | Repositório (C23) | `/ui/repos/:owner/:repo` | `GET /api/repos/<dono>/<repo>?period=30d\|90d\|1y` | `screens/repo.js` |
 | Esta máquina (C24) | `/ui/machines/local` | `GET /api/telemetry?machine=local&hours=1\|12`, `GET /api/machines`, `GET /api/attention` | `screens/machine.js` |
 | Máquina remota (C25, C26) | `/ui/machines/:id` | o mesmo, com `machine=<id>`; e a telemetria daqui para a coluna "No Mac" | `screens/machine.js` |
+| Conexões (C39 a C41, C44) | `/ui/connections` (`?start=1` começa o device flow) | `GET /api/connections`; escreve `POST /api/connections/github/start`, `cancel`, `disconnect` e `source` | `screens/connections.js` e `screens/connections.css` (classes `conn-`) |
 | Dev Console (C27) | `/ui/dev-console` (`?context=<id>`, `?tab=merge-queue`) | `GET /api/dev-console` e `GET /api/dev-console?context=<id>` | `screens/dev-console.js` e `screens/dev-console.css` (classes `dev-`) |
+
+O Kanban do projeto (issue 241): sem Project escolhido (503 `no-project`), a tela mostra a lista de `GET /api/project/options` para escolher (C43), e o quadro ganha "Trocar de Project" no cabeçalho; a escolha vai por `POST /api/project/selection`. Com `AHRENA_CONSOLE_PROJECT` definida, a faixa diz isso e a escolha não se edita. O seletor fica em `screens/project-picker.js` e `screens/project-picker.css` (classes `pp-`).
 
 As máquinas (issue 178, decisão 0008): as duas rotas abrem a mesma tela, `screens/machine.js`, com o que cada cartão mostra em `screens/machine-format.js` (sem DOM; o teste importa direto) e o estilo em `screens/machine.css` (classes `tm-`). Um grupo `null` da leitura não vira cartão; o que uma remota manda com outro formato é descartado campo a campo, sem derrubar a tela. A tela só mostra: nenhum botão sobe, derruba ou encaminha túnel ("Tentar agora" só relê). Relê a cada 30 s (amostra nova não publica mudança) e na hora quando chega um `alert` desta máquina ou um `<id>:machine-unreachable`.
 
@@ -132,7 +136,7 @@ Uma tela pode ler a query (`location.search`), como o Kanban lê `?view=`. A mol
 
 - **Só 127.0.0.1.** A política de conteúdo do núcleo (`src/api/ui.ts`) bloqueia scripts, estilos, fontes e `fetch` de fora. Por isso a fonte é a do sistema quando a Poppins não está instalada.
 - **Toda leitura passa por `read()`, toda escrita por `write()`**, nunca por `fetch` direto: é o que deixa a mesma página rodar no artefato.
-- **As escritas com o `Origin` da página** são só três: o abrir a sessão onde ela roda (`POST /api/sessions/<uuid>/open`, com o caminho exato), o mover card do Kanban do projeto e o `POST /api/agent-config/skill` da Agent Config.
+- **As escritas com o `Origin` da página**: o abrir a sessão onde ela roda (`POST /api/sessions/<uuid>/open`, com o caminho exato), o mover card do Kanban do projeto, o `POST /api/agent-config/skill` da Agent Config e, da issue 241, as quatro da conexão com o GitHub (`/api/connections/github/…`) e a escolha do Project (`POST /api/project/selection`), estas só da própria `/ui`.
 - **Texto do núcleo entra por `textContent`** (`el()` já faz isso). Nada de `innerHTML` com dado.
 - **Sem cor escrita à mão:** só variáveis de `brand.css`. O teste (`test/api/ui.test.ts`) recusa hex, `rgb()` e endereço externo.
 - **Sem estilo inline** (`style="..."`): a política de conteúdo bloqueia. Use classe. Largura que vem de dado (uma barra de progresso) sai de `<progress value max>` estilizado, como no Mural.

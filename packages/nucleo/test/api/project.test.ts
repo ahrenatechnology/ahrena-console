@@ -160,7 +160,7 @@ describe('GET /api/project', () => {
       const r = await pedir(s.api, '/api/project');
       assert.equal(r.status, 200);
       const q = r.json;
-      assert.deepEqual(Object.keys(q).sort(), ['fetchedAt', 'lanes', 'milestones', 'project', 'reason', 'source', 'stale', 'total'].sort());
+      assert.deepEqual(Object.keys(q).sort(), ['envOverride', 'fetchedAt', 'lanes', 'milestones', 'project', 'reason', 'selection', 'source', 'stale', 'total'].sort());
       assert.deepEqual(q.project, { owner: 'exemplo', number: 3, title: 'Ahrena Console', url: 'https://github.com/orgs/exemplo/projects/3', field: 'Status' });
       assert.deepEqual(q.lanes.map((l: Raia) => [l.name, l.cards.map((c) => c.number)]), [
         ['Backlog', [80, 87, 89]],
@@ -228,10 +228,26 @@ describe('GET /api/project', () => {
     }
   });
 
-  const semCache = async (fetch: (u: unknown, init?: RequestInit) => Promise<Response>) => {
+  const semCache = async (fetch: (u: unknown, init?: RequestInit) => Promise<Response>, credentialSource: 'console' | 'gh' = 'gh') => {
     const { kanban } = doGithub(recordedBoard, fetch as unknown as ReturnType<typeof replayFetch>);
-    return subir({ kanban, fonte: 'github' });
+    return subir({ kanban, fonte: 'github', credentialSource: () => credentialSource });
   };
+  const noScope = async () => new Response(JSON.stringify({ errors: [{ type: 'INSUFFICIENT_SCOPES', message: "requires one of the following scopes: ['read:project']" }] }), { status: 200 });
+
+  test('#241 review 2: without the project scope under the console source, reconnect in Conexões (no gh command)', async () => {
+    const s = await semCache(noScope, 'console');
+    try {
+      const r = await pedir(s.api, '/api/project');
+      assert.equal(r.status, 401);
+      assert.equal(r.json.code, 'no-scope');
+      assert.equal(r.json.command, undefined);
+      assert.equal(r.json.scope, 'project');
+      assert.match(r.json.error, /reconecte o GitHub em Conexões/);
+      assert.doesNotMatch(r.json.error, /gh auth/);
+    } finally {
+      await s.fechar();
+    }
+  });
 
   test('GitHub fora sem cache: 502 github-down', async () => {
     const s = await semCache(async () => {
@@ -366,7 +382,7 @@ describe('POST /api/project/move', () => {
       return (respostas.move as () => Response)();
     }) as unknown as ReturnType<typeof replayFetch>;
     const { kanban } = doGithub(recordedBoard, fetch);
-    const s = await subir({ kanban, fonte: 'github' });
+    const s = await subir({ kanban, fonte: 'github', credentialSource: () => 'gh' });
     try {
       respostas.move = () => new Response(JSON.stringify({ errors: [{ type: 'INSUFFICIENT_SCOPES', message: "requires ['project']" }] }), { status: 200 });
       const r401 = await mover(s.api, { itemId: ITEM, optionId: IN_PROGRESS });
@@ -512,7 +528,8 @@ describe('GET /api/project and POST /api/project/move: the English body', () => 
     const s = await subir({ kanban, fonte: 'demo' });
     try {
       const q = (await pedir(s.api, '/api/project')).json as QuadroDoProjeto;
-      assert.deepEqual(Object.keys(q), ['project', 'lanes', 'milestones', 'total', 'fetchedAt', 'stale', 'reason', 'source']);
+      assert.deepEqual(Object.keys(q), ['project', 'lanes', 'milestones', 'total', 'fetchedAt', 'stale', 'reason', 'source', 'selection', 'envOverride']);
+      assert.deepEqual([q.selection, q.envOverride], [{ owner: 'exemplo', number: 3, field: 'Status', from: 'demo' }, null]);
       assert.deepEqual(q.project, { owner: 'exemplo', number: 3, title: 'Ahrena Console', url: 'https://github.com/orgs/exemplo/projects/3', field: 'Status' });
       assert.deepEqual(Object.keys(q.lanes[0]!), ['id', 'name', 'color', 'cards']);
       const card = q.lanes[2]!.cards[0]!;

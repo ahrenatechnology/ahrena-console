@@ -110,12 +110,12 @@ describe('adaptador GraphQL: paginação e erros', () => {
     await assert.rejects(new GithubGraphqlSource({ token: 't', fetch: notFound }).detail(k(1)), /Could not resolve/);
   });
 
-  test('token por função é pedido uma vez só', async () => {
+  test('#241/AC-3 a function token is asked on every request: the connection caches it, not the source', async () => {
     let asked = 0;
     const s = new GithubGraphqlSource({ token: async () => (asked++, 'x'), fetch: replayFetch() });
     await s.detail(k(6));
     await s.detail(k(6));
-    assert.equal(asked, 1);
+    assert.equal(asked, 2);
   });
 });
 

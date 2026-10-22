@@ -26,7 +26,7 @@
 // escrita, `traffic/*`, `dependabot/alerts` e `code-scanning/alerts`.
 
 import { backoffMs, RateLimitedError } from './cache.ts';
-import { ghCliToken, githubGraphql, retryOnGateway, type GithubGraphqlSourceOptions } from './github-source.ts';
+import { githubGraphql, resolveGithubToken, retryOnGateway, type GithubGraphqlSourceOptions, type GithubToken } from './github-source.ts';
 
 export const GITHUB_API_URL = 'https://api.github.com';
 
@@ -228,7 +228,8 @@ interface Pagina<T> {
 }
 
 export interface GithubReposSourceOptions extends Omit<GithubGraphqlSourceOptions, 'token'> {
-  token?: string | (() => Promise<string>);
+  /** The credential provider (#241), asked on every request. Without one, every call is `SemGithubError`. */
+  token?: GithubToken;
   /** Base do REST. Padrão `https://api.github.com`. */
   api?: string;
   /** Teto de cada pedido. Padrão `TEMPO_DO_PEDIDO_MS`. */
@@ -237,10 +238,9 @@ export interface GithubReposSourceOptions extends Omit<GithubGraphqlSourceOption
   sinalDoPedido?: (ms: number) => AbortSignal;
 }
 
-/** Adaptador do GitHub: token do `gh` por padrão, `fetch` injetável. */
+/** Adaptador do GitHub: a credencial vem do provedor (#241) a cada pedido, `fetch` injetável. */
 export class GithubReposSource implements FonteDosRepos {
   private readonly opts: GithubReposSourceOptions;
-  private tokenValue: string | null = null;
 
   constructor(opts: GithubReposSourceOptions = {}) {
     this.opts = opts;
@@ -377,15 +377,16 @@ export class GithubReposSource implements FonteDosRepos {
     return this.graphql<T>(operation, query, variables, true);
   }
 
+  /** The credential for one request; a failure is "no GitHub" (`SemGithubError`, kept as it is when it already is one). */
   private async token(): Promise<string> {
-    if (this.tokenValue) return this.tokenValue;
-    const t = this.opts.token ?? (() => ghCliToken());
+    const t = this.opts.token;
+    if (t === undefined) throw new SemGithubError('GitHub não conectado');
     try {
-      this.tokenValue = typeof t === 'string' ? t : await t();
+      return await resolveGithubToken(t);
     } catch (err) {
+      if (err instanceof SemGithubError) throw err;
       throw new SemGithubError(err instanceof Error ? err.message : String(err));
     }
-    return this.tokenValue;
   }
 
   private async graphql<T>(operacao: string, consulta: string, variaveis: Record<string, unknown>, tolerarNaoEncontrado = false): Promise<T> {

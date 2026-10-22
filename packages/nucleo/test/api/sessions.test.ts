@@ -345,13 +345,13 @@ describe('#28 a tela Sessões', () => {
 
   // A mesma regra para a tela Workflows (#96), a aba Workflow do detalhe (#97), o Dev Console (#179)
   // e as Máquinas (#178), contra todo CSS da /ui (também os de ui/screens/), e toda classe própria delas com o prefixo da tela.
-  test('o CSS de Workflows, da aba Workflow, do Dev Console, das Máquinas (#178) e das Instruções (#183) só tem classe própria com prefixo, e nenhuma de outra tela', () => {
+  test('o CSS de Workflows, da aba Workflow, do Dev Console, das Máquinas (#178), das Instruções (#183), de Conexões e do seletor de Project (issue 241) só tem classe própria com prefixo, e nenhuma de outra tela', () => {
     const classes = (arquivo: string) => new Set([...readFileSync(`${UI_FOLDER}${arquivo}`, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/\.([a-z][a-z0-9-]*)/g)].map((m) => m[1]!));
     const SELOS = new Set(['badge', 'p', 'reason', 'soft', 'b-active', 'b-waiting', 'b-completed', 'b-error', 'b-abandoned']);
     const daMoldura = classes('shell.css');
     const todos = [...readdirSync(UI_FOLDER), ...readdirSync(`${UI_FOLDER}screens`).map((a) => `screens/${a}`)].filter((a) => a.endsWith('.css') && !['shell.css', 'brand.css'].includes(a));
     // The machine screens (issue 178): `tm-`.
-    for (const [arquivo, prefixo] of [['screens/workflows.css', 'wf-'], ['screens/session-detail-workflow.css', 'wfd-'], ['screens/dev-console.css', 'dev-'], ['screens/machine.css', 'tm-'], ['screens/agent-instructions.css', 'ins-'], ['screens/framework-install.css', 'fwi-'], ['screens/adrs.css', 'adr-']] as const) {
+    for (const [arquivo, prefixo] of [['screens/workflows.css', 'wf-'], ['screens/session-detail-workflow.css', 'wfd-'], ['screens/dev-console.css', 'dev-'], ['screens/machine.css', 'tm-'], ['screens/agent-instructions.css', 'ins-'], ['screens/framework-install.css', 'fwi-'], ['screens/adrs.css', 'adr-'], ['screens/connections.css', 'conn-'], ['screens/project-picker.css', 'pp-']] as const) {
       const minhas = [...classes(arquivo)].filter((c) => !daMoldura.has(c) && !SELOS.has(c));
       assert.deepEqual(minhas.filter((c) => !c.startsWith(prefixo) || (prefixo === 'wf-' && c.startsWith('wfd-'))), [], `${arquivo}: classe sem o prefixo ${prefixo}`);
       for (const outra of todos.filter((a) => a !== arquivo)) {

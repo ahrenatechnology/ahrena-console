@@ -16,6 +16,7 @@ import { el, icon } from '../dom.js';
 import { loading, error, empty } from '../states.js';
 import { NO_GITHUB } from '../repos-format.js';
 import { ADR_FOLDERS, FORMAT_LABEL, HOW_TO_WRITE, KINDS, PDR_FOLDERS, ago, chainList, decisionsChangeMatters, fold, foldersText, limitedBand, loadDecisionsStyle, recordRow, segmented } from './adrs-common.js';
+import { connectEmptyFor, connectionChanged, isGithubNotConnected } from '../github-connect.js';
 
 const REREAD_MS = 5000;
 
@@ -157,6 +158,7 @@ export async function mountRepoDecisions(area, ctx, { owner, name, onCount = () 
     drawKinds();
     const ready = data && data.state === 'ready';
     if (failure && ready) band.append(limitedBand({ error: failure.message, readAt: data.readAt, retryAt: null, plural: 'decisões', onRetry: () => read() }));
+    if (isGithubNotConnected(failure)) return body.replaceChildren(connectEmptyFor('instructions', ctx.navigate));
     if (!ready) {
       if (failure) return body.replaceChildren(error({ text: failure.message, retry: () => (body.replaceChildren(loading()), read()) }));
       if (!data) return body.replaceChildren(loading());
@@ -164,7 +166,7 @@ export async function mountRepoDecisions(area, ctx, { owner, name, onCount = () 
         timer = setTimeout(read, REREAD_MS);
         return body.replaceChildren(loading({ label: 'Lendo o GitHub…' }));
       }
-      if (data.state === 'no-github') return body.replaceChildren(empty({ icon: 'github', title: NO_GITHUB.titulo, text: NO_GITHUB.texto }));
+      if (data.state === 'no-github') return body.replaceChildren(empty({ icon: 'github', ...NO_GITHUB }));
       if (data.state === 'not-found') return body.replaceChildren(empty({ icon: 'repos', title: 'Repositório não encontrado', text: `${key} não existe ou a conta do GitHub não tem acesso a ele.` }));
       return body.replaceChildren(error({ title: 'O GitHub não respondeu', text: data.error ?? 'A leitura das decisões falhou.', retry: () => read({ refresh: true }) }));
     }
@@ -177,7 +179,7 @@ export async function mountRepoDecisions(area, ctx, { owner, name, onCount = () 
   }
 
   ctx.onChange((changes) => {
-    if (decisionsChangeMatters(changes, key)) read();
+    if (decisionsChangeMatters(changes, key) || connectionChanged(changes)) read();
   });
   ctx.onRestart(() => read());
 
