@@ -109,13 +109,6 @@ export class SessionOrders {
     return o && o.sessionId === sessionId ? view(o) : null;
   }
 
-  /** The open order of the session, if any (the /ui picks it up again after a reload). */
-  open(sessionId: string): OrderView | null {
-    this.#sweep();
-    for (const o of this.#orders.values()) if (o.sessionId === sessionId && (o.state === 'queued' || o.state === 'running')) return view(o);
-    return null;
-  }
-
   #sweep(): void {
     const now = this.#now();
     for (const [id, o] of this.#orders) {

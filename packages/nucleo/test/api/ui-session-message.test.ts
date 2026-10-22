@@ -494,6 +494,12 @@ describe('#61/AC-1 C53: "Mandar mensagem" on Sessões and on the Dashboard', () 
 
 describe('#61 mod part: the order buttons', () => {
   const click = (b: ElementoFalso | null) => b!.dispatchEvent({ type: 'click' });
+  /** The mod's fetch: waits for the order to reach the queue, then takes it. */
+  async function claimed() {
+    let got: ReturnType<SessionOrders['claim']> = [];
+    await until(() => (got = orderQueue.claim(DETAIL_SESSION)).length > 0, 'the order in the queue');
+    return got;
+  }
 
   test('a click queues the order, the mod fetches and confirms it, and the box says how it ended', async () => {
     plans.set(DETAIL_SESSION, { processes: 1, remoteControl: true });
@@ -505,8 +511,7 @@ describe('#61 mod part: the order buttons', () => {
     assert.deepEqual(JSON.parse(sent.body!), { kind: 'compact' });
 
     // The mod, inside the session: fetches with no Origin, runs it, confirms.
-    await until(() => orderQueue.open(DETAIL_SESSION) !== null, 'the order in the queue');
-    const [o] = orderQueue.claim(DETAIL_SESSION);
+    const [o] = await claimed();
     assert.equal(o!.kind, 'compact');
     await until(() => /Rodando \/compact/.test(texto(box)), 'running');
     orderQueue.done(DETAIL_SESSION, o!.orderId, { ok: true });
@@ -518,8 +523,7 @@ describe('#61 mod part: the order buttons', () => {
     plans.set(DETAIL_SESSION, { processes: 1, remoteControl: false });
     const box = await openBox(DETAIL_SESSION, null);
     click(buttonNamed(box, /Remote control/));
-    await until(() => orderQueue.open(DETAIL_SESSION) !== null, 'the order');
-    const [o] = orderQueue.claim(DETAIL_SESSION);
+    const [o] = await claimed();
     orderQueue.done(DETAIL_SESSION, o!.orderId, { ok: false, reason: 'a organização desligou o Remote Control' });
     await until(() => /Não ligou: a organização desligou o Remote Control/.test(texto(box)), 'the reason');
   });

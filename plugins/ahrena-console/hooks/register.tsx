@@ -289,18 +289,30 @@ function startPolling($: Engine) {
 // As ordens do console (#61): um relógio próprio, de toda sessão com o mod, e não só com o painel aberto.
 let ordersTimer: { cancel: () => void } | undefined
 let ordersBusy = false
+/** Ticks to skip while the core is unreachable: 1, 2, 4… up to 15 (a minute), and 0 again at the first answer. */
+let ordersSkip = 0
+let ordersBackoff = 0
 
 function startOrders($: Engine) {
   if (ordersTimer) return
   ordersTimer = $.clock.every(ORDERS_EVERY_MS, () => {
     if (ordersBusy) return
+    if (ordersSkip > 0) {
+      ordersSkip--
+      return
+    }
     ordersBusy = true
     // With the panel open, its own tick keeps `core` right (one lookup per tick); without it, this one does.
     void (timer ? Promise.resolve(core) : resolveCore($))
       .then((c) => pollOrders($, c))
+      .then(() => {
+        ordersBackoff = 0
+      })
       .catch(() => {
-        // sem núcleo, o próximo tick tenta de novo (e procura o núcleo outra vez)
+        // Sem núcleo: procura de novo, mas cada vez mais espaçado, para não varrer o registro a cada 4 s em toda sessão.
         resolved = false
+        ordersBackoff = Math.min(ordersBackoff * 2 || 1, 15)
+        ordersSkip = ordersBackoff
       })
       .finally(() => {
         ordersBusy = false
@@ -311,6 +323,7 @@ function startOrders($: Engine) {
 function stopOrders() {
   ordersTimer?.cancel()
   ordersTimer = undefined
+  ordersSkip = ordersBackoff = 0
 }
 
 function stopPolling($: Engine) {

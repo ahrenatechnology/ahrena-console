@@ -10,8 +10,8 @@
 //
 // Creating is a same-origin exception of decision 0003, as the messages' (`ordersWriteFromSameOrigin`):
 // `POST`, the exact raw path, `Origin` exactly `http://<Host>` with our Host, `application/json`. The
-// two the mod makes carry no `Origin` (a loopback client, like every hook), and a request WITH one is
-// refused there: the page must not fetch or confirm an order. The hub never creates one.
+// two the mod makes carry no `Origin` and no `Sec-Fetch-Site` (a loopback client, not a browser), and a request
+// WITH either is refused there: a page, even one that sends no `Origin` (a GET), must not fetch or confirm an order. The hub never creates one.
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { send } from '../ingest/hooks/receiver.ts';
@@ -104,7 +104,10 @@ export function createOrdersRoute({ orders, messaging, sessions }: OrdersRouteOp
     const sessionId = safeDecode(m[1]!);
     const orderId = m[2] === undefined ? null : safeDecode(m[2]);
     const isDone = m[3] === 'done';
-    const fromPage = typeof req.headers.origin === 'string';
+    // A browser always sends `Sec-Fetch-Site` and, on a write, `Origin`; the mod is not a browser and sends neither.
+    // A GET has no `Origin` even from a page (same-origin or an `<img>`), so the header is what tells them apart.
+    const fromPage = typeof req.headers.origin === 'string' || typeof req.headers['sec-fetch-site'] === 'string';
+    const createdByUi = typeof req.headers.origin === 'string';
     if (sessionId === null || !ID.test(sessionId)) {
       req.resume();
       return send(res, 400, { error: 'id de sessão inválido' });
@@ -116,7 +119,7 @@ export function createOrdersRoute({ orders, messaging, sessions }: OrdersRouteOp
 
     // POST …/commands: the /ui creates.
     if (orderId === null && req.method === 'POST') {
-      if (!fromPage) {
+      if (!createdByUi) {
         req.resume();
         return send(res, 403, { error: 'Ordens só saem da tela do console.', reason: 'ui_only' });
       }

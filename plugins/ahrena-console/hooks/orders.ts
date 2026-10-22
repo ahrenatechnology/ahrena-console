@@ -27,7 +27,7 @@ const COMMANDS: Record<Kind, readonly string[]> = {
 const MAX_REASON = 160
 
 /** O comando respondeu com um texto que diz que não ligou (plano, organização): o motivo é o texto. */
-const REFUSAL = /(not available|isn't available|is not enabled|not enabled|disabled|requires|only available|not allowed|não está disponível|desligad)/i
+const REFUSAL = /(not available|isn't available|not enabled|not allowed|is disabled|disabled by|não está disponível)/i
 
 const parseOrders = (text: string | undefined): Order[] => {
   try {

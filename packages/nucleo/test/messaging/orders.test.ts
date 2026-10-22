@@ -105,6 +105,10 @@ describe('the orders routes', () => {
 
       assert.equal((await call(b.url, 'POST', base, ui, JSON.stringify({ kind: 'clear' }))).status, 409, 'one at a time');
       assert.equal((await call(b.url, 'GET', base, { origin: `http://${b.host}` })).status, 403, 'the page does not fetch');
+      // A browser sends no Origin on a GET, but always Sec-Fetch-Site: a page cannot claim the order either.
+      for (const site of ['same-origin', 'cross-site', 'same-site', 'none']) {
+        assert.equal((await call(b.url, 'GET', base, { 'sec-fetch-site': site })).status, 403, `GET with Sec-Fetch-Site: ${site}`);
+      }
 
       const got = await call(b.url, 'GET', base);
       assert.deepEqual(got.json, { orders: [{ orderId: id, kind: 'compact' }] });
@@ -113,6 +117,7 @@ describe('the orders routes', () => {
 
       const json = { 'content-type': 'application/json' };
       assert.equal((await call(b.url, 'POST', `${base}/${id}/done`, ui, JSON.stringify({ ok: true }))).status, 403, 'the page does not confirm');
+      assert.equal((await call(b.url, 'POST', `${base}/${id}/done`, { ...json, 'sec-fetch-site': 'cross-site' }, JSON.stringify({ ok: true }))).status, 403, 'nor a page with no Origin');
       assert.equal((await call(b.url, 'POST', `${base}/${id}/done`, json, JSON.stringify({ ok: 'yes' }))).status, 400);
       assert.equal((await call(b.url, 'POST', `${base}/${id}/done`, json, JSON.stringify({ ok: false, reason: 'o plano não permite' }))).status, 200);
       const end = await call(b.url, 'GET', `${base}/${id}`, { origin: `http://${b.host}` });

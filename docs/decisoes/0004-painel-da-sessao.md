@@ -45,7 +45,7 @@ plano 3/5 · "Rodar testes"
 
 ## Consumo (4.6)
 
-- O polling começa quando o painel abre e para quando ele fecha. Sessão sem painel aberto não consulta nada.
+- O polling começa quando o painel abre e para quando ele fecha. Sessão sem painel aberto não consulta nada. **Emenda (#61, mod 0.0.36, proposta; a confirmar pelo Fernando):** uma exceção, as ordens do console (`/compact`, `/clear`, Remote Control). Sem painel aberto, o mod faz um `GET /api/sessions/<id>/commands` a cada 4 s, só da própria sessão e sem corpo na resposta quando não há ordem; com o núcleo fora do ar, o intervalo cresce até 1 minuto. Sem isso a ordem nunca chegaria a uma sessão sem painel. A meta de carga abaixo vale com esse GET incluído e precisa ser remedida com 20 sessões.
 - O painel pede só a própria sessão e a contagem de quem precisa de você, nunca a frota.
 - O núcleo responde do banco, alimentado pelos hooks (1.4) e pelo seguidor de transcripts (1.3), sem varrer `~/.claude/projects` a cada pedido.
 - Meta: com 20 sessões abertas e um painel aberto, o núcleo abaixo de 1% de um núcleo de CPU, medido por um script de carga versionado.
