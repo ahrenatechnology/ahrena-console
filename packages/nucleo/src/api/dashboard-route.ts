@@ -6,10 +6,10 @@
 // - Live sessions and their state: the MCP's `FleetReader`, the same as the tray's.
 // - Events: each session is read once and, after that, only from the cursor on when its `updatedAt`
 //   changes. Every `releituraMs` the session is re-read whole, to catch an event that arrived late.
-// - Cost: the report of the last 30 days and of the live sessions, at most every `custoMs`. The cost slices
-//   of each session are kept while its `updatedAt` holds (and for `releituraMs`), so a rebuild reads the
-//   events of the sessions that changed, not of all of them (#311).
-// - The scan yields to the event loop every `FATIA_MS`, so the núcleo keeps answering (`/api/telemetry`) while it builds.
+// - Cost: the report of the last 30 days and of the live sessions, at most every `custoMs`. The usage samples
+//   come with the events already read (one per message, only for the sessions that can be costed), and the
+//   token-usage buckets are read on every refresh, so the cost never reads the events a second time (#311).
+// - The scan yields to the event loop every `SLICE_MS`, so the núcleo keeps answering (`/api/telemetry`) while it builds.
 // - The whole response holds for `cacheMs`: a burst of changes does not redo the math on every request.
 //
 // #245: the session numbers split `blocked` ("Precisam de você", the errors included) from `idle`
@@ -21,7 +21,7 @@
 // card's last two messages, as C1 asks. Never the agent's answer.
 
 import { costReport, costSlicesOf, dayOf, usageSampleOf, type CostReport, type CostSlice } from '../cost/aggregation.ts';
-import type { UsageSample } from '../ingest/history/usage.ts';
+import { isBetterSample, messageKeyOf, type UsageSample } from '../ingest/history/usage.ts';
 import { currentPrices } from '../cost/table.ts';
 import type { InboxState } from '../states/inbox.ts';
 import { eventAttention, type SessionAttention } from './attention.ts';
@@ -110,7 +110,7 @@ export interface OpcoesDoDashboard {
   custoMs?: number;
   releituraMs?: number;
   /** The longest a build holds the event loop before yielding (default 20 ms). */
-  fatiaMs?: number;
+  sliceMs?: number;
   /** Quantas linhas de atividade. Padrão 8, como no C1. */
   linhas?: number;
 }
@@ -125,7 +125,7 @@ const MAX_ATIVIDADE_POR_SESSAO = 8;
 const MAX_SUBAGENTES = 20;
 const SESSOES_NA_ATIVIDADE = 24;
 /** The longest the build holds the event loop before giving it back. */
-const FATIA_MS = 20;
+const SLICE_MS = 20;
 
 interface Leitura {
   updatedAt: string;
@@ -141,11 +141,13 @@ interface Leitura {
   ultimaFerramenta: { nome: string | null; resumo: string | null } | null;
   atividade: { texto: string; status: StatusDoBadge; attention: SessionAttention | null; em: string }[];
   /** The usage the events carry, for the cost slices: read with the events, not in a second pass (#311). */
-  amostras: UsageSample[];
-  quando: Map<string, string>;
+  usageSamples: Map<string, UsageSample>;
+  eventTimes: Map<string, string>;
+  /** Whether the usage is being collected: only for the sessions the cost report can reach. */
+  costed: boolean;
 }
 
-const novaLeitura = (updatedAt: string, agora: number): Leitura => ({
+const novaLeitura = (updatedAt: string, agora: number, costed: boolean): Leitura => ({
   updatedAt,
   cursor: null,
   lidoEm: agora,
@@ -157,8 +159,9 @@ const novaLeitura = (updatedAt: string, agora: number): Leitura => ({
   ultimoPrompt: null,
   ultimaFerramenta: null,
   atividade: [],
-  amostras: [],
-  quando: new Map(),
+  usageSamples: new Map(),
+  eventTimes: new Map(),
+  costed,
 });
 
 export class MontadorDoDashboard {
@@ -168,22 +171,21 @@ export class MontadorDoDashboard {
   private readonly custoMs: number;
   private readonly releituraMs: number;
   private readonly linhas: number;
-  private readonly fatiaMs: number;
+  private readonly sliceMs: number;
   private readonly leituras = new Map<string, Leitura>();
   private resposta: { em: number; corpo: RespostaDoDashboard } | null = null;
   private rodando: Promise<RespostaDoDashboard> | null = null;
   private custo: { em: number; chave: string; mes: CostReport; vivas: CostReport } | null = null;
-  private readonly fatias = new Map<string, { updatedAt: string; lidoEm: number; chave: string; fatias: CostSlice[] }>();
-  private fimDaFatia = 0;
+  private sliceDeadline = 0;
 
-  constructor({ frota, cacheMs = 2_000, custoMs = 30_000, releituraMs = 10 * 60_000, linhas = 8, fatiaMs = FATIA_MS }: OpcoesDoDashboard) {
+  constructor({ frota, cacheMs = 2_000, custoMs = 30_000, releituraMs = 10 * 60_000, linhas = 8, sliceMs = SLICE_MS }: OpcoesDoDashboard) {
     this.frota = frota;
     this.storage = frota.storage;
     this.cacheMs = cacheMs;
     this.custoMs = custoMs;
     this.releituraMs = releituraMs;
     this.linhas = linhas;
-    this.fatiaMs = fatiaMs;
+    this.sliceMs = sliceMs;
   }
 
   async montar(): Promise<RespostaDoDashboard> {
@@ -204,12 +206,14 @@ export class MontadorDoDashboard {
     const fuso = this.frota.timeZone;
     const hoje = this.frota.today();
     const vivas = await this.frota.live();
-    this.fimDaFatia = performance.now() + this.fatiaMs;
+    this.sliceDeadline = performance.now() + this.sliceMs;
+    const desde = this.inicioDoCusto(hoje);
+    const idsVivas = new Set(vivas.map((v) => v.session.id));
 
     // Todas as sessões, mais recentes primeiro: os eventos de cada uma e a atividade das últimas.
     let totalDeSessoes = 0;
     const recentes: { id: string; projeto: string | null; status: StatusDoBadge }[] = [];
-    const sessoesPorDia: { id: string; updatedAt: string }[] = [];
+    const sessionsByRecency: { id: string; updatedAt: string }[] = [];
     const vistas = new Set<string>();
     let cursor: string | null = null;
     do {
@@ -217,15 +221,14 @@ export class MontadorDoDashboard {
       for (const s of page.items) {
         totalDeSessoes++;
         vistas.add(s.id);
-        sessoesPorDia.push({ id: s.id, updatedAt: s.updatedAt });
-        await this.ler(s.id, s.updatedAt, agora);
-        await this.ceder();
+        sessionsByRecency.push({ id: s.id, updatedAt: s.updatedAt });
+        await this.ler(s.id, s.updatedAt, agora, idsVivas.has(s.id) || dayOf(s.updatedAt, fuso) >= desde);
+        await this.yieldLoop();
         if (recentes.length < SESSOES_NA_ATIVIDADE) recentes.push({ id: s.id, projeto: projectOf(s), status: s.status === 'completed' ? 'completed' : s.status === 'abandoned' ? 'abandoned' : 'active' });
       }
       cursor = page.nextCursor;
     } while (cursor);
     for (const id of this.leituras.keys()) if (!vistas.has(id)) this.leituras.delete(id);
-    for (const id of this.fatias.keys()) if (!vistas.has(id)) this.fatias.delete(id);
 
     const inicioDoDia = inicioDoDiaEm(hoje, agora, fuso);
     const eventos = { today: 0, lastHour: 0, total: 0 };
@@ -237,7 +240,7 @@ export class MontadorDoDashboard {
       }
     }
 
-    const { mes, vivas: custoDasVivas } = await this.custos(sessoesPorDia, vivas.map((v) => ({ id: v.session.id, updatedAt: v.session.updatedAt })), hoje);
+    const { mes, vivas: custoDasVivas } = await this.custos(sessionsByRecency, desde, vivas.map((v) => ({ id: v.session.id, updatedAt: v.session.updatedAt })), hoje);
     const custoPorSessao = new Map(custoDasVivas.bySession.map((l) => [l.key, l.costUsd]));
 
     const sessoes = { total: totalDeSessoes, active: 0, waiting: 0, withError: 0, blocked: 0, idle: 0 };
@@ -334,15 +337,21 @@ export class MontadorDoDashboard {
   }
 
   /** Lê os eventos novos da sessão, se ela mudou desde a última leitura. */
-  private async ler(id: string, updatedAt: string, agora: number): Promise<void> {
+  private async ler(id: string, updatedAt: string, agora: number, costed: boolean): Promise<void> {
     let l = this.leituras.get(id);
-    if (l && l.updatedAt === updatedAt) return;
-    if (!l || agora - l.lidoEm >= this.releituraMs) {
+    if (l && l.updatedAt === updatedAt && (l.costed || !costed)) return;
+    // A session that enters the cost window was read without its usage: read it whole.
+    if (!l || agora - l.lidoEm >= this.releituraMs || (costed && !l.costed)) {
       // The first read of every session happens together; spread the whole re-reads so they do not all fall due at once.
-      const defasagem = l ? 0 : Math.floor((hashDe(id) % 1000) / 1000 * (this.releituraMs / 2));
-      l = novaLeitura(updatedAt, agora - defasagem);
+      const stagger = l ? 0 : Math.floor((hashOf(id) % 1000) / 1000 * (this.releituraMs / 2));
+      l = novaLeitura(updatedAt, agora - stagger, costed);
     }
     l.updatedAt = updatedAt;
+    if (!costed) {
+      l.costed = false;
+      l.usageSamples.clear();
+      l.eventTimes.clear();
+    }
     let cursor = l.cursor;
     for (;;) {
       let page;
@@ -351,7 +360,7 @@ export class MontadorDoDashboard {
       } catch (err) {
         // Cursor que o adaptador não reconhece: relê do início.
         if (!(err instanceof RangeError) || cursor === null) throw err;
-        l = novaLeitura(updatedAt, agora);
+        l = novaLeitura(updatedAt, agora, costed);
         cursor = null;
         continue;
       }
@@ -363,52 +372,48 @@ export class MontadorDoDashboard {
     this.leituras.set(id, l);
   }
 
-  private async custos(todas: { id: string; updatedAt: string }[], vivas: { id: string; updatedAt: string }[], hoje: string): Promise<{ mes: CostReport; vivas: CostReport }> {
+  private inicioDoCusto(hoje: string): string {
+    return dayOf(new Date(Date.parse(`${hoje}T12:00:00Z`) - (DIAS_DO_CUSTO - 1) * 24 * HORA).toISOString(), 'UTC');
+  }
+
+  private async custos(todas: { id: string; updatedAt: string }[], desde: string, vivas: { id: string }[], hoje: string): Promise<{ mes: CostReport; vivas: CostReport }> {
     const chave = `${hoje}|${vivas.map((v) => v.id).sort().join(',')}`;
     const c = this.custo;
     if (c && c.chave === chave && this.frota.now() - c.em < this.custoMs) return c;
     const fusoHorario = this.frota.timeZone;
-    const desde = dayOf(new Date(Date.parse(`${hoje}T12:00:00Z`) - (DIAS_DO_CUSTO - 1) * 24 * HORA).toISOString(), 'UTC');
-    const precos = await currentPrices(this.storage);
-    const precosChave = JSON.stringify(precos);
+    const prices = await currentPrices(this.storage);
     // Most recent first: a session with no activity since `desde` has no slice in the period.
-    const doMes: string[] = [];
+    const inMonth: string[] = [];
     for (const s of todas) {
       if (dayOf(s.updatedAt, fusoHorario) < desde) break;
-      doMes.push(s.id);
+      inMonth.push(s.id);
     }
-    const atualizadas = new Map(todas.map((s) => [s.id, s.updatedAt]));
-    for (const v of vivas) atualizadas.set(v.id, v.updatedAt);
-    const fatiasDe = async (id: string): Promise<CostSlice[]> => {
-      const agora = this.frota.now();
-      const updatedAt = atualizadas.get(id) ?? '';
-      const f = this.fatias.get(id);
-      if (f && f.updatedAt === updatedAt && f.chave === precosChave && agora - f.lidoEm < this.releituraMs) return f.fatias;
+    // The buckets are read every time (the importer writes them apart from the events); only the events are kept.
+    const slicesOf = async (id: string): Promise<CostSlice[]> => {
       const l = this.leituras.get(id);
-      const fatias = await costSlicesOf(this.storage, id, l?.amostras ?? [], l?.quando ?? new Map(), precos, fusoHorario);
-      this.fatias.set(id, { updatedAt, lidoEm: agora, chave: precosChave, fatias });
-      await this.ceder();
-      return fatias;
+      const slices = await costSlicesOf(this.storage, id, l ? [...l.usageSamples.values()] : [], l?.eventTimes ?? new Map(), prices, fusoHorario);
+      await this.yieldLoop();
+      return slices;
     };
-    const mesFatias: CostSlice[] = [];
-    for (const id of doMes) {
-      for (const p of await fatiasDe(id)) if (p.day >= desde && p.day <= hoje) mesFatias.push(p);
+    const monthSlices: CostSlice[] = [];
+    for (const id of inMonth) {
+      for (const p of await slicesOf(id)) if (p.day >= desde && p.day <= hoje) monthSlices.push(p);
     }
-    const vivasFatias: CostSlice[] = [];
-    for (const v of vivas) vivasFatias.push(...(await fatiasDe(v.id)));
-    this.custo = { em: this.frota.now(), chave, mes: costReport(mesFatias, fusoHorario), vivas: costReport(vivasFatias, fusoHorario) };
+    const liveSlices: CostSlice[] = [];
+    for (const v of vivas) liveSlices.push(...(await slicesOf(v.id)));
+    this.custo = { em: this.frota.now(), chave, mes: costReport(monthSlices, fusoHorario), vivas: costReport(liveSlices, fusoHorario) };
     return this.custo;
   }
 
-  /** Gives the event loop back when the build has held it for `FATIA_MS`. */
-  private async ceder(): Promise<void> {
-    if (performance.now() < this.fimDaFatia) return;
+  /** Gives the event loop back when the build has held it for `SLICE_MS`. */
+  private async yieldLoop(): Promise<void> {
+    if (performance.now() < this.sliceDeadline) return;
     await new Promise<void>((r) => setImmediate(r));
-    this.fimDaFatia = performance.now() + this.fatiaMs;
+    this.sliceDeadline = performance.now() + this.sliceMs;
   }
 }
 
-function hashDe(texto: string): number {
+function hashOf(texto: string): number {
   let h = 0;
   for (let i = 0; i < texto.length; i++) h = (h * 31 + texto.charCodeAt(i)) >>> 0;
   return h;
@@ -423,10 +428,16 @@ function cursorDe(ev: SessionEvent): string {
 
 function aplicar(l: Leitura, e: SessionEvent, agora: number): void {
   l.total++;
-  const amostra = usageSampleOf(e);
-  if (amostra) {
-    l.amostras.push(amostra);
-    l.quando.set(e.id, e.createdAt);
+  const sample = l.costed ? usageSampleOf(e) : null;
+  if (sample) {
+    // One sample per message, as `dedupeByMessage` keeps it.
+    const key = messageKeyOf(sample);
+    const prev = l.usageSamples.get(key);
+    if (isBetterSample(sample, prev)) {
+      if (prev) l.eventTimes.delete(prev.eventId);
+      l.usageSamples.set(key, sample);
+      l.eventTimes.set(e.id, e.createdAt);
+    }
   }
   const t = Date.parse(e.createdAt);
   if (Number.isFinite(t) && t > agora - JANELA_RECENTE) l.recentes.push(t);

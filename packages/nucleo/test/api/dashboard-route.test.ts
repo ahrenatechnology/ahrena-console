@@ -6,7 +6,8 @@ import { openSqliteStorage, type SqliteStorage } from '../../src/adapters/sqlite
 import { Accounts, startLocalApi, MontadorDoDashboard, MontadorDoPainel, montarDashboard, type LocalApi } from '../../src/api/index.ts';
 import { FleetReader } from '../../src/mcp/index.ts';
 import { seedPanelScenario, PANEL_SESSION } from '../../src/simulator/panel.ts';
-import { at, event, session } from '../fixtures.ts';
+import { aggregateCost } from '../../src/cost/aggregation.ts';
+import { at, event, session, usage } from '../fixtures.ts';
 import { NOW, seed } from '../mcp/helpers.ts';
 
 let storage: SqliteStorage;
@@ -151,11 +152,33 @@ describe('MontadorDoDashboard at scale (#311)', () => {
     await storage.putSession({ ...s, updatedAt: at(2) });
     agora = Date.parse(at(2));
     const incremental = await m.montar();
-    const frio = await new MontadorDoDashboard({ frota: frotaEm(() => agora), cacheMs: 0, custoMs: 0 }).montar();
-    assert.deepEqual(incremental, frio);
+    const cold = await new MontadorDoDashboard({ frota: frotaEm(() => agora), cacheMs: 0, custoMs: 0 }).montar();
+    assert.deepEqual(incremental, cold);
     assert.notEqual(incremental.numbers.cost.usd, antes.numbers.cost.usd);
     assert.deepEqual(Object.keys(incremental), ['generatedAt', 'day', 'timeZone', 'numbers', 'agents', 'activity']);
     assert.deepEqual(Object.keys(incremental.numbers), ['sessions', 'agents', 'subagents', 'events', 'cost']);
+  });
+
+  test('a token-usage bucket written without touching the session shows in the next cost refresh', async () => {
+    const id = 'bucket-only';
+    await storage.putSession(session({ id, status: 'completed', startedAt: at(-60), updatedAt: at(-30) }));
+    await storage.appendEvent(withUsage('b-u', id, 'b-m', -20));
+    const m = new MontadorDoDashboard({ frota: frotaEm(() => NOW), cacheMs: 0, custoMs: 0 });
+    const antes = await m.montar();
+    await storage.putTokenUsage(usage({ sessionId: id, tokens: { input: 5_000_000, output: 500, cacheRead: 0, cacheWrite5m: 0, cacheWrite1h: 0 }, updatedAt: at(-10) }));
+    const depois = await m.montar();
+    assert.ok((depois.numbers.cost.usd ?? 0) > (antes.numbers.cost.usd ?? 0));
+    assert.deepEqual(depois, await new MontadorDoDashboard({ frota: frotaEm(() => NOW), cacheMs: 0, custoMs: 0 }).montar());
+  });
+
+  test('the cost of sessions with several pages of events is the one aggregateCost gives', async () => {
+    for (const [id, n] of [['big-a', 620], ['big-b', 40]] as const) {
+      await storage.putSession(session({ id, status: 'completed', startedAt: at(-90), updatedAt: at(-5) }));
+      for (let i = 0; i < n; i++) await storage.appendEvent(withUsage(`${id}-u${i}`, id, `${id}-m${i % 300}`, -80 + (i % 70)));
+    }
+    const d = await new MontadorDoDashboard({ frota: frotaEm(() => NOW) }).montar();
+    const direto = await aggregateCost(storage, { since: '2026-10-04', until: '2026-11-02', timeZone: 'UTC' });
+    assert.equal(d.numbers.cost.usd, Math.round((direto.total.costUsd ?? 0) * 100) / 100);
   });
 
   test('a build over many sessions gives the event loop back', async () => {
@@ -164,17 +187,17 @@ describe('MontadorDoDashboard at scale (#311)', () => {
       await storage.putSession(session({ id, status: 'completed', startedAt: at(-60), updatedAt: at(-30 + (i % 20)) }));
       await storage.appendEvent(withUsage(`${id}-u`, id, `${id}-m`, -20));
     }
-    let voltas = 0;
-    let rodando = true;
-    const marca = (): void => {
-      voltas++;
-      if (rodando) setImmediate(marca);
+    let turns = 0;
+    let running = true;
+    const tick = (): void => {
+      turns++;
+      if (running) setImmediate(tick);
     };
-    setImmediate(marca);
-    const d = await new MontadorDoDashboard({ frota: frotaEm(() => NOW), fatiaMs: 0 }).montar();
-    rodando = false;
+    setImmediate(tick);
+    const d = await new MontadorDoDashboard({ frota: frotaEm(() => NOW), sliceMs: 0 }).montar();
+    running = false;
     assert.equal(d.numbers.sessions.total, 60);
-    assert.ok(voltas >= 60, `the event loop turned only ${voltas} times during the build`);
+    assert.ok(turns >= 60, `the event loop turned only ${turns} times during the build`);
   });
 });
 
