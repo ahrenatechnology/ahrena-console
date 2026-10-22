@@ -12,6 +12,10 @@
 // detector: a new alert, or a machine going down (its `machine-unreachable` alert), notifies once,
 // on the transition, without sound; the first read and a rediscovery of the core only record.
 //
+// The AWS SSO sessions (#277, decision 0013 section 7, A10) have a detector of their own too: a session
+// entering `expiring` ("Sessão da AWS expira em 15 min") or `expired` ("Sessão da AWS expirada")
+// notifies once per session and per token end, without sound, with "Entrar" and "Abrir".
+//
 // The silence belongs to the app, not to the core: a small JSON in the app's data folder, with the
 // menu's main switch ("Notificações") and the sessions silenced by the notification's "Silenciar".
 
@@ -21,6 +25,7 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
+use crate::clouds;
 use crate::http;
 use crate::machines;
 use crate::menu::{Attention, AttentionItem};
@@ -45,6 +50,8 @@ pub struct Notice {
     pub origin: Origin,
     /// The machine of a machine notice, for "Reconectar" (#244); `None` for a session.
     pub machine: Option<String>,
+    /// The SSO session of a cloud notice, for "Entrar" (#277); `None` otherwise.
+    pub cloud_session: Option<String>,
 }
 
 /// What a notice is about: it decides the actions the notification offers.
@@ -59,6 +66,11 @@ pub enum Origin {
     Machine,
     /// "<label> sem conexão" of a machine with a reconnect command (#244, A8): "Reconectar" and "Abrir".
     MachineReconnect,
+    /// An AWS session expiring or expired (#277, A10) whose name goes on the command line:
+    /// "Entrar" and "Abrir".
+    CloudLogin,
+    /// The same, for a session the core cannot log in (its name, or no CLI): only "Abrir".
+    Cloud,
 }
 
 /// An action button of a notification.
@@ -72,6 +84,8 @@ pub enum Action {
     Silence,
     /// "Reconectar": `POST /api/machines/<id>/reconnect` (#244).
     Reconnect,
+    /// "Entrar": `POST /api/connectors/aws/sessions/<name>/login` (#277).
+    CloudLogin,
 }
 
 impl Origin {
@@ -82,6 +96,8 @@ impl Origin {
             Origin::RemoteSession => &[Action::Open, Action::Silence],
             Origin::Machine => &[Action::Open],
             Origin::MachineReconnect => &[Action::Reconnect, Action::Open],
+            Origin::CloudLogin => &[Action::CloudLogin, Action::Open],
+            Origin::Cloud => &[Action::Open],
         }
     }
 }
@@ -97,6 +113,7 @@ impl Notice {
             path: session_path(&i.session),
             origin: if i.machine.is_some() { Origin::RemoteSession } else { Origin::Session },
             machine: None,
+            cloud_session: None,
         }
     }
 
@@ -112,7 +129,59 @@ impl Notice {
         };
         // "Reconectar" only on the "sem conexão" of a machine with a command in machines.json (A8 c).
         let origin = if a.kind == machines::UNREACHABLE_KIND && m.id != machines::LOCAL_ID && m.reconnect_configured() { Origin::MachineReconnect } else { Origin::Machine };
-        Notice { title, body, sound: false, session: alert_key(&m.id, &a.id), local: None, path: machines::machine_path(&m.id), origin, machine: Some(m.id.clone()) }
+        Notice { title, body, sound: false, session: alert_key(&m.id, &a.id), local: None, path: machines::machine_path(&m.id), origin, machine: Some(m.id.clone()), cloud_session: None }
+    }
+
+    /// An AWS session expiring or expired, silent (A10): "Sessão da AWS expira em 15 min",
+    /// "Sessão da AWS expirada". `session` is `cloud:aws:<name>`, so the expired notice replaces the
+    /// expiring one in the Notification Center. `None` for any other state.
+    pub fn from_cloud_session(aws: &clouds::Aws, s: &clouds::Session, now_ms: u64, offset_s: i64) -> Option<Notice> {
+        let (title, body) = match s.state.as_str() {
+            "expiring" => {
+                let minutes = s.expires_ms().map(|at| at.saturating_sub(now_ms).div_ceil(60_000)).unwrap_or(0);
+                let title = if minutes > 0 { format!("Sessão da AWS expira em {} min", minutes.min(15)) } else { "Sessão da AWS expira em menos de 1 min".into() };
+                (title, s.name.clone())
+            }
+            "expired" => {
+                let body = match s.expires_ms().filter(|at| *at <= now_ms) {
+                    Some(at) => format!("{} expirou às {}", s.name, clouds::clock(at, now_ms, offset_s)),
+                    None => format!("{} expirou", s.name),
+                };
+                ("Sessão da AWS expirada".to_string(), body)
+            }
+            _ => return None,
+        };
+        let origin = if s.offers_login(aws) { Origin::CloudLogin } else { Origin::Cloud };
+        Some(Notice { title, body, sound: false, session: format!("cloud:aws:{}", s.name), local: None, path: clouds::CONNECTIONS_PATH.into(), origin, machine: None, cloud_session: Some(s.name.clone()) })
+    }
+}
+
+/// The AWS sessions that entered `expiring` or `expired` since the previous read (#277).
+#[derive(Debug, Default)]
+pub struct CloudSessionDetector {
+    /// `<session>|<state>|<expiresAt>` of every condition seen, kept: a session that goes from
+    /// `expiring` to `unknown` (a network hiccup) and back does not notify twice for the same token
+    /// end, and a new login (a new end) notifies again. `None` before the first read (or after `reset`).
+    seen: Option<HashSet<String>>,
+}
+
+impl CloudSessionDetector {
+    pub fn observe(&mut self, aws: &clouds::Aws, now_ms: u64, offset_s: i64) -> Vec<Notice> {
+        let first = self.seen.is_none();
+        let seen = self.seen.get_or_insert_with(HashSet::new);
+        let mut notices = Vec::new();
+        for s in clouds::ordered(aws).into_iter().filter(|s| matches!(s.state.as_str(), "expiring" | "expired")) {
+            let key = format!("{}|{}|{}", s.name, s.state, s.expires_at.as_deref().unwrap_or(""));
+            if seen.insert(key) && !first {
+                notices.extend(Notice::from_cloud_session(aws, s, now_ms, offset_s));
+            }
+        }
+        notices
+    }
+
+    /// Forgets what was seen: the next read only records. On losing the core or its connectors.
+    pub fn reset(&mut self) {
+        self.seen = None;
     }
 }
 
@@ -255,6 +324,8 @@ pub struct Notices {
     pub detector: Detector,
     /// The machine alerts' detector (#180), behind the same switch.
     pub machines: MachineAlertDetector,
+    /// The AWS sessions' detector (#277), behind the same switch.
+    pub clouds: CloudSessionDetector,
     pub silence: Silence,
     /// `None` when the app has no data folder: the silence only lasts until it quits.
     pub file: Option<PathBuf>,
@@ -263,7 +334,7 @@ pub struct Notices {
 impl Notices {
     pub fn open(file: Option<PathBuf>) -> Notices {
         let silence = file.as_deref().map(load_or_migrate).unwrap_or_default();
-        Notices { detector: Detector::default(), machines: MachineAlertDetector::default(), silence, file }
+        Notices { detector: Detector::default(), machines: MachineAlertDetector::default(), clouds: CloudSessionDetector::default(), silence, file }
     }
 
     /// The notices of this read that pass the silence.
@@ -275,6 +346,12 @@ impl Notices {
     /// The machine notices of this read that pass the silence (#180).
     pub fn read_machines(&mut self, ms: &[machines::Machine]) -> Vec<Notice> {
         let new = self.machines.observe(ms);
+        self.silence.filter(new)
+    }
+
+    /// The AWS session notices of this read that pass the silence (#277).
+    pub fn read_clouds(&mut self, aws: &clouds::Aws, now_ms: u64, offset_s: i64) -> Vec<Notice> {
+        let new = self.clouds.observe(aws, now_ms, offset_s);
         self.silence.filter(new)
     }
 
@@ -775,5 +852,78 @@ mod tests {
         std::fs::write(p.0.join(LEGACY_FILE), r#"{ "ligadas": false }"#).unwrap();
         std::fs::write(p.0.join(FILE), r#"{ "enabled": true, "sessions": ["s3"] }"#).unwrap();
         assert_eq!(Notices::open(Some(p.0.join(FILE))).silence, Silence { enabled: true, sessions: ["s3".to_string()].into() });
+    }
+
+    // ---- #277: AWS sessions (A10) ----
+
+    fn with_state(mut aws: clouds::Aws, name: &str, state: &str, expires_at: Option<&str>) -> clouds::Aws {
+        let s = aws.sessions.iter_mut().find(|s| s.name == name).unwrap();
+        s.state = state.into();
+        s.expires_at = expires_at.map(String::from);
+        aws
+    }
+
+    #[test]
+    fn a10_first_read_of_the_clouds_does_not_notify() {
+        let mut d = CloudSessionDetector::default();
+        assert!(d.observe(&clouds::tests::a9(), clouds::tests::now(), 0).is_empty());
+    }
+
+    #[test]
+    fn a10_expiring_notifies_once_silently_with_entrar_and_abrir() {
+        let (mut d, now) = (CloudSessionDetector::default(), clouds::tests::now());
+        let end = "2026-10-18T18:15:00.000Z";
+        d.observe(&with_state(clouds::tests::a9(), "sessao-exemplo", "valid", Some(end)), now, 0);
+        let expiring = with_state(clouds::tests::a9(), "sessao-exemplo", "expiring", Some(end));
+        let notices = d.observe(&expiring, now, 0);
+        assert_eq!(notices.len(), 1);
+        let n = &notices[0];
+        assert_eq!((n.title.as_str(), n.body.as_str()), ("Sessão da AWS expira em 15 min", "sessao-exemplo"));
+        assert!(!n.sound, "cloud notifications are silent");
+        assert_eq!((n.session.as_str(), n.path.as_str(), n.cloud_session.as_deref()), ("cloud:aws:sessao-exemplo", "/ui/connections", Some("sessao-exemplo")));
+        assert_eq!(n.origin.actions(), [Action::CloudLogin, Action::Open]);
+        assert!(d.observe(&expiring, now + 60_000, 0).is_empty(), "the repeated read does not notify");
+        d.observe(&with_state(clouds::tests::a9(), "sessao-exemplo", "unknown", Some(end)), now, 0);
+        assert!(d.observe(&expiring, now, 0).is_empty(), "once per session and token end, across a hiccup");
+    }
+
+    #[test]
+    fn a10_expired_notifies_once_and_a_new_login_rearms() {
+        let (mut d, now) = (CloudSessionDetector::default(), clouds::tests::now());
+        let end = "2026-10-18T17:59:00.000Z";
+        d.observe(&with_state(clouds::tests::a9(), "sessao-exemplo", "expiring", Some(end)), now, 0);
+        let expired = with_state(clouds::tests::a9(), "sessao-exemplo", "expired", Some(end));
+        let notices = d.observe(&expired, now, -3 * 3_600);
+        assert_eq!(notices.len(), 1);
+        assert_eq!((notices[0].title.as_str(), notices[0].body.as_str()), ("Sessão da AWS expirada", "sessao-exemplo expirou às 14:59"));
+        assert_eq!(notices[0].origin.actions(), [Action::CloudLogin, Action::Open]);
+        assert!(d.observe(&expired, now, 0).is_empty());
+        let new_end = "2026-10-19T02:00:00.000Z";
+        d.observe(&with_state(clouds::tests::a9(), "sessao-exemplo", "valid", Some(new_end)), now, 0);
+        let again = d.observe(&with_state(clouds::tests::a9(), "sessao-exemplo", "expiring", Some(new_end)), now, 0);
+        assert_eq!(again.len(), 1, "a new token end notifies again");
+    }
+
+    #[test]
+    fn a10_session_without_login_only_opens() {
+        let (mut d, now) = (CloudSessionDetector::default(), clouds::tests::now());
+        let mut aws = clouds::tests::a9();
+        aws.sessions.retain(|s| s.name == "sessao com espaco");
+        aws.sessions[0].state = "valid".into();
+        d.observe(&aws, now, 0);
+        aws.sessions[0].state = "expired".into();
+        let notices = d.observe(&aws, now, 0);
+        assert_eq!((notices[0].body.as_str(), notices[0].origin), ("sessao com espaco expirou", Origin::Cloud));
+        assert_eq!(Origin::Cloud.actions(), [Action::Open]);
+    }
+
+    #[test]
+    fn a10_respects_the_notifications_switch_and_never_entering_does_not_notify() {
+        let now = clouds::tests::now();
+        let mut n = Notices::default();
+        n.read_clouds(&with_state(clouds::tests::a9(), "sessao-nova", "never", None), now, 0);
+        assert!(n.read_clouds(&with_state(clouds::tests::a9(), "sessao-nova", "valid", Some("2026-10-18T20:00:00.000Z")), now, 0).is_empty());
+        n.silence.enabled = false;
+        assert!(n.read_clouds(&with_state(clouds::tests::a9(), "sessao-nova", "expiring", Some("2026-10-18T18:10:00.000Z")), now, 0).is_empty());
     }
 }

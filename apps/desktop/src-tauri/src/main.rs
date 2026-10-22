@@ -13,11 +13,15 @@
 //     block (A6, A7, machines.rs) and notifies, silently, a new machine alert (#180);
 // 5b. under a remote without connection, offers "Reconectar", which asks the core to run the
 //     machine's reconnect command (`POST /api/machines/<id>/reconnect`, #244, decision 0012, A8);
+// 5c. reads the AWS SSO sessions (`/api/connectors`, #277, decision 0013) for the "Nuvens" block (A9,
+//     clouds.rs), offers "Entrar na AWS" (`POST /api/connectors/aws/sessions/<name>/login`) and
+//     notifies, silently, a session expiring or expired (A10);
 // 6. with the updater key in tauri.conf.json, looks for a new version on opening and every 6 h
 //    (updater.rs) and offers it in the menu;
 // 7. opened by hand, also opens the console; opened at login, stays in the tray only (login.rs).
 // The app writes no hooks nor Claude configuration, bundles no Node and has no screens of its own.
 
+mod clouds;
 mod core;
 mod http;
 mod login;
@@ -60,6 +64,10 @@ struct State {
     machines: Option<Vec<Machine>>,
     /// Consecutive reads of `/api/machines` that did not answer; see `count_machine_misses`.
     machine_misses: u32,
+    /// The AWS connector of `/api/connectors` with its sessions (#277); `None` without one.
+    clouds: Option<clouds::Aws>,
+    /// Consecutive reads of `/api/connectors` that did not answer, counted like `machine_misses`.
+    cloud_misses: u32,
     /// The notifications' detector and silence; the "Notificações" check is `notices.silence.enabled`.
     notices: Notices,
     /// The `SMAppService` status is `enabled` (login.rs), reread on every menu.
@@ -87,6 +95,8 @@ fn main() {
         no_attention: false,
         machines: None,
         machine_misses: 0,
+        clouds: None,
+        cloud_misses: 0,
         notices: Notices::default(),
         login: false,
         locals: HashMap::new(),
@@ -116,7 +126,7 @@ fn main() {
             #[cfg(target_os = "macos")]
             {
                 let main_thread = objc2::MainThreadMarker::new().expect("Tauri's setup runs on the main thread");
-                native_notice::start(app.handle(), native_notice::Handlers { open: open_window_at, open_in_desktop, silence, reconnect }, main_thread);
+                native_notice::start(app.handle(), native_notice::Handlers { open: open_window_at, open_in_desktop, silence, reconnect, cloud_login }, main_thread);
             }
             TrayIconBuilder::with_id(TRAY)
                 .icon(Image::from_bytes(ICON)?)
@@ -178,8 +188,10 @@ fn follow(app: AppHandle, state: Shared, dir: PathBuf, data_dir: Option<PathBuf>
             s.attention = None;
             s.no_attention = false;
             s.machines = None;
+            s.clouds = None;
             s.notices.detector.reset();
             s.notices.machines.reset();
+            s.notices.clouds.reset();
         });
         let outcome = core::start_own_core(&dir, data_dir.as_deref());
         let open = std::mem::take(&mut open_at_launch);
@@ -267,6 +279,31 @@ fn watch_core(app: &AppHandle, state: &Shared, core: &core::Core, signals: &std:
                     }
                 });
                 notify(app, &new);
+                // The clouds last (#277): `/api/connectors` is re-read on every change, `connector`
+                // ones included, and every 25 s, which also moves "expira em 14 min".
+                let read = read_clouds(port);
+                let mut new = Vec::new();
+                change(app, state, |s| {
+                    let (misses, drop) = count_machine_misses(s.cloud_misses, matches!(read, CloudsRead::NoAnswer));
+                    s.cloud_misses = misses;
+                    match read {
+                        CloudsRead::Read(aws) => {
+                            new = s.notices.read_clouds(&aws, now_ms(), utc_offset_s());
+                            s.clouds = Some(aws);
+                        }
+                        CloudsRead::NoClouds => {
+                            s.clouds = None;
+                            s.notices.clouds.reset();
+                        }
+                        CloudsRead::NoAnswer => {
+                            if drop {
+                                s.clouds = None;
+                                s.notices.clouds.reset();
+                            }
+                        }
+                    }
+                });
+                notify(app, &new);
             }
             // A core from before #87: up, but without the list. Rereads every 30 s.
             Some(r) if r.status == 404 => {
@@ -274,8 +311,10 @@ fn watch_core(app: &AppHandle, state: &Shared, core: &core::Core, signals: &std:
                     s.attention = None;
                     s.no_attention = true;
                     s.machines = None;
+                    s.clouds = None;
                     s.notices.detector.reset();
                     s.notices.machines.reset();
+                    s.notices.clouds.reset();
                 });
                 let _ = signals.recv_timeout(Duration::from_secs(30));
                 if !core.answers() {
@@ -356,6 +395,50 @@ fn read_machines(port: u16) -> MachinesRead {
     )
 }
 
+/// What one read of the cloud connectors gave (#277).
+enum CloudsRead {
+    Read(clouds::Aws),
+    /// `/api/connectors` is 404 (a core from before #277) or has no AWS session: no "Nuvens" block.
+    NoClouds,
+    /// The route did not answer or did not parse.
+    NoAnswer,
+}
+
+/// `GET /api/connectors`. The first read also starts the core's probing (`wakeOnView`).
+fn read_clouds(port: u16) -> CloudsRead {
+    match http::get_with_status(port, "/api/connectors", Duration::from_secs(5)) {
+        Some(r) if r.status == 404 => CloudsRead::NoClouds,
+        Some(r) if r.status == 200 => match clouds::aws_from_json(&r.body) {
+            Ok(Some(aws)) => CloudsRead::Read(aws),
+            Ok(None) => CloudsRead::NoClouds,
+            Err(err) => {
+                eprintln!("[ahrena-console] clouds: /api/connectors did not parse: {err}");
+                CloudsRead::NoAnswer
+            }
+        },
+        Some(r) => {
+            eprintln!("[ahrena-console] clouds: /api/connectors answered {}", r.status);
+            CloudsRead::NoAnswer
+        }
+        None => {
+            eprintln!("[ahrena-console] clouds: /api/connectors did not answer");
+            CloudsRead::NoAnswer
+        }
+    }
+}
+
+/// The local zone's offset from UTC, in seconds, for "válida até 18:40".
+fn utc_offset_s() -> i64 {
+    #[cfg(target_os = "macos")]
+    {
+        objc2_foundation::NSTimeZone::localTimeZone().secondsFromGMT() as i64
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        0
+    }
+}
+
 /// Consecutive `NoAnswer` reads after which the "Máquinas" block is dropped rather than kept stale.
 const MACHINE_MISSES_TO_DROP: u32 = 3;
 
@@ -387,7 +470,7 @@ fn redraw(app: &AppHandle, state: &Shared) {
         // Always reread: the user may remove the item in Ajustes.
         s.login = login::checked(login::SystemRegistration.status());
         let version = handle.package_info().version.to_string();
-        let items = menu::build(&menu::Input { core: &s.core, attention: s.attention.as_ref(), no_attention: s.no_attention, notifications: s.notices.silence.enabled, login: s.login, version: &version, update: s.update.as_deref(), machines: s.machines.as_deref(), now_ms: now_ms() });
+        let items = menu::build(&menu::Input { core: &s.core, attention: s.attention.as_ref(), no_attention: s.no_attention, notifications: s.notices.silence.enabled, login: s.login, version: &version, update: s.update.as_deref(), machines: s.machines.as_deref(), clouds: s.clouds.as_ref(), now_ms: now_ms(), utc_offset_s: utc_offset_s() });
         let title = menu::tray_title(&s.core, s.attention.as_ref());
         if s.last.as_ref() == Some(&(items.clone(), title.clone())) {
             return;
@@ -438,6 +521,8 @@ fn native_menu(app: &AppHandle, items: &[Item]) -> tauri::Result<Menu<Wry>> {
             Item::Machine { id: machine, text, dot } => Box::new(IconMenuItem::with_id(app, format!("{}{machine}#{n}", menu::MACHINE), text, true, Some(dot_image(*dot)), None::<&str>)?),
             Item::MachineLink { id: machine, text } => Box::new(MenuItem::with_id(app, format!("{}{machine}#{n}", menu::MACHINE), text, true, None::<&str>)?),
             Item::Reconnect { id: machine, text } => Box::new(MenuItem::with_id(app, format!("{}{machine}#{n}", menu::RECONNECT), text, true, None::<&str>)?),
+            Item::Cloud { text, dot } => Box::new(IconMenuItem::with_id(app, format!("{}{n}", menu::CLOUD), text, true, Some(dot_image(*dot)), None::<&str>)?),
+            Item::CloudLogin { session, text } => Box::new(MenuItem::with_id(app, format!("{}{session}#{n}", menu::CLOUD_LOGIN), text, true, None::<&str>)?),
             Item::Action { id, text, shortcut } => Box::new(MenuItem::with_id(app, *id, text, true, *shortcut)?),
             Item::Check { id, text, checked } => Box::new(CheckMenuItem::with_id(app, *id, *text, true, *checked, None::<&str>)?),
             Item::Separator => Box::new(PredefinedMenuItem::separator(app)?),
@@ -462,7 +547,7 @@ fn tweaks(items: &[Item]) -> Vec<native::Tweak> {
                     t.push(Tweak::Tooltip { title: alternate.clone(), tooltip: tooltip.clone() });
                 }
             }
-            Item::Detail(d) | Item::MachineLink { text: d, .. } | Item::Reconnect { text: d, .. } => t.push(Tweak::Indent(d.clone())),
+            Item::Detail(d) | Item::MachineLink { text: d, .. } | Item::Reconnect { text: d, .. } | Item::CloudLogin { text: d, .. } => t.push(Tweak::Indent(d.clone())),
             _ => {}
         }
     }
@@ -530,6 +615,11 @@ fn click(app: &AppHandle, id: &str) {
         menu::ID_INSTALL_NODE => {
             let _ = std::process::Command::new("open").arg("https://nodejs.org/en/download").spawn();
         }
+        _ if id.starts_with(menu::CLOUD_LOGIN) => {
+            let session = id[menu::CLOUD_LOGIN.len()..].rsplit_once('#').map(|(s, _)| s).unwrap_or("");
+            cloud_login(app, session);
+        }
+        _ if id.starts_with(menu::CLOUD) => open_window_at(app, clouds::CONNECTIONS_PATH),
         _ if id.starts_with(menu::RECONNECT) => {
             let machine = id[menu::RECONNECT.len()..].split('#').next().unwrap_or("");
             reconnect(app, machine);
@@ -602,6 +692,39 @@ fn reconnect(app: &AppHandle, machine: &str) {
             let _ = app.run_on_main_thread(move || open_window_at(&handle, &screen));
         }
         r => eprintln!("[ahrena-console] reconnect {machine}: {}", r.map(|r| format!("{} {}", r.status, r.body)).unwrap_or_else(|| "no answer".into())),
+    });
+}
+
+/// "Entrar na AWS (<session>)" in the menu or "Entrar" in the notification (#277): `POST
+/// /api/connectors/aws/sessions/<name>/login` in the browser mode, with no `Origin` and a loopback
+/// `Host`, like Reconectar. Only the name goes: the command is the core's fixed template, and the aws
+/// CLI opens the login page in the browser. The 202 brings the state, so "Aguardando o navegador"
+/// shows before the next read; a 404 or 409 (the session left the file, no CLI, a name the core
+/// refuses) opens Conexões, which says why.
+fn cloud_login(app: &AppHandle, session: &str) {
+    let shared = app.state::<Shared>().inner().clone();
+    let port = match shared.lock().unwrap_or_else(std::sync::PoisonError::into_inner).core {
+        CoreState::Up { port } => port,
+        _ => return,
+    };
+    let Some(path) = clouds::login_path(session) else { return };
+    let (app, session) = (app.clone(), session.to_string());
+    std::thread::spawn(move || match http::post_json(port, &path, clouds::LOGIN_BODY) {
+        Some(r) if r.status == 202 => {
+            if let Some(login) = clouds::login_from_response(&r.body) {
+                change(&app, &shared, |s| {
+                    for x in s.clouds.iter_mut().flat_map(|a| a.sessions.iter_mut()).filter(|x| x.name == session) {
+                        x.login = Some(login.clone());
+                    }
+                });
+            }
+        }
+        Some(r) if matches!(r.status, 404 | 409) => {
+            eprintln!("[ahrena-console] cloud login {session}: {}", r.status);
+            let handle = app.clone();
+            let _ = app.run_on_main_thread(move || open_window_at(&handle, clouds::CONNECTIONS_PATH));
+        }
+        r => eprintln!("[ahrena-console] cloud login {session}: {}", r.map(|r| r.status.to_string()).unwrap_or_else(|| "no answer".into())),
     });
 }
 
