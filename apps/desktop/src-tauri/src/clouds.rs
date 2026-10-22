@@ -279,7 +279,7 @@ pub mod tests {
     }
 
     #[test]
-    fn entrar_only_for_expiring_or_expired_with_a_supported_name() {
+    fn login_offered_only_for_expiring_or_expired_with_a_supported_name() {
         let aws = a9();
         let offered: Vec<&str> = ordered(&aws).into_iter().filter(|s| s.offers_login(&aws)).map(|s| s.name.as_str()).collect();
         assert_eq!(offered, ["sessao-velha", "sessao-exemplo"]);
