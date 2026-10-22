@@ -138,7 +138,7 @@ export class Messaging {
       if (!a.available) return this.accepted(this.fail(message, a.reason));
       // Opened before the write: only a turn after this point can confirm the message.
       const probe = await this.turns.open(a.process, sessionId, textSha256).catch((e: unknown) => {
-        this.log(`message ${message.id}: cannot watch session ${sessionId} for the new turn (${(e as Error).message})`);
+        this.log(`message ${message.id}: cannot watch session ${sessionId} for the new turn (${(e as Error)?.name ?? 'error'})`);
         return null;
       });
       const startedAt = this.now();

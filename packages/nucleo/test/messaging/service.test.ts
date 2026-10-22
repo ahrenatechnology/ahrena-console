@@ -217,6 +217,15 @@ describe('Messaging.send (#61/AC-1, #61/AC-2)', () => {
     assert.equal((await messaging.availability('s1')).inFlight, null);
   });
 
+  test('a rejection that is not an Error while opening the probe still sends, and logs only a name', async () => {
+    const { messaging, delivered, logs } = setup();
+    (messaging as unknown as { turns: { open: () => Promise<never> } }).turns = { open: () => Promise.reject(null) };
+    const r = await messaging.send('s1', 'oi');
+    assert.equal(r.kind === 'accepted' && r.message.state, 'sending');
+    assert.equal(delivered.length, 1);
+    assert.ok(logs.some((l) => l.includes('for the new turn (error)')), logs.join('\n'));
+  });
+
   test('failing to list the processes is no_live_process, and the session is free again', async () => {
     const { messaging } = setup();
     (messaging as unknown as { live: { find: () => Promise<never> } }).live = { find: async () => Promise.reject(new Error('profiles broke')) };
