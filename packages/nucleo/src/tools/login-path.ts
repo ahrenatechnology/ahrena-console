@@ -18,8 +18,9 @@ import { PROBE_TIMEOUT_MS, toolsEnv, type ToolRunner } from './runner.ts';
 
 export const PATH_MARKER = '__AHRENA_PATH__';
 
+// `${PATH}` with braces: right before the marker, a bare `$PATH` would read as the variable `PATH__AHRENA_PATH__`.
 export function loginShellArgv(shell: string): string[] {
-  return [shell, '-ilc', `printf '%s' "${PATH_MARKER}$PATH${PATH_MARKER}"`];
+  return [shell, '-ilc', `printf '%s' "${PATH_MARKER}\${PATH}${PATH_MARKER}"`];
 }
 
 /** The PATH between the markers (an interactive shell may print a banner around it). */
