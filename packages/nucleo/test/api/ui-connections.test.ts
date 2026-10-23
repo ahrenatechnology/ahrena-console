@@ -8,7 +8,9 @@ import { UI_FOLDER } from '../../src/api/ui.ts';
 import { ElementoFalso, instalarDomFalso, texto } from './fake-dom.ts';
 
 instalarDomFalso();
-const here = { pathname: '/ui/connections', search: '' };
+// The GitHub detail: at /ui/connections/github once Conexões is the catalog of connectors (#277); at
+// /ui/connections with a core without the cloud routes (ui-clouds.test.ts covers that fallback).
+const here = { pathname: '/ui/connections/github', search: '' };
 const replaced: string[] = [];
 Object.assign(globalThis, {
   location: here,

@@ -20,9 +20,12 @@ port.textContent = location.host;
 
 // One block per section (C1, C24): the everyday screens, then Delivery, Decisions, Machines and Control. The remote
 // machines (issue 178) come from `GET /api/machines` and are added by nav.js (`createNav`).
-const { readMachines, highlight, counter } = createNav({ nav, read });
+const { readMachines, readConnectors, highlight, counter } = createNav({ nav, read });
 // A remote's state also changes without an alert (another version over there): re-read now and then.
 setInterval(readMachines, 60_000);
+// The Conexões dot (issue 277): now, on every `connector` change, on restart and every minute (an expiry is no event).
+readConnectors();
+setInterval(readConnectors, 60_000);
 
 // The GitHub connection in the footer (ghFooter, issue 241): read now, on every `connections` change and on restart.
 const githubFooter = createGithubFooter({ node: document.getElementById('github'), read });
@@ -40,6 +43,7 @@ let connected = false;
 function restart() {
   readVersion();
   readMachines();
+  readConnectors();
   githubFooter.refresh();
   if (!connected) return void (connected = true);
   if (screenFailed) return open();
@@ -84,6 +88,7 @@ startLive({
     // A machine that goes down or comes back (`<id>:machine-unreachable`) changes its dot.
     if (changes.some((c) => c.type === 'alert')) readMachines();
     if (connectionChanged(changes)) githubFooter.refresh();
+    if (changes.some((c) => c.type === 'connector')) readConnectors();
     for (const f of listeners.change) f(changes);
   },
 });

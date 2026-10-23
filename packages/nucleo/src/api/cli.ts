@@ -109,6 +109,9 @@ import { SqliteToolChecksStore } from '../tools/store.ts';
 import { ToolsService } from '../tools/service.ts';
 import { MAX_MCP_PROJECTS } from '../tools/mcp-config.ts';
 import { publishToolsChanges, ToolsExecutor, toolsLogFile } from '../tools/executor.ts';
+import { AwsConnector, publishConnectorChanges } from '../clouds/aws-connector.ts';
+import { loopbackWrite } from '../clouds/remote-connectors.ts';
+import { createCloudsRoute } from './clouds.ts';
 import { LiveClaudeProcesses } from './live-processes.ts';
 import { SessionOpenDescriber } from './session-open.ts';
 import { createTerminalFocuser, createTerminalOpener } from './terminal-launch.ts';
@@ -500,6 +503,9 @@ const messaging = demo
 // The MCP servers (layer 3): Claude Code's ~/.claude.json and the .mcp.json of the sessions' projects (capped).
 const toolsService = demo ? null : new ToolsService({ store: new SqliteToolChecksStore(sqlite.db), mcpProjects: () => knownProjects(storage, MAX_MCP_PROJECTS), log });
 const toolsExecutor = toolsService ? new ToolsExecutor({ service: toolsService, logFile: toolsLogFile(dataDir), onChange: publishToolsChanges(changes), log }) : null;
+// The cloud connectors (#277, decision 0013): this machine's ~/.aws/config, its SSO sessions and their logins (into reconnect.log); the remote machines' through their tunnel port. Not in --demo.
+const awsConnector = demo ? null : new AwsConnector({ logFile: reconnectLogFile(dataDir), wakeOnView: true, onChange: publishConnectorChanges(changes), log });
+const clouds = awsConnector ? createCloudsRoute({ aws: awsConnector, remote: { port: (id) => remoteMachines?.get(id)?.port, get: loopbackGet(), write: loopbackWrite() } }) : null;
 
 let historyReady = false;
 const follower =
@@ -567,6 +573,7 @@ const api: LocalApi = await startLocalApi({
   reconnect: reconnectRunner,
   messaging: createMessagingRoute({ messaging, sessions: storage, accounts, log }),
   tools: toolsExecutor,
+  clouds,
   load: () => ({
     history: follower ? (historyReady ? 'ready' : 'importing') : 'off',
     follower: follower?.stats() ?? null,
@@ -674,6 +681,7 @@ async function shutdown() {
   await Promise.all([...samplers.map((a) => a.stop()), remoteMachines?.stop()]);
   // #280: the jobs run detached, so they would outlive the core; stop them and write their footers first.
   await toolsExecutor?.stopAll().catch(() => undefined);
+  await awsConnector?.stop().catch(() => undefined);
   await api.close().catch(() => undefined);
   await storage.close();
   if (demoFolder) rmSync(demoFolder, { recursive: true, force: true });

@@ -274,46 +274,67 @@ export class ReconnectRunner implements ReconnectControl {
    * writes the header line. `null`, with one console log line, when it cannot: the output is discarded.
    */
   private openLog(machineId: string, header: string): number | null {
-    try {
-      mkdirSync(dirname(this.logFile), { recursive: true, mode: 0o700 });
-      let size = 0;
-      try {
-        size = statSync(this.logFile).size;
-      } catch {
-        size = 0;
-      }
-      if (size > (this.o.maxLogBytes ?? MAX_RECONNECT_LOG_BYTES)) {
-        renameSync(this.logFile, `${this.logFile}.1`);
-        chmodSync(`${this.logFile}.1`, 0o600);
-      }
-      const fd = openSync(this.logFile, 'a', 0o600);
-      try {
-        fchmodSync(fd, 0o600);
-        writeSync(fd, this.line(machineId, header));
-      } catch (err) {
-        closeQuietly(fd);
-        throw err;
-      }
-      return fd;
-    } catch (err) {
-      this.o.log?.(`reconnect (${machineId}): could not open ${this.logFile} (${(err as NodeJS.ErrnoException).code ?? 'error'}); the output is discarded`);
-      return null;
-    }
+    return openRunLog(this.logFile, runLogLine(this.o.now ?? Date.now, machineId, header), {
+      maxBytes: this.o.maxLogBytes,
+      onError: (code) => this.o.log?.(`reconnect (${machineId}): could not open ${this.logFile} (${code}); the output is discarded`),
+    });
   }
 
   /** The footer line, appended by the core on exit; silent when the log could not be opened at the start. */
   private footer(machineId: string, text: string, logOpen: boolean): void {
     if (!logOpen) return;
-    try {
-      // The command's last line may lack its newline: the footer starts on a line of its own.
-      appendFileSync(this.logFile, `${endsWithNewline(this.logFile) ? '' : '\n'}${this.line(machineId, text)}`, { mode: 0o600 });
-    } catch (err) {
-      this.o.log?.(`reconnect (${machineId}): could not write ${this.logFile} (${(err as NodeJS.ErrnoException).code ?? 'error'})`);
-    }
+    appendRunLogLine(this.logFile, runLogLine(this.o.now ?? Date.now, machineId, text), (code) =>
+      this.o.log?.(`reconnect (${machineId}): could not write ${this.logFile} (${code})`),
+    );
   }
+}
 
-  private line(machineId: string, text: string): string {
-    return `${new Date((this.o.now ?? Date.now)()).toISOString()} ${machineId} ${text}\n`;
+// The run-log mechanics, shared with the cloud connectors' logins (src/clouds/aws-login.ts, #277):
+// the same file, the same rotation, mode and header/footer lines, the same process-group signals.
+
+/** One line of the run log: ISO time, the target (a machine id, `aws:<session>`), the text. */
+export function runLogLine(now: () => number, target: string, text: string): string {
+  return `${new Date(now()).toISOString()} ${target} ${text}\n`;
+}
+
+/**
+ * Opens the run log for a child (append, 0600; rotated to `.1` first when past `maxBytes`) and
+ * writes `header`. `null` when it cannot (`onError` gets the error code once): the output is discarded.
+ */
+export function openRunLog(logFile: string, header: string, o: { maxBytes?: number | undefined; onError?: (code: string) => void } = {}): number | null {
+  try {
+    mkdirSync(dirname(logFile), { recursive: true, mode: 0o700 });
+    let size = 0;
+    try {
+      size = statSync(logFile).size;
+    } catch {
+      size = 0;
+    }
+    if (size > (o.maxBytes ?? MAX_RECONNECT_LOG_BYTES)) {
+      renameSync(logFile, `${logFile}.1`);
+      chmodSync(`${logFile}.1`, 0o600);
+    }
+    const fd = openSync(logFile, 'a', 0o600);
+    try {
+      fchmodSync(fd, 0o600);
+      writeSync(fd, header);
+    } catch (err) {
+      closeQuietly(fd);
+      throw err;
+    }
+    return fd;
+  } catch (err) {
+    o.onError?.((err as NodeJS.ErrnoException).code ?? 'error');
+    return null;
+  }
+}
+
+/** Appends a core line (a footer) to the run log, on a line of its own: the command's last line may lack its newline. */
+export function appendRunLogLine(logFile: string, line: string, onError?: (code: string) => void): void {
+  try {
+    appendFileSync(logFile, `${endsWithNewline(logFile) ? '' : '\n'}${line}`, { mode: 0o600 });
+  } catch (err) {
+    onError?.((err as NodeJS.ErrnoException).code ?? 'error');
   }
 }
 
@@ -333,7 +354,7 @@ function endsWithNewline(file: string): boolean {
   }
 }
 
-function closeQuietly(fd: number | null): void {
+export function closeQuietly(fd: number | null): void {
   if (fd === null) return;
   try {
     closeSync(fd);
@@ -342,7 +363,8 @@ function closeQuietly(fd: number | null): void {
   }
 }
 
-function signalGroup(pid: number, signal: NodeJS.Signals, child: ChildProcess | null): void {
+/** A signal to the whole process group of `pid`; to the child alone when the group is gone. */
+export function signalGroup(pid: number, signal: NodeJS.Signals, child: ChildProcess | null): void {
   try {
     process.kill(-pid, signal);
   } catch {

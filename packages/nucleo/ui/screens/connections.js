@@ -10,10 +10,14 @@
 // - `?start=1` (the "Conectar ao GitHub" of the other screens, C42) starts the device flow on arrival.
 // - Data from GitHub (login, organizations) goes in through `textContent`; a link from the core is used
 //   only when it is https on github.com.
+// - Issue 277: with the cloud routes in the core, `/ui/connections` is the catalog of connectors
+//   (cloud-connections.js) and this GitHub detail opens at `/ui/connections/github`; a core without them
+//   (404) keeps this detail at `/ui/connections`, and `?start=1` always lands here.
 
 import { el, header, icon } from '../dom.js';
 import { loading, error, errorBand } from '../states.js';
 import { CONNECTIONS_ROUTE, CONNECTIONS_UI, connectionChanged, githubHttpsUrl, LAST_ERROR, UNAVAILABLE, writeErrorText } from '../github-connect.js';
+import { tryCatalog } from './cloud-connections.js';
 
 const STYLE = '/ui/screens/connections.css';
 export const START_ROUTE = '/api/connections/github/start';
@@ -97,6 +101,10 @@ const row = (k, v) => [el('span', { class: 'conn-k' }, k), el('span', { class: '
 const external = (href, label, cls = 'conn-link') => el('a', { class: cls, href, target: '_blank', rel: 'noopener noreferrer' }, label, ' ', icon('external'));
 
 export async function mount(area, ctx) {
+  if (globalThis.location?.pathname === CONNECTIONS_UI && new URLSearchParams(globalThis.location?.search ?? '').get('start') !== '1') {
+    const catalog = await tryCatalog(area, ctx);
+    if (catalog) return catalog;
+  }
   loadStyle();
   const head = header({ icon: 'plug', title: 'Conexões', sub: 'As contas de fora que o console usa. A credencial nunca sai do cofre do sistema.' });
   let github = null;
