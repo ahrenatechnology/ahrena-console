@@ -489,6 +489,20 @@ describe('Sessões with every machine (C45, C48)', () => {
     }
   });
 
+  test('an empty list with Todas and a remote names both machines, not only this one', async () => {
+    setUrl('/ui/sessions');
+    const { f, area, cleanup } = await mountSessions(() => list([], machinesUp));
+    try {
+      assert.match(texto(area), /As sessões do Claude Code das duas máquinas aparecem aqui/);
+      assert.doesNotMatch(texto(area), /desta máquina aparecem/);
+      assert.equal(sessions.registeredText({ registered: 2 }, { choice: 'ws', machines: mf.normalizeMachines(machinesUp) }), '2 sessões registradas na Workstation');
+      assert.equal(sessions.registeredText({ registered: 1 }, { choice: 'local', machines: mf.normalizeMachines(machinesUp) }), '1 sessão registrada nesta máquina');
+    } finally {
+      cleanup();
+      f.leave.abort();
+    }
+  });
+
   test('C48: the notice above the filters, the pill counts of the chosen machine, and an empty list with the notice when the remote is chosen', async () => {
     setUrl('/ui/sessions?machine=ws');
     const { f, area, cleanup } = await mountSessions((route) => (route === '/api/machines' ? machinesDown : list([], [machinesDown[1]])));

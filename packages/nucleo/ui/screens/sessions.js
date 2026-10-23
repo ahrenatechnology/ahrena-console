@@ -10,7 +10,7 @@ import { loading, error, errorBand, empty } from '../states.js';
 import { attentionBadges, attentionOf, statusWithoutAttention } from '../attention.js';
 import { lastAvailability, loadAvailability, messageAction, useMessageStyle } from './session-message.js';
 import { openAction } from '../open-action.js';
-import { createMachineFilter, isRemote, itemHref, itemKey, machineTag, queryWithMachine, remoteParts } from '../machine-filter.js';
+import { createMachineFilter, isRemote, itemHref, itemKey, machineTag, queryWithMachine, remoteParts, whereText } from '../machine-filter.js';
 
 // The `status` and `order` values of `/api/sessions` (English since phase 2b of issue 173). issue 245: the
 // old waiting pill split in two, "Precisam de você" (`blocked`, with the errors) and "Ociosas" (`idle`).
@@ -202,8 +202,7 @@ export function registeredText(list, { choice = 'all', machines = [] } = {}) {
   const base = n === 1 ? '1 sessão registrada' : `${n} sessões registradas`;
   if (!machines.some((m) => m.id !== 'local')) return base;
   if (choice === 'all') return [base, ...remoteParts(list.byMachine, machines, (b) => b.registered)].join(' · ');
-  const where = choice === 'local' ? 'nesta máquina' : `na ${machines.find((m) => m.id === choice)?.label ?? 'máquina remota'}`;
-  return `${base} ${where}`;
+  return `${base} ${whereText(choice, machines)}`;
 }
 
 /** "Precisam de você 5": the pill label and the count of `counts` (none when the core did not say). */
@@ -445,7 +444,7 @@ export async function mount(area, ctx) {
     body.replaceChildren(
       filtering
         ? empty({ title: 'Nenhuma sessão com esses filtros', text: 'Mude a busca, o diretório ou o status.', action: { label: 'Limpar os filtros', onClick: () => ((search.value = ''), change({ status: 'all', search: '', dir: '', page: 1 })) } })
-        : empty({ icon: 'sessions', title: 'Nenhuma sessão ainda', text: 'As sessões do Claude Code desta máquina aparecem aqui assim que o núcleo as vê.' }),
+        : empty({ icon: 'sessions', title: 'Nenhuma sessão ainda', text: `As sessões do Claude Code ${machines.hasRemotes() ? whereText(machines.choice, machines.machines(), { form: 'of' }) : 'desta máquina'} aparecem aqui assim que o núcleo as vê.` }),
     );
   }
 
