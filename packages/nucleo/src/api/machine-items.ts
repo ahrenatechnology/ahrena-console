@@ -87,10 +87,15 @@ const ROW_CHECKS: Record<RowKind, (r: Record<string, unknown>) => boolean> = {
   'dashboard-activity': (r) => isId(r.session) && typeof r.text === 'string' && isAttention(r.attention) && isIso(r.at),
 };
 
+/** A remote's account color when it is `#rrggbb`; the neutral one otherwise (the screens put it in a style). */
+export function remoteAccountColor(v: unknown): string {
+  return typeof v === 'string' && HEX.test(v) ? v : NEUTRAL_ACCOUNT_COLOR;
+}
+
 /** The account as the local ones go out: label and `#rrggbb` color only; `null` otherwise. */
 function remoteAccount(v: unknown): { label: string; color: string } | null {
   if (!isObject(v) || typeof v.label !== 'string' || typeof v.color !== 'string') return null;
-  return { label: v.label.slice(0, 40), color: HEX.test(v.color) ? v.color : NEUTRAL_ACCOUNT_COLOR };
+  return { label: v.label.slice(0, 40), color: remoteAccountColor(v.color) };
 }
 
 /** A remote's item of `kind`, rebuilt and marked with its machine; `null` when it lacks the shape. */

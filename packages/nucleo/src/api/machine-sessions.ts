@@ -60,6 +60,16 @@
 // case of C70). The remote's 400 and 404 pass on with their message; with the remote down, 503
 // `{ error: 'machine-unreachable', machine: { id, label, state, lastReadAt } }`. `machine=local` is the
 // local Detail as before; `machine=all` on a Detail gives 400.
+//
+// ## The panel of a remote session (#319, P14)
+//
+// `GET /api/panel/<id>` (no `machine` parameter: the mod does not know where the session runs) for
+// an id this Mac's storage does not know, or knows only from a transcript import (a copy of a remote
+// session's transcript), is answered by api/machine-panel.ts from the remote that knows it, marked
+// with `machine: { id, label, lastReadAt, connection }`. A session this Mac's hooks know, an id no
+// remote knows, or no remote machine at all: the server's own panel, as before. The session ids
+// of the remote `/api/sessions` and `/api/wall` reads above are remembered for it, so that a remote
+// session whose remote went down still gets its last panel (or the minimal one) with the band.
 
 import type { ServerResponse } from 'node:http';
 import { send } from '../ingest/hooks/receiver.ts';
@@ -73,6 +83,8 @@ import { HISTORY_ROUTE } from './history.ts';
 import { COLUNAS_DAS_SESSOES, COLUNAS_DOS_AGENTES, ErroDoPedidoDoKanban, KANBAN_ROUTE, pedidoDoKanban, POR_PAGINA as KANBAN_PER_PAGE, type KanbanHttp, type PedidoDoKanban, type QuadroKanban } from './kanban.ts';
 import { boundedJson, isCount, isObject, mergeOrdered, newerFirst, remoteCount, remoteRows, REMOTE_ID, withMachine, type MachineTag, type RowKind } from './machine-items.ts';
 import { withDeadline, type MachineReader, type RemoteSessionSource } from './machine-reader.ts';
+import { PANEL_PATH, RemotePanels, RemoteSessionMap } from './machine-panel.ts';
+import type { MontadorDoPainel } from './panel.ts';
 import { ErroDoPedido, FILTROS_DE_STATUS, pedidoDeSessoes, SESSIONS_ROUTE, type FiltroDeStatus, type ListaDeSessoes, type PedidoDeSessoes } from './sessions.ts';
 import { DASHBOARD_ROUTE } from './dashboard-route.ts';
 import { WALL_ROUTE } from './wall.ts';
@@ -115,6 +127,8 @@ export interface LocalScreens {
   history?: SessionHistory | null;
   events?: FeedDeEventos | null;
   dashboard?: (() => Promise<RespostaDoDashboard>) | null;
+  /** #319: this Mac's panel builder, to know which sessions are its own; without it, the panel is never a remote's. */
+  panel?: Pick<MontadorDoPainel, 'knows'> | null;
 }
 
 export interface MachineSessionsOptions {
@@ -123,6 +137,8 @@ export interface MachineSessionsOptions {
   /** For the machines' state and `lastReadAt` (`GET /api/machines`). */
   telemetry?: Pick<TelemetryService, 'machines'> | null;
   local: LocalScreens;
+  /** #319: the remote session ids and last panels; a test passes one with its own clock. */
+  remoteSessions?: RemoteSessionMap;
 }
 
 class RequestError extends Error {}
@@ -147,12 +163,18 @@ export function createMachineSessionsRoute(o: MachineSessionsOptions): (res: Ser
 
 class MachineSessionsRoute {
   private readonly o: MachineSessionsOptions;
+  private readonly remoteSessions: RemoteSessionMap;
+  private readonly panels: RemotePanels | null;
 
   constructor(o: MachineSessionsOptions) {
     this.o = o;
+    this.remoteSessions = o.remoteSessions ?? new RemoteSessionMap({ now: () => o.reader?.now() ?? Date.now() });
+    this.panels = o.reader ? new RemotePanels({ reader: o.reader, sessions: this.remoteSessions, lastReadAt: (id) => this.lastReadAt(id) }) : null;
   }
 
   async respond(res: ServerResponse, url: URL): Promise<boolean> {
+    const panel = PANEL_PATH.exec(url.pathname);
+    if (panel) return this.panel(res, url, panel[1]!);
     const raw = url.searchParams.get(MACHINE_PARAM);
     if (!raw) return false;
     const { local } = this.o;
@@ -183,6 +205,33 @@ class MachineSessionsRoute {
       else throw e;
     }
     return true;
+  }
+
+  // ---------- The panel of a remote session (#319) ----------
+
+  /** `true` when a remote's panel answered; `false` leaves the server's own panel (this Mac's, as before). */
+  private async panel(res: ServerResponse, url: URL, raw: string): Promise<boolean> {
+    const local = this.o.local.panel;
+    if (!this.panels || !local || !this.o.reader?.machines().length) return false;
+    let id: string;
+    try {
+      id = decodeURIComponent(raw);
+    } catch {
+      return false;
+    }
+    if (!REMOTE_ID.test(id)) return false;
+    // A session this Mac's hooks know is its own: the panel of before. One it only imported from a
+    // transcript may be a copy of a remote one: the remote that knows it (with its hooks) wins.
+    const known = await local.knows(id);
+    if (known && !known.imported) return false;
+    const body = await this.panels.panel(id, url.searchParams, { localCopy: known !== null });
+    if (!body) return false;
+    send(res, 200, body);
+    return true;
+  }
+
+  private async lastReadAt(machineId: string): Promise<string | null> {
+    return (await this.o.telemetry?.machines())?.find((m) => m.id === machineId)?.lastReadAt ?? null;
   }
 
   // ---------- The machines ----------
@@ -249,7 +298,9 @@ class MachineSessionsRoute {
           const l = await this.o.local.sessions!.listar({ ...request, pagina: 1, perPage: depth });
           return { id: c.tag.id, items: l.items.map((i) => withMachine(i, c.tag)) as Record<string, unknown>[], total: l.total, registered: l.registered, directories: l.directories, counts: l.counts as Record<string, number> };
         }
-        return this.remote(c, (source, reader) => remoteSessions(source, reader, request, depth, c.tag));
+        const part = await this.remote(c, (source, reader) => remoteSessions(source, reader, request, depth, c.tag));
+        if (part) this.remoteSessions.noteSessions(c.tag.id, part.items.map((i) => i.id));
+        return part;
       }),
     );
     const got = parts.filter((p) => p !== null);
@@ -286,10 +337,12 @@ class MachineSessionsRoute {
           const w = await this.o.local.wall!.montar();
           return { id: c.tag.id, generatedAt: w.generatedAt, cards: w.cards.map((x) => withMachine(x, c.tag)) as Record<string, unknown>[] };
         }
-        return this.remote(c, async (source, reader) => {
+        const part = await this.remote(c, async (source, reader) => {
           const body = await reader.read(source, WALL_ROUTE);
           return isObject(body) && Array.isArray(body.cards) ? { id: c.tag.id, generatedAt: null, cards: remoteRows(body.cards, 'wall-card', c.tag) } : null;
         });
+        if (part) this.remoteSessions.noteSessions(c.tag.id, part.cards.map((x) => x.id));
+        return part;
       }),
     );
     const got = parts.filter((p) => p !== null);

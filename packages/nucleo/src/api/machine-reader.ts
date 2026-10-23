@@ -16,9 +16,25 @@
 //   A failed read is cached too, so a remote that stopped answering is not asked again at once.
 // - The result is the parsed JSON of a 200 answer, or `null` (any other status, a body that is not
 //   JSON, a timeout, the machine not connected). Nothing here validates the shape: the merge does.
+// - `connection(machine)` (#319): the remote's connection as the mod's P14 band reads it,
+//   `{ state, since, lastError }`, from the injected `connectionOf` (the real one is #278's, PR #320)
+//   or, without it, derived from the machine's status (`connectionFromStatus`).
 
 import type { RemoteGet } from '../telemetry/ports.ts';
 import type { MachineStatus } from '../telemetry/service.ts';
+
+/** A remote machine's connection as the panel's P14 band reads it (the mod's `PanelMachineConnection`). */
+export interface PanelConnection {
+  state: string;
+  since: string | null;
+  lastError: { reason: string; at: string | null; exitCode: number | null; holder: string | null } | null;
+}
+
+/**
+ * The source of a remote's connection: #278's `MachineConnection.status(id)` (`ConnectionStatus`, a
+ * superset of `PanelConnection`) once PR #320 lands; `null` or `undefined` when it has none.
+ */
+export type ConnectionOf = (machineId: string) => Promise<PanelConnection | null | undefined> | PanelConnection | null | undefined;
 
 /** A remote machine as this reader needs it (`RemoteMachine` in production). */
 export interface RemoteSessionSource {
@@ -45,6 +61,12 @@ export interface MachineReaderOptions {
   staleMs?: number;
   /** At most this many cached paths; the oldest go first. Default 500. */
   maxEntries?: number;
+  /**
+   * #319: the remote's connection for the panel's `machine`. Without it, `connectionFromStatus`.
+   * TODO(#320): once #278's PR #320 lands, wire the real one in api/cli.ts, on the `machineReader`
+   * line: `connectionOf: (id) => machineConnection?.status(id) ?? null`.
+   */
+  connectionOf?: ConnectionOf | null;
 }
 
 export const MACHINE_READ_TTL_MS = 5_000;
@@ -111,6 +133,23 @@ export class MachineReader {
     return this.o.machines().find((m) => m.id === id);
   }
 
+  /** The machine's connection, `{ state, since, lastError }` only (never a command or a log path). */
+  async connection(machine: RemoteSessionSource): Promise<PanelConnection> {
+    let c: PanelConnection | null = null;
+    try {
+      c = (await this.o.connectionOf?.(machine.id)) ?? null;
+    } catch {
+      // A provider that fails leaves the status's connection: the panel never fails for it.
+    }
+    if (!c) return connectionFromStatus(machine.status());
+    const e = c.lastError;
+    return {
+      state: c.state,
+      since: c.since ?? null,
+      lastError: e ? { reason: e.reason, at: e.at ?? null, exitCode: e.exitCode ?? null, holder: e.holder ?? null } : null,
+    };
+  }
+
   /** The JSON of `GET <path>` on the machine when it answered 200, or `null` (see the module comment). */
   async read(machine: RemoteSessionSource, path: string): Promise<unknown> {
     const r = await this.answer(machine, path);
@@ -160,7 +199,7 @@ export class MachineReader {
     return Math.max(this.o.staleMs ?? MACHINE_READ_STALE_MS, 3 * tookMs);
   }
 
-  private now(): number {
+  now(): number {
     return (this.o.now ?? Date.now)();
   }
 
@@ -185,4 +224,16 @@ export class MachineReader {
       }
     }
   }
+}
+
+/**
+ * The connection until #278's is wired (TODO(#320)): what the 30 s poll of telemetry/remote.ts knows.
+ * `connected` is `up`; `unreachable` and `incompatible-version` are `failing`, with the reason (the
+ * port open and no núcleo answering is #278's `core-not-answering`); `not-configured` is `down`.
+ */
+export function connectionFromStatus(s: MachineStatus): PanelConnection {
+  if (s.state === 'connected') return { state: 'up', since: null, lastError: null };
+  if (s.state === 'not-configured') return { state: 'down', since: null, lastError: null };
+  const reason = s.state === 'incompatible-version' ? 'incompatible-version' : s.reason === 'no-response' ? 'core-not-answering' : (s.reason ?? 'unreachable');
+  return { state: 'failing', since: null, lastError: { reason, at: null, exitCode: null, holder: null } };
 }
