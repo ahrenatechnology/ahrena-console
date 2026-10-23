@@ -31,7 +31,7 @@ const KIND = /^[a-z0-9][a-z0-9.-]{0,63}$/;
 const REGION = /^[a-z]{2,}(-[a-z0-9]+){1,4}$/;
 const ZONE = /^[a-z]{2,}(-[a-z0-9]+){1,4}[a-z]?$/;
 const INSTANCE_ID = /^(i|mi)-[0-9a-f]{8,32}$/;
-const MAX_ANSWER = 4096;
+export const MAX_ANSWER = 4096;
 
 export const UNKNOWN_PLACEMENT: Placement = { provider: 'unknown', kind: null, region: null, zone: null, instanceId: null, source: null, readAt: null };
 
@@ -48,13 +48,37 @@ export interface PlacementReaderOptions {
   now?: () => number;
 }
 
-/** `fetch` with a timeout; only a 200 with a short body counts. */
+/**
+ * `fetch` with a timeout; only a 200 with a short body counts. A body over MAX_ANSWER bytes is never
+ * buffered: a larger content-length is refused before reading, and the stream is canceled once past it.
+ */
 export const fetchMetadata: MetadataRequest = async (method, url, headers, timeoutMs) => {
   try {
     const r = await fetch(url, { method, headers, signal: AbortSignal.timeout(timeoutMs), redirect: 'error' });
-    if (r.status !== 200) return null;
-    const text = await r.text();
-    return text.length <= MAX_ANSWER ? text : null;
+    if (r.status !== 200) {
+      await r.body?.cancel().catch(() => {});
+      return null;
+    }
+    const length = Number(r.headers.get('content-length'));
+    if (Number.isFinite(length) && length > MAX_ANSWER) {
+      await r.body?.cancel().catch(() => {});
+      return null;
+    }
+    if (!r.body) return '';
+    const reader = r.body.getReader();
+    const chunks: Uint8Array[] = [];
+    let size = 0;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > MAX_ANSWER) {
+        await reader.cancel().catch(() => {});
+        return null;
+      }
+      chunks.push(value);
+    }
+    return Buffer.concat(chunks).toString('utf8');
   } catch {
     return null;
   }

@@ -3,8 +3,10 @@
 // value must pass, and the Mac carrying a remote's placement through its stored reading. No network:
 // the request function is a fake. Placeholders only (no real instance id, region or host).
 import assert from 'node:assert/strict';
+import { createServer, type ServerResponse } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import { describe, test } from 'node:test';
-import { PlacementProbe, providerFromDmi, readPlacement, sanitizePlacement, withPlacement, type MetadataRequest } from '../../src/telemetry/placement.ts';
+import { fetchMetadata, MAX_ANSWER, PlacementProbe, providerFromDmi, readPlacement, sanitizePlacement, withPlacement, type MetadataRequest } from '../../src/telemetry/placement.ts';
 import { storableReading } from '../../src/telemetry/remote.ts';
 import { reading, T0 } from './reading.ts';
 
@@ -90,5 +92,36 @@ describe('#278 placement, from the first source that answers', () => {
     const tampered = storableReading({ ...JSON.parse(JSON.stringify(own)), placement: { ...own.placement, instanceId: 'x'.repeat(5000), region: '<b>' } }, T0);
     assert.deepEqual([tampered?.placement?.instanceId, tampered?.placement?.region], [null, null]);
     assert.equal(storableReading({ ...JSON.parse(JSON.stringify(own)), placement: 'aws' }, T0)?.placement, undefined);
+  });
+
+  test('#278 fetchMetadata never buffers more than MAX_ANSWER bytes: a larger content-length or a longer stream is null', async () => {
+    let streamClosed = false;
+    const server = createServer((req, res: ServerResponse) => {
+      if (req.url === '/small') return void res.end('t2.micro');
+      if (req.url === '/declared') {
+        res.writeHead(200, { 'content-length': String(MAX_ANSWER + 1) });
+        return void res.end('x'.repeat(MAX_ANSWER + 1));
+      }
+      // No content-length: chunks well past the cap, and the stream never ends on its own.
+      res.writeHead(200, { 'content-type': 'text/plain' });
+      res.on('close', () => (streamClosed = true));
+      const timer = setInterval(() => res.write('x'.repeat(1024)), 5);
+      res.on('close', () => clearInterval(timer));
+    });
+    await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
+    const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+    try {
+      assert.equal(await fetchMetadata('GET', `${base}/small`, {}, 1_000), 't2.micro');
+      assert.equal(await fetchMetadata('GET', `${base}/declared`, {}, 1_000), null);
+      const started = Date.now();
+      assert.equal(await fetchMetadata('GET', `${base}/stream`, {}, 5_000), null);
+      assert.ok(Date.now() - started < 4_000, 'stopped at the cap, not at the timeout');
+      const end = Date.now() + 2_000;
+      while (!streamClosed && Date.now() < end) await new Promise((r) => setTimeout(r, 10));
+      assert.equal(streamClosed, true, 'the stream is canceled past the cap');
+    } finally {
+      server.closeAllConnections();
+      await new Promise((r) => server.close(r));
+    }
   });
 });
