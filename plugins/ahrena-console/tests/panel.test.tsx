@@ -24,6 +24,8 @@ function fakes(on: any, opts: { scenario?: ScenarioName; outside?: boolean; env?
   const requests: Request[] = []
   const state: { scenario: ScenarioName; outside: boolean; panel?: Panel } = { scenario: opts.scenario ?? 'p1', outside: opts.outside ?? false }
   on('http.fetch', async (_$: unknown, e: { url: string; init?: { method?: string } }) => {
+    // The orders of the console (#61) have their own clock and their own test (orders.test.tsx).
+    if (/\/api\/sessions\/[^/]+\/commands/.test(e.url)) return { value: { status: 200, ok: true, headers: {}, text: '{"orders":[]}' } }
     requests.push({ method: e.init?.method ?? 'GET', url: e.url })
     if (state.outside) throw new Error('connect ECONNREFUSED 127.0.0.1:4720')
     return { value: { status: 200, ok: true, headers: {}, text: JSON.stringify(state.panel ?? SCENARIOS[state.scenario]) } }

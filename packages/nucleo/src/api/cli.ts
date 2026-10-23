@@ -84,6 +84,8 @@ import { createCoreGithub, type CoreGithub } from './core-github.ts';
 import { startLocalApi, API_VERSION, type LocalApi } from './server.ts';
 import { createMessagingRoute } from './messaging.ts';
 import { Messaging } from '../messaging/service.ts';
+import { SessionOrders } from '../messaging/orders.ts';
+import { createOrdersRoute } from './orders.ts';
 import { demoMessaging } from '../messaging/demo.ts';
 import { SessionsDirectory } from '../messaging/adapters/sessions-dir.ts';
 import { SocketInbox } from '../messaging/adapters/socket-inbox.ts';
@@ -581,6 +583,7 @@ const api: LocalApi = await startLocalApi({
   reconnect: machineConnection?.legacy ?? reconnectRunner,
   machineConnection: machineConnection ? createConnectionRoute(machineConnection) : null,
   messaging: createMessagingRoute({ messaging, sessions: storage, accounts, log }),
+  orders: createOrdersRoute({ orders: new SessionOrders(), messaging, sessions: storage }),
   tools: toolsExecutor,
   clouds,
   load: () => ({
