@@ -11,6 +11,7 @@ import { openAction } from '../open-action.js';
 import { create as workflowTab } from './session-detail-workflow.js';
 import { create as decisionsTab } from './session-detail-decisions.js';
 import { createComposeBox } from './session-message.js';
+import { downNotice, isMachineUnreachable, LOCAL, machineFromQuery, normalizeMachines, readAgeText, REMOTE_REREAD_MS, routeWithMachine, touchesRemotes, withQuery } from '../machine-filter.js';
 import { attentionOf, attentionPill, isBlocked, isIdle, reasonChip, reasonLabel, attentionDot, statusWithoutAttention } from '../attention.js';
 
 // ---------- Formatos ----------
@@ -139,10 +140,85 @@ function loadCss() {
   document.head.append(el('link', { rel: 'stylesheet', href: '/ui/screens/session-detail.css', 'data-screen': 'session-detail' }));
 }
 
+/** Why a remote session's Detail writes nothing here (issue 243): every write of the Detail is local. */
+export const REMOTE_READ_ONLY = 'Esta sessão roda em outra máquina: daqui o console só lê.';
+
+/**
+ * The Detail's read and write for a remote session (issue 243, C49): every route under `base` goes with
+ * `?machine=<id>`; a write is refused before it leaves (this core would write about a local session).
+ * `onRead()` is called after a good read, `onUnreachable(machine)` on the 503 `machine-unreachable`.
+ * A 503 on a route that already answered becomes a quiet `AbortError` (the tab keeps what it shows);
+ * on a route that never answered, an error with the notice's text.
+ */
+export function remoteDetailContext(ctx, base, machineId, { onRead = () => {}, onUnreachable = () => {} } = {}) {
+  const answered = new Set();
+  const pathOf = (route) => String(route).split('?')[0];
+  const ours = (route) => typeof route === 'string' && (route === base || route.startsWith(`${base}/`) || route.startsWith(`${base}?`));
+  return {
+    ...ctx,
+    async read(route, options) {
+      if (!ours(route)) return ctx.read(route, options);
+      try {
+        const answer = await ctx.read(routeWithMachine(route, machineId), options);
+        answered.add(pathOf(route));
+        onRead();
+        return answer;
+      } catch (e) {
+        if (!isMachineUnreachable(e)) throw e;
+        const m = normalizeMachines([{ ...e.body.machine, id: e.body.machine?.id ?? machineId }])[0] ?? { id: machineId, label: 'Máquina remota', lastReadAt: null };
+        onUnreachable(m);
+        if (answered.has(pathOf(route))) {
+          const quiet = new Error('machine-unreachable');
+          quiet.name = 'AbortError';
+          throw quiet;
+        }
+        const told = new Error(`${m.label} sem conexão. As sessões de lá voltam quando ela responder.`);
+        Object.assign(told, { status: e.status, body: e.body });
+        throw told;
+      }
+    },
+    write: () => Promise.reject(Object.assign(new Error(REMOTE_READ_ONLY), { name: 'WriteError', status: 0 })),
+  };
+}
+
 export async function mount(area, ctx) {
   loadCss();
   const id = ctx.params.id;
   const base = `/api/sessions/${encodeURIComponent(id)}`;
+  // Issue 243 (C49): `?machine=<id>` opens a remote session, read through the tunnel.
+  const machineChoice = machineFromQuery(location.search);
+  const remoteId = machineChoice && machineChoice !== LOCAL && machineChoice !== 'all' ? machineChoice : null;
+  let lastRead = null;
+  let down = null;
+  const noticeSlot = el('div', { class: 'sd-machine-notice' });
+  noticeSlot.hidden = true;
+  const sourceLine = el('div', { class: 'sd-source' });
+  function drawNotice() {
+    noticeSlot.replaceChildren(...(down ? [downNotice(down)] : []));
+    noticeSlot.hidden = !down;
+  }
+  function drawSource() {
+    if (!remoteId) return;
+    const label = headData?.machine?.label ?? down?.label ?? 'máquina remota';
+    sourceLine.replaceChildren(icon('cable'), el('span', {}, `Lida do núcleo da ${label}, pelo túnel${lastRead ? ` · ${readAgeText(Date.now() - lastRead)}` : ''}`));
+  }
+  if (remoteId) {
+    ctx = remoteDetailContext(ctx, base, remoteId, {
+      onRead: () => {
+        lastRead = Date.now();
+        if (down) {
+          down = null;
+          drawNotice();
+        }
+        drawSource();
+      },
+      onUnreachable: (m) => {
+        down = m;
+        drawNotice();
+        drawSource();
+      },
+    });
+  }
   const top = el('div', { class: 'sd-top' });
   const tabs = el('nav', { class: 'sd-tabs', role: 'tablist', 'aria-label': 'Abas da sessão' });
   const body = el('div', { class: 'sd-body', role: 'tabpanel' });
@@ -152,7 +228,7 @@ export async function mount(area, ctx) {
   let tab = (location.hash.slice(1) && TABS_LIST.some((a) => a.id === location.hash.slice(1))) ? location.hash.slice(1) : null;
   const labels = {};
   const tabScreens = Object.fromEntries(
-    TABS_LIST.map((a) => [a.id, a.create(ctx, base, { head: () => headData, setLabel: (t) => ((labels[a.id] = t ?? undefined), drawTabs()) })]),
+    TABS_LIST.map((a) => [a.id, a.create(ctx, base, { head: () => headData, setLabel: (t) => ((labels[a.id] = t ?? undefined), drawTabs()), remote: remoteId ? { id: remoteId } : null })]),
   );
 
   function drawTabs() {
@@ -173,7 +249,7 @@ export async function mount(area, ctx) {
     if (fresh === tab) return;
     tabScreens[tab]?.hide();
     tab = fresh;
-    history.replaceState(null, '', `${location.pathname}#${tab}`);
+    history.replaceState(null, '', `${location.pathname}${location.search}#${tab}`);
     drawTabs();
     body.replaceChildren(loading({ label: 'Carregando', blocks: 2 }));
     tabScreens[tab].show(body);
@@ -183,11 +259,17 @@ export async function mount(area, ctx) {
     try {
       headData = await ctx.read(base);
       ctx.title(headData.session.title);
-      top.replaceChildren(...drawTop(headData, refreshAll, ctx.write));
+      top.replaceChildren(...drawTop(headData, refreshAll, ctx.write, remoteId ? sourceLine : null));
+      drawSource();
       drawTabs();
       return true;
     } catch (e) {
       if (e.name === 'AbortError') return false;
+      // C49: the remote does not answer and nothing was read yet: the notice is the state.
+      if (!headData && remoteId && down) {
+        area.replaceChildren(noticeSlot);
+        return false;
+      }
       if (!headData) {
         area.replaceChildren(
           e.status === 404
@@ -206,7 +288,7 @@ export async function mount(area, ctx) {
     area.replaceChildren(loading({ label: 'Carregando a sessão' }));
     if (!(await readHead())) return;
     tab ??= attentionOf(headData.session.attention) ? 'conversation' : 'agents';
-    area.replaceChildren(top, tabs, body);
+    area.replaceChildren(noticeSlot, top, tabs, body);
     drawTabs();
     body.replaceChildren(loading({ label: 'Carregando', blocks: 2 }));
     tabScreens[tab].show(body);
@@ -227,13 +309,33 @@ export async function mount(area, ctx) {
   });
   ctx.onRestart(refreshAll);
 
+  // A remote session changes nothing on this core's `/api/changes`: re-read now and then, and soon after
+  // a machine goes down or comes back; the age of the read ticks every second.
+  let background = null;
+  let ticker = null;
+  if (remoteId) {
+    background = setInterval(() => refreshAll(), REMOTE_REREAD_MS);
+    ticker = setInterval(drawSource, 1000);
+    ctx.onChange((changes) => {
+      if (!touchesRemotes(changes)) return;
+      clearTimeout(wait);
+      wait = setTimeout(refreshAll, 1000);
+    });
+  }
+  const stop = () => {
+    clearTimeout(wait);
+    clearInterval(background);
+    clearInterval(ticker);
+  };
+  ctx.signal?.addEventListener?.('abort', stop);
+
   await first();
-  return () => clearTimeout(wait);
+  return stop;
 }
 
 // ---------- Topo (A5) ----------
 
-function drawTop(c, refresh, write) {
+function drawTop(c, refresh, write, source = null) {
   const s = c.session;
   const now = Date.now();
   const end = s.status === 'active' || s.status === 'waiting' ? now : Date.parse(c.endedAt ?? s.since);
@@ -245,7 +347,8 @@ function drawTop(c, refresh, write) {
     statusPill(s.status, s.attention),
     reasonChip(s.attention),
     // C70 (issue 285): the open action beside Atualizar, whether the session needs you or not.
-    openAction({ id: s.id, open: c.open }, { size: 'full', className: 'sd-open', write }),
+    // A remote session (C49) gets the "outra máquina" case of C70: off, with where it runs.
+    openAction({ id: s.id, open: c.open, machine: c.machine }, { size: 'full', className: 'sd-open', write, machine: c.machine?.label ?? null }),
     el('button', { type: 'button', class: 'sd-refresh', title: 'Atualizar', 'aria-label': 'Atualizar', onClick: refresh }, icon('refresh')),
   );
   const pills = el(
@@ -256,12 +359,14 @@ function drawTop(c, refresh, write) {
     pill('clock', `${when(s.startedAt)} (${duration(end - Date.parse(s.startedAt))})`),
     c.cost ? el('span', { class: 'sd-pill mono sd-cost', title: 'Estimativa' }, usd(c.cost.usd)) : null,
     c.branch ? pill('branch', c.branch) : null,
+    // C49: the machine chip of a remote session.
+    source && c.machine?.label ? pill('server', c.machine.label) : null,
   );
   const folder = s.cwd ? el('div', { class: 'sd-folder mono' }, icon('folder'), el('span', {}, s.cwd), copyButton(s.cwd, 'a pasta')) : null;
   // The yellow band only when the session is stuck (or stopped by an error); idle gets one muted line.
   const blocked = isBlocked(s.attention) || s.status === 'error';
   const notice = s.banner && blocked ? band(c) : isIdle(s.attention) ? idleLine(c) : null;
-  return [row1, pills, folder, notice].filter(Boolean);
+  return [row1, pills, folder, source, notice].filter(Boolean);
 }
 
 function idleLine(c) {
@@ -459,7 +564,7 @@ const TOOL_STATE = {
   running: { rotulo: 'Rodando', icone: 'clock' },
 };
 
-function conversationTab(ctx, base, { head } = {}) {
+function conversationTab(ctx, base, { head, remote = null } = {}) {
   let target = null;
   let agent = null;
   // #61: the compose box at the foot of the tab. It is made once and survives every re-draw of the
@@ -467,6 +572,8 @@ function conversationTab(ctx, base, { head } = {}) {
   let compose = null;
   const composeBox = () =>
     (compose ??= createComposeBox(ctx, ctx.params.id, {
+      // Issue 243: a remote session's process runs over there; the box stays off, with the reason.
+      remote: Boolean(remote),
       head: () => head?.() ?? null,
       // C53: a session with no live process offers the header's open action (issue 285) in the box too.
       openControl: () => { const h = head?.(); return h?.open ? openAction({ id: ctx.params.id, open: h.open }, { size: 'full', className: 'sm-open', write: ctx.write }) : null; },
@@ -561,7 +668,7 @@ function conversationTab(ctx, base, { head } = {}) {
       if (target === node) node.replaceChildren(content, composeBox().node);
       // "Mandar mensagem" from a list opens here with `?focus=message`: the box takes the focus once.
       if (new URLSearchParams(location.search).get('focus') === 'message') {
-        history.replaceState(null, '', `${location.pathname}${location.hash}`);
+        history.replaceState(null, '', `${location.pathname}${withQuery(location.search, { focus: null })}${location.hash}`);
         composeBox().focus();
       }
     },
