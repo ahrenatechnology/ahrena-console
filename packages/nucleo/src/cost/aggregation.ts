@@ -10,7 +10,7 @@
 
 import { dedupeByMessage, bucketKey, addCounts, type UsageSample } from '../ingest/history/usage.ts';
 import type { MessageUsage } from '../ingest/history/transcript.ts';
-import { emptyTokenCounts, type ModelPricing, type TokenCounts, type TokenUsage } from '../model.ts';
+import { emptyTokenCounts, type ModelPricing, type SessionEvent, type TokenCounts, type TokenUsage } from '../model.ts';
 import { contextSizeFor, estimateCost, type CostEstimate } from '../pricing.ts';
 import type { StoragePort } from '../storage-port.ts';
 import { currentPrices } from './table.ts';
@@ -130,6 +130,12 @@ function subtract(a: TokenCounts, b: TokenCounts): TokenCounts {
 
 const sumOf = (t: TokenCounts): number => KEYS.reduce((s, k) => s + t[k], 0);
 
+/** The usage sample an event carries (an assistant message in the transcript), or `null`. */
+export function usageSampleOf(e: SessionEvent): UsageSample | null {
+  const usage = eventUsage(e.data);
+  return usage ? { eventId: e.id, agentId: e.agentId ?? '', usage } : null;
+}
+
 /** A session's slices: one per assistant message, plus each bucket's remainder. */
 export async function sessionCostSlices(
   port: Pick<StoragePort, 'listEvents' | 'listTokenUsage'>,
@@ -143,14 +149,25 @@ export async function sessionCostSlices(
   do {
     const page = await port.listEvents(sessionId, { limit: 500, cursor });
     for (const e of page.items) {
-      const usage = eventUsage(e.data);
-      if (!usage) continue;
-      samples.push({ eventId: e.id, agentId: e.agentId ?? '', usage });
+      const sample = usageSampleOf(e);
+      if (!sample) continue;
+      samples.push(sample);
       when.set(e.id, e.createdAt);
     }
     cursor = page.nextCursor;
   } while (cursor);
+  return costSlicesOf(port, sessionId, samples, when, prices, timeZone);
+}
 
+/** The same slices from samples already read (`when` is the `createdAt` of each sample's event). */
+export async function costSlicesOf(
+  port: Pick<StoragePort, 'listTokenUsage'>,
+  sessionId: string,
+  samples: readonly UsageSample[],
+  when: ReadonlyMap<string, string>,
+  prices: readonly ModelPricing[],
+  timeZone = 'UTC',
+): Promise<CostSlice[]> {
   const buckets = await port.listTokenUsage(sessionId);
   // What the events already explain of each bucket.
   const explained = new Map<string, { tokens: TokenCounts; web: [number, number, number] }>();
