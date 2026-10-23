@@ -85,7 +85,7 @@ const tunnelReading = (state: 'up' | 'idle' | 'busy' | 'down', heldBy: string | 
   });
 
 describe('#278 the connection state, derived', () => {
-  test('#278 up: the remote núcleo answers; since = the ssh process start; ports of the tunnel that forwards the machine port', () => {
+  test('#278 up: the remote core answers; since = the ssh process start; ports of the tunnel that forwards the machine port', () => {
     const { status } = deriveConnection(base({ machine: UP, reading: tunnelReading('up') }));
     assert.equal(status.state, 'up');
     assert.equal(status.since, '2026-11-02T09:00:00.000Z');
@@ -129,7 +129,7 @@ describe('#278 the connection state, derived', () => {
     assert.equal(deriveConnection(base({ failure, machine: UP })).status.state, 'up');
   });
 
-  test('#278 stopped: after a stop the user asked for, even with the machine down; only Subir is offered', () => {
+  test('#278 stopped: after a stop the user asked for, even with the machine down; only Start is offered', () => {
     const { status } = deriveConnection(base({ stoppedAt: '2026-11-02T11:00:00.000Z', machine: NO_RESPONSE, failure: { reason: 'exit-code', at: 'x', exitCode: 1 } }));
     assert.equal(status.state, 'stopped');
     assert.equal(status.since, '2026-11-02T11:00:00.000Z');
@@ -176,7 +176,7 @@ describe('#278 the reason, in the order of the closed list', () => {
     assert.equal(tunnelFor(sshListener, 14720).busy, false);
   });
 
-  test('#278 (3) the port open and no núcleo answering', () => {
+  test('#278 (3) the port open and no core answering', () => {
     assert.equal(deriveConnection(base({ machine: NO_RESPONSE, failure })).status.lastError?.reason, 'core-not-answering');
   });
 
@@ -363,7 +363,7 @@ describe('#278 the start, stop and reconnect jobs', () => {
     assert.deepEqual((await s.conn.status('ws-exemplo'))!.lastError, { reason: 'exit-code', at: (await s.conn.status('ws-exemplo'))!.lastError!.at, exitCode: 3, holder: null });
   });
 
-  test('#278 stop: stopped by you, the unreachable alert is suppressed until a start, and Subir clears it', async () => {
+  test('#278 stop: stopped by you, the unreachable alert is suppressed until a start, and Start clears it', async () => {
     const m = marker();
     const s = setup({ start: cmd('marker', m), stop: cmd('print', 'stopping', '0') }, { machine: UP });
     const r = await s.conn.stop('ws-exemplo', 'ui');

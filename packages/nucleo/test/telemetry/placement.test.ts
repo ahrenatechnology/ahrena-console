@@ -81,7 +81,7 @@ describe('#278 placement, from the first source that answers', () => {
     assert.ok(reads >= 2);
   });
 
-  test('#278 withPlacement adds it to the núcleo’s own reading, and the Mac carries a remote’s through, validated', async () => {
+  test('#278 withPlacement adds it to the core’s own reading, and the Mac carries a remote’s through, validated', async () => {
     const probe = new PlacementProbe({ request: imds(null).request, ssmRegistrationFile: '/r', readText: files({ '/r': JSON.stringify({ ManagedInstanceID: MANAGED, Region: 'regiao-exemplo-1' }) }) });
     const own = await withPlacement({ collect: async () => reading() }, probe).collect();
     assert.equal(own.placement?.source, 'ssm-registration');

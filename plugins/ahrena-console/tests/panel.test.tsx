@@ -1501,7 +1501,7 @@ const SSO_EXPIRED: NonNullable<Panel['machine']>['connection'] = {
   lastError: { reason: 'sso-expired', at: new Date(READ_AT).toISOString(), exitCode: null, holder: null },
 }
 
-test('P14 narrow and wide: a band at the top of Esta sessão with the reason and "resolver no console ›"', async ($, on) => {
+test('P14 narrow and wide: a band at the top of the current-session card with the reason and the link to resolve it in the console', async ($, on) => {
   const f = await open($, on)
   f.state.panel = onWorkstation(SSO_EXPIRED)
   await f.timer.advance(5_000)

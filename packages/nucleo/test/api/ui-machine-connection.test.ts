@@ -294,7 +294,7 @@ describe('#278 machine-connection-format: the connection of GET /api/machines', 
     assert.deepEqual(l, { title: 'Entrando na AWS…', text: 'aguardando o login no navegador. Quando terminar, o console sobe o túnel sozinho.', command: 'Roda: aws sso login --sso-session sessao-exemplo · até 5 min' });
   });
 
-  test('Onde roda: known, unknown, an older core over there, no reading', () => {
+  test('the "where it runs" card: known, unknown, an older core over there, no reading', () => {
     const k = f.placementView(f.normalizePlacement(PLACEMENT));
     assert.deepEqual(k.fields.map((x: Obj) => x.value), ['AWS', 'Instância gerenciada (SSM)', 'regiao-exemplo-1', 'mi-0exemplo000000']);
     assert.match(k.source, /^Fonte: registro do agente SSM \(sem metadados de instância nesta máquina\) · lido às \d\d:\d\d$/);
@@ -337,7 +337,7 @@ describe('#278 the Workstation screen with its connection (C62 to C65)', () => {
     assert.doesNotMatch(sub(m.area), /AWS/);
   });
 
-  test('C62 up: the trio, the ports, what runs, Reconectar and Parar, and Onde roda; the header has AWS and the region', async () => {
+  test('C62 up: the trio, the ports, what runs, Reconnect and Stop, and the "where it runs" card; the header has AWS and the region', async () => {
     const m = mount();
     await m.ready;
     const card = part(m.area, 'connection')!;
@@ -357,7 +357,7 @@ describe('#278 the Workstation screen with its connection (C62 to C65)', () => {
     assert.ok(globalThis.document.head.querySelector('link[data-screen="machine-connection"]'));
   });
 
-  test('C63 down with SSO expired: the red band, "Entrar na AWS e subir o túnel" POSTs only the id, "Só entrar" logs in this Mac in browser mode', async () => {
+  test('C63 down with SSO expired: the red band, the login-and-start button POSTs only the id, the login-only button logs in this Mac in browser mode', async () => {
     setRemote('unreachable', 'port-closed');
     connection = down({ cloud: expired, lastError: { reason: 'sso-expired', at: iso(5 * H), exitCode: null, holder: null }, actions: { start: true, stop: false, reconnect: true, loginAndStart: true } });
     const m = mount(async (w) => (w.route.startsWith('/api/connectors') ? { login: { state: 'running', mode: 'browser', startedAt: new Date().toISOString(), timeoutSeconds: 300 } } : { connection }));
@@ -384,7 +384,7 @@ describe('#278 the Workstation screen with its connection (C62 to C65)', () => {
     assert.deepEqual(m.writes[2], { route: '/api/connectors/aws/sessions/sessao-exemplo/login', body: null, options: { method: 'DELETE' } });
   });
 
-  test('C64 1: the login-and-start job: steps, the time against the limit (ticking), Cancelar DELETEs', async () => {
+  test('C64 1: the login-and-start job: steps, the time against the limit (ticking), Cancel DELETEs', async () => {
     setRemote('unreachable', 'port-closed');
     connection = down({ state: 'starting', cloud: expired, job: { kind: 'login-and-start', steps: ['login', 'start', 'read'], step: 'login', state: 'running', startedAt: iso(48_000), endedAt: null, stepStartedAt: iso(48_000), stepTimeoutSeconds: 300, startedBy: 'ui' } });
     const m = mount();
@@ -414,7 +414,7 @@ describe('#278 the Workstation screen with its connection (C62 to C65)', () => {
     assert.equal(pill(m.area), 'Subindo o túnel');
   });
 
-  test('C64 3: Parar asks first; Cancelar closes without a write, Escape too; confirming POSTs stop', async () => {
+  test('C64 3: Stop asks first; Cancel closes without a write, Escape too; confirming POSTs stop', async () => {
     const m = mount();
     await m.ready;
     button(m.area, 'stop-ask').click();
@@ -440,7 +440,7 @@ describe('#278 the Workstation screen with its connection (C62 to C65)', () => {
     assert.deepEqual(m.writes[0], { route: '/api/machines/ws-exemplo/connection/stop', body: {}, options: undefined });
   });
 
-  test('C64 4: stopped by you: the neutral band, the grey pill, Subir o túnel in the card', async () => {
+  test('C64 4: stopped by you: the neutral band, the grey pill, the start-the-tunnel button in the card', async () => {
     setRemote('unreachable', 'port-closed');
     connection = down({ state: 'stopped', since: iso(10 * M) });
     const m = mount();
@@ -455,7 +455,7 @@ describe('#278 the Workstation screen with its connection (C62 to C65)', () => {
     assert.equal(m.writes[0]!.route, '/api/machines/ws-exemplo/connection/start');
   });
 
-  test('C65: the 15-minute warning with "Entrar na AWS"', async () => {
+  test('C65: the 15-minute warning with the login button', async () => {
     connection = connOf({ cloud: { ...expired, state: 'expiring', expiresAt: new Date(NOW + 14 * M + 30_000).toISOString() } });
     const m = mount();
     await m.ready;
@@ -463,7 +463,7 @@ describe('#278 the Workstation screen with its connection (C62 to C65)', () => {
     assert.deepEqual(buttons(band(m.area)), ['Entrar na AWS']);
   });
 
-  test('C65: port busy, with "Ver em Esta máquina"; the SSM agent offline; the exit code with the log path', async () => {
+  test('C65: port busy, with the link to this machine’s screen; the SSM agent offline; the exit code with the log path', async () => {
     setRemote('unreachable', 'port-closed');
     connection = down({ state: 'failing', lastError: { reason: 'port-busy', at: iso(0), exitCode: null, holder: 'node' } });
     let m = mount();
