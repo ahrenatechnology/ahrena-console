@@ -243,6 +243,30 @@ export type Panel = {
   prs?: { total: number; items: WaitingPr[] }
   /** `null`: o núcleo subiu sem as decisões (ou é de antes delas). */
   decisions?: PanelDecisions | null
+  /**
+   * #278 (P14): the remote machine the session runs on, with its connection as `GET /api/machines`
+   * serves it. Absent or `null` for a session of this machine, and from a core that does not send it
+   * yet: then the panel shows no band.
+   */
+  machine?: PanelMachine | null
+}
+
+/** Why the connection is down: the core's closed list (`CONNECTION_REASONS`). */
+export type ConnectionReason = 'sso-expired' | 'port-busy' | 'core-not-answering' | 'ssm-agent-offline' | 'host-unknown' | 'key-refused' | 'exit-code'
+
+/** The part of a remote machine's `connection` the panel reads (#278). */
+export type PanelMachineConnection = {
+  state: 'up' | 'down' | 'starting' | 'stopping' | 'failing' | 'stopped'
+  since: string | null
+  lastError: { reason: ConnectionReason | string; at?: string | null; exitCode?: number | null; holder?: string | null } | null
+}
+
+export type PanelMachine = {
+  id: string
+  label: string
+  /** The newest reading of the machine: what the panel shows is from then. */
+  lastReadAt: string | null
+  connection: PanelMachineConnection | null
 }
 
 /** A última leitura do núcleo e como ela foi. */

@@ -114,6 +114,9 @@ import { publishToolsChanges, ToolsExecutor, toolsLogFile } from '../tools/execu
 import { AwsConnector, publishConnectorChanges } from '../clouds/aws-connector.ts';
 import { loopbackWrite } from '../clouds/remote-connectors.ts';
 import { createCloudsRoute } from './clouds.ts';
+import { MachineConnection, publishConnectionChanges } from '../telemetry/connection.ts';
+import { PlacementProbe, withPlacement } from '../telemetry/placement.ts';
+import { createConnectionRoute } from './connection.ts';
 import { LiveClaudeProcesses } from './live-processes.ts';
 import { SessionOpenDescriber } from './session-open.ts';
 import { createTerminalFocuser, createTerminalOpener } from './terminal-launch.ts';
@@ -443,7 +446,8 @@ if (demo) {
   addSampler(SIMULATED_WORKSTATION.id, new SimulatedCollector('workstation'));
 } else if (!o.noTelemetry) {
   const platformCollector = collectorFor();
-  if (platformCollector) addSampler('local', platformCollector);
+  // Decision 0013 section 5: the Mac's núcleo asks the cloud nothing about itself; only a remote one reads its placement.
+  if (platformCollector) addSampler('local', process.platform === 'darwin' ? platformCollector : withPlacement(platformCollector, new PlacementProbe({ log })));
   else log(`telemetry: no collector for ${process.platform}`);
   const get = loopbackGet();
   const onAlertChange = publishAlertChanges(changes);
@@ -459,6 +463,8 @@ if (demo) {
         onAlertChange,
         onAttentionChange: publishRemoteAttentionChanges(changes),
         reconnectStatus: (id) => reconnectRunner?.status(id, registry.reconnectOf(id) ?? null) ?? null,
+        connectionStatus: (id) => machineConnection?.status(id) ?? Promise.resolve(null),
+        suppressUnreachable: (id) => machineConnection?.suppressUnreachable(id) ?? false,
         log,
       }),
     // A machine removed from the file closes its alerts, and the screen and the tray hear about it.
@@ -507,6 +513,8 @@ const toolsService = demo ? null : new ToolsService({ store: new SqliteToolCheck
 const toolsExecutor = toolsService ? new ToolsExecutor({ service: toolsService, logFile: toolsLogFile(dataDir), onChange: publishToolsChanges(changes), log }) : null;
 // The cloud connectors (#277, decision 0013): this machine's ~/.aws/config, its SSO sessions and their logins (into reconnect.log); the remote machines' through their tunnel port. Not in --demo.
 const awsConnector = demo ? null : new AwsConnector({ logFile: reconnectLogFile(dataDir), wakeOnView: true, onChange: publishConnectorChanges(changes), log });
+// The connection of each remote machine (#278, decision 0013 section 4): start, stop, reconnect and login-and-start, on the reconnect runner.
+const machineConnection = remoteMachines && reconnectRunner ? new MachineConnection({ registry: remoteMachines, startRunner: reconnectRunner, logFile: reconnectLogFile(dataDir), cloud: awsConnector, localReading: () => sampleStore.latest('local'), onChange: publishConnectionChanges(changes), log }) : null;
 const clouds = awsConnector ? createCloudsRoute({ aws: awsConnector, remote: { port: (id) => remoteMachines?.get(id)?.port, get: loopbackGet(), write: loopbackWrite() } }) : null;
 
 let historyReady = false;
@@ -572,7 +580,8 @@ const api: LocalApi = await startLocalApi({
   agentConfig,
   telemetry: telemetryService,
   machineReader: new MachineReader({ get: loopbackGet({ timeoutMs: MACHINE_READ_ADAPTER_TIMEOUT_MS }), machines: () => remoteMachines?.list() ?? [] }),
-  reconnect: reconnectRunner,
+  reconnect: machineConnection?.legacy ?? reconnectRunner,
+  machineConnection: machineConnection ? createConnectionRoute(machineConnection) : null,
   messaging: createMessagingRoute({ messaging, sessions: storage, accounts, log }),
   orders: createOrdersRoute({ orders: new SessionOrders(), messaging, sessions: storage }),
   tools: toolsExecutor,
@@ -684,6 +693,7 @@ async function shutdown() {
   await Promise.all([...samplers.map((a) => a.stop()), remoteMachines?.stop()]);
   // #280: the jobs run detached, so they would outlive the core; stop them and write their footers first.
   await toolsExecutor?.stopAll().catch(() => undefined);
+  await machineConnection?.stopAll().catch(() => undefined);
   await awsConnector?.stop().catch(() => undefined);
   await api.close().catch(() => undefined);
   await storage.close();

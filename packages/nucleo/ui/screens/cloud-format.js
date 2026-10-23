@@ -20,7 +20,7 @@ export const RUNNING_POLL_MS = 3_000;
 export const RECENT_LOGIN_MS = 10 * 60_000;
 
 // The core's rule for a name that goes on a command line (src/clouds/aws-config.ts `SAFE_CLI_NAME`).
-export const SAFE_NAME = /^[A-Za-z0-9._-]{1,64}$/;
+export const SAFE_NAME = /^[A-Za-z0-9_][A-Za-z0-9._-]{0,63}$/;
 const MACHINE_ID = /^[a-z0-9][a-z0-9-]{0,63}$/;
 
 const SESSION_STATES = ['valid', 'expiring', 'expired', 'never', 'unknown'];

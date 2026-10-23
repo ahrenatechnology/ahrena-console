@@ -75,6 +75,8 @@ function cases(): [string, Panel][] {
     ...(['p1', 'p4', 'p6', 'p12', 'p13'] as const).map((k) => [k, SCENARIOS[k]] as [string, Panel]),
     ['real', REAL],
     ['long-title', { ...REAL, session: { ...REAL.session!, title: LONG_TITLE } }],
+    // #278 (P14): the band of a machine without connection, with the longest reason.
+    ['p14', { ...REAL, machine: { id: 'workstation', label: 'Workstation', lastReadAt: new Date(NOW - 5 * 3_600_000).toISOString(), connection: { state: 'failing', since: null, lastError: { reason: 'core-not-answering' } } } }],
   ]
   for (const [name, p] of bases) {
     if (!p.session) {

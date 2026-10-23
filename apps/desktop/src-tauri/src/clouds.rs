@@ -29,7 +29,7 @@ pub struct Aws {
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct Session {
     pub name: String,
-    /// The name can go on the `aws` command line (`^[A-Za-z0-9._-]{1,64}$`); without it, no Entrar.
+    /// The name can go on the `aws` command line (`^[A-Za-z0-9_][A-Za-z0-9._-]{0,63}$`: never a leading `-` or `.`); without it, no Entrar.
     #[serde(rename = "loginSupported", default)]
     pub login_supported: bool,
     /// `valid`, `expiring`, `expired`, `never` or `unknown`.
@@ -96,7 +96,9 @@ pub fn login_from_response(text: &str) -> Option<Login> {
 
 /// The names the core accepts on the command line (`SAFE_CLI_NAME` in aws-config.ts).
 pub fn safe_name(name: &str) -> bool {
-    (1..=64).contains(&name.len()) && name.bytes().all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'_' | b'-')) && !matches!(name, "." | "..")
+    (1..=64).contains(&name.len())
+        && name.bytes().all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'_' | b'-'))
+        && !name.starts_with(['-', '.'])
 }
 
 /// `POST` here starts the login of the session, in the browser; `None` for a name the core would
@@ -316,7 +318,7 @@ pub mod tests {
     #[test]
     fn login_path_and_response() {
         assert_eq!(login_path("example-session").as_deref(), Some("/api/connectors/aws/sessions/example-session/login"));
-        for bad in ["", ".", "..", "a/b", "sessao com espaco", "a%2Fb", &"x".repeat(65)] {
+        for bad in ["", ".", "..", "a/b", "sessao com espaco", "a%2Fb", "-profile", ".hidden", &"x".repeat(65)] {
             assert_eq!(login_path(bad), None, "{bad:?}");
         }
         let l = login_from_response(r#"{ "login": { "state": "running", "mode": "browser", "startedAt": "2026-10-18T17:59:12.000Z" } }"#).unwrap();

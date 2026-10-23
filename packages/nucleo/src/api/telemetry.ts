@@ -3,7 +3,8 @@
 //
 // - `GET /api/machines`: `[{ id, label, state, reason, version, port, lastReadAt, alerts, reconnect }]`,
 //   this machine first, then the remote ones of `machines.json` (#176); `reconnect` (#244) is `null`
-//   for this machine and the demo's simulated one. `state` is `connected`,
+//   for this machine and the demo's simulated one; each remote machine also has `connection` (#278,
+//   src/telemetry/connection.ts; writes in api/connection.ts). `state` is `connected`,
 //   `unreachable` (with `reason`), `not-configured` or `incompatible-version`.
 // - `GET /api/telemetry?machine=<id>&hours=1|12`: `{ version, machine, hours, current, series, alerts }`
 //   (src/telemetry/service.ts). `machine` defaults to `local`, `hours` to 1. An invalid parameter
