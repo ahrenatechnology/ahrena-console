@@ -870,7 +870,7 @@ mod tests {
     }
 
     #[test]
-    fn a10_expiring_notifies_once_silently_with_entrar_and_abrir() {
+    fn a10_expiring_notifies_once_silently_with_login_and_open() {
         let (mut d, now) = (CloudSessionDetector::default(), clouds::tests::now());
         let end = "2026-10-18T18:15:00.000Z";
         d.observe(&with_state(clouds::tests::a9(), "sessao-exemplo", "valid", Some(end)), now, 0);

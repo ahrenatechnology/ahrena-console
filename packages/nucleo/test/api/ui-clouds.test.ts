@@ -422,8 +422,8 @@ describe('issue 277: the Perfis de nuvem card (C66, C67)', () => {
     const c = card('local', async () => connectorsBody(aws({ sessions: [session(), session({ name: 'sessao-lab', state: 'valid', expiresAt: iso(Date.now() + 3_600_000) })] })));
     const node = c.profiles.node('Esta máquina');
     await until(() => !node.hasAttribute('hidden'));
-    assert.deepEqual(node.querySelectorAll('tbody tr').map((r) => r.getAttribute('data-session')), ['sessao-exemplo', 'sessao-lab']);
-    assert.deepEqual(node.querySelectorAll('tbody button').map((b) => texto(b)), ['Entrar', 'Entrar de novo']);
+    assert.deepEqual(node.querySelectorAll('tbody tr').map((r: ElementoFalso) => r.getAttribute('data-session')), ['sessao-exemplo', 'sessao-lab']);
+    assert.deepEqual(node.querySelectorAll('tbody button').map((b: ElementoFalso) => texto(b)), ['Entrar', 'Entrar de novo']);
     assert.match(texto(node), /deste Mac · lidos do ~\/.aws\/config daqui/);
     assert.equal(node.querySelector('a.cl-link')!.getAttribute('href'), '/ui/connections');
     c.change([{ type: 'connector', key: 'aws' }]);
@@ -470,11 +470,27 @@ describe('issue 277: the Perfis de nuvem card (C66, C67)', () => {
       await flush();
       assert.equal(c.reads.length, 2);
       assert.ok(node.classList.contains('cl-faded'));
-      assert.deepEqual(node.querySelectorAll('tbody tr').map((r) => r.getAttribute('data-session')), ['sessao-exemplo'], 'the last reading');
+      assert.deepEqual(node.querySelectorAll('tbody tr').map((r: ElementoFalso) => r.getAttribute('data-session')), ['sessao-exemplo'], 'the last reading');
       assert.equal(node.querySelector('button[data-cl-action="login"]'), null);
       assert.match(texto(node), /Sem conexão: estes são os de \d\d:\d\d\. Entrar volta quando a Workstation responder\./);
     } finally {
       mock.timers.reset();
     }
+  });
+});
+
+describe('issue 277: the page named under a device code (decision 0013 §2a, review of #310)', () => {
+  const session = { name: 'sessao-exemplo', startUrlHost: 'exemplo.awsapps.com' };
+  test('the session portal is named as the session portal', () => {
+    assert.deepEqual(format.portalLine('https://exemplo.awsapps.com/start/#/device', session), { host: 'exemplo.awsapps.com', text: ', o portal da sessão sessao-exemplo. Confira antes de confirmar.' });
+  });
+  test('the region SSO device page is named as that page, never as the session portal', () => {
+    const line = format.portalLine('https://device.sso.regiao-exemplo-1.amazonaws.com/?user_code=ABCD-EFGH', session);
+    assert.equal(line.host, 'device.sso.regiao-exemplo-1.amazonaws.com');
+    assert.match(line.text, /página de dispositivo do SSO da AWS na região regiao-exemplo-1/);
+    assert.doesNotMatch(line.text, /portal da sessão/);
+  });
+  test('a URL that does not parse gives no line', () => {
+    assert.equal(format.portalLine('não é url', session), null);
   });
 });

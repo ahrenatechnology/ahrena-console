@@ -309,12 +309,17 @@ describe('#277 a remote machine through its tunnel port', () => {
     }
   });
 
-  test('#277 an AWS device code from the remote is kept', async () => {
+  test('#277 an AWS device code from the remote is kept once an earlier code-free answer vouched for the portal', async () => {
     const body = structuredClone(remoteBody);
-    body.connectors[0]!.sessions![0]!.login!.deviceCode.verificationUri = 'https://device.sso.regiao-exemplo-1.amazonaws.com/';
+    const login = body.connectors[0]!.sessions![0]!.login!;
+    const running = { ...login, deviceCode: { ...login.deviceCode, verificationUri: 'https://device.sso.regiao-exemplo-1.amazonaws.com/' } };
+    body.connectors[0]!.sessions![0]!.login = { state: 'idle' } as typeof login;
     const remote = await fakeRemote({ connectors: { status: 200, body }, login: { status: 202, body: {} } });
     const b = await boot({}, { 'ws-exemplo': remote.port });
     try {
+      const first = await call(b.api.url, 'GET', '/api/machines/ws-exemplo/connectors');
+      assert.equal(first.json.connectors[0].sessions[0].login.deviceCode, null);
+      body.connectors[0]!.sessions![0]!.login = running;
       const r = await call(b.api.url, 'GET', '/api/machines/ws-exemplo/connectors');
       assert.deepEqual(r.json.connectors[0].sessions[0].login.deviceCode, { verificationUri: 'https://device.sso.regiao-exemplo-1.amazonaws.com/', userCode: 'ABCD-EFGH', expiresAt: '2026-10-22T09:10:00.000Z' });
     } finally {

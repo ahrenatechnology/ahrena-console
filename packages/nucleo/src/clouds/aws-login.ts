@@ -77,6 +77,22 @@ export function acceptVerificationUri(candidate: string): string | null {
   return url.href;
 }
 
+/**
+ * Whether a device code's verification URL is on a session's portal (`startUrlHost`) or on the SSO
+ * device page of its region (`device.sso.<region>.amazonaws.com`). The caller passes the portal it
+ * trusts, never the one the same unauthenticated answer claims (remote-connectors.ts, SessionPortals).
+ */
+export function deviceCodeOnSessionPortal(verificationUri: string, startUrlHost: string | null, region: string | null): boolean {
+  let host: string;
+  try {
+    host = new URL(verificationUri).hostname;
+  } catch {
+    return false;
+  }
+  if (startUrlHost && host === startUrlHost.toLowerCase()) return true;
+  return !!region && /^[a-z0-9-]{1,32}$/.test(region) && host === `device.sso.${region}.amazonaws.com`;
+}
+
 /** The first accepted URI and the first user code in the CLI's stdout; anything else is ignored. */
 export function extractDeviceCode(stdout: string): { verificationUri: string | null; userCode: string | null } {
   let verificationUri: string | null = null;
