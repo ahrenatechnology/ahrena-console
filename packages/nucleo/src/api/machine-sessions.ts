@@ -128,7 +128,7 @@ export interface LocalScreens {
   events?: FeedDeEventos | null;
   dashboard?: (() => Promise<RespostaDoDashboard>) | null;
   /** #319: this Mac's panel builder, to know which sessions are its own; without it, the panel is never a remote's. */
-  panel?: Pick<MontadorDoPainel, 'knows'> | null;
+  panel?: Pick<MontadorDoPainel, 'knows' | 'api'> | null;
 }
 
 export interface MachineSessionsOptions {
@@ -169,7 +169,7 @@ class MachineSessionsRoute {
   constructor(o: MachineSessionsOptions) {
     this.o = o;
     this.remoteSessions = o.remoteSessions ?? new RemoteSessionMap({ now: () => o.reader?.now() ?? Date.now() });
-    this.panels = o.reader ? new RemotePanels({ reader: o.reader, sessions: this.remoteSessions, lastReadAt: (id) => this.lastReadAt(id) }) : null;
+    this.panels = o.reader ? new RemotePanels({ reader: o.reader, sessions: this.remoteSessions, lastReadAt: (id) => this.lastReadAt(id), api: o.local.panel ? () => o.local.panel!.api() : undefined }) : null;
   }
 
   async respond(res: ServerResponse, url: URL): Promise<boolean> {

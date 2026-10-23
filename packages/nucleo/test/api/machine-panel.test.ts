@@ -214,18 +214,13 @@ describe('#319 the panel of a remote session', () => {
     assert.equal(r.body.session.title, own.session.title);
     assert.deepEqual(r.body.cost, own.cost);
     assert.equal(r.body.api.opensSession, false);
+    assert.deepEqual(r.body.api, (await get(plain, `/api/panel/${await localSessionId()}`)).body.api, "this API's own footer, never the remote's");
     assert.ok(r.body.children.every((c: { local: unknown }) => c.local === null));
     assert.ok([...r.body.needYou.machine, ...r.body.needYou.family].every((i: { local: unknown }) => i.local === null));
-    if (r.body.decisions) {
-      assert.equal(r.body.decisions.toConfirm, 0);
-      for (const d of r.body.decisions.list?.items ?? []) {
-        assert.notEqual(d.state, 'to_confirm');
-        assert.equal(d.undo, null);
-      }
-    }
+    assert.equal(r.body.decisions, null);
   });
 
-  test('a remote decision to confirm is never offered: no Confirmar or Descartar', () => {
+  test('no remote decision is offered: no Confirmar, Descartar, Ajustar or Desfazer', () => {
     const own = minimalPanel(NOW);
     const body = {
       ...own,
@@ -237,8 +232,7 @@ describe('#319 the panel of a remote session', () => {
       work: { pr: { url: 'http://evil.example/' } },
     };
     const p = remotePanel(body, 's1') as Record<string, any>;
-    assert.deepEqual(p.decisions.list.items, [{ id: 'd2', state: 'current', undo: null }]);
-    assert.equal(p.decisions.toConfirm, 0);
+    assert.equal(p.decisions, null);
     assert.equal(p.children[0].local, null);
     assert.deepEqual(p.prs, { total: 1, items: [{ url: 'https://github.com/o/r/pull/1', session: { local: null } }] });
     assert.equal(p.work.pr, null);
@@ -369,7 +363,8 @@ describe('#319 a remote session whose remote is down (AC-1)', () => {
     assert.equal(r.body.session, null);
     assert.equal(r.body.machine.id, WS.id);
     assert.deepEqual(r.body.machine.connection, FAILING);
-    assert.deepEqual(Object.keys(r.body).sort(), [...Object.keys(minimalPanel(NOW)), 'machine'].sort());
+    assert.deepEqual(Object.keys(r.body).sort(), [...Object.keys(minimalPanel(NOW)), 'api', 'machine'].sort());
+    assert.equal(typeof r.body.api.version, 'string');
   });
 
   test('a remote that answers too slowly or badly is also served from the last panel, never 5xx', async () => {

@@ -20,16 +20,10 @@
 //   `{ state, since, lastError }`, from the injected `connectionOf`: #278's `MachineConnection.status`,
 //   the same `connection` as `GET /api/machines`. `null` without one (the demo, no reconnect runner).
 
-import type { ConnectionError, ConnectionStatus } from '../telemetry/model.ts';
+import type { ConnectionStatus } from '../telemetry/model.ts';
 import type { RemoteGet } from '../telemetry/ports.ts';
 import type { MachineStatus } from '../telemetry/service.ts';
-
-/** A remote machine's connection as the panel's P14 band reads it (the mod's `PanelMachineConnection`). */
-export interface PanelConnection {
-  state: ConnectionStatus['state'];
-  since: string | null;
-  lastError: ConnectionError | null;
-}
+import type { PanelMachineConnection } from './types.ts';
 
 /** The source of a remote's connection: #278's `MachineConnection.status(id)`; `null` when it has none. */
 export type ConnectionOf = (machineId: string) => Promise<ConnectionStatus | null> | null;
@@ -128,7 +122,7 @@ export class MachineReader {
   }
 
   /** The machine's connection, `{ state, since, lastError }` only (never a command or a log path); `null` without one. */
-  async connection(machine: RemoteSessionSource): Promise<PanelConnection | null> {
+  async connection(machine: RemoteSessionSource): Promise<PanelMachineConnection | null> {
     let c: ConnectionStatus | null = null;
     try {
       c = (await this.o.connectionOf?.(machine.id)) ?? null;

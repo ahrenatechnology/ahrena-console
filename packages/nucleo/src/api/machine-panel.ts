@@ -20,19 +20,29 @@
 // - It gains `machine: { id, label, lastReadAt, connection }`, the shape the mod's P14 band reads
 //   (plugins/ahrena-console/types, #278). `lastReadAt` is when the panel shown was read.
 // - Read only (AC-3): nothing in it opens or decides anything here. `api.opensSession` is false, every
-//   Desktop `local_…` id is null (no "Ir para a sessão", no "Desarquivar"), and the decisions to
-//   confirm are left out (no Confirmar or Descartar; their `undo` is null). The mod's writes go to
-//   this Mac's núcleo only, which never sends them to a remote.
+//   Desktop `local_…` id is null (no "Ir para a sessão", no "Desarquivar"), and `decisions` is null
+//   (no Confirmar, Descartar, Ajustar or Desfazer: they would write to this Mac's núcleo, which does not
+//   have the remote's decisions). The mod's writes go to this Mac's núcleo only, which never sends them
+//   to a remote. `api` is this API's own block (the footer's version and commits), never the remote's.
 // - Remote down (AC-1): which remote each session belongs to is remembered (`RemoteSessionMap`), from
 //   the panels read and from the session ids of the #243 list reads, with a TTL of hours and a bound.
 //   For a session known to be remote whose remote does not answer, the answer is its last good panel
 //   (if any) with that remote's `machine`, so the mod shows "<Máquina> sem conexão · <motivo>";
 //   without a last panel, the minimal panel (`minimalPanel`) the mod draws the band on. Never 5xx.
 // - An id that no remote knows, and that is not remembered, is left to this Mac's panel builder (the
-//   "Sessão nova" panel of before).
+//   "Sessão nova" panel of before). The map lives in memory: after this núcleo restarts with a remote
+//   down, a session first asked for while it is down is not known as remote, so it gets no band until
+//   the remote answers (or a list read names it).
+// - The `machine` fields (#278's connection, the telemetry's `lastReadAt`) wait at most the read
+//   budget; past it, `null`.
 
 import { boundedJson, isObject, remoteAccountColor, REMOTE_ID } from './machine-items.ts';
-import { withDeadline, type MachineReader, type PanelConnection, type RemoteSessionSource } from './machine-reader.ts';
+import { withDeadline, type MachineReader, type RemoteSessionSource } from './machine-reader.ts';
+import type { Panel, PanelMachine } from './types.ts';
+import { API_VERSION } from './version.ts';
+
+/** The `api` block without this API's own (a test without the panel builder). */
+const LOCAL_API_FALLBACK = { version: API_VERSION, commit: null, folder: null };
 
 /** `GET /api/panel/<session>` (server.ts `PANEL_ROUTE`; not imported, server.ts imports this module). */
 export const PANEL_PATH = /^\/api\/panel\/([^/]+)$/;
@@ -44,22 +54,14 @@ const GITHUB_URL = /^https:\/\/github\.com\/[^\s]{1,500}$/;
 export const PANEL_QUERY = ['local', 'account', 'org', 'model', 'cwd', 'decisions'] as const;
 const MAX_QUERY_VALUE = 1024;
 /** A remote's panel never goes out larger than this, serialized. */
-export const MAX_REMOTE_PANEL_BYTES = 2 * 1024 * 1024;
+export const MAX_REMOTE_PANEL_BYTES = 512 * 1024;
 /** How long a session stays known as a remote one, and its last panel kept. */
 export const REMOTE_SESSION_TTL_MS = 12 * 3_600_000;
 /** At most this many remote session ids remembered; the oldest go first. */
 export const MAX_REMOTE_SESSIONS = 5_000;
-/** At most this many last panels kept (a panel is tens of KB); the oldest go first. */
+/** At most this many last panels kept (a panel is tens of KB; at most 25 MB with the byte cap); the oldest go first. */
 export const MAX_REMOTE_PANELS = 50;
 const DEADLINE_MARGIN_MS = 250;
-
-/** The `machine` of a remote session's panel (the mod's `PanelMachine`). */
-export interface PanelMachine {
-  id: string;
-  label: string;
-  lastReadAt: string | null;
-  connection: PanelConnection | null;
-}
 
 export interface RemoteSessionMapOptions {
   now?: () => number;
@@ -151,6 +153,8 @@ export interface RemotePanelsOptions {
   sessions: RemoteSessionMap;
   /** A remote's `lastReadAt` of `GET /api/machines`, for the minimal panel. */
   lastReadAt?: (machineId: string) => Promise<string | null>;
+  /** This API's own `api` block (the footer's version and commits): a remote's never goes out. */
+  api?: () => Panel['api'];
 }
 
 /** The panel of a session of a remote machine (see the module comment). */
@@ -200,12 +204,17 @@ export class RemotePanels {
     if (last) return this.withMachine(last.body, source, new Date(last.readAt).toISOString());
     // With a local copy and no remote panel yet, the copy says more than the empty panel.
     if (localCopy) return null;
-    return this.withMachine(minimalPanel(readAt), source, (await this.o.lastReadAt?.(owner)) ?? null);
+    return this.withMachine(minimalPanel(readAt), source, await this.bounded(this.o.lastReadAt?.(owner) ?? null));
   }
 
   private async withMachine(body: Record<string, unknown>, source: RemoteSessionSource, lastReadAt: string | null): Promise<Record<string, unknown>> {
-    const machine: PanelMachine = { id: source.id, label: source.label, lastReadAt, connection: await this.o.reader.connection(source) };
-    return { ...body, machine };
+    const machine: PanelMachine = { id: source.id, label: source.label, lastReadAt, connection: await this.bounded(this.o.reader.connection(source)) };
+    return { ...body, api: { ...LOCAL_API_FALLBACK, ...this.o.api?.(), opensSession: false }, machine };
+  }
+
+  /** The `machine` fields wait at most the read budget: past it, `null` (the panel never waits on them). */
+  private async bounded<T>(v: Promise<T | null> | T | null): Promise<T | null> {
+    return withDeadline(Promise.resolve(v), this.o.reader.timeoutMs);
   }
 }
 
@@ -242,7 +251,6 @@ export function remotePanel(v: unknown, sessionId: string): Record<string, unkno
  * only, and an account goes out with a `#rrggbb` color (the mod puts it in a style).
  */
 function readOnly(p: Record<string, unknown>): void {
-  p.api = { ...(isObject(p.api) ? p.api : {}), opensSession: false };
   const items = (list: unknown): Record<string, unknown>[] => (Array.isArray(list) ? list.filter(isObject) : []);
   const account = (x: Record<string, unknown>) => {
     if (isObject(x.account)) x.account.color = remoteAccountColor(x.account.color);
@@ -262,14 +270,9 @@ function readOnly(p: Record<string, unknown>): void {
     for (const pr of p.prs.items as Record<string, unknown>[]) if (isObject(pr.session)) pr.session.local = null;
     p.prs.total = (p.prs.items as unknown[]).length;
   }
-  if (isObject(p.decisions)) {
-    p.decisions.toConfirm = 0;
-    const list = p.decisions.list;
-    if (isObject(list)) {
-      list.toConfirm = 0;
-      if (Array.isArray(list.items)) list.items = list.items.filter((d) => isObject(d) && d.state !== 'to_confirm').map((d) => ({ ...(d as object), undo: null }));
-    }
-  }
+  // The decisions are the remote's: Confirmar, Descartar, Ajustar and Desfazer would write to this
+  // Mac's núcleo, which does not have them (or has an imported copy). The panel does not bring them.
+  p.decisions = null;
 }
 
 /**
@@ -279,7 +282,6 @@ function readOnly(p: Record<string, unknown>): void {
 export function minimalPanel(now: number): Record<string, unknown> {
   return {
     version: 1,
-    api: { opensSession: false },
     generatedAt: new Date(now).toISOString(),
     session: null,
     context: null,
