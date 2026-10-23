@@ -132,7 +132,7 @@ export function searchField({ placeholder, onSearch, wait = 250 }) {
  * O card de uma decisão. `session` é a sessão em nome de quem a escrita vai (na página, a dona da
  * decisão; na aba, a sessão aberta). `onChange()` é chamado depois de uma escrita que deu certo.
  */
-export function decisionCard(d, { session = d.sessionId, onChange = () => {}, now = Date.now() } = {}) {
+export function decisionCard(d, { session = d.sessionId, onChange = () => {}, now = Date.now(), readOnly = null, machine = null } = {}) {
   const notice = el('span', { class: 'dec-notice', role: 'status' });
   const trail = [
     d.rejected?.length ? `Descartado: ${d.rejected.join('; ')}` : null,
@@ -141,9 +141,11 @@ export function decisionCard(d, { session = d.sessionId, onChange = () => {}, no
 
   const actions = el('div', { class: 'dec-actions' });
   if (d.state === 'to_confirm') {
-    const confirm = el('button', { type: 'button', class: 'btn filled' }, 'Confirmar');
-    const dismiss = el('button', { type: 'button', class: 'btn outline' }, 'Descartar');
+    // `readOnly` (issue 243: a remote session's decision) keeps the buttons, off, with the reason.
+    const confirm = el('button', { type: 'button', class: 'btn filled', disabled: Boolean(readOnly), title: readOnly }, 'Confirmar');
+    const dismiss = el('button', { type: 'button', class: 'btn outline', disabled: Boolean(readOnly), title: readOnly }, 'Descartar');
     const act = (action) => async () => {
+      if (readOnly) return;
       confirm.disabled = dismiss.disabled = true;
       notice.textContent = '';
       try {
@@ -159,10 +161,13 @@ export function decisionCard(d, { session = d.sessionId, onChange = () => {}, no
     dismiss.addEventListener('click', act('dismiss'));
     actions.append(confirm, dismiss);
   } else {
-    const conversation = conversationLink(d);
+    const link = conversationLink(d);
+    // The conversation of a remote session's decision is read through the tunnel too.
+    const conversation = link && machine && machine !== 'local' && /^[a-z0-9][a-z0-9-]{0,63}$/.test(machine) ? `${link}?machine=${machine}` : link;
     if (conversation) actions.append(el('a', { class: 'dec-link', href: conversation }, 'Ver na conversa'));
     if (d.state === 'current') {
       if (d.promotedTo) actions.append(el('span', { class: 'dec-promoted mono', title: d.promotedTo }, icon('promote'), 'Promovida'));
+      else if (readOnly) actions.append(el('button', { type: 'button', class: 'dec-link', disabled: true, title: readOnly, 'aria-label': `Promover a registro: ${readOnly}` }, 'Promover a registro'));
       else actions.append(el('button', { type: 'button', class: 'dec-link', onClick: () => openPromote(d, session, { onSave: onChange }) }, 'Promover a registro'));
     }
   }
