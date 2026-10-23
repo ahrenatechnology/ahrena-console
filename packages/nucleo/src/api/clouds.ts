@@ -30,7 +30,7 @@ import type { RemoteGet } from '../telemetry/ports.ts';
 import { SAFE_CLI_NAME } from '../clouds/aws-config.ts';
 import type { AwsConnector, LoginRefusal } from '../clouds/aws-connector.ts';
 import { LOGIN_MODES, type LoginMode } from '../clouds/aws-login.ts';
-import { REMOTE_CONNECTORS_PATH, sanitizeConnectors, sanitizeLoginAnswer, type RemoteWrite } from '../clouds/remote-connectors.ts';
+import { REMOTE_CONNECTORS_PATH, sanitizeConnectors, sanitizeLoginAnswer, type RemoteWrite, type SessionPortals } from '../clouds/remote-connectors.ts';
 import { fromOwnUi } from './same-origin.ts';
 
 export const CONNECTORS_ROUTE = '/api/connectors';
@@ -115,6 +115,8 @@ async function readMode(req: IncomingMessage): Promise<LoginMode | { status: num
 }
 
 export function createCloudsRoute(o: CloudsRouteOptions): CloudsRoute {
+  // Per remote machine, the SSO portals seen in code-free answers: what a device code is judged against (decision 0013 §2a).
+  const portals = new Map<string, SessionPortals>();
   return async (req, res, url) => {
     const path = url.pathname;
     if (path === CONNECTORS_ROUTE) {
@@ -166,7 +168,8 @@ export function createCloudsRoute(o: CloudsRouteOptions): CloudsRoute {
         if (req.method !== 'GET') return send(res, 405, { error: 'use GET' });
         const r = await o.remote.get(port, REMOTE_CONNECTORS_PATH);
         if (r.kind === 'unreachable') return send(res, 200, { machine: machineId, status: 'unreachable', reason: r.reason, connectors: [] });
-        const connectors = r.status === 200 ? sanitizeConnectors(r.body) : null;
+        if (!portals.has(machineId)) portals.set(machineId, new Map());
+        const connectors = r.status === 200 ? sanitizeConnectors(r.body, portals.get(machineId)) : null;
         if (!connectors) return send(res, 200, { machine: machineId, status: 'unsupported', connectors: [] });
         return send(res, 200, { machine: machineId, status: 'ok', connectors });
       }

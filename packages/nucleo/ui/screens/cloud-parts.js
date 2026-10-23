@@ -10,7 +10,7 @@
 // - `tickClocks` advances, once a second, the time of every running login on screen without repainting.
 
 import { el, icon } from '../dom.js';
-import { LOCAL_ID, canLogin, deviceCodeLeft, endedText, fallbackCommand, isFallback, loginBand, loginClock, loginCommand, loginLabel, loginRoute, writeErrorText } from './cloud-format.js';
+import { LOCAL_ID, canLogin, deviceCodeLeft, portalLine, endedText, fallbackCommand, isFallback, loginBand, loginClock, loginCommand, loginLabel, loginRoute, writeErrorText } from './cloud-format.js';
 
 const STYLE = '/ui/screens/clouds.css';
 
@@ -175,13 +175,10 @@ const steps = (on) =>
     ]),
   );
 
-// The host the person is about to confirm on (decision 0013 §2a: the núcleo only keeps a code on the session's portal).
-function portalHost(uri) {
-  try {
-    return new URL(uri).hostname;
-  } catch {
-    return '';
-  }
+// Which page the person is about to confirm on (decision 0013 §2a).
+function portalNote(uri, session) {
+  const line = portalLine(uri, session);
+  return line ? [el('div', { class: 'cl-portal' }, 'A página é ', el('b', { class: 'mono' }, line.host), line.text)] : [];
 }
 
 function deviceCodeBand(session, where, now) {
@@ -197,7 +194,7 @@ function deviceCodeBand(session, where, now) {
       el('b', {}, 'deste Mac'),
       ':',
       el('div', { class: 'cl-code-row' }, el('span', { class: 'mono cl-user-code', 'aria-label': `Código ${dc.userCode}` }, dc.userCode), open, copyButton(dc.userCode, 'Copiar o código')),
-      el('div', { class: 'cl-portal' }, 'A página é do portal ', el('b', { class: 'mono' }, portalHost(dc.verificationUri)), session.startUrlHost ? `, o da sessão ${session.name}. Confira antes de confirmar.` : '. Confira antes de confirmar.'),
+      ...portalNote(dc.verificationUri, session),
     );
     const c = loginClock(l, now);
     const left = deviceCodeLeft(dc, now);

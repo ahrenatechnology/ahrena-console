@@ -434,3 +434,21 @@ export function allSessions(machines) {
 
 /** "3 perfis", or the one profile's name. */
 export const profilesText = (session) => (session.profiles.length === 1 ? session.profiles[0].name : plural(session.profiles.length, 'perfil', 'perfis'));
+
+/**
+ * The line under a device code: which page the person is about to confirm on (decision 0013 §2a).
+ * "o da sessão" only when the URL is on the session's own portal; the region's SSO device page is
+ * named as such. `{ host, text }`, or null for a URL that does not parse.
+ */
+export function portalLine(verificationUri, session) {
+  let host;
+  try {
+    host = new URL(verificationUri).hostname;
+  } catch {
+    return null;
+  }
+  if (session?.startUrlHost && host === String(session.startUrlHost).toLowerCase()) return { host, text: `, o portal da sessão ${session.name}. Confira antes de confirmar.` };
+  const region = /^device\.sso\.([a-z0-9-]+)\.amazonaws\.com$/.exec(host)?.[1];
+  if (region) return { host, text: `, a página de dispositivo do SSO da AWS na região ${region}. Confira antes de confirmar.` };
+  return { host, text: '. Confira antes de confirmar.' };
+}

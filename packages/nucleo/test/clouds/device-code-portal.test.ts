@@ -4,7 +4,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { deviceCodeOnSessionPortal } from '../../src/clouds/aws-login.ts';
-import { sanitizeConnectors } from '../../src/clouds/remote-connectors.ts';
+import { sanitizeConnectors, sanitizeLoginAnswer, type SessionPortals } from '../../src/clouds/remote-connectors.ts';
 
 test('#277 deviceCodeOnSessionPortal: the session portal or its region device page, nothing else', () => {
   assert.equal(deviceCodeOnSessionPortal('https://exemplo.awsapps.com/start/#/device?user_code=ABCD-EFGH', 'exemplo.awsapps.com', 'regiao-exemplo-1'), true);
@@ -15,7 +15,7 @@ test('#277 deviceCodeOnSessionPortal: the session portal or its region device pa
   assert.equal(deviceCodeOnSessionPortal('not a url', 'exemplo.awsapps.com', 'regiao-exemplo-1'), false);
 });
 
-const remote = (verificationUri: string) => ({
+const remote = (verificationUri: string | null, startUrlHost = 'exemplo.awsapps.com') => ({
   connectors: [
     {
       kind: 'aws',
@@ -26,21 +26,42 @@ const remote = (verificationUri: string) => ({
         {
           name: 'sessao-exemplo',
           kind: 'sso-session',
-          startUrlHost: 'exemplo.awsapps.com',
+          startUrlHost,
           region: 'regiao-exemplo-1',
           loginSupported: true,
           state: 'expired',
           profiles: [],
-          login: { state: 'running', mode: 'device-code', startedAt: '2026-10-22T09:00:00.000Z', timeoutSeconds: 300, deviceCode: { verificationUri, userCode: 'ABCD-EFGH', expiresAt: '2026-10-22T09:10:00.000Z' } },
+          login: verificationUri
+            ? { state: 'running', mode: 'device-code', startedAt: '2026-10-22T09:00:00.000Z', timeoutSeconds: 300, deviceCode: { verificationUri, userCode: 'ABCD-EFGH', expiresAt: '2026-10-22T09:10:00.000Z' } }
+            : { state: 'idle' },
         },
       ],
       outOfScope: [],
     },
   ],
 });
-const codeOf = (body: unknown) => ((sanitizeConnectors(body)![0] as { sessions: { login: { deviceCode: unknown } }[] }).sessions[0]!.login.deviceCode);
+const codeOf = (body: unknown, portals: SessionPortals) =>
+  (sanitizeConnectors(body, portals)![0] as { sessions: { login: { deviceCode: unknown } }[] }).sessions[0]!.login.deviceCode;
 
-test('#277 the Mac keeps a remote device code on the session portal and drops one from another AWS portal', () => {
-  assert.deepEqual(codeOf(remote('https://exemplo.awsapps.com/start/#/device')), { verificationUri: 'https://exemplo.awsapps.com/start/#/device', userCode: 'ABCD-EFGH', expiresAt: '2026-10-22T09:10:00.000Z' });
-  assert.equal(codeOf(remote('https://outro-portal.awsapps.com/start/#/device')), null);
+test('#277 a remote device code is judged against the portal of an EARLIER code-free answer (trust on first use)', () => {
+  const portals: SessionPortals = new Map();
+  // No earlier reading: the answer carrying the code cannot vouch for itself.
+  assert.equal(codeOf(remote('https://exemplo.awsapps.com/start/#/device'), portals), null);
+  codeOf(remote(null), portals);
+  assert.deepEqual(codeOf(remote('https://exemplo.awsapps.com/start/#/device'), portals), { verificationUri: 'https://exemplo.awsapps.com/start/#/device', userCode: 'ABCD-EFGH', expiresAt: '2026-10-22T09:10:00.000Z' });
+  assert.equal(codeOf(remote('https://outro-portal.awsapps.com/start/#/device'), portals), null);
+});
+
+test('#277 an answer that changes the portal along with the code does not pass, and a later code-free answer does not overwrite the memory', () => {
+  const portals: SessionPortals = new Map();
+  codeOf(remote(null), portals);
+  assert.equal(codeOf(remote('https://atacante.awsapps.com/start/#/device', 'atacante.awsapps.com'), portals), null);
+  codeOf(remote(null, 'atacante.awsapps.com'), portals);
+  assert.equal(codeOf(remote('https://atacante.awsapps.com/start/#/device', 'atacante.awsapps.com'), portals), null);
+});
+
+test('#277 the login answer of a remote POST never carries the code (it is shown only from the judged GET)', () => {
+  const r = sanitizeLoginAnswer({ login: { state: 'running', mode: 'device-code', deviceCode: { verificationUri: 'https://exemplo.awsapps.com/start/#/device', userCode: 'ABCD-EFGH', expiresAt: '2026-10-22T09:10:00.000Z' } } });
+  assert.ok(r && 'login' in r);
+  assert.equal(r.login.deviceCode, null);
 });

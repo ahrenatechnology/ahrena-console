@@ -60,14 +60,29 @@ function sanitizeLogin(v: unknown): Record<string, unknown> | null {
   };
 }
 
-/** A device code whose URL is not on the session's portal is dropped (deviceCodeOnSessionPortal). */
-function onSessionPortal(login: Record<string, unknown> | null, startUrlHost: string | null, region: string | null): Record<string, unknown> | null {
+/**
+ * What the Mac remembers of a remote machine's SSO sessions, to judge a device code (decision 0013
+ * §2a, review of #310). The answer that carries a code is unauthenticated (whoever answers on the
+ * tunnel port writes it), so the code is never judged against the portal that same answer claims:
+ * it is judged against the portal and region the Mac saw for that session in an EARLIER answer
+ * WITHOUT a code (trust on first use), kept for the life of the process and never overwritten.
+ * No earlier code-free reading, or a code answer whose portal differs from the remembered one: the
+ * code is dropped. A full impostor that answers from the start is #315's (pairing).
+ */
+export type SessionPortals = Map<string, { startUrlHost: string | null; region: string | null }>;
+
+function judgeDeviceCode(login: Record<string, unknown> | null, sessionName: string, startUrlHost: string | null, region: string | null, portals: SessionPortals): Record<string, unknown> | null {
   const dc = login?.deviceCode as { verificationUri: string } | null | undefined;
-  if (!login || !dc || deviceCodeOnSessionPortal(dc.verificationUri, startUrlHost, region)) return login;
-  return { ...login, deviceCode: null };
+  const known = portals.get(sessionName);
+  if (!dc) {
+    if (!known) portals.set(sessionName, { startUrlHost, region });
+    return login;
+  }
+  const trusted = known && known.startUrlHost === startUrlHost && known.region === region && deviceCodeOnSessionPortal(dc.verificationUri, known.startUrlHost, known.region);
+  return trusted ? login : { ...login!, deviceCode: null };
 }
 
-function sanitizeAws(v: Record<string, unknown>): Record<string, unknown> | null {
+function sanitizeAws(v: Record<string, unknown>, portals: SessionPortals): Record<string, unknown> | null {
   const state = oneOf(v.state, CONNECTOR_STATES);
   if (!state) return null;
   const cli = isObject(v.cli) ? v.cli : {};
@@ -96,7 +111,7 @@ function sanitizeAws(v: Record<string, unknown>): Record<string, unknown> | null
         expiresAt: iso(s.expiresAt),
         checkedAt: iso(s.checkedAt),
         profiles,
-        login: onSessionPortal(sanitizeLogin(s.login), text(s.startUrlHost, 253), text(s.region, 64)),
+        login: judgeDeviceCode(sanitizeLogin(s.login), sessionName, text(s.startUrlHost, 253), text(s.region, 64), portals),
       },
     ];
   });
@@ -113,14 +128,14 @@ function sanitizeAws(v: Record<string, unknown>): Record<string, unknown> | null
   };
 }
 
-/** A remote `GET /api/connectors` answer, re-projected; `null` when it is not one. */
-export function sanitizeConnectors(body: unknown): Record<string, unknown>[] | null {
+/** A remote `GET /api/connectors` answer, re-projected; `null` when it is not one. `portals` is that machine's memory (SessionPortals). */
+export function sanitizeConnectors(body: unknown, portals: SessionPortals = new Map()): Record<string, unknown>[] | null {
   if (!isObject(body) || !Array.isArray(body.connectors)) return null;
   const out: Record<string, unknown>[] = [];
   for (const c of body.connectors.slice(0, 10)) {
     if (!isObject(c)) continue;
     if (c.kind === 'aws') {
-      const aws = sanitizeAws(c);
+      const aws = sanitizeAws(c, portals);
       if (aws && !out.some((o) => o.kind === 'aws')) out.push(aws);
     } else if ((c.kind === 'gcp' || c.kind === 'azure') && c.state === 'soon' && !out.some((o) => o.kind === c.kind)) {
       out.push({ kind: c.kind, state: 'soon' });
@@ -133,7 +148,8 @@ export function sanitizeConnectors(body: unknown): Record<string, unknown>[] | n
 export function sanitizeLoginAnswer(body: unknown): { login: Record<string, unknown> } | { error: string } | null {
   if (!isObject(body)) return null;
   const login = sanitizeLogin(body.login);
-  if (login) return { login };
+  // The code is shown only from GET /api/machines/<id>/connectors, judged against the remembered portal.
+  if (login) return { login: { ...login, deviceCode: null } };
   const error = text(body.error, 200);
   return error ? { error } : null;
 }

@@ -478,3 +478,19 @@ describe('issue 277: the Perfis de nuvem card (C66, C67)', () => {
     }
   });
 });
+
+describe('issue 277: the page named under a device code (decision 0013 §2a, review of #310)', () => {
+  const session = { name: 'sessao-exemplo', startUrlHost: 'exemplo.awsapps.com' };
+  test('the session portal is named as the session portal', () => {
+    assert.deepEqual(format.portalLine('https://exemplo.awsapps.com/start/#/device', session), { host: 'exemplo.awsapps.com', text: ', o portal da sessão sessao-exemplo. Confira antes de confirmar.' });
+  });
+  test('the region SSO device page is named as that page, never as the session portal', () => {
+    const line = format.portalLine('https://device.sso.regiao-exemplo-1.amazonaws.com/?user_code=ABCD-EFGH', session);
+    assert.equal(line.host, 'device.sso.regiao-exemplo-1.amazonaws.com');
+    assert.match(line.text, /página de dispositivo do SSO da AWS na região regiao-exemplo-1/);
+    assert.doesNotMatch(line.text, /portal da sessão/);
+  });
+  test('a URL that does not parse gives no line', () => {
+    assert.equal(format.portalLine('não é url', session), null);
+  });
+});
