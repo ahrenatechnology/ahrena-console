@@ -1,6 +1,7 @@
 // The per-session orders (#61, mod part): the queue with a fake clock, and the routes on 127.0.0.1.
 import assert from 'node:assert/strict';
-import { request } from 'node:http';
+import { createServer, request } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -147,6 +148,34 @@ describe('the orders routes', () => {
       assert.equal(r.json.reason, 'no_live_process');
     } finally {
       await off.close();
+    }
+  });
+});
+
+describe('the mod\'s order fetch answers from memory (decision 0004 amendment, condition a)', () => {
+  test('GET /commands and POST …/done touch neither the store, nor the live-process directory, nor any transcript', async () => {
+    const touched: string[] = [];
+    const orders = new SessionOrders();
+    const boom = (what: string) => async () => {
+      touched.push(what);
+      throw new Error(`${what} must not be read`);
+    };
+    // Every reader the route could reach is a spy that fails the test: the session store (it holds the
+    // transcript-fed data) and the messaging service (it lists the live processes in `~/.claude/sessions`).
+    const route = createOrdersRoute({ orders, messaging: { availability: boom('availability') } as never, sessions: { getSession: boom('getSession') } });
+    const server = createServer((req, res) => void route(req, res, new URL(req.url ?? '/', 'http://127.0.0.1')).catch(() => res.destroy()));
+    await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
+    const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+    try {
+      const made = orders.create('s1', 'compact');
+      const id = (made as { order: { orderId: string } }).order.orderId;
+      const got = await call(url, 'GET', '/api/sessions/s1/commands');
+      assert.deepEqual(got.json, { orders: [{ orderId: id, kind: 'compact' }] });
+      assert.deepEqual((await call(url, 'GET', '/api/sessions/s1/commands')).json, { orders: [] }, 'an empty poll, the common case');
+      assert.equal((await call(url, 'POST', `/api/sessions/s1/commands/${id}/done`, { 'content-type': 'application/json' }, JSON.stringify({ ok: true }))).status, 200);
+      assert.deepEqual(touched, [], 'no store, directory or transcript reader was called');
+    } finally {
+      await new Promise((r) => server.close(r));
     }
   });
 });

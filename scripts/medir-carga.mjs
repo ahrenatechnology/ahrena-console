@@ -8,7 +8,7 @@
 // Uso:
 //   node scripts/medir-carga.mjs [--rota painel|sessao|frota] [--sessoes 20] [--abertos 1]
 //                                [--segundos 60] [--porta 4799] [--servidor caminho]
-//                                [--hooks-por-min 0] [--sessao <id>] [--varredura <s>]
+//                                [--ordens 0] [--hooks-por-min 0] [--sessao <id>] [--varredura <s>]
 //
 //   --rota painel  a API de produção (packages/nucleo/src/api/cli.ts): importa e segue
 //                  ~/.claude/projects de verdade, num banco temporário, e só começa a
@@ -17,6 +17,9 @@
 //                  mais recente. `--hooks-por-min` soma hooks sintéticos das `--sessoes`
 //                  (POST /api/hooks), como sessões trabalhando ao mesmo tempo.
 //                  `--varredura` passa ao núcleo o intervalo da varredura de reserva.
+//                  `--ordens N` soma N sessões buscando as ordens do console, `GET
+//                  /api/sessions/<id>/commands` a cada 4 s, painel aberto ou não (#61, mod 0.0.36;
+//                  emenda da decisão 0004): o pior caso, com o núcleo de pé.
 //   --rota sessao  núcleo de teste: só os `--abertos` painéis consultam, cada um
 //                  /api/sessao/<id> a cada 5 s; as outras sessões não pedem nada.
 //   --rota frota   núcleo de teste, comportamento antigo: todas as `--sessoes` consultam
@@ -44,6 +47,8 @@ const servidor = resolve(raiz, args.servidor ?? (rota === 'painel' ? 'packages/n
 const hooksPorMin = Number(args['hooks-por-min'] ?? 0);
 const base = `http://127.0.0.1:${porta}`;
 const INTERVALO_MS = 5000;
+const INTERVALO_ORDENS_MS = 4000;
+const ordens = rota === 'painel' ? Math.min(sessoes, Number(args.ordens ?? 0)) : 0;
 
 if (!['painel', 'sessao', 'frota'].includes(rota)) throw new Error(`--rota painel, sessao ou frota, não ${rota}`);
 
@@ -143,6 +148,19 @@ try {
     // Cada painel começa num momento diferente, como sessões abertas em horas diferentes.
     timers.push(setTimeout(() => { void pedir(i); timers.push(setInterval(() => void pedir(i), INTERVALO_MS)); }, Math.random() * INTERVALO_MS));
   }
+  for (let i = 0; i < ordens; i++) {
+    // As ordens do console (#61): o mod de cada sessão busca a sua, a cada 4 s, sem o painel aberto.
+    const buscar = async () => {
+      const t = performance.now();
+      try {
+        const r = await fetch(`${base}/api/sessions/carga-ordens-${i}/commands`);
+        await r.text();
+        if (!r.ok) erros++;
+      } catch { erros++; }
+      lat.push(performance.now() - t);
+    };
+    timers.push(setTimeout(() => { void buscar(); timers.push(setInterval(() => void buscar(), INTERVALO_ORDENS_MS)); }, Math.random() * INTERVALO_ORDENS_MS));
+  }
   await dormir(segundos * 1000);
   timers.forEach((t) => { clearTimeout(t); clearInterval(t); });
   const depois = amostra(nucleo.pid);
@@ -152,7 +170,7 @@ try {
   lat.sort((a, b) => a - b);
   const q = (x) => (lat.length ? Math.round(lat[Math.min(lat.length - 1, Math.floor(lat.length * x))]) : null);
   const resultado = {
-    rota, sessoes, abertos, segundos: Math.round(janela),
+    rota, sessoes, abertos, ordens, segundos: Math.round(janela),
     cpuPct: Number((((depois.cpu - antes.cpu) / janela) * 100).toFixed(2)),
     rssMb: depois.rssMb,
     pedidos: lat.length,
@@ -169,7 +187,7 @@ try {
         }
       : {}),
   };
-  console.log(`${rota}: ${sessoes} sessões, ${abertos} consultando · CPU ${resultado.cpuPct}% de um núcleo · ${resultado.rssMb} MB · ` +
+  console.log(`${rota}: ${sessoes} sessões, ${abertos} consultando${ordens ? `, ${ordens} buscando ordens` : ''} · CPU ${resultado.cpuPct}% de um núcleo · ${resultado.rssMb} MB · ` +
     `${resultado.pedidosPorMin} pedidos/min · p50 ${resultado.p50ms} ms, p95 ${resultado.p95ms} ms · ${erros} erros`);
   console.log(JSON.stringify(resultado));
 } finally {
