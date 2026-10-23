@@ -21,7 +21,8 @@
 import type { ChangeCursor } from '../changes/cursor.ts';
 import { machineUnreachableAlert, type AlertChange, type AlertTracker } from './alerts.ts';
 import type { RemoteMachineConfig } from './machines-config.ts';
-import { RETENTION_MS, SAMPLE_INTERVAL_MS, TELEMETRY_VERSION, type Alert, type AlertKind, type MachineState, type ReconnectStatus, type TelemetryReading } from './model.ts';
+import { RETENTION_MS, SAMPLE_INTERVAL_MS, TELEMETRY_VERSION, type Alert, type AlertKind, type ConnectionStatus, type MachineState, type ReconnectStatus, type TelemetryReading } from './model.ts';
+import { sanitizePlacement } from './placement.ts';
 import type { RemoteGet, TelemetryStore } from './ports.ts';
 import { systemTimers, type SamplerTimers } from './sampler.ts';
 import type { MachineEntry, MachineStatus } from './service.ts';
@@ -50,6 +51,13 @@ export interface RemoteMachineOptions {
   log?: (message: string) => void;
   /** The machine's reconnect (#244); without it, `null`. */
   reconnectStatus?: (machineId: string) => ReconnectStatus | null;
+  /** The machine's connection (#278); without it, `GET /api/machines` has no `connection` for it. */
+  connectionStatus?: (machineId: string) => Promise<ConnectionStatus | null>;
+  /**
+   * The user stopped the connection through the console (#278, `stopped`) or a stop is running: the
+   * drop that follows does not open `machine-unreachable` (nor its notification) until a start.
+   */
+  suppressUnreachable?: (machineId: string) => boolean;
 }
 
 const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -106,7 +114,10 @@ export function storableReading(v: unknown, readAt: number): TelemetryReading | 
     docker: (v.docker ?? null) as TelemetryReading['docker'],
     ports: Array.isArray(v.ports) ? (v.ports as TelemetryReading['ports']) : null,
     tunnels: Array.isArray(v.tunnels) ? (v.tunnels as TelemetryReading['tunnels']) : null,
-  } satisfies TelemetryReading;
+  } satisfies TelemetryReading as TelemetryReading;
+  // Where it runs (#278): only what passes the placement patterns.
+  const placement = sanitizePlacement(v.placement);
+  if (placement) reading.placement = placement;
   return Buffer.byteLength(JSON.stringify(reading)) <= MAX_REMOTE_READING_BYTES ? reading : null;
 }
 
@@ -157,12 +168,16 @@ export class RemoteMachine implements MachineEntry {
   private lastAttention: unknown = null;
   private timer: unknown = null;
   private inFlight: Promise<MachineStatus> | null = null;
+  /** The connection (#278), only when the núcleo wires one. */
+  readonly connection?: () => Promise<ConnectionStatus | null>;
 
   constructor(options: RemoteMachineOptions) {
     this.o = options;
     this.id = options.config.id;
     this.label = options.config.label;
     this.port = options.config.port;
+    const connectionStatus = options.connectionStatus;
+    if (connectionStatus) this.connection = () => connectionStatus(this.id);
   }
 
   state(): MachineState {
@@ -247,7 +262,7 @@ export class RemoteMachine implements MachineEntry {
       const a = await get(this.port, REMOTE_ATTENTION_PATH);
       attention = a.kind === 'response' && a.status === 200 && isObject(a.body) ? a.body : null;
     }
-    if (next.state === 'unreachable' && next.reason) alerts.push(machineUnreachableAlert(this.label, this.port, next.reason, new Date(now).toISOString()));
+    if (next.state === 'unreachable' && next.reason && !this.o.suppressUnreachable?.(this.id)) alerts.push(machineUnreachableAlert(this.label, this.port, next.reason, new Date(now).toISOString()));
 
     const reasonChanged = this.current.reason !== null && next.reason !== null && this.current.reason !== next.reason;
     this.logTransition(next);

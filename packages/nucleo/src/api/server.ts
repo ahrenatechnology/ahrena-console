@@ -39,6 +39,7 @@
 // | `GET /api/sessions/<id>/messaging`, `POST /api/sessions/<id>/messages` and `GET /api/sessions/<id>/messages/<messageId>` | Send a message a person typed in the /ui to the session's live process, through Claude Code's cross-session inbox, and read its state (api/messaging.ts, src/messaging, #61) |
 // | `GET /api/tools`              | The Tools screen: CLIs, runtimes and containers, installed and latest versions, the catalog's actions, the jobs (`?machine=`; api/tools.ts, #280) |
 // | `POST /api/tools/<toolId>/actions/<actionId>`, `DELETE /api/tools/jobs/<jobId>`, `POST /api/tools/checks` and `POST /api/tools/mcp/checks` | Run a catalog action as a job, cancel it, Verificar agora, Verificar conexões (api/tools.ts, src/tools/executor.ts, #280) |
+// | `POST /api/machines/<id>/connection/start|stop|reconnect|login-and-start`, `DELETE /api/machines/<id>/connection` | The connection of a remote machine (api/connection.ts, #278) |
 // | `GET /api/connectors`, `POST`/`DELETE /api/connectors/aws/sessions/<name>/login`, and the same under `/api/machines/<id>/` | The cloud connectors and their logins (api/clouds.ts, #277) |
 // | `GET /api/connections`        | The console's own GitHub connection: `{ github: <status> }` (api/connections-route.ts, #241) |
 // | `POST /api/connections/github/start`, `/cancel`, `/disconnect`, `/source` | Device flow, Cancel, Disconnect and the credential source (#241, decision 0011) |
@@ -123,6 +124,7 @@ import { isToolsRoute, isToolsWrite, respondTools, respondToolsWrite, toolsWrite
 import type { ToolsControl } from '../tools/executor.ts';
 import { fromAnotherSite, fromOwnUi } from './same-origin.ts';
 import { cloudsWriteFromSameOrigin, isCloudsRoute, type CloudsRoute } from './clouds.ts';
+import { connectionWriteFromSameOrigin, isConnectionRoute, type ConnectionRoute } from './connection.ts';
 import { CONNECTIONS_ROUTE, PROJECT_SELECTION_ROUTE, respondConnections, respondProjectSelection, STRICT_WRITE_ROUTES, strictWriteRefusal, type ProjectSelectionTarget } from './connections-route.ts';
 import type { GithubConnection } from '../github/connection/connection.ts';
 
@@ -209,6 +211,8 @@ export interface ApiOptions {
   tools?: ToolsControl | null;
   /** The cloud connectors (#277, decision 0013; api/clouds.ts): `/api/connectors` and the logins; without it, 404. */
   clouds?: CloudsRoute | null;
+  /** The connection of the remote machines (#278, api/connection.ts): start, stop, reconnect, login-and-start, cancel; without it, 404. */
+  machineConnection?: ConnectionRoute | null;
   /** The console's own GitHub connection (#241); turns on `/api/connections` and its writes. */
   connection?: GithubConnection | null;
   /** Where `POST /api/project/selection` stores the chosen Project (#241); without it, 503 `off`. */
@@ -445,7 +449,7 @@ export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
       if (!opts.connection) return send(res, 404, { error: 'not-found' });
       return respondConnections(req, res, url.pathname, opts.connection);
     }
-    if (!allowedLocalRequest(req, port) && !sameOriginRead(req, port) && !sameOriginOpen(req, port) && !sameOriginSessionOpen(req, port) && !mesmaOrigemMovendo(req, port) && !sameOriginDecision(req, port) && !agentConfigWriteFromSameOrigin(req, port) && !frameworkInstallWriteFromSameOrigin(req, port) && !reconnectFromSameOrigin(req, port) && !messagesWriteFromSameOrigin(req, port) && !cloudsWriteFromSameOrigin(req, port)) return send(res, 403, { error: 'origem não permitida' });
+    if (!allowedLocalRequest(req, port) && !sameOriginRead(req, port) && !sameOriginOpen(req, port) && !sameOriginSessionOpen(req, port) && !mesmaOrigemMovendo(req, port) && !sameOriginDecision(req, port) && !agentConfigWriteFromSameOrigin(req, port) && !frameworkInstallWriteFromSameOrigin(req, port) && !reconnectFromSameOrigin(req, port) && !messagesWriteFromSameOrigin(req, port) && !cloudsWriteFromSameOrigin(req, port) && !connectionWriteFromSameOrigin(req, port)) return send(res, 403, { error: 'origem não permitida' });
     // The Project list spends GitHub quota and the connection status is the /ui's: another site's page
     // never gets either, connected or not (#241 review 2).
     if ((url.pathname === PROJECT_OPTIONS_ROUTE || url.pathname === CONNECTIONS_ROUTE) && fromAnotherSite(req)) return send(res, 403, { error: 'forbidden' });
@@ -467,6 +471,7 @@ export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
     if (ehDoProjeto(url.pathname)) return projectRoute(req, res, url);
     if (opts.agentConfig && (url.pathname === AGENT_CONFIG_ROUTE || url.pathname.startsWith(`${AGENT_CONFIG_ROUTE}/`))) return opts.agentConfig(req, res, url);
     if (opts.frameworkInstall && url.pathname.startsWith(`${FRAMEWORK_INSTALL_ROUTE}/`)) return opts.frameworkInstall(req, res, url);
+    if (opts.machineConnection && isConnectionRoute(url.pathname)) return opts.machineConnection(req, res, url);
     const reconnectMatch = RECONNECT_ROUTE.exec(url.pathname);
     if (reconnectMatch) return respondReconnect(req, res, reconnectMatch[1]!, opts.reconnect, opts.telemetry);
     if (opts.messaging && MESSAGING_ROUTE.test(url.pathname)) return opts.messaging(req, res, url);

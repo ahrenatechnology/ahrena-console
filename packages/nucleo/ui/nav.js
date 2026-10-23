@@ -12,7 +12,7 @@ import { machineItems, MACHINES_ROUTE, SCREENS, sidebarSections } from './screen
 import { CONNECTORS_ROUTE, connectorsDot } from './screens/cloud-format.js';
 
 /** The state of a remote machine, said on its dot: the color alone does not say it. */
-export const MACHINE_STATE_LABELS = { connected: 'Conectada', unreachable: 'Sem conexão', 'incompatible-version': 'Versão diferente', 'not-configured': 'Sem configuração' };
+export const MACHINE_STATE_LABELS = { connected: 'Conectada', unreachable: 'Sem conexão', 'incompatible-version': 'Versão diferente', 'not-configured': 'Sem configuração', stopped: 'Parada por você' };
 
 /** Draws the sidebar into `nav` at once; `read` is the shell's read layer. */
 export function createNav({ nav, read, screens = SCREENS }) {

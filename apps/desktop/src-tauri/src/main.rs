@@ -16,6 +16,9 @@
 // 5c. reads the AWS SSO sessions (`/api/connectors`, #277, decision 0013) for the "Nuvens" block (A9,
 //     clouds.rs), offers "Entrar na AWS" (`POST /api/connectors/aws/sessions/<name>/login`) and
 //     notifies, silently, a session expiring or expired (A10);
+// 5d. says the state of a remote's connection (#278, A9): "túnel no ar", "sem conexão desde" with the
+//     reason, "Entrar na AWS e subir o túnel" or Reconectar (`POST /api/machines/<id>/connection/<verb>`),
+//     "Parar o túnel…" on the machine's screen, and notifies the drop with its reason (A10);
 // 6. with the updater key in tauri.conf.json, looks for a new version on opening and every 6 h
 //    (updater.rs) and offers it in the menu;
 // 7. opened by hand, also opens the console; opened at login, stays in the tray only (login.rs).
@@ -126,7 +129,7 @@ fn main() {
             #[cfg(target_os = "macos")]
             {
                 let main_thread = objc2::MainThreadMarker::new().expect("Tauri's setup runs on the main thread");
-                native_notice::start(app.handle(), native_notice::Handlers { open: open_window_at, open_in_desktop, silence, reconnect, cloud_login }, main_thread);
+                native_notice::start(app.handle(), native_notice::Handlers { open: open_window_at, open_in_desktop, silence, reconnect, cloud_login, login_and_start }, main_thread);
             }
             TrayIconBuilder::with_id(TRAY)
                 .icon(Image::from_bytes(ICON)?)
@@ -261,7 +264,7 @@ fn watch_core(app: &AppHandle, state: &Shared, core: &core::Core, signals: &std:
                     s.machine_misses = misses;
                     match read {
                         MachinesRead::Read(ms) => {
-                            new = s.notices.read_machines(&ms);
+                            new = s.notices.read_machines(&ms, now_ms(), utc_offset_s());
                             s.machines = Some(ms);
                         }
                         MachinesRead::NoTelemetry => {
@@ -288,7 +291,8 @@ fn watch_core(app: &AppHandle, state: &Shared, core: &core::Core, signals: &std:
                     s.cloud_misses = misses;
                     match read {
                         CloudsRead::Read(aws) => {
-                            new = s.notices.read_clouds(&aws, now_ms(), utc_offset_s());
+                            let links = s.machines.as_deref().map(machines::cloud_links).unwrap_or_default();
+                            new = s.notices.read_clouds(&aws, now_ms(), utc_offset_s(), &links);
                             s.clouds = Some(aws);
                         }
                         CloudsRead::NoClouds => {
@@ -521,6 +525,7 @@ fn native_menu(app: &AppHandle, items: &[Item]) -> tauri::Result<Menu<Wry>> {
             Item::Machine { id: machine, text, dot } => Box::new(IconMenuItem::with_id(app, format!("{}{machine}#{n}", menu::MACHINE), text, true, Some(dot_image(*dot)), None::<&str>)?),
             Item::MachineLink { id: machine, text } => Box::new(MenuItem::with_id(app, format!("{}{machine}#{n}", menu::MACHINE), text, true, None::<&str>)?),
             Item::Reconnect { id: machine, text } => Box::new(MenuItem::with_id(app, format!("{}{machine}#{n}", menu::RECONNECT), text, true, None::<&str>)?),
+            Item::Connection { id: machine, verb, text } => Box::new(MenuItem::with_id(app, format!("{}{}:{machine}#{n}", menu::CONNECTION, verb.segment()), text, true, None::<&str>)?),
             Item::Cloud { text, dot } => Box::new(IconMenuItem::with_id(app, format!("{}{n}", menu::CLOUD), text, true, Some(dot_image(*dot)), None::<&str>)?),
             Item::CloudLogin { session, text } => Box::new(MenuItem::with_id(app, format!("{}{session}#{n}", menu::CLOUD_LOGIN), text, true, None::<&str>)?),
             Item::Action { id, text, shortcut } => Box::new(MenuItem::with_id(app, *id, text, true, *shortcut)?),
@@ -547,7 +552,7 @@ fn tweaks(items: &[Item]) -> Vec<native::Tweak> {
                     t.push(Tweak::Tooltip { title: alternate.clone(), tooltip: tooltip.clone() });
                 }
             }
-            Item::Detail(d) | Item::MachineLink { text: d, .. } | Item::Reconnect { text: d, .. } | Item::CloudLogin { text: d, .. } => t.push(Tweak::Indent(d.clone())),
+            Item::Detail(d) | Item::MachineLink { text: d, .. } | Item::Reconnect { text: d, .. } | Item::Connection { text: d, .. } | Item::CloudLogin { text: d, .. } => t.push(Tweak::Indent(d.clone())),
             _ => {}
         }
     }
@@ -620,6 +625,14 @@ fn click(app: &AppHandle, id: &str) {
             cloud_login(app, session);
         }
         _ if id.starts_with(menu::CLOUD) => open_window_at(app, clouds::CONNECTIONS_PATH),
+        _ if id.starts_with(menu::CONNECTION) => {
+            // `<verb>:<machine>#<n>`: the verb must be one the tray knows, the machine id is looked up by the core.
+            let rest = &id[menu::CONNECTION.len()..];
+            let rest = rest.rsplit_once('#').map(|(r, _)| r).unwrap_or(rest);
+            if let Some((verb, machine)) = rest.split_once(':').and_then(|(v, m)| Some((machines::ConnectionVerb::from_segment(v)?, m))) {
+                connection_action(app, machine, verb);
+            }
+        }
         _ if id.starts_with(menu::RECONNECT) => {
             let machine = id[menu::RECONNECT.len()..].split('#').next().unwrap_or("");
             reconnect(app, machine);
@@ -669,10 +682,18 @@ fn open_in_desktop(app: &AppHandle, local: Option<String>) {
 /// explains how to set it up.
 fn reconnect(app: &AppHandle, machine: &str) {
     let shared = app.state::<Shared>().inner().clone();
-    let port = match shared.lock().unwrap_or_else(std::sync::PoisonError::into_inner).core {
-        CoreState::Up { port } => port,
-        _ => return,
+    let (port, has_connection) = {
+        let s = shared.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let has_connection = s.machines.iter().flatten().any(|m| m.summary.id == machine && m.summary.connection.is_some());
+        match s.core {
+            CoreState::Up { port } => (port, has_connection),
+            _ => return,
+        }
     };
+    // A core with #278 reconnects through the connection's job (stop, then start).
+    if has_connection {
+        return connection_action(app, machine, machines::ConnectionVerb::Reconnect);
+    }
     let Some(path) = machines::reconnect_path(machine) else { return };
     let (app, machine) = (app.clone(), machine.to_string());
     std::thread::spawn(move || match http::post_json(port, &path, "{}") {
@@ -693,6 +714,47 @@ fn reconnect(app: &AppHandle, machine: &str) {
         }
         r => eprintln!("[ahrena-console] reconnect {machine}: {}", r.map(|r| format!("{} {}", r.status, r.body)).unwrap_or_else(|| "no answer".into())),
     });
+}
+
+/// "Entrar na AWS e subir o túnel", "Reconectar a <label>" and "Subir o túnel" of a machine with a
+/// `connection` (#278, A9 and A10): `POST /api/machines/<id>/connection/<verb>`, with no `Origin`
+/// and a loopback `Host`, like Reconectar. Only the id goes, and the verb is one of the tray's own;
+/// the commands are machines.json's and the login is the AWS connector's fixed template. The 202
+/// brings the connection, so the running line shows before the next read; a 404 or 409 (the
+/// machine or its connection left the file, a job already runs, no profile to log in) opens the
+/// machine's screen, which says why.
+fn connection_action(app: &AppHandle, machine: &str, verb: machines::ConnectionVerb) {
+    let shared = app.state::<Shared>().inner().clone();
+    let port = match shared.lock().unwrap_or_else(std::sync::PoisonError::into_inner).core {
+        CoreState::Up { port } => port,
+        _ => return,
+    };
+    let Some(path) = machines::connection_path(machine, verb) else { return };
+    let (app, machine) = (app.clone(), machine.to_string());
+    std::thread::spawn(move || match http::post_json(port, &path, "{}") {
+        Some(r) if r.status == 202 => {
+            if let Some(connection) = machines::connection_from_response(&r.body) {
+                change(&app, &shared, |s| {
+                    for m in s.machines.iter_mut().flatten().filter(|m| m.summary.id == machine) {
+                        m.summary.connection = Some(connection.clone());
+                    }
+                });
+            }
+        }
+        Some(r) if matches!(r.status, 404 | 409) => {
+            eprintln!("[ahrena-console] connection {} {machine}: {}", verb.segment(), r.status);
+            let handle = app.clone();
+            let screen = machines::machine_path(&machine);
+            let _ = app.run_on_main_thread(move || open_window_at(&handle, &screen));
+        }
+        r => eprintln!("[ahrena-console] connection {} {machine}: {}", verb.segment(), r.map(|r| r.status.to_string()).unwrap_or_else(|| "no answer".into())),
+    });
+}
+
+/// The notification's "Entrar e subir" (#278, A10).
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+fn login_and_start(app: &AppHandle, machine: &str) {
+    connection_action(app, machine, machines::ConnectionVerb::LoginAndStart);
 }
 
 /// "Entrar na AWS (<session>)" in the menu or "Entrar" in the notification (#277): `POST

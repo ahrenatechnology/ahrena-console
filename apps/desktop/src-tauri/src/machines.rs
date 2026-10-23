@@ -37,6 +37,310 @@ pub struct MachineSummary {
     /// from before #244 and for a value that does not parse (read as "not configured").
     #[serde(default, deserialize_with = "lenient_reconnect")]
     pub reconnect: Option<Reconnect>,
+    /// The connection of a remote machine (#278, decision 0013 section 4); `None` for this machine,
+    /// for a core from before #278 and for a value that does not parse: then the tray behaves as in #244.
+    #[serde(default, deserialize_with = "lenient_option")]
+    pub connection: Option<Connection>,
+}
+
+/// The part of `connection` the tray reads (#278): the state, why it is down, what can run and the
+/// job that runs. The commands, the log and the ports' details stay with the core and the `/ui`.
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+pub struct Connection {
+    #[serde(default)]
+    pub configured: bool,
+    /// `up`, `down`, `starting`, `stopping`, `failing` or `stopped`.
+    pub state: String,
+    #[serde(default)]
+    pub since: Option<String>,
+    /// This Mac's tunnel ports for the machine; the tray only counts them.
+    #[serde(default, deserialize_with = "lenient_list")]
+    pub ports: Vec<serde_json::Value>,
+    #[serde(default, deserialize_with = "lenient_option")]
+    pub cloud: Option<ConnectionCloud>,
+    #[serde(rename = "lastError", default, deserialize_with = "lenient_option")]
+    pub last_error: Option<ConnectionError>,
+    #[serde(default, deserialize_with = "lenient_actions")]
+    pub actions: ConnectionActions,
+    #[serde(default, deserialize_with = "lenient_option")]
+    pub job: Option<ConnectionJob>,
+}
+
+/// The cloud profile the tunnel depends on (`cloudProfile` in machines.json).
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+pub struct ConnectionCloud {
+    #[serde(default)]
+    pub profile: Option<String>,
+    /// The SSO session the profile uses; `None` when the profile is not in ~/.aws/config.
+    #[serde(default)]
+    pub session: Option<String>,
+    /// `valid`, `expiring`, `expired`, `never`, `unknown`, `not-found` or `unavailable`.
+    #[serde(default)]
+    pub state: String,
+    #[serde(rename = "expiresAt", default)]
+    pub expires_at: Option<String>,
+}
+
+/// Why the connection is down: a closed list in the core (`CONNECTION_REASONS`).
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+pub struct ConnectionError {
+    /// `sso-expired`, `port-busy`, `core-not-answering`, `ssm-agent-offline`, `host-unknown`,
+    /// `key-refused` or `exit-code`.
+    pub reason: String,
+    #[serde(default)]
+    pub at: Option<String>,
+    #[serde(rename = "exitCode", default)]
+    pub exit_code: Option<i64>,
+    /// The process holding the port, for `port-busy`.
+    #[serde(default)]
+    pub holder: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Deserialize)]
+pub struct ConnectionActions {
+    #[serde(default)]
+    pub start: bool,
+    #[serde(default)]
+    pub stop: bool,
+    #[serde(default)]
+    pub reconnect: bool,
+    #[serde(rename = "loginAndStart", default)]
+    pub login_and_start: bool,
+}
+
+/// The job that runs (or the last one), with its steps in order.
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+pub struct ConnectionJob {
+    /// `start`, `stop`, `reconnect` or `login-and-start`.
+    #[serde(default)]
+    pub kind: String,
+    /// `login`, `stop`, `start` and `read`, in the order they run.
+    #[serde(default)]
+    pub steps: Vec<String>,
+    #[serde(default)]
+    pub step: String,
+    /// `running`, `succeeded`, `failed`, `timed-out` or `canceled`.
+    #[serde(default)]
+    pub state: String,
+    #[serde(rename = "startedAt", default)]
+    pub started_at: Option<String>,
+    #[serde(rename = "stepStartedAt", default)]
+    pub step_started_at: Option<String>,
+}
+
+/// A value absent, `null` or of an unexpected shape is `None`: an older or newer core never makes
+/// `/api/machines` fail to parse, and a field of `connection` that does not parse keeps the rest.
+fn lenient_option<'de, D: serde::Deserializer<'de>, T: serde::de::DeserializeOwned>(d: D) -> Result<Option<T>, D::Error> {
+    let value = serde_json::Value::deserialize(d)?;
+    Ok(serde_json::from_value(value).ok())
+}
+
+fn lenient_actions<'de, D: serde::Deserializer<'de>>(d: D) -> Result<ConnectionActions, D::Error> {
+    let value = serde_json::Value::deserialize(d)?;
+    Ok(serde_json::from_value(value).unwrap_or_default())
+}
+
+fn lenient_list<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Vec<serde_json::Value>, D::Error> {
+    match serde_json::Value::deserialize(d)? {
+        serde_json::Value::Array(items) => Ok(items),
+        _ => Ok(Vec::new()),
+    }
+}
+
+impl Connection {
+    /// A start, stop, reconnect or login-and-start runs, from the tray or the window.
+    pub fn running(&self) -> bool {
+        self.job.as_ref().is_some_and(|j| j.state == "running") || matches!(self.state.as_str(), "starting" | "stopping")
+    }
+
+    /// Down because the person stopped it ("parada por você", or the stop running): no notice.
+    pub fn stopped_by_you(&self) -> bool {
+        matches!(self.state.as_str(), "stopped" | "stopping")
+    }
+
+    pub fn reason(&self) -> Option<&str> {
+        self.last_error.as_ref().map(|e| e.reason.as_str())
+    }
+}
+
+/// What the tray (and a notification) can ask of a machine's connection (#278). Only these: the
+/// path segment comes from here, never from a menu id or a notification's `userInfo`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ConnectionVerb {
+    /// "Subir o túnel": `connection.start`.
+    Start,
+    /// "Reconectar a <label>": `connection.stop` (if any), then `connection.start`.
+    Reconnect,
+    /// "Entrar na AWS e subir o túnel": the linked session's login, then `connection.start`.
+    LoginAndStart,
+}
+
+impl ConnectionVerb {
+    pub const ALL: [ConnectionVerb; 3] = [ConnectionVerb::Start, ConnectionVerb::Reconnect, ConnectionVerb::LoginAndStart];
+
+    pub fn segment(self) -> &'static str {
+        match self {
+            ConnectionVerb::Start => "start",
+            ConnectionVerb::Reconnect => "reconnect",
+            ConnectionVerb::LoginAndStart => "login-and-start",
+        }
+    }
+
+    pub fn from_segment(segment: &str) -> Option<ConnectionVerb> {
+        ConnectionVerb::ALL.into_iter().find(|v| v.segment() == segment)
+    }
+}
+
+/// `POST` here runs `verb` on the connection of `id`; `None` for this machine and for an id that
+/// makes no path segment.
+pub fn connection_path(id: &str, verb: ConnectionVerb) -> Option<String> {
+    if matches!(id, "" | "." | ".." | LOCAL_ID) {
+        return None;
+    }
+    Some(format!("/api/machines/{}/connection/{}", http::encode(id), verb.segment()))
+}
+
+#[derive(Deserialize)]
+struct ConnectionResponse {
+    #[serde(default, deserialize_with = "lenient_option")]
+    connection: Option<Connection>,
+}
+
+/// The `connection` of the 202 answer, to show the running line before the next read.
+pub fn connection_from_response(text: &str) -> Option<Connection> {
+    serde_json::from_str::<ConnectionResponse>(text).ok()?.connection
+}
+
+/// A length of time the way the tray says it: "menos de 1 min", "14 min", "9 h 50 min", "2 d 3 h".
+pub fn span(minutes: u64) -> String {
+    match minutes {
+        0 => "menos de 1 min".into(),
+        m if m < 60 => format!("{m} min"),
+        m if m < 60 * 24 => match m % 60 {
+            0 => format!("{} h", m / 60),
+            r => format!("{} h {r} min", m / 60),
+        },
+        m => match (m / 60) % 24 {
+            0 => format!("{} d", m / (60 * 24)),
+            h => format!("{} d {h} h", m / (60 * 24)),
+        },
+    }
+}
+
+/// A name from the core shown as is (the process holding a port): at most 40 characters.
+pub fn short(text: &str) -> String {
+    let mut chars = text.chars();
+    let head: String = chars.by_ref().take(40).collect();
+    if chars.next().is_some() {
+        format!("{head}…")
+    } else {
+        head
+    }
+}
+
+/// The row's text after the label, for a machine with a `connection` (#278, A9): "túnel no ar há 9 h
+/// 50 min · 4 portas", "sem conexão desde 03:11", "parada por você", "subindo o túnel".
+pub fn connection_row(s: &MachineSummary, c: &Connection, now_ms: u64, offset_s: i64) -> String {
+    if c.running() {
+        return match c.job.as_ref().filter(|j| j.state == "running").map(|j| j.step.as_str()) {
+            Some("login") => "entrando na AWS".into(),
+            Some("stop") => "parando o túnel".into(),
+            Some(_) => "subindo o túnel".into(),
+            None if c.state == "stopping" => "parando o túnel".into(),
+            None => "subindo o túnel".into(),
+        };
+    }
+    match c.state.as_str() {
+        "up" => {
+            let mut parts = vec![match c.since.as_deref().and_then(|t| minutes_since(t, now_ms)) {
+                Some(m) => format!("túnel no ar há {}", span(m)),
+                None => "túnel no ar".to_string(),
+            }];
+            match c.ports.len() {
+                0 => {}
+                1 => parts.push("1 porta".into()),
+                n => parts.push(format!("{n} portas")),
+            }
+            parts.join(" · ")
+        }
+        "stopped" => "parada por você".into(),
+        _ => match c.since.as_deref().and_then(parse_iso_ms).filter(|at| *at <= now_ms) {
+            Some(at) => format!("sem conexão desde {}", crate::clouds::clock(at, now_ms, offset_s)),
+            None => match s.last_read_at.as_deref().and_then(|t| minutes_since(t, now_ms)) {
+                Some(m) => format!("sem conexão {}", ago(m)),
+                None => "sem conexão".into(),
+            },
+        },
+    }
+}
+
+/// The grey lines under a running job (A9, "Enquanto roda"): the step with its count and, for a
+/// login or a stop that a start follows, "depois: subir o túnel".
+pub fn connection_running_lines(s: &MachineSummary, c: &Connection, now_ms: u64) -> Vec<String> {
+    let Some(job) = c.job.as_ref().filter(|j| j.state == "running") else { return Vec::new() };
+    let step = match job.step.as_str() {
+        "login" => "Entrando na AWS · aguardando o navegador".to_string(),
+        "stop" => "Parando o túnel".to_string(),
+        "start" => "Subindo o túnel".to_string(),
+        "read" => format!("Lendo a {}", display_label(s)),
+        _ => return Vec::new(),
+    };
+    let time = job.step_started_at.as_deref().or(job.started_at.as_deref()).and_then(|t| running_for(t, now_ms));
+    let mut lines = vec![match time {
+        Some(t) => format!("{step} · {t}"),
+        None => step,
+    }];
+    let start_follows = job.steps.iter().skip_while(|x| **x != job.step).skip(1).any(|x| x == "start");
+    if matches!(job.step.as_str(), "login" | "stop") && start_follows {
+        lines.push("depois: subir o túnel".into());
+    }
+    lines
+}
+
+/// The grey line under a machine whose connection is down: the reason in plain words (A9), or
+/// `None` when the core gave none (then the #244 line of `unreachable_reason`, if any).
+pub fn connection_reason_line(s: &MachineSummary, c: &Connection, now_ms: u64) -> Option<String> {
+    let e = c.last_error.as_ref()?;
+    Some(match e.reason.as_str() {
+        "sso-expired" => match sso_expired_at(c, now_ms) {
+            Some(at) => format!("Túnel fora: SSO expirado {}", ago(now_ms.saturating_sub(at) / 60_000)),
+            None => "Túnel fora: SSO expirado".into(),
+        },
+        "port-busy" => {
+            let port = s.port.map(|p| format!("Porta {p}")).unwrap_or_else(|| "A porta do túnel".into());
+            match e.holder.as_deref().filter(|h| !h.is_empty()) {
+                Some(h) => format!("{port} ocupada no Mac por {}", short(h)),
+                None => format!("{port} ocupada no Mac"),
+            }
+        }
+        "core-not-answering" => "Túnel no ar, núcleo de lá parado".into(),
+        "ssm-agent-offline" => format!("Túnel fora: agente SSM da {} offline", display_label(s)),
+        "host-unknown" => "Túnel fora: host desconhecido no ~/.ssh/config".into(),
+        "key-refused" => "Túnel fora: chave SSH recusada".into(),
+        "exit-code" => match e.exit_code {
+            Some(code) => format!("Túnel fora: o comando saiu com o código {code}"),
+            None => "Túnel fora: o comando de subir não terminou".into(),
+        },
+        _ => return None,
+    })
+}
+
+/// When the linked SSO session expired: the token's end, else when the core saw it; `None` in the future.
+pub fn sso_expired_at(c: &Connection, now_ms: u64) -> Option<u64> {
+    let cloud = c.cloud.as_ref().and_then(|x| x.expires_at.as_deref()).and_then(parse_iso_ms);
+    let seen = c.last_error.as_ref().and_then(|e| e.at.as_deref()).and_then(parse_iso_ms);
+    cloud.or(seen).filter(|at| *at <= now_ms)
+}
+
+/// The SSO sessions the machines' tunnels depend on, with the machine's label: "· a Workstation usa"
+/// in the "Nuvens" block and "· a Workstation cai junto" in the 15-minute notice (A9, A10).
+pub fn cloud_links(ms: &[Machine]) -> Vec<(String, String)> {
+    ms.iter()
+        .filter_map(|m| {
+            let session = m.summary.connection.as_ref()?.cloud.as_ref()?.session.clone()?;
+            Some((session, display_label(&m.summary).to_string()))
+        })
+        .collect()
 }
 
 /// The part of `reconnect` the tray reads (#244): whether a command is configured and whether one
@@ -378,6 +682,54 @@ mod tests {
         assert_eq!(running_for("2026-10-18T23:10:00.000Z", now).as_deref(), Some("0:00"));
         assert_eq!(running_for("2026-10-18T23:11:00.000Z", now).as_deref(), Some("0:00"), "a clock ahead is zero");
         assert_eq!(running_for("ontem", now), None);
+    }
+
+    #[test]
+    fn connection_is_read_leniently() {
+        let one = |connection: &str| -> MachineSummary {
+            let json = format!(r#"[{{ "id": "workstation", "label": "Workstation", "state": "connected", "port": 14720, "connection": {connection} }}]"#);
+            summaries_from_json(&json).expect("parses").remove(0)
+        };
+        for older in ["null", r#""x""#, r#"{ "configured": true }"#, "[]"] {
+            assert_eq!(one(older).connection, None, "{older}");
+        }
+        let c = one(r#"{ "configured": true, "state": "down", "since": null, "ports": "x", "cloud": 3, "lastError": { "at": "x" }, "actions": null, "job": "running" }"#).connection.expect("the state is enough");
+        assert!(!c.running() && !c.stopped_by_you());
+        assert_eq!((c.ports.len(), c.cloud, c.last_error, c.actions, c.job), (0, None, None, ConnectionActions::default(), None), "each bad field alone is dropped");
+        let c = one(
+            r#"{ "configured": true, "state": "starting", "since": "2026-10-18T23:08:48.000Z", "ports": [{}, {}], "cloud": null,
+                 "lastError": null, "actions": { "start": false, "stop": false, "reconnect": false, "loginAndStart": false },
+                 "job": { "kind": "login-and-start", "steps": ["login", "start", "read"], "step": "login", "state": "running", "startedAt": "2026-10-18T23:08:48.000Z", "stepStartedAt": "2026-10-18T23:08:48.000Z" } }"#,
+        )
+        .connection
+        .unwrap();
+        assert!(c.running());
+        assert_eq!(c.job.unwrap().steps, ["login", "start", "read"]);
+    }
+
+    #[test]
+    fn connection_paths_carry_only_the_id_and_a_known_verb() {
+        assert_eq!(connection_path("workstation", ConnectionVerb::LoginAndStart).as_deref(), Some("/api/machines/workstation/connection/login-and-start"));
+        assert_eq!(connection_path("workstation", ConnectionVerb::Reconnect).as_deref(), Some("/api/machines/workstation/connection/reconnect"));
+        assert_eq!(connection_path("a/b", ConnectionVerb::Start).as_deref(), Some("/api/machines/a%2Fb/connection/start"));
+        for bad in ["", ".", "..", "local"] {
+            assert_eq!(connection_path(bad, ConnectionVerb::Start), None, "{bad:?}");
+        }
+        for v in ConnectionVerb::ALL {
+            assert_eq!(ConnectionVerb::from_segment(v.segment()), Some(v));
+        }
+        assert_eq!(ConnectionVerb::from_segment("stop"), None, "the tray never stops by itself");
+        assert_eq!(ConnectionVerb::from_segment("../reconnect"), None);
+        let c = connection_from_response(r#"{ "connection": { "configured": true, "state": "starting", "job": null } }"#).unwrap();
+        assert_eq!(c.state, "starting");
+        assert_eq!(connection_from_response(r#"{ "error": "x", "reason": "busy" }"#), None);
+    }
+
+    #[test]
+    fn spans_in_hours_and_minutes() {
+        assert_eq!([span(0), span(14), span(60), span(590), span(60 * 24), span(60 * 27 + 5)], ["menos de 1 min", "14 min", "1 h", "9 h 50 min", "1 d", "1 d 3 h"]);
+        assert_eq!(short("node"), "node");
+        assert_eq!(short(&"x".repeat(50)), format!("{}…", "x".repeat(40)));
     }
 
     #[test]

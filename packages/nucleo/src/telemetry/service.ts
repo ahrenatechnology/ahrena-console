@@ -10,6 +10,7 @@ import {
   LOCAL_MACHINE_ID,
   TELEMETRY_VERSION,
   type Alert,
+  type ConnectionStatus,
   type MachineState,
   type MachineSummary,
   type ReconnectStatus,
@@ -39,6 +40,8 @@ export interface MachineEntry {
   port?: number;
   /** A remote machine's reconnect (#244); without it, `null`. */
   reconnect?(): ReconnectStatus | null;
+  /** A remote machine's connection (#278); without it, the summary has no `connection`. */
+  connection?: () => Promise<ConnectionStatus | null>;
 }
 
 /** This machine: the núcleo answering is its own, so it is always connected. */
@@ -91,6 +94,7 @@ export class TelemetryService {
       lastReadAt: r?.takenAt ?? null,
       alerts: this.o.tracker.active(m.id).length,
       reconnect: m.reconnect?.() ?? null,
+      ...(m.connection ? { connection: await m.connection().catch(() => null) } : {}),
     };
   }
 

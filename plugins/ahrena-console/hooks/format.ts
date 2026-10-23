@@ -1,6 +1,6 @@
 // Formatação do painel: tempo, modelo, tokens, custo e os glifos de status. Funções puras.
 
-import type { AwaitingReason, PanelDecision, DisplayStatus, DecisionScope, InboxState, Panel, PanelSession, SessionAttention } from '../types'
+import type { AwaitingReason, ConnectionReason, PanelDecision, DisplayStatus, DecisionScope, InboxState, Panel, PanelMachine, PanelMachineConnection, PanelSession, SessionAttention } from '../types'
 
 /** "agora", "40 s", "12 min", "4 h", "2 d". */
 /**
@@ -227,3 +227,38 @@ export function stripMarkdown(text: string): string {
 
 /** #145: o que o painel manda à sessão para desarquivar uma filha (ela chama `unarchive_session`). */
 export const unarchiveRequest = (f: { title: string; local?: string | null }) => `Desarquive a sessão ${f.title} (${f.local}) com unarchive_session.`
+
+/** #278 (P14): the short reason of the band, "SSO expirado", in the core's closed list. */
+const CONNECTION_REASON: Record<ConnectionReason, { short: string; why: string }> = {
+  'sso-expired': { short: 'SSO expirado', why: 'o túnel caiu quando a sessão AWS expirou' },
+  'port-busy': { short: 'porta ocupada', why: 'outro processo deste Mac segura a porta do túnel' },
+  'core-not-answering': { short: 'núcleo de lá parado', why: 'o túnel está no ar, mas o núcleo de lá não responde' },
+  'ssm-agent-offline': { short: 'agente SSM offline', why: 'a AWS diz que a máquina não está conectada ao SSM' },
+  'host-unknown': { short: 'host desconhecido', why: 'o ssh não achou o apelido no ~/.ssh/config deste Mac' },
+  'key-refused': { short: 'chave SSH recusada', why: 'a máquina recusou a chave deste Mac' },
+  'exit-code': { short: 'o comando falhou', why: 'o comando de subir o túnel falhou' },
+}
+
+/** Without a known reason, what the state says. */
+const CONNECTION_STATE: Record<PanelMachineConnection['state'], { short: string; why: string }> = {
+  up: { short: 'túnel no ar', why: 'o túnel está no ar' },
+  down: { short: 'túnel fora', why: 'o túnel caiu' },
+  failing: { short: 'túnel fora', why: 'o comando de subir o túnel falhou' },
+  starting: { short: 'subindo o túnel', why: 'o túnel está subindo' },
+  stopping: { short: 'parando o túnel', why: 'o túnel está parando' },
+  stopped: { short: 'parada por você', why: 'você parou o túnel' },
+}
+
+/**
+ * The machine the session runs on, when its connection is not up (#278, P14): the band's reason
+ * ("SSO expirado") and, for the wide panel, the clause that explains it. `null` for this machine,
+ * a connection that is up, or a core that does not send the machine.
+ */
+export function machineDown(p: Panel | null | undefined): { machine: PanelMachine; short: string; why: string } | null {
+  const machine = p?.machine
+  const c = machine?.connection
+  if (!machine || !c || machine.id === 'local' || c.state === 'up' || !CONNECTION_STATE[c.state]) return null
+  // A stop the person asked for, or a job that runs, says what happens; otherwise, the reason.
+  const known = c.state === 'stopped' || c.state === 'starting' || c.state === 'stopping' ? null : CONNECTION_REASON[c.lastError?.reason as ConnectionReason]
+  return { machine, ...(known ?? CONNECTION_STATE[c.state]) }
+}

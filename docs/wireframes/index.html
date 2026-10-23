@@ -827,6 +827,23 @@ body.captura[data-width="1100"] .width-col[data-w="1440"], body.captura[data-wid
 .with-tag > .trunc { min-width: 0; }
 .faixa.machine-offline { border-color: var(--border); }
 .status-group { display: inline-flex; gap: 8px; align-items: center; }
+/* ---------- the mod panel with every machine (P15 and P16, issue #262) ---------- */
+.pn-machine { color: var(--muted); font-weight: 400; }
+.pn-filter-row { display: flex; align-items: center; gap: 1ch; }
+.pn-sec .pn-machine-select { text-transform: none; letter-spacing: 0; font-weight: 400; color: var(--text); }
+.fila + .fila.pn-below { margin-top: 32px; }
+.pn-machine-offline { flex-wrap: wrap; white-space: normal; }
+.pn-machine-offline .pn-offline-text { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pn-machine-offline .pn-offline-time { color: var(--muted); white-space: nowrap; }
+.pn-hovered { flex-direction: column; align-items: stretch; gap: .2em; }
+.pn-hovered > .pn-hover-main { display: flex; align-items: center; gap: 1ch; min-width: 0; }
+.pn-hovered > .pn-hover-main .pn-btn { margin-left: auto; }
+.pn-hover-tip { color: var(--status-waiting-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pn-placeholder { border: 1px dashed var(--border); border-radius: 10px; padding: .7ch 1.2ch; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pn-options { display: flex; flex-direction: column; gap: 4px; padding-top: 24px; font-family: var(--font-mono); font-size: 12.5px; }
+.pn-options .pn-option-list { border: 1px solid var(--border); border-radius: 8px; background: var(--bg); padding: 4px 0; width: 30ch; }
+.pn-options .pn-option-list div { padding: 2px 1.2ch; white-space: nowrap; }
+.pn-options .pn-option-list .on { background: var(--raised); font-weight: 600; }
 </style>
 
 <header class="topo">
@@ -3197,6 +3214,62 @@ function painelConexao() {
 }
 
 
+// P15 and P16 · the mod's "Ver" list with the sessions of every machine (#262). The núcleo of this Mac
+// joins the machines (the #243 route); the mod only reads it. Measured on the real Desktop
+// (plugins/ahrena-console/hooks/height.ts): 1 row ~19 px, a gap of 1 ~10 px, a 34-column card ~270 px,
+// and every card the same fixed height. The machine filter merges with P7's family/machine Select.
+const NEED_RELATION = { d6c0e4a9: 'outro projeto', '8e17b6f2': 'outro projeto', '4d2a9c35': 'filha desta' }
+const MACHINE_OPTIONS = ['Família', 'Todas as máquinas', 'Esta máquina', 'Workstation']
+function machineNeedCard(s) {
+  const remote = isRemote(s)
+  // A remote row says its machine first in the meta line, which truncates at the end: the label is never the part cut.
+  const meta = remote ? `<span class="pn-machine">Workstation</span> · ${s.mo}` : `${NEED_RELATION[s.id] ?? 'outro projeto'} · ${s.mo}`
+  // A remote session opens its detail in the console (C49), never "Abrir no Claude Desktop" on this Mac.
+  const go = remote ? '<span class="pn-link">abrir no console ›</span>' : '<span class="pn-btn sec">Ir para a sessão</span>'
+  return `<div class="pc st-${s.st}"><div class="t">${ponto(s.st)}<span style="letter-spacing:0;text-transform:none;color:var(--text);font-size:12.5px" class="trunc">${s.pj}</span><span class="r c-muted">${s.idade}</span></div>
+    <div class="ln">${sessionChip(s)}</div><div class="ln"><span class="trunc">${s.pede ?? s.erro}</span></div>
+    <div class="ln mut"><span class="trunc">${meta}</span></div>
+    <div class="ln">${go}</div></div>`
+}
+const machineSelect = (value, offline) => `<span class="pn-sel pn-machine-select">${value}${offline && value === 'Workstation' ? ' · sem conexão' : ''} ${ic('chevron-down')}</span>`
+function machineOfflineLine(wide) {
+  // Neutral, like C48: the raised footer box, never the red band. P14's link, to the same console screen.
+  if (wide) return `<div class="pn-pe pn-machine-offline"><span class="pn-offline-text">Workstation sem conexão desde 22:41 · <span class="mut">as sessões de lá voltam sozinhas</span></span><span class="pn-link">resolver no console ›</span></div>`
+  // 34 columns: "Workstation sem conexão desde 22:41" is 35, so the hour goes to the right column, as in a card header.
+  // 32 inner columns: the hour takes the right column, like the time in a card header. No icon in either width: the mod draws text.
+  return `<div class="pn-pe pn-machine-offline"><span class="pn-offline-text">Workstation sem conexão</span><span class="pn-offline-time">22:41</span><span class="pn-link" style="flex-basis:100%">resolver no console ›</span></div>`
+}
+function panelMachines(offline) {
+  const ids = offline ? ['d6c0e4a9', '8e17b6f2', '4d2a9c35'] : ['d6c0e4a9', '8e17b6f2', '4d2a9c35', '5a61c2bf', 'b91d04aa']
+  const l = ids.map(byId)
+  const body = wide => `${pnServidor()}<div class="pn-sec">Precisam de você · ${l.length}${wide ? `<span style="margin-left:auto">${machineSelect('Todas as máquinas', offline)}</span>` : ''}</div>
+      ${wide ? '' : `<div class="pn-filter-row">${machineSelect('Todas as máquinas', offline)}</div>`}
+      ${offline ? machineOfflineLine(wide) : ''}
+      <div class="pn-grade" style="--cols:${wide ? 3 : 1}">${l.map(machineNeedCard).join('')}</div>
+      <div class="pn-pe"><span class="mut trunc">mais antigas primeiro${wide ? ' · as máquinas numa lista só · as ociosas ficam em "na sua vez"' : ''}</span><span class="pn-link" style="margin-left:auto">fechar</span></div>`
+  const st = offline ? '● Ativa · 3 precisam de você · Workstation sem conexão' : '● Ativa · 5 precisam de você'
+  const options = `<div class="pn-options"><p class="rotulo">O Select, aberto</p><div class="pn-option-list">${MACHINE_OPTIONS.map(o => `<div class="${o === 'Todas as máquinas' ? 'on' : ''}"><span style="display:inline-block;width:2ch">${o === 'Todas as máquinas' ? '✓' : ''}</span>${o}${offline && o === 'Workstation' ? ' · sem conexão' : ''}</div>`).join('')}</div>
+    <span class="mut" style="font-family:var(--font-sans);font-size:11px;max-width:26ch;white-space:normal">Um Select só, nas duas larguras: a Família do P7 e uma opção por máquina do machines.json. No estreito, Família continua o padrão.</span></div>`
+  const measure = wide => wide ? `3 cards por linha, 34 col cada · <b>sem estouro</b>` : `cards 34 col, ~270 px no Desktop · Select na linha de baixo · <b>sem estouro</b>`
+  return `<div class="fila">${pane(38, body, st, measure(false))}${pane(121, body, st, measure(true))}${options}</div>`
+}
+// The "N precisam de você" line of P1, with the mouse over it: the count sums the machines, the tip splits it.
+function needYouHover(offline) {
+  const n = offline ? 3 : 5
+  const tips = wide => offline
+    ? (wide ? ['por máquina: esta 3 · Workstation sem conexão desde 22:41 · por conta: pessoal 2 · empresa 1']
+      : ['máquina: esta 3', 'Workstation sem conexão · 22:41', 'conta: pessoal 2 · empresa 1'])
+    : (wide ? ['por máquina: Esta máquina 3 · Workstation 2 · por conta: pessoal 4 · empresa 1']
+      : ['máquina: esta 3 · Workstation 2', 'conta: pessoal 4 · empresa 1'])
+  const names = offline ? 'cli-de-notas (Decisão pedida), agenda-ficticia (Plano para aprovar) +1' : 'cli-de-notas (Decisão pedida), agenda-ficticia (Plano para aprovar) +3'
+  const body = wide => `${pnServidor()}<div class="pn-sec">Esta sessão<span class="r">auto · 5 s</span></div>
+      <div class="pn-placeholder">… os seis cards do P1 …</div>${pnDec(4, 0)}
+      <div class="pn-pe tem pn-hovered"><div class="pn-hover-main"><span class="c-waiting">${ic('bell')}</span><b class="c-waiting">${n} precisam de você</b>${wide ? `<span class="mut trunc">· ${names}</span>` : ''}<span class="pn-btn">Ver</span></div>
+        ${tips(wide).map(t => `<div class="pn-hover-tip">${t}</div>`).join('')}</div>`
+  const st = `● Ativa · ${n} precisam de você`
+  return `<div class="fila pn-below">${pane(38, body, st, 'a dica ocupa as linhas de baixo do pé, como hoje · <b>sem estouro</b>')}${pane(121, body, st, 'a dica numa linha só · <b>sem estouro</b>')}</div>`
+}
+
 // ---------- cloud profiles per machine (C66 and C67, #277): each núcleo reads its own machine ----------
 // rows: [cloud, session, profiles, pillHtml, actionHtml]
 const cpTable = rows => `<table class="tabela"><thead><tr><th>Nuvem</th><th>Sessão</th><th>Perfis</th><th>Estado</th><th></th></tr></thead><tbody>
@@ -3739,6 +3812,27 @@ const TELAS = [
 
   { id: 'painel-connection', cod: 'P14', nome: 'Sessão numa máquina sem conexão', sub: 'Feature A conexão da máquina remota (#278). Numa sessão que roda na Workstation, quando o túnel caiu: uma faixa com o motivo (SSO expirado) e o link para resolver no console. O painel não roda nada.', html: painelConexao,
     n: N(['Nada.'], ['O mod não sobe túnel nem entra na AWS: a página do Claude Desktop não é a origem da /ui, e as escritas são de mesma origem (0003). O link abre a janela do app na C63, onde está o botão.', 'Sessões deste Mac não mostram a faixa.']) },
+  { id: 'panel-machines', cod: 'P15', nome: '"Ver" com todas as máquinas', sub: 'Feature O painel com as sessões de todas as máquinas (#262). A lista do P7 com as sessões deste Mac e da Workstation, juntas por idade. Cada card remoto diz a máquina; um Select só junta a Família do P7 e o filtro de máquina (Todas as máquinas · Esta máquina · Workstation). A sessão remota abre o detalhe no console. Embaixo, a linha "N precisam de você" com o mouse em cima: soma as duas máquinas, e a dica divide por máquina e por conta.', html: () => panelMachines(false) + needYouHover(false),
+    n: N(['O SessionCard do Kanban, como no P7.', 'Do console (C45 a C47, #243): o filtro Todas · Esta máquina · Workstation, o rótulo "Workstation" em cinza só nos itens remotos, e "precisam de você" somando as duas máquinas.', 'Da bandeja (A6): a sessão remota sem "Abrir no Claude Desktop".'],
+      ['O mod não tem ícone: no lugar do <code>server</code> do console vai a palavra "Workstation", em cinza, <b>no começo</b> da linha de meta. Essa linha encurta pelo fim, então o que corta é o modelo, nunca a máquina. Um glifo novo competiria com os do status (● ◐ ◌ ✓ ✕ ○) e pediria legenda; a palavra é o rótulo que o machines.json já dá.',
+       'No card remoto, a máquina toma o lugar da relação ("filha desta", "outro projeto"): família é desta máquina, e "Workstation · Opus 5.5" cabe nas 34 colunas sem reticências (a aprovar).',
+       '<b>Um Select só</b>, nas duas larguras: Família · Todas as máquinas · Esta máquina · Workstation. A Família do P7 é sempre de uma máquina, e "Máquina inteira" deixou de dizer qual. Dois Selects não cabem em 34 colunas, e a maioria das combinações (Família + Workstation) dá vazio.',
+       'No estreito, o Select desce para a linha de baixo do rótulo, como a linha de filtro do Mural no console (C46): "PRECISAM DE VOCÊ · 5" mais o Select passam de 34 colunas. No largo, fica à direita do rótulo, como no P7.',
+       'No console o filtro diz "Máquina: Todas"; aqui o Select não tem rótulo ao lado, então a opção diz "Todas as máquinas".',
+       'Padrão: no estreito, Família, como no P7 (decisão 0004); no largo, Todas as máquinas, no lugar de "Máquina inteira". O desenho mostra Todas nas duas larguras para ver as duas máquinas (a aprovar).',
+       'Uma lista só, por idade (a mais antiga primeiro), sem agrupar por máquina: o que trava há mais tempo vem primeiro, de onde for.',
+       'A sessão remota tem "abrir no console ›" (um Link para o detalhe na /ui, C49) no lugar de "Ir para a sessão", e o nome dela não é botão: o Claude Desktop deste Mac não abre uma sessão que roda na Workstation.',
+       '"N precisam de você" soma as duas máquinas, como a bandeja e o Dashboard. A dica, que hoje mostra "por conta", ganha "por máquina" antes. No estreito são duas linhas (31 e 28 colunas); no largo, uma.',
+       'Rótulos de conta "pessoal" e "empresa" são sintéticos.']) },
+  { id: 'panel-machine-offline', cod: 'P16', nome: 'Uma máquina sem conexão nessa lista', sub: 'Feature O painel com as sessões de todas as máquinas (#262). O túnel da Workstation caiu: as sessões de lá saem da lista e uma linha neutra diz desde quando, com o link do P14 para resolver no console. A lista deste Mac continua. Embaixo, a dica de "N precisam de você" diz que a Workstation está fora da conta.', html: () => panelMachines(true) + needYouHover(true),
+    n: N(['Nada do CCAM: ele só conhece uma máquina.', 'Do console (C48): as sessões remotas saem da lista e um aviso neutro, sem o vermelho de erro, diz desde quando; no filtro, a Workstation diz que está sem conexão.', 'Do P14: "resolver no console ›", que abre a C63.'],
+      ['<b>Nunca erro:</b> a linha é a caixa neutra do pé (cinza), não a faixa vermelha do P14. Lá a sessão aberta é a remota; aqui a remota é uma parte da lista, e a lista deste Mac funciona.',
+       'Sai a última leitura da Workstation, como nas listas do console (C48): uma sessão de 22:41 que "precisa de você" pode já ter andado. Quem quer a última leitura abre a máquina no console.',
+       'No estreito, "Workstation sem conexão desde 22:41" tem 35 colunas: a hora vai para a coluna da direita, como o tempo no cabeçalho do card, e o link desce para a linha de baixo. No largo, a frase inteira numa linha.',
+       'A contagem cai para 3, só deste Mac, e a linha de status diz que a Workstation está sem conexão. A dica diz "Workstation sem conexão", para o número menor não parecer que as sessões de lá andaram (a aprovar).',
+       'No Select, a opção Workstation diz "Workstation · sem conexão" no próprio rótulo (o Select do mod recebe só valor e rótulo, sem cor por opção) e continua escolhível: escolhida, a lista fica vazia com a mesma linha neutra.',
+       'Sem ícone na linha neutra, nas duas larguras: o mod desenha texto (o <code>wifi-off</code> é do console, C48).',
+       'O mod não reconecta nem sobe o túnel: o link leva ao console, como no P14.']) },
   { cap: 'app', titulo: 'App de bandeja (Tauri)', desc: 'O app da decisão 0005 (issues #87 e #88): bandeja, menu e notificação nativos do macOS, e a janela com a interface que o núcleo serve.' },
   { id: 'app-bandeja-0', cod: 'A1', nome: 'Bandeja sem ninguém precisando de você', sub: 'Ninguém precisa de você: só o ícone na barra de menus. As ociosas aparecem só como contagem cinza no resumo.', html: () => `<div class="fila"><div class="mac">${APP.zero()}</div></div>`,
     n: N(['O menu da bandeja (<code>desktop/src/tray.ts</code>): título, "Listening on :4820" com ponto verde, o resumo, Open Dashboard ⌘O, Open at Login, Quit ⌘Q.', 'Ícone template preto, que o macOS pinta.'], ['Sem Restart Server, Show Logs e Open in Browser: o app adota o núcleo, não é dono dele.', 'O resumo fica no que pede ação (precisam de você, com erro), sem "eventos de hoje".']) },
@@ -3944,6 +4038,7 @@ function montar() {
     <li><b>Nuvens e a conexão da máquina (#277, #278, decisão 0013, a aprovar):</b> as contas de nuvem entram em Conexões, como conectores ao lado do GitHub (C57 a C61); o túnel vira a <code>connection</code> da máquina no machines.json, com Subir, Parar, o perfil de nuvem que ele exige e o motivo da queda em palavras simples (C62 a C65, A9, A10, P14). Os perfis de nuvem são de cada máquina: Esta máquina e a Workstation ganham o card Perfis de nuvem, e o login de lá é por código mostrado aqui (C66, C67). Perguntas em aberto: de onde vem o "até quando" da sessão SSO (variante A, só o expiresAt do cache da CLI, ou B, sem abrir o cache), Conexões ou uma seção Nuvens, um clique para entrar e subir, e Parar já na fase 1.</li>
     <li><b>Ferramentas (#280, decisão 0014):</b> CLIs, servidores MCP, plataformas e containers desta máquina e da Workstation, na seção Controle. Instalar, atualizar, iniciar e parar rodam só o que está no catálogo do núcleo, sem shell, um por vez, depois de mostrar o comando; o que pede sudo vira comando para copiar. A Workstation é só leitura até ela mesma ligar as ações (C72 a C76). Aprovado em 21/10, como está.</li>
     <li><b>Sessões de todas as máquinas (#243, a aprovar):</b> o filtro de máquina (Todas · Esta máquina · Workstation, Todas por padrão, na URL) entra em Sessões, Mural, Kanban, Histórico, Feed e Dashboard; o rótulo "Workstation" vai só nas linhas e cards remotos; sem conexão, as sessões de lá saem das listas com um aviso neutro; o detalhe remoto não tem "Abrir no Claude Desktop" (C45 a C49).</li>
+    <li><b>O painel do mod com todas as máquinas (#262, a aprovar):</b> "Ver" lista as sessões deste Mac e da Workstation juntas, por idade; o card remoto diz "Workstation" no começo da linha de meta, no lugar da relação, e abre o detalhe no console; um Select só junta a Família e o filtro (Família · Todas as máquinas · Esta máquina · Workstation), na linha de baixo no estreito; sem conexão, as sessões de lá saem e uma linha neutra diz desde quando, com "resolver no console ›"; "N precisam de você" soma as máquinas e a dica divide por máquina e por conta (P15, P16).</li>
     <li><b>Backlog:</b> Feed de atividade, Analytics completo, Workflows e o detalhe com o grafo de agentes estavam para depois da entrega. Entraram aqui a pedido do dono; o PM decide se viram itens da 0.0.1.</li></ol></section>`
   indice.innerHTML = htmlI; main.innerHTML = htmlM
   if (window.lucide) lucide.createIcons()
