@@ -10,6 +10,8 @@ A moldura do console ([#26](https://github.com/ahrenatechnology/ahrena-console/i
 | `api.js` | A camada de leitura, `read(route)`, e de escrita: `write(route, body)` (POST JSON na `/api/`, ou DELETE com `{ method: 'DELETE' }`). Por HTTP na janela; o artefato troca o transporte com `useReader()` e `useWriter()` |
 | `open-action.js` | Abrir a sessão onde ela roda ([#285](https://github.com/ahrenatechnology/ahrena-console/issues/285), C70 e C71): a mesma ação no cabeçalho do Detalhe, no pé do card do Mural, na linha de Sessões e no "precisam de você" do Dashboard. O alvo vem do núcleo (`open.target`: Claude Desktop, terminal, terminal já rodando, outra máquina ou nada); o clique é `write('/api/sessions/<uuid>/open', {})`, e ao lado do botão aparecem "Abrindo…", o sucesso (some em 4 s) ou o erro do núcleo com "Copiar comando" |
 | `open-action.css` | O estilo dessa ação (classes `open-`), carregado uma vez pelo `index.html` |
+| `machine-filter.js` | As sessões de todas as máquinas ([#243](https://github.com/ahrenatechnology/ahrena-console/issues/243), C45 a C49): o filtro "Máquina" (Todas · Esta máquina · uma por remota, pelo `label`), o rótulo do item remoto (`machineTag`, só o ícone com o nome na dica onde o card é estreito), o aviso neutro de remota sem conexão (`downNotice`, C48; nunca a `errorBand`), as chaves `máquina:id` (`itemKey`) e o link do Detalhe remoto (`sessionHref(id, machine)`, `/ui/sessions/<id>?machine=<id>`). A parte sem DOM vem antes da linha "DOM" (o teste importa direto). Ver "O parâmetro `?machine=`" abaixo |
+| `machine-filter.css` | O estilo do filtro, do rótulo e do aviso (classes `mf-`), carregado uma vez pelo `index.html`, como o `open-action.css` |
 | `live.js` | Long polling em `GET /api/changes?since=<cursor>&wait=25` |
 | `states.js` | Os três estados de toda tela (C19): `loading`, `empty`, `error`, e a `errorBand` |
 | `dom.js` | `el()`, `icon()` e `header()` |
@@ -123,6 +125,22 @@ A limpeza vai no `ctx.signal`, e não só na função que `mount` devolve, para 
 ## Parâmetros na URL
 
 Uma tela pode ler a query (`location.search`), como o Kanban lê `?view=`. A moldura a preserva ao navegar por `ctx.navigate` ou por link. Para trocar a query sem sair da tela, use `history.replaceState`: a tela continua montada e relê o que precisar.
+
+## O parâmetro `?machine=` (issue 243)
+
+Sessões, Mural ao vivo, Kanban (as duas visões), Feed, Histórico e Dashboard leem a rota da lista sempre com `machine` (`all` por padrão, `local` ou o id de uma remota de `/api/machines`), por `createMachineFilter(ctx, { onChange, reread, onLayout })` de `machine-filter.js`:
+
+- **Na URL:** a escolha fica em `?machine=` (Todas não aparece), trocada por `history.replaceState` junto com os outros parâmetros da tela (`?status=`, `?view=`…), que continuam valendo. A última escolha também fica na memória da página, então um link entre as seis telas (a barra, "Ver em Sessões", o Voltar do Detalhe) abre na mesma máquina, e a tela a escreve na URL para o recarregar manter.
+- **Sem remota** (`machines` só com `local`): nada aparece, nem filtro, nem rótulo, nem aviso. As telas ficam como antes.
+- **Onde fica:** em Sessões, na barra de filtros, numa linha com as pílulas de status (em 1100 dobra em duas: máquina e status); nas outras, numa linha logo abaixo do cabeçalho (`parts()`).
+- **Os números:** as pílulas de Sessões contam a máquina escolhida (o núcleo já conta). Com Todas, o subtítulo de Sessões e os cards Sessões e Agentes ativos do Dashboard dizem quanto é da remota, por `byMachine` ("· 3 na Workstation"). O "precisam de você" (`/api/attention`, que já junta as máquinas) é filtrado no cliente pela escolha.
+- **O rótulo:** só no item remoto, com o ícone `server` e o nome; no card do Kanban e no "precisam de você" e na atividade recente do Dashboard, só o ícone, com o nome em `title` e `aria-label`. No Mural divide a linha do projeto (o projeto encurta); no Feed abre o caminho (Workstation › projeto › sessão › agente); o card de agente do Kanban não leva rótulo.
+- **Remota sem conexão (C48):** o núcleo tira os itens dela; a tela mostra o aviso neutro "<nome> sem conexão desde HH:MM (há N min). As sessões de lá voltam quando ela responder." com "Ver a <nome>" para `/ui/machines/<id>`, e o segmento dela fica cinza com `wifi-off`. Com ela escolhida, a lista fica vazia com o mesmo aviso. Nunca a faixa vermelha.
+- **Ao vivo:** `/api/changes` só conta o que muda nesta máquina, então, enquanto há remota, a tela relê a cada 30 s e logo depois de um `alert` ou de um `<id>:machine-unreachable`; os timers param no `ctx.signal`.
+- **As chaves:** ids de sessão e de evento se repetem entre máquinas, então mapas, conjuntos, dedup, linha aberta e `data-key` usam `máquina:id`. O Feed insere os eventos por `createdAt` (a página mais antiga com várias máquinas e a máquina que volta no ao vivo não vêm em ordem global).
+- **Escolha que o núcleo não conhece** (400 `machine: …`, a remota saiu do `machines.json`): a tela volta para Todas.
+
+**O Detalhe de uma sessão remota (C49):** `/ui/sessions/<id>?machine=<id>`. O cabeçalho e todas as abas leem com `?machine=<id>` (`remoteDetailContext` em `screens/session-detail.js`). O cabeçalho ganha o chip da máquina e a linha "Lida do núcleo da <nome>, pelo túnel · há N s". O "Abrir…" é o caso "outra máquina" do C70 (desligado), a caixa "Mandar mensagem" fica desligada com o motivo, e Confirmar, Descartar e "Promover a registro" das Decisões ficam desligados: são escritas deste núcleo. Nenhuma escrita sai para uma sessão remota. Com a remota fora do ar (503 `machine-unreachable`), o Detalhe guarda o que já mostrava e põe o aviso neutro no topo; sem nada lido ainda, o aviso é o estado. Uma sessão local mantém as URLs de antes.
 
 ## O `ctx` da tela
 

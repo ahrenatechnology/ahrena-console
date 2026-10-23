@@ -164,6 +164,8 @@ const ICONS = {
 };
 // The detail's Workflow tab registers the icon as `graph`: the same drawing as `workflows`.
 ICONS.graph = ICONS.workflows;
+// The machine filter (issue 243) names the offline drawing as Lucide does: `wifi-off`.
+ICONS['wifi-off'] = ICONS.offline;
 
 /** The names of the icons that exist (the test checks the ones the screens use). */
 export const ICON_NAMES = Object.keys(ICONS);

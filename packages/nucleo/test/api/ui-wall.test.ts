@@ -311,7 +311,7 @@ describe('Mural: a tela montada', () => {
       assert.deepEqual(comClasse(area, 'wall-card').map((c) => c.getAttribute('data-session')), ['espera-2']);
       botao('active').click();
       assert.deepEqual(comClasse(area, 'wall-card').map((c) => c.getAttribute('data-session')), ['ativa-1']);
-      assert.deepEqual(rotas, ['/api/wall'], 'só a primeira leitura');
+      assert.deepEqual(rotas, ['/api/wall?machine=all'], 'só a primeira leitura');
 
       dados = soAtivas;
       area.todos((e) => e.getAttribute('data-action') === 'refresh')[0]!.click();

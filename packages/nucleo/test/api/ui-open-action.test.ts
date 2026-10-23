@@ -457,7 +457,7 @@ describe('Sessions: the open icon in the row (C71)', () => {
 // ---------- Dashboard (C71): the icon beside "Abrir ›" in the "precisam de você" inbox ----------
 
 describe('Dashboard: the open icon in the inbox (C71)', () => {
-  test('the icon sits beside "Abrir ›", outside any link; its click opens without following the card link; a remote card has none', async () => {
+  test('the icon sits beside "Abrir ›", outside any link; its click opens without following the card link; a remote card has it off', async () => {
     // @ts-expect-error: browser module, plain JavaScript
     const dashboard = await import('../../ui/screens/dashboard.js');
     const numbers = { sessions: { total: 2, active: 0, waiting: 2, withError: 0 }, agents: { active: 0, sessions: 0 }, subagents: { active: 0, sessions: 0 }, events: { today: 0, lastHour: 0, total: 0 }, cost: { usd: 0, days: 30, unpriced: [] } };
@@ -472,7 +472,7 @@ describe('Dashboard: the open icon in the inbox (C71)', () => {
     const signal = new AbortController();
     const w = stubWriter({ ok: true, opened: 'focused' });
     const cleanup = await dashboard.mount(area, {
-      read: async (route: string) => (route === '/api/dashboard' ? { numbers, agents: [], activity: [] } : attention),
+      read: async (route: string) => (route.startsWith('/api/dashboard') ? { numbers, agents: [], activity: [] } : attention),
       write: w.write,
       signal: signal.signal,
       onChange: () => {},
@@ -500,7 +500,14 @@ describe('Dashboard: the open icon in the inbox (C71)', () => {
       w.release();
       await settle();
       assert.equal(texto(actions.querySelector('.open-status')), 'Terminal à frente');
-      assert.equal(minis[1]!.querySelectorAll('button').length, 0, 'remote: the foot names the machine, no icon');
+      // Issue 243 (C49): the remote card opens the remote Detail; its icon is the "outra máquina" case, off.
+      const remote = minis[1]!.querySelector('.dash-mini-actions')!;
+      assert.equal(remote.querySelector('a')!.getAttribute('href'), '/ui/sessions/r1?machine=ws');
+      const off = remote.querySelector('button')!;
+      assert.equal(off.getAttribute('aria-disabled'), 'true');
+      off.dispatchEvent(clickEvent());
+      await settle();
+      assert.equal(w.calls.length, 1, 'a remote session never POSTs to this core');
     } finally {
       signal.abort();
       cleanup?.();
