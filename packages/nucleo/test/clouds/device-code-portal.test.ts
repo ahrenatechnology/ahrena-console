@@ -65,3 +65,12 @@ test('#277 the login answer of a remote POST never carries the code (it is shown
   assert.ok(r && 'login' in r);
   assert.equal(r.login.deviceCode, null);
 });
+
+test('#277 a name that starts with "-" or "." never goes on the aws command line (review of #310, INP-2)', async () => {
+  const { SAFE_CLI_NAME } = await import('../../src/clouds/aws-config.ts');
+  const { SAFE_PROFILE_NAME } = await import('../../src/telemetry/machines-config.ts');
+  for (const re of [SAFE_CLI_NAME, SAFE_PROFILE_NAME]) {
+    for (const ok of ['sessao-exemplo', 'perfil_dev', '0perfil', '_x']) assert.ok(re.test(ok), ok);
+    for (const bad of ['-profile', '--debug', '.hidden', '', 'a b', 'x'.repeat(65)]) assert.ok(!re.test(bad), bad);
+  }
+});

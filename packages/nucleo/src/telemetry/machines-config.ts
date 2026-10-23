@@ -71,7 +71,7 @@ export interface RemoteMachineConfig {
 }
 
 /** The same rule as the AWS connector's `SAFE_CLI_NAME` (src/clouds/aws-config.ts): the name may go on a command line. */
-export const SAFE_PROFILE_NAME = /^[A-Za-z0-9._-]{1,64}$/;
+export const SAFE_PROFILE_NAME = /^[A-Za-z0-9_][A-Za-z0-9._-]{0,63}$/;
 export const CLOUD_CONNECTORS = ['aws'] as const;
 
 /** The machine's connection: its `connection`, or a lone `reconnect` read as `connection.start`; `null` without either. */

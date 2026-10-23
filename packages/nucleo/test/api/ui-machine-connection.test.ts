@@ -249,7 +249,7 @@ describe('#278 machine-connection-format: the connection of GET /api/machines', 
     assert.deepEqual(d[2]!.slice(0, 3), ['Núcleo de lá', 'off', 'Sem leitura']);
     assert.deepEqual(t({ state: 'stopped', since: iso(M) }, off)[0]!.slice(0, 3), ['Túnel', 'off', 'Parado por você']);
     const login = t({ state: 'starting', job: { kind: 'login-and-start', steps: ['login', 'start', 'read'], step: 'login', state: 'running', startedAt: iso(48_000), stepStartedAt: iso(48_000) } }, off);
-    assert.deepEqual(login.map((c) => c[2]), ['Esperando', 'Entrando…', 'Sem leitura']);
+    assert.deepEqual(login.map((c: unknown[]) => c[2]), ['Esperando', 'Entrando…', 'Sem leitura']);
     assert.deepEqual(t({ cloud: null })[1]!.slice(0, 3), ['Sessão de nuvem', 'off', 'Nenhuma']);
     assert.deepEqual(t({ cloud: { ...expired, state: 'expiring', expiresAt: new Date(NOW + 14 * M + 30_000).toISOString() } })[1]!.slice(0, 4), ['Sessão AWS', 'warn', 'Expira em 15 min', 'perfil-dev · o túnel cai junto']);
   });

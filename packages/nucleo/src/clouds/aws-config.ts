@@ -18,7 +18,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 
 /** A name that may go on the `aws` command line (decision 0013 section 1). */
-export const SAFE_CLI_NAME = /^[A-Za-z0-9._-]{1,64}$/;
+export const SAFE_CLI_NAME = /^[A-Za-z0-9_][A-Za-z0-9._-]{0,63}$/;
 
 export interface AwsProfile {
   name: string;
