@@ -205,12 +205,12 @@ describe('#319 the panel of a remote session', () => {
     const query = '?decisions=family&account=acc-1&cwd=%2Fsrv%2Fapp&other=dropped';
     const r = await get(local, `/api/panel/${id}${query}`);
     assert.equal(r.status, 200);
-    assert.ok(tunnel.paths.includes(`/api/panel/${id}?account=acc-1&cwd=%2Fsrv%2Fapp&decisions=family`), tunnel.paths.join(' '));
-    assert.ok(tunnel.paths.every((p) => !p.includes('other=')));
+    assert.ok(tunnel.paths.includes(`/api/panel/${id}?account=acc-1&cwd=%2Fsrv%2Fapp`), tunnel.paths.join(' '));
+    assert.ok(tunnel.paths.every((p) => !p.includes('other=') && !p.includes('decisions=')));
     assert.equal(r.body.session.id, id);
     assert.deepEqual(r.body.machine, { ...WS, lastReadAt: new Date(NOW).toISOString(), connection: UP });
     // The same panel the remote builds, with only what this Mac must not offer taken out.
-    const own = await remotePanelOf(id!, '?decisions=family&account=acc-1&cwd=%2Fsrv%2Fapp');
+    const own = await remotePanelOf(id!, '?account=acc-1&cwd=%2Fsrv%2Fapp');
     assert.equal(r.body.session.title, own.session.title);
     assert.deepEqual(r.body.cost, own.cost);
     assert.equal(r.body.api.opensSession, false);

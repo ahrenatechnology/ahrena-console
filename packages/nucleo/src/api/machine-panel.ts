@@ -50,8 +50,11 @@ const PANEL_BASE = '/api/panel';
 /** The only links a remote's panel may carry: GitHub's (the PRs and issues of the work card). */
 const GITHUB_URL = /^https:\/\/github\.com\/[^\s]{1,500}$/;
 
-/** The query parameters the mod sends with the panel (server.ts `panelRequestOf`), passed on as they are. */
-export const PANEL_QUERY = ['local', 'account', 'org', 'model', 'cwd', 'decisions'] as const;
+/**
+ * The query parameters the mod sends with the panel (server.ts `panelRequestOf`), passed on as they
+ * are; not `decisions`, since a remote panel goes out without them.
+ */
+export const PANEL_QUERY = ['local', 'account', 'org', 'model', 'cwd'] as const;
 const MAX_QUERY_VALUE = 1024;
 /** A remote's panel never goes out larger than this, serialized. */
 export const MAX_REMOTE_PANEL_BYTES = 512 * 1024;
