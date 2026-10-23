@@ -9,7 +9,9 @@ import { after, afterEach, before, beforeEach, describe, test } from 'node:test'
 import { openSqliteStorage, type SqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
 import { Accounts, ListaDeSessoes, MontadorDoPainel, startLocalApi, type ApiOptions, type LocalApi } from '../../src/api/index.ts';
 import { MAX_REMOTE_PANEL_BYTES, minimalPanel, remotePanel, RemoteSessionMap } from '../../src/api/machine-panel.ts';
-import { connectionFromStatus, MachineReader, type ConnectionOf } from '../../src/api/machine-reader.ts';
+import { MachineReader, type ConnectionOf } from '../../src/api/machine-reader.ts';
+import type { ConnectionStatus } from '../../src/telemetry/model.ts';
+import { machineDown } from '../../../../plugins/ahrena-console/hooks/format.ts';
 import { simulate } from '../../src/simulator/index.ts';
 import { AlertTracker } from '../../src/telemetry/alerts.ts';
 import { loopbackGet } from '../../src/telemetry/adapters/loopback-http.ts';
@@ -18,7 +20,27 @@ import { localMachine, TelemetryService, type MachineStatus } from '../../src/te
 
 const NOW = Date.parse('2026-11-02T12:00:00.000Z');
 const WS = { id: 'ws-test', label: 'Workstation' };
-const UP = { state: 'up', since: null, lastError: null };
+const SINCE = '2026-11-02T11:00:00.000Z';
+const UP = { state: 'up', since: SINCE, lastError: null };
+const SSO_EXPIRED = { reason: 'sso-expired', at: '2026-11-02T11:58:00.000Z', exitCode: null, holder: null } as const;
+const FAILING = { state: 'failing', since: SINCE, lastError: SSO_EXPIRED };
+
+/** #278's `ConnectionStatus` as `MachineConnection.status` gives it: up while connected, the SSO expired otherwise. */
+function connectionFor(s: MachineStatus): ConnectionStatus {
+  const up = s.state === 'connected';
+  return {
+    configured: true,
+    state: up ? 'up' : 'failing',
+    since: SINCE,
+    ports: [],
+    cloud: null,
+    lastError: up ? null : { ...SSO_EXPIRED },
+    actions: { start: !up, stop: up, reconnect: true, loginAndStart: !up },
+    command: { start: ['ssh', 'ahrena-tunnel'], stop: null, startTimeoutSeconds: 60, stopTimeoutSeconds: null },
+    job: null,
+    logFile: '/tmp/reconnect.log',
+  };
+}
 
 interface Core {
   storage: SqliteStorage;
@@ -115,7 +137,7 @@ function machineOptions(): Partial<ApiOptions> {
     machines: () => [source],
     now: () => clock,
     timeoutMs: 2_000,
-    connectionOf: (id) => connectionOf?.(id),
+    connectionOf: (id) => connectionOf?.(id) ?? null,
   });
   const telemetry = new TelemetryService({ store, tracker: new AlertTracker(), machines: [localMachine(), { ...source, state: () => status.state }], now: () => NOW });
   return { machineReader, telemetry };
@@ -133,7 +155,7 @@ beforeEach(async () => {
   tunnel = await startTunnel(remote.api.url);
   status = { state: 'connected', reason: null, version: 1 };
   clock = NOW;
-  connectionOf = null;
+  connectionOf = (id) => (id === WS.id ? Promise.resolve(connectionFor(status)) : null);
   const storage = await seeded(176);
   local = await startCore(storage, machineOptions());
   plain = await startCore(storage);
@@ -252,17 +274,17 @@ describe('#319 the panel of a remote session', () => {
     assert.equal((await get(local, `/api/panel/${c}`)).body.machine, undefined);
   });
 
-  test('machine.connection comes from the injected provider, its fields only', async () => {
+  test("machine.connection is #278's connection, its state, since and lastError only", async () => {
     const [id] = await remoteSessionIds();
-    connectionOf = (machineId) =>
-      machineId === WS.id
-        ? Promise.resolve({ state: 'up', since: '2026-11-02T11:00:00.000Z', lastError: null, command: { start: ['ssh'] }, logFile: '/tmp/x.log' } as never)
-        : null;
     const r = await get(local, `/api/panel/${id}`);
-    assert.deepEqual(r.body.machine.connection, { state: 'up', since: '2026-11-02T11:00:00.000Z', lastError: null });
+    assert.deepEqual(r.body.machine.connection, UP);
+    assert.doesNotMatch(r.text, /ahrena-tunnel|reconnect\.log/);
     connectionOf = () => Promise.reject(new Error('boom'));
     clock += 10_000;
-    assert.deepEqual((await get(local, `/api/panel/${id}`)).body.machine.connection, UP, 'a failing provider falls back to the status');
+    assert.equal((await get(local, `/api/panel/${id}`)).body.machine.connection, null, 'a failing source gives no connection, not an error');
+    connectionOf = null;
+    clock += 10_000;
+    assert.equal((await get(local, `/api/panel/${id}`)).body.machine.connection, null, 'no source (the demo): no connection');
   });
 
   test('only GET reaches the remote; the legacy /api/painel route stays 404', async () => {
@@ -332,7 +354,7 @@ describe('#319 a remote session whose remote is down (AC-1)', () => {
     assert.deepEqual(down.body.machine, {
       ...WS,
       lastReadAt: new Date(NOW).toISOString(),
-      connection: { state: 'failing', since: null, lastError: { reason: 'core-not-answering', at: null, exitCode: null, holder: null } },
+      connection: FAILING,
     });
   });
 
@@ -346,7 +368,7 @@ describe('#319 a remote session whose remote is down (AC-1)', () => {
     assert.equal(r.body.version, 1);
     assert.equal(r.body.session, null);
     assert.equal(r.body.machine.id, WS.id);
-    assert.deepEqual(r.body.machine.connection, { state: 'failing', since: null, lastError: { reason: 'port-closed', at: null, exitCode: null, holder: null } });
+    assert.deepEqual(r.body.machine.connection, FAILING);
     assert.deepEqual(Object.keys(r.body).sort(), [...Object.keys(minimalPanel(NOW)), 'machine'].sort());
   });
 
@@ -394,12 +416,28 @@ describe('#319 RemoteSessionMap', () => {
   });
 });
 
-describe('#319 connectionFromStatus (until #320 is wired)', () => {
-  test('connected is up; unreachable is failing with the reason; not configured is down', () => {
-    assert.deepEqual(connectionFromStatus({ state: 'connected', reason: null, version: 1 }), UP);
-    assert.equal(connectionFromStatus({ state: 'unreachable', reason: 'no-response', version: null }).lastError?.reason, 'core-not-answering');
-    assert.equal(connectionFromStatus({ state: 'unreachable', reason: 'port-closed', version: null }).lastError?.reason, 'port-closed');
-    assert.equal(connectionFromStatus({ state: 'incompatible-version', reason: null, version: 0 }).state, 'failing');
-    assert.deepEqual(connectionFromStatus({ state: 'not-configured', reason: null, version: null }), { state: 'down', since: null, lastError: null });
+describe("#319 the shape lights the mod's P14 band (plugins/ahrena-console/hooks/format.ts)", () => {
+  test('a remote session whose connection is down gets the band with the reason; up, none (AC-1)', async () => {
+    const [id] = await remoteSessionIds();
+    const up = await get(local, `/api/panel/${id}`);
+    assert.equal(machineDown(up.body as never), null, 'connection up: no band');
+    status = { state: 'unreachable', reason: 'no-response', version: null };
+    const down = await get(local, `/api/panel/${id}`);
+    const band = machineDown(down.body as never);
+    assert.ok(band, 'connection down: the band');
+    assert.equal(band.machine.label, WS.label);
+    assert.equal(band.short, 'SSO expirado');
+    assert.equal(band.machine.lastReadAt, new Date(NOW).toISOString());
+  });
+
+  test('the minimal panel of a session known only from a list lights the band too; a local session never does', async () => {
+    const all = await get(local, '/api/sessions?machine=all&perPage=100');
+    const remoteId = all.body.items.find((i: { machine: { id: string } }) => i.machine.id === WS.id).id;
+    const localId = all.body.items.find((i: { machine: { id: string } }) => i.machine.id === 'local').id;
+    status = { state: 'unreachable', reason: 'port-closed', version: null };
+    const minimal = await get(local, `/api/panel/${remoteId}`);
+    assert.equal(minimal.body.session, null);
+    assert.equal(machineDown(minimal.body as never)?.short, 'SSO expirado');
+    assert.equal(machineDown((await get(local, `/api/panel/${localId}`)).body as never), null);
   });
 });

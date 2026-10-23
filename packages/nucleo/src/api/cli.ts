@@ -577,7 +577,7 @@ const api: LocalApi = await startLocalApi({
   devConsole: screens.devConsole,
   agentConfig,
   telemetry: telemetryService,
-  machineReader: new MachineReader({ get: loopbackGet({ timeoutMs: MACHINE_READ_ADAPTER_TIMEOUT_MS }), machines: () => remoteMachines?.list() ?? [] }),
+  machineReader: new MachineReader({ get: loopbackGet({ timeoutMs: MACHINE_READ_ADAPTER_TIMEOUT_MS }), machines: () => remoteMachines?.list() ?? [], connectionOf: (id) => machineConnection?.status(id) ?? null }),
   reconnect: machineConnection?.legacy ?? reconnectRunner,
   machineConnection: machineConnection ? createConnectionRoute(machineConnection) : null,
   messaging: createMessagingRoute({ messaging, sessions: storage, accounts, log }),
