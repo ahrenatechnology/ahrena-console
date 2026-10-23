@@ -285,7 +285,8 @@ export async function mount(area, ctx) {
   }
 
   async function first() {
-    area.replaceChildren(loading({ label: 'Carregando a sessão' }));
+    // C49: while the remote is down and nothing was read, a retry keeps the notice on screen.
+    if (!(remoteId && down)) area.replaceChildren(loading({ label: 'Carregando a sessão' }));
     if (!(await readHead())) return;
     tab ??= attentionOf(headData.session.attention) ? 'conversation' : 'agents';
     area.replaceChildren(noticeSlot, top, tabs, body);

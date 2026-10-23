@@ -180,12 +180,27 @@ export function remoteParts(byMachine, machines, count) {
   return out;
 }
 
-/** Where the screen's items come from, for the subtitles: "nas duas máquinas", "nesta máquina", "na Workstation". */
-export function whereText(choice, machines) {
-  if (choice === LOCAL) return 'nesta máquina';
-  if (choice !== ALL) return `na ${(machines ?? []).find((m) => m.id === choice)?.label ?? 'máquina remota'}`;
+const WHERE_FORMS = {
+  // "Um card por sessão aberta, nas duas máquinas"
+  in: { local: 'nesta máquina', one: 'na', all: 'nas' },
+  // "As sessões das duas máquinas por status"
+  of: { local: 'desta máquina', one: 'da', all: 'das' },
+  // "Abra uma sessão em uma das máquinas e ela aparece aqui"
+  any: { local: 'nesta máquina', one: 'na', all: null },
+};
+
+/**
+ * Where the screen's items come from, for the subtitles and the empty states. `form`: `in` ("nas duas
+ * máquinas", "nesta máquina", "na Workstation"), `of` ("das duas máquinas", "desta máquina", "da
+ * Workstation") or `any` (as `in`, but Todas is "em uma das máquinas").
+ */
+export function whereText(choice, machines, { form = 'in' } = {}) {
+  const w = WHERE_FORMS[form] ?? WHERE_FORMS.in;
+  if (choice === LOCAL) return w.local;
+  if (choice !== ALL) return `${w.one} ${(machines ?? []).find((m) => m.id === choice)?.label ?? 'máquina remota'}`;
+  if (!w.all) return 'em uma das máquinas';
   const n = (machines ?? []).length;
-  return n === 2 ? 'nas duas máquinas' : `nas ${n} máquinas`;
+  return n === 2 ? `${w.all} duas máquinas` : `${w.all} ${n} máquinas`;
 }
 
 /** The items of `/api/attention` (this machine's have no `machine`) that belong to the choice. */
@@ -263,7 +278,9 @@ export function machineControl(machines, choice, onChoose) {
 
 /**
  * The filter of one screen. `onChange(choice)` re-reads the screen with the new choice; `reread()` is
- * the screen's quiet re-read (the periodic one and the machine changes); `onLayout()` is called when
+ * the screen's quiet re-read (the periodic one and the machine changes). A screen with a clock of its own
+ * passes `periodic: false` (no 30 s timer here), and one that already re-reads on every change passes
+ * `watchChanges: false` (no second debounce on the machine changes). `onLayout()` is called when
  * the known machines change outside a read (the screen redraws its last answer). Returns:
  * - `choice`; `route(apiRoute)`: the route with `machine=`;
  * - `update(body)`: takes the answer's `machines` and redraws the control and the notices;
@@ -273,7 +290,7 @@ export function machineControl(machines, choice, onChoose) {
  * - `hasRemotes()`, `machines()`, `chosenDown()` (the chosen remote is down: the empty list says no more);
  * - `recover(error)`: a choice the core no longer knows goes back to Todas (true when it did).
  */
-export function createMachineFilter(ctx, { onChange = () => {}, reread = onChange, onLayout = () => {} } = {}) {
+export function createMachineFilter(ctx, { onChange = () => {}, reread = onChange, onLayout = () => {}, periodic = true, watchChanges = true } = {}) {
   let choice = initialChoice(globalThis.location?.search ?? '');
   rememberChoice(choice);
   let known = [];
@@ -317,7 +334,7 @@ export function createMachineFilter(ctx, { onChange = () => {}, reread = onChang
 
   /** The periodic re-read runs only while a remote is known. */
   function tick() {
-    const want = remotesOf(known).length > 0 && !ctx.signal?.aborted;
+    const want = periodic && remotesOf(known).length > 0 && !ctx.signal?.aborted;
     if (want && !timer) {
       timer = setInterval(() => reread(), REMOTE_REREAD_MS);
       timer?.unref?.();
@@ -337,7 +354,7 @@ export function createMachineFilter(ctx, { onChange = () => {}, reread = onChang
     }
   }
 
-  ctx.onChange?.((changes) => {
+  if (watchChanges) ctx.onChange?.((changes) => {
     if (!remotesOf(known).length || !touchesRemotes(changes)) return;
     clearTimeout(wait);
     wait = setTimeout(() => reread(), CHANGE_WAIT_MS);

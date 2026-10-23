@@ -75,12 +75,14 @@ function context(answer: (route: string) => unknown, params: Record<string, stri
   const routes: string[] = [];
   const writes: string[] = [];
   const changes: ((c: unknown[]) => void)[] = [];
+  const restarts: (() => void)[] = [];
   const leave = new AbortController();
   return {
     routes,
     writes,
     leave,
     change: (c: unknown[]) => changes.forEach((f) => f(c)),
+    restart: () => restarts.forEach((f) => f()),
     ctx: {
       params,
       signal: leave.signal,
@@ -92,7 +94,7 @@ function context(answer: (route: string) => unknown, params: Record<string, stri
       },
       write: async (route: string) => (writes.push(route), {}),
       onChange: (f: (c: unknown[]) => void) => changes.push(f),
-      onRestart: () => {},
+      onRestart: (f: () => void) => restarts.push(f),
       liveState: () => 'live',
       counter: () => {},
       title: () => {},
@@ -177,6 +179,11 @@ describe('machine-filter: the choice, the URL and the routes', () => {
     assert.equal(mf.whereText('all', machines), 'nas duas máquinas');
     assert.equal(mf.whereText('local', machines), 'nesta máquina');
     assert.equal(mf.whereText('ws', machines), 'na Workstation');
+    assert.equal(mf.whereText('all', machines, { form: 'of' }), 'das duas máquinas');
+    assert.equal(mf.whereText('local', machines, { form: 'of' }), 'desta máquina');
+    assert.equal(mf.whereText('ws', machines, { form: 'of' }), 'da Workstation');
+    assert.equal(mf.whereText('all', machines, { form: 'any' }), 'em uma das máquinas');
+    assert.equal(mf.whereText('ws', machines, { form: 'any' }), 'na Workstation');
     const attention = { blocked: 2, idle: 0, items: [{ session: 'a', machine: null }, { session: 'b', machine: WS }] };
     assert.equal(mf.attentionForChoice(attention, 'all'), attention);
     assert.deepEqual(mf.attentionForChoice(attention, 'ws').items.map((i: { session: string }) => i.session), ['b']);
@@ -251,10 +258,12 @@ describe('feed-state: machine + id and the insertion by createdAt (issue 243)', 
     const s = feedState.newState();
     feedState.load(s, { events: [ev('l3', '2026-10-22T23:00:30Z'), ev('w3', '2026-10-22T23:00:20Z', WS)], cursor: 'c', older: 'o' });
     const older = feedState.receiveOlder(s, { events: [ev('l2', '2026-10-22T23:00:25Z'), ev('w3', '2026-10-22T23:00:20Z', WS), ev('w2', '2026-10-22T23:00:01Z', WS)], older: null });
-    assert.equal(older.noFim, false, 'l2 is newer than the last row on screen');
+    assert.equal(older.atEnd, false, 'l2 is newer than the last row on screen');
+    assert.deepEqual(older.entered.map((e: { id: string }) => feedState.eventKey(e)), ['local:l2', 'ws:w2'], 'the repeated w3 does not come in again');
     assert.deepEqual(s.events.map((e: { id: string }) => feedState.eventKey(e)), ['local:l3', 'local:l2', 'ws:w3', 'ws:w2']);
     const after = feedState.receiveOlder(s, { events: [ev('l1', '2026-10-22T23:00:00Z')], older: null });
-    assert.equal(after.noFim, true);
+    assert.equal(after.atEnd, true);
+    assert.deepEqual(after.entered.map((e: { id: string }) => e.id), ['l1']);
   });
 
   test('the open row is the event key, so the same id on the other machine stays closed', () => {
@@ -470,6 +479,8 @@ describe('Sessões with every machine (C45, C48)', () => {
       assert.equal(f.routes.filter((r) => r.endsWith('/messaging')).length, 1, 'only the local row asks for its availability');
 
       one(area, '.mf-seg button[data-machine="local"]')!.click();
+      // The pressed segment changes at once, before the read comes back.
+      assert.equal(one(area, '.mf-seg button[aria-pressed="true"]')!.getAttribute('data-machine'), 'local');
       await until(() => f.routes.some((r) => r.endsWith('&machine=local')), 'the local read');
       assert.equal(page.search, '?status=active&machine=local', 'the other filters stay in the URL');
     } finally {
@@ -559,6 +570,65 @@ describe('Histórico, Feed and Dashboard with every machine (C47)', () => {
       cleanup();
       f.leave.abort();
     }
+  });
+});
+
+// ---------- One clock per screen ----------
+
+describe('the filter adds no second clock to a screen that has its own', () => {
+  /** Mounts with `setInterval` watched: the delays of every interval the mount starts. */
+  async function intervalsOf(mount: () => Promise<unknown>) {
+    const real = globalThis.setInterval;
+    const delays: number[] = [];
+    globalThis.setInterval = ((f: () => void, ms: number) => (delays.push(ms), real(f, ms))) as typeof setInterval;
+    try {
+      await mount();
+    } finally {
+      globalThis.setInterval = real;
+    }
+    return delays;
+  }
+  const numbers = { sessions: { total: 1, active: 1, blocked: 0, idle: 0 }, agents: { active: 0, sessions: 0 }, subagents: { active: 0, sessions: 0 }, events: { today: 0, lastHour: 0, total: 0 }, cost: { usd: 0, days: 30, unpriced: [] } };
+
+  test('Dashboard: one 30 s re-read (its own), and one re-read for a machine change, not two', async () => {
+    setUrl('/ui');
+    const f = context((route) => (route.startsWith('/api/dashboard') ? { numbers, agents: [], activity: [], machines: machinesUp, byMachine: [] } : { items: [] }));
+    const area = new ElementoFalso('main');
+    let cleanup: (() => void) | undefined;
+    const delays = await intervalsOf(async () => (cleanup = (await dashboard.mount(area, f.ctx)) as () => void));
+    try {
+      assert.deepEqual(delays.filter((d) => d === mf.REMOTE_REREAD_MS), [30_000], 'only the Dashboard\'s own background re-read');
+      const before = f.routes.filter((r) => r.startsWith('/api/dashboard')).length;
+      f.change([{ type: 'alert', key: 'ws:machine-unreachable' }]);
+      await new Promise((r) => setTimeout(r, 1300));
+      assert.equal(f.routes.filter((r) => r.startsWith('/api/dashboard')).length, before + 1);
+    } finally {
+      cleanup?.();
+      f.leave.abort();
+    }
+  });
+
+  test('Feed: no 30 s timer of the filter beside the feed\'s own clock', async () => {
+    setUrl('/ui/feed');
+    const f = context(() => ({ events: [], cursor: 'c', older: null, options: { types: [], tools: [], sessions: [] }, machines: machinesUp }));
+    const area = new ElementoFalso('main');
+    let cleanup: (() => void) | undefined;
+    const delays = await intervalsOf(async () => (cleanup = (await feed.mount(area, f.ctx)) as () => void));
+    try {
+      assert.equal(delays.filter((d) => d === mf.REMOTE_REREAD_MS).length, 0);
+      assert.equal(all(area, '.mf-filter').length, 1);
+    } finally {
+      cleanup?.();
+      f.leave.abort();
+    }
+  });
+
+  test('a screen without a clock of its own (Mural) gets the 30 s re-read while a remote is known', async () => {
+    setUrl('/ui/wall');
+    const f = context(() => ({ count: {}, cards: [], machines: machinesUp }));
+    const delays = await intervalsOf(() => wall.mount(new ElementoFalso('main'), f.ctx));
+    f.leave.abort();
+    assert.deepEqual(delays.filter((d) => d === mf.REMOTE_REREAD_MS), [30_000]);
   });
 });
 
@@ -654,6 +724,12 @@ describe('the Detail of a remote session (C49)', () => {
       assert.equal(all(area, '.mf-notice').length, 1);
       assert.equal(all(area, '.state').length, 0);
       assert.equal(one(area, '.mf-notice a')!.getAttribute('href'), '/ui/machines/ws');
+      // A retry (the 30 s one, or the core reconnecting) keeps the notice while it reads.
+      f.restart();
+      assert.equal(all(area, '.mf-notice').length, 1);
+      assert.equal(all(area, '.loading').length, 0);
+      await tick();
+      assert.equal(all(area, '.mf-notice').length, 1);
     } finally {
       f.leave.abort();
       stop?.();

@@ -124,15 +124,15 @@ const SUB = {
   agents: 'Os agentes por status, só leitura',
 };
 
-const EMPTY = {
-  sessions: { title: 'Nenhuma sessão ainda', text: 'Quando uma sessão do Claude Code começar nesta máquina, ela aparece aqui.' },
-  agents: { title: 'Nenhum agente ainda', text: 'Quando uma sessão do Claude Code começar nesta máquina, os agentes dela aparecem aqui.' },
-};
+/** The empty board; `where` is where its sessions would start (issue 243: "em uma das máquinas" with Todas). */
+const emptyFor = (view, where = 'nesta máquina') =>
+  view === 'agents'
+    ? { title: 'Nenhum agente ainda', text: `Quando uma sessão do Claude Code começar ${where}, os agentes dela aparecem aqui.` }
+    : { title: 'Nenhuma sessão ainda', text: `Quando uma sessão do Claude Code começar ${where}, ela aparece aqui.` };
 
 /** Where each view's items come from, with a remote known (issue 243): "As sessões das duas máquinas…". */
-function subWith(view, where) {
-  const what = view === 'agents' ? 'Os agentes' : 'As sessões';
-  return where === 'nesta máquina' ? `${what} desta máquina por status, só leitura` : `${what} ${where.replace(/^nas /, 'das ').replace(/^na /, 'da ')} por status, só leitura`;
+function subWith(view, of) {
+  return `${view === 'agents' ? 'Os agentes' : 'As sessões'} ${of} por status, só leitura`;
 }
 
 function badges(item) {
@@ -200,7 +200,7 @@ export async function mount(area, ctx) {
   const sub = head.querySelector('.sub');
   // Issue 243 (C46): the machine filter on its own row under the header; both views follow it.
   const machines = createMachineFilter(ctx, { onChange: () => ((boardInFlight = false), draw()), reread: () => draw(), onLayout: () => draw() });
-  const subText = () => (machines.hasRemotes() ? subWith(view, whereText(machines.choice, machines.machines())) : SUB[view]);
+  const subText = () => (machines.hasRemotes() ? subWith(view, whereText(machines.choice, machines.machines(), { form: 'of' })) : SUB[view]);
 
   function switchTo(v) {
     if (v === view) return;
@@ -226,7 +226,7 @@ export async function mount(area, ctx) {
       if (!columns.some((c) => c.total > 0)) {
         boardInFlight = false;
         // C48: the chosen remote is down; the notice says why the board is empty.
-        area.replaceChildren(head, ...machines.parts(), ...(machines.chosenDown() ? [] : [empty(EMPTY[v])]));
+        area.replaceChildren(head, ...machines.parts(), ...(machines.chosenDown() ? [] : [empty(emptyFor(v, machines.hasRemotes() ? whereText(machines.choice, machines.machines(), { form: 'any' }) : undefined))]));
       } else {
         // A releitura ao vivo não joga a rolagem horizontal para o começo.
         const scroll = boardInFlight ? (area.querySelector('.kb-kanban')?.scrollLeft ?? 0) : 0;

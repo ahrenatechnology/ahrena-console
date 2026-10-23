@@ -128,9 +128,9 @@ export function resume(state) {
 
 /**
  * A página mais velha ("mostrar mais"), sem repetir. Each event goes to its place by `createdAt` (issue
- * 243: with several machines the page is not older than everything on screen); the answer is the events
- * that came in, and `noFim` says whether they all landed after the ones already there (the screen only
- * appends then).
+ * 243: with several machines the page is not older than everything on screen). Returns `{ entered, atEnd }`:
+ * the events that came in, newest first, and whether they all landed after the ones already there (the
+ * screen only appends then).
  */
 export function receiveOlder(state, response) {
   const seen = ids(state);
@@ -145,9 +145,7 @@ export function receiveOlder(state, response) {
   const atEnd = !last || !sorted.length || newestFirst(last, sorted[0]) < 0;
   state.events = atEnd ? [...state.events, ...sorted] : [...state.events, ...sorted].sort(newestFirst);
   state.older = response.older ?? null;
-  const entered = sorted;
-  entered.noFim = atEnd;
-  return entered;
+  return { entered: sorted, atEnd };
 }
 
 /** Abre a linha (pela chave do evento, `eventKey`), ou fecha se já estava aberta. Uma aberta por vez. */

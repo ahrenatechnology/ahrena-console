@@ -232,7 +232,15 @@ export async function mount(area, ctx) {
 
   let state = stateFromQuery(location.search);
   // Issue 243 (C45, C48): the machine filter, in the URL as `?machine=` beside the other filters.
-  const machines = createMachineFilter(ctx, { onChange: () => change({ page: 1 }), reread: () => read(), onLayout: () => placeMachineFilter() });
+  // Sessões places its own control (`placeMachineFilter`), so a choice redraws it at once, before the read.
+  const machines = createMachineFilter(ctx, {
+    onChange: () => {
+      placeMachineFilter();
+      change({ page: 1 });
+    },
+    reread: () => read(),
+    onLayout: () => placeMachineFilter(),
+  });
   const url = () => `${location.pathname}${queryWithMachine(queryFromState(state), machines.choice)}`;
   let last = null;
   let request = 0;

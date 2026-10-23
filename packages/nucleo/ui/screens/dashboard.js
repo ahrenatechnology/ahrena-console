@@ -351,9 +351,15 @@ export async function mount(area, ctx) {
   const refresh = el('button', { type: 'button', class: 'btn', onClick: () => draw() }, icon('refresh'), 'Atualizar');
   const head = header({ icon: 'dashboard', title: 'Dashboard', sub: 'O agora das suas sessões', actions: [refresh] });
   const sub = head.querySelector?.('.sub') ?? null;
-  // Issue 243 (C47): the machine filter on its own row under the header. Its periodic re-read is the
-  // Dashboard's own background one, so it adds no timer of its own beyond the machine changes.
-  const machines = createMachineFilter(ctx, { onChange: () => ((last = null), area.replaceChildren(head, ...machines.parts(), loading({ label: 'Lendo as sessões' })), draw()), reread: () => draw(), onLayout: () => last && paint(last) });
+  // Issue 243 (C47): the machine filter on its own row under the header. The Dashboard's own background
+  // re-read (BACKGROUND_MS) and its re-read on every change already cover the remotes: the filter adds no
+  // timer and no debounce of its own (the slow /api/dashboard is never read twice for one tick).
+  const machines = createMachineFilter(ctx, {
+    onChange: () => ((last = null), area.replaceChildren(head, ...machines.parts(), loading({ label: 'Lendo as sessões' })), draw()),
+    onLayout: () => last && paint(last),
+    periodic: false,
+    watchChanges: false,
+  });
   area.replaceChildren(head, loading({ label: 'Lendo as sessões' }));
 
   const expanded = new Set();

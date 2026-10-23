@@ -67,17 +67,17 @@ export async function mount(area, ctx) {
   const refreshButton = el('button', { type: 'button', class: 'btn', onClick: () => reload() }, icon('refresh'), 'Atualizar');
   const head = header({ icon: 'activity', title: 'Feed de atividade', sub: 'Todos os eventos das sessões, ao vivo', actions: [pauseButton, refreshButton] });
   const sub = head.querySelector?.('.sub') ?? null;
-  // Issue 243 (C47): the machine filter on its own row under the header. The feed already asks for new
-  // events every few seconds, which reads the remotes too; the filter's own re-read only refreshes the
-  // machines' state.
-  const machines = createMachineFilter(ctx, { onChange: () => reload(), reread: () => fetchNew(), onLayout: () => placeMachineRow() });
+  // Issue 243 (C47): the machine filter on its own row under the header. The feed's own clock already asks
+  // for new events every few seconds (which reads the remotes and their state too), and every change asks
+  // again: the filter adds no timer and no debounce of its own.
+  const machines = createMachineFilter(ctx, { onChange: () => reload(), onLayout: () => placeMachineRow(), periodic: false, watchChanges: false });
   const machineSlot = el('div', { class: 'feed-machines' });
   machineSlot.hidden = true;
   function placeMachineRow() {
     const parts = machines.parts();
     machineSlot.replaceChildren(...parts);
     machineSlot.hidden = parts.length === 0;
-    if (sub) sub.textContent = machines.hasRemotes() ? `Todos os eventos das sessões ${whereText(machines.choice, machines.machines()).replace(/^nas /, 'das ').replace(/^na /, 'da ').replace('nesta máquina', 'desta máquina')}, ao vivo` : 'Todos os eventos das sessões, ao vivo';
+    if (sub) sub.textContent = machines.hasRemotes() ? `Todos os eventos das sessões ${whereText(machines.choice, machines.machines(), { form: 'of' })}, ao vivo` : 'Todos os eventos das sessões, ao vivo';
   }
 
   // ---------- sobre ----------
@@ -359,10 +359,10 @@ export async function mount(area, ctx) {
     try {
       const r = await ctx.read(machines.route(query(filters, { before: state.older })));
       if (g !== generation) return;
-      const stale = receiveOlder(state, r);
+      const { entered, atEnd } = receiveOlder(state, r);
       // Issue 243: an older page of several machines can land between rows already on screen.
-      if (stale.noFim === false) drawAll();
-      else listEl.append(...stale.map(item));
+      if (!atEnd) drawAll();
+      else listEl.append(...entered.map(item));
       moreButton.hidden = !state.older;
     } catch (e) {
       if (isAbort(e) || g !== generation) return;

@@ -217,7 +217,7 @@ export async function mount(area, ctx) {
       ? el('div', { class: 'wall-grid' }, ...nodes)
       : machines.chosenDown()
         ? null
-        : empty({ icon: 'wall', title: f.vazio, text: filter === 'all' ? 'Abra uma sessão do Claude Code nesta máquina e ela aparece aqui.' : 'Troque o filtro para ver as outras.' });
+        : empty({ icon: 'wall', title: f.vazio, text: filter === 'all' ? `Abra uma sessão do Claude Code ${machines.hasRemotes() ? whereText(machines.choice, machines.machines(), { form: 'any' }) : 'nesta máquina'} e ela aparece aqui.` : 'Troque o filtro para ver as outras.' });
     // Redesenhar troca os cards: o foco do teclado volta ao card da mesma sessão.
     // Issue 243: by machine + id (`data-key`), since two machines can have the same session id.
     const holder = globalThis.document?.activeElement?.closest?.('[data-session]') ?? null;
