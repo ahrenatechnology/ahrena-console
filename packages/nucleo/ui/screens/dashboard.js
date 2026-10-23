@@ -10,6 +10,7 @@ import { loading, error, errorBand, empty } from '../states.js';
 import { lastAvailability, loadAvailability, messageAction, useMessageStyle } from './session-message.js';
 import { attentionOf, attentionOfItem, attentionPill, attentionTone, attentionDot, isBlocked, isIdle, reasonChip, statusWithoutAttention } from '../attention.js';
 import { openAction } from '../open-action.js';
+import { attentionForChoice, createMachineFilter, isRemote, itemHref, itemKey, machineTag, remoteParts, sessionHref, whereText } from '../machine-filter.js';
 
 const STYLE = '/ui/dashboard.css';
 // As rotas do núcleo, num lugar só. A da atenção é a `ATTENTION_ROUTE` de src/api/attention-route.ts (#87):
@@ -66,12 +67,17 @@ export function modelName(id) {
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 const inSessions = (n) => `em ${plural(n, 'sessão', 'sessões')}`;
 
-/** Os seis cards, na ordem do C1. */
-export function cards(numbers) {
+/**
+ * Os seis cards, na ordem do C1. Issue 243 (C47): with Todas and a remote, `byMachine` and `machines` say how
+ * many are the remote's: "3 na Workstation · 5 precisam de você", "em 4 sessões · 1 na Workstation".
+ */
+export function cards(numbers, { byMachine = null, machines = [] } = {}) {
   const { sessions, agents, subagents, events, cost: c } = numbers;
+  const remoteSessions = remoteParts(byMachine, machines, (b) => b.numbers?.sessions?.total);
+  const remoteAgents = remoteParts(byMachine, machines, (b) => b.numbers?.agents?.active);
   return [
-    { id: 'sessions', rotulo: 'Sessões', icone: 'sessions', cor: 'accent', valor: integer.format(sessions.total), extra: `${sessions.active} ${sessions.active === 1 ? 'ativa' : 'ativas'}`, sub: sessionsDetail(sessions) },
-    { id: 'agents', rotulo: 'Agentes ativos', icone: 'bot', cor: 'active', valor: integer.format(agents.active), sub: inSessions(agents.sessions) },
+    { id: 'sessions', rotulo: 'Sessões', icone: 'sessions', cor: 'accent', valor: integer.format(sessions.total), extra: `${sessions.active} ${sessions.active === 1 ? 'ativa' : 'ativas'}`, sub: [...remoteSessions, sessionsDetail(sessions)].join(' · ') },
+    { id: 'agents', rotulo: 'Agentes ativos', icone: 'bot', cor: 'active', valor: integer.format(agents.active), sub: [inSessions(agents.sessions), ...remoteAgents].join(' · ') },
     { id: 'subagents', rotulo: 'Subagentes ativos', icone: 'subagent', cor: 'accent', valor: integer.format(subagents.active), sub: inSessions(subagents.sessions) },
     { id: 'events-today', rotulo: 'Eventos hoje', icone: 'events', cor: 'waiting', valor: quantity(events.today), sub: `+${quantity(events.lastHour)} na última hora` },
     { id: 'events-total', rotulo: 'Eventos no total', icone: 'activity', cor: 'muted', valor: quantity(events.total), sub: 'desde a importação' },
@@ -108,22 +114,22 @@ export const idleCount = (attention) => (Number.isInteger(attention?.idle) ? att
  * migrate") e o modelo vêm do card do agente, quando a sessão está entre os ativos.
  */
 export function inboxCards(attention, agents) {
-  const bySession = new Map((agents ?? []).map((a) => [a.session, a]));
+  // By machine and session (issue 243): a remote agent with the same session id is another session.
+  const bySession = new Map((agents ?? []).map((a) => [itemKey(a, (x) => x.session), a]));
   return blockedItems(attention).slice(0, IN_INBOX).map((i) => {
-    const machine = i.machine && typeof i.machine.id === 'string' ? { id: i.machine.id, label: typeof i.machine.label === 'string' && i.machine.label ? i.machine.label : i.machine.id } : null;
-    // A remote session is not in this core's agents: its model would be another session's.
-    const a = machine ? undefined : bySession.get(i.session);
+    const machine = isRemote(i) ? { id: i.machine.id, label: typeof i.machine.label === 'string' && i.machine.label ? i.machine.label : 'Máquina remota' } : null;
+    const a = bySession.get(itemKey({ id: i.session, machine }));
     return {
       session: i.session,
       attention: attentionOfItem(i),
       age: i.minutes < 1 ? 'agora' : `${i.minutes} min`,
       name: i.project ?? i.title,
       text: (i.reason === 'permission' && a?.task) || i.longReason,
-      foot: machine ? machine.label : (modelName(a?.model) ?? i.account?.label ?? ''),
-      // A remote session (issue 178): this core does not serve its detail, so the card names the machine
-      // and does not link.
+      // C47: the remote card's machine is the server icon beside the project; the foot is the model, as for a local one.
+      foot: modelName(a?.model) ?? i.account?.label ?? '',
       machine,
-      href: machine ? null : `/ui/sessions/${encodeURIComponent(i.session)}`,
+      // Issue 243 (C49): a remote session's Detail is read through the tunnel, with `?machine=<id>`.
+      href: sessionHref(i.session, machine?.id),
       // issue 285: where the session opens (`{ target, command }`), for the icon beside "Abrir ›".
       open: i.open ?? null,
     };
@@ -137,7 +143,7 @@ export const idleTitle = (total) => `${total} ${total === 1 ? 'ociosa' : 'ociosa
 export function idleChips(attention) {
   return idleItems(attention)
     .slice(0, IN_IDLE_ROW)
-    .map((i) => ({ session: i.session, attention: attentionOfItem(i), name: i.project ?? i.title ?? '' }));
+    .map((i) => ({ session: i.session, key: itemKey({ id: i.session, machine: i.machine }), attention: attentionOfItem(i), name: i.project ?? i.title ?? '' }));
 }
 
 // ---------- Peças ----------
@@ -186,17 +192,20 @@ function inbox(attention, agents, write, navigate = () => {}) {
   const mini = inboxCards(attention, agents).map((c) => {
     // #61 (C53): with the availability known, the foot has "Mandar mensagem" (or "sem processo vivo")
     // beside the open icon and "Abrir ›", and the age goes up beside the reason; unknown, it is the C1 foot.
-    const known = c.href ? lastAvailability(c.session) : undefined;
+    // A remote session's process runs over there: this core has no availability for it.
+    const known = c.machine ? undefined : lastAvailability(c.session);
     const action = known ? messageAction(c.session, known, navigate, { variant: 'link' }) : null;
     const withAction = known !== undefined && known !== null;
     const lead = withAction
       ? (action ?? el('span', {}, ''))
-      : c.machine ? el('span', { class: 'trunc', title: `Sessão da ${c.foot}` }, icon('server'), ` ${c.foot} · ${c.age}`) : el('span', { class: 'trunc' }, [c.foot, c.age].filter(Boolean).join(' · '));
+      : el('span', { class: 'trunc' }, [c.foot, c.age].filter(Boolean).join(' · '));
+    // C47: a remote card names its machine with the server icon beside the project, the label in the tooltip.
+    const tag = c.machine ? machineTag({ machine: c.machine }, { iconOnly: true }) : null;
     return el(
       'div',
-      { class: `card mini dash-mini${withAction ? ' dash-mini-sm' : ''}`, 'data-session': c.session, 'data-machine': c.machine?.id },
+      { class: `card mini dash-mini${withAction ? ' dash-mini-sm' : ''}`, 'data-session': c.session, 'data-machine': c.machine?.id, 'data-key': itemKey({ id: c.session, machine: c.machine }) },
       el('div', { class: 'l1' }, reasonChip(c.attention, { withError: true }), withAction ? el('span', { class: 'age' }, c.age) : null),
-      el('div', { class: 'n trunc' }, c.name),
+      tag ? el('div', { class: 'n mf-with-tag' }, el('span', { class: 'mf-shrink' }, c.name), tag) : el('div', { class: 'n trunc' }, c.name),
       el('div', { class: 'x trunc' }, c.text),
       // C1 (issue 245): the model and the age in the foot, "Opus 5.5 · 2 min", beside "Abrir ›".
       el('div', { class: 'foot' }, lead, c.href ? miniActions(c, write) : null),
@@ -214,7 +223,7 @@ function miniActions(c, write) {
   return el(
     'span',
     { class: 'dash-mini-actions' },
-    openAction({ id: c.session, open: c.open }, { size: 'icon', write }),
+    openAction({ id: c.session, open: c.open, machine: c.machine }, { size: 'icon', write, machine: c.machine?.label ?? null }),
     // Each link says which session it opens, not five "Abrir ›" in a row.
     el('a', { class: 'dash-open-link', href: c.href, 'aria-label': c.name ? `Abrir ${c.name}` : 'Abrir a sessão' }, 'Abrir ›'),
   );
@@ -228,15 +237,18 @@ function idleRow(attention) {
     'section',
     { class: 'card dash-idle', 'aria-label': 'Ociosas' },
     el('span', { class: 'dash-idle-title' }, attentionDot('idle'), el('b', {}, idleTitle(total)), ' · sem pressa'),
-    ...idleChips(attention).map((c) => el('span', { class: 'dash-idle-item', 'data-session': c.session }, reasonChip(c.attention), el('span', { class: 'mono trunc' }, c.name))),
+    ...idleChips(attention).map((c) => el('span', { class: 'dash-idle-item', 'data-session': c.session, 'data-key': c.key }, reasonChip(c.attention), el('span', { class: 'mono trunc' }, c.name))),
     el('a', { class: 'dash-idle-link', href: IDLE_SESSIONS_HREF }, 'Ver em Sessões', icon('chevron-right')),
   );
 }
 
+/** The DOM id of an agent's subagent list: the key of its session (issue 243), safe for an id. */
+const subsId = (a) => `subs-${itemKey(a, (x) => x.session).replace(/[^A-Za-z0-9_-]/g, '-')}`;
+
 function tree(a) {
   return el(
     'ul',
-    { class: 'tree', id: `subs-${a.session}` },
+    { class: 'tree', id: subsId(a) },
     ...a.subagents.map((s) =>
       el(
         'li',
@@ -252,20 +264,29 @@ function tree(a) {
 
 function agentCard(a, expanded, toggleOne) {
   const n = a.subagents.length;
-  const isOpen = n > 0 && expanded.has(a.session);
+  const key = itemKey(a, (x) => x.session);
+  const isOpen = n > 0 && expanded.has(key);
   const activeCount = a.subagents.filter((s) => s.status === 'working').length;
   const exp = n
-    ? el('button', { type: 'button', class: `exp${isOpen ? ' open' : ''}`, 'aria-expanded': String(isOpen), 'aria-controls': `subs-${a.session}`, 'aria-label': isOpen ? 'Esconder os subagentes' : 'Mostrar os subagentes', onClick: () => toggleOne(a.session) }, icon('chevron-right'))
+    ? el('button', { type: 'button', class: `exp${isOpen ? ' open' : ''}`, 'aria-expanded': String(isOpen), 'aria-controls': subsId(a), 'aria-label': isOpen ? 'Esconder os subagentes' : 'Mostrar os subagentes', onClick: () => toggleOne(key) }, icon('chevron-right'))
     : el('span', { class: 'exp' }, icon('dot'));
   const messages = a.messages.length ? a.messages : ['(sem mensagens)'];
   const card = el(
     'a',
-    { class: `card ac ${cardToneClass(a.status, a.attention)}`, href: `/ui/sessions/${encodeURIComponent(a.session)}`, 'data-session': a.session },
+    { class: `card ac ${cardToneClass(a.status, a.attention)}`, href: itemHref(a, a.session), 'data-session': a.session, 'data-key': key },
     el(
       'div',
       { class: 'l1' },
       el('span', { class: 'av' }, icon('bot')),
-      el('div', { class: 'trunc' }, el('div', { class: 'tt trunc' }, `Agente principal · ${a.title}`), el('div', { class: 'meta trunc' }, [a.project, plural(n, 'subagente', 'subagentes'), plural(a.turns, 'turno', 'turnos')].filter(Boolean).join(' · '))),
+      el(
+        'div',
+        { class: 'trunc' },
+        el('div', { class: 'tt trunc' }, `Agente principal · ${a.title}`),
+        // C47: a remote agent's tag beside the meta line, which truncates instead of the tag.
+        isRemote(a)
+          ? el('div', { class: 'meta mf-with-tag' }, el('span', { class: 'mf-shrink' }, [a.project, plural(n, 'subagente', 'subagentes'), plural(a.turns, 'turno', 'turnos')].filter(Boolean).join(' · ')), machineTag(a))
+          : el('div', { class: 'meta trunc' }, [a.project, plural(n, 'subagente', 'subagentes'), plural(a.turns, 'turno', 'turnos')].filter(Boolean).join(' · ')),
+      ),
       statusPill(a.status, a.attention),
     ),
     el('blockquote', {}, ...messages.map((m) => el('span', { class: 'trunc' }, m))),
@@ -280,7 +301,7 @@ function agentCard(a, expanded, toggleOne) {
     ),
   );
   const subs = n
-    ? el('button', { type: 'button', class: 'subs', 'aria-expanded': String(isOpen), 'aria-controls': `subs-${a.session}`, onClick: () => toggleOne(a.session) }, icon('subagent'), plural(n, 'subagente', 'subagentes'), activeCount && activeCount < n ? ` · ${activeCount} ${activeCount === 1 ? 'ativo' : 'ativos'}` : null)
+    ? el('button', { type: 'button', class: 'subs', 'aria-expanded': String(isOpen), 'aria-controls': subsId(a), onClick: () => toggleOne(key) }, icon('subagent'), plural(n, 'subagente', 'subagentes'), activeCount && activeCount < n ? ` · ${activeCount} ${activeCount === 1 ? 'ativo' : 'ativos'}` : null)
     : null;
   return el('div', { class: 'agent' }, exp, el('div', { class: 'column' }, card, subs, isOpen ? tree(a) : null));
 }
@@ -304,10 +325,12 @@ function recentActivity(activity) {
       ...activity.map((l) =>
         el(
           'a',
-          { class: 'row', href: `/ui/sessions/${encodeURIComponent(l.session)}`, 'data-session': l.session },
+          { class: 'row', href: itemHref(l, l.session), 'data-session': l.session, 'data-key': itemKey(l, (x) => x.session) },
           statusPill(l.status, l.attention),
           el('span', { class: 'trunc' }, l.text),
           l.project ? el('span', { class: 'o mono trunc' }, l.project) : null,
+          // C47: only the server icon in a recent activity row, the machine in the tooltip.
+          machineTag(l, { iconOnly: true }),
           el('span', { class: 't' }, age(l.at)),
         ),
       ),
@@ -327,6 +350,10 @@ export async function mount(area, ctx) {
   useMessageStyle();
   const refresh = el('button', { type: 'button', class: 'btn', onClick: () => draw() }, icon('refresh'), 'Atualizar');
   const head = header({ icon: 'dashboard', title: 'Dashboard', sub: 'O agora das suas sessões', actions: [refresh] });
+  const sub = head.querySelector?.('.sub') ?? null;
+  // Issue 243 (C47): the machine filter on its own row under the header. Its periodic re-read is the
+  // Dashboard's own background one, so it adds no timer of its own beyond the machine changes.
+  const machines = createMachineFilter(ctx, { onChange: () => ((last = null), area.replaceChildren(head, ...machines.parts(), loading({ label: 'Lendo as sessões' })), draw()), reread: () => draw(), onLayout: () => last && paint(last) });
   area.replaceChildren(head, loading({ label: 'Lendo as sessões' }));
 
   const expanded = new Set();
@@ -340,8 +367,12 @@ export async function mount(area, ctx) {
   }
 
   function paint({ dashboard, atencao: attention }) {
-    const parts = [head, el('div', { class: 'stats' }, ...cards(dashboard.numbers).map(numberCard))];
-    if (attention.ok) parts.push(inbox(attention.valor, dashboard.agents, ctx.write, ctx.navigate), idleRow(attention.valor));
+    const all = machines.choice === 'all';
+    if (sub) sub.textContent = machines.hasRemotes() ? `O agora das suas sessões, ${whereText(machines.choice, machines.machines())}` : 'O agora das suas sessões';
+    const parts = [head, ...machines.parts(), el('div', { class: 'stats' }, ...cards(dashboard.numbers, all ? { byMachine: dashboard.byMachine, machines: machines.machines() } : {}).map(numberCard))];
+    // `/api/attention` covers every machine: the inbox keeps the chosen one's.
+    const chosen = attention.ok ? attentionForChoice(attention.valor, machines.choice) : null;
+    if (attention.ok) parts.push(inbox(chosen, dashboard.agents, ctx.write, ctx.navigate), idleRow(chosen));
     else parts.push(errorBand({ title: 'Não deu para ler quem precisa de você.', text: attention.erro.message, action: { label: 'Tentar de novo', onClick: () => draw() } }));
     parts.push(el('div', { class: 'two' }, activeAgents(dashboard.agents, expanded, toggleOne), recentActivity(dashboard.activity)));
     area.replaceChildren(...parts.filter(Boolean));
@@ -349,23 +380,25 @@ export async function mount(area, ctx) {
 
   async function draw() {
     const mine = ++request;
-    const [d, a] = await Promise.allSettled([ctx.read(DASHBOARD_ROUTE), ctx.read(ATTENTION_ROUTE)]);
+    const [d, a] = await Promise.allSettled([ctx.read(machines.route(DASHBOARD_ROUTE)), ctx.read(ATTENTION_ROUTE)]);
     if (mine !== request || ctx.signal.aborted) return;
     if (d.status === 'rejected') {
       if (d.reason?.name === 'AbortError') return;
+      if (machines.recover(d.reason)) return;
       last = null;
-      area.replaceChildren(head, error({ text: d.reason?.message, retry: () => draw() }));
+      area.replaceChildren(head, ...machines.parts(), error({ text: d.reason?.message, retry: () => draw() }));
       return;
     }
     if (a.status === 'rejected' && a.reason?.name === 'AbortError') return;
     const attention = a.status === 'fulfilled' ? { ok: true, valor: a.value } : { ok: false, erro: a.reason };
     // The sidebar number counts only who needs you (issue 245), as the menu bar.
     ctx.counter('dashboard', attention.ok ? blockedCount(attention.valor) : 0);
+    machines.update(d.value);
     last = { dashboard: d.value, atencao: attention };
     paint(last);
     // #61: the availability of the local cards of the inbox (at most five), then one more paint.
     if (attention.ok) {
-      const ids = inboxCards(attention.valor, d.value.agents).filter((c) => c.href).map((c) => c.session);
+      const ids = inboxCards(attentionForChoice(attention.valor, machines.choice), d.value.agents).filter((c) => !c.machine).map((c) => c.session);
       let changed = false;
       await loadAvailability(ctx.read, ids, () => (changed = true)).catch(() => {});
       if (changed && mine === request && !ctx.signal.aborted && last) paint(last);

@@ -10,6 +10,7 @@ import { loading, error, errorBand, empty } from '../states.js';
 import { attentionBadges, attentionOf, statusWithoutAttention } from '../attention.js';
 import { lastAvailability, loadAvailability, messageAction, useMessageStyle } from './session-message.js';
 import { openAction } from '../open-action.js';
+import { createMachineFilter, isRemote, itemHref, itemKey, machineTag, queryWithMachine, remoteParts } from '../machine-filter.js';
 
 // The `status` and `order` values of `/api/sessions` (English since phase 2b of issue 173). issue 245: the
 // old waiting pill split in two, "Precisam de você" (`blocked`, with the errors) and "Ociosas" (`idle`).
@@ -167,6 +168,8 @@ export const mayHaveLiveProcess = (s) => s.status !== 'completed';
 
 /** The Mensagem cell's content: the action, "sem processo vivo", or nothing while unknown. */
 export function messageCell(s, availability, navigate) {
+  // Issue 243: a remote session's process runs over there; this core has no inbox for it.
+  if (isRemote(s)) return null;
   if (!mayHaveLiveProcess(s)) return el('span', { class: 'sm-none', title: 'Sem processo vivo nesta máquina' }, 'sem processo vivo');
   return messageAction(s.id, availability, navigate);
 }
@@ -188,6 +191,19 @@ export function badgeEl(status, attention) {
   const st = statusWithoutAttention(status);
   if (!Object.hasOwn(STATUS, st)) return [];
   return [el('span', { class: `badge b-${st}` }, el('span', { class: 'p' }), STATUS[st])];
+}
+
+/**
+ * The subtitle (C45): "15 sessões registradas · 3 na Workstation" with Todas; one machine chosen,
+ * where they are ("nesta máquina", "na Workstation"); with no remote, as before.
+ */
+export function registeredText(list, { choice = 'all', machines = [] } = {}) {
+  const n = list.registered;
+  const base = n === 1 ? '1 sessão registrada' : `${n} sessões registradas`;
+  if (!machines.some((m) => m.id !== 'local')) return base;
+  if (choice === 'all') return [base, ...remoteParts(list.byMachine, machines, (b) => b.registered)].join(' · ');
+  const where = choice === 'local' ? 'nesta máquina' : `na ${machines.find((m) => m.id === choice)?.label ?? 'máquina remota'}`;
+  return `${base} ${where}`;
 }
 
 /** "Precisam de você 5": the pill label and the count of `counts` (none when the core did not say). */
@@ -215,6 +231,9 @@ export async function mount(area, ctx) {
   useMessageStyle();
 
   let state = stateFromQuery(location.search);
+  // Issue 243 (C45, C48): the machine filter, in the URL as `?machine=` beside the other filters.
+  const machines = createMachineFilter(ctx, { onChange: () => change({ page: 1 }), reread: () => read(), onLayout: () => placeMachineFilter() });
+  const url = () => `${location.pathname}${queryWithMachine(queryFromState(state), machines.choice)}`;
   let last = null;
   let request = 0;
   // Issue 279: the rows that fit; measured again after the first table and on every resize.
@@ -242,10 +261,24 @@ export async function mount(area, ctx) {
   const invert = el('button', { type: 'button', class: 'field square', 'aria-label': 'Inverter a ordem', title: 'Inverter a ordem', onClick: () => change({ direction: state.direction === 'desc' ? 'asc' : 'desc', page: 1 }) }, icon('invert'));
   const pills = el('div', { class: 'seg', role: 'group', 'aria-label': 'Status' });
   for (const [v, label] of PILLS) pills.append(el('button', { type: 'button', 'data-status': v, onClick: () => change({ status: v, page: 1 }) }, label, el('b', { class: 'sessions-pill-count' })));
-  const filters = el('div', { class: 'card filters' }, searchField, dirSlot, orderSlot, invert, pills);
+  // With a remote, the machine filter and the status pills share a row of their own (in 1100 they fold
+  // into two); with none, the pills stay where they always were.
+  const statusSlot = el('span', { class: 'sessions-status-slot' }, pills);
+  const filters = el('div', { class: 'card filters' }, searchField, dirSlot, orderSlot, invert, statusSlot);
+
+  function placeMachineFilter() {
+    const control = machines.control();
+    if (!control) {
+      statusSlot.setAttribute('class', 'sessions-status-slot');
+      statusSlot.replaceChildren(pills);
+      return;
+    }
+    statusSlot.setAttribute('class', 'sessions-status-slot sessions-machine-row');
+    statusSlot.replaceChildren(control, el('span', { class: 'sessions-status-group' }, el('span', { class: 'sessions-filter-label' }, 'Status'), pills));
+  }
 
   const body = el('div', { class: 'sessions-body' }, loading({ label: 'Carregando as sessões' }));
-  area.replaceChildren(head, filters, body);
+  area.replaceChildren(head, machines.notices, filters, body);
 
   function drawFilters(directories, counts = null) {
     const dirs = state.dir && !directories.includes(state.dir) ? [...directories, state.dir] : directories;
@@ -289,7 +322,7 @@ export async function mount(area, ctx) {
     perPage = next;
     if (page !== state.page) {
       state = { ...state, page };
-      history.replaceState(null, '', `${location.pathname}${queryFromState(state)}`);
+      history.replaceState(null, '', url());
     }
     return true;
   }
@@ -306,7 +339,7 @@ export async function mount(area, ctx) {
 
   function change(partial) {
     state = { ...state, ...partial };
-    history.replaceState(null, '', `${location.pathname}${queryFromState(state)}`);
+    history.replaceState(null, '', url());
     read();
   }
 
@@ -318,19 +351,20 @@ export async function mount(area, ctx) {
     td.replaceChildren(...(content ? [content] : []));
   };
   function askAvailability(items) {
-    const ids = items.filter(mayHaveLiveProcess).map((s) => s.id);
+    const ids = items.filter((s) => !isRemote(s) && mayHaveLiveProcess(s)).map((s) => s.id);
     loadAvailability(ctx.read, ids, (id, a) => {
-      const cell = messageCells.get(id);
+      const cell = messageCells.get(itemKey({ id }));
       if (cell) fillMessage(cell.s, cell.td, a);
     }).catch(() => {});
   }
 
   function row(s) {
-    const target = `/ui/sessions/${encodeURIComponent(s.id)}`;
+    // Issue 243 (C49): a remote session opens its Detail with `?machine=<id>`.
+    const target = itemHref(s);
     const tr = el(
       'tr',
-      { class: 'session-row' },
-      el('td', { class: 'nm' }, el('a', { href: target, title: s.title }, el('b', {}, s.title)), el('small', {}, el('span', { class: 'mono' }, shortId(s.id)), account(s.account))),
+      { class: 'session-row', 'data-key': itemKey(s) },
+      el('td', { class: 'nm' }, el('a', { href: target, title: s.title }, el('b', {}, s.title)), el('small', {}, el('span', { class: 'mono' }, shortId(s.id)), account(s.account), machineTag(s))),
       el('td', { class: 'st' }, ...badgeEl(s.status, s.attention)),
       el('td', { class: 'c-muted', title: new Date(s.lastActivity).toLocaleString('pt-BR') }, age(s.lastActivity)),
       // Os dois pedaços não quebram por dentro: na coluna estreita, o tempo desce para a linha de baixo.
@@ -341,7 +375,7 @@ export async function mount(area, ctx) {
       el('td', { class: 'dir', title: s.cwd ?? '' }, s.cwd ? `\u200e${s.cwd}\u200e` : '—'),
       messageTd(s),
       // Empty when there is nothing to open: the column keeps its width, the others stay aligned.
-      el('td', { class: 'sessions-open' }, openAction({ id: s.id, open: s.open }, { size: 'icon', write: ctx.write })),
+      el('td', { class: 'sessions-open' }, openAction({ id: s.id, open: s.open, machine: s.machine }, { size: 'icon', write: ctx.write, machine: s.machine?.label ?? null })),
     );
     tr.addEventListener('click', (ev) => {
       if (ev.target instanceof Element && ev.target.closest('a')) return;
@@ -352,8 +386,8 @@ export async function mount(area, ctx) {
 
   function messageTd(s) {
     const td = el('td', { class: 'msg' });
-    fillMessage(s, td, lastAvailability(s.id));
-    messageCells.set(s.id, { s, td });
+    fillMessage(s, td, isRemote(s) ? undefined : lastAvailability(s.id));
+    messageCells.set(itemKey(s), { s, td });
     return td;
   }
 
@@ -380,11 +414,13 @@ export async function mount(area, ctx) {
   }
 
   function draw(list) {
-    sub.textContent = list.registered === 1 ? '1 sessão registrada' : `${list.registered} sessões registradas`;
+    machines.update(list);
+    placeMachineFilter();
+    sub.textContent = registeredText(list, { choice: machines.choice, machines: machines.machines() });
     // A página pedida pode ter sumido (a lista encolheu): fica a que o núcleo devolveu.
     if (list.page !== state.page) {
       state = { ...state, page: list.page };
-      history.replaceState(null, '', `${location.pathname}${queryFromState(state)}`);
+      history.replaceState(null, '', url());
     }
     drawFilters(list.directories, list.counts);
     if (list.items.length) {
@@ -395,6 +431,8 @@ export async function mount(area, ctx) {
       if (!fitted && refit()) read();
       return;
     }
+    // C48: the chosen remote is down; the notice above already says why the list is empty.
+    if (machines.chosenDown()) return void body.replaceChildren();
     const filtering = state.status !== 'all' || state.search.trim() || state.dir;
     body.replaceChildren(
       filtering
@@ -406,12 +444,13 @@ export async function mount(area, ctx) {
   async function read() {
     const mine = ++request;
     try {
-      const list = await ctx.read(listRoute(state, perPage));
+      const list = await ctx.read(machines.route(listRoute(state, perPage)));
       if (mine !== request) return;
       last = list;
       draw(list);
     } catch (e) {
       if (e?.name === 'AbortError' || mine !== request) return;
+      if (machines.recover(e)) return;
       // Com uma lista na tela, ela fica e a faixa avisa; sem lista, o erro ocupa o lugar.
       if (last) {
         body.querySelector('.error-band')?.remove();

@@ -6,6 +6,7 @@
 import { header, el, icon } from '../dom.js';
 import { loading, error, errorBand, empty } from '../states.js';
 import { attentionPill } from '../attention.js';
+import { createMachineFilter, itemKey, machineIdOf, machineTag, sessionHref, whereText } from '../machine-filter.js';
 
 /** Quantos dias cada página traz. */
 export const DAYS_PER_PAGE = 7;
@@ -87,8 +88,9 @@ export function appendDays(currentOnes, newOnes) {
   for (const day of newOnes ?? []) {
     const last = list[list.length - 1];
     if (last && last.day === day.day) {
-      const ids = new Set(last.sessions.map((s) => s.id));
-      list[list.length - 1] = { ...last, sessions: [...last.sessions, ...day.sessions.filter((s) => !ids.has(s.id))] };
+      // Issue 243: two machines can have the same id; the key is machine + id.
+      const ids = new Set(last.sessions.map((s) => itemKey(s)));
+      list[list.length - 1] = { ...last, sessions: [...last.sessions, ...day.sessions.filter((s) => !ids.has(itemKey(s)))] };
     } else list.push(day);
   }
   return list;
@@ -110,10 +112,11 @@ function badge(status) {
   return el('span', { class: `badge b-${known ? status : 'abandoned'}` }, el('span', { class: 'p' }), known ? STATUS[status] : '—');
 }
 
-const sessionRoute = (id) => `/ui/sessions/${encodeURIComponent(id)}`;
-
 function row(s) {
   const id = String(s.id);
+  // Issue 243: a remote row (and the session it continued) opens the Detail with `?machine=`.
+  const sessionRoute = (x) => sessionHref(x, machineIdOf(s));
+  const tag = machineTag(s);
   const previous = s.previous
     ? el(
         'div',
@@ -129,7 +132,14 @@ function row(s) {
     'div',
     { class: 'hist-row' },
     badge(s.status),
-    el('div', { class: 'hist-trunc hist-block' }, el('a', { class: 'hist-target', href: sessionRoute(id) }, el('b', { class: 'hist-title' }, s.title || 'Sem título')), ' ', el('span', { class: 'hist-o mono' }, shortId(id)), previous),
+    tag
+      ? el(
+          'div',
+          { class: 'hist-block hist-with-tag' },
+          el('div', { class: 'mf-with-tag' }, el('span', { class: 'mf-shrink' }, el('a', { class: 'hist-target', href: sessionRoute(id) }, el('b', { class: 'hist-title' }, s.title || 'Sem título')), ' ', el('span', { class: 'hist-o mono' }, shortId(id))), tag),
+          previous,
+        )
+      : el('div', { class: 'hist-trunc hist-block' }, el('a', { class: 'hist-target', href: sessionRoute(id) }, el('b', { class: 'hist-title' }, s.title || 'Sem título')), ' ', el('span', { class: 'hist-o mono' }, shortId(id)), previous),
     el('span', { class: 'hist-o mono hist-trunc hist-project' }, s.project || '—'),
     el('span', { class: 'hist-o mono hist-trunc hist-model' }, s.model || '—'),
     el('span', { class: 'hist-o mono hist-duration' }, formatDuration(s.durationMs)),
@@ -166,7 +176,18 @@ export function mount(area, ctx) {
   const footer = el('div', { class: 'hist-region', hidden: true });
   const sentinel = el('div', { class: 'hist-sentinel', 'aria-hidden': 'true' });
   const body = el('div', { class: 'hist-body' }, top, list, footer);
-  area.replaceChildren(head, body);
+  const sub = head.querySelector?.('.sub') ?? null;
+  // Issue 243 (C47): the machine filter on its own row under the header.
+  const machines = createMachineFilter(ctx, { onChange: () => restart(), reread: () => (ready ? reread() : restart()), onLayout: () => placeMachineRow() });
+  const machineSlot = el('div', { class: 'hist-machines' });
+  machineSlot.hidden = true;
+  function placeMachineRow() {
+    const parts = machines.parts();
+    machineSlot.replaceChildren(...parts);
+    machineSlot.hidden = parts.length === 0;
+    if (sub) sub.textContent = machines.hasRemotes() ? `Sessões encerradas ${whereText(machines.choice, machines.machines())}, por dia` : 'Sessões encerradas, por dia';
+  }
+  area.replaceChildren(head, machineSlot, body);
 
   let search = '';
   let days = [];
@@ -220,7 +241,8 @@ export function mount(area, ctx) {
     const today = new Date();
     const children = [];
     if (!days.length && (!next || !observer)) {
-      children.push(
+      // C48: the chosen remote is down; the notice above says why the list is empty.
+      if (!machines.chosenDown()) children.push(
         search
           ? empty({ title: 'Nenhuma sessão encontrada', text: `Nada com “${search}” no histórico.` })
           : empty({ title: 'Nenhuma sessão encerrada ainda', text: 'As sessões aparecem aqui quando terminam.' }),
@@ -260,14 +282,17 @@ export function mount(area, ctx) {
     pickLane(footer, null);
     list.replaceChildren(loading());
     try {
-      const r = await read(historyRoute({ search }));
+      const r = await read(machines.route(historyRoute({ search })));
       if (g !== generation || ended) return;
+      machines.update(r);
+      placeMachineRow();
       days = r?.days ?? [];
       next = r?.next ?? null;
       ready = true;
       drawList();
     } catch (e) {
       if (aborted(e) || g !== generation) return;
+      if (machines.recover(e)) return;
       // Status 0: o núcleo não respondeu (o título padrão). Outro status: ele respondeu com erro.
       list.replaceChildren(error({ title: e?.status ? 'Não deu para ler o histórico' : undefined, text: e?.message ?? String(e), retry: restart }));
     }
@@ -278,7 +303,7 @@ export function mount(area, ctx) {
     const g = generation;
     loadingMore = true;
     try {
-      const r = await read(historyRoute({ before: next, search }));
+      const r = await read(machines.route(historyRoute({ before: next, search })));
       if (g !== generation || ended) return;
       days = appendDays(days, r?.days ?? []);
       next = r?.next ?? null;
@@ -303,8 +328,10 @@ export function mount(area, ctx) {
     const g = generation;
     const turn = ++liveTurn;
     try {
-      const r = await read(historyRoute({ search }));
+      const r = await read(machines.route(historyRoute({ search })));
       if (g !== generation || turn !== liveTurn || ended) return;
+      machines.update(r);
+      placeMachineRow();
       const newOnes = r?.days ?? [];
       const oldest = newOnes.length ? newOnes[newOnes.length - 1].day : null;
       // Os dias já carregados além da primeira página ficam, e o cursor deles também.

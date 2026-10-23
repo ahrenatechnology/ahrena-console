@@ -290,7 +290,7 @@ describe('Feed de atividade: a tela', () => {
     const area = new Elemento('main');
     const limpar = await mount(area, f.ctx);
 
-    assert.equal(f.pedidos[0], '/api/events');
+    assert.equal(f.pedidos[0], '/api/events?machine=all', 'always with the machine (issue 243)');
     assert.ok(documento.head.querySelector('link[data-screen="feed"]'), 'o CSS da tela entrou no head');
     assert.deepEqual(linhasDe(area), ['e2', 'e1']);
     const [l2, l1] = area.querySelectorAll('.feed-item');
@@ -326,7 +326,7 @@ describe('Feed de atividade: a tela', () => {
     fila = [{ events: [evento('e3', 1)], cursor: 'k3', older: null, options: null }];
     f.mudar();
     await espera();
-    assert.equal(f.pedidos.at(-1), '/api/events?after=k2');
+    assert.equal(f.pedidos.at(-1), '/api/events?after=k2&machine=all');
     fila = [{ events: [evento('e4', 0), evento('e3', 1)], cursor: 'k4', older: null, options: null }];
     f.mudar();
     await espera();
@@ -364,7 +364,7 @@ describe('Feed de atividade: a tela', () => {
     await espera();
     await espera();
     assert.equal(n, 2);
-    assert.equal(f.pedidos.at(-1), '/api/events?after=k2');
+    assert.equal(f.pedidos.at(-1), '/api/events?after=k2&machine=all');
     soltar({ events: [], cursor: 'k2', older: null });
     await espera();
     assert.deepEqual(linhasDe(area), ['b', 'a']);
@@ -396,7 +396,7 @@ describe('Feed de atividade: a tela', () => {
     assert.equal(botao.hidden, false);
     botao.click();
     await espera();
-    assert.equal(mais.pedidos.at(-1), '/api/events?before=v%201');
+    assert.equal(mais.pedidos.at(-1), '/api/events?before=v%201&machine=all');
     assert.deepEqual(linhasDe(area), ['novo', 'velho']);
     assert.equal(botao.hidden, true);
     limpar();

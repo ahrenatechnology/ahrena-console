@@ -1,5 +1,15 @@
 // O estado do Feed de atividade (C8, #94), sem DOM: a lista, o cursor do ao vivo, a pausa e as contas
 // de tempo. A tela (`feed.js`) desenha o que este módulo decide; o teste exercita os dois.
+//
+// Issue 243: with `machine=all` the event ids of two machines can repeat, so every set, the open row and
+// the dedup use `eventKey` (machine + id). An older page is not globally ordered against the one before
+// it (each machine continues from its own cursor), and a machine that comes back during live polling
+// brings its newest page once: both are inserted by `createdAt`, never just appended or prepended.
+
+import { itemKey, sessionHref } from '../machine-filter.js';
+
+/** The key of an event: its machine and its id (`local:<id>` for this machine's). */
+export const eventKey = (ev) => itemKey(ev);
 
 /** Quantas linhas a lista guarda em memória; o ao vivo corta as mais velhas além disso. */
 export const LIMIT = 500;
@@ -29,9 +39,9 @@ export function rowPill(ev) {
 /** O mesmo molde de id que a moldura aceita em `/ui/sessions/:id`. */
 const ID = /^[A-Za-z0-9_.:-]{1,128}$/;
 
-/** O caminho do Detalhe de uma sessão, ou `null` se o id não serve como rota. */
-export function sessionRoute(id) {
-  return typeof id === 'string' && ID.test(id) ? `/ui/sessions/${encodeURIComponent(id)}` : null;
+/** O caminho do Detalhe de uma sessão, ou `null` se o id não serve como rota; a remote one carries `?machine=`. */
+export function sessionRoute(id, machineId = 'local') {
+  return typeof id === 'string' && ID.test(id) ? sessionHref(id, machineId) : null;
 }
 
 /** Como a moldura escreve o agente do evento: o principal e o subagente sem tipo (`main`, `subagent`). */
@@ -49,10 +59,10 @@ export function load(state, response) {
   state.older = response.older ?? null;
   state.pendentes = [];
   state.chegados = 0;
-  if (state.aberto && !state.events.some((e) => e.id === state.aberto)) state.aberto = null;
+  if (state.aberto && !state.events.some((e) => eventKey(e) === state.aberto)) state.aberto = null;
 }
 
-const ids = (state) => new Set([...state.events, ...state.pendentes].map((e) => e.id));
+const ids = (state) => new Set([...state.events, ...state.pendentes].map(eventKey));
 
 /**
  * Eventos novos do ao vivo (mais novo primeiro). Pausado, eles esperam em `pendentes`; senão entram no
@@ -61,7 +71,12 @@ const ids = (state) => new Set([...state.events, ...state.pendentes].map((e) => 
 export function receiveNewer(state, response) {
   if (response.cursor) state.cursor = response.cursor;
   const seen = ids(state);
-  const newOnes = (response.events ?? []).filter((e) => !seen.has(e.id));
+  const newOnes = [];
+  for (const e of response.events ?? []) {
+    if (seen.has(eventKey(e))) continue;
+    seen.add(eventKey(e));
+    newOnes.push(e);
+  }
   if (state.pausado) {
     // Guarda só os `LIMITE` mais novos (mais que isso cairia da lista ao retomar), mas conta todos.
     state.pendentes = [...newOnes, ...state.pendentes].slice(0, LIMIT);
@@ -71,10 +86,13 @@ export function receiveNewer(state, response) {
   return up(state, newOnes);
 }
 
-/** Mais novo primeiro: `createdAt` decrescente e, no empate, `id` decrescente (a ordem do núcleo). */
+/** Mais novo primeiro: `createdAt` decrescente e, no empate, `id` decrescente (a ordem do núcleo); then the machine. */
 export function newestFirst(a, b) {
   if (a.createdAt !== b.createdAt) return a.createdAt < b.createdAt ? 1 : -1;
-  return a.id < b.id ? 1 : a.id > b.id ? -1 : 0;
+  if (a.id !== b.id) return a.id < b.id ? 1 : -1;
+  const ka = eventKey(a);
+  const kb = eventKey(b);
+  return ka < kb ? 1 : ka > kb ? -1 : 0;
 }
 
 /**
@@ -90,9 +108,9 @@ function up(state, newOnes) {
   const cutOff = state.events.splice(LIMIT);
   // Cortar o fim deixa o cursor de "mostrar mais" apontando para depois do buraco: some o botão.
   if (cutOff.length) state.older = null;
-  if (cutOff.some((e) => e.id === state.aberto)) state.aberto = null;
-  const dropped = new Set(cutOff.map((e) => e.id));
-  return { entraram: sorted.filter((e) => !dropped.has(e.id)), cortados: cutOff, noTopo: atTop };
+  if (cutOff.some((e) => eventKey(e) === state.aberto)) state.aberto = null;
+  const dropped = new Set(cutOff.map(eventKey));
+  return { entraram: sorted.filter((e) => !dropped.has(eventKey(e))), cortados: cutOff, noTopo: atTop };
 }
 
 export function pause(state) {
@@ -108,18 +126,33 @@ export function resume(state) {
   return up(state, newOnes);
 }
 
-/** A página mais velha ("mostrar mais"): entra no fim, sem repetir. */
+/**
+ * A página mais velha ("mostrar mais"), sem repetir. Each event goes to its place by `createdAt` (issue
+ * 243: with several machines the page is not older than everything on screen); the answer is the events
+ * that came in, and `noFim` says whether they all landed after the ones already there (the screen only
+ * appends then).
+ */
 export function receiveOlder(state, response) {
   const seen = ids(state);
-  const stale = (response.events ?? []).filter((e) => !seen.has(e.id));
-  state.events = [...state.events, ...stale];
+  const stale = [];
+  for (const e of response.events ?? []) {
+    if (seen.has(eventKey(e))) continue;
+    seen.add(eventKey(e));
+    stale.push(e);
+  }
+  const sorted = [...stale].sort(newestFirst);
+  const last = state.events.at(-1);
+  const atEnd = !last || !sorted.length || newestFirst(last, sorted[0]) < 0;
+  state.events = atEnd ? [...state.events, ...sorted] : [...state.events, ...sorted].sort(newestFirst);
   state.older = response.older ?? null;
-  return stale;
+  const entered = sorted;
+  entered.noFim = atEnd;
+  return entered;
 }
 
-/** Abre a linha, ou fecha se já estava aberta. Uma aberta por vez. */
-export function toggleOne(state, id) {
-  state.aberto = state.aberto === id ? null : id;
+/** Abre a linha (pela chave do evento, `eventKey`), ou fecha se já estava aberta. Uma aberta por vez. */
+export function toggleOne(state, key) {
+  state.aberto = state.aberto === key ? null : key;
   return state.aberto;
 }
 
