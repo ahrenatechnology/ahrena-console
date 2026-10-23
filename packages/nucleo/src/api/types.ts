@@ -272,6 +272,10 @@ export interface PanelNeedYou {
   scope?: string;
   /** The list for the scope: `needs` first, then `your-turn`, each oldest `since` first; at most 24. */
   items?: NeedsYouItem[];
+  /** The scope's list before the cap of `items`: how many in all, and of them `needs` and `your-turn`. */
+  itemsTotal?: number;
+  itemsNeeds?: number;
+  itemsYourTurn?: number;
   /** The `needs` count per machine: this Mac first (`local`), then each remote in machines.json order. */
   byMachine?: { id: string; label: string; n: number }[];
   /** Every remote machine of machines.json, in its order. */

@@ -185,6 +185,7 @@ describe('#262 the panel without needYou', () => {
       assert.equal(r.text, JSON.stringify(await local.builder.montar({ sessionId: id })), query);
       assert.equal(r.body.needYou.items, undefined);
       assert.equal(r.body.needYou.scope, undefined);
+      assert.equal(r.body.needYou.itemsTotal, undefined);
     }
     assert.equal(reader.requests, 0);
     assert.deepEqual(tunnel.paths, []);
@@ -404,6 +405,19 @@ describe('#262 what a remote sends', () => {
     }
   });
 
+  test('a session id the routes would refuse is left out', async () => {
+    const id = await localSessionId();
+    const refused = ['bad id', '../etc/passwd', 'x'.repeat(129), 'a/b'];
+    tunnel.override.set('/api/attention', { items: [attentionItem('remote-ok', 'permission', 30), ...refused.map((s, k) => attentionItem(s, 'permission', 40 + k))] });
+    tunnel.override.set('/api/wall', { cards: [] });
+    const n = (await get(local, `/api/panel/${id}?needYou=${WS.id}`)).body.needYou;
+    assert.deepEqual(
+      n.items.map((i: { id: string }) => i.id),
+      ['remote-ok'],
+    );
+    assert.equal(n.byMachine[1].n, 1);
+  });
+
   test('items carrying their own machine are dropped, and the list holds at most 24', async () => {
     const id = await localSessionId();
     const many = Array.from({ length: 40 }, (_, k) => attentionItem(`remote-${k}`, 'permission', 1000 + k));
@@ -414,6 +428,68 @@ describe('#262 what a remote sends', () => {
     assert.ok(n.items.every((i: { id: string }) => i.id !== 'remote-of-remote'));
     assert.equal(n.items[0].title, 'Remote remote-39', 'the oldest first; a card with a machine does not enrich');
     assert.equal(n.byMachine[1].n, 40);
+  });
+});
+
+describe('#262 the counts before the cap', () => {
+  test('itemsTotal, itemsNeeds and itemsYourTurn count the whole scope, past the 24 of items', async () => {
+    const id = await localSessionId();
+    const many = [...Array.from({ length: 30 }, (_, k) => attentionItem(`remote-n${k}`, 'permission', 100 + k)), ...Array.from({ length: 5 }, (_, k) => attentionItem(`remote-t${k}`, 'your-turn', 10 + k))];
+    tunnel.override.set('/api/attention', { items: many });
+    tunnel.override.set('/api/wall', { cards: [] });
+    const n = (await get(local, `/api/panel/${id}?needYou=${WS.id}`)).body.needYou;
+    assert.equal(n.items.length, MAX_ITEMS);
+    assert.equal(n.itemsTotal, 35);
+    assert.equal(n.itemsNeeds, 30);
+    assert.equal(n.itemsYourTurn, 5);
+    // Another scope, its own counts.
+    const mine = (await localItems(id)).filter((i) => i.id !== id);
+    const l = (await get(local, `/api/panel/${id}?needYou=local`)).body.needYou;
+    assert.equal(l.itemsTotal, mine.length);
+    assert.equal(l.itemsNeeds, mine.filter((i) => i.level === 'needs').length);
+    assert.equal(l.itemsYourTurn, mine.length - l.itemsNeeds);
+  });
+});
+
+describe('#262 one build per tick', () => {
+  test("a local panel's need-you is built once, by montar, with the same answer", async () => {
+    const id = await localSessionId();
+    tunnel.override.set('/api/attention', { items: [attentionItem('remote-a', 'permission', 30)] });
+    tunnel.override.set('/api/wall', { cards: [] });
+    const builder = local.builder;
+    const original = builder.needYouItems.bind(builder);
+    let calls = 0;
+    builder.needYouItems = async (...args) => {
+      calls++;
+      return original(...args);
+    };
+    for (const scope of ['all', 'local', 'family', WS.id]) {
+      const served = (await get(local, `/api/panel/${id}?needYou=${scope}`)).body.needYou;
+      // The same as decorating without the list montar kept (built again by needYouItems).
+      const rebuilt = (await new PanelMachines({ reader, local: { needYouItems: original } }).decorate(await builder.montar({ sessionId: id }), id, new URL(`http://127.0.0.1/api/panel/${id}?needYou=${scope}`))).needYou as Record<string, unknown>;
+      for (const k of ['scope', 'items', 'itemsTotal', 'itemsNeeds', 'itemsYourTurn', 'total', 'yourTurn', 'byAccount', 'byMachine', 'family', 'machine']) assert.deepEqual(served[k], rebuilt[k], `${scope} ${k}`);
+    }
+    assert.equal(calls, 0);
+  });
+
+  test("a machine's connection is asked once: from its summary when it has one, else from the reader", async () => {
+    let asked = 0;
+    const counted = connectionOf;
+    connectionOf = (machineId) => {
+      asked++;
+      return counted?.(machineId) ?? null;
+    };
+    const url = new URL('http://127.0.0.1/api/panel/me?needYou=all');
+    const body = { needYou: { total: 0, yourTurn: 0, byAccount: [], family: [], machine: [] } };
+    const summary = { id: WS.id, label: WS.label, state: 'connected', reason: null, lastReadAt: null };
+    const withConnection = { machines: async () => [{ ...summary, connection: connectionFor(status) }] } as unknown as ConstructorParameters<typeof PanelMachines>[0]['telemetry'];
+    const a = (await new PanelMachines({ reader, telemetry: withConnection, local: { needYouItems: async () => [] } }).decorate(body, 'me', url)).needYou as Record<string, any>;
+    assert.equal(asked, 0);
+    assert.deepEqual(a.machines[0].connection, { state: 'up', since: SINCE, lastError: null });
+    const without = { machines: async () => [summary] } as unknown as ConstructorParameters<typeof PanelMachines>[0]['telemetry'];
+    const b = (await new PanelMachines({ reader, telemetry: without, local: { needYouItems: async () => [] } }).decorate(body, 'me', url)).needYou as Record<string, any>;
+    assert.equal(asked, 1);
+    assert.deepEqual(b.machines, a.machines);
   });
 });
 

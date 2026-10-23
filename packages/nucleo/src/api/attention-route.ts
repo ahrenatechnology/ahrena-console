@@ -19,6 +19,7 @@
 import { LIVE_STATES, type FleetReader, type McpAttentionReason } from '../mcp/fleet.ts';
 import { needingYou } from '../mcp/tools/attention.ts';
 import { BLOCKED_REASONS, type SessionAttention } from './attention.ts';
+import { REMOTE_ID } from './machine-items.ts';
 import { SessionOpenDescriber, type SessionOpen } from './session-open.ts';
 import type { NeedsYouItem } from './types.ts';
 import { paleta } from '../../../marca/gerado/marca.ts';
@@ -118,7 +119,8 @@ export function remoteAttentionItems(body: unknown, machine: { id: string; label
     if (!isObject(i) || (i.machine !== null && i.machine !== undefined)) continue;
     const reason = i.reason as AttentionReason;
     const level = i.level as AttentionLevel;
-    const session = text(i.session, 128);
+    // An id the routes would refuse (api/machine-items.ts `REMOTE_ID`) is left out, not cut.
+    const session = typeof i.session === 'string' && REMOTE_ID.test(i.session) ? i.session : null;
     const since = text(i.since, 40);
     if (!session || !since || !Number.isFinite(Date.parse(since)) || typeof i.reason !== 'string' || !Object.hasOwn(MOTIVO_CURTO, reason) || !ATTENTION_LEVELS.includes(level)) continue;
     if (!Number.isFinite(i.minutes) || (i.minutes as number) < 0) continue;

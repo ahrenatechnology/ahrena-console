@@ -64,7 +64,7 @@ import { GRAPH_STATE, shortCount, buildGraph, paginate, type GraphState, type Gr
 import { paleta, status as STATUS_COR } from './brand'
 import { charsFor, columns, fit, kids, type Node } from './fit'
 import { LEGACY_PORT } from './discover'
-import { downInScope, emptyText, hasMachineList, listFooter, needYouTooltip, scopeList, scopeOf } from './machines'
+import { downInScope, emptyText, hasMachineList, listFooter, needYouTooltip, scopeCounts, scopeList, scopeOf } from './machines'
 import { offlineLine, remoteGo, scopeRow, scopeSelect } from './render-machines'
 
 export const CARD_W = 34
@@ -2271,6 +2271,8 @@ function needYouAcrossMachines(c: DrawContext, p: Panel, g: ReturnType<typeof gr
   const items = scopeList(p, scope)
   const ofLevel = items.filter(needs)
   const onTurn = items.filter((i) => !needs(i))
+  // The scope's counts before the core's cap of the list (the list's own from an older core).
+  const counts = scopeCounts(p, scope, { needs: ofLevel.length, yourTurn: onTurn.length })
   const down = downInScope(p, scope)
   // Around: as in P7, plus the Select's own line in the narrow panel and each neutral line (3 or 4).
   const around = 2 + 4 + 1 + 1 + (narrow ? 1 : 0) + down.length * (narrow ? 4 : 3) + (onTurn.length ? 2 : 0) + 3 + 1 + 2 + 5
@@ -2281,7 +2283,7 @@ function needYouAcrossMachines(c: DrawContext, p: Panel, g: ReturnType<typeof gr
   const select = scopeSelect(c, p, scope)
   const empty = emptyText(p, scope)
   return [
-    sectionLabel(c, g.width, `PRECISAM DE VOCÊ · ${ofLevel.length}`, narrow ? null : select),
+    sectionLabel(c, g.width, `PRECISAM DE VOCÊ · ${counts.needs}`, narrow ? null : select),
     narrow ? scopeRow(c, select, g.width) : null,
     ...down.map((m) => offlineLine(c, m, g.width, !narrow, machineUrl(c, m.id))),
     ofLevel.length || empty ? (
@@ -2291,7 +2293,7 @@ function needYouAcrossMachines(c: DrawContext, p: Panel, g: ReturnType<typeof gr
     ) : null,
     showYourTurn.length ? (
       <Text key="label-your-turn" mono size="caption" weight="semibold" dimColor>
-        SUA VEZ · {onTurn.length} · sem pendência, só a vez de responder
+        SUA VEZ · {counts.yourTurn} · sem pendência, só a vez de responder
       </Text>
     ) : null,
     showYourTurn.length ? (
@@ -2299,7 +2301,7 @@ function needYouAcrossMachines(c: DrawContext, p: Panel, g: ReturnType<typeof gr
         {showYourTurn.map((i) => needsYouCard(c, i))}
       </Box>
     ) : null,
-    didNotFit(c, 'did-not-fit', items.length - shown.length),
+    didNotFit(c, 'did-not-fit', counts.total - shown.length),
     <Box key="footer-need-you" flexDirection="row" justifyContent="space-between" alignItems="center" width={g.width} borderStyle="round" borderColor={BORDER} backgroundColor={CARD_BG} paddingX={1}>
       <Text mono wrap="truncate-end">{listFooter(!narrow)}</Text>
       <Button key="close-need-you" plain onPress={c.actions.close}>

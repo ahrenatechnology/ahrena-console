@@ -17,13 +17,13 @@ export const DOWN_SINCE = (() => {
 
 const minutesAgo = (m: number) => new Date(NOW - m * 60_000).toISOString()
 
-function item(id: string, minutes: number, extra: Partial<NeedsYou>): NeedsYou {
+function item(id: string, title: string, minutes: number, extra: Partial<NeedsYou>): NeedsYou {
   return {
     id: `sim-p15-${id}`,
     level: 'needs',
     why: 'decision',
     local: null,
-    title: id,
+    title,
     state: 'waiting',
     reason: 'notification',
     urgent: false,
@@ -39,16 +39,16 @@ function item(id: string, minutes: number, extra: Partial<NeedsYou>): NeedsYou {
 }
 
 export const LOCAL_ITEMS: NeedsYou[] = [
-  item('cli-de-notas', 9, { why: 'decision', model: 'claude-sonnet-5-5' }),
-  item('agenda-ficticia', 7, { why: 'plan', text: 'Plano de 5 passos espera aprovação' }),
-  item('catalogo-exemplo', 4, { why: 'question', relation: 'child', text: 'Redis ou cache em memória? · 2 opções', account: COMPANY }),
+  item('notes-cli', 'cli-de-notas', 9, { why: 'decision', model: 'claude-sonnet-5-5' }),
+  item('sample-calendar', 'agenda-ficticia', 7, { why: 'plan', text: 'Plano de 5 passos espera aprovação' }),
+  item('sample-catalog', 'catalogo-exemplo', 4, { why: 'question', relation: 'child', text: 'Redis ou cache em memória? · 2 opções', account: COMPANY }),
 ]
 export const REMOTE_ITEMS: NeedsYou[] = [
-  item('painel-de-metricas', 3, { why: 'error', state: 'error', reason: null, text: 'API 529 · overloaded_error', machine: { ...REMOTE } }),
-  item('motor-de-regras', 2, { why: 'permission', text: 'Bash: npm run migrate', machine: { ...REMOTE } }),
+  item('metrics-dashboard', 'painel-de-metricas', 3, { why: 'error', state: 'error', reason: null, text: 'API 529 · overloaded_error', machine: { ...REMOTE } }),
+  item('rules-engine', 'motor-de-regras', 2, { why: 'permission', text: 'Bash: npm run migrate', machine: { ...REMOTE } }),
 ]
 /** An idle session of this Mac: it goes to the separate "sua vez" group. */
-export const IDLE_ITEM = item('fila-de-tarefas', 1, { level: 'your-turn', why: 'your-turn', reason: 'stop', relation: 'parent', text: 'Terminei. Rodo os testes?' })
+export const IDLE_ITEM = item('task-queue', 'fila-de-tarefas', 1, { level: 'your-turn', why: 'your-turn', reason: 'stop', relation: 'parent', text: 'Terminei. Rodo os testes?' })
 
 function machine(offline: boolean): NeedYouMachine {
   return {

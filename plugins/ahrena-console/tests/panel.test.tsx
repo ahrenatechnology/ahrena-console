@@ -1579,7 +1579,7 @@ const cardKeys = async (ui: any, list = 'list') => {
 }
 /** The keys of a found node's children (a nested node keeps its key in `props`). */
 const childKeys = (n: any): string[] => ((n?.children ?? []) as { key?: string; props?: { key?: string } }[]).map((x) => x.key ?? x.props?.key ?? '').filter(Boolean)
-const P15_OLDEST_FIRST = ['cli-de-notas', 'agenda-ficticia', 'catalogo-exemplo', 'painel-de-metricas', 'motor-de-regras'].map((t) => `needs-sim-p15-${t}`)
+const P15_OLDEST_FIRST = ['notes-cli', 'sample-calendar', 'sample-catalog', 'metrics-dashboard', 'rules-engine'].map((t) => `needs-sim-p15-${t}`)
 const P15_OPTIONS = ['Família', 'Todas as máquinas', 'Esta máquina', 'Workstation']
 
 test('P15 narrow: Família by default, the Select on the line below the label, with one option per machine', async ($, on) => {
@@ -1597,8 +1597,8 @@ test('P15 narrow: Família by default, the Select on the line below the label, w
   expect(await ui.find({ type: 'Text', text: /Máquina inteira/ })).toBeUndefined()
   expect(await ui.find({ type: 'Text', text: /^mais antigas primeiro$/ })).toBeDefined()
   // The idle one keeps its own group after the needs.
-  expect(await cardKeys(ui)).toEqual(['needs-sim-p15-catalogo-exemplo'])
-  expect(await cardKeys(ui, 'list-your-turn')).toEqual(['needs-sim-p15-fila-de-tarefas'])
+  expect(await cardKeys(ui)).toEqual(['needs-sim-p15-sample-catalog'])
+  expect(await cardKeys(ui, 'list-your-turn')).toEqual(['needs-sim-p15-task-queue'])
   // Every machine: one list, oldest first (the core's order is reversed on purpose), not grouped by machine.
   await ui.select({ key: 'scope', value: 'all' })
   expect((await ui.find({ key: 'scope' }))?.props.value).toBe('all')
@@ -1648,6 +1648,33 @@ test('P15: a remote card says its machine first in the meta line and opens in th
     await ui.press({ key: 'close-need-you' })
     await ui.unmount()
   }
+})
+
+test('#262: the header, SUA VEZ and "+N" count the whole scope, not only the items the core sends', async ($, on) => {
+  const f = await open($, on)
+  // The core caps `items`; its uncapped counts of the scope come apart.
+  f.state.respond = (url) => {
+    const p = machinesPanel(url.searchParams.get('needYou'))
+    return { ...p, needYou: { ...p.needYou, itemsTotal: 30, itemsNeeds: 26, itemsYourTurn: 4 } }
+  }
+  const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...WIDE })
+  await f.timer.advance(5_000)
+  await ui.press({ key: 'show-need-you' })
+  expect(await ui.find({ key: 'section-PRECISAM DE VOCÊ · 26' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /SUA VEZ · 4 ·/ })).toBeDefined()
+  const shown = (await cardKeys(ui)).length + (await cardKeys(ui, 'list-your-turn')).length
+  expect(await ui.find({ type: 'Text', text: new RegExp(`\\+${30 - shown} que não cabem nesta altura`) })).toBeDefined()
+  await ui.press({ key: 'close-need-you' })
+  await ui.unmount()
+  // Without them (a core before the counts), the list's own, as before.
+  answerScopes(f)
+  const plain = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...WIDE })
+  await f.timer.advance(15_000)
+  await plain.press({ key: 'show-need-you' })
+  expect(await plain.find({ key: 'section-PRECISAM DE VOCÊ · 5' })).toBeDefined()
+  expect(await plain.find({ type: 'Text', text: /SUA VEZ · 1 ·/ })).toBeDefined()
+  expect(await plain.find({ type: 'Text', text: /que não cabem nesta altura/ })).toBeUndefined()
+  await plain.unmount()
 })
 
 test('P16: a remote that is down leaves the list; the neutral line says since when, with the link of P14', async ($, on) => {

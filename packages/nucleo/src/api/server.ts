@@ -376,7 +376,7 @@ export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
     counters.panel++;
     counters.panelMs += performance.now() - t0;
     // #262: `?needYou=` adds every machine's need-you; without it, the same object (api/panel-machines.ts).
-    send(res, 200, await panelMachines.decorate(body, sessionId, url));
+    send(res, 200, await panelMachines.decorate(body, sessionId, url, opts.panelBuilder.needYouItemsOf(body)));
   }
 
   async function decisionList(res: ServerResponse, sessionId: string, url: URL) {

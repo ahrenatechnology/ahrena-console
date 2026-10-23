@@ -69,6 +69,20 @@ export function scopeList(p: Panel, scope: NeedYouScope): NeedsYou[] {
   return oldestFirst((n.items ?? []).filter((i) => i.machine?.id === scope))
 }
 
+/**
+ * The scope's counts for the header, SUA VEZ and the "+N" line: the core's, before its cap of the list
+ * (`itemsTotal`, `itemsNeeds`, `itemsYourTurn`); `own`, the list's, from a core without them or while
+ * the answer is for another scope (right after the Select changes). Never below the list's own.
+ */
+export function scopeCounts(p: Panel, scope: NeedYouScope, own: { needs: number; yourTurn: number }): { needs: number; yourTurn: number; total: number } {
+  const n = p.needYou
+  if (n.scope !== scope || !n.items) return { ...own, total: own.needs + own.yourTurn }
+  const count = (v: unknown, min: number) => (Number.isInteger(v) && (v as number) >= min ? (v as number) : min)
+  const needs = count(n.itemsNeeds, own.needs)
+  const yourTurn = count(n.itemsYourTurn, own.yourTurn)
+  return { needs, yourTurn, total: count(n.itemsTotal, needs + yourTurn) }
+}
+
 /** The remotes that are down in a scope: every one under "Todas as máquinas", the chosen one alone. */
 export function downInScope(p: Panel, scope: NeedYouScope): NeedYouMachine[] {
   const down = remoteMachines(p).filter(machineIsDown)

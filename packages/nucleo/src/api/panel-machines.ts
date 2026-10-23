@@ -19,9 +19,10 @@
 // - `total`, `yourTurn` and `byAccount` cover this Mac and every connected remote, whatever the scope;
 //   accounts are merged by label (a remote account's id is `remote:<machine>:<label>`, never shown).
 // - `scope`, `items` (the scope's list, `needs` first and then `your-turn`, each oldest `since` first,
-//   at most `MAX_ITEMS`), `byMachine` (this Mac first, then each remote in machines.json order; a remote
-//   that is down has 0) and `machines` (each remote with its state, `lastReadAt`, #278's connection and
-//   the `since` of the P16 line).
+//   at most `MAX_ITEMS`), `itemsTotal`, `itemsNeeds` and `itemsYourTurn` (that list's counts before
+//   the cap, for the header and the "+N" line), `byMachine` (this Mac first, then each remote in
+//   machines.json order; a remote that is down has 0) and `machines` (each remote with its state,
+//   `lastReadAt`, #278's connection and the `since` of the P16 line).
 // - The session the panel is open on is never in any list, also when it is a remote one.
 //
 // ## A remote's items
@@ -39,7 +40,7 @@ import { LOCAL_MACHINE_ID } from '../telemetry/model.ts';
 import { localMachine, type TelemetryService } from '../telemetry/service.ts';
 import { remoteAttentionItems, type ItemDaAtencao } from './attention-route.ts';
 import { isObject, remoteRows, type MachineTag } from './machine-items.ts';
-import { withDeadline, type MachineReader, type RemoteSessionSource } from './machine-reader.ts';
+import { panelConnection, withDeadline, type MachineReader, type RemoteSessionSource } from './machine-reader.ts';
 import type { MontadorDoPainel } from './panel.ts';
 import type { NeedsYouItem, PanelAccount, PanelNeedYouMachine } from './types.ts';
 
@@ -84,8 +85,10 @@ export class PanelMachines {
   /**
    * The panel `body` of `sessionId` with the need-you of every machine when `url` has a well-formed
    * `needYou`; otherwise `body` itself, untouched. `body.machine` tells a remote session's panel (#319).
+   * `local`: this Mac's uncapped need-you list when the caller already built it for the same request
+   * (`MontadorDoPainel.needYouItemsOf`); without it, it is built here.
    */
-  async decorate<T extends object>(body: T, sessionId: string, url: URL): Promise<T> {
+  async decorate<T extends object>(body: T, sessionId: string, url: URL, local: readonly NeedsYouItem[] | null = null): Promise<T> {
     const raw = needYouScopeOf(url.searchParams.get(NEED_YOU_PARAM));
     const b = body as Record<string, unknown>;
     if (!raw || !isObject(b.needYou)) return body;
@@ -95,7 +98,7 @@ export class PanelMachines {
     const owner = isObject(b.machine) && typeof b.machine.id === 'string' && typeof b.machine.label === 'string' ? { id: b.machine.id, label: b.machine.label } : null;
 
     const [localItems, remoteParts, machines] = await Promise.all([
-      this.localItems(sessionId, url),
+      this.localItems(sessionId, url, local),
       Promise.all(remotes.map((m) => this.remoteItems(m, sessionId))),
       this.machineEntries(remotes),
     ]);
@@ -114,6 +117,8 @@ export class PanelMachines {
     };
     const needs = all.filter((i) => i.level === 'needs');
     const needsOf = (list: readonly Item[]) => list.filter((i) => i.level === 'needs').length;
+    const inScope = scoped();
+    const scopeNeeds = needsOf(inScope);
     return {
       ...body,
       needYou: {
@@ -124,7 +129,10 @@ export class PanelMachines {
         family,
         machine: mark(needYou.machine),
         scope,
-        items: ordered(scoped()).slice(0, MAX_ITEMS),
+        items: ordered(inScope).slice(0, MAX_ITEMS),
+        itemsTotal: inScope.length,
+        itemsNeeds: scopeNeeds,
+        itemsYourTurn: inScope.length - scopeNeeds,
         byMachine: [{ id: LOCAL_MACHINE_ID, label: LOCAL_LABEL, n: needsOf(localItems) }, ...remotes.map((m, k) => ({ id: m.id, label: m.label, n: needsOf(remoteParts[k]!) }))],
         machines,
       },
@@ -132,9 +140,8 @@ export class PanelMachines {
   }
 
   /** This Mac's items, `machine: null`; for a remote session's panel, this Mac's around it. */
-  private async localItems(sessionId: string, url: URL): Promise<Item[]> {
-    const local = needYouScopeOf(url.searchParams.get('local'));
-    const items = await this.o.local.needYouItems(sessionId, local);
+  private async localItems(sessionId: string, url: URL, built: readonly NeedsYouItem[] | null): Promise<Item[]> {
+    const items = built ?? (await this.o.local.needYouItems(sessionId, needYouScopeOf(url.searchParams.get('local'))));
     return items.filter((i) => i.id !== sessionId).map((i) => ({ ...i, machine: null }));
   }
 
@@ -164,10 +171,14 @@ export class PanelMachines {
     const reader = this.o.reader;
     if (!reader || remotes.length === 0) return [];
     const bounded = <V>(p: Promise<V>): Promise<V | null> => withDeadline(p, reader.timeoutMs);
-    const [summaries, connections] = await Promise.all([
-      this.o.telemetry ? bounded(this.o.telemetry.machines()) : Promise.resolve(null),
-      Promise.all(remotes.map((m) => bounded(reader.connection(m)))),
-    ]);
+    const summaries = this.o.telemetry ? await bounded(this.o.telemetry.machines()) : null;
+    // A summary that carries #278's connection already asked for it; only the others ask the reader.
+    const connections = await Promise.all(
+      remotes.map((m) => {
+        const s = summaries?.find((x) => x.id === m.id);
+        return s && 'connection' in s ? panelConnection(s.connection) : bounded(reader.connection(m));
+      }),
+    );
     return remotes.map((m, k): PanelNeedYouMachine => {
       const s = summaries?.find((x) => x.id === m.id);
       const status = m.status();

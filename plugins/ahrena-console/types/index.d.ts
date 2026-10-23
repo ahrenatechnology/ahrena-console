@@ -177,6 +177,10 @@ export type PanelNeedYou = {
   scope?: NeedYouScope
   /** #262: the list for the scope, needs first then idle, each oldest first. Absent from an older core. */
   items?: NeedsYou[]
+  /** #262: the scope's list before the core's cap of `items`: how many in all, and of them blocked and idle. Absent from an older core. */
+  itemsTotal?: number
+  itemsNeeds?: number
+  itemsYourTurn?: number
   /** #262: the blocked count per machine, this Mac first (`local`), then each remote. */
   byMachine?: { id: string; label: string; n: number }[]
   /** #262: every remote machine of machines.json, in its order; empty without remotes. */
