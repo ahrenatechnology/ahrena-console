@@ -111,6 +111,17 @@ interface Run {
   alive: boolean;
   exited: Promise<void>;
   timer: ReturnType<typeof setTimeout> | null;
+  /** The byte of reconnect.log where this run's header starts (#278); `null` when the log could not be opened. */
+  logOffset: number | null;
+}
+
+/** What the connection (#278) needs of a machine's last run: how it ended and where its bytes start in the log. */
+export interface RunOutcome {
+  state: ReconnectState;
+  exitCode: number | null;
+  endedAt: string | null;
+  logOffset: number | null;
+  logFile: string;
 }
 
 export class ReconnectRunner implements ReconnectControl {
@@ -138,6 +149,17 @@ export class ReconnectRunner implements ReconnectControl {
       startedBy: run?.startedBy ?? null,
       logFile: this.logFile,
     };
+  }
+
+  /** The machine's last run, `null` before any (#278). */
+  lastRun(machineId: string): RunOutcome | null {
+    const run = this.runs.get(machineId);
+    return run ? { state: run.state, exitCode: run.exitCode, endedAt: run.endedAt, logOffset: run.logOffset, logFile: this.logFile } : null;
+  }
+
+  /** A process of the machine is alive (running, or a canceled or timed-out one still dying). */
+  alive(machineId: string): boolean {
+    return this.runs.get(machineId)?.alive === true || this.starting.has(machineId);
   }
 
   /** Resolves when the machine's process (if any) has exited. */
@@ -196,10 +218,11 @@ export class ReconnectRunner implements ReconnectControl {
       alive: true,
       exited: new Promise<void>((r) => (markExited = r)),
       timer: null,
+      logOffset: null,
     };
     this.runs.set(machineId, run);
     this.o.log?.(`reconnect (${machineId}): started by ${startedBy === 'ui' ? 'the /ui' : 'a local client'}`);
-    const fd = this.openLog(machineId, `start (${startedBy})`);
+    const fd = this.openLog(machineId, `start (${startedBy})`, (offset) => (run.logOffset = offset));
 
     const finish = (state: ReconnectState, exitCode: number | null) => {
       if (!run.alive) return;
@@ -273,9 +296,10 @@ export class ReconnectRunner implements ReconnectControl {
    * Opens reconnect.log for the child (append, 0600; rotated to `.1` first when past the limit) and
    * writes the header line. `null`, with one console log line, when it cannot: the output is discarded.
    */
-  private openLog(machineId: string, header: string): number | null {
+  private openLog(machineId: string, header: string, onOffset?: (offset: number) => void): number | null {
     return openRunLog(this.logFile, runLogLine(this.o.now ?? Date.now, machineId, header), {
       maxBytes: this.o.maxLogBytes,
+      onOffset,
       onError: (code) => this.o.log?.(`reconnect (${machineId}): could not open ${this.logFile} (${code}); the output is discarded`),
     });
   }
@@ -301,7 +325,11 @@ export function runLogLine(now: () => number, target: string, text: string): str
  * Opens the run log for a child (append, 0600; rotated to `.1` first when past `maxBytes`) and
  * writes `header`. `null` when it cannot (`onError` gets the error code once): the output is discarded.
  */
-export function openRunLog(logFile: string, header: string, o: { maxBytes?: number | undefined; onError?: (code: string) => void } = {}): number | null {
+export function openRunLog(
+  logFile: string,
+  header: string,
+  o: { maxBytes?: number | undefined; onError?: (code: string) => void; onOffset?: ((offset: number) => void) | undefined } = {},
+): number | null {
   try {
     mkdirSync(dirname(logFile), { recursive: true, mode: 0o700 });
     let size = 0;
@@ -317,6 +345,8 @@ export function openRunLog(logFile: string, header: string, o: { maxBytes?: numb
     const fd = openSync(logFile, 'a', 0o600);
     try {
       fchmodSync(fd, 0o600);
+      // Where this run's bytes start (after a rotation, 0 of the new file): the connection's reasons read from here (#278).
+      o.onOffset?.(fstatSync(fd).size);
       writeSync(fd, header);
     } catch (err) {
       closeQuietly(fd);

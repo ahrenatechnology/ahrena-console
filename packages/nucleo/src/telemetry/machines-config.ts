@@ -12,6 +12,19 @@
 // (10 to 900 s, 180 by default). An invalid `reconnect` drops only that field, with a log line: the
 // machine stays, as if it had no command.
 //
+// `connection` is optional too (#278, decision 0013 section 4): it generalizes `reconnect` with a stop
+// command and a link to a cloud profile of this Mac:
+//
+//   "connection": { "start": { "command": [...], "timeoutSeconds": 180 },
+//                   "stop": { "command": [...] },
+//                   "cloudProfile": { "connector": "aws", "profile": "perfil-dev" } }
+//
+// `start` and `stop` follow the rules and limits of `reconnect`. An invalid `stop` or `cloudProfile`
+// drops only that field, and an invalid `start` drops the whole `connection`, each with a log line:
+// the machine stays. A lone `reconnect` is read as `connection.start` (`connectionOf`); with both,
+// `connection` wins, the log says so, and `reconnect` becomes `connection.start` (so the old
+// Reconnect route keeps running the start command).
+//
 // - No file: no remote machine (only `local`); the sidebar does not show the item.
 // - An invalid file (bad JSON, wrong shape, any invalid entry, a repeated id, the reserved `local`):
 //   logged, and no remote machine. One bad line voids the whole file, so a typo never leaves a
@@ -34,12 +47,69 @@ export interface ReconnectConfig {
   timeoutSeconds: number;
 }
 
+/** The cloud profile of THIS Mac the tunnel depends on (#278); the name must match `SAFE_PROFILE_NAME`. */
+export interface CloudProfileLink {
+  connector: 'aws';
+  profile: string;
+}
+
+/** A remote machine's connection (#278, decision 0013 section 4). */
+export interface ConnectionConfig {
+  start: ReconnectConfig;
+  stop?: ReconnectConfig;
+  cloudProfile?: CloudProfileLink;
+}
+
 export interface RemoteMachineConfig {
   id: string;
   label: string;
   port: number;
-  /** Only when the file has a valid one. */
+  /** Only when the file has a valid one; with a `connection`, its `start`. */
   reconnect?: ReconnectConfig;
+  /** Only when the file has a valid one (a lone `reconnect` is not copied here: see `connectionOf`). */
+  connection?: ConnectionConfig;
+}
+
+/** The same rule as the AWS connector's `SAFE_CLI_NAME` (src/clouds/aws-config.ts): the name may go on a command line. */
+export const SAFE_PROFILE_NAME = /^[A-Za-z0-9._-]{1,64}$/;
+export const CLOUD_CONNECTORS = ['aws'] as const;
+
+/** The machine's connection: its `connection`, or a lone `reconnect` read as `connection.start`; `null` without either. */
+export function connectionOf(machine: Pick<RemoteMachineConfig, 'reconnect' | 'connection'>): ConnectionConfig | null {
+  if (machine.connection) return machine.connection;
+  return machine.reconnect ? { start: machine.reconnect } : null;
+}
+
+/**
+ * A machine's `connection`, or the reason it is invalid as a whole (a missing or invalid `start`).
+ * An invalid `stop` or `cloudProfile` drops only that field, reported through `warn` (`.stop: why`).
+ */
+export function parseConnection(v: unknown, warn?: (message: string) => void): ConnectionConfig | string {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return 'expected { "start": { "command": [...] }, "stop"?: {...}, "cloudProfile"?: {...} }';
+  const { start, stop, cloudProfile } = v as Record<string, unknown>;
+  if (start === undefined) return '.start: required';
+  const s = parseReconnect(start);
+  if (typeof s === 'string') return `.start${s.startsWith('.') ? s : `: ${s}`}`;
+  const out: ConnectionConfig = { start: s };
+  if (stop !== undefined) {
+    const t = parseReconnect(stop);
+    if (typeof t === 'string') warn?.(`.stop${t.startsWith('.') ? t : `: ${t}`}; ignored`);
+    else out.stop = t;
+  }
+  if (cloudProfile !== undefined) {
+    const c = parseCloudProfile(cloudProfile);
+    if (typeof c === 'string') warn?.(`.cloudProfile${c}; ignored`);
+    else out.cloudProfile = c;
+  }
+  return out;
+}
+
+function parseCloudProfile(v: unknown): CloudProfileLink | string {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return ': expected { "connector": "aws", "profile": "<name>" }';
+  const { connector, profile } = v as Record<string, unknown>;
+  if (typeof connector !== 'string' || !(CLOUD_CONNECTORS as readonly string[]).includes(connector)) return `.connector: one of ${CLOUD_CONNECTORS.join(', ')}`;
+  if (typeof profile !== 'string' || !SAFE_PROFILE_NAME.test(profile)) return '.profile: letters, digits, dot, hyphen and underscore, up to 64';
+  return { connector: connector as CloudProfileLink['connector'], profile };
 }
 
 export type MachinesFileStatus = 'missing' | 'invalid' | 'ok';
@@ -98,7 +168,7 @@ export function parseMachinesConfig(text: string, warn?: (message: string) => vo
   for (const [i, entry] of ((raw as { machines: unknown[] }).machines).entries()) {
     const at = `machines[${i}]`;
     if (!entry || typeof entry !== 'object') return `${at}: expected an object`;
-    const { id, label, port, reconnect } = entry as Record<string, unknown>;
+    const { id, label, port, reconnect, connection } = entry as Record<string, unknown>;
     if (typeof id !== 'string' || !MACHINE_ID.test(id)) return `${at}.id: lowercase letters, digits and hyphens`;
     if (id === LOCAL_MACHINE_ID) return `${at}.id: "${LOCAL_MACHINE_ID}" is this machine`;
     if (seen.has(id)) return `${at}.id: "${id}" repeated`;
@@ -112,6 +182,17 @@ export function parseMachinesConfig(text: string, warn?: (message: string) => vo
         const why = r.startsWith('.') ? r : `: ${r}`;
         warn?.(`${at}.reconnect${why}; ignored`);
       } else machine.reconnect = r;
+    }
+    if (connection !== undefined) {
+      const c = parseConnection(connection, (m) => warn?.(`${at}.connection${m}`));
+      if (typeof c === 'string') {
+        const why = c.startsWith('.') ? c : `: ${c}`;
+        warn?.(`${at}.connection${why}; ignored${machine.reconnect ? ' (the "reconnect" applies)' : ''}`);
+      } else {
+        if (reconnect !== undefined) warn?.(`${at}: both "reconnect" and "connection"; "connection" wins and "reconnect" is ignored`);
+        machine.connection = c;
+        machine.reconnect = c.start;
+      }
     }
     machines.push(machine);
   }

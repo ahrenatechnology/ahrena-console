@@ -5,8 +5,8 @@
 // - a machine added to the file is created and, once the registry runs, started;
 // - a machine removed is stopped, and `onRemoved` lets the caller close its alerts;
 // - a machine whose label or port changed is replaced (stopped, created again, started);
-// - a machine whose `reconnect` alone changed is kept: the reconnect is read from here
-//   (`reconnectOf`), never from a stale copy;
+// - a machine whose `reconnect` or `connection` alone changed is kept: both are read from here
+//   (`reconnectOf`, `connectionOf`), never from a stale copy;
 // - a machine on the core's own port is skipped, with a log line, as before;
 // - an invalid file keeps the machines of the last good reading (MachinesFileSource), and
 //   `fileInvalid()` says so, for the reconnect to refuse until it is fixed.
@@ -15,7 +15,7 @@
 // screen and the tray pick up an edit without waiting for their own re-read. Refreshes never
 // overlap; timers are injectable.
 
-import type { MachinesFileSource, ReconnectConfig, RemoteMachineConfig } from './machines-config.ts';
+import { connectionOf, type ConnectionConfig, type MachinesFileSource, type ReconnectConfig, type RemoteMachineConfig } from './machines-config.ts';
 import { SAMPLE_INTERVAL_MS } from './model.ts';
 import { systemTimers, type SamplerTimers } from './sampler.ts';
 
@@ -72,6 +72,12 @@ export class RemoteMachines<M extends ManagedMachine> {
   reconnectOf(id: string): ReconnectConfig | null | undefined {
     const e = this.machines.get(id);
     return e ? (e.config.reconnect ?? null) : undefined;
+  }
+
+  /** The machine's connection (#278; a lone `reconnect` as its `start`): `undefined` for an unknown id, `null` without one. */
+  connectionOf(id: string): ConnectionConfig | null | undefined {
+    const e = this.machines.get(id);
+    return e ? connectionOf(e.config) : undefined;
   }
 
   /** machines.json, as it is now, does not parse (as of the last refresh). */
@@ -135,7 +141,7 @@ export class RemoteMachines<M extends ManagedMachine> {
       const old = this.machines.get(id);
       if (old && old.config.label === c.label && old.config.port === c.port) {
         result.set(id, { machine: old.machine, config: c });
-        if (!sameJson(old.config.reconnect, c.reconnect)) touched.push(id);
+        if (!sameJson(old.config.reconnect, c.reconnect) || !sameJson(old.config.connection, c.connection)) touched.push(id);
         continue;
       }
       if (old) stops.push(old.machine.stop());
