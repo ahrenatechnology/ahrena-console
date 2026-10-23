@@ -279,6 +279,8 @@ export const machineItemId = (id) => `machine-${id}`;
 // The machine id of the core (src/telemetry/model.ts `MACHINE_ID`).
 const MACHINE_ID = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const MACHINE_STATES = new Set(['connected', 'unreachable', 'incompatible-version', 'not-configured']);
+// A connection the person stopped (issue 278) is not a drop: its own state, a grey dot.
+const stoppedByYou = (m) => m.connection && typeof m.connection === 'object' && m.connection.state === 'stopped';
 
 /** The sidebar entries of the remote machines in `GET /api/machines` (this machine is in SCREENS). */
 export function machineItems(machines) {
@@ -293,7 +295,7 @@ export function machineItems(machines) {
       id: machineItemId(m.id),
       route: `/ui/machines/${m.id}`,
       item: { label, icon: 'server', section: 'machines' },
-      state: MACHINE_STATES.has(m.state) ? m.state : 'unreachable',
+      state: stoppedByYou(m) ? 'stopped' : MACHINE_STATES.has(m.state) ? m.state : 'unreachable',
       title: label,
       icon: 'server',
     });
