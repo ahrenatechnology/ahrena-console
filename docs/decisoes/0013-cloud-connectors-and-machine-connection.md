@@ -1,6 +1,6 @@
 # 0013 · Conectores de nuvem e a conexão da máquina remota: o console entra pelas CLIs das nuvens, sem guardar credencial
 
-- **Status:** aceita com as quatro respostas recomendadas, a confirmar pelo Fernando (wireframes C57 a C67, A9, A10 e P14 aprovados no #283, em 22/10)
+- **Status:** aceita com as quatro respostas recomendadas, confirmadas pelo Fernando em 22/10, com o Mac multiusuário fora do escopo da fase 1 e o pareamento na #315 (wireframes C57 a C67, A9, A10 e P14 aprovados no #283, em 22/10)
 - **Data:** 2026-10-21
 - **Issues:** [#277](https://github.com/ahrenatechnology/ahrena-console/issues/277) (contas de nuvem) e [#278](https://github.com/ahrenatechnology/ahrena-console/issues/278) (a conexão da máquina remota)
 - **Revê:** em [0008](0008-machine-telemetry-and-dev-console.md), seção 6, "abrir login de nuvem" (passa a ser do console, só pela CLI da nuvem) e "subir, parar o túnel" (passa a ser do console, só pelo comando do usuário); em [0012](0012-remote-reconnect.md), seção 3, "o núcleo não lê a saída" (passa a procurar uma lista fechada de padrões no trecho do log da execução, sem mostrar nada dele)
@@ -121,7 +121,7 @@ O resultado vai na leitura da máquina (`placement: { provider, kind, region, zo
 - O motivo da queda depende de padrões de texto de ferramentas que mudam; a lista é testada com saídas gravadas e, quando nada casa, a tela cai no código de saída, que é o que existe hoje.
 - O Argos faz a revisão de segurança das rotas, do parser do `~/.aws/config` e, na variante A, do leitor do cache.
 
-## Respostas (as recomendadas, a confirmar pelo Fernando)
+## Respostas (as recomendadas, confirmadas pelo Fernando em 22/10)
 
 1. **"Até quando":** variante A. O núcleo lê só o `expiresAt` do cache da aws CLI, com o teste de vazamento.
 2. **Conexões em Controle** é o lugar único das contas; sem seção Nuvens.
