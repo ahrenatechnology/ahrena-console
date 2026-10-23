@@ -25,14 +25,16 @@
 // with no session and no account.
 // `tools` (#280, decision 0014): the Tools screen of a machine changed (a job moved, a check ended); the
 // key is the machine id (`local`). Only the HTTP route exposes it, like `repos`.
+// `connector` (#277, decision 0013 section 6): a cloud connector of this machine changed (a session's
+// state, a login moving, its CLI's config file); the key is the connector (`aws`). Only the HTTP route.
 // The values are English since #173 phase 2b; the old Portuguese ones left in phase 6.
-export const CHANGE_TYPES = ['session', 'state', 'needs-you', 'plan', 'decision', 'account', 'repos', 'alert', 'agent-instructions', 'framework-install', 'adrs', 'connections', 'tools'] as const;
+export const CHANGE_TYPES = ['session', 'state', 'needs-you', 'plan', 'decision', 'account', 'repos', 'alert', 'agent-instructions', 'framework-install', 'adrs', 'connections', 'tools', 'connector'] as const;
 export type ChangeType = (typeof CHANGE_TYPES)[number];
 
 export interface RecordedChange {
   seq: number;
   type: ChangeType;
-  /** What changed: the id of the session, decision or account; for `repos`, `lista` or `<owner>/<repo>`. For `alert`: `<machine>:<alert>`; for `agent-instructions` and `framework-install`, `<owner>/<repo>`; for `adrs`, `list` or `<owner>/<repo>`; for `tools`, the machine id. */
+  /** What changed: the id of the session, decision or account; for `repos`, `lista` or `<owner>/<repo>`. For `alert`: `<machine>:<alert>`; for `agent-instructions` and `framework-install`, `<owner>/<repo>`; for `adrs`, `list` or `<owner>/<repo>`; for `tools`, the machine id; for `connector`, the connector (`aws`). */
   key: string;
   /** The session the change belongs to; `null` for account and repository changes (and for `alert`). */
   sessionId: string | null;

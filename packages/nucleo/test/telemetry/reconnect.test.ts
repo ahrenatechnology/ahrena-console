@@ -30,7 +30,9 @@ if (mode === 'background') {
   // Inherits stdout and stderr, stays in the group, outlives the script: like a tunnel left running.
   const c = spawn(process.execPath, ['-e', "require('fs').writeFileSync(process.argv[1], String(process.pid)); setInterval(() => console.log('bg-tick'), 30)", arg], { stdio: 'inherit' });
   c.unref();
-  await new Promise((r) => setTimeout(r, 150));
+  // Exits once the background child is up (its pid file written), however loaded the machine is.
+  const fs = await import('node:fs');
+  for (let i = 0; i < 250 && !fs.existsSync(arg); i++) await new Promise((r) => setTimeout(r, 20));
 }
 `,
 );

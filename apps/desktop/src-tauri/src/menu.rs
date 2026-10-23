@@ -6,9 +6,11 @@
 //
 // #180 adds the "Máquinas" block of A6 and A7 (machines.rs) and the remote sessions' label (A2).
 // #244 adds, under an unreachable remote, Reconectar, its running line and the way to set it up (A8).
+// #277 adds the "Nuvens" block of A9 (clouds.rs): one line per AWS SSO session and Entrar.
 
 use serde::Deserialize;
 
+use crate::clouds;
 use crate::machines;
 
 /// One item of `GET /api/attention` (packages/nucleo/src/api/attention-route.ts), in English (#173
@@ -189,6 +191,11 @@ pub enum Item {
     /// "Reconectar a <label>" (#244, A8): the click asks the core to run the machine's reconnect
     /// command (`POST /api/machines/<id>/reconnect`). Indented, with no dot.
     Reconnect { id: String, text: String },
+    /// A cloud session line (#277, A9): the click opens the window on Conexões.
+    Cloud { text: String, dot: Dot },
+    /// "Entrar na AWS (<session>)" (#277, A9): the click asks the core to run the session's login
+    /// (`POST /api/connectors/aws/sessions/<name>/login`). Indented, with no dot.
+    CloudLogin { session: String, text: String },
     Action { id: &'static str, text: String, shortcut: Option<&'static str> },
     Check { id: &'static str, text: &'static str, checked: bool },
     Separator,
@@ -206,8 +213,12 @@ pub struct Input<'a> {
     pub update: Option<&'a str>,
     /// The machines of `/api/machines` (#180); `None` when the core has no telemetry (404).
     pub machines: Option<&'a [machines::Machine]>,
+    /// The AWS connector with its sessions (#277); `None` without one (or a core without the route).
+    pub clouds: Option<&'a clouds::Aws>,
     /// Now, in ms since the epoch: the age of an unreachable machine and of an alert.
     pub now_ms: u64,
+    /// The local zone's offset from UTC, in seconds: "válida até 18:40".
+    pub utc_offset_s: i64,
 }
 
 pub const ID_OPEN: &str = "open";
@@ -224,6 +235,10 @@ pub const SESSION_IN_DESKTOP: &str = "desktop:";
 pub const MACHINE: &str = "machine:";
 /// Prefix of the ids of the "Reconectar a <label>" items (#244).
 pub const RECONNECT: &str = "reconnect:";
+/// Id of the cloud session lines (#277).
+pub const CLOUD: &str = "cloud#";
+/// Prefix of the ids of the "Entrar na AWS (<session>)" items (#277).
+pub const CLOUD_LOGIN: &str = "cloud-login:";
 
 /// The number next to the icon: only the sessions that need you (blocked or with an error, #245);
 /// the idle ones never count. Zero or a stopped core: only the icon.
@@ -260,7 +275,12 @@ pub fn build(input: &Input) -> Vec<Item> {
             if input.no_attention && input.attention.is_none() {
                 m.push(Item::Detail("Este núcleo não lista quem precisa de você: atualize-o".into()));
             } else {
-                let block = input.machines.map(|ms| machines_block(ms, input.now_ms)).unwrap_or_default();
+                let mut block = input.machines.map(|ms| machines_block(ms, input.now_ms)).unwrap_or_default();
+                let clouds = input.clouds.map(|a| clouds_block(a, input.now_ms, input.utc_offset_s)).unwrap_or_default();
+                if !block.is_empty() && !clouds.is_empty() {
+                    block.push(Item::Separator);
+                }
+                block.extend(clouds);
                 sessions(&mut m, input.attention, block);
             }
         }
@@ -290,7 +310,7 @@ pub fn build(input: &Input) -> Vec<Item> {
     m
 }
 
-/// `machines`: the "Máquinas" block (A6, A7), empty when there is nothing to show. It goes between
+/// `machines`: the "Máquinas" block (A6, A7) and the "Nuvens" one (A9), empty when there is nothing to show. It goes between
 /// the "precisam de você" list and the active count; in A1 (nobody waiting), after the three lines.
 fn sessions(m: &mut Vec<Item>, attention: Option<&Attention>, machines: Vec<Item>) {
     let Some(a) = attention else {
@@ -400,6 +420,31 @@ fn machines_block(ms: &[machines::Machine], now_ms: u64) -> Vec<Item> {
     b
 }
 
+/// The "Nuvens" block (A9): a header and one line per session, the one closest to expiring first.
+/// Under a session that asks for it, "Entrar na AWS (<session>)"; while its login runs, a grey line
+/// with the count instead (one at a time, as A8). Empty without sessions: no block.
+fn clouds_block(aws: &clouds::Aws, now_ms: u64, offset_s: i64) -> Vec<Item> {
+    let mut b = Vec::new();
+    for s in clouds::ordered(aws) {
+        let dot = match s.state.as_str() {
+            "valid" => Dot::Green,
+            "expiring" => Dot::Yellow,
+            "expired" => Dot::Red,
+            _ => Dot::Empty,
+        };
+        b.push(Item::Cloud { text: clouds::line(s, now_ms, offset_s), dot });
+        if s.login_running() {
+            b.push(Item::Detail(clouds::waiting_line(s, now_ms)));
+        } else if s.offers_login(aws) {
+            b.push(Item::CloudLogin { session: s.name.clone(), text: format!("Entrar na AWS ({})", s.name) });
+        }
+    }
+    if !b.is_empty() {
+        b.insert(0, Item::Text { text: "Nuvens".into(), dot: None });
+    }
+    b
+}
+
 fn active_count(n: u64) -> String {
     if n == 1 {
         "1 ativa".into()
@@ -451,14 +496,14 @@ mod tests {
     }"##;
 
     fn input<'a>(core: &'a CoreState, attention: Option<&'a Attention>) -> Input<'a> {
-        Input { core, attention, no_attention: false, notifications: true, login: false, version: "0.0.1", update: None, machines: None, now_ms: 0 }
+        Input { core, attention, no_attention: false, notifications: true, login: false, version: "0.0.1", update: None, machines: None, clouds: None, now_ms: 0, utc_offset_s: 0 }
     }
 
     fn texts(m: &[Item]) -> Vec<String> {
         m.iter()
             .map(|i| match i {
-                Item::Text { text, .. } | Item::Header { text, .. } | Item::Session { text, .. } | Item::Action { text, .. } | Item::Machine { text, .. } => text.clone(),
-                Item::MachineLink { text, .. } | Item::Reconnect { text, .. } => format!("  {text}"),
+                Item::Text { text, .. } | Item::Header { text, .. } | Item::Session { text, .. } | Item::Action { text, .. } | Item::Machine { text, .. } | Item::Cloud { text, .. } => text.clone(),
+                Item::MachineLink { text, .. } | Item::Reconnect { text, .. } | Item::CloudLogin { text, .. } => format!("  {text}"),
                 Item::Detail(t) => format!("  {t}"),
                 Item::Check { text, checked, .. } => format!("{}{text}", if *checked { "✓ " } else { "" }),
                 Item::Separator => "—".into(),
@@ -1027,5 +1072,76 @@ mod tests {
     fn invalid_json_does_not_build() {
         assert!(Attention::from_json("{}").is_none());
         assert!(Attention::from_json("não é json").is_none());
+    }
+
+    // #277, A9: the "Nuvens" block.
+
+    fn with_clouds<'a>(core: &'a CoreState, attention: Option<&'a Attention>, ms: Option<&'a [machines::Machine]>, aws: Option<&'a clouds::Aws>) -> Input<'a> {
+        Input { machines: ms, clouds: aws, now_ms: clouds::tests::now(), ..input(core, attention) }
+    }
+
+    #[test]
+    fn a9_clouds_block_after_the_machines() {
+        let (a, ms, aws) = (Attention::from_json(THREE).unwrap(), a6_machines(), clouds::tests::a9());
+        let n = CoreState::Up { port: 4720 };
+        let t = texts(&build(&with_clouds(&n, Some(&a), Some(&ms), Some(&aws))));
+        let machines_at = t.iter().position(|x| x == "Máquinas").expect("Máquinas");
+        let at = t.iter().position(|x| x == "Nuvens").expect("Nuvens");
+        assert!(machines_at < at && t[at - 1] == "—", "after Máquinas, with a separator: {t:?}");
+        assert_eq!(
+            &t[at..at + 10],
+            [
+                "Nuvens",
+                "AWS · sessao-velha · expirada há 5 h",
+                "  Entrar na AWS (sessao-velha)",
+                "AWS · sessao com espaco · expirada",
+                "AWS · sessao-exemplo · expira em 14 min",
+                "  Entrar na AWS (sessao-exemplo)",
+                "AWS · sessao-lab · válida até 18:40",
+                "AWS · sessao-nova · nunca entrou",
+                "—",
+                "4 ativas",
+            ]
+        );
+        assert_eq!(tray_title(&n, Some(&a)).as_deref(), Some("3"), "clouds never add to the bar's number");
+    }
+
+    #[test]
+    fn a9_dots_and_the_login_item() {
+        let (a, aws) = (Attention::from_json(ZERO).unwrap(), clouds::tests::a9());
+        let n = CoreState::Up { port: 4720 };
+        let m = build(&with_clouds(&n, Some(&a), None, Some(&aws)));
+        let dots: Vec<Dot> = m.iter().filter_map(|i| if let Item::Cloud { dot, .. } = i { Some(*dot) } else { None }).collect();
+        assert_eq!(dots, [Dot::Red, Dot::Red, Dot::Yellow, Dot::Green, Dot::Empty]);
+        let logins: Vec<&str> = m.iter().filter_map(|i| if let Item::CloudLogin { session, .. } = i { Some(session.as_str()) } else { None }).collect();
+        assert_eq!(logins, ["sessao-velha", "sessao-exemplo"]);
+        let t = texts(&m);
+        assert_eq!(&t[3..8], ["Ninguém precisa de você", "4 ativas", "nenhuma com erro", "—", "Nuvens"], "A1: after the three lines");
+    }
+
+    #[test]
+    fn a9_running_login_is_a_grey_line_with_the_count() {
+        let (a, mut aws) = (Attention::from_json(ZERO).unwrap(), clouds::tests::a9());
+        let s = aws.sessions.iter_mut().find(|s| s.name == "sessao-exemplo").unwrap();
+        s.login = clouds::login_from_response(r#"{ "login": { "state": "running", "mode": "browser", "startedAt": "2026-10-18T17:59:12.000Z" } }"#);
+        let n = CoreState::Up { port: 4720 };
+        let m = build(&with_clouds(&n, Some(&a), None, Some(&aws)));
+        let t = texts(&m);
+        let at = t.iter().position(|x| x == "AWS · sessao-exemplo · expira em 14 min").unwrap();
+        assert_eq!(t[at + 1], "  Aguardando o navegador · 0:48");
+        assert!(matches!(m[at + 1], Item::Detail(_)), "grey, no click");
+        assert!(!m.iter().any(|i| matches!(i, Item::CloudLogin { session, .. } if session == "sessao-exemplo")));
+    }
+
+    #[test]
+    fn a9_no_block_without_aws_sessions() {
+        let a = Attention::from_json(ZERO).unwrap();
+        let n = CoreState::Up { port: 4720 };
+        let t = texts(&build(&with_clouds(&n, Some(&a), None, None)));
+        assert!(!t.iter().any(|x| x == "Nuvens"));
+        let ms = a6_machines();
+        let t = texts(&build(&with_clouds(&n, Some(&a), Some(&ms), None)));
+        assert!(!t.iter().any(|x| x == "Nuvens"));
+        assert_eq!(t.iter().filter(|x| *x == "—").count(), 4, "no extra separator for an absent block: {t:?}");
     }
 }
