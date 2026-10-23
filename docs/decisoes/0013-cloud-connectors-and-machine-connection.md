@@ -27,6 +27,8 @@ Duas origens de comando, e só elas:
 
 A rota recebe um identificador (o `id` da máquina, o nome da sessão SSO) e o núcleo procura esse identificador na leitura mais recente do arquivo. Não achou, 404. **Nenhum texto da tela, da URL ou do corpo vira argumento, caminho ou variável de ambiente**; o nome que vai para a linha de comando é o que está no arquivo, não o que chegou no pedido, e precisa casar com `^[A-Za-z0-9_][A-Za-z0-9._-]{0,63}$` (nunca começa com `-` nem `.`, para não parecer uma opção) (fora disso o perfil aparece como "nome não suportado", sem Entrar). Tudo roda como na 0012: `spawn` sem shell, grupo próprio, tempo limite, um por vez por alvo, entrada fechada, saída no `reconnect.log` da instalação, o mesmo da 0012, que passa a receber também os logins dos conectores.
 
+> **22/10:** padrão do nome endurecido para `^[A-Za-z0-9_][A-Za-z0-9._-]{0,63}$` (sem `-` nem `.` no início, para um nome nunca parecer uma opção da linha de comando), no [#320](https://github.com/ahrenatechnology/ahrena-console/pull/320). Antes era `^[A-Za-z0-9._-]{1,64}$`.
+
 ### 2. Os conectores
 
 - **Catálogo fixo no código**: GitHub (0011), AWS, e depois GCP e Azure. "Adicionar" não instala nada: liga a leitura daquele conector e mostra como configurar a CLI se ela não estiver lá. Não há conector de terceiros carregado de fora; o catálogo é o que o código conhece.
