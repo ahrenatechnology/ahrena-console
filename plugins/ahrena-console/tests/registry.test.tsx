@@ -37,6 +37,8 @@ function fakes(on: any, files: { name: string; text: string }[], cores: Record<n
     return { value: text }
   })
   on('http.fetch', async (_$: unknown, e: { url: string }) => {
+    // The orders of the console (#61) have their own clock and their own test (orders.test.tsx).
+    if (/\/api\/sessions\/[^/]+\/commands/.test(e.url)) return { value: { status: 200, ok: true, headers: {}, text: '{"orders":[]}' } }
     requests.push(e.url)
     const url = new URL(e.url)
     const core = cores[Number(url.port)]

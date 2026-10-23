@@ -10,6 +10,8 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { after, afterEach, before, beforeEach, describe, test } from 'node:test';
 import { createMessagingRoute } from '../../src/api/messaging.ts';
+import { createOrdersRoute } from '../../src/api/orders.ts';
+import { SessionOrders } from '../../src/messaging/orders.ts';
 import { UI_FOLDER } from '../../src/api/ui.ts';
 import type { LiveProcess } from '../../src/messaging/model.ts';
 import type { DeliveryResult } from '../../src/messaging/ports.ts';
@@ -81,6 +83,7 @@ const live = (sessionId: string): LiveProcess[] => {
 
 let demo: DemoApi;
 let service: Messaging;
+let orderQueue: SessionOrders;
 let read: (route: string, options?: unknown) => Promise<any>;
 let write: (route: string, body: unknown, options?: unknown) => Promise<any>;
 
@@ -106,6 +109,7 @@ before(async () => {
       });
       return createMessagingRoute({ messaging: service, sessions: storage, accounts: { ofId: async (id) => ({ id, label: 'Pessoal (teste)', color: '#e5484d' }) } });
     },
+    orders: (storage) => createOrdersRoute({ orders: (orderQueue = new SessionOrders()), messaging: service, sessions: storage }),
   });
   const origin = `http://${demo.host}`;
   // The browser's fetch from /ui sends the page's Origin: the core's same-origin exception wants it.
@@ -201,7 +205,7 @@ async function openBox(id: string, plan: Plan | null, head: object | null = null
 // ---------- C51: the box at the foot of the Conversa ----------
 
 describe('#61/AC-1 C51: the compose box at the foot of the Detail\'s Conversa', () => {
-  test('a live idle session: destination, the empty text, the note, /compact and /clear off "dependem do mod", Enviar off until there is text', async () => {
+  test('a live idle session: destination, the empty text, the note, /compact and /clear on, Enviar off until there is text', async () => {
     plans.set(DETAIL_SESSION, { processes: 1, remoteControl: true, accountId: 'acc-1' });
     const { area, box } = await openDetail(DETAIL_SESSION);
     await until(() => /processo vivo nesta máquina/.test(texto(box)), 'the destination line');
@@ -216,8 +220,8 @@ describe('#61/AC-1 C51: the compose box at the foot of the Detail\'s Conversa', 
     assert.match(texto(one(box, '.sm-note')), /^Chega à sessão como mensagem de outra sessão : não aprova permissão, não roda comando e não muda configuração\.$/);
     const commands = all(box, '.sm-cmd');
     assert.deepEqual(commands.map(texto), ['/compact', '/clear'], 'Remote control is not offered when it is already on');
-    assert.ok(commands.every(disabled), '/compact and /clear are off: they depend on the mod');
-    assert.match(texto(one(box, '.sm-why')), /dependem do mod/);
+    assert.ok(!commands.some(disabled), '/compact and /clear are on: the mod runs them');
+    assert.equal(one(box, '.sm-why'), null);
     const send = one(box, '.sm-send')!;
     assert.match(texto(send), /^Enviar (⌘↵|Ctrl↵)$/);
     assert.ok(disabled(send), 'nothing to send yet');
@@ -227,12 +231,12 @@ describe('#61/AC-1 C51: the compose box at the foot of the Detail\'s Conversa', 
     assert.ok(!disabled(one(box, '.sm-send')), 'Enviar turns on with text');
   });
 
-  test('the permission variant: Remote Control off shows a disabled "Remote control", and the box warns it does not answer the permission', async () => {
+  test('the permission variant: Remote Control off shows "Remote control", and the box warns it does not answer the permission', async () => {
     plans.set(DETAIL_SESSION, { processes: 1, remoteControl: false });
     const { box } = await openDetail(DETAIL_SESSION);
     await until(() => /não responde à permissão/.test(texto(box)), 'the permission warning');
     assert.deepEqual(all(box, '.sm-cmd').map(texto), ['/compact', '/clear', 'Remote control']);
-    assert.ok(all(box, '.sm-cmd').every(disabled));
+    assert.ok(!all(box, '.sm-cmd').some(disabled));
     assert.doesNotMatch(texto(one(box, '.sm-dest')), /Remote Control ligado/);
     const warning = one(box, '.sm-status.sm-wait')!;
     assert.match(texto(warning), /^Esta mensagem não responde à permissão\. Permitir ou negar o npm run migrate continua no Claude Desktop\. A mensagem espera na caixa de entrada da sessão e o Claude lê quando a ferramenta voltar\.$/);
@@ -482,5 +486,45 @@ describe('#61/AC-1 C53: "Mandar mensagem" on Sessões and on the Dashboard', () 
     const classes = new Set([...css.matchAll(/\.([a-z][a-z0-9-]*)/g)].map((m) => m[1]!));
     const shared = new Set(['card', 'btn', 'outline', 'icon', 'mono']);
     assert.deepEqual([...classes].filter((c) => !c.startsWith('sm-') && !shared.has(c)), [], 'every class of the box is sm-');
+  });
+});
+
+
+// ---------- The order buttons (#61, mod part): /compact, /clear and Remote control ----------
+
+describe('#61 mod part: the order buttons', () => {
+  const click = (b: ElementoFalso | null) => b!.dispatchEvent({ type: 'click' });
+  /** The mod's fetch: waits for the order to reach the queue, then takes it. */
+  async function claimed() {
+    let got: ReturnType<SessionOrders['claim']> = [];
+    await until(() => (got = orderQueue.claim(DETAIL_SESSION)).length > 0, 'the order in the queue');
+    return got;
+  }
+
+  test('a click queues the order, the mod fetches and confirms it, and the box says how it ended', async () => {
+    plans.set(DETAIL_SESSION, { processes: 1, remoteControl: true });
+    const box = await openBox(DETAIL_SESSION, null);
+    click(buttonNamed(box, /^\/compact$/));
+    await until(() => /Pedindo \/compact|Rodando \/compact/.test(texto(box)), 'the order sent');
+    assert.ok(all(box, '.sm-cmd').every(disabled), 'every order button waits while one is open');
+    const sent = requests.find((r) => r.method === 'POST' && r.path.endsWith('/commands'))!;
+    assert.deepEqual(JSON.parse(sent.body!), { kind: 'compact' });
+
+    // The mod, inside the session: fetches with no Origin, runs it, confirms.
+    const [o] = await claimed();
+    assert.equal(o!.kind, 'compact');
+    await until(() => /Rodando \/compact/.test(texto(box)), 'running');
+    orderQueue.done(DETAIL_SESSION, o!.orderId, { ok: true });
+    await until(() => /\/compact rodou\./.test(texto(box)), 'done');
+    assert.ok(!all(box, '.sm-cmd').some(disabled), 'free again');
+  });
+
+  test('a refusal of the mod reads "Não ligou: <motivo>" for Remote control', async () => {
+    plans.set(DETAIL_SESSION, { processes: 1, remoteControl: false });
+    const box = await openBox(DETAIL_SESSION, null);
+    click(buttonNamed(box, /Remote control/));
+    const [o] = await claimed();
+    orderQueue.done(DETAIL_SESSION, o!.orderId, { ok: false, reason: 'a organização desligou o Remote Control' });
+    await until(() => /Não ligou: a organização desligou o Remote Control/.test(texto(box)), 'the reason');
   });
 });
