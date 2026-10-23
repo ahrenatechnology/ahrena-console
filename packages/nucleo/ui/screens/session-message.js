@@ -266,7 +266,7 @@ const isMac = () => /Mac|iPhone|iPad/.test(globalThis.navigator?.platform ?? glo
  * open action (issue 285) for a session with no live process, or `null`; `onDelivered()` re-reads the conversation.
  * Returns `{ node, refresh(), focus() }`.
  */
-export function createComposeBox(ctx, sessionId, { head = () => null, openControl = () => null, onDelivered = () => {}, onShowConversation = () => {} } = {}) {
+export function createComposeBox(ctx, sessionId, { head = () => null, openControl = () => null, onDelivered = () => {}, onShowConversation = () => {}, remote = false } = {}) {
   useMessageStyle();
   const kbd = isMac() ? '⌘↵' : 'Ctrl↵';
   const placeholder = `Escreva para a sessão… (${kbd} envia)`;
@@ -519,7 +519,7 @@ export function createComposeBox(ctx, sessionId, { head = () => null, openContro
   }
 
   async function send() {
-    if (!sendable()) return;
+    if (remote || !sendable()) return;
     sending = true;
     notice = null;
     message = null;
@@ -605,12 +605,14 @@ export function createComposeBox(ctx, sessionId, { head = () => null, openContro
     clearTimeout(retryTimer);
   });
 
+  // Issue 243: a session of another machine has no inbox on this core; nothing is read or sent from here.
+  if (remote) availability = { available: false, reason: 'other_machine', processes: 0 };
   draw();
-  readAvailability();
+  if (!remote) readAvailability();
   return {
     node,
     /** Re-reads the availability (a live change of the session); the text and the message in flight stay. */
-    refresh: () => (sending || watched() || orderOpen() ? undefined : readAvailability()),
+    refresh: () => (remote || sending || watched() || orderOpen() ? undefined : readAvailability()),
     /** Focuses the text as soon as the box can take it ("Mandar mensagem" from a list). */
     focus() {
       wantFocus = true;

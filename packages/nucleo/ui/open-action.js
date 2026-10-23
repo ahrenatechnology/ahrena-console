@@ -127,9 +127,14 @@ function setState(id, st) {
  * `size`: 'full' | 'small' | 'icon'. `write` swaps the transport (tests, the screen's `ctx.write`).
  */
 export function openAction(session, { size = 'full', write = defaultWrite, machine = null, className = null, successMs = SUCCESS_MS, failMs = FAIL_MS } = {}) {
-  const d = describeOpenAction(session?.open, { machine });
+  // Issue 243: a session of another machine never POSTs to this core, whatever its `open` says.
+  const remote = typeof session?.machine?.id === 'string' && session.machine.id !== '' && session.machine.id !== 'local';
+  const d = describeOpenAction(remote && session?.open ? { target: 'remote', command: null } : session?.open, { machine });
   if (!d) return null;
   const id = session.id;
+  // Issue 243: ids repeat across machines; the state of a remote session's action never mixes with a
+  // local one of the same id. The write still goes by the session id (only local sessions open).
+  const key = remote ? `${session.machine.id}:${id}` : id;
   const compact = size === 'icon';
   const label = size === 'small' && d.smallLabel ? d.smallLabel : d.label;
   // Where the button cannot say "roda em…" beside it (wall foot, icon), the server icon says it.
@@ -153,9 +158,9 @@ export function openAction(session, { size = 'full', write = defaultWrite, machi
   root.addEventListener('click', (ev) => ev.stopPropagation?.());
   // Escape closes a failure (the icon's popover covers the rows below it).
   root.addEventListener('keydown', (ev) => {
-    if (ev.key === 'Escape' && openStateOf(id)?.kind === 'fail') {
+    if (ev.key === 'Escape' && openStateOf(key)?.kind === 'fail') {
       ev.stopPropagation?.();
-      setState(id, null);
+      setState(key, null);
     }
   });
 
@@ -165,7 +170,7 @@ export function openAction(session, { size = 'full', write = defaultWrite, machi
     // A redraw dropped this action from the page: it stops listening.
     if (root.isConnected === false && status.getAttribute('data-state') !== null) return void forget();
     clearTimeout(timer);
-    const st = openStateOf(id);
+    const st = openStateOf(key);
     // In flight: aria-disabled and aria-busy, not `disabled`, so the focus stays on the button.
     if (st?.kind === 'busy') {
       button.setAttribute('aria-disabled', 'true');
@@ -178,7 +183,7 @@ export function openAction(session, { size = 'full', write = defaultWrite, machi
     if (!st) return void status.replaceChildren();
     const msg = el('span', { class: `open-msg open-${st.kind}`, title: st.text }, st.text);
     const copy = st.kind === 'fail' && st.command ? copyButton(st.command, compact || size === 'small') : null;
-    const close = st.kind === 'fail' && compact ? closeButton(() => setState(id, null)) : null;
+    const close = st.kind === 'fail' && compact ? closeButton(() => setState(key, null)) : null;
     status.replaceChildren(...[msg, copy, close].filter(Boolean));
     if (st.until !== null) {
       timer = setTimeout(draw, Math.max(0, st.until - Date.now()));
@@ -189,19 +194,19 @@ export function openAction(session, { size = 'full', write = defaultWrite, machi
 
   function forget() {
     clearTimeout(timer);
-    views.get(id)?.delete(draw);
-    if (views.get(id)?.size === 0) views.delete(id);
+    views.get(key)?.delete(draw);
+    if (views.get(key)?.size === 0) views.delete(key);
   }
 
-  if (!views.has(id)) views.set(id, new Set());
-  views.get(id).add(draw);
+  if (!views.has(key)) views.set(key, new Set());
+  views.get(key).add(draw);
   draw();
 
   button.addEventListener('click', async (ev) => {
     stop(ev);
-    if (d.disabled || openStateOf(id)?.kind === 'busy') return;
+    if (d.disabled || openStateOf(key)?.kind === 'busy') return;
     // The next click clears a failure.
-    setState(id, { kind: 'busy', text: 'Abrindo…', command: null, until: null });
+    setState(key, { kind: 'busy', text: 'Abrindo…', command: null, until: null });
     let state;
     try {
       state = stateOfAnswer(await openSession(id, { write }));
@@ -209,8 +214,8 @@ export function openAction(session, { size = 'full', write = defaultWrite, machi
       if (e?.name === 'AbortError') state = null;
       else state = stateOfAnswer(null, e instanceof Error ? e : new Error(String(e)));
     }
-    if (!state) return setState(id, null);
-    setState(id, { ...state, command: state.kind === 'fail' ? state.command : null, until: Date.now() + (state.kind === 'ok' ? successMs : failMs) });
+    if (!state) return setState(key, null);
+    setState(key, { ...state, command: state.kind === 'fail' ? state.command : null, until: Date.now() + (state.kind === 'ok' ? successMs : failMs) });
   });
   return root;
 }

@@ -1,0 +1,131 @@
+/* The cloud connectors (issue 277, C57 to C61, C66 and C67): Conexões (catalog and AWS) and the
+   "Perfis de nuvem" card of the machine screens. Loaded by cloud-parts.js (`link[data-screen="clouds"]`).
+   Every own class is cl-*; only brand.css variables. Below 1300 px of window (the app opens at 1100) the
+   wireframe's 1100 layout; from 1300 px, the 1440 one. Nothing scrolls sideways: min-width 0 everywhere,
+   long names wrap. */
+
+.badge { display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 9px; border-radius: 99px; font-size: 11.5px; font-weight: var(--weight-medium); white-space: nowrap; flex: none; }
+.badge .p { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.b-completed { background: var(--status-completed-badge); color: var(--status-completed-text); }
+.b-waiting { background: var(--status-waiting-badge); color: var(--status-waiting-text); }
+.b-error { background: var(--status-error-badge); color: var(--status-error-text); }
+.b-abandoned { background: var(--status-abandoned-badge); color: var(--status-abandoned-text); }
+
+.cl-eyebrow { margin-bottom: -6px; }
+.cl-link { color: var(--accent-text); font-size: 12px; white-space: nowrap; }
+.cl-link:hover { text-decoration: underline; }
+.cl-accent { color: var(--accent-text); display: inline-flex; font-size: 16px; flex: none; }
+.cl-muted { color: var(--muted); }
+.cl-mono { font-size: 11.5px; overflow-wrap: anywhere; }
+.cl-lock { display: flex; gap: 8px; align-items: center; font-size: 11.5px; color: var(--muted); margin: 0; }
+.cl-lock .icon { flex: none; }
+.cl-crumb { font-size: 12px; color: var(--muted); display: flex; gap: 6px; align-items: center; margin-bottom: -8px; }
+.cl-crumb b { color: var(--text); font-weight: var(--weight-medium); }
+.cl-column { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.cl-faded { opacity: .5; filter: saturate(.3); display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.cl-sess.cl-faded { display: flex; gap: 0; }
+
+.cl-seg { display: inline-flex; padding: 2px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg); flex: none; }
+.cl-seg button { border: 0; background: transparent; color: var(--muted); font-size: 11.5px; padding: 4px 9px; border-radius: 6px; white-space: nowrap; }
+.cl-seg button[aria-pressed="true"] { background: var(--raised); color: var(--text); }
+.cl-seg button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* C57: one card per connector. */
+.cl-grid { display: grid; gap: 14px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.cl-grid-add { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.cl-conn { padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.cl-top { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; min-width: 0; }
+.cl-logo { width: 34px; height: 34px; border-radius: 9px; display: grid; place-items: center; background: var(--raised); color: var(--accent-text); font-size: 17px; flex: none; }
+.cl-title { flex: 1; min-width: 140px; }
+.cl-title b { display: block; font-weight: var(--weight-semibold); font-size: 14px; }
+.cl-title small { display: block; color: var(--muted); font-size: 11.5px; }
+.cl-top .badge { margin-left: auto; }
+.cl-lines { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+.cl-lines b { color: var(--text); font-weight: var(--weight-medium); }
+.cl-foot { margin-top: auto; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.cl-foot-note { font-size: 11px; color: var(--muted); margin-right: auto; overflow-wrap: anywhere; }
+.cl-soon { border-style: dashed; background: transparent; }
+.cl-soon .cl-logo { color: var(--muted); }
+.cl-conn .btn[disabled], .cl-sess .btn[disabled] { opacity: .45; cursor: not-allowed; }
+.cl-none { padding: 18px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; text-align: center; border-style: dashed; background: transparent; font-size: 12.5px; color: var(--muted); min-width: 0; }
+.cl-none b { color: var(--text); font-size: 13.5px; }
+.cl-none-ic { font-size: 22px; color: var(--muted); }
+
+/* C58: a session with its profiles, and the Perfis de nuvem card (C66, C67). */
+.cl-sess { padding: 0; display: flex; flex-direction: column; min-width: 0; flex-shrink: 0; }
+.cl-profiles[hidden] { display: none; }
+.cl-sess.cl-bad { border-color: color-mix(in srgb, var(--status-error-dot) 45%, var(--border)); }
+.cl-sh { display: flex; gap: 12px; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--border); flex-wrap: wrap; min-width: 0; }
+.cl-sn { min-width: 0; flex: 1 1 200px; }
+.cl-sn b { display: block; font-size: 13.5px; overflow-wrap: anywhere; }
+.cl-sn small { color: var(--muted); font-size: 11.5px; overflow-wrap: anywhere; }
+.cl-act { margin-left: auto; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
+.cl-table { width: 100%; border-collapse: collapse; font-size: 12.5px; table-layout: auto; }
+.cl-table th { text-align: left; font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-weight: var(--weight-semibold); padding: 8px 16px; border-bottom: 1px solid var(--border); }
+.cl-table td { padding: 8px 16px; border-bottom: 1px solid var(--border); vertical-align: middle; overflow-wrap: anywhere; }
+.cl-table tr:last-child td { border-bottom: 0; }
+.cl-table .mono { font-size: 12px; }
+.cl-name { font-weight: var(--weight-medium); }
+.cl-right { text-align: right; white-space: nowrap; }
+.cl-wrap { white-space: normal; }
+.cl-sf { margin-top: auto; padding: 9px 16px; border-top: 1px dashed var(--border); font-size: 11.5px; color: var(--muted); display: flex; gap: 8px; align-items: center; overflow-wrap: anywhere; }
+.cl-sf .icon { flex: none; }
+.cl-sf b { color: var(--text); font-weight: var(--weight-medium); }
+.cl-message { margin: 0; padding: 14px 16px; font-size: 12.5px; color: var(--muted); overflow-wrap: anywhere; }
+
+/* The numbers of the AWS screen. */
+.cl-stats { display: grid; gap: 12px; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.cl-stat { padding: 14px 16px; min-height: 84px; display: flex; flex-direction: column; justify-content: space-between; gap: 2px; position: relative; min-width: 0; }
+.cl-stat-label { font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-weight: var(--weight-semibold); padding-right: 22px; }
+.cl-stat-ic { position: absolute; top: 13px; right: 14px; font-size: 17px; }
+.cl-stat-v { font-size: 24px; font-weight: var(--weight-semibold); font-family: var(--font-mono); line-height: 1.1; }
+.cl-stat-s { font-size: 11.5px; color: var(--muted); overflow-wrap: anywhere; }
+.cl-tone-accent { color: var(--accent-text); }
+.cl-tone-completed { color: var(--status-completed-text); }
+.cl-tone-error { color: var(--status-error-text); }
+.cl-tone-waiting { color: var(--status-waiting-text); }
+.cl-tone-muted { color: var(--muted); }
+
+/* C60: the states that are not the happy path. */
+.cl-states { display: grid; gap: 12px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.cl-state { padding: 16px; display: flex; flex-direction: column; gap: 6px; align-items: flex-start; min-width: 0; font-size: 12.5px; }
+.cl-state b { font-size: 13.5px; }
+.cl-state-ic { font-size: 22px; display: inline-flex; }
+.cl-state-text { color: var(--muted); overflow-wrap: anywhere; }
+.cl-config { display: block; font-size: 11.5px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; margin-top: 4px; color: var(--text); white-space: pre-wrap; overflow-wrap: anywhere; max-width: 100%; }
+
+/* C59 and C67: the login band. */
+.cl-band { display: flex; align-items: flex-start; gap: 12px; padding: 10px 14px; margin: 12px 16px 0; border-radius: 12px; font-size: 13px; min-width: 0; border: 1px solid var(--border); }
+.cl-band-running { border-color: var(--status-waiting-dot); background: var(--status-waiting-badge); }
+.cl-band-ok { border-color: color-mix(in srgb, var(--status-completed-dot) 50%, var(--border)); background: color-mix(in srgb, var(--status-completed-badge) 70%, var(--surface)); }
+.cl-band-error { border-color: var(--status-error-dot); background: var(--status-error-badge); }
+.cl-band-neutral { background: var(--raised); }
+.cl-band-ic { font-size: 18px; flex: none; display: inline-flex; padding-top: 1px; }
+.cl-band-running .cl-band-ic { color: var(--status-waiting-text); }
+.cl-band-ok .cl-band-ic { color: var(--status-completed-text); }
+.cl-band-error .cl-band-ic, .cl-band-error b { color: var(--status-error-text); }
+.cl-band-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; overflow-wrap: anywhere; }
+.cl-band-line { margin: 0; line-height: 1.5; }
+.cl-band-actions { display: flex; gap: 8px; flex-wrap: wrap; flex: none; }
+.cl-spin .icon { animation: cl-turn 1s linear infinite; }
+@keyframes cl-turn { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .cl-spin .icon { animation: none; } }
+.cl-steps { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 11.5px; color: var(--muted); }
+.cl-step { display: inline-flex; gap: 5px; align-items: center; }
+.cl-step-done { color: var(--status-completed-text); }
+.cl-step-on { color: var(--text); font-weight: var(--weight-medium); }
+.cl-step-on .icon { animation: cl-turn 1s linear infinite; }
+@media (prefers-reduced-motion: reduce) { .cl-step-on .icon { animation: none; } }
+.cl-time { display: flex; align-items: center; gap: 10px; font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.cl-progress { appearance: none; width: 160px; max-width: 40%; height: 6px; border: 0; border-radius: 99px; background: var(--raised); overflow: hidden; }
+.cl-progress::-webkit-progress-bar { background: var(--raised); border-radius: 99px; }
+.cl-progress::-webkit-progress-value { background: var(--status-waiting-dot); border-radius: 99px; }
+.cl-progress::-moz-progress-bar { background: var(--status-waiting-dot); border-radius: 99px; }
+.cl-cmd { font-size: 11px; color: var(--muted); overflow-wrap: anywhere; }
+.cl-code-row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.cl-user-code { font-size: 22px; letter-spacing: .12em; color: var(--text); font-weight: var(--weight-semibold); padding: 6px 14px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); user-select: all; }
+
+@media (min-width: 1300px) {
+  .cl-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+.cl-portal { margin-top: 6px; font-size: 12px; color: var(--muted); }

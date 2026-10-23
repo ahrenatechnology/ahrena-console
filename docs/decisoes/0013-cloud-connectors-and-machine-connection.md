@@ -1,6 +1,6 @@
 # 0013 · Conectores de nuvem e a conexão da máquina remota: o console entra pelas CLIs das nuvens, sem guardar credencial
 
-- **Status:** proposta, esperando o ok do Fernando nos wireframes C57 a C67, A9, A10 e P14
+- **Status:** aceita com as quatro respostas recomendadas, confirmadas pelo Fernando em 22/10, com o Mac multiusuário fora do escopo da fase 1 e o pareamento na #315 (wireframes C57 a C67, A9, A10 e P14 aprovados no #283, em 22/10)
 - **Data:** 2026-10-21
 - **Issues:** [#277](https://github.com/ahrenatechnology/ahrena-console/issues/277) (contas de nuvem) e [#278](https://github.com/ahrenatechnology/ahrena-console/issues/278) (a conexão da máquina remota)
 - **Revê:** em [0008](0008-machine-telemetry-and-dev-console.md), seção 6, "abrir login de nuvem" (passa a ser do console, só pela CLI da nuvem) e "subir, parar o túnel" (passa a ser do console, só pelo comando do usuário); em [0012](0012-remote-reconnect.md), seção 3, "o núcleo não lê a saída" (passa a procurar uma lista fechada de padrões no trecho do log da execução, sem mostrar nada dele)
@@ -47,6 +47,7 @@ O núcleo de **cada máquina** lê a configuração das CLIs **dela** (o `~/.aws
 
 - **Por que não abrir o navegador lá**: o núcleo de lá é um serviço sem tela (ou a tela de lá não é a que a pessoa está olhando); um navegador aberto lá esperaria por ninguém. É o mesmo padrão do código do GitHub na 0011 (C40).
 - **O código aparece na /ui**, que a 0012 evita para a saída de comando: é a exceção estreita de um campo de formato fixo, de vida curta (10 min), que só vale com o login da pessoa no navegador, e que ela precisa ver. Nada mais da saída sai do log.
+- **Quem atende na porta do túnel não é autenticado.** Com o túnel caído, outro usuário do sistema no mesmo Mac pode ocupar a porta e se passar pelo núcleo de lá, inclusive servindo um código de dispositivo de uma autorização dele. Um Mac de um usuário só (o caso de uso) está fora desse risco, que fica fora do escopo da fase 1. O núcleo do Mac não julga o código pelo portal que a mesma resposta declara (quem ocupa a porta escreve os dois): lembra, por máquina e por sessão, o portal (`startUrlHost`) e a região vistos numa leitura anterior **sem** código, e só mostra um código cuja URL esteja nesse portal ou na página de dispositivo do SSO dessa região, com a resposta declarando o mesmo portal. Sem leitura anterior, ou com o portal trocado, o código é descartado; a resposta do `POST` nunca traz o código. A tela mostra a página ao lado do código. É confiança no primeiro uso: um impostor que atende desde a primeira leitura passa, e esse caso só o pareamento fecha. Autenticar os dois lados do túnel (parear o Mac com o núcleo remoto) é a [#315](https://github.com/ahrenatechnology/ahrena-console/issues/315).
 - **Sem login por código lá** (aws CLI antiga, ou núcleo de lá numa versão sem a rota), a tela **mostra o comando** para rodar num terminal de lá, com Copiar, e nada roda (C67, estado 4).
 
 ### 3. O estado da sessão, e a pergunta do "até quando"
@@ -119,6 +120,13 @@ O resultado vai na leitura da máquina (`placement: { provider, kind, region, zo
 - Quem pode escrever no `~/.aws/config` escolhe o nome que vai para a linha do `aws`, limitado pelo padrão da seção 1. É a mesma pessoa que já roda o `aws` no terminal.
 - O motivo da queda depende de padrões de texto de ferramentas que mudam; a lista é testada com saídas gravadas e, quando nada casa, a tela cai no código de saída, que é o que existe hoje.
 - O Argos faz a revisão de segurança das rotas, do parser do `~/.aws/config` e, na variante A, do leitor do cache.
+
+## Respostas (as recomendadas, confirmadas pelo Fernando em 22/10)
+
+1. **"Até quando":** variante A. O núcleo lê só o `expiresAt` do cache da aws CLI, com o teste de vazamento.
+2. **Conexões em Controle** é o lugar único das contas; sem seção Nuvens.
+3. **Um clique** para "Entrar na AWS e subir o túnel" quando o SSO expirou.
+4. **Parar o túnel** entra na fase 1, com confirmação, pela tela e pela bandeja.
 
 ## Perguntas para o Fernando
 

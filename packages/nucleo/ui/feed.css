@@ -71,3 +71,7 @@
   .feed-trail { display: none; }
   .feed-detail { grid-template-columns: 1fr; padding-left: 14px; }
 }
+
+/* Issue 243 (C47): the machine filter and the C48 notices, under the header. */
+.feed-machines { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.feed-machines[hidden] { display: none; }

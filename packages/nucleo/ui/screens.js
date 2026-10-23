@@ -241,6 +241,26 @@ export const SCREENS = [
     icon: 'plug',
     file: '/ui/screens/connections.js',
   },
+  {
+    // The GitHub detail (C39 to C44) once Conexões is a catalog (issue 277, C57): the same screen.
+    id: 'connections-github',
+    route: '/ui/connections/github',
+    highlights: 'connections',
+    title: 'Conexões · GitHub',
+    sub: null,
+    icon: 'github',
+    file: '/ui/screens/connections.js',
+  },
+  {
+    // The AWS sessions and profiles of this Mac or a remote machine (`?machine=<id>`, C58 to C60, issue 277).
+    id: 'connections-aws',
+    route: '/ui/connections/aws',
+    highlights: 'connections',
+    title: 'Conexões · AWS',
+    sub: null,
+    icon: 'cloud',
+    file: '/ui/screens/cloud-connections.js',
+  },
 ];
 
 // ---------- The remote machines in the sidebar (issue 178) ----------

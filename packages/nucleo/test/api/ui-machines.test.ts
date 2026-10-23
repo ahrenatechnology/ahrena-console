@@ -539,22 +539,24 @@ describe('#178 criterion 6: live through /api/changes, with simulator data', () 
 
 // ---------- C1: the remote sessions on the Dashboard ----------
 
-describe('Dashboard: remote sessions (supports #176/#178): the machine label and no link', () => {
-  test('inboxCards: an item with `machine` carries the label and has no href; a local one keeps its link', () => {
+describe('Dashboard: remote sessions (#178, then #243 C47 and C49): the machine icon and the remote Detail', () => {
+  test('inboxCards: an item with `machine` carries the machine and links to the remote Detail; a local one keeps its link', () => {
     const cards = dashboard.inboxCards(ATTENTION, [{ session: 'r1', model: 'claude-opus-5-5', task: 'Bash: rm' }]);
     assert.equal(cards[0].href, '/ui/sessions/l1');
     assert.equal(cards[0].machine, null);
-    assert.equal(cards[1].href, null);
+    // Issue 243 (C49): the remote Detail is read through the tunnel, with `?machine=`.
+    assert.equal(cards[1].href, `/ui/sessions/r1?machine=${WS.id}`);
     assert.deepEqual(cards[1].machine, { id: WS.id, label: 'Workstation' });
-    assert.equal(cards[1].foot, 'Workstation', 'the machine, not a local agent of the same id');
+    assert.equal(cards[1].foot, '', 'a local agent of the same id is another session: its model is not used');
   });
 
-  test('mounted: the remote card is not a link and shows the machine', async () => {
+  test('mounted: the remote card shows the server icon with the machine in the tooltip, links to the remote Detail and has its open action off', async () => {
     const numbers = { sessions: { total: 1, active: 1, waiting: 0, withError: 0 }, agents: { active: 0, sessions: 0 }, subagents: { active: 0, sessions: 0 }, events: { today: 0, lastHour: 0, total: 0 }, cost: { usd: 0, days: 30, unpriced: [] } };
     const area = new ElementoFalso('main');
     const signal = new AbortController();
+    const remoteAttention = { ...ATTENTION, items: ATTENTION.items.map((i) => (i.machine ? { ...i, open: { target: 'remote', command: null } } : i)) };
     const cleanup = await dashboard.mount(area, {
-      read: async (route: string) => (route === '/api/dashboard' ? { numbers, agents: [], activity: [] } : ATTENTION),
+      read: async (route: string) => (route.startsWith('/api/dashboard') ? { numbers, agents: [], activity: [] } : remoteAttention),
       signal: signal.signal,
       onChange: () => {},
       onRestart: () => {},
@@ -562,14 +564,16 @@ describe('Dashboard: remote sessions (supports #176/#178): the machine label and
     });
     try {
       const minis = area.querySelectorAll('.mini');
-      // issue 285: the card is a div; a local one carries the "Abrir ›" link, a remote one none.
+      // issue 285: the card is a div; a local one carries the "Abrir ›" link.
       assert.equal(minis[0]!.querySelector('a.dash-open-link')!.getAttribute('href'), '/ui/sessions/l1');
       assert.equal(minis[1]!.tagName, 'DIV');
-      assert.equal(minis[1]!.querySelectorAll('a').length, 0);
-      assert.equal(minis[1]!.querySelectorAll('button').length, 0, 'no open icon for a remote session');
+      assert.equal(minis[1]!.querySelector('a.dash-open-link')!.getAttribute('href'), `/ui/sessions/r1?machine=${WS.id}`);
       assert.equal(minis[1]!.getAttribute('data-machine'), WS.id);
-      assert.match(texto(minis[1]!), /Workstation · 2 min$/);
-      assert.doesNotMatch(texto(minis[1]!), /Abrir/);
+      const tag = minis[1]!.querySelector('.mf-tag')!;
+      assert.equal(tag.getAttribute('title'), 'Workstation');
+      assert.equal(texto(tag), '', 'icon only, the label in the tooltip');
+      // The open icon is the "outra máquina" case of C70: off, never a POST to this core.
+      assert.equal(minis[1]!.querySelector('button')!.getAttribute('aria-disabled'), 'true');
     } finally {
       signal.abort();
       cleanup?.();

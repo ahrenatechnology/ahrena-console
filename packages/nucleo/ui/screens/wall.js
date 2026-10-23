@@ -10,6 +10,7 @@ import { header, el, icon } from '../dom.js';
 import { loading, error, errorBand, empty } from '../states.js';
 import { attentionOf, attentionPill, attentionTone, isBlocked, isIdle, reasonChip, statusWithoutAttention } from '../attention.js';
 import { openAction } from '../open-action.js';
+import { createMachineFilter, itemHref, itemKey, machineTag, whereText } from '../machine-filter.js';
 
 const STYLE = '/ui/wall.css';
 export const WALL_ROUTE = '/api/wall';
@@ -72,7 +73,10 @@ export function cardContent(c) {
   else row = { tipo: 'fazendo', texto: c.activity?.text ?? '' };
   return {
     id: c.id,
-    href: `/ui/sessions/${encodeURIComponent(c.id)}`,
+    // Issue 243: two machines can have the same id; a remote card opens its Detail with `?machine=`.
+    key: itemKey(c),
+    machine: c.machine ?? null,
+    href: itemHref(c),
     open: c.open ?? null,
     status: c.status,
     attention,
@@ -126,12 +130,14 @@ function bar({ valor: value, max, rotulo: label, alto: high = false, tipo: type 
  */
 function card(c, write) {
   const v = cardContent(c);
-  const link = el('a', { class: 'wall-tt wall-trunc wall-link', href: v.href, title: v.title, 'data-session': v.id }, v.title);
+  const link = el('a', { class: 'wall-tt wall-trunc wall-link', href: v.href, title: v.title, 'data-session': v.id, 'data-key': v.key }, v.title);
+  // C46: a remote card's tag shares the project line; the project truncates, never the tag.
+  const tag = machineTag(v);
   const node = el(
     'div',
-    { class: `card wall-card wall-st-${v.tone}`, 'data-session': v.id },
+    { class: `card wall-card wall-st-${v.tone}`, 'data-session': v.id, 'data-key': v.key },
     el('div', { class: 'wall-l1' }, link, badge(v)),
-    el('div', { class: 'wall-prj wall-trunc' }, v.origem),
+    tag ? el('div', { class: 'wall-prj mf-with-tag' }, el('span', { class: 'mf-shrink' }, v.origem), tag) : el('div', { class: 'wall-prj wall-trunc' }, v.origem),
     cardRow(v.linha),
     el(
       'div',
@@ -157,7 +163,7 @@ function card(c, write) {
  * it did before issue 285 (the whole card was the link), so a remote one keeps "Detalhe ›" too.
  */
 function foot(v, write) {
-  const action = openAction({ id: v.id, open: v.open }, { size: 'small', write });
+  const action = openAction({ id: v.id, open: v.open, machine: v.machine }, { size: 'small', write, machine: v.machine?.label ?? null });
   return el('div', { class: 'wall-foot' }, action, el('a', { class: 'wall-detail', href: v.href, tabindex: '-1' }, 'Detalhe ›'));
 }
 
@@ -184,6 +190,9 @@ export async function mount(area, ctx) {
   );
   const refresh = el('button', { type: 'button', class: 'btn', 'data-action': 'refresh', onClick: () => read() }, icon('refresh'), 'Atualizar');
   const head = header({ icon: 'wall', title: 'Mural ao vivo', sub: 'Um card por sessão aberta nesta máquina', actions: [selector, refresh] });
+  const sub = head.querySelector?.('.sub') ?? null;
+  // Issue 243 (C46): the machine filter on its own row under the header.
+  const machines = createMachineFilter(ctx, { onChange: () => ((wall = null), draw(), read()), reread: () => read(), onLayout: () => draw() });
 
   function choose(id) {
     filter = id;
@@ -193,7 +202,7 @@ export async function mount(area, ctx) {
 
   function draw() {
     if (!wall) {
-      area.replaceChildren(head, failure ? error({ text: failure.message, retry: () => read() }) : loading({ label: 'Lendo o mural' }));
+      area.replaceChildren(head, ...machines.parts(), failure ? error({ text: failure.message, retry: () => read() }) : loading({ label: 'Lendo o mural' }));
       return;
     }
     for (const f of FILTERS) buttons.get(f.id).replaceChildren(filterLabel(f, wall.count));
@@ -206,22 +215,29 @@ export async function mount(area, ctx) {
     const links = built.map((b) => b.link);
     const body = cards.length
       ? el('div', { class: 'wall-grid' }, ...nodes)
-      : empty({ icon: 'wall', title: f.vazio, text: filter === 'all' ? 'Abra uma sessão do Claude Code nesta máquina e ela aparece aqui.' : 'Troque o filtro para ver as outras.' });
+      : machines.chosenDown()
+        ? null
+        : empty({ icon: 'wall', title: f.vazio, text: filter === 'all' ? `Abra uma sessão do Claude Code ${machines.hasRemotes() ? whereText(machines.choice, machines.machines(), { form: 'any' }) : 'nesta máquina'} e ela aparece aqui.` : 'Troque o filtro para ver as outras.' });
     // Redesenhar troca os cards: o foco do teclado volta ao card da mesma sessão.
-    const focused = globalThis.document?.activeElement?.closest?.('[data-session]')?.getAttribute('data-session') ?? null;
-    area.replaceChildren(...[head, band, body].filter(Boolean));
-    if (focused) links.find((n) => n.getAttribute('data-session') === focused)?.focus();
+    // Issue 243: by machine + id (`data-key`), since two machines can have the same session id.
+    const holder = globalThis.document?.activeElement?.closest?.('[data-session]') ?? null;
+    const focused = holder ? (holder.getAttribute('data-key') ?? holder.getAttribute('data-session')) : null;
+    if (sub) sub.textContent = machines.hasRemotes() ? `Um card por sessão aberta, ${whereText(machines.choice, machines.machines())}` : 'Um card por sessão aberta nesta máquina';
+    area.replaceChildren(...[head, ...machines.parts(), band, body].filter(Boolean));
+    if (focused) links.find((n) => n.getAttribute('data-key') === focused)?.focus();
   }
 
   async function read() {
     const mine = ++request;
     try {
-      const fresh = await ctx.read(WALL_ROUTE);
+      const fresh = await ctx.read(machines.route(WALL_ROUTE));
       if (mine !== request) return;
+      machines.update(fresh);
       wall = fresh;
       failure = null;
     } catch (e) {
       if (e?.name === 'AbortError' || mine !== request) return;
+      if (machines.recover(e)) return;
       failure = e instanceof Error ? e : new Error(String(e));
     }
     draw();
