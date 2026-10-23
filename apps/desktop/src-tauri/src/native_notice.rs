@@ -5,9 +5,9 @@
 // "Opções" menu. Here the app uses `UNUserNotificationCenter`: it registers the category with
 // "Abrir", "Abrir no Claude Desktop" and "Silenciar" (and, for a machine that went down with a
 // reconnect command, "Reconectar" and "Abrir", #244; for an AWS session expiring or expired, "Entrar"
-// and "Abrir", #277), puts the session, the `local_…` and the
-// machine in `userInfo`, asks for the presentation also with the app in the foreground and answers through
-// the delegate.
+// and "Abrir", #277; for a machine whose tunnel fell with the SSO, "Entrar e subir" and "Abrir", #278),
+// puts the session, the `local_…` and the machine in `userInfo`, asks for the presentation also with
+// the app in the foreground and answers through the delegate.
 //
 // `UNUserNotificationCenter` kills the process when the app does not run from a bundle (a plain
 // `cargo run`: the `mainBundle` without `bundleIdentifier`). In that case this module does not turn
@@ -51,11 +51,15 @@ const REMOTE_SESSION_CATEGORY: &str = "remote-session";
 const CLOUD_LOGIN_CATEGORY: &str = "cloud-login";
 /// The same, for a session the core cannot log in: only "Abrir".
 const CLOUD_CATEGORY: &str = "cloud";
+/// "<label> sem conexão: SSO expirado" of a machine whose core can log in and start (#278, A10):
+/// "Entrar e subir" and "Abrir".
+const MACHINE_LOGIN_AND_START_CATEGORY: &str = "machine-login-and-start";
 const OPEN_ACTION: &str = "open";
 const OPEN_IN_DESKTOP_ACTION: &str = "open-in-desktop";
 const SILENCE_ACTION: &str = "silence";
 const RECONNECT_ACTION: &str = "reconnect";
 const CLOUD_LOGIN_ACTION: &str = "cloud-login";
+const LOGIN_AND_START_ACTION: &str = "login-and-start";
 const SESSION_KEY: &str = "session";
 const LOCAL_KEY: &str = "local";
 /// The `/ui` path "Abrir" leads to (#180); without it, the session's screen.
@@ -77,6 +81,8 @@ pub struct Handlers {
     pub reconnect: fn(&AppHandle, &str),
     /// "Entrar" (#277): asks the core to run the AWS session's login.
     pub cloud_login: fn(&AppHandle, &str),
+    /// "Entrar e subir" (#278): asks the core to log in to the machine's linked session and start its tunnel.
+    pub login_and_start: fn(&AppHandle, &str),
 }
 
 static APP: OnceLock<(AppHandle, Handlers)> = OnceLock::new();
@@ -152,9 +158,11 @@ pub fn start(app: &AppHandle, handlers: Handlers, _main: MainThreadMarker) -> bo
         Action::Reconnect => action(RECONNECT_ACTION, "Reconectar", UNNotificationActionOptions::empty()),
         // In the background too: the aws CLI opens the login page in the browser by itself.
         Action::CloudLogin => action(CLOUD_LOGIN_ACTION, "Entrar", UNNotificationActionOptions::empty()),
+        // In the background as well: the login opens in the browser, then the tunnel comes up.
+        Action::LoginAndStart => action(LOGIN_AND_START_ACTION, "Entrar e subir", UNNotificationActionOptions::empty()),
     };
     // One category per kind of notice, with the actions `Origin::actions` gives it.
-    let categories: Vec<_> = [(Origin::Session, category(Origin::Session)), (Origin::RemoteSession, category(Origin::RemoteSession)), (Origin::Machine, category(Origin::Machine)), (Origin::MachineReconnect, category(Origin::MachineReconnect)), (Origin::CloudLogin, category(Origin::CloudLogin)), (Origin::Cloud, category(Origin::Cloud))]
+    let categories: Vec<_> = [(Origin::Session, category(Origin::Session)), (Origin::RemoteSession, category(Origin::RemoteSession)), (Origin::Machine, category(Origin::Machine)), (Origin::MachineReconnect, category(Origin::MachineReconnect)), (Origin::MachineLoginAndStart, category(Origin::MachineLoginAndStart)), (Origin::CloudLogin, category(Origin::CloudLogin)), (Origin::Cloud, category(Origin::Cloud))]
         .into_iter()
         .map(|(o, id)| {
             let actions = NSArray::from_retained_slice(&o.actions().iter().map(|a| button(*a)).collect::<Vec<_>>());
@@ -227,6 +235,7 @@ fn category(o: Origin) -> &'static str {
         Origin::RemoteSession => REMOTE_SESSION_CATEGORY,
         Origin::Machine => MACHINE_CATEGORY,
         Origin::MachineReconnect => MACHINE_RECONNECT_CATEGORY,
+        Origin::MachineLoginAndStart => MACHINE_LOGIN_AND_START_CATEGORY,
         Origin::CloudLogin => CLOUD_LOGIN_CATEGORY,
         Origin::Cloud => CLOUD_CATEGORY,
     }
@@ -258,7 +267,7 @@ fn respond(response: &UNNotificationResponse) {
     let is = |id: &str| action.isEqualToString(&NSString::from_str(id));
     // SAFETY: a UserNotifications constant, read after the framework has loaded.
     let default = unsafe { UNNotificationDefaultActionIdentifier };
-    let (open, open_in_desktop, silence, reconnect, cloud_login) = (handlers.open, handlers.open_in_desktop, handlers.silence, handlers.reconnect, handlers.cloud_login);
+    let (open, open_in_desktop, silence, reconnect, cloud_login, login_and_start) = (handlers.open, handlers.open_in_desktop, handlers.silence, handlers.reconnect, handlers.cloud_login, handlers.login_and_start);
     let handle = app.clone();
     let work: Box<dyn FnOnce() + Send> = if action.isEqualToString(default) || is(OPEN_ACTION) {
         Box::new(move || open(&handle, &path))
@@ -269,6 +278,9 @@ fn respond(response: &UNNotificationResponse) {
     } else if is(RECONNECT_ACTION) {
         let Some(machine) = read(&info, MACHINE_KEY) else { return };
         Box::new(move || reconnect(&handle, &machine))
+    } else if is(LOGIN_AND_START_ACTION) {
+        let Some(machine) = read(&info, MACHINE_KEY) else { return };
+        Box::new(move || login_and_start(&handle, &machine))
     } else if is(CLOUD_LOGIN_ACTION) {
         let Some(cloud_session) = read(&info, CLOUD_SESSION_KEY) else { return };
         Box::new(move || cloud_login(&handle, &cloud_session))

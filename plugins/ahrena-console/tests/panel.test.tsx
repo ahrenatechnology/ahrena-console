@@ -4,6 +4,7 @@ import type { Panel } from '../types'
 import { paleta } from '../hooks/brand'
 import { UNCUT_COLUMNS, modelLine, viewLines, highlightedSteps, sessionPills } from '../hooks/render'
 import { CARD_LINES } from '../hooks/height'
+import { clockTime } from '../hooks/format'
 import { NOW, SCENARIOS } from './scenarios'
 
 type ScenarioName = keyof typeof SCENARIOS
@@ -1482,6 +1483,81 @@ test('0.0.30: the This session card fits its height in every state, in both widt
       const model = await ui.find({ type: 'Text', text: /turno 262|t262/ })
       expect([...(model?.text ?? '')].length).toBeLessThanOrEqual(UNCUT_COLUMNS)
       expect(model?.text).not.toMatch(/…/)
+      await ui.unmount()
+    }
+  }
+})
+
+// #278 (P14): the session runs on a remote machine whose connection is down.
+
+/** The Workstation of P14: the tunnel fell when the SSO session expired; the last reading is from 5 h ago. */
+const READ_AT = NOW - 5 * 3_600_000
+function onWorkstation(connection: NonNullable<Panel['machine']>['connection']): Panel {
+  return { ...SCENARIOS.p1, machine: { id: 'workstation', label: 'Workstation', lastReadAt: new Date(READ_AT).toISOString(), connection } }
+}
+const SSO_EXPIRED: NonNullable<Panel['machine']>['connection'] = {
+  state: 'down',
+  since: new Date(READ_AT).toISOString(),
+  lastError: { reason: 'sso-expired', at: new Date(READ_AT).toISOString(), exitCode: null, holder: null },
+}
+
+test('P14 narrow and wide: a band at the top of the current-session card with the reason and the link to resolve it in the console', async ($, on) => {
+  const f = await open($, on)
+  f.state.panel = onWorkstation(SSO_EXPIRED)
+  await f.timer.advance(5_000)
+  const at = clockTime(READ_AT)
+  for (const [target, title, detail] of [
+    [PANE, '⊘ Sem conexão · SSO expirado', `Roda na Workstation · última leitura ${at}`],
+    [WIDE, '⊘ Workstation sem conexão · SSO expirado', `Esta sessão roda na Workstation. O que você vê é a última leitura, de ${at}; o túnel caiu quando a sessão AWS expirou.`],
+  ] as const) {
+    const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...target })
+    const band = await ui.find({ key: 'machine-banner' })
+    expect(band).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: title })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: detail })).toBeDefined()
+    const links = (await ui.findAll({ type: 'Link' })).map((l: any) => l.props.href)
+    expect(links).toContain('http://localhost:4720/ui/machines/workstation')
+    expect(await ui.find({ type: 'Text', text: 'resolver no console ›' })).toBeDefined()
+    // First under the section label, before the cards; the panel offers nothing that runs.
+    const keys = (await ui.findAll({ type: 'Box' })).map((b: any) => b.key)
+    expect(keys.indexOf('machine-banner')).toBeGreaterThan(keys.indexOf('section-ESTA SESSÃO'))
+    expect(keys.indexOf('machine-banner')).toBeLessThan(keys.indexOf('cards'))
+    expect((await ui.findAll({ type: 'Button' })).some((b: any) => /Entrar|Reconectar|Subir/.test(String(b.props.label)))).toBe(false)
+    await ui.unmount()
+  }
+})
+
+test('P14: the other reasons and states in plain words; no band when the connection is up, on this machine, or from an older core', async ($, on) => {
+  const f = await open($, on)
+  const cases: [NonNullable<Panel['machine']>['connection'], string][] = [
+    [{ state: 'failing', since: null, lastError: { reason: 'port-busy', holder: 'node' } }, '⊘ Workstation sem conexão · porta ocupada'],
+    [{ state: 'failing', since: null, lastError: { reason: 'ssm-agent-offline', exitCode: 255 } }, '⊘ Workstation sem conexão · agente SSM offline'],
+    [{ state: 'failing', since: null, lastError: { reason: 'exit-code', exitCode: 255 } }, '⊘ Workstation sem conexão · o comando falhou'],
+    [{ state: 'down', since: null, lastError: { reason: 'core-not-answering' } }, '⊘ Workstation sem conexão · núcleo de lá parado'],
+    [{ state: 'down', since: null, lastError: null }, '⊘ Workstation sem conexão · túnel fora'],
+    [{ state: 'down', since: null, lastError: { reason: 'motivo-novo' } }, '⊘ Workstation sem conexão · túnel fora'],
+    [{ state: 'stopped', since: null, lastError: null }, '⊘ Workstation sem conexão · parada por você'],
+    [{ state: 'starting', since: null, lastError: { reason: 'sso-expired' } }, '⊘ Workstation sem conexão · subindo o túnel'],
+  ]
+  for (const [connection, title] of cases) {
+    f.state.panel = onWorkstation(connection)
+    await f.timer.advance(15_000)
+    const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...WIDE })
+    expect(await ui.find({ type: 'Text', text: title })).toBeDefined()
+    await ui.unmount()
+  }
+  const none: Panel[] = [
+    onWorkstation({ state: 'up', since: null, lastError: null }),
+    onWorkstation(null),
+    { ...onWorkstation(SSO_EXPIRED), machine: { ...onWorkstation(SSO_EXPIRED).machine!, id: 'local' } },
+    SCENARIOS.p1,
+  ]
+  for (const panel of none) {
+    f.state.panel = panel
+    await f.timer.advance(15_000)
+    for (const target of [PANE, WIDE]) {
+      const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...target })
+      expect(await ui.find({ key: 'machine-banner' })).toBeUndefined()
       await ui.unmount()
     }
   }

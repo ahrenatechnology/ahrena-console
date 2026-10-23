@@ -190,6 +190,32 @@ export interface TelemetryReading {
   ports: ListeningPort[] | null;
   /** Mac only; `null` where it does not apply. */
   tunnels: TunnelReading[] | null;
+  /** Where the machine runs, read by its own núcleo (#278, decision 0013 section 5); absent from older readings. */
+  placement?: Placement;
+}
+
+// ---------------------------------------------------------------------------------------------
+// Placement (#278, decision 0013 section 5)
+
+export const PLACEMENT_PROVIDERS = ['aws', 'gcp', 'azure', 'unknown'] as const;
+export type PlacementProvider = (typeof PLACEMENT_PROVIDERS)[number];
+export const PLACEMENT_SOURCES = ['instance-metadata', 'ssm-registration', 'dmi'] as const;
+export type PlacementSource = (typeof PLACEMENT_SOURCES)[number];
+
+/**
+ * Where the machine runs, from its instance metadata, its SSM agent registration or its DMI, without
+ * credentials. `kind`: the instance type from the metadata, `managed-instance` from the SSM
+ * registration, `null` from the DMI. Everything `null` (and `provider: 'unknown'`) when nothing answered.
+ */
+export interface Placement {
+  provider: PlacementProvider;
+  kind: string | null;
+  region: string | null;
+  zone: string | null;
+  instanceId: string | null;
+  source: PlacementSource | null;
+  /** When the núcleo read it. */
+  readAt: string | null;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -302,6 +328,75 @@ export interface MachineSummary {
   alerts: number;
   /** The reconnect of a remote machine (#244); `null` for this machine and the demo's simulated one. */
   reconnect: ReconnectStatus | null;
+  /** The connection of a remote machine (#278); only on remote machines. */
+  connection?: ConnectionStatus | null;
+}
+
+// ---------------------------------------------------------------------------------------------
+// The connection of a remote machine (#278, decision 0013 section 4)
+
+export const CONNECTION_STATES = ['up', 'down', 'starting', 'stopping', 'failing', 'stopped'] as const;
+export type ConnectionState = (typeof CONNECTION_STATES)[number];
+
+/** Why the connection is down, a CLOSED list in this order of precedence (decision 0013 section 4). */
+export const CONNECTION_REASONS = ['sso-expired', 'port-busy', 'core-not-answering', 'ssm-agent-offline', 'host-unknown', 'key-refused', 'exit-code'] as const;
+export type ConnectionReason = (typeof CONNECTION_REASONS)[number];
+
+export const CONNECTION_JOB_KINDS = ['start', 'stop', 'reconnect', 'login-and-start'] as const;
+export type ConnectionJobKind = (typeof CONNECTION_JOB_KINDS)[number];
+export type ConnectionStep = 'login' | 'stop' | 'start' | 'read';
+export type ConnectionJobState = 'running' | 'succeeded' | 'failed' | 'timed-out' | 'canceled';
+
+/** `not-found`: the profile is not in this Mac's ~/.aws/config; `unavailable`: the núcleo runs without the connector (the demo). */
+export type CloudLinkState = 'valid' | 'expiring' | 'expired' | 'never' | 'unknown' | 'not-found' | 'unavailable';
+
+export interface ConnectionCloud {
+  connector: 'aws';
+  profile: string;
+  /** The SSO session the profile uses; `null` when the profile is not found. */
+  session: string | null;
+  state: CloudLinkState;
+  expiresAt: string | null;
+}
+
+export interface ConnectionError {
+  reason: ConnectionReason;
+  at: string;
+  /** The failed command's exit code (`null` when a signal or a timeout ended it, or the reason is a probe's). */
+  exitCode: number | null;
+  /** The process holding the port, for `port-busy` when the probe saw it. */
+  holder: string | null;
+}
+
+/** The job running (or the last one), with its steps in order. */
+export interface ConnectionJob {
+  kind: ConnectionJobKind;
+  steps: ConnectionStep[];
+  /** The step running (or where it ended). */
+  step: ConnectionStep;
+  state: ConnectionJobState;
+  startedAt: string;
+  endedAt: string | null;
+  stepStartedAt: string;
+  /** The running step's timeout; `null` for `read`. */
+  stepTimeoutSeconds: number | null;
+  startedBy: ReconnectStarter;
+}
+
+/** A remote machine's connection, as `GET /api/machines` serves it. Never any command output. */
+export interface ConnectionStatus {
+  configured: boolean;
+  state: ConnectionState;
+  since: string | null;
+  /** This Mac's tunnel forwarding the machine's port (matched by it), each port with its probe. */
+  ports: TunnelPort[];
+  cloud: ConnectionCloud | null;
+  lastError: ConnectionError | null;
+  actions: { start: boolean; stop: boolean; reconnect: boolean; loginAndStart: boolean };
+  /** What runs, for the screen to show; `null` without a connection. */
+  command: { start: string[]; stop: string[] | null; startTimeoutSeconds: number; stopTimeoutSeconds: number | null } | null;
+  job: ConnectionJob | null;
+  logFile: string | null;
 }
 
 export function isWindowHours(n: number): n is WindowHours {

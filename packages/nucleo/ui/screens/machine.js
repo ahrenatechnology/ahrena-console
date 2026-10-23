@@ -80,6 +80,7 @@ import {
   yOf,
 } from './machine-format.js';
 import { cloudProfiles } from './cloud-profiles.js';
+import { machineConnection } from './machine-connection.js';
 
 const STYLE = '/ui/screens/machine.css';
 const SVG = 'http://www.w3.org/2000/svg';
@@ -539,6 +540,8 @@ export async function mount(area, ctx) {
   let problem = null;
   // The "Perfis de nuvem" card (issue 277, C66 and C67): its own module, which reads and polls by itself.
   const cloud = cloudProfiles(ctx, id);
+  // The remote's connection (issue 278, C62 to C65): its own module; `null` keeps the screen as it was.
+  const conn = local ? null : machineConnection(ctx, id, { reread: () => draw(), repaint: () => last && paint(last) });
 
   const hourButtons = WINDOWS.map((h) => el('button', { type: 'button', 'aria-pressed': String(h === hours), 'data-hours': h, onClick: () => setHours(h) }, `${h} h`));
   const toggle = el('div', { class: 'tm-seg', role: 'group', 'aria-label': 'Janela do gráfico' }, ...hourButtons);
@@ -578,12 +581,14 @@ export async function mount(area, ctx) {
     titleText.textContent = label;
     ctx.title(label);
     const shownProblem = problem && problem.key === reconnectKey(machine) ? problem.message : null;
-    const condition = local
+    const legacy = local
       ? { faded: false, parts: [] }
       : (reconnectParts(machine, data.reading, { retry: () => draw(), start: () => reconnect('POST'), cancel: () => reconnect('DELETE'), pending, problem: shownProblem, now }) ??
         conditionParts(machine, data.reading, { retry: () => draw(), version: data.version, now }));
-    if (sub) sub.textContent = headerLine(data.reading, machine, { local, offline: condition.faded, now }) || (local ? 'A telemetria medida pelo núcleo daqui' : 'Máquina remota');
-    if (!local && machine) pillSlot.replaceChildren(pill(statePill(machine)));
+    const condition = conn?.view(data, legacy, now) ?? legacy;
+    const line = headerLine(data.reading, machine, { local, offline: condition.faded, now });
+    if (sub) sub.textContent = (conn ? conn.headerLine(line) : line) || (local ? 'A telemetria medida pelo núcleo daqui' : 'Máquina remota');
+    if (!local && machine) pillSlot.replaceChildren(pill(conn?.pill() ?? statePill(machine)));
     const ownPort = Number(globalThis.location?.port) || null;
     const body = data.reading || local || remoteCondition(machine) === null ? machineBody(data, { local, filter, setFilter, now, ownPort }) : [];
     const shown = condition.faded && data.reading ? [el('div', { class: 'tm-faded', 'aria-label': 'Última leitura guardada' }, ...body)] : body;
@@ -598,6 +603,7 @@ export async function mount(area, ctx) {
       if (active.getAttribute?.('data-filter')) key = `[data-filter="${active.getAttribute('data-filter')}"]`;
       else if (active.getAttribute?.('data-hours')) key = `[data-hours="${active.getAttribute('data-hours')}"]`;
       else if (active.getAttribute?.('data-rc-action')) key = `[data-rc-action="${active.getAttribute('data-rc-action')}"]`;
+      else if (active.getAttribute?.('data-mc-action')) key = `[data-mc-action="${active.getAttribute('data-mc-action')}"]`;
     }
     area.replaceChildren(...nodes);
     if (!key) return;
@@ -664,6 +670,7 @@ export async function mount(area, ctx) {
         }
       }
       if (mine !== request || ctx.signal.aborted) return;
+      conn?.take(machinesBody, telemetry);
       last = {
         version: typeof telemetry?.version === 'number' ? telemetry.version : null,
         hours,

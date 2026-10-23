@@ -158,6 +158,9 @@ const ICONS = {
   // The cloud connectors (issue 277): the cloud and Entrar.
   cloud: '<path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/>',
   'log-in': '<path d="m10 17 5-5-5-5"/><path d="M15 12H3"/><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/>',
+  // The remote machine's connection (issue 278, C62 to C65): Parar o túnel and Onde roda
+  square: '<rect width="18" height="18" x="3" y="3" rx="2"/>',
+  'map-pin': '<path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/>',
 };
 // The detail's Workflow tab registers the icon as `graph`: the same drawing as `workflows`.
 ICONS.graph = ICONS.workflows;
