@@ -7,6 +7,8 @@
 // #180 adds the "Máquinas" block of A6 and A7 (machines.rs) and the remote sessions' label (A2).
 // #244 adds, under an unreachable remote, Reconectar, its running line and the way to set it up (A8).
 // #277 adds the "Nuvens" block of A9 (clouds.rs): one line per AWS SSO session and Entrar.
+// #278 adds the Workstation's connection to the "Máquinas" block (A9): the tunnel's state, the reason
+// it is down, "Entrar na AWS e subir o túnel", Reconectar, Parar and the running line.
 
 use serde::Deserialize;
 
@@ -191,6 +193,10 @@ pub enum Item {
     /// "Reconectar a <label>" (#244, A8): the click asks the core to run the machine's reconnect
     /// command (`POST /api/machines/<id>/reconnect`). Indented, with no dot.
     Reconnect { id: String, text: String },
+    /// "Entrar na AWS e subir o túnel", "Reconectar a <label>" or "Subir o túnel" of a machine with a
+    /// `connection` (#278, A9): the click asks the core to run `verb` (`POST
+    /// /api/machines/<id>/connection/<verb>`). Indented, with no dot.
+    Connection { id: String, verb: machines::ConnectionVerb, text: String },
     /// A cloud session line (#277, A9): the click opens the window on Conexões.
     Cloud { text: String, dot: Dot },
     /// "Entrar na AWS (<session>)" (#277, A9): the click asks the core to run the session's login
@@ -235,6 +241,8 @@ pub const SESSION_IN_DESKTOP: &str = "desktop:";
 pub const MACHINE: &str = "machine:";
 /// Prefix of the ids of the "Reconectar a <label>" items (#244).
 pub const RECONNECT: &str = "reconnect:";
+/// Prefix of the ids of the connection items (#278): `connection:<verb>:<machine>#<n>`.
+pub const CONNECTION: &str = "connection:";
 /// Id of the cloud session lines (#277).
 pub const CLOUD: &str = "cloud#";
 /// Prefix of the ids of the "Entrar na AWS (<session>)" items (#277).
@@ -275,8 +283,9 @@ pub fn build(input: &Input) -> Vec<Item> {
             if input.no_attention && input.attention.is_none() {
                 m.push(Item::Detail("Este núcleo não lista quem precisa de você: atualize-o".into()));
             } else {
-                let mut block = input.machines.map(|ms| machines_block(ms, input.now_ms)).unwrap_or_default();
-                let clouds = input.clouds.map(|a| clouds_block(a, input.now_ms, input.utc_offset_s)).unwrap_or_default();
+                let mut block = input.machines.map(|ms| machines_block(ms, input.now_ms, input.utc_offset_s)).unwrap_or_default();
+                let links = input.machines.map(machines::cloud_links).unwrap_or_default();
+                let clouds = input.clouds.map(|a| clouds_block(a, &links, input.now_ms, input.utc_offset_s)).unwrap_or_default();
                 if !block.is_empty() && !clouds.is_empty() {
                     block.push(Item::Separator);
                 }
@@ -369,13 +378,18 @@ fn summary(m: &mut Vec<Item>, a: &Attention) {
 
 /// The "Máquinas" block (A6, A7): a header, one row per machine and one item per open alert of a
 /// connected machine. Empty without machines to show, so a core without telemetry shows no block.
-fn machines_block(ms: &[machines::Machine], now_ms: u64) -> Vec<Item> {
+fn machines_block(ms: &[machines::Machine], now_ms: u64, offset_s: i64) -> Vec<Item> {
     let mut b = Vec::new();
     for x in ms.iter().filter(|x| x.summary.state != "not-configured") {
         let s = &x.summary;
         let label = machines::display_label(s);
         let row = |text: String, dot: Dot| Item::Machine { id: s.id.clone(), text, dot };
         let reading = x.telemetry.as_ref().and_then(|t| t.current.as_ref());
+        // #278: a remote with a `connection` says the tunnel's state; without one, as in #244.
+        if let Some(c) = s.connection.as_ref().filter(|_| s.id != machines::LOCAL_ID && s.state != "incompatible-version") {
+            connection_rows(&mut b, x, c, now_ms, offset_s);
+            continue;
+        }
         match s.state.as_str() {
             "unreachable" if s.reconnect_running() => {
                 // A8 b: one at a time, so the item becomes a grey line with the count, no click.
@@ -420,10 +434,65 @@ fn machines_block(ms: &[machines::Machine], now_ms: u64) -> Vec<Item> {
     b
 }
 
+/// The rows of a remote with a `connection` (#278, A9):
+/// - while a job runs, the row says the step ("entrando na AWS", "subindo o túnel") and grey lines
+///   count it, with nothing to click (one at a time; Cancelar is in the window, C64);
+/// - up: "túnel no ar há 9 h 50 min · 4 portas", its open alerts and, with a stop command, "Parar o
+///   túnel…", which opens the machine's screen for the confirmation (the tray never stops by itself);
+/// - stopped by you: "parada por você", and "Subir o túnel" when the core can start it;
+/// - down: "sem conexão desde 03:11", the reason in plain words and the action that fits it:
+///   "Entrar na AWS e subir o túnel" when the core can (`loginAndStart`), otherwise "Reconectar a
+///   <label>"; without a connection configured, the #244 way to set it up.
+fn connection_rows(b: &mut Vec<Item>, x: &machines::Machine, c: &machines::Connection, now_ms: u64, offset_s: i64) {
+    let s = &x.summary;
+    let label = machines::display_label(s);
+    let text = format!("{label} · {}", machines::connection_row(s, c, now_ms, offset_s));
+    let row = |dot: Dot| Item::Machine { id: s.id.clone(), text: text.clone(), dot };
+    let action = |verb: machines::ConnectionVerb, text: String| Item::Connection { id: s.id.clone(), verb, text };
+    if c.running() {
+        b.push(row(Dot::Yellow));
+        b.extend(machines::connection_running_lines(s, c, now_ms).into_iter().map(Item::Detail));
+        return;
+    }
+    match c.state.as_str() {
+        "up" => {
+            b.push(row(Dot::Green));
+            let reading = x.telemetry.as_ref().and_then(|t| t.current.as_ref());
+            for a in x.telemetry.iter().flat_map(|t| &t.alerts).filter(|a| a.kind != machines::UNREACHABLE_KIND) {
+                let dot = if a.level == "error" { Dot::Red } else { Dot::Yellow };
+                b.push(Item::Machine { id: s.id.clone(), text: format!("{} · {label}", machines::alert_text(a, reading, now_ms)), dot });
+            }
+            if c.actions.stop {
+                b.push(Item::MachineLink { id: s.id.clone(), text: "Parar o túnel…".into() });
+            }
+        }
+        "stopped" => {
+            b.push(row(Dot::Empty));
+            if c.actions.start {
+                b.push(action(machines::ConnectionVerb::Start, "Subir o túnel".into()));
+            }
+        }
+        _ => {
+            b.push(row(Dot::Empty));
+            if let Some(reason) = machines::connection_reason_line(s, c, now_ms).or_else(|| machines::unreachable_reason(s)) {
+                b.push(Item::Detail(reason));
+            }
+            if c.actions.login_and_start {
+                b.push(action(machines::ConnectionVerb::LoginAndStart, "Entrar na AWS e subir o túnel".into()));
+            } else if c.actions.reconnect {
+                b.push(action(machines::ConnectionVerb::Reconnect, format!("Reconectar a {label}")));
+            } else if !c.configured {
+                b.push(Item::MachineLink { id: s.id.clone(), text: "Como reconectar daqui…".into() });
+            }
+        }
+    }
+}
+
 /// The "Nuvens" block (A9): a header and one line per session, the one closest to expiring first.
 /// Under a session that asks for it, "Entrar na AWS (<session>)"; while its login runs, a grey line
-/// with the count instead (one at a time, as A8). Empty without sessions: no block.
-fn clouds_block(aws: &clouds::Aws, now_ms: u64, offset_s: i64) -> Vec<Item> {
+/// with the count instead (one at a time, as A8). Empty without sessions: no block. `links`: the
+/// sessions a machine's tunnel depends on (#278), whose line ends in "· a Workstation usa".
+fn clouds_block(aws: &clouds::Aws, links: &[(String, String)], now_ms: u64, offset_s: i64) -> Vec<Item> {
     let mut b = Vec::new();
     for s in clouds::ordered(aws) {
         let dot = match s.state.as_str() {
@@ -432,7 +501,11 @@ fn clouds_block(aws: &clouds::Aws, now_ms: u64, offset_s: i64) -> Vec<Item> {
             "expired" => Dot::Red,
             _ => Dot::Empty,
         };
-        b.push(Item::Cloud { text: clouds::line(s, now_ms, offset_s), dot });
+        let mut text = clouds::line(s, now_ms, offset_s);
+        for (_, machine) in links.iter().filter(|(session, _)| *session == s.name) {
+            text.push_str(&format!(" · a {machine} usa"));
+        }
+        b.push(Item::Cloud { text, dot });
         if s.login_running() {
             b.push(Item::Detail(clouds::waiting_line(s, now_ms)));
         } else if s.offers_login(aws) {
@@ -503,7 +576,7 @@ mod tests {
         m.iter()
             .map(|i| match i {
                 Item::Text { text, .. } | Item::Header { text, .. } | Item::Session { text, .. } | Item::Action { text, .. } | Item::Machine { text, .. } | Item::Cloud { text, .. } => text.clone(),
-                Item::MachineLink { text, .. } | Item::Reconnect { text, .. } | Item::CloudLogin { text, .. } => format!("  {text}"),
+                Item::MachineLink { text, .. } | Item::Reconnect { text, .. } | Item::Connection { text, .. } | Item::CloudLogin { text, .. } => format!("  {text}"),
                 Item::Detail(t) => format!("  {t}"),
                 Item::Check { text, checked, .. } => format!("{}{text}", if *checked { "✓ " } else { "" }),
                 Item::Separator => "—".into(),
@@ -1131,6 +1204,156 @@ mod tests {
         assert_eq!(t[at + 1], "  Aguardando o navegador · 0:48");
         assert!(matches!(m[at + 1], Item::Detail(_)), "grey, no click");
         assert!(!m.iter().any(|i| matches!(i, Item::CloudLogin { session, .. } if session == "sessao-exemplo")));
+    }
+
+    // #278, A9: the Workstation's connection in the "Máquinas" block.
+
+    /// 08:11 of the morning after, UTC in the tests: the tunnel fell at 03:11, the session expired at 03:10.
+    const MORNING: &str = "2026-10-19T08:11:00.000Z";
+    /// 23:10 UTC, the wireframes' clock (`NOW_MS`).
+    const EVENING: &str = "2026-10-18T23:10:00.000Z";
+
+    const PORTS4: &str = r#"[{ "localPort": 14720, "remoteHost": "127.0.0.1", "remotePort": 4720, "state": "up", "heldBy": null },
+        { "localPort": 15000, "remoteHost": "127.0.0.1", "remotePort": 5000, "state": "up", "heldBy": null },
+        { "localPort": 15001, "remoteHost": "127.0.0.1", "remotePort": 5001, "state": "idle", "heldBy": null },
+        { "localPort": 15002, "remoteHost": "127.0.0.1", "remotePort": 5002, "state": "idle", "heldBy": null }]"#;
+    const CLOUD_VALID: &str = r#"{ "connector": "aws", "profile": "perfil-dev", "session": "sessao-exemplo", "state": "valid", "expiresAt": "2026-10-19T16:14:00.000Z" }"#;
+    const CLOUD_EXPIRED: &str = r#"{ "connector": "aws", "profile": "perfil-dev", "session": "sessao-exemplo", "state": "expired", "expiresAt": "2026-10-19T03:10:00.000Z" }"#;
+    const NO_ACTIONS: &str = r#"{ "start": false, "stop": false, "reconnect": false, "loginAndStart": false }"#;
+
+    /// `connection` as the core serves it, with the parts each test changes.
+    fn connection(state: &str, since: &str, ports: &str, cloud: &str, last_error: &str, actions: &str, job: &str) -> String {
+        format!(
+            r#"{{ "configured": true, "state": "{state}", "since": {since}, "ports": {ports}, "cloud": {cloud}, "lastError": {last_error}, "actions": {actions},
+                 "command": {{ "start": ["/caminho/para/conectar.sh", "tunnel", "start"], "stop": ["/caminho/para/conectar.sh", "tunnel", "stop"], "startTimeoutSeconds": 180, "stopTimeoutSeconds": 180 }},
+                 "job": {job}, "logFile": "/dados/reconnect.log" }}"#
+        )
+    }
+
+    /// This Mac and the Workstation with `connection`; connected or not, as `state` says.
+    fn ws_machines(state: &str, connection: &str) -> Vec<machines::Machine> {
+        let reason = if state == "unreachable" { r#""port-closed""# } else { "null" };
+        let s = summaries(&format!(
+            r#"[{LOCAL_SUMMARY},
+               {{ "id": "workstation", "label": "Workstation", "state": "{state}", "reason": {reason}, "version": 1, "port": 14720, "lastReadAt": "2026-10-19T03:11:00.000Z", "alerts": 0,
+                  "reconnect": {CONFIGURED_IDLE}, "connection": {connection} }}]"#
+        ));
+        let alerts = if state == "unreachable" { UNREACHABLE_ALERT } else { "" };
+        vec![
+            machines::Machine { summary: s[0].clone(), telemetry: Some(telemetry(34.0, 2.1, 10, &[("/", 61.0)], "")) },
+            machines::Machine { summary: s[1].clone(), telemetry: Some(telemetry(20.0, 1.0, 16, &[("/", 40.0)], alerts)) },
+        ]
+    }
+
+    fn block_at(ms: &[machines::Machine], now: &str) -> (Vec<String>, Vec<Item>) {
+        let a = Attention::from_json(ZERO).unwrap();
+        let n = CoreState::Up { port: 4720 };
+        let m = build(&Input { machines: Some(ms), now_ms: machines::parse_iso_ms(now).unwrap(), ..input(&n, Some(&a)) });
+        let t = texts(&m);
+        let from = t.iter().position(|x| x == "Máquinas").unwrap();
+        let to = from + t[from..].iter().position(|x| x == "—").unwrap();
+        (t[from..to].to_vec(), m[from..to].to_vec())
+    }
+
+    #[test]
+    fn a9_up_says_how_long_the_tunnel_is_up_and_offers_stop() {
+        let c = connection("up", r#""2026-10-18T13:20:00.000Z""#, PORTS4, CLOUD_VALID, "null", r#"{ "start": false, "stop": true, "reconnect": true, "loginAndStart": false }"#, "null");
+        let (t, m) = block_at(&ws_machines("connected", &c), EVENING);
+        assert_eq!(t, ["Máquinas", "Este Mac · CPU 34% · disco 61%", "Workstation · túnel no ar há 9 h 50 min · 4 portas", "  Parar o túnel…"]);
+        assert!(matches!(&m[2], Item::Machine { dot: Dot::Green, .. }));
+        assert!(matches!(&m[3], Item::MachineLink { id, .. } if id == "workstation"), "opens the machine's screen for the confirmation; the tray never stops");
+        let c = connection("up", "null", "[]", "null", "null", NO_ACTIONS, "null");
+        assert_eq!(block_at(&ws_machines("connected", &c), EVENING).0[2], "Workstation · túnel no ar", "no stop command: no Parar");
+    }
+
+    #[test]
+    fn a9_down_sso_expired_offers_login_and_start() {
+        let c = connection(
+            "down",
+            r#""2026-10-19T03:11:00.000Z""#,
+            "[]",
+            CLOUD_EXPIRED,
+            r#"{ "reason": "sso-expired", "at": "2026-10-19T03:11:00.000Z", "exitCode": null, "holder": null }"#,
+            r#"{ "start": true, "stop": false, "reconnect": true, "loginAndStart": true }"#,
+            "null",
+        );
+        let (t, m) = block_at(&ws_machines("unreachable", &c), MORNING);
+        assert_eq!(t, ["Máquinas", "Este Mac · CPU 34% · disco 61%", "Workstation · sem conexão desde 03:11", "  Túnel fora: SSO expirado há 5 h", "  Entrar na AWS e subir o túnel"]);
+        assert!(matches!(&m[2], Item::Machine { dot: Dot::Empty, .. }), "grey");
+        assert!(matches!(&m[3], Item::Detail(_)), "the reason is a disabled line");
+        assert_eq!(m[4], Item::Connection { id: "workstation".into(), verb: machines::ConnectionVerb::LoginAndStart, text: "Entrar na AWS e subir o túnel".into() });
+        assert!(!m.iter().any(|i| matches!(i, Item::Reconnect { .. })), "the #244 item gives way to the connection's");
+    }
+
+    #[test]
+    fn a9_other_reasons_in_plain_words_with_reconnect() {
+        let reasons = [
+            (r#"{ "reason": "port-busy", "holder": "node" }"#, "Porta 14720 ocupada no Mac por node"),
+            (r#"{ "reason": "port-busy", "holder": null }"#, "Porta 14720 ocupada no Mac"),
+            (r#"{ "reason": "ssm-agent-offline", "exitCode": 255 }"#, "Túnel fora: agente SSM da Workstation offline"),
+            (r#"{ "reason": "host-unknown", "exitCode": 255 }"#, "Túnel fora: host desconhecido no ~/.ssh/config"),
+            (r#"{ "reason": "key-refused", "exitCode": 255 }"#, "Túnel fora: chave SSH recusada"),
+            (r#"{ "reason": "exit-code", "exitCode": 255 }"#, "Túnel fora: o comando saiu com o código 255"),
+            (r#"{ "reason": "exit-code", "exitCode": null }"#, "Túnel fora: o comando de subir não terminou"),
+            (r#"{ "reason": "core-not-answering" }"#, "Túnel no ar, núcleo de lá parado"),
+            (r#"{ "reason": "motivo-novo" }"#, "A porta 14720 não aceita conexão: o túnel parece caído"),
+            ("null", "A porta 14720 não aceita conexão: o túnel parece caído"),
+        ];
+        for (error, line) in reasons {
+            let c = connection("failing", r#""2026-10-19T03:11:00.000Z""#, "[]", CLOUD_VALID, error, r#"{ "start": true, "stop": false, "reconnect": true, "loginAndStart": false }"#, "null");
+            let (t, m) = block_at(&ws_machines("unreachable", &c), MORNING);
+            assert_eq!(t[2..], ["Workstation · sem conexão desde 03:11".to_string(), format!("  {line}"), "  Reconectar a Workstation".into()], "{error}");
+            assert_eq!(m[4], Item::Connection { id: "workstation".into(), verb: machines::ConnectionVerb::Reconnect, text: "Reconectar a Workstation".into() });
+        }
+    }
+
+    #[test]
+    fn a9_running_is_a_grey_line_with_the_step_and_the_count() {
+        let job = |kind: &str, steps: &str, step: &str| {
+            format!(r#"{{ "kind": "{kind}", "steps": {steps}, "step": "{step}", "state": "running", "startedAt": "2026-10-19T08:10:00.000Z", "endedAt": null, "stepStartedAt": "2026-10-19T08:10:12.000Z", "stepTimeoutSeconds": 300, "startedBy": "local" }}"#)
+        };
+        let cases = [
+            (job("login-and-start", r#"["login", "start", "read"]"#, "login"), "starting", vec!["Workstation · entrando na AWS", "  Entrando na AWS · aguardando o navegador · 0:48", "  depois: subir o túnel"]),
+            (job("login-and-start", r#"["login", "start", "read"]"#, "start"), "starting", vec!["Workstation · subindo o túnel", "  Subindo o túnel · 0:48"]),
+            (job("reconnect", r#"["stop", "start", "read"]"#, "stop"), "stopping", vec!["Workstation · parando o túnel", "  Parando o túnel · 0:48", "  depois: subir o túnel"]),
+            (job("stop", r#"["stop"]"#, "stop"), "stopping", vec!["Workstation · parando o túnel", "  Parando o túnel · 0:48"]),
+            (job("start", r#"["start", "read"]"#, "read"), "starting", vec!["Workstation · subindo o túnel", "  Lendo a Workstation · 0:48"]),
+        ];
+        for (j, state, lines) in cases {
+            let c = connection(state, r#""2026-10-19T08:10:00.000Z""#, "[]", CLOUD_EXPIRED, "null", NO_ACTIONS, &j);
+            let (t, m) = block_at(&ws_machines("unreachable", &c), MORNING);
+            assert_eq!(t[2..], lines, "{j}");
+            assert!(matches!(&m[2], Item::Machine { dot: Dot::Yellow, .. }), "the row opens the screen, where Cancelar is");
+            assert!(m[3..].iter().all(|i| matches!(i, Item::Detail(_))), "nothing to click while it runs");
+        }
+    }
+
+    #[test]
+    fn a9_stopped_by_you_is_grey_and_offers_start() {
+        let c = connection("stopped", r#""2026-10-18T19:02:00.000Z""#, "[]", CLOUD_VALID, "null", r#"{ "start": true, "stop": false, "reconnect": false, "loginAndStart": false }"#, "null");
+        let (t, m) = block_at(&ws_machines("unreachable", &c), EVENING);
+        assert_eq!(t[2..], ["Workstation · parada por você", "  Subir o túnel"]);
+        assert!(matches!(&m[2], Item::Machine { dot: Dot::Empty, .. }));
+        assert_eq!(m[3], Item::Connection { id: "workstation".into(), verb: machines::ConnectionVerb::Start, text: "Subir o túnel".into() });
+    }
+
+    #[test]
+    fn a9_a_core_without_connection_keeps_the_244_rows() {
+        for connection in ["null", r#""inesperado""#, r#"{ "configured": true }"#] {
+            let ms = ws_machines("unreachable", connection);
+            assert_eq!(ms[1].summary.connection, None, "{connection}");
+            assert_eq!(block_at(&ms, MORNING).0[2..], ["Workstation · sem conexão há 5 h", "  A porta 14720 não aceita conexão: o túnel parece caído", "  Reconectar a Workstation"]);
+        }
+    }
+
+    #[test]
+    fn a9_the_linked_session_says_the_workstation_uses_it() {
+        let c = connection("up", r#""2026-10-18T13:20:00.000Z""#, PORTS4, CLOUD_VALID, "null", NO_ACTIONS, "null");
+        let (a, ms, aws) = (Attention::from_json(ZERO).unwrap(), ws_machines("connected", &c), clouds::tests::a9());
+        let n = CoreState::Up { port: 4720 };
+        let t = texts(&build(&with_clouds(&n, Some(&a), Some(&ms), Some(&aws))));
+        assert!(t.contains(&"AWS · sessao-exemplo · expira em 14 min · a Workstation usa".to_string()), "{t:?}");
+        assert!(t.contains(&"AWS · sessao-lab · válida até 18:40".to_string()), "only the linked one");
     }
 
     #[test]
