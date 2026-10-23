@@ -23,7 +23,7 @@ const frotaEm = (agora: () => number, fusoHorario = 'UTC') => new FleetReader({ 
 
 describe('montarDashboard com o cenário p1 do simulador', () => {
   test('os seis números', async () => {
-    const agora = Date.now();
+    const agora = NOW;
     await seedPanelScenario(storage, 'p1', agora);
     const d = await montarDashboard(frotaEm(() => agora));
     assert.deepEqual(d.numbers.sessions, { total: 3, active: 1, waiting: 2, withError: 0, blocked: 1, idle: 1 });
@@ -38,7 +38,7 @@ describe('montarDashboard com o cenário p1 do simulador', () => {
   });
 
   test('os agentes: quem trabalha primeiro, com subagentes, turnos, plano e custo', async () => {
-    const agora = Date.now();
+    const agora = NOW;
     await seedPanelScenario(storage, 'p1', agora);
     const d = await montarDashboard(frotaEm(() => agora));
     assert.deepEqual(
@@ -69,7 +69,7 @@ describe('montarDashboard com o cenário p1 do simulador', () => {
   });
 
   test('a atividade recente: o pedido de permissão e a interrupção, mais novo primeiro', async () => {
-    const agora = Date.now();
+    const agora = NOW;
     await seedPanelScenario(storage, 'p1', agora);
     const d = await montarDashboard(frotaEm(() => agora));
     assert.deepEqual(
@@ -212,7 +212,7 @@ describe('GET /api/dashboard', () => {
     startLocalApi({ panelBuilder: new MontadorDoPainel({ storage, contas, desktop: null, trabalho: null as never }), hooks: { storage }, port: 0, log: () => {}, ...(frota ? { fleet: frota } : {}) });
 
   test('responde o dashboard quando o núcleo tem a frota', async () => {
-    const agora = Date.now();
+    const agora = NOW;
     await seedPanelScenario(storage, 'p1', agora);
     api = await subir(frotaEm(() => agora));
     const r = await fetch(`${api.url}/api/dashboard`);
