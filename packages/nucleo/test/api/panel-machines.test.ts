@@ -493,6 +493,28 @@ describe('#262 one build per tick', () => {
   });
 });
 
+describe('#262 a hanging telemetry and connection source', () => {
+  test('decorate answers within one read budget, with the machine entry still there', async () => {
+    status = { state: 'unreachable', reason: 'no-response', version: null };
+    let asked = 0;
+    connectionOf = () => {
+      asked++;
+      return new Promise<never>(() => {});
+    };
+    const hanging = { machines: () => new Promise<never>(() => {}) } as unknown as ConstructorParameters<typeof PanelMachines>[0]['telemetry'];
+    const body = { needYou: { total: 0, yourTurn: 0, byAccount: [], family: [], machine: [] } };
+    const t0 = performance.now();
+    const n = (await new PanelMachines({ reader, telemetry: hanging, local: { needYouItems: async () => [] } }).decorate(body, 'me', new URL('http://127.0.0.1/api/panel/me?needYou=all'))).needYou as Record<string, any>;
+    const took = performance.now() - t0;
+    assert.ok(took < reader.timeoutMs + 300, `took ${Math.round(took)} ms, the budget is ${reader.timeoutMs} ms`);
+    assert.ok(asked <= 1, 'the connection is asked at most once');
+    assert.equal(n.machines.length, 1);
+    assert.equal(n.machines[0].id, WS.id);
+    assert.equal(n.machines[0].state, 'unreachable');
+    assert.equal(n.machines[0].connection, null);
+  });
+});
+
 describe('#262 the session the panel is open on', () => {
   test('is never listed, on this Mac', async () => {
     const waiting = (await localItems('nobody'))[0];

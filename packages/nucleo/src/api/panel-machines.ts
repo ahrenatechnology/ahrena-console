@@ -170,7 +170,9 @@ export class PanelMachines {
   private async machineEntries(remotes: readonly RemoteSessionSource[]): Promise<PanelNeedYouMachine[]> {
     const reader = this.o.reader;
     if (!reader || remotes.length === 0) return [];
-    const bounded = <V>(p: Promise<V>): Promise<V | null> => withDeadline(p, reader.timeoutMs);
+    // One deadline for both reads: the connections get only what the telemetry read left of it.
+    const deadline = Date.now() + reader.timeoutMs;
+    const bounded = <V>(p: Promise<V>): Promise<V | null> => withDeadline(p, Math.max(0, deadline - Date.now()));
     const summaries = this.o.telemetry ? await bounded(this.o.telemetry.machines()) : null;
     // A summary that carries #278's connection already asked for it; only the others ask the reader.
     const connections = await Promise.all(
