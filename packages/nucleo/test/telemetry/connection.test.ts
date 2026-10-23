@@ -381,6 +381,49 @@ describe('#278 the start, stop and reconnect jobs', () => {
     assert.equal(existsSync(m), true);
   });
 
+  test('#278 stop, then the machine answers again outside the console: up, the actions come back, and the next drop alerts', async () => {
+    const s = setup({ start: cmd('print', 'starting', '0'), stop: cmd('print', 'stopping', '0') }, { machine: UP });
+    await s.conn.stop('ws-exemplo', 'ui');
+    await s.conn.settled('ws-exemplo');
+    s.state.machine = DOWN;
+    assert.equal((await s.conn.status('ws-exemplo'))!.state, 'stopped');
+    assert.equal(s.conn.suppressUnreachable('ws-exemplo'), true);
+    // The tunnel comes back some other way (a terminal, a reboot): the machine answers, no job runs.
+    s.state.machine = UP;
+    const st = (await s.conn.status('ws-exemplo'))!;
+    assert.equal(st.state, 'up');
+    assert.deepEqual({ stop: st.actions.stop, reconnect: st.actions.reconnect }, { stop: true, reconnect: true });
+    assert.equal(s.conn.suppressUnreachable('ws-exemplo'), false);
+    // The next drop opens machine-unreachable.
+    s.state.machine = DOWN;
+    const tracker = new AlertTracker();
+    const entered: string[] = [];
+    const m = new RemoteMachine({
+      config: { id: 'ws-exemplo', label: 'Workstation', port: 14720 },
+      get: async () => ({ kind: 'unreachable', reason: 'port-closed' }),
+      store: { putSample: async () => {}, listPoints: async () => [], latest: async () => null },
+      tracker,
+      onAlertChange: (c) => c.change === 'entered' && entered.push(c.alert.id),
+      suppressUnreachable: (id) => s.conn.suppressUnreachable(id),
+    });
+    await m.pollOnce();
+    assert.deepEqual(entered, ['machine-unreachable']);
+  });
+
+  test('#278 the stopped mark is not cleared while the machine still answers during the stop job', async () => {
+    const s = setup({ start: cmd('print', 'starting', '0'), stop: cmd('print', 'stopping', '0') }, { machine: UP });
+    let release = () => {};
+    s.state.readGate = new Promise<void>((r) => (release = r));
+    await s.conn.stop('ws-exemplo', 'ui');
+    await waitFor(async () => (await s.conn.status('ws-exemplo'))!.job?.step === 'read');
+    assert.equal((await s.conn.status('ws-exemplo'))!.state, 'stopping');
+    assert.equal(s.conn.suppressUnreachable('ws-exemplo'), true);
+    s.state.machine = DOWN;
+    release();
+    await s.conn.settled('ws-exemplo');
+    assert.equal((await s.conn.status('ws-exemplo'))!.state, 'stopped');
+  });
+
   test('#278 stop without a stop command is refused, nothing runs', async () => {
     const s = setup({ start: cmd('marker', marker()) }, { machine: UP });
     assert.deepEqual(await s.conn.stop('ws-exemplo', 'ui'), { kind: 'refused', reason: 'no-stop-command' });

@@ -14,9 +14,9 @@
 //   old route and this one never run two starts at once; the stop step on a second runner with the
 //   same mechanics and the same reconnect.log. One job per machine at a time.
 // - The state (`deriveConnection`, pure): `starting` / `stopping` while a job runs; `stopped` after a
-//   stop the user asked for that exited 0 (until a start through the console); `up` while the remote
-//   núcleo answers through the port; `failing` when the last start failed and it still does not;
-//   `down` otherwise.
+//   stop the user asked for that exited 0 (until a start through the console, or the machine answering
+//   again with no job alive); `up` while the remote núcleo answers through the port; `failing` when
+//   the last start failed and it still does not; `down` otherwise.
 // - The reason (`lastError`), a CLOSED list in this order: the linked session expired
 //   (`sso-expired`); the port held by another process on this Mac (`port-busy`, with its process name
 //   from the existing probe); the port open and no núcleo answering (`core-not-answering`); after a
@@ -337,10 +337,21 @@ export class MachineConnection {
     return c !== undefined && this.o.registry.fileInvalid() ? INVALID_MACHINES_FILE : c;
   }
 
+  /**
+   * "Stopped by you" ends once the machine answers again with no job alive (the tunnel brought back
+   * outside the console: a terminal, a reboot): from then on it is `up`, and its next drop alerts.
+   */
+  private clearStopIfAnswering(id: string, e: Entry): void {
+    if (e.stoppedAt === null || e.job?.alive === true) return;
+    const state = this.o.registry.get(id)?.status().state;
+    if (state === 'connected' || state === 'incompatible-version') e.stoppedAt = null;
+  }
+
   /** Stopped by the user, or a stop running: the drop does not raise machine-unreachable (remote.ts). */
   suppressUnreachable(id: string): boolean {
     const e = this.entries.get(id);
     if (!e) return false;
+    this.clearStopIfAnswering(id, e);
     return e.stoppedAt !== null || (e.job?.alive === true && e.job.view.kind === 'stop');
   }
 
@@ -365,6 +376,7 @@ export class MachineConnection {
     const machine = this.o.registry.get(id);
     if (config === undefined || !machine) return null;
     const e = this.entry(id);
+    this.clearStopIfAnswering(id, e);
     const [cloud, reading] = await Promise.all([this.cloudOf(config), this.o.localReading?.().catch(() => null) ?? Promise.resolve(null)]);
     const { status, memo } = deriveConnection({
       config,
