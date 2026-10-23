@@ -139,6 +139,8 @@ export interface MachineSessionsOptions {
   local: LocalScreens;
   /** #319: the remote session ids and last panels; a test passes one with its own clock. */
   remoteSessions?: RemoteSessionMap;
+  /** #262: the need-you of every machine on a remote session's panel (api/panel-machines.ts `decorate`). */
+  decoratePanel?: ((body: Record<string, unknown>, sessionId: string, url: URL) => Promise<Record<string, unknown>>) | null;
 }
 
 class RequestError extends Error {}
@@ -226,7 +228,7 @@ class MachineSessionsRoute {
     if (known && !known.imported) return false;
     const body = await this.panels.panel(id, url.searchParams, { localCopy: known !== null });
     if (!body) return false;
-    send(res, 200, body);
+    send(res, 200, this.o.decoratePanel ? await this.o.decoratePanel(body, id, url) : body);
     return true;
   }
 

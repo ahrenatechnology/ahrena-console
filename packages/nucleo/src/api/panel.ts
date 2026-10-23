@@ -522,7 +522,36 @@ export class MontadorDoPainel {
     return { total: items.length, items };
   }
 
+  /**
+   * #262: every item of this Mac's "precisam de você" for the panel of `sessionId`, in the panel's
+   * order and uncapped, as `montar` lists them (the session itself never). For api/panel-machines.ts.
+   */
+  async needYouItems(sessionId: string, local: string | null = null): Promise<NeedsYouItem[]> {
+    await this.atualizarFontes();
+    const id = this.apelido(sessionId);
+    const session = await this.storage.getSession(id);
+    return this.needYouList(id, session, this.doDesktop(id, local));
+  }
+
   private async precisamDe(sessionId: string, session: Session | null, desktop: DesktopSession | null): Promise<PanelNeedYou> {
+    const itens = await this.needYouList(sessionId, session, desktop);
+    // A contagem e a divisão por conta são só das que precisam de você: a sua vez não soma.
+    const precisam = itens.filter((i) => i.level === 'needs');
+    const porConta = new Map<string, { account: PanelAccount | null; n: number }>();
+    for (const i of precisam) {
+      const k = i.account?.id ?? '';
+      porConta.set(k, { account: i.account, n: (porConta.get(k)?.n ?? 0) + 1 });
+    }
+    return {
+      total: precisam.length,
+      yourTurn: itens.length - precisam.length,
+      byAccount: [...porConta.values()].sort((a, b) => b.n - a.n),
+      family: itens.filter((i) => i.relation !== null),
+      machine: itens.slice(0, MAX_MAQUINA),
+    };
+  }
+
+  private async needYouList(sessionId: string, session: Session | null, desktop: DesktopSession | null): Promise<NeedsYouItem[]> {
     const agora = this.agora();
     const minhaFamilia = familiaDe(session, desktop);
     const itens: NeedsYouItem[] = [];
@@ -556,20 +585,7 @@ export class MontadorDoPainel {
     // e, entre elas, o pedido mais recente, que é o que a pessoa lembra.
     const peso = (i: NeedsYouItem) => (i.level === 'needs' ? 1 : 0)
     itens.sort((a, b) => peso(b) - peso(a) || Number(b.urgent) - Number(a.urgent) || b.since.localeCompare(a.since));
-    // A contagem e a divisão por conta são só das que precisam de você: a sua vez não soma.
-    const precisam = itens.filter((i) => i.level === 'needs');
-    const porConta = new Map<string, { account: PanelAccount | null; n: number }>();
-    for (const i of precisam) {
-      const k = i.account?.id ?? '';
-      porConta.set(k, { account: i.account, n: (porConta.get(k)?.n ?? 0) + 1 });
-    }
-    return {
-      total: precisam.length,
-      yourTurn: itens.length - precisam.length,
-      byAccount: [...porConta.values()].sort((a, b) => b.n - a.n),
-      family: itens.filter((i) => i.relation !== null),
-      machine: itens.slice(0, MAX_MAQUINA),
-    };
+    return itens;
   }
 }
 
