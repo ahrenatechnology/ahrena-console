@@ -422,8 +422,8 @@ describe('issue 277: the Perfis de nuvem card (C66, C67)', () => {
     const c = card('local', async () => connectorsBody(aws({ sessions: [session(), session({ name: 'sessao-lab', state: 'valid', expiresAt: iso(Date.now() + 3_600_000) })] })));
     const node = c.profiles.node('Esta máquina');
     await until(() => !node.hasAttribute('hidden'));
-    assert.deepEqual(node.querySelectorAll('tbody tr').map((r) => r.getAttribute('data-session')), ['sessao-exemplo', 'sessao-lab']);
-    assert.deepEqual(node.querySelectorAll('tbody button').map((b) => texto(b)), ['Entrar', 'Entrar de novo']);
+    assert.deepEqual(node.querySelectorAll('tbody tr').map((r: ElementoFalso) => r.getAttribute('data-session')), ['sessao-exemplo', 'sessao-lab']);
+    assert.deepEqual(node.querySelectorAll('tbody button').map((b: ElementoFalso) => texto(b)), ['Entrar', 'Entrar de novo']);
     assert.match(texto(node), /deste Mac · lidos do ~\/.aws\/config daqui/);
     assert.equal(node.querySelector('a.cl-link')!.getAttribute('href'), '/ui/connections');
     c.change([{ type: 'connector', key: 'aws' }]);
@@ -470,7 +470,7 @@ describe('issue 277: the Perfis de nuvem card (C66, C67)', () => {
       await flush();
       assert.equal(c.reads.length, 2);
       assert.ok(node.classList.contains('cl-faded'));
-      assert.deepEqual(node.querySelectorAll('tbody tr').map((r) => r.getAttribute('data-session')), ['sessao-exemplo'], 'the last reading');
+      assert.deepEqual(node.querySelectorAll('tbody tr').map((r: ElementoFalso) => r.getAttribute('data-session')), ['sessao-exemplo'], 'the last reading');
       assert.equal(node.querySelector('button[data-cl-action="login"]'), null);
       assert.match(texto(node), /Sem conexão: estes são os de \d\d:\d\d\. Entrar volta quando a Workstation responder\./);
     } finally {
