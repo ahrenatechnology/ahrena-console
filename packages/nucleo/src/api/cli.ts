@@ -444,7 +444,8 @@ if (demo) {
   addSampler(SIMULATED_WORKSTATION.id, new SimulatedCollector('workstation'));
 } else if (!o.noTelemetry) {
   const platformCollector = collectorFor();
-  if (platformCollector) addSampler('local', withPlacement(platformCollector, new PlacementProbe({ log })));
+  // Decision 0013 section 5: the Mac's núcleo asks the cloud nothing about itself; only a remote one reads its placement.
+  if (platformCollector) addSampler('local', process.platform === 'darwin' ? platformCollector : withPlacement(platformCollector, new PlacementProbe({ log })));
   else log(`telemetry: no collector for ${process.platform}`);
   const get = loopbackGet();
   const onAlertChange = publishAlertChanges(changes);
