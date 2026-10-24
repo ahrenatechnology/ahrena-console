@@ -160,6 +160,8 @@ export class MontadorDoPainel {
   private precisamCache: { em: number; candidatas: Candidata[] } | null = null;
   private sessoesRecentes: { em: number; sessoes: Session[] } | null = null;
   private precisamRodando: Promise<Candidata[]> | null = null;
+  /** #262: each panel `montar` built, with its uncapped need-you list (`needYouItemsOf`). */
+  private readonly needYouOfPanel = new WeakMap<Panel, NeedsYouItem[]>();
 
   constructor({ storage, contas, desktop, trabalho, decisoes = null, agora = Date.now, custoMs = 30_000, precisamMs = 4_000, apelido = (id) => id, commit = null, commitDaPasta = () => null, abreSessao = false, version = API_VERSION }: OpcoesDoPainel) {
     this.version = version;
@@ -252,8 +254,9 @@ export class MontadorDoPainel {
     const planos = session ? await this.storage.listPlanRecords(session.id) : [];
     const bg = memoria ? Object.values(memoria.background) : [];
     const trabalho = this.trabalho?.ler(session?.cwd ?? pedido.cwd ?? desktop?.cwd ?? null, desktop?.branch ?? null) ?? null;
+    const precisam = await this.needYouList(pedido.sessionId, session, desktop);
 
-    return {
+    const panel: Panel = {
       version: 1,
       api: this.api(),
       generatedAt: new Date(agora).toISOString(),
@@ -268,12 +271,22 @@ export class MontadorDoPainel {
       subagents: subagentesDe(agentes, resumo ? iniciosDosTurnos(resumo) : []),
       children: await this.filhasDe(session, desktop),
       work: trabalho,
-      needYou: await this.precisamDe(pedido.sessionId, session, desktop),
+      needYou: precisamDe(precisam),
       prs: await this.prsAguardando(),
       decisions: this.decisoes
         ? await this.decisoes.doPainel(await this.alvoDe(pedido.sessionId, session, pedido.cwd ?? null, desktop, conta), pedido.decisoes ?? null)
         : null,
     };
+    this.needYouOfPanel.set(panel, precisam);
+    return panel;
+  }
+
+  /**
+   * #262: the uncapped need-you list `montar` built `panel` from, for api/panel-machines.ts on the same
+   * request (so it is not built twice); `null` for an object `montar` did not return.
+   */
+  needYouItemsOf(panel: object): NeedsYouItem[] | null {
+    return this.needYouOfPanel.get(panel as Panel) ?? null;
   }
 
   /** A sessão das decisões: o branch e a pasta que o painel conhece, e a conta dela. */
@@ -522,7 +535,18 @@ export class MontadorDoPainel {
     return { total: items.length, items };
   }
 
-  private async precisamDe(sessionId: string, session: Session | null, desktop: DesktopSession | null): Promise<PanelNeedYou> {
+  /**
+   * #262: every item of this Mac's "precisam de você" for the panel of `sessionId`, in the panel's
+   * order and uncapped, as `montar` lists them (the session itself never). For api/panel-machines.ts.
+   */
+  async needYouItems(sessionId: string, local: string | null = null): Promise<NeedsYouItem[]> {
+    await this.atualizarFontes();
+    const id = this.apelido(sessionId);
+    const session = await this.storage.getSession(id);
+    return this.needYouList(id, session, this.doDesktop(id, local));
+  }
+
+  private async needYouList(sessionId: string, session: Session | null, desktop: DesktopSession | null): Promise<NeedsYouItem[]> {
     const agora = this.agora();
     const minhaFamilia = familiaDe(session, desktop);
     const itens: NeedsYouItem[] = [];
@@ -556,21 +580,26 @@ export class MontadorDoPainel {
     // e, entre elas, o pedido mais recente, que é o que a pessoa lembra.
     const peso = (i: NeedsYouItem) => (i.level === 'needs' ? 1 : 0)
     itens.sort((a, b) => peso(b) - peso(a) || Number(b.urgent) - Number(a.urgent) || b.since.localeCompare(a.since));
-    // A contagem e a divisão por conta são só das que precisam de você: a sua vez não soma.
-    const precisam = itens.filter((i) => i.level === 'needs');
-    const porConta = new Map<string, { account: PanelAccount | null; n: number }>();
-    for (const i of precisam) {
-      const k = i.account?.id ?? '';
-      porConta.set(k, { account: i.account, n: (porConta.get(k)?.n ?? 0) + 1 });
-    }
-    return {
-      total: precisam.length,
-      yourTurn: itens.length - precisam.length,
-      byAccount: [...porConta.values()].sort((a, b) => b.n - a.n),
-      family: itens.filter((i) => i.relation !== null),
-      machine: itens.slice(0, MAX_MAQUINA),
-    };
+    return itens;
   }
+}
+
+/** The panel's `needYou` from its uncapped list (`needYouList`). */
+function precisamDe(itens: readonly NeedsYouItem[]): PanelNeedYou {
+  // A contagem e a divisão por conta são só das que precisam de você: a sua vez não soma.
+  const precisam = itens.filter((i) => i.level === 'needs');
+  const porConta = new Map<string, { account: PanelAccount | null; n: number }>();
+  for (const i of precisam) {
+    const k = i.account?.id ?? '';
+    porConta.set(k, { account: i.account, n: (porConta.get(k)?.n ?? 0) + 1 });
+  }
+  return {
+    total: precisam.length,
+    yourTurn: itens.length - precisam.length,
+    byAccount: [...porConta.values()].sort((a, b) => b.n - a.n),
+    family: itens.filter((i) => i.relation !== null),
+    machine: itens.slice(0, MAX_MAQUINA),
+  };
 }
 
 /** A sessão na família: o próprio id e o da mãe, pelo Desktop (`local_…`) ou pelo simulador. */

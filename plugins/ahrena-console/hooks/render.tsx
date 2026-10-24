@@ -64,13 +64,15 @@ import { GRAPH_STATE, shortCount, buildGraph, paginate, type GraphState, type Gr
 import { paleta, status as STATUS_COR } from './brand'
 import { charsFor, columns, fit, kids, type Node } from './fit'
 import { LEGACY_PORT } from './discover'
+import { downInScope, emptyText, hasMachineList, listFooter, needYouTooltip, scopeCounts, scopeList, scopeOf } from './machines'
+import { offlineLine, remoteGo, scopeRow, scopeSelect } from './render-machines'
 
 export const CARD_W = 34
 /** Todo card tem a mesma altura, ~190 px no Desktop (ver CARD_LINES): a borda e as linhas de conteúdo. */
 export const CARD_H = CARD_BORDER + CARD_LINES
 export const GAP = 2
 /** A versão deste plugin; o teste do núcleo confere com o plugin.json. */
-export const PLUGIN_VERSION = '0.0.36'
+export const PLUGIN_VERSION = '0.0.37'
 const KPI_W = 15
 /** No estreito, quantos cards de decisão cabem antes do rodapé "+N". */
 const DECISIONS_WHEN_NARROW = 3
@@ -1700,10 +1702,13 @@ function needYouLine(c: DrawContext, p: Panel, width: number, narrow: boolean) {
         </Box>
         <Button key="show-need-you" label="Ver" variant="primary" onPress={c.actions.showNeedYou} />
       </Box>
-      <Box display="none" hover={{ display: 'flex' }}>
-        <Text mono size="caption" color={YELLOW} wrap="truncate-end">
-          por conta: {split}
-        </Text>
+      {/* #262: the by-machine split first, when the core knows remote machines; otherwise today's by-account line. */}
+      <Box display="none" hover={{ display: 'flex' }} flexDirection="column">
+        {needYouTooltip(p, narrow, split).map((t, n) => (
+          <Text key={`need-you-tip-${n}`} mono size="caption" color={YELLOW} wrap="truncate-end">
+            {t}
+          </Text>
+        ))}
       </Box>
     </Box>
   )
@@ -2146,15 +2151,19 @@ function needsYouCard(c: DrawContext, i: NeedsYou) {
   const color = !needs(i) ? neutral : error ? STATUS_COLOR.error : STATUS_COLOR.waiting
   const attention = itemAttention(i)
   const relation = i.relation === 'parent' ? 'mãe desta' : i.relation === 'child' ? 'filha desta' : i.relation === 'sibling' ? 'irmã desta' : i.sameProject ? 'mesmo projeto' : 'outro projeto'
+  // #262 (P15): a session of a remote machine: its name is not a button, its meta line starts with the
+  // machine (the line truncates at the end, so the label is never what is cut), and it opens in the console.
+  const remote = !!i.machine
+  const local = remote ? null : i.local
   return cardBox(
     c,
     `needs-${i.id}`,
     [
       <Box flexDirection="row" justifyContent="space-between" gap={1}>
-        {sessionUrl(c, i.local) ? (
+        {sessionUrl(c, local) ? (
           <Box flexDirection="row" flexShrink={1} minWidth={0}>
             <Text mono color={color.border}>● </Text>
-            {sessionName(c, `name-${i.id}`, i.title, i.local, 22)}
+            {sessionName(c, `name-${i.id}`, i.title, local, 22)}
           </Box>
         ) : (
           <Text mono weight="bold" wrap="truncate-end">
@@ -2178,11 +2187,13 @@ function needsYouCard(c: DrawContext, i: NeedsYou) {
         {stripMarkdown(i.text)}
       </Text>,
       <Text mono size="footnote" dimColor wrap="truncate-end">
-        {relation} · {model(i.model)}
+        {i.machine ? <Text key="machine-label">{i.machine.label}</Text> : relation} · {model(i.model)}
         {i.account ? <Text color={accountColor(i.account)}> · ◆ {accountLabel(i.account.label)}</Text> : null}
       </Text>,
       <Box flexDirection="row">
-        {opensDirectly(c, i.local) ? (
+        {remote ? (
+          remoteGo(c, i)
+        ) : opensDirectly(c, i.local) ? (
           <Button key={`go-${i.id}`} label="Ir para a sessão" variant="secondary" onPress={() => c.actions.openSession(i.local!, i.title)} />
         ) : sessionUrl(c, i.local) ? (
           <Link key={`go-${i.id}`} href={sessionUrl(c, i.local)!} label="Ir para a sessão" />
@@ -2197,8 +2208,10 @@ function needsYouCard(c: DrawContext, i: NeedsYou) {
 }
 
 function needYouScreen(c: DrawContext, p: Panel, g: ReturnType<typeof grid>, narrow: boolean) {
+  if (hasMachineList(p)) return needYouAcrossMachines(c, p, g, narrow)
   const { Box, Text, Button, Select } = c.el
-  const scope = c.view.scope ?? (narrow && p.needYou.family.length ? 'family' : 'machine')
+  // From a core before #262: P7 as it was, the family or the whole machine (`all` is the old `machine`).
+  const scope = c.view.scope === null ? (narrow && p.needYou.family.length ? 'family' : 'machine') : c.view.scope === 'family' ? 'family' : 'machine'
   const items = scope === 'family' ? p.needYou.family : p.needYou.machine
   // #140: quem precisa de você primeiro, com destaque; a sua vez depois, neutra, num grupo à parte.
   const ofLevel = items.filter(needs)
@@ -2237,6 +2250,60 @@ function needYouScreen(c: DrawContext, p: Panel, g: ReturnType<typeof grid>, nar
     didNotFit(c, 'did-not-fit', items.length - shown.length),
     <Box key="footer-need-you" flexDirection="row" justifyContent="space-between" alignItems="center" width={g.width} borderStyle="round" borderColor={BORDER} backgroundColor={CARD_BG} paddingX={1}>
       <Text mono wrap="truncate-end">urgentes primeiro{narrow ? '' : ' · só o que trava; as ociosas ficam em "sua vez"'}</Text>
+      <Button key="close-need-you" plain onPress={c.actions.close}>
+        <Text color={ORANGE} underline>
+          ← voltar
+        </Text>
+      </Button>
+    </Box>,
+  ]
+}
+
+/**
+ * #262 (P15, P16): the list across machines. One Select joins the family and the machines (below the
+ * label in the narrow panel, at its right in the wide one); one list, oldest first, not grouped by
+ * machine, with the idle ones in their own group after; a remote that is down leaves the list and a
+ * neutral line says since when.
+ */
+function needYouAcrossMachines(c: DrawContext, p: Panel, g: ReturnType<typeof grid>, narrow: boolean) {
+  const { Box, Text, Button } = c.el
+  const scope = scopeOf(c.view, narrow, p)
+  const items = scopeList(p, scope)
+  const ofLevel = items.filter(needs)
+  const onTurn = items.filter((i) => !needs(i))
+  // The scope's counts before the core's cap of the list (the list's own from an older core).
+  const counts = scopeCounts(p, scope, { needs: ofLevel.length, yourTurn: onTurn.length })
+  const down = downInScope(p, scope)
+  // Around: as in P7, plus the Select's own line in the narrow panel and each neutral line (3 or 4).
+  const around = 2 + 4 + 1 + 1 + (narrow ? 1 : 0) + down.length * (narrow ? 4 : 3) + (onTurn.length ? 2 : 0) + 3 + 1 + 2 + 5
+  const fit = rowsThatFit(free(c, around)) * g.perRow
+  const shown = [...ofLevel, ...onTurn].slice(0, fit)
+  const showNeeds = shown.filter(needs)
+  const showYourTurn = shown.filter((i) => !needs(i))
+  const select = scopeSelect(c, p, scope)
+  const empty = emptyText(p, scope)
+  return [
+    sectionLabel(c, g.width, `PRECISAM DE VOCÊ · ${counts.needs}`, narrow ? null : select),
+    narrow ? scopeRow(c, select, g.width) : null,
+    ...down.map((m) => offlineLine(c, m, g.width, !narrow, machineUrl(c, m.id))),
+    ofLevel.length || empty ? (
+      <Box key="list" flexDirection="row" flexWrap="wrap" gap={GAP} width={g.width}>
+        {ofLevel.length ? showNeeds.map((i) => needsYouCard(c, i)) : [<Text key="empty" mono dimColor wrap="wrap">{empty}</Text>]}
+      </Box>
+    ) : null,
+    showYourTurn.length ? (
+      <Text key="label-your-turn" mono size="caption" weight="semibold" dimColor>
+        SUA VEZ · {counts.yourTurn} · sem pendência, só a vez de responder
+      </Text>
+    ) : null,
+    showYourTurn.length ? (
+      <Box key="list-your-turn" flexDirection="row" flexWrap="wrap" gap={GAP} width={g.width}>
+        {showYourTurn.map((i) => needsYouCard(c, i))}
+      </Box>
+    ) : null,
+    didNotFit(c, 'did-not-fit', counts.total - shown.length),
+    <Box key="footer-need-you" flexDirection="row" justifyContent="space-between" alignItems="center" width={g.width} borderStyle="round" borderColor={BORDER} backgroundColor={CARD_BG} paddingX={1}>
+      <Text mono wrap="truncate-end">{listFooter(!narrow)}</Text>
       <Button key="close-need-you" plain onPress={c.actions.close}>
         <Text color={ORANGE} underline>
           ← voltar

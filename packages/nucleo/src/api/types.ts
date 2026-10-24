@@ -233,6 +233,25 @@ export interface NeedsYouItem {
   /** Mesmo projeto (cwd) desta sessão. */
   sameProject: boolean;
   account: PanelAccount | null;
+  /**
+   * #262, only with `?needYou=`: the machine the session runs on, `{ id, label }` of machines.json for
+   * a remote; `null` for this Mac (as `/api/attention`). Absent without the parameter.
+   */
+  machine?: { id: string; label: string } | null;
+}
+
+/** #262: a remote machine as the panel's need-you Select and its offline line (P15, P16) read it. */
+export interface PanelNeedYouMachine {
+  id: string;
+  label: string;
+  /** As `GET /api/machines`: `connected` or not. */
+  state: string;
+  reason: string | null;
+  lastReadAt: string | null;
+  /** #278's connection, as `PanelMachine.connection`. */
+  connection: PanelMachineConnection | null;
+  /** When it went down: `connection.since` when the connection is not up, else `lastReadAt`; `null` when unknown. */
+  since: string | null;
 }
 
 /** "Precisam de você": the count, by account, the family and the machine. */
@@ -247,6 +266,20 @@ export interface PanelNeedYou {
   family: NeedsYouItem[];
   /** A máquina inteira, urgentes primeiro, até 12. */
   machine: NeedsYouItem[];
+  // #262, only with `?needYou=<scope>` (api/panel-machines.ts); absent without it. With it, `total`,
+  // `yourTurn` and `byAccount` cover this Mac and every connected remote, whatever the scope.
+  /** The scope answered: `family`, `all`, `local` or a remote's id (an unknown id is answered as `all`). */
+  scope?: string;
+  /** The list for the scope: `needs` first, then `your-turn`, each oldest `since` first; at most 24. */
+  items?: NeedsYouItem[];
+  /** The scope's list before the cap of `items`: how many in all, and of them `needs` and `your-turn`. */
+  itemsTotal?: number;
+  itemsNeeds?: number;
+  itemsYourTurn?: number;
+  /** The `needs` count per machine: this Mac first (`local`), then each remote in machines.json order. */
+  byMachine?: { id: string; label: string; n: number }[];
+  /** Every remote machine of machines.json, in its order. */
+  machines?: PanelNeedYouMachine[];
 }
 
 /** A PR opened by a session that awaits your approval (review pending on GitHub). */

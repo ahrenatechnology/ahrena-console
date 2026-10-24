@@ -8,6 +8,7 @@ import { CARD_LINES } from '../hooks/height'
 import { CARD_W, TITLE_LINES, sessionTitle } from '../hooks/render'
 import { heightOf, kids, overflows, textOf, type Node } from '../hooks/fit'
 import { NOW, SCENARIOS } from './scenarios'
+import { REMOTE_ITEMS, machinesPanel } from './machine-scenarios'
 
 const PANE = {
   component: 'Pane',
@@ -187,4 +188,68 @@ test('the title never gets cut: up to 2 lines; with 2 the last message leaves; p
   expect(LONG_TITLE[long.text.length]).toBe(' ')
   expect(sessionTitle('PM da rodada · Ahrena Console · 17/10/2026')).toEqual({ text: 'PM da rodada · Ahrena Console · 17/10/2026', lines: 2 })
   expect(sessionTitle('Kanban de sessões no artefato')).toEqual({ text: 'Kanban de sessões no artefato', lines: 1 })
+})
+
+/** #262: the cards of the "Ver" list (`needs-…`) and what passes their height. */
+async function needCardProblems(ui: any): Promise<string[]> {
+  const out: string[] = []
+  for (const card of (await ui.findAll({ type: 'Box' })).filter((b: any) => /^needs-/.test(b.key ?? '')) as Node[]) {
+    const lines = kids(card).reduce((a, x) => a + heightOf(x, CARD_W - 2 - 2), 0)
+    if (lines > CARD_CONTENT_LINES) out.push(`${String((card as { key?: string }).key)}: ${lines} linhas > ${CARD_CONTENT_LINES}`)
+  }
+  return out
+}
+
+test('P15 and P16: the list across machines, its Select, the neutral line and the tooltip fit 38 and 121 columns', async ($, on) => {
+  const f = fakes(on)
+  await $.session.start({ cwd: '/tmp', surface: 'desktop', isInteractive: true })
+  await $.command.run(CONSOLE)
+  // The longest label the wireframe draws, and one past it, to see the meta line keep the machine.
+  const long = { id: 'workstation', label: 'Workstation de testes da equipe' }
+  const longLabel = (p: Panel): Panel => ({
+    ...p,
+    needYou: {
+      ...p.needYou,
+      items: p.needYou.items?.map((i) => (i.machine ? { ...i, machine: long } : i)),
+      byMachine: p.needYou.byMachine?.map((b) => (b.id === long.id ? { ...b, label: long.label } : b)),
+      machines: p.needYou.machines?.map((m) => ({ ...m, label: long.label })),
+    },
+  })
+  const found: string[] = []
+  const cases: [string, Panel, string][] = [
+    ['p15/all', machinesPanel('all'), 'all'],
+    ['p15/family', machinesPanel('family'), 'family'],
+    ['p15/remote', machinesPanel('workstation'), 'workstation'],
+    ['p15/long-label', longLabel(machinesPanel('all')), 'all'],
+    ['p16/all', machinesPanel('all', { offline: true }), 'all'],
+    ['p16/remote', machinesPanel('workstation', { offline: true }), 'workstation'],
+    ['p16/long-label', longLabel(machinesPanel('all', { offline: true })), 'all'],
+  ]
+  for (const [name, panel, scope] of cases) {
+    f.state.panel = panel
+    await f.timer.advance(15_000)
+    for (const target of [PANE, WIDE]) {
+      const cols = target.props.bodyColumns
+      let ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...target })
+      // The main screen, with the tooltip of "N precisam de você".
+      for (const p of await problems(ui, cols)) found.push(`${name} session @${cols}: ${p}`)
+      await ui.press({ key: 'show-need-you' })
+      await ui.select({ key: 'scope', value: scope })
+      for (const p of [...(await problems(ui, cols)), ...(await needCardProblems(ui))]) found.push(`${name} list @${cols}: ${p}`)
+      await ui.press({ key: 'close-need-you' })
+      await ui.unmount()
+    }
+  }
+  expect(found).toEqual([])
+  // The machine starts the meta line, so a long label is never what is cut.
+  f.state.panel = longLabel(machinesPanel('all'))
+  await f.timer.advance(15_000)
+  const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...PANE })
+  await ui.press({ key: 'show-need-you' })
+  await ui.select({ key: 'scope', value: 'all' })
+  const card = (await ui.find({ key: `needs-${REMOTE_ITEMS[0]!.id}` })) as Node
+  const meta = kids(card).map((x) => textOf(x)).find((t) => t.startsWith(long.label))
+  expect(meta).toBeDefined()
+  expect(meta!.endsWith('…')).toBe(true)
+  await ui.unmount()
 })

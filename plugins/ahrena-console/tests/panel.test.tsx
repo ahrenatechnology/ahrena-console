@@ -6,6 +6,7 @@ import { UNCUT_COLUMNS, modelLine, viewLines, highlightedSteps, sessionPills } f
 import { CARD_LINES } from '../hooks/height'
 import { clockTime } from '../hooks/format'
 import { NOW, SCENARIOS } from './scenarios'
+import { DOWN_SINCE, LOCAL_ITEMS, REMOTE_ITEMS, machinesPanel } from './machine-scenarios'
 
 type ScenarioName = keyof typeof SCENARIOS
 type Request = { method: string; url: string }
@@ -22,13 +23,13 @@ const CONSOLE = { command: 'console', args: '', origin: { kind: 'user' }, presen
 // a lista de painéis abertos, o /console que abre e o ambiente da sessão, como o Claude Desktop.
 function fakes(on: any, opts: { scenario?: ScenarioName; outside?: boolean; env?: Record<string, string>; noRoom?: string } = {}) {
   const requests: Request[] = []
-  const state: { scenario: ScenarioName; outside: boolean; panel?: Panel } = { scenario: opts.scenario ?? 'p1', outside: opts.outside ?? false }
+  const state: { scenario: ScenarioName; outside: boolean; panel?: Panel; respond?: (url: URL) => Panel } = { scenario: opts.scenario ?? 'p1', outside: opts.outside ?? false }
   on('http.fetch', async (_$: unknown, e: { url: string; init?: { method?: string } }) => {
     // The orders of the console (#61) have their own clock and their own test (orders.test.tsx).
     if (/\/api\/sessions\/[^/]+\/commands/.test(e.url)) return { value: { status: 200, ok: true, headers: {}, text: '{"orders":[]}' } }
     requests.push({ method: e.init?.method ?? 'GET', url: e.url })
     if (state.outside) throw new Error('connect ECONNREFUSED 127.0.0.1:4720')
-    return { value: { status: 200, ok: true, headers: {}, text: JSON.stringify(state.panel ?? SCENARIOS[state.scenario]) } }
+    return { value: { status: 200, ok: true, headers: {}, text: JSON.stringify(state.respond ? state.respond(new URL(e.url)) : (state.panel ?? SCENARIOS[state.scenario])) } }
   })
   const timer = mock.clock(on, { now: NOW })
   mock.env(on, opts.env ?? {})
@@ -1563,4 +1564,233 @@ test('P14: the other reasons and states in plain words; no band when the connect
       await ui.unmount()
     }
   }
+})
+
+// --- #262 (P15, P16): the "Ver" list across machines ---
+
+/** The core answers the scope the tick asks (`needYou=`), as `GET /api/panel` does since #262. */
+function answerScopes(f: Awaited<ReturnType<typeof open>>, opts: Parameters<typeof machinesPanel>[1] = {}) {
+  f.state.respond = (url) => machinesPanel(url.searchParams.get('needYou'), opts)
+}
+const needYouParam = (f: Awaited<ReturnType<typeof open>>) => f.requests.filter((r) => r.url.includes('/api/panel/')).map((r) => new URL(r.url).searchParams.get('needYou'))
+const cardKeys = async (ui: any, list = 'list') => {
+  const box = await ui.find({ key: list })
+  return childKeys(box).filter((k) => k.startsWith('needs-'))
+}
+/** The keys of a found node's children (a nested node keeps its key in `props`). */
+const childKeys = (n: any): string[] => ((n?.children ?? []) as { key?: string; props?: { key?: string } }[]).map((x) => x.key ?? x.props?.key ?? '').filter(Boolean)
+const P15_OLDEST_FIRST = ['notes-cli', 'sample-calendar', 'sample-catalog', 'metrics-dashboard', 'rules-engine'].map((t) => `needs-sim-p15-${t}`)
+const P15_OPTIONS = ['Família', 'Todas as máquinas', 'Esta máquina', 'Workstation']
+
+test('P15 narrow: Família by default, the Select on the line below the label, with one option per machine', async ($, on) => {
+  const f = await open($, on)
+  answerScopes(f, { shuffle: true })
+  await f.timer.advance(5_000)
+  const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...PANE })
+  await ui.press({ key: 'show-need-you' })
+  const select = await ui.find({ key: 'scope' })
+  expect(select?.props.value).toBe('family')
+  expect(select?.props.options.map((o: { label: string }) => o.label)).toEqual(P15_OPTIONS)
+  expect(select?.props.options.map((o: { value: string }) => o.value)).toEqual(['family', 'all', 'local', 'workstation'])
+  // Below the label, not at its right: the row of the Select holds it.
+  expect(childKeys(await ui.find({ key: 'scope-row' }))).toEqual(['scope'])
+  expect(await ui.find({ type: 'Text', text: /Máquina inteira/ })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: /^mais antigas primeiro$/ })).toBeDefined()
+  // The idle one keeps its own group after the needs.
+  expect(await cardKeys(ui)).toEqual(['needs-sim-p15-sample-catalog'])
+  expect(await cardKeys(ui, 'list-your-turn')).toEqual(['needs-sim-p15-task-queue'])
+  // Every machine: one list, oldest first (the core's order is reversed on purpose), not grouped by machine.
+  await ui.select({ key: 'scope', value: 'all' })
+  expect((await ui.find({ key: 'scope' }))?.props.value).toBe('all')
+  expect(await ui.find({ type: 'Text', text: /PRECISAM DE VOCÊ · 5/ })).toBeDefined()
+  expect(await cardKeys(ui)).toEqual(P15_OLDEST_FIRST)
+  await ui.unmount()
+})
+
+test('P15 wide: every machine by default, the Select at the right of the label, the long footer', async ($, on) => {
+  const f = await open($, on)
+  answerScopes(f)
+  const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...WIDE })
+  await f.timer.advance(5_000)
+  await ui.press({ key: 'show-need-you' })
+  expect((await ui.find({ key: 'scope' }))?.props.value).toBe('all')
+  expect(await ui.find({ key: 'scope-row' })).toBeUndefined()
+  const label = await ui.find({ key: 'section-PRECISAM DE VOCÊ · 5' })
+  expect(JSON.stringify(label)).toContain('"scope"')
+  expect(await cardKeys(ui)).toEqual(P15_OLDEST_FIRST)
+  expect(await ui.find({ type: 'Text', text: 'mais antigas primeiro · as máquinas numa lista só · as ociosas ficam em "na sua vez"' })).toBeDefined()
+  await ui.unmount()
+})
+
+test('P15: a remote card says its machine first in the meta line and opens in the console, never "Ir para a sessão"', async ($, on) => {
+  const f = await open($, on)
+  answerScopes(f)
+  for (const target of [PANE, WIDE]) {
+    const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...target })
+    await f.timer.advance(5_000)
+    await ui.press({ key: 'show-need-you' })
+    await ui.select({ key: 'scope', value: 'all' })
+    const links = (await ui.findAll({ type: 'Link' })) as any[]
+    for (const remote of REMOTE_ITEMS) {
+      const go = links.filter((l) => l.props.href === `http://localhost:4720/ui/sessions/${remote.id}?machine=workstation`)
+      expect(go).toHaveLength(1)
+      expect(JSON.stringify(go[0].children)).toContain('abrir no console ›')
+      // Its card has no "Ir para a sessão".
+      expect((await ui.find({ key: `needs-${remote.id}` }))?.text).not.toContain('Ir para a sessão')
+    }
+    expect(await ui.find({ type: 'Text', text: /^Workstation · Opus 5\.5/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /^outro projeto · Sonnet 5\.5/ })).toBeDefined()
+    // The remote title is not a button: no Button nor Link carries its name.
+    expect((await ui.findAll({ type: 'Button' })).some((b: any) => b.props.label === 'motor-de-regras')).toBe(false)
+    expect((await ui.findAll({ type: 'Link' })).some((l: any) => l.props.label === 'motor-de-regras')).toBe(false)
+    // A card of this Mac keeps "Ir para a sessão".
+    expect((await ui.find({ key: `go-${LOCAL_ITEMS[0]!.id}` }))?.props.label).toBe('Ir para a sessão')
+    await ui.press({ key: 'close-need-you' })
+    await ui.unmount()
+  }
+})
+
+test('#262: the header, SUA VEZ and "+N" count the whole scope, not only the items the core sends', async ($, on) => {
+  const f = await open($, on)
+  // The core caps `items`; its uncapped counts of the scope come apart.
+  f.state.respond = (url) => {
+    const p = machinesPanel(url.searchParams.get('needYou'))
+    return { ...p, needYou: { ...p.needYou, itemsTotal: 30, itemsNeeds: 26, itemsYourTurn: 4 } }
+  }
+  const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...WIDE })
+  await f.timer.advance(5_000)
+  await ui.press({ key: 'show-need-you' })
+  expect(await ui.find({ key: 'section-PRECISAM DE VOCÊ · 26' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /SUA VEZ · 4 ·/ })).toBeDefined()
+  const shown = (await cardKeys(ui)).length + (await cardKeys(ui, 'list-your-turn')).length
+  expect(await ui.find({ type: 'Text', text: new RegExp(`\\+${30 - shown} que não cabem nesta altura`) })).toBeDefined()
+  await ui.press({ key: 'close-need-you' })
+  await ui.unmount()
+  // Without them (a core before the counts), the list's own, as before.
+  answerScopes(f)
+  const plain = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...WIDE })
+  await f.timer.advance(15_000)
+  await plain.press({ key: 'show-need-you' })
+  expect(await plain.find({ key: 'section-PRECISAM DE VOCÊ · 5' })).toBeDefined()
+  expect(await plain.find({ type: 'Text', text: /SUA VEZ · 1 ·/ })).toBeDefined()
+  expect(await plain.find({ type: 'Text', text: /que não cabem nesta altura/ })).toBeUndefined()
+  await plain.unmount()
+})
+
+test('P16: a remote that is down leaves the list; the neutral line says since when, with the link of P14', async ($, on) => {
+  const f = await open($, on)
+  answerScopes(f, { offline: true })
+  const time = clockTime(Date.parse(DOWN_SINCE))
+  // Narrow: "Workstation sem conexão", the time in the right column and the link on the line below.
+  let ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...PANE })
+  await f.timer.advance(5_000)
+  await ui.press({ key: 'show-need-you' })
+  await ui.select({ key: 'scope', value: 'all' })
+  const narrowLine = await ui.find({ key: 'machine-offline-workstation' })
+  expect(narrowLine?.props.borderColor).toBe(paleta.gray['500'])
+  expect(await ui.find({ type: 'Text', text: 'Workstation sem conexão' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: time })).toBeDefined()
+  expect(((await ui.findAll({ type: 'Link' })) as any[]).filter((l) => l.props.href === 'http://localhost:4720/ui/machines/workstation').map((l) => JSON.stringify(l.children).includes('resolver no console ›'))).toEqual([true])
+  expect(await cardKeys(ui)).toEqual(P15_OLDEST_FIRST.slice(0, 3))
+  expect((await ui.find({ key: 'scope' }))?.props.options.map((o: { label: string }) => o.label)).toEqual(['Família', 'Todas as máquinas', 'Esta máquina', 'Workstation · sem conexão'])
+  // Above the cards.
+  const keys = ((await ui.findAll({ type: 'Box' })) as { key?: string }[]).map((b) => b.key)
+  expect(keys.indexOf('machine-offline-workstation')).toBeLessThan(keys.indexOf('list'))
+  // Chosen, the down remote still answers: an empty list with the same neutral line.
+  await ui.select({ key: 'scope', value: 'workstation' })
+  expect((await ui.find({ key: 'scope' }))?.props.value).toBe('workstation')
+  expect(await ui.find({ key: 'machine-offline-workstation' })).toBeDefined()
+  expect(await cardKeys(ui)).toEqual([])
+  expect(await ui.find({ type: 'Text', text: /PRECISAM DE VOCÊ · 0/ })).toBeDefined()
+  await ui.unmount()
+  // Wide: the whole sentence on one line, the link at its right.
+  ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...WIDE })
+  await ui.select({ key: 'scope', value: 'all' })
+  expect(await ui.find({ type: 'Text', text: `Workstation sem conexão desde ${time} · as sessões de lá voltam sozinhas` })).toBeDefined()
+  expect((await ui.find({ key: 'machine-offline-workstation' }))?.props.flexDirection).toBe('row')
+  // The family and this Mac are about this Mac: no line.
+  await ui.select({ key: 'scope', value: 'local' })
+  expect(await ui.find({ key: 'machine-offline-workstation' })).toBeUndefined()
+  await ui.unmount()
+  // The status line says the remote is down.
+  expect(f.status.at(-1)).toMatch(/· 3 precisam de você · Workstation sem conexão$/)
+})
+
+test('P15 and P16: the tooltip of "N precisam de você" splits by machine, then by account', async ($, on) => {
+  const f = await open($, on)
+  const tips = async (target: typeof PANE | typeof WIDE) => {
+    const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...target })
+    // The tooltip's lines: the Texts of the Box shown only on hover.
+    const hover = ((await ui.findAll({ type: 'Box' })) as any[]).find((b) => b.props.display === 'none')
+    const out = ((hover?.children ?? []) as any[]).map((t) => (t.children ?? []).join(''))
+    await ui.unmount()
+    return out
+  }
+  answerScopes(f)
+  await f.timer.advance(5_000)
+  expect(await tips(PANE)).toEqual(['máquina: esta 3 · Workstation 2', 'conta: pessoal 4 · empresa 1'])
+  expect(await tips(WIDE)).toEqual(['por máquina: Esta máquina 3 · Workstation 2 · por conta: pessoal 4 · empresa 1'])
+  answerScopes(f, { offline: true })
+  await f.timer.advance(15_000)
+  const time = clockTime(Date.parse(DOWN_SINCE))
+  expect(await tips(PANE)).toEqual(['máquina: esta 3', `Workstation sem conexão · ${time}`, 'conta: pessoal 2 · empresa 1'])
+  expect(await tips(WIDE)).toEqual([`por máquina: Esta máquina 3 · Workstation sem conexão desde ${time} · por conta: pessoal 2 · empresa 1`])
+  // Without remote machines, exactly today's line.
+  answerScopes(f, { withRemote: false })
+  await f.timer.advance(15_000)
+  expect(await tips(PANE)).toEqual(['por conta: pessoal 2 · empresa 1'])
+  expect(await tips(WIDE)).toEqual(['por conta: pessoal 2 · empresa 1'])
+})
+
+test('#262: every tick sends the scope (the width default, then the choice); an unknown id resets the Select', async ($, on) => {
+  const f = await open($, on)
+  answerScopes(f)
+  let ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...PANE })
+  await f.timer.advance(5_000)
+  expect(needYouParam(f).at(-1)).toBe('family')
+  await ui.unmount()
+  ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...WIDE })
+  await f.timer.advance(5_000)
+  expect(needYouParam(f).at(-1)).toBe('all')
+  // Not only on the "Ver" screen: the main one too, so the count sums every machine.
+  expect(await ui.find({ key: 'card-session' })).toBeDefined()
+  await ui.press({ key: 'show-need-you' })
+  await ui.select({ key: 'scope', value: 'workstation' })
+  expect(needYouParam(f).at(-1)).toBe('workstation')
+  expect(await cardKeys(ui)).toEqual(P15_OLDEST_FIRST.slice(3))
+  await f.timer.advance(5_000)
+  expect(needYouParam(f).at(-1)).toBe('workstation')
+  // The Workstation leaves machines.json: the core answers `all`, and the Select follows.
+  answerScopes(f, { withRemote: false })
+  await f.timer.advance(5_000)
+  expect((await ui.find({ key: 'scope' }))?.props.value).toBe('all')
+  await f.timer.advance(5_000)
+  expect(needYouParam(f).at(-1)).toBe('all')
+  await ui.unmount()
+})
+
+test('#262: from a core without the feature, P7 exactly as before (Família, Máquina inteira, urgentes primeiro)', async ($, on) => {
+  const f = await open($, on)
+  answerScopes(f)
+  f.state.respond = () => machinesPanel(null)
+  for (const target of [PANE, WIDE]) {
+    const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...target })
+    await f.timer.advance(5_000)
+    await ui.press({ key: 'show-need-you' })
+    const select = await ui.find({ key: 'scope' })
+    expect(select?.props.options.map((o: { label: string }) => o.label)).toEqual(['Família', 'Máquina inteira'])
+    expect(select?.props.value).toBe(target === PANE ? 'family' : 'machine')
+    expect(await ui.find({ key: 'scope-row' })).toBeUndefined()
+    expect(await ui.find({ type: 'Text', text: /^urgentes primeiro/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /mais antigas primeiro/ })).toBeUndefined()
+    await ui.press({ key: 'close-need-you' })
+    await ui.unmount()
+  }
+  // The old 'machine' still selects the whole machine.
+  const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...PANE })
+  await ui.press({ key: 'show-need-you' })
+  await ui.select({ key: 'scope', value: 'machine' })
+  expect((await ui.find({ key: 'scope' }))?.props.value).toBe('machine')
+  expect(await ui.find({ type: 'Text', text: /PRECISAM DE VOCÊ · 3/ })).toBeDefined()
+  await ui.unmount()
 })

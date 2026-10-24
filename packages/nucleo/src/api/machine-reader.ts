@@ -28,6 +28,13 @@ import type { PanelMachineConnection } from './types.ts';
 /** The source of a remote's connection: #278's `MachineConnection.status(id)`; `null` when it has none. */
 export type ConnectionOf = (machineId: string) => Promise<ConnectionStatus | null> | null;
 
+/** #278's connection as the panel carries it: `{ state, since, lastError }` only; `null` without one. */
+export function panelConnection(c: ConnectionStatus | null | undefined): PanelMachineConnection | null {
+  if (!c) return null;
+  const e = c.lastError;
+  return { state: c.state, since: c.since, lastError: e ? { reason: e.reason, at: e.at, exitCode: e.exitCode, holder: e.holder } : null };
+}
+
 /** A remote machine as this reader needs it (`RemoteMachine` in production). */
 export interface RemoteSessionSource {
   readonly id: string;
@@ -129,9 +136,7 @@ export class MachineReader {
     } catch {
       // A source that fails leaves no connection: the panel never fails for it.
     }
-    if (!c) return null;
-    const e = c.lastError;
-    return { state: c.state, since: c.since, lastError: e ? { reason: e.reason, at: e.at, exitCode: e.exitCode, holder: e.holder } : null };
+    return panelConnection(c);
   }
 
   /** The JSON of `GET <path>` on the machine when it answered 200, or `null` (see the module comment). */
