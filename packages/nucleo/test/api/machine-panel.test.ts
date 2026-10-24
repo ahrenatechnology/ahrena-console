@@ -11,7 +11,10 @@ import { Accounts, ListaDeSessoes, MontadorDoPainel, startLocalApi, type ApiOpti
 import { MAX_REMOTE_PANEL_BYTES, minimalPanel, remotePanel, RemoteSessionMap } from '../../src/api/machine-panel.ts';
 import { MachineReader, type ConnectionOf } from '../../src/api/machine-reader.ts';
 import type { ConnectionStatus } from '../../src/telemetry/model.ts';
-import { machineDown } from '../../../../plugins/ahrena-console/hooks/format.ts';
+// The mod's own band check, loaded at run time: the plugin folder is not part of this package's type
+// check (no package.json of its own), so a static import would make tsc read it as CommonJS.
+const MOD_FORMAT = '../../../../plugins/ahrena-console/hooks/format.ts';
+const { machineDown } = (await import(MOD_FORMAT)) as { machineDown: (panel: never) => { machine: { label: string; lastReadAt: string | null }; short: string } | null };
 import { simulate } from '../../src/simulator/index.ts';
 import { AlertTracker } from '../../src/telemetry/alerts.ts';
 import { loopbackGet } from '../../src/telemetry/adapters/loopback-http.ts';
