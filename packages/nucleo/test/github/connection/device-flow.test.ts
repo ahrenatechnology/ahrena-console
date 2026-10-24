@@ -29,10 +29,10 @@ function setup(extra: Partial<FakeGithubAuth> = {}) {
 }
 
 describe('#241/AC-6 client id and scopes', () => {
-  test('the published client id is empty until the OAuth App exists; the env var replaces it', () => {
-    assert.equal(GITHUB_OAUTH_CLIENT_ID, '');
-    assert.equal(resolveGithubClientId({}), null);
-    assert.equal(resolveGithubClientId({ AHRENA_CONSOLE_GITHUB_CLIENT_ID: '  ' }), null);
+  test('the Ahrena client id is built in (a GitHub OAuth App id: Ov23li + 14 chars); the env var replaces it (#327)', () => {
+    assert.match(GITHUB_OAUTH_CLIENT_ID, /^Ov23li[A-Za-z0-9]{14}$/);
+    assert.equal(resolveGithubClientId({}), GITHUB_OAUTH_CLIENT_ID);
+    assert.equal(resolveGithubClientId({ AHRENA_CONSOLE_GITHUB_CLIENT_ID: '  ' }), GITHUB_OAUTH_CLIENT_ID);
     assert.equal(resolveGithubClientId({ AHRENA_CONSOLE_GITHUB_CLIENT_ID: 'test-client-id' }), 'test-client-id');
     assert.deepEqual([...GITHUB_SCOPES], ['repo', 'read:org', 'project']);
   });

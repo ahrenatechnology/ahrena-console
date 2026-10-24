@@ -4,8 +4,12 @@
 // `fetch` are injectable (tests and the demo use the fake GitHub). Errors carry HTTP statuses and
 // GitHub's machine error codes only: never the token, the device code nor a response body.
 
-/** The Ahrena Console OAuth App's public client id. Empty until the app exists (decision 0011 §1). */
-export const GITHUB_OAUTH_CLIENT_ID = '';
+/**
+ * The Ahrena Console OAuth App's public client id (decision 0011 §1; Device Flow on, no client secret).
+ * It is public and ships inside the app: an end user is never asked for it. A release build with this
+ * empty is refused by `scripts/check-github-client-id.mjs` (#327).
+ */
+export const GITHUB_OAUTH_CLIENT_ID = 'Ov23liVOZdlk3SA82JdZ';
 
 /** The scopes the console asks for (decision 0011 §2). */
 export const GITHUB_SCOPES: readonly string[] = ['repo', 'read:org', 'project'];
