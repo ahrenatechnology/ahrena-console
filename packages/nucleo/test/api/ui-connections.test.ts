@@ -240,9 +240,10 @@ describe('Conexões: every state (C39 to C41, C44)', () => {
   test('C44 no-client-id: Conectar disabled, the explanation and Como configurar', async () => {
     const m = await mountWith({ read: answer(unavailable('no-client-id', { clientId: null })) });
     assert.equal(card(m).getAttribute('data-reason'), 'no-client-id');
-    assert.equal(texto(card(m).querySelector('.conn-message-title')), 'Este console não tem o aplicativo do GitHub');
+    assert.equal(texto(card(m).querySelector('.conn-message-title')), 'Build de desenvolvimento sem o aplicativo do GitHub');
     assert.ok(button(m, 'connect')!.hasAttribute('disabled'));
-    const how = card(m).querySelectorAll('a').find((a) => texto(a) === 'Como configurar')!;
+    assert.doesNotMatch(texto(card(m)), /AHRENA_CONSOLE_GITHUB_CLIENT_ID|montado do código/, 'no environment variable on the screen: that is for developers');
+    const how = card(m).querySelectorAll('a').find((a) => /^Como configurar/.test(texto(a)))!;
     assert.match(how.getAttribute('href')!, /^https:\/\/docs\.github\.com\/en\//);
   });
 
@@ -366,7 +367,7 @@ describe('Conexões: the writes (contract)', () => {
 
   // Every refusal of the four writes, phrased: never the machine code.
   for (const [status, body, phrase] of [
-    [409, { error: 'github-unavailable', reason: 'no-client-id' }, 'Este console não tem o aplicativo do GitHub.'],
+    [409, { error: 'github-unavailable', reason: 'no-client-id' }, 'Build de desenvolvimento sem o aplicativo do GitHub.'],
     [409, { error: 'github-unavailable', reason: 'no-vault' }, 'Não há onde guardar a credencial com segurança.'],
     [409, { error: 'source-is-gh' }, 'A fonte é o login do gh: conectar e desconectar ficam com o gh. Volte ao padrão para usar a conexão do console.'],
     [502, { error: 'github-error' }, 'O GitHub recusou o pedido do código. Tente de novo em instantes.'],

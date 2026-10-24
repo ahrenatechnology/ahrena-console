@@ -127,8 +127,8 @@ export function createGithubFooter({ node, read }) {
 /** Why the connection is unavailable (`reason`): `{ title, text }`. */
 export const UNAVAILABLE = {
   'no-client-id': {
-    title: 'Este console não tem o aplicativo do GitHub',
-    text: 'Acontece num console montado do código antes do aplicativo da Ahrena existir. Quem montou define AHRENA_CONSOLE_GITHUB_CLIENT_ID com o Client ID de um OAuth App com device flow.',
+    title: 'Build de desenvolvimento sem o aplicativo do GitHub',
+    text: 'Este console foi iniciado a partir do código-fonte e não traz o aplicativo da Ahrena no GitHub. O app instalado traz, e conecta sem configurar nada.',
   },
   'no-vault': {
     title: 'Não há onde guardar a credencial com segurança',

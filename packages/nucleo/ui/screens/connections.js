@@ -253,7 +253,7 @@ export async function mount(area, ctx) {
       const buttons = [];
       let text = why.text;
       if (g.reason === 'no-client-id') {
-        buttons.push(button('Conectar ao GitHub', { iconName: 'github', filled: true, action: 'connect', disabled: true }), external(HOW_TO_CONFIGURE, 'Como configurar', 'btn outline conn-link-btn'));
+        buttons.push(button('Conectar ao GitHub', { iconName: 'github', filled: true, action: 'connect', disabled: true }), external(HOW_TO_CONFIGURE, 'Como configurar (para quem monta o console)', 'btn outline conn-link-btn'));
       } else if (g.reason === 'no-vault') {
         if (g.ghInstalled) {
           text = `${why.text} O gh está instalado: dá para usar o login dele.`;
