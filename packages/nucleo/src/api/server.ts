@@ -346,7 +346,7 @@ export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
   const projectRoute = criarRotaDoProjeto(opts.project ?? { kanban: null, fonte: 'github', log });
   const openDescriber = opts.openDescriber ?? new SessionOpenDescriber();
   const wall = muralDoPainel(opts.panelBuilder, { open: openDescriber });
-  const machineSessions = createMachineSessionsRoute({ reader: opts.machineReader, telemetry: opts.telemetry, local: { sessions: opts.sessions, wall, kanban: opts.kanban, history: opts.history, events: opts.events, dashboard: opts.fleet ? () => montarDashboard(opts.fleet!) : null } });
+  const machineSessions = createMachineSessionsRoute({ reader: opts.machineReader, telemetry: opts.telemetry, local: { sessions: opts.sessions, wall, kanban: opts.kanban, history: opts.history, events: opts.events, dashboard: opts.fleet ? () => montarDashboard(opts.fleet!) : null, panel: opts.panelBuilder } });
   const remotes = (): readonly RemoteAttentionSource[] => (typeof opts.remoteAttention === 'function' ? opts.remoteAttention() : (opts.remoteAttention ?? []));
   const sessionOpen = createSessionOpenRoute({
     storage: opts.panelBuilder.storage,
