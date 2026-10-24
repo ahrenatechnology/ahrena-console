@@ -1,6 +1,6 @@
 {
   "name": "@ahrena-console/nucleo",
-  "version": "0.0.8",
+  "version": "0.0.9",
   "description": "Núcleo do Ahrena Console: modelo de dados, portas e adaptadores",
   "license": "Apache-2.0",
   "private": true,
