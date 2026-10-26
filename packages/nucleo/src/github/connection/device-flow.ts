@@ -1,6 +1,6 @@
 // The GitHub OAuth device flow and the few REST reads the connection needs (decision 0011 §1-2):
-// request a code, poll for the token, `GET /user` (login and `X-OAuth-Scopes`), `GET /user/orgs` and
-// the org access check. Only the public client id travels; there is no client secret. The base URLs and
+// request a code, poll for the token, `GET /user` (login and `X-OAuth-Scopes`), `GET /user/orgs`, the
+// public memberships and the org access check. Only the public client id travels; there is no client secret. The base URLs and
 // `fetch` are injectable (tests and the demo use the fake GitHub). Errors carry HTTP statuses and
 // GitHub's machine error codes only: never the token, the device code nor a response body.
 
@@ -62,6 +62,7 @@ export interface DeviceFlowClient {
   pollToken(deviceCode: string): Promise<PollResult>;
   user(token: string): Promise<{ login: string; scopes: string[] }>;
   orgs(token: string): Promise<string[]>;
+  publicOrgs(token: string, login: string): Promise<string[]>;
   orgAccess(token: string, org: string): Promise<OrgAccess>;
 }
 
@@ -140,17 +141,24 @@ export class GithubDeviceFlowClient implements DeviceFlowClient {
     return { login: body.login, scopes: parseScopes(res.headers.get('x-oauth-scopes')) };
   }
 
+  /** The orgs this token may operate on: GitHub leaves out every org that restricts the app (#336). */
   async orgs(token: string): Promise<string[]> {
-    const res = await this.get('/user/orgs?per_page=100', token);
-    const body = await readJson(res);
-    if (res.status !== 200 || !Array.isArray(body)) throw new GithubAuthError(res.status === 401 ? 'unauthorized' : `http-${res.status}`, res.status);
-    return body.map((o) => asObject(o)?.login).filter((l): l is string => typeof l === 'string');
+    return this.orgLogins('/user/orgs?per_page=100', token);
   }
 
-  /** `blocked` only for GitHub's "OAuth App access restrictions" 403; any other failure is `unknown`. */
+  /** The person's public memberships, which GitHub lists even for an org that restricts the app. */
+  async publicOrgs(token: string, login: string): Promise<string[]> {
+    return this.orgLogins(`/users/${encodeURIComponent(login)}/orgs?per_page=100`, token);
+  }
+
+  /**
+   * The membership read, which GitHub refuses with its "OAuth App access restrictions" 403 while the org
+   * has not approved the app (`blocked`); the org's repos answer 200 either way, with public data (#336).
+   * Any other failure is `unknown`.
+   */
   async orgAccess(token: string, org: string): Promise<OrgAccess> {
     try {
-      const res = await this.get(`/orgs/${encodeURIComponent(org)}/repos?per_page=1`, token);
+      const res = await this.get(`/user/memberships/orgs/${encodeURIComponent(org)}`, token);
       if (res.status === 200) return 'ok';
       const body = asObject(await readJson(res));
       if (res.status === 403 && typeof body?.message === 'string' && /OAuth App access restrictions/i.test(body.message)) return 'blocked';
@@ -158,6 +166,13 @@ export class GithubDeviceFlowClient implements DeviceFlowClient {
     } catch {
       return 'unknown';
     }
+  }
+
+  private async orgLogins(path: string, token: string): Promise<string[]> {
+    const res = await this.get(path, token);
+    const body = await readJson(res);
+    if (res.status !== 200 || !Array.isArray(body)) throw new GithubAuthError(res.status === 401 ? 'unauthorized' : `http-${res.status}`, res.status);
+    return body.map((o) => asObject(o)?.login).filter((l): l is string => typeof l === 'string');
   }
 
   private isVerificationUri(value: unknown): value is string {

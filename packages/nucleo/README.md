@@ -488,7 +488,8 @@ npm test
 - **Fonte.** `console` (padrão) ou `gh` (`gh auth token`, só por escolha): `AHRENA_CONSOLE_GITHUB_SOURCE` > a preferência > `console`.
 - **Uma credencial para tudo.** Repositórios, Instruções, instalador do framework, ADRs e PDRs, Dev Console, Entregas, o kanban e o trabalho do painel pegam a credencial da conexão. Sem conexão, as rotas dessas telas respondem 409 `{ "error": "github-not-connected" }` sem chamar o GitHub (`--no-github` mantém as respostas `off`/`no-github`).
 - **Troca de identidade.** Desconectar, conectar outra conta ou trocar a fonte apaga todas as linhas do `github_cache` (uma credencial ativa por instalação) e remonta as telas.
-- **Só a `/ui`.** As cinco escritas (`start`, `cancel`, `disconnect`, `source`, `/api/project/selection`) exigem `POST` no caminho exato, sem query, `Host` nosso, `Origin` exatamente `http://<Host>`, `Content-Type: application/json`, corpo até 4 KiB e nenhum `Sec-Fetch-Site: cross-site | same-site`. Sem `Origin` é 403, mesmo vindo de um processo local. Recusas: 403 `forbidden`, 405 `method-not-allowed`, 413 `too-large`, 415 `unsupported-media-type`.
+- **Só a `/ui`.** As seis escritas (`start`, `cancel`, `disconnect`, `source`, `orgs`, `/api/project/selection`) exigem `POST` no caminho exato, sem query, `Host` nosso, `Origin` exatamente `http://<Host>`, `Content-Type: application/json`, corpo até 4 KiB e nenhum `Sec-Fetch-Site: cross-site | same-site`. Sem `Origin` é 403, mesmo vindo de um processo local. Recusas: 403 `forbidden`, 405 `method-not-allowed`, 413 `too-large`, 415 `unsupported-media-type`.
+- **Organizações (#336).** `GET /user/orgs` só lista as que liberaram o aplicativo; as que o restringem somem dali e ainda respondem 200 nos repositórios (dados públicos). Então o núcleo lista as de `/user/orgs` como `granted` e confere uma a uma as filiações públicas (`/users/<login>/orgs`) que faltam: `GET /user/memberships/orgs/<org>` com o 403 "OAuth App access restrictions" é `pending`, com o link da política da org (`approvalUrl`, para o dono) e o do aplicativo (`requestUrl`, Grant ou Request). Uma filiação privada numa org que restringe fica invisível ao token; a tela diz onde aprovar. `POST /api/connections/github/orgs` confere de novo.
 - **Mudanças.** Cada transição do estado é uma mudança `connections` (chave `github`) em `/api/changes`; fica fora do MCP.
 
 O estado em `GET /api/connections` (sempre `state`, `source`, `sourceFrom` `env | settings | default`, `vault` `keychain | secret-service | memory | null`, `clientId`, `ghInstalled`, `requiredScopes`):
@@ -497,7 +498,7 @@ O estado em `GET /api/connections` (sempre `state`, `source`, `sourceFrom` `env 
 | --- | --- |
 | `disconnected` | `lastError`: `null`, `expired`, `denied`, `github-error` ou `vault-error` |
 | `pending` | `userCode`, `verificationUri`, `expiresAt` (ISO), `interval` (s); ao reconectar, também os de `connected` |
-| `connected` | `login`, `scopes`, `missingScopes`, `scopesChecked`, `blockedOrgs: [{ login, approvalUrl }]`, `orgsChecked`, `revokeUrl` (só na fonte `console`) |
+| `connected` | `login`, `scopes`, `missingScopes`, `scopesChecked`, `orgs: [{ login, access: "granted" } \| { login, access: "pending", approvalUrl, requestUrl }]`, `orgsChecked`, `revokeUrl` (só na fonte `console`) |
 | `unavailable` | `reason`: `no-client-id`, `no-vault`, `gh-not-installed`, `gh-not-authenticated` ou `github-off` |
 
 Erros das escritas: `start` dá 409 `{ error: "github-unavailable", reason }`, 409 `source-is-gh` ou 502 `github-error` (o GitHub recusou o pedido do código); `disconnect` dá 409 `source-is-gh`; `source` dá 400 `invalid` e 409 `gh-not-installed`.

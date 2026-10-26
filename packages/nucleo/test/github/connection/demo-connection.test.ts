@@ -55,13 +55,13 @@ describe('#241 --demo-github states', () => {
     assert.throws(() => parseDemoGithubState('conectado'), /--demo-github/);
   });
 
-  test('connected (the default): dev-sintetico with every scope, the revoke link, no blocked org', async () => {
+  test('connected (the default): dev-sintetico with every scope, the revoke link, every org granted', async () => {
     const d = await boot('connected');
     const s = await d.connection.status();
     assert.equal(s.state, 'connected');
     assert.equal(s.login, 'dev-sintetico');
     assert.deepEqual(s.missingScopes, []);
-    assert.deepEqual(s.blockedOrgs, []);
+    assert.deepEqual(s.orgs, [{ login: 'exemplo-labs', access: 'granted' }, { login: 'estudio-ficticio', access: 'granted' }]);
     assert.equal(s.orgsChecked, true);
     assert.equal(s.vault, 'memory');
     assert.equal(s.clientId, 'demo-client-id');
@@ -127,7 +127,15 @@ describe('#241 --demo-github states', () => {
     const d = await boot('blocked-orgs');
     const s = await d.connection.status();
     assert.equal(s.state, 'connected');
-    assert.deepEqual(s.blockedOrgs, [{ login: 'estudio-ficticio', approvalUrl: 'https://github.com/settings/connections/applications/demo-client-id' }]);
+    assert.deepEqual(s.orgs, [
+      {
+        login: 'estudio-ficticio',
+        access: 'pending',
+        approvalUrl: 'https://github.com/organizations/estudio-ficticio/settings/oauth_application_policy',
+        requestUrl: 'https://github.com/settings/connections/applications/demo-client-id',
+      },
+      { login: 'exemplo-labs', access: 'granted' },
+    ]);
     d.connection.close();
   });
 
