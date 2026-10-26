@@ -124,7 +124,7 @@ As telas de repositórios (`/api/repos`, `packages/nucleo/src/api/repos.ts`) seg
 | --- | --- | --- |
 | `repos:list:light` | 5 min | `ReposLista` leve: até 500 repositórios da conta e das orgs, 100 por página |
 | `repos:list:counts` | 5 min | `ReposCounts`: contagens abertas e CI do branch padrão de cada repositório da lista |
-| `repos:list:view` | — | a última lista montada, para a primeira leitura depois da partida (até 24 h) |
+| `repos:list:view` | — | a última lista montada, para a primeira leitura depois da partida (até 24 h depois da leitura da `ReposLista` que a montou) |
 | `repos:resumo` | 5 min | `ReposResumo`: PRs esperando review e issues fechadas na semana (`issueCount`) |
 | `repos:detalhe:<dono/repo>:<período>` | 5 min | `RepoDetalhe` e as páginas seguintes das buscas |
 | `repos:rest:<dono/repo>:commit_activity`, `code_frequency`, `contributors` | 1 h | estatísticas do REST, com ETag; 202 é "calculando" |

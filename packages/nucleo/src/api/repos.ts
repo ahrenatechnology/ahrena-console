@@ -441,8 +441,10 @@ export class ReposDoGithub {
     });
     const publish = async (valor: ListaDeRepos) => {
       this.publicar(e, valor, LIST_CHANGE_KEY);
-      // The next core start shows it at once (#341), unless the GitHub identity changed meanwhile.
-      if (this.cache.epoch === epoch) await this.cache.put(LIST_VIEW_KEY, valor);
+      // The next core start shows it at once (#341), unless the GitHub identity changed meanwhile. It
+      // keeps the list's own `fetchedAt`, so it ages out with the data (24 h); a failed write is only logged.
+      if (this.cache.epoch !== epoch) return;
+      await this.cache.store.set(LIST_VIEW_KEY, { value: valor, fetchedAt: crua.fetchedAt, etag: null }).catch((err: unknown) => this.log(`repos: the list was not kept in the cache: ${motivo(err)}`));
     };
     // Primeira etapa: os repositórios já aparecem, com o que se sabia antes de cada um.
     if (!e.valor) await publish(montar(null, commitsAntes, ciAntes));

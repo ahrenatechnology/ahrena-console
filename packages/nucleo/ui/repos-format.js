@@ -149,8 +149,9 @@ const pushOf = (r) => (r.lastPush ? Date.parse(r.lastPush) || 0 : -Infinity);
 const ORDER = {
   recente: (a, b) => pushOf(b) - pushOf(a) || byName(a, b),
   nome: byName,
-  issues: (a, b) => b.openIssues - a.openIssues || byName(a, b),
-  prs: (a, b) => b.openPrs - a.openPrs || byName(a, b),
+  // Counts not read yet (`null`, issue 341) go after the real zeros.
+  issues: (a, b) => (b.openIssues ?? -1) - (a.openIssues ?? -1) || byName(a, b),
+  prs: (a, b) => (b.openPrs ?? -1) - (a.openPrs ?? -1) || byName(a, b),
   sessoes: (a, b) => b.sessions.active - a.sessions.active || b.sessions.thisMonth - a.sessions.thisMonth || byName(a, b),
 };
 

@@ -221,7 +221,7 @@ describe('#104 CA3: consulta enxuta e cache da decisão 0001', () => {
     assert.equal(m.repos.chamadas.fonte, 2);
   });
 
-  test('uma ReposLista, um ReposCounts, um ReposResumo e commits e CI só dos repositórios recentes, nessa ordem na fila; dentro da validade, nenhuma chamada', async () => {
+  test('one ReposLista, one ReposCounts, one ReposResumo, then commits and CI of the recent repositories only, in that queue order; within the TTL, no call', async () => {
     const m = await montar();
     await listaPronta(m);
     const desde = new Date(T0 - 7 * 24 * 60 * MIN).toISOString().slice(0, 10);
@@ -730,6 +730,14 @@ describe('#341: the list shows before its counts, and at once after a restart', 
     assert.equal(l.updatedAt, before.updatedAt);
     // The rebuild went out.
     assert.equal(m.pedidos.total, 1);
+  });
+
+  test('a kept list older than 24 h since its ReposLista read is not restored', async () => {
+    const store = new MemoryCacheStore();
+    await listaPronta(await montar({ store }));
+    const m = await montar({ store, t0: T0 + 25 * 60 * MIN });
+    m.modo.atual = 'pendurado';
+    assert.equal((await semEsperar(m.repos.lista())).state, 'loading');
   });
 
   test('a list read before the GitHub identity changed is never restored (#241)', async () => {
