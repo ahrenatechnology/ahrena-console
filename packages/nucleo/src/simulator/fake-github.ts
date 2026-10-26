@@ -282,6 +282,7 @@ function generateSeries(repo: FakeRepo, now: number): Series {
 
 function rawRepo(repo: FakeRepo, now: number) {
   return {
+    id: `R_${repo.owner}/${repo.name}`,
     name: repo.name,
     nameWithOwner: `${repo.owner}/${repo.name}`,
     url: `https://github.com/${repo.owner}/${repo.name}`,
@@ -479,6 +480,11 @@ export function createFakeGithub(data: FakeGithubData, { now = Date.now, delayMs
           repositories: { totalCount: data.repos.length, pageInfo: { hasNextPage: false, endCursor: null }, nodes: data.repos.map((x) => rawRepo(x, now())) },
         },
       };
+    }
+    if (op === 'ReposCounts') {
+      // `nodes(ids:)` (#341): the ids `rawRepo` gives; an unknown one is `null`, as GitHub answers.
+      const ids = (v.ids as unknown as string[]) ?? [];
+      return { rateLimit, nodes: ids.map((id) => (repoById(id) ? rawRepo(repoById(id)!, now()) : null)) };
     }
     if (op === 'RepoFilesDiscovery') {
       // Um lote de até 20 repositórios (`$o<i>`, `$n<i>`), cada um sob `r<i>` (#174).

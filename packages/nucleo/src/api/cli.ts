@@ -27,7 +27,7 @@ import { createMcpServer } from '../mcp/index.ts';
 import { GithubCache } from '../github/cache.ts';
 import { GithubGraphqlSource } from '../github/github-source.ts';
 import { SqliteCacheStore } from '../github/sqlite-cache.ts';
-import { GithubCallQueue } from '../github/call-queue.ts';
+import { GITHUB_CALL_LIMIT, GithubCallQueue } from '../github/call-queue.ts';
 import { chooseVault, GithubConnection, GithubNotConnectedError } from '../github/connection/index.ts';
 import { parseProjectEnv, PROJECT_ENV } from '../github/project-selection.ts';
 import { SqliteInstallationSettings } from '../settings/installation-settings.ts';
@@ -272,8 +272,9 @@ const desktop = demo || o.noDesktop ? null : new DesktopIndex();
 // The installation settings (#241, decision 0011 §8): the GitHub login, the credential source and the
 // Project chosen on the screen. Never a credential.
 const settings = new SqliteInstallationSettings(sqlite.db);
-// A single queue for the GitHub calls (decision 0001, item 6): the connection's, the screens' and the work's.
-const githubQueue = new GithubCallQueue();
+// A single queue for the GitHub calls (decision 0001, item 6): the connection's, the screens' and the work's,
+// up to `GITHUB_CALL_LIMIT` at once (#341).
+const githubQueue = new GithubCallQueue(GITHUB_CALL_LIMIT);
 // A single GitHub cache, in the database, for the work and every screen: a rate-limit pause holds for all.
 const githubCache = new GithubCache({ store: new SqliteCacheStore(storage.db) });
 // The core's GitHub (#241, src/api/core-github.ts): the connection, the credential provider and the
