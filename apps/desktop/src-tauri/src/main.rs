@@ -887,7 +887,9 @@ fn link_target(url: &tauri::Url, core_port: Option<u16>) -> LinkTarget {
 /// The AWS SSO device page "Abrir a página de login" links to (#334): an IAM Identity Center portal
 /// (`<name>.awsapps.com`) or a region's SSO device page (`device.sso.<region>.amazonaws.com`), one
 /// label each, never the rest of amazonaws.com. The core only shows the session's pinned portal or
-/// its region's page (`deviceCodeOnSessionPortal`, decision 0013 §2a); this is the shell's fence.
+/// its region's page (`deviceCodeOnSessionPortal`, decision 0013 §2a). The portal arm is wider than
+/// that: any tenant's portal, which can redirect to an IdP its owner picks. Accepted in 0013 §2a, the
+/// same exposure as `github.io`.
 fn aws_sso_device_host(host: &str) -> bool {
     let label = |s: &str, max: usize| !s.is_empty() && s.len() <= max && s.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-');
     if let Some(portal) = host.strip_suffix(".awsapps.com") {
@@ -998,6 +1000,10 @@ mod tests {
         assert_eq!(t("https://x.device.sso.us-east-1.amazonaws.com/"), LinkTarget::Refused);
         assert_eq!(t("https://device.sso.us-east-1.amazonaws.com.evil.example/"), LinkTarget::Refused);
         assert_eq!(t("https://device.sso.us-east-1.amazonaws.com:444/"), LinkTarget::Refused, "no port");
+        assert_eq!(t("https://GuardiaTechnology.AWSAPPS.com/start"), LinkTarget::Browser, "the parser lowercases the host");
+        assert_eq!(t("https://guardiatechnology.awsapps.com./start"), LinkTarget::Refused, "trailing dot");
+        assert_eq!(t("https://device.sso.us-east-1.amazonaws.com./"), LinkTarget::Refused, "trailing dot");
+        assert_eq!(t("https://foo%2Eevil.awsapps.com/"), LinkTarget::Refused, "an encoded dot is a second label");
     }
 
     #[test]
