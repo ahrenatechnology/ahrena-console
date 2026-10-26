@@ -7,8 +7,8 @@
 // Console source: the active login is the setting `github.login`; its secret is read from the vault
 // once, on first need, and kept in memory. With no login, a vault holding exactly one account is
 // adopted (one connection per machine, §3). After a credential is loaded, `/user` is called once to
-// learn the granted scopes, and the organizations that restrict OAuth Apps are found in the
-// background, best effort. Every call to the GitHub API goes through the single call queue (0001).
+// learn the granted scopes, and the organizations are checked in the background, best effort: the
+// ones the token sees, and the ones known to restrict the app (#336). Every call to the GitHub API goes through the single call queue (0001).
 //
 // Device flow: one at a time; the device code lives only here, in memory, and is dropped when the
 // flow ends for any reason. Polls honour `interval` and `slow_down`; expiry, `access_denied` and
@@ -53,12 +53,19 @@ export interface GithubConnectionStatus {
   missingScopes?: string[];
   /** Whether `/user` answered, so `scopes` and `missingScopes` are known. */
   scopesChecked?: boolean;
-  blockedOrgs?: { login: string; approvalUrl: string }[];
+  /** The orgs the token sees (`granted`) and the ones that restrict the app (`pending`). */
+  orgs?: GithubOrg[];
   orgsChecked?: boolean;
   revokeUrl?: string;
   /** unavailable */
   reason?: GithubUnavailableReason;
 }
+
+/**
+ * An organization on the screen. `pending`: it restricts OAuth Apps and has not approved this one; an
+ * owner approves it at `approvalUrl`, anyone grants or requests it at `requestUrl`.
+ */
+export type GithubOrg = { login: string; access: 'granted' } | { login: string; access: 'pending'; approvalUrl: string; requestUrl: string };
 
 /** No GitHub credential: the source is unavailable or not connected. A `SemGithubError`, so the services treat it as "no GitHub". */
 export class GithubNotConnectedError extends SemGithubError {
@@ -85,6 +92,11 @@ export class GithubConnectionError extends Error {
   }
 }
 
+/** Where an org owner approves the OAuth Apps that org restricts. */
+export function githubOrgPolicyUrl(org: string): string {
+  return `https://github.com/organizations/${encodeURIComponent(org)}/settings/oauth_application_policy`;
+}
+
 /** Where a person approves (or revokes) the OAuth App: the same page on github.com. */
 export function githubApplicationUrl(clientId: string): string {
   return `https://github.com/settings/connections/applications/${encodeURIComponent(clientId)}`;
@@ -97,7 +109,7 @@ export function missingScopes(granted: readonly string[], required: readonly str
   return required.filter((scope) => !(covers[scope] ?? [scope]).some((s) => has.has(s)));
 }
 
-/** The most organizations checked for OAuth App restrictions. */
+/** The most organizations listed, and the most checked for OAuth App restrictions. */
 export const MAX_CHECKED_ORGS = 30;
 
 export interface GithubConnectionOptions {
@@ -175,7 +187,7 @@ export class GithubConnection {
   private scopesChecked = false;
   private ghFailed = false;
   private lastError: GithubLastError | null = null;
-  private orgs: { checked: boolean; blocked: string[] } = { checked: false, blocked: [] };
+  private orgs: { checked: boolean; granted: string[]; pending: string[] } = { checked: false, granted: [], pending: [] };
   private flow: Flow | null = null;
   private starting: Promise<void> | null = null;
   /** Bumped by cancel, disconnect and setSource: a flow being started or finished behind them gives up. */
@@ -321,6 +333,22 @@ export class GithubConnection {
     return this.status();
   }
 
+  /** Checks the organizations again (an owner just approved the app); console source, connected only. */
+  async recheckOrgs(): Promise<GithubConnectionStatus> {
+    if (this.sourceInfo().source === 'gh') throw new GithubConnectionError('source-is-gh');
+    const reason = this.staticUnavailable();
+    if (reason) throw new GithubConnectionError('github-unavailable', reason);
+    await this.ensureCredential();
+    if (this.profileLoad) await this.profileLoad;
+    const token = this.credential;
+    if (token && this.login && this.orgs.checked) {
+      this.orgs = { ...this.orgs, checked: false };
+      this.checkOrgs(this.generation, token, this.login);
+      this.onChange();
+    }
+    return this.status();
+  }
+
   /** Clears the poll timer (shutdown, tests). */
   close(): void {
     this.dropFlow();
@@ -421,7 +449,7 @@ export class GithubConnection {
       this.scopes = user.scopes;
       this.scopesChecked = true;
       if (source === 'gh') this.login = user.login;
-      if (source === 'console') this.checkOrgs(generation, token);
+      if (source === 'console' && this.login) this.checkOrgs(generation, token, this.login);
     } catch (err) {
       if (generation !== this.generation || this.credential !== token) return;
       if (err instanceof GithubAuthError && err.status === 401) {
@@ -437,19 +465,30 @@ export class GithubConnection {
     }
   }
 
-  /** Best effort, in the background: which organizations hide their data from this OAuth App. */
-  private checkOrgs(generation: number, token: string): void {
+  /**
+   * Best effort, in the background (#336). `/user/orgs` lists only the orgs that let this app in, so
+   * the public memberships it leaves out are checked one by one: GitHub refuses their membership read
+   * while they restrict the app. A private membership of such an org is invisible to the token.
+   */
+  private checkOrgs(generation: number, token: string, login: string): void {
     if (!this.clientId) return;
     const run = async () => {
       try {
-        const orgs = (await this.queue.run(() => this.client.orgs(token))).slice(0, MAX_CHECKED_ORGS);
-        const blocked: string[] = [];
-        for (const org of orgs) {
+        const granted = (await this.queue.run(() => this.client.orgs(token))).slice(0, MAX_CHECKED_ORGS);
+        if (generation !== this.generation) return;
+        // The public list is a hint: without it, the orgs the token sees still go to the screen.
+        const publicOrgs = await this.queue.run(() => this.client.publicOrgs(token, login)).catch(() => [] as string[]);
+        const seen = new Set(granted.map((o) => o.toLowerCase()));
+        const candidates = publicOrgs.filter((o) => !seen.has(o.toLowerCase())).slice(0, MAX_CHECKED_ORGS);
+        const pending: string[] = [];
+        for (const org of candidates) {
           if (generation !== this.generation) return;
-          if ((await this.queue.run(() => this.client.orgAccess(token, org))) === 'blocked') blocked.push(org);
+          const access = await this.queue.run(() => this.client.orgAccess(token, org));
+          if (access === 'blocked') pending.push(org);
+          else if (access === 'ok') granted.push(org);
         }
         if (generation !== this.generation || this.credential !== token) return;
-        this.orgs = { checked: true, blocked };
+        this.orgs = { checked: true, granted, pending };
         this.onChange();
       } catch (err) {
         this.log(`github: could not check the organizations (${err instanceof GithubAuthError ? err.code : 'error'})`);
@@ -559,8 +598,8 @@ export class GithubConnection {
     this.scopes = user.scopes.length > 0 ? user.scopes : tokenScopes;
     this.scopesChecked = true;
     this.lastError = null;
-    this.orgs = { checked: false, blocked: [] };
-    this.checkOrgs(this.generation, token);
+    this.orgs = { checked: false, granted: [], pending: [] };
+    this.checkOrgs(this.generation, token, user.login);
     this.log(`github: connected as ${user.login}`);
     // Reconnected as another login: the previous entry goes, so no live token outlives its use.
     if (previous && previous !== user.login) {
@@ -601,7 +640,7 @@ export class GithubConnection {
     this.scopesChecked = false;
     this.ghFailed = false;
     this.lastError = null;
-    this.orgs = { checked: false, blocked: [] };
+    this.orgs = { checked: false, granted: [], pending: [] };
     this.profileLoad = null;
   }
 
@@ -634,6 +673,15 @@ export class GithubConnection {
     return { ...common('disconnected'), lastError: this.lastError };
   }
 
+  /** The pending orgs first: they are the ones that need a click. */
+  private orgList(clientId: string): GithubOrg[] {
+    const requestUrl = githubApplicationUrl(clientId);
+    return [
+      ...this.orgs.pending.map((login): GithubOrg => ({ login, access: 'pending', approvalUrl: githubOrgPolicyUrl(login), requestUrl })),
+      ...this.orgs.granted.map((login): GithubOrg => ({ login, access: 'granted' })),
+    ];
+  }
+
   private connectedFields(source: GithubCredentialSource): Partial<GithubConnectionStatus> {
     const consoleSource = source === 'console' && this.clientId !== null;
     return {
@@ -641,7 +689,7 @@ export class GithubConnection {
       scopes: [...this.scopes],
       missingScopes: this.scopesChecked ? missingScopes(this.scopes) : [],
       scopesChecked: this.scopesChecked,
-      blockedOrgs: consoleSource ? this.orgs.blocked.map((login) => ({ login, approvalUrl: githubApplicationUrl(this.clientId!) })) : [],
+      orgs: consoleSource ? this.orgList(this.clientId!) : [],
       orgsChecked: consoleSource && this.orgs.checked,
       ...(consoleSource ? { revokeUrl: githubApplicationUrl(this.clientId!) } : {}),
     };

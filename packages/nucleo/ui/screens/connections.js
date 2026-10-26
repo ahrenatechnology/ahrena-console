@@ -2,8 +2,8 @@
 //
 // - Reads `GET /api/connections` (`{ github }`) and draws the state: disconnected (the scopes the console
 //   will ask for and why), pending (the device-flow code, the link to github.com and the countdown),
-//   connected (account, scopes, blocked organizations) and unavailable (why, and what to do).
-// - Writes `POST /api/connections/github/start | cancel | disconnect | source`, each answering
+//   connected (account, scopes, the organizations and the ones pending approval) and unavailable (why, and what to do).
+// - Writes `POST /api/connections/github/start | cancel | disconnect | source | orgs`, each answering
 //   `{ github }`; a refusal is phrased in pt-BR (`writeErrorText`), never the raw code.
 // - Live: every transition is a `connections` change in `/api/changes`; while a code waits, the screen
 //   also re-reads every `interval` seconds, so it advances by itself when the person authorizes.
@@ -24,6 +24,7 @@ export const START_ROUTE = '/api/connections/github/start';
 export const CANCEL_ROUTE = '/api/connections/github/cancel';
 export const DISCONNECT_ROUTE = '/api/connections/github/disconnect';
 export const SOURCE_ROUTE = '/api/connections/github/source';
+export const ORGS_ROUTE = '/api/connections/github/orgs';
 
 /** The device-flow documentation, for "Como configurar" when the OAuth App is missing. */
 const HOW_TO_CONFIGURE = 'https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/authorizing-oauth-apps#device-flow';
@@ -157,6 +158,7 @@ export async function mount(area, ctx) {
   const cancel = () => act(CANCEL_ROUTE);
   const disconnect = () => act(DISCONNECT_ROUTE);
   const setSource = (source) => act(SOURCE_ROUTE, { source });
+  const recheckOrgs = () => act(ORGS_ROUTE);
 
   // ---------- timers: the countdown and the poll while a code waits ----------
 
@@ -318,21 +320,34 @@ export async function mount(area, ctx) {
     );
   }
 
+  // The orgs the token sees, and the ones that restrict the app (issue 336). GitHub hides the private
+  // memberships of an org that has not approved the app, so the note says where to approve them.
   function orgsList() {
     const g = github;
-    const blocked = Array.isArray(g.blockedOrgs) ? g.blockedOrgs.filter((o) => o && typeof o.login === 'string') : [];
-    const rows = blocked.map((o) => {
-      const url = githubHttpsUrl(o.approvalUrl);
-      return el(
-        'li',
-        { class: 'conn-org', 'data-org': o.login },
-        el('span', { class: 'conn-muted' }, icon('organization')),
-        el('span', { class: 'conn-trunc' }, o.login),
-        el('span', { class: 'conn-org-state' }, 'bloqueia o aplicativo', url ? ' · ' : null, url ? external(url, 'pedir aprovação') : null),
-      );
+    const orgs = Array.isArray(g.orgs) ? g.orgs.filter((o) => o && typeof o.login === 'string') : [];
+    const rows = orgs.map((o) => {
+      const pending = o.access === 'pending';
+      const approve = pending ? githubHttpsUrl(o.approvalUrl) : null;
+      const request = pending ? githubHttpsUrl(o.requestUrl) : null;
+      const state = pending
+        ? el('span', { class: 'conn-org-state' }, 'acesso pendente', approve ? ' · ' : null, approve ? external(approve, 'aprovar (dono)') : null, request ? ' · ' : null, request ? external(request, 'pedir') : null)
+        : el('span', { class: 'conn-org-state conn-org-granted' }, icon('done'), 'liberada');
+      return el('li', { class: 'conn-org', 'data-org': o.login, 'data-access': pending ? 'pending' : 'granted' }, el('span', { class: 'conn-muted' }, icon('organization')), el('span', { class: 'conn-trunc' }, o.login), state);
     });
-    const status = !g.orgsChecked ? 'Conferindo as organizações…' : blocked.length ? null : 'Nenhuma organização bloqueia o aplicativo.';
-    return [rows.length ? el('ul', { class: 'conn-orgs' }, ...rows) : null, status ? muted(status) : null, muted('Uma organização que restringe aplicativos esconde os dados até o dono aprovar.', 'conn-small')];
+    const status = !g.orgsChecked ? 'Conferindo as organizações…' : orgs.length ? null : 'O token não enxerga nenhuma organização.';
+    const app = githubHttpsUrl(g.revokeUrl);
+    const recheck = g.orgsChecked ? button('Conferir de novo', { iconName: 'refresh', action: 'recheck-orgs', route: ORGS_ROUTE, onClick: recheckOrgs }) : null;
+    return [
+      rows.length ? el('ul', { class: 'conn-orgs' }, ...rows) : null,
+      status ? muted(status) : null,
+      el(
+        'p',
+        { class: 'conn-muted conn-small' },
+        'Falta alguma? O GitHub esconde as organizações que ainda não aprovaram o Ahrena Console. O dono aprova uma vez, em Settings › Third-party access › OAuth app policy da organização',
+        app ? ['; ou ', external(app, 'abra o aplicativo no GitHub'), ' e use Grant (se você é dono) ou Request (pede ao dono).'] : '.',
+      ),
+      recheck ? el('div', { class: 'conn-actions' }, recheck) : null,
+    ];
   }
 
   function connectedCard() {

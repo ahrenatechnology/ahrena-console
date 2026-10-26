@@ -362,18 +362,47 @@ describe('#241/AC-2 connecting through the device flow', () => {
     assert.deepEqual(st.missingScopes, ['read:org', 'project']);
   });
 
-  test('blocked orgs are found in the background through the single call queue', async () => {
+  test('#336 the orgs the token sees and the public ones that restrict the app, through the single call queue', async () => {
     const s = setup({ auth: { blockedOrgs: ['estudio-ficticio'] } });
     await connect(s);
     const st = await s.conn.status();
     assert.equal(st.orgsChecked, true);
-    assert.deepEqual(st.blockedOrgs, [{ login: 'estudio-ficticio', approvalUrl: APPROVAL }]);
+    assert.deepEqual(st.orgs, [
+      { login: 'estudio-ficticio', access: 'pending', approvalUrl: 'https://github.com/organizations/estudio-ficticio/settings/oauth_application_policy', requestUrl: APPROVAL },
+      { login: 'exemplo-labs', access: 'granted' },
+    ]);
     const apiCalls = s.gh.calls.filter((c) => c.startsWith('GET '));
-    assert.deepEqual(apiCalls, ['GET /user', 'GET /user/orgs?per_page=100', 'GET /orgs/exemplo-labs/repos?per_page=1', 'GET /orgs/estudio-ficticio/repos?per_page=1']);
+    assert.deepEqual(apiCalls, ['GET /user', 'GET /user/orgs?per_page=100', 'GET /users/dev-sintetico/orgs?per_page=100', 'GET /user/memberships/orgs/estudio-ficticio']);
     assert.equal(s.queued.length, apiCalls.length, 'every API call went through the queue');
   });
 
-  test('a failing org list leaves orgsChecked false and no blocked org', async () => {
+  test('#336 without the public list, the orgs the token sees still show', async () => {
+    const s = setup({ auth: { blockedOrgs: ['estudio-ficticio'] } });
+    const fetch = (async (input: string | URL | Request, init?: RequestInit) =>
+      String(input).includes('/users/') ? new Response('{}', { status: 502 }) : s.gh.fetch(input, init)) as typeof globalThis.fetch;
+    const conn = new GithubConnection({ ...connOptions(s), fetch });
+    await conn.start();
+    while (s.timers.length) {
+      s.timers.shift()!.fn();
+      await conn.idle();
+    }
+    const st = await conn.status();
+    assert.deepEqual([st.orgsChecked, st.orgs], [true, [{ login: 'exemplo-labs', access: 'granted' }]]);
+  });
+
+  test('#336 recheckOrgs reads the orgs again after an owner approves the app', async () => {
+    const s = setup({ auth: { blockedOrgs: ['estudio-ficticio'] } });
+    await connect(s);
+    assert.equal((await s.conn.status()).orgs?.[0]?.access, 'pending');
+    s.auth.blockedOrgs = [];
+    const during = await s.conn.recheckOrgs();
+    assert.equal(during.orgsChecked, false);
+    await s.conn.idle();
+    const st = await s.conn.status();
+    assert.deepEqual([st.orgsChecked, st.orgs], [true, [{ login: 'exemplo-labs', access: 'granted' }, { login: 'estudio-ficticio', access: 'granted' }]]);
+  });
+
+  test('a failing org list leaves orgsChecked false and no org', async () => {
     const s = setup();
     const fetch = (async (input: string | URL | Request, init?: RequestInit) =>
       String(input).includes('/user/orgs') ? new Response('{}', { status: 502 }) : s.gh.fetch(input, init)) as typeof globalThis.fetch;
@@ -384,7 +413,7 @@ describe('#241/AC-2 connecting through the device flow', () => {
       await conn.idle();
     }
     const st = await conn.status();
-    assert.deepEqual([st.state, st.orgsChecked, st.blockedOrgs], ['connected', false, []]);
+    assert.deepEqual([st.state, st.orgsChecked, st.orgs], ['connected', false, []]);
   });
 });
 

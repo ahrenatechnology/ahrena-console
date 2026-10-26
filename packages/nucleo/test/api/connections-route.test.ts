@@ -16,7 +16,7 @@ import { MemoryInstallationSettings } from '../../src/settings/installation-sett
 import { createFakeGithub, DEMO_GITHUB_DATA } from '../../src/simulator/fake-github.ts';
 
 const TOKEN = 'gho_FAKEroutes000000000000000000000000';
-const WRITES = ['/api/connections/github/start', '/api/connections/github/cancel', '/api/connections/github/disconnect', '/api/connections/github/source', '/api/project/selection'];
+const WRITES = ['/api/connections/github/start', '/api/connections/github/cancel', '/api/connections/github/disconnect', '/api/connections/github/source', '/api/connections/github/orgs', '/api/project/selection'];
 const BODIES: Record<string, string> = {
   '/api/connections/github/source': JSON.stringify({ source: 'console' }),
   '/api/project/selection': JSON.stringify({ owner: 'exemplo', number: 3 }),
@@ -122,6 +122,12 @@ describe('#241/AC-2 GET /api/connections and the github writes', () => {
     assert.ok(!/deviceCode|device_code/.test(r.text));
     const c = await b.post('/api/connections/github/cancel');
     assert.deepEqual([c.status, c.json.github.state], [200, 'disconnected']);
+  });
+
+  test('#336 orgs checks the organizations again and answers the status', async () => {
+    const o = await b.post('/api/connections/github/orgs');
+    assert.equal(o.status, 200);
+    assert.ok(o.json.github.state, 'the status comes back');
   });
 
   test('disconnect answers the status; source switches and validates', async () => {
