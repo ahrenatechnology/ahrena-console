@@ -124,12 +124,6 @@ describe('#241/AC-2 GET /api/connections and the github writes', () => {
     assert.deepEqual([c.status, c.json.github.state], [200, 'disconnected']);
   });
 
-  test('#336 orgs checks the organizations again and answers the status', async () => {
-    const o = await b.post('/api/connections/github/orgs');
-    assert.equal(o.status, 200);
-    assert.ok(o.json.github.state, 'the status comes back');
-  });
-
   test('disconnect answers the status; source switches and validates', async () => {
     const d = await b.post('/api/connections/github/disconnect');
     assert.deepEqual([d.status, d.json.github.state], [200, 'disconnected']);
@@ -183,6 +177,37 @@ describe('#241/AC-2 the github write errors', () => {
     }
   });
 
+  test('#336 orgs: connected, it reads the organizations again; unavailable or under gh, 409', async () => {
+    const b = await boot({ vault: new MemoryVault({ 'dev-sintetico': TOKEN }) });
+    try {
+      await b.connection.status();
+      await b.connection.idle();
+      const orgReads = () => b.gh.calls.filter((c) => c.startsWith('GET /user/orgs')).length;
+      assert.equal(orgReads(), 1);
+      const r = await b.post('/api/connections/github/orgs');
+      assert.deepEqual([r.status, r.json.github.state, r.json.github.orgsChecked], [200, 'connected', false]);
+      await b.connection.idle();
+      assert.equal(orgReads(), 2);
+      assert.equal((await b.connection.status()).orgsChecked, true);
+    } finally {
+      await b.close();
+    }
+    const off = await boot({ clientId: null });
+    try {
+      const r = await off.post('/api/connections/github/orgs');
+      assert.deepEqual([r.status, r.json], [409, { error: 'github-unavailable', reason: 'no-client-id' }]);
+    } finally {
+      await off.close();
+    }
+    const gh = await boot({ env: { AHRENA_CONSOLE_GITHUB_SOURCE: 'gh' }, ghInstalled: true });
+    try {
+      const r = await gh.post('/api/connections/github/orgs');
+      assert.deepEqual([r.status, r.json], [409, { error: 'source-is-gh' }]);
+    } finally {
+      await gh.close();
+    }
+  });
+
   test('GitHub refusing the code request: 502 github-error', async () => {
     const b = await boot({ clientId: 'not-the-app' });
     try {
@@ -194,7 +219,7 @@ describe('#241/AC-2 the github write errors', () => {
   });
 });
 
-describe('#241/AC-6 the five writes only from the /ui itself', () => {
+describe('#241/AC-6 the six writes only from the /ui itself', () => {
   let b: Awaited<ReturnType<typeof boot>>;
   before(async () => {
     b = await boot();

@@ -334,7 +334,13 @@ export async function mount(area, ctx) {
         : el('span', { class: 'conn-org-state conn-org-granted' }, icon('done'), 'liberada');
       return el('li', { class: 'conn-org', 'data-org': o.login, 'data-access': pending ? 'pending' : 'granted' }, el('span', { class: 'conn-muted' }, icon('organization')), el('span', { class: 'conn-trunc' }, o.login), state);
     });
-    const status = !g.orgsChecked ? 'Conferindo as organizações…' : orgs.length ? null : 'O token não enxerga nenhuma organização.';
+    const status = !g.orgsChecked
+      ? 'Conferindo as organizações…'
+      : g.orgsFailed
+        ? 'Não deu para conferir as organizações no GitHub agora. Tente de novo em instantes.'
+        : orgs.length
+          ? null
+          : 'O token não enxerga nenhuma organização.';
     const app = githubHttpsUrl(g.revokeUrl);
     const recheck = g.orgsChecked ? button('Conferir de novo', { iconName: 'refresh', action: 'recheck-orgs', route: ORGS_ROUTE, onClick: recheckOrgs }) : null;
     return [

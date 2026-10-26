@@ -7,6 +7,7 @@ import {
   GithubConnection,
   GithubConnectionError,
   GithubNotConnectedError,
+  MAX_CHECKED_ORGS,
   MemoryVault,
   missingScopes,
   type CredentialVault,
@@ -402,7 +403,62 @@ describe('#241/AC-2 connecting through the device flow', () => {
     assert.deepEqual([st.orgsChecked, st.orgs], [true, [{ login: 'exemplo-labs', access: 'granted' }, { login: 'estudio-ficticio', access: 'granted' }]]);
   });
 
-  test('a failing org list leaves orgsChecked false and no org', async () => {
+  test('#336 a recheck that fails says so and can run again; the next one succeeds', async () => {
+    const s = setup({ auth: { blockedOrgs: ['estudio-ficticio'] } });
+    let down = false;
+    const fetch = (async (input: string | URL | Request, init?: RequestInit) =>
+      down && String(input).includes('/user/orgs') ? new Response('{}', { status: 502 }) : s.gh.fetch(input, init)) as typeof globalThis.fetch;
+    const conn = new GithubConnection({ ...connOptions(s), fetch });
+    await conn.start();
+    while (s.timers.length) {
+      s.timers.shift()!.fn();
+      await conn.idle();
+    }
+    const before = (await conn.status()).orgs;
+    down = true;
+    await conn.recheckOrgs();
+    await conn.idle();
+    const failed = await conn.status();
+    assert.deepEqual([failed.orgsChecked, failed.orgsFailed, failed.orgs], [true, true, before], 'what the earlier check found stays');
+    down = false;
+    s.auth.blockedOrgs = [];
+    assert.equal((await conn.recheckOrgs()).orgsChecked, false, 'a failed check does not block the next one');
+    await conn.idle();
+    const st = await conn.status();
+    assert.deepEqual([st.orgsChecked, st.orgsFailed, st.orgs?.map((o) => o.access)], [true, false, ['granted', 'granted']]);
+  });
+
+  test('#336 a recheck while a check runs starts no second one', async () => {
+    const s = setup();
+    await connect(s);
+    const reads = () => s.gh.calls.filter((c) => c.startsWith('GET /user/orgs')).length;
+    const n = reads();
+    await Promise.all([s.conn.recheckOrgs(), s.conn.recheckOrgs()]);
+    await s.conn.idle();
+    assert.equal(reads(), n + 1);
+  });
+
+  test('#336 each list keeps at most MAX_CHECKED_ORGS', async () => {
+    const many = Array.from({ length: MAX_CHECKED_ORGS + 5 }, (_, i) => `org-${i}`);
+    const s = setup({ auth: { publicOrgs: many } });
+    const fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes('/user/orgs')) return Response.json(many.slice(0, MAX_CHECKED_ORGS + 5).map((login) => ({ login })));
+      if (url.includes('/users/')) return Response.json(many.map((login) => ({ login: `${login}-pub` })));
+      if (url.includes('/user/memberships/orgs/')) return Response.json({ state: 'active' });
+      return s.gh.fetch(input, init);
+    }) as typeof globalThis.fetch;
+    const conn = new GithubConnection({ ...connOptions(s), fetch });
+    await conn.start();
+    while (s.timers.length) {
+      s.timers.shift()!.fn();
+      await conn.idle();
+    }
+    const st = await conn.status();
+    assert.equal(st.orgs?.length, MAX_CHECKED_ORGS);
+  });
+
+  test('a failing org list ends the check as failed, with no org', async () => {
     const s = setup();
     const fetch = (async (input: string | URL | Request, init?: RequestInit) =>
       String(input).includes('/user/orgs') ? new Response('{}', { status: 502 }) : s.gh.fetch(input, init)) as typeof globalThis.fetch;
@@ -413,7 +469,7 @@ describe('#241/AC-2 connecting through the device flow', () => {
       await conn.idle();
     }
     const st = await conn.status();
-    assert.deepEqual([st.state, st.orgsChecked, st.orgs], ['connected', false, []]);
+    assert.deepEqual([st.state, st.orgsChecked, st.orgsFailed, st.orgs], ['connected', true, true, []]);
   });
 });
 

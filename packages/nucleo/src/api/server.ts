@@ -46,7 +46,7 @@
 // | `GET /api/project/options`    | The Projects the account sees, to choose the kanban's (`?refresh=1`; api/project.ts, #241) |
 // | `POST /api/project/selection` | Stores the chosen Project: `{ owner, number, field? }` (#241) |
 //
-// #241 (decision 0011 §6): the five writes `POST /api/connections/github/(start|cancel|disconnect|source)`
+// #241 (decision 0011 §6): the six writes `POST /api/connections/github/(start|cancel|disconnect|source|orgs)`
 // and `POST /api/project/selection` are accepted ONLY from the /ui itself: exact path, our Host, `Origin`
 // exactly `http://<Host>`, JSON, at most 4 KiB, no cross-site or same-site `Sec-Fetch-Site`. A request
 // without `Origin` is 403 there, unlike the other writes. While GitHub is not connected, every
@@ -445,7 +445,7 @@ export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
       }
       return respondToolsWrite(req, res, url, opts.tools);
     }
-    // #241: the five writes only the /ui itself makes, checked before anything else.
+    // #241: the six writes only the /ui itself makes, checked before anything else.
     if (STRICT_WRITE_ROUTES.has(url.pathname)) {
       const refusal = strictWriteRefusal(req, port, url.pathname);
       if (refusal) return send(res, refusal.status, refusal.body);

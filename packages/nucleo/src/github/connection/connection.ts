@@ -56,6 +56,8 @@ export interface GithubConnectionStatus {
   /** The orgs the token sees (`granted`) and the ones that restrict the app (`pending`). */
   orgs?: GithubOrg[];
   orgsChecked?: boolean;
+  /** The last org check failed (GitHub down, rate limit): `orgs` is what an earlier check found. */
+  orgsFailed?: boolean;
   revokeUrl?: string;
   /** unavailable */
   reason?: GithubUnavailableReason;
@@ -109,7 +111,7 @@ export function missingScopes(granted: readonly string[], required: readonly str
   return required.filter((scope) => !(covers[scope] ?? [scope]).some((s) => has.has(s)));
 }
 
-/** The most organizations listed, and the most checked for OAuth App restrictions. */
+/** The most organizations of each list (granted, pending), and the most checked for OAuth App restrictions. */
 export const MAX_CHECKED_ORGS = 30;
 
 export interface GithubConnectionOptions {
@@ -187,7 +189,9 @@ export class GithubConnection {
   private scopesChecked = false;
   private ghFailed = false;
   private lastError: GithubLastError | null = null;
-  private orgs: { checked: boolean; granted: string[]; pending: string[] } = { checked: false, granted: [], pending: [] };
+  private orgs: { checked: boolean; failed: boolean; granted: string[]; pending: string[] } = { checked: false, failed: false, granted: [], pending: [] };
+  /** The generation whose org check is running: a recheck of it waits instead of starting another. */
+  private orgsRunning: number | null = null;
   private flow: Flow | null = null;
   private starting: Promise<void> | null = null;
   /** Bumped by cancel, disconnect and setSource: a flow being started or finished behind them gives up. */
@@ -341,8 +345,8 @@ export class GithubConnection {
     await this.ensureCredential();
     if (this.profileLoad) await this.profileLoad;
     const token = this.credential;
-    if (token && this.login && this.orgs.checked) {
-      this.orgs = { ...this.orgs, checked: false };
+    if (token && this.login && this.orgsRunning !== this.generation) {
+      this.orgs = { ...this.orgs, checked: false, failed: false };
       this.checkOrgs(this.generation, token, this.login);
       this.onChange();
     }
@@ -473,25 +477,36 @@ export class GithubConnection {
   private checkOrgs(generation: number, token: string, login: string): void {
     if (!this.clientId) return;
     const run = async () => {
+      const current = () => generation === this.generation && this.credential === token;
+      this.orgsRunning = generation;
       try {
         const granted = (await this.queue.run(() => this.client.orgs(token))).slice(0, MAX_CHECKED_ORGS);
-        if (generation !== this.generation) return;
+        if (!current()) return;
         // The public list is a hint: without it, the orgs the token sees still go to the screen.
         const publicOrgs = await this.queue.run(() => this.client.publicOrgs(token, login)).catch(() => [] as string[]);
         const seen = new Set(granted.map((o) => o.toLowerCase()));
         const candidates = publicOrgs.filter((o) => !seen.has(o.toLowerCase())).slice(0, MAX_CHECKED_ORGS);
         const pending: string[] = [];
+        let unknown = 0;
         for (const org of candidates) {
-          if (generation !== this.generation) return;
+          if (!current()) return;
           const access = await this.queue.run(() => this.client.orgAccess(token, org));
           if (access === 'blocked') pending.push(org);
           else if (access === 'ok') granted.push(org);
+          else unknown++;
         }
-        if (generation !== this.generation || this.credential !== token) return;
-        this.orgs = { checked: true, granted, pending };
+        if (!current()) return;
+        if (unknown > 0) this.log(`github: ${unknown} public organization(s) could not be checked`);
+        this.orgs = { checked: true, failed: false, granted: granted.slice(0, MAX_CHECKED_ORGS), pending };
         this.onChange();
       } catch (err) {
         this.log(`github: could not check the organizations (${err instanceof GithubAuthError ? err.code : 'error'})`);
+        if (!current()) return;
+        // Ended, so the screen offers the recheck; what an earlier check found stays.
+        this.orgs = { ...this.orgs, checked: true, failed: true };
+        this.onChange();
+      } finally {
+        if (this.orgsRunning === generation) this.orgsRunning = null;
       }
     };
     void this.track(run());
@@ -598,7 +613,7 @@ export class GithubConnection {
     this.scopes = user.scopes.length > 0 ? user.scopes : tokenScopes;
     this.scopesChecked = true;
     this.lastError = null;
-    this.orgs = { checked: false, granted: [], pending: [] };
+    this.orgs = { checked: false, failed: false, granted: [], pending: [] };
     this.checkOrgs(this.generation, token, user.login);
     this.log(`github: connected as ${user.login}`);
     // Reconnected as another login: the previous entry goes, so no live token outlives its use.
@@ -640,7 +655,7 @@ export class GithubConnection {
     this.scopesChecked = false;
     this.ghFailed = false;
     this.lastError = null;
-    this.orgs = { checked: false, granted: [], pending: [] };
+    this.orgs = { checked: false, failed: false, granted: [], pending: [] };
     this.profileLoad = null;
   }
 
@@ -691,6 +706,7 @@ export class GithubConnection {
       scopesChecked: this.scopesChecked,
       orgs: consoleSource ? this.orgList(this.clientId!) : [],
       orgsChecked: consoleSource && this.orgs.checked,
+      orgsFailed: consoleSource && this.orgs.failed,
       ...(consoleSource ? { revokeUrl: githubApplicationUrl(this.clientId!) } : {}),
     };
   }
