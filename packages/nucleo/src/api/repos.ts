@@ -17,9 +17,10 @@
 // `state: 'loading'`. Cada montagem lê o GitHub pelo `GithubCache` (TTL por chave, ETag no
 // REST, dado velho por até 24 h, pausa quando o GitHub limita), o mesmo do trabalho no núcleo, para
 // a pausa valer para os dois. Todas as chamadas à fonte, de qualquer montagem (a lista e as
-// métricas de vários repositórios ao mesmo tempo), passam por uma fila só (`chamar()`): uma de cada
-// vez, nunca em paralelo (decisão 0001, item 6), e cada pedido tem teto de 20 s, para um pedido
-// pendurado não travar a fila (o estouro vira `error`). Quando a montagem muda a resposta, o núcleo
+// métricas de vários repositórios ao mesmo tempo), passam por uma fila só (`chamar()`), que no
+// núcleo deixa até `GITHUB_CALL_LIMIT` (4) chamadas ao mesmo tempo (#341, emenda o item 6 da
+// decisão 0001), e cada pedido tem teto de 20 s, para um pedido pendurado não travar a fila (o
+// estouro vira `error`). Quando a montagem muda a resposta, o núcleo
 // registra no cursor `{ type: 'repos', key: 'list' }` ou `{ type: 'repos', key: '<dono>/<repo>' }`
 // em minúsculas (`chaveDoRepo`, seja qual for a caixa da rota), e a tela relê. A descoberta de
 // sessões novas num repositório também registra `list`. As métricas guardam em memória no máximo
@@ -39,9 +40,11 @@
 //
 // ## O que cada número lê
 //
-// Lista: `ReposLista` (GraphQL; até 500 repos da conta e das orgs, sem arquivados), `ReposResumo`
-// (duas buscas de custo 1) e, por repositório com push nas últimas 12 semanas (até 30, os mais
-// recentes), o `stats/commit_activity` do REST com ETag. Escolhido no lugar do `history(since:)`
+// Lista (#341, in three steps, each one published): the last assembled list from the cache at
+// start; `ReposLista` (GraphQL, light: up to 500 repos of the account and its orgs, no archived,
+// 100 per page); then, handed to the queue together, `ReposCounts` (open counts and the default
+// branch's CI by `nodes(ids:)`, 25 per batch), `ReposResumo` (duas buscas de custo 1) e, por
+// repositório com push nas últimas 12 semanas (até 30, os mais recentes), o `stats/commit_activity` do REST com ETag. Escolhido no lugar do `history(since:)`
 // do GraphQL porque o REST dá as 52 semanas numa chamada que o 304 deixa de graça, e a mesma chave
 // do cache serve as métricas do repositório; o GraphQL pediria 12 contagens por repositório. O CI
 // de 7 dias do resumo soma os workflow runs concluídos dos repositórios com push nos 7 dias.
@@ -70,9 +73,11 @@ import {
   prsDoPeriodo,
   releasesDoPeriodo,
   repoDoDetalhe,
+  rowCounts,
   somarCi,
   temEscrita,
   type ContribuidorCru,
+  type RowCounts,
   type RunsCrus,
   type SemanaDeCodigo,
   type SemanaDeCommits,
@@ -80,6 +85,7 @@ import {
 import {
   GithubReposSource,
   incompleteListMessage,
+  LIST_COUNTS_BATCH,
   NOME_DO_DONO,
   NOME_DO_REPO,
   SemGithubError,
@@ -128,6 +134,14 @@ const CALCULANDO = 'o GitHub ainda está calculando (202)';
  * `owner/repo` in lower case.
  */
 export const LIST_CHANGE_KEY = 'list';
+
+/** Cache keys of the list (#341): the light `ReposLista`, the counts and CI, and the last assembled answer. */
+export const LIST_KEY = 'repos:list:light';
+export const LIST_COUNTS_KEY = 'repos:list:counts';
+export const LIST_VIEW_KEY = 'repos:list:view';
+
+/** A promise that never rejects: its value or its error (for reads started together, awaited one by one). */
+const settle = <T>(p: Promise<T>): Promise<{ value: T } | { error: unknown }> => p.then((value) => ({ value }), (error: unknown) => ({ error }));
 
 class CalculandoError extends Error {
   constructor() {
@@ -194,6 +208,8 @@ export class ReposDoGithub {
   private readonly entradaDaLista = entrada<ListaDeRepos>();
   private readonly entradas = new Map<string, Entrada<MetricasDoRepo>>();
   private semToken: string | null = null;
+  /** The first read looked for the list kept in the cache (#341). */
+  private snapshotChecked = false;
   /** Chamadas que passaram pelo cache até a fonte (medição e testes). */
   chamadas = { fonte: 0 };
 
@@ -215,10 +231,22 @@ export class ReposDoGithub {
     const e = this.entradaDaLista;
     if (!this.fonte) return listaVazia('no-github', null);
     e.lidaEm = this.agora();
+    if (!e.valor && !this.snapshotChecked) await this.restoreList(e);
     if (atualizar) this.vencer(e);
     this.disparar(e, LIST_CHANGE_KEY, () => this.montarLista(e), (msg) => listaVazia('error', msg));
     const base = e.valor ?? listaVazia('loading', null);
     return this.comSessoesNaLista(base, await this.contagens());
+  }
+
+  /**
+   * #341: the first read after the core starts shows the last list it assembled (kept in the cache,
+   * up to 24 h old like any stale read), and the rebuild runs behind it. A change of GitHub identity
+   * empties the cache (#241), so a list read with another credential is never restored.
+   */
+  private async restoreList(e: Entrada<ListaDeRepos>): Promise<void> {
+    this.snapshotChecked = true;
+    const hit = await this.cache.peek<ListaDeRepos>(LIST_VIEW_KEY).catch(() => null);
+    if (hit && !e.valor && hit.value.state === 'ready') e.valor = hit.value;
   }
 
   /** As métricas de `dono/nome` no período; mesma regra da lista. */
@@ -381,12 +409,13 @@ export class ReposDoGithub {
 
   private async montarLista(e: Entrada<ListaDeRepos>): Promise<void> {
     const agora = this.agora();
+    const epoch = this.cache.epoch;
     let crua: { value: ListaCrua; fetchedAt: number; stale: boolean; staleReason: string | null };
     try {
       // A cut list never replaces a longer one already shown: it fails, and the cache keeps serving
       // the old one with the reason (#269).
       const shown = e.valor?.summary.repositories ?? 0;
-      crua = await this.graphql('repos:list', TTL_DOS_REPOS.lista, e.forcar, async (f) => {
+      crua = await this.graphql(LIST_KEY, TTL_DOS_REPOS.lista, e.forcar, async (f) => {
         const list = await f.lista();
         if (list.incomplete && list.repos.length < shown) throw new Error(incompleteListMessage(list.incomplete));
         return list;
@@ -400,47 +429,97 @@ export class ReposDoGithub {
     // A list cut by a page that failed says so first: how many came and why the rest did not.
     const missing = crua.value.incomplete;
     if (missing) erros.unshift(incompleteListMessage(missing));
-    const commitsAntes = new Map((e.valor?.groups ?? []).flatMap((g) => g.repos.map((r) => [r.fullName, r.commits12] as const)));
+    const rowsBefore = (e.valor?.groups ?? []).flatMap((g) => g.repos);
+    const commitsAntes = new Map(rowsBefore.map((r) => [r.fullName, r.commits12] as const));
+    const counts = new Map<string, RowCounts>(rowsBefore.map((r) => [r.fullName, { openIssues: r.openIssues, openPrs: r.openPrs, ci: r.ci }]));
     const ciAntes = e.valor?.summary.ci ?? { greenRate: null, runs: 0 };
     const montar = (resumo: ResumoCru | null, commits: ReadonlyMap<string, number[]>, ci: { greenRate: number | null; runs: number }): ListaDeRepos => ({
       state: 'ready',
       updatedAt: new Date(crua.fetchedAt).toISOString(),
       error: erros[0] ?? null,
-      ...montarLista(crua.value, resumo, commits, ci),
+      ...montarLista(crua.value, resumo, commits, ci, counts),
     });
+    const publish = async (valor: ListaDeRepos) => {
+      this.publicar(e, valor, LIST_CHANGE_KEY);
+      // The next core start shows it at once (#341), unless the GitHub identity changed meanwhile.
+      if (this.cache.epoch === epoch) await this.cache.put(LIST_VIEW_KEY, valor);
+    };
     // Primeira etapa: os repositórios já aparecem, com o que se sabia antes de cada um.
-    if (!e.valor) this.publicar(e, montar(null, commitsAntes, ciAntes), LIST_CHANGE_KEY);
+    if (!e.valor) await publish(montar(null, commitsAntes, ciAntes));
 
-    let resumo: ResumoCru | null = e.valor ? { esperandoReview: e.valor.summary.prsAwaitingReview, fechadasNaSemana: e.valor.summary.issuesClosedThisWeek } : null;
-    try {
-      const r = await this.graphql('repos:summary', TTL_DOS_REPOS.resumo, e.forcar, (f) => f.resumo(crua.value.login, crua.value.organizacoes, diaIso(agora - 7 * DIA_MS)));
-      resumo = r.value;
-      if (r.stale && r.staleReason) erros.push(r.staleReason);
-    } catch (err) {
-      erros.push(motivo(err));
-    }
-
+    // #341: the counts, the summary and the per-repository REST reads start together; the queue
+    // caps how many run at once, and the count batches are first in it.
+    const countsRead = settle(this.listCounts(crua.value, e.forcar));
+    const summaryRead = settle(this.graphql('repos:summary', TTL_DOS_REPOS.resumo, e.forcar, (f) => f.resumo(crua.value.login, crua.value.organizacoes, diaIso(agora - 7 * DIA_MS))));
     const recentes = [...crua.value.repos]
       .filter((r) => r.pushedAt && agora - Date.parse(r.pushedAt) < 12 * 7 * DIA_MS)
       .sort((a, b) => Date.parse(b.pushedAt!) - Date.parse(a.pushedAt!))
       .slice(0, this.maximoPorRepo);
+    const desde7 = diaIso(agora - 7 * DIA_MS);
+    const perRepo = Promise.all(
+      recentes.map((r) => {
+        const k = chaveDoRepo(r.nameWithOwner);
+        return Promise.all([
+          this.rest<SemanaDeCommits[]>(`repos:rest:${k}:commit_activity`, TTL_DOS_REPOS.estatisticas, `/repos/${r.nameWithOwner}/stats/commit_activity`),
+          agora - Date.parse(r.pushedAt!) < 7 * DIA_MS ? this.rest<RunsCrus>(`repos:rest:${k}:runs7`, TTL_DOS_REPOS.runs, caminhoDosRuns(r.nameWithOwner, desde7)) : null,
+        ]);
+      }),
+    );
+
+    let resumo: ResumoCru | null = e.valor ? { esperandoReview: e.valor.summary.prsAwaitingReview, fechadasNaSemana: e.valor.summary.issuesClosedThisWeek } : null;
+    const summary = await summaryRead;
+    if ('error' in summary) erros.push(motivo(summary.error));
+    else {
+      resumo = summary.value.value;
+      if (summary.value.stale && summary.value.staleReason) erros.push(summary.value.staleReason);
+    }
+    const read = await countsRead;
+    if ('error' in read) erros.push(motivo(read.error));
+    else {
+      for (const [name, c] of Object.entries(read.value.value)) counts.set(name, c);
+      if (read.value.stale && read.value.staleReason) erros.push(read.value.staleReason);
+    }
+    // Segunda etapa: as contagens e o CI de cada linha, antes das leituras por repositório.
+    await publish(montar(resumo, commitsAntes, ciAntes));
+
     const commits = new Map(commitsAntes);
     const partesDoCi: ReturnType<typeof contarRuns>[] = [];
     let calculando = false;
-    const desde7 = diaIso(agora - 7 * DIA_MS);
-    for (const r of recentes) {
-      const atividade = await this.rest<SemanaDeCommits[]>(`repos:rest:${chaveDoRepo(r.nameWithOwner)}:commit_activity`, TTL_DOS_REPOS.estatisticas, `/repos/${r.nameWithOwner}/stats/commit_activity`);
+    const lidos = await perRepo;
+    recentes.forEach((r, i) => {
+      const [atividade, runs] = lidos[i];
       if (atividade.calculando) calculando = true;
       else commits.set(r.nameWithOwner, commits12(atividade.valor));
       if (atividade.erro) erros.push(atividade.erro);
-      if (agora - Date.parse(r.pushedAt!) < 7 * DIA_MS) {
-        const runs = await this.rest<RunsCrus>(`repos:rest:${chaveDoRepo(r.nameWithOwner)}:runs7`, TTL_DOS_REPOS.runs, caminhoDosRuns(r.nameWithOwner, desde7));
-        if (runs.valor) partesDoCi.push(contarRuns(runs.valor));
-        if (runs.erro) erros.push(runs.erro);
-      }
-    }
-    this.publicar(e, montar(resumo, commits, somarCi(partesDoCi)), LIST_CHANGE_KEY);
+      if (runs?.valor) partesDoCi.push(contarRuns(runs.valor));
+      if (runs?.erro) erros.push(runs.erro);
+    });
+    await publish(montar(resumo, commits, somarCi(partesDoCi)));
     this.repetirSeCalculando(e, calculando, LIST_CHANGE_KEY, () => this.montarLista(e), (msg) => listaVazia('error', msg));
+  }
+
+  /**
+   * #341: the open counts and CI of every listed repository, by `nameWithOwner`: `LIST_COUNTS_BATCH`
+   * per call, all the batches handed to the queue at once.
+   */
+  private listCounts(list: ListaCrua, force: boolean) {
+    return this.cache.get<Record<string, RowCounts>>(
+      LIST_COUNTS_KEY,
+      TTL_DOS_REPOS.lista,
+      async () => {
+        const names = new Map(list.repos.map((r) => [r.id, r.nameWithOwner]));
+        const ids = [...names.keys()];
+        const batches = Array.from({ length: Math.ceil(ids.length / LIST_COUNTS_BATCH) }, (_, i) => ids.slice(i * LIST_COUNTS_BATCH, (i + 1) * LIST_COUNTS_BATCH));
+        const read = await Promise.all(batches.map((b) => this.chamar((f) => f.counts(b))));
+        const value: Record<string, RowCounts> = {};
+        for (const c of read.flat()) {
+          const name = names.get(c.id);
+          if (name) value[name] = rowCounts(c);
+        }
+        return { value };
+      },
+      { force },
+    );
   }
 
   // ---- Métricas (#105) ----

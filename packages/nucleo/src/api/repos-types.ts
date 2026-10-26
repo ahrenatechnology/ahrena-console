@@ -32,8 +32,9 @@ export interface RepoDaLista {
    * não chegaram (o GitHub ainda calcula, com 202, ou a leitura por repositório não terminou).
    */
   commits12: number[];
-  openIssues: number;
-  openPrs: number;
+  /** `null` until the counts read after the light list arrived (#341). */
+  openIssues: number | null;
+  openPrs: number | null;
   ci: CiDoRepo;
   sessions: SessoesDoRepo;
   /** ISO. */
@@ -53,10 +54,11 @@ export interface ResumoDosRepos {
   repositories: number;
   /** Repositórios com ao menos uma sessão no mês. */
   withSessionsThisMonth: number;
-  openPrs: number;
+  /** `null` until the counts arrived (#341); the sum of the repositories that have them. */
+  openPrs: number | null;
   /** PRs abertos, fora rascunho, com review exigido e ainda sem aprovação (`review:required`). */
   prsAwaitingReview: number;
-  openIssues: number;
+  openIssues: number | null;
   issuesClosedThisWeek: number;
   /** Workflow runs concluídos nos últimos 7 dias; `greenRate` de 0 a 1, `null` sem execuções. */
   ci: { greenRate: number | null; runs: number; days: 7 };

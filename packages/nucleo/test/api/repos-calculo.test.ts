@@ -18,6 +18,7 @@ import {
   mediana,
   montarLista,
   prsDoPeriodo,
+  rowCounts,
   SEMANA_MS,
   temEscrita,
 } from '../../src/github/repos-calculo.ts';
@@ -28,10 +29,10 @@ const H = 3_600_000;
 const semanaSeg = (atras: number) => Math.floor((AGORA - atras * SEMANA_MS) / 1000);
 const iso = (ms: number) => new Date(ms).toISOString();
 
-function repo(nome: string, extra: Partial<RepoCru> = {}): RepoCru {
+function repo(nome: string, extra: Partial<RepoCru> = {}): RepoCru & { id: string } {
   const [dono, n] = nome.split('/');
   return {
-    name: n, nameWithOwner: nome, url: `https://github.com/${nome}`, isPrivate: false, pushedAt: iso(AGORA - H), viewerPermission: 'WRITE',
+    id: `R_${nome}`, name: n, nameWithOwner: nome, url: `https://github.com/${nome}`, isPrivate: false, pushedAt: iso(AGORA - H), viewerPermission: 'WRITE',
     owner: { login: dono }, primaryLanguage: { name: 'TypeScript' }, issues: { totalCount: 2 }, pullRequests: { totalCount: 1 },
     defaultBranchRef: { name: 'main', target: { statusCheckRollup: { state: 'SUCCESS' } } }, ...extra,
   };
@@ -60,6 +61,7 @@ describe('#104 CA1: agrupados por organização e pela conta pessoal, ordenados 
       { esperandoReview: 2, fechadasNaSemana: 5 },
       new Map(),
       { greenRate: 0.5, runs: 4 },
+      new Map(['eu/notas', 'org-a/velho', 'org-b/novo', 'org-a/recente'].map((n) => [n, rowCounts(repo(n))])),
     );
     assert.deepEqual(lista.groups.map((g) => [g.owner, g.type, g.repos.map((r) => r.name)]), [
       ['org-a', 'org', ['recente', 'velho']],
