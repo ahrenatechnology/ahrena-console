@@ -56,3 +56,11 @@
 .pp-band p { margin: 0; flex: 1; min-width: 0; line-height: 1.6; }
 .pp-band b { color: var(--status-waiting-text); font-weight: var(--weight-semibold); }
 .pp-band-ic { color: var(--status-waiting-text); font-size: 18px; display: inline-flex; }
+
+/* Owners whose Projects GitHub refused (issue 340). */
+.pp-band-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.pp-band-body p { margin: 0; line-height: 1.6; }
+.pp-blocked { margin: 0; padding-left: 18px; line-height: 1.6; }
+.pp-blocked li b { color: var(--text); }
+.pp-link { color: var(--accent-text); white-space: nowrap; }
+.pp-band .btn { flex: none; align-self: flex-start; }

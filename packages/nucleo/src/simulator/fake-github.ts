@@ -721,11 +721,11 @@ function projectOptions(data: FakeGithubData, rateLimit: unknown): unknown {
     rateLimit,
     viewer: {
       login: data.login,
-      projectsV2: { nodes: [node(data.login, 'User', 1, 'Notas soltas', 4, false), node(data.login, 'User', 2, 'Arquivo de 2025', 12, true, true)] },
+      projectsV2: { totalCount: 2, nodes: [node(data.login, 'User', 1, 'Notas soltas', 4, false), node(data.login, 'User', 2, 'Arquivo de 2025', 12, true, true)] },
       organizations: {
         nodes: [
-          { login: 'exemplo', projectsV2: { nodes: [node('exemplo', 'Organization', 3, 'Ahrena Console', 12, true)] } },
-          ...data.organizations.map((login) => ({ login, projectsV2: { nodes: [] } })),
+          { login: 'exemplo', projectsV2: { totalCount: 1, nodes: [node('exemplo', 'Organization', 3, 'Ahrena Console', 12, true)] } },
+          ...data.organizations.map((login) => ({ login, projectsV2: { totalCount: 0, nodes: [] } })),
         ],
       },
     },
