@@ -879,9 +879,21 @@ fn link_target(url: &tauri::Url, core_port: Option<u16>) -> LinkTarget {
     match url.scheme() {
         "http" if matches!(host, "127.0.0.1" | "localhost") && core_port.is_some() && url.port() == core_port && (url.path() == "/ui" || url.path().starts_with("/ui/")) => LinkTarget::Core,
         "about" if url.as_str() == "about:blank" => LinkTarget::Core,
-        "https" if url.username().is_empty() && url.port().is_none() && BROWSER_HOSTS.iter().any(|h| host == *h || host.ends_with(&format!(".{h}"))) => LinkTarget::Browser,
+        "https" if url.username().is_empty() && url.password().is_none() && url.port().is_none() && (BROWSER_HOSTS.iter().any(|h| host == *h || host.ends_with(&format!(".{h}"))) || aws_sso_device_host(host)) => LinkTarget::Browser,
         _ => LinkTarget::Refused,
     }
+}
+
+/// The AWS SSO device page "Abrir a página de login" links to (#334): an IAM Identity Center portal
+/// (`<name>.awsapps.com`) or a region's SSO device page (`device.sso.<region>.amazonaws.com`), one
+/// label each, never the rest of amazonaws.com. The core only shows the session's pinned portal or
+/// its region's page (`deviceCodeOnSessionPortal`, decision 0013 §2a); this is the shell's fence.
+fn aws_sso_device_host(host: &str) -> bool {
+    let label = |s: &str, max: usize| !s.is_empty() && s.len() <= max && s.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-');
+    if let Some(portal) = host.strip_suffix(".awsapps.com") {
+        return label(portal, 63);
+    }
+    host.strip_prefix("device.sso.").and_then(|h| h.strip_suffix(".amazonaws.com")).is_some_and(|region| label(region, 32))
 }
 
 /// `/usr/bin/open <url>`: the URL goes as one argument, never through a shell; the child is reaped.
@@ -959,6 +971,33 @@ mod tests {
         assert_eq!(t("file:///etc/passwd"), LinkTarget::Refused);
         assert_eq!(t("javascript:alert(1)"), LinkTarget::Refused);
         assert_eq!(link_target(&"http://127.0.0.1:53817/ui".parse().unwrap(), None), LinkTarget::Refused, "no core up");
+        assert_eq!(t("https://:secret@github.com/"), LinkTarget::Refused, "a password is userinfo too");
+    }
+
+    #[test]
+    fn aws_sso_device_pages_go_to_the_system_browser() {
+        let t = |u: &str| link_target(&u.parse().unwrap(), Some(53817));
+        assert_eq!(t("https://guardiatechnology.awsapps.com/start/#/device?user_code=BXQS-NGPB"), LinkTarget::Browser);
+        assert_eq!(t("https://d-9067abcdef.awsapps.com/start/#/device"), LinkTarget::Browser);
+        assert_eq!(t("https://device.sso.us-east-1.amazonaws.com/?user_code=BXQS-NGPB"), LinkTarget::Browser);
+        assert_eq!(t("https://device.sso.ap-southeast-2.amazonaws.com/"), LinkTarget::Browser);
+        assert_eq!(t("https://awsapps.com/"), LinkTarget::Refused, "no portal name");
+        assert_eq!(t("https://a.b.awsapps.com/"), LinkTarget::Refused, "one label before awsapps.com");
+        assert_eq!(t("https://awsapps.com.evil.example/"), LinkTarget::Refused);
+        assert_eq!(t("https://evil-awsapps.com/"), LinkTarget::Refused);
+        assert_eq!(t("http://guardiatechnology.awsapps.com/start"), LinkTarget::Refused, "https only");
+        assert_eq!(t("https://guardiatechnology.awsapps.com:8443/start"), LinkTarget::Refused, "no port");
+        assert_eq!(t("https://user@guardiatechnology.awsapps.com/start"), LinkTarget::Refused, "no userinfo");
+        assert_eq!(t("https://amazonaws.com/"), LinkTarget::Refused);
+        assert_eq!(t("https://s3.amazonaws.com/bucket/page.html"), LinkTarget::Refused, "not all of amazonaws.com");
+        assert_eq!(t("https://evil.s3.us-east-1.amazonaws.com/"), LinkTarget::Refused);
+        assert_eq!(t("https://abc.execute-api.us-east-1.amazonaws.com/"), LinkTarget::Refused);
+        assert_eq!(t("https://oidc.us-east-1.amazonaws.com/"), LinkTarget::Refused);
+        assert_eq!(t("https://device.sso.amazonaws.com/"), LinkTarget::Refused, "no region");
+        assert_eq!(t("https://device.sso.a.b.amazonaws.com/"), LinkTarget::Refused, "one region label");
+        assert_eq!(t("https://x.device.sso.us-east-1.amazonaws.com/"), LinkTarget::Refused);
+        assert_eq!(t("https://device.sso.us-east-1.amazonaws.com.evil.example/"), LinkTarget::Refused);
+        assert_eq!(t("https://device.sso.us-east-1.amazonaws.com:444/"), LinkTarget::Refused, "no port");
     }
 
     #[test]
