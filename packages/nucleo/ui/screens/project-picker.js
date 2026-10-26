@@ -78,8 +78,13 @@ export function blockedText(owner) {
   return { text: `o GitHub recusou: ${owner?.blocked?.message ?? 'sem motivo informado'}`, link: null };
 }
 
+function headline(blocked) {
+  if (blocked.length > 1) return `${blocked.length} donos não mostraram os Projects deles.`;
+  return blocked[0].ownerType === 'user' ? 'A sua conta não mostrou os seus Projects.' : 'Uma organização não mostrou os Projects dela.';
+}
+
 /** Issue 340: the owners whose Projects GitHub refused, each with the reason and the fix; `null` when none. */
-export function blockedBand(owners, onRefresh) {
+export function blockedBand(owners, onRefresh, { others = true } = {}) {
   const blocked = (Array.isArray(owners) ? owners : []).filter((o) => o && typeof o.login === 'string' && o.blocked);
   if (!blocked.length) return null;
   const rows = blocked.map((o) => {
@@ -97,7 +102,7 @@ export function blockedBand(owners, onRefresh) {
     el(
       'div',
       { class: 'pp-band-body' },
-      el('p', {}, el('b', {}, blocked.length === 1 ? 'Uma organização não mostrou os Projects dela.' : `${blocked.length} donos não mostraram os Projects deles.`), ' As outras aparecem abaixo.'),
+      el('p', {}, el('b', {}, headline(blocked)), others ? ' Os outros aparecem abaixo.' : null),
       el('ul', { class: 'pp-blocked' }, ...rows),
       el('p', { class: 'pp-muted' }, 'Organizações privadas que não aprovaram o app nem aparecem aqui: o GitHub as esconde. Veja Conexões › GitHub.'),
     ),
@@ -191,7 +196,7 @@ export function mountPicker(box, ctx, { onSaved, onNotConnected }) {
       const t = optionsErrorText(failure);
       band.append(errorBand({ title: `${t.title}.`, text: `${t.text} Mostrando a última lista.`, action: { label: 'Tentar de novo', onClick: () => reload({ refresh: true }) } }));
     } else if (data.stale) band.append(errorBand({ title: 'GitHub indisponível.', text: `Mostrando a lista em cache.${data.reason ? ` ${data.reason}` : ''}`, action: { label: 'Tentar agora', onClick: () => reload({ refresh: true }) } }));
-    const blocked = blockedBand(data.owners, () => reload({ refresh: true }));
+    const blocked = blockedBand(data.owners, () => reload({ refresh: true }), { others: Array.isArray(data.projects) && data.projects.some(valid) });
     if (blocked) band.append(blocked);
     if (saveFailure) {
       const t = optionsErrorText(saveFailure);

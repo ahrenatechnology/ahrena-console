@@ -124,7 +124,7 @@ describe('#340 owners GitHub refused', () => {
     const a = li.querySelector('a')!;
     assert.equal(a.getAttribute('href'), BLOCKED.fixUrl);
     assert.equal(a.getAttribute('target'), '_blank');
-    assert.match(texto(band), /Uma organização não mostrou os Projects dela\./);
+    assert.match(texto(band), /Uma organização não mostrou os Projects dela\. Os outros aparecem abaixo\./);
     assert.equal(m.box.querySelector('li[data-owner="exemplo-labs"]'), null);
   });
 
@@ -155,6 +155,12 @@ describe('#340 owners GitHub refused', () => {
     const m = await mountPicker(async () => OPTIONS({ projects: [], owners: [OWNERS[0], BLOCKED] }));
     assert.ok(m.box.querySelector('[data-band="blocked-owners"]'));
     assert.match(texto(m.box), /Nenhum GitHub Project liberado/);
+    assert.doesNotMatch(texto(m.box.querySelector('[data-band="blocked-owners"]')!), /aparecem abaixo/);
+  });
+
+  test('the person\'s own account blocked: the band says so, not "uma organização"', () => {
+    const band = picker.blockedBand([{ login: 'dev-sintetico', ownerType: 'user', projects: 0, blocked: { reason: 'forbidden', message: 'no' }, fixUrl: null }]);
+    assert.match(texto(band), /A sua conta não mostrou os seus Projects\./);
   });
 });
 
