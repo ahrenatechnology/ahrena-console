@@ -732,9 +732,16 @@ describe('#341: the list shows before its counts, and at once after a restart', 
     assert.equal(m.pedidos.total, 1);
   });
 
-  test('a kept list older than 24 h since its ReposLista read is not restored', async () => {
+  test('a kept list older than 24 h since its ReposLista read is not restored, even when it was assembled later from that stale read', async () => {
     const store = new MemoryCacheStore();
     await listaPronta(await montar({ store }));
+    // 20 h later GitHub is down: the list is assembled again from the ReposLista read at T0 (stale).
+    const down = await montar({ store, t0: T0 + 20 * 60 * MIN });
+    down.modo.atual = 'falha';
+    const stale = await listaPronta(down);
+    assert.equal(stale.state, 'ready');
+    assert.match(stale.error ?? '', /rede fora/);
+    // 25 h after that read, the kept list is not served, though it was written 5 h ago.
     const m = await montar({ store, t0: T0 + 25 * 60 * MIN });
     m.modo.atual = 'pendurado';
     assert.equal((await semEsperar(m.repos.lista())).state, 'loading');

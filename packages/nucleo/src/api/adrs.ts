@@ -37,7 +37,7 @@
 //   valor: o mesmo texto noutra pasta é relido (a pasta decide ADR ou PDR).
 // Com o GitHub limitando ou fora, serve o que há no cache (até 24 h) com a hora dele (`readAt`), o
 // motivo (`error`) e, quando o GitHub disse até quando, `retryAt`. Todas as chamadas passam pela fila
-// do GitHub do núcleo, uma de cada vez.
+// do GitHub do núcleo, até `GITHUB_CALL_LIMIT` ao mesmo tempo (#341).
 //
 // ## Segurança
 //
