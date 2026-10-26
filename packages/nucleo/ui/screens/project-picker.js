@@ -5,7 +5,10 @@
 // - `mountPicker` is the C43 1100 list (search, owner filter, closed hidden, the field that becomes the
 //   columns, Usar). `createSwitch` is the C43 1440 "Trocar de Project" popover of the board's header.
 // - Options errors: 409 `github-not-connected` goes back to the caller (the shared C42 empty state),
-//   429 `rate-limited` waits, 502 `github-down`, 503 `off`; a stale list shows a band.
+//   429 `rate-limited` waits, 502 `github-down` (no answer) or `github-refused` (GitHub's message),
+//   401 `no-scope`, 503 `off`; a stale list shows a band.
+// - `owners` (issue 340): an organization (or the person) whose Projects GitHub refused shows in a band with
+//   the reason and the link that fixes it, and the other owners keep their Projects.
 // - With `AHRENA_CONSOLE_PROJECT` set (`envOverride`), the board follows the variable and the choice on
 //   screen is not editable: the caller shows `envBand` instead of the switch.
 // - Project titles and owners come from GitHub: `textContent` only.
@@ -56,12 +59,50 @@ export function optionsErrorText(e) {
   const code = e?.body?.code ?? e?.body?.error;
   const wait = e?.retryIn ? ` Tente de novo em ${Math.ceil(e.retryIn / 1000)} s.` : ' Tente de novo em instantes.';
   if (e?.status === 429 || code === 'rate-limited') return { title: 'O GitHub limitou as chamadas', text: `A lista dos Projects volta quando o limite passar.${wait}` };
+  if (code === 'github-refused') return { title: 'O GitHub recusou a lista', text: e?.body?.error ? `${e.body.error}.` : 'Não deu para ler os seus Projects.' };
+  if (code === 'no-scope') return { title: 'Falta permissão no GitHub', text: e?.body?.error ? `${e.body.error}.` : 'Reconecte o GitHub em Conexões.' };
   if (e?.status === 502 || code === 'github-down') return { title: 'O GitHub não respondeu', text: 'Não deu para ler os seus Projects, e não há lista guardada.' };
   if (e?.status === 503 || code === 'off') return { title: 'O núcleo subiu sem o GitHub', text: 'Ele foi iniciado com --no-github: não há Projects para escolher. Reinicie o núcleo sem essa opção.' };
   if (e?.status === 400 || code === 'invalid') return { title: 'O núcleo recusou essa escolha', text: 'Confira o Project e o nome do campo que vira colunas.' };
   if (e?.status === 403) return { title: 'O núcleo recusou o pedido', text: 'Só a própria janela do console escolhe o Project.' };
   if (!e?.status) return { title: 'Sem conexão com o núcleo', text: e?.message ?? 'O núcleo não respondeu.' };
   return { title: 'Não deu certo', text: `O núcleo respondeu ${e.status}.` };
+}
+
+/** What blocks an owner, in pt-BR, and the label of the link that fixes it. */
+export function blockedText(owner) {
+  const reason = owner?.blocked?.reason;
+  if (reason === 'oauth-restricted')
+    return { text: 'restringe apps OAuth e ainda não aprovou o Ahrena Console. Na página do app no GitHub, em Organization access, peça (Request) ou conceda (Grant) o acesso a ela e atualize.', link: 'Abrir o app no GitHub' };
+  if (reason === 'saml') return { text: 'exige login pelo SSO (SAML) da organização. Entre pelo SSO no GitHub e atualize.', link: 'Entrar pelo SSO' };
+  return { text: `o GitHub recusou: ${owner?.blocked?.message ?? 'sem motivo informado'}`, link: null };
+}
+
+/** Issue 340: the owners whose Projects GitHub refused, each with the reason and the fix; `null` when none. */
+export function blockedBand(owners, onRefresh) {
+  const blocked = (Array.isArray(owners) ? owners : []).filter((o) => o && typeof o.login === 'string' && o.blocked);
+  if (!blocked.length) return null;
+  const rows = blocked.map((o) => {
+    const t = blockedText(o);
+    const count = Number.isInteger(o.projects) && o.projects > 0 ? ` (${o.projects} ${o.projects === 1 ? 'Project' : 'Projects'})` : '';
+    const link = t.link && typeof o.fixUrl === 'string' && /^https:\/\/github\.com\//.test(o.fixUrl) ? el('a', { href: o.fixUrl, target: '_blank', rel: 'noopener noreferrer', class: 'pp-link' }, t.link, ' ', icon('external')) : null;
+    return el('li', { 'data-owner': o.login, 'data-reason': o.blocked.reason }, el('b', {}, o.login), count, ' ', t.text, link ? ' ' : null, link);
+  });
+  const action = el('button', { type: 'button', class: 'btn outline', 'data-action': 'refresh-owners' }, 'Atualizar');
+  action.addEventListener('click', () => onRefresh?.());
+  return el(
+    'div',
+    { class: 'pp-band', role: 'status', 'data-band': 'blocked-owners' },
+    el('span', { class: 'pp-band-ic' }, icon('info')),
+    el(
+      'div',
+      { class: 'pp-band-body' },
+      el('p', {}, el('b', {}, blocked.length === 1 ? 'Uma organização não mostrou os Projects dela.' : `${blocked.length} donos não mostraram os Projects deles.`), ' As outras aparecem abaixo.'),
+      el('ul', { class: 'pp-blocked' }, ...rows),
+      el('p', { class: 'pp-muted' }, 'Organizações privadas que não aprovaram o app nem aparecem aqui: o GitHub as esconde. Veja Conexões › GitHub.'),
+    ),
+    action,
+  );
 }
 
 /** The `AHRENA_CONSOLE_PROJECT` band (C44): the board follows the variable; the screen's choice waits. */
@@ -150,6 +191,8 @@ export function mountPicker(box, ctx, { onSaved, onNotConnected }) {
       const t = optionsErrorText(failure);
       band.append(errorBand({ title: `${t.title}.`, text: `${t.text} Mostrando a última lista.`, action: { label: 'Tentar de novo', onClick: () => reload({ refresh: true }) } }));
     } else if (data.stale) band.append(errorBand({ title: 'GitHub indisponível.', text: `Mostrando a lista em cache.${data.reason ? ` ${data.reason}` : ''}`, action: { label: 'Tentar agora', onClick: () => reload({ refresh: true }) } }));
+    const blocked = blockedBand(data.owners, () => reload({ refresh: true }));
+    if (blocked) band.append(blocked);
     if (saveFailure) {
       const t = optionsErrorText(saveFailure);
       band.append(errorBand({ title: `${t.title}.`, text: t.text }));
@@ -160,7 +203,9 @@ export function mountPicker(box, ctx, { onSaved, onNotConnected }) {
     if (!projects.filter(valid).length) {
       return box.replaceChildren(
         band,
-        empty({ icon: 'kanban', title: 'Nenhum GitHub Project na conta', text: 'A conta conectada não enxerga nenhum Project, nem seu nem das organizações. Crie um Project no GitHub e atualize.', action: { label: 'Atualizar', icon: 'refresh', onClick: () => reload({ refresh: true }) } }),
+        blocked
+          ? empty({ icon: 'kanban', title: 'Nenhum GitHub Project liberado', text: 'Os Projects que a conta enxerga estão nas organizações acima, que não liberaram o acesso. Libere uma delas e atualize.' })
+          : empty({ icon: 'kanban', title: 'Nenhum GitHub Project na conta', text: 'A conta conectada não enxerga nenhum Project, nem seu nem das organizações. Crie um Project no GitHub e atualize.', action: { label: 'Atualizar', icon: 'refresh', onClick: () => reload({ refresh: true }) } }),
       );
     }
     drawFilters();

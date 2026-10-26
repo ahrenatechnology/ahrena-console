@@ -65,6 +65,9 @@ describe('the picker: pure parts', () => {
     assert.equal(t(429, { code: 'rate-limited' }), 'O GitHub limitou as chamadas');
     assert.match(picker.optionsErrorText(new ReadError('x', { status: 429, body: { code: 'rate-limited' }, retryIn: 30_000 })).text, /Tente de novo em 30 s\./);
     assert.equal(t(502, { code: 'github-down' }), 'O GitHub não respondeu');
+    assert.equal(t(502, { code: 'github-refused', error: 'o GitHub recusou a lista de Projects: GitHub: boom' }), 'O GitHub recusou a lista');
+    assert.equal(picker.optionsErrorText(new ReadError('x', { status: 502, body: { code: 'github-refused', error: 'o GitHub recusou a lista de Projects: GitHub: boom' } })).text, 'o GitHub recusou a lista de Projects: GitHub: boom.');
+    assert.equal(t(401, { code: 'no-scope', error: 'sem permissão no GitHub Project' }), 'Falta permissão no GitHub');
     assert.equal(t(503, { code: 'off' }), 'O núcleo subiu sem o GitHub');
     assert.equal(t(400, { error: 'invalid' }), 'O núcleo recusou essa escolha');
     assert.equal(t(0, null), 'Sem conexão com o núcleo');
@@ -98,6 +101,62 @@ async function mountPicker(read: (route: string) => Promise<unknown>, write: (ro
 }
 const rows = (box: ElementoFalso) => box.querySelectorAll('tr[data-project]').map((r) => r.getAttribute('data-project'));
 const use = (box: ElementoFalso) => box.querySelector('[data-action="use-project"]')!;
+
+const BLOCKED = {
+  login: 'guardiafinance',
+  ownerType: 'organization',
+  projects: 8,
+  blocked: { reason: 'oauth-restricted', message: 'the `guardiafinance` organization has enabled OAuth App access restrictions' },
+  fixUrl: 'https://github.com/settings/connections/applications/Ov23liVOZdlk3SA82JdZ',
+};
+const SAML = { login: 'saml-org', ownerType: 'organization', projects: 1, blocked: { reason: 'saml', message: 'SAML' }, fixUrl: 'https://github.com/orgs/saml-org/sso' };
+const OWNERS = [{ login: 'dev-sintetico', ownerType: 'user', projects: 1, blocked: null, fixUrl: null }, { login: 'exemplo-labs', ownerType: 'organization', projects: 2, blocked: null, fixUrl: null }, BLOCKED];
+
+describe('#340 owners GitHub refused', () => {
+  test('the list keeps the other owners\' Projects and a band names the blocked one, the reason and the fix', async () => {
+    const m = await mountPicker(async () => OPTIONS({ owners: OWNERS }));
+    assert.equal(rows(m.box).length, 5);
+    const band = m.box.querySelector('[data-band="blocked-owners"]')!;
+    assert.ok(band);
+    const li = band.querySelector('li[data-owner="guardiafinance"]')!;
+    assert.equal(li.getAttribute('data-reason'), 'oauth-restricted');
+    assert.match(texto(li), /guardiafinance \(8 Projects\) restringe apps OAuth e ainda não aprovou o Ahrena Console\..*Request.*Grant/);
+    const a = li.querySelector('a')!;
+    assert.equal(a.getAttribute('href'), BLOCKED.fixUrl);
+    assert.equal(a.getAttribute('target'), '_blank');
+    assert.match(texto(band), /Uma organização não mostrou os Projects dela\./);
+    assert.equal(m.box.querySelector('li[data-owner="exemplo-labs"]'), null);
+  });
+
+  test('Atualizar re-reads with refresh', async () => {
+    const m = await mountPicker(async () => OPTIONS({ owners: OWNERS }));
+    m.box.querySelector('[data-action="refresh-owners"]')!.click();
+    await until(() => m.reads.length === 2);
+    assert.equal(m.reads[1], '/api/project/options?refresh=1');
+  });
+
+  test('SAML says to sign in through SSO; a refusal without a known reason shows GitHub\'s message, with no link', () => {
+    const band = picker.blockedBand([SAML, { login: 'x', ownerType: 'organization', projects: null, blocked: { reason: 'forbidden', message: 'Resource not accessible' }, fixUrl: null }]);
+    assert.match(texto(band.querySelector('li[data-owner="saml-org"]')), /exige login pelo SSO \(SAML\).*Entrar pelo SSO/);
+    const other = band.querySelector('li[data-owner="x"]');
+    assert.match(texto(other), /o GitHub recusou: Resource not accessible/);
+    assert.equal(other.querySelector('a'), null);
+    assert.match(texto(band), /2 donos não mostraram os Projects deles\./);
+  });
+
+  test('a link that is not github.com is not drawn; no blocked owner, no band', () => {
+    const band = picker.blockedBand([{ ...BLOCKED, fixUrl: 'https://evil.example/x' }]);
+    assert.equal(band.querySelector('a'), null);
+    assert.equal(picker.blockedBand([OWNERS[0]]), null);
+    assert.equal(picker.blockedBand(undefined), null);
+  });
+
+  test('every Project behind a blocked owner: the empty state says to unblock one, under the band', async () => {
+    const m = await mountPicker(async () => OPTIONS({ projects: [], owners: [OWNERS[0], BLOCKED] }));
+    assert.ok(m.box.querySelector('[data-band="blocked-owners"]'));
+    assert.match(texto(m.box), /Nenhum GitHub Project liberado/);
+  });
+});
 
 describe('the picker (C43 1100)', () => {
   test('lists the open Projects with items and the field; the one without Status says so', async () => {

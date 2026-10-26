@@ -28,9 +28,12 @@ import {
   type ProjectCard,
   type ProjectMoveResult,
 } from '../github/project.ts';
+import { GithubGatewayError, GithubHttpError, GithubScopeError } from '../github/github-source.ts';
 import { send } from '../ingest/hooks/receiver.ts';
 import { fromAnotherSite, fromOwnUi } from './same-origin.ts';
-import type { ProjectOptions } from '../github/project-options.ts';
+import type { ProjectOptions, ProjectOwner } from '../github/project-options.ts';
+import { githubApplicationUrl } from '../github/connection/connection.ts';
+import { resolveGithubClientId } from '../github/connection/device-flow.ts';
 import type { ProjectEnvOverride, ResolvedProjectSelection } from '../github/project-selection.ts';
 import { ciDoPr, reviewDoPr, type PrCi, type PrReview } from './work.ts';
 
@@ -182,6 +185,26 @@ function noScopeError(source: 'console' | 'gh'): Erro {
   return { status: 401, code: 'no-scope', error: 'sem permissão no GitHub Project: falta o escopo project; reconecte o GitHub em Conexões', extra: { scope: 'project' } };
 }
 
+/**
+ * #340: where a blocked owner gets unblocked. An OAuth App restriction is lifted on the app's page
+ * (Grant, or Request for a member; the `gh` source's app is not ours, so its list of apps); SAML on the
+ * organization's single sign-on page.
+ */
+function fixUrlOf(owner: ProjectOwner, source: 'console' | 'gh'): string | null {
+  if (!owner.blocked) return null;
+  if (owner.blocked.reason === 'saml') return `https://github.com/orgs/${encodeURIComponent(owner.login)}/sso`;
+  if (owner.blocked.reason !== 'oauth-restricted') return null;
+  const clientId = source === 'console' ? resolveGithubClientId() : null;
+  return clientId ? githubApplicationUrl(clientId) : 'https://github.com/settings/applications';
+}
+
+/** GitHub did not answer: the network failed, the request timed out or GitHub answered 5xx. */
+function githubUnreachable(err: unknown): boolean {
+  if (err instanceof GithubGatewayError || err instanceof TypeError) return true;
+  if (err instanceof GithubHttpError) return err.status >= 500;
+  return err instanceof Error && (err.name === 'AbortError' || err.name === 'TimeoutError');
+}
+
 function enviarErro(res: ServerResponse, e: Erro): void {
   if (e.headers) for (const [k, v] of Object.entries(e.headers)) res.setHeader(k, v);
   send(res, e.status, { error: e.error, code: e.code, ...(e.extra ?? {}) });
@@ -242,12 +265,15 @@ export function criarRotaDoProjeto({ kanban: fixedKanban, fonte, semProjeto = fa
     if (!options) return enviarErro(res, DESLIGADO);
     try {
       const l = await options.list({ refresh: url.searchParams.get('refresh') === '1' });
-      send(res, 200, { projects: l.projects, selection: resolver?.selection() ?? null, envOverride: resolver?.envOverride() ?? null, fetchedAt: l.fetchedAt, stale: l.stale, reason: l.reason });
+      send(res, 200, { projects: l.projects, owners: l.owners.map((o) => ({ ...o, fixUrl: fixUrlOf(o, credentialSource()) })), selection: resolver?.selection() ?? null, envOverride: resolver?.envOverride() ?? null, fetchedAt: l.fetchedAt, stale: l.stale, reason: l.reason });
     } catch (err) {
       const cause = err instanceof NoDataError ? err.cause : err;
       if (cause instanceof RateLimitedError) return enviarErro(res, { status: 429, code: 'rate-limited', error: 'o GitHub limitou as chamadas; tente de novo em instantes', headers: { 'retry-after': segundos(cause.retryAfterMs) } });
+      if (cause instanceof GithubScopeError) return enviarErro(res, noScopeError(credentialSource()));
       const reason = cause instanceof Error ? cause.message : String(cause);
-      enviarErro(res, { status: 502, code: 'github-down', error: `o GitHub não respondeu e não há lista no cache: ${reason}` });
+      // #340: only a network failure or a 5xx is "não respondeu"; an answer that refuses is a refusal.
+      if (githubUnreachable(cause)) return enviarErro(res, { status: 502, code: 'github-down', error: `o GitHub não respondeu e não há lista no cache: ${reason}` });
+      enviarErro(res, { status: 502, code: 'github-refused', error: `o GitHub recusou a lista de Projects: ${reason}` });
     }
   }
 
