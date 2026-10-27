@@ -54,6 +54,15 @@ const CLOUD_CATEGORY: &str = "cloud";
 /// "<label> sem conexão: SSO expirado" of a machine whose core can log in and start (#278, A10):
 /// "Entrar e subir" and "Abrir".
 const MACHINE_LOGIN_AND_START_CATEGORY: &str = "machine-login-and-start";
+/// A new app version (#330, A12): "Atualizar" and "Depois".
+const APP_UPDATE_CATEGORY: &str = "app-update";
+/// An update that did not install (#330): "Tentar de novo" and "Abrir".
+const APP_UPDATE_FAILED_CATEGORY: &str = "app-update-failed";
+/// The answer of "Buscar agora" (#330): only "Abrir".
+const APP_UP_TO_DATE_CATEGORY: &str = "app-up-to-date";
+const UPDATE_NOW_ACTION: &str = "update-now";
+const UPDATE_LATER_ACTION: &str = "update-later";
+const RETRY_UPDATE_ACTION: &str = "retry-update";
 const OPEN_ACTION: &str = "open";
 const OPEN_IN_DESKTOP_ACTION: &str = "open-in-desktop";
 const SILENCE_ACTION: &str = "silence";
@@ -83,6 +92,10 @@ pub struct Handlers {
     pub cloud_login: fn(&AppHandle, &str),
     /// "Entrar e subir" (#278): asks the core to log in to the machine's linked session and start its tunnel.
     pub login_and_start: fn(&AppHandle, &str),
+    /// "Atualizar" and "Tentar de novo" (#330): downloads, installs and relaunches.
+    pub update_now: fn(&AppHandle),
+    /// "Depois" (#330): hides the update card.
+    pub update_later: fn(&AppHandle),
 }
 
 static APP: OnceLock<(AppHandle, Handlers)> = OnceLock::new();
@@ -160,9 +173,13 @@ pub fn start(app: &AppHandle, handlers: Handlers, _main: MainThreadMarker) -> bo
         Action::CloudLogin => action(CLOUD_LOGIN_ACTION, "Entrar", UNNotificationActionOptions::empty()),
         // In the background as well: the login opens in the browser, then the tunnel comes up.
         Action::LoginAndStart => action(LOGIN_AND_START_ACTION, "Entrar e subir", UNNotificationActionOptions::empty()),
+        // In the background: the app relaunches itself; "Depois" only tells the núcleo.
+        Action::UpdateNow => action(UPDATE_NOW_ACTION, "Atualizar", UNNotificationActionOptions::empty()),
+        Action::UpdateLater => action(UPDATE_LATER_ACTION, "Depois", UNNotificationActionOptions::empty()),
+        Action::RetryUpdate => action(RETRY_UPDATE_ACTION, "Tentar de novo", UNNotificationActionOptions::empty()),
     };
     // One category per kind of notice, with the actions `Origin::actions` gives it.
-    let categories: Vec<_> = [(Origin::Session, category(Origin::Session)), (Origin::RemoteSession, category(Origin::RemoteSession)), (Origin::Machine, category(Origin::Machine)), (Origin::MachineReconnect, category(Origin::MachineReconnect)), (Origin::MachineLoginAndStart, category(Origin::MachineLoginAndStart)), (Origin::CloudLogin, category(Origin::CloudLogin)), (Origin::Cloud, category(Origin::Cloud))]
+    let categories: Vec<_> = [(Origin::Session, category(Origin::Session)), (Origin::RemoteSession, category(Origin::RemoteSession)), (Origin::Machine, category(Origin::Machine)), (Origin::MachineReconnect, category(Origin::MachineReconnect)), (Origin::MachineLoginAndStart, category(Origin::MachineLoginAndStart)), (Origin::CloudLogin, category(Origin::CloudLogin)), (Origin::Cloud, category(Origin::Cloud)), (Origin::AppUpdate, category(Origin::AppUpdate)), (Origin::AppUpdateFailed, category(Origin::AppUpdateFailed)), (Origin::AppUpToDate, category(Origin::AppUpToDate))]
         .into_iter()
         .map(|(o, id)| {
             let actions = NSArray::from_retained_slice(&o.actions().iter().map(|a| button(*a)).collect::<Vec<_>>());
@@ -238,6 +255,9 @@ fn category(o: Origin) -> &'static str {
         Origin::MachineLoginAndStart => MACHINE_LOGIN_AND_START_CATEGORY,
         Origin::CloudLogin => CLOUD_LOGIN_CATEGORY,
         Origin::Cloud => CLOUD_CATEGORY,
+        Origin::AppUpdate => APP_UPDATE_CATEGORY,
+        Origin::AppUpdateFailed => APP_UPDATE_FAILED_CATEGORY,
+        Origin::AppUpToDate => APP_UP_TO_DATE_CATEGORY,
     }
 }
 
@@ -268,6 +288,7 @@ fn respond(response: &UNNotificationResponse) {
     // SAFETY: a UserNotifications constant, read after the framework has loaded.
     let default = unsafe { UNNotificationDefaultActionIdentifier };
     let (open, open_in_desktop, silence, reconnect, cloud_login, login_and_start) = (handlers.open, handlers.open_in_desktop, handlers.silence, handlers.reconnect, handlers.cloud_login, handlers.login_and_start);
+    let (update_now, update_later) = (handlers.update_now, handlers.update_later);
     let handle = app.clone();
     let work: Box<dyn FnOnce() + Send> = if action.isEqualToString(default) || is(OPEN_ACTION) {
         Box::new(move || open(&handle, &path))
@@ -281,6 +302,10 @@ fn respond(response: &UNNotificationResponse) {
     } else if is(LOGIN_AND_START_ACTION) {
         let Some(machine) = read(&info, MACHINE_KEY) else { return };
         Box::new(move || login_and_start(&handle, &machine))
+    } else if is(UPDATE_NOW_ACTION) || is(RETRY_UPDATE_ACTION) {
+        Box::new(move || update_now(&handle))
+    } else if is(UPDATE_LATER_ACTION) {
+        Box::new(move || update_later(&handle))
     } else if is(CLOUD_LOGIN_ACTION) {
         let Some(cloud_session) = read(&info, CLOUD_SESSION_KEY) else { return };
         Box::new(move || cloud_login(&handle, &cloud_session))

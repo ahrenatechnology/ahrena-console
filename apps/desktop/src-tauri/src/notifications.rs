@@ -80,6 +80,12 @@ pub enum Origin {
     CloudLogin,
     /// The same, for a session the core cannot log in (its name, or no CLI): only "Abrir".
     Cloud,
+    /// A new app version (#330, A12): "Atualizar" and "Depois".
+    AppUpdate,
+    /// An update that did not install (#330, A12): "Tentar de novo" and "Abrir".
+    AppUpdateFailed,
+    /// "Você está na versão mais nova" after a "Buscar agora" from the tray (#330, A12): only "Abrir".
+    AppUpToDate,
 }
 
 /// An action button of a notification.
@@ -97,6 +103,12 @@ pub enum Action {
     CloudLogin,
     /// "Entrar e subir": `POST /api/machines/<id>/connection/login-and-start` (#278).
     LoginAndStart,
+    /// "Atualizar" (#330): downloads, installs and relaunches the app.
+    UpdateNow,
+    /// "Depois" (#330): hides the update card, as the card's own Depois.
+    UpdateLater,
+    /// "Tentar de novo" (#330): the same download again.
+    RetryUpdate,
 }
 
 impl Origin {
@@ -109,12 +121,30 @@ impl Origin {
             Origin::MachineReconnect => &[Action::Reconnect, Action::Open],
             Origin::MachineLoginAndStart => &[Action::LoginAndStart, Action::Open],
             Origin::CloudLogin => &[Action::CloudLogin, Action::Open],
-            Origin::Cloud => &[Action::Open],
+            Origin::Cloud | Origin::AppUpToDate => &[Action::Open],
+            Origin::AppUpdate => &[Action::UpdateNow, Action::UpdateLater],
+            Origin::AppUpdateFailed => &[Action::RetryUpdate, Action::Open],
         }
     }
 }
 
 impl Notice {
+    /// A new app version (#330, A12), silent: a version does not block any session.
+    pub fn update_available(version: &str, notes: Option<&str>, current: &str) -> Notice {
+        let body = notes.map(str::to_string).unwrap_or_else(|| format!("Você está na versão {current}."));
+        Notice { title: format!("Ahrena Console {version} disponível"), body, sound: false, session: "app-update".into(), local: None, path: "/ui/dashboard".into(), origin: Origin::AppUpdate, machine: None, cloud_session: None }
+    }
+
+    /// The answer of a "Buscar agora" from the tray (#330, A12).
+    pub fn up_to_date(current: &str) -> Notice {
+        Notice { title: "Ahrena Console está em dia".into(), body: format!("Você está na versão mais nova · {current}"), sound: false, session: "app-update".into(), local: None, path: "/ui/dashboard".into(), origin: Origin::AppUpToDate, machine: None, cloud_session: None }
+    }
+
+    /// An update started from the tray or the notification that did not install (#330, A12).
+    pub fn update_failed(version: &str, body: &str) -> Notice {
+        Notice { title: format!("Não deu para atualizar para a {version}"), body: body.into(), sound: false, session: "app-update".into(), local: None, path: "/ui/dashboard".into(), origin: Origin::AppUpdateFailed, machine: None, cloud_session: None }
+    }
+
     pub fn from_item(i: &AttentionItem) -> Notice {
         Notice {
             title: title(i),
@@ -515,6 +545,21 @@ pub fn file_path(app_data: Option<PathBuf>) -> Option<PathBuf> {
 mod tests {
     use super::*;
     use crate::menu::{ItemAttention, BLOCKED, IDLE};
+
+    #[test]
+    fn a12_the_update_notices_are_silent_and_offer_their_actions() {
+        let n = Notice::update_available("0.0.10", Some("Aviso de versão nova"), "0.0.9");
+        assert_eq!((n.title.as_str(), n.body.as_str(), n.sound), ("Ahrena Console 0.0.10 disponível", "Aviso de versão nova", false));
+        assert_eq!(n.origin.actions(), &[Action::UpdateNow, Action::UpdateLater]);
+        assert_eq!(Notice::update_available("0.0.10", None, "0.0.9").body, "Você está na versão 0.0.9.");
+        let ok = Notice::up_to_date("0.0.9");
+        assert_eq!((ok.title.as_str(), ok.body.as_str()), ("Ahrena Console está em dia", "Você está na versão mais nova · 0.0.9"));
+        assert_eq!(ok.origin.actions(), &[Action::Open]);
+        let failed = Notice::update_failed("0.0.10", "A conexão caiu no download. Você continua na 0.0.9.");
+        assert_eq!(failed.title, "Não deu para atualizar para a 0.0.10");
+        assert_eq!(failed.origin.actions(), &[Action::RetryUpdate, Action::Open]);
+        assert!(!failed.sound);
+    }
 
     const IDLE_REASONS: [&str; 3] = ["turn_ended", "interrupted", "first_prompt"];
 

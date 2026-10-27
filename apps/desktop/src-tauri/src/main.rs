@@ -19,8 +19,9 @@
 // 5d. says the state of a remote's connection (#278, A9): "túnel no ar", "sem conexão desde" with the
 //     reason, "Entrar na AWS e subir o túnel" or Reconectar (`POST /api/machines/<id>/connection/<verb>`),
 //     "Parar o túnel…" on the machine's screen, and notifies the drop with its reason (A10);
-// 6. with the updater key in tauri.conf.json, looks for a new version on opening and every 6 h
-//    (updater.rs) and offers it in the menu;
+// 6. with the updater key in tauri.conf.json, looks for a new version on opening and every 10 min
+//    (a version below 1.0) or 6 h (updater.rs, #330), on "Buscar agora" too; offers it in the menu,
+//    in a notification and, through the core, in a card on top of the /ui;
 // 7. opened by hand, also opens the console; opened at login, stays in the tray only (login.rs).
 // The app writes no hooks nor Claude configuration, bundles no Node and has no screens of its own.
 
@@ -78,8 +79,6 @@ struct State {
     /// `session id` → Claude Desktop's `local_…`, from the last menu.
     locals: HashMap<String, Option<String>>,
     last: Option<(Vec<Item>, Option<String>)>,
-    /// The new version the updater found.
-    update: Option<String>,
     /// "Abrir o console" was clicked while the core was not up: open it once the core is.
     open_when_up: bool,
 }
@@ -104,7 +103,6 @@ fn main() {
         login: false,
         locals: HashMap::new(),
         last: None,
-        update: None,
         open_when_up: false,
     }));
     let (wake, signals) = channel::<()>();
@@ -129,7 +127,7 @@ fn main() {
             #[cfg(target_os = "macos")]
             {
                 let main_thread = objc2::MainThreadMarker::new().expect("Tauri's setup runs on the main thread");
-                native_notice::start(app.handle(), native_notice::Handlers { open: open_window_at, open_in_desktop, silence, reconnect, cloud_login, login_and_start }, main_thread);
+                native_notice::start(app.handle(), native_notice::Handlers { open: open_window_at, open_in_desktop, silence, reconnect, cloud_login, login_and_start, update_now, update_later }, main_thread);
             }
             TrayIconBuilder::with_id(TRAY)
                 .icon(Image::from_bytes(ICON)?)
@@ -146,8 +144,7 @@ fn main() {
                 });
             }
             redraw(app.handle(), &state);
-            let for_the_menu = state.clone();
-            if let Err(e) = updater::watch(app.handle(), move |app, version| change(app, &for_the_menu, |s| s.update = Some(version))) {
+            if let Err(e) = updater::watch(app.handle()) {
                 eprintln!("[ahrena-console] updater: {e}");
             }
 
@@ -328,6 +325,8 @@ fn watch_core(app: &AppHandle, state: &Shared, core: &core::Core, signals: &std:
             }
             _ => return,
         }
+        // The updater's state to the núcleo, and the clicks of the /ui on it (#330).
+        updater::sync(app, port);
         // "Procurar o núcleo de novo" with the core up: only rereads.
         while signals.try_recv().is_ok() {}
         let start = Instant::now();
@@ -460,6 +459,35 @@ fn now_ms() -> u64 {
     SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_millis() as u64).unwrap_or(0)
 }
 
+/// Rebuilds the menu now, from anywhere (the updater's thread).
+fn redraw_now(app: &AppHandle) {
+    let state = app.state::<Shared>().inner().clone();
+    redraw(app, &state);
+}
+
+/// The port of the app's own core, if it is up.
+fn core_port_of(app: &AppHandle) -> Option<u16> {
+    match app.state::<Shared>().lock().unwrap_or_else(std::sync::PoisonError::into_inner).core {
+        CoreState::Up { port } => Some(port),
+        _ => None,
+    }
+}
+
+/// The "Notificações" check of the tray: off silences every notification, the updater's too.
+fn notices_on(app: &AppHandle) -> bool {
+    app.state::<Shared>().lock().unwrap_or_else(std::sync::PoisonError::into_inner).notices.silence.enabled
+}
+
+/// "Atualizar" and "Tentar de novo" in the notification (#330).
+fn update_now(app: &AppHandle) {
+    updater::install(app, false);
+}
+
+/// "Depois" in the notification (#330).
+fn update_later(app: &AppHandle) {
+    updater::later(app);
+}
+
 fn change(app: &AppHandle, state: &Shared, f: impl FnOnce(&mut State)) {
     f(&mut state.lock().unwrap());
     redraw(app, state);
@@ -474,7 +502,8 @@ fn redraw(app: &AppHandle, state: &Shared) {
         // Always reread: the user may remove the item in Ajustes.
         s.login = login::checked(login::SystemRegistration.status());
         let version = handle.package_info().version.to_string();
-        let items = menu::build(&menu::Input { core: &s.core, attention: s.attention.as_ref(), no_attention: s.no_attention, notifications: s.notices.silence.enabled, login: s.login, version: &version, update: s.update.as_deref(), machines: s.machines.as_deref(), clouds: s.clouds.as_ref(), now_ms: now_ms(), utc_offset_s: utc_offset_s() });
+        let update = updater::view(&handle);
+        let items = menu::build(&menu::Input { core: &s.core, attention: s.attention.as_ref(), no_attention: s.no_attention, notifications: s.notices.silence.enabled, login: s.login, version: &version, update: update.as_ref(), machines: s.machines.as_deref(), clouds: s.clouds.as_ref(), now_ms: now_ms(), utc_offset_s: utc_offset_s() });
         let title = menu::tray_title(&s.core, s.attention.as_ref());
         if s.last.as_ref() == Some(&(items.clone(), title.clone())) {
             return;
@@ -613,7 +642,8 @@ fn click(app: &AppHandle, id: &str) {
             // The click already flipped the native check: rebuild the menu even without a change (error, approval).
             change(app, &state, |s| s.last = None);
         }
-        menu::ID_UPDATE => updater::install(app),
+        menu::ID_UPDATE => updater::install(app, false),
+        menu::ID_CHECK_NOW => updater::check_now(app, true),
         menu::ID_SEARCH_AGAIN => {
             let _ = app.state::<CoreLoop>().0.lock().unwrap().send(());
         }
@@ -830,6 +860,8 @@ fn open_window(app: &AppHandle, path: Option<&str>) {
     let window = WebviewWindowBuilder::new(app, "console", WebviewUrl::External(url))
         .title("Ahrena Console")
         .inner_size(1100.0, 760.0)
+        // The /ui tells its own window from a browser tab by this mark (#330): Atualizar only works in the app.
+        .initialization_script("window.__AHRENA_APP__ = true;")
         // A link out of the /ui (github.com/login/device, Revogar no GitHub; #241) opens in the system
         // browser, never inside this window: the window only ever shows this app's core's /ui.
         .on_navigation(move |url| match link_target(url, core_port(&nav_state)) {
