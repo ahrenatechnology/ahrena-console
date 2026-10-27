@@ -215,8 +215,8 @@ pub struct Input<'a> {
     pub notifications: bool,
     pub login: bool,
     pub version: &'a str,
-    /// The new version the updater found and that is not installed yet.
-    pub update: Option<&'a str>,
+    /// The updater's state (A11, #330); `None` when the updater is off (no key).
+    pub update: Option<&'a crate::updater::View>,
     /// The machines of `/api/machines` (#180); `None` when the core has no telemetry (404).
     pub machines: Option<&'a [machines::Machine]>,
     /// The AWS connector with its sessions (#277); `None` without one (or a core without the route).
@@ -234,6 +234,7 @@ pub const ID_QUIT: &str = "quit";
 pub const ID_INSTALL_NODE: &str = "install-node";
 pub const ID_SEARCH_AGAIN: &str = "search-again";
 pub const ID_UPDATE: &str = "update";
+pub const ID_CHECK_NOW: &str = "check-now";
 /// Prefixes of the session ids: the main item and the alternate one (⌥).
 pub const SESSION: &str = "session:";
 pub const SESSION_IN_DESKTOP: &str = "desktop:";
@@ -312,11 +313,63 @@ pub fn build(input: &Input) -> Vec<Item> {
     m.push(Item::Check { id: ID_LOGIN, text: "Abrir no login", checked: input.login });
     m.push(Item::Separator);
     m.push(Item::Text { text: format!("Ahrena Console {}", input.version), dot: None });
-    if let Some(new) = input.update {
-        m.push(Item::Action { id: ID_UPDATE, text: format!("Atualizar para a versão {new}"), shortcut: None });
+    if let Some(u) = input.update {
+        update_items(&mut m, u, input.now_ms, input.utc_offset_s);
     }
     m.push(Item::Action { id: ID_QUIT, text: "Sair do Ahrena Console".into(), shortcut: Some("CmdOrCtrl+Q") });
     m
+}
+
+/// "Atualizar", "Buscar agora…" and the cadence line (A11, #330). Downloading and installing grey the
+/// items out, with the percentage; the "Atualizar" of a version found sits above "Buscar agora…".
+fn update_items(m: &mut Vec<Item>, u: &crate::updater::View, now_ms: u64, offset_s: i64) {
+    use crate::updater::Phase;
+    let version = u.version.as_deref().unwrap_or("");
+    match u.phase {
+        Phase::Downloading => {
+            let percent = u.percent().map(|p| format!(" {p}%")).unwrap_or_default();
+            m.push(Item::Text { text: format!("Baixando a {version}…{percent}"), dot: None });
+        }
+        Phase::Installing => m.push(Item::Text { text: format!("Instalando a {version} e reiniciando…"), dot: None }),
+        _ => {
+            if u.version.is_some() {
+                m.push(Item::Action { id: ID_UPDATE, text: format!("Atualizar para a versão {version}"), shortcut: None });
+            }
+        }
+    }
+    match u.phase {
+        Phase::Checking => m.push(Item::Text { text: "Buscando agora…".into(), dot: None }),
+        Phase::Downloading | Phase::Installing => m.push(Item::Text { text: "Buscar agora…".into(), dot: None }),
+        _ => m.push(Item::Action { id: ID_CHECK_NOW, text: "Buscar agora…".into(), shortcut: None }),
+    }
+    if let Some(line) = update_line(u, now_ms, offset_s) {
+        m.push(Item::Detail(line));
+    }
+}
+
+/// The small grey line under "Buscar agora…": the cadence, or what is going on.
+pub fn update_line(u: &crate::updater::View, now_ms: u64, offset_s: i64) -> Option<String> {
+    use crate::updater::Phase;
+    let minutes = |ms: u64| ms / 60_000;
+    let since = |at: u64| machines::ago(minutes(now_ms.saturating_sub(at)));
+    match u.phase {
+        Phase::Downloading => {
+            let (done, total) = u.bytes?;
+            let mb = |b: u64| machines::decimal(b as f64 / 1_000_000.0);
+            Some(match total {
+                Some(t) => format!("{} de {} MB", mb(done), mb(t)),
+                None => format!("{} MB", mb(done)),
+            })
+        }
+        Phase::Installing => None,
+        Phase::Checking => u.last_check_ms.map(|at| format!("última consulta {}", since(at))),
+        Phase::Error => u.failed_at_ms.map(|at| format!("a última tentativa falhou às {} · tente de novo", clouds::clock(at, now_ms, offset_s))),
+        Phase::Idle => {
+            let checked = u.last_check_ms.map(|at| format!("verificado {}", since(at)))?;
+            let next = u.next_check_ms.map(|at| format!(" · próxima em {}", if at <= now_ms { "instantes".to_string() } else { elapsed(minutes(at - now_ms).max(1)) })).unwrap_or_default();
+            Some(if u.version.is_none() { format!("em dia · {checked}{next}") } else { format!("{checked}{next}") })
+        }
+    }
 }
 
 /// `machines`: the "Máquinas" block (A6, A7) and the "Nuvens" one (A9), empty when there is nothing to show. It goes between
@@ -723,15 +776,65 @@ mod tests {
         assert_eq!(&texts(&m)[..4], ["Ahrena Console", "Procurando o núcleo…", "—", "Abrir o console"]);
     }
 
-    #[test]
-    fn update_right_below_the_version() {
+    fn view(phase: crate::updater::Phase, version: Option<&str>) -> crate::updater::View {
+        // The wireframes' clock: 23:10 on 2026-10-18, so "verificado há 3 min" is 23:07.
+        crate::updater::View { phase, version: version.map(str::to_string), bytes: None, failed_at_ms: None, last_check_ms: Some(1_792_365_000_000 - 3 * 60_000), next_check_ms: Some(1_792_365_000_000 + 7 * 60_000) }
+    }
+
+    fn with_update(u: &crate::updater::View) -> Vec<Item> {
         let n = CoreState::Up { port: 4720 };
-        let without = texts(&build(&input(&n, None)));
-        assert!(!without.iter().any(|t| t.starts_with("Atualizar")));
-        let m = build(&Input { update: Some("0.0.2"), ..input(&n, None) });
-        let t = texts(&m);
-        assert_eq!(&t[t.len() - 4..], ["—", "Ahrena Console 0.0.1", "Atualizar para a versão 0.0.2", "Sair do Ahrena Console"]);
+        build(&Input { update: Some(u), now_ms: 1_792_365_000_000, ..input(&n, None) })
+    }
+
+    /// The visible lines, without the indent the small grey lines carry.
+    fn lines(m: &[Item]) -> Vec<String> {
+        texts(m).iter().map(|t| t.trim().to_string()).collect()
+    }
+
+    #[test]
+    fn without_the_updater_the_menu_has_no_update_items() {
+        let n = CoreState::Up { port: 4720 };
+        let t = texts(&build(&input(&n, None)));
+        assert!(!t.iter().any(|t| t.starts_with("Atualizar") || t.starts_with("Buscar")));
+    }
+
+    #[test]
+    fn a1_up_to_date_offers_buscar_agora_and_the_cadence() {
+        let m = with_update(&view(crate::updater::Phase::Idle, None));
+        let t = lines(&m);
+        assert_eq!(&t[t.len() - 5..], ["—", "Ahrena Console 0.0.1", "Buscar agora…", "em dia · verificado há 3 min · próxima em 7 min", "Sair do Ahrena Console"]);
+        assert!(m.iter().any(|i| matches!(i, Item::Action { id: ID_CHECK_NOW, .. })));
+    }
+
+    #[test]
+    fn a11_a_new_version_sits_above_buscar_agora() {
+        let m = with_update(&view(crate::updater::Phase::Idle, Some("0.0.2")));
+        let t = lines(&m);
+        assert_eq!(&t[t.len() - 5..], ["Ahrena Console 0.0.1", "Atualizar para a versão 0.0.2", "Buscar agora…", "verificado há 3 min · próxima em 7 min", "Sair do Ahrena Console"]);
         assert!(m.iter().any(|i| matches!(i, Item::Action { id: ID_UPDATE, .. })));
+    }
+
+    #[test]
+    fn a11_checking_downloading_and_installing_grey_the_items_out() {
+        let t = lines(&with_update(&view(crate::updater::Phase::Checking, None)));
+        assert!(t.contains(&"Buscando agora…".to_string()) && t.contains(&"última consulta há 3 min".to_string()));
+        let mut downloading = view(crate::updater::Phase::Downloading, Some("0.0.10"));
+        downloading.bytes = Some((5_200_000, Some(12_400_000)));
+        let m = with_update(&downloading);
+        let t = lines(&m);
+        assert!(t.contains(&"Baixando a 0.0.10… 41%".to_string()) && t.contains(&"5,2 de 12,4 MB".to_string()));
+        assert!(!m.iter().any(|i| matches!(i, Item::Action { id: ID_UPDATE | ID_CHECK_NOW, .. })));
+        let t = lines(&with_update(&view(crate::updater::Phase::Installing, Some("0.0.10"))));
+        assert!(t.contains(&"Instalando a 0.0.10 e reiniciando…".to_string()));
+    }
+
+    #[test]
+    fn a11_a_failed_download_offers_atualizar_again_with_the_time() {
+        let mut failed = view(crate::updater::Phase::Error, Some("0.0.10"));
+        failed.failed_at_ms = Some(1_792_365_000_000 - 60_000);
+        let m = with_update(&failed);
+        assert!(m.iter().any(|i| matches!(i, Item::Action { id: ID_UPDATE, .. })));
+        assert!(lines(&m).iter().any(|t| t.starts_with("a última tentativa falhou às ") && t.ends_with(" · tente de novo")));
     }
 
     // ---- #180: the "Máquinas" block (wireframes A6 and A7) ----
