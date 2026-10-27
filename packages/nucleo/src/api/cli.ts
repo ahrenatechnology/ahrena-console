@@ -114,6 +114,8 @@ import { publishToolsChanges, ToolsExecutor, toolsLogFile } from '../tools/execu
 import { AwsConnector, publishConnectorChanges } from '../clouds/aws-connector.ts';
 import { loopbackWrite } from '../clouds/remote-connectors.ts';
 import { createCloudsRoute } from './clouds.ts';
+import { AppUpdateState } from '../app-update/state.ts';
+import { createAppUpdateRoute } from './app-update.ts';
 import { MachineConnection, publishConnectionChanges } from '../telemetry/connection.ts';
 import { PlacementProbe, withPlacement } from '../telemetry/placement.ts';
 import { createConnectionRoute } from './connection.ts';
@@ -517,6 +519,8 @@ const awsConnector = demo ? null : new AwsConnector({ logFile: reconnectLogFile(
 // The connection of each remote machine (#278, decision 0013 section 4): start, stop, reconnect and login-and-start, on the reconnect runner.
 const machineConnection = remoteMachines && reconnectRunner ? new MachineConnection({ registry: remoteMachines, startRunner: reconnectRunner, logFile: reconnectLogFile(dataDir), cloud: awsConnector, localReading: () => sampleStore.latest('local'), onChange: publishConnectionChanges(changes), log }) : null;
 const clouds = awsConnector ? createCloudsRoute({ aws: awsConnector, remote: { port: (id) => remoteMachines?.get(id)?.port, get: loopbackGet(), write: loopbackWrite() } }) : null;
+// The desktop app's update notice (#330): the app reports what it found; the /ui reads it. Not in --demo.
+const appUpdate = demo ? null : createAppUpdateRoute(new AppUpdateState(changes));
 
 let historyReady = false;
 const follower =
@@ -587,6 +591,7 @@ const api: LocalApi = await startLocalApi({
   orders: createOrdersRoute({ orders: new SessionOrders(), messaging, sessions: storage }),
   tools: toolsExecutor,
   clouds,
+  appUpdate,
   load: () => ({
     history: follower ? (historyReady ? 'ready' : 'importing') : 'off',
     follower: follower?.stats() ?? null,
