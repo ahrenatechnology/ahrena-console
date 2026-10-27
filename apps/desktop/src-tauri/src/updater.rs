@@ -37,10 +37,6 @@ pub const STABLE_INTERVAL: Duration = Duration::from_secs(6 * 60 * 60);
 const STATE_PATH: &str = "/api/app-update/state";
 const VERSION_FILE: &str = "app-version.txt";
 const NOTIFIED_FILE: &str = "update-notified.json";
-/// The `/ui` screen a notification of the update leads to: the card sits on top of every screen.
-const NOTICE_PATH: &str = "/ui/dashboard";
-/// The notification's identifier: a new one replaces the previous one.
-const NOTICE_ID: &str = "app-update";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Mode {
@@ -309,7 +305,7 @@ fn check(app: &AppHandle, manual: bool, announce: bool) {
         publish(app);
         crate::redraw_now(app);
     }
-    let outcome = app.updater().map_err(tauri_plugin_updater::Error::from).and_then(|u| tauri::async_runtime::block_on(u.check()));
+    let outcome = app.updater().and_then(|u| tauri::async_runtime::block_on(u.check()));
     let now = now_ms();
     let mut notice = None;
     match outcome {
