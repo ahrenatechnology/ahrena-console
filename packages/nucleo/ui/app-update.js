@@ -89,6 +89,8 @@ export function drawNotice(view, { where, act }) {
   if (!n) return null;
   const off = where === 'read-only';
   const button = (label, onClick, { filled = false, why = null } = {}) => el('button', { type: 'button', class: `btn ${filled ? 'filled' : 'outline'}`, onClick, disabled: off || Boolean(why), title: off ? READ_ONLY_WHY : (why ?? undefined) }, label);
+  // Tentar de novo restarts the app like Atualizar: off in a browser tab too.
+  const retry = () => (where === 'browser' ? button('Tentar de novo', null, { filled: true, why: 'Atualizar é no app, pela bandeja' }) : button('Tentar de novo', () => act('install'), { filled: true }));
   const sub = (...parts) => el('span', { class: 'up-sub' }, parts.filter(Boolean).join(' · '));
   const current = `Você está na versão ${view.appVersion}`;
   const card = (cls, ic, title, subline, actions = [], extra = null) =>
@@ -102,7 +104,7 @@ export function drawNotice(view, { where, act }) {
   if (n.kind === 'installing') return card('', 'refresh', `Instalando a versão ${n.version} e reiniciando…`, sub('O app fecha e abre sozinho', 'as sessões do Claude não param'));
   if (n.kind === 'error') {
     const text = n.why === 'signature' ? `A assinatura não confere. ${current}.` : `A conexão caiu no download. ${current}.`;
-    return card('up-err', 'error', `Não deu para atualizar para a ${n.version}`, sub(text), [button('Tentar de novo', () => act('install'), { filled: true })]);
+    return card('up-err', 'error', `Não deu para atualizar para a ${n.version}`, sub(text), [retry()]);
   }
   return card('up-ok', 'check-circle-2', `Atualizado para a versão ${n.version}`, sub(view.updated.notes ?? `Antes: ${view.updated.from}`), [button('Fechar', () => act('ack'))]);
 }
@@ -148,7 +150,7 @@ export function drawPanel(view, { where, act, now = Date.now() }) {
       body = [status('error', 'Canal fora do ar', 'O canal de atualizações não respondeu. A próxima consulta segue o intervalo normal.'), el('div', { class: 'up-pa' }, search('Tentar de novo', true))];
       break;
     case 'error':
-      body = [status('error', `Não deu para atualizar para a ${view.available?.version ?? ''}`, `Você continua na versão ${view.appVersion}.`), el('div', { class: 'up-pa' }, button('Tentar de novo', () => act('install'), { filled: true }), search())];
+      body = [status('error', `Não deu para atualizar para a ${view.available?.version ?? ''}`, `Você continua na versão ${view.appVersion}.`), el('div', { class: 'up-pa' }, where === 'browser' ? button('Tentar de novo', null, { filled: true, disabled: true, why: 'Atualizar é no app, pela bandeja' }) : button('Tentar de novo', () => act('install'), { filled: true }), search())];
       break;
     case 'available': {
       const install = where === 'browser' ? button('Atualizar', null, { filled: true, disabled: true, why: 'Atualizar é no app, pela bandeja' }) : button('Atualizar', () => act('install'), { filled: true });
@@ -199,7 +201,9 @@ export function createAppUpdate({ read, write, noticeNode, panelNode, win = glob
       noticeNode.setAttribute('hidden', '');
     }
     // The "Atualizado" card goes by itself; Fechar does the same.
-    if (view?.updated && !doneTimer) doneTimer = setTimer(() => ((doneTimer = null), act('ack')), DONE_MS);
+    // Only the app window times it out, and only while it is seen: a background tab must not eat the card.
+    const seen = where() === 'app' && win.document?.visibilityState !== 'hidden';
+    if (view?.updated && seen && !doneTimer) doneTimer = setTimer(() => ((doneTimer = null), act('ack')), DONE_MS);
     if (!view?.updated && doneTimer) (clearTimer(doneTimer), (doneTimer = null));
     if (open) drawOpenPanel();
   }

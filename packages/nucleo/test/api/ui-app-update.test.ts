@@ -96,6 +96,13 @@ describe('the card (C77, C78)', () => {
     assert.equal(labelled(card, 'Depois')!.hasAttribute('disabled'), false);
   });
 
+  test('Tentar de novo restarts the app like Atualizar: off in a browser, in the card and in the panel', () => {
+    const failed = view({ phase: 'error', error: 'download' });
+    assert.equal(labelled(up.drawNotice(failed, { where: 'browser', act: () => {} }), 'Tentar de novo')!.hasAttribute('disabled'), true);
+    assert.equal(labelled(up.drawPanel(failed, { where: 'browser', act: () => {}, now: NOW }), 'Tentar de novo')!.hasAttribute('disabled'), true);
+    assert.equal(labelled(up.drawNotice(failed, { where: 'app', act: () => {} }), 'Tentar de novo')!.hasAttribute('disabled'), false);
+  });
+
   test('read-only (the artifact): both buttons are off, with the reason', () => {
     const card = up.drawNotice(view(), { where: 'read-only', act: () => {} });
     for (const b of buttons(card)) {
@@ -238,6 +245,16 @@ describe('the wiring', () => {
     await new Promise((r) => setImmediate(r));
     assert.deepEqual(sent, ['/api/app-update/actions/ack']);
     assert.equal(n.noticeNode.hasAttribute('hidden'), true);
+  });
+
+  test('the "Atualizado" timeout runs only in the app window and only while the page is visible', async () => {
+    for (const [win, starts] of [[{ __AHRENA_APP__: true, document: { visibilityState: 'hidden' } }, false], [{ document: { visibilityState: 'visible' } }, false], [{ __AHRENA_APP__: true, document: { visibilityState: 'visible' } }, true]] as const) {
+      useWriter(async () => view());
+      let started = 0;
+      const widget = up.createAppUpdate({ read: async () => view({ available: null, updated: { from: '0.0.9', to: '0.0.10', notes: null } }), write: async () => view(), ...nodes(), win, setTimer: () => (started++, 1), clearTimer: () => {} });
+      await widget.refresh();
+      assert.equal(started > 0, starts);
+    }
   });
 
   test('index.html has the strip above the main area and the panel; app.js wires the footer version', () => {
