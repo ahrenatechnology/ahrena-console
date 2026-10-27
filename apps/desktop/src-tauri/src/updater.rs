@@ -81,6 +81,11 @@ pub enum Phase {
 }
 
 impl Phase {
+    /// A download or an install is going: nothing else may touch the update, its progress or its phase.
+    pub fn is_busy(self) -> bool {
+        matches!(self, Phase::Downloading | Phase::Installing)
+    }
+
     fn name(self) -> &'static str {
         match self {
             Phase::Idle => "idle",
@@ -297,6 +302,10 @@ fn with<R>(app: &AppHandle, f: impl FnOnce(&mut Inner) -> R) -> Option<R> {
 /// One check. `manual`: the person asked, so it shows "procurando" and its error. `announce`: it came
 /// from the tray, whose menu closed, so the result goes out as a notification.
 fn check(app: &AppHandle, manual: bool, announce: bool) {
+    // A download in progress owns the state: a check now would reset its phase and its update.
+    if with(app, |t| t.phase.is_busy()).unwrap_or(true) {
+        return;
+    }
     if manual {
         with(app, |t| {
             t.phase = Phase::Checking;
@@ -308,16 +317,23 @@ fn check(app: &AppHandle, manual: bool, announce: bool) {
     let outcome = app.updater().and_then(|u| tauri::async_runtime::block_on(u.check()));
     let now = now_ms();
     let mut notice = None;
+    // Asked before the tracker's lock: the tray holds the shared state while it reads the tracker.
+    let notices_on = crate::notices_on(app);
     match outcome {
         Ok(Some(update)) => {
             let found = Found { version: update.version.clone(), notes: update.body.as_deref().and_then(first_line), published_at: update.date.map(|d| d.to_string()) };
             with(app, |t| {
+                // An install started while the check ran: it took the update, leave the state to it.
+                if t.phase.is_busy() {
+                    return;
+                }
                 t.update = Some(update);
                 t.found = Some(found.clone());
                 t.phase = Phase::Idle;
                 t.error = None;
                 t.last_check_ms = Some(now);
-                if t.notified.as_deref() != Some(found.version.as_str()) {
+                // With the notifications off the version stays unnotified, so turning them on tells it.
+                if notices_on && t.notified.as_deref() != Some(found.version.as_str()) {
                     t.notified = Some(found.version.clone());
                     write_file(&t.dir, NOTIFIED_FILE, &json!({ "version": found.version, "notes": found.notes }).to_string());
                     notice = Some(Notice::update_available(&found.version, found.notes.as_deref(), &t.app_version));
@@ -326,6 +342,9 @@ fn check(app: &AppHandle, manual: bool, announce: bool) {
         }
         Ok(None) => {
             with(app, |t| {
+                if t.phase.is_busy() {
+                    return;
+                }
                 t.update = None;
                 t.found = None;
                 t.phase = Phase::Idle;
@@ -339,6 +358,9 @@ fn check(app: &AppHandle, manual: bool, announce: bool) {
         Err(e) => {
             eprintln!("[ahrena-console] update: {e}");
             with(app, |t| {
+                if t.phase.is_busy() {
+                    return;
+                }
                 t.last_check_ms = Some(now);
                 if manual {
                     t.phase = Phase::Error;
@@ -351,7 +373,7 @@ fn check(app: &AppHandle, manual: bool, announce: bool) {
         }
     }
     if let Some(n) = notice {
-        if crate::notices_on(app) {
+        if notices_on {
             crate::notify(app, &[n]);
         }
     }
@@ -471,6 +493,12 @@ pub fn publish(app: &AppHandle) {
     let Some(body) = with(app, |t| report(t)) else { return };
     if crate::http::put_json(port, STATE_PATH, &body).map(|r| r.status) != Some(200) {
         eprintln!("[ahrena-console] update: the core did not take the state");
+    } else {
+        // The "Atualizado" card is said once: a núcleo that restarts alone must not bring it back.
+        with(app, |t| {
+            t.updated_from = None;
+            t.updated_notes = None;
+        });
     }
 }
 
@@ -541,6 +569,12 @@ mod tests {
         // The core restarted: counters back to zero, then a new click.
         assert_eq!(pending_requests(&mut seen, (0, 0)), (false, false));
         assert_eq!(pending_requests(&mut seen, (1, 0)), (true, false));
+    }
+
+    #[test]
+    fn only_a_download_or_an_install_is_busy() {
+        assert!(Phase::Downloading.is_busy() && Phase::Installing.is_busy());
+        assert!(!Phase::Idle.is_busy() && !Phase::Checking.is_busy() && !Phase::Error.is_busy());
     }
 
     #[test]

@@ -363,7 +363,7 @@ pub fn update_line(u: &crate::updater::View, now_ms: u64, offset_s: i64) -> Opti
         }
         Phase::Installing => None,
         Phase::Checking => u.last_check_ms.map(|at| format!("última consulta {}", since(at))),
-        Phase::Error => u.failed_at_ms.map(|at| format!("o download falhou às {} · tente de novo", clouds::clock(at, now_ms, offset_s))),
+        Phase::Error => u.failed_at_ms.map(|at| format!("a última tentativa falhou às {} · tente de novo", clouds::clock(at, now_ms, offset_s))),
         Phase::Idle => {
             let checked = u.last_check_ms.map(|at| format!("verificado {}", since(at)))?;
             let next = u.next_check_ms.map(|at| format!(" · próxima em {}", if at <= now_ms { "instantes".to_string() } else { elapsed(minutes(at - now_ms).max(1)) })).unwrap_or_default();
@@ -834,7 +834,7 @@ mod tests {
         failed.failed_at_ms = Some(1_792_365_000_000 - 60_000);
         let m = with_update(&failed);
         assert!(m.iter().any(|i| matches!(i, Item::Action { id: ID_UPDATE, .. })));
-        assert!(lines(&m).iter().any(|t| t.starts_with("o download falhou às ") && t.ends_with(" · tente de novo")));
+        assert!(lines(&m).iter().any(|t| t.starts_with("a última tentativa falhou às ") && t.ends_with(" · tente de novo")));
     }
 
     // ---- #180: the "Máquinas" block (wireframes A6 and A7) ----
