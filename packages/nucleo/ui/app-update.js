@@ -1,4 +1,4 @@
-// The app's update notice (issue #330, wireframes C77 to C80): the card on top of every screen and the
+// The app's update notice (issue 330, wireframes C77 to C80): the card on top of every screen and the
 // version panel that opens from the version in the sidebar footer.
 //
 // The state is the núcleo's (`GET /api/app-update`, api/app-update.ts): the app reports it, this file
