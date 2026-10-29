@@ -160,7 +160,7 @@ export function createNewSessionRoute(o: NewSessionRouteOptions): NewSessionRout
       log('new session opened in a terminal');
       return send(res, 200, { ok: true, opened: 'terminal' });
     } catch (err) {
-      log(`new session: opening failed (${(err as NodeJS.ErrnoException).code ?? (err as Error).name})`);
+      log(`new session: opening failed (${err instanceof Error ? ((err as NodeJS.ErrnoException).code ?? err.name) : typeof err})`);
       return send(res, 502, { error: 'Não deu para abrir a sessão nova', command });
     }
   }
