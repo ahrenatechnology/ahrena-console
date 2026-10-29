@@ -350,6 +350,8 @@ export async function mount(area, ctx) {
       const toggle = (id) => {
         openNodes.has(id) ? openNodes.delete(id) : openNodes.add(id);
         draw();
+        // The redraw replaces the button that had the focus: give it back, or the keyboard loses its place.
+        [...area.querySelectorAll('.wft-toggle')].find((b) => b.getAttribute('data-node') === id)?.focus();
       };
       area.replaceChildren(...[head, failure ? errorBand({ title: 'Não deu para atualizar.', text: failure, action: { label: 'Tentar de novo', onClick: () => read() } }) : null, treeKpiRow(d), treePanel(d, openNodes, toggle)].filter(Boolean));
       return;

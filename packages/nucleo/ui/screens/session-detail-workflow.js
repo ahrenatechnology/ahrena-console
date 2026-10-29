@@ -260,13 +260,15 @@ function timeline(w) {
 const VIEWS = [['by-pr', 'Por PR'], ['nodes', 'Todos os nós']];
 
 /** The toggle between the loop by PR (the default, C81) and the graph of every node (C7). */
-function viewToggle(view, setView) {
-  const buttons = VIEWS.map(([id, label]) => el('button', { type: 'button', 'aria-pressed': id === view ? 'true' : 'false', onClick: () => id !== view && setView(id) }, label));
+function viewToggle(view, setView, hasLoop = true) {
+  // Without the loop in the answer (an older core) there is only the graph: the toggle has nothing to offer.
+  if (!hasLoop) return null;
+  const buttons = VIEWS.map(([id, label]) => el('button', { type: 'button', 'data-view': id, 'aria-pressed': id === view ? 'true' : 'false', onClick: () => id !== view && setView(id) }, label));
   return el('div', { class: 'wfd-views', role: 'group', 'aria-label': 'Como ver o fluxo' }, ...buttons);
 }
 
 function drawing(w, view = 'by-pr', setView = () => {}) {
-  const toggle = viewToggle(view, setView);
+  const toggle = viewToggle(view, setView, Boolean(w.loop));
   const strip = lineageStrip(w.lineage);
   if (view === 'by-pr' && w.loop) return [strip, loopPanel(w, toggle)].filter(Boolean);
   return [
@@ -293,7 +295,11 @@ export function create(ctx, base) {
   let view = 'by-pr';
   const setView = (v) => {
     view = v;
-    if (target && data) target.replaceChildren(...drawing(data, view, setView));
+    if (target && data) {
+      target.replaceChildren(...drawing(data, view, setView));
+      // The redraw replaces the clicked button: give the focus back to the same choice.
+      [...target.querySelectorAll('.wfd-views button')].find((b) => b.getAttribute('data-view') === v)?.focus();
+    }
   };
   ctx.signal?.addEventListener('abort', () => clearTimeout(timer));
 

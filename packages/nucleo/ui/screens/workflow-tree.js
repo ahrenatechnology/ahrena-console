@@ -51,7 +51,7 @@ function row(node, depth, open, toggle) {
     'div',
     { class: `card wft-node wft-depth-${Math.min(depth, 8)}` },
     has
-      ? el('button', { type: 'button', class: 'wft-toggle', 'aria-expanded': isOpen ? 'true' : 'false', 'aria-label': isOpen ? 'Recolher' : 'Expandir', onClick: () => toggle(node.sessionId) }, icon(isOpen ? 'chevron-down' : 'chevron-right'))
+      ? el('button', { type: 'button', class: 'wft-toggle', 'data-node': node.sessionId, 'aria-expanded': isOpen ? 'true' : 'false', 'aria-label': isOpen ? 'Recolher' : 'Expandir', onClick: () => toggle(node.sessionId) }, icon(isOpen ? 'chevron-down' : 'chevron-right'))
       : el('span', { class: 'wft-toggle wft-none' }),
     el('b', { class: 'wft-name' }, node.name ?? node.sessionId.slice(0, 8)),
     el('span', { class: 'wft-chip mono' }, node.kind === 'child' ? 'Filha' : 'Sessão'),
