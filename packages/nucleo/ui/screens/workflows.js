@@ -22,6 +22,29 @@ export const VIEWS = [
 ];
 const REREAD_ACTIVE_MS = 10_000;
 
+/** The periods of the page (issue 332, C84); the first read uses the default, the core's too. */
+export const PERIODS = [
+  { id: '24h', label: '24 h', text: 'as últimas 24 h' },
+  { id: '7d', label: '7 dias', text: 'os últimos 7 dias' },
+  { id: '30d', label: '30 dias', text: 'os últimos 30 dias' },
+  { id: 'all', label: 'Tudo', text: 'todo o histórico' },
+];
+export const DEFAULT_PERIOD = '30d';
+
+/** The period in the URL (`?period=7d`), when it is one the page knows. */
+export function periodFromSearch(search) {
+  const p = new URLSearchParams(search).get('period');
+  return PERIODS.some((x) => x.id === p) ? p : DEFAULT_PERIOD;
+}
+
+/** The line under the filters: how many sessions the numbers cover, and what is never left out. */
+export function coverageText(d) {
+  const p = PERIODS.find((x) => x.id === d.period) ?? PERIODS[2];
+  const base = d.period === 'all' ? `${num(d.sessions)} ${d.sessions === 1 ? 'sessão' : 'sessões'} no histórico` : `${num(d.sessions)} ${d.sessions === 1 ? 'sessão' : 'sessões'} em ${p.label}`;
+  const outside = d.activeOutsidePeriod > 0 ? ` ${num(d.activeOutsidePeriod)} ${d.activeOutsidePeriod === 1 ? 'ativa mais velha entra' : 'ativas mais velhas entram'} assim mesmo.` : ' Nenhuma sessão ativa fica de fora.';
+  return { title: base, text: `Os números e o grafo contam todas, não só as da lista.${outside}` };
+}
+
 export const FILTERS = [
   { id: 'all', rotulo: 'Todas as sessões', resumo: 'todas as sessões' },
   { id: 'active', rotulo: 'Só ativas', resumo: 'só as ativas' },
@@ -30,10 +53,12 @@ export const FILTERS = [
 
 // ---------- Partes puras (testadas no node) ----------
 
-/** A rota da API para o filtro e o nó escolhidos. */
-export function workflowsRoute(filter, node) {
+/** A rota da API para o filtro, o nó e o período escolhidos; `cursor` pede a página seguinte das árvores (issue 332). */
+export function workflowsRoute(filter, node, period = DEFAULT_PERIOD, cursor = null) {
   const q = new URLSearchParams({ filter: filter });
   if (node) q.set('node', node);
+  if (period !== DEFAULT_PERIOD) q.set('period', period);
+  if (cursor) q.set('cursor', cursor);
   return `/api/workflows?${q}`;
 }
 
@@ -177,6 +202,12 @@ function kpis(k) {
   );
 }
 
+/** The card under the filters (C84): what the numbers cover and that no active session is left out. */
+function coverage(d) {
+  const c = coverageText(d);
+  return el('div', { class: 'card wf-coverage' }, el('span', { class: 'wf-coverage-ic' }, icon('ok')), el('div', {}, el('b', {}, `${c.title}. `), c.text));
+}
+
 function panel(title, right, ...body) {
   return el('section', { class: 'card wf-panel' }, el('div', { class: 'wf-ttl' }, ...title, el('span', { class: 'wf-ttl-r' }, right)), ...body);
 }
@@ -287,6 +318,10 @@ export async function mount(area, ctx) {
   let timer = null;
   let wait = null;
   let view = 'overview';
+  let period = periodFromSearch(location.search);
+  let more = []; // the tree pages loaded after the first one ("Carregar mais")
+  let nextCursor = null;
+  let loadingMore = false;
   let openNodes = null; // the tree nodes that are open; `null` until the first read opens the first levels
   let expanded = null; // os runs abertos; `null` até a primeira leitura abrir o primeiro
   let focusTarget = null; // o nó que tinha o foco, para devolvê-lo depois de redesenhar
@@ -311,8 +346,21 @@ export async function mount(area, ctx) {
       if (data) draw();
     } }, v.label),
   );
+  const periodButtons = PERIODS.map((p) =>
+    el('button', { type: 'button', 'aria-pressed': p.id === period ? 'true' : 'false', onClick: () => {
+      if (period === p.id) return;
+      period = p.id;
+      if (period === 'all') area.replaceChildren(head, loading({ label: 'Lendo todo o histórico' }));
+      periodButtons.forEach((b, i) => b.setAttribute('aria-pressed', PERIODS[i].id === period ? 'true' : 'false'));
+      const q = new URLSearchParams(location.search);
+      period === DEFAULT_PERIOD ? q.delete('period') : q.set('period', period);
+      history.replaceState(null, '', `${location.pathname}${q.size ? `?${q}` : ''}${location.hash}`);
+      read();
+    } }, p.label),
+  );
+  const periodSeg = el('div', { class: 'wf-seg', role: 'group', 'aria-label': 'Período' }, ...periodButtons);
   const viewSeg = el('div', { class: 'wf-seg', role: 'group', 'aria-label': 'Como ver' }, ...viewButtons);
-  const head = header({ icon: 'workflows', title: 'Workflows', sub: 'Como os agentes se orquestram: delegação, rodadas de review e resultado', actions: [viewSeg, seg] });
+  const head = header({ icon: 'workflows', title: 'Workflows', sub: 'Como os agentes se orquestram: delegação, rodadas de review e resultado', actions: [viewSeg, seg, periodSeg] });
 
   area.replaceChildren(head, loading({ label: 'Carregando os workflows' }));
 
@@ -341,7 +389,11 @@ export async function mount(area, ctx) {
     if (!d.sessions && d.filter === 'all' && !d.node) {
       area.replaceChildren(
         ...[head, failure ? errorBand({ title: 'Não deu para atualizar.', text: failure, action: { label: 'Tentar de novo', onClick: () => read() } }) : null].filter(Boolean),
-        empty({ icon: 'workflows', title: 'Nenhuma sessão ainda', text: 'Quando houver sessões do Claude Code nesta máquina, a orquestração dos agentes aparece aqui.' }),
+        empty(
+          d.period === 'all'
+            ? { icon: 'workflows', title: 'Nenhuma sessão ainda', text: 'Quando houver sessões do Claude Code nesta máquina, a orquestração dos agentes aparece aqui.' }
+            : { icon: 'workflows', title: `Nada em ${PERIODS.find((x) => x.id === d.period)?.label ?? d.period}`, text: 'Nenhuma sessão se mexeu neste período e nenhuma está ativa. Escolha um período maior para ver mais.' },
+        ),
       );
       return;
     }
@@ -353,7 +405,8 @@ export async function mount(area, ctx) {
         // The redraw replaces the button that had the focus: give it back, or the keyboard loses its place.
         [...area.querySelectorAll('.wft-toggle')].find((b) => b.getAttribute('data-node') === id)?.focus();
       };
-      area.replaceChildren(...[head, failure ? errorBand({ title: 'Não deu para atualizar.', text: failure, action: { label: 'Tentar de novo', onClick: () => read() } }) : null, treeKpiRow(d), treePanel(d, openNodes, toggle)].filter(Boolean));
+      const onMore = nextCursor ? loadMore : null;
+      area.replaceChildren(...[head, failure ? errorBand({ title: 'Não deu para atualizar.', text: failure, action: { label: 'Tentar de novo', onClick: () => read() } }) : null, coverage(d), treeKpiRow(d), treePanel(d, openNodes, toggle, { items: [...d.trees.items, ...more], nextCursor, onMore, loadingMore })].filter(Boolean));
       return;
     }
     if (expanded === null) expanded = new Set(d.runs.length ? [d.runs[0].id] : []);
@@ -384,6 +437,7 @@ export async function mount(area, ctx) {
     const parts = [
       head,
       failure ? errorBand({ title: 'Não deu para atualizar.', text: failure, action: { label: 'Tentar de novo', onClick: () => read() } }) : null,
+      coverage(d),
       kpis(d.kpis),
       panel([icon('workflows'), 'Workflows dinâmicos'], 'frotas do Workflow tool, lidas dos journals', el('div', { class: 'wf-runs' }, ...runs)),
       panel(
@@ -400,13 +454,33 @@ export async function mount(area, ctx) {
     }
   }
 
+  async function loadMore() {
+    if (loadingMore || !nextCursor) return;
+    loadingMore = true;
+    draw();
+    try {
+      const r = await ctx.read(workflowsRoute(filter, node, period, nextCursor));
+      more = [...more, ...r.trees.items];
+      nextCursor = r.trees.nextCursor;
+      for (const id of initialOpen(r.trees.items)) openNodes?.add(id);
+      failure = null;
+    } catch (e) {
+      if (e?.name === 'AbortError') return;
+      failure = e.message;
+    }
+    loadingMore = false;
+    if (data) draw();
+  }
+
   async function read() {
     const mine = ++seq;
     clearTimeout(timer);
     try {
-      const d = await ctx.read(workflowsRoute(filter, node));
+      const d = await ctx.read(workflowsRoute(filter, node, period));
       if (mine !== seq) return;
       data = d;
+      more = [];
+      nextCursor = d.trees.nextCursor;
       failure = null;
       draw();
     } catch (e) {
