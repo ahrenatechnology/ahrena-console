@@ -32,6 +32,7 @@ import type { InstallationSettings } from '../settings/installation-settings.ts'
 import { DEV_CONSOLE_SIMULATOR_CONTEXTS, devConsoleSimulatorGit, SimulatedDevConsoleSource } from '../simulator/dev-console.ts';
 import { createFakeGithub, DEMO_GITHUB_DATA, FAKE_GITHUB_BASE } from '../simulator/fake-github.ts';
 import { SIMULATOR_PROJECT, SimulatorProject } from '../simulator/project.ts';
+import { SYNC_DECISIONS_EVERY_MS, SYNC_PROJECT_EVERY_MS, type SyncStep } from '../github/background-sync.ts';
 
 export interface GithubScreensOptions {
   /** --demo: each screen's fake GitHub; the credential still comes from `github` when given. */
@@ -61,6 +62,8 @@ export interface GithubScreensOptions {
   devConsole?: Partial<Pick<CreateDevConsoleOptions, 'file' | 'contexts' | 'git'>>;
   /** Called after every rebuild, for memory held outside these screens (e.g. the panel's work by branch). */
   onReset?: () => void;
+  /** Decision 0015: a background sync keeps the ADRs and PDRs fresh, so a read never starts a build. */
+  backgroundSync?: boolean;
   log?: (message: string) => void;
 }
 
@@ -165,6 +168,7 @@ export function createGithubScreens(o: GithubScreensOptions): GithubScreens {
       changes,
       queue,
       github,
+      syncOnRead: !o.backgroundSync,
       ...(log ? { log } : {}),
       accountRepos: async (): Promise<AccountRepos> => {
         const l = await repos.repos.lista();
@@ -223,4 +227,34 @@ export function createGithubScreens(o: GithubScreensOptions): GithubScreens {
       o.onReset?.();
     },
   };
+}
+
+/**
+ * The background sync's steps over these screens (decision 0015): the chosen Project's board every
+ * 2 min and the ADR/PDR index every 15 min. `connected` is the core's GitHub connection; without it
+ * both steps are skipped.
+ */
+export function githubSyncSteps(screens: Pick<GithubScreens, 'project' | 'current'>, connected: (() => Promise<boolean>) | null): SyncStep[] {
+  const ready = async () => (connected ? connected().catch(() => false) : false);
+  return [
+    {
+      name: 'project',
+      everyMs: SYNC_PROJECT_EVERY_MS,
+      async run() {
+        const kanban = screens.project?.kanban();
+        if (!kanban || !(await ready())) return 'skipped';
+        const board = await kanban.board({ force: true });
+        if (board.stale) throw new Error(board.staleReason ?? 'o GitHub não respondeu; ficou o quadro guardado');
+        return 'done';
+      },
+    },
+    {
+      name: 'decisions',
+      everyMs: SYNC_DECISIONS_EVERY_MS,
+      async run() {
+        if (!(await ready())) return 'skipped';
+        return screens.current().decisions.sync();
+      },
+    },
+  ];
 }

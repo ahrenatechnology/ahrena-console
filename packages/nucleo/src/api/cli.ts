@@ -25,6 +25,8 @@ import { SqliteDecisionStore } from '../decisions/sqlite.ts';
 import { SessionStateMachine } from '../states/machine.ts';
 import { createMcpServer } from '../mcp/index.ts';
 import { GithubCache } from '../github/cache.ts';
+import { GithubBackgroundSync } from '../github/background-sync.ts';
+import { githubSyncSteps } from './github-screens.ts';
 import { GithubGraphqlSource } from '../github/github-source.ts';
 import { SqliteCacheStore } from '../github/sqlite-cache.ts';
 import { GITHUB_CALL_LIMIT, GithubCallQueue } from '../github/call-queue.ts';
@@ -418,6 +420,7 @@ coreGithub = await createCoreGithub({
       : new GithubConnection({ vault: chooseVault(), settings, env: process.env, off: o.noGithub, queue: githubQueue, ...hooks, log }),
   cache: githubCache,
   queue: githubQueue,
+  backgroundSync: true,
   changes,
   fleet: mcp.fleet,
   storage,
@@ -430,6 +433,11 @@ coreGithub = await createCoreGithub({
   log,
 });
 const { connection, screens } = coreGithub;
+// Decision 0015 (#356): the core reads GitHub on a timer and the GitHub screens answer from the database.
+// Under --no-github there is no connection and no sync.
+const githubSync = coreGithub.connected
+  ? new GithubBackgroundSync({ steps: githubSyncSteps(screens, coreGithub.connected), pauseLeftMs: () => githubCache.pauseLeftMs(), log })
+  : null;
 
 // Machine telemetry (#175, decision 0008): one sample every 30 s, 12 h in the database, and each
 // alert that enters or exits on /api/changes. In --demo, the simulator's synthetic readings, with
@@ -602,7 +610,7 @@ const api: LocalApi = await startLocalApi({
   commit,
   changes,
   decisionsUi,
-  project: { kanban: null, fonte: demo ? 'demo' : 'github', resolver: screens.project, options: screens.projectOptions, credentialSource: () => connection.credentialSource(), log },
+  project: { kanban: null, fonte: demo ? 'demo' : 'github', resolver: screens.project, options: screens.projectOptions, credentialSource: () => connection.credentialSource(), fromStore: githubSync !== null, log },
   projectSelection: screens.project,
   connection,
   // --no-github keeps its own off / no-github answers; otherwise 409 github-not-connected before any call.
@@ -632,6 +640,7 @@ const api: LocalApi = await startLocalApi({
   clouds,
   docker,
   appUpdate,
+  githubSync,
   load: () => ({
     history: follower ? (historyReady ? 'ready' : 'importing') : 'off',
     follower: follower?.stats() ?? null,
@@ -694,6 +703,7 @@ const stopWatchingParent =
 const stopWatcher = demo ? () => {} : machine.start();
 for (const a of samplers) a.start();
 remoteMachines?.start();
+githubSync?.start();
 if (follower) {
   follower
     .start()
@@ -741,6 +751,7 @@ async function shutdown() {
   await toolsExecutor?.stopAll().catch(() => undefined);
   await machineConnection?.stopAll().catch(() => undefined);
   await awsConnector?.stop().catch(() => undefined);
+  await githubSync?.stop().catch(() => undefined);
   await api.close().catch(() => undefined);
   await storage.close();
   if (demoFolder) rmSync(demoFolder, { recursive: true, force: true });

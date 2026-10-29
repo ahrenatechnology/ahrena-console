@@ -51,6 +51,8 @@ const OPCAO = /^[A-Za-z0-9_-]{1,64}$/;
 export interface KanbanDoProjeto {
   readonly project: { owner: string; number: number; field: string };
   board(opts?: { force?: boolean }): Promise<ProjectBoard>;
+  /** The stored board without calling GitHub (decision 0015); `null` when there is none. */
+  snapshot?(): Promise<ProjectBoard | null>;
   move(itemId: string, optionId: string): Promise<ProjectMoveResult>;
   pauseLeftMs(): number;
 }
@@ -69,6 +71,8 @@ export interface OpcoesDoProjeto {
   options?: Pick<ProjectOptions, 'list'> | null;
   /** #241: where the credential comes from, for the `no-scope` hint. Default `console` (reconnect in Conexões). */
   credentialSource?: () => 'console' | 'gh';
+  /** Decision 0015: the GET answers the stored board (`snapshot`) and waits for GitHub only without one. */
+  fromStore?: boolean;
 }
 
 /** What the routes use from the Project resolver (src/github/project-selection.ts). */
@@ -241,7 +245,7 @@ function lerCorpo(req: IncomingMessage): Promise<string | null> {
 // site's page never gets it (`fromAnotherSite`, api/same-origin.ts).
 
 /** As duas rotas do kanban. O servidor já conferiu Host e Origin. */
-export function criarRotaDoProjeto({ kanban: fixedKanban, fonte, semProjeto = false, log = () => {}, resolver = null, options = null, credentialSource = () => 'console' }: OpcoesDoProjeto) {
+export function criarRotaDoProjeto({ kanban: fixedKanban, fonte, semProjeto = false, log = () => {}, resolver = null, options = null, credentialSource = () => 'console', fromStore = false }: OpcoesDoProjeto) {
   const currentKanban = () => (resolver ? resolver.kanban() : fixedKanban);
   const stoppedError = () => (resolver || semProjeto ? SEM_PROJETO : DESLIGADO);
   const selectionOf = (kanban: KanbanDoProjeto): { selection: ResolvedProjectSelection; envOverride: ProjectEnvOverride | null } =>
@@ -254,7 +258,10 @@ export function criarRotaDoProjeto({ kanban: fixedKanban, fonte, semProjeto = fa
     if (!kanban) return enviarErro(res, stoppedError());
     const forcar = url.searchParams.get('refresh') === '1';
     try {
-      send(res, 200, { ...quadroDe(await kanban.board({ force: forcar }), fonte), ...selectionOf(kanban) });
+      // Decision 0015: under the background sync the GET answers what is stored; only Atualizar and an
+      // empty store wait for GitHub.
+      const stored = fromStore && !forcar ? await kanban.snapshot?.() : null;
+      send(res, 200, { ...quadroDe(stored ?? (await kanban.board({ force: forcar })), fonte), ...selectionOf(kanban) });
     } catch (err) {
       enviarErro(res, erroDe(err, kanban, 'github-down', credentialSource()));
     }

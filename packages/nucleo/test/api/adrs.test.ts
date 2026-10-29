@@ -52,7 +52,7 @@ interface Setup {
   store: MemoryCacheStore;
 }
 
-function setup({ noSource = false, many = 0 } = {}): Setup {
+function setup({ noSource = false, many = 0, syncOnRead = true, store = new MemoryCacheStore() } = {}): Setup {
   const clock = { now: T0 };
   const now = () => clock.now;
   const extra = Object.fromEntries(Array.from({ length: many }, (_, i) => [`extra-${i}`, { 'README.md': '# x\n' }]));
@@ -78,7 +78,6 @@ function setup({ noSource = false, many = 0 } = {}): Setup {
   const transport = new GithubReposSource({ token: TOKEN, fetch, now, url: 'https://fake.invalid/graphql', api: 'https://fake.invalid', sleep: async () => {} });
   const cursor = new ChangeCursor({ generation: 'g', batchMs: 0, minIntervalMs: 0 });
   const start = cursor.current;
-  const store = new MemoryCacheStore();
   const account = { state: 'ready' as 'ready' | 'loading', repos: [...Object.keys(REPOS), ...Object.keys(extra)].map((name) => ({ owner: 'org-a', name, lastPush: null as string | null })) };
   const service = new DecisionsService({
     source: noSource ? null : new RepoFilesSource(transport),
@@ -86,6 +85,7 @@ function setup({ noSource = false, many = 0 } = {}): Setup {
     cache: new GithubCache({ store, now }),
     changes: cursor,
     now,
+    syncOnRead,
   });
   return {
     service,
@@ -469,5 +469,60 @@ describe('#174 the /api/adrs and /api/pdrs routes', () => {
     assert.equal((await get('/api/adrsx')).status, 404);
     const post = await fetch(`${api.url}/api/adrs`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' });
     assert.equal(post.status, 405);
+  });
+});
+
+describe('#356 the background sync (decision 0015)', () => {
+  test('sync() builds the index and stores it: a new service on the same store answers at once, without GitHub', async () => {
+    const first = setup({ syncOnRead: false });
+    assert.equal(await first.service.sync(), 'done');
+    const before = await first.service.list('adr');
+    assert.equal(before.state, 'ready');
+    assert.ok(before.totals.records > 0);
+
+    // The core restarted: the same database, a new service, GitHub down.
+    const second = setup({ syncOnRead: false, store: first.store });
+    second.mode.current = 'down';
+    const after = await second.service.list('adr');
+    assert.equal(after.state, 'ready');
+    assert.deepEqual(after.groups, before.groups);
+    const tab = await second.service.repo('adr', 'org-a', 'madr');
+    assert.equal(tab.state, 'ready');
+    assert.ok(tab.records.length > 0);
+    const record = await second.service.record('adr', 'org-a', 'madr', tab.records[0].id);
+    assert.equal(record.status, 200);
+    await second.service.wait();
+    assert.equal(second.bodies.length, 0);
+  });
+
+  test('without syncOnRead a read past the validity starts nothing; Atualizar still does', async () => {
+    const s = setup({ syncOnRead: false });
+    await s.service.sync();
+    const read = s.bodies.length;
+    s.clock.now += DECISIONS_DISCOVERY_TTL + 1;
+    await list(s);
+    await repo(s, 'madr');
+    assert.equal(s.bodies.length, read);
+    await list(s, 'adr', {}, true);
+    assert.ok(s.bodies.length > read);
+  });
+
+  test('an empty store still builds on the first read', async () => {
+    const s = setup({ syncOnRead: false });
+    assert.equal((await s.service.list('adr')).state, 'loading');
+    await s.service.wait();
+    assert.equal((await s.service.list('adr')).state, 'ready');
+  });
+
+  test('the account list still loading: sync() answers pending and builds nothing', async () => {
+    const s = setup({ syncOnRead: false });
+    s.account.state = 'loading';
+    assert.equal(await s.service.sync(), 'pending');
+    s.account.state = 'ready';
+    assert.equal(await s.service.sync(), 'done');
+  });
+
+  test('without GitHub the step is skipped', async () => {
+    assert.equal(await setup({ noSource: true, syncOnRead: false }).service.sync(), 'skipped');
   });
 });
