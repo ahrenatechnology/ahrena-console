@@ -66,7 +66,7 @@ const MASK = '***';
 const PLAIN = /^[\w./@:+,-]{1,64}$/;
 const BARE_FLAG = /^--?[A-Za-z][A-Za-z0-9-]{0,40}$/;
 /** Flags whose value is a count or a port, not a secret: an integer after them is kept. */
-const NUMERIC_FLAG = /^(?:-[pPnj]|--(?:port|ports|workers|threads|timeout|jobs|max-[a-z-]+|[a-z-]*-port))$/;
+const NUMERIC_FLAG = /^(?:-[pPnj]|--(?:port|ports|workers|threads|timeout|jobs|max-(?:workers|threads|connections|old-space-size)|(?:http|https|grpc|listen|server|web|admin|metrics)-port))$/;
 const SECRET_SHAPE = /^(?:ghp_|gho_|ghs_|ghu_|github_pat_|sk-|xox[abprs]-|AKIA|ASIA|eyJ)/;
 
 /** A bare word that looks like a key more than a name: long, or letters and digits mixed with no path in it. */
@@ -78,7 +78,7 @@ function looksLikeSecret(t: string): boolean {
 function plainUrl(t: string): string {
   const m = /^([a-z][a-z0-9+.-]*:\/\/)(?:[^/?#]*@)?([^/?#]*)([^?#]*)(\?|#)?/i.exec(t);
   if (!m) return MASK;
-  const path = m[3]!.split('/').map((seg) => (seg === '' || /^[A-Za-z][A-Za-z_.-]{0,30}$/.test(seg) || /^\d{1,5}$/.test(seg) ? seg : MASK)).join('/');
+  const path = m[3]!.split('/').map((seg) => (seg === '' || /^[A-Za-z][A-Za-z_.-]{0,30}$/.test(seg) ? seg : MASK)).join('/');
   return `${m[1]}${m[2]}${path}${m[4] ? `${m[4]}${MASK}` : ''}`;
 }
 
@@ -112,7 +112,7 @@ export function summarizeCommand(command: string): string {
         out.push(t);
       } else {
         out.push(`${t.startsWith('--') ? '--' : t.slice(0, 2)}${MASK}`);
-        afterFlag = t.startsWith('--');
+        afterFlag = true;
         run = true;
       }
       return;
