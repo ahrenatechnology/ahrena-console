@@ -128,6 +128,13 @@ describe('preview and the command summary', () => {
 
   test('the summary is one short line without credentials', () => {
     assert.equal(summarizeCommand('psql postgres://admin:hunter2@db:5432/x --api-token abc123 --password=p4ss'), 'psql postgres://***@db:5432/x --api-token *** --password=***');
+    assert.equal(summarizeCommand('redis-server --requirepass hunter2'), 'redis-server --requirepass ***');
+    assert.equal(summarizeCommand('mysqld -pSECRET -P 3306'), 'mysqld -p*** -P 3306');
+    assert.equal(summarizeCommand('curl -H "Authorization: Bearer abc123" http://x'), 'curl -H *** http://x');
+    assert.equal(summarizeCommand('curl --header "X-Api-Key: k" http://x'), 'curl --header *** http://x');
+    assert.equal(summarizeCommand('git clone https://ghp_abc@github.com/a/b'), 'git clone https://***@github.com/a/b');
+    assert.equal(summarizeCommand('app --password "a b" --port 80'), 'app --password *** --port 80');
+    assert.equal(summarizeCommand('app -p 8080 -p8080'), 'app -p 8080 -p8080');
     assert.equal(summarizeCommand('a\nb\tc'), 'a b c');
     assert.equal(summarizeCommand('x'.repeat(500)).length, 160);
   });

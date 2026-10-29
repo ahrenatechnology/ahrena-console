@@ -51,15 +51,43 @@ export type PreviewResult =
   | Extract<ReleaseResult, { kind: 'refused' }>;
 
 const COMMAND_MAX = 160;
-const SECRET_FLAG = /(\s--?[\w-]*(?:token|secret|passw(?:or)?d|key|auth)[\w-]*[= ])\S+/gi;
+const SECRET_NAME = /(token|secret|pass|pwd|key|auth|bearer|cred|cookie)/i;
+const MASK = '***';
 
-/** The command line as the confirmation shows it: credentials out of URLs and secret-looking flags, one line, short. */
+/** Splits on whitespace outside quotes; a quoted value stays one token, quotes kept. */
+function tokenize(line: string): string[] {
+  return line.match(/(?:[^\s"']+|"[^"]*"?|'[^']*'?)+/g) ?? [];
+}
+
+/** The command line as the confirmation shows it: credentials masked, one line, short. */
 export function summarizeCommand(command: string): string {
-  const clean = command
-    .replace(/[\u0000-\u001f\u007f]+/g, ' ')
-    .replace(/(\w+:\/\/)[^/\s:@]+:[^/\s@]+@/g, '$1***@')
-    .replace(SECRET_FLAG, '$1***')
-    .trim();
+  const line = command.replace(/[\u0000-\u001f\u007f]+/g, ' ');
+  const out: string[] = [];
+  let maskNext = false;
+  for (const raw of tokenize(line)) {
+    if (maskNext) {
+      out.push(MASK);
+      maskNext = false;
+      continue;
+    }
+    const token = raw.replace(/([a-z][a-z0-9+.-]*:\/\/)[^/\s]*@/gi, `$1${MASK}@`);
+    const flag = /^(--?[\w-]+)(=.*)?$/.exec(token);
+    if (flag) {
+      const [, name, value] = flag;
+      const headerLike = /^(-H|--header)$/.test(name!);
+      // `-pSECRET`: a short flag with its value glued on (mysql, redis-cli style).
+      if (/^-p\S+$/.test(token) && !/^-p\d+$/.test(token)) { out.push(`-p${MASK}`); continue; }
+      if (SECRET_NAME.test(name!)) {
+        if (value !== undefined) out.push(`${name}=${MASK}`);
+        else { out.push(token); maskNext = true; }
+        continue;
+      }
+      if (headerLike && value === undefined) { out.push(token); maskNext = true; continue; }
+    }
+    if (/^(bearer|basic)$/i.test(token)) { out.push(token); maskNext = true; continue; }
+    out.push(token);
+  }
+  const clean = out.join(' ').trim();
   return clean.length > COMMAND_MAX ? `${clean.slice(0, COMMAND_MAX - 1)}…` : clean;
 }
 
