@@ -68,7 +68,9 @@ import { send } from '../ingest/hooks/receiver.ts';
 import type { Agent, Session, SessionEvent, SessionStatus } from '../model.ts';
 import type { StoragePort } from '../storage-port.ts';
 import { subagentesDe } from './panel.ts';
+import type { DesktopIndex } from './desktop-index.ts';
 import { buildPrLoop, type PrLoop } from './workflow-loop.ts';
+import { DEFAULT_WORKFLOW_PERIOD, TREE_PAGE_SIZE, WORKFLOW_PERIODS, buildSessionTrees, pageOfTrees, periodStart, type SessionTree, type WorkflowPeriod } from './workflow-tree.ts';
 import type { TrabalhoPorBranch } from './work.ts';
 
 // ---------- Contrato ----------
@@ -148,10 +150,12 @@ export interface RespostaDosWorkflows {
   generatedAt: string;
   /** Quantas sessões entraram na conta (depois do filtro e do nó). */
   sessions: number;
-  /** O teto de sessões lidas (`MAXIMO_DE_SESSOES`) cortou: a conta não cobre todas. */
-  truncated: boolean;
-  /** O teto de sessões lidas efetivamente usado; a tela o cita quando `truncated`. */
-  max: number;
+  /** The period the page asked for (#332): `24h`, `7d`, `30d` or `all`. */
+  period: WorkflowPeriod;
+  /** The start of the period, or `null` for `all`. The sessions are filtered by their last event. */
+  since: string | null;
+  /** Active sessions older than the period: they are in anyway, and counted here. */
+  activeOutsidePeriod: number;
   kpis: KpisDosWorkflows;
   runs: RunDoWorkflow[];
   graph: GrafoDeOrquestracao;
@@ -418,10 +422,10 @@ export interface OpcoesDosWorkflows {
   filtro?: FiltroDosWorkflows;
   no?: string | null;
   agora: number;
-  /** A leitura parou no teto de sessões. */
-  truncado?: boolean;
-  /** O teto de sessões usado na leitura; padrão `MAXIMO_DE_SESSOES`. */
-  maximo?: number;
+  /** The period of the read, for the answer (#332). */
+  period?: WorkflowPeriod;
+  since?: string | null;
+  activeOutsidePeriod?: number;
 }
 
 export const NO_DO_GRAFO = /^(?:main|origin:(?:prompt|resume)|compaction:(?:none|compacted)|outcome:(?:completed|error|active|abandoned)|subagent:[A-Za-z0-9_.:-]{1,64})$/;
@@ -685,11 +689,11 @@ export function grafoDe(sessoes: readonly SessaoDosWorkflows[]): GrafoDeOrquestr
 
 const PESO_DO_RUN: Record<EstadoDoRun, number> = { active: 0, error: 1, completed: 2 };
 
-export function montarWorkflows(todas: readonly SessaoDosWorkflows[], { filtro = 'all', no = null, agora, truncado = false, maximo = MAXIMO_DE_SESSOES }: OpcoesDosWorkflows): RespostaDosWorkflows {
+export function montarWorkflows(todas: readonly SessaoDosWorkflows[], { filtro = 'all', no = null, agora, period = DEFAULT_WORKFLOW_PERIOD, since = null, activeOutsidePeriod = 0 }: OpcoesDosWorkflows): RespostaDosWorkflows {
   let sessoes = todas.filter((x) => passaNoFiltro(x.session, filtro));
   if (no) sessoes = sessoes.filter((x) => nosDaSessao(x).has(no));
   const runs = sessoes.flatMap((x) => runsDaSessao(x, agora)).sort((a, b) => PESO_DO_RUN[a.state] - PESO_DO_RUN[b.state] || b.start.localeCompare(a.start));
-  return { filter: filtro, node: no, generatedAt: new Date(agora).toISOString(), sessions: sessoes.length, truncated: truncado, max: maximo, kpis: kpisDe(sessoes, agora), runs, graph: grafoDe(sessoes) };
+  return { filter: filtro, node: no, generatedAt: new Date(agora).toISOString(), sessions: sessoes.length, period, since, activeOutsidePeriod, kpis: kpisDe(sessoes, agora), runs, graph: grafoDe(sessoes) };
 }
 
 // ---------- Rotas ----------
@@ -699,14 +703,13 @@ export interface FontesDosWorkflows {
   storage: StoragePort;
   trabalho?: TrabalhoPorBranch | null;
   agora?: () => number;
-  /** O teto de sessões lidas; padrão `MAXIMO_DE_SESSOES` (testes usam menos). */
-  maximoDeSessoes?: number;
+  /** The Claude Desktop index, for the tree between sessions (#332); without it every session is a root. */
+  desktop?: DesktopIndex | null;
 }
 
 export const WORKFLOWS_ROUTE = '/api/workflows';
 const DA_SESSAO = /^\/api\/sessions\/([^/]+)\/workflow$/;
 const ID = /^[A-Za-z0-9_.:-]{1,128}$/;
-export const MAXIMO_DE_SESSOES = 500;
 
 async function todosOsEventos(storage: StoragePort, sessionId: string): Promise<SessionEvent[]> {
   const out: SessionEvent[] = [];
@@ -728,8 +731,8 @@ async function compactou(storage: StoragePort, s: Session): Promise<boolean> {
 
 export interface LeituraDosWorkflows {
   sessoes: SessaoDosWorkflows[];
-  /** Havia mais sessões que o teto. */
-  truncado: boolean;
+  /** Ids of the active sessions older than the period: they are in anyway (#332). */
+  outsidePeriod: Set<string>;
 }
 
 /**
@@ -755,23 +758,143 @@ async function eventosDosRuns(storage: StoragePort, session: Session, agentes: A
   return eventos;
 }
 
-/** As sessões do filtro, com o que a montagem pede; os eventos só das que têm run do Workflow tool. */
-export async function lerSessoesDosWorkflows(storage: StoragePort, filtro: FiltroDosWorkflows, maximo = MAXIMO_DE_SESSOES): Promise<LeituraDosWorkflows> {
+/**
+ * What the read keeps per session between requests, per storage: a session that did not change is not read again.
+ * The entry is valid while the session's `updatedAt`, `status` and `endedAt` are the same and for `CACHE_TTL_MS`: the
+ * watchdog flips an agent or a session without touching `updatedAt`, so a signature alone would go stale.
+ */
+const CACHE_TTL_MS = 30_000;
+const CACHE_MAX = 10_000;
+const signature = (s: Session) => `${s.updatedAt}|${s.status}|${s.endedAt ?? ''}`;
+
+interface Cached<T> {
+  signature: string;
+  at: number;
+  value: T;
+}
+
+class SessionCache<T> {
+  private readonly map = new Map<string, Cached<T>>();
+  get(s: Session, now: number): T | null {
+    const hit = this.map.get(s.id);
+    return hit && hit.signature === signature(s) && now - hit.at < CACHE_TTL_MS ? hit.value : null;
+  }
+  set(s: Session, now: number, value: T): T {
+    this.map.delete(s.id);
+    this.map.set(s.id, { signature: signature(s), at: now, value });
+    if (this.map.size > CACHE_MAX) this.map.delete(this.map.keys().next().value!);
+    return value;
+  }
+}
+
+const READ_CACHES = new WeakMap<StoragePort, SessionCache<{ agentes: Agent[]; compactou: boolean }>>();
+const LOOP_CACHES = new WeakMap<StoragePort, SessionCache<PrLoop>>();
+const cacheOf = <T>(caches: WeakMap<StoragePort, SessionCache<T>>, storage: StoragePort): SessionCache<T> => {
+  let c = caches.get(storage);
+  if (!c) caches.set(storage, (c = new SessionCache<T>()));
+  return c;
+};
+
+async function readSession(storage: StoragePort, session: Session, now: number): Promise<SessaoDosWorkflows> {
+  const cache = cacheOf(READ_CACHES, storage);
+  const hit = cache.get(session, now) ?? cache.set(session, now, { agentes: await storage.listAgents(session.id), compactou: await compactou(storage, session) });
+  return { session, agentes: hit.agentes, compactou: hit.compactou, eventos: await eventosDosRuns(storage, session, hit.agentes) };
+}
+
+/**
+ * The sessions of the filter in the period, with no cap (#332): the page walks the list by last event, newest first
+ * (the order `StoragePort.listSessions` gives: `updatedAt` descending, then id),
+ * until it passes `since` (`null` reads everything). The active sessions are always in: the ones older than the
+ * period come at the end, and their ids go in `outsidePeriod`.
+ */
+export async function lerSessoesDosWorkflows(storage: StoragePort, filtro: FiltroDosWorkflows, since: string | null = null, now: number = Date.now()): Promise<LeituraDosWorkflows> {
   const status: SessionStatus[] | undefined = filtro === 'active' ? ['active'] : filtro === 'completed' ? ['completed', 'error', 'abandoned'] : undefined;
   const sessoes: Session[] = [];
   let cursor: string | null = null;
+  let passed = false;
   do {
     const page = await storage.listSessions({ ...(status ? { status } : {}), limit: 200, cursor });
-    sessoes.push(...page.items);
+    for (const s of page.items) {
+      if (since !== null && s.updatedAt < since) passed = true;
+      else sessoes.push(s);
+    }
     cursor = page.nextCursor;
-  } while (cursor && sessoes.length < maximo);
-  const truncado = sessoes.length > maximo || (sessoes.length === maximo && cursor !== null);
-  const out: SessaoDosWorkflows[] = [];
-  for (const session of sessoes.slice(0, maximo)) {
-    const agentes = await storage.listAgents(session.id);
-    out.push({ session, agentes, compactou: await compactou(storage, session), eventos: await eventosDosRuns(storage, session, agentes) });
+  } while (cursor && !passed);
+  const outsidePeriod = new Set<string>();
+  if (since !== null && filtro !== 'completed') {
+    const have = new Set(sessoes.map((s) => s.id));
+    let next: string | null = null;
+    do {
+      const page = await storage.listSessions({ status: ['active'], limit: 200, cursor: next });
+      for (const s of page.items) if (!have.has(s.id)) {
+        sessoes.push(s);
+        outsidePeriod.add(s.id);
+      }
+      next = page.nextCursor;
+    } while (next);
   }
-  return { sessoes: out, truncado };
+  const out: SessaoDosWorkflows[] = [];
+  for (const session of sessoes) out.push(await readSession(storage, session, now));
+  return { sessoes: out, outsidePeriod };
+}
+
+/** The loop of a session, cached like the read (same signature and time limit); the events are read only when there is a reviewer. */
+async function loopDe(fontes: FontesDosWorkflows, x: SessaoDosWorkflows, now: number): Promise<PrLoop> {
+  const cache = cacheOf(LOOP_CACHES, fontes.storage);
+  const hit = cache.get(x.session, now);
+  if (hit) return hit;
+  const hasReviewer = x.agentes.some((a) => a.type === 'subagent' && papelDe(a) === 'review');
+  const eventos = hasReviewer ? await todosOsEventos(fontes.storage, x.session.id) : [];
+  return cache.set(x.session, now, buildPrLoop(x.session, x.agentes, eventos, papelDe));
+}
+
+export interface LoopKpis {
+  prs: number;
+  rounds: number;
+  changeRequests: number;
+  approved: number;
+  stopped: number;
+  roundsPerPr: number | null;
+}
+
+type TreeNodeWithLoop = SessionTree['root'] & { loop: PrLoop['totals'] | null; children: TreeNodeWithLoop[] };
+
+/** The trees of the sessions in scope, one page of them, and the loop KPIs of the whole scope. */
+async function arvoresDosWorkflows(fontes: FontesDosWorkflows, escopo: SessaoDosWorkflows[], outside: Set<string>, cursor: string | null, now: number, markParentOutside: boolean) {
+  await fontes.desktop?.refresh();
+  const desktop = fontes.desktop ?? null;
+  const lineage = desktop
+    ? {
+        parentOf(cliId: string) {
+          const ds = desktop.sessionByCli(cliId);
+          if (!ds) return null;
+          const parent = ds.parentLocalId ? desktop.sessionByLocal(ds.parentLocalId) : null;
+          // Under a filter or a node the parent can be missing only because the filter dropped it: say "outside the period" just when nothing filters.
+          return { parentCliId: parent?.cliSessionId ?? null, parentKnown: markParentOutside && !!parent };
+        },
+      }
+    : null;
+  const trees = buildSessionTrees(escopo.map((x) => ({ id: x.session.id, name: x.session.name, status: x.session.status, startedAt: x.session.startedAt, updatedAt: x.session.updatedAt })), lineage, outside);
+  const page = pageOfTrees(trees, cursor);
+  if (!page) return null;
+  const byId = new Map(escopo.map((x) => [x.session.id, x]));
+  const loops = new Map<string, PrLoop>();
+  for (const x of escopo) loops.set(x.session.id, await loopDe(fontes, x, now));
+  const decorate = (n: SessionTree['root']): TreeNodeWithLoop => ({ ...n, loop: byId.has(n.sessionId) ? loops.get(n.sessionId)!.totals : null, children: n.children.map(decorate) });
+  const groups = [...loops.values()].flatMap((l) => l.groups.filter((g) => g.kind === 'pr'));
+  const rounds = groups.reduce((t, g) => t + g.rounds, 0);
+  const loopKpis: LoopKpis = {
+    prs: groups.length,
+    rounds,
+    changeRequests: groups.reduce((t, g) => t + g.changeRequests, 0),
+    approved: groups.filter((g) => g.state === 'approved').length,
+    stopped: groups.filter((g) => g.state === 'stopped').length,
+    roundsPerPr: groups.length ? Math.round((rounds / groups.length) * 10) / 10 : null,
+  };
+  return {
+    trees: { items: page.items.map((t) => ({ ...t, root: decorate(t.root) })), total: page.total, pageSize: TREE_PAGE_SIZE, nextCursor: page.nextCursor },
+    loopKpis,
+  };
 }
 
 /**
@@ -792,9 +915,21 @@ export async function responderWorkflows(res: ServerResponse, url: URL, fontes: 
       send(res, 400, { error: 'node: um id de nó do grafo (ex.: subagent:Explore)' });
       return true;
     }
-    const maximo = fontes.maximoDeSessoes ?? MAXIMO_DE_SESSOES;
-    const { sessoes, truncado } = await lerSessoesDosWorkflows(fontes.storage, filtro as FiltroDosWorkflows, maximo);
-    send(res, 200, montarWorkflows(sessoes, { filtro: filtro as FiltroDosWorkflows, no, agora, truncado, maximo }));
+    const period = url.searchParams.get('period') ?? DEFAULT_WORKFLOW_PERIOD;
+    if (!WORKFLOW_PERIODS.includes(period as WorkflowPeriod)) {
+      send(res, 400, { error: 'period: 24h, 7d, 30d ou all' });
+      return true;
+    }
+    const since = periodStart(period as WorkflowPeriod, agora);
+    const { sessoes, outsidePeriod } = await lerSessoesDosWorkflows(fontes.storage, filtro as FiltroDosWorkflows, since, agora);
+    const base = montarWorkflows(sessoes, { filtro: filtro as FiltroDosWorkflows, no, agora, period: period as WorkflowPeriod, since, activeOutsidePeriod: outsidePeriod.size });
+    const inScope = sessoes.filter((x) => passaNoFiltro(x.session, filtro as FiltroDosWorkflows) && (!no || nosDaSessao(x).has(no)));
+    const trees = await arvoresDosWorkflows(fontes, inScope, outsidePeriod, url.searchParams.get('cursor'), agora, filtro === 'all' && !no);
+    if (!trees) {
+      send(res, 400, { error: 'cursor inválido' });
+      return true;
+    }
+    send(res, 200, { ...base, ...trees });
     return true;
   }
   const m = DA_SESSAO.exec(url.pathname);
