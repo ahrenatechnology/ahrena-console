@@ -46,6 +46,23 @@ export interface PortReleaserDeps {
   waitMs?: Partial<Record<ReleaseSignal, number>>;
 }
 
+export type PreviewResult =
+  | { kind: 'ok'; process: string | null; pid: number; command: string; ports: number[]; interface: ListeningPort['interface'] }
+  | Extract<ReleaseResult, { kind: 'refused' }>;
+
+const COMMAND_MAX = 160;
+const SECRET_FLAG = /(\s--?[\w-]*(?:token|secret|passw(?:or)?d|key|auth)[\w-]*[= ])\S+/gi;
+
+/** The command line as the confirmation shows it: credentials out of URLs and secret-looking flags, one line, short. */
+export function summarizeCommand(command: string): string {
+  const clean = command
+    .replace(/[\u0000-\u001f\u007f]+/g, ' ')
+    .replace(/(\w+:\/\/)[^/\s:@]+:[^/\s@]+@/g, '$1***@')
+    .replace(SECRET_FLAG, '$1***')
+    .trim();
+  return clean.length > COMMAND_MAX ? `${clean.slice(0, COMMAND_MAX - 1)}…` : clean;
+}
+
 export class PortReleaser {
   private readonly d: PortReleaserDeps;
 
@@ -53,8 +70,9 @@ export class PortReleaser {
     this.d = deps;
   }
 
-  async release(port: number, pid: number, signal: ReleaseSignal): Promise<ReleaseResult> {
-    const refused = (reason: RefusalReason, now?: { process: string | null; pid: number | null } | null): ReleaseResult => ({ kind: 'refused', reason, ...(now !== undefined ? { now } : {}) });
+  /** Why the port cannot be released now, or who holds it. Nothing is sent. */
+  private async check(port: number, pid: number): Promise<{ refusal: Extract<ReleaseResult, { kind: 'refused' }> } | { holder: ListeningPort; ports: ListeningPort[]; command: string }> {
+    const refused = (reason: RefusalReason, now?: { process: string | null; pid: number | null } | null) => ({ refusal: { kind: 'refused' as const, reason, ...(now !== undefined ? { now } : {}) } });
     const ports = await this.d.listPorts();
     if (ports === null) return refused('unavailable');
     const holders = ports.filter((p) => p.port === port);
@@ -72,12 +90,25 @@ export class PortReleaser {
     if (info === null) return refused('already-free');
     if (APP_COMMAND.test(info.command)) return refused('app');
     if (info.uid !== uid) return refused('other-user');
+    return { holder, ports: ports.filter((p) => p.pid === pid), command: summarizeCommand(info.command) };
+  }
+
+  /** What the confirmation shows: the process, its short command and every port it holds; or why not. */
+  async preview(port: number, pid: number): Promise<PreviewResult> {
+    const c = await this.check(port, pid);
+    if ('refusal' in c) return c.refusal;
+    return { kind: 'ok', process: c.holder.process, pid, command: c.command, ports: c.ports.map((p) => p.port).sort((a, b) => a - b), interface: c.holder.interface };
+  }
+
+  async release(port: number, pid: number, signal: ReleaseSignal): Promise<ReleaseResult> {
+    const c = await this.check(port, pid);
+    if ('refusal' in c) return c.refusal;
     try {
       this.d.kill(pid, signal === 'TERM' ? 'SIGTERM' : 'SIGKILL');
     } catch (err) {
       const code = (err as NodeJS.ErrnoException).code;
       if (code === 'ESRCH') return { kind: 'released' };
-      return refused(code === 'EPERM' ? 'other-user' : 'unavailable');
+      return { kind: 'refused', reason: code === 'EPERM' ? 'other-user' : 'unavailable' };
     }
     return (await this.closed(port, pid, this.d.waitMs?.[signal] ?? WAIT_MS[signal])) ? { kind: 'released' } : { kind: 'still-listening' };
   }

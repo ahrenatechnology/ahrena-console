@@ -2,7 +2,7 @@
 // signalled, the núcleo, the app and a container's proxy never are, and SIGKILL is its own request.
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
-import { PortReleaser, listPortsWith, type PortReleaserDeps } from '../../src/ports/release.ts';
+import { PortReleaser, listPortsWith, summarizeCommand, type PortReleaserDeps } from '../../src/ports/release.ts';
 import type { ListeningPort } from '../../src/telemetry/model.ts';
 
 const listener = (port: number, pid: number | null, process: string | null): ListeningPort => ({ port, interface: 'all', address: null, process, pid });
@@ -110,5 +110,25 @@ describe('listPortsWith', () => {
     assert.deepEqual((await listPortsWith(run, 'darwin')())?.map((p) => [p.port, p.pid]), [[3000, 77]]);
     assert.equal(await listPortsWith(run, 'win32')(), null);
     assert.deepEqual(calls, ['ss', 'lsof']);
+  });
+});
+
+describe('preview and the command summary', () => {
+  test('the preview names the process, its short command and every port the pid holds, and signals nothing', async () => {
+    const t = setup([listener(13000, 6102, 'ssh'), listener(14720, 6102, 'ssh'), listener(3000, 7741, 'node')], { ps: { 6102: '501 ssh -N ws-exemplo' } });
+    assert.deepEqual(await t.releaser.preview(13000, 6102), { kind: 'ok', process: 'ssh', pid: 6102, command: 'ssh -N ws-exemplo', ports: [13000, 14720], interface: 'all' });
+    assert.deepEqual(t.signals, []);
+  });
+
+  test('the preview gives the same refusals a release would', async () => {
+    const t = setup([listener(22, 811, 'sshd')], { ps: { 811: '0 /usr/sbin/sshd -D' } });
+    assert.equal(((await t.releaser.preview(22, 811)) as { reason: string }).reason, 'other-user');
+    assert.equal(((await t.releaser.preview(22, 1)) as { reason: string }).reason, 'owner-changed');
+  });
+
+  test('the summary is one short line without credentials', () => {
+    assert.equal(summarizeCommand('psql postgres://admin:hunter2@db:5432/x --api-token abc123 --password=p4ss'), 'psql postgres://***@db:5432/x --api-token *** --password=***');
+    assert.equal(summarizeCommand('a\nb\tc'), 'a b c');
+    assert.equal(summarizeCommand('x'.repeat(500)).length, 160);
   });
 });

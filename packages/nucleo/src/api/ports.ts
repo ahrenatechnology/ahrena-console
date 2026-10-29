@@ -3,6 +3,9 @@
 //
 // - `GET /api/ports/release`: `{ release: true, remoteActions }`. What a Mac's núcleo asks a remote
 //   one to know whether the action is there and whether it will take a request from the tunnel.
+// - `GET /api/ports/release/preview?port=<n>&pid=<n>`: what the confirmation shows, 200 `{ process, pid,
+//   command, ports, interface }` (the command is one short line with credentials cut out) or the same
+//   409 `{ error, reason, now? }` a release would answer. It sends nothing.
 // - `POST /api/ports/release` `{ port, pid, signal: 'TERM' | 'KILL' }`: 200 `{ result: 'released' |
 //   'still-listening' }` (it waited up to 5 s for TERM, 3 s for KILL); 409 `{ error, reason, now? }`
 //   when nothing was sent (`already-free`, `owner-changed` with who holds the port now, `self`, `app`,
@@ -28,8 +31,10 @@ import { PortReleaser, REFUSAL_REASONS, RELEASE_SIGNALS, type ReleaseSignal } fr
 import { fromAnotherSite, fromOwnUi } from './same-origin.ts';
 
 export const PORTS_RELEASE_ROUTE = '/api/ports/release';
-const MACHINE_RELEASE = /^\/api\/machines\/([^/]+)\/ports\/release$/;
+export const PORTS_PREVIEW_ROUTE = '/api/ports/release/preview';
+const MACHINE_RELEASE = /^\/api\/machines\/([^/]+)\/ports\/release(\/preview)?$/;
 const MACHINE_RELEASE_RAW = /^\/api\/machines\/[a-z0-9][a-z0-9-]{0,63}\/ports\/release$/;
+const PREVIEW_QUERY = /^\?port=(\d{1,5})&pid=(\d{1,7})$/;
 const MAX_BODY = 256;
 
 export interface PortsRouteOptions {
@@ -46,7 +51,7 @@ export interface PortsRoute {
 }
 
 export function isPortsRoute(pathname: string): boolean {
-  return pathname === PORTS_RELEASE_ROUTE || MACHINE_RELEASE.test(pathname);
+  return pathname === PORTS_RELEASE_ROUTE || pathname === PORTS_PREVIEW_ROUTE || MACHINE_RELEASE.test(pathname);
 }
 
 /** Every non-GET request on a release route is a write and goes through `portsWriteAllowed` only. */
@@ -132,6 +137,16 @@ export function createPortsRoute(o: PortsRouteOptions): PortsRoute {
   const handle = async (req: IncomingMessage, res: ServerResponse, url: URL): Promise<void> => {
     const path = url.pathname;
     const machine = MACHINE_RELEASE.exec(path);
+    if (path === PORTS_PREVIEW_ROUTE) {
+      req.resume();
+      if (!o.releaser) return send(res, 404, { error: 'não encontrado' });
+      if (req.method !== 'GET' || fromAnotherSite(req)) return send(res, 403, { error: 'origem não permitida' });
+      const q = PREVIEW_QUERY.exec(url.search);
+      if (!q) return send(res, 400, { error: 'use ?port=<n>&pid=<n>' });
+      const r = await o.releaser.preview(Number(q[1]), Number(q[2]));
+      if (r.kind === 'ok') return send(res, 200, { process: r.process, pid: r.pid, command: r.command, ports: r.ports, interface: r.interface });
+      return send(res, r.reason === 'unavailable' ? 503 : 409, { error: REFUSAL_TEXT[r.reason], reason: r.reason, ...(r.now !== undefined ? { now: r.now } : {}) });
+    }
     if (path === PORTS_RELEASE_ROUTE) {
       if (!o.releaser) {
         req.resume();
@@ -155,6 +170,26 @@ export function createPortsRoute(o: PortsRouteOptions): PortsRoute {
     if (!o.remote || remotePort === undefined) {
       req.resume();
       return send(res, 404, { error: `máquina desconhecida: ${MACHINE_ID.test(id) ? id : '(id inválido)'}` });
+    }
+    if (machine![2]) {
+      req.resume();
+      if (req.method !== 'GET' || fromAnotherSite(req)) return send(res, 403, { error: 'origem não permitida' });
+      const q = PREVIEW_QUERY.exec(url.search);
+      if (!q) return send(res, 400, { error: 'use ?port=<n>&pid=<n>' });
+      const r = await o.remote.get(remotePort, `${PORTS_PREVIEW_ROUTE}${url.search}`);
+      if (r.kind === 'unreachable') return send(res, 502, { error: 'a máquina não respondeu', reason: 'unreachable' });
+      const a = (r.body ?? {}) as Record<string, unknown>;
+      if (r.status === 200 && Array.isArray(a.ports) && Number.isInteger(a.pid)) {
+        const text = (v: unknown, max: number) => (typeof v === 'string' && v.length <= max ? v.replace(/[\u0000-\u001f\u007f]/g, ' ') : null);
+        return send(res, 200, { process: text(a.process, 80), pid: a.pid, command: text(a.command, 200) ?? '', ports: a.ports.filter((n) => Number.isInteger(n)).slice(0, 64), interface: a.interface === 'all' || a.interface === 'address' ? a.interface : 'loopback' });
+      }
+      if (r.status === 404 || r.status === 405) return send(res, 409, { error: 'o núcleo de lá não sabe liberar portas', reason: 'unsupported' });
+      const reason = typeof a.reason === 'string' && (REFUSAL_REASONS as readonly string[]).includes(a.reason) ? a.reason : null;
+      if ((r.status === 409 || r.status === 503) && reason) {
+        const now = sanitizeNow(a.now);
+        return send(res, r.status, { error: REFUSAL_TEXT[reason], reason, ...(now !== undefined ? { now } : {}) });
+      }
+      return send(res, 502, { error: 'resposta inesperada da máquina', reason: 'bad-response' });
     }
     if (req.method === 'GET') {
       req.resume();

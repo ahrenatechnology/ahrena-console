@@ -230,3 +230,34 @@ describe('#286 /api/machines/<id>/ports/release', () => {
     }
   });
 });
+
+describe('#286 GET /api/ports/release/preview', () => {
+  test('#286 the preview shows the process and sends nothing; a bad query is 400; another site is 403', async () => {
+    const b = await boot();
+    try {
+      const ok = await call(b.api.url, 'GET', `${RELEASE}/preview?port=5432&pid=2210`);
+      assert.equal(ok.status, 200);
+      assert.deepEqual(ok.json, { process: 'postgres', pid: 2210, command: 'postgres -D data', ports: [5432], interface: 'all' });
+      assert.equal((await call(b.api.url, 'GET', `${RELEASE}/preview?port=5432&pid=9999`)).json.reason, 'owner-changed');
+      assert.equal((await call(b.api.url, 'GET', `${RELEASE}/preview?port=x`)).status, 400);
+      assert.equal((await call(b.api.url, 'GET', `${RELEASE}/preview?port=5432&pid=2210`, { 'sec-fetch-site': 'cross-site' })).status, 403);
+      assert.equal((await call(b.api.url, 'POST', `${RELEASE}/preview`, { ...JSON_HEADERS, origin: b.origin }, body())).status, 403);
+      assert.deepEqual(b.signals, []);
+    } finally {
+      await b.close();
+    }
+  });
+
+  test('#286 the machine preview relays the query and re-projects the answer', async () => {
+    const remote = await fakeRemote({ get: { status: 200, body: { process: 'vite', pid: 5521, command: 'node vite', ports: [3000], interface: 'loopback', env: 'LEAK' } }, post: { status: 200, body: {} } });
+    const b = await boot({ remotes: { ws: remote.port } });
+    try {
+      const r = await call(b.api.url, 'GET', '/api/machines/ws/ports/release/preview?port=3000&pid=5521', { origin: b.origin });
+      assert.deepEqual(r.json, { process: 'vite', pid: 5521, command: 'node vite', ports: [3000], interface: 'loopback' });
+      assert.equal(remote.requests[0]!.url, `${RELEASE}/preview?port=3000&pid=5521`);
+    } finally {
+      await b.close();
+      await remote.close();
+    }
+  });
+});
