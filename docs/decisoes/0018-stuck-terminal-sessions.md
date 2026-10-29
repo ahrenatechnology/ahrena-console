@@ -1,10 +1,10 @@
-# 0017 · Terminais presos: o núcleo lê os terminais, manda o sinal em escada só ao processo do próprio usuário e nunca ao sshd do túnel
+# 0018 · Terminais presos: o núcleo lê os terminais, manda o sinal em escada só ao processo do próprio usuário e nunca ao sshd do túnel
 
 - **Status:** aceita (o Fernando aprovou os wireframes C90 a C93 em 29/10)
 - **Data:** 2026-10-29
 - **Issue:** [#350](https://github.com/ahrenatechnology/ahrena-console/issues/350)
 - **Estende:** [0014](0014-dev-tools-command-catalog.md) (ids e não comando, mesma origem estrita, a máquina remota só age se ela mesma aceitar), [0016](0016-release-listening-port.md) (o núcleo manda o sinal só ao processo do próprio usuário e confere de novo antes) e [0008](0008-machine-telemetry-and-dev-console.md) (cada máquina se mede com o próprio núcleo; o Mac lê a remota pela porta do túnel)
-- **Numeração:** o 0015 e o 0016 já estão tomados nos branches das outras frentes; esta usa o 0017.
+- **Numeração:** o 0015 está tomado duas vezes, o 0016 é das portas e o 0017 é do Docker (#288); esta usa o 0018.
 
 ## Contexto
 
