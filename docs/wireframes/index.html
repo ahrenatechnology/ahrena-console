@@ -579,6 +579,19 @@ body.captura .pagina { display: block; } body.captura main { padding: 20px 24px;
 body.captura .palco { overflow: visible; }
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
 /* ---------- bothWidths da janela (1100 é a do app, 1440 a de um monitor largo) ---------- */
+/* ---------- Live wall: waiting sessions, the Paradas band, nested children (C85 to C87, issue #333) ---------- */
+.mc.wall-lead { height: auto; min-height: 214px; }
+.mc.wall-span { grid-column: 1 / -1; }
+.wall-age { margin-left: auto; font-size: 11.5px; color: var(--status-waiting-text); white-space: nowrap; }
+.wall-from { margin-left: 6px; font-family: var(--font-sans); font-size: 10.5px; }
+.wall-foot { display: flex; align-items: center; gap: 6px; font-size: 11px; white-space: nowrap; border-top: 1px dashed var(--border); padding-top: 8px; }
+.wall-kids, .wall-parked-list { display: flex; flex-direction: column; gap: 6px; }
+.wall-kid b { flex: 0 1 auto; min-width: 56px; }
+.wall-kid { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); font-size: 12px; min-width: 0; }
+.wall-parked { padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; }
+.wall-states { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.wall-cap { margin: 8px 0 0; font-size: 12px; color: var(--muted); }
+
 /* ---------- Workflows: the PR loop, the tree between sessions (C81 to C84, issue #332) ---------- */
 .wf-group { padding: 10px 12px; display: flex; flex-direction: column; gap: 10px; background: var(--bg); }
 .wf-head { display: flex; gap: 10px; align-items: center; font-size: 12.5px; }
@@ -3854,7 +3867,7 @@ const N = (ccam, diverge) => `<div class="notas"><div class="nota ccam"><h4>Do C
 const NP_BASE = ['Sidebar da extensão VS Code (<code>vscode-extension/sidebar.js</code>): cartão do servidor com a pílula <b>Online</b>, rótulo de seção com <b>auto · 5 s</b>, blocos de estatística com sparkline, barra empilhada de saúde dos agentes e a lista com ícone de status.']
 const NP_DIV = ['Mostra só esta sessão (decisão 0004), não a frota: a frota fica no console.', 'Cards de 34 colunas × 6 linhas em qualquer largura: o estreito empilha 1, o largo põe 3 por linha.']
 // =====================================================================
-// RELEASE A PORT (C85 to C88, issue #286). The "Portas em escuta" card gets a Liberar action per row:
+// RELEASE A PORT (C88 to C91, issue #286). The "Portas em escuta" card gets a Liberar action per row:
 // SIGTERM, then SIGKILL after a second confirmation. The screen sends the pid and the port, never a
 // command; the núcleo checks again that the pid still owns the port. On the Workstation the request
 // goes through the núcleo over there, and only if that núcleo accepts remote actions (decision 0016).
@@ -4225,6 +4238,76 @@ const wfNoCapScreen = () => `<div class="tm-rc">
     'O rangeíodo e a página vão na URL (<code>?period=30d&page=2</code>) para um link levar à mesma visão.'])}
 </div>`
 
+// =====================================================================
+// THE LIVE WALL: WAITING SESSIONS STAY, THE "PARADAS" BAND, NESTED CHILDREN (C85 to C87, issue #333).
+// =====================================================================
+const wallLead = { nome: 'Rodada 0.0.11 (PM)', pj: 'ahrena-console', br: 'main', st: 'active', mo: 'Opus 5.5', esf: 'alto', ag: 5, custo: '12,40', plano: [6, 9], ctx: 48, tarefa: 'Coordenar a rodada' }
+const wallKid = { nome: 'Pendências do PM de 19/10', pj: 'ahrena-console', br: 'main', st: 'blocked', mot: 'question', pede: 'Confere a v0.0.36 no Desktop?', mo: 'Sonnet 5.5', esf: 'médio', ag: 1, custo: '0,94', plano: [2, 3], ctx: 22 }
+const wallCard = (s, { foot = '', tag = '', age = '', cls = '', extra = '' } = {}) => `<div class="cartao mc st-${s.st}${foot ? ' wall-lead' : ''} ${cls}">
+    <div class="l1"><span class="tt trunc">${s.nome}</span>${badge(s.st)}</div>
+    <div class="pj trunc">${s.pj} · ${s.br}${tag}</div>
+    ${s.mot ? `<div class="mural-reason">${motChip(s.mot)}<span class="c-muted trunc">${s.pede}</span>${age ? `<b class="wall-age">${age}</b>` : ''}</div>` : `<div class="c-muted trunc" style="font-size:11.5px">${ic('loader-2')} ${s.tarefa}</div>`}
+    <div class="gr"><div>Modelo<b>${s.mo.split(' ')[0]}</b></div><div>Esforço<b>${s.esf}</b></div><div>Agentes<b>${s.ag}</b></div><div>Custo<b>~${s.custo}</b></div></div>
+    <div class="linhaplano"><span>Plano ${s.plano[0]}/${s.plano[1]}</span><span>contexto ${s.ctx}%</span></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">${barra(s.plano[0] / s.plano[1] * 100)}${barra(s.ctx)}</div>${foot}${extra}
+  </div>`
+const wallFoot = (open, n, parts) => `<div class="wall-foot"><span class="c-muted">${ic(open ? 'chevron-down' : 'chevron-right')}</span><b>${n} filhas</b>${parts.map(([c, t]) => `<span class="${c}">${t}</span>`).join('<span class="c-muted">·</span>')}</div>`
+const wallKidRow = (depth, name, role, st, mot, meta, open) => `<div class="wall-kid" style="margin-left:${depth * 24}px"><span class="c-muted">${ic(open == null ? 'minus' : open ? 'chevron-down' : 'chevron-right')}</span><b class="trunc">${name}</b><span class="chip">${role}</span>${badge(st, mot)}<span class="c-muted" style="margin-left:auto;font-size:11.5px">${meta}</span><span class="c-muted" title="Abre a sessão">${ic('external-link')}</span></div>`
+const wallTools = (n) => `<div class="seg"><span class="on">Todas</span><span>Precisam de você · ${n}</span><span>Ociosas · 3</span><span>Ativas</span></div>${atualizar}`
+const wallOthers = ['4d2a9c35', '7f3a2c1e', 'e04b7d93', '2c8e6f10'].map(byId)
+const wallPlain = s => wallCard(s)
+const wallParkedRows = [
+  ['Configuração por variáveis de ambiente', 'gateway-sandbox', 'Sua vez · "Rodo os testes?"', 'há 4 h', 'idle'],
+  ['Documentar a autenticação', 'gateway-sandbox', 'Terminou sem erro', 'há 5 h', 'completed'],
+  ['Testes do parser de datas', 'cli-de-notas', 'Terminou sem erro', 'há 6 h', 'completed'],
+  ['Exploração do CSV de custos', 'catalogo-exemplo', 'Interrompida (Esc)', 'há 9 h', 'idle'],
+  ['Layout da tela de cadastro', 'agenda-ficticia', 'Sessão aberta, prompt vazio', 'há 1 dia', 'idle'],
+  ['Revisão da instalação do framework', 'ahrena-console', 'Sua vez · "Abro o PR?"', 'há 2 dias', 'idle'],
+  ['Spike de notificações do macOS', 'ahrena-console', 'Terminou sem erro', 'há 3 dias', 'completed'],
+]
+const wallParked = (open, total, rows = wallParkedRows) => `<div class="cartao wall-parked">
+  <div class="ttl" style="margin:0">${ic(open ? 'chevron-down' : 'chevron-right')}<b>Paradas (${total})</b><span class="c-muted" style="font-weight:400;font-size:12px">sem atividade há mais de 180 min e sem pedir nada a você</span><span class="r">${open ? `Mostrando ${rows.length} de ${total} · as mais recentes` : 'Recolhida'}</span></div>
+  ${open ? `<div class="wall-parked-list">${rows.map(([n, pj, what, age]) => `<div class="wall-kid"><span class="c-muted">${ic('minus')}</span><b class="trunc">${n}</b><span class="mono c-muted" style="font-size:11px">${pj}</span><span class="chip">${what}</span><span class="c-muted" style="margin-left:auto;font-size:11.5px">${age}</span><span class="btn contorno">Abrir</span></div>`).join('')}${total > rows.length ? `<div class="wall-kid" style="justify-content:center"><span class="btn contorno">Mostrar mais ${total - rows.length}</span></div>` : ''}</div>` : ''}
+</div>`
+const wallKidsOpen = `<div class="wall-kids">
+      ${wallKidRow(0, 'Tech Lead do console', 'Tech Lead', 'idle', 'turn_ended', '3 filhas · 1 precisa de você · há 3 min', true)}
+      ${wallKidRow(1, 'Pendências do PM de 19/10', 'Filha', 'blocked', 'question', 'há 5 h', null)}
+      ${wallKidRow(1, '330-update-notice', 'Filha', 'completed', null, 'há 5 h', false)}
+      ${wallKidRow(1, 'Workflow: o laço e a árvore (#332)', 'Filha', 'active', null, 'agora', false)}
+      ${wallKidRow(0, 'Fila de PRs do console', 'Sessão', 'active', null, 'agora', null)}
+      ${wallKidRow(0, 'Revisão de documentação (#310)', 'Sessão', 'abandoned', null, 'há 8 h', null)}
+    </div>`
+const wallLeader = (open) => wallCard(wallLead, { foot: wallFoot(open, 6, [['c-blocked', '1 precisa de você'], ['c-active', '2 ativas'], ['c-muted', '1 parada']]), cls: open ? 'wall-span' : '', extra: open ? wallKidsOpen : '' })
+// C85 · the wall: the waiting child on top, the leader with its children collapsed
+const wallMainScreen = () => `${cab('layout-grid', 'Mural ao vivo', 'Um card por sessão aberta nesta máquina', wallTools(6))}
+  <div class="mural">
+    ${wallCard(wallKid, { age: 'há 5 h', tag: `<span class="chip wall-from">${ic('corner-down-right')}filha de Tech Lead</span>` })}
+    ${wallPlain(wallOthers[0])}
+    ${wallLeader(false)}
+    ${wallOthers.slice(1).map(wallPlain).join('')}
+  </div>
+  ${wallParked(false, 23)}`
+// C86 · the leader expanded: the children one level inside the other
+const wallTreeScreen = () => `${cab('layout-grid', 'Mural ao vivo', 'Um card por sessão aberta nesta máquina', wallTools(6))}
+  <div class="mural">
+    ${wallCard(wallKid, { age: 'há 5 h', tag: `<span class="chip wall-from">${ic('corner-down-right')}filha de Tech Lead</span>` })}
+    ${wallPlain(wallOthers[0])}
+    ${wallPlain(wallOthers[1])}
+    ${wallLeader(true)}
+    ${wallOthers.slice(2).map(wallPlain).join('')}
+  </div>
+  ${wallParked(true, 23)}`
+// C87 · the states
+const wallStatesScreen = () => `${cab('layout-grid', 'Mural ao vivo · estados', 'O que entra no mural, o que vai para Paradas e o que nunca aparece', '')}
+  <div class="wall-states">
+    <div><div class="rotulo">1 · Esperando há 5 h, sem arquivar</div>${wallCard(wallKid, { age: 'há 5 h' })}<p class="wall-cap">Entra entre as que precisam de você, sem o limite de 180 min. Ordem: urgente primeiro, depois a que espera há mais tempo.</p></div>
+    <div><div class="rotulo">2 · Mãe arquivada, filha viva</div>${wallCard(wallKid, { age: 'há 5 h', tag: `<span class="chip wall-from">${ic('archive')}mãe arquivada</span>` })}<p class="wall-cap">A filha é card próprio, sem aninhamento. O chip diz de quem ela veio; a mãe não aparece.</p></div>
+    <div><div class="rotulo">3 · Árvore funda: o resumo da líder</div><div class="cartao" style="padding:12px 14px;display:flex;flex-direction:column;gap:8px">
+      ${wallKidRow(0, 'PM', 'Líder', 'active', null, '', true)}${wallKidRow(1, 'Tech Lead', 'Filha', 'idle', 'turn_ended', '', true)}${wallKidRow(2, 'Sessão A', 'Neta', 'active', null, '', false)}${wallKidRow(2, 'Sessão B', 'Neta', 'blocked', null, '', false)}${wallKidRow(2, 'Sessão C', 'Neta', 'completed', null, '', false)}${wallKidRow(3, 'Filha da C', 'Bisneta', 'abandoned', null, '', null)}
+      ${wallFoot(true, 5, [['c-blocked', '1 precisa de você'], ['c-active', '1 ativa'], ['c-muted', '1 parada']])}</div><p class="wall-cap">O resumo da líder conta a árvore inteira, todos os níveis; cada nível abre recolhido dentro da sua mãe.</p></div>
+    <div style="grid-column:1/-1"><div class="rotulo">4 · Parada sem pedido</div>${wallParked(true, 2, wallParkedRows.slice(1, 3))}<p class="wall-cap">Terminou o turno há 6 h sem pedir nada: fora dos cards, dentro de Paradas. Arquivada no Desktop: nem aqui.</p></div>
+  </div>`
+
 const TELAS = [
   { cap: 'painel', titulo: 'Painel lateral', desc: 'O mod do Claude Code, ao lado da conversa, no recorte por sessão da decisão 0004 (issues #35, #36 e #37). Desenhado com os elementos nativos do mod (Box, Text, Button, Select, Svg, Link), na fonte monoespaçada do app, em 38 e 121 colunas.' },
   { id: 'painel-estados', cod: 'P0', nome: 'Os 6 status e os 8 motivos', sub: 'O card "Esta sessão" em cada status, e as mesmas pílulas como aparecem no console. O antigo estado de espera virou dois: Precisa de você (trava, amarelo, chip forte) e Ociosa (sua vez, neutra, chip leve), issue #245.', html: painelEstados,
@@ -4479,13 +4562,19 @@ const TELAS = [
     n: N(['Nada: o CCAM não tem sessão que abre sessão.'], ['A árvore é entre sessões; o laço por PR vive dentro de cada sessão. As duas se encaixam, e o PM vê tudo sem abrir transcript.']) },
   { id: 'console-workflows-no-cap', cod: 'C84', nome: 'Workflows · sem o corte de 500', sub: 'Feature Workflow (#332), parte 3. Período (24 h, 7 dias, 30 dias, Tudo) e páginas de 50 árvores; KPIs e grafo contam o período todo; as sessões ativas entram sempre; "Tudo" lê em blocos e mostra o avanço. Em 1100.', html: () => wfNoCapScreen(),
     n: N(['Nada.'], ['O corte de 500 some: quem limita é o período escolhido, e uma sessão ativa nunca fica de fora.', 'Os números não dependem da página: a lista pagina, a conta não.']) },
-  { id: 'console-port-release', cod: 'C85', nome: 'Liberar uma porta · esta máquina', sub: 'Feature Liberar uma porta em escuta (#286). O card Portas em escuta ganha a coluna Ação: Liberar por linha, desligado com o motivo escrito na própria linha (o núcleo, o app, root, outro usuário), e Ver a stack no lugar de matar o docker-proxy de um container. O resto da tela é o da C24. Em 1100 e 1440.', html: () => `<div class="fila">${bothWidths(w => rpScreen(w, rpMacCard(w)))}</div>`,
+  { id: 'console-wall-nested', cod: 'C85', nome: 'Mural · a que espera por mim fica, e a líder leva as filhas', sub: 'Feature Mural (#333), parte 1. A sessão não arquivada que me pediu algo continua entre os cards, com "há 5 h" e sem o limite de 180 min; a líder mostra as filhas recolhidas, com o estado delas, e a filha que precisa de mim sobe para o topo; a faixa Paradas fecha a página, recolhida e com contador. Em 1100.', html: () => `<div class="tm-rc">${rcRow([['1100 px · a janela do app', cc('mural', wallMainScreen(), 5, 1100)]], ['<b>Hoje:</b> a sessão que o watcher marcou como abandonada (180 min parada) sai do mural, mesmo esperando por você; a "Pendências do PM de 19/10" ficou de fora esperando a conferência da v0.0.36.', '<b>Entra</b> toda sessão não arquivada com <code>attention</code> que pede algo, qualquer que seja a idade. O "há 5 h" fica na linha do motivo, em âmbar.', '<b>A filha que precisa de mim é card próprio, no topo</b>, com o chip "filha de Tech Lead"; dentro da líder ela continua aparecendo, com o mesmo estado.', '<b>A líder</b> ganha uma linha no pé: quantas filhas, quantas precisam de você, quantas estão ativas e quantas paradas. O card da líder cresce nessa linha; os outros continuam com a altura fixa.', 'A faixa <b>Paradas (23)</b> fica abaixo dos cards, <b>recolhida</b>; o contador conta as não arquivadas, paradas há mais de 180 min e sem pedido.'])}</div>`,
+    n: N(['Nada: o CCAM não tem mural nem sessão que abre sessão.'], ['O mural é do Podium. Aqui só muda o critério de entrada (o que pede algo fica) e a árvore (quem abriu quem, do <code>startedBy</code> que a #332 já usa).']) },
+  { id: 'console-wall-tree', cod: 'C86', nome: 'Mural · a líder aberta e a faixa Paradas aberta', sub: 'Feature Mural (#333), parte 2. A líder expandida ocupa a linha inteira e mostra as filhas, cada nível recolhido dentro da sua mãe; a faixa Paradas aberta lista as mais recentes, com Abrir. Em 1100.', html: () => `<div class="tm-rc">${rcRow([['1100 px · a janela do app', cc('mural', wallTreeScreen(), 5, 1100)]], ['<b>Abrir a líder</b> a faz ocupar a linha inteira; as filhas aparecem em linhas com o estado e o motivo, uma dentro da outra pela indentação (<code>startedBy</code>).', 'Cada filha abre a sua sessão; uma filha com filhas própria abre recolhida e mostra o contador delas.', '<b>Paradas aberta:</b> as 7 mais recentes de 23, com o que a sessão fez por último e há quanto tempo; "Mostrar mais" lê o resto. Abrir leva à sessão.', 'A abertura da líder e da faixa fica na URL (<code>?open=…&parked=1</code>) e no navegador do app, para a página reabrir como você deixou.'])}</div>`,
+    n: N(['Nada.'], ['A faixa Paradas é nova: o mural é "o que está em jogo", e parada sem pedido não é, mas some da vista sem deixar rastro; o contador mantém a conta.']) },
+  { id: 'console-wall-states', cod: 'C87', nome: 'Mural · os estados', sub: 'Feature Mural (#333), parte 3. Esperando há 5 h, a mãe arquivada com a filha viva, a árvore funda e a parada sem pedido. Em 1100.', html: () => `<div class="tm-rc">${rcRow([['1100 px · a janela do app', cc('mural', wallStatesScreen(), 5, 1100)]], ['<b>Arquivada no Desktop</b> nunca entra: nem como card, nem em Paradas, nem dentro da líder.', '<b>Mãe arquivada com filha viva:</b> a filha é card próprio, com o chip "mãe arquivada"; ninguém fica órfão sem aviso.', 'O resumo da líder conta a árvore toda: "5 filhas · 1 precisa de você · 1 ativa · 1 parada".', 'Vale também com <code>?machine=all</code>: a árvore e a faixa são por máquina de origem; uma filha da Workstation de uma mãe do Mac aparece como card próprio, com o rótulo da máquina.'])}</div>`,
+    n: N(['Nada.'], ['Os estados são os da #245 (Precisa de você, Ociosa) mais Paradas, que só existe no mural.']) },
+  { id: 'console-port-release', cod: 'C88', nome: 'Liberar uma porta · esta máquina', sub: 'Feature Liberar uma porta em escuta (#286). O card Portas em escuta ganha a coluna Ação: Liberar por linha, desligado com o motivo escrito na própria linha (o núcleo, o app, root, outro usuário), e Ver a stack no lugar de matar o docker-proxy de um container. O resto da tela é o da C24. Em 1100 e 1440.', html: () => `<div class="fila">${bothWidths(w => rpScreen(w, rpMacCard(w)))}</div>`,
     n: N(['Nada: o CCAM não age sobre portas.'], ['Liberar é uma porta (um processo) por vez. Não há “Liberar todas as que ouvem em todas as interfaces” (critério 7, decidido aqui): na Workstation de 29/10 quase todas as de todas as interfaces são de root (22, 139, 445) ou de container (15306), e o restante é um runner e um serviço de dev. A ação em lote mataria o que ninguém olhou; a lista fica no filtro “Todas as interfaces”, uma linha de cada vez.', 'Um processo com várias portas (o ssh do túnel) é uma linha só: liberar derruba todas elas, e o diálogo lista as portas.', 'Porta de container não mata o docker-proxy: Ver a stack leva ao card de stacks (frente do Docker, #288), onde parar a stack é a ação certa.']) },
-  { id: 'console-port-release-flow', cod: 'C86', nome: 'Liberar uma porta · o fluxo', sub: 'Confirmar com o processo, o pid, o comando resumido e de quem é (1), esperando a porta fechar (2), a linha some (3), não saiu em 5 s e pede a segunda confirmação, SIGKILL (4), o dono mudou e nada foi enviado (5) e a porta do túnel, que avisa que derruba o encaminhamento e aponta para a conexão da máquina (6). Em 1100.', html: () => rpScreens(),
+  { id: 'console-port-release-flow', cod: 'C89', nome: 'Liberar uma porta · o fluxo', sub: 'Confirmar com o processo, o pid, o comando resumido e de quem é (1), esperando a porta fechar (2), a linha some (3), não saiu em 5 s e pede a segunda confirmação, SIGKILL (4), o dono mudou e nada foi enviado (5) e a porta do túnel, que avisa que derruba o encaminhamento e aponta para a conexão da máquina (6). Em 1100.', html: () => rpScreens(),
     n: N(['Nada.'], ['A tela manda o pid e a porta, nunca um comando: o núcleo confere de novo que o pid ainda é o dono da porta e só envia sinal a processo do próprio usuário, nunca ao núcleo nem ao app (critérios 3 e 6).', 'SIGTERM primeiro; o SIGKILL só depois de 5 s e de uma segunda confirmação que diz o que se perde.', 'Se o dono mudou, não envia nada: o console só age no processo que a pessoa viu.']) },
-  { id: 'console-port-release-why', cod: 'C87', nome: 'Quando não oferece Liberar', sub: 'Os motivos escritos na linha: o núcleo, o app, root ou outro usuário (o console não pede senha de administrador), pid desconhecido. Embaixo, o filtro Todas as interfaces, onde só uma de três pode ser liberada. Em 1100.', html: () => `<div class="fila">${rpScreen(1100, rpWhy())}</div>`,
+  { id: 'console-port-release-why', cod: 'C90', nome: 'Quando não oferece Liberar', sub: 'Os motivos escritos na linha: o núcleo, o app, root ou outro usuário (o console não pede senha de administrador), pid desconhecido. Embaixo, o filtro Todas as interfaces, onde só uma de três pode ser liberada. Em 1100.', html: () => `<div class="fila">${rpScreen(1100, rpWhy())}</div>`,
     n: N(['Nada.'], ['O botão desligado fica na linha, com o motivo: some o “por que não consigo?”.', 'Nada de sudo, como na decisão 0014.']) },
-  { id: 'console-port-release-ws', cod: 'C88', nome: 'Liberar uma porta · Workstation', sub: 'A mesma ação na máquina remota, pelo núcleo de lá. Padrão: a Workstation não aceita ações pelo túnel, e cada linha vira Copiar comando (1). Ligada lá: Liberar, com Ver a stack para o container (2, em 1100 e 1440) e o confirmar que diz “Roda na Workstation” (3). Núcleo de lá sem a ação: desligado, com o motivo (4). Sem conexão (5).', html: () => rpWsScreens(),
+  { id: 'console-port-release-ws', cod: 'C91', nome: 'Liberar uma porta · Workstation', sub: 'A mesma ação na máquina remota, pelo núcleo de lá. Padrão: a Workstation não aceita ações pelo túnel, e cada linha vira Copiar comando (1). Ligada lá: Liberar, com Ver a stack para o container (2, em 1100 e 1440) e o confirmar que diz “Roda na Workstation” (3). Núcleo de lá sem a ação: desligado, com o motivo (4). Sem conexão (5).', html: () => rpWsScreens(),
     n: N(['Nada.'], ['Mesmo modelo da C75 (decisão 0014, seção 5; decisão 0016): o Mac repassa só o pid e a porta; o núcleo de lá confere o dono, envia o sinal e responde. Desligado por padrão, ligado por quem está na Workstation.', 'Núcleo de lá que não conhece a rota responde 404: a ação aparece desligada, como a do login por código (C67).']) },
 ]
 
@@ -4518,6 +4607,7 @@ function montar() {
     <li><b>Sessões de todas as máquinas (#243, a aprovar):</b> o filtro de máquina (Todas · Esta máquina · Workstation, Todas por padrão, na URL) entra em Sessões, Mural, Kanban, Histórico, Feed e Dashboard; o rótulo "Workstation" vai só nas linhas e cards remotos; sem conexão, as sessões de lá saem das listas com um aviso neutro; o detalhe remoto não tem "Abrir no Claude Desktop" (C45 a C49).</li>
     <li><b>O painel do mod com todas as máquinas (#262, a aprovar):</b> "Ver" lista as sessões deste Mac e da Workstation juntas, por idade; o card remoto diz "Workstation" no começo da linha de meta, no lugar da relação, e abre o detalhe no console; um Select só junta a Família e o filtro (Família · Todas as máquinas · Esta máquina · Workstation), na linha de baixo no estreito; sem conexão, as sessões de lá saem e uma linha neutra diz desde quando, com "resolver no console ›"; "N precisam de você" soma as máquinas e a dica divide por máquina e por conta (P15, P16).</li>
     <li><b>Workflows: o laço por PR, a árvore entre sessões e sem o corte de 500 (#332, a aprovar):</b> a aba Workflow do detalhe agrupa por PR (C81, C82) e a página Workflows ganha a árvore entre sessões (C83) e o período com páginas (C84). Escolhas em aberto, cada uma com a recomendação no PR: (1) de onde vem o PR de um subagente: tarefa, depois branch, depois issue; (2) o que conta como rodada e como pedido de mudança: cada chamada do Argos, e o veredito na última linha da resposta; (3) quando o laço "parou": sessão concluída ou abandonada com pedido de mudança sem resposta; (4) a aba do detalhe: "Por PR" como padrão, "Todos os nós" mantém o grafo de hoje; (5) a árvore: aba na página Workflows e faixa Aberta por / Abriu no detalhe; (6) o fim do corte: período de 30 dias por padrão, páginas de 50, ativas sempre dentro, KPIs sobre o período inteiro; (7) uma tarefa com dois PRs fica no primeiro, com o outro em chip.</li>
+    <li><b>Mural ao vivo: a que espera por mim fica, Paradas e as filhas (#333, a aprovar):</b> a sessão não arquivada que pede algo continua no mural sem o limite de 180 min, a faixa Paradas guarda as paradas sem pedido, e a líder mostra as filhas recolhidas, com a que precisa de você no topo (C85 a C87). Escolhas em aberto, cada uma com a recomendação no PR: (1) o que é "pediu algo"; (2) onde mora a faixa Paradas; (3) a filha que precisa de mim: card próprio e dentro da líder; (4) a líder aberta ocupa a linha inteira; (5) o resumo da líder conta a árvore toda; (6) mãe arquivada com filha viva; (7) Paradas pagina de 7 em 7.</li>
     <li><b>Backlog:</b> Feed de atividade, Analytics completo, Workflows e o detalhe com o grafo de agentes estavam para depois da entrega. Entraram aqui a pedido do dono; o PM decide se viram itens da 0.0.1.</li></ol></section>`
   indice.innerHTML = htmlI; main.innerHTML = htmlM
   if (window.lucide) lucide.createIcons()

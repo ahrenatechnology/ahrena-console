@@ -1,4 +1,4 @@
-// Liberar uma porta (issue 286, decision 0016; wireframes C85 to C88): the confirmation flow of the
+// Liberar uma porta (issue 286, decision 0016; wireframes C88 to C91): the confirmation flow of the
 // action in the "Portas em escuta" card. A modal, its own, over the machine screen:
 //
 //   preview (what the núcleo would act on) → [tunnel warning] → confirm → SIGTERM → waiting
