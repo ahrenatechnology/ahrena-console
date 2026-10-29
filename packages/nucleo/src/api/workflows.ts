@@ -897,6 +897,29 @@ async function arvoresDosWorkflows(fontes: FontesDosWorkflows, escopo: SessaoDos
   };
 }
 
+export interface SessionRef {
+  sessionId: string;
+  name: string | null;
+  status: SessionStatus;
+}
+
+/** Who opened this session and which sessions it opened, from the Desktop index (#332, the "Aberta por / Abriu" strip). */
+async function lineageDe(fontes: FontesDosWorkflows, session: Session): Promise<{ parent: SessionRef | null; children: SessionRef[] }> {
+  const desktop = fontes.desktop;
+  if (!desktop) return { parent: null, children: [] };
+  await desktop.refresh();
+  const me = desktop.sessionByCli(session.id);
+  const ref = async (cliId: string | null): Promise<SessionRef | null> => {
+    const found = cliId ? await fontes.storage.getSession(cliId) : null;
+    return found ? { sessionId: found.id, name: found.name, status: found.status } : null;
+  };
+  if (!me) return { parent: null, children: [] };
+  const parentLocal = me.parentLocalId ? desktop.sessionByLocal(me.parentLocalId) : null;
+  const parent = await ref(parentLocal?.cliSessionId ?? null);
+  const children = (await Promise.all(desktop.childrenOf(me.localId).map((c) => ref(c.cliSessionId)))).filter((c): c is SessionRef => c !== null);
+  return { parent, children };
+}
+
 /**
  * Responde as duas rotas, quando o pedido é de uma delas (`GET`); devolve `false` para o resto, e o
  * servidor segue. `/api/sessions/<id>/workflow` não colide com `/api/sessions/<id>` nem com
@@ -952,6 +975,7 @@ export async function responderWorkflows(res: ServerResponse, url: URL, fontes: 
   const [agentes, eventos] = await Promise.all([fontes.storage.listAgents(id), todosOsEventos(fontes.storage, id)]);
   const branch = typeof session.metadata?.branch === 'string' ? session.metadata.branch : null;
   const pr = fontes.trabalho?.ler(session.cwd, branch)?.pr?.number ?? null;
-  send(res, 200, workflowDaSessao(session, agentes, eventos, { agora, pr }));
+  const lineage = await lineageDe(fontes, session);
+  send(res, 200, { ...workflowDaSessao(session, agentes, eventos, { agora, pr }), lineage });
   return true;
 }

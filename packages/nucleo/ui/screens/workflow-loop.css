@@ -1,0 +1,67 @@
+/* The loop by PR (C81, C82) and the tree between sessions (C83). Every color comes from marca.css.
+   Own classes carry the prefix wfl-, because the CSS stays loaded after the screen leaves. */
+.wfl-groups { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.wfl-group { padding: 10px 12px; display: flex; flex-direction: column; gap: 10px; background: var(--bg); min-width: 0; }
+.wfl-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; font-size: 12.5px; min-width: 0; }
+.wfl-count { margin-left: auto; font-size: 11.5px; }
+.wfl-chip { display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 9px; border-radius: 7px; font-size: 11.5px; background: var(--raised); color: var(--text); border: 1px solid var(--border); white-space: nowrap; text-decoration: none; }
+.wfl-pill { display: inline-flex; align-items: center; height: 20px; padding: 0 7px; border-radius: 99px; font-size: 10.5px; font-weight: var(--weight-semibold); white-space: nowrap; }
+.wfl-pill-completed { background: var(--status-completed-badge); color: var(--status-completed-text); }
+.wfl-pill-active { background: var(--status-active-badge); color: var(--status-active-text); }
+.wfl-pill-waiting { background: var(--status-waiting-badge); color: var(--status-waiting-text); }
+.wfl-pill-muted { background: var(--raised); color: var(--muted); }
+.wfl-mute { color: var(--muted); }
+.wfl-trunc { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.wfl-row { display: flex; align-items: stretch; overflow-x: auto; padding-top: 14px; }
+.wfl-step { flex: 1 1 0; min-width: 130px; max-width: 230px; padding: 7px 9px; display: flex; flex-direction: column; gap: 2px; background: var(--surface); border: 1px solid var(--border); border-left: 3px solid var(--status-completed-dot); border-radius: 10px; }
+.wfl-step.wfl-run { border-left-color: var(--status-active-dot); }
+.wfl-step.wfl-changes, .wfl-step.wfl-error { border-left-color: var(--status-error-dot); }
+.wfl-step-top { display: flex; align-items: center; gap: 6px; font-size: 11.5px; }
+.wfl-open { margin-left: auto; color: var(--muted); display: inline-flex; }
+.wfl-open:hover { color: var(--text); }
+.wfl-task { font-size: 10.5px; color: var(--muted); }
+.wfl-res { font-size: 10.5px; color: var(--status-completed-text); }
+.wfl-res-run { color: var(--status-active-text); }
+.wfl-res-changes, .wfl-res-error { color: var(--status-error-text); }
+.wfl-link { flex: 0 0 58px; position: relative; display: flex; align-items: center; }
+.wfl-link i { display: block; width: 100%; border-top: 2px solid var(--muted); position: relative; }
+.wfl-link i::after { content: ''; position: absolute; right: -1px; top: -5px; border: 4px solid transparent; border-left: 6px solid var(--muted); }
+.wfl-link-changes i { border-top-style: dashed; border-color: var(--status-error-dot); }
+.wfl-link-changes i::after { border-left-color: var(--status-error-dot); }
+.wfl-lab { position: absolute; top: calc(50% - 17px); left: 0; right: 0; text-align: center; font-size: 9.5px; color: var(--muted); white-space: nowrap; }
+.wfl-link-changes .wfl-lab { color: var(--status-error-text); }
+.wfl-gap { flex: 0 0 14px; }
+.wfl-foot { font-size: 11px; color: var(--muted); }
+.wfl-empty { font-size: 12.5px; color: var(--muted); margin: 0; }
+.wfl-dash { display: inline-block; width: 18px; border-top: 2px dashed var(--status-error-dot); }
+.wfl-lineage { padding: 9px 12px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 12px; }
+.wfl-after { margin-left: 14px; }
+.wfd-views { margin-left: 12px; display: inline-flex; padding: 3px; gap: 2px; background: var(--bg); border: 1px solid var(--border); border-radius: 9px; }
+.wfd-views button { font: inherit; font-size: 12px; color: var(--muted); background: none; border: 0; padding: 4px 10px; border-radius: 6px; cursor: pointer; }
+.wfd-views button[aria-pressed="true"] { background: var(--raised); color: var(--text); }
+
+/* ---------- the tree between sessions (C83) ---------- */
+.wft-tree { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.wft-node { padding: 8px 12px; display: flex; align-items: center; gap: 10px; font-size: 12.5px; min-width: 0; flex-wrap: wrap; }
+.wft-toggle { width: 22px; height: 22px; display: inline-flex; align-items: center; justify-content: center; background: none; border: 0; color: var(--muted); cursor: pointer; padding: 0; }
+.wft-none { cursor: default; }
+.wft-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; max-width: 40ch; }
+.wft-chip { display: inline-flex; align-items: center; height: 22px; padding: 0 8px; border-radius: 7px; font-size: 11px; background: var(--raised); color: var(--muted); border: 1px solid var(--border); white-space: nowrap; }
+.wft-warn { color: var(--status-waiting-text); }
+.wft-pill { display: inline-flex; align-items: center; height: 20px; padding: 0 7px; border-radius: 99px; font-size: 10.5px; font-weight: var(--weight-semibold); white-space: nowrap; }
+.wft-pill-completed { background: var(--status-completed-badge); color: var(--status-completed-text); }
+.wft-pill-active { background: var(--status-active-badge); color: var(--status-active-text); }
+.wft-pill-error { background: var(--status-error-badge); color: var(--status-error-text); }
+.wft-pill-muted { background: var(--raised); color: var(--muted); }
+.wft-meta { margin-left: auto; font-size: 11.5px; color: var(--muted); }
+.wft-open { color: var(--muted); display: inline-flex; }
+.wft-legend { margin-top: 4px; }
+.wft-depth-0 { margin-left: 0px; }
+.wft-depth-1 { margin-left: 26px; }
+.wft-depth-2 { margin-left: 52px; }
+.wft-depth-3 { margin-left: 78px; }
+.wft-depth-4 { margin-left: 104px; }
+.wft-depth-5 { margin-left: 130px; }
+.wft-depth-6 { margin-left: 156px; }
+.wft-depth-7 { margin-left: 182px; }
+.wft-depth-8 { margin-left: 208px; }
