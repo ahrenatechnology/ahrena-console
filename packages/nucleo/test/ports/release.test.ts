@@ -198,6 +198,7 @@ describe('preview and the command summary', () => {
     assert.equal(summarizeCommand('redis-server --requirepass hunter2'), 'redis-server --requirepass ***');
     assert.equal(summarizeCommand('mysqld -pSECRET -P 3306'), 'mysqld -p*** -P 3306');
     assert.equal(summarizeCommand('node server.js --port 3000'), 'node server.js --port 3000');
+    assert.equal(summarizeCommand('vite -p 5173 --workers 4'), 'vite -p 5173 --workers 4');
     assert.equal(summarizeCommand('a\nb\tc'), 'a b c');
     assert.equal(summarizeCommand(Array(100).fill('word').join(' ')).length, 160);
   });
@@ -229,6 +230,15 @@ describe('preview and the command summary', () => {
       ['git clone https://ghp_user@github.com/a/b', 'ghp_user'],
       ['app --password "a b"', 'a b'],
       ['app x9Kq2LmZp4Rt7Vw1Yb3NcD8', 'x9Kq2L'],
+      ['redis-server --requirepass 123456', '123456'],
+      ['redis-cli -a 123456', '123456'],
+      ['app --password 123456', '123456'],
+      ['app --pin 4821', '4821'],
+      ['app dGhpcy1pcy1hLXNlY3JldC10b2tlbg==', 'dGhpcy1'],
+      ['app hunter2=', 'hunter2'],
+      ['curl https://hooks.slack.com/services/T000/B000/XXXX1234abcd', 'B000'],
+      ['curl https://api.telegram.org/bot123456:ABCdef/getMe', 'ABCdef'],
+      ['curl http://h/x;jsessionid=sess1', 'sess1'],
     ];
     for (const [command, secret] of leaks) assert.ok(!summarizeCommand(command).includes(secret), `${command} -> ${summarizeCommand(command)}`);
   });

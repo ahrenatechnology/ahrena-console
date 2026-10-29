@@ -65,6 +65,8 @@ function tokenize(line: string): string[] {
 const MASK = '***';
 const PLAIN = /^[\w./@:+,-]{1,64}$/;
 const BARE_FLAG = /^--?[A-Za-z][A-Za-z0-9-]{0,40}$/;
+/** Flags whose value is a count or a port, not a secret: an integer after them is kept. */
+const NUMERIC_FLAG = /^(?:-[pPnj]|--(?:port|ports|workers|threads|timeout|jobs|max-[a-z-]+|[a-z-]*-port))$/;
 const SECRET_SHAPE = /^(?:ghp_|gho_|ghs_|ghu_|github_pat_|sk-|xox[abprs]-|AKIA|ASIA|eyJ)/;
 
 /** A bare word that looks like a key more than a name: long, or letters and digits mixed with no path in it. */
@@ -75,7 +77,9 @@ function looksLikeSecret(t: string): boolean {
 /** A URL without its userinfo, query and fragment: where it points, nothing it carries. */
 function plainUrl(t: string): string {
   const m = /^([a-z][a-z0-9+.-]*:\/\/)(?:[^/?#]*@)?([^/?#]*)([^?#]*)(\?|#)?/i.exec(t);
-  return m ? `${m[1]}${m[2]}${m[3]}${m[4] ? `${m[4]}${MASK}` : ''}` : MASK;
+  if (!m) return MASK;
+  const path = m[3]!.split('/').map((seg) => (seg === '' || /^[A-Za-z][A-Za-z_.-]{0,30}$/.test(seg) || /^\d{1,5}$/.test(seg) ? seg : MASK)).join('/');
+  return `${m[1]}${m[2]}${path}${m[4] ? `${m[4]}${MASK}` : ''}`;
 }
 
 /**
@@ -88,6 +92,7 @@ export function summarizeCommand(command: string): string {
   const out: string[] = [];
   let afterFlag = false; // the next token is probably a flag's value
   let run = false; // a value was masked: plain words right after it are its continuation
+  let flag = '';
   tokenize(command.replace(/[\u0000-\u001f\u007f]+/g, ' ')).forEach((t, i) => {
     if (i === 0) {
       const name = t.slice(t.lastIndexOf('/') + 1);
@@ -96,6 +101,7 @@ export function summarizeCommand(command: string): string {
     }
     if (t.startsWith('-') && t !== '-' && t !== '--') {
       afterFlag = true;
+      flag = t;
       const eq = t.indexOf('=');
       if (eq > 0) {
         const name = t.slice(0, eq);
@@ -113,7 +119,7 @@ export function summarizeCommand(command: string): string {
     }
     const value = afterFlag;
     afterFlag = false;
-    if (/^\d{1,6}$/.test(t)) {
+    if (/^\d{1,6}$/.test(t) && (!value || NUMERIC_FLAG.test(flag))) {
       out.push(t);
       return;
     }
@@ -122,7 +128,7 @@ export function summarizeCommand(command: string): string {
       run = true;
       return;
     }
-    if (/^[A-Za-z_][A-Za-z0-9_]*=/.test(t)) out.push(`${t.slice(0, t.indexOf('='))}=${MASK}`);
+    if (/^[A-Za-z_][A-Za-z0-9_]*=/.test(t)) out.push(/^[A-Z][A-Z0-9_]*=/.test(t) ? `${t.slice(0, t.indexOf('='))}=${MASK}` : MASK);
     else if (/^[a-z][a-z0-9+.-]*:\/\//i.test(t)) {
       out.push(plainUrl(t));
       run = false;
@@ -250,8 +256,9 @@ export function ancestorsWith(run: CommandRunner, ppid: number): () => Promise<n
     if (known) return known;
     const chain: number[] = [];
     let at = ppid;
-    for (let hops = 0; at > 1 && hops < 32; hops++) {
+    for (let hops = 0; at > 1; hops++) {
       if (chain.includes(at)) break;
+      if (hops >= 32) return null;
       chain.push(at);
       const out = await run('ps', ['-o', 'ppid=', '-p', String(at)]);
       const parent = out === null ? NaN : Number.parseInt(out.trim(), 10);
