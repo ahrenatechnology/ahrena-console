@@ -65,8 +65,8 @@
 .wall-bar.wall-high::-moz-progress-bar { background: var(--status-error-dot); }
 
 /* ---------- the children nested in a leader and the "Paradas" band (C85 to C87, issue 333) ---------- */
-.wall-card.wall-lead { height: auto; min-height: 214px; }
-.wall-card.wall-span { grid-column: 1 / -1; }
+/* Closed, a leader keeps the card height (the summary line fits in it); opened, it takes the row and grows with its children. */
+.wall-card.wall-span { grid-column: 1 / -1; height: auto; min-height: 252px; }
 .wall-from { margin-left: 6px; font-family: var(--font-sans); font-size: 10.5px; padding: 1px 7px; border: 1px solid var(--border); border-radius: 99px; color: var(--muted); }
 .wall-treeline { display: flex; align-items: center; gap: 6px; padding: 8px 0 0; border: 0; border-top: 1px dashed var(--border); background: none; color: var(--text); font: inherit; font-size: 11px; white-space: nowrap; cursor: pointer; text-align: left; position: relative; z-index: 1; }
 .wall-tree-total { font-weight: var(--weight-semibold); }

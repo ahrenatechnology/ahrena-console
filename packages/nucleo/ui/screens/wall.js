@@ -200,7 +200,7 @@ function card(c, write, nest) {
       bar({ tipo: 'context', valor: v.context.pct ?? 0, max: 100, alto: v.context.high, rotulo: v.context.pct === null ? 'Contexto: sem leitura' : `Contexto: ${v.context.pct}%` }),
     ),
     summary ? treeLine(c, summary, opened, nest) : null,
-    opened ? el('div', { class: 'wall-kids' }, ...kidRows(c.children, 0, c, nest)) : null,
+    opened ? el('div', { class: 'wall-kids' }, ...kidRows(c.children ?? [], 0, c, nest)) : null,
     foot(v, write),
   );
   return { node, link };
@@ -226,7 +226,7 @@ function kidRows(nodes, depth, leader, nest) {
     const row = el(
       'div',
       { class: `wall-kid wall-depth-${Math.min(depth, 6)}${k.parked ? ' wall-kid-parked' : ''}`, 'data-child': k.id },
-      hasKids ? el('button', { type: 'button', class: 'wall-kid-toggle', 'aria-expanded': opened ? 'true' : 'false', 'aria-label': opened ? 'Recolher' : 'Abrir as filhas', onClick: () => nest.toggle(k.id) }, icon(opened ? 'chevron-down' : 'chevron-right')) : el('span', { class: 'wall-kid-toggle' }),
+      hasKids ? el('button', { type: 'button', class: 'wall-kid-toggle', 'data-toggle': k.id, 'aria-expanded': opened ? 'true' : 'false', 'aria-label': opened ? 'Recolher' : 'Abrir as filhas', onClick: () => nest.toggle(k.id) }, icon(opened ? 'chevron-down' : 'chevron-right')) : el('span', { class: 'wall-kid-toggle' }),
       el('a', { class: 'wall-trunc wall-kid-title', href: itemHref({ id: k.id, machine: leader.machine }), title: k.title }, k.title),
       pill,
       k.parked ? el('span', { class: 'wall-muted' }, 'parada') : null,
@@ -339,11 +339,15 @@ export async function mount(area, ctx) {
     // Issue 243: by machine + id (`data-key`), since two machines can have the same session id.
     const holder = globalThis.document?.activeElement?.closest?.('[data-session]') ?? null;
     const focused = holder ? (holder.getAttribute('data-key') ?? holder.getAttribute('data-session')) : null;
+    // The toggles of the tree and of the band are buttons inside a card: the focus goes back to the one just used.
+    const active = globalThis.document?.activeElement ?? null;
+    const toggled = active ? ['data-tree', 'data-toggle', 'data-parked'].map((a) => [a, active.getAttribute?.(a)]).find(([, v]) => v) ?? null : null;
     if (sub) sub.textContent = machines.hasRemotes() ? `Um card por sessão aberta, ${whereText(machines.choice, machines.machines())}` : 'Um card por sessão aberta nesta máquina';
     // The band is part of "Todas": the other filters are about the cards.
     const parked = filter === 'all' ? parkedBand(wall.parked, parkedOpen, { toggle: () => ((parkedOpen = !parkedOpen), draw()), more: () => ((parkedLimit = PARKED_MAX), read()) }) : null;
     area.replaceChildren(...[head, ...machines.parts(), band, body, parked].filter(Boolean));
-    if (focused) links.find((n) => n.getAttribute('data-key') === focused)?.focus();
+    if (toggled) [...(area.querySelectorAll?.(`[${toggled[0]}]`) ?? [])].find((n) => n.getAttribute(toggled[0]) === toggled[1])?.focus();
+    else if (focused) links.find((n) => n.getAttribute('data-key') === focused)?.focus();
   }
 
   async function read() {
