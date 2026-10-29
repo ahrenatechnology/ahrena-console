@@ -4,6 +4,7 @@
 
 import { createHash } from 'node:crypto';
 import type { TokenCounts } from '../../model.ts';
+import { findingsOf, verdictOf } from './verdict.ts';
 
 /** Tamanho máximo do resumo de um evento. O transcript completo continua no arquivo. */
 export const SUMMARY_MAX = 200;
@@ -254,7 +255,12 @@ export function parseLine(raw: string, toolNames: Map<string, string>): ParsedLi
         data: toolUseId ? { ...data, ...input, toolUseId } : { ...data, ...input },
       });
     } else {
-      out.events.push({ uuid, type: 'AssistantMessage', toolName: null, summary: truncate(textOf(blocks), SUMMARY_MAX), createdAt: timestamp, data });
+      // The summary is cut; the verdict and the findings of a review live at the end of a long report, so they are read from the full text (#332).
+      const text = textOf(blocks);
+      const verdict = verdictOf(text);
+      const findings = findingsOf(text);
+      const review = verdict || findings !== null ? { ...(verdict ? { verdict } : {}), ...(findings !== null ? { findings } : {}) } : {};
+      out.events.push({ uuid, type: 'AssistantMessage', toolName: null, summary: truncate(text, SUMMARY_MAX), createdAt: timestamp, data: { ...data, ...review } });
     }
     return out;
   }

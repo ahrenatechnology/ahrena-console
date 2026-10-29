@@ -123,3 +123,41 @@ describe('where the PR link comes from besides the task', () => {
     assert.deepEqual([loop.groups[0].id, loop.groups[0].otherRefs], ['pr:5', [6]]);
   });
 });
+
+describe('review verdicts as the ingest keeps them (#332, review round 1)', () => {
+  const dev = sub('d', 'general-purpose', 0, 5, 'Build PR #1');
+  const reviewed = (events: SessionEvent[], over: Partial<Agent> = {}, status: 'active' | 'completed' = 'completed') => {
+    const argos = sub('a', 'argos', 5, 8, 'Review PR #1', over);
+    return buildPrLoop(session({ id: 's1', status }), [main, dev, argos], events(argos), papelDe).groups[0];
+  };
+
+  test('a verdict past the 200 characters of the summary is read from the event data', () => {
+    const long = 'x'.repeat(300);
+    const g = reviewed((a) => [event({ id: 'l', agentId: a.id, type: 'AssistantMessage', toolName: null, summary: `${long.slice(0, 200)}…`, data: { verdict: 'request-changes', findings: 4 }, createdAt: at(8) })]);
+    assert.deepEqual([g.changeRequests, g.state, g.steps[1].findings], [1, 'stopped', 4]);
+  });
+
+  test('the ingest reads the verdict and the findings from the full text of a long report', async () => {
+    const { parseLine } = await import('../../src/ingest/history/transcript.ts');
+    const text = `${'detail '.repeat(80)}\n4 findings\nVerdict: request-changes`;
+    const line = JSON.stringify({ type: 'assistant', uuid: 'u1', sessionId: 's1', timestamp: '2026-11-02T12:00:00.000Z', message: { id: 'm1', content: [{ type: 'text', text }] } });
+    const ev = parseLine(line, new Map())!.events[0];
+    assert.deepEqual([ev.summary!.length <= 201, (ev.data as any).verdict, (ev.data as any).findings], [true, 'request-changes', 4]);
+  });
+
+  test('a readable "comment" verdict counts as a change request; the metadata verdict wins over the text', () => {
+    const comment = reviewed((a) => [said(a, 'Verdict: comment', 8)]);
+    assert.deepEqual([comment.changeRequests, comment.state], [1, 'stopped']);
+    const meta = reviewed((a) => [said(a, 'Verdict: request-changes', 8)], { metadata: { workflow: { verdict: 'approve' } } });
+    assert.deepEqual([meta.changeRequests, meta.state], [0, 'approved']);
+  });
+
+  test('a review that errored is a round with no verdict; approval holds when something starts after it; the issue comes from the branch', () => {
+    const errored = reviewed(() => [], { status: 'error' });
+    assert.deepEqual([errored.rounds, errored.changeRequests, errored.steps[1].state], [1, 0, 'error']);
+    const argos = sub('a', 'argos', 5, 8, 'Review PR #1', { metadata: { branch: 'feat/333-x' } });
+    const later = sub('l', 'Explore', 9, 10, 'Refs nothing');
+    const loop = buildPrLoop(session({ id: 's1', status: 'completed' }), [main, dev, argos, later], [said(argos, 'Verdict: approve', 8)], papelDe);
+    assert.deepEqual([loop.groups.find((g) => g.id === 'pr:1')!.state, loop.groups.find((g) => g.id === 'pr:1')!.issue], ['approved', 333]);
+  });
+});

@@ -13,13 +13,15 @@
 // A task that cites two PRs stays in the first and carries the other in `otherRefs`.
 //
 // A round is each Argos call (a `review` step) on the group. A change request is a round whose verdict, read from
-// the last `Verdict: …` line of the reviewer's last message (or `metadata.workflow.verdict`), is not `approve`;
+// the last `Verdict: …` line of the reviewer's report (at ingest, from the full text; or `metadata.workflow.verdict`), is
+// not `approve` (`request-changes` and `comment` both count);
 // with no readable verdict the step counts as a round and never as a change request.
 
+import { findingsOf, verdictOf, type ReviewVerdict } from '../ingest/history/verdict.ts';
 import type { Agent, Session, SessionEvent } from '../model.ts';
 
 export type LoopRole = 'dev' | 'review' | 'fix' | 'other';
-export type LoopVerdict = 'approve' | 'request-changes' | 'comment';
+export type LoopVerdict = ReviewVerdict;
 export type LoopStepState = 'completed' | 'running' | 'error';
 export const LOOP_GROUP_STATES = ['approved', 'in-review', 'waiting-fix', 'stopped', 'open'] as const;
 export type LoopGroupState = (typeof LOOP_GROUP_STATES)[number];
@@ -69,8 +71,6 @@ const PR_URL = /\/pull\/(\d{1,7})\b/g;
 const ISSUE_REF = /\b(?:issues?|refs?|closes?|fixes?)\s*#(\d{1,7})\b/gi;
 const BARE_REF = /(?<![\w/&])#(\d{1,7})\b/g;
 const BRANCH_ISSUE = /(?:^|\/)(\d{1,7})-/;
-const VERDICT = /Verdict:\s*\**\s*(approve|request[- ]changes|changes[- ]requested|comment)/gi;
-const FINDINGS = /(\d+)\s+(?:findings?|achados)(?![\p{L}])/giu;
 
 const nums = (text: string, re: RegExp): number[] => [...text.matchAll(re)].map((m) => Number(m[1]));
 const unique = (xs: number[]) => [...new Set(xs)];
@@ -95,18 +95,7 @@ export function refsOf(text: string): TextRefs {
   return { prs: unique(hits), issues: unique(issues), bare: unique(bare) };
 }
 
-/** The verdict in a reviewer's message: the last `Verdict: …` line. */
-export function verdictOf(message: string): LoopVerdict | null {
-  const last = [...message.matchAll(VERDICT)].at(-1)?.[1]?.toLowerCase();
-  if (!last) return null;
-  if (last === 'approve') return 'approve';
-  return last === 'comment' ? 'comment' : 'request-changes';
-}
-
-const findingsOf = (message: string): number | null => {
-  const last = [...message.matchAll(FINDINGS)].at(-1);
-  return last ? Number(last[1]) : null;
-};
+export { verdictOf };
 
 const byStart = (a: Agent, b: Agent) => a.startedAt.localeCompare(b.startedAt) || a.id.localeCompare(b.id);
 
@@ -154,15 +143,24 @@ export function buildPrLoop(session: Session, agents: readonly Agent[], events: 
   }
   for (const l of linked) if (l.pr === null && l.issue !== null && prByIssue.has(l.issue)) l.pr = prByIssue.get(l.issue)!;
 
-  const lastMessage = new Map<string, string>();
-  for (const e of events) if (e.type === 'AssistantMessage' && e.agentId && e.summary) lastMessage.set(e.agentId, e.summary);
+  // What a reviewer's last message says: the verdict and the findings the ingest read from the full text, or, for
+  // an event stored before that, from the (cut) summary.
+  const said = new Map<string, { verdict: LoopVerdict | null; findings: number | null }>();
+  for (const e of events) {
+    if (e.type !== 'AssistantMessage' || !e.agentId) continue;
+    const d = obj(e.data);
+    const text = e.summary ?? '';
+    const verdict = (str(d?.verdict) as LoopVerdict | null) ?? verdictOf(text);
+    const findings = typeof d?.findings === 'number' ? d.findings : findingsOf(text);
+    const prev = said.get(e.agentId);
+    said.set(e.agentId, { verdict: verdict ?? prev?.verdict ?? null, findings: findings ?? prev?.findings ?? null });
+  }
 
   const toStep = (l: Linked): LoopStep => {
     const a = l.agent;
-    const message = lastMessage.get(a.id) ?? '';
-    const meta = obj(a.metadata?.workflow);
-    const metaVerdict = str(meta?.verdict);
-    const verdict = l.role === 'review' ? (metaVerdict ? verdictOf(`Verdict: ${metaVerdict}`) : verdictOf(message)) : null;
+    const heard = said.get(a.id);
+    const metaVerdict = str(obj(a.metadata?.workflow)?.verdict);
+    const verdict = l.role === 'review' ? (metaVerdict ? verdictOf(`Verdict: ${metaVerdict}`) : (heard?.verdict ?? null)) : null;
     return {
       agentId: a.id,
       role: l.role,
@@ -172,7 +170,7 @@ export function buildPrLoop(session: Session, agents: readonly Agent[], events: 
       startedAt: a.startedAt,
       endedAt: a.endedAt,
       verdict,
-      findings: l.role === 'review' ? findingsOf(message) : null,
+      findings: l.role === 'review' ? (heard?.findings ?? null) : null,
     };
   };
 
@@ -193,23 +191,23 @@ export function buildPrLoop(session: Session, agents: readonly Agent[], events: 
     const after = lastReview ? steps.slice(steps.indexOf(lastReview) + 1) : [];
     let state: LoopGroupState = 'open';
     if (lastReview) {
-      if (lastReview.state === 'running') state = 'in-review';
-      else if (after.some((s) => s.state === 'running')) state = 'in-review';
-      else if (lastReview.verdict === 'approve' && after.length === 0) state = 'approved';
-      else if (lastReview.verdict === 'request-changes' && after.length === 0) state = sessionLive ? 'waiting-fix' : 'stopped';
+      if (lastReview.state === 'running' || after.some((s) => s.state === 'running')) state = 'in-review';
+      else if (lastReview.verdict === 'approve') state = 'approved';
+      else if (lastReview.verdict !== null && after.length === 0) state = sessionLive ? 'waiting-fix' : 'stopped';
       else state = sessionLive ? 'in-review' : 'open';
     }
     const issues = b.items.map((i) => i.issue).filter((n): n is number => n !== null);
+    const branchIssues = b.items.map((i) => (i.branch ? Number(BRANCH_ISSUE.exec(i.branch)?.[1]) : NaN)).filter(Number.isFinite);
     const lastActivity = steps.reduce((m, s) => ((s.endedAt ?? s.startedAt) > m ? (s.endedAt ?? s.startedAt) : m), '');
     return {
       id,
       kind: b.kind,
       number: b.number,
-      issue: b.kind === 'pr' ? (issues[0] ?? null) : null,
+      issue: b.kind === 'pr' ? (issues[0] ?? branchIssues[0] ?? null) : null,
       otherRefs: unique(b.items.flatMap((i) => i.otherRefs)),
       state: b.kind === 'none' ? 'open' : state,
-      rounds: reviews.length,
-      changeRequests: reviews.filter((s) => s.verdict === 'request-changes').length,
+      rounds: b.kind === 'none' ? 0 : reviews.length,
+      changeRequests: b.kind === 'none' ? 0 : reviews.filter((s) => s.verdict !== null && s.verdict !== 'approve').length,
       steps,
       lastActivityAt: lastActivity,
     };
