@@ -41,6 +41,7 @@
 // | `POST /api/tools/<toolId>/actions/<actionId>`, `DELETE /api/tools/jobs/<jobId>`, `POST /api/tools/checks` and `POST /api/tools/mcp/checks` | Run a catalog action as a job, cancel it, Verificar agora, Verificar conexões (api/tools.ts, src/tools/executor.ts, #280) |
 // | `POST /api/machines/<id>/connection/start|stop|reconnect|login-and-start`, `DELETE /api/machines/<id>/connection` | The connection of a remote machine (api/connection.ts, #278) |
 // | `GET /api/connectors`, `POST`/`DELETE /api/connectors/aws/sessions/<name>/login`, and the same under `/api/machines/<id>/` | The cloud connectors and their logins (api/clouds.ts, #277) |
+// | `GET /api/github/sync` | The GitHub background sync's steps: last run, next run, last error (decision 0015, #356) |
 // | `GET /api/app-update`, `PUT /api/app-update/state` and `POST /api/app-update/actions/check|install|dismiss|ack` | The desktop app's update notice: the app reports, the /ui reads and clicks (api/app-update.ts, #330) |
 // | `GET /api/connections`        | The console's own GitHub connection: `{ github: <status> }` (api/connections-route.ts, #241) |
 // | `POST /api/connections/github/start`, `/cancel`, `/disconnect`, `/source` | Device flow, Cancel, Disconnect and the credential source (#241, decision 0011) |
@@ -127,6 +128,7 @@ import { isToolsRoute, isToolsWrite, respondTools, respondToolsWrite, toolsWrite
 import type { ToolsControl } from '../tools/executor.ts';
 import { fromAnotherSite, fromOwnUi } from './same-origin.ts';
 import { appUpdateWriteFromSameOrigin, isAppUpdateRoute, type AppUpdateRoute } from './app-update.ts';
+import type { GithubBackgroundSync } from '../github/background-sync.ts';
 import { cloudsWriteFromSameOrigin, isCloudsRoute, type CloudsRoute } from './clouds.ts';
 import { connectionWriteFromSameOrigin, isConnectionRoute, type ConnectionRoute } from './connection.ts';
 import { CONNECTIONS_ROUTE, PROJECT_SELECTION_ROUTE, respondConnections, respondProjectSelection, STRICT_WRITE_ROUTES, strictWriteRefusal, type ProjectSelectionTarget } from './connections-route.ts';
@@ -219,6 +221,8 @@ export interface ApiOptions {
   clouds?: CloudsRoute | null;
   /** The desktop app's update notice (#330, api/app-update.ts): `/api/app-update`; without it, 404. */
   appUpdate?: AppUpdateRoute | null;
+  /** The GitHub background sync (decision 0015): `GET /api/github/sync`; without it, 404. */
+  githubSync?: Pick<GithubBackgroundSync, 'status'> | null;
   /** The connection of the remote machines (#278, api/connection.ts): start, stop, reconnect, login-and-start, cancel; without it, 404. */
   machineConnection?: ConnectionRoute | null;
   /** The console's own GitHub connection (#241); turns on `/api/connections` and its writes. */
@@ -255,6 +259,7 @@ export const PANEL_ROUTE = '/api/panel';
 export const OPEN_ROUTE = '/open';
 export const LOAD_ROUTE = '/api/load';
 export const DECISIONS_ROUTE = '/api/decisions';
+export const GITHUB_SYNC_ROUTE = '/api/github/sync';
 
 const PANEL = /^\/api\/panel\/([^/]+)$/;
 const OPEN = /^\/open\/([^/]+)$/;
@@ -486,6 +491,7 @@ export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
     if (opts.orders && ORDERS_ROUTE.test(url.pathname)) return opts.orders(req, res, url);
     if (opts.clouds && isCloudsRoute(url.pathname)) return opts.clouds(req, res, url);
     if (opts.appUpdate && isAppUpdateRoute(url.pathname)) return opts.appUpdate(req, res, url);
+    if (opts.githubSync && url.pathname === GITHUB_SYNC_ROUTE) return req.method === 'GET' ? send(res, 200, opts.githubSync.status()) : send(res, 405, { error: 'use GET' });
     if (req.method !== 'GET') return send(res, 405, { error: 'use GET' });
     if (isUiPath(url.pathname)) return respondUi(res, url.pathname);
     const desktopMatch = OPEN_IN_DESKTOP.exec(url.pathname);
