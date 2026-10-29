@@ -161,7 +161,7 @@ const ICONS = {
   // The remote machine's connection (issue 278, C62 to C65): Parar o túnel and Onde roda
   square: '<rect width="18" height="18" x="3" y="3" rx="2"/>',
   'map-pin': '<path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/>',
-  // Docker actions (#288)
+  // Docker actions (issue 288)
   play: '<polygon points="6 3 20 12 6 21 6 3"/>',
   power: '<path d="M12 2v10"/><path d="M18.4 6.6a9 9 0 1 1-12.77.04"/>',
   'rotate-cw': '<path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/>',

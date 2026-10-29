@@ -1,4 +1,4 @@
-// The Docker card of a machine screen (#288, decision 0017, wireframes C81 to C85): the stacks and the
+// The Docker card of a machine screen (issue 288, decision 0017, wireframes C81 to C85): the stacks and the
 // containers the daemon lists, with Parar, Subir, Reiniciar and Remover…, Limpar os parados and Reiniciar o
 // Docker. This machine's daemon and, through the tunnel, the remote's: the same card, `?machine=<id>`.
 //
@@ -219,7 +219,7 @@ export function dockerActions(ctx, machineId = LOCAL_ID, { repaint = () => {} } 
     const body = el(
       'div',
       { class: 'card dk-dialog', role: 'dialog', 'aria-modal': 'true', 'aria-label': plan.label },
-      el('div', { class: 'dk-dialog-head' }, icon(danger ? 'trash' : 'container'), el('b', {}, plan.label), button({ label: '', iconName: 'x', kind: 'ghost', onClick: closeDialog, attrs: { 'aria-label': 'Fechar' } })),
+      el('div', { class: 'dk-dialog-head' }, icon(danger ? 'trash' : 'container'), el('b', {}, plan.label), button({ label: '', iconName: 'x', kind: 'dk-ghost', onClick: closeDialog, attrs: { 'aria-label': 'Fechar' } })),
       el('dl', { class: 'dk-kv' }, ...rows.flatMap(([k, v]) => [el('dt', {}, k), el('dd', {}, v)])),
       volumes,
       el('div', { class: 'eyebrow' }, plan.admin ? 'Rode no Terminal, exatamente' : copyOnly ? 'Para rodar, exatamente' : 'Vai rodar, exatamente'),
@@ -296,7 +296,7 @@ export function dockerActions(ctx, machineId = LOCAL_ID, { repaint = () => {} } 
     return el(
       'div',
       { class: `dk-band ${ok ? 'dk-ok' : 'dk-fail'}`, role: ok ? 'status' : 'alert', 'data-part': 'docker-job' },
-      el('div', { class: 'dk-band-top' }, icon(ok ? 'check-circle-2' : 'error'), el('p', {}, el('b', {}, ok ? `${last.label}: pronto.` : `${last.label}: não terminou.`), ` ${text}`), button({ label: 'Fechar', kind: 'ghost', iconName: 'x', onClick: () => (dismissed.add(last.id), paint()), attrs: { 'aria-label': 'Fechar o aviso' } })),
+      el('div', { class: 'dk-band-top' }, icon(ok ? 'check-circle-2' : 'error'), el('p', {}, el('b', {}, ok ? `${last.label}: pronto.` : `${last.label}: não terminou.`), ` ${text}`), button({ label: 'Fechar', kind: 'dk-ghost', iconName: 'x', onClick: () => (dismissed.add(last.id), paint()), attrs: { 'aria-label': 'Fechar o aviso' } })),
       !ok && last.output.length ? el('div', { class: 'dk-out mono' }, ...last.output.slice(-4).map((l) => el('span', {}, l))) : null,
       !ok ? el('div', { class: 'dk-band-actions' }, button({ label: 'Copiar a saída', iconName: 'copy', onClick: () => copy(last.output.join('\n')) }), daemonDown && view.daemon.offered ? button({ label: 'Reiniciar o Docker', iconName: 'power', kind: 'filled', onClick: () => openPlan('daemon-restart', null) }) : null) : null,
     );
@@ -343,7 +343,7 @@ export function dockerActions(ctx, machineId = LOCAL_ID, { repaint = () => {} } 
         el(
           'div',
           { class: 'card dk-dialog dk-wide', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Limpar o Docker' },
-          el('div', { class: 'dk-dialog-head' }, icon('trash'), el('b', {}, `Limpar o Docker${local ? '' : ' da Workstation'}`), button({ label: '', iconName: 'x', kind: 'ghost', onClick: closeDialog, attrs: { 'aria-label': 'Fechar' } })),
+          el('div', { class: 'dk-dialog-head' }, icon('trash'), el('b', {}, `Limpar o Docker${local ? '' : ' da Workstation'}`), button({ label: '', iconName: 'x', kind: 'dk-ghost', onClick: closeDialog, attrs: { 'aria-label': 'Fechar' } })),
           el('p', { class: 'dk-note' }, icon('info'), 'Marque o que limpar. Cada item é um comando só, do catálogo, e o espaço é uma estimativa do docker system df: o número real aparece quando termina.'),
           el(
             'div',
@@ -402,7 +402,7 @@ export function dockerActions(ctx, machineId = LOCAL_ID, { repaint = () => {} } 
         el(
           'div',
           { class: 'card dk-dialog dk-wide', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Confirmar a limpeza' },
-          el('div', { class: 'dk-dialog-head' }, icon('trash'), el('b', {}, 'Confirmar a limpeza'), button({ label: '', iconName: 'x', kind: 'ghost', onClick: closeDialog, attrs: { 'aria-label': 'Fechar' } })),
+          el('div', { class: 'dk-dialog-head' }, icon('trash'), el('b', {}, 'Confirmar a limpeza'), button({ label: '', iconName: 'x', kind: 'dk-ghost', onClick: closeDialog, attrs: { 'aria-label': 'Fechar' } })),
           el('dl', { class: 'dk-kv' }, el('dt', {}, 'Onde'), el('dd', {}, local ? 'Esta máquina · como o seu usuário' : 'Workstation · como o usuário de lá'), el('dt', {}, 'Ordem'), el('dd', {}, 'um de cada vez, na ordem abaixo'), el('dt', {}, 'Libera'), el('dd', {}, sum ? `até ${bytes(sum)} (estimativa; o número real aparece no fim)` : 'o que houver')),
           el('div', { class: 'eyebrow' }, copyOnly ? 'Para rodar, exatamente' : 'Vai rodar, exatamente'),
           ...plans.flatMap(commandLines).map((line) => el('code', { class: 'dk-cmd mono' }, line)),
@@ -504,14 +504,14 @@ export function dockerActions(ctx, machineId = LOCAL_ID, { repaint = () => {} } 
     }
     node.removeAttribute('hidden');
     if (status === 'unsupported' || status === 'unreachable' || !view) {
-      node.replaceChildren(el('h2', { class: 'tm-title' }, icon('container'), el('span', {}, 'Docker')), el('p', { class: 'tm-muted' }, status === 'unsupported' ? `O núcleo da ${where} é de uma versão sem as ações do Docker. Atualize o núcleo de lá.` : `Sem conexão com a ${where}. As ações voltam quando ela responder.`));
+      node.replaceChildren(el('h2', { class: 'tm-title dk-title' }, icon('container'), el('span', {}, 'Docker')), el('p', { class: 'tm-muted' }, status === 'unsupported' ? `O núcleo da ${where} é de uma versão sem as ações do Docker. Atualize o núcleo de lá.` : `Sem conexão com a ${where}. As ações voltam quando ela responder.`));
       return;
     }
     const active = globalThis.document?.activeElement;
     const keep = active && node.contains(active) ? (active.getAttribute?.('data-dk-filter') ? `[data-dk-filter="${active.getAttribute('data-dk-filter')}"]` : null) : null;
     fill(
       node,
-      el('h2', { class: 'tm-title' }, icon('container'), el('span', {}, 'Docker'), el('small', { class: 'tm-note' }, `${view.summary.running} rodando · ${view.summary.stopped} parados · ${plural(view.summary.stacks, 'stack', 'stacks')}`), toolbar()),
+      el('h2', { class: 'tm-title dk-title' }, icon('container'), el('span', {}, 'Docker'), el('small', { class: 'tm-note' }, `${view.summary.running} rodando · ${view.summary.stopped} parados · ${plural(view.summary.stacks, 'stack', 'stacks')}`), toolbar()),
       !local && !view.acceptsRemoteActions ? el('div', { class: 'dk-band dk-lock', role: 'note' }, el('div', { class: 'dk-band-top' }, icon('lock'), el('p', {}, el('b', {}, 'As ações na Workstation estão desligadas.'), ' O túnel faz o pedido do Mac parecer local lá, então a Workstation só aceita ações quando ela mesma liga: AHRENA_CONSOLE_ACCEPT_REMOTE_ACTIONS=1 no núcleo de lá. Até lá, cada ação mostra o comando para copiar.'))) : null,
       notice ? el('p', { class: notice.tone === 'error' ? 'dk-problem' : 'tm-muted', role: 'alert' }, notice.text) : null,
       view.available ? jobBand() : downCard(),
