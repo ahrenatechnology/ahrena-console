@@ -140,6 +140,27 @@ export type NeedsYou = {
   relation: 'parent' | 'child' | 'sibling' | null
   sameProject: boolean
   account: PanelAccount | null
+  /**
+   * #262: the machine the session runs on: `null` (or absent, from an older core) for this Mac,
+   * `{ id, label }` of machines.json for a remote one.
+   */
+  machine?: { id: string; label: string } | null
+}
+
+/** #262: the scope of the "Ver" list: the family, every machine, this Mac, or the id of a remote. */
+export type NeedYouScope = 'family' | 'all' | 'local' | (string & {})
+
+/** #262: a remote machine of machines.json, as the panel's need-you list sees it. */
+export type NeedYouMachine = {
+  id: string
+  label: string
+  /** `connected`, or why not (as `GET /api/machines`). */
+  state: string
+  reason: string | null
+  lastReadAt: string | null
+  connection: PanelMachineConnection | null
+  /** When it went down (or its last reading); `null` when unknown. */
+  since: string | null
 }
 
 export type PanelNeedYou = {
@@ -152,6 +173,18 @@ export type PanelNeedYou = {
   byAccount: { account: PanelAccount | null; n: number }[]
   family: NeedsYou[]
   machine: NeedsYou[]
+  /** #262, with `needYou=<scope>` on the request: the scope answered (an unknown id answers `all`). */
+  scope?: NeedYouScope
+  /** #262: the list for the scope, needs first then idle, each oldest first. Absent from an older core. */
+  items?: NeedsYou[]
+  /** #262: the scope's list before the core's cap of `items`: how many in all, and of them blocked and idle. Absent from an older core. */
+  itemsTotal?: number
+  itemsNeeds?: number
+  itemsYourTurn?: number
+  /** #262: the blocked count per machine, this Mac first (`local`), then each remote. */
+  byMachine?: { id: string; label: string; n: number }[]
+  /** #262: every remote machine of machines.json, in its order; empty without remotes. */
+  machines?: NeedYouMachine[]
 }
 
 /** O escopo da lista de decisões (o Select do P9). */
@@ -303,8 +336,11 @@ export type View = {
   reachable?: string[]
   /** O "Compactar" do card Contexto: a confirmação aberta, ou a compactação em andamento. */
   compact?: 'confirm' | 'compacting' | null
-  /** `null`: o padrão da largura (família no estreito, máquina inteira no largo). */
-  scope: 'family' | 'machine' | null
+  /**
+   * The scope of the "Ver" list (#262): `family`, `all`, `local` or a remote's id; `null`, the width's
+   * default (family in the narrow panel, every machine in the wide one). The old `machine` reads as `all`.
+   */
+  scope: NeedYouScope | null
   /** O escopo das decisões; `null`: o padrão da largura (sessão no estreito, família no largo). */
   decisionsScope?: DecisionScope | null
   /** #146: o grafo da sessão (tela `subagents`): a página, as ondas abertas e fechadas, o filtro. */

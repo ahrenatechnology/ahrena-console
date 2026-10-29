@@ -176,6 +176,12 @@ describe('#176/AC-6 remote attention items are untrusted', () => {
     assert.deepEqual(remoteAttentionItems(body, machine).map((i) => i.session), ['ok']);
   });
 
+  test('#262 an item whose session id the routes would refuse is left out, never cut', () => {
+    const machine = { id: 'ws-exemplo', label: 'Workstation' };
+    const body = attentionBody([remoteItem('ok'), remoteItem('with space'), remoteItem('../x'), remoteItem('a'.repeat(129))]);
+    assert.deepEqual(remoteAttentionItems(body, machine).map((i) => i.session), ['ok']);
+  });
+
   test('#176/AC-6 a remote adds at most 10000 to active and to withError', async () => {
     const { frota } = await boot();
     const local = await montarAtencao(frota, null, []);

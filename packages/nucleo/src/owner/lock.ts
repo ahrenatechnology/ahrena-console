@@ -9,8 +9,8 @@
 //   - the core writes both sets of keys, so an older core still recognises the lock;
 //   - the core reads either set, English first, so it recognises a lock an older core wrote.
 // When the legacy keys go: once no published app and mod writes them. The first app (0.0.7) and mod
-// (0.0.36) that read English keys are the cutoff; the release after them (app 0.0.8, mod 0.0.37) drops
-// `LEGACY_KEYS` from `toFile` and `readLockFile`. Recorded in decision 0009, "Migração".
+// (0.0.36) that read English keys are the cutoff; a release after them (app 0.0.8, mod 0.0.38, issue
+// #325) drops `LEGACY_KEYS` from `toFile` and `readLockFile`. Recorded in decision 0009, "Migração".
 // `Lock` is the in-memory shape; `toFile` and `readLockFile` map the two.
 
 import { randomBytes } from 'node:crypto';

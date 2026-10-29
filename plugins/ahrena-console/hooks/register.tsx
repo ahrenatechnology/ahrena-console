@@ -12,7 +12,8 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface as Engine, PromptOrigin, Register } from 'claude-code'
 
 import type { PanelDecision, DecisionScope, Reading, Panel, SessionQuestion, NeedsYou, View } from '../types'
-import { draw, decisionScopeOf, type Actions, type Elements } from './render'
+import { draw, decisionScopeOf, grid, type Actions, type Elements } from './render'
+import { normalizeScope, scopeAfterAnswer, scopeOf } from './machines'
 import { GRAPH_STATE, type GraphState } from './graph'
 import { UNDO_MS, decisionsText, statusLine, model, unarchiveRequest, needYouText, statusGlyph, tokens } from './format'
 import { LEGACY_CORE, discoverCore } from './discover'
@@ -76,7 +77,7 @@ function normalizeView(v: unknown): View {
   const u = r.lastAction
   return {
     screen: SCREENS.includes(r.screen as View['screen']) && (r.screen !== 'decision' || decision) ? (r.screen as View['screen']) : 'session',
-    scope: r.scope === 'family' || r.scope === 'machine' ? r.scope : null,
+    scope: normalizeScope(r.scope),
     decisionsScope: DECISION_SCOPES.includes(r.decisionsScope as DecisionScope) ? (r.decisionsScope as DecisionScope) : null,
     decision,
     adjusting: r.adjusting === true,
@@ -136,11 +137,16 @@ function fromThePerson(origin: PromptOrigin | undefined): boolean {
   return origin.kind === 'composer' || origin.kind === 'bridge' || origin.kind === 'sdk'
 }
 
-/** O pedido do tick: com as decisões abertas, leva o escopo para a lista vir junto. */
+/**
+ * O pedido do tick: com as decisões abertas, leva o escopo para a lista vir junto. #262: every tick
+ * also carries the "Ver" list's scope (`needYou=`), the person's or the width's default, so the count
+ * on the main screen sums every machine; a core before #262 ignores it.
+ */
 async function tickPath($: Engine, v: View): Promise<string> {
   const base = await panelPath($)
-  if (v.screen !== 'decisions') return base
-  return `${base}${base.includes('?') ? '&' : '?'}decisions=${decisionScopeOf(v, columns)}`
+  const scope = scopeOf(v, grid(columns).perRow === 1, (await readReading($)).panel)
+  const decisions = v.screen === 'decisions' ? `&decisions=${decisionScopeOf(v, columns)}` : ''
+  return `${base}${base.includes('?') ? '&' : '?'}needYou=${encodeURIComponent(scope)}${decisions}`
 }
 
 // O pedido de todo tick: esta sessão, a conta e quantas precisam de você, nunca a frota.
@@ -228,6 +234,12 @@ async function refresh($: Engine, nextView?: Partial<View>, again = false) {
     const panel = res.ok && res.text ? (JSON.parse(res.text) as Panel) : null
     if (!panel || panel.version !== 1) throw new Error(res.ok ? 'resposta inválida' : `HTTP ${res.status}`)
     const liveContext = await engineContext($)
+    // #262: the core answered another scope than the one chosen (a remote no longer in machines.json): the Select follows it.
+    const answered = scopeAfterAnswer(v.scope, panel)
+    if (answered) {
+      v.scope = answered
+      nextView = { ...nextView, scope: answered }
+    }
     const current = normalizeReading(await read($, reading))
     const fresh: Reading = { panel, readAt: now, offline: false, error: null, nextAt: null, liveContext }
     // Um clique: a tela nova, a leitura e as decisões que a conversa ainda tem vão juntas, uma
@@ -681,7 +693,8 @@ export const register: Register = (on, options) => {
       actions: {
         showNeedYou: () => void changeView($, { screen: 'need-you' }),
         close: () => void changeView($, { screen: 'session' }),
-        scope: (value) => void changeView($, { scope: value === 'family' ? 'family' : 'machine' }),
+        // #262: the list for the new scope comes at once, without waiting for the next tick.
+        scope: (value) => void refresh($, { scope: normalizeScope(value) ?? 'all' }),
         retry: () => void refresh($),
         goTo: (i) => void goTo($, i, e.surface),
         openSession: (local, title) => void openSession($, local, title),

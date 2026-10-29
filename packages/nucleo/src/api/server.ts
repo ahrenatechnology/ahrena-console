@@ -59,7 +59,8 @@
 // aliases of these until phase 6 of #173 (decision 0009): now they are 404 like any unknown path.
 //
 // `?local=`, `?account=`, `?org=`, `?model=` and `?cwd=` on the panel are what it reads from its own session;
-// `?decisions=<scope>` brings the open decision list in the same request.
+// `?decisions=<scope>` brings the open decision list in the same request; `?needYou=<scope>` (#262) the
+// need-you of every machine (api/panel-machines.ts).
 // A request with an `Origin`, or with a `Host` that is not ours, gets 403 (decision 0003). The exception is
 // the /ui itself reading: a `GET` whose `Origin` is exactly `http://<Host>` (a browser may send `Origin`
 // even on a same-origin `fetch`). A write with `Origin` is still refused, except three, only with `Origin`
@@ -111,6 +112,7 @@ import { createSessionOpenRoute, SESSION_OPEN_FROM_UI, SESSION_OPEN_ROUTE } from
 import type { TerminalFocuser, TerminalOpener } from './terminal-launch.ts';
 import { montarDashboard, DASHBOARD_ROUTE } from './dashboard-route.ts';
 import { createMachineSessionsRoute } from './machine-sessions.ts';
+import { PanelMachines } from './panel-machines.ts';
 import type { MachineReader } from './machine-reader.ts';
 import { RotaAnalytics } from './analytics-route.ts';
 import { REPOS_ROUTE, type RotaDosRepos } from './repos.ts';
@@ -350,7 +352,8 @@ export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
   const projectRoute = criarRotaDoProjeto(opts.project ?? { kanban: null, fonte: 'github', log });
   const openDescriber = opts.openDescriber ?? new SessionOpenDescriber();
   const wall = muralDoPainel(opts.panelBuilder, { open: openDescriber });
-  const machineSessions = createMachineSessionsRoute({ reader: opts.machineReader, telemetry: opts.telemetry, local: { sessions: opts.sessions, wall, kanban: opts.kanban, history: opts.history, events: opts.events, dashboard: opts.fleet ? () => montarDashboard(opts.fleet!) : null, panel: opts.panelBuilder } });
+  const panelMachines = new PanelMachines({ reader: opts.machineReader, telemetry: opts.telemetry, local: opts.panelBuilder });
+  const machineSessions = createMachineSessionsRoute({ reader: opts.machineReader, telemetry: opts.telemetry, local: { sessions: opts.sessions, wall, kanban: opts.kanban, history: opts.history, events: opts.events, dashboard: opts.fleet ? () => montarDashboard(opts.fleet!) : null, panel: opts.panelBuilder }, decoratePanel: (body, id, url) => panelMachines.decorate(body, id, url) });
   const remotes = (): readonly RemoteAttentionSource[] => (typeof opts.remoteAttention === 'function' ? opts.remoteAttention() : (opts.remoteAttention ?? []));
   const sessionOpen = createSessionOpenRoute({
     storage: opts.panelBuilder.storage,
@@ -376,7 +379,8 @@ export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
     const body = await opts.panelBuilder.montar(panelRequestOf(sessionId, url));
     counters.panel++;
     counters.panelMs += performance.now() - t0;
-    send(res, 200, body);
+    // #262: `?needYou=` adds every machine's need-you; without it, the same object (api/panel-machines.ts).
+    send(res, 200, await panelMachines.decorate(body, sessionId, url, opts.panelBuilder.needYouItemsOf(body)));
   }
 
   async function decisionList(res: ServerResponse, sessionId: string, url: URL) {

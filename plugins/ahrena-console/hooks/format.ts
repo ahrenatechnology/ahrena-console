@@ -124,6 +124,12 @@ export function statusOf(state: InboxState | 'unknown'): DisplayStatus {
 
 export const needYouText = (n: number) => (n === 1 ? '1 precisa de você' : `${n} precisam de você`)
 
+/** #262: a remote machine of the need-you list that is not connected (its sessions are out of the count). */
+export const machineIsDown = (m: { state: string }) => m.state !== 'connected'
+
+/** #262 (P16): " · Workstation sem conexão" for each remote that is down, at the end of the status line. */
+const machinesDownText = (p: Panel) => (p.needYou.machines ?? []).filter(machineIsDown).map((m) => ` · ${m.label} sem conexão`).join('')
+
 /** A linha de status da sessão: "ahrena-console ● Ativa · 2 precisam de você". */
 export function statusLine(p: Panel | null, offline: boolean): string {
   if (offline || !p) return 'ahrena-console ○ offline'
@@ -132,13 +138,14 @@ export function statusLine(p: Panel | null, offline: boolean): string {
   const outside = n ? needYouText(n) : 'ninguém mais'
   const d = p.decisions
   const dec = d?.resume ? ` · ${d.resume.n} decisões herdadas` : d?.current ? ` · ${d.current === 1 ? '1 decisão' : `${d.current} decisões`}` : ''
-  if (!s) return `ahrena-console ◌ Ociosa · No prompt${dec} · ${outside}`
+  const down = machinesDownText(p)
+  if (!s) return `ahrena-console ◌ Ociosa · No prompt${dec} · ${outside}${down}`
   const attention = s.state === 'waiting' ? attentionOf(s) : null
   // #245 (P2, P6): "◐ Precisa de você"; the idle one says why it sits, "◌ Ociosa · No prompt".
   const st = attention ? ATTENTION_STATUS[attention.level] : STATUS[statusOf(s.state)]
   const label = attention?.level === 'idle' ? `${st.label} · ${ATTENTION_REASONS[attention.reason].label}` : st.label
   const extra = s.state === 'delegating' ? ' · delegando' : ''
-  return `ahrena-console ${st.glyph} ${label}${extra}${dec} · ${outside}`
+  return `ahrena-console ${st.glyph} ${label}${extra}${dec} · ${outside}${down}`
 }
 
 /** A origem de uma decisão: o glifo e o rótulo do card (P9). */
