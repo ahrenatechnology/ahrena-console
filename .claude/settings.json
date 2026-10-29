@@ -2,5 +2,20 @@
   "env": {
     "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE": "20",
     "CLAUDE_CODE_SUBAGENT_MODEL": "sonnet"
+  },
+  "extraKnownMarketplaces": {
+    "ahrena": {
+      "source": {
+        "source": "github",
+        "repo": "ahrenatechnology/ahrena-framework"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "ahrena-foundation@ahrena": true,
+    "ahrena-contributing@ahrena": true,
+    "ahrena-engineering-fundamentals@ahrena": true,
+    "ahrena-engineering-typescript@ahrena": true,
+    "ahrena-engineering-frontend@ahrena": true
   }
 }
