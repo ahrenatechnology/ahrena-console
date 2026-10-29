@@ -1,4 +1,4 @@
-// The Docker card of a machine screen (issue 288, decision 0017, wireframes C81 to C85): the stacks and the
+// The Docker card of a machine screen (issue 288, decision 0017, wireframes C85 to C88): the stacks and the
 // containers the daemon lists, with Parar, Subir, Reiniciar and Remover…, Limpar os parados and Reiniciar o
 // Docker. This machine's daemon and, through the tunnel, the remote's: the same card, `?machine=<id>`.
 //

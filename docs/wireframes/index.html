@@ -568,7 +568,7 @@ main { min-width: 0; padding-block: 24px 80px; padding-left: max(16px, env(safe-
 .tl-sudo-box { border-color: color-mix(in srgb, var(--status-waiting-dot) 45%, var(--border)); }
 .tl-copy { display: flex; gap: 8px; align-items: center; margin-top: 6px; } .tl-copy code { flex: 1; min-width: 0; }
 
-/* ---------- Docker actions (C81 to C85, issue #288) ---------- */
+/* ---------- Docker actions (C85 to C88, issue #288) ---------- */
 .dk-acts { text-align: right; white-space: nowrap; } .dk-acts .btn + .btn { margin-left: 6px; }
 .btn.dk-danger { color: var(--status-error-text); }
 .dk-find { display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); font-size: 12.5px; max-width: 320px; }
@@ -4000,7 +4000,7 @@ const APP_UP = {
 }
 
 // =====================================================================
-// DOCKER ACTIONS (C81 to C85, issue #288)
+// DOCKER ACTIONS (C85 to C88, issue #288)
 // =====================================================================
 // The Docker card of the machine screens gains actions. The screen sends ids read from the daemon
 // (the stack name of the compose label, the 12-character container id) and the action id; the núcleo
@@ -4098,7 +4098,7 @@ const dkStale = `<div class="tl-veil"><div class="cartao tl-dlg">
   <div class="tl-dlg-a"><span class="btn contorno">Cancelar</span><span class="btn mc-danger">${ic('trash-2')}Remover a stack</span></div></div></div>`
 const dkWrap = (w, remote, dlg, h = 640, o = {}) => frameAt(w, remote ? 'machine-ws' : 'machine-local', `<div class="tl-veil-wrap">${tlClip(dkMain(w, remote, o), h)}${dlg}</div>`)
 
-// ---------- C83: clean the stopped ones ----------
+// ---------- C87: clean the stopped ones ----------
 const DK_CLEAN = [
   ['containers-24h', 'Parados há mais de 1 dia', 'docker container prune --force --filter until=24h', 'Remove só os containers parados há mais de 24 h. Os de ontem ficam, e as stacks paradas há pouco ainda sobem.', '44 containers', '3,1 GB', true],
   ['containers', 'Todos os parados', 'docker container prune --force', 'Remove todo container parado, inclusive os de uma stack parada (<span class="mono">loomapi-local</span>, 9): Subir depois não acha mais o que subir. Prefira o de cima.', '148 containers', '3,9 GB', false],
@@ -4122,7 +4122,7 @@ const dkCleanMulti = `<div class="tl-veil"><div class="cartao tl-dlg dk-wide">
   <div class="tl-dlg-note">${ic('shield-check')}<span>Nenhum desses apaga volume nem container rodando.</span></div>
   <div class="tl-dlg-a"><span class="btn contorno">Voltar</span><span class="btn cheio">${ic('play')}Confirmar os 3</span></div></div></div>`
 
-// ---------- C84: running, done, failed ----------
+// ---------- C87: running, done, failed ----------
 const dkRunBox = (steps, active, out, elapsed, pct, cmd) => `<div class="cartao dk-run"><div class="tl-run-top"><div class="tm-rc-steps">${steps.map((s, i) => `<span class="${i < active ? 'done' : i === active ? 'on' : ''}">${i < active ? ic('check-circle-2') : i === active ? ic('loader-2') : ic('circle-dot')}${s}</span>`).join('')}</div><span class="btn contorno tl-cancel">${ic('x')}Cancelar</span></div>
   <div class="tl-out">${out.map(l => `<span>${l}</span>`).join('')}<span class="tl-caret">▍</span></div>
   <div class="tl-run-foot"><span class="tm-stack"><i style="width:${pct}%;background:var(--status-active-dot)"></i></span><span class="mono">${elapsed} de 10:00</span><span class="mono c-muted">${cmd}</span></div></div>`
@@ -4139,7 +4139,7 @@ const dkFailScreen = w => `${dkHead(true)}
     <div class="tm-rc-cmd">As últimas linhas da saída; o resto está em ~/.ahrena-console/docker.log.</div></div>
     <div class="tm-rc-actions"><span class="btn contorno">${ic('copy')}Copiar a saída</span><span class="btn cheio">${ic('power')}Reiniciar o Docker</span></div></div>`
 
-// ---------- C85: the daemon ----------
+// ---------- C88: the daemon ----------
 const dkDaemonCard = (kind) => {
   const k = {
     rootless: { t: 'Docker sem root · systemd do usuário', st: '<span class="badge b-error"><span class="p"></span>Não responde</span>', rows: [['Último sinal', 'há 4 min · 179 containers'], ['O que aconteceu', '<span class="mono">docker ps</span> não respondeu em 5 s']],
@@ -4417,13 +4417,13 @@ const TELAS = [
     n: N(['A leitura remota da C25: o Mac lê o núcleo de lá pela porta do túnel.'], ['Quem libera ações é a Workstation, no config dela: o túnel faz o pedido do Mac parecer local lá, então o padrão é recusar.', 'Rodar lá é o núcleo de lá, com o catálogo de lá. O Mac só repassa o id do item e da ação.', 'No Linux o apt pede sudo: a maior parte das CLIs de lá fica em Precisa de sudo, mesmo com ações ligadas.']) },
   { id: 'console-tools-containers', cod: 'C76', nome: 'Ferramentas · containers', sub: 'O card Containers em cada plataforma: Colima rodando (1), parado, com Iniciar (2), iniciando (3), nenhum runtime, com a proposta de instalar o Colima (4), Docker Engine parado no Linux, que pede sudo (5) e Windows, com o Podman Desktop como a proposta de código aberto (6). Em 1100.', html: () => `<div class="fila">${frameAt(1100, 'tools', toolsContainersScreen())}</div>`,
     n: N(['Os números de Docker da C25 (Workstation): containers e disco.'], ['Aqui só a saúde do runtime e Iniciar / Parar. Uso por imagem, volumes e stacks com a sessão dona ficam na tela da máquina.', 'Docker Desktop achado é lido, nunca iniciado nem atualizado pelo console.', 'Windows é proposta: o Podman Desktop, com o WSL 2; ligar o WSL pede administrador.']) },
-  { id: 'console-docker-actions', cod: 'C81', nome: 'Docker · stacks e containers com ações', sub: 'Feature Ações no Docker (#288, decisão 0017). A tela da máquina ganha, no Docker, as ações: por stack, Parar, Subir e Remover; por container, Parar, Reiniciar e Remover; no topo, Limpar os parados e Reiniciar o Docker. A Workstation (1100 e 1440, com as ações ligadas lá) e, em 1100, Esta máquina. A lista de containers filtra, busca e pagina: são 179 na Workstation.', html: () => `<div class="fila">${frameAt(1100, 'machine-ws', dkMain(1100, true))}${frameAt(1440, 'machine-ws', dkMain(1440, true))}${frameAt(1100, 'machine-local', dkMain(1100, false))}</div>`,
+  { id: 'console-docker-actions', cod: 'C85', nome: 'Docker · stacks e containers com ações', sub: 'Feature Ações no Docker (#288, decisão 0017). A tela da máquina ganha, no Docker, as ações: por stack, Parar, Subir e Remover; por container, Parar, Reiniciar e Remover; no topo, Limpar os parados e Reiniciar o Docker. A Workstation (1100 e 1440, com as ações ligadas lá) e, em 1100, Esta máquina. A lista de containers filtra, busca e pagina: são 179 na Workstation.', html: () => `<div class="fila">${frameAt(1100, 'machine-ws', dkMain(1100, true))}${frameAt(1440, 'machine-ws', dkMain(1440, true))}${frameAt(1100, 'machine-local', dkMain(1100, false))}</div>`,
     n: N(['Do console da workstation antigo: o recuperável do Docker e as stacks com a sessão dona (C25), que aqui ganham as ações.', 'Do CCAM: nada; ele só observa.'], ['As ações ficam na tela da máquina, onde o Docker já está, e não em Ferramentas: Ferramentas cuida da saúde do runtime (C76).', 'A tela manda a stack (o nome do rótulo do Compose) ou o id de 12 caracteres do container, lidos do Docker agora. Nunca um comando.', 'Remover tem o ícone de lixo e o texto “Remover…”: sempre abre uma confirmação.', 'A leitura passa a trazer a lista de containers (nome, imagem, estado, stack, desde); um núcleo mais velho não a manda, e a tela mostra só as stacks.']) },
-  { id: 'console-docker-confirm', cod: 'C82', nome: 'Docker · confirmar Parar, Remover e Reiniciar', sub: 'A confirmação mostra o comando exato, onde roda e o que acontece. Remover uma stack tem dois passos: primeiro os containers (volumes ficam), depois, em outra confirmação, os volumes, com a lista, o tamanho, quem mais os usa e uma caixa de ciência. Se algo mudou entre abrir e confirmar, o núcleo recusa (409) e mostra o plano novo. Em 1100.', html: () => dkConfirmFlow(),
+  { id: 'console-docker-confirm', cod: 'C86', nome: 'Docker · confirmar Parar, Remover e Reiniciar', sub: 'A confirmação mostra o comando exato, onde roda e o que acontece. Remover uma stack tem dois passos: primeiro os containers (volumes ficam), depois, em outra confirmação, os volumes, com a lista, o tamanho, quem mais os usa e uma caixa de ciência. Se algo mudou entre abrir e confirmar, o núcleo recusa (409) e mostra o plano novo. Em 1100.', html: () => dkConfirmFlow(),
     n: N(['O confirmar de Atualizar (C73): onde, o comando exato, o tempo limite e a nota do catálogo.'], ['Os volumes são uma pergunta à parte, depois de remover a stack: apagar dado não pode vir de um clique que também remove containers.', 'Um volume usado por um container fora da stack não entra: o núcleo confere na hora e a tela diz “fica”.', 'O botão destrutivo é vermelho; Parar e Reiniciar usam o botão da marca.', 'O comando com muitos ids mostra três e “e mais N”: o digest cobre todos.']) },
-  { id: 'console-docker-clean', cod: 'C83', nome: 'Docker · limpar os parados', sub: 'Cinco limpezas, cada uma com o que é, o comando e o espaço que deve liberar (estimativa do docker system df). Parados há mais de 1 dia vem marcada; todos os parados avisa que tira o que Subir precisaria. Mais de um item: a lista inteira antes de rodar, na ordem. Rodando, pronto (com o espaço de verdade) e falhou. Em 1100.', html: () => dkFlow(),
+  { id: 'console-docker-clean', cod: 'C87', nome: 'Docker · limpar os parados', sub: 'Cinco limpezas, cada uma com o que é, o comando e o espaço que deve liberar (estimativa do docker system df). Parados há mais de 1 dia vem marcada; todos os parados avisa que tira o que Subir precisaria. Mais de um item: a lista inteira antes de rodar, na ordem. Rodando, pronto (com o espaço de verdade) e falhou. Em 1100.', html: () => dkFlow(),
     n: N(['O “recuperável” do Docker na C25.'], ['docker system prune, --all e volume prune não estão: apagam o que ainda se usa. Volumes ficam para o passo de Liberar volume, com confirmação de dados.', 'O espaço é “até”: imagens e cache dividem camadas. O núcleo mostra o número real, lido de novo, quando termina.', 'A mesma fila das Ferramentas: uma ação por vez, por máquina.']) },
-  { id: 'console-docker-daemon', cod: 'C85', nome: 'Docker · reiniciar o daemon', sub: 'O Docker não responde: a tela mostra o card com o último sinal. Docker sem root (Ubuntu) e Colima (Mac): o console roda. Docker do sistema: pede sudo, a tela mostra o comando para você rodar. Workstation com as ações desligadas, o padrão: tudo vira Copiar comando. Em 1100.', html: () => dkDaemonScreens(),
+  { id: 'console-docker-daemon', cod: 'C88', nome: 'Docker · reiniciar o daemon', sub: 'O Docker não responde: a tela mostra o card com o último sinal. Docker sem root (Ubuntu) e Colima (Mac): o console roda. Docker do sistema: pede sudo, a tela mostra o comando para você rodar. Workstation com as ações desligadas, o padrão: tudo vira Copiar comando. Em 1100.', html: () => dkDaemonScreens(),
     n: N(['Nada.'], ['Reiniciar o daemon para os containers que rodam: a confirmação diz quantos e se o live-restore está ligado.', 'Sem sudo, como na decisão 0014: o que pede senha é da pessoa.', 'Ações na Workstation usam a mesma chave da 0014, tools.acceptRemoteActions: uma chave só, ligada por quem está lá.']) },
   { id: 'console-update-banner', cod: 'C77', nome: 'Aviso de versão nova no topo da /ui', sub: 'Feature Aviso de versão nova (#330). Atualização disponível: versão 0.0.10, com a linha do que mudou quando o latest.json tem notas, Atualizar e Depois. Fica no topo de todas as telas, acima do cabeçalho, e não alarga a página. Em 1100 e 1440.', html: () => updateBannerScreens(),
     n: N(['Nada: o CCAM não tem updater.'], ['Hoje (#90) a versão nova só aparece no menu da bandeja; a #330 a traz para a janela.', 'Cor da marca, não o amarelo de "precisa de você".']) },

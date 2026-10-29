@@ -1,4 +1,4 @@
-/* The Docker card of the machine screens (issue 288, wireframes C81 to C85). Loaded by docker-actions.js
+/* The Docker card of the machine screens (issue 288, wireframes C85 to C88). Loaded by docker-actions.js
    (`link[data-screen="docker"]`); it uses machine.css's `tm-` blocks and brand.css variables only. Every own
    class is dk-*. Nothing scrolls sideways from a 1100 px window: min-width 0, long names wrap. */
 

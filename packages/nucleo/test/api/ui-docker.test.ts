@@ -1,4 +1,4 @@
-// #288 on /ui (wireframes C81 to C85): the pure formats of docker-format.js and the Docker card mounted on the
+// #288 on /ui (wireframes C85 to C88): the pure formats of docker-format.js and the Docker card mounted on the
 // fake DOM against answers shaped like the núcleo's: the stacks and containers with their offered buttons, the
 // dialogs built from the núcleo's plan (never a command of the screen), the digest the confirmation sends, the
 // stale plan (409), the consent for the volumes, Limpar with its five kinds, a running job and its Cancel, the

@@ -1,4 +1,4 @@
-// What the Docker actions card shows and sends (issue 288, decision 0017, wireframes C81 to C85). Pure: the
+// What the Docker actions card shows and sends (issue 288, decision 0017, wireframes C85 to C88). Pure: the
 // test imports it without the DOM. Nothing here builds a command: the argv of every dialog comes from
 // `GET /api/docker/plan`, and the screen sends back only an action id, a target id and the plan's digest.
 
