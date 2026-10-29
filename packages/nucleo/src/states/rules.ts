@@ -5,7 +5,7 @@
 // The machine (machine.ts) is what saves; nothing here reads the port or the clock.
 
 import { mainAgentId, subagentId } from '../ingest/history/importer.ts';
-import type { Agent, AwaitingReason, Session, SessionEvent } from '../model.ts';
+import { AWAITING_REASONS, type Agent, type AwaitingReason, type Session, type SessionEvent } from '../model.ts';
 
 /** Where the machine keeps what it must remember between events, inside `session.metadata`. */
 export const MEMORY_KEY = 'states';
@@ -34,6 +34,11 @@ export interface MachineMemory {
   delegations: Record<string, Delegation>;
   /** By the process id Claude Code returns (`backgroundTaskId`, `shellId`). */
   background: Record<string, BackgroundProcess>;
+  /**
+   * #333: what the session was waiting on when the watcher abandoned it (`end` clears the wait), so the
+   * live wall can still tell it asked the person something. `null` when it was not waiting.
+   */
+  waitingWhenAbandoned: { since: string; reason: AwaitingReason } | null;
 }
 
 /** A session and its agents: what the rules read and return. */
@@ -85,7 +90,14 @@ const maxIso = (a: string, b: string): string => (a > b ? a : b);
 
 /** A memory with nothing in it. */
 export function emptyMemory(): MachineMemory {
-  return { lastEvent: null, idsAtLastInstant: [], errorAt: null, delegations: {}, background: {} };
+  return { lastEvent: null, idsAtLastInstant: [], errorAt: null, delegations: {}, background: {}, waitingWhenAbandoned: null };
+}
+
+function waitingWhenAbandonedOf(v: unknown): MachineMemory['waitingWhenAbandoned'] {
+  const w = obj(v);
+  const since = str(w.since);
+  const reason = str(w.reason);
+  return since && reason && (AWAITING_REASONS as readonly string[]).includes(reason) ? { since, reason: reason as AwaitingReason } : null;
 }
 
 /** Reads the memory saved in `metadata`, tolerating its absence and an old format. */
@@ -98,6 +110,7 @@ export function readMemory(session: Pick<Session, 'metadata'>): MachineMemory {
     errorAt: str(m.errorAt),
     delegations: { ...(obj(m.delegations) as Record<string, Delegation>) },
     background: { ...(obj(m.background) as Record<string, BackgroundProcess>) },
+    waitingWhenAbandoned: waitingWhenAbandonedOf(m.waitingWhenAbandoned),
   };
 }
 
@@ -346,6 +359,7 @@ class Transition {
   private end(status: 'completed' | 'abandoned' | 'error'): void {
     this.s.status = status;
     this.s.endedAt = this.at;
+    this.m.waitingWhenAbandoned = status === 'abandoned' && this.s.awaitingInputSince && this.s.awaitingReason ? { since: this.s.awaitingInputSince, reason: this.s.awaitingReason } : null;
     this.clearWait();
     this.m.delegations = {};
     this.m.background = {};

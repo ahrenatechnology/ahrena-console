@@ -493,7 +493,7 @@ export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
     // `pid` proves who holds the port: whoever reads the lock only stops the core if its pid is this one (src/owner).
     if (url.pathname === '/api/overview') return send(res, 200, { ok: true, name: 'ahrena-console', version: API_VERSION, pid: process.pid, commit: opts.commit ?? null });
     if (url.pathname === CHANGES_ROUTE && opts.changes) return serveChanges(res, url, opts.changes);
-    if (url.pathname === WALL_ROUTE) return responderMural(res, wall);
+    if (url.pathname === WALL_ROUTE) return responderMural(res, wall, url.searchParams.has('parkedLimit') ? Number(url.searchParams.get('parkedLimit')) : undefined);
     if (url.pathname === EVENTS_ROUTE && opts.events) return responderEventos(res, url, opts.events);
     if (url.pathname === ATTENTION_ROUTE && opts.fleet) return send(res, 200, await montarAtencao(opts.fleet, opts.changes?.current ?? null, remotes(), openDescriber));
     if (url.pathname === DASHBOARD_ROUTE && opts.fleet) return send(res, 200, await montarDashboard(opts.fleet));
