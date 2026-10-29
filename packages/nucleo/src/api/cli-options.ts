@@ -53,6 +53,8 @@ export const HELP = `Usage: npm run api -- [options]
                          (measurements on a separate port). --demo is already lock-free. Both fail if
                          the port has an owner
   --no-telemetry         Does not measure this machine: /api/machines and /api/telemetry answer 404.
+  --accept-remote-actions  Takes POST /api/ports/release without Origin, which is how a Mac's núcleo reaches this one
+                         through the tunnel (decision 0016). Default off; AHRENA_CONSOLE_ACCEPT_REMOTE_ACTIONS=1 does the same.
                          Under --demo, the telemetry is synthetic (this machine and a "workstation")
   --machines <file>      The remote machines (default ~/.ahrena-console/machines.json, #176):
                          { "machines": [{ "id", "label", "port", "reconnect"? }] }, port is the port
@@ -95,6 +97,8 @@ export interface ApiCliOptions {
   replace: boolean;
   noLock: boolean;
   noTelemetry: boolean;
+  /** --accept-remote-actions: take a port release that arrives without Origin (the tunnel, from a Mac's núcleo). Off by default (decision 0016). */
+  acceptRemoteActions: boolean;
   machines: string | undefined;
   /** --demo-github: the connection state under --demo (src/simulator/demo-github-connection.ts). */
   demoGithub: string | undefined;
@@ -122,6 +126,7 @@ export function parseApiOptions(args: string[]): ApiCliOptions {
       replace: { type: 'boolean', default: false },
       'no-lock': { type: 'boolean', default: false },
       'no-telemetry': { type: 'boolean', default: false },
+      'accept-remote-actions': { type: 'boolean', default: false },
       machines: { type: 'string' },
       'demo-github': { type: 'string' },
       'demo-project': { type: 'string' },
@@ -144,6 +149,7 @@ export function parseApiOptions(args: string[]): ApiCliOptions {
     replace: o.replace,
     noLock: o['no-lock'],
     noTelemetry: o['no-telemetry'],
+    acceptRemoteActions: o['accept-remote-actions'] || process.env.AHRENA_CONSOLE_ACCEPT_REMOTE_ACTIONS === '1',
     machines: o.machines,
     demoGithub: o['demo-github'],
     demoProject: o['demo-project'],
