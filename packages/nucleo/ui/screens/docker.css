@@ -1,0 +1,51 @@
+/* The Docker card of the machine screens (#288, wireframes C81 to C85). Loaded by docker-actions.js
+   (`link[data-screen="docker"]`); it uses machine.css's `tm-` blocks and brand.css variables only. Every own
+   class is dk-*. Nothing scrolls sideways from a 1100 px window: min-width 0, long names wrap. */
+
+.dk-card { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.dk-card .tm-title { flex-wrap: wrap; }
+.dk-toolbar { margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; }
+.dk-card .btn { height: 28px; padding: 0 10px; font-size: 12px; gap: 6px; white-space: nowrap; }
+.dk-card .btn.ghost { border-color: transparent; background: transparent; color: var(--muted); padding: 0 6px; }
+.dk-card .btn.dk-danger, .dk-dialog .btn.dk-danger { color: var(--status-error-text); }
+.dk-card .btn.filled.dk-danger, .dk-dialog .btn.filled.dk-danger { background: var(--status-error-dot); color: var(--on-accent); }
+.dk-acts { text-align: right; white-space: nowrap; }
+.dk-acts .btn + .btn { margin-left: 6px; }
+.dk-ports, .dk-image { overflow-wrap: anywhere; }
+.dk-containers { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.dk-containers-head { display: flex; gap: 12px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+.dk-find { height: 30px; min-width: 220px; max-width: 320px; flex: 1; padding: 0 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--text); font-size: 12.5px; }
+.dk-link { border: 0; background: transparent; padding: 0; color: var(--accent-text); text-decoration: underline; font-size: inherit; cursor: pointer; }
+
+.dk-band { display: flex; flex-direction: column; gap: 8px; padding: 10px 14px; border-radius: 12px; font-size: 13px; border: 1px solid var(--border); background: var(--surface); }
+.dk-band-top { display: flex; align-items: flex-start; gap: 10px; } .dk-band-top p { margin: 0; flex: 1; min-width: 0; }
+.dk-band-top .icon { flex: none; margin-top: 2px; }
+.dk-band-actions { display: flex; gap: 8px; justify-content: flex-end; }
+.dk-running { border-color: var(--status-waiting-dot); background: var(--status-waiting-badge); }
+.dk-ok { border-color: color-mix(in srgb, var(--status-completed-dot) 50%, var(--border)); background: color-mix(in srgb, var(--status-completed-badge) 70%, var(--surface)); }
+.dk-ok .icon, .dk-ok b { color: var(--status-completed-text); }
+.dk-fail { border-color: var(--status-error-dot); background: var(--status-error-badge); }
+.dk-fail .icon, .dk-fail b { color: var(--status-error-text); }
+.dk-lock .icon { color: var(--status-waiting-text); }
+.dk-out { display: flex; flex-direction: column; gap: 1px; padding: 8px 10px; border-radius: 8px; background: var(--bg); border: 1px solid var(--border); font-size: 11.5px; overflow-wrap: anywhere; }
+.dk-problem { margin: 0; color: var(--status-error-text); font-size: 12.5px; }
+
+.dk-veil { position: fixed; inset: 0; z-index: 50; display: flex; justify-content: center; align-items: flex-start; padding: 90px 16px 16px; background: color-mix(in srgb, var(--bg) 62%, transparent); overflow-y: auto; }
+.dk-dialog { width: 520px; max-width: 100%; display: flex; flex-direction: column; gap: 12px; padding: 18px 20px; box-shadow: 0 18px 50px rgba(0, 0, 0, .35); }
+.dk-dialog.dk-wide { width: 640px; }
+.dk-dialog-head { display: flex; align-items: center; gap: 10px; font-size: 15px; } .dk-dialog-head .btn { margin-left: auto; }
+.dk-kv { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; margin: 0; font-size: 13px; }
+.dk-kv dt { color: var(--muted); } .dk-kv dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.dk-cmd { display: block; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; font-size: 12px; overflow-wrap: anywhere; }
+.dk-note { display: flex; gap: 8px; align-items: flex-start; margin: 0; font-size: 11.5px; color: var(--muted); } .dk-note .icon { flex: none; margin-top: 1px; }
+.dk-check { display: flex; gap: 10px; align-items: center; font-size: 12.5px; }
+.dk-dialog-actions { display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
+.dk-vols .dk-skip td { color: var(--muted); }
+.dk-opts { display: flex; flex-direction: column; gap: 8px; }
+.dk-opt { display: flex; gap: 10px; padding: 9px 11px; border: 1px solid var(--border); border-radius: 10px; align-items: flex-start; cursor: pointer; }
+.dk-opt.on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 7%, transparent); }
+.dk-opt-body { display: flex; flex-direction: column; gap: 4px; min-width: 0; flex: 1; } .dk-opt-body p { margin: 0; font-size: 11.5px; }
+.dk-opt-title { display: flex; gap: 10px; align-items: baseline; font-size: 13px; }
+.dk-size { margin-left: auto; font-size: 12px; color: var(--status-completed-text); }
+.dk-opt code { font-size: 11.5px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 3px 7px; overflow-wrap: anywhere; }
+.dk-sum { display: flex; font-size: 12.5px; color: var(--muted); }

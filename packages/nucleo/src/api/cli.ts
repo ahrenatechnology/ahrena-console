@@ -114,6 +114,9 @@ import { publishToolsChanges, ToolsExecutor, toolsLogFile } from '../tools/execu
 import { AwsConnector, publishConnectorChanges } from '../clouds/aws-connector.ts';
 import { loopbackWrite } from '../clouds/remote-connectors.ts';
 import { createCloudsRoute } from './clouds.ts';
+import { createDockerRoute } from './docker.ts';
+import { DockerService } from '../docker/service.ts';
+import { systemToolRunner } from '../tools/runner.ts';
 import { AppUpdateState } from '../app-update/state.ts';
 import { createAppUpdateRoute } from './app-update.ts';
 import { MachineConnection, publishConnectionChanges } from '../telemetry/connection.ts';
@@ -519,6 +522,29 @@ const awsConnector = demo ? null : new AwsConnector({ logFile: reconnectLogFile(
 // The connection of each remote machine (#278, decision 0013 section 4): start, stop, reconnect and login-and-start, on the reconnect runner.
 const machineConnection = remoteMachines && reconnectRunner ? new MachineConnection({ registry: remoteMachines, startRunner: reconnectRunner, logFile: reconnectLogFile(dataDir), cloud: awsConnector, localReading: () => sampleStore.latest('local'), onChange: publishConnectionChanges(changes), log }) : null;
 const clouds = awsConnector ? createCloudsRoute({ aws: awsConnector, remote: { port: (id) => remoteMachines?.get(id)?.port, get: loopbackGet(), write: loopbackWrite() } }) : null;
+// The Docker actions (#288, decision 0017): this machine's daemon, on the Tools executor's queue; the remote machines' through their tunnel port. Not in --demo.
+// A núcleo accepts a no-Origin write (the tunnel) only with AHRENA_CONSOLE_ACCEPT_REMOTE_ACTIONS=1, set by whoever is on that machine.
+const acceptRemoteActions = () => process.env.AHRENA_CONSOLE_ACCEPT_REMOTE_ACTIONS === '1';
+const docker =
+  toolsService && toolsExecutor
+    ? {
+        route: createDockerRoute({
+          service: new DockerService({
+            queue: toolsExecutor,
+            run: systemToolRunner,
+            env: () => toolsService.processEnv(),
+            platform: process.platform,
+            resolve: async (name) => (await toolsService.resolveExecutable(name)).path,
+            acceptsRemoteActions: acceptRemoteActions,
+            log,
+          }),
+          cancel: (id) => toolsExecutor.cancel(id),
+          acceptNoOriginActions: acceptRemoteActions,
+          remote: { port: (id) => remoteMachines?.get(id)?.port, get: loopbackGet(), write: loopbackWrite() },
+        }),
+        acceptNoOrigin: acceptRemoteActions,
+      }
+    : null;
 // The desktop app's update notice (#330): the app reports what it found; the /ui reads it. Not in --demo.
 const appUpdate = demo ? null : createAppUpdateRoute(new AppUpdateState(changes));
 
@@ -591,6 +617,7 @@ const api: LocalApi = await startLocalApi({
   orders: createOrdersRoute({ orders: new SessionOrders(), messaging, sessions: storage }),
   tools: toolsExecutor,
   clouds,
+  docker,
   appUpdate,
   load: () => ({
     history: follower ? (historyReady ? 'ready' : 'importing') : 'off',
