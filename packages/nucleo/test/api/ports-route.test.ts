@@ -262,7 +262,7 @@ describe('#286 review: the log, KILL after TERM, the remote command', () => {
     const b = await boot({ remotes: { ws: remote.port } });
     try {
       const r = await call(b.api.url, 'GET', '/api/machines/ws/ports/release/preview?port=6379&pid=5521', { origin: b.origin });
-      assert.equal(r.json.command, 'redis-server --requirepass *** https://***@host/x');
+      assert.equal(r.json.command, 'redis-server --requirepass *** https://host/x');
     } finally {
       await b.close();
       await remote.close();
@@ -288,7 +288,7 @@ describe('#286 GET /api/ports/release/preview', () => {
     try {
       const ok = await call(b.api.url, 'GET', `${RELEASE}/preview?port=5432&pid=2210`);
       assert.equal(ok.status, 200);
-      assert.deepEqual(ok.json, { process: 'postgres', pid: 2210, command: 'postgres -D data', ports: [5432], interface: 'all' });
+      assert.deepEqual(ok.json, { process: 'postgres', pid: 2210, command: 'postgres -D ***', ports: [5432], interface: 'all' });
       assert.equal((await call(b.api.url, 'GET', `${RELEASE}/preview?port=5432&pid=9999`)).json.reason, 'owner-changed');
       assert.equal((await call(b.api.url, 'GET', `${RELEASE}/preview?port=x`)).status, 400);
       assert.equal((await call(b.api.url, 'GET', `${RELEASE}/preview?port=5432&pid=2210`, { 'sec-fetch-site': 'cross-site' })).status, 403);

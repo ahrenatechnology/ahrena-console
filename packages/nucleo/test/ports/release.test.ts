@@ -9,7 +9,7 @@ const listener = (port: number, pid: number | null, process: string | null): Lis
 
 const clock = { t: 1_000_000 };
 
-function setup(initial: ListeningPort[], opts: { ps?: Record<number, string>; closesOnSignal?: boolean; uid?: number | null; killError?: string; ancestors?: number[] } = {}) {
+function setup(initial: ListeningPort[], opts: { ps?: Record<number, string>; closesOnSignal?: boolean; uid?: number | null; killError?: string; ancestors?: number[] | null } = {}) {
   let ports = initial;
   const signals: [number, string][] = [];
   const commands: string[][] = [];
@@ -22,7 +22,7 @@ function setup(initial: ListeningPort[], opts: { ps?: Record<number, string>; cl
     },
     uid: () => (opts.uid === undefined ? 501 : opts.uid),
     selfPid: 100,
-    ancestors: async () => opts.ancestors ?? [50],
+    ancestors: async () => (opts.ancestors === undefined ? [50] : opts.ancestors),
     now: () => clock.t,
     kill: (pid, signal) => {
       signals.push([pid, signal]);
@@ -64,16 +64,23 @@ describe('PortReleaser', () => {
   test('never signals the núcleo itself, its parent (the app), or the app bundle', async () => {
     const t = setup([listener(4720, 100, 'node'), listener(4731, 50, 'node'), listener(4740, 7002, 'Ahrena Console')], { ps: { 100: '501 node', 50: '501 app', 7002: '501 /Applications/Ahrena Console.app/Contents/MacOS/app' } });
     assert.equal(((await t.releaser.release(4720, 100, 'KILL')) as { reason: string }).reason, 'self');
-    assert.equal(((await t.releaser.release(4731, 50, 'KILL')) as { reason: string }).reason, 'app');
+    assert.equal(((await t.releaser.release(4731, 50, 'KILL')) as { reason: string }).reason, 'self');
     assert.equal(((await t.releaser.release(4740, 7002, 'KILL')) as { reason: string }).reason, 'app');
     assert.deepEqual(t.signals, []);
   });
 
-  test('never signals any ancestor of the núcleo: a supervisor or an npm wrapper is as fatal as the app', async () => {
-    const t = setup([listener(4750, 50, 'app'), listener(4751, 40, 'npm'), listener(4752, 30, 'supervisor')], { ps: { 50: '501 app', 40: '501 npm run dev', 30: '501 supervisor' }, ancestors: [50, 40, 30] });
+  test('never signals any ancestor of the núcleo: the app is `app`, an npm wrapper or a supervisor is `self`', async () => {
+    const t = setup([listener(4750, 50, 'app'), listener(4751, 40, 'npm'), listener(4752, 30, 'supervisor')], { ps: { 50: '501 /Applications/Ahrena Console.app/Contents/MacOS/app', 40: '501 npm run dev', 30: '501 supervisor' }, ancestors: [50, 40, 30] });
     assert.equal(((await t.releaser.release(4750, 50, 'TERM')) as { reason: string }).reason, 'app');
     assert.equal(((await t.releaser.release(4751, 40, 'TERM')) as { reason: string }).reason, 'self');
     assert.equal(((await t.releaser.release(4752, 30, 'TERM')) as { reason: string }).reason, 'self');
+    assert.deepEqual(t.signals, []);
+  });
+
+  test('when the chain above the núcleo cannot be read, nothing is released (fail closed)', async () => {
+    const t = setup([listener(5432, 2210, 'postgres')], { ps: { 2210: '501 postgres' }, ancestors: null });
+    assert.equal(((await t.releaser.release(5432, 2210, 'TERM')) as { reason: string }).reason, 'unavailable');
+    assert.equal(((await t.releaser.preview(5432, 2210)) as { reason: string }).reason, 'unavailable');
     assert.deepEqual(t.signals, []);
   });
 
@@ -129,12 +136,33 @@ describe('PortReleaser', () => {
 });
 
 describe('ancestorsWith', () => {
-  test('walks ps -o ppid= up to pid 1 and stops on a loop or an unreadable step', async () => {
-    const parents: Record<string, string | null> = { '100': '50\n', '50': '40', '40': '1', '7': '8', '8': '7' };
-    const run = async (_c: string, args: string[]) => parents[args[args.length - 1]!] ?? null;
-    assert.deepEqual(await ancestorsWith(run, 100)(), [50, 40]);
-    assert.deepEqual(await ancestorsWith(run, 7)(), [8]);
-    assert.deepEqual(await ancestorsWith(run, 999)(), []);
+  const psOf = (parents: Record<string, string | null>) => async (_c: string, args: string[]) => parents[args[args.length - 1]!] ?? null;
+
+  test('starts from the parent and walks ps -o ppid= up to pid 1', async () => {
+    assert.deepEqual(await ancestorsWith(psOf({ '50': '40\n', '40': '30', '30': '1' }), 50)(), [50, 40, 30]);
+    assert.deepEqual(await ancestorsWith(psOf({}), 1)(), [], 'a parent that is pid 1 needs no step');
+  });
+
+  test('a loop ends the walk; an unreadable step before pid 1 is null, not a shorter chain', async () => {
+    assert.deepEqual(await ancestorsWith(psOf({ '7': '8', '8': '7' }), 7)(), [7, 8]);
+    assert.equal(await ancestorsWith(psOf({ '50': '40' }), 50)(), null, 'ps of 40 failed');
+    assert.equal(await ancestorsWith(psOf({}), 50)(), null, 'the first step failed');
+  });
+
+  test('a complete chain is kept; a failed one is tried again', async () => {
+    let calls = 0;
+    let up = false;
+    const run = async (_c: string, args: string[]) => {
+      calls++;
+      return up ? ({ '50': '1' } as Record<string, string>)[args[args.length - 1]!] ?? null : null;
+    };
+    const chain = ancestorsWith(run, 50);
+    assert.equal(await chain(), null);
+    up = true;
+    assert.deepEqual(await chain(), [50]);
+    const seen = calls;
+    assert.deepEqual(await chain(), [50]);
+    assert.equal(calls, seen);
   });
 });
 
@@ -155,7 +183,7 @@ describe('listPortsWith', () => {
 describe('preview and the command summary', () => {
   test('the preview names the process, its short command and every port the pid holds, and signals nothing', async () => {
     const t = setup([listener(13000, 6102, 'ssh'), listener(14720, 6102, 'ssh'), listener(3000, 7741, 'node')], { ps: { 6102: '501 ssh -N ws-exemplo' } });
-    assert.deepEqual(await t.releaser.preview(13000, 6102), { kind: 'ok', process: 'ssh', pid: 6102, command: 'ssh -N ws-exemplo', ports: [13000, 14720], interface: 'all' });
+    assert.deepEqual(await t.releaser.preview(13000, 6102), { kind: 'ok', process: 'ssh', pid: 6102, command: 'ssh -N ***', ports: [13000, 14720], interface: 'all' });
     assert.deepEqual(t.signals, []);
   });
 
@@ -165,16 +193,43 @@ describe('preview and the command summary', () => {
     assert.equal(((await t.releaser.preview(22, 1)) as { reason: string }).reason, 'owner-changed');
   });
 
-  test('the summary is one short line without credentials', () => {
-    assert.equal(summarizeCommand('psql postgres://admin:hunter2@db:5432/x --api-token abc123 --password=p4ss'), 'psql postgres://***@db:5432/x --api-token *** --password=***');
+  test('the summary shows the executable and plain words, and masks every flag value, env value and key-like token', () => {
+    assert.equal(summarizeCommand('/usr/bin/psql postgres://admin:hunter2@db:5432/x --api-token abc123 --password=p4ss'), 'psql postgres://db:5432/x --api-token *** --password=***');
     assert.equal(summarizeCommand('redis-server --requirepass hunter2'), 'redis-server --requirepass ***');
     assert.equal(summarizeCommand('mysqld -pSECRET -P 3306'), 'mysqld -p*** -P 3306');
-    assert.equal(summarizeCommand('curl -H "Authorization: Bearer abc123" http://x'), 'curl -H *** http://x');
-    assert.equal(summarizeCommand('curl --header "X-Api-Key: k" http://x'), 'curl --header *** http://x');
-    assert.equal(summarizeCommand('git clone https://ghp_abc@github.com/a/b'), 'git clone https://***@github.com/a/b');
-    assert.equal(summarizeCommand('app --password "a b" --port 80'), 'app --password *** --port 80');
-    assert.equal(summarizeCommand('app -p 8080 -p8080'), 'app -p 8080 -p8080');
+    assert.equal(summarizeCommand('node server.js --port 3000'), 'node server.js --port 3000');
     assert.equal(summarizeCommand('a\nb\tc'), 'a b c');
-    assert.equal(summarizeCommand('x'.repeat(500)).length, 160);
+    assert.equal(summarizeCommand(Array(100).fill('word').join(' ')).length, 160);
+  });
+
+  test('credential formats of every kind never reach the summary', () => {
+    const leaks: [string, string][] = [
+      ['jupyter lab --NotebookApp.token=abc123', 'abc123'],
+      ['jupyter lab --ServerApp.password=s3cr3t', 's3cr3t'],
+      ['java -Dspring.datasource.password=zzpass -jar app.jar', 'zzpass'],
+      ['curl -u user:pw1 http://h', 'pw1'],
+      ['curl -uuser:pw2 http://h', 'pw2'],
+      ['curl --user user:pw3 http://h', 'pw3'],
+      ['redis-cli -a hunter2', 'hunter2'],
+      ['app --pw abc9', 'abc9'],
+      ['app --pw=abc8', 'abc8'],
+      ['app --login admin:abc7', 'abc7'],
+      ['curl http://h/x?token=tok1&a=b', 'tok1'],
+      ['curl http://h/x?access_token=tok2', 'tok2'],
+      ['app jdbc:postgresql://h/db?password=dbpass1', 'dbpass1'],
+      ['app --connection-string "Server=h;Password=cs1"', 'cs1'],
+      ['TOKEN=envtok1 node x.js', 'envtok1'],
+      ['AWS_SECRET_ACCESS_KEY=awsk1 node x.js', 'awsk1'],
+      ['app ghp_abcdefghijklmnopqrstuvwxyz0123456789', 'ghp_abc'],
+      ['app sk-ant-api03-abcdefghijklmnop', 'sk-ant'],
+      ['app eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.sig', 'eyJhbGci'],
+      ['app --auth basic abc6', 'abc6'],
+      ['curl -H "Authorization: Bearer abc5" http://h', 'abc5'],
+      ['curl --header "X-Api-Key: k5" http://h', 'k5'],
+      ['git clone https://ghp_user@github.com/a/b', 'ghp_user'],
+      ['app --password "a b"', 'a b'],
+      ['app x9Kq2LmZp4Rt7Vw1Yb3NcD8', 'x9Kq2L'],
+    ];
+    for (const [command, secret] of leaks) assert.ok(!summarizeCommand(command).includes(secret), `${command} -> ${summarizeCommand(command)}`);
   });
 });

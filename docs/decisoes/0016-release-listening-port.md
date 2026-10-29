@@ -20,14 +20,14 @@ O card "Portas em escuta" mostra o que a máquina expõe, e o alerta `port-expos
 ### 1. A rota
 
 - `POST /api/ports/release` `{ port, pid, signal }`, exatamente essas três chaves. `200 { result: 'released' | 'still-listening' }` depois de esperar a porta fechar (5 s para TERM, 3 s para KILL). `409 { error, reason, now? }` quando nada foi enviado; `503` quando as portas não puderam ser lidas.
-- `GET /api/ports/release/preview?port=&pid=`: o que o confirmar mostra (processo, comando resumido, as portas do pid), ou os mesmos motivos de recusa. Não envia nada. O comando sai em uma linha curta e passa por `summarizeCommand`, que anda por token e mascara o valor de flag com nome de segredo (colado, entre aspas ou separado), `-p<valor>`, valor de `-H`/`--header`, `Bearer`/`Basic` e o usuário de qualquer URL. Na máquina remota o Mac aplica o resumo de novo no que o núcleo de lá mandou: uma credencial nunca chega à tela por um núcleo que não a cortou.
+- `GET /api/ports/release/preview?port=&pid=`: o que o confirmar mostra (processo, comando resumido, as portas do pid), ou os mesmos motivos de recusa. Não envia nada. O comando sai em uma linha curta e passa por `summarizeCommand`, que é uma lista de permissão: mostra o nome do executável, nomes de flag simples, números e palavras comuns, e troca por `***` todo valor de flag (`--x v`, `--x=v`, `-xV`, `-Dnome=v`, flag com ponto), todo `NOME=valor`, toda string entre aspas e tudo que parece chave (`ghp_`, `sk-`, JWT, sequências longas). URLs perdem usuário e query. Perde-se um pouco de identificação (`ssh -N ***`); o nome do processo e as portas continuam na tela. Na máquina remota o Mac aplica o resumo de novo no que o núcleo de lá mandou: uma credencial nunca chega à tela por um núcleo que não a cortou.
 - Na máquina remota, as mesmas rotas sob `/api/machines/<id>/ports/release[/preview]`, repassadas ao núcleo de lá. Só port, pid e signal viajam, como pedido sem `Origin`; a resposta é reprojetada (motivos de uma lista fixa, `now` só com nome curto e inteiro).
 - Gate próprio, como o das Ferramentas: `Host` loopback, caminho cru exato e `Origin` igual a `http://<Host>`. A rota da máquina remota aceita só o `Origin` da própria `/ui`.
 
 ### 2. O que o núcleo recusa (nada é enviado)
 
 - **O pid não é mais o dono da porta** (`owner-changed`, com quem segura agora) ou a porta já está livre (`already-free`).
-- **O próprio núcleo** (`self`), **o processo que o iniciou, o app** (`app`), além do bundle `Ahrena Console.app`, e **qualquer ancestral do núcleo** (`self`): um supervisor ou um `npm run` acima do pai é do mesmo usuário e derrubaria o núcleo do mesmo jeito. Os ancestrais saem de `ps -o ppid=`, subindo até o pid 1.
+- **O próprio núcleo** (`self`), **o processo que o iniciou, o app** (`app`), além do bundle `Ahrena Console.app`, e **qualquer ancestral do núcleo**: um supervisor ou um `npm run` acima do pai é do mesmo usuário e derrubaria o núcleo do mesmo jeito. A cadeia parte do `process.ppid` e sobe com `ps -o ppid=` até o pid 1; se um passo não puder ser lido, nada é liberado (`unavailable`): uma cadeia cortada não pode deixar um ancestral passar. O motivo é `app` só quando o comando é o do bundle `Ahrena Console.app`; os outros ancestrais saem como `self`.
 - **Pid 1 ou menor** (`system`): processo do sistema, com texto próprio na tela; não é o núcleo.
 - **O proxy de um container** (`container`): `docker-proxy` e parentes. A tela aponta para a stack (a frente do Docker, #288) em vez de matar o proxy.
 - **Processo de outro usuário** (`other-user`), conferido pelo uid de `ps -o uid=`. Nada de `sudo`: o que pede senha fica com a pessoa.
@@ -58,7 +58,7 @@ Não há "Liberar todas as que ouvem em todas as interfaces" (critério 7 da #28
 ## Consequências
 
 - O núcleo passa a poder encerrar processos do próprio usuário a pedido da `/ui`. A superfície é estreita (três chaves, mesma origem estrita, dono conferido de novo, nunca o núcleo nem o app, sem senha), e o Argos revê `src/ports/` e `src/api/ports.ts` com atenção.
-- Um processo pode trocar de pid entre a leitura e o `kill` (reuso de pid). A janela é de milissegundos e o uid é conferido antes do envio; fica como risco aceito.
+- Um processo pode trocar de pid entre a leitura e o `kill` (reuso de pid). A janela é de milissegundos e o uid é conferido antes do envio; fica como risco aceito. O mesmo vale para a memória do TERM, que é por `porta:pid` e não guarda a hora de início do processo: um pid reaproveitado na mesma porta em até 10 minutos aceitaria um KILL sem TERM próprio, mas o dono e o usuário continuam conferidos antes do sinal.
 - O app de bandeja não ganha a ação: ela é do console.
 - Reuso: #288 e #350 podem usar o mesmo modelo (ids, dono conferido de novo, remota desligada por padrão) para parar uma stack e fechar um terminal preso.
 - Fica para depois: unificar a opção de aceitar ações remotas com a das Ferramentas, e o app mostrar a ação na bandeja.

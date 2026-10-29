@@ -42,7 +42,8 @@ export interface PortReleaserDeps {
   uid(): number | null;
   /** This núcleo's pid and the pids above it, nearest first (the desktop app, a supervisor, `npm`). */
   selfPid: number;
-  ancestors(): Promise<number[]>;
+  /** The pids above the núcleo, nearest first; `null` when a step cannot be read (nothing is released then). */
+  ancestors(): Promise<number[] | null>;
   /** The clock, for how long a TERM stays on record (tests). */
   now?(): number;
   kill(pid: number, signal: 'SIGTERM' | 'SIGKILL'): void;
@@ -56,42 +57,82 @@ export type PreviewResult =
   | Extract<ReleaseResult, { kind: 'refused' }>;
 
 const COMMAND_MAX = 160;
-const SECRET_NAME = /(token|secret|pass|pwd|key|auth|bearer|cred|cookie)/i;
-const MASK = '***';
-
 /** Splits on whitespace outside quotes; a quoted value stays one token, quotes kept. */
 function tokenize(line: string): string[] {
   return line.match(/(?:[^\s"']+|"[^"]*"?|'[^']*'?)+/g) ?? [];
 }
 
-/** The command line as the confirmation shows it: credentials masked, one line, short. */
+const MASK = '***';
+const PLAIN = /^[\w./@:+,-]{1,64}$/;
+const BARE_FLAG = /^--?[A-Za-z][A-Za-z0-9-]{0,40}$/;
+const SECRET_SHAPE = /^(?:ghp_|gho_|ghs_|ghu_|github_pat_|sk-|xox[abprs]-|AKIA|ASIA|eyJ)/;
+
+/** A bare word that looks like a key more than a name: long, or letters and digits mixed with no path in it. */
+function looksLikeSecret(t: string): boolean {
+  return SECRET_SHAPE.test(t) || (t.length >= 20 && !t.includes('/') && /[A-Za-z]/.test(t) && /\d/.test(t)) || t.length > 40 && !t.includes('/');
+}
+
+/** A URL without its userinfo, query and fragment: where it points, nothing it carries. */
+function plainUrl(t: string): string {
+  const m = /^([a-z][a-z0-9+.-]*:\/\/)(?:[^/?#]*@)?([^/?#]*)([^?#]*)(\?|#)?/i.exec(t);
+  return m ? `${m[1]}${m[2]}${m[3]}${m[4] ? `${m[4]}${MASK}` : ''}` : MASK;
+}
+
+/**
+ * The command line as the confirmation shows it, by allow-list: the executable's name, bare flag
+ * names, integers and plain words that are not values of a flag. Every value of a flag (`--x v`,
+ * `--x=v`, `-xV`, `-Dname=v`, a flag with a dot in it), every `NAME=value`, every quoted string and
+ * everything that looks like a key becomes `***`; URLs lose their userinfo and query. One line, short.
+ */
 export function summarizeCommand(command: string): string {
-  const line = command.replace(/[\u0000-\u001f\u007f]+/g, ' ');
   const out: string[] = [];
-  let maskNext = false;
-  for (const raw of tokenize(line)) {
-    if (maskNext) {
-      out.push(MASK);
-      maskNext = false;
-      continue;
+  let afterFlag = false; // the next token is probably a flag's value
+  let run = false; // a value was masked: plain words right after it are its continuation
+  tokenize(command.replace(/[\u0000-\u001f\u007f]+/g, ' ')).forEach((t, i) => {
+    if (i === 0) {
+      const name = t.slice(t.lastIndexOf('/') + 1);
+      out.push(/^[\w.+-]{1,64}$/.test(name) ? name : MASK);
+      return;
     }
-    const token = raw.replace(/([a-z][a-z0-9+.-]*:\/\/)[^/\s]*@/gi, `$1${MASK}@`);
-    const flag = /^(--?[\w-]+)(=.*)?$/.exec(token);
-    if (flag) {
-      const [, name, value] = flag;
-      const headerLike = /^(-H|--header)$/.test(name!);
-      // `-pSECRET`: a short flag with its value glued on (mysql, redis-cli style).
-      if (/^-p\S+$/.test(token) && !/^-p\d+$/.test(token)) { out.push(`-p${MASK}`); continue; }
-      if (SECRET_NAME.test(name!)) {
-        if (value !== undefined) out.push(`${name}=${MASK}`);
-        else { out.push(token); maskNext = true; }
-        continue;
+    if (t.startsWith('-') && t !== '-' && t !== '--') {
+      afterFlag = true;
+      const eq = t.indexOf('=');
+      if (eq > 0) {
+        const name = t.slice(0, eq);
+        out.push(BARE_FLAG.test(name) ? `${name}=${MASK}` : `${name.startsWith('--') ? '--' : name.slice(0, 2)}${MASK}`);
+        afterFlag = false;
+        run = true;
+      } else if (BARE_FLAG.test(t) && (t.startsWith('--') || t.length <= 4)) {
+        out.push(t);
+      } else {
+        out.push(`${t.startsWith('--') ? '--' : t.slice(0, 2)}${MASK}`);
+        afterFlag = t.startsWith('--');
+        run = true;
       }
-      if (headerLike && value === undefined) { out.push(token); maskNext = true; continue; }
+      return;
     }
-    if (/^(bearer|basic)$/i.test(token)) { out.push(token); maskNext = true; continue; }
-    out.push(token);
-  }
+    const value = afterFlag;
+    afterFlag = false;
+    if (/^\d{1,6}$/.test(t)) {
+      out.push(t);
+      return;
+    }
+    if (value) {
+      out.push(MASK);
+      run = true;
+      return;
+    }
+    if (/^[A-Za-z_][A-Za-z0-9_]*=/.test(t)) out.push(`${t.slice(0, t.indexOf('='))}=${MASK}`);
+    else if (/^[a-z][a-z0-9+.-]*:\/\//i.test(t)) {
+      out.push(plainUrl(t));
+      run = false;
+    } else if (!PLAIN.test(t) || looksLikeSecret(t) || (t.includes(':') && t.includes('@'))) out.push(MASK);
+    else if (run && !t.includes('/')) out.push(MASK);
+    else {
+      out.push(t);
+      run = false;
+    }
+  });
   const clean = out.join(' ').trim();
   return clean.length > COMMAND_MAX ? `${clean.slice(0, COMMAND_MAX - 1)}…` : clean;
 }
@@ -121,13 +162,14 @@ export class PortReleaser {
     if (pid <= 1) return refused('system');
     if (pid === this.d.selfPid) return refused('self');
     const above = await this.d.ancestors();
-    if (above.includes(pid)) return refused(pid === above[0] ? 'app' : 'self');
+    if (above === null) return refused('unavailable');
     if (holder.process !== null && CONTAINER_PROXIES.has(holder.process)) return refused('container');
     const uid = this.d.uid();
     if (uid === null) return refused('unavailable');
     const info = await this.processInfo(pid);
     if (info === null) return refused('already-free');
     if (APP_COMMAND.test(info.command)) return refused('app');
+    if (above.includes(pid)) return refused('self');
     if (info.uid !== uid) return refused('other-user');
     return { holder, ports: ports.filter((p) => p.pid === pid), command: summarizeCommand(info.command) };
   }
@@ -197,18 +239,26 @@ export function listPortsWith(run: CommandRunner, platform: NodeJS.Platform = pr
   };
 }
 
-/** The pids above `pid`, nearest first, read with `ps -o ppid=`; stops at pid 1, a loop or an unreadable step. */
-export function ancestorsWith(run: CommandRunner, pid: number): () => Promise<number[]> {
+/**
+ * The pids above the núcleo, nearest first: its parent (`ppid`, from the process itself) and then
+ * each parent read with `ps -o ppid=` up to pid 1 or a loop. A step that cannot be read before that
+ * is `null`: a chain cut short must not let an ancestor be signalled. A complete chain is kept.
+ */
+export function ancestorsWith(run: CommandRunner, ppid: number): () => Promise<number[] | null> {
+  let known: number[] | null = null;
   return async () => {
+    if (known) return known;
     const chain: number[] = [];
-    let at = pid;
-    for (let hops = 0; hops < 32; hops++) {
+    let at = ppid;
+    for (let hops = 0; at > 1 && hops < 32; hops++) {
+      if (chain.includes(at)) break;
+      chain.push(at);
       const out = await run('ps', ['-o', 'ppid=', '-p', String(at)]);
       const parent = out === null ? NaN : Number.parseInt(out.trim(), 10);
-      if (!Number.isInteger(parent) || parent <= 1 || parent === pid || chain.includes(parent)) break;
-      chain.push(parent);
+      if (!Number.isInteger(parent) || parent < 0) return null;
       at = parent;
     }
+    known = chain;
     return chain;
   };
 }

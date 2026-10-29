@@ -526,7 +526,7 @@ const clouds = awsConnector ? createCloudsRoute({ aws: awsConnector, remote: { p
 const ports = createPortsRoute({
   releaser: demo
     ? null
-    : new PortReleaser({ listPorts: listPortsWith(systemRunner), run: systemRunner, uid: () => process.getuid?.() ?? null, selfPid: process.pid, ancestors: ancestorsWith(systemRunner, process.pid), kill: (pid, signal) => process.kill(pid, signal) }),
+    : new PortReleaser({ listPorts: listPortsWith(systemRunner), run: systemRunner, uid: () => process.getuid?.() ?? null, selfPid: process.pid, ancestors: ancestorsWith(systemRunner, process.ppid), kill: (pid, signal) => process.kill(pid, signal) }),
   acceptNoOrigin: () => o.acceptRemoteActions,
   log,
   remote: { port: (id) => remoteMachines?.get(id)?.port, get: loopbackGet(), write: loopbackWrite({ timeoutMs: 15_000 }) },
