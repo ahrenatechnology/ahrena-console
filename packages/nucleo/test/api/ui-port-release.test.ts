@@ -1,4 +1,4 @@
-// Liberar uma porta on /ui (issue 286, wireframes C81 to C84): which action each row of "Portas em
+// Liberar uma porta on /ui (issue 286, wireframes C85 to C88): which action each row of "Portas em
 // escuta" offers, the line that goes when the port closes, and the confirmation flow against a fake
 // núcleo: the preview, SIGTERM, the wait, the second confirmation for SIGKILL, and the refusals.
 import assert from 'node:assert/strict';

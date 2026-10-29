@@ -740,7 +740,7 @@ const CONTAINER_PROXIES = new Set(['docker-proxy', 'rootlessport', 'com.docker.b
  * request). `remote` is the capability read of a remote machine (`{ status, remoteActions }`), `null`
  * for this one.
  * - `release`: Liberar (`warn` when it drops the tunnel);
- * - `off`: Liberar disabled, `why` says why (the wireframe C81 and C84);
+ * - `off`: Liberar disabled, `why` says why (the wireframe C85 and C88);
  * - `stack`: Ver a stack, not a kill of the docker-proxy;
  * - `copy`: the remote does not take actions through the tunnel: Copiar comando.
  */

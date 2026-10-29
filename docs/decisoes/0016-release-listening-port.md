@@ -1,6 +1,6 @@
 # 0016 · Liberar uma porta: o núcleo manda o sinal só ao processo do próprio usuário, confere o dono de novo e age na máquina remota pelo núcleo de lá
 
-- **Status:** aceita (o Fernando aprovou os wireframes C81 a C84, sem "Liberar todas", em 29/10)
+- **Status:** aceita (o Fernando aprovou os wireframes C85 a C88, sem "Liberar todas", em 29/10)
 - **Data:** 2026-10-29
 - **Issue:** [#286](https://github.com/ahrenatechnology/ahrena-console/issues/286)
 - **Estende:** [0014](0014-dev-tools-command-catalog.md) (ids e não comando, mesma origem estrita, a máquina remota só age se ela mesma aceitar) e [0003](0003-responder-sessao.md) (mais uma escrita de mesma origem da `/ui`)

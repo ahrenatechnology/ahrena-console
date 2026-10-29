@@ -178,7 +178,7 @@
 .tm-rc-setup .tm-legend { gap: 8px 18px; }
 .tm-rc-setup .tm-legend .icon { vertical-align: -2px; }
 
-/* ---------- Liberar uma porta (issue 286, wireframes C81 to C84) ---------- */
+/* ---------- Liberar uma porta (issue 286, wireframes C85 to C88) ---------- */
 .tm-table td.tm-rp-act { text-align: right; white-space: nowrap; }
 .tm-rp-act .btn { margin-left: auto; }
 .tm-rp-why { display: block; margin-left: auto; max-width: 280px; font-size: 11px; color: var(--muted); white-space: normal; }
