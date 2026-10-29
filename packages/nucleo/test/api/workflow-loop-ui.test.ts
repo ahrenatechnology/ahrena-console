@@ -67,3 +67,32 @@ describe('the tree between sessions on the screen', () => {
     assert.deepEqual(statusOf('active'), ['Ativa', 'active']);
   });
 });
+
+// @ts-expect-error: idem
+import { workflowsRoute, periodFromSearch, coverageText, PERIODS } from '../../ui/screens/workflows.js';
+
+describe('the period of the Workflows page (C84)', () => {
+  test('the route carries the period only when it is not the default, and the cursor of the next page', () => {
+    assert.equal(workflowsRoute('all', null), '/api/workflows?filter=all');
+    assert.equal(workflowsRoute('all', null, '7d'), '/api/workflows?filter=all&period=7d');
+    assert.equal(workflowsRoute('active', 'main', 'all', '50'), '/api/workflows?filter=active&node=main&period=all&cursor=50');
+  });
+
+  test('the period read from the URL falls back to 30 days on anything unknown', () => {
+    assert.deepEqual(['?period=24h', '?period=all', '?period=year', ''].map(periodFromSearch), ['24h', 'all', '30d', '30d']);
+    assert.deepEqual(PERIODS.map((p: any) => p.id), ['24h', '7d', '30d', 'all']);
+  });
+
+  test('the coverage line says how many sessions the numbers cover and that no active one is left out', () => {
+    assert.deepEqual(coverageText({ period: '30d', sessions: 1286, activeOutsidePeriod: 0 }), {
+      title: '1.286 sessões em 30 dias',
+      text: 'Os números e o grafo contam todas, não só as da lista. Nenhuma sessão ativa fica de fora.',
+    });
+    // `sessions` already counts the active session older than the period.
+    assert.deepEqual(coverageText({ period: '24h', sessions: 1, activeOutsidePeriod: 1 }), { title: 'Nada em 24 h', text: 'Há 1 sessão ativa mais velha e ela entra mesmo assim: sessões ativas nunca ficam de fora do período.' });
+    const mixed = coverageText({ period: '7d', sessions: 13, activeOutsidePeriod: 1 });
+    assert.equal(mixed.title, '12 sessões em 7 dias');
+    assert.match(mixed.text, /1 ativa mais velha entra assim mesmo\./);
+    assert.equal(coverageText({ period: 'all', sessions: 8912, activeOutsidePeriod: 0 }).title, '8.912 sessões no histórico');
+  });
+});

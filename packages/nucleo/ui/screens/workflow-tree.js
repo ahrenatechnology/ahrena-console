@@ -77,13 +77,14 @@ export function initialOpen(trees, levels = 3) {
   return open;
 }
 
-export function treePanel(d, open, toggle) {
-  const items = d.trees.items;
+/** `items` are the pages loaded so far; `onMore` is set while there is another page ("Carregar mais"). */
+export function treePanel(d, open, toggle, { items = d.trees.items, nextCursor = d.trees.nextCursor, onMore = null, loadingMore = false } = {}) {
   return el(
     'section',
     { class: 'card wf-panel' },
-    el('div', { class: 'wf-ttl' }, icon('subagent'), 'Árvore entre sessões', el('span', { class: 'wf-ttl-r' }, 'sessão → sessões que ela abriu · clique abre a sessão')),
+    el('div', { class: 'wf-ttl' }, icon('subagent'), 'Árvore entre sessões', el('span', { class: 'wf-ttl-r' }, `${num(items.length)} de ${num(d.trees.total)} árvores · clique abre a sessão`)),
     items.length ? el('div', { class: 'wft-tree' }, ...items.flatMap((t) => row(t.root, 0, open, toggle))) : el('p', { class: 'wf-none' }, 'Nenhuma sessão neste filtro.'),
+    nextCursor && onMore ? el('div', { class: 'wft-more' }, el('button', { type: 'button', class: 'btn outline', disabled: loadingMore ? '' : null, onClick: onMore }, icon('chevron-down'), loadingMore ? 'Carregando…' : `Carregar mais ${num(Math.min(d.trees.pageSize ?? 50, d.trees.total - items.length))}`)) : null,
     el('div', { class: 'wf-legend wft-legend' }, el('span', {}, icon('chevron-down'), ' expandido'), el('span', {}, icon('chevron-right'), ' recolhido'), el('span', {}, icon('external'), ' abre a sessão, na aba Workflow'), el('span', {}, 'A indentação é quem abriu quem: o índice do Claude Desktop, sem ligação deduzida')),
   );
 }
