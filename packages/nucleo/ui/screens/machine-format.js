@@ -185,7 +185,7 @@ function normalizePorts(p) {
   if (!Array.isArray(p)) return null;
   return list(p, 500)
     .filter((x) => isObject(x) && Number.isInteger(x.port) && x.port > 0 && x.port < 65536)
-    .map((x) => ({ port: x.port, interface: ['all', 'loopback', 'address'].includes(x.interface) ? x.interface : 'address', address: str(x.address, 60), process: str(x.process, 60) }));
+    .map((x) => ({ port: x.port, interface: ['all', 'loopback', 'address'].includes(x.interface) ? x.interface : 'address', address: str(x.address, 60), process: str(x.process, 60), pid: Number.isInteger(x.pid) && x.pid > 0 ? x.pid : null }));
 }
 
 const TUNNEL_STATES = ['up', 'idle', 'busy', 'down'];
@@ -357,11 +357,11 @@ export function portRows(portsList, owner = () => null) {
   const byKey = new Map();
   for (const p of [...portsList].sort((a, b) => a.port - b.port)) {
     const who = owner(p) ?? null;
-    const key = `${p.interface}|${p.address ?? ''}|${p.process ?? ''}|${who ?? ''}`;
+    const key = `${p.interface}|${p.address ?? ''}|${p.process ?? ''}|${p.pid ?? ''}|${who ?? ''}`;
     const row = byKey.get(key);
     if (row && who) row.ports.push(p.port);
     else {
-      const next = { ports: [p.port], interface: p.interface, address: p.address, process: p.process, owner: who };
+      const next = { ports: [p.port], interface: p.interface, address: p.address, process: p.process, pid: p.pid ?? null, owner: who };
       rows.push(next);
       if (who) byKey.set(key, next);
     }
@@ -725,4 +725,69 @@ export function touchesMachine(changes, machineId) {
     if (c.type === 'needs-you') return local || c.key.startsWith(`${machineId}:`);
     return local && c.type === 'session';
   });
+}
+
+// ---------- Liberar uma porta (issue 286, decision 0015) ----------
+
+export const releaseRoute = (id) => (id === LOCAL_ID ? '/api/ports/release' : `${MACHINES_ROUTE}/${encodeURIComponent(id)}/ports/release`);
+export const releasePreviewRoute = (id, port, pid) => `${releaseRoute(id)}/preview?port=${port}&pid=${pid}`;
+
+/** The processes that publish a container's port: the stack owns it (issue 288), not the proxy. */
+const CONTAINER_PROXIES = new Set(['docker-proxy', 'rootlessport', 'com.docker.backend', 'gvproxy', 'vpnkit-bridge']);
+
+/**
+ * What a row of "Portas em escuta" offers, from the reading alone (the núcleo checks again on every
+ * request). `remote` is the capability read of a remote machine (`{ status, remoteActions }`), `null`
+ * for this one.
+ * - `release`: Liberar (`warn` when it drops the tunnel);
+ * - `off`: Liberar disabled, `why` says why (the wireframe C81 and C84);
+ * - `stack`: Ver a stack, not a kill of the docker-proxy;
+ * - `copy`: the remote does not take actions through the tunnel: Copiar comando.
+ */
+export function releaseAction(row, { ownPort = null, remote = null } = {}) {
+  const local = remote === null;
+  if (row.process && CONTAINER_PROXIES.has(row.process)) return { kind: 'stack', why: 'publicada por container: a stack é a dona' };
+  if (row.pid === null || row.pid === undefined) return { kind: 'off', why: 'o sistema não disse quem escuta' };
+  if (row.owner === 'Núcleo do console' || (local && ownPort !== null && row.ports.includes(ownPort))) return { kind: 'off', why: 'é o núcleo do console' };
+  if (!local) {
+    if (remote.status === 'unreachable') return { kind: 'off', why: 'sem conexão com o núcleo de lá' };
+    if (remote.status !== 'ok') return { kind: 'off', why: 'o núcleo de lá é de antes desta ação' };
+    if (!remote.remoteActions) return { kind: 'copy', command: `kill -TERM ${row.pid}` };
+  }
+  return { kind: 'release', warn: row.owner?.startsWith('túnel para') ? 'derruba o túnel' : null };
+}
+
+/** What each refusal of the núcleo says on the screen, when a Liberar met one. */
+export const RELEASE_REFUSAL = {
+  'already-free': 'A porta já está livre.',
+  'owner-changed': 'A porta agora é de outro processo. Nada foi enviado.',
+  self: 'É o núcleo do console: parar derrubaria esta tela.',
+  app: 'É o app do console: feche pela bandeja.',
+  container: 'A porta é publicada por um container: a stack é a dona.',
+  'other-user': 'O processo é de outro usuário e o console não pede senha de administrador.',
+  unavailable: 'Não deu para ler as portas da máquina agora.',
+  'remote-actions-off': 'A Workstation não aceita ações pelo túnel. Quem liga é quem está nela.',
+  unsupported: 'O núcleo de lá é de antes desta ação.',
+  unreachable: 'A máquina não respondeu.',
+  'bad-response': 'A máquina respondeu algo inesperado.',
+};
+
+/** The sentence for a failed write: the refusal's reason when the núcleo gave a known one. */
+export function releaseProblem(err) {
+  const reason = err?.body?.reason;
+  return (typeof reason === 'string' && RELEASE_REFUSAL[reason]) || err?.message || 'O núcleo não respondeu.';
+}
+
+/**
+ * The reading without the ports released since it was taken: the line goes when the port closes, not
+ * when the next 30 s sample says so. `released` maps `port:pid` to the time (ms) of the release.
+ */
+export function withoutReleased(reading, released) {
+  if (!reading?.ports || released.size === 0) return reading;
+  const taken = Date.parse(reading.takenAt ?? '');
+  const ports = reading.ports.filter((p) => {
+    const at = released.get(`${p.port}:${p.pid}`);
+    return at === undefined || (Number.isFinite(taken) && taken > at);
+  });
+  return ports.length === reading.ports.length ? reading : { ...reading, ports };
 }
