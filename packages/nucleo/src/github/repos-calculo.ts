@@ -5,7 +5,7 @@
 
 import type { CiDoRepo, GrupoDeRepos, MetricasDoRepo, Periodo, RepoDaLista, ResumoDosRepos, SemanaDeFrequencia } from '../api/repos-types.ts';
 import type { Amostra } from '../api/repos-types.ts';
-import type { ContagensCruas, InfoCrua, IssueCrua, ListaCrua, PrCru, RepoCru, ResumoCru } from './repos-source.ts';
+import type { ContagensCruas, InfoCrua, IssueCrua, ListaCrua, ListRepoRaw, PrCru, RepoCountsRaw, ResumoCru } from './repos-source.ts';
 
 export const DIA_MS = 24 * 60 * 60_000;
 export const SEMANA_MS = 7 * DIA_MS;
@@ -242,7 +242,16 @@ export function repoDoDetalhe(info: InfoCrua): NonNullable<MetricasDoRepo['repo'
 
 export const SESSOES_VAZIAS = { active: 0, needYou: 0, thisMonth: 0 } as const;
 
-export function repoDaLista(r: RepoCru, commits: number[]): RepoDaLista {
+/** The open counts and CI of a list row: they come after the light list (#341), `null` until then. */
+export type RowCounts = Pick<RepoDaLista, 'openIssues' | 'openPrs' | 'ci'>;
+
+export const NO_COUNTS: RowCounts = { openIssues: null, openPrs: null, ci: null };
+
+export function rowCounts(raw: RepoCountsRaw): RowCounts {
+  return { openIssues: raw.issues.totalCount, openPrs: raw.pullRequests.totalCount, ci: ciDoRollup(raw.defaultBranchRef?.target?.statusCheckRollup?.state) };
+}
+
+export function repoDaLista(r: ListRepoRaw, commits: number[], counts: RowCounts = NO_COUNTS): RepoDaLista {
   const [owner, name] = r.nameWithOwner.split('/');
   return {
     owner,
@@ -252,9 +261,7 @@ export function repoDaLista(r: RepoCru, commits: number[]): RepoDaLista {
     visibility: r.isPrivate ? 'private' : 'public',
     language: r.primaryLanguage?.name ?? null,
     commits12: commits,
-    openIssues: r.issues.totalCount,
-    openPrs: r.pullRequests.totalCount,
-    ci: ciDoRollup(r.defaultBranchRef?.target?.statusCheckRollup?.state),
+    ...counts,
     sessions: { ...SESSOES_VAZIAS },
     lastPush: r.pushedAt,
   };
@@ -262,17 +269,19 @@ export function repoDaLista(r: RepoCru, commits: number[]): RepoDaLista {
 
 /**
  * Agrupa por dono: as orgs pela atividade mais recente, a conta pessoal por último; dentro do
- * grupo, pelo último push. `commits` e `ci` vêm da leitura por repositório (podem faltar).
+ * grupo, pelo último push. `commits` e `ci` vêm da leitura por repositório (podem faltar), e
+ * `counts`, by `nameWithOwner`, from the counts read after the light list (#341; missing: `null`).
  */
 export function montarLista(
   crua: ListaCrua,
   resumo: ResumoCru | null,
   commits: ReadonlyMap<string, number[]>,
   ci: { greenRate: number | null; runs: number },
+  counts: ReadonlyMap<string, RowCounts> = new Map(),
 ): { account: string; summary: ResumoDosRepos; groups: GrupoDeRepos[] } {
   const porDono = new Map<string, GrupoDeRepos>();
   for (const r of crua.repos) {
-    const linha = repoDaLista(r, commits.get(r.nameWithOwner) ?? []);
+    const linha = repoDaLista(r, commits.get(r.nameWithOwner) ?? [], counts.get(r.nameWithOwner));
     let g = porDono.get(linha.owner);
     if (!g) porDono.set(linha.owner, (g = { owner: linha.owner, type: linha.owner === crua.login ? 'personal' : 'org', repos: [] }));
     g.repos.push(linha);
@@ -288,14 +297,20 @@ export function montarLista(
       organizations: new Set([...crua.organizacoes, ...grupos.filter((g) => g.type === 'org').map((g) => g.owner)]).size,
       repositories: todos.length,
       withSessionsThisMonth: 0,
-      openPrs: todos.reduce((s, r) => s + r.openPrs, 0),
+      openPrs: sumKnown(todos.map((r) => r.openPrs)),
       prsAwaitingReview: resumo?.esperandoReview ?? 0,
-      openIssues: todos.reduce((s, r) => s + r.openIssues, 0),
+      openIssues: sumKnown(todos.map((r) => r.openIssues)),
       issuesClosedThisWeek: resumo?.fechadasNaSemana ?? 0,
       ci: { greenRate: ci.greenRate, runs: ci.runs, days: 7 },
     },
     groups: grupos,
   };
+}
+
+/** The sum of the known values; `null` when none is known yet (#341). */
+function sumKnown(values: readonly (number | null)[]): number | null {
+  const known = values.filter((v): v is number => v !== null);
+  return known.length ? known.reduce((s, v) => s + v, 0) : null;
 }
 
 /** Junta a taxa de vários repositórios, ponderada pelas execuções concluídas da amostra. */

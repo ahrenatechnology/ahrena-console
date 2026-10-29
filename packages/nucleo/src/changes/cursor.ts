@@ -27,8 +27,10 @@
 // key is the machine id (`local`). Only the HTTP route exposes it, like `repos`.
 // `connector` (#277, decision 0013 section 6): a cloud connector of this machine changed (a session's
 // state, a login moving, its CLI's config file); the key is the connector (`aws`). Only the HTTP route.
+// `app-update` (#330): the desktop app's update notice changed (what the app found, a download moving, a click on Depois,
+// Buscar agora or Atualizar); the key is `app`. Only the HTTP route exposes it.
 // The values are English since #173 phase 2b; the old Portuguese ones left in phase 6.
-export const CHANGE_TYPES = ['session', 'state', 'needs-you', 'plan', 'decision', 'account', 'repos', 'alert', 'agent-instructions', 'framework-install', 'adrs', 'connections', 'tools', 'connector'] as const;
+export const CHANGE_TYPES = ['session', 'state', 'needs-you', 'plan', 'decision', 'account', 'repos', 'alert', 'agent-instructions', 'framework-install', 'adrs', 'connections', 'tools', 'connector', 'app-update'] as const;
 export type ChangeType = (typeof CHANGE_TYPES)[number];
 
 export interface RecordedChange {

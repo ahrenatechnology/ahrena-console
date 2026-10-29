@@ -844,6 +844,58 @@ body.captura[data-width="1100"] .width-col[data-w="1440"], body.captura[data-wid
 .pn-options .pn-option-list { border: 1px solid var(--border); border-radius: 8px; background: var(--bg); padding: 4px 0; width: 30ch; }
 .pn-options .pn-option-list div { padding: 2px 1.2ch; white-space: nowrap; }
 .pn-options .pn-option-list .on { background: var(--raised); font-weight: 600; }
+/* ---------- the app's update notice (C77 to C80, A11, A12, issue #330) ---------- */
+.up-banner { display: flex; gap: 12px; align-items: center; padding: 12px 14px; border-radius: 12px; font-size: 12.5px; min-width: 0;
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface)); border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--border)); }
+.up-banner .up-ic { width: 34px; height: 34px; border-radius: 9px; display: grid; place-items: center; flex: none; font-size: 17px;
+  background: color-mix(in srgb, var(--accent) 18%, var(--surface)); color: var(--accent-text); }
+.up-banner .up-text { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 2px; }
+.up-banner .up-text b { font-size: 13.5px; font-weight: 600; color: var(--text); }
+.up-banner .up-sub { color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.up-banner .up-act { display: flex; gap: 8px; flex: none; align-items: center; }
+.up-banner .up-progress { display: flex; align-items: center; gap: 10px; margin-top: 4px; font-family: var(--font-mono); font-size: 11px; color: var(--muted); }
+.up-banner .up-progress .barra-h { flex: 1; max-width: 420px; }
+.up-banner.up-err { background: color-mix(in srgb, var(--status-error-badge) 70%, var(--surface)); border-color: color-mix(in srgb, var(--status-error-dot) 50%, var(--border)); }
+.up-banner.up-err .up-ic { background: color-mix(in srgb, var(--status-error-badge) 90%, var(--surface)); color: var(--status-error-text); }
+.up-banner.up-ok { background: color-mix(in srgb, var(--status-completed-badge) 70%, var(--surface)); border-color: color-mix(in srgb, var(--status-completed-dot) 50%, var(--border)); }
+.up-banner.up-ok .up-ic { background: color-mix(in srgb, var(--status-completed-badge) 90%, var(--surface)); color: var(--status-completed-text); }
+.up-pill { margin-left: auto; display: inline-flex; align-items: center; gap: 5px; height: 20px; padding: 0 7px; border-radius: 99px; font-family: var(--font-mono); font-size: 11px; color: var(--muted); border: 1px solid var(--border); }
+.up-pill.up-new { color: var(--accent-text); border-color: color-mix(in srgb, var(--accent) 55%, var(--border)); }
+.up-pill.up-open { background: var(--raised); color: var(--text); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 35%, transparent); }
+.up-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); display: inline-block; }
+.cc.up-frame { position: relative; }
+.up-pop { position: absolute; left: 206px; bottom: 16px; width: 360px; z-index: 2; border-radius: 12px; box-shadow: 0 14px 44px color-mix(in srgb, var(--mono-black) 45%, transparent); }
+.up-panel { padding: 0; display: flex; flex-direction: column; min-width: 0; }
+.up-panel .up-ph { display: flex; gap: 10px; align-items: center; padding: 12px 14px; border-bottom: 1px solid var(--border); }
+.up-panel .up-ph img { width: 30px; height: 30px; border-radius: 8px; flex: none; }
+.up-panel .up-pn { min-width: 0; white-space: nowrap; } .up-panel .up-pn b { display: block; font-size: 13.5px; font-weight: 600; }
+.up-panel .up-pn small { color: var(--muted); font-size: 11.5px; }
+.up-panel .up-ph .badge { margin-left: auto; }
+.up-panel .up-body { padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; flex: 1; }
+.up-panel .up-st { display: flex; gap: 10px; align-items: flex-start; }
+.up-panel .up-st .ic { font-size: 18px; flex: none; margin-top: 1px; }
+.up-panel .up-st b { display: block; font-size: 13px; font-weight: 600; }
+.up-panel .up-st span { color: var(--muted); font-size: 12px; line-height: 1.45; }
+.up-panel .up-notes { margin: 0; padding-left: 18px; font-size: 12px; color: var(--muted); display: flex; flex-direction: column; gap: 2px; }
+.up-panel .up-bar { display: flex; align-items: center; gap: 10px; font-family: var(--font-mono); font-size: 11px; color: var(--muted); }
+.up-panel .up-bar .barra-h { flex: 1; }
+.up-panel .up-pa { display: flex; gap: 8px; flex-wrap: wrap; margin-top: auto; }
+.up-panel .up-cad { padding: 9px 14px; border-top: 1px dashed var(--border); font-size: 11.5px; color: var(--muted); display: flex; flex-direction: column; gap: 3px; }
+.up-panel .up-cad span { display: flex; gap: 6px; align-items: center; }
+.up-states { display: grid; grid-template-columns: repeat(4, 340px); gap: 16px; align-items: stretch; }
+.up-states > .width-col > .cartao { flex: 1; }
+.up-clip { max-height: 236px; overflow: hidden; position: relative; border-radius: 12px; }
+.up-clip::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 60px; background: linear-gradient(transparent, var(--bg)); }
+.up-mini { width: 220px; padding: 10px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); margin-top: 10px; }
+.up-browser { border: 1px solid var(--border); border-radius: 12px; overflow: hidden; background: var(--surface); width: max-content; }
+.up-browser > .cc { border: 0; border-radius: 0; }
+.up-browser .up-bbar { height: 34px; display: flex; align-items: center; gap: 12px; padding: 0 12px; border-bottom: 1px solid var(--border); }
+.up-browser .up-lights { display: flex; gap: 7px; } .up-browser .up-lights i { width: 11px; height: 11px; border-radius: 50%; display: block; background: var(--raised); box-shadow: inset 0 0 0 1px var(--border); }
+.up-browser .up-url { flex: 0 1 520px; margin: 0 auto; height: 22px; border-radius: 7px; background: var(--bg); display: flex; align-items: center; gap: 6px; padding: 0 10px; font-family: var(--font-mono); font-size: 11.5px; color: var(--muted); }
+.mac.up-wide { width: 1180px; height: 600px; }
+.up-frag { position: absolute; left: 24px; top: 48px; display: grid; grid-template-columns: repeat(2, 300px); gap: 12px; align-items: stretch; }
+.up-frag .menu { position: static; width: auto; box-shadow: none; }
+.mi.up-small { height: 20px; font-size: 11.5px; }
 </style>
 
 <header class="topo">
@@ -3776,6 +3828,157 @@ function toolsContainersScreen() {
 const N = (ccam, diverge) => `<div class="notas"><div class="nota ccam"><h4>Do CCAM</h4><ul>${ccam.map(x => `<li>${x}</li>`).join('')}</ul></div><div class="nota"><h4>Onde diverge, e por quê</h4><ul>${diverge.map(x => `<li>${x}</li>`).join('')}</ul></div></div>`
 const NP_BASE = ['Sidebar da extensão VS Code (<code>vscode-extension/sidebar.js</code>): cartão do servidor com a pílula <b>Online</b>, rótulo de seção com <b>auto · 5 s</b>, blocos de estatística com sparkline, barra empilhada de saúde dos agentes e a lista com ícone de status.']
 const NP_DIV = ['Mostra só esta sessão (decisão 0004), não a frota: a frota fica no console.', 'Cards de 34 colunas × 6 linhas em qualquer largura: o estreito empilha 1, o largo põe 3 por linha.']
+// =====================================================================
+// THE APP'S UPDATE NOTICE (C77 to C80, A11 and A12, issue #330). Synthetic versions: the app is on 0.0.9
+// and 0.0.10 was just published on the app-updates channel. Who checks and downloads is the app
+// (tauri-plugin-updater); the core only relays its state to the /ui and the /ui's requests to it.
+// =====================================================================
+const UP_NOTES = ['aviso de versão nova na /ui e na bandeja', 'correções no túnel da Workstation']
+const UP_LINE = `Novidades: ${UP_NOTES.join(' · ')}`
+const UP_RULE = 'a cada 10 min no modo dev (abaixo da 1.0 ou build dev) · a cada 6 h na estável'
+const upBtn = (t, i = '', k = 'contorno') => `<span class="btn ${k}">${i ? ic(i) : ''}${t}</span>`
+const UP_PILLS = {
+  none: '<span class="up-pill">v0.0.9</span>',
+  new: '<span class="up-pill up-new" title="0.0.10 disponível">v0.0.9<i class="up-dot"></i></span>',
+  open: '<span class="up-pill up-new up-open">v0.0.9<i class="up-dot"></i></span>',
+  openOk: '<span class="up-pill up-open">v0.0.9</span>',
+}
+// The sidebar of these screens: the foot's version (v0.0.1 elsewhere on the page) becomes the version pill.
+const upSide = (active, pill) => lado(active, 5).replace('<span style="margin-left:auto" class="mono">v0.0.1</span>', UP_PILLS[pill])
+const upFrame = (w, active, body, pill = 'new', pop = '') => `<div class="cc w${w} up-frame">${upSide(active, pill)}<div class="cc-main">${body}</div>${pop ? `<div class="up-pop">${pop}</div>` : ''}</div>`
+const UP_BANNER = {
+  available: { ic: 'download', t: 'Atualização disponível: versão 0.0.10', s: `Você está na 0.0.9 · ${UP_LINE}`, act: upBtn('Depois') + upBtn('Atualizar', 'download', 'cheio') },
+  plain: { ic: 'download', t: 'Atualização disponível: versão 0.0.10', s: 'Você está na 0.0.9 · publicada há 12 min', act: upBtn('Depois') + upBtn('Atualizar', 'download', 'cheio') },
+  downloading: { ic: 'loader-2', t: 'Baixando a versão 0.0.10…', s: 'O app instala e reinicia sozinho quando terminar. Pode seguir usando.', progress: [42, '5,2 de 12,4 MB'], act: '' },
+  installing: { ic: 'rotate-cw', t: 'Instalando a 0.0.10 e reiniciando…', s: 'A janela fecha e volta nesta mesma tela em alguns segundos. As sessões do Claude não param.', act: '' },
+  error: { cls: 'up-err', ic: 'x-circle', t: 'Não deu para baixar a 0.0.10', s: 'A conexão caiu no meio do download (5,2 de 12,4 MB). Você continua na 0.0.9.', act: upBtn('Depois') + upBtn('Tentar de novo', 'refresh-cw', 'cheio') },
+  done: { cls: 'up-ok', ic: 'check-circle-2', t: 'Atualizado para a 0.0.10', s: `O que mudou: ${UP_NOTES.join(' · ')}`, act: upBtn('Fechar', 'x', '') },
+  browser: { ic: 'download', t: 'Atualização disponível: versão 0.0.10', s: 'Para atualizar, use o app Ahrena Console: na bandeja, Atualizar para a versão 0.0.10.', act: upBtn('Depois') },
+  artifact: { ic: 'download', t: 'Atualização disponível: versão 0.0.10', s: 'Só para ler aqui. Para atualizar ou adiar: No app do Ahrena Console, na bandeja.', act: upBtn('Depois', '', 'contorno tm-rc-off') },
+}
+const upBanner = k => {
+  const b = UP_BANNER[k]
+  const bar = b.progress ? `<div class="up-progress">${barra(b.progress[0])}<span>${b.progress[1]} · ${b.progress[0]}%</span></div>` : ''
+  return `<div class="up-banner ${b.cls ?? ''}"><span class="up-ic">${ic(b.ic)}</span><div class="up-text"><b>${b.t}</b><span class="up-sub">${b.s}</span>${bar}</div>${b.act ? `<div class="up-act">${b.act}</div>` : ''}</div>`
+}
+// The version panel, opened from the sidebar foot's version pill (C79).
+const UP_DEV = '<span class="badge b-idle"><span class="p"></span>modo dev</span>'
+const UP_NOTE_LIST = `<ul class="up-notes">${UP_NOTES.map(n => `<li>${n}</li>`).join('')}</ul>`
+const UP_SEARCH = upBtn('Buscar agora', 'refresh-cw')
+const UP_PANEL = {
+  checking: { ic: 'loader-2', c: 'var(--muted)', t: 'Buscando agora…', s: 'consultando o latest.json do canal app-updates', act: upBtn('Buscar agora', 'refresh-cw', 'contorno tm-rc-off'), cad: 'última consulta há 6 min' },
+  upToDate: { ic: 'check-circle-2', c: 'var(--status-completed-text)', t: 'Você está na versão mais nova', s: '0.0.9 · conferido agora', act: UP_SEARCH, cad: 'verificado agora · próxima em 10 min' },
+  stable: { ver: 'v1.2.0', mode: '<span class="badge b-completed"><span class="p"></span>estável</span>', ic: 'check-circle-2', c: 'var(--status-completed-text)', t: 'Você está na versão mais nova', s: '1.2.0 · conferido há 2 h', act: UP_SEARCH, cad: 'verificado há 2 h · próxima em 4 h', rule: 'versão 1.0 em diante, sem a marca dev: a cada 6 h' },
+  available: { ic: 'download', c: 'var(--accent-text)', t: 'Versão 0.0.10 disponível', s: 'publicada há 12 min · 12,4 MB', extra: UP_NOTE_LIST, act: upBtn('Atualizar', 'download', 'cheio') + upBtn('Depois'), cad: 'verificado há 3 min · próxima em 7 min' },
+  downloading: { ic: 'loader-2', c: 'var(--accent-text)', t: 'Baixando a 0.0.10…', s: 'instala e reinicia sozinho ao terminar', extra: `<div class="up-bar">${barra(42)}<span>5,2 de 12,4 MB</span></div>`, act: '', cad: 'verificado há 4 min · as consultas esperam o download' },
+  offline: { ic: 'wifi-off', c: 'var(--status-error-text)', t: 'Sem rede', s: 'Não deu para consultar o canal agora. Você continua na 0.0.9.', act: upBtn('Tentar de novo', 'refresh-cw'), cad: 'última consulta boa há 3 h · próxima em 10 min' },
+  channelDown: { ic: 'cloud-off', c: 'var(--status-error-text)', t: 'O canal de atualizações não respondeu', s: 'O latest.json do app-updates voltou com erro 503. Nada mudou aqui.', act: upBtn('Tentar de novo', 'refresh-cw'), cad: 'conferido há 1 min · próxima em 10 min' },
+  browser: { ic: 'download', c: 'var(--accent-text)', t: 'Versão 0.0.10 disponível', s: 'Atualizar é só no app: na bandeja, Atualizar para a versão 0.0.10. Daqui dá para procurar e adiar.', extra: UP_NOTE_LIST, act: UP_SEARCH + upBtn('Depois'), cad: 'verificado pelo app há 3 min · próxima em 7 min' },
+  artifact: { ic: 'download', c: 'var(--accent-text)', t: 'Versão 0.0.10 disponível', s: 'Só para ler: o artefato fala com o console pela extensão (MCP), que não escreve. Nada daqui atualiza, adia ou consulta.', extra: UP_NOTE_LIST, act: upBtn('Buscar agora', 'refresh-cw', 'contorno tm-rc-off') + upBtn('Depois', '', 'contorno tm-rc-off'), cad: 'verificado pelo app há 3 min · próxima em 7 min', rule: 'No app do Ahrena Console' },
+  noApp: { mode: '', ic: 'app-window', c: 'var(--muted)', t: 'O app não está aberto nesta máquina', s: 'Quem procura versões novas é o app Ahrena Console. Sem ele, a /ui não sabe se há versão nova e não mostra o aviso.', act: upBtn('Buscar agora', 'refresh-cw', 'contorno tm-rc-off'), cad: 'o núcleo veio da extensão do Claude Desktop', rule: 'abra o app para voltar a receber o aviso' },
+}
+const upPanel = k => {
+  const p = UP_PANEL[k]
+  return `<div class="cartao up-panel"><div class="up-ph"><img src="${LOGO}" alt=""><div class="up-pn"><b>Ahrena Console</b><small>${p.ver ?? 'v0.0.9'} · canal app-updates</small></div>${p.mode ?? UP_DEV}</div>
+    <div class="up-body"><div class="up-st"><span class="ic" style="color:${p.c}">${ic(p.ic)}</span><div><b>${p.t}</b><span>${p.s}</span></div></div>${p.extra ?? ''}${p.act ? `<div class="up-pa">${p.act}</div>` : ''}</div>
+    <div class="up-cad"><span>${ic('clock')}${p.cad}</span><span>${ic('repeat')}${p.rule ?? UP_RULE}</span></div></div>`
+}
+const upClip = (k, pill = 'new') => `<div class="up-clip">${upFrame(1100, 'dashboard', (k ? upBanner(k) : '') + telaDashboard(5), pill)}</div>`
+const upMiniFoot = pill => `<div class="cc-pe up-mini"><div class="cartao">${ic('radio')}<b>Ao vivo</b>${UP_PILLS[pill]}</div><div class="cartao">${ic('cpu')}<span class="mono">127.0.0.1:4720</span></div></div>`
+const upBrowser = (url, inner) => `<div class="up-browser"><div class="up-bbar"><span class="up-lights"><i></i><i></i><i></i></span><span class="up-url">${ic('globe')}${url}</span></div>${inner}</div>`
+
+// C77 · the banner on top of every screen
+const updateBannerScreens = () => `<div class="tm-rc">${rcRow([
+  ['1100 px · a janela do app', upFrame(1100, 'dashboard', upBanner('available') + telaDashboard(5))],
+  ['1440 px', upFrame(1440, 'dashboard', upBanner('available') + telaDashboard(5))]], [
+  '<b>Onde:</b> no topo da coluna da tela, acima do cabeçalho, em <b>todas as telas</b>: é parte da moldura, não do Dashboard. A barra lateral fica onde está (a aprovar).',
+  '<b>Uma linha só</b> de texto: a versão, a sua, e a primeira linha das notas do <code>latest.json</code> quando houver, cortada com reticências. O card nunca cresce para os lados: na 1100 o corte vem antes de qualquer rolagem horizontal.',
+  '<b>Atualizar</b> baixa, confere a assinatura, instala e reinicia, como o item da bandeja já faz (#90). <b>Depois</b> esconde o card (C78).',
+  'Cor de destaque da marca, não amarela: amarelo é "precisa de você" (#245), e uma versão nova não trava nada.',
+  'No pé da barra lateral, a versão ganha um ponto laranja enquanto houver versão nova, mesmo depois de Depois. Clicar abre o painel da versão (C79).'])}</div>`
+
+// C78 · the banner's states
+const updateBannerStates = () => `<div class="tm-rc">
+  ${rcRow([['1 · baixando', upClip('downloading')], ['2 · instalando e reiniciando', upClip('installing')]], [
+    '<b>Baixando:</b> a barra e os MB, sem Atualizar e sem Depois. Não há Cancelar: o download do updater não para no meio, e ele é curto (uns 12 MB).',
+    '<b>Instalando:</b> o app fecha e abre sozinho. O núcleo que o app subiu reinicia junto, já na versão nova; as sessões do Claude não param, são do Claude.',
+    'Começou pela bandeja ou pela notificação? O card mostra o mesmo estado: o estado é um só, guardado pelo núcleo.'])}
+  ${rcRow([['3 · erro ao baixar', upClip('error')], ['4 · depois de reiniciar', upClip('done')]], [
+    '<b>Erro ao baixar</b> (rede, ou a assinatura que não confere): o card fica vermelho, diz que você continua na versão de antes e oferece <b>Tentar de novo</b>. Com assinatura errada, o texto diz isso e a saída vai para o log do app.',
+    '<b>Atualizado:</b> depois de reiniciar, uma vez, o card verde com o que mudou. Some sozinho em 10 s ou no Fechar (a aprovar).'])}
+  ${rcRow([['5 · sem notas no latest.json', upClip('plain')], ['6 · depois de Depois', `${upClip('', 'new')}${upMiniFoot('new')}`]], [
+    '<b>Sem notas</b>, a linha de baixo fica só com a sua versão e a idade da publicação.',
+    '<b>Depois (a aprovar):</b> o card some <b>até sair uma versão mais nova ou por 24 h, o que vier antes</b>. A notificação não se repete para a mesma versão (A12).',
+    'Adiar vale para todas as janelas e para a bandeja: quem guarda é o núcleo. O ponto laranja do pé da barra lateral continua, para você achar a versão quando quiser.'])}
+</div>`
+
+// C79 · "Buscar agora" on demand
+const UP_STATES = [['1 · procurando', 'checking'], ['2 · em dia, modo dev', 'upToDate'], ['3 · em dia, estável', 'stable'], ['4 · disponível', 'available'], ['5 · baixando', 'downloading'], ['6 · erro: sem rede', 'offline'], ['7 · erro: canal fora do ar', 'channelDown']]
+const updateCheckScreens = () => `<div class="tm-rc">
+  ${rcRow([['1100 px · o painel aberto pelo pé da barra lateral', upFrame(1100, 'dashboard', telaDashboard(5), 'openOk', upPanel('upToDate'))],
+    ['1440 px', upFrame(1440, 'dashboard', telaDashboard(5), 'openOk', upPanel('upToDate'))]], [
+    '<b>Onde (a aprovar): a versão no pé da barra lateral</b> vira um botão que abre este painel. A versão já mora ali, aparece em todas as telas e está a um clique de qualquer lugar; nenhum item novo entra na barra.',
+    'A alternativa da issue, um card "Versão do app" em Controle, pede uma tela nova (Controle não tem página própria) ou um card dentro de Ferramentas ou Conexões, que tratam de outra coisa.',
+    '<b>Buscar agora</b> está sempre disponível, em qualquer modo, e consulta na hora. Esc ou um clique fora fecha.',
+    '<b>A cadência aparece no pé do painel:</b> "verificado há 3 min · próxima em 7 min", e a regra do modo.'])}
+  <div class="up-states">${UP_STATES.map(([l, k]) => `<div class="width-col"><div class="rotulo">${l}</div>${upPanel(k)}</div>`).join('')}
+    ${rcNote([
+      '<b>Regra do modo (a aprovar):</b> versão <b>abaixo da 1.0</b> ou build com a marca de canal <b>dev</b> consulta <b>a cada 10 min</b>; as outras, <b>a cada 6 h</b>. Hoje há um canal só (app-updates) e toda versão é 0.0.x, então hoje é tudo modo dev.',
+      'A pílula "modo dev" ou "estável" no topo do painel diz qual regra vale para esta instalação.',
+      '<b>Erros só no clique:</b> uma consulta automática que falha não mostra nada e fica no log do app (issue). Só a busca que você pediu mostra "Sem rede" ou "canal fora do ar", com Tentar de novo.',
+      'Cache do CDN logo depois de publicar: a consulta acha a versão anterior, diz "em dia", e a seguinte acha a nova. Sem erro.'])}</div>
+</div>`
+
+// C80 · outside the app
+const updateOutsideScreens = () => `<div class="tm-rc">
+  ${rcRow([['1 · /ui num navegador comum, com o app aberto · 1100 px', upBrowser('127.0.0.1:4720/ui/dashboard', upFrame(1100, 'dashboard', upBanner('browser') + telaDashboard(5)))],
+    ['2 · o painel da versão no navegador · 1100 px', upBrowser('127.0.0.1:4720/ui/dashboard', upFrame(1100, 'dashboard', telaDashboard(5), 'open', upPanel('browser')))]], [
+    '<b>Fora do app (a aprovar):</b> a /ui num navegador comum mostra o mesmo aviso, mas <b>sem Atualizar</b>: o texto diz que é no app, pela bandeja. Atualizar reinicia o app, e você não está olhando para ele.',
+    '<b>Depois</b> e <b>Buscar agora</b> funcionam daqui: o núcleo repassa o pedido ao app, que consulta e responde, e guarda o estado do Depois (PUT /api/app-update/state).',
+    'Como a /ui sabe onde está: o app marca a própria janela (um script de início do Tauri); sem a marca, é navegador.'])}
+  ${rcRow([['3 · sem o app nesta máquina · 1100 px', upBrowser('127.0.0.1:4720/ui/dashboard', upFrame(1100, 'dashboard', telaDashboard(5), 'openOk', upPanel('noApp')))],
+    ['4 · no artefato do claude.ai, só leitura · 1100 px', upFrame(1100, 'dashboard', upBanner('artifact') + telaDashboard(5))]], [
+    '<b>Sem o app</b> (núcleo subido pela extensão do Claude Desktop, ou um app anterior à #330): ninguém consulta o canal, então não há card nem ponto. O painel da versão explica e o botão fica desligado.',
+    '<b>No painel do mod</b> (a aprovar): nada. O painel é da sessão e cabe pouco; a notificação e a bandeja já avisam, e o console tem o card.',
+    '<b>No artefato publicado no claude.ai (a aprovar):</b> só leitura. Ele fala com o console pela extensão, o MCP, que só lê (decisão 0003). O aviso aparece (4), mas Depois e Buscar agora ficam desligados, com o motivo: "No app do Ahrena Console". O painel da versão mostra o mesmo.'])}
+</div>`
+
+// A11 and A12 · the tray and the notification
+const upMenuTop = `${trayHead}${mi('<span class="ponto" style="box-shadow:inset 0 0 0 1.5px var(--muted)"></span>Ninguém precisa de você', 'off')}${mi(`${ponto('active')}4 ativas &nbsp; ${ponto('idle')}2 ociosas`, 'off')}${msep}
+  ${mi('Abrir o console', '', '⌘O')}${mi('<span class="ck">✓</span>Notificações')}${mi('<span class="ck">✓</span>Abrir no login')}${msep}`
+const upSmall = t => mi(`<span class="mt">${t}</span>`, 'off up-small')
+const UP_TRAY = {
+  upToDate: ['Em dia', mi('Ahrena Console 0.0.9', 'off') + mi('Buscar agora…') + upSmall('em dia · verificado há 3 min · próxima em 7 min')],
+  checking: ['Procurando', mi('Ahrena Console 0.0.9', 'off') + mi('Buscando agora…', 'off') + upSmall('última consulta há 6 min')],
+  available: ['Disponível', mi('Ahrena Console 0.0.9', 'off') + mi('Atualizar para a versão 0.0.10', 'foco') + mi('Buscar agora…') + upSmall('verificado há 1 min · próxima em 9 min')],
+  downloading: ['Baixando', mi('Ahrena Console 0.0.9', 'off') + mi(`${ic('loader-2')}Baixando a 0.0.10… 42%`, 'off') + mi('Buscar agora…', 'off') + upSmall('5,2 de 12,4 MB')],
+  installing: ['Instalando', mi('Ahrena Console 0.0.9', 'off') + mi(`${ic('rotate-cw')}Instalando a 0.0.10 e reiniciando…`, 'off') + mi('Buscar agora…', 'off')],
+  error: ['Erro ao baixar', mi('Ahrena Console 0.0.9', 'off') + mi('Atualizar para a versão 0.0.10') + upSmall('o download falhou às 23:02 · tente de novo') + mi('Buscar agora…')],
+}
+const upTrayFoot = k => UP_TRAY[k][1] + mi('Sair do Ahrena Console', '', '⌘Q')
+const APP_UP = {
+  tray: () => `<div class="tm-rc-row"><div class="mac up-wide">${mbar(0, true)}
+    <div class="menu" style="right:170px;width:360px">${upMenuTop}${upTrayFoot('available')}</div>
+    <div class="up-frag">${['upToDate', 'checking', 'downloading', 'installing', 'error'].map(k => `<div class="menu">${mi(UP_TRAY[k][0], 'cab')}${msep}${upTrayFoot(k)}</div>`).join('')}</div></div>
+    ${rcNote([
+      '<b>Buscar agora…</b> entra logo abaixo da versão, no bloco do pé, perto de Sair. Está sempre lá, em qualquer modo.',
+      'Logo abaixo, uma linha cinza menor com a cadência: "verificado há 3 min · próxima em 7 min". O menu é refeito a cada clique, então a conta está sempre certa.',
+      'Com versão nova, <b>Atualizar para a versão 0.0.10</b> (o item de hoje, #90) sobe para cima de Buscar agora.',
+      'Baixando e instalando, os itens ficam cinza e sem clique, com a porcentagem: o mesmo estado do card da /ui (C78).',
+      'O menu fecha no clique: o resultado de "Buscar agora" sai numa notificação (A12).',
+      'O número da barra continua só de sessões: versão nova não conta nem muda o ícone.'])}</div>`,
+  notif: () => `<div class="tm-rc-row"><div class="mac">${mbar(0, false)}
+    <div class="notif" style="top:44px"><img src="${LOGO}" alt=""><div><div class="app">AHRENA CONSOLE<span>agora · sem som</span></div><div class="tit">Ahrena Console 0.0.10 disponível</div><div>${UP_LINE}</div></div><div class="acoes"><span>Atualizar</span><span>Depois</span></div></div>
+    <div class="notif" style="top:198px"><img src="${LOGO}" alt=""><div><div class="app">AHRENA CONSOLE<span>agora · sem som</span></div><div class="tit">Ahrena Console está em dia</div><div>Você está na versão mais nova · 0.0.9</div></div></div>
+    <div class="notif" style="top:298px"><img src="${LOGO}" alt=""><div><div class="app">AHRENA CONSOLE<span>23:02 · sem som</span></div><div class="tit">Não deu para atualizar para a 0.0.10</div><div>A conexão caiu no download. Você continua na 0.0.9.</div></div><div class="acoes"><span>Tentar de novo</span><span>Abrir</span></div></div>
+    <div class="anota" style="left:28px;top:56px;width:500px"><b>1. Versão nova:</b> "Ahrena Console 0.0.10 disponível", com a primeira linha das notas. <b>Uma vez por versão</b> e <b>sem som</b>: não é sessão travada (#245).<br><br>
+      <b>Atualizar</b> faz o mesmo que o card e o item da bandeja. <b>Depois</b> adia como o Depois do card (C78). <b>Clicar no corpo</b> abre a janela do app na tela em que ela estava, com o card no topo.<br><br>
+      <b>2. Em dia (a aprovar):</b> só depois de "Buscar agora…" na bandeja, que fecha o menu ao clicar. A consulta automática nunca notifica "em dia".<br><br>
+      <b>3. Falha (a aprovar):</b> só quando a atualização começou pela bandeja ou pela notificação e a janela está fechada. Com a janela aberta, o card vermelho já diz.<br><br>
+      O item <b>Notificações</b> da bandeja desliga estas também; o card na /ui continua.</div></div>
+    ${rcNote(['Ações nativas do macOS, como as da A10.', 'Na Central de Notificações, a de versão nova some sozinha quando a versão é instalada.'])}</div>`,
+}
+
 const TELAS = [
   { cap: 'painel', titulo: 'Painel lateral', desc: 'O mod do Claude Code, ao lado da conversa, no recorte por sessão da decisão 0004 (issues #35, #36 e #37). Desenhado com os elementos nativos do mod (Box, Text, Button, Select, Svg, Link), na fonte monoespaçada do app, em 38 e 121 colunas.' },
   { id: 'painel-estados', cod: 'P0', nome: 'Os 6 status e os 8 motivos', sub: 'O card "Esta sessão" em cada status, e as mesmas pílulas como aparecem no console. O antigo estado de espera virou dois: Precisa de você (trava, amarelo, chip forte) e Ociosa (sua vez, neutra, chip leve), issue #245.', html: painelEstados,
@@ -3854,6 +4057,10 @@ const TELAS = [
   { id: 'app-clouds-connection', cod: 'A9', nome: 'Bandeja: Nuvens e a conexão da Workstation', sub: 'Features Contas de nuvem (#277) e A conexão da máquina remota (#278), decisão 0013. À esquerda, o túnel no ar e o bloco Nuvens com a sessão que expira em 14 min e Entrar. À direita, de manhã: o túnel fora por SSO expirado, com Entrar na AWS e subir o túnel, e o item cinza enquanto roda.', html: () => `<div class="fila"><div class="mac">${APP_CL.up()}</div><div class="mac">${APP_CL.down()}</div></div>`,
     n: N(['Nada.'], ['A bandeja roda o mesmo que a janela, pela mesma rota local (sem Origin, Host em loopback, como a A8).', 'O número da barra continua só de sessões: nuvem e túnel não contam.']) },
   { id: 'app-clouds-notifications', cod: 'A10', nome: 'Notificações da nuvem e da conexão', sub: 'A sessão que vai expirar, a queda por SSO expirado e a queda por porta ocupada: o motivo no título e a ação que resolve. Todas sem som.', html: () => `<div class="fila"><div class="mac">${APP_CL.notifs()}</div></div>`, n: '' },
+  { id: 'app-update-tray', cod: 'A11', nome: 'Bandeja: Buscar agora', sub: 'Feature Aviso de versão nova (#330). À direita, o menu com a 0.0.10 disponível: Atualizar para a versão 0.0.10 em cima, Buscar agora… sempre presente e a linha da cadência. À esquerda, o mesmo bloco em dia, procurando, baixando, instalando e com erro ao baixar.', html: () => `<div class="fila">${APP_UP.tray()}</div>`,
+    n: N(['Nada: o CCAM não tem updater (decisão 0005).'], ['O item "Atualizar para a versão X" é o de hoje (#90); a #330 acrescenta Buscar agora, a cadência e os estados.', 'A consulta automática passa de 6 h fixas para a regra do modo: 10 min no modo dev, 6 h na estável (a aprovar).']) },
+  { id: 'app-update-notification', cod: 'A12', nome: 'Notificação de versão nova', sub: 'Ahrena Console 0.0.10 disponível, com Atualizar e Depois, uma vez por versão e sem som. Embaixo, o "em dia" de uma busca pedida pela bandeja e a falha de uma atualização começada fora da janela.', html: () => `<div class="fila">${APP_UP.notif()}</div>`,
+    n: N(['Nada.'], ['Sem som, como as da máquina e da nuvem (A10): versão nova não trava sessão.', 'Uma vez por versão: Depois, fechar ou ignorar não a trazem de volta para a mesma versão.']) },
   { cap: 'console', titulo: 'Console (artefato)', desc: 'O console completo, que é também o que a janela do app mostra: todas as telas do CCAM que fazem sentido aqui, na mesma ordem da barra lateral dele. Moldura, cabeçalho, cards, tabelas e gráficos seguem o CCAM tela a tela.' },
   { id: 'console-dashboard', cod: 'C1', nome: 'Dashboard', sub: '6 cards, "precisam de você" em destaque (só o que trava, #245), as ociosas numa linha neutra à parte, agentes ativos e atividade recente (3.2).', html: () => `<div class="fila">${cc1100('dashboard', telaDashboard())}</div>`,
     n: N(['Dashboard · Monitor: grade 3 × 2 de StatCard, Active Agents com AgentCard (borda na cor do status, duas últimas mensagens, modelo, custo, idade, id) e Recent Activity.', 'Cabeçalho de página com ícone, título, pílula Live e Refresh; segmented Monitor | Saúde.'], ['O inbox "precisam de você" entra entre os números e as listas, ideia do Podium.', 'Ociosas (#245): uma linha neutra logo abaixo do inbox, sem fundo amarelo, com o motivo em chip leve. Ficam visíveis sem disputar atenção.', 'Custo sempre com "~" e "estimativa".']) },
@@ -4010,6 +4217,14 @@ const TELAS = [
     n: N(['A leitura remota da C25: o Mac lê o núcleo de lá pela porta do túnel.'], ['Quem libera ações é a Workstation, no config dela: o túnel faz o pedido do Mac parecer local lá, então o padrão é recusar.', 'Rodar lá é o núcleo de lá, com o catálogo de lá. O Mac só repassa o id do item e da ação.', 'No Linux o apt pede sudo: a maior parte das CLIs de lá fica em Precisa de sudo, mesmo com ações ligadas.']) },
   { id: 'console-tools-containers', cod: 'C76', nome: 'Ferramentas · containers', sub: 'O card Containers em cada plataforma: Colima rodando (1), parado, com Iniciar (2), iniciando (3), nenhum runtime, com a proposta de instalar o Colima (4), Docker Engine parado no Linux, que pede sudo (5) e Windows, com o Podman Desktop como a proposta de código aberto (6). Em 1100.', html: () => `<div class="fila">${frameAt(1100, 'tools', toolsContainersScreen())}</div>`,
     n: N(['Os números de Docker da C25 (Workstation): containers e disco.'], ['Aqui só a saúde do runtime e Iniciar / Parar. Uso por imagem, volumes e stacks com a sessão dona ficam na tela da máquina.', 'Docker Desktop achado é lido, nunca iniciado nem atualizado pelo console.', 'Windows é proposta: o Podman Desktop, com o WSL 2; ligar o WSL pede administrador.']) },
+  { id: 'console-update-banner', cod: 'C77', nome: 'Aviso de versão nova no topo da /ui', sub: 'Feature Aviso de versão nova (#330). Atualização disponível: versão 0.0.10, com a linha do que mudou quando o latest.json tem notas, Atualizar e Depois. Fica no topo de todas as telas, acima do cabeçalho, e não alarga a página. Em 1100 e 1440.', html: () => updateBannerScreens(),
+    n: N(['Nada: o CCAM não tem updater.'], ['Hoje (#90) a versão nova só aparece no menu da bandeja; a #330 a traz para a janela.', 'Cor da marca, não o amarelo de "precisa de você".']) },
+  { id: 'console-update-banner-states', cod: 'C78', nome: 'Os estados do aviso', sub: 'Baixando (a barra, sem Atualizar), instalando e reiniciando, erro ao baixar (Tentar de novo), atualizado, sem notas, e depois de Depois: o card some até a próxima versão ou por 24 h (a aprovar). Em 1100, o topo da tela.', html: () => updateBannerStates(),
+    n: N(['Nada.'], ['Um estado só para a janela, o navegador e a bandeja: quem guarda é o núcleo, quem baixa é o app.']) },
+  { id: 'console-update-check', cod: 'C79', nome: 'Buscar agora na /ui', sub: 'A versão no pé da barra lateral abre o painel da versão (proposta, a aprovar): procurando, em dia ("Você está na versão mais nova · 0.0.9 · conferido agora"), disponível, baixando e os dois erros, com a cadência no pé: a cada 10 min no modo dev, a cada 6 h na estável (a aprovar). Em 1100 e 1440.', html: () => updateCheckScreens(),
+    n: N(['Nada.'], ['A issue fala num card de versão em Controle; a proposta é o pé da barra lateral, que já mostra a versão e está em todas as telas.', 'Só a busca pedida mostra erro; a automática falha em silêncio, no log.']) },
+  { id: 'console-update-outside-app', cod: 'C80', nome: 'O aviso fora do app', sub: 'A /ui num navegador comum: o mesmo aviso, mas Atualizar é só no app; Depois e Buscar agora funcionam pelo núcleo. No artefato do claude.ai o aviso é só de leitura (Depois e Buscar agora desligados). Sem o app na máquina, não há aviso, e o painel da versão explica por quê. O painel do mod não mostra nada (a aprovar). Em 1100.', html: () => updateOutsideScreens(),
+    n: N(['Nada.'], ['Atualizar reinicia o app: só faz sentido de dentro dele.']) },
 ]
 
 // =====================================================================
@@ -4036,6 +4251,7 @@ function montar() {
     <li><b>Telemetria e Dev Console no app (decisão 0008, a aprovar):</b> cada máquina se mede com o próprio núcleo; o do Mac lê o da Workstation pela porta que o túnel encaminha; o app só mostra, sem subir túnel nem abrir login (A6, A7, C24 a C27). A reconexão revê esse ponto na decisão 0012. A barra lateral ganha Dev Console e a seção Máquinas, que aparece em todas as telas.</li>
     <li><b>Reconectar a máquina remota (#244, decisão 0012):</b> com <code>reconnect</code> no machines.json, o núcleo do Mac roda o comando que você escreveu, sem shell, um por vez e com tempo limite; a tela espera o login no navegador e relê a remota ao terminar (C50, A8). Aprovado em 20/10, com a saída só no log.</li>
     <li><b>Nuvens e a conexão da máquina (#277, #278, decisão 0013, a aprovar):</b> as contas de nuvem entram em Conexões, como conectores ao lado do GitHub (C57 a C61); o túnel vira a <code>connection</code> da máquina no machines.json, com Subir, Parar, o perfil de nuvem que ele exige e o motivo da queda em palavras simples (C62 a C65, A9, A10, P14). Os perfis de nuvem são de cada máquina: Esta máquina e a Workstation ganham o card Perfis de nuvem, e o login de lá é por código mostrado aqui (C66, C67). Perguntas em aberto: de onde vem o "até quando" da sessão SSO (variante A, só o expiresAt do cache da CLI, ou B, sem abrir o cache), Conexões ou uma seção Nuvens, um clique para entrar e subir, e Parar já na fase 1.</li>
+    <li><b>Aviso de versão nova do app (#330, a aprovar):</b> o app consulta o canal app-updates <b>a cada 10 min no modo dev</b> (versão abaixo da 1.0, ou build com a marca de canal dev) e <b>a cada 6 h numa estável</b>; Buscar agora está sempre disponível. Quando acha, uma notificação sem som, uma vez por versão, com Atualizar e Depois (A12), e um card no topo de todas as telas da /ui, acima do cabeçalho (C77, C78). Perguntas em aberto: a regra do modo dev; Depois esconde até a próxima versão ou por 24 h, o que vier antes; Buscar agora mora na versão do pé da barra lateral, e não num card em Controle (C79); fora do app, o aviso aparece sem Atualizar, e o painel do mod não mostra nada (C80); no artefato do claude.ai o aviso é só de leitura, sem Depois nem Buscar agora ativos, porque o MCP da extensão só lê (decisão 0003); o lugar do card, no topo da coluna de conteúdo, em todas as telas, e a cor, laranja da marca e não o amarelo de "precisa de você" (a aprovar); o "em dia" e a falha também notificam, só quando a ação veio da bandeja (A11, A12); o card verde de "atualizado" depois de reiniciar. Quem consulta e baixa é o app; o núcleo só guarda o estado e repassa os pedidos da /ui.</li>
     <li><b>Ferramentas (#280, decisão 0014):</b> CLIs, servidores MCP, plataformas e containers desta máquina e da Workstation, na seção Controle. Instalar, atualizar, iniciar e parar rodam só o que está no catálogo do núcleo, sem shell, um por vez, depois de mostrar o comando; o que pede sudo vira comando para copiar. A Workstation é só leitura até ela mesma ligar as ações (C72 a C76). Aprovado em 21/10, como está.</li>
     <li><b>Sessões de todas as máquinas (#243, a aprovar):</b> o filtro de máquina (Todas · Esta máquina · Workstation, Todas por padrão, na URL) entra em Sessões, Mural, Kanban, Histórico, Feed e Dashboard; o rótulo "Workstation" vai só nas linhas e cards remotos; sem conexão, as sessões de lá saem das listas com um aviso neutro; o detalhe remoto não tem "Abrir no Claude Desktop" (C45 a C49).</li>
     <li><b>O painel do mod com todas as máquinas (#262, a aprovar):</b> "Ver" lista as sessões deste Mac e da Workstation juntas, por idade; o card remoto diz "Workstation" no começo da linha de meta, no lugar da relação, e abre o detalhe no console; um Select só junta a Família e o filtro (Família · Todas as máquinas · Esta máquina · Workstation), na linha de baixo no estreito; sem conexão, as sessões de lá saem e uma linha neutra diz desde quando, com "resolver no console ›"; "N precisam de você" soma as máquinas e a dica divide por máquina e por conta (P15, P16).</li>

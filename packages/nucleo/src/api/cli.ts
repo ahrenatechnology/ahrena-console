@@ -27,7 +27,7 @@ import { createMcpServer } from '../mcp/index.ts';
 import { GithubCache } from '../github/cache.ts';
 import { GithubGraphqlSource } from '../github/github-source.ts';
 import { SqliteCacheStore } from '../github/sqlite-cache.ts';
-import { GithubCallQueue } from '../github/call-queue.ts';
+import { GITHUB_CALL_LIMIT, GithubCallQueue } from '../github/call-queue.ts';
 import { chooseVault, GithubConnection, GithubNotConnectedError } from '../github/connection/index.ts';
 import { parseProjectEnv, PROJECT_ENV } from '../github/project-selection.ts';
 import { SqliteInstallationSettings } from '../settings/installation-settings.ts';
@@ -86,6 +86,8 @@ import { createMessagingRoute } from './messaging.ts';
 import { createTranscriptionRoute } from './transcription.ts';
 import { createTranscription, resolveWhisperConfig } from '../transcription/whisper.ts';
 import { Messaging } from '../messaging/service.ts';
+import { SessionOrders } from '../messaging/orders.ts';
+import { createOrdersRoute } from './orders.ts';
 import { demoMessaging } from '../messaging/demo.ts';
 import { SessionsDirectory } from '../messaging/adapters/sessions-dir.ts';
 import { SocketInbox } from '../messaging/adapters/socket-inbox.ts';
@@ -114,6 +116,8 @@ import { publishToolsChanges, ToolsExecutor, toolsLogFile } from '../tools/execu
 import { AwsConnector, publishConnectorChanges } from '../clouds/aws-connector.ts';
 import { loopbackWrite } from '../clouds/remote-connectors.ts';
 import { createCloudsRoute } from './clouds.ts';
+import { AppUpdateState } from '../app-update/state.ts';
+import { createAppUpdateRoute } from './app-update.ts';
 import { MachineConnection, publishConnectionChanges } from '../telemetry/connection.ts';
 import { PlacementProbe, withPlacement } from '../telemetry/placement.ts';
 import { createConnectionRoute } from './connection.ts';
@@ -272,8 +276,9 @@ const desktop = demo || o.noDesktop ? null : new DesktopIndex();
 // The installation settings (#241, decision 0011 §8): the GitHub login, the credential source and the
 // Project chosen on the screen. Never a credential.
 const settings = new SqliteInstallationSettings(sqlite.db);
-// A single queue for the GitHub calls (decision 0001, item 6): the connection's, the screens' and the work's.
-const githubQueue = new GithubCallQueue();
+// A single queue for the GitHub calls (decision 0001, item 6): the connection's, the screens' and the work's,
+// up to `GITHUB_CALL_LIMIT` at once (#341).
+const githubQueue = new GithubCallQueue(GITHUB_CALL_LIMIT);
 // A single GitHub cache, in the database, for the work and every screen: a rate-limit pause holds for all.
 const githubCache = new GithubCache({ store: new SqliteCacheStore(storage.db) });
 // The core's GitHub (#241, src/api/core-github.ts): the connection, the credential provider and the
@@ -519,6 +524,8 @@ const awsConnector = demo ? null : new AwsConnector({ logFile: reconnectLogFile(
 // The connection of each remote machine (#278, decision 0013 section 4): start, stop, reconnect and login-and-start, on the reconnect runner.
 const machineConnection = remoteMachines && reconnectRunner ? new MachineConnection({ registry: remoteMachines, startRunner: reconnectRunner, logFile: reconnectLogFile(dataDir), cloud: awsConnector, localReading: () => sampleStore.latest('local'), onChange: publishConnectionChanges(changes), log }) : null;
 const clouds = awsConnector ? createCloudsRoute({ aws: awsConnector, remote: { port: (id) => remoteMachines?.get(id)?.port, get: loopbackGet(), write: loopbackWrite() } }) : null;
+// The desktop app's update notice (#330): the app reports what it found; the /ui reads it. Not in --demo.
+const appUpdate = demo ? null : createAppUpdateRoute(new AppUpdateState(changes));
 
 let historyReady = false;
 const follower =
@@ -582,13 +589,15 @@ const api: LocalApi = await startLocalApi({
   devConsole: screens.devConsole,
   agentConfig,
   telemetry: telemetryService,
-  machineReader: new MachineReader({ get: loopbackGet({ timeoutMs: MACHINE_READ_ADAPTER_TIMEOUT_MS }), machines: () => remoteMachines?.list() ?? [] }),
+  machineReader: new MachineReader({ get: loopbackGet({ timeoutMs: MACHINE_READ_ADAPTER_TIMEOUT_MS }), machines: () => remoteMachines?.list() ?? [], connectionOf: (id) => machineConnection?.status(id) ?? null }),
   reconnect: machineConnection?.legacy ?? reconnectRunner,
   machineConnection: machineConnection ? createConnectionRoute(machineConnection) : null,
   messaging: createMessagingRoute({ messaging, sessions: storage, accounts, log }),
   transcription: transcription ? createTranscriptionRoute({ transcription, log }) : null,
+  orders: createOrdersRoute({ orders: new SessionOrders(), messaging, sessions: storage }),
   tools: toolsExecutor,
   clouds,
+  appUpdate,
   load: () => ({
     history: follower ? (historyReady ? 'ready' : 'importing') : 'off',
     follower: follower?.stats() ?? null,

@@ -102,6 +102,8 @@ interface Candidata {
 }
 
 const UM_MIN = 60_000;
+/** The `source` of a session the history import created (ingest/history/importer.ts). */
+const IMPORT_SOURCE = 'import';
 
 /** O que o painel calcula de uma sessão já gravada, com os mesmos caches: o card do mural (#34) sai daqui. */
 export interface LeituraDaSessao {
@@ -214,6 +216,21 @@ export class MontadorDoPainel {
     };
   }
 
+  /**
+   * #319: whether this Mac's storage has the session (after the demo's alias), as `montar` reads it,
+   * and whether it was first seen through a transcript import (`source: 'import'`, no hook of its
+   * start): such a session may be a copy of one that runs on a remote machine. `null`: not known.
+   */
+  async knows(sessionId: string): Promise<{ imported: boolean } | null> {
+    const session = await this.storage.getSession(this.apelido(sessionId));
+    return session ? { imported: session.source === IMPORT_SOURCE } : null;
+  }
+
+  /** #319: this API's own block for the panel's footer (version, commits, whether it opens the Desktop). */
+  api(): Panel['api'] {
+    return { version: this.version, commit: this.commit, folder: this.commitDaPasta(), opensSession: this.abreSessao };
+  }
+
   /** `literal`: o id pedido, sem o apelido da demonstração (o Detalhe da /ui lê qualquer sessão). */
   async montar(pedidoOriginal: PedidoDoPainel, { literal = false }: { literal?: boolean } = {}): Promise<Panel> {
     const pedido = { ...pedidoOriginal, sessionId: literal ? pedidoOriginal.sessionId : this.apelido(pedidoOriginal.sessionId) };
@@ -238,10 +255,11 @@ export class MontadorDoPainel {
 
     return {
       version: 1,
-      api: { version: this.version, commit: this.commit, folder: this.commitDaPasta(), opensSession: this.abreSessao },
+      api: this.api(),
       generatedAt: new Date(agora).toISOString(),
       session: sessao,
       context: session ? contextoDe(session, resumo!, await this.storage.listContextMeters(session.id)) : null,
+      // #319: `null` only when the storage has no such session; api/machine-panel.ts reads a remote's panel by it.
       cost: custo,
       tokens,
       background: { total: bg.length, first: bg[0]?.command ?? null },

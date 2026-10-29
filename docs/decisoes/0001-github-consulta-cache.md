@@ -78,6 +78,8 @@ O GitHub documenta que um 304 com autenticação não consome o limite primário
    - **Limite atingido** (403/429): pausa pelo `retry-after`, senão até o `x-ratelimit-reset`, senão 2 min, e serve o cache.
 6. **Proibido:** laço de aquecimento, leitura de todas as organizações na partida e consultas em paralelo ao GitHub. A primeira tela lê só o que vai mostrar.
 
+   **Emenda de 25/10/2026 (#341):** a fila única do núcleo passa a deixar até 4 chamadas ao mesmo tempo (`GITHUB_CALL_LIMIT`, `packages/nucleo/src/github/call-queue.ts`), na ordem de chegada; uma fila criada sem limite continua uma de cada vez. Motivo: com a conta de 206 repositórios em 3 orgs, a lista levava 74,5 s com 70 chamadas em série, e a soma do tempo das chamadas era a espera inteira. 4 fica muito abaixo do limite secundário do GitHub (100 pedidos simultâneos) e do limite de pontos por minuto; o limite primário não muda, porque o número de chamadas é o mesmo. O resto do item continua: nada de aquecimento nem de leitura na partida.
+
 **Orçamento resultante, por pessoa, com a tela aberta:** Project a cada 2 min (30/h) + delta a cada 60 s (60/h) + algumas expansões (cerca de 30/h) ≈ 120 pontos por hora, contra 540 do paliativo e milhares do formato antigo. É menos de 3% do limite primário, e nenhuma consulta passa de 1 s de servidor.
 
 **Webhooks e ETag.** O núcleo local não recebe webhooks: não tem URL pública, e abrir uma por túnel não é algo para o time instalar. ETag não existe no GraphQL; fica para as poucas leituras REST (por exemplo, `sub_issues`), pelo adaptador, sem mudar a interface.
@@ -104,11 +106,25 @@ O GitHub documenta que um 304 com autenticação não consome o limite primário
 
 ## Repositórios (#104, #105)
 
-As telas de repositórios (`/api/repos`, `packages/nucleo/src/api/repos.ts`) seguem esta decisão pelo mesmo `GithubCache` do trabalho, sobre o banco do núcleo: a pausa por limite vale para os dois. Todas as chamadas, de qualquer montagem, passam por uma fila só, uma de cada vez (item 6). O pedido nunca espera o GitHub: serve o que está montado (validade de 60 s) e monta por trás.
+As telas de repositórios (`/api/repos`, `packages/nucleo/src/api/repos.ts`) seguem esta decisão pelo mesmo `GithubCache` do trabalho, sobre o banco do núcleo: a pausa por limite vale para os dois. Todas as chamadas, de qualquer montagem, passam por uma fila só, até 4 ao mesmo tempo (item 6, emenda do #341). O pedido nunca espera o GitHub: serve o que está montado (validade de 60 s) e monta por trás.
+
+**A lista em três etapas (#341).** Medido contra a conta de 206 repositórios: o que pesa na `ReposLista` são as contagens abertas e o `defaultBranchRef` com o CI (sem eles, 100 repositórios vêm em ~1,2 s; com eles, a página teve de cair para 25, #269). Então:
+
+1. Na primeira leitura depois da partida, a tela recebe a última lista montada, guardada no cache (`repos:list:view`), como qualquer dado velho de até 24 h, e a montagem roda por trás. Trocar a identidade do GitHub limpa o cache (#241), então nunca volta uma lista lida com outra credencial.
+2. A `ReposLista` leve, 100 por página, sem contagens nem CI, é publicada assim que chega: as colunas de issues, PRs e CI mostram "—".
+3. As contagens e o CI pelo `nodes(ids:)` (`ReposCounts`, 25 por lote), o `ReposResumo` e as leituras REST por repositório entram na fila juntos; a lista é publicada quando chegam as contagens e de novo no fim.
+
+| | Antes | Depois |
+| --- | ---: | ---: |
+| Primeira lista, sem cache | 27,9 s | 3,5 a 4,1 s |
+| Lista completa, sem cache | 74,5 s | 20,5 a 21,5 s |
+| Primeira lista depois de reiniciar o núcleo (cache de 10 min) | 20,7 s | imediata |
 
 | Chave | TTL | O que guarda |
 | --- | --- | --- |
-| `repos:lista` | 5 min | `ReposLista`: até 500 repositórios da conta e das orgs |
+| `repos:list:light` | 5 min | `ReposLista` leve: até 500 repositórios da conta e das orgs, 100 por página |
+| `repos:list:counts` | 5 min | `ReposCounts`: contagens abertas e CI do branch padrão de cada repositório da lista |
+| `repos:list:view` | — | a última lista montada, para a primeira leitura depois da partida (até 24 h depois da leitura da `ReposLista` que a montou) |
 | `repos:resumo` | 5 min | `ReposResumo`: PRs esperando review e issues fechadas na semana (`issueCount`) |
 | `repos:detalhe:<dono/repo>:<período>` | 5 min | `RepoDetalhe` e as páginas seguintes das buscas |
 | `repos:rest:<dono/repo>:commit_activity`, `code_frequency`, `contributors` | 1 h | estatísticas do REST, com ETag; 202 é "calculando" |
@@ -117,4 +133,4 @@ As telas de repositórios (`/api/repos`, `packages/nucleo/src/api/repos.ts`) seg
 | `repos:rest:<dono/repo>:traffic_*` | 1 h | só com escrita no repositório |
 | `repos:rest:<dono/repo>:dependabot`, `code_scanning` | 10 min | só com escrita no repositório |
 
-`<dono/repo>` vai em minúsculas. **Orçamento por montagem:** a lista custa de 2 a 21 pontos de GraphQL (1 por página de 25 repositórios, até 20 páginas, mais 1 do resumo) e até 60 leituras REST (as estatísticas e os runs dos 30 repositórios com push mais recente); as métricas de um repositório custam cerca de 4 pontos no `RepoDetalhe`, mais cerca de 1 a 2 por página seguinte das buscas (até 25: os PRs vêm de 25 em 25), e de 6 a 11 leituras REST. Dentro do TTL nada sai; fora dele, o 304 do REST não gasta o limite primário. O 202 é tentado de novo em 3, 6, 12, 30 e 60 s só enquanto alguém leu a resposta nos últimos 5 minutos. Um 502, 503 ou 504 do GraphQL (o GitHub desiste de uma consulta depois de uns 10 s) é tentado de novo depois de 1 e de 3 s, com metade da página a cada vez; uma página seguinte que ainda falha deixa o que já veio, e a resposta diz qual parte faltou (#269).
+`<dono/repo>` vai em minúsculas. **Orçamento por montagem:** a lista custa de 3 a 26 pontos de GraphQL (1 por página de 100 repositórios, até 5 páginas, 1 por lote de 25 nas contagens, até 20 lotes, mais 1 do resumo) e até 60 leituras REST (as estatísticas e os runs dos 30 repositórios com push mais recente); as métricas de um repositório custam cerca de 4 pontos no `RepoDetalhe`, mais cerca de 1 a 2 por página seguinte das buscas (até 25: os PRs vêm de 25 em 25), e de 6 a 11 leituras REST. Dentro do TTL nada sai; fora dele, o 304 do REST não gasta o limite primário. O 202 é tentado de novo em 3, 6, 12, 30 e 60 s só enquanto alguém leu a resposta nos últimos 5 minutos. Um 502, 503 ou 504 do GraphQL (o GitHub desiste de uma consulta depois de uns 10 s) é tentado de novo depois de 1 e de 3 s, com metade da página a cada vez; uma página seguinte que ainda falha deixa o que já veio, e a resposta diz qual parte faltou (#269).

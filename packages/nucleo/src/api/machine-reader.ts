@@ -16,9 +16,17 @@
 //   A failed read is cached too, so a remote that stopped answering is not asked again at once.
 // - The result is the parsed JSON of a 200 answer, or `null` (any other status, a body that is not
 //   JSON, a timeout, the machine not connected). Nothing here validates the shape: the merge does.
+// - `connection(machine)` (#319): the remote's connection as the mod's P14 band reads it,
+//   `{ state, since, lastError }`, from the injected `connectionOf`: #278's `MachineConnection.status`,
+//   the same `connection` as `GET /api/machines`. `null` without one (the demo, no reconnect runner).
 
+import type { ConnectionStatus } from '../telemetry/model.ts';
 import type { RemoteGet } from '../telemetry/ports.ts';
 import type { MachineStatus } from '../telemetry/service.ts';
+import type { PanelMachineConnection } from './types.ts';
+
+/** The source of a remote's connection: #278's `MachineConnection.status(id)`; `null` when it has none. */
+export type ConnectionOf = (machineId: string) => Promise<ConnectionStatus | null> | null;
 
 /** A remote machine as this reader needs it (`RemoteMachine` in production). */
 export interface RemoteSessionSource {
@@ -45,6 +53,8 @@ export interface MachineReaderOptions {
   staleMs?: number;
   /** At most this many cached paths; the oldest go first. Default 500. */
   maxEntries?: number;
+  /** #319: the remote's connection for the panel's `machine` (#278's); without it, `null`. */
+  connectionOf?: ConnectionOf | null;
 }
 
 export const MACHINE_READ_TTL_MS = 5_000;
@@ -111,6 +121,19 @@ export class MachineReader {
     return this.o.machines().find((m) => m.id === id);
   }
 
+  /** The machine's connection, `{ state, since, lastError }` only (never a command or a log path); `null` without one. */
+  async connection(machine: RemoteSessionSource): Promise<PanelMachineConnection | null> {
+    let c: ConnectionStatus | null = null;
+    try {
+      c = (await this.o.connectionOf?.(machine.id)) ?? null;
+    } catch {
+      // A source that fails leaves no connection: the panel never fails for it.
+    }
+    if (!c) return null;
+    const e = c.lastError;
+    return { state: c.state, since: c.since, lastError: e ? { reason: e.reason, at: e.at, exitCode: e.exitCode, holder: e.holder } : null };
+  }
+
   /** The JSON of `GET <path>` on the machine when it answered 200, or `null` (see the module comment). */
   async read(machine: RemoteSessionSource, path: string): Promise<unknown> {
     const r = await this.answer(machine, path);
@@ -160,7 +183,7 @@ export class MachineReader {
     return Math.max(this.o.staleMs ?? MACHINE_READ_STALE_MS, 3 * tookMs);
   }
 
-  private now(): number {
+  now(): number {
     return (this.o.now ?? Date.now)();
   }
 
@@ -186,3 +209,4 @@ export class MachineReader {
     }
   }
 }
+

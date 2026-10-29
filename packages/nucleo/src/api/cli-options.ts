@@ -62,8 +62,8 @@ export const HELP = `Usage: npm run api -- [options]
   --help
 
 GitHub (decision 0011): the console connects by itself, with the OAuth device flow, and keeps the
-credential in the Keychain (macOS) or the Secret Service (Linux), never in a file. The OAuth App is
-AHRENA_CONSOLE_GITHUB_CLIENT_ID (none is built in yet: without it the connection is unavailable).
+credential in the Keychain (macOS) or the Secret Service (Linux), never in a file. The Ahrena OAuth App is
+built in; AHRENA_CONSOLE_GITHUB_CLIENT_ID overrides it with another app's Client ID (development).
 AHRENA_CONSOLE_GITHUB_SOURCE=gh uses \`gh auth token\` instead (opt-in, for development).
 AHRENA_CONSOLE_VAULT=keychain|secret-service|memory|none overrides the vault this platform has
 (memory keeps nothing across restarts; none makes the connection unavailable). Under node --test only

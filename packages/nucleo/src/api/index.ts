@@ -45,4 +45,5 @@ export { createDecisionsRoute, createCoreDecisions, DecisionsService, ADRS_ROUTE
 export { createAgentConfigRoute, agentConfigWriteFromSameOrigin, MAX_SKILL_BODY, AGENT_CONFIG_ROUTE, SKILL_ROUTE, type AgentConfigOptions, type AgentConfigRoute } from './agent-config.ts';
 export { MACHINES_ROUTE, TELEMETRY_ROUTE, isTelemetryRoute, readTelemetryRequest, respondTelemetry } from './telemetry.ts';
 export { createTranscriptionRoute, transcriptionWriteFromSameOrigin, TRANSCRIPTION_ROUTE, MAX_AUDIO_BYTES, type TranscriptionRoute } from './transcription.ts';
+export { createOrdersRoute, ordersWriteFromSameOrigin, ORDERS_ROUTE, type OrdersRoute, type OrdersRouteOptions } from './orders.ts';
 export { createMessagingRoute, messagesWriteFromSameOrigin, MESSAGING_ROUTE, MAX_MESSAGE_BODY, type MessagingAccount, type MessagingAvailabilityBody, type MessagingRoute, type MessagingRouteOptions } from './messaging.ts';

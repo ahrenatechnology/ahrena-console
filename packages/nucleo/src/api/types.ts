@@ -8,6 +8,7 @@ import type { SessionAttention } from './attention.ts';
 import type { SessionOpen } from './session-open.ts';
 import type { AccountSource, AwaitingReason, DisplayStatus } from '../model.ts';
 import type { InboxState } from '../states/inbox.ts';
+import type { ConnectionError, ConnectionState } from '../telemetry/model.ts';
 
 /** A session's account on the panel (decision 0006). */
 export interface PanelAccount {
@@ -292,6 +293,26 @@ export interface Panel {
   prs: PanelPrs;
   /** `null`: o núcleo subiu sem a porta das decisões. */
   decisions: PanelDecisions | null;
+  /**
+   * #319 (P14): the remote machine the session runs on (api/machine-panel.ts). Absent for a session of
+   * this machine; the mod's `PanelMachine` repeats it.
+   */
+  machine?: PanelMachine | null;
+}
+
+/** A remote machine's connection as the P14 band reads it: #278's `ConnectionStatus`, these fields only. */
+export interface PanelMachineConnection {
+  state: ConnectionState;
+  since: string | null;
+  lastError: ConnectionError | null;
+}
+
+/** The `machine` of a remote session's panel (#319). `lastReadAt`: when the panel shown was read. */
+export interface PanelMachine {
+  id: string;
+  label: string;
+  lastReadAt: string | null;
+  connection: PanelMachineConnection | null;
 }
 
 /** The scope of the decision list (P9's Select). */

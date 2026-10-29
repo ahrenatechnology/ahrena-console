@@ -282,6 +282,7 @@ function generateSeries(repo: FakeRepo, now: number): Series {
 
 function rawRepo(repo: FakeRepo, now: number) {
   return {
+    id: `R_${repo.owner}/${repo.name}`,
     name: repo.name,
     nameWithOwner: `${repo.owner}/${repo.name}`,
     url: `https://github.com/${repo.owner}/${repo.name}`,
@@ -479,6 +480,11 @@ export function createFakeGithub(data: FakeGithubData, { now = Date.now, delayMs
           repositories: { totalCount: data.repos.length, pageInfo: { hasNextPage: false, endCursor: null }, nodes: data.repos.map((x) => rawRepo(x, now())) },
         },
       };
+    }
+    if (op === 'ReposCounts') {
+      // `nodes(ids:)` (#341): the ids `rawRepo` gives; an unknown one is `null`, as GitHub answers.
+      const ids = (v.ids as unknown as string[]) ?? [];
+      return { rateLimit, nodes: ids.map((id) => (repoById(id) ? rawRepo(repoById(id)!, now()) : null)) };
     }
     if (op === 'RepoFilesDiscovery') {
       // Um lote de até 20 repositórios (`$o<i>`, `$n<i>`), cada um sob `r<i>` (#174).
@@ -721,11 +727,11 @@ function projectOptions(data: FakeGithubData, rateLimit: unknown): unknown {
     rateLimit,
     viewer: {
       login: data.login,
-      projectsV2: { nodes: [node(data.login, 'User', 1, 'Notas soltas', 4, false), node(data.login, 'User', 2, 'Arquivo de 2025', 12, true, true)] },
+      projectsV2: { totalCount: 2, nodes: [node(data.login, 'User', 1, 'Notas soltas', 4, false), node(data.login, 'User', 2, 'Arquivo de 2025', 12, true, true)] },
       organizations: {
         nodes: [
-          { login: 'exemplo', projectsV2: { nodes: [node('exemplo', 'Organization', 3, 'Ahrena Console', 12, true)] } },
-          ...data.organizations.map((login) => ({ login, projectsV2: { nodes: [] } })),
+          { login: 'exemplo', projectsV2: { totalCount: 1, nodes: [node('exemplo', 'Organization', 3, 'Ahrena Console', 12, true)] } },
+          ...data.organizations.map((login) => ({ login, projectsV2: { totalCount: 0, nodes: [] } })),
         ],
       },
     },

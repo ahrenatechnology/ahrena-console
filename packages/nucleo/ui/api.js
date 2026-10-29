@@ -127,6 +127,17 @@ export function useWriter(next) {
   writer = next;
 }
 
+/** Whether this page can write to a core: the HTTP writer works on a local origin; the artifact has none. */
+export function canWrite() {
+  if (writer) return true;
+  try {
+    writer = httpWriter();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /** Sends `body` (JSON) to a route of the core API and returns the JSON of the answer; `{ method: 'DELETE' }` deletes. */
 export function write(route, body, options) {
   writer ??= httpWriter();

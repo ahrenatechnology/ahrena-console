@@ -10,6 +10,7 @@ import { Accounts, FeedDeEventos, LeiturasDoDetalhe, ListaDeSessoes, MontadorDoP
 import { RotaAnalytics } from '../../src/api/analytics-route.ts';
 import type { MessagingRoute } from '../../src/api/messaging.ts';
 import type { TranscriptionRoute } from '../../src/api/transcription.ts';
+import type { OrdersRoute } from '../../src/api/orders.ts';
 import { DecisoesDaUi } from '../../src/api/decisions-ui.ts';
 import { criarReposDoNucleo } from '../../src/api/repos.ts';
 import { SqliteDecisionStore } from '../../src/decisions/sqlite.ts';
@@ -51,9 +52,11 @@ export interface DemoApiOptions {
   messaging?: (storage: SqliteStorage) => MessagingRoute;
   /** The dictation route of #352, over a fake whisper. */
   transcription?: TranscriptionRoute;
+  /** The per-session orders (#61, mod part), built the same way. */
+  orders?: (storage: SqliteStorage) => OrdersRoute;
 }
 
-export async function startDemoApi({ messaging, transcription }: DemoApiOptions = {}): Promise<DemoApi> {
+export async function startDemoApi({ messaging, orders, transcription }: DemoApiOptions = {}): Promise<DemoApi> {
   const clock = () => NOW;
   const opened: string[] = [];
   const records = mkdtempSync(join(tmpdir(), 'ahrena-demo-api-'));
@@ -102,6 +105,7 @@ export async function startDemoApi({ messaging, transcription }: DemoApiOptions 
     repos: repos.rota,
     messaging: messaging?.(sqlite),
     transcription,
+    orders: orders?.(sqlite),
   });
   return {
     api,

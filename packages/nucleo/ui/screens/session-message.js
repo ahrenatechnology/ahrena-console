@@ -7,6 +7,10 @@
 // - `POST /api/sessions/<id>/messages` `{ text }`: same origin only, the page's own `write()`;
 // - `GET /api/sessions/<id>/messages/<messageId>`: the state, polled while it is "sending".
 //
+// - `POST /api/sessions/<id>/commands` `{ kind }` and `GET …/commands/<orderId>` (src/api/orders.ts): the
+//   `/compact`, `/clear` and Remote control buttons. The core queues the order and the panel mod, inside
+//   the session, runs it and says how it went; the box polls the order while it is `queued` or `running`.
+//
 // What the person types lives only in the textarea and in the POST body: never in a URL, a log or the
 // DOM as HTML. Everything from the core goes in through `textContent` (`el()`).
 //
@@ -36,8 +40,36 @@ export function useMessageStyle() {
 /** The route of a session's messaging: `kind` is `messaging`, `messages` or `messages/<id>`. */
 export const messagingRoute = (sessionId, kind) => `/api/sessions/${encodeURIComponent(sessionId)}/${kind}`;
 
+/** The route of a session's orders: `/commands`, or one order `/commands/<orderId>`. */
+export const ordersRoute = (sessionId, orderId = null) => `/api/sessions/${encodeURIComponent(sessionId)}/commands${orderId ? `/${encodeURIComponent(orderId)}` : ''}`;
+
 /** The Detail on Conversa with the box focused: where "Mandar mensagem" goes. */
 export const composeHref = (sessionId) => `/ui/sessions/${encodeURIComponent(sessionId)}?focus=message#conversation`;
+
+/** What the three order buttons are called on screen. */
+const ORDER_LABEL = { compact: '/compact', clear: '/clear', 'remote-control': 'Remote control' };
+
+/** The status line of an order (an object from `GET …/commands/<id>`), by its state: `{ kind, icon, title, text }`, or `null`. */
+export function orderStatus(order) {
+  if (!order) return null;
+  const label = ORDER_LABEL[order.kind] ?? order.kind;
+  switch (order.state) {
+    case 'queued':
+      return { kind: 'busy', icon: 'wall-loader', title: `Pedindo ${label} à sessão…`, text: 'A ordem espera o mod do painel, que roda dentro da sessão, buscá-la.' };
+    case 'running':
+      return { kind: 'busy', icon: 'wall-loader', title: `Rodando ${label}…`, text: 'O comando roda quando a sessão estiver ociosa.' };
+    case 'done':
+      return { kind: 'ok', icon: 'check-circle-2', title: order.kind === 'remote-control' ? 'Remote Control ligado.' : `${label} rodou.`, text: 'O resultado aparece na conversa da sessão.' };
+    case 'failed':
+      return { kind: 'fail', icon: 'error', title: `${order.kind === 'remote-control' ? 'Não ligou' : 'Não rodou'}: ${order.reason ?? 'sem motivo'}`, text: 'Nada mudou na sessão.' };
+    case 'expired':
+      return order.reason === 'no_mod'
+        ? { kind: 'wait', icon: 'clock', title: 'O mod do painel não respondeu.', text: 'Sem o mod ligado nesta sessão (/reload-plugins), ninguém roda o comando. Nada foi feito.' }
+        : { kind: 'wait', icon: 'clock', title: 'Sem resposta do mod a tempo.', text: `O ${label} pode ter rodado: veja na conversa antes de pedir de novo.` };
+    default:
+      return null;
+  }
+}
 
 /** The size the core counts: UTF-8 bytes. */
 export function byteLength(text) {
@@ -262,6 +294,9 @@ export function createComposeBox(ctx, sessionId, { head = () => null, openContro
   let poll = null;
   let retryTimer = null;
   let wantFocus = false;
+  /** This box's order (`/compact`, `/clear`, Remote control): the 202 of its POST, then the polled state. */
+  let order = null;
+  let orderTimer = null;
 
   // Dictation. `voiceState`: idle, opening (the browser's permission prompt), recording, transcribing.
   let voiceState = 'idle';
@@ -463,13 +498,16 @@ export function createComposeBox(ctx, sessionId, { head = () => null, openContro
     }
   }
 
+  const orderOpen = () => order !== null && (order.state === 'queued' || order.state === 'running');
+
   function commandButtons(remoteControl) {
-    const why = 'Só o mod do painel roda comandos: mandado como mensagem, chegaria como texto';
+    const off = !availability?.available || sending || !!foreign || orderOpen() || message?.state === 'sending';
+    const button = (kind, className, title, ...children) =>
+      el('button', { type: 'button', class: className, disabled: off, title, 'aria-busy': order?.kind === kind && orderOpen() ? 'true' : null, onClick: () => runOrder(kind) }, ...children);
     return [
-      el('button', { type: 'button', class: 'sm-cmd mono', disabled: true, title: why }, '/compact'),
-      el('button', { type: 'button', class: 'sm-cmd mono', disabled: true, title: why }, '/clear'),
-      remoteControl ? null : el('button', { type: 'button', class: 'sm-cmd', disabled: true, title: 'Ligar o Remote Control desta sessão depende do mod do painel' }, icon('live'), 'Remote control'),
-      el('span', { class: 'sm-why' }, icon('lock'), 'dependem do mod'),
+      button('compact', 'sm-cmd mono', 'Compacta a conversa; roda quando a sessão estiver ociosa', '/compact'),
+      button('clear', 'sm-cmd mono', 'Limpa a conversa; roda quando a sessão estiver ociosa', '/clear'),
+      remoteControl ? null : button('remote-control', 'sm-cmd', 'Liga o Remote Control desta sessão', icon('live'), 'Remote control'),
     ];
   }
 
@@ -570,13 +608,15 @@ export function createComposeBox(ctx, sessionId, { head = () => null, openContro
     const lines = [];
     const s = messageStatus(sending ? { state: 'sending' } : message);
     if (s) lines.push(statusLine(s));
+    const o = orderStatus(order);
+    if (o) lines.push(statusLine(o));
     if (foreign) lines.push(statusLine({ kind: 'wait', icon: 'clock', title: 'Outra mensagem a caminho.', text: foreign.text }));
     if (notice) lines.push(statusLine({ kind: notice.kind, icon: notice.kind === 'fail' ? 'error' : 'clock', title: notice.title, text: notice.text }));
     if (voiceState === 'transcribing') lines.push(statusLine({ kind: 'busy', icon: 'wall-loader', title: `Transcrevendo ${clock(audioSeconds)} de áudio…`, text: 'whisper large-v3-turbo nesta máquina; o áudio não sai dela.' }));
     else if (dictation) lines.push(statusLine(dictation));
-    if (!s && !notice && !foreign) lines.push(permissionWarning());
+    if (!s && !o && !notice && !foreign) lines.push(permissionWarning());
     const off = voiceOffReason();
-    if (off && !lines.some(Boolean)) lines.push(statusLine({ kind: 'info', icon: 'info', title: 'Ditado desligado:', text: off }));
+    if (off && !dictation && !notice) lines.push(statusLine({ kind: 'info', icon: 'info', title: 'Ditado desligado:', text: off }));
     status.replaceChildren(...lines.filter(Boolean));
 
     const send = [];
@@ -704,7 +744,58 @@ export function createComposeBox(ctx, sessionId, { head = () => null, openContro
     }
   }
 
+  function stopOrderPolling() {
+    clearTimeout(orderTimer);
+    orderTimer = null;
+  }
+
+  /** Asks for the state of the order until it settles; a core that stops answering is given up on after a few tries. */
+  function watchOrder(id, failures = 0) {
+    stopOrderPolling();
+    orderTimer = setTimeout(async () => {
+      try {
+        const o = await ctx.read(ordersRoute(sessionId, id));
+        if (order?.orderId !== id) return;
+        order = o;
+        if (o.state === 'queued' || o.state === 'running') {
+          draw();
+          return void watchOrder(id);
+        }
+        // Settled: Remote control may have changed, and a command writes to the conversation.
+        draw();
+        readAvailability();
+        onDelivered();
+      } catch (e) {
+        if (e?.name === 'AbortError' || order?.orderId !== id) return;
+        if (e?.status === 404 || failures >= 5) {
+          order = { ...order, state: 'expired', reason: 'no_answer' };
+          return void draw();
+        }
+        watchOrder(id, failures + 1);
+      }
+    }, timing.pollMs);
+  }
+
+  async function runOrder(kind) {
+    if (!availability?.available || orderOpen()) return;
+    order = { orderId: null, kind, state: 'queued', reason: null };
+    notice = null;
+    draw();
+    try {
+      const o = await ctx.write(ordersRoute(sessionId), { kind });
+      order = o;
+      draw();
+      watchOrder(o.orderId);
+    } catch (e) {
+      if (e?.name === 'AbortError') return;
+      order = null;
+      notice = { kind: 'fail', title: 'Não pediu.', text: e?.message ?? 'O núcleo não aceitou a ordem.' };
+      draw();
+    }
+  }
+
   ctx.signal?.addEventListener?.('abort', () => {
+    stopOrderPolling();
     stopPolling();
     clearTimeout(retryTimer);
     endRecording()?.cancel();
@@ -720,7 +811,7 @@ export function createComposeBox(ctx, sessionId, { head = () => null, openContro
   return {
     node,
     /** Re-reads the availability (a live change of the session); the text and the message in flight stay. */
-    refresh: () => (remote || sending || watched() || voiceState !== 'idle' ? undefined : readAvailability()),
+    refresh: () => (remote || sending || watched() || orderOpen() || voiceState !== 'idle' ? undefined : readAvailability()),
     /** Focuses the text as soon as the box can take it ("Mandar mensagem" from a list). */
     focus() {
       wantFocus = true;

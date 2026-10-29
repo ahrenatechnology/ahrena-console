@@ -7,9 +7,10 @@
 // | `POST /api/connections/github/cancel`      | Drops the pending flow; `{ github }`                   |
 // | `POST /api/connections/github/disconnect`  | Deletes the vault entry and forgets it; `{ github }`   |
 // | `POST /api/connections/github/source`      | `{ source: "console" | "gh" }`; `{ github }`           |
+// | `POST /api/connections/github/orgs`        | Checks the organizations again (#336); `{ github }`    |
 // | `POST /api/project/selection`              | `{ owner, number, field? }`; `{ selection, envOverride }` |
 //
-// The five writes are accepted ONLY from the /ui itself (`strictWriteRefusal`): POST, the raw URL exactly
+// The six writes are accepted ONLY from the /ui itself (`strictWriteRefusal`): POST, the raw URL exactly
 // the route (no query), our Host, `Origin` exactly `http://<Host>`, `Content-Type: application/json`, a
 // body of at most 4 KiB, and not a browser saying `Sec-Fetch-Site: cross-site` or `same-site`. Unlike the
 // other writes, a request without `Origin` is refused: connecting is a decision of the person in front of
@@ -27,10 +28,11 @@ export const GITHUB_START_ROUTE = '/api/connections/github/start';
 export const GITHUB_CANCEL_ROUTE = '/api/connections/github/cancel';
 export const GITHUB_DISCONNECT_ROUTE = '/api/connections/github/disconnect';
 export const GITHUB_SOURCE_ROUTE = '/api/connections/github/source';
+export const GITHUB_ORGS_ROUTE = '/api/connections/github/orgs';
 export const PROJECT_SELECTION_ROUTE = '/api/project/selection';
 
 /** The writes that only the /ui itself may make. */
-export const STRICT_WRITE_ROUTES: ReadonlySet<string> = new Set([GITHUB_START_ROUTE, GITHUB_CANCEL_ROUTE, GITHUB_DISCONNECT_ROUTE, GITHUB_SOURCE_ROUTE, PROJECT_SELECTION_ROUTE]);
+export const STRICT_WRITE_ROUTES: ReadonlySet<string> = new Set([GITHUB_START_ROUTE, GITHUB_CANCEL_ROUTE, GITHUB_DISCONNECT_ROUTE, GITHUB_SOURCE_ROUTE, GITHUB_ORGS_ROUTE, PROJECT_SELECTION_ROUTE]);
 
 const MAX_BODY = 4096;
 
@@ -95,7 +97,7 @@ function connectionError(res: ServerResponse, err: unknown): void {
   send(res, 409, { error: err.code });
 }
 
-/** GET /api/connections and the four github writes. The caller already ran `strictWriteRefusal` on the writes. */
+/** GET /api/connections and the five github writes. The caller already ran `strictWriteRefusal` on the writes. */
 export async function respondConnections(req: IncomingMessage, res: ServerResponse, pathname: string, connection: GithubConnection): Promise<void> {
   if (pathname === CONNECTIONS_ROUTE) {
     if (req.method !== 'GET') return send(res, 405, { error: 'method-not-allowed' });
@@ -107,6 +109,7 @@ export async function respondConnections(req: IncomingMessage, res: ServerRespon
     if (pathname === GITHUB_START_ROUTE) return send(res, 200, { github: await connection.start() });
     if (pathname === GITHUB_CANCEL_ROUTE) return send(res, 200, { github: await connection.cancel() });
     if (pathname === GITHUB_DISCONNECT_ROUTE) return send(res, 200, { github: await connection.disconnect() });
+    if (pathname === GITHUB_ORGS_ROUTE) return send(res, 200, { github: await connection.recheckOrgs() });
     if (pathname === GITHUB_SOURCE_ROUTE) {
       const source = (body.value as { source?: unknown } | null)?.source;
       if (source !== 'console' && source !== 'gh') return send(res, 400, { error: 'invalid' });
