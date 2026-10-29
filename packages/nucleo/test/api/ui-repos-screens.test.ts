@@ -101,7 +101,7 @@ function metricasDeExemplo(extra: Partial<MetricasDoRepo> = {}): MetricasDoRepo 
     },
     tabs: { issues: 12, prs: 3, sessions: 5 },
     lines: { total: 48_300, inPeriod: 6_100 },
-    commits: { total: 120, perWeek: 9, weeks: [5, 9, 12] },
+    commits: { total: 120, perWeek: 9, weeks: [5, 9, 12], days: [{ day: '2026-10-12', commits: 3 }, { day: '2026-10-13', commits: 0 }, { day: '2026-10-14', commits: 9 }] },
     frequency: { weeks: [{ week: iso(14 * 24 * HORA), added: 900, removed: 200 }], added: 900, removed: 200 },
     issues: { byType: [{ type: 'Bug', closed: 4, open: 2 }], closed: 4, open: 2, medianTimeToCloseMs: 2 * HORA, sample: amostra(6, 6) },
     prs: {

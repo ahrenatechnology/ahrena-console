@@ -5,7 +5,9 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { describe, test } from 'node:test';
 import { UI_FOLDER } from '../../src/api/ui.ts';
 import {
-  bars,
+  activityGrid,
+  frequencyGrid,
+  heat,
   COMPUTING,
   trafficCardKind,
   screenState,
@@ -22,7 +24,6 @@ import {
   duration,
   slices,
   filterRepos,
-  frequency,
   ago,
   integer,
   kilo,
@@ -232,33 +233,29 @@ describe('repos na /ui: as escalas dos gráficos', () => {
     assert.equal(sparkline([0, 0, 0], 90, 22), '1,20 45,20 89,20', 'tudo zero fica rente ao chão');
   });
 
-  test('#105 critério 1: barras dos commits por semana, a maior no topo', () => {
-    const b = bars([1, 2, 4], 300, 90);
-    assert.equal(b.length, 3);
-    assert.equal(b[2].y, 6);
-    assert.equal(b[2].altura, 84);
-    assert.equal(b[0].altura, 21);
-    assert.equal(b[1].x, 101);
-    assert.deepEqual(bars([]), []);
+  test('heat levels go from 0 (nothing) to 4 against the largest value', () => {
+    assert.deepEqual([0, 1, 25, 26, 100].map((v) => heat(v, 100)), [0, 1, 1, 2, 4]);
+    assert.equal(heat(5, 0), 0);
   });
 
-  test('#105 critério 1: frequência com adicionadas para cima e removidas para baixo, mesma escala', () => {
-    const f = frequency(
-      [
-        { week: 'a', added: 100, removed: 50 },
-        { week: 'b', added: 20, removed: 100 },
-      ],
-      200,
-      64,
-      58,
-      52,
-    );
-    assert.equal(f[0].cima.altura, 58);
-    assert.equal(f[0].cima.y, 6);
-    assert.equal(f[0].baixo.y, 64);
-    assert.equal(f[0].baixo.altura, 26);
-    assert.equal(f[1].baixo.altura, 52);
-    assert.deepEqual(frequency([]), []);
+  test('commit grid: a column per week, rows Monday to Sunday, a month label on the 1st', () => {
+    // 2026-09-30 is a Wednesday: it opens the first column on row 2.
+    const days = ['2026-09-30', '2026-10-01', '2026-10-02', '2026-10-03', '2026-10-04', '2026-10-05'].map((day, i) => ({ day, commits: i * 2 }));
+    const g = activityGrid(days);
+    assert.equal(g.columns, 2);
+    assert.deepEqual(g.cells.map((c) => [c.column, c.row]), [[0, 2], [0, 3], [0, 4], [0, 5], [0, 6], [1, 0]]);
+    assert.deepEqual(g.cells.map((c) => c.level), [0, 1, 2, 3, 4, 4]);
+    assert.deepEqual(g.months, [{ column: 0, label: 'out' }]);
+    assert.deepEqual(activityGrid([]), { columns: 0, cells: [], months: [] });
+  });
+
+  test('code frequency grid: added and removed weeks on one scale', () => {
+    const f = frequencyGrid([
+      { week: '2026-10-04T00:00:00.000Z', added: 100, removed: 50 },
+      { week: '2026-10-11T00:00:00.000Z', added: 0, removed: 100 },
+    ]);
+    assert.deepEqual(f.map((w) => [w.week, w.addedLevel, w.removedLevel]), [['2026-10-04', 4, 2], ['2026-10-11', 0, 4]]);
+    assert.deepEqual(frequencyGrid([]), []);
   });
 
   test('#105 critério 3 e 4: fatias da barra empilhada e linguagens com "Outras"', () => {

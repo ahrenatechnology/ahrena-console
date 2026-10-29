@@ -123,10 +123,25 @@
 .repo-chart { display: block; width: 100%; height: auto; }
 .repo-chart text { font-family: var(--font-mono); font-size: 10px; fill: var(--muted); }
 .repo-chart-base { stroke: var(--border); }
-.repo-chart-bar { fill: var(--accent); fill-opacity: .65; }
-.repo-chart-current { fill-opacity: 1; }
-.repo-chart-add { fill: var(--status-completed-dot); fill-opacity: .8; }
-.repo-chart-rem { fill: var(--status-error-dot); fill-opacity: .75; }
+/* grids à la GitHub: commits in the brand orange, added lines green, removed lines red; 0 is empty */
+.repo-heat { overflow: visible; }
+.repo-heat-cell:hover { stroke: var(--text); stroke-width: 1; }
+.repo-h0, .repo-ha0, .repo-hr0 { --heat: var(--raised); }
+.repo-h1 { --heat: color-mix(in srgb, var(--accent) 25%, var(--raised)); }
+.repo-h2 { --heat: color-mix(in srgb, var(--accent) 50%, var(--raised)); }
+.repo-h3 { --heat: color-mix(in srgb, var(--accent) 75%, var(--raised)); }
+.repo-h4 { --heat: var(--accent); }
+.repo-ha1 { --heat: color-mix(in srgb, var(--status-completed-dot) 25%, var(--raised)); }
+.repo-ha2 { --heat: color-mix(in srgb, var(--status-completed-dot) 50%, var(--raised)); }
+.repo-ha3 { --heat: color-mix(in srgb, var(--status-completed-dot) 75%, var(--raised)); }
+.repo-ha4 { --heat: var(--status-completed-dot); }
+.repo-hr1 { --heat: color-mix(in srgb, var(--status-error-dot) 25%, var(--raised)); }
+.repo-hr2 { --heat: color-mix(in srgb, var(--status-error-dot) 50%, var(--raised)); }
+.repo-hr3 { --heat: color-mix(in srgb, var(--status-error-dot) 75%, var(--raised)); }
+.repo-hr4 { --heat: var(--status-error-dot); }
+.repo-heat-cell { fill: var(--heat); }
+.repo-heat-sample { width: 10px; height: 10px; border-radius: 2px; display: inline-block; background: var(--heat); }
+.repo-heat-leg { justify-content: flex-end; gap: 4px; }
 
 .repo-bar { height: 6px; border-radius: 99px; background: var(--raised); overflow: hidden; display: flex; min-width: 0; }
 .repo-bar-thick { height: 10px; }
