@@ -68,6 +68,7 @@ import { send } from '../ingest/hooks/receiver.ts';
 import type { Agent, Session, SessionEvent, SessionStatus } from '../model.ts';
 import type { StoragePort } from '../storage-port.ts';
 import { subagentesDe } from './panel.ts';
+import { buildPrLoop, type PrLoop } from './workflow-loop.ts';
 import type { TrabalhoPorBranch } from './work.ts';
 
 // ---------- Contrato ----------
@@ -207,6 +208,8 @@ export interface WorkflowDaSessao {
   edges: ArestaDoWorkflow[];
   reviewRounds: number;
   changesRequested: number;
+  /** The loop grouped by PR or issue (#332). */
+  loop: PrLoop;
   timeline: {
     start: string;
     /** O fim da sessão, ou agora enquanto ela roda. */
@@ -228,13 +231,17 @@ const duracao = (inicio: string, fim: string | null, agora: number) => Math.max(
 
 const wf = (a: Agent): Json | null => obj(a.metadata?.workflow);
 const REVIEW = /review|revis/i;
+/** The Argos and Erodos agents of the quality plugin: `argos`, `ahrena-engineering-quality:erodos`. */
+const ARGOS = /(?:^|:)argos$/i;
+const ERODOS = /(?:^|:)erodos$/i;
 
 /** O papel do subagente no laço: `dev`, `review` ou o próprio tipo. */
 export function papelDe(a: Agent): string {
   const m = str(wf(a)?.role) ?? str(a.metadata?.role);
   if (m) return m;
   const t = a.subagentType ?? '';
-  if (REVIEW.test(t)) return 'review';
+  if (REVIEW.test(t) || ARGOS.test(t)) return 'review';
+  if (ERODOS.test(t)) return 'fix';
   if (t === 'general-purpose') return 'dev';
   return t || 'subagente';
 }
@@ -392,6 +399,7 @@ export function workflowDaSessao(session: Session, agentes: readonly Agent[], ev
     edges: arestas,
     reviewRounds: reviews.length,
     changesRequested: ajustes,
+    loop: buildPrLoop(session, agentes, eventos, papelDe),
     timeline: { start: session.startedAt, end: fimDaSessao ?? new Date(agora).toISOString(), lanes: faixas },
   };
 }
