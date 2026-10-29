@@ -60,6 +60,11 @@ describe('the .command file (#285/AC-4)', () => {
     assert.ok(!readdirSync(root).includes('probe.sh'), 'the file removed itself');
   });
 
+  test('no session: exec claude, a new one', () => {
+    assert.equal(commandFileContent('/w/app', null), `#!/bin/sh\nrm -f -- "$0"\ncd -- '/w/app' || exit 1\nexec claude\n`);
+    assert.throws(() => commandFileContent('w/a', null));
+  });
+
   test('a folder with a line break, a relative folder or a bad id is refused', () => {
     assert.throws(() => commandFileContent('/w/a\nb', ID));
     assert.throws(() => commandFileContent('w/a', ID));
@@ -99,6 +104,20 @@ describe('createTerminalOpener', () => {
     assert.notEqual(runner.calls[1]!.args[0], file);
   });
 
+  test('macOS, no session: a new-<uuid>.command running claude; the old new- leftovers go too', async () => {
+    const dir = join(root, 'new');
+    mkdirSync(dir);
+    const old = join(dir, 'new-00000000-0000-4000-8000-000000000000.command');
+    writeFileSync(old, 'old');
+    utimesSync(old, new Date(0), new Date(0));
+    const runner = fakeRunner();
+    assert.equal(await createTerminalOpener({ dir, platform: 'darwin', runner })({ sessionId: null, cwd: '/w/app' }), 'opened');
+    const file = runner.calls[0]!.args[0]!;
+    assert.match(file, /\/new-[0-9a-f-]{36}\.command$/);
+    assert.equal(readFileSync(file, 'utf8'), commandFileContent('/w/app', null));
+    assert.ok(!readdirSync(dir).includes('new-00000000-0000-4000-8000-000000000000.command'), 'the hour-old file is gone');
+  });
+
   test('macOS: a folder that is a link is refused', async () => {
     const target = join(root, 'elsewhere');
     mkdirSync(target);
@@ -114,6 +133,13 @@ describe('createTerminalOpener', () => {
     const open = createTerminalOpener({ dir: root, platform: 'linux', runner, findExecutable: async (n) => (n === 'x-terminal-emulator' ? '/usr/bin/x-terminal-emulator' : null) });
     assert.equal(await open({ sessionId: ID, cwd: "/w/it's" }), 'opened');
     assert.deepEqual(runner.calls, [{ kind: 'spawn', file: '/usr/bin/x-terminal-emulator', args: ['-e', 'claude', '--resume', ID], cwd: "/w/it's" }]);
+  });
+
+  test('Linux, no session: claude with no arguments', async () => {
+    const runner = fakeRunner();
+    const open = createTerminalOpener({ dir: root, platform: 'linux', runner, findExecutable: async () => '/usr/bin/x-terminal-emulator' });
+    assert.equal(await open({ sessionId: null, cwd: '/w/app' }), 'opened');
+    assert.deepEqual(runner.calls, [{ kind: 'spawn', file: '/usr/bin/x-terminal-emulator', args: ['-e', 'claude'], cwd: '/w/app' }]);
   });
 
   test('no terminal program, or another platform: unsupported, nothing runs', async () => {

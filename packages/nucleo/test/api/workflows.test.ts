@@ -224,8 +224,8 @@ describe('#96 montarWorkflows: KPIs de orquestração', () => {
     const r = montarWorkflows([], { agora: AGORA });
     assert.deepEqual(r.kpis, { averageDepth: null, subagentsPerSession: null, subagentSuccess: null, commonFlow: null, roundsPerPr: null, averageDurationMs: null });
     assert.deepEqual([r.runs, r.graph.nodes, r.graph.edges, r.sessions], [[], [], [], 0]);
-    assert.equal(r.truncated, false);
-    assert.equal(montarWorkflows([], { agora: AGORA, truncado: true }).truncated, true);
+    assert.equal(r.period, '30d');
+    assert.equal(r.activeOutsidePeriod, 0);
     assert.equal(r.graph.columns.length, 5);
   });
 });
@@ -433,16 +433,4 @@ describe('runs com o formato que o importer grava (B1)', () => {
   });
 });
 
-describe('o teto de sessões (M5)', () => {
-  test('#96 truncado diz que o teto cortou a leitura', async () => {
-    const storage = openSqliteStorage({ path: ':memory:' });
-    for (let i = 0; i < 3; i++) await storage.putSession(session({ id: `t${i}`, updatedAt: at(i) }));
-    const cortada = await lerSessoesDosWorkflows(storage, 'all', 2);
-    assert.deepEqual([cortada.sessoes.length, cortada.truncado], [2, true]);
-    const inteira = await lerSessoesDosWorkflows(storage, 'all', 3);
-    assert.deepEqual([inteira.sessoes.length, inteira.truncado], [3, false]);
-    assert.equal(montarWorkflows(cortada.sessoes, { agora: AGORA, truncado: cortada.truncado }).truncated, true);
-    assert.equal(montarWorkflows(inteira.sessoes, { agora: AGORA }).truncated, false);
-    await storage.close();
-  });
-});
+

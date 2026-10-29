@@ -556,6 +556,7 @@ main { min-width: 0; padding-block: 24px 80px; padding-left: max(16px, env(safe-
 .tl-dlg-note svg { color: var(--status-completed-text); flex: none; margin-top: 1px; }
 .tl-dlg-a { display: flex; justify-content: flex-end; gap: 8px; }
 .tl-clip { overflow: hidden; -webkit-mask-image: linear-gradient(to bottom, #000 72%, transparent); mask-image: linear-gradient(to bottom, #000 72%, transparent); }
+.rp-act { text-align: right; white-space: nowrap; } .rp-act .btn { margin-left: auto; } .rp-why { display: block; font-size: 11px; color: var(--muted); white-space: normal; max-width: 280px; margin-left: auto; }
 .tl-flow { display: flex; flex-direction: column; gap: 28px; }
 .tl-run td { padding: 0 0 10px !important; white-space: normal !important; }
 .tl-run-box { border: 1px solid var(--border); border-radius: 10px; background: var(--bg); padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; font-size: 12.5px; }
@@ -598,6 +599,43 @@ body.captura .pagina { display: block; } body.captura main { padding: 20px 24px;
 body.captura .palco { overflow: visible; }
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
 /* ---------- bothWidths da janela (1100 é a do app, 1440 a de um monitor largo) ---------- */
+/* ---------- Live wall: waiting sessions, the Paradas band, nested children (C85 to C87, issue #333) ---------- */
+.mc.wall-lead { height: auto; min-height: 214px; }
+.mc.wall-span { grid-column: 1 / -1; }
+.wall-age { margin-left: auto; font-size: 11.5px; color: var(--status-waiting-text); white-space: nowrap; }
+.wall-from { margin-left: 6px; font-family: var(--font-sans); font-size: 10.5px; }
+.wall-foot { display: flex; align-items: center; gap: 6px; font-size: 11px; white-space: nowrap; border-top: 1px dashed var(--border); padding-top: 8px; }
+.wall-kids, .wall-parked-list { display: flex; flex-direction: column; gap: 6px; }
+.wall-kid b { flex: 0 1 auto; min-width: 56px; }
+.wall-kid { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); font-size: 12px; min-width: 0; }
+.wall-parked { padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; }
+.wall-states { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.wall-cap { margin: 8px 0 0; font-size: 12px; color: var(--muted); }
+
+/* ---------- Workflows: the PR loop, the tree between sessions (C81 to C84, issue #332) ---------- */
+.wf-group { padding: 10px 12px; display: flex; flex-direction: column; gap: 10px; background: var(--bg); }
+.wf-head { display: flex; gap: 10px; align-items: center; font-size: 12.5px; }
+.wf-row { display: flex; align-items: stretch; }
+.wf-step { flex: 1 1 0; min-width: 0; max-width: 230px; padding: 7px 9px; display: flex; flex-direction: column; gap: 2px; }
+.wf-step-top { display: flex; align-items: center; gap: 6px; font-size: 11.5px; } .wf-open { margin-left: auto; font-size: 12px; }
+.wf-link { flex: 0 0 58px; position: relative; display: flex; align-items: center; }
+.wf-link i { display: block; width: 100%; border-top: 2px solid var(--muted); position: relative; }
+.wf-link i::after { content: ''; position: absolute; right: -1px; top: -5px; border: 4px solid transparent; border-left: 6px solid var(--muted); }
+.wf-link.e i { border-top-style: dashed; border-color: var(--status-error-dot); } .wf-link.e i::after { border-left-color: var(--status-error-dot); }
+.wf-link.wait i { border-top-style: dotted; }
+.wf-lab { position: absolute; top: calc(50% - 17px); left: 0; right: 0; text-align: center; font-size: 9.5px; color: var(--muted); white-space: nowrap; }
+.wf-link.e .wf-lab { color: var(--status-error-text); }
+.wf-gap { flex: 0 0 14px; }
+.wf-ghost { border: 1px dashed var(--border); background: transparent; justify-content: center; box-shadow: none; }
+.wf-foot { font-size: 11px; color: var(--muted); }
+.wf-bread { padding: 9px 12px; display: flex; align-items: center; gap: 8px; font-size: 12px; }
+.wf-tree { display: flex; flex-direction: column; gap: 8px; }
+.wf-tnode { padding: 8px 12px; display: flex; align-items: center; gap: 10px; font-size: 12.5px; }
+.wf-minis { display: flex; flex-direction: column; gap: 4px; margin-top: 6px; }
+.wf-mini { display: flex; align-items: center; gap: 7px; padding: 5px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); font-size: 11.5px; }
+.wf-m { padding: 1px 7px; border-radius: 6px; background: var(--raised); font-size: 10.5px; }
+.wf-m.ch { color: var(--status-error-text); } .wf-m.ok { color: var(--status-completed-text); } .wf-m.run { color: var(--status-active-text); }
+.wf-li { display: flex; align-items: center; gap: 10px; padding: 9px 14px; border-bottom: 1px solid var(--border); font-size: 12.5px; } .wf-li:last-child { border-bottom: 0; }
 .cc.w1100 { width: 1100px; } .cc.w1440 { width: 1440px; }
 .width-col { display: flex; flex-direction: column; gap: 6px; }
 /* ?width=1100 or ?width=1440 in capture mode keeps only that column (C51 to C53). */
@@ -3849,6 +3887,84 @@ const N = (ccam, diverge) => `<div class="notas"><div class="nota ccam"><h4>Do C
 const NP_BASE = ['Sidebar da extensão VS Code (<code>vscode-extension/sidebar.js</code>): cartão do servidor com a pílula <b>Online</b>, rótulo de seção com <b>auto · 5 s</b>, blocos de estatística com sparkline, barra empilhada de saúde dos agentes e a lista com ícone de status.']
 const NP_DIV = ['Mostra só esta sessão (decisão 0004), não a frota: a frota fica no console.', 'Cards de 34 colunas × 6 linhas em qualquer largura: o estreito empilha 1, o largo põe 3 por linha.']
 // =====================================================================
+// RELEASE A PORT (C88 to C91, issue #286). The "Portas em escuta" card gets a Liberar action per row:
+// SIGTERM, then SIGKILL after a second confirmation. The screen sends the pid and the port, never a
+// command; the núcleo checks again that the pid still owns the port. On the Workstation the request
+// goes through the núcleo over there, and only if that núcleo accepts remote actions (decision 0016).
+// =====================================================================
+const rpOff = (why) => `<span class="btn contorno os-off">${ic('power')}Liberar</span><small class="rp-why">${why}</small>`
+const rpOn = (warn) => `<span class="btn contorno">${ic(warn ? 'triangle-alert' : 'power')}Liberar</span>${warn ? `<small class="rp-why">${warn}</small>` : ''}`
+const rpDocker = (what) => `<span class="btn contorno">${ic('container')}Ver a stack</span><small class="rp-why">${what}</small>`
+const rpCopy = (cmd) => `<span class="btn contorno">${ic('copy')}Copiar comando</span><small class="rp-why mono">${cmd}</small>`
+const rpAddr = (a) => `<span class="pill b-waiting">${a}</span>`
+const rpRow = (ports, listen, proc, pid, who, act, extra = '') => `<tr><td class="mono">${ports}</td><td>${listen}</td><td>${proc}<small class="rp-why mono">pid ${pid}</small></td><td>${who}</td>${extra}<td class="rp-act">${act}</td></tr>`
+const rpCard = (w, { remote = false, rows, seg, band = '', foot = '', faded = false }) => `<div class="cartao tm-card${faded ? ' tm-faded' : ''}" style="${spanAt(w, 2, 3)}"><h5>${ic('radio-tower')}${remote ? 'Portas em escuta lá' : 'Portas em escuta'}<small><span class="seg">${seg}</span></small></h5>${band}
+  <table class="tabela"><thead><tr><th>Porta</th><th>Escuta em</th><th>Processo</th><th>De quem</th>${remote ? '<th>No Mac</th>' : ''}<th style="text-align:right">Ação</th></tr></thead><tbody>${rows.join('')}</tbody></table>${foot}</div>`
+const rpScreen = (w, card, { remote = false, head } = {}) => frameAt(w, remote ? 'machine-ws' : 'machine-local', `${head || (remote ? workstationHeader('ok', 'lido há 6 s') : cab('monitor', 'Esta máquina', 'mac-exemplo · macOS 26 · 12 núcleos (8 P + 4 E) · 36 GB · lido há 4 s', hourToggle))}<div class="tm-grid" style="${gridCols(w)}">${card}</div>`)
+const rpSeg = (on, n = [9, 2, 7]) => ['Todas', 'Todas as interfaces', 'Só loopback'].map((t, i) => `<span${i === on ? ' class="on"' : ''}>${t} ${n[i]}</span>`).join('')
+const rpMac = (extraRow = '') => [
+  rpRow('4720', tmListen('lo'), 'node', 8123, 'Núcleo do console', rpOff('é o núcleo do console')),
+  rpRow('5432', tmListen('todas'), 'postgres', 2210, '<span class="c-muted">—</span>', rpOn()),
+  rpRow('3000', tmListen('lo'), 'node', 7741, 'vitrine-demo', rpOn()),
+  rpRow('13000, 14720, 15173', tmListen('lo'), 'ssh', 6102, 'túnel para ws-exemplo', rpOn('derruba o túnel')),
+  rpRow('18080', tmListen('lo'), 'node', 9904, '<span class="c-muted">segura a porta do túnel</span>', rpOn()),
+  rpRow('631', tmListen('lo'), 'cupsd', 312, 'sistema', rpOff('é de root: o console não pede senha de administrador')),
+  extraRow].filter(Boolean)
+const rpDlg = (title, icon, rows, { lead = '', body = '', note, cancel = 'Cancelar', ok, danger = false, okIcon = 'power' }) => `<div class="tl-veil"><div class="cartao tl-dlg">
+  <div class="tl-dlg-h">${ic(icon)}<b>${title}</b><span class="tl-x">${ic('x')}</span></div>${lead ? `<p style="margin:0;font-size:12.5px">${lead}</p>` : ''}
+  ${tlKv(rows)}${body}
+  <div class="tl-dlg-note">${ic('shield-check')}<span>${note}</span></div>
+  <div class="tl-dlg-a"><span class="btn contorno">${cancel}</span>${ok ? `<span class="btn ${danger ? 'mc-danger' : 'cheio'}">${ic(okIcon)}${ok}</span>` : ''}</div></div></div>`
+const rpCmdBox = (c) => `<div class="tl-dlg-cmd"><div class="olhinho">Comando do processo, resumido</div><code>${c}</code></div>`
+const rpOver = (w, card, dlg, opts) => `<div class="tl-veil-wrap">${rpScreen(w, card, opts)}${dlg}</div>`
+const rpProc = [['Processo', '<b>postgres</b> · pid <span class="mono">2210</span>'], ['De quem', 'o seu usuário (fernando) · desde as 09:12'], ['Porta', '<span class="mono">5432</span> em todas as interfaces']]
+const rpMacCard = (w, o = {}) => rpCard(w, { rows: rpMac(), seg: rpSeg(0), ...o })
+const rpWs = (act) => [
+  rpRow('22', tmListen('todas'), 'sshd', 811, 'sistema', rpOff('é de root: o console não pede senha de administrador'), '<td class="c-muted">—</td>'),
+  rpRow('139, 445', tmListen('todas'), 'smbd', 902, 'sistema', rpOff('é de root: o console não pede senha de administrador'), '<td class="c-muted">—</td>'),
+  rpRow('15306', tmListen('todas'), 'docker-proxy', 4417, 'tessera306 · postgres', rpDocker('publicada por container: a stack é a dona'), '<td class="c-muted">—</td>'),
+  rpRow('8080', tmListen('todas'), 'claude self-hosted-runner', 3390, 'o seu usuário (fernando)', act('8080', 'é o runner do Claude: as tarefas dele param'), '<td class="c-muted">—</td>'),
+  rpRow('8200, 8220', rpAddr('198.19.232.16'), 'python3', 3318, 'o seu usuário (fernando)', act('8200'), '<td class="c-muted">—</td>'),
+  rpRow('4720', tmListen('lo'), 'node', 1204, 'Núcleo do console', rpOff('é o núcleo do console'), '<td class="mono">14720 ' + tmPort('up') + '</td>'),
+  rpRow('3000', tmListen('lo'), 'vite', 5521, 'catalogo-local', act('3000'), '<td class="mono">13000 ' + tmPort('up') + '</td>')]
+const rpWsOn = (p, warn) => rpOn(warn)
+const rpWsCopy = (p) => rpCopy(`kill -TERM ${p === '8080' ? 3390 : p === '8200' ? 3318 : 5521}`)
+const rpWsOff = () => `<span class="btn contorno os-off">${ic('power')}Liberar</span><small class="rp-why">o núcleo de lá é de antes desta ação (0.0.31)</small>`
+const rpWsCard = (w, act, o = {}) => rpCard(w, { remote: true, rows: rpWs(act), seg: rpSeg(0, [12, 5, 7]), ...o })
+const rpWsBand = (cls, ic_, html) => `<div class="faixa ${cls}" style="margin:0 0 10px"><span class="ic">${ic(ic_)}</span><div>${html}</div></div>`
+const rpWsStep = (n, t, h) => `<div class="tl-step"><div class="rotulo">${n} · ${t}</div>${h}</div>`
+const rpMacConfirm = rpDlg('Liberar a porta 5432', 'power', rpProc, { body: rpCmdBox('/opt/homebrew/opt/postgresql@16/bin/postgres -D /opt/homebrew/var/postgresql@16'),
+  lead: 'Isto pede ao processo que encerre. Quem usa o banco agora perde a conexão.', ok: 'Liberar a 5432',
+  note: 'O console envia SIGTERM ao pid 2210. Nada digitado aqui vira comando: a tela manda o pid e a porta, e o núcleo confere de novo que o pid ainda é o dono da porta. Se não sair em 5 s, ele pergunta antes de forçar.' })
+const rpWaiting = rpDlg('Esperando o postgres sair', 'loader', rpProc, { lead: 'SIGTERM enviado. Esperando a porta 5432 fechar: <b class="mono">3 de 5 s</b>.', cancel: 'Fechar', note: 'Fechar só esconde esta janela: o sinal já foi enviado e o card mostra o resultado quando a porta fechar.' })
+const rpStuck = rpDlg('O postgres não saiu', 'triangle-alert', rpProc, { lead: 'Passaram 5 s e ele ainda segura a 5432.', cancel: 'Deixar como está', ok: 'Forçar com SIGKILL', danger: true, okIcon: 'octagon-x',
+  note: 'SIGKILL encerra na hora, sem deixar o processo salvar nada nem fechar arquivos. É a segunda confirmação: o núcleo confere o pid e a porta mais uma vez antes de enviar.' })
+const rpMoved = rpDlg('A 5432 mudou de dono', 'info', [['Quando você abriu', '<b>postgres</b> · pid <span class="mono">2210</span>'], ['Agora', '<b>redis-server</b> · pid <span class="mono">5120</span>']], { lead: 'Nada foi enviado: o console só age no processo que você viu.', cancel: 'Fechar', ok: 'Atualizar a lista', okIcon: 'refresh-cw', note: 'Se o pid tivesse sumido, o aviso seria “A 5432 já está livre”, e a linha sairia da lista.' })
+const rpTunnel = rpDlg('Liberar derruba o túnel', 'triangle-alert', [['Processo', '<b>ssh</b> · pid <span class="mono">6102</span>'], ['Portas do Mac', '<span class="mono">13000, 14720, 15173</span> → ws-exemplo'], ['O que para', 'o núcleo da Workstation (14720), o vite (13000) e tudo que passa por esse túnel']], { lead: 'Este ssh é o túnel da Workstation. Sem ele, o console perde a leitura de lá e a sessão remota cai.', cancel: 'Ver a conexão de ws-exemplo', ok: 'Liberar mesmo assim',
+  note: 'Subir o túnel de novo continua com a ferramenta que você já usa (decisão 0008). A conexão da máquina está em Nuvens e SSM, na tela da Workstation (C62).' })
+const rpWsConfirm = rpDlg('Liberar a porta 3000 na Workstation', 'power', [['Onde', '<b>Na Workstation</b> · pelo núcleo de lá · como o seu usuário de lá'], ['Processo', '<b>vite</b> · pid <span class="mono">5521</span> · catalogo-local'], ['Porta', '<span class="mono">3000</span> só em loopback · encaminhada na 13000 do Mac']], { lead: 'O Mac manda só o pid e a porta. Quem confere o dono e envia o SIGTERM é o núcleo de lá.', ok: 'Liberar lá', note: 'A Workstation foi iniciada aceitando ações remotas (decisão 0016). A 3000 está no túnel: depois de liberada, a 13000 do Mac passa a “Ninguém escuta lá”.' })
+const rpScreens = () => `<div class="tl-flow">
+  ${rpWsStep(1, 'Confirmar · SIGTERM · 1100 px', rpOver(1100, rpMacCard(1100), rpMacConfirm))}
+  ${rpWsStep(2, 'Esperando a porta fechar', rpOver(1100, rpMacCard(1100), rpWaiting))}
+  ${rpWsStep(3, 'Liberada: a linha some', rpScreen(1100, rpCard(1100, { rows: rpMac().filter((r) => !r.includes('5432')), seg: rpSeg(0, [8, 1, 7]), band: rpWsBand('tm-rc-ok', 'circle-check', '<b>Porta 5432 liberada.</b> O postgres (pid 2210) saiu com SIGTERM.') })))}
+  ${rpWsStep(4, 'Não saiu: segunda confirmação · SIGKILL', rpOver(1100, rpMacCard(1100), rpStuck))}
+  ${rpWsStep(5, 'O dono da porta mudou', rpOver(1100, rpMacCard(1100), rpMoved))}
+  ${rpWsStep(6, 'Porta do túnel', rpOver(1100, rpMacCard(1100), rpTunnel))}</div>`
+const rpWhy = () => rpCard(1100, { rows: [
+  rpRow('4720', tmListen('lo'), 'node', 8123, 'Núcleo do console', rpOff('é o núcleo do console: parar derrubaria esta tela')),
+  rpRow('4731', tmListen('lo'), 'Ahrena Console', 7002, 'o app do console', rpOff('é o app do console: feche pela bandeja')),
+  rpRow('631', tmListen('lo'), 'cupsd', 312, 'sistema', rpOff('é de root: o console não pede senha de administrador')),
+  rpRow('5000', tmListen('todas'), 'ControlCenter', 612, 'outro usuário (admin)', rpOff('é de outro usuário')),
+  rpRow('5433', tmListen('lo'), '<span class="c-muted">desconhecido</span>', '—', '<span class="c-muted">—</span>', rpOff('o sistema não disse quem escuta')),
+  rpRow('5432', tmListen('todas'), 'postgres', 2210, '<span class="c-muted">—</span>', rpOn())], seg: rpSeg(0, [6, 3, 3]),
+  foot: '<div class="tm-legend" style="margin-top:8px"><span>Cada Liberar desligado diz por quê, na própria linha. “Todas as interfaces 3”: só 1 pode ser liberada; por isso não há “Liberar todas” (veja a nota).</span></div>' })
+const rpWsScreens = () => `<div class="tl-flow">
+  ${rpWsStep(1, 'Padrão: a Workstation não aceita ações · 1100 px', rpScreen(1100, rpWsCard(1100, (p, w) => rpWsCopy(p), { band: rpWsBand('mc-neutral', 'shield', '<b>Liberar lá está desligado.</b> A Workstation recusa ações pelo túnel; quem liga é quem está nela. Cada linha mostra o comando para rodar lá.') }), { remote: true }))}
+  ${rpWsStep(2, 'Ligada na Workstation · 1100 e 1440 px', `<div class="fila">${bothWidths((w) => rpScreen(w, rpWsCard(w, (p, warn) => rpOn(warn)), { remote: true }))}</div>`)}
+  ${rpWsStep(3, 'Confirmar na Workstation', rpOver(1100, rpWsCard(1100, (p, warn) => rpOn(warn)), rpWsConfirm, { remote: true }))}
+  ${rpWsStep(4, 'Núcleo de lá de antes desta ação', rpScreen(1100, rpWsCard(1100, () => rpWsOff()), { remote: true }))}
+  ${rpWsStep(5, 'Sem conexão', rpScreen(1100, rpWsCard(1100, () => '<span class="c-muted">—</span>', { faded: true }), { remote: true, head: workstationHeader('off', 'última leitura às 22:41, há 14 min') }))}</div>`
+// =====================================================================
 // THE APP'S UPDATE NOTICE (C77 to C80, A11 and A12, issue #330). Synthetic versions: the app is on 0.0.9
 // and 0.0.10 was just published on the app-updates channel. Who checks and downloads is the app
 // (tauri-plugin-updater); the core only relays its state to the /ui and the /ui's requests to it.
@@ -4001,7 +4117,7 @@ const APP_UP = {
 
 // =====================================================================
 // DOCKER ACTIONS (C92 to C95, issue #288)
-// =====================================================================
+// ==============================================================// =====================================================================
 // The Docker card of the machine screens gains actions. The screen sends ids read from the daemon
 // (the stack name of the compose label, the 12-character container id) and the action id; the núcleo
 // builds the argv list from its closed Docker catalog, and the confirmation shows it before it runs.
@@ -4178,6 +4294,219 @@ const dkConfirmFlow = () => `<div class="tl-flow">
   <div class="tl-step"><div class="rotulo">5 · Reiniciar um container · 1100 px</div>${dkWrap(1100, true, dkRestartCt(true), 640)}</div>
   <div class="tl-step"><div class="rotulo">6 · A stack mudou entre abrir e confirmar · 409, nada rodou · 1100 px</div>${dkWrap(1100, true, dkStale, 640)}</div>
 </div>`
+
+=======
+// WORKFLOWS: THE PR LOOP, THE TREE BETWEEN SESSIONS, NO CAP OF 500 (C81 to C84, issue #332).
+// The loop is read from what each subagent was asked and what it answered: the PR comes from the
+// subagent's task (`#320`, `PR #320`, the PR URL) and, when there is one, from its branch; the same rule
+// for every kind of agent. Synthetic data, with the shape of the issue's measured session.
+// =====================================================================
+// A step of the loop. kind: the agent; st: ok | changes | run | wait | stop; the line under the name is the task.
+const LOOP_ST = {
+  ok: ['var(--status-completed-dot)', 'c-completed', '✓'], changes: ['var(--status-error-dot)', 'c-error', '✕'],
+  run: ['var(--status-active-dot)', 'c-active', '●'], wait: ['var(--status-idle-dot)', 'c-muted', '◌'], stop: ['var(--status-blocked-dot)', 'c-blocked', '◐'],
+}
+const loopStep = (kind, task, st, res, dur) => `<div class="cartao wf-step" style="border-left:3px solid ${LOOP_ST[st][0]}">
+  <div class="wf-step-top"><b class="trunc">${kind}</b><span class="c-muted wf-open" title="Abre o transcript deste subagente">${ic('external-link')}</span></div>
+  <span class="trunc c-muted" style="font-size:10.5px">${task}</span>
+  <span class="trunc ${LOOP_ST[st][1]}" style="font-size:10.5px">${LOOP_ST[st][2]} ${res}${dur ? ` <span class="c-muted">· ${dur}</span>` : ''}</span></div>`
+// The link between two steps: the order of the group, by start time. Red and dashed: the review asked for changes.
+const loopLink = (label, kind = '') => `<div class="wf-link ${kind}"><span class="wf-lab">${label}</span><i></i></div>`
+// The group of a PR. head: [PR, title, state pill, counters]; steps: the row.
+const loopGroup = (head, steps, footer = '') => `<div class="cartao wf-group">
+  <div class="wf-head"><span class="chip" style="color:var(--text)">${head[0]}</span><b class="trunc">${head[1]}</b>${head[2]}<span class="c-muted" style="font-size:11.5px;margin-left:auto">${head[3]}</span><span class="c-muted">${ic('external-link')}</span></div>
+  <div class="wf-row">${steps.join('')}</div>${footer ? `<div class="wf-foot">${footer}</div>` : ''}</div>`
+const wfPill = (t, c) => `<span class="pill ${c}">${t}</span>`
+const LOOP_OK = wfPill('Aprovado', 'b-completed'), LOOP_CH = wfPill('Pediu mudanças', 'b-error'), LOOP_RUN = wfPill('Em revisão', 'b-active'), LOOP_STOP = wfPill('Parou aqui', 'b-blocked')
+const G310 = loopGroup(['PR #310', 'feat(277): contas de nuvem em Conexões', LOOP_OK, '1 rodada · 0 pedidos de mudança'], [
+  loopStep('dev', 'general-purpose · Construir #277', 'ok', 'Concluído', '22 min'), loopLink('PR aberto'), loopStep('Argos', 'Revisar o PR #310', 'ok', 'Aprovou (Verdict: approve)', '4 min')])
+const G320 = loopGroup(['PR #320', 'feat(278): conexão da Workstation', LOOP_OK, '2 rodadas · 1 pedido de mudança'], [
+  loopStep('dev', 'general-purpose · Construir #278', 'ok', 'Concluído', '31 min'), loopLink('PR aberto'),
+  loopStep('Argos', 'Revisar o PR #320', 'changes', 'Pediu mudanças · 3 achados', '5 min'), loopLink('3 achados', 'e'),
+  loopStep('Erodos', 'Corrigir os achados do #320', 'ok', 'Corrigiu 3', '6 min'), loopLink('rodada 2'),
+  loopStep('Argos', 'Revisar o PR #320', 'ok', 'Aprovou (Verdict: approve)', '3 min')])
+const G331 = loopGroup(['PR #331', 'docs(330): wireframes do aviso de versão', LOOP_RUN, '2 rodadas · 1 pedido de mudança'], [
+  loopStep('dev', 'general-purpose · Wireframes da #330', 'ok', 'Concluído', '18 min'), loopLink('PR aberto'),
+  loopStep('Argos', 'Revisar o PR #331', 'changes', 'Pediu mudanças · 2 achados', '4 min'), loopLink('2 achados', 'e'),
+  loopStep('Erodos', 'Corrigir os achados do #331', 'ok', 'Corrigiu 2', '5 min'), loopLink('rodada 2'),
+  loopStep('Argos', 'Revisar o PR #331', 'run', 'Revisando', '2 min')])
+const GNONE = loopGroup(['Sem PR', 'subagentes sem PR nem issue na tarefa', wfPill('3 subagentes', 'b-completed'), 'ligados ao Principal'], [
+  loopStep('Explore', 'achar onde o túnel cai', 'ok', 'Concluído', '1 min'), `<div class="wf-gap"></div>`,
+  loopStep('general-purpose', 'comparar bibliotecas de túnel', 'ok', 'Concluído', '7 min'), `<div class="wf-gap"></div>`,
+  loopStep('Plan', 'plano das nuvens', 'ok', 'Concluído', '3 min')], 'Sem seta entre eles: o que não cita PR não ganha vínculo inventado, só fica ligado ao Principal.')
+const wfCrumb = `<div class="cartao wf-bread"><span class="c-muted">${ic('git-fork')}</span><span class="c-muted">Aberta por</span><span class="chip" style="color:var(--text)">${ic('user-round')}Tech Lead do console</span><span class="c-muted">${ic('chevron-right')}</span><b>esta sessão</b><span class="c-muted" style="margin-left:14px">Abriu</span><span class="chip" style="color:var(--text)">${ic('corner-down-right')}Aviso de versão: UI</span><span class="c-muted" style="margin-left:auto;font-size:11.5px">PM › Tech Lead › esta › filha · <u>ver a árvore</u></span></div>`
+const wfSum = (a, b, c, d) => `<div class="leg"><span>PRs <b>${a}</b></span><span>Rodadas de revisão <b>${b}</b></span><span>Pedidos de mudança <b>${c}</b></span><span>Subagentes <b>${d}</b></span><span>Sessão filha <b>1</b></span></div>`
+const wfTabs = `<div class="seg" style="width:max-content"><span class="on">${ic('git-pull-request')}Por PR</span><span>${ic('clock')}Por hora</span><span>${ic('git-fork')}Todos os nós</span></div>`
+
+// C81 · the Workflow tab of the session, grouped by PR
+const wfDetailScreen = () => `${detCab(byId('c3f09b52'))}${abas(3, 16)}${wfCrumb}
+  <div class="cartao" style="padding:14px 16px;display:flex;flex-direction:column;gap:12px">
+    <div class="ttl">${ic('workflow')}O laço da sessão, por PR<span class="r">dev → Argos → Erodos → Argos, até aprovar</span>${wfTabs}</div>
+    ${wfSum(4, 5, 2, 15)}
+    ${G331}${G320}${G310}${GNONE}
+    <div class="leg"><span><span style="display:inline-block;width:18px;border-top:2px dashed var(--status-error-dot)"></span>o Argos pediu mudanças: o Erodos corrige</span><span>${ponto('active')}Rodando</span><span>${ponto('completed')}Concluído</span><span>${ic('external-link')} abre o transcript do subagente</span></div>
+  </div>`
+const wf1100 = (ativo, miolo) => cc(ativo, miolo, 5, 1100), wf1440 = (ativo, miolo) => cc(ativo, miolo, 5, 1440)
+
+// C82 · the states of a group
+const wfState = (label, g) => `<div class="width-col"><div class="rotulo">${label}</div>${g}</div>`
+const GS_FIRST = loopGroup(['PR #340', 'fix(300): paginação do histórico', LOOP_OK, '1 rodada · 0 pedidos de mudança'], [
+  loopStep('dev', 'general-purpose · Corrigir #300', 'ok', 'Concluído', '9 min'), loopLink('PR aberto'), loopStep('Argos', 'Revisar o PR #340', 'ok', 'Aprovou na primeira', '3 min')])
+const GS_WAIT = loopGroup(['PR #345', 'feat(332): página Workflows', wfPill('Aguardando correção', 'b-blocked'), '1 rodada · 1 pedido de mudança'], [
+  loopStep('dev', 'general-purpose · Construir #332', 'ok', 'Concluído', '25 min'), loopLink('PR aberto'),
+  loopStep('Argos', 'Revisar o PR #345', 'changes', 'Pediu mudanças · 4 achados', '6 min'), loopLink('', 'e wait'), `<div class="cartao wf-step wf-ghost"><span class="c-muted" style="font-size:11px">${ic('hourglass')} ninguém chamou o Erodos ainda</span></div>`],
+  'A sessão está ativa: o laço segue aberto. Some o "Aguardando" assim que um Erodos ou um dev tocar o PR.')
+const GS_STOP = loopGroup(['PR #347', 'feat(330): aviso de versão, app', LOOP_STOP, '1 rodada · 1 pedido de mudança'], [
+  loopStep('dev', 'general-purpose · Construir #330', 'ok', 'Concluído', '27 min'), loopLink('PR aberto'),
+  loopStep('Argos', 'Revisar o PR #347', 'changes', 'Pediu mudanças · 2 achados', '5 min'), loopLink('', 'e wait'), `<div class="cartao wf-step wf-ghost"><span class="c-error" style="font-size:11px">${ic('octagon')} a sessão terminou aqui</span></div>`],
+  'A sessão está concluída e o último passo foi um pedido de mudança sem resposta: é onde o laço travou. Entra no KPI "Laços parados".')
+const GS_R3 = loopGroup(['PR #351', 'feat(280): ferramentas, catálogo', wfPill('Em revisão · rodada 3', 'b-active'), '3 rodadas · 2 pedidos de mudança'], [
+  loopStep('dev', 'general-purpose · Construir #280', 'ok', 'Concluído', '40 min'), loopLink('PR aberto'),
+  loopStep('Argos', 'Revisar o PR #351', 'changes', 'Pediu mudanças', '6 min'), loopLink('', 'e'),
+  loopStep('Erodos', 'Corrigir #351', 'ok', 'Corrigiu 5', '8 min'), loopLink('rodada 2'),
+  loopStep('Argos', 'Revisar o PR #351', 'changes', 'Pediu mudanças', '5 min'), loopLink('', 'e'),
+  loopStep('dev', 'general-purpose · ajuste do #351', 'ok', 'Concluído', '10 min'), loopLink('rodada 3'),
+  loopStep('Argos', 'Revisar o PR #351', 'run', 'Revisando', '1 min')])
+const GS_PAR = loopGroup(['PR #355', 'feat(333): mural ao vivo', LOOP_RUN, '1 rodada · 0 pedidos de mudança'], [
+  loopStep('dev A', 'general-purpose · Mural, backend', 'ok', 'Concluído', '20 min'), `<div class="wf-gap" title="começaram juntos"></div>`,
+  loopStep('dev B', 'general-purpose · Mural, tela', 'ok', 'Concluído', '24 min'), loopLink('PR aberto'), loopStep('Argos', 'Revisar o PR #355', 'run', 'Revisando', '3 min')],
+  'Dois devs que começaram juntos aparecem lado a lado, sem seta entre eles: o laço só liga o que veio depois.')
+const GS_ISSUE = loopGroup(['Issue #333', 'a tarefa cita só a issue, nenhum PR', wfPill('Sem PR ainda', 'b-completed'), '0 rodadas'], [
+  loopStep('dev', 'general-purpose · Construir #333', 'ok', 'Concluído', '35 min'), loopLink('', 'wait'), `<div class="cartao wf-step wf-ghost"><span class="c-muted" style="font-size:11px">${ic('git-pull-request')} PR ainda não citado</span></div>`],
+  'O vínculo veio da issue. Quando um subagente seguinte citar o PR e o branch bater (feat/333-…), o grupo vira "PR #3xx" e leva a issue junto.')
+const wfStatesScreen = () => `<div class="tm-rc">
+  ${rcRow([['1 · aprovado de primeira', GS_FIRST], ['2 · pediu mudanças, ninguém corrigiu (sessão ativa)', GS_WAIT]], ['<b>Uma rodada</b> é cada chamada do Argos a um PR. <b>Pedido de mudança</b> é uma rodada cujo veredito não foi "Verdict: approve".', 'O veredito vem da última linha da resposta do Argos. Sem veredito legível, o passo fica "Concluído" e não conta como pedido (nada inventado).'])}
+  ${rcRow([['3 · o laço parou', GS_STOP], ['4 · terceira rodada', GS_R3]], ['<b>Parou aqui</b> é o único estado vermelho-amarelo: a sessão acabou com um pedido de mudança sem resposta. É a resposta a "onde o laço travou".', 'Três rodadas não têm tratamento especial; o contador diz tudo. A aresta tracejada vermelha é sempre a que sai de um pedido de mudança.'])}
+  ${rcRow([['5 · dois devs no mesmo PR', GS_PAR], ['6 · só a issue, sem PR ainda', GS_ISSUE]], ['<b>De onde vem o PR</b>, na ordem: (1) <code>PR #N</code>, <code>#N</code> ou a URL do PR na tarefa do subagente; (2) o branch, quando o PR dele já foi visto; (3) a issue, <code>Refs #N</code> ou <code>#N</code> que a tarefa cita sem PR. A mesma regra para qualquer agente.', 'Uma tarefa que cita dois PRs fica no primeiro e leva o outro como chip, sem duplicar o nó.'])}
+</div>`
+
+// C83 · the tree between sessions
+const wfNode = (depth, icon, name, role, st, meta2 = '', body = '') => `<div class="wf-tn" style="margin-left:${depth * 26}px"><div class="cartao wf-tnode">
+  <span class="c-muted">${ic(depth < 3 ? 'chevron-down' : 'chevron-right')}</span><span class="c-accent">${ic(icon)}</span><b class="trunc">${name}</b><span class="chip">${role}</span>${badge(st)}<span class="c-muted" style="font-size:11.5px;margin-left:auto">${meta2}</span><span class="c-muted" title="Abre a sessão">${ic('external-link')}</span></div>${body}</div>`
+const wfMini = (pr, steps, endText, count) => `<div class="wf-mini"><span class="chip" style="color:var(--text)">${pr}</span>${steps.map(p => `<span class="wf-m ${p[1]}">${p[0]}</span>`).join('<span class="c-muted">›</span>')}<span class="${endText[1]}" style="font-size:11px">${endText[0]}</span><span class="c-muted" style="font-size:11px;margin-left:auto">${count}</span></div>`
+const wfTree = () => `<div class="wf-tree">
+  ${wfNode(0, 'user-round', 'Rodada 0.0.11', 'PM', 'active', '4 filhas · 28 PRs · hoje, 09:12')}
+  ${wfNode(1, 'user-round-cog', 'Tech Lead do console', 'Tech Lead', 'idle', '3 filhas · 24 PRs · há 3 min')}
+  ${wfNode(2, 'cloud', 'Nuvens e conexão SSM da Workstation', 'Sessão', 'completed', '15 subagentes · 4 PRs · 2 h', `<div class="wf-minis" style="margin-left:26px">
+    ${wfMini('PR #331', [['dev', 'ok'], ['Argos ✕', 'ch'], ['Erodos', 'ok'], ['Argos ●', 'run']], ['Em revisão', 'c-active'], '2 rodadas · 1 pedido')}
+    ${wfMini('PR #320', [['dev', 'ok'], ['Argos ✕', 'ch'], ['Erodos', 'ok'], ['Argos ✓', 'ok']], ['Aprovado', 'c-completed'], '2 rodadas · 1 pedido')}
+    ${wfMini('PR #310', [['dev', 'ok'], ['Argos ✓', 'ok']], ['Aprovado', 'c-completed'], '1 rodada · 0 pedidos')}
+    ${wfMini('Sem PR', [['Explore', 'ok'], ['general-purpose', 'ok'], ['Plan', 'ok']], ['', ''], '3 subagentes')}</div>`)}
+  ${wfNode(3, 'corner-down-right', 'Aviso de versão: UI', 'Filha', 'active', '2 subagentes · 1 PR · 6 min')}
+  ${wfNode(2, 'bell', '330-update-notice', 'Sessão', 'completed', '9 subagentes · 3 PRs · 5 h')}
+  ${wfNode(2, 'list-tree', 'Workflow: o laço e a árvore (#332)', 'Sessão', 'active', '1 subagente · 0 PRs · agora')}
+</div>`
+const wfTreeScreen = () => `${cab('workflow', 'Workflows', 'Como os agentes se orquestram: a árvore entre sessões, o laço por PR e as rodadas de revisão', `<div class="seg"><span>Visão geral</span><span class="on">Árvore</span><span>Grafo</span></div><span class="btn">${ic('download')}</span>`)}
+  <div class="stats" style="grid-template-columns:repeat(6,minmax(0,1fr))">
+    ${stat('Árvores', '3', 'raízes sem pai', 'git-fork', 'var(--accent-text)')}
+    ${stat('PRs no laço', '28', 'nos últimos 30 dias', 'git-pull-request', 'var(--accent-text)')}
+    ${stat('Rodadas por PR', '1,7', 'de revisão', 'refresh-cw', 'var(--accent-text)')}
+    ${stat('Aprovados', '82%', 'na 1ª ou 2ª rodada', 'check-circle-2', 'var(--status-completed-text)')}
+    ${stat('Laços parados', '1', 'o PR #347', 'octagon', 'var(--status-error-text)')}
+    ${stat('Sessões', '1.286', 'em 30 dias', 'folder-open', 'var(--status-waiting-text)')}
+  </div>
+  <div class="cartao" style="padding:14px 16px;display:flex;flex-direction:column;gap:10px">
+    <div class="ttl">${ic('git-fork')}Árvore entre sessões<span class="r">PM → Tech Lead → sessão → grupos por PR · clique abre a sessão</span></div>
+    ${wfTree()}
+    <div class="leg"><span>${ic('chevron-down')} expandido</span><span>${ic('chevron-right')} recolhido (os grupos por PR da sessão)</span><span>${ic('external-link')} abre o Detalhe, na aba Workflow</span><span>Um nível dentro do outro: a indentação é a árvore <code>startedBy</code></span></div>
+  </div>`
+
+// C84 · no cap of 500: period, pages and what is never left out
+const wfPeriod = (range, on = 2) => `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><div class="seg">${['Todas as sessões', 'Só ativas', 'Concluídas'].map((t, i) => `<span class="${i === 0 ? 'on' : ''}">${t}</span>`).join('')}</div>
+  <div class="seg">${['24 h', '7 dias', '30 dias', 'Tudo'].map((t, i) => `<span class="${i === on ? 'on' : ''}">${t}</span>`).join('')}</div>${range}</div>`
+const wfList = (rows, footer) => `<div class="cartao" style="padding:6px 0">${rows.map(([name, role, st, meta, outside]) => `<div class="wf-li"><span class="c-muted">${ic('chevron-right')}</span><b class="trunc">${name}</b><span class="chip">${role}</span>${badge(st)}${outside ? `<span class="chip" style="color:var(--status-waiting-text)">${ic('calendar-off')}outside do rangeíodo</span>` : ''}<span class="c-muted" style="font-size:11.5px;margin-left:auto">${meta}</span></div>`).join('')}${footer ? `<div class="wf-li" style="justify-content:center">${footer}</div>` : ''}</div>`
+const WF_ROWS = [['Rodada 0.0.11', 'PM', 'active', '4 filhas · 28 PRs · hoje', 0], ['Tech Lead do console', 'Tech Lead', 'idle', '3 filhas · 24 PRs · há 3 min', 0], ['Nuvens e conexão SSM da Workstation', 'Sessão', 'completed', '15 subagentes · 4 PRs · 2 h', 0], ['Rodada 0.0.7', 'PM', 'completed', '6 filhas · 31 PRs · 12 dias', 0]]
+const wfStatus = (t, i2 = 'check-circle-2', cls = 'c-completed') => `<div class="cartao" style="padding:10px 14px;display:flex;gap:10px;align-items:center;font-size:12.5px"><span class="${cls}" style="font-size:16px">${ic(i2)}</span><div>${t}</div></div>`
+const wfPage = (body) => `${cab('workflow', 'Workflows', 'Como os agentes se orquestram: a árvore entre sessões, o laço por PR e as rodadas de revisão', `<span class="btn">${ic('download')}</span>`)}${body}`
+const WF_PAGE_1 = wfPage(`${wfPeriod('')}
+  ${wfStatus('<b>1.286 sessões em 30 dias · 14 ativas, todas aqui.</b> Os números e o grafo contam as 1.286, não só as que aparecem na lista. Nenhuma sessão ativa fica de outside.')}
+  <div class="rotulo">Árvores · 50 de 312</div>${wfList(WF_ROWS, `<span class="btn contorno">${ic('chevrons-down')}Carregar mais 50</span>`)}`)
+const WF_PAGE_2 = wfPage(`${wfPeriod('', 3)}
+  ${wfStatus('<b>Lendo o histórico: 3.400 de 8.912 sessões…</b> As ativas já estão aqui; os números fecham quando a leitura acabar e dizem "parcial" até lá.', 'loader-2', 'c-active')}
+  <div class="rotulo">Árvores · 50 de 1.020 até agora</div>${wfList(WF_ROWS.slice(0, 3), '')}`)
+const WF_PAGE_3 = wfPage(`${wfPeriod('', 0)}
+  ${wfStatus('<b>Nada em 24 h.</b> Há uma sessão ativa começada há 41 dias, e ela entra mesmo assim: ativas nunca ficam de outside do rangeíodo.', 'info', 'c-muted')}
+  <div class="rotulo">Árvores · 1 de 1</div>${wfList([['Migração do esquema de pedidos', 'Sessão', 'active', '3 subagentes · 1 PR · 41 dias', 1]], '')}`)
+const wfNoCapScreen = () => `<div class="tm-rc">
+  ${rcRow([['1 · 30 dias, o padrão · 1100 px', cc('workflows', WF_PAGE_1, 5, 1100)], ['2 · tudo, lendo aos poucos · 1100 px', cc('workflows', WF_PAGE_2, 5, 1100)]], [
+    '<b>Hoje:</b> a tela lê as 500 sessões mais recentes e devolve <code>truncated: true</code>; a sessão que construiu o #277 e o #330 ficou de outside.',
+    '<b>Proposta:</b> um rangeíodo (24 h, 7 dias, <b>30 dias</b>, Tudo) e páginas de 50 árvores. Os KPIs e o grafo contam <b>o rangeíodo inteiro</b>, pelo núcleo, sem teto; a lista é que pagina.',
+    '<b>Ativas entram sempre</b>, qualquer que seja o rangeíodo, com o chip "outside do rangeíodo" quando forem mais velhas (3).',
+    'Em "Tudo", o núcleo lê em blocos e a tela mostra o avanço; os números vêm marcados "parcial" até fechar. Nunca aparece "truncado" de novo.'])}
+  ${rcRow([['3 · 24 h, com uma ativa antiga · 1100 px', cc('workflows', WF_PAGE_3, 5, 1100)]], [
+    '<b>A janela é do dado, não da tela:</b> o rangeíodo filtra por último evento, não por início, para uma sessão longa não sumir no meio do trabalho.',
+    'O rangeíodo e a página vão na URL (<code>?period=30d&page=2</code>) para um link levar à mesma visão.'])}
+</div>`
+
+// =====================================================================
+// THE LIVE WALL: WAITING SESSIONS STAY, THE "PARADAS" BAND, NESTED CHILDREN (C85 to C87, issue #333).
+// =====================================================================
+const wallLead = { nome: 'Rodada 0.0.11 (PM)', pj: 'ahrena-console', br: 'main', st: 'active', mo: 'Opus 5.5', esf: 'alto', ag: 5, custo: '12,40', plano: [6, 9], ctx: 48, tarefa: 'Coordenar a rodada' }
+const wallKid = { nome: 'Pendências do PM de 19/10', pj: 'ahrena-console', br: 'main', st: 'blocked', mot: 'question', pede: 'Confere a v0.0.36 no Desktop?', mo: 'Sonnet 5.5', esf: 'médio', ag: 1, custo: '0,94', plano: [2, 3], ctx: 22 }
+const wallCard = (s, { foot = '', tag = '', age = '', cls = '', extra = '' } = {}) => `<div class="cartao mc st-${s.st}${foot ? ' wall-lead' : ''} ${cls}">
+    <div class="l1"><span class="tt trunc">${s.nome}</span>${badge(s.st)}</div>
+    <div class="pj trunc">${s.pj} · ${s.br}${tag}</div>
+    ${s.mot ? `<div class="mural-reason">${motChip(s.mot)}<span class="c-muted trunc">${s.pede}</span>${age ? `<b class="wall-age">${age}</b>` : ''}</div>` : `<div class="c-muted trunc" style="font-size:11.5px">${ic('loader-2')} ${s.tarefa}</div>`}
+    <div class="gr"><div>Modelo<b>${s.mo.split(' ')[0]}</b></div><div>Esforço<b>${s.esf}</b></div><div>Agentes<b>${s.ag}</b></div><div>Custo<b>~${s.custo}</b></div></div>
+    <div class="linhaplano"><span>Plano ${s.plano[0]}/${s.plano[1]}</span><span>contexto ${s.ctx}%</span></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">${barra(s.plano[0] / s.plano[1] * 100)}${barra(s.ctx)}</div>${foot}${extra}
+  </div>`
+const wallFoot = (open, n, parts) => `<div class="wall-foot"><span class="c-muted">${ic(open ? 'chevron-down' : 'chevron-right')}</span><b>${n} filhas</b>${parts.map(([c, t]) => `<span class="${c}">${t}</span>`).join('<span class="c-muted">·</span>')}</div>`
+const wallKidRow = (depth, name, role, st, mot, meta, open) => `<div class="wall-kid" style="margin-left:${depth * 24}px"><span class="c-muted">${ic(open == null ? 'minus' : open ? 'chevron-down' : 'chevron-right')}</span><b class="trunc">${name}</b><span class="chip">${role}</span>${badge(st, mot)}<span class="c-muted" style="margin-left:auto;font-size:11.5px">${meta}</span><span class="c-muted" title="Abre a sessão">${ic('external-link')}</span></div>`
+const wallTools = (n) => `<div class="seg"><span class="on">Todas</span><span>Precisam de você · ${n}</span><span>Ociosas · 3</span><span>Ativas</span></div>${atualizar}`
+const wallOthers = ['4d2a9c35', '7f3a2c1e', 'e04b7d93', '2c8e6f10'].map(byId)
+const wallPlain = s => wallCard(s)
+const wallParkedRows = [
+  ['Configuração por variáveis de ambiente', 'gateway-sandbox', 'Sua vez · "Rodo os testes?"', 'há 4 h', 'idle'],
+  ['Documentar a autenticação', 'gateway-sandbox', 'Terminou sem erro', 'há 5 h', 'completed'],
+  ['Testes do parser de datas', 'cli-de-notas', 'Terminou sem erro', 'há 6 h', 'completed'],
+  ['Exploração do CSV de custos', 'catalogo-exemplo', 'Interrompida (Esc)', 'há 9 h', 'idle'],
+  ['Layout da tela de cadastro', 'agenda-ficticia', 'Sessão aberta, prompt vazio', 'há 1 dia', 'idle'],
+  ['Revisão da instalação do framework', 'ahrena-console', 'Sua vez · "Abro o PR?"', 'há 2 dias', 'idle'],
+  ['Spike de notificações do macOS', 'ahrena-console', 'Terminou sem erro', 'há 3 dias', 'completed'],
+]
+const wallParked = (open, total, rows = wallParkedRows) => `<div class="cartao wall-parked">
+  <div class="ttl" style="margin:0">${ic(open ? 'chevron-down' : 'chevron-right')}<b>Paradas (${total})</b><span class="c-muted" style="font-weight:400;font-size:12px">sem atividade há mais de 180 min e sem pedir nada a você</span><span class="r">${open ? `Mostrando ${rows.length} de ${total} · as mais recentes` : 'Recolhida'}</span></div>
+  ${open ? `<div class="wall-parked-list">${rows.map(([n, pj, what, age]) => `<div class="wall-kid"><span class="c-muted">${ic('minus')}</span><b class="trunc">${n}</b><span class="mono c-muted" style="font-size:11px">${pj}</span><span class="chip">${what}</span><span class="c-muted" style="margin-left:auto;font-size:11.5px">${age}</span><span class="btn contorno">Abrir</span></div>`).join('')}${total > rows.length ? `<div class="wall-kid" style="justify-content:center"><span class="btn contorno">Mostrar mais ${total - rows.length}</span></div>` : ''}</div>` : ''}
+</div>`
+const wallKidsOpen = `<div class="wall-kids">
+      ${wallKidRow(0, 'Tech Lead do console', 'Tech Lead', 'idle', 'turn_ended', '3 filhas · 1 precisa de você · há 3 min', true)}
+      ${wallKidRow(1, 'Pendências do PM de 19/10', 'Filha', 'blocked', 'question', 'há 5 h', null)}
+      ${wallKidRow(1, '330-update-notice', 'Filha', 'completed', null, 'há 5 h', false)}
+      ${wallKidRow(1, 'Workflow: o laço e a árvore (#332)', 'Filha', 'active', null, 'agora', false)}
+      ${wallKidRow(0, 'Fila de PRs do console', 'Sessão', 'active', null, 'agora', null)}
+      ${wallKidRow(0, 'Revisão de documentação (#310)', 'Sessão', 'abandoned', null, 'há 8 h', null)}
+    </div>`
+const wallLeader = (open) => wallCard(wallLead, { foot: wallFoot(open, 6, [['c-blocked', '1 precisa de você'], ['c-active', '2 ativas'], ['c-muted', '1 parada']]), cls: open ? 'wall-span' : '', extra: open ? wallKidsOpen : '' })
+// C85 · the wall: the waiting child on top, the leader with its children collapsed
+const wallMainScreen = () => `${cab('layout-grid', 'Mural ao vivo', 'Um card por sessão aberta nesta máquina', wallTools(6))}
+  <div class="mural">
+    ${wallCard(wallKid, { age: 'há 5 h', tag: `<span class="chip wall-from">${ic('corner-down-right')}filha de Tech Lead</span>` })}
+    ${wallPlain(wallOthers[0])}
+    ${wallLeader(false)}
+    ${wallOthers.slice(1).map(wallPlain).join('')}
+  </div>
+  ${wallParked(false, 23)}`
+// C86 · the leader expanded: the children one level inside the other
+const wallTreeScreen = () => `${cab('layout-grid', 'Mural ao vivo', 'Um card por sessão aberta nesta máquina', wallTools(6))}
+  <div class="mural">
+    ${wallCard(wallKid, { age: 'há 5 h', tag: `<span class="chip wall-from">${ic('corner-down-right')}filha de Tech Lead</span>` })}
+    ${wallPlain(wallOthers[0])}
+    ${wallPlain(wallOthers[1])}
+    ${wallLeader(true)}
+    ${wallOthers.slice(2).map(wallPlain).join('')}
+  </div>
+  ${wallParked(true, 23)}`
+// C87 · the states
+const wallStatesScreen = () => `${cab('layout-grid', 'Mural ao vivo · estados', 'O que entra no mural, o que vai para Paradas e o que nunca aparece', '')}
+  <div class="wall-states">
+    <div><div class="rotulo">1 · Esperando há 5 h, sem arquivar</div>${wallCard(wallKid, { age: 'há 5 h' })}<p class="wall-cap">Entra entre as que precisam de você, sem o limite de 180 min. Ordem: urgente primeiro, depois a que espera há mais tempo.</p></div>
+    <div><div class="rotulo">2 · Mãe arquivada, filha viva</div>${wallCard(wallKid, { age: 'há 5 h', tag: `<span class="chip wall-from">${ic('archive')}mãe arquivada</span>` })}<p class="wall-cap">A filha é card próprio, sem aninhamento. O chip diz de quem ela veio; a mãe não aparece.</p></div>
+    <div><div class="rotulo">3 · Árvore funda: o resumo da líder</div><div class="cartao" style="padding:12px 14px;display:flex;flex-direction:column;gap:8px">
+      ${wallKidRow(0, 'PM', 'Líder', 'active', null, '', true)}${wallKidRow(1, 'Tech Lead', 'Filha', 'idle', 'turn_ended', '', true)}${wallKidRow(2, 'Sessão A', 'Neta', 'active', null, '', false)}${wallKidRow(2, 'Sessão B', 'Neta', 'blocked', null, '', false)}${wallKidRow(2, 'Sessão C', 'Neta', 'completed', null, '', false)}${wallKidRow(3, 'Filha da C', 'Bisneta', 'abandoned', null, '', null)}
+      ${wallFoot(true, 5, [['c-blocked', '1 precisa de você'], ['c-active', '1 ativa'], ['c-muted', '1 parada']])}</div><p class="wall-cap">O resumo da líder conta a árvore inteira, todos os níveis; cada nível abre recolhido dentro da sua mãe.</p></div>
+    <div style="grid-column:1/-1"><div class="rotulo">4 · Parada sem pedido</div>${wallParked(true, 2, wallParkedRows.slice(1, 3))}<p class="wall-cap">Terminou o turno há 6 h sem pedir nada: fora dos cards, dentro de Paradas. Arquivada no Desktop: nem aqui.</p></div>
+  </div>`
 
 const TELAS = [
   { cap: 'painel', titulo: 'Painel lateral', desc: 'O mod do Claude Code, ao lado da conversa, no recorte por sessão da decisão 0004 (issues #35, #36 e #37). Desenhado com os elementos nativos do mod (Box, Text, Button, Select, Svg, Link), na fonte monoespaçada do app, em 38 e 121 colunas.' },
@@ -4433,6 +4762,28 @@ const TELAS = [
     n: N(['Nada.'], ['A issue fala num card de versão em Controle; a proposta é o pé da barra lateral, que já mostra a versão e está em todas as telas.', 'Só a busca pedida mostra erro; a automática falha em silêncio, no log.']) },
   { id: 'console-update-outside-app', cod: 'C80', nome: 'O aviso fora do app', sub: 'A /ui num navegador comum: o mesmo aviso, mas Atualizar é só no app; Depois e Buscar agora funcionam pelo núcleo. No artefato do claude.ai o aviso é só de leitura (Depois e Buscar agora desligados). Sem o app na máquina, não há aviso, e o painel da versão explica por quê. O painel do mod não mostra nada (a aprovar). Em 1100.', html: () => updateOutsideScreens(),
     n: N(['Nada.'], ['Atualizar reinicia o app: só faz sentido de dentro dele.']) },
+  { id: 'console-workflow-loop', cod: 'C81', nome: 'Workflow da sessão · o laço por PR', sub: 'Feature Workflow (#332), parte 1. A aba Workflow do detalhe agrupa os subagentes pelo PR ou pela issue que cada um tocou: dev → Argos → Erodos → Argos, com as rodadas e os pedidos de mudança contados, e "Sem PR" para o que não cita nenhum. Cada passo abre o transcript do subagente; a faixa de cima liga a sessão ao que a abriu e ao que ela abriu. Em 1100 e 1440.', html: () => `<div class="tm-rc">${rcRow([['1100 px · a janela do app', wf1100('sessoes', wfDetailScreen())], ['1440 px', wf1440('sessoes', wfDetailScreen())]], ['<b>Hoje (C7):</b> o grafo põe todo subagente ligado ao Principal, com 0 rodadas e 0 pedidos, mesmo quando houve pedido de mudança. Aqui o grupo é o PR.', '<b>A aba continua sendo a Workflow</b> (a aprovar): "Por PR" é a visão nova e a padrão; "Todos os nós" mantém o grafo de hoje (C7) para quem quiser.', 'A ordem dentro do grupo é a hora em que cada subagente começou. A seta tracejada vermelha sai de um pedido de mudança.', 'Um grupo por PR, o mais recente em cima. O número do PR leva ao GitHub; o resto do cartão, ao transcript.'])}</div>`,
+    n: N(['O Session Drill-In do Workflows, com árvore de agentes e timeline.'], ['O CCAM mostra a árvore por quem chamou quem; aqui o eixo é o PR, que é o que se quer saber (quantas rodadas, onde travou).', 'O vínculo vem do texto da tarefa e do branch, nunca de um palpite: sem PR, sem seta.']) },
+  { id: 'console-workflow-states', cod: 'C82', nome: 'Workflow da sessão · os estados do grupo', sub: 'Aprovado de primeira, pediu mudanças sem Erodos ainda (sessão ativa), o laço que parou (sessão concluída), a terceira rodada, dois devs no mesmo PR e o grupo que só tem a issue. Mais a regra do vínculo com o PR. Em 1100.', html: () => wfStatesScreen(),
+    n: N(['Nada.'], ['"Parou aqui" responde onde o laço travou: a sessão acabou com um pedido de mudança sem resposta.', 'Sem veredito legível no fim da resposta do Argos, nada é contado como pedido de mudança.']) },
+  { id: 'console-workflow-tree', cod: 'C83', nome: 'Workflows · a árvore entre sessões', sub: 'Feature Workflow (#332), parte 2. PM → Tech Lead → sessão → grupos por PR, um nível dentro do outro, a partir do startedBy das sessões; cada nó abre a sua sessão. KPIs: árvores, PRs no laço, rodadas por PR, aprovados e laços parados. Em 1100 e 1440.', html: () => `<div class="tm-rc">${rcRow([['1100 px', wf1100('workflows', wfTreeScreen())], ['1440 px', wf1440('workflows', wfTreeScreen())]], ['<b>A raiz é a sessão sem pai</b> (o PM). Quem abriu quem vem do <code>startedBy</code>, que o índice do Desktop já tem; nenhuma ligação é deduzida por nome ou hora.', 'Cada sessão traz seus grupos por PR em uma linha (dev › Argos › Erodos › Argos); recolhida, mostra só os totais. Subagentes ficam dentro da sessão que os chamou; sessão filha é nó da árvore.', 'Uma sessão cujo pai está fora do período aparece como raiz, com o aviso "pai fora do período".', 'No Detalhe, a faixa "Aberta por / Abriu" (C81) leva um nível para cima ou para baixo.'])}</div>`,
+    n: N(['Nada: o CCAM não tem sessão que abre sessão.'], ['A árvore é entre sessões; o laço por PR vive dentro de cada sessão. As duas se encaixam, e o PM vê tudo sem abrir transcript.']) },
+  { id: 'console-workflows-no-cap', cod: 'C84', nome: 'Workflows · sem o corte de 500', sub: 'Feature Workflow (#332), parte 3. Período (24 h, 7 dias, 30 dias, Tudo) e páginas de 50 árvores; KPIs e grafo contam o período todo; as sessões ativas entram sempre; "Tudo" lê em blocos e mostra o avanço. Em 1100.', html: () => wfNoCapScreen(),
+    n: N(['Nada.'], ['O corte de 500 some: quem limita é o período escolhido, e uma sessão ativa nunca fica de fora.', 'Os números não dependem da página: a lista pagina, a conta não.']) },
+  { id: 'console-wall-nested', cod: 'C85', nome: 'Mural · a que espera por mim fica, e a líder leva as filhas', sub: 'Feature Mural (#333), parte 1. A sessão não arquivada que me pediu algo continua entre os cards, com "há 5 h" e sem o limite de 180 min; a líder mostra as filhas recolhidas, com o estado delas, e a filha que precisa de mim sobe para o topo; a faixa Paradas fecha a página, recolhida e com contador. Em 1100.', html: () => `<div class="tm-rc">${rcRow([['1100 px · a janela do app', cc('mural', wallMainScreen(), 5, 1100)]], ['<b>Hoje:</b> a sessão que o watcher marcou como abandonada (180 min parada) sai do mural, mesmo esperando por você; a "Pendências do PM de 19/10" ficou de fora esperando a conferência da v0.0.36.', '<b>Entra</b> toda sessão não arquivada com <code>attention</code> que pede algo, qualquer que seja a idade. O "há 5 h" fica na linha do motivo, em âmbar.', '<b>A filha que precisa de mim é card próprio, no topo</b>, com o chip "filha de Tech Lead"; dentro da líder ela continua aparecendo, com o mesmo estado.', '<b>A líder</b> ganha uma linha no pé: quantas filhas, quantas precisam de você, quantas estão ativas e quantas paradas. O card da líder cresce nessa linha; os outros continuam com a altura fixa.', 'A faixa <b>Paradas (23)</b> fica abaixo dos cards, <b>recolhida</b>; o contador conta as não arquivadas, paradas há mais de 180 min e sem pedido.'])}</div>`,
+    n: N(['Nada: o CCAM não tem mural nem sessão que abre sessão.'], ['O mural é do Podium. Aqui só muda o critério de entrada (o que pede algo fica) e a árvore (quem abriu quem, do <code>startedBy</code> que a #332 já usa).']) },
+  { id: 'console-wall-tree', cod: 'C86', nome: 'Mural · a líder aberta e a faixa Paradas aberta', sub: 'Feature Mural (#333), parte 2. A líder expandida ocupa a linha inteira e mostra as filhas, cada nível recolhido dentro da sua mãe; a faixa Paradas aberta lista as mais recentes, com Abrir. Em 1100.', html: () => `<div class="tm-rc">${rcRow([['1100 px · a janela do app', cc('mural', wallTreeScreen(), 5, 1100)]], ['<b>Abrir a líder</b> a faz ocupar a linha inteira; as filhas aparecem em linhas com o estado e o motivo, uma dentro da outra pela indentação (<code>startedBy</code>).', 'Cada filha abre a sua sessão; uma filha com filhas própria abre recolhida e mostra o contador delas.', '<b>Paradas aberta:</b> as 7 mais recentes de 23, com o que a sessão fez por último e há quanto tempo; "Mostrar mais" lê o resto. Abrir leva à sessão.', 'A abertura da líder e da faixa fica na URL (<code>?open=…&parked=1</code>) e no navegador do app, para a página reabrir como você deixou.'])}</div>`,
+    n: N(['Nada.'], ['A faixa Paradas é nova: o mural é "o que está em jogo", e parada sem pedido não é, mas some da vista sem deixar rastro; o contador mantém a conta.']) },
+  { id: 'console-wall-states', cod: 'C87', nome: 'Mural · os estados', sub: 'Feature Mural (#333), parte 3. Esperando há 5 h, a mãe arquivada com a filha viva, a árvore funda e a parada sem pedido. Em 1100.', html: () => `<div class="tm-rc">${rcRow([['1100 px · a janela do app', cc('mural', wallStatesScreen(), 5, 1100)]], ['<b>Arquivada no Desktop</b> nunca entra: nem como card, nem em Paradas, nem dentro da líder.', '<b>Mãe arquivada com filha viva:</b> a filha é card próprio, com o chip "mãe arquivada"; ninguém fica órfão sem aviso.', 'O resumo da líder conta a árvore toda: "5 filhas · 1 precisa de você · 1 ativa · 1 parada".', 'Vale também com <code>?machine=all</code>: a árvore e a faixa são por máquina de origem; uma filha da Workstation de uma mãe do Mac aparece como card próprio, com o rótulo da máquina.'])}</div>`,
+    n: N(['Nada.'], ['Os estados são os da #245 (Precisa de você, Ociosa) mais Paradas, que só existe no mural.']) },
+  { id: 'console-port-release', cod: 'C88', nome: 'Liberar uma porta · esta máquina', sub: 'Feature Liberar uma porta em escuta (#286). O card Portas em escuta ganha a coluna Ação: Liberar por linha, desligado com o motivo escrito na própria linha (o núcleo, o app, root, outro usuário), e Ver a stack no lugar de matar o docker-proxy de um container. O resto da tela é o da C24. Em 1100 e 1440.', html: () => `<div class="fila">${bothWidths(w => rpScreen(w, rpMacCard(w)))}</div>`,
+    n: N(['Nada: o CCAM não age sobre portas.'], ['Liberar é uma porta (um processo) por vez. Não há “Liberar todas as que ouvem em todas as interfaces” (critério 7, decidido aqui): na Workstation de 29/10 quase todas as de todas as interfaces são de root (22, 139, 445) ou de container (15306), e o restante é um runner e um serviço de dev. A ação em lote mataria o que ninguém olhou; a lista fica no filtro “Todas as interfaces”, uma linha de cada vez.', 'Um processo com várias portas (o ssh do túnel) é uma linha só: liberar derruba todas elas, e o diálogo lista as portas.', 'Porta de container não mata o docker-proxy: Ver a stack leva ao card de stacks (frente do Docker, #288), onde parar a stack é a ação certa.']) },
+  { id: 'console-port-release-flow', cod: 'C89', nome: 'Liberar uma porta · o fluxo', sub: 'Confirmar com o processo, o pid, o comando resumido e de quem é (1), esperando a porta fechar (2), a linha some (3), não saiu em 5 s e pede a segunda confirmação, SIGKILL (4), o dono mudou e nada foi enviado (5) e a porta do túnel, que avisa que derruba o encaminhamento e aponta para a conexão da máquina (6). Em 1100.', html: () => rpScreens(),
+    n: N(['Nada.'], ['A tela manda o pid e a porta, nunca um comando: o núcleo confere de novo que o pid ainda é o dono da porta e só envia sinal a processo do próprio usuário, nunca ao núcleo nem ao app (critérios 3 e 6).', 'SIGTERM primeiro; o SIGKILL só depois de 5 s e de uma segunda confirmação que diz o que se perde.', 'Se o dono mudou, não envia nada: o console só age no processo que a pessoa viu.']) },
+  { id: 'console-port-release-why', cod: 'C90', nome: 'Quando não oferece Liberar', sub: 'Os motivos escritos na linha: o núcleo, o app, root ou outro usuário (o console não pede senha de administrador), pid desconhecido. Embaixo, o filtro Todas as interfaces, onde só uma de três pode ser liberada. Em 1100.', html: () => `<div class="fila">${rpScreen(1100, rpWhy())}</div>`,
+    n: N(['Nada.'], ['O botão desligado fica na linha, com o motivo: some o “por que não consigo?”.', 'Nada de sudo, como na decisão 0014.']) },
+  { id: 'console-port-release-ws', cod: 'C91', nome: 'Liberar uma porta · Workstation', sub: 'A mesma ação na máquina remota, pelo núcleo de lá. Padrão: a Workstation não aceita ações pelo túnel, e cada linha vira Copiar comando (1). Ligada lá: Liberar, com Ver a stack para o container (2, em 1100 e 1440) e o confirmar que diz “Roda na Workstation” (3). Núcleo de lá sem a ação: desligado, com o motivo (4). Sem conexão (5).', html: () => rpWsScreens(),
+    n: N(['Nada.'], ['Mesmo modelo da C75 (decisão 0014, seção 5; decisão 0016): o Mac repassa só o pid e a porta; o núcleo de lá confere o dono, envia o sinal e responde. Desligado por padrão, ligado por quem está na Workstation.', 'Núcleo de lá que não conhece a rota responde 404: a ação aparece desligada, como a do login por código (C67).']) },
 ]
 
 // =====================================================================
@@ -4463,6 +4814,8 @@ function montar() {
     <li><b>Ferramentas (#280, decisão 0014):</b> CLIs, servidores MCP, plataformas e containers desta máquina e da Workstation, na seção Controle. Instalar, atualizar, iniciar e parar rodam só o que está no catálogo do núcleo, sem shell, um por vez, depois de mostrar o comando; o que pede sudo vira comando para copiar. A Workstation é só leitura até ela mesma ligar as ações (C72 a C76). Aprovado em 21/10, como está.</li>
     <li><b>Sessões de todas as máquinas (#243, a aprovar):</b> o filtro de máquina (Todas · Esta máquina · Workstation, Todas por padrão, na URL) entra em Sessões, Mural, Kanban, Histórico, Feed e Dashboard; o rótulo "Workstation" vai só nas linhas e cards remotos; sem conexão, as sessões de lá saem das listas com um aviso neutro; o detalhe remoto não tem "Abrir no Claude Desktop" (C45 a C49).</li>
     <li><b>O painel do mod com todas as máquinas (#262, a aprovar):</b> "Ver" lista as sessões deste Mac e da Workstation juntas, por idade; o card remoto diz "Workstation" no começo da linha de meta, no lugar da relação, e abre o detalhe no console; um Select só junta a Família e o filtro (Família · Todas as máquinas · Esta máquina · Workstation), na linha de baixo no estreito; sem conexão, as sessões de lá saem e uma linha neutra diz desde quando, com "resolver no console ›"; "N precisam de você" soma as máquinas e a dica divide por máquina e por conta (P15, P16).</li>
+    <li><b>Workflows: o laço por PR, a árvore entre sessões e sem o corte de 500 (#332, a aprovar):</b> a aba Workflow do detalhe agrupa por PR (C81, C82) e a página Workflows ganha a árvore entre sessões (C83) e o período com páginas (C84). Escolhas em aberto, cada uma com a recomendação no PR: (1) de onde vem o PR de um subagente: tarefa, depois branch, depois issue; (2) o que conta como rodada e como pedido de mudança: cada chamada do Argos, e o veredito na última linha da resposta; (3) quando o laço "parou": sessão concluída ou abandonada com pedido de mudança sem resposta; (4) a aba do detalhe: "Por PR" como padrão, "Todos os nós" mantém o grafo de hoje; (5) a árvore: aba na página Workflows e faixa Aberta por / Abriu no detalhe; (6) o fim do corte: período de 30 dias por padrão, páginas de 50, ativas sempre dentro, KPIs sobre o período inteiro; (7) uma tarefa com dois PRs fica no primeiro, com o outro em chip.</li>
+    <li><b>Mural ao vivo: a que espera por mim fica, Paradas e as filhas (#333, a aprovar):</b> a sessão não arquivada que pede algo continua no mural sem o limite de 180 min, a faixa Paradas guarda as paradas sem pedido, e a líder mostra as filhas recolhidas, com a que precisa de você no topo (C85 a C87). Escolhas em aberto, cada uma com a recomendação no PR: (1) o que é "pediu algo"; (2) onde mora a faixa Paradas; (3) a filha que precisa de mim: card próprio e dentro da líder; (4) a líder aberta ocupa a linha inteira; (5) o resumo da líder conta a árvore toda; (6) mãe arquivada com filha viva; (7) Paradas pagina de 7 em 7.</li>
     <li><b>Backlog:</b> Feed de atividade, Analytics completo, Workflows e o detalhe com o grafo de agentes estavam para depois da entrega. Entraram aqui a pedido do dono; o PM decide se viram itens da 0.0.1.</li></ol></section>`
   indice.innerHTML = htmlI; main.innerHTML = htmlM
   if (window.lucide) lucide.createIcons()

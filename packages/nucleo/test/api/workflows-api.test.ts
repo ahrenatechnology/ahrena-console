@@ -5,7 +5,7 @@ import { after, before, describe, test } from 'node:test';
 import { openSqliteStorage, type SqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
 import { Accounts, startLocalApi, MontadorDoPainel, TrabalhoPorBranch, type LocalApi, type RespostaDosWorkflows, type WorkflowDaSessao } from '../../src/api/index.ts';
 import { SimulatorWorkSource, seedPanelScenario } from '../../src/simulator/panel.ts';
-import { lerSessoesDosWorkflows, MAXIMO_DE_SESSOES, montarWorkflows } from '../../src/api/workflows.ts';
+import { lerSessoesDosWorkflows, montarWorkflows } from '../../src/api/workflows.ts';
 import { WORKFLOW_SESSIONS, seedDemoWorkflows } from '../../src/simulator/workflows.ts';
 import { T0 } from '../fixtures.ts';
 
@@ -85,8 +85,7 @@ describe('Workflows na API, com a demonstração do p4', () => {
     const r = corpo as RespostaDosWorkflows;
     assert.equal(r.filter, 'all');
     assert.equal(r.node, null);
-    assert.equal(r.truncated, false);
-    assert.equal(r.max, MAXIMO_DE_SESSOES, 'o teto usado vai no JSON');
+    assert.equal(r.period, '30d');
     for (const k of Object.keys(r.kpis) as (keyof typeof r.kpis)[]) assert.notEqual(r.kpis[k], null, `KPI ${k}`);
     assert.equal(r.kpis.commonFlow!.label, 'dev → review');
     assert.deepEqual(r.runs.map((x) => [x.name, x.state, x.project]), [
@@ -109,7 +108,7 @@ describe('Workflows na API, com a demonstração do p4', () => {
   test('#96/AC-3 #96/AC-4 Dado o grafo, o clique num nó e o filtro valem para a tela inteira', async () => {
     const todas = (await pedir(api.url, '/api/workflows')).corpo as RespostaDosWorkflows;
     const total = todas.sessions;
-    assert.equal(todas.truncated, false);
+    assert.equal(todas.period, '30d');
     assert.ok(total >= WORKFLOW_SESSIONS.length);
     assert.deepEqual(todas.graph.columns.map((c) => c.id), ['origin', 'main', 'subagent', 'compaction', 'outcome']);
     for (const id of ['origin:prompt', 'origin:resume', 'compaction:none', 'compaction:compacted', 'outcome:completed', 'outcome:error']) {
@@ -144,18 +143,10 @@ describe('Workflows na API, com a demonstração do p4', () => {
     }
   });
 
-  test('#96 Dado mais sessões que o teto, a leitura diz que cortou', async () => {
+  test('#332 the read has no cap: every session comes back, and none is reported as cut', async () => {
     const todas = await lerSessoesDosWorkflows(storage, 'all');
-    assert.equal(todas.truncado, false);
-    const n = todas.sessoes.length;
-    assert.ok(n >= 3);
-    const cortada = await lerSessoesDosWorkflows(storage, 'all', n - 1);
-    assert.deepEqual([cortada.sessoes.length, cortada.truncado], [n - 1, true]);
-    const exata = await lerSessoesDosWorkflows(storage, 'all', n);
-    assert.deepEqual([exata.sessoes.length, exata.truncado], [n, false], 'o teto exato não corta');
-    assert.deepEqual(
-      (({ truncated, max }) => [truncated, max])(montarWorkflows(cortada.sessoes, { agora: AGORA, truncado: cortada.truncado, maximo: n - 1 })),
-      [true, n - 1],
-    );
+    assert.ok(todas.sessoes.length >= 3);
+    assert.equal(todas.outsidePeriod.size, 0);
+    assert.equal('truncated' in montarWorkflows(todas.sessoes, { agora: AGORA }), false);
   });
 });

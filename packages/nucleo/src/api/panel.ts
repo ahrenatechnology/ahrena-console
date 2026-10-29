@@ -144,7 +144,8 @@ export class MontadorDoPainel {
   /** Público para o mural (#34), que lista as sessões pela mesma porta. */
   readonly storage: Porta;
   private readonly contas: Accounts;
-  private readonly desktop: DesktopIndex | null;
+  /** Public for the Workflows tree (#332), which asks who opened whom. */
+  readonly desktop: DesktopIndex | null;
   readonly trabalho: TrabalhoPorBranch | null;
   readonly agora: () => number;
   private readonly custoMs: number;
