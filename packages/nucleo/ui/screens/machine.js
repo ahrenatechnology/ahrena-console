@@ -542,7 +542,7 @@ export async function mount(area, ctx) {
   let problem = null;
   // The "Perfis de nuvem" card (issue 277, C66 and C67): its own module, which reads and polls by itself.
   const cloud = cloudProfiles(ctx, id);
-  // The Docker card with the actions (issue 288, C85 to C88): its own module, which reads by itself; it replaces the read-only stacks card while it shows the stacks.
+  // The Docker card with the actions (issue 288, C92 to C95): its own module, which reads by itself; it replaces the read-only stacks card while it shows the stacks.
   const docker = dockerActions(ctx, id, { repaint: () => last && paint(last) });
   // The remote's connection (issue 278, C62 to C65): its own module; `null` keeps the screen as it was.
   const conn = local ? null : machineConnection(ctx, id, { reread: () => draw(), repaint: () => last && paint(last) });

@@ -1,6 +1,6 @@
 # 0017 · Docker: o núcleo para, sobe, remove e limpa só pelo catálogo, com os ids lidos do daemon, e volume é outra confirmação
 
-- **Status:** aceita (o Fernando aprovou os wireframes C85 a C88 em 29/10; esta decisão acompanha o PR)
+- **Status:** aceita (o Fernando aprovou os wireframes C92 a C95 em 29/10; esta decisão acompanha o PR)
 - **Data:** 2026-10-29
 - **Issue:** [#288](https://github.com/ahrenatechnology/ahrena-console/issues/288)
 - **Estende:** [0014](0014-dev-tools-command-catalog.md) (catálogo no código, ids, `planDigest`, mesma origem estrita, sem senha, um por vez, mostra o comando antes) e [0013](0013-cloud-connectors-and-machine-connection.md) (o Mac repassa uma escrita à máquina remota pelo túnel)
