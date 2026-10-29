@@ -495,7 +495,8 @@ export async function mount(area, ctx) {
       if (e?.name === 'AbortError' || mine !== seq) return;
       failure = e.message;
     } finally {
-      loadingMore = false;
+      // Only the request of the current view clears the flag; a late one must not clear a newer request's.
+      if (mine === seq) loadingMore = false;
     }
     if (data) {
       keepFocus = () => area.querySelector('.wft-more button');
@@ -511,6 +512,7 @@ export async function mount(area, ctx) {
       if (mine !== seq) return;
       data = d;
       more = [];
+      loadingMore = false; // a "Carregar mais" still in flight belongs to the view this read replaces
       nextCursor = d.trees.nextCursor;
       failure = null;
       draw();
