@@ -144,3 +144,36 @@ describe('GET /api/workflows with a period, pages and the tree', () => {
     await big.close();
   });
 });
+
+describe('the read caches (#332, review round 1)', () => {
+  const build = async (storage: SqliteStorage) =>
+    startLocalApi({ panelBuilder: new MontadorDoPainel({ storage, contas: new Accounts({ storage, file: null }), desktop: null, trabalho: null, agora: () => NOW }), hooks: { storage }, port: 0, log: () => {} });
+
+  test('a session that flips from active to abandoned without a new updatedAt is read again', async () => {
+    const storage = openSqliteStorage({ path: ':memory:' });
+    await storage.putSession(session({ id: 'live', status: 'active', updatedAt: ago(0.1), startedAt: ago(1) }));
+    const api = await build(storage);
+    assert.equal((await get(api.url, '/api/workflows?filter=active')).body.sessions, 1);
+    await storage.putSession(session({ id: 'live', status: 'abandoned', updatedAt: ago(0.1), startedAt: ago(1) }));
+    assert.equal((await get(api.url, '/api/workflows?filter=active')).body.sessions, 0);
+    assert.equal((await get(api.url, '/api/workflows?filter=completed')).body.graph.nodes.some((n: any) => n.id === 'outcome:abandoned'), true);
+    await api.close();
+    await storage.close();
+  });
+
+  test('two storages with the same session id do not share what was read', async () => {
+    const a = openSqliteStorage({ path: ':memory:' });
+    const b = openSqliteStorage({ path: ':memory:' });
+    for (const [st, kind] of [[a, 'general-purpose'], [b, 'Explore']] as const) {
+      await st.putSession(session({ id: 'same', status: 'completed', updatedAt: ago(1), startedAt: ago(2) }));
+      await st.putAgent(agent({ id: 'same:main', sessionId: 'same', type: 'main', name: null }));
+      await st.putAgent(agent({ id: 'same:sub', sessionId: 'same', type: 'subagent', subagentType: kind, name: 'x', parentAgentId: 'same:main' }));
+    }
+    const [apiA, apiB] = [await build(a), await build(b)];
+    const labels = async (api: LocalApi) => (await get(api.url, '/api/workflows')).body.graph.nodes.filter((n: any) => n.column === 'subagent').map((n: any) => n.label);
+    assert.deepEqual(await labels(apiA), ['general-purpose']);
+    assert.deepEqual(await labels(apiB), ['Explore']);
+    await Promise.all([apiA.close(), apiB.close()]);
+    await Promise.all([a.close(), b.close()]);
+  });
+});
