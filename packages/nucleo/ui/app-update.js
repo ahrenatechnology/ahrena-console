@@ -17,6 +17,9 @@ export const APP_UPDATE_ROUTE = '/api/app-update';
 const ACTION_ROUTE = `${APP_UPDATE_ROUTE}/actions/`;
 /** The "Atualizado" card goes away by itself after this long. */
 export const DONE_MS = 10_000;
+/** A click on Atualizar or Buscar agora shows busy until the app reports a new phase, or this long. */
+export const PENDING_MS = 60_000;
+const BUSY_LABEL = { install: 'Iniciando…', check: 'Buscando…' };
 const DEV_EVERY = 'a cada 10 min';
 const STABLE_EVERY = 'a cada 6 h';
 const READ_ONLY_WHY = 'No app do Ahrena Console';
@@ -76,6 +79,15 @@ export function noticeOf(view) {
   return null;
 }
 
+/**
+ * A button of the card or the panel. `busy` is the click that went out and the app has not picked up
+ * yet: the icon turns, the label says so, and a second click does nothing (aria-disabled keeps the focus).
+ */
+function actionButton(label, onClick, { off, filled = false, disabled = false, why = null, busy = null }) {
+  if (busy) return el('button', { type: 'button', class: `btn ${filled ? 'filled' : 'outline'}`, 'aria-busy': 'true', 'aria-disabled': 'true' }, icon('refresh'), BUSY_LABEL[busy]);
+  return el('button', { type: 'button', class: `btn ${filled ? 'filled' : 'outline'}`, onClick, disabled: off || disabled, title: off ? READ_ONLY_WHY : (why ?? undefined) }, label);
+}
+
 function bar(progress) {
   const p = percent(progress);
   const fill = el('span', { class: 'up-fill' });
@@ -84,21 +96,23 @@ function bar(progress) {
 }
 
 /** The card on top of the screen. `act(action, version)` sends a click. */
-export function drawNotice(view, { where, act }) {
+export function drawNotice(view, { where, act, pending = null }) {
   const n = noticeOf(view);
   if (!n) return null;
   const off = where === 'read-only';
-  const button = (label, onClick, { filled = false, why = null } = {}) => el('button', { type: 'button', class: `btn ${filled ? 'filled' : 'outline'}`, onClick, disabled: off || Boolean(why), title: off ? READ_ONLY_WHY : (why ?? undefined) }, label);
+  const button = (label, onClick, { filled = false, why = null, busy = null } = {}) => actionButton(label, onClick, { off, filled, disabled: Boolean(why), why, busy });
+  const installing = pending === 'install' ? 'install' : null;
   // Tentar de novo restarts the app like Atualizar: off in a browser tab too.
-  const retry = () => (where === 'browser' ? button('Tentar de novo', null, { filled: true, why: 'Atualizar é no app, pela bandeja' }) : button('Tentar de novo', () => act('install'), { filled: true }));
+  const retry = () => (where === 'browser' ? button('Tentar de novo', null, { filled: true, why: 'Atualizar é no app, pela bandeja' }) : button('Tentar de novo', () => act('install'), { filled: true, busy: installing }));
   const sub = (...parts) => el('span', { class: 'up-sub' }, parts.filter(Boolean).join(' · '));
   const current = `Você está na versão ${view.appVersion}`;
   const card = (cls, ic, title, subline, actions = [], extra = null) =>
     el('section', { class: `up-banner ${cls}`, role: 'status', 'data-kind': n.kind }, el('span', { class: 'up-ic' }, icon(ic)), el('div', { class: 'up-text' }, el('b', {}, title), subline, extra), actions.length ? el('div', { class: 'up-act' }, ...actions) : null);
   if (n.kind === 'available') {
-    const install = where === 'browser' ? button('Atualizar', null, { filled: true, why: 'Atualizar é no app, pela bandeja' }) : button('Atualizar', () => act('install'), { filled: true });
+    const install = where === 'browser' ? button('Atualizar', null, { filled: true, why: 'Atualizar é no app, pela bandeja' }) : button('Atualizar', () => act('install'), { filled: true, busy: installing });
     const note = where === 'browser' ? 'Atualizar é no app: abra pela bandeja.' : null;
-    return card('', 'an-download', `Atualização disponível: versão ${n.version}`, sub(current, note ?? view.available.notes), [install, button('Depois', () => act('dismiss', n.version))]);
+    const later = button('Depois', () => act('dismiss', n.version), { why: installing ? 'Atualização em andamento' : null });
+    return card('', 'an-download', `Atualização disponível: versão ${n.version}`, sub(current, note ?? view.available.notes), [install, later]);
   }
   if (n.kind === 'downloading') return card('', 'wall-loader', `Baixando a versão ${n.version}…`, null, [], bar(view.progress));
   if (n.kind === 'installing') return card('', 'refresh', `Instalando a versão ${n.version} e reiniciando…`, sub('O app fecha e abre sozinho', 'as sessões do Claude não param'));
@@ -122,13 +136,14 @@ export function panelState(view, where) {
 }
 
 /** The panel that opens from the version in the footer. */
-export function drawPanel(view, { where, act, now = Date.now() }) {
+export function drawPanel(view, { where, act, now = Date.now(), pending = null }) {
   const state = panelState(view, where);
   const off = where === 'read-only';
-  const button = (label, onClick, { filled = false, disabled = false, why = null } = {}) => el('button', { type: 'button', class: `btn ${filled ? 'filled' : 'outline'}`, onClick, disabled: off || disabled, title: off ? READ_ONLY_WHY : (why ?? undefined) }, label);
+  const button = (label, onClick, { filled = false, disabled = false, why = null, busy = null } = {}) => actionButton(label, onClick, { off, filled, disabled: disabled || (Boolean(pending) && !busy), why, busy });
   const mode = view?.app ? modeText(view) : null;
   const status = (ic, title, text) => el('div', { class: 'up-st' }, el('span', { class: 'ic' }, icon(ic)), el('div', {}, el('b', {}, title), el('span', {}, text)));
-  const search = (label = 'Buscar agora', filled = false) => button(label, () => act('check'), { filled });
+  const search = (label = 'Buscar agora', filled = false) => button(label, () => act('check'), { filled, busy: pending === 'check' ? 'check' : null });
+  const install = (label) => button(label, () => act('install'), { filled: true, busy: pending === 'install' ? 'install' : null });
   let body;
   switch (state.kind) {
     case 'no-app':
@@ -150,11 +165,11 @@ export function drawPanel(view, { where, act, now = Date.now() }) {
       body = [status('error', 'Canal fora do ar', 'O canal de atualizações não respondeu. A próxima consulta segue o intervalo normal.'), el('div', { class: 'up-pa' }, search('Tentar de novo', true))];
       break;
     case 'error':
-      body = [status('error', `Não deu para atualizar para a ${view.available?.version ?? ''}`, `Você continua na versão ${view.appVersion}.`), el('div', { class: 'up-pa' }, where === 'browser' ? button('Tentar de novo', null, { filled: true, disabled: true, why: 'Atualizar é no app, pela bandeja' }) : button('Tentar de novo', () => act('install'), { filled: true }), search())];
+      body = [status('error', `Não deu para atualizar para a ${view.available?.version ?? ''}`, `Você continua na versão ${view.appVersion}.`), el('div', { class: 'up-pa' }, where === 'browser' ? button('Tentar de novo', null, { filled: true, disabled: true, why: 'Atualizar é no app, pela bandeja' }) : install('Tentar de novo'), search())];
       break;
     case 'available': {
-      const install = where === 'browser' ? button('Atualizar', null, { filled: true, disabled: true, why: 'Atualizar é no app, pela bandeja' }) : button('Atualizar', () => act('install'), { filled: true });
-      body = [status('an-download', `Versão ${view.available.version} disponível`, view.available.notes ?? `Você está na versão ${view.appVersion}.`), el('div', { class: 'up-pa' }, install, search())];
+      const update = where === 'browser' ? button('Atualizar', null, { filled: true, disabled: true, why: 'Atualizar é no app, pela bandeja' }) : install('Atualizar');
+      body = [status('an-download', `Versão ${view.available.version} disponível`, view.available.notes ?? `Você está na versão ${view.appVersion}.`), el('div', { class: 'up-pa' }, update, search())];
       if (where === 'browser') body.splice(1, 0, el('span', { class: 'up-note' }, 'Atualizar é no app: abra pela bandeja.'));
       break;
     }
@@ -179,20 +194,39 @@ export function createAppUpdate({ read, write, noticeNode, panelNode, win = glob
   let view = null;
   let open = false;
   let doneTimer = null;
+  // Atualizar and Buscar agora only leave a request for the app, which picks it up on its own time:
+  // until it reports a new phase (or a new check), the button says the click went out.
+  let pending = null;
+  let pendingTimer = null;
   const where = () => whereAmI(win);
 
+  function settle() {
+    if (pendingTimer) clearTimer(pendingTimer);
+    pending = null;
+    pendingTimer = null;
+  }
+
   async function act(action, version) {
+    const asksTheApp = action === 'install' || action === 'check';
+    if (asksTheApp) {
+      if (pending) return;
+      pending = { action, phase: view?.phase ?? null, lastCheckAt: view?.lastCheckAt ?? null, updated: view?.updated ?? null };
+      pendingTimer = setTimer(() => ((pendingTimer = null), settle(), draw()), PENDING_MS);
+      draw();
+    }
     try {
       view = await write(`${ACTION_ROUTE}${action}`, version ? { version } : null);
     } catch {
       // The núcleo said no (no app, a stale version): read what is true now.
+      if (asksTheApp) settle();
       return refresh();
     }
     draw();
   }
 
   function draw() {
-    const card = view ? drawNotice(view, { where: where(), act }) : null;
+    if (pending && view && (view.phase !== pending.phase || view.lastCheckAt !== pending.lastCheckAt || view.updated?.to !== pending.updated?.to)) settle();
+    const card = view ? drawNotice(view, { where: where(), act, pending: pending?.action }) : null;
     if (card) {
       noticeNode.replaceChildren(card);
       noticeNode.removeAttribute('hidden');
@@ -209,7 +243,7 @@ export function createAppUpdate({ read, write, noticeNode, panelNode, win = glob
   }
 
   function drawOpenPanel() {
-    panelNode.replaceChildren(drawPanel(view ?? { app: false }, { where: where(), act, now: now() }));
+    panelNode.replaceChildren(drawPanel(view ?? { app: false }, { where: where(), act, now: now(), pending: pending?.action }));
     panelNode.removeAttribute('hidden');
   }
 
