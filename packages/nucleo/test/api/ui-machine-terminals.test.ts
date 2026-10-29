@@ -1,4 +1,4 @@
-// The "Sessões de terminal" card on the machine screens (issue 350, C90 to C93): the pure parts, and
+// The "Sessões de terminal" card on the machine screens (issue 350, C96 to C99): the pure parts, and
 // the card with its confirmations on the fake DOM. The write is a double; nothing leaves the test.
 import assert from 'node:assert/strict';
 import { afterEach, describe, mock, test } from 'node:test';

@@ -1,4 +1,4 @@
-// The "Sessões de terminal" card of the machine screens (C90 to C93, issue 350): one row per
+// The "Sessões de terminal" card of the machine screens (C96 to C99, issue 350): one row per
 // pseudo-terminal, with Interromper o comando and Encerrar a sessão. Each action opens a
 // confirmation that shows the process and the signal; the ladder (SIGINT, SIGTERM, SIGKILL with a
 // second confirmation; SIGHUP, SIGTERM) is one click per step, never automatic. The write sends ids

@@ -1,4 +1,4 @@
-// The "Sessões de terminal" card (C90 to C93, issue 350) without the DOM: what each row says, which
+// The "Sessões de terminal" card (C96 to C99, issue 350) without the DOM: what each row says, which
 // actions are on and why not, and what each confirmation shows. Read from the machine's telemetry
 // reading (`terminals`, src/telemetry/model.ts); a remote's reading goes through `normalizeTerminals`.
 

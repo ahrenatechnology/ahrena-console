@@ -547,7 +547,7 @@ export async function mount(area, ctx) {
   const cloud = cloudProfiles(ctx, id);
   // The remote's connection (issue 278, C62 to C65): its own module; `null` keeps the screen as it was.
   const conn = local ? null : machineConnection(ctx, id, { reread: () => draw(), repaint: () => last && paint(last) });
-  // The terminal sessions card (issue 350, C90 to C93): the actions and their confirmations are its own.
+  // The terminal sessions card (issue 350, C96 to C99): the actions and their confirmations are its own.
   const terminals = machineTerminals(ctx, { id, local, label: () => (local ? 'Esta máquina' : (last?.machine?.label ?? id)), repaint: () => last && paint(last), reread: () => draw() });
 
   const hourButtons = WINDOWS.map((h) => el('button', { type: 'button', 'aria-pressed': String(h === hours), 'data-hours': h, onClick: () => setHours(h) }, `${h} h`));
