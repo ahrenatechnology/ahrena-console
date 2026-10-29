@@ -121,6 +121,8 @@ export class MontadorDoMural {
   private readonly parkedWindowMs: number;
   private readonly open: SessionOpenDescriber;
   private cache: { em: number; mural: Wall; byLimit: Map<number, Wall> } | null = null;
+  /** Abandoned sessions already read as asking nothing, by `id@updatedAt`: they are not read again until they change. */
+  private readonly askedNothing = new Set<string>();
   private rodando: Promise<Wall> | null = null;
 
   constructor({ painel, storage, agora = Date.now, cacheMs = 2_000, recenteMs = RECENTE_DO_MURAL_MS, parkedWindowMs = PARKED_WINDOW_MS, open = new SessionOpenDescriber() }: OpcoesDoMural) {
@@ -241,9 +243,11 @@ export class MontadorDoMural {
     const open = ehAberta(session, desktop, agora, this.recenteMs);
     if (!open) {
       const asking = waitingAsAbandoned(session);
-      if (asking) {
+      const key = `${session.id}@${session.updatedAt}`;
+      if (asking && !this.askedNothing.has(key)) {
         const reading = await this.painel.leituraDaSessao(asking);
         if (reading.sessao.attention?.level === 'blocked') return { session, desktop, open: true, reading: async () => reading };
+        this.askedNothing.add(key);
       }
     }
     let memo: Promise<LeituraDaSessao> | null = null;
@@ -257,11 +261,16 @@ export class MontadorDoMural {
     const walk = async (mother: DesktopSession): Promise<WallChild[]> => {
       const out: WallChild[] = [];
       for (const child of this.painel.desktopChildren(mother.localId)) {
-        if (child.archived || !child.cliSessionId || visited.has(child.localId)) continue;
+        if (visited.has(child.localId)) continue;
         visited.add(child.localId);
-        const session = await this.storage.getSession(child.cliSessionId);
+        const session = child.archived || !child.cliSessionId ? null : await this.storage.getSession(child.cliSessionId);
         const sit = session ? await situationOf(session) : null;
-        if (!sit) continue;
+        // An archived, unknown or id-less one is not listed, but its children are: `leaderOf` climbs through it, so the
+        // tree must come down through it, or the sessions below it would be in neither place.
+        if (!sit) {
+          out.push(...(await walk(child)));
+          continue;
+        }
         const { sessao } = await sit.reading();
         const blocked = sessao.attention?.level === 'blocked';
         out.push({ id: sit.session.id, title: sessao.title, status: sessao.status, state: sessao.state, attention: sessao.attention, since: sessao.since, parked: !sit.open && !blocked, children: await walk(child) });

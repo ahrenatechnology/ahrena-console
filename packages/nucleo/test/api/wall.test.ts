@@ -324,6 +324,26 @@ describe('mural ao vivo: a que espera por mim fica e as Paradas (#333)', () => {
     await storage.close();
   });
 
+  test('an archived middle: the sessions below it are in the grandmother\'s tree, never in neither place', async () => {
+    const storage = openSqliteStorage({ path: ':memory:' });
+    await storage.putSession(session({ id: 'grandma', status: 'active', updatedAt: iso(1) }));
+    await storage.putSession(session({ id: 'mid', status: 'active', updatedAt: iso(1) }));
+    await storage.putSession(session({ id: 'live', status: 'active', updatedAt: iso(1) }));
+    await storage.putSession(session({ id: 'stale', status: 'completed', endedAt: iso(500), updatedAt: iso(500) }));
+    const desktop = desktopOf([
+      { cliSessionId: 'grandma' } as DesktopSession,
+      { cliSessionId: 'mid', parentLocalId: 'local_grandma', archived: true } as DesktopSession,
+      { cliSessionId: 'live', parentLocalId: 'local_mid' } as DesktopSession,
+      { cliSessionId: 'stale', parentLocalId: 'local_mid' } as DesktopSession,
+    ]);
+    const mural = await muralDe(storage, desktop).montar();
+    assert.deepEqual(mural.cards.map((c) => c.id), ['grandma']);
+    assert.deepEqual(mural.cards[0]!.children.map((c) => c.id), ['live', 'stale'], 'the archived one is not listed, its children are');
+    assert.deepEqual(mural.cards[0]!.tree, { total: 2, blocked: 0, active: 1, parked: 1 });
+    assert.equal(mural.parked.total, 0);
+    await storage.close();
+  });
+
   test('a cycle in the Desktop index does not loop', async () => {
     const storage = openSqliteStorage({ path: ':memory:' });
     await storage.putSession(session({ id: 'a', status: 'active', updatedAt: iso(1) }));
