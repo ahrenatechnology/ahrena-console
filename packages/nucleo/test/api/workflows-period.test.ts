@@ -177,3 +177,29 @@ describe('the read caches (#332, review round 1)', () => {
     await Promise.all([a.close(), b.close()]);
   });
 });
+
+describe('GET /api/sessions/<id>/workflow: who opened whom', () => {
+  test('lineage names the parent and the children from the Desktop index; no index, no lineage', async () => {
+    const storage = openSqliteStorage({ path: ':memory:' });
+    for (const id of ['pm', 'tl', 'kid']) await storage.putSession(session({ id, name: id.toUpperCase(), status: 'completed', updatedAt: ago(1) }));
+    const rows: Record<string, DesktopSession> = {
+      local_pm: { localId: 'local_pm', cliSessionId: 'pm', title: null, branch: null, cwd: null, parentLocalId: null, archived: false, accounts: [] },
+      local_tl: { localId: 'local_tl', cliSessionId: 'tl', title: null, branch: null, cwd: null, parentLocalId: 'local_pm', archived: false, accounts: [] },
+      local_kid: { localId: 'local_kid', cliSessionId: 'kid', title: null, branch: null, cwd: null, parentLocalId: 'local_tl', archived: false, accounts: [] },
+    };
+    const desktop = {
+      refresh: async () => {},
+      sessionByCli: (id: string) => Object.values(rows).find((d) => d.cliSessionId === id) ?? null,
+      sessionByLocal: (id: string) => rows[id] ?? null,
+      childrenOf: (id: string) => Object.values(rows).filter((d) => d.parentLocalId === id),
+    } as unknown as DesktopIndex;
+    const withIndex = await startLocalApi({ panelBuilder: new MontadorDoPainel({ storage, contas: new Accounts({ storage, file: null }), desktop, trabalho: null, agora: () => NOW }), hooks: { storage }, port: 0, log: () => {} });
+    const { body } = await get(withIndex.url, '/api/sessions/tl/workflow');
+    assert.deepEqual([body.lineage.parent?.sessionId, body.lineage.children.map((c: any) => c.sessionId)], ['pm', ['kid']]);
+    await withIndex.close();
+    const without = await startLocalApi({ panelBuilder: new MontadorDoPainel({ storage, contas: new Accounts({ storage, file: null }), desktop: null, trabalho: null, agora: () => NOW }), hooks: { storage }, port: 0, log: () => {} });
+    assert.deepEqual((await get(without.url, '/api/sessions/tl/workflow')).body.lineage, { parent: null, children: [] });
+    await without.close();
+    await storage.close();
+  });
+});

@@ -12,6 +12,7 @@
 import { el, icon } from '../dom.js';
 import { loading, error, errorBand } from '../states.js';
 import { duration, modelName, num } from './workflow-format.js';
+import { lineageStrip, loopPanel } from './workflow-loop.js';
 
 const SVG = 'http://www.w3.org/2000/svg';
 const REREAD_ACTIVE_MS = 10_000;
@@ -163,6 +164,7 @@ const short = (t, n) => (t.length > n ? `${t.slice(0, n - 1)}…` : t);
 function loadCss() {
   if (document.querySelector('link[data-screen="session-detail-workflow"]')) return;
   document.head.append(el('link', { rel: 'stylesheet', href: '/ui/screens/session-detail-workflow.css', 'data-screen': 'session-detail-workflow' }));
+  document.head.append(el('link', { rel: 'stylesheet', href: '/ui/screens/workflow-loop.css', 'data-screen': 'workflow-loop' }));
 }
 
 // As medidas do C7 (6 colunas em ~980 px): o SVG encolhe para caber no painel, o texto junto.
@@ -255,17 +257,29 @@ function timeline(w) {
   );
 }
 
-function drawing(w) {
+const VIEWS = [['by-pr', 'Por PR'], ['nodes', 'Todos os nós']];
+
+/** The toggle between the loop by PR (the default, C81) and the graph of every node (C7). */
+function viewToggle(view, setView) {
+  const buttons = VIEWS.map(([id, label]) => el('button', { type: 'button', 'aria-pressed': id === view ? 'true' : 'false', onClick: () => id !== view && setView(id) }, label));
+  return el('div', { class: 'wfd-views', role: 'group', 'aria-label': 'Como ver o fluxo' }, ...buttons);
+}
+
+function drawing(w, view = 'by-pr', setView = () => {}) {
+  const toggle = viewToggle(view, setView);
+  const strip = lineageStrip(w.lineage);
+  if (view === 'by-pr' && w.loop) return [strip, loopPanel(w, toggle)].filter(Boolean);
   return [
+    strip,
     el(
       'section',
       { class: 'card wfd-panel' },
-      el('div', { class: 'wfd-ttl' }, icon('subagent'), 'Grafo de agentes', el('span', { class: 'wfd-ttl-r' }, w.summary ?? '')),
+      el('div', { class: 'wfd-ttl' }, icon('subagent'), 'Grafo de agentes', el('span', { class: 'wfd-ttl-r' }, w.summary ?? ''), toggle),
       graph(w),
       legend(w),
     ),
     timeline(w),
-  ];
+  ].filter(Boolean);
 }
 
 // ---------- A aba ----------
@@ -275,6 +289,12 @@ export function create(ctx, base) {
   let data = null;
   let seq = 0;
   let timer = null;
+  // The loop by PR is the view that opens (decision of the wireframe, issue 332); the choice lasts while the tab lives.
+  let view = 'by-pr';
+  const setView = (v) => {
+    view = v;
+    if (target && data) target.replaceChildren(...drawing(data, view, setView));
+  };
   ctx.signal?.addEventListener('abort', () => clearTimeout(timer));
 
   async function draw() {
@@ -286,10 +306,10 @@ export function create(ctx, base) {
       const w = await ctx.read(`${base}/workflow`);
       if (mine !== seq || !target) return;
       data = w;
-      target.replaceChildren(...drawing(w));
+      target.replaceChildren(...drawing(w, view, setView));
     } catch (e) {
       if (e?.name === 'AbortError' || mine !== seq || !target) return;
-      if (data) target.replaceChildren(errorBand({ title: 'Não deu para atualizar.', text: e.message, action: { label: 'Tentar de novo', onClick: () => draw() } }), ...drawing(data));
+      if (data) target.replaceChildren(errorBand({ title: 'Não deu para atualizar.', text: e.message, action: { label: 'Tentar de novo', onClick: () => draw() } }), ...drawing(data, view, setView));
       else target.replaceChildren(error({ title: e.status === 404 ? 'Sessão não encontrada' : 'Não deu para ler o workflow', text: e.message, retry: () => (target?.replaceChildren(loading({ label: 'Carregando', blocks: 2 })), draw()) }));
     }
     if (mine === seq && target && !ctx.signal?.aborted && data?.nodes.some((n) => n.state === 'active')) timer = setTimeout(draw, REREAD_ACTIVE_MS);

@@ -567,7 +567,8 @@ const TOOL_STATE = {
 
 function conversationTab(ctx, base, { head, remote = null } = {}) {
   let target = null;
-  let agent = null;
+  // `?agent=<id>` (the Workflow tab's steps, issue 332) opens the conversation of that subagent.
+  let agent = new URLSearchParams(location.search).get('agent');
   // #61: the compose box at the foot of the tab. It is made once and survives every re-draw of the
   // list, so the text being typed and the message in flight stay.
   let compose = null;

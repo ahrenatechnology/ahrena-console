@@ -11,8 +11,15 @@
 import { header, el, icon } from '../dom.js';
 import { loading, error, errorBand, empty } from '../states.js';
 import { decimal, duration, modelName, num, percent, when, tokens } from './workflow-format.js';
+import { initialOpen, treeKpiRow, treePanel } from './workflow-tree.js';
 
 const SVG = 'http://www.w3.org/2000/svg';
+
+/** The views of the page (issue 332): the overview of today and the tree between sessions (C83). */
+export const VIEWS = [
+  { id: 'overview', label: 'Visão geral' },
+  { id: 'tree', label: 'Árvore' },
+];
 const REREAD_ACTIVE_MS = 10_000;
 
 export const FILTERS = [
@@ -146,6 +153,7 @@ function svg(tag, attributes = {}, ...children) {
 function loadCss() {
   if (document.querySelector('link[data-screen="workflows"]')) return;
   document.head.append(el('link', { rel: 'stylesheet', href: '/ui/screens/workflows.css', 'data-screen': 'workflows' }));
+  document.head.append(el('link', { rel: 'stylesheet', href: '/ui/screens/workflow-loop.css', 'data-screen': 'workflow-loop' }));
 }
 
 function badgeEl(text, color) {
@@ -278,6 +286,8 @@ export async function mount(area, ctx) {
   let seq = 0;
   let timer = null;
   let wait = null;
+  let view = 'overview';
+  let openNodes = null; // the tree nodes that are open; `null` until the first read opens the first levels
   let expanded = null; // os runs abertos; `null` até a primeira leitura abrir o primeiro
   let focusTarget = null; // o nó que tinha o foco, para devolvê-lo depois de redesenhar
 
@@ -293,7 +303,16 @@ export async function mount(area, ctx) {
   });
   const markFilter = () => FILTERS.forEach((f, i) => buttons[i].setAttribute('aria-pressed', f.id === filter ? 'true' : 'false'));
   const seg = el('div', { class: 'wf-seg', role: 'group', 'aria-label': 'Quais sessões' }, ...buttons);
-  const head = header({ icon: 'workflows', title: 'Workflows', sub: 'Como os agentes se orquestram: delegação, rodadas de review e resultado', actions: [seg] });
+  const viewButtons = VIEWS.map((v) =>
+    el('button', { type: 'button', 'aria-pressed': v.id === view ? 'true' : 'false', onClick: () => {
+      if (view === v.id) return;
+      view = v.id;
+      viewButtons.forEach((b, i) => b.setAttribute('aria-pressed', VIEWS[i].id === view ? 'true' : 'false'));
+      if (data) draw();
+    } }, v.label),
+  );
+  const viewSeg = el('div', { class: 'wf-seg', role: 'group', 'aria-label': 'Como ver' }, ...viewButtons);
+  const head = header({ icon: 'workflows', title: 'Workflows', sub: 'Como os agentes se orquestram: delegação, rodadas de review e resultado', actions: [viewSeg, seg] });
 
   area.replaceChildren(head, loading({ label: 'Carregando os workflows' }));
 
@@ -326,10 +345,19 @@ export async function mount(area, ctx) {
       );
       return;
     }
+    if (view === 'tree') {
+      openNodes ??= initialOpen(d.trees.items);
+      const toggle = (id) => {
+        openNodes.has(id) ? openNodes.delete(id) : openNodes.add(id);
+        draw();
+      };
+      area.replaceChildren(...[head, failure ? errorBand({ title: 'Não deu para atualizar.', text: failure, action: { label: 'Tentar de novo', onClick: () => read() } }) : null, treeKpiRow(d), treePanel(d, openNodes, toggle)].filter(Boolean));
+      return;
+    }
     if (expanded === null) expanded = new Set(d.runs.length ? [d.runs[0].id] : []);
     const nodeLabel = node ? (d.graph.nodes.find((n) => n.id === node)?.label ?? node) : null;
     // Com o teto de sessões lidas cortando, o subtítulo diz que são só as mais recentes.
-    const summary = `${FILTERS.find((f) => f.id === d.filter)?.resumo ?? 'todas as sessões'}${d.truncated ? `, das ${d.max ?? 500} mais recentes` : ''}`;
+    const summary = FILTERS.find((f) => f.id === d.filter)?.resumo ?? 'todas as sessões';
 
     const runs = d.runs.length
       ? d.runs.map((r) =>
