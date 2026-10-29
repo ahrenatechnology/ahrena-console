@@ -4019,11 +4019,11 @@ const loopStep = (kind, task, st, res, dur) => `<div class="cartao wf-step" styl
   <span class="trunc c-muted" style="font-size:10.5px">${task}</span>
   <span class="trunc ${LOOP_ST[st][1]}" style="font-size:10.5px">${LOOP_ST[st][2]} ${res}${dur ? ` <span class="c-muted">· ${dur}</span>` : ''}</span></div>`
 // The link between two steps: the order of the group, by start time. Red and dashed: the review asked for changes.
-const loopLink = (rot, tipo = '') => `<div class="wf-link ${tipo}"><span class="wf-lab">${rot}</span><i></i></div>`
+const loopLink = (label, kind = '') => `<div class="wf-link ${kind}"><span class="wf-lab">${label}</span><i></i></div>`
 // The group of a PR. head: [PR, title, state pill, counters]; steps: the row.
-const loopGroup = (head, steps, rodape = '') => `<div class="cartao wf-group">
+const loopGroup = (head, steps, footer = '') => `<div class="cartao wf-group">
   <div class="wf-head"><span class="chip" style="color:var(--text)">${head[0]}</span><b class="trunc">${head[1]}</b>${head[2]}<span class="c-muted" style="font-size:11.5px;margin-left:auto">${head[3]}</span><span class="c-muted">${ic('external-link')}</span></div>
-  <div class="wf-row">${steps.join('')}</div>${rodape ? `<div class="wf-foot">${rodape}</div>` : ''}</div>`
+  <div class="wf-row">${steps.join('')}</div>${footer ? `<div class="wf-foot">${footer}</div>` : ''}</div>`
 const wfPill = (t, c) => `<span class="pill ${c}">${t}</span>`
 const LOOP_OK = wfPill('Aprovado', 'b-completed'), LOOP_CH = wfPill('Pediu mudanças', 'b-error'), LOOP_RUN = wfPill('Em revisão', 'b-active'), LOOP_STOP = wfPill('Parou aqui', 'b-blocked')
 const G310 = loopGroup(['PR #310', 'feat(277): contas de nuvem em Conexões', LOOP_OK, '1 rodada · 0 pedidos de mudança'], [
@@ -4042,14 +4042,14 @@ const GNONE = loopGroup(['Sem PR', 'subagentes sem PR nem issue na tarefa', wfPi
   loopStep('Explore', 'achar onde o túnel cai', 'ok', 'Concluído', '1 min'), `<div class="wf-gap"></div>`,
   loopStep('general-purpose', 'comparar bibliotecas de túnel', 'ok', 'Concluído', '7 min'), `<div class="wf-gap"></div>`,
   loopStep('Plan', 'plano das nuvens', 'ok', 'Concluído', '3 min')], 'Sem seta entre eles: o que não cita PR não ganha vínculo inventado, só fica ligado ao Principal.')
-const wfBread = `<div class="cartao wf-bread"><span class="c-muted">${ic('git-fork')}</span><span class="c-muted">Aberta por</span><span class="chip" style="color:var(--text)">${ic('user-round')}Tech Lead do console</span><span class="c-muted">${ic('chevron-right')}</span><b>esta sessão</b><span class="c-muted" style="margin-left:14px">Abriu</span><span class="chip" style="color:var(--text)">${ic('corner-down-right')}Aviso de versão: UI</span><span class="c-muted" style="margin-left:auto;font-size:11.5px">PM › Tech Lead › esta › filha · <u>ver a árvore</u></span></div>`
+const wfCrumb = `<div class="cartao wf-bread"><span class="c-muted">${ic('git-fork')}</span><span class="c-muted">Aberta por</span><span class="chip" style="color:var(--text)">${ic('user-round')}Tech Lead do console</span><span class="c-muted">${ic('chevron-right')}</span><b>esta sessão</b><span class="c-muted" style="margin-left:14px">Abriu</span><span class="chip" style="color:var(--text)">${ic('corner-down-right')}Aviso de versão: UI</span><span class="c-muted" style="margin-left:auto;font-size:11.5px">PM › Tech Lead › esta › filha · <u>ver a árvore</u></span></div>`
 const wfSum = (a, b, c, d) => `<div class="leg"><span>PRs <b>${a}</b></span><span>Rodadas de revisão <b>${b}</b></span><span>Pedidos de mudança <b>${c}</b></span><span>Subagentes <b>${d}</b></span><span>Sessão filha <b>1</b></span></div>`
-const wfAbas = `<div class="seg" style="width:max-content"><span class="on">${ic('git-pull-request')}Por PR</span><span>${ic('clock')}Por hora</span><span>${ic('git-fork')}Todos os nós</span></div>`
+const wfTabs = `<div class="seg" style="width:max-content"><span class="on">${ic('git-pull-request')}Por PR</span><span>${ic('clock')}Por hora</span><span>${ic('git-fork')}Todos os nós</span></div>`
 
 // C81 · the Workflow tab of the session, grouped by PR
-const telaWfDetalhe = () => `${detCab(byId('c3f09b52'))}${abas(3, 16)}${wfBread}
+const wfDetailScreen = () => `${detCab(byId('c3f09b52'))}${abas(3, 16)}${wfCrumb}
   <div class="cartao" style="padding:14px 16px;display:flex;flex-direction:column;gap:12px">
-    <div class="ttl">${ic('workflow')}O laço da sessão, por PR<span class="r">dev → Argos → Erodos → Argos, até aprovar</span>${wfAbas}</div>
+    <div class="ttl">${ic('workflow')}O laço da sessão, por PR<span class="r">dev → Argos → Erodos → Argos, até aprovar</span>${wfTabs}</div>
     ${wfSum(4, 5, 2, 15)}
     ${G331}${G320}${G310}${GNONE}
     <div class="leg"><span><span style="display:inline-block;width:18px;border-top:2px dashed var(--status-error-dot)"></span>o Argos pediu mudanças: o Erodos corrige</span><span>${ponto('active')}Rodando</span><span>${ponto('completed')}Concluído</span><span>${ic('external-link')} abre o transcript do subagente</span></div>
@@ -4057,7 +4057,7 @@ const telaWfDetalhe = () => `${detCab(byId('c3f09b52'))}${abas(3, 16)}${wfBread}
 const wf1100 = (ativo, miolo) => cc(ativo, miolo, 5, 1100), wf1440 = (ativo, miolo) => cc(ativo, miolo, 5, 1440)
 
 // C82 · the states of a group
-const wfEstado = (rot, g) => `<div class="width-col"><div class="rotulo">${rot}</div>${g}</div>`
+const wfState = (label, g) => `<div class="width-col"><div class="rotulo">${label}</div>${g}</div>`
 const GS_FIRST = loopGroup(['PR #340', 'fix(300): paginação do histórico', LOOP_OK, '1 rodada · 0 pedidos de mudança'], [
   loopStep('dev', 'general-purpose · Corrigir #300', 'ok', 'Concluído', '9 min'), loopLink('PR aberto'), loopStep('Argos', 'Revisar o PR #340', 'ok', 'Aprovou na primeira', '3 min')])
 const GS_WAIT = loopGroup(['PR #345', 'feat(332): página Workflows', wfPill('Aguardando correção', 'b-blocked'), '1 rodada · 1 pedido de mudança'], [
@@ -4082,29 +4082,29 @@ const GS_PAR = loopGroup(['PR #355', 'feat(333): mural ao vivo', LOOP_RUN, '1 ro
 const GS_ISSUE = loopGroup(['Issue #333', 'a tarefa cita só a issue, nenhum PR', wfPill('Sem PR ainda', 'b-completed'), '0 rodadas'], [
   loopStep('dev', 'general-purpose · Construir #333', 'ok', 'Concluído', '35 min'), loopLink('', 'wait'), `<div class="cartao wf-step wf-ghost"><span class="c-muted" style="font-size:11px">${ic('git-pull-request')} PR ainda não citado</span></div>`],
   'O vínculo veio da issue. Quando um subagente seguinte citar o PR e o branch bater (feat/333-…), o grupo vira "PR #3xx" e leva a issue junto.')
-const telaWfEstados = () => `<div class="tm-rc">
+const wfStatesScreen = () => `<div class="tm-rc">
   ${rcRow([['1 · aprovado de primeira', GS_FIRST], ['2 · pediu mudanças, ninguém corrigiu (sessão ativa)', GS_WAIT]], ['<b>Uma rodada</b> é cada chamada do Argos a um PR. <b>Pedido de mudança</b> é uma rodada cujo veredito não foi "Verdict: approve".', 'O veredito vem da última linha da resposta do Argos. Sem veredito legível, o passo fica "Concluído" e não conta como pedido (nada inventado).'])}
   ${rcRow([['3 · o laço parou', GS_STOP], ['4 · terceira rodada', GS_R3]], ['<b>Parou aqui</b> é o único estado vermelho-amarelo: a sessão acabou com um pedido de mudança sem resposta. É a resposta a "onde o laço travou".', 'Três rodadas não têm tratamento especial; o contador diz tudo. A aresta tracejada vermelha é sempre a que sai de um pedido de mudança.'])}
   ${rcRow([['5 · dois devs no mesmo PR', GS_PAR], ['6 · só a issue, sem PR ainda', GS_ISSUE]], ['<b>De onde vem o PR</b>, na ordem: (1) <code>PR #N</code>, <code>#N</code> ou a URL do PR na tarefa do subagente; (2) o branch, quando o PR dele já foi visto; (3) a issue, <code>Refs #N</code> ou <code>#N</code> que a tarefa cita sem PR. A mesma regra para qualquer agente.', 'Uma tarefa que cita dois PRs fica no primeiro e leva o outro como chip, sem duplicar o nó.'])}
 </div>`
 
 // C83 · the tree between sessions
-const wfNo = (nivel, icone, nome, papel, st, extra = '', corpo = '') => `<div class="wf-tn" style="margin-left:${nivel * 26}px"><div class="cartao wf-tnode">
-  <span class="c-muted">${ic(nivel < 3 ? 'chevron-down' : 'chevron-right')}</span><span class="c-accent">${ic(icone)}</span><b class="trunc">${nome}</b><span class="chip">${papel}</span>${badge(st)}<span class="c-muted" style="font-size:11.5px;margin-left:auto">${extra}</span><span class="c-muted" title="Abre a sessão">${ic('external-link')}</span></div>${corpo}</div>`
-const wfMini = (pr, passos, fim, cont) => `<div class="wf-mini"><span class="chip" style="color:var(--text)">${pr}</span>${passos.map(p => `<span class="wf-m ${p[1]}">${p[0]}</span>`).join('<span class="c-muted">›</span>')}<span class="${fim[1]}" style="font-size:11px">${fim[0]}</span><span class="c-muted" style="font-size:11px;margin-left:auto">${cont}</span></div>`
-const wfArvore = () => `<div class="wf-tree">
-  ${wfNo(0, 'user-round', 'Rodada 0.0.11', 'PM', 'active', '4 filhas · 28 PRs · hoje, 09:12')}
-  ${wfNo(1, 'user-round-cog', 'Tech Lead do console', 'Tech Lead', 'idle', '3 filhas · 24 PRs · há 3 min')}
-  ${wfNo(2, 'cloud', 'Nuvens e conexão SSM da Workstation', 'Sessão', 'completed', '15 subagentes · 4 PRs · 2 h', `<div class="wf-minis" style="margin-left:26px">
+const wfNode = (depth, icon, name, role, st, meta2 = '', body = '') => `<div class="wf-tn" style="margin-left:${depth * 26}px"><div class="cartao wf-tnode">
+  <span class="c-muted">${ic(depth < 3 ? 'chevron-down' : 'chevron-right')}</span><span class="c-accent">${ic(icon)}</span><b class="trunc">${name}</b><span class="chip">${role}</span>${badge(st)}<span class="c-muted" style="font-size:11.5px;margin-left:auto">${meta2}</span><span class="c-muted" title="Abre a sessão">${ic('external-link')}</span></div>${body}</div>`
+const wfMini = (pr, steps, endText, count) => `<div class="wf-mini"><span class="chip" style="color:var(--text)">${pr}</span>${steps.map(p => `<span class="wf-m ${p[1]}">${p[0]}</span>`).join('<span class="c-muted">›</span>')}<span class="${endText[1]}" style="font-size:11px">${endText[0]}</span><span class="c-muted" style="font-size:11px;margin-left:auto">${count}</span></div>`
+const wfTree = () => `<div class="wf-tree">
+  ${wfNode(0, 'user-round', 'Rodada 0.0.11', 'PM', 'active', '4 filhas · 28 PRs · hoje, 09:12')}
+  ${wfNode(1, 'user-round-cog', 'Tech Lead do console', 'Tech Lead', 'idle', '3 filhas · 24 PRs · há 3 min')}
+  ${wfNode(2, 'cloud', 'Nuvens e conexão SSM da Workstation', 'Sessão', 'completed', '15 subagentes · 4 PRs · 2 h', `<div class="wf-minis" style="margin-left:26px">
     ${wfMini('PR #331', [['dev', 'ok'], ['Argos ✕', 'ch'], ['Erodos', 'ok'], ['Argos ●', 'run']], ['Em revisão', 'c-active'], '2 rodadas · 1 pedido')}
     ${wfMini('PR #320', [['dev', 'ok'], ['Argos ✕', 'ch'], ['Erodos', 'ok'], ['Argos ✓', 'ok']], ['Aprovado', 'c-completed'], '2 rodadas · 1 pedido')}
     ${wfMini('PR #310', [['dev', 'ok'], ['Argos ✓', 'ok']], ['Aprovado', 'c-completed'], '1 rodada · 0 pedidos')}
     ${wfMini('Sem PR', [['Explore', 'ok'], ['general-purpose', 'ok'], ['Plan', 'ok']], ['', ''], '3 subagentes')}</div>`)}
-  ${wfNo(3, 'corner-down-right', 'Aviso de versão: UI', 'Filha', 'active', '2 subagentes · 1 PR · 6 min')}
-  ${wfNo(2, 'bell', '330-update-notice', 'Sessão', 'completed', '9 subagentes · 3 PRs · 5 h')}
-  ${wfNo(2, 'list-tree', 'Workflow: o laço e a árvore (#332)', 'Sessão', 'active', '1 subagente · 0 PRs · agora')}
+  ${wfNode(3, 'corner-down-right', 'Aviso de versão: UI', 'Filha', 'active', '2 subagentes · 1 PR · 6 min')}
+  ${wfNode(2, 'bell', '330-update-notice', 'Sessão', 'completed', '9 subagentes · 3 PRs · 5 h')}
+  ${wfNode(2, 'list-tree', 'Workflow: o laço e a árvore (#332)', 'Sessão', 'active', '1 subagente · 0 PRs · agora')}
 </div>`
-const telaWfArvore = () => `${cab('workflow', 'Workflows', 'Como os agentes se orquestram: a árvore entre sessões, o laço por PR e as rodadas de revisão', `<div class="seg"><span>Visão geral</span><span class="on">Árvore</span><span>Grafo</span></div><span class="btn">${ic('download')}</span>`)}
+const wfTreeScreen = () => `${cab('workflow', 'Workflows', 'Como os agentes se orquestram: a árvore entre sessões, o laço por PR e as rodadas de revisão', `<div class="seg"><span>Visão geral</span><span class="on">Árvore</span><span>Grafo</span></div><span class="btn">${ic('download')}</span>`)}
   <div class="stats" style="grid-template-columns:repeat(6,minmax(0,1fr))">
     ${stat('Árvores', '3', 'raízes sem pai', 'git-fork', 'var(--accent-text)')}
     ${stat('PRs no laço', '28', 'nos últimos 30 dias', 'git-pull-request', 'var(--accent-text)')}
@@ -4115,35 +4115,35 @@ const telaWfArvore = () => `${cab('workflow', 'Workflows', 'Como os agentes se o
   </div>
   <div class="cartao" style="padding:14px 16px;display:flex;flex-direction:column;gap:10px">
     <div class="ttl">${ic('git-fork')}Árvore entre sessões<span class="r">PM → Tech Lead → sessão → grupos por PR · clique abre a sessão</span></div>
-    ${wfArvore()}
+    ${wfTree()}
     <div class="leg"><span>${ic('chevron-down')} expandido</span><span>${ic('chevron-right')} recolhido (os grupos por PR da sessão)</span><span>${ic('external-link')} abre o Detalhe, na aba Workflow</span><span>Um nível dentro do outro: a indentação é a árvore <code>startedBy</code></span></div>
   </div>`
 
 // C84 · no cap of 500: period, pages and what is never left out
-const wfPeriodo = (per, on = 2) => `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><div class="seg">${['Todas as sessões', 'Só ativas', 'Concluídas'].map((t, i) => `<span class="${i === 0 ? 'on' : ''}">${t}</span>`).join('')}</div>
-  <div class="seg">${['24 h', '7 dias', '30 dias', 'Tudo'].map((t, i) => `<span class="${i === on ? 'on' : ''}">${t}</span>`).join('')}</div>${per}</div>`
-const wfLista = (linhas, rodape) => `<div class="cartao" style="padding:6px 0">${linhas.map(([nome, papel, st, meta, fora]) => `<div class="wf-li"><span class="c-muted">${ic('chevron-right')}</span><b class="trunc">${nome}</b><span class="chip">${papel}</span>${badge(st)}${fora ? `<span class="chip" style="color:var(--status-waiting-text)">${ic('calendar-off')}fora do período</span>` : ''}<span class="c-muted" style="font-size:11.5px;margin-left:auto">${meta}</span></div>`).join('')}${rodape ? `<div class="wf-li" style="justify-content:center">${rodape}</div>` : ''}</div>`
+const wfPeriod = (range, on = 2) => `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><div class="seg">${['Todas as sessões', 'Só ativas', 'Concluídas'].map((t, i) => `<span class="${i === 0 ? 'on' : ''}">${t}</span>`).join('')}</div>
+  <div class="seg">${['24 h', '7 dias', '30 dias', 'Tudo'].map((t, i) => `<span class="${i === on ? 'on' : ''}">${t}</span>`).join('')}</div>${range}</div>`
+const wfList = (rows, footer) => `<div class="cartao" style="padding:6px 0">${rows.map(([name, role, st, meta, outside]) => `<div class="wf-li"><span class="c-muted">${ic('chevron-right')}</span><b class="trunc">${name}</b><span class="chip">${role}</span>${badge(st)}${outside ? `<span class="chip" style="color:var(--status-waiting-text)">${ic('calendar-off')}outside do rangeíodo</span>` : ''}<span class="c-muted" style="font-size:11.5px;margin-left:auto">${meta}</span></div>`).join('')}${footer ? `<div class="wf-li" style="justify-content:center">${footer}</div>` : ''}</div>`
 const WF_ROWS = [['Rodada 0.0.11', 'PM', 'active', '4 filhas · 28 PRs · hoje', 0], ['Tech Lead do console', 'Tech Lead', 'idle', '3 filhas · 24 PRs · há 3 min', 0], ['Nuvens e conexão SSM da Workstation', 'Sessão', 'completed', '15 subagentes · 4 PRs · 2 h', 0], ['Rodada 0.0.7', 'PM', 'completed', '6 filhas · 31 PRs · 12 dias', 0]]
 const wfStatus = (t, i2 = 'check-circle-2', cls = 'c-completed') => `<div class="cartao" style="padding:10px 14px;display:flex;gap:10px;align-items:center;font-size:12.5px"><span class="${cls}" style="font-size:16px">${ic(i2)}</span><div>${t}</div></div>`
-const telaWfPagina = (corpo) => `${cab('workflow', 'Workflows', 'Como os agentes se orquestram: a árvore entre sessões, o laço por PR e as rodadas de revisão', `<span class="btn">${ic('download')}</span>`)}${corpo}`
-const WF_PAGE_1 = telaWfPagina(`${wfPeriodo('')}
-  ${wfStatus('<b>1.286 sessões em 30 dias · 14 ativas, todas aqui.</b> Os números e o grafo contam as 1.286, não só as que aparecem na lista. Nenhuma sessão ativa fica de fora.')}
-  <div class="rotulo">Árvores · 50 de 312</div>${wfLista(WF_ROWS, `<span class="btn contorno">${ic('chevrons-down')}Carregar mais 50</span>`)}`)
-const WF_PAGE_2 = telaWfPagina(`${wfPeriodo('', 3)}
+const wfPage = (body) => `${cab('workflow', 'Workflows', 'Como os agentes se orquestram: a árvore entre sessões, o laço por PR e as rodadas de revisão', `<span class="btn">${ic('download')}</span>`)}${body}`
+const WF_PAGE_1 = wfPage(`${wfPeriod('')}
+  ${wfStatus('<b>1.286 sessões em 30 dias · 14 ativas, todas aqui.</b> Os números e o grafo contam as 1.286, não só as que aparecem na lista. Nenhuma sessão ativa fica de outside.')}
+  <div class="rotulo">Árvores · 50 de 312</div>${wfList(WF_ROWS, `<span class="btn contorno">${ic('chevrons-down')}Carregar mais 50</span>`)}`)
+const WF_PAGE_2 = wfPage(`${wfPeriod('', 3)}
   ${wfStatus('<b>Lendo o histórico: 3.400 de 8.912 sessões…</b> As ativas já estão aqui; os números fecham quando a leitura acabar e dizem "parcial" até lá.', 'loader-2', 'c-active')}
-  <div class="rotulo">Árvores · 50 de 1.020 até agora</div>${wfLista(WF_ROWS.slice(0, 3), '')}`)
-const WF_PAGE_3 = telaWfPagina(`${wfPeriodo('', 0)}
-  ${wfStatus('<b>Nada em 24 h.</b> Há uma sessão ativa começada há 41 dias, e ela entra mesmo assim: ativas nunca ficam de fora do período.', 'info', 'c-muted')}
-  <div class="rotulo">Árvores · 1 de 1</div>${wfLista([['Migração do esquema de pedidos', 'Sessão', 'active', '3 subagentes · 1 PR · 41 dias', 1]], '')}`)
-const telaWfSemCorte = () => `<div class="tm-rc">
+  <div class="rotulo">Árvores · 50 de 1.020 até agora</div>${wfList(WF_ROWS.slice(0, 3), '')}`)
+const WF_PAGE_3 = wfPage(`${wfPeriod('', 0)}
+  ${wfStatus('<b>Nada em 24 h.</b> Há uma sessão ativa começada há 41 dias, e ela entra mesmo assim: ativas nunca ficam de outside do rangeíodo.', 'info', 'c-muted')}
+  <div class="rotulo">Árvores · 1 de 1</div>${wfList([['Migração do esquema de pedidos', 'Sessão', 'active', '3 subagentes · 1 PR · 41 dias', 1]], '')}`)
+const wfNoCapScreen = () => `<div class="tm-rc">
   ${rcRow([['1 · 30 dias, o padrão · 1100 px', cc('workflows', WF_PAGE_1, 5, 1100)], ['2 · tudo, lendo aos poucos · 1100 px', cc('workflows', WF_PAGE_2, 5, 1100)]], [
-    '<b>Hoje:</b> a tela lê as 500 sessões mais recentes e devolve <code>truncated: true</code>; a sessão que construiu o #277 e o #330 ficou de fora.',
-    '<b>Proposta:</b> um período (24 h, 7 dias, <b>30 dias</b>, Tudo) e páginas de 50 árvores. Os KPIs e o grafo contam <b>o período inteiro</b>, pelo núcleo, sem teto; a lista é que pagina.',
-    '<b>Ativas entram sempre</b>, qualquer que seja o período, com o chip "fora do período" quando forem mais velhas (3).',
+    '<b>Hoje:</b> a tela lê as 500 sessões mais recentes e devolve <code>truncated: true</code>; a sessão que construiu o #277 e o #330 ficou de outside.',
+    '<b>Proposta:</b> um rangeíodo (24 h, 7 dias, <b>30 dias</b>, Tudo) e páginas de 50 árvores. Os KPIs e o grafo contam <b>o rangeíodo inteiro</b>, pelo núcleo, sem teto; a lista é que pagina.',
+    '<b>Ativas entram sempre</b>, qualquer que seja o rangeíodo, com o chip "outside do rangeíodo" quando forem mais velhas (3).',
     'Em "Tudo", o núcleo lê em blocos e a tela mostra o avanço; os números vêm marcados "parcial" até fechar. Nunca aparece "truncado" de novo.'])}
   ${rcRow([['3 · 24 h, com uma ativa antiga · 1100 px', cc('workflows', WF_PAGE_3, 5, 1100)]], [
-    '<b>A janela é do dado, não da tela:</b> o período filtra por último evento, não por início, para uma sessão longa não sumir no meio do trabalho.',
-    'O período e a página vão na URL (<code>?period=30d&page=2</code>) para um link levar à mesma visão.'])}
+    '<b>A janela é do dado, não da tela:</b> o rangeíodo filtra por último evento, não por início, para uma sessão longa não sumir no meio do trabalho.',
+    'O rangeíodo e a página vão na URL (<code>?period=30d&page=2</code>) para um link levar à mesma visão.'])}
 </div>`
 
 const TELAS = [
@@ -4392,13 +4392,13 @@ const TELAS = [
     n: N(['Nada.'], ['A issue fala num card de versão em Controle; a proposta é o pé da barra lateral, que já mostra a versão e está em todas as telas.', 'Só a busca pedida mostra erro; a automática falha em silêncio, no log.']) },
   { id: 'console-update-outside-app', cod: 'C80', nome: 'O aviso fora do app', sub: 'A /ui num navegador comum: o mesmo aviso, mas Atualizar é só no app; Depois e Buscar agora funcionam pelo núcleo. No artefato do claude.ai o aviso é só de leitura (Depois e Buscar agora desligados). Sem o app na máquina, não há aviso, e o painel da versão explica por quê. O painel do mod não mostra nada (a aprovar). Em 1100.', html: () => updateOutsideScreens(),
     n: N(['Nada.'], ['Atualizar reinicia o app: só faz sentido de dentro dele.']) },
-  { id: 'console-workflow-loop', cod: 'C81', nome: 'Workflow da sessão · o laço por PR', sub: 'Feature Workflow (#332), parte 1. A aba Workflow do detalhe agrupa os subagentes pelo PR ou pela issue que cada um tocou: dev → Argos → Erodos → Argos, com as rodadas e os pedidos de mudança contados, e "Sem PR" para o que não cita nenhum. Cada passo abre o transcript do subagente; a faixa de cima liga a sessão ao que a abriu e ao que ela abriu. Em 1100 e 1440.', html: () => `<div class="tm-rc">${rcRow([['1100 px · a janela do app', wf1100('sessoes', telaWfDetalhe())], ['1440 px', wf1440('sessoes', telaWfDetalhe())]], ['<b>Hoje (C7):</b> o grafo põe todo subagente ligado ao Principal, com 0 rodadas e 0 pedidos, mesmo quando houve pedido de mudança. Aqui o grupo é o PR.', '<b>A aba continua sendo a Workflow</b> (a aprovar): "Por PR" é a visão nova e a padrão; "Todos os nós" mantém o grafo de hoje (C7) para quem quiser.', 'A ordem dentro do grupo é a hora em que cada subagente começou. A seta tracejada vermelha sai de um pedido de mudança.', 'Um grupo por PR, o mais recente em cima. O número do PR leva ao GitHub; o resto do cartão, ao transcript.'])}</div>`,
+  { id: 'console-workflow-loop', cod: 'C81', nome: 'Workflow da sessão · o laço por PR', sub: 'Feature Workflow (#332), parte 1. A aba Workflow do detalhe agrupa os subagentes pelo PR ou pela issue que cada um tocou: dev → Argos → Erodos → Argos, com as rodadas e os pedidos de mudança contados, e "Sem PR" para o que não cita nenhum. Cada passo abre o transcript do subagente; a faixa de cima liga a sessão ao que a abriu e ao que ela abriu. Em 1100 e 1440.', html: () => `<div class="tm-rc">${rcRow([['1100 px · a janela do app', wf1100('sessoes', wfDetailScreen())], ['1440 px', wf1440('sessoes', wfDetailScreen())]], ['<b>Hoje (C7):</b> o grafo põe todo subagente ligado ao Principal, com 0 rodadas e 0 pedidos, mesmo quando houve pedido de mudança. Aqui o grupo é o PR.', '<b>A aba continua sendo a Workflow</b> (a aprovar): "Por PR" é a visão nova e a padrão; "Todos os nós" mantém o grafo de hoje (C7) para quem quiser.', 'A ordem dentro do grupo é a hora em que cada subagente começou. A seta tracejada vermelha sai de um pedido de mudança.', 'Um grupo por PR, o mais recente em cima. O número do PR leva ao GitHub; o resto do cartão, ao transcript.'])}</div>`,
     n: N(['O Session Drill-In do Workflows, com árvore de agentes e timeline.'], ['O CCAM mostra a árvore por quem chamou quem; aqui o eixo é o PR, que é o que se quer saber (quantas rodadas, onde travou).', 'O vínculo vem do texto da tarefa e do branch, nunca de um palpite: sem PR, sem seta.']) },
-  { id: 'console-workflow-states', cod: 'C82', nome: 'Workflow da sessão · os estados do grupo', sub: 'Aprovado de primeira, pediu mudanças sem Erodos ainda (sessão ativa), o laço que parou (sessão concluída), a terceira rodada, dois devs no mesmo PR e o grupo que só tem a issue. Mais a regra do vínculo com o PR. Em 1100.', html: () => telaWfEstados(),
+  { id: 'console-workflow-states', cod: 'C82', nome: 'Workflow da sessão · os estados do grupo', sub: 'Aprovado de primeira, pediu mudanças sem Erodos ainda (sessão ativa), o laço que parou (sessão concluída), a terceira rodada, dois devs no mesmo PR e o grupo que só tem a issue. Mais a regra do vínculo com o PR. Em 1100.', html: () => wfStatesScreen(),
     n: N(['Nada.'], ['"Parou aqui" responde onde o laço travou: a sessão acabou com um pedido de mudança sem resposta.', 'Sem veredito legível no fim da resposta do Argos, nada é contado como pedido de mudança.']) },
-  { id: 'console-workflow-tree', cod: 'C83', nome: 'Workflows · a árvore entre sessões', sub: 'Feature Workflow (#332), parte 2. PM → Tech Lead → sessão → grupos por PR, um nível dentro do outro, a partir do startedBy das sessões; cada nó abre a sua sessão. KPIs: árvores, PRs no laço, rodadas por PR, aprovados e laços parados. Em 1100 e 1440.', html: () => `<div class="tm-rc">${rcRow([['1100 px', wf1100('workflows', telaWfArvore())], ['1440 px', wf1440('workflows', telaWfArvore())]], ['<b>A raiz é a sessão sem pai</b> (o PM). Quem abriu quem vem do <code>startedBy</code>, que o índice do Desktop já tem; nenhuma ligação é deduzida por nome ou hora.', 'Cada sessão traz seus grupos por PR em uma linha (dev › Argos › Erodos › Argos); recolhida, mostra só os totais. Subagentes ficam dentro da sessão que os chamou; sessão filha é nó da árvore.', 'Uma sessão cujo pai está fora do período aparece como raiz, com o aviso "pai fora do período".', 'No Detalhe, a faixa "Aberta por / Abriu" (C81) leva um nível para cima ou para baixo.'])}</div>`,
+  { id: 'console-workflow-tree', cod: 'C83', nome: 'Workflows · a árvore entre sessões', sub: 'Feature Workflow (#332), parte 2. PM → Tech Lead → sessão → grupos por PR, um nível dentro do outro, a partir do startedBy das sessões; cada nó abre a sua sessão. KPIs: árvores, PRs no laço, rodadas por PR, aprovados e laços parados. Em 1100 e 1440.', html: () => `<div class="tm-rc">${rcRow([['1100 px', wf1100('workflows', wfTreeScreen())], ['1440 px', wf1440('workflows', wfTreeScreen())]], ['<b>A raiz é a sessão sem pai</b> (o PM). Quem abriu quem vem do <code>startedBy</code>, que o índice do Desktop já tem; nenhuma ligação é deduzida por nome ou hora.', 'Cada sessão traz seus grupos por PR em uma linha (dev › Argos › Erodos › Argos); recolhida, mostra só os totais. Subagentes ficam dentro da sessão que os chamou; sessão filha é nó da árvore.', 'Uma sessão cujo pai está fora do período aparece como raiz, com o aviso "pai fora do período".', 'No Detalhe, a faixa "Aberta por / Abriu" (C81) leva um nível para cima ou para baixo.'])}</div>`,
     n: N(['Nada: o CCAM não tem sessão que abre sessão.'], ['A árvore é entre sessões; o laço por PR vive dentro de cada sessão. As duas se encaixam, e o PM vê tudo sem abrir transcript.']) },
-  { id: 'console-workflows-no-cap', cod: 'C84', nome: 'Workflows · sem o corte de 500', sub: 'Feature Workflow (#332), parte 3. Período (24 h, 7 dias, 30 dias, Tudo) e páginas de 50 árvores; KPIs e grafo contam o período todo; as sessões ativas entram sempre; "Tudo" lê em blocos e mostra o avanço. Em 1100.', html: () => telaWfSemCorte(),
+  { id: 'console-workflows-no-cap', cod: 'C84', nome: 'Workflows · sem o corte de 500', sub: 'Feature Workflow (#332), parte 3. Período (24 h, 7 dias, 30 dias, Tudo) e páginas de 50 árvores; KPIs e grafo contam o período todo; as sessões ativas entram sempre; "Tudo" lê em blocos e mostra o avanço. Em 1100.', html: () => wfNoCapScreen(),
     n: N(['Nada.'], ['O corte de 500 some: quem limita é o período escolhido, e uma sessão ativa nunca fica de fora.', 'Os números não dependem da página: a lista pagina, a conta não.']) },
 ]
 
