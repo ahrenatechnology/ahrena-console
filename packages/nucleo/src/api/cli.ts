@@ -113,6 +113,9 @@ import { MAX_MCP_PROJECTS } from '../tools/mcp-config.ts';
 import { publishToolsChanges, ToolsExecutor, toolsLogFile } from '../tools/executor.ts';
 import { AwsConnector, publishConnectorChanges } from '../clouds/aws-connector.ts';
 import { loopbackWrite } from '../clouds/remote-connectors.ts';
+import { createPortsRoute } from './ports.ts';
+import { listPortsWith, PortReleaser } from '../ports/release.ts';
+import { systemRunner } from '../telemetry/adapters/system.ts';
 import { createCloudsRoute } from './clouds.ts';
 import { AppUpdateState } from '../app-update/state.ts';
 import { createAppUpdateRoute } from './app-update.ts';
@@ -519,6 +522,14 @@ const awsConnector = demo ? null : new AwsConnector({ logFile: reconnectLogFile(
 // The connection of each remote machine (#278, decision 0013 section 4): start, stop, reconnect and login-and-start, on the reconnect runner.
 const machineConnection = remoteMachines && reconnectRunner ? new MachineConnection({ registry: remoteMachines, startRunner: reconnectRunner, logFile: reconnectLogFile(dataDir), cloud: awsConnector, localReading: () => sampleStore.latest('local'), onChange: publishConnectionChanges(changes), log }) : null;
 const clouds = awsConnector ? createCloudsRoute({ aws: awsConnector, remote: { port: (id) => remoteMachines?.get(id)?.port, get: loopbackGet(), write: loopbackWrite() } }) : null;
+// Releasing a listening port (#286, decision 0015): this machine's, and the remote machines' through their núcleo. Not in --demo.
+const ports = createPortsRoute({
+  releaser: demo
+    ? null
+    : new PortReleaser({ listPorts: listPortsWith(systemRunner), run: systemRunner, uid: () => process.getuid?.() ?? null, selfPid: process.pid, parentPid: process.ppid, kill: (pid, signal) => process.kill(pid, signal) }),
+  acceptNoOrigin: () => o.acceptRemoteActions,
+  remote: { port: (id) => remoteMachines?.get(id)?.port, get: loopbackGet(), write: loopbackWrite({ timeoutMs: 15_000 }) },
+});
 // The desktop app's update notice (#330): the app reports what it found; the /ui reads it. Not in --demo.
 const appUpdate = demo ? null : createAppUpdateRoute(new AppUpdateState(changes));
 
@@ -590,6 +601,7 @@ const api: LocalApi = await startLocalApi({
   messaging: createMessagingRoute({ messaging, sessions: storage, accounts, log }),
   orders: createOrdersRoute({ orders: new SessionOrders(), messaging, sessions: storage }),
   tools: toolsExecutor,
+  ports,
   clouds,
   appUpdate,
   load: () => ({
