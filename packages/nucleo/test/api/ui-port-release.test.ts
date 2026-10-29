@@ -138,6 +138,17 @@ describe('#286 the release dialog', () => {
     assert.equal(t.done.length, 0);
   });
 
+  test('#286 a system process and a KILL with no TERM before it have their own text', async () => {
+    for (const [reason, re] of [['system', /processo do sistema/], ['term-first', /só vale depois do pedido normal/]] as const) {
+      const t = boot({ writes: [refusal(reason)] });
+      await flush();
+      click('release');
+      await flush();
+      assert.match(texto(body), re);
+      assert.equal(t.done.length, 0);
+    }
+  });
+
   test('#286 the tunnel asks first, and can go to the connection of the machine instead', async () => {
     const t = boot({ warn: true, writes: [{ result: 'released' }] });
     await flush();

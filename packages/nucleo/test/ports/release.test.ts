@@ -2,12 +2,14 @@
 // signalled, the núcleo, the app and a container's proxy never are, and SIGKILL is its own request.
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
-import { PortReleaser, listPortsWith, summarizeCommand, type PortReleaserDeps } from '../../src/ports/release.ts';
+import { PortReleaser, ancestorsWith, listPortsWith, summarizeCommand, type PortReleaserDeps } from '../../src/ports/release.ts';
 import type { ListeningPort } from '../../src/telemetry/model.ts';
 
 const listener = (port: number, pid: number | null, process: string | null): ListeningPort => ({ port, interface: 'all', address: null, process, pid });
 
-function setup(initial: ListeningPort[], opts: { ps?: Record<number, string>; closesOnSignal?: boolean; uid?: number | null; killError?: string } = {}) {
+const clock = { t: 1_000_000 };
+
+function setup(initial: ListeningPort[], opts: { ps?: Record<number, string>; closesOnSignal?: boolean; uid?: number | null; killError?: string; ancestors?: number[] } = {}) {
   let ports = initial;
   const signals: [number, string][] = [];
   const commands: string[][] = [];
@@ -20,7 +22,8 @@ function setup(initial: ListeningPort[], opts: { ps?: Record<number, string>; cl
     },
     uid: () => (opts.uid === undefined ? 501 : opts.uid),
     selfPid: 100,
-    parentPid: 50,
+    ancestors: async () => opts.ancestors ?? [50],
+    now: () => clock.t,
     kill: (pid, signal) => {
       signals.push([pid, signal]);
       if (opts.killError) throw Object.assign(new Error(opts.killError), { code: opts.killError });
@@ -66,6 +69,32 @@ describe('PortReleaser', () => {
     assert.deepEqual(t.signals, []);
   });
 
+  test('never signals any ancestor of the núcleo: a supervisor or an npm wrapper is as fatal as the app', async () => {
+    const t = setup([listener(4750, 50, 'app'), listener(4751, 40, 'npm'), listener(4752, 30, 'supervisor')], { ps: { 50: '501 app', 40: '501 npm run dev', 30: '501 supervisor' }, ancestors: [50, 40, 30] });
+    assert.equal(((await t.releaser.release(4750, 50, 'TERM')) as { reason: string }).reason, 'app');
+    assert.equal(((await t.releaser.release(4751, 40, 'TERM')) as { reason: string }).reason, 'self');
+    assert.equal(((await t.releaser.release(4752, 30, 'TERM')) as { reason: string }).reason, 'self');
+    assert.deepEqual(t.signals, []);
+  });
+
+  test('pid 1 and below is a system process, not the núcleo', async () => {
+    const t = setup([listener(111, 1, 'systemd')], { ps: { 1: '0 /sbin/init' } });
+    assert.equal(((await t.releaser.release(111, 1, 'TERM')) as { reason: string }).reason, 'system');
+    assert.deepEqual(t.signals, []);
+  });
+
+  test('KILL as a first request is refused; after a TERM for the same port and pid it goes; the memory expires', async () => {
+    const t = setup([listener(5432, 2210, 'postgres'), listener(6000, 3300, 'node')], { ps: { 2210: '501 postgres', 3300: '501 node' } });
+    assert.deepEqual(await t.releaser.release(5432, 2210, 'KILL'), { kind: 'refused', reason: 'term-first' });
+    assert.deepEqual(t.signals, []);
+    await t.releaser.release(5432, 2210, 'TERM');
+    assert.equal(((await t.releaser.release(6000, 3300, 'KILL')) as { reason: string }).reason, 'term-first', 'another port and pid does not borrow it');
+    assert.deepEqual(await t.releaser.release(5432, 2210, 'KILL'), { kind: 'still-listening' });
+    assert.deepEqual(t.signals, [[2210, 'SIGTERM'], [2210, 'SIGKILL']]);
+    clock.t += 11 * 60_000;
+    assert.equal(((await t.releaser.release(5432, 2210, 'KILL')) as { reason: string }).reason, 'term-first');
+  });
+
   test('never signals a container proxy: the stack is the owner', async () => {
     const t = setup([listener(15306, 4417, 'docker-proxy')], { ps: { 4417: '501 docker-proxy' } });
     assert.equal(((await t.releaser.release(15306, 4417, 'TERM')) as { reason: string }).reason, 'container');
@@ -96,6 +125,16 @@ describe('PortReleaser', () => {
     assert.deepEqual(await gone.releaser.release(5432, 2210, 'TERM'), { kind: 'released' });
     const denied = setup([listener(5432, 2210, 'postgres')], { ps: { 2210: '501 postgres' }, killError: 'EPERM' });
     assert.equal(((await denied.releaser.release(5432, 2210, 'TERM')) as { reason: string }).reason, 'other-user');
+  });
+});
+
+describe('ancestorsWith', () => {
+  test('walks ps -o ppid= up to pid 1 and stops on a loop or an unreadable step', async () => {
+    const parents: Record<string, string | null> = { '100': '50\n', '50': '40', '40': '1', '7': '8', '8': '7' };
+    const run = async (_c: string, args: string[]) => parents[args[args.length - 1]!] ?? null;
+    assert.deepEqual(await ancestorsWith(run, 100)(), [50, 40]);
+    assert.deepEqual(await ancestorsWith(run, 7)(), [8]);
+    assert.deepEqual(await ancestorsWith(run, 999)(), []);
   });
 });
 

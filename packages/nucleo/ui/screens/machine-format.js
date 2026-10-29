@@ -761,9 +761,11 @@ export function releaseAction(row, { ownPort = null, remote = null } = {}) {
 export const RELEASE_REFUSAL = {
   'already-free': 'A porta já está livre.',
   'owner-changed': 'A porta agora é de outro processo. Nada foi enviado.',
-  self: 'É o núcleo do console: parar derrubaria esta tela.',
+  self: 'É o núcleo do console ou quem o iniciou: parar derrubaria esta tela.',
   app: 'É o app do console: feche pela bandeja.',
   container: 'A porta é publicada por um container: a stack é a dona.',
+  system: 'É um processo do sistema: o console não mexe nele.',
+  'term-first': 'O encerramento forçado só vale depois do pedido normal para esta porta.',
   'other-user': 'O processo é de outro usuário e o console não pede senha de administrador.',
   unavailable: 'Não deu para ler as portas da máquina agora.',
   'remote-actions-off': 'A Workstation não aceita ações pelo túnel. Quem liga é quem está nela.',

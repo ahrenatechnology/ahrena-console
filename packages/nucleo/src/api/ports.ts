@@ -27,7 +27,7 @@ import { send } from '../ingest/hooks/receiver.ts';
 import { LOCAL_MACHINE_ID, MACHINE_ID } from '../telemetry/model.ts';
 import type { RemoteGet } from '../telemetry/ports.ts';
 import type { RemoteWrite } from '../clouds/remote-connectors.ts';
-import { PortReleaser, REFUSAL_REASONS, RELEASE_SIGNALS, type ReleaseSignal } from '../ports/release.ts';
+import { PortReleaser, REFUSAL_REASONS, RELEASE_SIGNALS, summarizeCommand, type ReleaseSignal } from '../ports/release.ts';
 import { fromAnotherSite, fromOwnUi } from './same-origin.ts';
 
 export const PORTS_RELEASE_ROUTE = '/api/ports/release';
@@ -42,6 +42,8 @@ export interface PortsRouteOptions {
   releaser: PortReleaser | null;
   /** Whether a request with no Origin is taken (a remote núcleo started with `--accept-remote-actions`). */
   acceptNoOrigin: () => boolean;
+  /** One line per release action: port, pid, signal and the outcome; never the command. */
+  log?: (line: string) => void;
   remote?: { port: (machineId: string) => number | undefined; get: RemoteGet; write: RemoteWrite } | null;
 }
 
@@ -116,10 +118,12 @@ const REFUSAL_TEXT: Record<string, string> = {
   unavailable: 'não deu para ler as portas desta máquina',
   'already-free': 'a porta já está livre',
   'owner-changed': 'a porta agora é de outro processo; nada foi enviado',
-  self: 'é o núcleo do console',
+  self: 'é o núcleo do console ou quem o iniciou: parar derrubaria a tela',
   app: 'é o app do console',
   container: 'a porta é publicada por um container; a stack é a dona',
   'other-user': 'o processo é de outro usuário e o console não pede senha de administrador',
+  system: 'é um processo do sistema; o console não mexe nele',
+  'term-first': 'o encerramento forçado só vale depois do pedido normal para esta porta e este processo',
 };
 
 /** `{ process, pid }` from a remote answer: a short text and an integer, nothing else. */
@@ -131,6 +135,10 @@ function sanitizeNow(v: unknown): { process: string | null; pid: number | null }
     process: typeof process === 'string' && process.length <= 80 && !/[\u0000-\u001f\u007f]/.test(process) ? process : null,
     pid: Number.isInteger(pid) && (pid as number) > 0 ? (pid as number) : null,
   };
+}
+
+function logLine(b: ReleaseBody, outcome: string, machine?: string): string {
+  return `ports: release SIG${b.signal} port ${b.port} pid ${b.pid}${machine ? ` on ${machine}` : ''}: ${outcome}`;
 }
 
 export function createPortsRoute(o: PortsRouteOptions): PortsRoute {
@@ -159,6 +167,7 @@ export function createPortsRoute(o: PortsRouteOptions): PortsRoute {
       const body = await readBody(req);
       if ('status' in body) return send(res, body.status, { error: body.error });
       const r = await o.releaser.release(body.port, body.pid, body.signal);
+      o.log?.(logLine(body, r.kind === 'refused' ? `refused:${r.reason}` : r.kind));
       if (r.kind === 'released' || r.kind === 'still-listening') return send(res, 200, { result: r.kind });
       const status = r.reason === 'unavailable' ? 503 : 409;
       return send(res, status, { error: REFUSAL_TEXT[r.reason], reason: r.reason, ...(r.now !== undefined ? { now: r.now } : {}) });
@@ -181,7 +190,7 @@ export function createPortsRoute(o: PortsRouteOptions): PortsRoute {
       const a = (r.body ?? {}) as Record<string, unknown>;
       if (r.status === 200 && Array.isArray(a.ports) && Number.isInteger(a.pid)) {
         const text = (v: unknown, max: number) => (typeof v === 'string' && v.length <= max ? v.replace(/[\u0000-\u001f\u007f]/g, ' ') : null);
-        return send(res, 200, { process: text(a.process, 80), pid: a.pid, command: text(a.command, 200) ?? '', ports: a.ports.filter((n) => Number.isInteger(n)).slice(0, 64), interface: a.interface === 'all' || a.interface === 'address' ? a.interface : 'loopback' });
+        return send(res, 200, { process: text(a.process, 80), pid: a.pid, command: summarizeCommand(text(a.command, 200) ?? ''), ports: a.ports.filter((n) => Number.isInteger(n)).slice(0, 64), interface: a.interface === 'all' || a.interface === 'address' ? a.interface : 'loopback' });
       }
       if (r.status === 404 || r.status === 405) return send(res, 409, { error: 'o núcleo de lá não sabe liberar portas', reason: 'unsupported' });
       const reason = typeof a.reason === 'string' && (REFUSAL_REASONS as readonly string[]).includes(a.reason) ? a.reason : null;
@@ -202,9 +211,16 @@ export function createPortsRoute(o: PortsRouteOptions): PortsRoute {
     const body = await readBody(req);
     if ('status' in body) return send(res, body.status, { error: body.error });
     const r = await o.remote.write(remotePort, 'POST', PORTS_RELEASE_ROUTE, JSON.stringify({ port: body.port, pid: body.pid, signal: body.signal }));
-    if (r.kind === 'unreachable') return send(res, 502, { error: 'a máquina não respondeu', reason: 'unreachable' });
+    if (r.kind === 'unreachable') {
+      o.log?.(logLine(body, 'unreachable', id));
+      return send(res, 502, { error: 'a máquina não respondeu', reason: 'unreachable' });
+    }
     const answer = (r.body ?? {}) as { result?: unknown; reason?: unknown; now?: unknown };
-    if (r.status === 200 && (answer.result === 'released' || answer.result === 'still-listening')) return send(res, 200, { result: answer.result });
+    if (r.status === 200 && (answer.result === 'released' || answer.result === 'still-listening')) {
+      o.log?.(logLine(body, answer.result, id));
+      return send(res, 200, { result: answer.result });
+    }
+    o.log?.(logLine(body, r.status === 403 ? 'refused:remote-actions-off' : r.status === 404 || r.status === 405 ? 'refused:unsupported' : typeof answer.reason === 'string' && (REFUSAL_REASONS as readonly string[]).includes(answer.reason) ? `refused:${answer.reason}` : `error:${r.status}`, id));
     if (r.status === 403) return send(res, 409, { error: 'a Workstation não aceita ações pelo túnel', reason: 'remote-actions-off' });
     if (r.status === 404 || r.status === 405) return send(res, 409, { error: 'o núcleo de lá não sabe liberar portas', reason: 'unsupported' });
     const reason = typeof answer.reason === 'string' && (REFUSAL_REASONS as readonly string[]).includes(answer.reason) ? answer.reason : null;

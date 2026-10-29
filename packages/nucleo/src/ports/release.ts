@@ -15,7 +15,7 @@ import { parseSs } from '../telemetry/adapters/linux.ts';
 export const RELEASE_SIGNALS = ['TERM', 'KILL'] as const;
 export type ReleaseSignal = (typeof RELEASE_SIGNALS)[number];
 
-export const REFUSAL_REASONS = ['unavailable', 'already-free', 'owner-changed', 'self', 'app', 'container', 'other-user'] as const;
+export const REFUSAL_REASONS = ['unavailable', 'already-free', 'owner-changed', 'self', 'app', 'container', 'other-user', 'system', 'term-first'] as const;
 export type RefusalReason = (typeof REFUSAL_REASONS)[number];
 
 export type ReleaseResult =
@@ -30,6 +30,9 @@ const APP_COMMAND = /Ahrena Console\.app\//;
 /** How long each signal waits for the port to close. */
 const WAIT_MS: Record<ReleaseSignal, number> = { TERM: 5_000, KILL: 3_000 };
 const POLL_MS = 250;
+/** How long a sent TERM counts as the first request that a KILL follows. */
+const TERM_MEMORY_MS = 10 * 60_000;
+const TERM_MEMORY_MAX = 256;
 
 export interface PortReleaserDeps {
   /** The listeners now; `null` when they cannot be read. */
@@ -37,9 +40,11 @@ export interface PortReleaserDeps {
   run: CommandRunner;
   /** The uid running the núcleo; `null` where there is none (Windows): nothing is released. */
   uid(): number | null;
-  /** This núcleo's pid and its parent's (the desktop app starts it). */
+  /** This núcleo's pid and the pids above it, nearest first (the desktop app, a supervisor, `npm`). */
   selfPid: number;
-  parentPid: number;
+  ancestors(): Promise<number[]>;
+  /** The clock, for how long a TERM stays on record (tests). */
+  now?(): number;
   kill(pid: number, signal: 'SIGTERM' | 'SIGKILL'): void;
   sleep?(ms: number): Promise<void>;
   /** Overrides the wait per signal (tests). */
@@ -94,6 +99,9 @@ export function summarizeCommand(command: string): string {
 export class PortReleaser {
   private readonly d: PortReleaserDeps;
 
+  /** `port:pid` of each TERM sent, with when: KILL is only accepted after one. */
+  private readonly termSent = new Map<string, number>();
+
   constructor(deps: PortReleaserDeps) {
     this.d = deps;
   }
@@ -110,7 +118,10 @@ export class PortReleaser {
       const other = holders[0]!;
       return refused('owner-changed', { process: other.process, pid: other.pid });
     }
-    if (pid === this.d.selfPid || pid === this.d.parentPid || pid <= 1) return refused(pid === this.d.parentPid ? 'app' : 'self');
+    if (pid <= 1) return refused('system');
+    if (pid === this.d.selfPid) return refused('self');
+    const above = await this.d.ancestors();
+    if (above.includes(pid)) return refused(pid === above[0] ? 'app' : 'self');
     if (holder.process !== null && CONTAINER_PROXIES.has(holder.process)) return refused('container');
     const uid = this.d.uid();
     if (uid === null) return refused('unavailable');
@@ -131,6 +142,9 @@ export class PortReleaser {
   async release(port: number, pid: number, signal: ReleaseSignal): Promise<ReleaseResult> {
     const c = await this.check(port, pid);
     if ('refusal' in c) return c.refusal;
+    const key = `${port}:${pid}`;
+    const now = this.d.now?.() ?? Date.now();
+    if (signal === 'KILL' && now - (this.termSent.get(key) ?? -Infinity) > TERM_MEMORY_MS) return { kind: 'refused', reason: 'term-first' };
     try {
       this.d.kill(pid, signal === 'TERM' ? 'SIGTERM' : 'SIGKILL');
     } catch (err) {
@@ -138,7 +152,17 @@ export class PortReleaser {
       if (code === 'ESRCH') return { kind: 'released' };
       return { kind: 'refused', reason: code === 'EPERM' ? 'other-user' : 'unavailable' };
     }
+    if (signal === 'TERM') this.rememberTerm(key, now);
     return (await this.closed(port, pid, this.d.waitMs?.[signal] ?? WAIT_MS[signal])) ? { kind: 'released' } : { kind: 'still-listening' };
+  }
+
+  private rememberTerm(key: string, now: number): void {
+    this.termSent.delete(key);
+    this.termSent.set(key, now);
+    for (const old of this.termSent.keys()) {
+      if (this.termSent.size <= TERM_MEMORY_MAX) break;
+      this.termSent.delete(old);
+    }
   }
 
   private async processInfo(pid: number): Promise<{ uid: number; command: string } | null> {
@@ -170,5 +194,21 @@ export function listPortsWith(run: CommandRunner, platform: NodeJS.Platform = pr
       return out === null ? null : parseSs(out);
     }
     return null;
+  };
+}
+
+/** The pids above `pid`, nearest first, read with `ps -o ppid=`; stops at pid 1, a loop or an unreadable step. */
+export function ancestorsWith(run: CommandRunner, pid: number): () => Promise<number[]> {
+  return async () => {
+    const chain: number[] = [];
+    let at = pid;
+    for (let hops = 0; hops < 32; hops++) {
+      const out = await run('ps', ['-o', 'ppid=', '-p', String(at)]);
+      const parent = out === null ? NaN : Number.parseInt(out.trim(), 10);
+      if (!Number.isInteger(parent) || parent <= 1 || parent === pid || chain.includes(parent)) break;
+      chain.push(parent);
+      at = parent;
+    }
+    return chain;
   };
 }

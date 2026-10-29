@@ -114,7 +114,7 @@ import { publishToolsChanges, ToolsExecutor, toolsLogFile } from '../tools/execu
 import { AwsConnector, publishConnectorChanges } from '../clouds/aws-connector.ts';
 import { loopbackWrite } from '../clouds/remote-connectors.ts';
 import { createPortsRoute } from './ports.ts';
-import { listPortsWith, PortReleaser } from '../ports/release.ts';
+import { ancestorsWith, listPortsWith, PortReleaser } from '../ports/release.ts';
 import { systemRunner } from '../telemetry/adapters/system.ts';
 import { createCloudsRoute } from './clouds.ts';
 import { AppUpdateState } from '../app-update/state.ts';
@@ -526,8 +526,9 @@ const clouds = awsConnector ? createCloudsRoute({ aws: awsConnector, remote: { p
 const ports = createPortsRoute({
   releaser: demo
     ? null
-    : new PortReleaser({ listPorts: listPortsWith(systemRunner), run: systemRunner, uid: () => process.getuid?.() ?? null, selfPid: process.pid, parentPid: process.ppid, kill: (pid, signal) => process.kill(pid, signal) }),
+    : new PortReleaser({ listPorts: listPortsWith(systemRunner), run: systemRunner, uid: () => process.getuid?.() ?? null, selfPid: process.pid, ancestors: ancestorsWith(systemRunner, process.pid), kill: (pid, signal) => process.kill(pid, signal) }),
   acceptNoOrigin: () => o.acceptRemoteActions,
+  log,
   remote: { port: (id) => remoteMachines?.get(id)?.port, get: loopbackGet(), write: loopbackWrite({ timeoutMs: 15_000 }) },
 });
 // The desktop app's update notice (#330): the app reports what it found; the /ui reads it. Not in --demo.

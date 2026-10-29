@@ -39,6 +39,7 @@ async function fakeRemote(answers: { get: { status: number; body: unknown }; pos
 }
 
 async function boot(opts: { accept?: boolean; remotes?: Record<string, number> } = {}) {
+  const lines: string[] = [];
   let ports: ListeningPort[] = [{ port: 5432, interface: 'all', address: null, process: 'postgres', pid: 2210 }];
   const signals: [number, string][] = [];
   const releaser = new PortReleaser({
@@ -46,7 +47,7 @@ async function boot(opts: { accept?: boolean; remotes?: Record<string, number> }
     run: async () => '501 postgres -D data',
     uid: () => 501,
     selfPid: 1,
-    parentPid: 2,
+    ancestors: async () => [2],
     kill: (pid, signal) => {
       signals.push([pid, signal]);
       ports = ports.filter((p) => p.pid !== pid);
@@ -54,12 +55,12 @@ async function boot(opts: { accept?: boolean; remotes?: Record<string, number> }
     sleep: async () => {},
     waitMs: { TERM: 100, KILL: 100 },
   });
-  const route = createPortsRoute({ releaser, acceptNoOrigin: () => opts.accept ?? false, remote: { port: (id) => opts.remotes?.[id], get: loopbackGet({ timeoutMs: 1000 }), write: loopbackWrite({ timeoutMs: 1000 }) } });
+  const route = createPortsRoute({ releaser, log: (l) => lines.push(l), acceptNoOrigin: () => opts.accept ?? false, remote: { port: (id) => opts.remotes?.[id], get: loopbackGet({ timeoutMs: 1000 }), write: loopbackWrite({ timeoutMs: 1000 }) } });
   const storage = openSqliteStorage({ path: ':memory:' });
   const montador = new MontadorDoPainel({ storage, contas: new Accounts({ storage, file: null }), desktop: null, trabalho: null });
   const api = await startLocalApi({ panelBuilder: montador, hooks: { storage }, port: 0, log: () => {}, ports: route });
   const port = Number(new URL(api.url).port);
-  return { api, signals, host: `127.0.0.1:${port}`, origin: `http://127.0.0.1:${port}`, close: async () => { await api.close(); await storage.close(); } };
+  return { api, signals, lines, host: `127.0.0.1:${port}`, origin: `http://127.0.0.1:${port}`, close: async () => { await api.close(); await storage.close(); } };
 }
 
 function call(url: string, method: string, path: string, headers: Record<string, string> = {}, body?: string): Promise<{ status: number; json: any }> {
@@ -224,6 +225,56 @@ describe('#286 /api/machines/<id>/ports/release', () => {
       assert.equal((await call(b.api.url, 'GET', '/api/machines/ws/ports/release', { origin: b.origin })).json.status, 'unsupported');
       assert.equal((await call(b.api.url, 'GET', '/api/machines/nope/ports/release', { origin: b.origin })).status, 404);
       assert.equal((await call(b.api.url, 'POST', '/api/machines/local/ports/release', { ...JSON_HEADERS, origin: b.origin }, body())).status, 404);
+    } finally {
+      await b.close();
+      await remote.close();
+    }
+  });
+});
+
+describe('#286 review: the log, KILL after TERM, the remote command', () => {
+  test('#286 one log line per release action: port, pid, signal and outcome, without the command', async () => {
+    const b = await boot();
+    try {
+      await call(b.api.url, 'POST', RELEASE, { ...JSON_HEADERS, origin: b.origin }, body({ signal: 'KILL' }));
+      await call(b.api.url, 'POST', RELEASE, { ...JSON_HEADERS, origin: b.origin }, body());
+      assert.deepEqual(b.lines, ['ports: release SIGKILL port 5432 pid 2210: refused:term-first', 'ports: release SIGTERM port 5432 pid 2210: released']);
+      assert.ok(b.lines.every((l) => !l.includes('postgres -D')));
+    } finally {
+      await b.close();
+    }
+  });
+
+  test('#286 a KILL with no TERM before it is 409 term-first and signals nothing', async () => {
+    const b = await boot();
+    try {
+      const r = await call(b.api.url, 'POST', RELEASE, { ...JSON_HEADERS, origin: b.origin }, body({ signal: 'KILL' }));
+      assert.equal(r.status, 409);
+      assert.equal(r.json.reason, 'term-first');
+      assert.deepEqual(b.signals, []);
+    } finally {
+      await b.close();
+    }
+  });
+
+  test('#286 the machine preview summarises the remote command again, so a credential never reaches the screen', async () => {
+    const remote = await fakeRemote({ get: { status: 200, body: { process: 'redis', pid: 5521, command: 'redis-server --requirepass hunter2 https://tok@host/x', ports: [6379], interface: 'loopback' } }, post: { status: 200, body: {} } });
+    const b = await boot({ remotes: { ws: remote.port } });
+    try {
+      const r = await call(b.api.url, 'GET', '/api/machines/ws/ports/release/preview?port=6379&pid=5521', { origin: b.origin });
+      assert.equal(r.json.command, 'redis-server --requirepass *** https://***@host/x');
+    } finally {
+      await b.close();
+      await remote.close();
+    }
+  });
+
+  test('#286 the machine release is logged with the machine and the remote outcome', async () => {
+    const remote = await fakeRemote({ get: { status: 200, body: {} }, post: { status: 409, body: { reason: 'system', error: 'x' } } });
+    const b = await boot({ remotes: { ws: remote.port } });
+    try {
+      await call(b.api.url, 'POST', '/api/machines/ws/ports/release', { ...JSON_HEADERS, origin: b.origin }, body());
+      assert.deepEqual(b.lines, ['ports: release SIGTERM port 5432 pid 2210 on ws: refused:system']);
     } finally {
       await b.close();
       await remote.close();
