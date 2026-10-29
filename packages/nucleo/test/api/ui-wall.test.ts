@@ -508,3 +508,107 @@ test('o wall.css não estiliza classe de outra tela: as próprias levam wall-', 
     assert.deepEqual([...classes(outra)].filter((c) => minhas.includes(c)), [], `wall.css e ${outra} estilizam as mesmas classes`);
   }
 });
+
+// ---------- #333: the children nested in a leader and the "Paradas" band (C85 to C87) ----------
+
+const { treeSummary, childContent, parkedContent } = tela;
+const filho = (id: string, extra: Card = {}) => ({ id, title: `Filha ${id}`, status: 'active', state: 'active', attention: null, since: '2026-10-20T11:00:00Z', parked: false, children: [], ...extra });
+const MURAL_COM_FILHAS = {
+  ...MURAL,
+  cards: [
+    cardDeExemplo('lider', {
+      tree: { total: 4, blocked: 1, active: 2, parked: 1 },
+      children: [
+        filho('tl', { status: 'waiting', state: 'waiting', attention: { level: 'idle', reason: 'turn_ended' }, children: [filho('neta', { children: [filho('bisneta')] })] }),
+        filho('pede', { status: 'waiting', state: 'waiting', attention: { level: 'blocked', reason: 'question' } }),
+        filho('velha', { status: 'completed', state: 'completed', parked: true }),
+      ],
+    }),
+    cardDeExemplo('pede', { title: 'Pendências', status: 'waiting', state: 'waiting', attention: { level: 'blocked', reason: 'question' }, activity: { type: 'question', text: 'Confere a v0.0.36?' }, parentId: 'lider' }),
+  ],
+  parked: { total: 9, items: [cardDeExemplo('p1', { status: 'completed', state: 'completed', activity: { type: 'completed', text: '' } }), cardDeExemplo('p2', { status: 'abandoned', state: 'active', activity: { type: 'idle', text: 'Interrompida (Esc)' } })] },
+};
+
+describe('Mural: filhas aninhadas e Paradas (#333)', () => {
+  test('o resumo da líder: os números da árvore toda, sem os zeros, no singular e no plural', () => {
+    assert.deepEqual(treeSummary({ total: 4, blocked: 1, active: 2, parked: 1 })?.map((p: { text: string }) => p.text), ['4 filhas', '1 precisa de você', '2 ativas', '1 parada']);
+    assert.deepEqual(treeSummary({ total: 1, blocked: 0, active: 0, parked: 0 })?.map((p: { text: string }) => p.text), ['1 filha']);
+    assert.deepEqual(treeSummary({ total: 3, blocked: 2, active: 0, parked: 2 })?.map((p: { text: string }) => p.text), ['3 filhas', '2 precisam de você', '2 paradas']);
+    assert.equal(treeSummary(null), null);
+    assert.equal(treeSummary({ total: 0, blocked: 0, active: 0, parked: 0 }), null);
+  });
+
+  test('childContent e parkedContent: o que cada linha mostra', () => {
+    const agora = Date.parse('2026-10-20T16:00:00Z');
+    assert.equal(childContent(filho('x', { since: '2026-10-20T11:00:00Z' }), agora).since, 'há 5 h');
+    assert.equal(parkedContent(null), null);
+    assert.equal(parkedContent({ total: 0, items: [] }), null);
+    assert.deepEqual(parkedContent({ total: 23, items: new Array(7) }), { title: 'Paradas (23)', shown: 7, total: 23, more: 16 });
+    assert.equal(parkedContent({ total: 250, items: new Array(7) })?.more, 93, 'o núcleo para em 100');
+  });
+
+  test('a líder traz o resumo recolhido; abrir mostra as filhas, e cada nível abre recolhido dentro da mãe', async () => {
+    const { area, sair } = await montarTela(async () => MURAL_COM_FILHAS);
+    try {
+      await ate(() => comClasse(area, 'wall-card').length === 2);
+      const linha = area.todos((e) => e.getAttribute('data-tree') === 'lider')[0]!;
+      assert.match(linha.textContent, /4 filhas.*1 precisa de você.*2 ativas.*1 parada/);
+      assert.equal(linha.getAttribute('aria-expanded'), 'false');
+      assert.equal(comClasse(area, 'wall-kid').length, 0, 'recolhida');
+      linha.click();
+      assert.deepEqual(area.todos((e) => e.getAttribute('data-child') !== null).map((e) => e.getAttribute('data-child')), ['tl', 'pede', 'velha'], 'só o primeiro nível');
+      assert.ok(comClasse(area, 'wall-span').length === 1, 'a líder aberta ocupa a linha');
+      const abre = comClasse(area.todos((e) => e.getAttribute('data-child') === 'tl')[0]!, 'wall-kid-toggle')[0]!;
+      abre.click();
+      assert.deepEqual(area.todos((e) => e.getAttribute('data-child') !== null).map((e) => e.getAttribute('data-child')), ['tl', 'neta', 'pede', 'velha'], 'a neta aparece, a bisneta ainda não');
+      assert.match(area.todos((e) => e.getAttribute('data-child') === 'velha')[0]!.textContent, /parada/);
+      assert.equal(area.todos((e) => e.getAttribute('data-child') === 'pede')[0]!.todos((e) => e.tag === 'a')[0]!.getAttribute('href')?.includes('/ui/sessions/pede'), true, 'cada filha abre a sua sessão');
+    } finally {
+      await sair();
+    }
+  });
+
+  test('a filha que precisa de você é card próprio e diz de quem é', async () => {
+    const { area, sair } = await montarTela(async () => MURAL_COM_FILHAS);
+    try {
+      await ate(() => comClasse(area, 'wall-card').length === 2);
+      const filha = area.todos((e) => e.getAttribute('data-session') === 'pede' && e.classes.includes('wall-card'))[0]!;
+      assert.match(comClasse(filha, 'wall-from')[0]!.textContent, /filha de Sessão lider/);
+    } finally {
+      await sair();
+    }
+  });
+
+  test('Paradas: recolhida com o contador; aberta, as linhas e "Mostrar mais", que relê com parkedLimit; só em Todas', async () => {
+    const rotas: string[] = [];
+    const { area, sair, rotas: r } = await montarTela(async (rota) => (rotas.push(rota), MURAL_COM_FILHAS));
+    try {
+      await ate(() => comClasse(area, 'wall-card').length === 2);
+      const topo = () => area.todos((e) => e.getAttribute('data-parked') === 'toggle')[0]!;
+      assert.match(topo().textContent, /Paradas \(9\)/);
+      assert.match(topo().textContent, /Recolhida/);
+      assert.equal(comClasse(area, 'wall-parked-list').length, 0);
+      topo().click();
+      assert.deepEqual(area.todos((e) => e.getAttribute('data-parked-row') !== null).map((e) => e.getAttribute('data-parked-row')), ['p1', 'p2']);
+      assert.match(topo().textContent, /Mostrando 2 de 9/);
+      area.todos((e) => e.getAttribute('data-parked') === 'more')[0]!.click();
+      await ate(() => r.length === 2);
+      assert.equal(r[1], '/api/wall?machine=all&parkedLimit=100');
+      area.todos((e) => e.getAttribute('data-filter') === 'blocked')[0]!.click();
+      assert.equal(area.todos((e) => e.getAttribute('data-parked') === 'toggle').length, 0, 'fora de Todas a faixa não aparece');
+    } finally {
+      await sair();
+    }
+  });
+
+  test('um núcleo sem filhas nem Paradas (mais antigo) mostra o mural como antes', async () => {
+    const { area, sair } = await montarTela(async () => MURAL);
+    try {
+      await ate(() => comClasse(area, 'wall-card').length === 5);
+      assert.equal(area.todos((e) => e.getAttribute('data-tree') !== null).length, 0);
+      assert.equal(area.todos((e) => e.getAttribute('data-parked') !== null).length, 0);
+    } finally {
+      await sair();
+    }
+  });
+});
