@@ -90,7 +90,8 @@ describe('#350 local actions', () => {
   test('an unreadable ps sends nothing; a process gone between the read and the signal is "changed"', async () => {
     assert.deepEqual(await setup({ read: async () => null }).local.act('pts-0', 'interrupt', 41233, false), { kind: 'unreadable' });
     assert.deepEqual(await setup({ throws: 'ESRCH' }).local.act('pts-0', 'interrupt', 41233, false), { kind: 'changed' });
-    await assert.rejects(setup({ throws: 'EPERM' }).local.act('pts-0', 'interrupt', 41233, false));
+    assert.deepEqual(await setup({ throws: 'EPERM' }).local.act('pts-0', 'interrupt', 41233, false), { kind: 'refused', reason: 'other-user' });
+    await assert.rejects(setup({ throws: 'EIO' }).local.act('pts-0', 'interrupt', 41233, false));
   });
 });
 

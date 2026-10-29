@@ -58,6 +58,21 @@ ESTAB 0 0 10.0.0.5:22 10.0.0.9:50000 users:(("sshd",pid=3150,fd=4))`;
   });
 });
 
+describe('#350 secrets in command lines', () => {
+  test('URL credentials, flags, key=value, Bearer and -p are masked before the args are kept', async () => {
+    const { maskSecrets } = await import('../../src/telemetry/terminals.ts');
+    assert.equal(maskSecrets('curl https://u:hunter2@api.exemplo.dev/x'), 'curl https://***@api.exemplo.dev/x');
+    assert.equal(maskSecrets('tool --token abc123 --name ok'), 'tool --token *** --name ok');
+    assert.equal(maskSecrets('tool --api-key=abc123'), 'tool --api-key=***');
+    assert.equal(maskSecrets('run PASSWORD=abc ./x'), 'run PASSWORD=*** ./x');
+    assert.equal(maskSecrets('curl -H Authorization: Bearer abc.def'), 'curl -H Authorization: Bearer ***');
+    assert.equal(maskSecrets('mysql -psecret db'), 'mysql -p*** db');
+    assert.equal(maskSecrets('bash ./destrava-pedro.sh'), 'bash ./destrava-pedro.sh');
+    const rows = parseTerminalsPs(' 1 0 1 -1 pts/0 S+ 10 1000 seguim curl https://u:hunter2@x.dev');
+    assert.equal(rows[0]?.args, 'curl https://***@x.dev');
+  });
+});
+
 describe('#350 sessions', () => {
   const r = buildTerminals(parseTerminalsPs(LINUX_PS), opts());
 

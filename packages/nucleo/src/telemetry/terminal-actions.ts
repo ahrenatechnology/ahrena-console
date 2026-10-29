@@ -88,7 +88,10 @@ export class LocalTerminalActions {
     try {
       (this.o.signal ?? process.kill)(pidToSignal, signal);
     } catch (err) {
-      if ((err as NodeJS.ErrnoException).code === 'ESRCH') return { kind: 'changed' };
+      const code = (err as NodeJS.ErrnoException).code;
+      if (code === 'ESRCH') return { kind: 'changed' };
+      // The group leader is another user's (a `sudo` the shell started): not ours to signal.
+      if (code === 'EPERM') return { kind: 'refused', reason: 'other-user' };
       throw err;
     }
     this.o.log?.(`terminal ${session.tty}: ${action} (${signal}) on ${pidToSignal}`);

@@ -74,6 +74,8 @@ Encerrar a sessão fecha **todos** os terminais da conexão (`pts/0` e `pts/1` t
 
 - O núcleo passa a poder encerrar processos e conexões `sshd` do próprio usuário a pedido da `/ui`. A superfície é estreita (três chaves, mesma origem estrita, pid e usuário conferidos de novo, nunca o túnel, o núcleo nem o app, sem senha); o Argos revê `src/telemetry/terminals.ts`, `terminal-actions.ts` e `src/api/terminals.ts` com atenção.
 - Reuso de pid entre a leitura e o `kill`: a janela é de milissegundos, o grupo e o uid são conferidos antes. Risco aceito, como na 0016.
+- A linha de comando de cada processo fica na leitura (até 300 caracteres), com URL com credencial, `--token x`, `password=x`, `Bearer x` e `-pSEGREDO` mascarados antes de guardar. O mascaramento é por padrão e pode deixar passar um segredo de forma incomum: a leitura vai ao SQLite e pelo túnel.
+- Comandos como `claude`, `sudo`, `su`, `psql`, `mysql` e `sqlite3` contam como interativos (esperam a pessoa); `python` e `node` não, porque é neles que um script esquecido prende a aba.
 - A detecção do `sshd` do túnel depende do `ss` e do usuário do próprio núcleo; sem `ss`, o `sshd` do túnel não é reconhecido. No Mac não há `sshd` de terminal, então o caso não existe.
 - O app de bandeja não ganha a ação: ela é do console. O alerta chega a ele como os outros.
 - Fica para depois: os processos `claude`/`ccd-cli` antigos do servidor remoto do Claude Desktop (outro card, outra issue), e unificar o `config.json` com as outras frentes.

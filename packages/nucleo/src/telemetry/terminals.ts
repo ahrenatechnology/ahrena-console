@@ -21,7 +21,7 @@ export const LINUX_TERMINALS_PS = ['-eo', 'pid=,ppid=,pgid=,tpgid=,tty=,stat=,et
 export const DARWIN_TERMINALS_PS = ['-axo', 'pid=,ppid=,pgid=,tpgid=,tty=,stat=,etime=,uid=,user=,command='] as const;
 
 /** Commands that wait for the person on purpose; the config's `terminal.interactiveCommands` adds to them. */
-export const INTERACTIVE_COMMANDS: readonly string[] = ['vim', 'vi', 'nvim', 'nano', 'emacs', 'less', 'more', 'man', 'top', 'htop', 'btop', 'watch', 'tmux', 'screen', 'ssh', 'mosh'];
+export const INTERACTIVE_COMMANDS: readonly string[] = ['vim', 'vi', 'nvim', 'nano', 'emacs', 'less', 'more', 'man', 'top', 'htop', 'btop', 'watch', 'tmux', 'screen', 'ssh', 'mosh', 'claude', 'sudo', 'su', 'psql', 'mysql', 'sqlite3'];
 const SHELLS = new Set(['bash', 'zsh', 'sh', 'dash', 'fish', 'ksh', 'tcsh', 'csh']);
 const TERMINAL_APPS = /(Terminal|iTerm2?|Ghostty|WezTerm|Alacritty|kitty|Warp|tmux)/;
 const SSHD_SESSION = /^sshd: (\S+?)@(\S+)/;
@@ -49,6 +49,16 @@ export function parseElapsed(s: string): number | null {
   return Number(m[1] ?? 0) * 86400 + Number(m[2] ?? 0) * 3600 + Number(m[3]) * 60 + Number(m[4]);
 }
 
+/** A command line can carry a secret: URL credentials, `--token x`, `password=x`, `Bearer x`, `-pSECRET`. Masked before it is kept. */
+export function maskSecrets(args: string): string {
+  return args
+    .replace(/(\w+:\/\/)[^\s/@]*:[^\s/@]*@/g, '$1***@')
+    .replace(/(--[\w-]*(?:pass(?:word)?|token|secret|key|auth)[\w-]*[= ])\S+/gi, '$1***')
+    .replace(/\b((?:pass(?:word)?|token|secret|api[_-]?key)=)\S+/gi, '$1***')
+    .replace(/\b(Bearer|Basic)\s+\S+/g, '$1 ***')
+    .replace(/(\s-p)\S+/g, '$1***');
+}
+
 export function parseTerminalsPs(out: string): PsRow[] {
   const rows: PsRow[] = [];
   for (const line of out.split('\n')) {
@@ -56,7 +66,7 @@ export function parseTerminalsPs(out: string): PsRow[] {
     if (!m) continue;
     const etimeSec = parseElapsed(m[7]!);
     if (etimeSec === null) continue;
-    rows.push({ pid: Number(m[1]), ppid: Number(m[2]), pgid: Number(m[3]), tpgid: Number(m[4]), tty: m[5]!, stat: m[6]!, etimeSec, uid: Number(m[8]), user: m[9]!, args: m[10]!.trim().slice(0, MAX_ARGS) });
+    rows.push({ pid: Number(m[1]), ppid: Number(m[2]), pgid: Number(m[3]), tpgid: Number(m[4]), tty: m[5]!, stat: m[6]!, etimeSec, uid: Number(m[8]), user: m[9]!, args: maskSecrets(m[10]!.trim()).slice(0, MAX_ARGS) });
   }
   return rows;
 }
