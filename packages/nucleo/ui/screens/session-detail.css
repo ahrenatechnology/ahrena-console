@@ -126,6 +126,16 @@
 .sd-msg header .sd-pill { height: 22px; font-size: 11.5px; padding: 0 8px; }
 .sd-msg header time { margin-left: auto; color: var(--muted); font-size: 12px; }
 .sd-msg p { margin: 0; line-height: 1.6; overflow-wrap: anywhere; white-space: pre-wrap; }
+.sd-msg.sd-quiet { margin-top: -8px; }
+.sd-msg.sd-quiet .sd-avatar { height: 0; background: none; }
+
+.sd-activity { display: flex; flex-direction: column; gap: 8px; }
+.sd-activity-head { display: inline-flex; align-items: center; gap: 8px; align-self: flex-start; max-width: 100%; padding: 4px 8px; margin-left: -8px; border: 0; border-radius: 6px; background: transparent; color: var(--muted); font-size: 12.5px; text-align: left; }
+.sd-activity-head:hover { color: var(--text); background: var(--raised); }
+.sd-activity-head:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.sd-activity-names { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; opacity: .8; }
+.sd-activity-head .sd-e-error { display: inline-flex; align-items: center; gap: 4px; flex: none; }
+.sd-activity-body { display: flex; flex-direction: column; gap: 8px; }
 
 .sd-tool { border: 1px solid var(--border); border-radius: 8px; background: var(--bg); }
 .sd-tool.sd-asks { border-color: var(--status-waiting-dot); }
