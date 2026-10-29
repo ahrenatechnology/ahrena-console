@@ -40,9 +40,15 @@ export function periodFromSearch(search) {
 /** The line under the filters: how many sessions the numbers cover, and what is never left out. */
 export function coverageText(d) {
   const p = PERIODS.find((x) => x.id === d.period) ?? PERIODS[2];
-  const base = d.period === 'all' ? `${num(d.sessions)} ${d.sessions === 1 ? 'sessão' : 'sessões'} no histórico` : `${num(d.sessions)} ${d.sessions === 1 ? 'sessão' : 'sessões'} em ${p.label}`;
-  const outside = d.activeOutsidePeriod > 0 ? ` ${num(d.activeOutsidePeriod)} ${d.activeOutsidePeriod === 1 ? 'ativa mais velha entra' : 'ativas mais velhas entram'} assim mesmo.` : ' Nenhuma sessão ativa fica de fora.';
-  return { title: base, text: `Os números e o grafo contam todas, não só as da lista.${outside}` };
+  const outside = d.activeOutsidePeriod ?? 0;
+  const inPeriod = d.sessions - outside; // `sessions` already counts the active ones older than the period
+  const plural = (n, one, many) => `${num(n)} ${n === 1 ? one : many}`;
+  if (d.period !== 'all' && inPeriod === 0 && outside > 0) {
+    return { title: `Nada em ${p.label}`, text: `Há ${plural(outside, 'sessão ativa mais velha', 'sessões ativas mais velhas')} e ${outside === 1 ? 'ela entra' : 'elas entram'} mesmo assim: sessões ativas nunca ficam de fora do período.` };
+  }
+  const base = d.period === 'all' ? `${plural(inPeriod, 'sessão', 'sessões')} no histórico` : `${plural(inPeriod, 'sessão', 'sessões')} em ${p.label}`;
+  const tail = outside > 0 ? ` ${plural(outside, 'ativa mais velha entra', 'ativas mais velhas entram')} assim mesmo.` : ' Nenhuma sessão ativa fica de fora.';
+  return { title: base, text: `Os números e o grafo contam todas, não só as da lista.${tail}` };
 }
 
 export const FILTERS = [
@@ -322,6 +328,12 @@ export async function mount(area, ctx) {
   let more = []; // the tree pages loaded after the first one ("Carregar mais")
   let nextCursor = null;
   let loadingMore = false;
+  let keepFocus = null; // returns the element that should have the focus after the next redraw
+  const restoreFocus = () => {
+    const target = keepFocus?.();
+    keepFocus = null;
+    if (target?.isConnected) target.focus();
+  };
   let openNodes = null; // the tree nodes that are open; `null` until the first read opens the first levels
   let expanded = null; // os runs abertos; `null` até a primeira leitura abrir o primeiro
   let focusTarget = null; // o nó que tinha o foco, para devolvê-lo depois de redesenhar
@@ -350,11 +362,16 @@ export async function mount(area, ctx) {
     el('button', { type: 'button', 'aria-pressed': p.id === period ? 'true' : 'false', onClick: () => {
       if (period === p.id) return;
       period = p.id;
-      if (period === 'all') area.replaceChildren(head, loading({ label: 'Lendo todo o histórico' }));
+      keepFocus = () => periodButtons[PERIODS.findIndex((x) => x.id === period)];
+      if (period === 'all') {
+        area.replaceChildren(head, loading({ label: 'Lendo todo o histórico' }));
+        restoreFocus();
+        keepFocus = () => periodButtons[PERIODS.findIndex((x) => x.id === period)];
+      }
       periodButtons.forEach((b, i) => b.setAttribute('aria-pressed', PERIODS[i].id === period ? 'true' : 'false'));
       const q = new URLSearchParams(location.search);
       period === DEFAULT_PERIOD ? q.delete('period') : q.set('period', period);
-      history.replaceState(null, '', `${location.pathname}${q.size ? `?${q}` : ''}${location.hash}`);
+      history.replaceState(history.state, '', `${location.pathname}${q.size ? `?${q}` : ''}${location.hash}`);
       read();
     } }, p.label),
   );
@@ -384,6 +401,11 @@ export async function mount(area, ctx) {
   observer?.observe(graphBox);
 
   function draw() {
+    drawNow();
+    restoreFocus();
+  }
+
+  function drawNow() {
     const d = data;
     // Nenhuma sessão, sem filtro nenhum: a tela inteira diz isso.
     if (!d.sessions && d.filter === 'all' && !d.node) {
@@ -456,20 +478,29 @@ export async function mount(area, ctx) {
 
   async function loadMore() {
     if (loadingMore || !nextCursor) return;
+    const mine = seq;
+    const asked = { filter, node, period };
     loadingMore = true;
+    keepFocus = () => area.querySelector('.wft-more button');
     draw();
     try {
-      const r = await ctx.read(workflowsRoute(filter, node, period, nextCursor));
+      const r = await ctx.read(workflowsRoute(asked.filter, asked.node, asked.period, nextCursor));
+      // A re-read, another period or another filter came meanwhile: this page belongs to a view that is gone.
+      if (mine !== seq || asked.filter !== filter || asked.node !== node || asked.period !== period) return;
       more = [...more, ...r.trees.items];
       nextCursor = r.trees.nextCursor;
       for (const id of initialOpen(r.trees.items)) openNodes?.add(id);
       failure = null;
     } catch (e) {
-      if (e?.name === 'AbortError') return;
+      if (e?.name === 'AbortError' || mine !== seq) return;
       failure = e.message;
+    } finally {
+      loadingMore = false;
     }
-    loadingMore = false;
-    if (data) draw();
+    if (data) {
+      keepFocus = () => area.querySelector('.wft-more button');
+      draw();
+    }
   }
 
   async function read() {
@@ -485,7 +516,10 @@ export async function mount(area, ctx) {
       draw();
     } catch (e) {
       if (e?.name === 'AbortError' || mine !== seq) return;
-      if (!data) area.replaceChildren(head, error({ text: e.message, retry: () => (area.replaceChildren(head, loading({ label: 'Carregando os workflows' })), read()) }));
+      if (!data) {
+        area.replaceChildren(head, error({ text: e.message, retry: () => (area.replaceChildren(head, loading({ label: 'Carregando os workflows' })), read()) }));
+        restoreFocus();
+      }
       else {
         failure = e.message;
         draw();
