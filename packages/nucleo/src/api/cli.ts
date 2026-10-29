@@ -96,7 +96,9 @@ import { ResumosDeSessao } from './summary.ts';
 import { FeedDeEventos } from './events.ts';
 import { TrabalhoPorBranch } from './work.ts';
 import { AlertTracker } from '../telemetry/alerts.ts';
-import { collectorFor } from '../telemetry/adapters/system.ts';
+import { collectorFor, systemDeps } from '../telemetry/adapters/system.ts';
+import { terminalSettings } from '../telemetry/terminal-config.ts';
+import { LocalTerminalActions, TerminalActions } from '../telemetry/terminal-actions.ts';
 import { SqliteTelemetryStore } from '../telemetry/adapters/sqlite.ts';
 import { publishAlertChanges, TelemetrySampler } from '../telemetry/sampler.ts';
 import { localMachine, TelemetryService, type MachineEntry } from '../telemetry/service.ts';
@@ -438,6 +440,7 @@ const demoEntries: MachineEntry[] = [];
 const samplers: TelemetrySampler[] = [];
 let remoteMachines: RemoteMachines<RemoteMachine> | null = null;
 let reconnectRunner: ReconnectRunner | null = null;
+let terminalControl: TerminalActions | null = null;
 function addSampler(machineId: string, collector: TelemetryCollector) {
   samplers.push(new TelemetrySampler({ machineId, collector, store: sampleStore, tracker: alertTracker, onAlertChange: publishAlertChanges(changes), log }));
 }
@@ -448,7 +451,8 @@ if (demo) {
   addSampler('local', new SimulatedCollector('local'));
   addSampler(SIMULATED_WORKSTATION.id, new SimulatedCollector('workstation'));
 } else if (!o.noTelemetry) {
-  const platformCollector = collectorFor();
+  const settings = terminalSettings(dataDir);
+  const platformCollector = collectorFor(process.platform, { ...systemDeps(), corePort: boundPort, interactiveCommands: () => settings().interactiveCommands, acceptRemoteActions: () => settings().acceptRemoteActions });
   // Decision 0013 section 5: the Mac's núcleo asks the cloud nothing about itself; only a remote one reads its placement.
   if (platformCollector) addSampler('local', process.platform === 'darwin' ? platformCollector : withPlacement(platformCollector, new PlacementProbe({ log })));
   else log(`telemetry: no collector for ${process.platform}`);
@@ -492,6 +496,14 @@ if (demo) {
     log,
   });
   await registry.refresh();
+  // The terminal actions (#350): this machine's collector reads and the sampler re-reads after a signal; a remote id is forwarded.
+  const localSampler = samplers.find((s) => s.machineId === 'local');
+  terminalControl = new TerminalActions({
+    local: new LocalTerminalActions({ read: async () => (await platformCollector?.terminals?.()) ?? null, onSignaled: () => void localSampler?.sampleOnce(), log }),
+    remote: { port: (id) => registry.get(id)?.port, write: loopbackWrite() },
+    acceptRemoteActions: () => settings().acceptRemoteActions,
+    onRemoteSent: (id) => void registry.get(id)?.readNow(),
+  });
 }
 const machineEntries = (): MachineEntry[] => [localEntry, ...demoEntries, ...(remoteMachines?.list() ?? [])];
 const telemetryService = samplers.length > 0 || remoteMachines ? new TelemetryService({ store: sampleStore, tracker: alertTracker, machines: machineEntries }) : null;
@@ -590,6 +602,7 @@ const api: LocalApi = await startLocalApi({
   messaging: createMessagingRoute({ messaging, sessions: storage, accounts, log }),
   orders: createOrdersRoute({ orders: new SessionOrders(), messaging, sessions: storage }),
   tools: toolsExecutor,
+  terminals: terminalControl,
   clouds,
   appUpdate,
   load: () => ({

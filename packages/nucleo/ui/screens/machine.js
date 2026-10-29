@@ -81,6 +81,7 @@ import {
 } from './machine-format.js';
 import { cloudProfiles } from './cloud-profiles.js';
 import { machineConnection } from './machine-connection.js';
+import { machineTerminals } from './machine-terminals.js';
 
 const STYLE = '/ui/screens/machine.css';
 const SVG = 'http://www.w3.org/2000/svg';
@@ -454,7 +455,7 @@ export function reconnectParts(machine, reading, { retry = () => {}, start = () 
 // ---------- the body ----------
 
 /** Everything under the header for one reading: the cards, then the grid. Exported for the test. */
-export function machineBody(data, { local, filter = 'all', setFilter = () => {}, now = Date.now(), ownPort = null } = {}) {
+export function machineBody(data, { local, filter = 'all', setFilter = () => {}, now = Date.now(), ownPort = null, terminals = null } = {}) {
   const { reading, series, alerts, machines, machine, sessions, localReading, remoteReadings = new Map(), hours = 1 } = data;
   const parts = [];
   if (!reading) {
@@ -473,6 +474,8 @@ export function machineBody(data, { local, filter = 'all', setFilter = () => {},
     const claude = reading.claude ? claudeCard(reading.claude, reading.topProcesses, { wide: !reading.tunnels }) : null;
     if (reading.tunnels) grid.push(el('div', { class: 'card-column tm-side' }, alertsCard(alerts, now), claude));
     else grid.push(alertsCard(alerts, now), ...(claude ? [claude] : []));
+    const terminalsNode = terminals?.card(reading.terminals, sessions, { now });
+    if (terminalsNode) grid.push(terminalsNode);
     if (reading.ports) grid.push(portsCard(reading.ports, { local, owner: localPortOwner(reading.tunnels, ownPort), forwards: new Map(), filter, setFilter }));
     if (!machines.some((m) => m.id !== LOCAL_ID)) grid.push(el('div', { class: 'tm-span-full' }, noRemoteCard()));
   } else {
@@ -481,6 +484,8 @@ export function machineBody(data, { local, filter = 'all', setFilter = () => {},
     if (reading.docker) grid.push(dockerCard(reading.docker));
     if (sessions) grid.push(sessionsCard(sessions));
     if (reading.docker?.stacks.length) grid.push(stacksCard(reading.docker.stacks));
+    const terminalsNode = terminals?.card(reading.terminals, sessions, { now });
+    if (terminalsNode) grid.push(terminalsNode);
     if (reading.ports) {
       const owner = remotePortOwner(reading.docker, remoteCorePort(localReading, machine));
       grid.push(portsCard(reading.ports, { local, owner, forwards: forwardsOf(localReading, machine), filter, setFilter }));
@@ -542,6 +547,8 @@ export async function mount(area, ctx) {
   const cloud = cloudProfiles(ctx, id);
   // The remote's connection (issue 278, C62 to C65): its own module; `null` keeps the screen as it was.
   const conn = local ? null : machineConnection(ctx, id, { reread: () => draw(), repaint: () => last && paint(last) });
+  // The terminal sessions card (issue 350, C90 to C93): the actions and their confirmations are its own.
+  const terminals = machineTerminals(ctx, { id, local, label: () => (local ? 'Esta máquina' : (last?.machine?.label ?? id)), repaint: () => last && paint(last), reread: () => draw() });
 
   const hourButtons = WINDOWS.map((h) => el('button', { type: 'button', 'aria-pressed': String(h === hours), 'data-hours': h, onClick: () => setHours(h) }, `${h} h`));
   const toggle = el('div', { class: 'tm-seg', role: 'group', 'aria-label': 'Janela do gráfico' }, ...hourButtons);
@@ -590,9 +597,11 @@ export async function mount(area, ctx) {
     if (sub) sub.textContent = (conn ? conn.headerLine(line) : line) || (local ? 'A telemetria medida pelo núcleo daqui' : 'Máquina remota');
     if (!local && machine) pillSlot.replaceChildren(pill(conn?.pill() ?? statePill(machine)));
     const ownPort = Number(globalThis.location?.port) || null;
-    const body = data.reading || local || remoteCondition(machine) === null ? machineBody(data, { local, filter, setFilter, now, ownPort }) : [];
-    const shown = condition.faded && data.reading ? [el('div', { class: 'tm-faded', 'aria-label': 'Última leitura guardada' }, ...body)] : body;
-    replaceKeepingFocus(head, ...condition.parts, cloud.node(label), ...shown);
+    terminals.take(data.reading?.terminals ?? null, data.sessions);
+    const body = data.reading || local || remoteCondition(machine) === null ? machineBody(data, { local, filter, setFilter, now, ownPort, terminals }) : [];
+    const dialog = terminals.dialogNode();
+    const shown = condition.faded && data.reading ? [el('div', { class: 'tm-faded', 'aria-label': 'Última leitura guardada' }, ...body)] : dialog ? [el('div', { class: 'tm-faded' }, ...body)] : body;
+    replaceKeepingFocus(head, ...condition.parts, ...(dialog ? [dialog] : []), ...(terminals.bandNode() ? [terminals.bandNode()] : []), cloud.node(label), ...shown);
   }
 
   // A repaint (a filter, the 30 s re-read) rebuilds the buttons: the focus goes back to the same one.

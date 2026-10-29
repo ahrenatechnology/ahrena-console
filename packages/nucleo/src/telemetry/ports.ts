@@ -8,11 +8,13 @@
 // - `RemoteGet` (#176): one `GET` to a remote núcleo through the local port the user's tunnel
 //   forwards (adapters/loopback-http.ts); tests point it at a fake núcleo on loopback.
 
-import type { SamplePoint, TelemetryReading, UnreachableReason } from './model.ts';
+import type { SamplePoint, TelemetryReading, TerminalsReading, UnreachableReason } from './model.ts';
 
 export interface TelemetryCollector {
   /** A reading now. Never rejects because a command is missing: that group comes out `null`. */
   collect(): Promise<TelemetryReading>;
+  /** The terminal sessions right now (#350), for the actions to check against; `null` when `ps` did not answer. */
+  terminals?(): Promise<TerminalsReading | null>;
 }
 
 export interface TelemetryStore {
@@ -93,6 +95,13 @@ export interface CollectorDeps {
   fileOwner: FileOwner;
   probe: PortProbe;
   os: OsFacts;
+  /** The núcleo's own pid and port, for the terminal sessions it must never signal (#350). Default: this process and none. */
+  selfPid?: number;
+  corePort?: number;
+  /** Extra commands that count as interactive for "presa" (`terminal.interactiveCommands` in config.json). */
+  interactiveCommands?: () => readonly string[];
+  /** `terminal.acceptRemoteActions`, reported in the reading. */
+  acceptRemoteActions?: () => boolean;
   /** Clock, for `takenAt` and the rates. */
   now?: () => number;
   /** The wait before the first reading (CPU and network need two measurements). Nothing in tests. */

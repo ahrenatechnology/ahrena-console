@@ -4,6 +4,7 @@
 // - `volume-full`: a volume above 85%;
 // - `port-exposed`: a port listening on all interfaces;
 // - `tunnel-busy`: a tunnel port that another process on this Mac holds;
+// - `terminal-stuck` (#350): a terminal whose foreground command is "presa" (src/telemetry/terminals.ts);
 // - `machine-unreachable` (#176): a remote machine this Mac cannot read (`machineUnreachableAlert`).
 //
 // `computeAlerts` is pure: the current reading and the recent samples give the alerts that hold now.
@@ -113,7 +114,34 @@ export function computeAlerts(reading: TelemetryReading, points: readonly Sample
       });
     }
   }
+
+  for (const s of reading.terminals?.sessions ?? []) {
+    if (!s.stuck || !s.foreground) continue;
+    const command = shortCommand(s.foreground.args);
+    alerts.push({
+      id: `terminal-stuck:${s.id}`,
+      kind: 'terminal-stuck',
+      level: 'error',
+      message: `O terminal ${s.tty} está preso há ${formatAge(s.foreground.ageSec)}`,
+      detail: `${command}${s.claudeSessionId ? ` · da sessão do Claude ${s.claudeSessionId.slice(0, 8)}` : ''}`,
+      since: new Date(now - s.foreground.ageSec * 1000).toISOString(),
+    });
+  }
   return alerts;
+}
+
+/** `bash /tmp/claude-…/scratchpad/destrava-pedro.sh` → `bash …/destrava-pedro.sh`: long paths keep only their last name. */
+export function shortCommand(args: string): string {
+  const out = args.split(/\s+/).map((t) => (t.length > 40 && t.includes('/') ? `…/${t.slice(t.lastIndexOf('/') + 1)}` : t)).join(' ');
+  return out.length > 80 ? `${out.slice(0, 79)}…` : out;
+}
+
+/** "26 min", "1 h 05", "45 s". */
+export function formatAge(sec: number): string {
+  if (sec < 60) return `${sec} s`;
+  const min = Math.floor(sec / 60);
+  if (min < 60) return `${min} min`;
+  return `${Math.floor(min / 60)} h ${String(min % 60).padStart(2, '0')}`;
 }
 
 /**

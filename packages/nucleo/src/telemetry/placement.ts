@@ -219,5 +219,6 @@ export function withPlacement(collector: TelemetryCollector, probe: PlacementPro
       const [reading, placement] = await Promise.all([collector.collect(), probe.get().catch(() => null)]);
       return placement ? { ...reading, placement } : reading;
     },
+    ...(collector.terminals ? { terminals: () => collector.terminals!() } : {}),
   };
 }
