@@ -12,7 +12,7 @@ import { examine, stopCore } from './owner.ts';
 import { isPidAlive } from './probe.ts';
 import { runningOutput, startOrAdopt, type StartOutput } from './start.ts';
 import { removeLock, type Lock } from './lock.ts';
-import { INSTALLATIONS, parseInstallation, resolveDataDir, resolvePort } from './installation.ts';
+import { INSTALLATIONS, consoleHome, parseInstallation, resolveDataDir, resolvePort } from './installation.ts';
 import { listInstances, type Instance } from './registry.ts';
 
 const HELP = `Usage: npm run core -- <command> [options] [-- API options]
@@ -22,6 +22,9 @@ const HELP = `Usage: npm run core -- <command> [options] [-- API options]
   start               Adopts this installation's core or starts one in the background (log in
                       <data-dir>/nucleo.log) and waits for it to answer
   stop                Stops this installation's core (SIGTERM, then SIGKILL) and deletes the lock
+  voice install       Installs the dictation engine for the compose box: builds whisper.cpp (CUDA with an
+                      NVIDIA GPU and nvcc, else CPU) and downloads the ggml large-v3-turbo model into
+                      ~/.ahrena-console/voice. Needs git and cmake. Runs once per machine
 
   --installation <i>  ${INSTALLATIONS.join(', ')} (default dev). Each installation runs its own core, with its
                       own data folder, and never adopts another installation's core
@@ -111,6 +114,15 @@ async function start(): Promise<never> {
 if (command === 'status') await status();
 else if (command === 'start') await start();
 else if (command === 'stop') await stop();
+else if (command === 'voice' && apiArgs[0] === 'install') {
+  const { installVoice } = await import('../transcription/install.ts');
+  try {
+    const r = await installVoice({ home: consoleHome(), log });
+    finish({ state: 'installed', ...r } as never, `dictation installed: ${r.bin}`);
+  } catch (e) {
+    finish({ state: 'failed', reason: (e as Error).message } as never, `voice install failed: ${(e as Error).message}`, 1);
+  }
+}
 else {
   process.stderr.write(`unknown command: ${command}\n\n${HELP}`);
   process.exit(2);
