@@ -1,4 +1,4 @@
-// Release a listening port (#286, decision 0015): stop the process that holds it.
+// Release a listening port (#286, decision 0016): stop the process that holds it.
 //
 // The caller names a port and the pid it saw; nothing else. The núcleo reads the listeners again
 // and acts only when that pid still owns that port, and only on a process of the user running the

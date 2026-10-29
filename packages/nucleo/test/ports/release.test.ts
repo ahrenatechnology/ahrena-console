@@ -1,4 +1,4 @@
-// Releasing a port (#286, decision 0015): the pid is checked again, only the user's own process is
+// Releasing a port (#286, decision 0016): the pid is checked again, only the user's own process is
 // signalled, the núcleo, the app and a container's proxy never are, and SIGKILL is its own request.
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';

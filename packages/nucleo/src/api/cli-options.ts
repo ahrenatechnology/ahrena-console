@@ -54,7 +54,7 @@ export const HELP = `Usage: npm run api -- [options]
                          the port has an owner
   --no-telemetry         Does not measure this machine: /api/machines and /api/telemetry answer 404.
   --accept-remote-actions  Takes POST /api/ports/release without Origin, which is how a Mac's núcleo reaches this one
-                         through the tunnel (decision 0015). Default off; AHRENA_CONSOLE_ACCEPT_REMOTE_ACTIONS=1 does the same.
+                         through the tunnel (decision 0016). Default off; AHRENA_CONSOLE_ACCEPT_REMOTE_ACTIONS=1 does the same.
                          Under --demo, the telemetry is synthetic (this machine and a "workstation")
   --machines <file>      The remote machines (default ~/.ahrena-console/machines.json, #176):
                          { "machines": [{ "id", "label", "port", "reconnect"? }] }, port is the port
@@ -97,7 +97,7 @@ export interface ApiCliOptions {
   replace: boolean;
   noLock: boolean;
   noTelemetry: boolean;
-  /** --accept-remote-actions: take a port release that arrives without Origin (the tunnel, from a Mac's núcleo). Off by default (decision 0015). */
+  /** --accept-remote-actions: take a port release that arrives without Origin (the tunnel, from a Mac's núcleo). Off by default (decision 0016). */
   acceptRemoteActions: boolean;
   machines: string | undefined;
   /** --demo-github: the connection state under --demo (src/simulator/demo-github-connection.ts). */

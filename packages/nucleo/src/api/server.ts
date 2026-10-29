@@ -41,7 +41,7 @@
 // | `GET /api/tools`              | The Tools screen: CLIs, runtimes and containers, installed and latest versions, the catalog's actions, the jobs (`?machine=`; api/tools.ts, #280) |
 // | `POST /api/tools/<toolId>/actions/<actionId>`, `DELETE /api/tools/jobs/<jobId>`, `POST /api/tools/checks` and `POST /api/tools/mcp/checks` | Run a catalog action as a job, cancel it, Verificar agora, Verificar conexões (api/tools.ts, src/tools/executor.ts, #280) |
 // | `POST /api/machines/<id>/connection/start|stop|reconnect|login-and-start`, `DELETE /api/machines/<id>/connection` | The connection of a remote machine (api/connection.ts, #278) |
-// | `GET`/`POST /api/ports/release`, and the same under `/api/machines/<id>/` | Release a listening port: SIGTERM, then SIGKILL (api/ports.ts, #286, decision 0015) |
+// | `GET`/`POST /api/ports/release`, and the same under `/api/machines/<id>/` | Release a listening port: SIGTERM, then SIGKILL (api/ports.ts, #286, decision 0016) |
 // | `GET /api/connectors`, `POST`/`DELETE /api/connectors/aws/sessions/<name>/login`, and the same under `/api/machines/<id>/` | The cloud connectors and their logins (api/clouds.ts, #277) |
 // | `GET /api/app-update`, `PUT /api/app-update/state` and `POST /api/app-update/actions/check|install|dismiss|ack` | The desktop app's update notice: the app reports, the /ui reads and clicks (api/app-update.ts, #330) |
 // | `GET /api/connections`        | The console's own GitHub connection: `{ github: <status> }` (api/connections-route.ts, #241) |
@@ -223,7 +223,7 @@ export interface ApiOptions {
   tools?: ToolsControl | null;
   /** The cloud connectors (#277, decision 0013; api/clouds.ts): `/api/connectors` and the logins; without it, 404. */
   clouds?: CloudsRoute | null;
-  /** The port release (#286, decision 0015; api/ports.ts): `/api/ports/release` and the same under `/api/machines/<id>/`; without it, 404. */
+  /** The port release (#286, decision 0016; api/ports.ts): `/api/ports/release` and the same under `/api/machines/<id>/`; without it, 404. */
   ports?: PortsRoute | null;
   /** The desktop app's update notice (#330, api/app-update.ts): `/api/app-update`; without it, 404. */
   appUpdate?: AppUpdateRoute | null;
@@ -461,7 +461,7 @@ export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
       }
       return respondToolsWrite(req, res, url, opts.tools);
     }
-    // The port release writes have their own gate too (decision 0015): the Origin, or none only when asked for.
+    // The port release writes have their own gate too (decision 0016): the Origin, or none only when asked for.
     if (isPortsWrite(req, url.pathname)) {
       if (!opts.ports || !portsWriteAllowed(req, port, opts.ports.acceptNoOrigin())) {
         req.resume();

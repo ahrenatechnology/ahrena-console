@@ -1,4 +1,4 @@
-// Liberar uma porta (issue 286, decision 0015; wireframes C81 to C84): the confirmation flow of the
+// Liberar uma porta (issue 286, decision 0016; wireframes C81 to C84): the confirmation flow of the
 // action in the "Portas em escuta" card. A modal, its own, over the machine screen:
 //
 //   preview (what the núcleo would act on) → [tunnel warning] → confirm → SIGTERM → waiting
@@ -16,7 +16,7 @@ const button = (label, { kind = 'outline', iconName = null, onClick, action }) =
 
 const kv = (rows) => el('dl', { class: 'tm-rp-kv' }, ...rows.flatMap(([k, v]) => [el('dt', {}, k), el('dd', {}, v)]));
 
-/** "node · pid 7741" style: the process the person saw. */
+/** The process the person saw: "node · pid 7741". */
 const who = (process, pid) => el('span', {}, el('b', {}, process ?? 'processo sem nome'), ' · pid ', el('span', { class: 'mono' }, String(pid)));
 
 /**

@@ -727,7 +727,7 @@ export function touchesMachine(changes, machineId) {
   });
 }
 
-// ---------- Liberar uma porta (issue 286, decision 0015) ----------
+// ---------- Liberar uma porta (issue 286, decision 0016) ----------
 
 export const releaseRoute = (id) => (id === LOCAL_ID ? '/api/ports/release' : `${MACHINES_ROUTE}/${encodeURIComponent(id)}/ports/release`);
 export const releasePreviewRoute = (id, port, pid) => `${releaseRoute(id)}/preview?port=${port}&pid=${pid}`;

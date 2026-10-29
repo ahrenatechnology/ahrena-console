@@ -1,4 +1,4 @@
-// The port release routes (#286, decision 0015). Same model as the Tools writes (decision 0014):
+// The port release routes (#286, decision 0016). Same model as the Tools writes (decision 0014):
 // the request carries ids, never a command; the núcleo checks again and does it.
 //
 // - `GET /api/ports/release`: `{ release: true, remoteActions }`. What a Mac's núcleo asks a remote
