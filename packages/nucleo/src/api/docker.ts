@@ -204,7 +204,7 @@ export function createDockerRoute(o: DockerRouteOptions): DockerRoute {
       const r = await o.remote!.write(port, 'POST', `${DOCKER_ROUTE}/actions/${action}`, forwarded);
       if (r.kind === 'unreachable') return send(res, 502, { error: 'a máquina não respondeu', reason: 'unreachable' });
       const answer = (r.body ?? {}) as { job?: unknown; plan?: unknown; reason?: unknown };
-      if (r.status === 403 && answer.plan === undefined) return send(res, 403, { error: 'a máquina não aceita ações remotas: ligue AHRENA_CONSOLE_ACCEPT_REMOTE_ACTIONS=1 lá, ou copie o comando', reason: 'remote-actions-disabled' });
+      if (r.status === 403 && answer.plan === undefined) return send(res, 403, { error: 'a máquina não aceita ações remotas: suba o núcleo de lá com --accept-remote-actions lá, ou copie o comando', reason: 'remote-actions-disabled' });
       const j = sanitizeJob(answer.job);
       const plan = sanitizePlan(answer.plan);
       if (r.status === 202 && j) return send(res, 202, { job: j });

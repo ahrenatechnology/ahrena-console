@@ -182,7 +182,7 @@ export function stackLine(s) {
 /** The pt-BR text for a refused write. */
 export function refusalText(e) {
   const reason = e?.body?.reason;
-  if (e?.status === 403 && reason === 'remote-actions-disabled') return 'A Workstation não aceita ações pelo túnel: ligue AHRENA_CONSOLE_ACCEPT_REMOTE_ACTIONS=1 lá, ou copie o comando.';
+  if (e?.status === 403 && reason === 'remote-actions-disabled') return 'A Workstation não aceita ações pelo túnel: suba o núcleo de lá com --accept-remote-actions, ou copie o comando.';
   if (e?.status === 404) return 'O Docker mudou desde que a tela leu: atualizando a lista.';
   if (e?.status === 409 && e?.body?.plan) return 'O plano mudou desde que você abriu: confira o novo comando.';
   if (e?.status === 409) return e?.message || 'Esta ação não está disponível agora.';
