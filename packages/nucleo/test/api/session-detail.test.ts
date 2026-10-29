@@ -158,6 +158,26 @@ describe('Detalhe da sessão: /api/sessions/<id>', () => {
     assert.doesNotMatch(tela, /innerHTML|outerHTML|insertAdjacentHTML|document\.write/);
   });
 
+  test('Conversa: the full text with its newlines, from data.text or the hook prompt, and the hook prompt once', async () => {
+    const id = 'sim-detalhe-texto';
+    await storage.putSession({ ...(await storage.getSession(DETAIL_SESSION))!, id, awaitingInputSince: null, awaitingReason: null });
+    const quando = (s: number) => new Date(AGORA + s * 1000).toISOString();
+    const pedido = `# Pedido\n\n- um\n- dois\n\n${'x'.repeat(3_000)}`;
+    const resposta = `Feito:\n\n\`\`\`ts\nconst a = 1;\n\`\`\`\n${'y'.repeat(3_000)}`;
+    const resumo = (t: string) => `${t.replace(/\s+/g, ' ').slice(0, 199)}…`;
+    const ev = (n: number, type: string, summary: string | null, data: unknown) =>
+      storage.appendEvent({ id: `${id}-e${n}`, sessionId: id, agentId: null, type, toolName: null, summary, data: data as never, createdAt: quando(n) });
+    await ev(1, 'UserPromptSubmit', resumo(pedido), { prompt: pedido });
+    await ev(2, 'UserPrompt', resumo(pedido), { parentUuid: null, transcriptAgentId: null, text: pedido });
+    await ev(3, 'AssistantMessage', resumo(resposta), { parentUuid: null, transcriptAgentId: null, text: resposta });
+    // An event stored before data.text: the transcript prompt only has the summary, and still dedupes against the hook.
+    const outro = 'Segundo pedido\ncom duas linhas';
+    await ev(4, 'UserPromptSubmit', outro, { prompt: outro });
+    await ev(5, 'UserPrompt', outro.replace(/\s+/g, ' '), null);
+    const c = await read<ConversaDoDetalhe>(`/api/sessions/${id}/conversation`);
+    assert.deepEqual(c.messages.map((m) => [m.role, m.text]), [['you', pedido], ['assistant', resposta], ['you', outro]]);
+  });
+
   test('Linha do tempo (C6): do mais novo para o mais velho, filtros e páginas', async () => {
     const base = `/api/sessions/${DETAIL_SESSION}/events`;
     const tudo = await read<EventosDoDetalhe>(`${base}?limit=500`);

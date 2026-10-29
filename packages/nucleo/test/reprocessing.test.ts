@@ -10,7 +10,7 @@ import { after, beforeEach, describe, test } from 'node:test';
 import { DatabaseSync } from 'node:sqlite';
 import { openSqliteStorage, type SqliteStorage } from '../src/adapters/sqlite/sqlite-storage.ts';
 import { MIGRATIONS, migrate } from '../src/adapters/sqlite/migrations.ts';
-import { capturarDoTranscript, limparDecisoes, reprocessarHistorico } from '../src/api/reprocessing.ts';
+import { capturarDoTranscript, limparDecisoes, reprocessarHistorico, reprocessMessageText } from '../src/api/reprocessing.ts';
 import { registerDecision } from '../src/decisions/registry.ts';
 import { SqliteDecisionStore } from '../src/decisions/sqlite.ts';
 import { importHistory } from '../src/ingest/history/importer.ts';
@@ -169,5 +169,23 @@ describe('ruído nas decisões (#131)', () => {
     assert.equal(ficou.metadata.text, 'Não, não solta a tag ainda. Espera o review do time.');
     assert.equal((await decisoes.getDecision(tocada.id))?.state, 'to_confirm', 'a que a pessoa já mexeu fica');
     assert.deepEqual(await limparDecisoes(store, decisoes, at(6)), { ruido: 0, encurtadas: 0 });
+  });
+});
+
+describe('full message text (Conversa)', () => {
+  test('fills data.text of the prompts and messages imported before it existed, subagents included', async () => {
+    const { root } = projeto([tx.prompt(o('u1', 1), 'Primeira linha\n\nsegunda linha'), tx.say(o('a1', 2), 'Resposta\n- um\n- dois')]);
+    const pasta = join(root, '-repo-app', S, 'subagents');
+    mkdirSync(pasta, { recursive: true });
+    writeFileSync(join(pasta, 'agent-x1.jsonl'), jsonl([tx.say({ ...o('s1', 3), agentId: 'x1' }, 'Do subagente\nfim')]).map((l) => `${l}\n`).join(''));
+    await importHistory({ storage: store, root });
+    // As an old import left them: no data.text.
+    store.db.exec(`UPDATE events SET data = json_remove(data, '$.text')`);
+    const textos = async () => (await store.listEvents(S)).items.filter((e) => e.type !== 'ToolUse').map((e) => (e.data as { text?: string } | null)?.text ?? null);
+    assert.deepEqual(await textos(), [null, null, null]);
+
+    const r = await reprocessMessageText({ storage: store, raiz: root });
+    assert.deepEqual(r, { sessions: 1, messages: 3 });
+    assert.deepEqual(await textos(), ['Primeira linha\n\nsegunda linha', 'Resposta\n- um\n- dois', 'Do subagente\nfim']);
   });
 });

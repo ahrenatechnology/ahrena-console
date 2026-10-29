@@ -76,6 +76,8 @@ import {
   PLANS_AND_DECISIONS_REPROCESSING,
   CONTEXT_REPROCESSING,
   reprocessarContexto,
+  MESSAGE_TEXT_REPROCESSING,
+  reprocessMessageText,
   reprocessarHistorico,
 } from './reprocessing.ts';
 import type { GithubAccess } from './github-access.ts';
@@ -707,7 +709,8 @@ if (follower) {
 
 // Once per database, after the initial import: plans and decisions of the sessions imported before the
 // capture existed, the cleanup of what the old capture wrote that is not a decision, and the context
-// meters of the sessions imported before item 1.7.
+// meters of the sessions imported before item 1.7, and the full text of the messages imported before
+// the Conversa kept it.
 async function reprocessOnce() {
   if (!storage.isReprocessed(PLANS_AND_DECISIONS_REPROCESSING)) {
     const start = Date.now();
@@ -724,6 +727,11 @@ async function reprocessOnce() {
     const r = await reprocessarContexto({ storage, raiz: o.projects ?? defaultProjectsRoot(), log });
     storage.markReprocessed(CONTEXT_REPROCESSING, new Date().toISOString());
     log(`context meter rebuilt: ${r.medidores} meters in ${r.sessoes} sessions`);
+  }
+  if (!storage.isReprocessed(MESSAGE_TEXT_REPROCESSING)) {
+    const r = await reprocessMessageText({ storage, raiz: o.projects ?? defaultProjectsRoot(), log });
+    storage.markReprocessed(MESSAGE_TEXT_REPROCESSING, new Date().toISOString());
+    log(`message text filled: ${r.messages} messages in ${r.sessions} sessions`);
   }
 }
 

@@ -9,7 +9,7 @@ import { after, describe, test } from 'node:test';
 import { openSqliteStorage } from '../src/adapters/sqlite/sqlite-storage.ts';
 import { discoverTranscripts, readLinesFrom } from '../src/ingest/history/files.ts';
 import { eventId, importHistory, mainAgentId, resumeOffset, subagentId } from '../src/ingest/history/importer.ts';
-import { parseLine, parseUsage } from '../src/ingest/history/transcript.ts';
+import { MESSAGE_TEXT_MAX, parseLine, parseUsage, SUMMARY_MAX } from '../src/ingest/history/transcript.ts';
 import { aggregateUsage, dedupeByMessage, type UsageSample } from '../src/ingest/history/usage.ts';
 import type { SessionEvent, StoragePort, TokenUsage } from '../src/index.ts';
 import { session } from './fixtures.ts';
@@ -373,6 +373,25 @@ describe('transcript reading', () => {
     assert.deepEqual(parseLine('{"type":"queue-operation","sessionId":"s"}', names)?.events, []);
     assert.deepEqual(parseLine('{"type":"user","timestamp":"2026-11-02T12:00:00Z","message":{"content":"x"}}', names)?.events, []);
     assert.deepEqual(parseLine('{"type":"summary","summary":"Resumo"}', names)?.title, { kind: 'summary', value: 'Resumo' });
+  });
+
+  test('prompts and assistant messages keep their full text in data.text, newlines kept; the summary stays short', () => {
+    const names = new Map<string, string>();
+    const line = (type: string, uuid: string, message: unknown) =>
+      JSON.stringify({ type, uuid, sessionId: 's', timestamp: '2026-11-02T12:00:00Z', message });
+    const prompt = '  # Título\n\n- item 1\n- item 2\n\n```ts\nconst x = 1;\n```  ';
+    const [p] = parseLine(line('user', 'u1', { role: 'user', content: prompt }), names)!.events;
+    assert.equal(p!.type, 'UserPrompt');
+    assert.equal(p!.data.text, prompt.trim());
+    assert.equal(p!.summary, prompt.replace(/\s+/g, ' ').trim());
+    const longo = 'a\n'.repeat(20_000);
+    const [m] = parseLine(line('assistant', 'a1', { role: 'assistant', model: 'claude-x', content: [{ type: 'text', text: longo }] }), names)!.events;
+    assert.equal(m!.type, 'AssistantMessage');
+    assert.equal(m!.data.text!.length, MESSAGE_TEXT_MAX);
+    assert.ok(m!.data.text!.endsWith('…') && m!.data.text!.startsWith('a\na\n'));
+    assert.equal(m!.summary!.length, SUMMARY_MAX);
+    const [vazio] = parseLine(line('assistant', 'a2', { role: 'assistant', model: 'claude-x', content: [{ type: 'text', text: '  \n ' }] }), names)!.events;
+    assert.equal('text' in vazio!.data, false);
   });
 
   test('dedupe by message keeps the final entry and aggregates by bucket', () => {

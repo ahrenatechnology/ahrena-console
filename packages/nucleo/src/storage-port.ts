@@ -112,6 +112,8 @@ export interface StoragePort {
 
   /** Acrescenta o evento. Devolve `false` se o id já existia (o evento não é duplicado nem alterado). */
   appendEvent(event: SessionEvent): Promise<boolean>;
+  /** Sets `data.text` of an existing event, keeping the rest of its `data`. Returns `false` if the id does not exist. */
+  setEventText(id: string, text: string): Promise<boolean>;
   /** Em ordem cronológica. */
   listEvents(sessionId: string, query?: ListEventsQuery): Promise<Page<SessionEvent>>;
   /** Todas as sessões, mais novos primeiro, com filtros e o ao vivo (feed, #94). */

@@ -11,6 +11,8 @@
 // - Context meter (item 1.7): the write only sees new events, and the old import did not keep the
 //   compaction's `compactMetadata`. `reprocessarContexto` rebuilds each session's meters from the
 //   stored events and the compactions re-read from the transcript (and from the subagents).
+// - Conversa's full text: the old import kept only the 200-char summary of each message.
+//   `reprocessMessageText` fills `data.text` of the stored prompts and messages from the transcript.
 
 import { existsSync, readdirSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
@@ -171,6 +173,40 @@ export async function reprocessarContexto(o: { storage: StoragePort; raiz: strin
         r.medidores += await rebuildContextMeters(o.storage, s.id, relidos);
       } catch (err) {
         o.log?.(`medidor de contexto de ${s.id}: ${(err as Error).message}`);
+      }
+    }
+    cursor = page.nextCursor;
+  } while (cursor);
+  return r;
+}
+
+/** The full message text's reprocessing; a new name makes it run again in every database. */
+export const MESSAGE_TEXT_REPROCESSING = 'message-text-1';
+
+const MESSAGE_TYPES = new Set(['UserPrompt', 'AssistantMessage']);
+
+/**
+ * One pass over every session: the prompts and the agent's messages imported before `data.text`
+ * existed get their full text, re-read from the transcript (and from the subagents').
+ */
+export async function reprocessMessageText(o: { storage: StoragePort; raiz: string; log?: (m: string) => void }): Promise<{ sessions: number; messages: number }> {
+  const r = { sessions: 0, messages: 0 };
+  let cursor: string | null = null;
+  do {
+    const page = await o.storage.listSessions({ limit: 200, cursor });
+    for (const s of page.items) {
+      r.sessions++;
+      try {
+        const t = transcriptDe(s, o.raiz);
+        const files = t && existsSync(t) ? [t, ...transcriptsDosSubagentes(t)] : [];
+        for (const f of files) {
+          for (const e of await transcriptEvents(f, s.id, (ev) => MESSAGE_TYPES.has(ev.type))) {
+            const text = (e.data as { text?: unknown } | null)?.text;
+            if (typeof text === 'string' && (await o.storage.setEventText(e.id, text))) r.messages++;
+          }
+        }
+      } catch (err) {
+        o.log?.(`message text of ${s.id}: ${(err as Error).message}`);
       }
     }
     cursor = page.nextCursor;

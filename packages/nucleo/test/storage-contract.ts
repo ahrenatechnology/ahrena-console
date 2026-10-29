@@ -238,6 +238,19 @@ export function storageContract(name: string, create: () => Promise<StoragePort>
         assert.equal(p2.nextCursor, null);
       });
 
+      test('setEventText fills data.text and keeps the rest of data', async () => {
+        await store.appendEvent(event({ id: 'e1' }));
+        await store.appendEvent(event({ id: 'e2', data: null }));
+        assert.equal(await store.setEventText('e1', 'linha 1\n\n  linha 2'), true);
+        assert.equal(await store.setEventText('e2', 'só texto'), true);
+        assert.equal(await store.setEventText('nao-existe', 'x'), false);
+        const { items } = await store.listEvents('s1');
+        assert.deepEqual(items[0].data, { command: 'npm test', text: 'linha 1\n\n  linha 2' });
+        assert.deepEqual(items[1].data, { text: 'só texto' });
+        assert.equal(await store.setEventText('e1', 'de novo'), true);
+        assert.deepEqual((await store.listEvents('s1')).items[0].data, { command: 'npm test', text: 'de novo' });
+      });
+
       test('recusa evento sem tipo ou com data fora do padrão', async () => {
         await assert.rejects(store.appendEvent(event({ type: '' })), InvalidModelError);
         await assert.rejects(store.appendEvent(event({ createdAt: '02/11/2026' })), InvalidModelError);
