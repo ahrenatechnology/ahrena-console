@@ -81,7 +81,7 @@ export function noticeOf(view) {
 
 /**
  * A button of the card or the panel. `busy` is the click that went out and the app has not picked up
- * yet: the icon turns, the label says so, and a second click does nothing (aria-disabled keeps the focus).
+ * yet: the icon turns, the label says so, and a second click does nothing.
  */
 function actionButton(label, onClick, { off, filled = false, disabled = false, why = null, busy = null }) {
   if (busy) return el('button', { type: 'button', class: `btn ${filled ? 'filled' : 'outline'}`, 'aria-busy': 'true', 'aria-disabled': 'true' }, icon('refresh'), BUSY_LABEL[busy]);
@@ -102,14 +102,16 @@ export function drawNotice(view, { where, act, pending = null }) {
   const off = where === 'read-only';
   const button = (label, onClick, { filled = false, why = null, busy = null } = {}) => actionButton(label, onClick, { off, filled, disabled: Boolean(why), why, busy });
   const installing = pending === 'install' ? 'install' : null;
+  // A Buscar agora from the panel still going: Atualizar waits for it, like the panel's buttons.
+  const waiting = pending && !installing ? 'Busca em andamento' : null;
   // Tentar de novo restarts the app like Atualizar: off in a browser tab too.
-  const retry = () => (where === 'browser' ? button('Tentar de novo', null, { filled: true, why: 'Atualizar é no app, pela bandeja' }) : button('Tentar de novo', () => act('install'), { filled: true, busy: installing }));
+  const retry = () => (where === 'browser' ? button('Tentar de novo', null, { filled: true, why: 'Atualizar é no app, pela bandeja' }) : button('Tentar de novo', () => act('install'), { filled: true, busy: installing, why: waiting }));
   const sub = (...parts) => el('span', { class: 'up-sub' }, parts.filter(Boolean).join(' · '));
   const current = `Você está na versão ${view.appVersion}`;
   const card = (cls, ic, title, subline, actions = [], extra = null) =>
     el('section', { class: `up-banner ${cls}`, role: 'status', 'data-kind': n.kind }, el('span', { class: 'up-ic' }, icon(ic)), el('div', { class: 'up-text' }, el('b', {}, title), subline, extra), actions.length ? el('div', { class: 'up-act' }, ...actions) : null);
   if (n.kind === 'available') {
-    const install = where === 'browser' ? button('Atualizar', null, { filled: true, why: 'Atualizar é no app, pela bandeja' }) : button('Atualizar', () => act('install'), { filled: true, busy: installing });
+    const install = where === 'browser' ? button('Atualizar', null, { filled: true, why: 'Atualizar é no app, pela bandeja' }) : button('Atualizar', () => act('install'), { filled: true, busy: installing, why: waiting });
     const note = where === 'browser' ? 'Atualizar é no app: abra pela bandeja.' : null;
     const later = button('Depois', () => act('dismiss', n.version), { why: installing ? 'Atualização em andamento' : null });
     return card('', 'an-download', `Atualização disponível: versão ${n.version}`, sub(current, note ?? view.available.notes), [install, later]);

@@ -307,11 +307,13 @@ describe('the wiring', () => {
       }
       assert.ok(labelled(n.panelNode, 'Buscando…'), ending);
       assert.equal(labelled(n.panelNode, 'Atualizar')!.hasAttribute('disabled'), true, 'the other button waits');
+      assert.equal(labelled(n.noticeNode, 'Atualizar')!.hasAttribute('disabled'), true, "the card's Atualizar waits too");
       if (ending === 'phase') {
         current = view({ phase: 'idle', lastCheckAt: NOW });
         await widget.refresh();
       } else timer!();
       assert.ok(labelled(n.panelNode, 'Buscar agora'), ending);
+      assert.equal(labelled(n.noticeNode, 'Atualizar')!.hasAttribute('disabled'), false, ending);
     }
   });
 
