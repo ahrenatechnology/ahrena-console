@@ -117,6 +117,9 @@ import { createPortsRoute } from './ports.ts';
 import { ancestorsWith, listPortsWith, PortReleaser } from '../ports/release.ts';
 import { systemRunner } from '../telemetry/adapters/system.ts';
 import { createCloudsRoute } from './clouds.ts';
+import { createDockerRoute } from './docker.ts';
+import { DockerService } from '../docker/service.ts';
+import { systemToolRunner } from '../tools/runner.ts';
 import { AppUpdateState } from '../app-update/state.ts';
 import { createAppUpdateRoute } from './app-update.ts';
 import { MachineConnection, publishConnectionChanges } from '../telemetry/connection.ts';
@@ -531,6 +534,29 @@ const ports = createPortsRoute({
   log,
   remote: { port: (id) => remoteMachines?.get(id)?.port, get: loopbackGet(), write: loopbackWrite({ timeoutMs: 15_000 }) },
 });
+// The Docker actions (#288, decision 0017): this machine's daemon, on the Tools executor's queue; the remote machines' through their tunnel port. Not in --demo.
+// A núcleo accepts a no-Origin write (the tunnel) only with --accept-remote-actions (or AHRENA_CONSOLE_ACCEPT_REMOTE_ACTIONS=1), as the port release does.
+const acceptRemoteActions = () => o.acceptRemoteActions;
+const docker =
+  toolsService && toolsExecutor
+    ? {
+        route: createDockerRoute({
+          service: new DockerService({
+            queue: toolsExecutor,
+            run: systemToolRunner,
+            env: () => toolsService.processEnv(),
+            platform: process.platform,
+            resolve: async (name) => (await toolsService.resolveExecutable(name)).path,
+            acceptsRemoteActions: acceptRemoteActions,
+            log,
+          }),
+          cancel: (id) => toolsExecutor.cancel(id),
+          acceptNoOriginActions: acceptRemoteActions,
+          remote: { port: (id) => remoteMachines?.get(id)?.port, get: loopbackGet(), write: loopbackWrite() },
+        }),
+        acceptNoOrigin: acceptRemoteActions,
+      }
+    : null;
 // The desktop app's update notice (#330): the app reports what it found; the /ui reads it. Not in --demo.
 const appUpdate = demo ? null : createAppUpdateRoute(new AppUpdateState(changes));
 
@@ -604,6 +630,7 @@ const api: LocalApi = await startLocalApi({
   tools: toolsExecutor,
   ports,
   clouds,
+  docker,
   appUpdate,
   load: () => ({
     history: follower ? (historyReady ? 'ready' : 'importing') : 'off',

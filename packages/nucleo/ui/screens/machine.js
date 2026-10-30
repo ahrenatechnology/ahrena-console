@@ -83,6 +83,7 @@ import {
   yOf,
 } from './machine-format.js';
 import { cloudProfiles } from './cloud-profiles.js';
+import { dockerActions } from './docker-actions.js';
 import { openRelease } from './port-release.js';
 import { machineConnection } from './machine-connection.js';
 
@@ -478,7 +479,7 @@ function releaseOptions(release, context) {
 }
 
 /** Everything under the header for one reading: the cards, then the grid. Exported for the test. */
-export function machineBody(data, { local, filter = 'all', setFilter = () => {}, now = Date.now(), ownPort = null, release = null } = {}) {
+export function machineBody(data, { local, filter = 'all', setFilter = () => {}, now = Date.now(), ownPort = null, release = null, dockerActions: hasActions = false } = {}) {
   const { reading, series, alerts, machines, machine, sessions, localReading, remoteReadings = new Map(), hours = 1 } = data;
   const parts = [];
   if (!reading) {
@@ -504,7 +505,8 @@ export function machineBody(data, { local, filter = 'all', setFilter = () => {},
     if (reading.volumes.length) grid.push(volumesCard(reading, { local }));
     if (reading.docker) grid.push(dockerCard(reading.docker));
     if (sessions) grid.push(sessionsCard(sessions));
-    if (reading.docker?.stacks.length) grid.push(stacksCard(reading.docker.stacks));
+    // The Docker actions card (below the grid) lists the stacks with their buttons: this read-only one stays only without it.
+    if (reading.docker?.stacks.length && !hasActions) grid.push(stacksCard(reading.docker.stacks));
     if (reading.ports) {
       const owner = remotePortOwner(reading.docker, remoteCorePort(localReading, machine));
       grid.push(portsCard(reading.ports, { local, owner, forwards: forwardsOf(localReading, machine), filter, setFilter, ...releaseOptions(release, { ownPort, remote: data.releaseCap ?? { status: 'unsupported', remoteActions: false } }) }));
@@ -568,6 +570,8 @@ export async function mount(area, ctx) {
   let noteTimer = null;
   // The "Perfis de nuvem" card (issue 277, C66 and C67): its own module, which reads and polls by itself.
   const cloud = cloudProfiles(ctx, id);
+  // The Docker card with the actions (issue 288, C92 to C95): its own module, which reads by itself; it replaces the read-only stacks card while it shows the stacks.
+  const docker = dockerActions(ctx, id, { repaint: () => last && paint(last) });
   // The remote's connection (issue 278, C62 to C65): its own module; `null` keeps the screen as it was.
   const conn = local ? null : machineConnection(ctx, id, { reread: () => draw(), repaint: () => last && paint(last) });
 
@@ -620,9 +624,9 @@ export async function mount(area, ctx) {
     const ownPort = Number(globalThis.location?.port) || null;
     const shownData = data.reading ? { ...data, reading: withoutReleased(data.reading, released) } : data;
     const release = { release: startRelease, stack: showStacks, copy: copyCommand, band: releaseBand() };
-    const body = data.reading || local || remoteCondition(machine) === null ? machineBody(shownData, { local, filter, setFilter, now, ownPort, release: condition.faded ? null : release }) : [];
+    const body = data.reading || local || remoteCondition(machine) === null ? machineBody(shownData, { local, filter, setFilter, now, ownPort, release: condition.faded ? null : release, dockerActions: docker.available() }) : [];
     const shown = condition.faded && data.reading ? [el('div', { class: 'tm-faded', 'aria-label': 'Última leitura guardada' }, ...body)] : body;
-    replaceKeepingFocus(head, ...condition.parts, cloud.node(label), ...shown);
+    replaceKeepingFocus(head, ...condition.parts, cloud.node(label), ...shown, docker.node());
   }
 
   // A repaint (a filter, the 30 s re-read) rebuilds the buttons: the focus goes back to the same one.
