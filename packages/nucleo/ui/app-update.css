@@ -12,6 +12,8 @@
 .up-sub { color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .up-act { display: flex; gap: 8px; flex: none; align-items: center; }
 .up-act .btn:disabled, .up-pa .btn:disabled { opacity: .5; cursor: default; }
+/* Atualizar or Buscar agora went out and the app has not picked it up: the icon turns (shell.css). */
+.up-act .btn[aria-busy="true"], .up-pa .btn[aria-busy="true"] { cursor: progress; }
 .up-progress { display: flex; align-items: center; gap: 10px; margin-top: 4px; font-size: 11px; color: var(--muted); }
 .up-bar { flex: 1; max-width: 420px; height: 6px; border-radius: 99px; background: var(--raised); overflow: hidden; display: block; }
 .up-fill { display: block; height: 100%; width: var(--w, 30%); border-radius: 99px; background: var(--accent); }
