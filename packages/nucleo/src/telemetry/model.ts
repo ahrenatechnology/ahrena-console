@@ -230,7 +230,7 @@ export interface TerminalsReading {
   sessions: TerminalSession[];
   /** The limit in seconds that makes a command "presa". */
   stuckAfterSec: number;
-  /** This núcleo accepts actions that come through the tunnel (`terminal.acceptRemoteActions`); the Mac's screen offers "Copiar comando" when not. */
+  /** This núcleo accepts actions that come through the tunnel (`--accept-remote-actions`); the Mac's screen offers "Copiar comando" when not. */
   remoteActions: boolean;
 }
 

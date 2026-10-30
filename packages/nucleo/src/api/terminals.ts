@@ -13,7 +13,7 @@
 //
 // Like the Tools writes, the gate is stricter than the server's usual one: `Origin` exactly
 // `http://<Host>`, Host loopback, the exact raw path; a request with NO `Origin` is 403 unless
-// `terminal.acceptRemoteActions` is on (the tunnel from the Mac). JSON only, capped.
+// `--accept-remote-actions` is on (the tunnel from the Mac). JSON only, capped.
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { send } from '../ingest/hooks/receiver.ts';

@@ -111,7 +111,7 @@ export interface BuildTerminalsOptions {
   selfPid: number;
   tunnelSshd?: ReadonlySet<number>;
   interactive?: readonly string[];
-  /** `terminal.acceptRemoteActions` of this núcleo, told to the screen that reads it from the Mac. */
+  /** `--accept-remote-actions` of this núcleo, told to the screen that reads it from the Mac. */
   remoteActions?: boolean;
   stuckAfterSec?: number;
 }

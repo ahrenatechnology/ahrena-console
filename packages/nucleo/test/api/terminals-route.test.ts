@@ -1,6 +1,6 @@
 // POST /api/terminals/<id>/actions/<action> (#350) behind its own, strict gate (decision 0014 section 4):
 // the same Origin as the Host, loopback Host, the exact path; no Origin is 403 unless
-// `terminal.acceptRemoteActions`; JSON only; a body with only pid, machine and confirm.
+// `--accept-remote-actions`; JSON only; a body with only pid, machine and confirm.
 import assert from 'node:assert/strict';
 import { request } from 'node:http';
 import { after, describe, test } from 'node:test';

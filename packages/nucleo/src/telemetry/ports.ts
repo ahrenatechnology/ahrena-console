@@ -100,7 +100,7 @@ export interface CollectorDeps {
   corePort?: number;
   /** Extra commands that count as interactive for "presa" (`terminal.interactiveCommands` in config.json). */
   interactiveCommands?: () => readonly string[];
-  /** `terminal.acceptRemoteActions`, reported in the reading. */
+  /** `--accept-remote-actions`, reported in the reading. */
   acceptRemoteActions?: () => boolean;
   /** Clock, for `takenAt` and the rates. */
   now?: () => number;

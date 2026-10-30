@@ -1,14 +1,15 @@
-// The terminal side of "open the session" (#285): open a terminal resuming a session, and bring forward
-// the terminal where its `claude` still runs. The route (session-open-route.ts) decides what to do;
+// The terminal side of "open the session" (#285): open a terminal resuming a session (or starting a new
+// one, "Nova sessão"), and bring forward the terminal where its `claude` still runs. The route (session-open-route.ts) decides what to do;
 // these only act, and every one is injected so the tests never open a terminal.
 //
 // No shell string is ever run: every program goes through `execFile`/`spawn` with an argument list.
 //
 // - macOS, open: a `.command` file in a folder only the núcleo reads (0700, file 0700, a unique name),
-//   `#!/bin/sh`, the folder single-quoted (`cd -- '<cwd>' || exit 1`) and `exec claude --resume <id>`;
+//   `#!/bin/sh`, the folder single-quoted (`cd -- '<cwd>' || exit 1`) and `exec claude --resume <id>`
+//   (`exec claude` for a new session);
 //   then `open <file>`, which runs it in whatever terminal the person has for `.command` files. The
 //   file removes itself when it runs, and each call removes the leftovers older than an hour.
-// - Linux, open: `x-terminal-emulator -e claude --resume <id>` in the folder, when it is on the PATH.
+// - Linux, open: `x-terminal-emulator -e claude [--resume <id>]` in the folder, when it is on the PATH.
 // - Anything else (Windows included: its folders are not POSIX paths): `unsupported`, and the route
 //   answers 501 with the command to copy.
 // - macOS, focus: `ps -o tty= -o lstart= -p <pid>` (in UTC, to compare with the `procStart` Claude Code
@@ -24,7 +25,8 @@ import { delimiter, join } from 'node:path';
 import { isUsableCwd, SESSION_ID_PATTERN, shellQuote, type LiveProcess } from './session-open.ts';
 
 export interface TerminalRequest {
-  sessionId: string;
+  /** The session to resume; `null` starts a new one in the folder. */
+  sessionId: string | null;
   /** An absolute folder that exists; the route checks it. */
   cwd: string;
 }
@@ -78,14 +80,20 @@ export async function findOnPath(name: string, path = process.env.PATH ?? ''): P
   return null;
 }
 
-/** The `.command` file that resumes a session; throws when the folder or the id cannot be carried. */
-export function commandFileContent(cwd: string, sessionId: string): string {
-  if (!isUsableCwd(cwd)) throw new Error('unusable folder');
+/** `claude`'s arguments: resume the session, or none for a new one; throws on an id that is not the UUID. */
+function claudeArgs(sessionId: string | null): string[] {
+  if (sessionId === null) return [];
   if (!SESSION_ID_PATTERN.test(sessionId)) throw new Error('invalid session id');
-  return ['#!/bin/sh', 'rm -f -- "$0"', `cd -- ${shellQuote(cwd)} || exit 1`, `exec claude --resume ${sessionId}`, ''].join('\n');
+  return ['--resume', sessionId];
 }
 
-const COMMAND_FILE = /^resume-[0-9a-f-]{36}\.command$/;
+/** The `.command` file that resumes a session (or starts one); throws when the folder or the id cannot be carried. */
+export function commandFileContent(cwd: string, sessionId: string | null): string {
+  if (!isUsableCwd(cwd)) throw new Error('unusable folder');
+  return ['#!/bin/sh', 'rm -f -- "$0"', `cd -- ${shellQuote(cwd)} || exit 1`, ['exec claude', ...claudeArgs(sessionId)].join(' '), ''].join('\n');
+}
+
+const COMMAND_FILE = /^(resume|new)-[0-9a-f-]{36}\.command$/;
 const HOUR = 3_600_000;
 
 export interface TerminalOpenerOptions {
@@ -125,17 +133,17 @@ export function createTerminalOpener({ dir, platform = process.platform, runner 
       const content = commandFileContent(cwd, sessionId);
       await privateDir(dir);
       await removeOld(dir, now(), maxAgeMs);
-      const file = join(dir, `resume-${randomUUID()}.command`);
+      const file = join(dir, `${sessionId === null ? 'new' : 'resume'}-${randomUUID()}.command`);
       await writeFile(file, content, { mode: 0o700, flag: 'wx' });
       await chmod(file, 0o700);
       await runner.run('open', [file]);
       return 'opened';
     }
-    if (!SESSION_ID_PATTERN.test(sessionId)) throw new Error('invalid session id');
+    const args = claudeArgs(sessionId);
     if (platform === 'linux') {
       const exe = await findExecutable('x-terminal-emulator');
       if (!exe) return 'unsupported';
-      await runner.spawnDetached(exe, ['-e', 'claude', '--resume', sessionId], { cwd });
+      await runner.spawnDetached(exe, ['-e', 'claude', ...args], { cwd });
       return 'opened';
     }
     return 'unsupported';

@@ -11,9 +11,45 @@
 import { header, el, icon } from '../dom.js';
 import { loading, error, errorBand, empty } from '../states.js';
 import { decimal, duration, modelName, num, percent, when, tokens } from './workflow-format.js';
+import { initialOpen, treeKpiRow, treePanel } from './workflow-tree.js';
 
 const SVG = 'http://www.w3.org/2000/svg';
+
+/** The views of the page (issue 332): the overview of today and the tree between sessions (C83). */
+export const VIEWS = [
+  { id: 'overview', label: 'Visão geral' },
+  { id: 'tree', label: 'Árvore' },
+];
 const REREAD_ACTIVE_MS = 10_000;
+
+/** The periods of the page (issue 332, C84); the first read uses the default, the core's too. */
+export const PERIODS = [
+  { id: '24h', label: '24 h', text: 'as últimas 24 h' },
+  { id: '7d', label: '7 dias', text: 'os últimos 7 dias' },
+  { id: '30d', label: '30 dias', text: 'os últimos 30 dias' },
+  { id: 'all', label: 'Tudo', text: 'todo o histórico' },
+];
+export const DEFAULT_PERIOD = '30d';
+
+/** The period in the URL (`?period=7d`), when it is one the page knows. */
+export function periodFromSearch(search) {
+  const p = new URLSearchParams(search).get('period');
+  return PERIODS.some((x) => x.id === p) ? p : DEFAULT_PERIOD;
+}
+
+/** The line under the filters: how many sessions the numbers cover, and what is never left out. */
+export function coverageText(d) {
+  const p = PERIODS.find((x) => x.id === d.period) ?? PERIODS[2];
+  const outside = d.activeOutsidePeriod ?? 0;
+  const inPeriod = d.sessions - outside; // `sessions` already counts the active ones older than the period
+  const plural = (n, one, many) => `${num(n)} ${n === 1 ? one : many}`;
+  if (d.period !== 'all' && inPeriod === 0 && outside > 0) {
+    return { title: `Nada em ${p.label}`, text: `Há ${plural(outside, 'sessão ativa mais velha', 'sessões ativas mais velhas')} e ${outside === 1 ? 'ela entra' : 'elas entram'} mesmo assim: sessões ativas nunca ficam de fora do período.` };
+  }
+  const base = d.period === 'all' ? `${plural(inPeriod, 'sessão', 'sessões')} no histórico` : `${plural(inPeriod, 'sessão', 'sessões')} em ${p.label}`;
+  const tail = outside > 0 ? ` ${plural(outside, 'ativa mais velha entra', 'ativas mais velhas entram')} assim mesmo.` : ' Nenhuma sessão ativa fica de fora.';
+  return { title: base, text: `Os números e o grafo contam todas, não só as da lista.${tail}` };
+}
 
 export const FILTERS = [
   { id: 'all', rotulo: 'Todas as sessões', resumo: 'todas as sessões' },
@@ -23,10 +59,12 @@ export const FILTERS = [
 
 // ---------- Partes puras (testadas no node) ----------
 
-/** A rota da API para o filtro e o nó escolhidos. */
-export function workflowsRoute(filter, node) {
+/** A rota da API para o filtro, o nó e o período escolhidos; `cursor` pede a página seguinte das árvores (issue 332). */
+export function workflowsRoute(filter, node, period = DEFAULT_PERIOD, cursor = null) {
   const q = new URLSearchParams({ filter: filter });
   if (node) q.set('node', node);
+  if (period !== DEFAULT_PERIOD) q.set('period', period);
+  if (cursor) q.set('cursor', cursor);
   return `/api/workflows?${q}`;
 }
 
@@ -146,6 +184,7 @@ function svg(tag, attributes = {}, ...children) {
 function loadCss() {
   if (document.querySelector('link[data-screen="workflows"]')) return;
   document.head.append(el('link', { rel: 'stylesheet', href: '/ui/screens/workflows.css', 'data-screen': 'workflows' }));
+  document.head.append(el('link', { rel: 'stylesheet', href: '/ui/screens/workflow-loop.css', 'data-screen': 'workflow-loop' }));
 }
 
 function badgeEl(text, color) {
@@ -167,6 +206,12 @@ function kpis(k) {
       ),
     ),
   );
+}
+
+/** The card under the filters (C84): what the numbers cover and that no active session is left out. */
+function coverage(d) {
+  const c = coverageText(d);
+  return el('div', { class: 'card wf-coverage' }, el('span', { class: 'wf-coverage-ic' }, icon('ok')), el('div', {}, el('b', {}, `${c.title}. `), c.text));
 }
 
 function panel(title, right, ...body) {
@@ -278,6 +323,18 @@ export async function mount(area, ctx) {
   let seq = 0;
   let timer = null;
   let wait = null;
+  let view = 'overview';
+  let period = periodFromSearch(location.search);
+  let more = []; // the tree pages loaded after the first one ("Carregar mais")
+  let nextCursor = null;
+  let loadingMore = false;
+  let keepFocus = null; // returns the element that should have the focus after the next redraw
+  const restoreFocus = () => {
+    const target = keepFocus?.();
+    keepFocus = null;
+    if (target?.isConnected) target.focus();
+  };
+  let openNodes = null; // the tree nodes that are open; `null` until the first read opens the first levels
   let expanded = null; // os runs abertos; `null` até a primeira leitura abrir o primeiro
   let focusTarget = null; // o nó que tinha o foco, para devolvê-lo depois de redesenhar
 
@@ -293,7 +350,34 @@ export async function mount(area, ctx) {
   });
   const markFilter = () => FILTERS.forEach((f, i) => buttons[i].setAttribute('aria-pressed', f.id === filter ? 'true' : 'false'));
   const seg = el('div', { class: 'wf-seg', role: 'group', 'aria-label': 'Quais sessões' }, ...buttons);
-  const head = header({ icon: 'workflows', title: 'Workflows', sub: 'Como os agentes se orquestram: delegação, rodadas de review e resultado', actions: [seg] });
+  const viewButtons = VIEWS.map((v) =>
+    el('button', { type: 'button', 'aria-pressed': v.id === view ? 'true' : 'false', onClick: () => {
+      if (view === v.id) return;
+      view = v.id;
+      viewButtons.forEach((b, i) => b.setAttribute('aria-pressed', VIEWS[i].id === view ? 'true' : 'false'));
+      if (data) draw();
+    } }, v.label),
+  );
+  const periodButtons = PERIODS.map((p) =>
+    el('button', { type: 'button', 'aria-pressed': p.id === period ? 'true' : 'false', onClick: () => {
+      if (period === p.id) return;
+      period = p.id;
+      keepFocus = () => periodButtons[PERIODS.findIndex((x) => x.id === period)];
+      if (period === 'all') {
+        area.replaceChildren(head, loading({ label: 'Lendo todo o histórico' }));
+        restoreFocus();
+        keepFocus = () => periodButtons[PERIODS.findIndex((x) => x.id === period)];
+      }
+      periodButtons.forEach((b, i) => b.setAttribute('aria-pressed', PERIODS[i].id === period ? 'true' : 'false'));
+      const q = new URLSearchParams(location.search);
+      period === DEFAULT_PERIOD ? q.delete('period') : q.set('period', period);
+      history.replaceState(history.state, '', `${location.pathname}${q.size ? `?${q}` : ''}${location.hash}`);
+      read();
+    } }, p.label),
+  );
+  const periodSeg = el('div', { class: 'wf-seg', role: 'group', 'aria-label': 'Período' }, ...periodButtons);
+  const viewSeg = el('div', { class: 'wf-seg', role: 'group', 'aria-label': 'Como ver' }, ...viewButtons);
+  const head = header({ icon: 'workflows', title: 'Workflows', sub: 'Como os agentes se orquestram: delegação, rodadas de review e resultado', actions: [viewSeg, seg, periodSeg] });
 
   area.replaceChildren(head, loading({ label: 'Carregando os workflows' }));
 
@@ -317,19 +401,40 @@ export async function mount(area, ctx) {
   observer?.observe(graphBox);
 
   function draw() {
+    drawNow();
+    restoreFocus();
+  }
+
+  function drawNow() {
     const d = data;
     // Nenhuma sessão, sem filtro nenhum: a tela inteira diz isso.
     if (!d.sessions && d.filter === 'all' && !d.node) {
       area.replaceChildren(
         ...[head, failure ? errorBand({ title: 'Não deu para atualizar.', text: failure, action: { label: 'Tentar de novo', onClick: () => read() } }) : null].filter(Boolean),
-        empty({ icon: 'workflows', title: 'Nenhuma sessão ainda', text: 'Quando houver sessões do Claude Code nesta máquina, a orquestração dos agentes aparece aqui.' }),
+        empty(
+          d.period === 'all'
+            ? { icon: 'workflows', title: 'Nenhuma sessão ainda', text: 'Quando houver sessões do Claude Code nesta máquina, a orquestração dos agentes aparece aqui.' }
+            : { icon: 'workflows', title: `Nada em ${PERIODS.find((x) => x.id === d.period)?.label ?? d.period}`, text: 'Nenhuma sessão se mexeu neste período e nenhuma está ativa. Escolha um período maior para ver mais.' },
+        ),
       );
+      return;
+    }
+    if (view === 'tree') {
+      openNodes ??= initialOpen(d.trees.items);
+      const toggle = (id) => {
+        openNodes.has(id) ? openNodes.delete(id) : openNodes.add(id);
+        draw();
+        // The redraw replaces the button that had the focus: give it back, or the keyboard loses its place.
+        [...area.querySelectorAll('.wft-toggle')].find((b) => b.getAttribute('data-node') === id)?.focus();
+      };
+      const onMore = nextCursor ? loadMore : null;
+      area.replaceChildren(...[head, failure ? errorBand({ title: 'Não deu para atualizar.', text: failure, action: { label: 'Tentar de novo', onClick: () => read() } }) : null, coverage(d), treeKpiRow(d), treePanel(d, openNodes, toggle, { items: [...d.trees.items, ...more], nextCursor, onMore, loadingMore })].filter(Boolean));
       return;
     }
     if (expanded === null) expanded = new Set(d.runs.length ? [d.runs[0].id] : []);
     const nodeLabel = node ? (d.graph.nodes.find((n) => n.id === node)?.label ?? node) : null;
     // Com o teto de sessões lidas cortando, o subtítulo diz que são só as mais recentes.
-    const summary = `${FILTERS.find((f) => f.id === d.filter)?.resumo ?? 'todas as sessões'}${d.truncated ? `, das ${d.max ?? 500} mais recentes` : ''}`;
+    const summary = FILTERS.find((f) => f.id === d.filter)?.resumo ?? 'todas as sessões';
 
     const runs = d.runs.length
       ? d.runs.map((r) =>
@@ -354,6 +459,7 @@ export async function mount(area, ctx) {
     const parts = [
       head,
       failure ? errorBand({ title: 'Não deu para atualizar.', text: failure, action: { label: 'Tentar de novo', onClick: () => read() } }) : null,
+      coverage(d),
       kpis(d.kpis),
       panel([icon('workflows'), 'Workflows dinâmicos'], 'frotas do Workflow tool, lidas dos journals', el('div', { class: 'wf-runs' }, ...runs)),
       panel(
@@ -370,18 +476,52 @@ export async function mount(area, ctx) {
     }
   }
 
+  async function loadMore() {
+    if (loadingMore || !nextCursor) return;
+    const mine = seq;
+    const asked = { filter, node, period };
+    loadingMore = true;
+    keepFocus = () => area.querySelector('.wft-more button');
+    draw();
+    try {
+      const r = await ctx.read(workflowsRoute(asked.filter, asked.node, asked.period, nextCursor));
+      // A re-read, another period or another filter came meanwhile: this page belongs to a view that is gone.
+      if (mine !== seq || asked.filter !== filter || asked.node !== node || asked.period !== period) return;
+      more = [...more, ...r.trees.items];
+      nextCursor = r.trees.nextCursor;
+      for (const id of initialOpen(r.trees.items)) openNodes?.add(id);
+      failure = null;
+    } catch (e) {
+      if (e?.name === 'AbortError' || mine !== seq) return;
+      failure = e.message;
+    } finally {
+      // Only the request of the current view clears the flag; a late one must not clear a newer request's.
+      if (mine === seq) loadingMore = false;
+    }
+    if (data) {
+      keepFocus = () => area.querySelector('.wft-more button');
+      draw();
+    }
+  }
+
   async function read() {
     const mine = ++seq;
     clearTimeout(timer);
     try {
-      const d = await ctx.read(workflowsRoute(filter, node));
+      const d = await ctx.read(workflowsRoute(filter, node, period));
       if (mine !== seq) return;
       data = d;
+      more = [];
+      loadingMore = false; // a "Carregar mais" still in flight belongs to the view this read replaces
+      nextCursor = d.trees.nextCursor;
       failure = null;
       draw();
     } catch (e) {
       if (e?.name === 'AbortError' || mine !== seq) return;
-      if (!data) area.replaceChildren(head, error({ text: e.message, retry: () => (area.replaceChildren(head, loading({ label: 'Carregando os workflows' })), read()) }));
+      if (!data) {
+        area.replaceChildren(head, error({ text: e.message, retry: () => (area.replaceChildren(head, loading({ label: 'Carregando os workflows' })), read()) }));
+        restoreFocus();
+      }
       else {
         failure = e.message;
         draw();

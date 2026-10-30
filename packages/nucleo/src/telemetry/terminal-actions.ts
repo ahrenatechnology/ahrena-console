@@ -42,7 +42,7 @@ export type TerminalActResult =
 
 export interface TerminalControl {
   act(machine: string, id: string, action: TerminalActionId, pid: number, confirm: boolean): Promise<TerminalActResult>;
-  /** A loopback write with no `Origin` (the tunnel) passes only when the config says so (`terminal.acceptRemoteActions`). */
+  /** A loopback write with no `Origin` (the tunnel) passes only when this núcleo was started with `--accept-remote-actions`. */
   acceptNoOriginActions(): boolean;
 }
 

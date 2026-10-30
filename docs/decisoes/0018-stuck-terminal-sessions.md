@@ -57,7 +57,7 @@ Encerrar a sessão fecha **todos** os terminais da conexão (`pts/0` e `pts/1` t
 ### 4. A Workstation
 
 - **Ler** é como em tudo da 0008: `terminals` vem na leitura que o Mac já faz.
-- **Agir lá é desligado por padrão**, pelo mesmo motivo da 0014 §5 e da 0016 §3: o túnel faz o pedido do Mac parecer local. O núcleo de lá aceita um `POST` sem `Origin` só se `AHRENA_CONSOLE_ACCEPT_REMOTE_ACTIONS=1` (a variável da 0016) ou `"terminal": { "acceptRemoteActions": true }` no `config.json` de lá. Quem liga é quem está na Workstation.
+- **Agir lá é desligado por padrão**, pelo mesmo motivo da 0014 §5 e da 0016 §3: o túnel faz o pedido do Mac parecer local. O núcleo de lá aceita um `POST` sem `Origin` só se subiu com `--accept-remote-actions` ou `AHRENA_CONSOLE_ACCEPT_REMOTE_ACTIONS=1`, a mesma opção das portas (0016) e do Docker (0017). Quem liga é quem está na Workstation.
 - **A tela sabe antes de clicar:** a leitura traz `remoteActions`. Desligado, cada ação é **Copiar comando** (`kill -INT -- -<pgid>`, `kill -HUP <pid>`), para colar num terminal de lá, que não é o preso. Um núcleo de lá sem a rota (404) mostra a mensagem de atualizar o núcleo.
 - O Mac manda só `{ pid, confirm? }`, sem `Origin`, e reprojeta a resposta (motivos de uma lista, textos curtos). Depois de um envio, relê a máquina.
 
@@ -68,7 +68,7 @@ Encerrar a sessão fecha **todos** os terminais da conexão (`pts/0` e `pts/1` t
 - **Agir por `ssh` a partir do Mac.** O console passaria a abrir `ssh` de ação; o túnel e o núcleo de lá já fazem isso, com as regras de lá.
 - **Só mostrar e deixar a pessoa matar na mão.** É o que acontece hoje; o pedido é fechar o ciclo na tela.
 - **Marcar presa só pelo tempo.** Pegaria o `vim` aberto havia 3 h. A lista de interativos conhecidos e a do `config.json` resolvem; sem elas, um `npm run dev` deixado em primeiro plano de propósito vira Presa depois de 15 min. Risco aceito, com a saída no `config.json`.
-- **Uma opção só para ações remotas em `config.json`** (como prevê a 0014). Ela ainda não existe; esta usa a variável da 0016 e, para os terminais, a chave `terminal.acceptRemoteActions` do `config.json`, que o núcleo lê a cada 5 s. Unificar fica para quando o `config.json` valer para tudo.
+- **Uma opção só para ações remotas em `config.json`** (como prevê a 0014). Ela ainda não existe; os terminais usam a opção da 0016, como as portas e o Docker. Só a lista `terminal.interactiveCommands` fica no `config.json`, que o núcleo lê a cada 5 s.
 
 ## Consequências
 

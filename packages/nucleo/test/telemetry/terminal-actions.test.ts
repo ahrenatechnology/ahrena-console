@@ -141,13 +141,10 @@ describe('#350 forward to a remote machine', () => {
 });
 
 describe('#350 settings', () => {
-  test('config.json and the env switch turn on remote actions; the extra interactive commands are checked', async () => {
+  test('config.json gives the extra interactive commands, checked', async () => {
     const { parseTerminalSettings } = await import('../../src/telemetry/terminal-config.ts');
-    assert.deepEqual(parseTerminalSettings('{}', {}), { acceptRemoteActions: false, interactiveCommands: [] });
-    assert.deepEqual(parseTerminalSettings('nope', {}), { acceptRemoteActions: false, interactiveCommands: [] });
-    assert.equal(parseTerminalSettings('{"terminal":{"acceptRemoteActions":true}}', {}).acceptRemoteActions, true);
-    assert.equal(parseTerminalSettings('{"terminal":{"acceptRemoteActions":"yes"}}', {}).acceptRemoteActions, false);
-    assert.equal(parseTerminalSettings('{}', { AHRENA_CONSOLE_ACCEPT_REMOTE_ACTIONS: '1' }).acceptRemoteActions, true);
-    assert.deepEqual(parseTerminalSettings('{"terminal":{"interactiveCommands":["vite","rm -rf /",7,"npm"]}}', {}).interactiveCommands, ['vite', 'npm']);
+    assert.deepEqual(parseTerminalSettings('{}'), { interactiveCommands: [] });
+    assert.deepEqual(parseTerminalSettings('nope'), { interactiveCommands: [] });
+    assert.deepEqual(parseTerminalSettings('{"terminal":{"interactiveCommands":["vite","rm -rf /",7,"npm"]}}').interactiveCommands, ['vite', 'npm']);
   });
 });

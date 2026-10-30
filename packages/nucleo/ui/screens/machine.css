@@ -201,3 +201,24 @@
 .tm-term-sends code { font-family: var(--font-mono); font-size: 12px; }
 .tm-term-dialog-buttons { display: flex; gap: 8px; justify-content: flex-end; }
 .tm-term-danger { background: var(--status-error-dot); border-color: var(--status-error-dot); }
+/* ---------- Liberar uma porta (issue 286, wireframes C88 to C91) ---------- */
+.tm-table td.tm-rp-act { text-align: right; white-space: nowrap; }
+.tm-rp-act .btn { margin-left: auto; }
+.tm-rp-why { display: block; margin-left: auto; max-width: 280px; font-size: 11px; color: var(--muted); white-space: normal; }
+.tm-table small.tm-rp-why.mono { white-space: nowrap; }
+.tm-rp-pid { display: block; font-size: 11px; color: var(--muted); }
+.tm-rp-band { margin: 0 0 10px; }
+.tm-rp-veil { position: fixed; inset: 0; z-index: 40; display: flex; justify-content: center; align-items: flex-start; padding-top: 12vh; background: color-mix(in srgb, var(--bg) 62%, transparent); }
+.tm-rp-dialog { width: min(520px, calc(100vw - 32px)); padding: 18px 20px; display: flex; flex-direction: column; gap: 14px; box-shadow: 0 18px 50px color-mix(in srgb, var(--mono-black) 40%, transparent); box-sizing: border-box; }
+.tm-rp-dialog h2 { display: flex; align-items: center; gap: 10px; margin: 0; font-size: 15px; font-weight: var(--weight-semibold); overflow-wrap: anywhere; }
+.tm-rp-lead { margin: 0; font-size: 12.5px; }
+.tm-rp-kv { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 6px 14px; margin: 0; font-size: 12.5px; }
+.tm-rp-kv dt { color: var(--muted); }
+.tm-rp-kv dd { margin: 0; overflow-wrap: anywhere; }
+.tm-rp-cmd { display: flex; flex-direction: column; gap: 6px; }
+.tm-rp-cmd code { display: block; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); font-family: var(--font-mono); font-size: 12px; overflow-wrap: anywhere; }
+.tm-rp-note { display: flex; gap: 8px; align-items: flex-start; margin: 0; font-size: 11.5px; color: var(--muted); }
+.tm-rp-note .icon { flex: none; margin-top: 1px; color: var(--status-completed-text); }
+.tm-rp-actions { display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
+.btn.tm-rp-danger { background: var(--status-error-dot); color: var(--on-accent); font-weight: var(--weight-semibold); }
+.btn.tm-rp-danger:focus-visible { outline: 2px solid var(--status-error-text); outline-offset: 2px; }
