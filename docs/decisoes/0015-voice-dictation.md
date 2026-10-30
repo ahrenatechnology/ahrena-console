@@ -19,7 +19,7 @@ A caixa de mensagem da sessão (`createComposeBox`) só aceita texto digitado. Q
 5. **Escrita de mesma origem (0003).** Só `POST`, caminho exato, `Origin` igual a `http://<Host>`; sem `Origin` é 403 `ui_only`. O áudio e o texto não são guardados nem logados.
 6. **Gravador com `ScriptProcessorNode`** (mudo, ligado a um `GainNode` de ganho zero) mais um `AnalyserNode` para o nível. Funciona em todo navegador e dispensa um segundo arquivo servido (o `AudioWorklet` pediria). Está marcado como obsoleto, mas o Chrome e o Safari o mantêm; se um dia sair, troca-se só `startRecording`.
 7. **Atalho: Ctrl+Espaço** (começa, e para e transcreve enquanto grava). ⌘+Espaço é do Spotlight. Esc cancela. Aos 5 minutos a gravação para sozinha. O texto entra onde está o cursor e nunca é enviado sozinho.
-8. **`npm run core -- voice install`** compila o whisper.cpp de uma tag fixa (`v1.9.5`) com CUDA quando há GPU NVIDIA e `nvcc`, ou na CPU (mais lento, com aviso), e baixa o modelo do repositório do whisper.cpp no Hugging Face. Exige `git` e `cmake`.
+8. **`npm run core -- voice install`** compila o whisper.cpp de uma tag fixa (`v1.9.5`) com CUDA quando há GPU NVIDIA e `nvcc`, ou na CPU (mais lento, com aviso), e baixa o modelo do repositório do whisper.cpp no Hugging Face. Exige `git` e um compilador; sem `cmake` no PATH, baixa o da Kitware (versão fixa) para `voice/tools`. O `cmake` baixado e o modelo só são usados depois de conferido o SHA-256 fixado no código; o modelo vem de uma revisão fixa do Hugging Face e o clone é recusado se a tag deixar de apontar para o commit fixado.
 
 ## Alternativas rejeitadas
 
@@ -32,4 +32,4 @@ A caixa de mensagem da sessão (`createComposeBox`) só aceita texto digitado. Q
 
 - Sem o whisper instalado a caixa continua igual, com o microfone apagado e o motivo na linha de estado. Um núcleo antigo (sem a rota) não mostra linha nenhuma.
 - A primeira transcrição depois de um tempo parada paga a carga do modelo.
-- O `voice install` baixa e compila código de fora: a tag é fixa e a revisão dela é de quem sobe a versão.
+- O `voice install` baixa e compila código de fora: tag, commit, revisão do modelo e os SHA-256 são fixos no código, e trocá-los é de quem sobe a versão.

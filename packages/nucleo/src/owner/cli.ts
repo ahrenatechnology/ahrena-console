@@ -70,7 +70,10 @@ const installation = parseInstallation(o.installation);
 const dir = resolveDataDir({ installation, dataDir: o['data-dir'] });
 const where = { installation, dataDir: dir };
 
-function finish(s: StartOutput & { instances?: Instance[] }, text: string, exitCode = 0): never {
+/** What `voice install` prints, next to the core's own outputs. */
+type InstallOutput = { state: 'installed'; bin: string; model: string; cuda: boolean } | { state: 'failed'; reason: string };
+
+function finish(s: (StartOutput | InstallOutput) & { instances?: Instance[] }, text: string, exitCode = 0): never {
   process.stdout.write(o.json ? `${JSON.stringify(s)}\n` : `${text}\n`);
   process.exit(exitCode);
 }
@@ -118,9 +121,9 @@ else if (command === 'voice' && apiArgs[0] === 'install') {
   const { installVoice } = await import('../transcription/install.ts');
   try {
     const r = await installVoice({ home: consoleHome(), log });
-    finish({ state: 'installed', ...r } as never, `dictation installed: ${r.bin}`);
+    finish({ state: 'installed', ...r }, `dictation installed: ${r.bin}`);
   } catch (e) {
-    finish({ state: 'failed', reason: (e as Error).message } as never, `voice install failed: ${(e as Error).message}`, 1);
+    finish({ state: 'failed', reason: (e as Error).message }, `voice install failed: ${(e as Error).message}`, 1);
   }
 }
 else {
