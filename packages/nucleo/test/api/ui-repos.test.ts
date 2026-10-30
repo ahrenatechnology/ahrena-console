@@ -247,6 +247,10 @@ describe('repos na /ui: as escalas dos gráficos', () => {
     assert.deepEqual(g.cells.map((c) => c.level), [0, 1, 2, 3, 4, 4]);
     assert.deepEqual(g.months, [{ column: 0, label: 'out' }]);
     assert.deepEqual(activityGrid([]), { columns: 0, cells: [], months: [] });
+    // A week the core left out (no `days`) stays an empty column: the next days keep their place.
+    const gap = activityGrid([{ day: '2026-10-03', commits: 1 }, { day: '2026-10-11', commits: 1 }, { day: '2026-10-12', commits: 1 }]);
+    assert.deepEqual(gap.cells.map((c) => [c.day, c.column, c.row]), [['2026-10-03', 0, 5], ['2026-10-11', 1, 6], ['2026-10-12', 2, 0]]);
+    assert.equal(gap.columns, 3);
   });
 
   test('code frequency grid: added and removed weeks on one scale', () => {

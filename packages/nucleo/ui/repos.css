@@ -122,7 +122,6 @@
 
 .repo-chart { display: block; width: 100%; height: auto; }
 .repo-chart text { font-family: var(--font-mono); font-size: 10px; fill: var(--muted); }
-.repo-chart-base { stroke: var(--border); }
 /* grids à la GitHub: commits in the brand orange, added lines green, removed lines red; 0 is empty */
 .repo-heat { overflow: visible; }
 .repo-heat-cell:hover { stroke: var(--text); stroke-width: 1; }

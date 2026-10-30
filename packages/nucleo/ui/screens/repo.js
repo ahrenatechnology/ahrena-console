@@ -275,7 +275,8 @@ export async function mount(area, ctx) {
   function commitsCard() {
     const c = data.commits;
     if (!c) return card('Commits por dia', null, note(value(null, 'commits')));
-    if (!c.weeks.length || !c.days?.length) return card('Commits por dia', null, note('Nenhuma semana no período'));
+    if (!c.weeks.length) return card('Commits por dia', null, note('Nenhuma semana no período'));
+    if (!c.days?.length) return card('Commits por dia', null, note('Sem detalhe por dia no período'));
     return card('Commits por dia', `${c.weeks.length} ${c.weeks.length === 1 ? 'semana' : 'semanas'}`, ...commitsChart(c));
   }
 

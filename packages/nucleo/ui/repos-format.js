@@ -202,9 +202,15 @@ export const dayLabel = (day) => `${Number(day.slice(8, 10))} ${MONTHS[Number(da
  */
 export function activityGrid(days) {
   if (!days?.length) return { columns: 0, cells: [], months: [] };
-  const shift = (new Date(`${days[0].day}T00:00:00Z`).getUTCDay() + 6) % 7;
+  // The place comes from the date, not the index: the core leaves out weeks without `days`.
+  const ms = (day) => Date.parse(`${day}T00:00:00Z`);
+  const first = ms(days[0].day);
+  const shift = (new Date(first).getUTCDay() + 6) % 7;
   const max = Math.max(0, ...days.map((d) => d.commits));
-  const cells = days.map((d, i) => ({ day: d.day, commits: d.commits, column: Math.floor((i + shift) / 7), row: (i + shift) % 7, level: heat(d.commits, max) }));
+  const cells = days.map((d) => {
+    const offset = Math.round((ms(d.day) - first) / 86_400_000) + shift;
+    return { day: d.day, commits: d.commits, column: Math.floor(offset / 7), row: offset % 7, level: heat(d.commits, max) };
+  });
   const months = [];
   for (const c of cells) {
     if (c.day.endsWith('-01') && (months.length === 0 || c.column - months.at(-1).column >= 3)) months.push({ column: c.column, label: MONTHS[Number(c.day.slice(5, 7)) - 1] });
