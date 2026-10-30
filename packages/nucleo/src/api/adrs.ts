@@ -238,6 +238,10 @@ export class DecisionsService {
   private readonly syncOnRead: boolean;
   /** The snapshots loaded from the store, once (decision 0015). */
   private hydrated: Promise<void> | null = null;
+  /** The cache's epoch when this service was built: after an identity reset (`clear`), nothing it read is stored. */
+  private readonly epoch: number;
+  /** Why the last index build failed; `sync()` throws it so the sync status shows it. */
+  private indexFailure: string | null = null;
   /** Chamadas que passaram pelo cache até a fonte (medição e testes). */
   calls = { source: 0 };
 
@@ -251,6 +255,7 @@ export class DecisionsService {
     this.queue = queue;
     this.log = log;
     this.syncOnRead = syncOnRead;
+    this.epoch = this.cache.epoch;
   }
 
   /**
@@ -269,6 +274,7 @@ export class DecisionsService {
     await this.index.running;
     // The account's repository list was still loading: the build did not run, try again on the next tick.
     if (this.index.at === -Infinity) return 'pending';
+    if (this.indexFailure) throw new Error(this.indexFailure);
     return this.index.value?.state === 'no-github' ? 'skipped' : 'done';
   }
 
@@ -423,6 +429,7 @@ export class DecisionsService {
   }
 
   private store(key: string, value: unknown): void {
+    if (this.cache.epoch !== this.epoch) return;
     this.cache.put(key, value).catch((err: unknown) => this.log(`adrs: ${key} could not be stored: ${reason(err)}`));
   }
 
@@ -456,9 +463,11 @@ export class DecisionsService {
     e.running = this.buildIndex(e.force)
       .then((ok) => {
         done = ok;
+        this.indexFailure = null;
       })
       .catch((err: unknown) => {
         const msg = reason(err);
+        this.indexFailure = msg;
         this.log(`adrs: a montagem da lista falhou: ${msg}`);
         this.publishIndex(e.value && e.value.state === 'ready' ? { ...e.value, error: msg } : { state: 'error', error: msg, account: null, repos: [] });
       })
