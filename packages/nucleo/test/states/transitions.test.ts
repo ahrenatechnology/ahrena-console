@@ -366,6 +366,24 @@ const TABLE: Row[] = [
   },
   // Abandonment (applied by the watcher)
   {
+    name: 'Abandoned while waiting on a request remembers what it waited on (#333)',
+    before: state({ awaitingInputSince: at(1), awaitingReason: 'notification' }),
+    events: [ev('Abandoned', 200, { data: { synthetic: true } })],
+    expect: {
+      displayed: 'abandoned',
+      check: (e) => {
+        assert.equal(e.session.awaitingInputSince, null);
+        assert.deepEqual(readMemory(e.session).waitingWhenAbandoned, { since: at(1), reason: 'notification' });
+      },
+    },
+  },
+  {
+    name: 'Abandoned while working remembers nothing (#333)',
+    before: state({}, [mainAgent({ currentTool: 'Bash' })]),
+    events: [ev('Abandoned', 200, { data: { synthetic: true } })],
+    expect: { displayed: 'abandoned', check: (e) => assert.equal(readMemory(e.session).waitingWhenAbandoned, null) },
+  },
+  {
     name: 'Abandoned ends as abandoned',
     before: state({}, [mainAgent({ currentTool: 'Bash' })]),
     events: [ev('Abandoned', 200, { data: { synthetic: true } })],

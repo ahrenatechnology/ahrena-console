@@ -184,6 +184,16 @@ export class MontadorDoPainel {
     return this.desktop?.sessionByCli(sessionId) ?? null;
   }
 
+  /** #333: a Desktop session by its `local_…` id, for the wall's tree. */
+  desktopByLocal(localId: string): DesktopSession | null {
+    return this.desktop?.sessionByLocal(localId) ?? null;
+  }
+
+  /** #333: the Desktop sessions a session opened, the archived ones included (they come with `archived`). */
+  desktopChildren(localId: string): DesktopSession[] {
+    return this.desktop?.childrenOf(localId) ?? [];
+  }
+
   /** Confere as contas e o índice do Desktop (cada um respeita o próprio intervalo). */
   async atualizarFontes(): Promise<void> {
     await Promise.all([this.contas.refresh(), this.desktop?.refresh()]);
