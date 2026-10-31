@@ -53,6 +53,8 @@ export interface GithubBackgroundSyncOptions {
 export const SYNC_PROJECT_EVERY_MS = 2 * 60_000;
 export const SYNC_DECISIONS_EVERY_MS = 15 * 60_000;
 export const SYNC_TICK_MS = 15_000;
+/** How long `stop` waits for the running step before the core goes on with its shutdown. */
+export const SYNC_STOP_WAIT_MS = 3_000;
 
 interface StepState {
   step: SyncStep;
@@ -96,11 +98,18 @@ export class GithubBackgroundSync {
     void this.tick();
   }
 
-  /** Stops the timer and waits for the step that is running. */
-  async stop(): Promise<void> {
+  /**
+   * Stops the timer and waits for the step that is running, up to `waitMs`: a decisions build can take
+   * tens of seconds, and the core's shutdown must not wait for it. A write that lands after the database
+   * closed only fails into the log.
+   */
+  async stop({ waitMs = SYNC_STOP_WAIT_MS }: { waitMs?: number } = {}): Promise<void> {
     if (this.timer) clearInterval(this.timer);
     this.timer = null;
-    await this.ticking;
+    if (!this.ticking) return;
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    await Promise.race([this.ticking, new Promise<void>((resolve) => (timeout = setTimeout(resolve, waitMs)))]);
+    clearTimeout(timeout);
   }
 
   /** Runs the due steps, one at a time; a tick while another runs waits for it instead of overlapping. */

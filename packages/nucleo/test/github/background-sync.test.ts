@@ -6,6 +6,7 @@ import { openSqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
 import { githubSyncSteps } from '../../src/api/github-screens.ts';
 import { Accounts, MontadorDoPainel, startLocalApi } from '../../src/api/index.ts';
 import { GithubBackgroundSync, type SyncStep } from '../../src/github/background-sync.ts';
+import { OWNER_TOKEN, ownerFetch } from '../owner-http.ts';
 
 const T0 = Date.parse('2026-10-29T12:00:00Z');
 
@@ -124,14 +125,29 @@ describe('#356 the sync steps and the status route', () => {
     assert.equal(read, 2);
   });
 
-  test('GET /api/github/sync answers the status', async () => {
+  test('stop waits for the running step only up to its limit', async () => {
+    let release = () => {};
+    const hung: SyncStep = { name: 'decisions', everyMs: 900_000, run: () => new Promise((r) => (release = () => r('done'))) };
+    const sync = new GithubBackgroundSync({ steps: [hung], now: () => T0 });
+    sync.start();
+    const started = Date.now();
+    await sync.stop({ waitMs: 50 });
+    assert.ok(Date.now() - started < 2_000, 'the shutdown does not wait for the whole step');
+    assert.equal(sync.status().steps[0]!.running, true);
+    release();
+  });
+
+  test('GET /api/github/sync answers the status to the owner only', async () => {
     const storage = openSqliteStorage({ path: ':memory:' });
     const panelBuilder = new MontadorDoPainel({ storage, contas: new Accounts({ storage, file: null }), desktop: null, trabalho: null, agora: () => T0 });
     const sync = new GithubBackgroundSync({ steps: [step('project', 120_000, [], [])], now: () => T0 });
     await sync.tick();
-    const api = await startLocalApi({ panelBuilder, hooks: { storage }, port: 0, log: () => {}, githubSync: sync });
+    const api = await startLocalApi({ ownerToken: () => OWNER_TOKEN, panelBuilder, hooks: { storage }, port: 0, log: () => {}, githubSync: sync });
     try {
-      const r = await fetch(`${api.url}/api/github/sync`);
+      const anonymous = await fetch(`${api.url}/api/github/sync`);
+      assert.equal(anonymous.status, 403, 'a private read needs the owner proof (#391)');
+      await anonymous.body?.cancel();
+      const r = await ownerFetch(`${api.url}/api/github/sync`);
       assert.equal(r.status, 200);
       const body = (await r.json()) as { steps: { name: string; lastOutcome: string }[] };
       assert.deepEqual(body.steps.map((x) => [x.name, x.lastOutcome]), [['project', 'done']]);
