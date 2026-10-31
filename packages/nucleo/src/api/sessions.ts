@@ -188,7 +188,8 @@ export class ListaDeSessoes {
 
     const external = new Map((this.codex?.list() ?? []).map(t => [t.id, t]));
     for (const t of external.values()) {
-      if (todas.some(({ s }) => s.id === t.id)) continue;
+      const existing = todas.findIndex(({ s }) => s.id === t.id);
+      if (existing >= 0) todas.splice(existing, 1);
       const s: Session = { id: t.id, identity: t.identity, capabilities: t.capabilities, name: t.title,
         status: 'completed', cwd: t.cwd, model: null, source: 'codex-index', startedAt: t.createdAt,
         endedAt: null, awaitingInputSince: null, awaitingReason: null, updatedAt: t.updatedAt,

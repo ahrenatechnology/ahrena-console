@@ -298,6 +298,7 @@ export async function mount(area, ctx) {
   area.replaceChildren(head, machines.notices, filters, body);
 
   function drawFilters(directories, counts = null) {
+    providerSelect.value = state.provider ?? '';
     const dirs = state.dir && !directories.includes(state.dir) ? [...directories, state.dir] : directories;
     dirSlot.replaceChildren(selector('Diretório', [['', 'Todos os projetos'], ...dirs.map((d) => [d, lastPart(d)])], state.dir, (dir) => change({ dir, page: 1 })));
     orderSlot.replaceChildren(selector('Ordenar por', Object.entries(ORDERS).map(([v, r]) => [v, r[state.direction]]), state.order, (order) => change({ order: order, page: 1 })));

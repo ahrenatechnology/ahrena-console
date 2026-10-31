@@ -1,3 +1,4 @@
+import { OWNER_TOKEN, ownerFetch as fetch } from '../owner-http.ts';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { openSqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
@@ -23,7 +24,7 @@ test('wall labels both providers and routes opening only to the verified local s
   await storage.putSession(session({ id: CLAUDE_ID, status: 'active', updatedAt: recent }));
   const panel = new MontadorDoPainel({ storage, contas: new Accounts({ storage, file: null }), desktop: null, trabalho: null, agora: () => now });
   const opened: string[] = [];
-  const api = await startLocalApi({ panelBuilder: panel, hooks: { storage }, port: 0, log: () => {}, codex: source,
+  const api = await startLocalApi({ ownerToken: () => OWNER_TOKEN, panelBuilder: panel, hooks: { storage }, port: 0, log: () => {}, codex: source,
     localOf: () => 'local_aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
     openInDesktop: async url => { if (launcherFails) throw new Error('missing app'); opened.push(url); } });
   const url = api.url;
@@ -31,6 +32,12 @@ test('wall labels both providers and routes opening only to the verified local s
     method: 'POST', headers: { Origin: origin, 'Content-Type': 'application/json' }, body: JSON.stringify({ url: 'https://untrusted.example', provider: 'claude' }),
   });
   try {
+    assert.equal((await globalThis.fetch(`${url}/api/wall`)).status, 403);
+    assert.equal((await globalThis.fetch(`${url}/api/codex/sessions/${encodeURIComponent(scoped)}`)).status, 403);
+    assert.equal((await globalThis.fetch(`${url}/api/codex/sessions/${encodeURIComponent(scoped)}/open`, { method: 'POST', headers: { Origin: url, 'Content-Type': 'application/json' } })).status, 403);
+    assert.equal(opened.length, 0);
+    const detail = await (await fetch(`${url}/api/codex/sessions/${encodeURIComponent(scoped)}`)).json();
+    assert.deepEqual(detail.identity, identity);
     const wall = await (await fetch(`${url}/api/wall`)).json();
     const codex = wall.cards.find(c => c.id === scoped);
     const claude = wall.cards.find(c => c.id === CLAUDE_ID);
@@ -51,6 +58,9 @@ test('wall labels both providers and routes opening only to the verified local s
     assert.match(opened[1], /^claude:\/\/claude.ai\/epitaxy\/local_/);
     assert.equal((await open(scoped, 'https://untrusted.example')).status, 403);
     assert.equal(opened.length, 2);
+    thread.capabilities.nativeOpen = 'unavailable';
+    assert.equal((await open(scoped)).status, 422);
+    thread.capabilities.nativeOpen = 'available';
     launcherFails = true;
     assert.equal((await open(scoped)).status, 502);
     source.error = 'Índice Codex indisponível';
@@ -59,4 +69,19 @@ test('wall labels both providers and routes opening only to the verified local s
     available = false;
     assert.equal((await open(scoped)).status, 404, 'removed/archived threads cannot be launched');
   } finally { await api.close(); await storage.close(); }
+});
+
+test('metadata merge preserves Claude latest activity instead of state age', async () => {
+  const { muralDoPainel } = await import('../../src/api/wall.ts');
+  const now = Date.now();
+  const time = (ago: number) => new Date(now - ago).toISOString();
+  const storage = openSqliteStorage({ path: ':memory:' });
+  try {
+    await storage.putSession(session({ id: 'recent-activity', status: 'completed', updatedAt: time(1000), endedAt: time(1000), awaitingInputSince: time(90_000) }));
+    await storage.putSession(session({ id: 'older-activity', status: 'completed', updatedAt: time(60_000), endedAt: time(60_000), awaitingInputSince: null }));
+    const panel = new MontadorDoPainel({ storage, contas: new Accounts({ storage, file: null }), desktop: null, trabalho: null, agora: () => now });
+    const wall = await muralDoPainel(panel).montar();
+    assert.deepEqual(wall.cards.map(c => c.id), ['recent-activity', 'older-activity']);
+    assert.ok(wall.cards[0].since < wall.cards[1].since, 'state age deliberately differs from activity order');
+  } finally { await storage.close(); }
 });

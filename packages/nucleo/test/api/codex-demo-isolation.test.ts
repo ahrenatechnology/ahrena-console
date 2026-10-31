@@ -1,8 +1,9 @@
+import { OWNER_TOKEN, ownerFetch as fetch } from '../owner-http.ts';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { spawn } from 'node:child_process';
 import { DatabaseSync } from 'node:sqlite';
-import { mkdtempSync, mkdirSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -19,6 +20,9 @@ test('demo CLI never discovers a real-profile Codex index', { timeout: 30_000 },
   db.close();
   const env = { ...process.env, HOME: home, CODEX_HOME: codexHome };
   for (const key of Object.keys(env)) if (key.startsWith('AHRENA_CONSOLE_')) delete env[key];
+  const ownerFile = join(root, 'owner-proof');
+  writeFileSync(ownerFile, OWNER_TOKEN, { mode: 0o600 });
+  env.AHRENA_CONSOLE_OWNER_TOKEN_FILE = ownerFile;
   const child = spawn(process.execPath, ['--disable-warning=ExperimentalWarning', fileURLToPath(new URL('../../src/api/cli.ts', import.meta.url)), '--demo', '--port', '0', '--data-dir', join(root, 'data'), '--no-history', '--no-desktop', '--no-github', '--no-telemetry'], { env, stdio: ['ignore', 'pipe', 'pipe'] });
   const exited = new Promise(resolve => child.once('exit', resolve));
   try {

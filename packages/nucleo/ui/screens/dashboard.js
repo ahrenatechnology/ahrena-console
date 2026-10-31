@@ -123,6 +123,7 @@ export function inboxCards(attention, agents) {
     const a = bySession.get(itemKey({ id: i.session, machine }));
     return {
       session: i.session,
+      identity: i.identity ?? a?.identity,
       attention: attentionOfItem(i),
       age: i.minutes < 1 ? 'agora' : `${i.minutes} min`,
       name: i.project ?? i.title,

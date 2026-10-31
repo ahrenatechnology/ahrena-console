@@ -224,9 +224,11 @@ export class MontadorDoMural {
     // "Paradas": what is not on the wall and does not nest in a leader (that one counts in the leader's tree).
     const parked = stopped.filter((s) => !leaderOf(s)).sort((a, b) => b.session.updatedAt.localeCompare(a.session.updatedAt));
     const parkedCards = await Promise.all(parked.slice(0, PARKED_MAX).map(async (s) => cardDe(await s.reading(), this.open, [], null, null)));
+    const activityTimes = new Map(onWall.map(l => [l.leitura.sessao.id, l.updatedAt]));
     const external = (this.codex?.list() ?? []).filter(t => agora - Date.parse(t.updatedAt) <= this.recenteMs);
     for (const t of external) {
       if (cards.some(c => c.id === t.id)) continue;
+      activityTimes.set(t.id, t.updatedAt);
       cards.push({ id: t.id, identity: t.identity, capabilities: t.capabilities, title: safeTitle(t.title) ?? t.id,
         project: basename(t.cwd), branch: null, status: 'unknown', state: 'unknown', reason: null,
         urgent: false, attention: null, since: t.updatedAt, activity: { type: 'unknown', text: 'Atividade registrada; estado indisponível' },
@@ -235,7 +237,7 @@ export class MontadorDoMural {
     }
     // Keep Claude attention ordering; merge metadata-only rows with other activity.
     const priority = (c: WallCard) => c.attention?.level === 'blocked' ? 0 : c.attention?.level === 'idle' ? 1 : 2;
-    cards.sort((a, b) => priority(a) - priority(b) || (priority(a) < 2 ? 0 : b.since.localeCompare(a.since)));
+    cards.sort((a, b) => priority(a) - priority(b) || (priority(a) < 2 ? 0 : (activityTimes.get(b.id) ?? b.since).localeCompare(activityTimes.get(a.id) ?? a.since)));
     const mural: Wall = {
       sources: { codex: { error: this.codex?.error ?? null } },
       version: 1,
