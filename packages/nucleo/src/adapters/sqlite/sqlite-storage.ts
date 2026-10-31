@@ -433,6 +433,15 @@ export class SqliteStorage implements StoragePort {
     return Number(result.changes) === 1;
   }
 
+  async setEventText(id: string, text: string): Promise<boolean> {
+    const result = this.db
+      .prepare(
+        `UPDATE events SET data = json_set(CASE WHEN json_type(data) = 'object' THEN data ELSE '{}' END, '$.text', ?) WHERE id = ?`,
+      )
+      .run(text, id);
+    return Number(result.changes) === 1;
+  }
+
   async listEvents(sessionId: string, query: ListEventsQuery = {}): Promise<Page<SessionEvent>> {
     const limit = pageSize(query.limit);
     const params: string[] = [sessionId];

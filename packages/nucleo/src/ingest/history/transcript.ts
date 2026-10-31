@@ -10,6 +10,8 @@ import { findingsOf, verdictOf } from './verdict.ts';
 export const SUMMARY_MAX = 200;
 /** Tamanho máximo da tarefa de um subagente (o primeiro prompt). */
 export const TASK_MAX = 2000;
+/** Maximum size of a message's full text (`data.text`), kept with its newlines for the Detail's Conversa. */
+export const MESSAGE_TEXT_MAX = 32_000;
 
 /** Uso de tokens de uma mensagem do assistente, já com as dimensões de preço. */
 export interface MessageUsage {
@@ -51,6 +53,8 @@ export interface EventData {
   taskId?: string;
   /** Da marca `compact_boundary` (`compactMetadata`): gatilho e contexto antes e depois (item 1.7). */
   compact?: { trigger: string | null; preTokens: number | null; postTokens: number | null };
+  /** Full text of a `UserPrompt` or `AssistantMessage`, whitespace kept (see `messageText`). */
+  text?: string;
 }
 
 export interface ParsedLine {
@@ -71,6 +75,18 @@ type Json = Record<string, unknown>;
 const isObj = (v: unknown): v is Json => typeof v === 'object' && v !== null && !Array.isArray(v);
 const str = (v: unknown): string | null => (typeof v === 'string' && v.length > 0 ? v : null);
 const count = (v: unknown): number => (Number.isInteger(v) && (v as number) > 0 ? (v as number) : 0);
+
+/** The message's full text: trimmed, newlines kept, capped at `MESSAGE_TEXT_MAX`; `null` when empty. */
+export function messageText(text: string | null): string | null {
+  const clean = text?.trim();
+  if (!clean) return null;
+  return clean.length > MESSAGE_TEXT_MAX ? `${clean.slice(0, MESSAGE_TEXT_MAX - 1)}…` : clean;
+}
+
+const withText = (data: EventData, text: string | null): EventData => {
+  const full = messageText(text);
+  return full ? { ...data, text: full } : data;
+};
 
 export function truncate(text: string | null, max: number): string | null {
   if (text === null) return null;
@@ -225,7 +241,7 @@ export function parseLine(raw: string, toolNames: Map<string, string>): ParsedLi
     } else if (o.isMeta !== true) {
       const text = textOf(content);
       out.promptText = text;
-      out.events.push({ uuid, type: 'UserPrompt', toolName: null, summary: truncate(text, SUMMARY_MAX), createdAt: timestamp, data: base });
+      out.events.push({ uuid, type: 'UserPrompt', toolName: null, summary: truncate(text, SUMMARY_MAX), createdAt: timestamp, data: withText(base, text) });
     }
     return out;
   }
@@ -260,7 +276,7 @@ export function parseLine(raw: string, toolNames: Map<string, string>): ParsedLi
       const verdict = verdictOf(text);
       const findings = findingsOf(text);
       const review = verdict || findings !== null ? { ...(verdict ? { verdict } : {}), ...(findings !== null ? { findings } : {}) } : {};
-      out.events.push({ uuid, type: 'AssistantMessage', toolName: null, summary: truncate(text, SUMMARY_MAX), createdAt: timestamp, data: { ...data, ...review } });
+      out.events.push({ uuid, type: 'AssistantMessage', toolName: null, summary: truncate(text, SUMMARY_MAX), createdAt: timestamp, data: withText({ ...data, ...review }, text) });
     }
     return out;
   }
