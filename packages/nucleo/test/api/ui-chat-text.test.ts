@@ -118,6 +118,16 @@ describe('harness tags', () => {
     assert.match(texto(byClass(nodes, 'sd-note-head')[0]!), /Texto colado/);
   });
 
+  test('a tag named after an Object.prototype key is text, not a lookup', () => {
+    for (const name of ['constructor', 'toString', 'hasOwnProperty']) {
+      const { nodes, system } = messageBody(`see <${name}>new Foo()</${name}> here`);
+      assert.equal(system, false);
+      assert.ok(nodes.every((n: unknown) => n instanceof ElementoFalso), `${name}: every piece is a node`);
+      assert.match(text(nodes), new RegExp(`<${name}>new Foo\\(\\)</${name}>`));
+    }
+    assert.match(text(messageBody('<constructor>cut…').nodes), /<constructor>cut/);
+  });
+
   test('an unknown tag is the person\'s text, not a card', () => {
     const { nodes, system } = messageBody('<foo>bar</foo>');
     assert.equal(system, false);

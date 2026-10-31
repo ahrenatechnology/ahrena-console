@@ -524,6 +524,8 @@ function messageText(e: SessionEvent): string | null {
   const d = obj(e.data);
   const full = str(d?.text) ?? (e.type === 'UserPromptSubmit' ? str(d?.prompt) : null);
   if (full?.trim()) return full.trim();
+  // The hook's `prompt` summary is a label, not the text: with no prompt in data there is nothing to show.
+  if (e.type === 'UserPromptSubmit' && e.summary === 'prompt') return null;
   return e.summary ?? str(d?.prompt)?.trim() ?? null;
 }
 

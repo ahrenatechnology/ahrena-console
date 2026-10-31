@@ -151,27 +151,33 @@ function codeBlock(code, lang) {
 
 // ---------- Harness tags ----------
 
-const BLOCK_TAG = /<([a-z][\w-]*)(\s[^>]*)?>([\s\S]*?)<\/\1>/gi;
 const child = (body, name) => new RegExp(`<${name}>([\\s\\S]*?)(</${name}>|$)`, 'i').exec(body)?.[1]?.trim() || null;
+// The tag name comes from the message: only an own key of TAGS is a card, never one `Object.prototype`
+// lends (`<constructor>` would call `Object`).
+const isTag = (name) => Object.hasOwn(TAGS, name.toLowerCase());
+// Only the known names open a match: an unknown `<x>` with no `</x>` (a generic, `Array<string>`) does not
+// make the lazy body scan to the end of a 32k text on every redraw.
+let blockTag = null;
+const BLOCK_TAG = () => (blockTag ??= new RegExp(`<(${Object.keys(TAGS).join('|')})(\\s[^>]*)?>([\\s\\S]*?)<\\/\\1>`, 'gi'));
 
 /**
  * Splits a message into the harness's tagged pieces and the person's own text, in order:
  * `[{ tag, attrs, body } | { text }]`. Only the known top-level tags split; anything else is text.
  */
-export function pieces(text) {
+export function pieces(raw) {
+  const text = String(raw ?? '');
   const out = [];
   let last = 0;
-  for (const m of String(text ?? '').matchAll(BLOCK_TAG)) {
-    if (!TAGS[m[1].toLowerCase()]) continue;
+  for (const m of text.matchAll(BLOCK_TAG())) {
     const before = text.slice(last, m.index);
     if (before.trim()) out.push({ text: before.trim() });
     out.push({ tag: m[1].toLowerCase(), attrs: m[2] ?? '', body: m[3] });
     last = m.index + m[0].length;
   }
-  const rest = String(text ?? '').slice(last);
+  const rest = text.slice(last);
   // A text cut before its closing tag (older summaries end in "…") still reads as its card.
   const open = /^\s*<([a-z][\w-]*)(\s[^>]*)?>/i.exec(rest);
-  if (open && TAGS[open[1].toLowerCase()]) out.push({ tag: open[1].toLowerCase(), attrs: open[2] ?? '', body: rest.slice(open[0].length).replace(/…\s*$/, '') });
+  if (open && isTag(open[1])) out.push({ tag: open[1].toLowerCase(), attrs: open[2] ?? '', body: rest.slice(open[0].length).replace(/…\s*$/, '') });
   else if (rest.trim()) out.push({ text: rest.trim() });
   return out;
 }
