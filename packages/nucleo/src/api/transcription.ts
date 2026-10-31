@@ -74,14 +74,25 @@ export function isExpectedWav(b: Buffer): boolean {
 
 const BODY_CUTOFF_MS = 1000;
 
+// The 413 goes out once the rest of the body is drained (none of it kept): answering first and closing
+// resets the socket under a client still writing, which then sees ECONNRESET instead of the 413.
+// A body still arriving after `BODY_CUTOFF_MS` gets the answer and the socket is dropped.
 function tooLarge(req: IncomingMessage, res: ServerResponse): void {
-  const cutoff = setTimeout(() => req.destroy(), BODY_CUTOFF_MS);
+  res.setHeader('connection', 'close');
+  const reply = () => {
+    if (!res.headersSent) send(res, 413, { error: ERRORS.too_large, reason: 'too_large' });
+  };
+  const cutoff = setTimeout(() => {
+    reply();
+    req.destroy();
+  }, BODY_CUTOFF_MS);
   cutoff.unref();
-  req.once('end', () => clearTimeout(cutoff));
+  req.once('end', () => {
+    clearTimeout(cutoff);
+    reply();
+  });
   req.once('close', () => clearTimeout(cutoff));
   req.resume();
-  res.setHeader('connection', 'close');
-  send(res, 413, { error: ERRORS.too_large, reason: 'too_large' });
 }
 
 export function createTranscriptionRoute({ transcription, log = () => {} }: { transcription: Transcription; log?: (message: string) => void }): TranscriptionRoute {
