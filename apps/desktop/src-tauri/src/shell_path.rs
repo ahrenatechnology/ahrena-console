@@ -28,8 +28,19 @@ pub fn fix_path() {
 
 fn shell_path() -> Option<String> {
     let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".into());
-    let mut child = Command::new(shell)
-        .args(["-ilc", &format!("printf '%s' \"{MARKER}$PATH{MARKER}\"")])
+    let mut command = Command::new(shell);
+    command.args(["-ilc", &path_command()]);
+    run_for_path(command)
+}
+
+// `${PATH}` with braces: right before the marker, a bare `$PATH` reads as the variable
+// `PATH__AHRENA_PATH__`, which is empty, and the login PATH never came through (#280).
+fn path_command() -> String {
+    format!("printf '%s' \"{MARKER}${{PATH}}{MARKER}\"")
+}
+
+fn run_for_path(mut command: Command) -> Option<String> {
+    let mut child = command
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
@@ -43,6 +54,8 @@ fn shell_path() -> Option<String> {
             Ok(None) if Instant::now() < deadline => std::thread::sleep(Duration::from_millis(50)),
             _ => {
                 let _ = child.kill();
+                // Reap it, so the killed login shell does not stay a zombie until the app exits.
+                let _ = child.wait();
                 return None;
             }
         }
@@ -52,4 +65,16 @@ fn shell_path() -> Option<String> {
     let start = output.find(MARKER)? + MARKER.len();
     let end = start + output[start..].find(MARKER)?;
     Some(output[start..end].to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_real_shell_prints_the_path_between_the_markers() {
+        let mut command = Command::new("/bin/sh");
+        command.args(["-c", &path_command()]).env_clear().env("PATH", "/x/bin:/y/bin");
+        assert_eq!(run_for_path(command).as_deref(), Some("/x/bin:/y/bin"));
+    }
 }

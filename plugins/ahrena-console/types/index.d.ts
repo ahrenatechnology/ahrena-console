@@ -2,11 +2,25 @@
 // que o mod guarda. Os tipos da resposta repetem packages/nucleo/src/api/tipos.ts; mudar um é
 // mudar os dois (o teste do núcleo confere os nomes dos campos).
 
+export type IdentityScope = { provider: 'claude' | 'codex'; profileId: string | null; machineId: string | null; environmentId: string | null }
+export type SessionIdentity = IdentityScope & { providerSessionId: string }
+export type AccountIdentity = IdentityScope & { providerAccountId: string; organizationId: string | null }
+export type EvidenceConfidence = 'confirmed' | 'inferred' | 'unknown'
+export type CapabilityState = 'available' | 'unavailable' | 'unknown'
+export type SessionCapabilities = {
+  mode: 'external' | 'managed' | 'unknown'
+  history: CapabilityState
+  nativeOpen: CapabilityState
+  sendInput: CapabilityState
+  interrupt: CapabilityState
+  approve: CapabilityState
+}
+
 export type DisplayStatus = 'active' | 'completed' | 'error' | 'abandoned' | 'waiting'
 export type InboxState = DisplayStatus | 'delegating' | 'background'
 export type AwaitingReason = 'notification' | 'interrupted' | 'stop' | 'session_start'
 /** `color` em hex; `source` pela ordem da decisão 0006. */
-export type PanelAccount = { id: string; label: string; color: string; source: 'env' | 'config' | 'transcript' | 'desktop' | 'profile' }
+export type PanelAccount = { identity?: AccountIdentity | null; confidence?: EvidenceConfidence; id: string; label: string; color: string; source: 'env' | 'config' | 'transcript' | 'desktop' | 'profile' }
 
 export type SessionActivity = {
   type: 'tool' | 'delegating' | 'question' | 'permission' | 'error' | 'prompt' | 'your-turn' | 'interrupted' | 'completed' | 'abandoned' | 'idle'
@@ -22,6 +36,8 @@ export type SessionAttention = {
 }
 
 export type PanelSession = {
+  identity?: SessionIdentity
+  capabilities?: SessionCapabilities
   id: string
   title: string
   model: string | null
@@ -243,6 +259,30 @@ export type Panel = {
   prs?: { total: number; items: WaitingPr[] }
   /** `null`: o núcleo subiu sem as decisões (ou é de antes delas). */
   decisions?: PanelDecisions | null
+  /**
+   * #278 (P14): the remote machine the session runs on, with its connection as `GET /api/machines`
+   * serves it. Absent or `null` for a session of this machine, and from a core that does not send it
+   * yet: then the panel shows no band.
+   */
+  machine?: PanelMachine | null
+}
+
+/** Why the connection is down: the core's closed list (`CONNECTION_REASONS`). */
+export type ConnectionReason = 'sso-expired' | 'port-busy' | 'core-not-answering' | 'ssm-agent-offline' | 'host-unknown' | 'key-refused' | 'exit-code'
+
+/** The part of a remote machine's `connection` the panel reads (#278). */
+export type PanelMachineConnection = {
+  state: 'up' | 'down' | 'starting' | 'stopping' | 'failing' | 'stopped'
+  since: string | null
+  lastError: { reason: ConnectionReason | string; at?: string | null; exitCode?: number | null; holder?: string | null } | null
+}
+
+export type PanelMachine = {
+  id: string
+  label: string
+  /** The newest reading of the machine: what the panel shows is from then. */
+  lastReadAt: string | null
+  connection: PanelMachineConnection | null
 }
 
 /** A última leitura do núcleo e como ela foi. */

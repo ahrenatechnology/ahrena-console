@@ -8,6 +8,8 @@ import { join } from 'node:path';
 import { openSqliteStorage, type SqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
 import { Accounts, FeedDeEventos, LeiturasDoDetalhe, ListaDeSessoes, MontadorDoPainel, QuadroKanban, TrabalhoPorBranch, startLocalApi, type LocalApi } from '../../src/api/index.ts';
 import { RotaAnalytics } from '../../src/api/analytics-route.ts';
+import type { MessagingRoute } from '../../src/api/messaging.ts';
+import type { OrdersRoute } from '../../src/api/orders.ts';
 import { DecisoesDaUi } from '../../src/api/decisions-ui.ts';
 import { criarReposDoNucleo } from '../../src/api/repos.ts';
 import { SqliteDecisionStore } from '../../src/decisions/sqlite.ts';
@@ -44,7 +46,14 @@ export interface DemoApi {
   close(): Promise<void>;
 }
 
-export async function startDemoApi(): Promise<DemoApi> {
+/** `messaging`: the routes of #61 over the demo storage, built by the caller from `storage` (the screens' tests). */
+export interface DemoApiOptions {
+  messaging?: (storage: SqliteStorage) => MessagingRoute;
+  /** The per-session orders (#61, mod part), built the same way. */
+  orders?: (storage: SqliteStorage) => OrdersRoute;
+}
+
+export async function startDemoApi({ messaging, orders }: DemoApiOptions = {}): Promise<DemoApi> {
   const clock = () => NOW;
   const opened: string[] = [];
   const records = mkdtempSync(join(tmpdir(), 'ahrena-demo-api-'));
@@ -91,6 +100,8 @@ export async function startDemoApi(): Promise<DemoApi> {
     kanban: new QuadroKanban({ storage, contas: accounts, agora: clock }),
     decisionsUi,
     repos: repos.rota,
+    messaging: messaging?.(sqlite),
+    orders: orders?.(sqlite),
   });
   return {
     api,

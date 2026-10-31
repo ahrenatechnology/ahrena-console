@@ -211,7 +211,8 @@ describe('Kanban: the sessions board with blocked and idle (issue 245)', () => {
 
       columns[1]!.querySelector('.kb-more')!.click();
       await new Promise((r) => setTimeout(r, 0));
-      assert.deepEqual(routes, ['/api/kanban?view=sessions', '/api/kanban?view=sessions&column=blocked&page=2']);
+      // Issue 243: the board is always read with `machine` (`all` by default).
+      assert.deepEqual(routes, ['/api/kanban?view=sessions&machine=all', '/api/kanban?view=sessions&column=blocked&page=2&machine=all']);
       assert.ok(routes.every((r) => !r.includes('column=waiting')));
     } finally {
       abort.abort();

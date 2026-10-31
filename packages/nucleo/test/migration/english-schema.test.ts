@@ -38,7 +38,7 @@ import {
 const LATEST = MIGRATIONS.at(-1)!.version;
 const RENAMED_TABLES: Record<string, string> = { reprocessamentos: 'reprocessings' };
 /** Tables that later migrations add, empty (#241: the installation's settings). */
-const ADDED_TABLES: Record<string, number> = { installation_settings: 0 };
+const ADDED_TABLES: Record<string, number> = { installation_settings: 0, tool_checks: 0 };
 /** Every Portuguese name and value the old schema had; none may remain in the new one. */
 const PORTUGUESE = [
   'reprocessamentos', 'nome', 'feito_em', 'faltando',

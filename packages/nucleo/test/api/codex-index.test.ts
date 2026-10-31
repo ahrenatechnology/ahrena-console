@@ -29,27 +29,28 @@ test('real-shaped Codex index stays read-only, excludes archives, preserves grou
     const rows = index.list();
     assert.equal(rows.length, 1);
     assert.equal(rows[0].title, 'PM Codex');
-    assert.equal(rows[0].group, 'Ahrena');
+    assert.equal(rows[0].identity.provider, 'codex');
     assert.equal(index.find(rows[0].id)?.title, 'PM Codex');
     assert.equal(index.find('00000000-0000-4000-8000-000000000000'), null);
     const list = new ListaDeSessoes({ storage, contas: new Accounts({ storage, file: null }), codex: index });
     const result = await list.listar(pedidoDeSessoes(new URL('http://localhost/api/sessions?provider=codex&group=section%3AAhrena')));
     assert.equal(result.total, 1);
-    assert.equal((await list.listar(pedidoDeSessoes(new URL('http://localhost/api/sessions?group=folder%3AAhrena')))).total, 0, 'a Claude folder key never matches a Codex section');
-    assert.equal(result.items[0].provider, 'codex');
+    assert.equal(result.items[0].identity.provider, 'codex');
     assert.equal(result.items[0].status, 'unknown');
     assert.equal(result.items[0].costUsd, null);
-    assert.equal(result.items[0].open.target, 'codex-desktop');
+    assert.equal(result.items[0].open.target, 'none');
     assert.equal(result.counts.active, 0);
     assert.equal((await list.listar(pedidoDeSessoes(new URL('http://localhost/api/sessions?provider=claude')))).total, 0);
     assert.deepEqual(readFileSync(path), before);
   } finally { await storage.close(); rmSync(dir, { recursive: true }); }
 });
-test('missing index is empty; incompatible index reports a source error', () => {
+test('missing and incompatible indexes report a source error', () => {
   const dir = mkdtempSync(join(tmpdir(), 'codex-index-'));
   try {
     const path = join(dir, 'missing.sqlite');
-    assert.deepEqual(new CodexIndex(path).list(), []);
+    const missing = new CodexIndex(path);
+    assert.deepEqual(missing.list(), []);
+    assert.ok(missing.error);
     new DatabaseSync(path).close();
     const index = new CodexIndex(path);
     assert.deepEqual(index.list(), []);

@@ -1,3 +1,5 @@
+import { CodexIndex, codexOpen, type CodexThread } from './codex-index.ts';
+import { PROVIDERS, legacySessionIdentity, unknownCapabilities, type Provider, type SessionIdentity, type SessionCapabilities } from '../identity.ts';
 // The session list of the Sessions screen (C3, #28): `GET /api/sessions`, paginated and with the filters
 // on the server.
 //
@@ -22,7 +24,6 @@
 // `safeTitle`, as in the MCP.
 
 import type { ServerResponse } from 'node:http';
-import type { CodexIndex, CodexThread } from './codex-index.ts';
 import { basename } from 'node:path';
 import { send } from '../ingest/hooks/receiver.ts';
 import { sessionCostSlices, costReport } from '../cost/aggregation.ts';
@@ -50,8 +51,8 @@ export const ORDENS = ['activity', 'duration', 'cost'] as const;
 export type Ordem = (typeof ORDENS)[number];
 
 export interface PedidoDeSessoes {
-  provider?: 'all' | 'claude' | 'codex';
-  group?: string | null;
+  provider?: Provider;
+  profileId?: string;
   status: FiltroDeStatus;
   busca: string | null;
   dir: string | null;
@@ -62,11 +63,10 @@ export interface PedidoDeSessoes {
 }
 
 export interface LinhaDeSessao {
+  identity: SessionIdentity;
+  capabilities: SessionCapabilities;
   id: string;
   title: string;
-  provider?: 'claude' | 'codex';
-  group?: string;
-  groupKey?: string;
   status: DisplayStatus | 'unknown';
   /** Por que espera, quando espera (`notification`, `interrupted`, `stop`, `session_start`). */
   reason: AwaitingReason | null;
@@ -76,8 +76,8 @@ export interface LinhaDeSessao {
   start: string;
   /** Ativa ou esperando: a duração ainda corre. */
   running: boolean;
-  durationMs: number;
-  agents: number;
+  durationMs: number | null;
+  agents: number | null;
   /** Estimativa; `null` quando há uso e nada dele tem preço. */
   costUsd: number | null;
   cwd: string | null;
@@ -87,8 +87,7 @@ export interface LinhaDeSessao {
 }
 
 export interface ListaDeSessoesHttp {
-  sourceError?: string | null;
-  groups?: { key: string; label: string }[];
+  sources: { codex: { error: string | null } };
   total: number;
   /** Todas as sessões registradas, sem filtro: o "12 sessões registradas" do cabeçalho. */
   registered: number;
@@ -116,6 +115,10 @@ export function pedidoDeSessoes(url: URL): PedidoDeSessoes {
     if (!validos.includes(v as T)) throw new ErroDoPedido(`${nome}: um de ${validos.join(', ')}`);
     return v as T;
   };
+  const provider = p.get('provider');
+  if (provider !== null && !PROVIDERS.includes(provider as Provider)) throw new ErroDoPedido('provider inválido');
+  const profileId = p.get('profileId');
+  if (profileId !== null && (!profileId || profileId.length > 4096 || /[\u0000-\u001f]/.test(profileId))) throw new ErroDoPedido('profileId inválido');
   const busca = (p.get('search') ?? '').trim();
   if (busca.length > BUSCA_MAXIMA) throw new ErroDoPedido('search grande demais');
   const dir = p.get('dir') || null;
@@ -125,8 +128,8 @@ export function pedidoDeSessoes(url: URL): PedidoDeSessoes {
   const perPage = Number(p.get('perPage') || POR_PAGINA);
   if (!Number.isInteger(perPage) || perPage < 1 || perPage > PER_PAGE_MAX) throw new ErroDoPedido(`perPage: um inteiro de 1 a ${PER_PAGE_MAX}`);
   return {
-    ...(p.has('provider') ? { provider: um('provider', ['all', 'claude', 'codex'] as const, 'all') } : {}),
-    ...(p.has('group') ? { group: p.get('group') || null } : {}),
+    ...(provider ? { provider: provider as Provider } : {}),
+    ...(profileId ? { profileId } : {}),
     status: um('status', FILTROS_DE_STATUS, 'all'),
     busca: busca || null,
     dir,
@@ -172,7 +175,7 @@ export class ListaDeSessoes {
   async listar(pedido: PedidoDeSessoes): Promise<ListaDeSessoesHttp> {
     await Promise.all([this.contas.refresh(), this.desktop?.refresh(), this.open.refresh()]);
     const agora = this.agora();
-    const todas: { s: Session; desktop: DesktopSession | null; titulo: string; status: DisplayStatus | 'unknown'; attention: SessionAttention | null; codex?: CodexThread }[] = [];
+    const todas: { s: Session; desktop: DesktopSession | null; titulo: string; status: DisplayStatus | 'unknown'; attention: SessionAttention | null }[] = [];
     let cursor: string | null = null;
     do {
       const page = await this.storage.listSessions({ limit: 500, cursor });
@@ -183,25 +186,24 @@ export class ListaDeSessoes {
       cursor = page.nextCursor;
     } while (cursor);
 
-    for (const thread of this.codex?.list() ?? []) {
-      todas.push({ s: { id: thread.id, name: thread.title, cwd: thread.cwd, status: 'completed',
-        source: 'codex', model: null, startedAt: thread.createdAt, updatedAt: thread.updatedAt,
-        endedAt: null, awaitingInputSince: null, awaitingReason: null, accountId: null, accountSource: null, metadata: {} },
-        desktop: null, titulo: safeTitle(thread.title) ?? thread.id, status: 'unknown', attention: null, codex: thread });
+    const external = new Map((this.codex?.list() ?? []).map(t => [t.id, t]));
+    for (const t of external.values()) {
+      if (todas.some(({ s }) => s.id === t.id)) continue;
+      const s: Session = { id: t.id, identity: t.identity, capabilities: t.capabilities, name: t.title,
+        status: 'completed', cwd: t.cwd, model: null, source: 'codex-index', startedAt: t.createdAt,
+        endedAt: null, awaitingInputSince: null, awaitingReason: null, updatedAt: t.updatedAt,
+        accountId: null, accountSource: null, accountConfidence: 'unknown', metadata: {} };
+      todas.push({ s, desktop: null, titulo: safeTitle(t.title) ?? t.id, status: 'unknown', attention: null });
     }
-    // The key is what the group filter sends; the label is the screen text. A Codex section named "Pasta: x" must not merge with a Claude folder.
-    const groupOf = (t: typeof todas[number]): { key: string; label: string } =>
-      t.codex ? (t.codex.group ? { key: `section:${t.codex.group}`, label: t.codex.group } : { key: 'none', label: 'Sem grupo' })
-        : t.s.cwd ? { key: `folder:${basename(t.s.cwd)}`, label: `Pasta: ${basename(t.s.cwd)}` } : { key: 'none', label: 'Sem grupo' };
-    const groups = [...new Map(todas.filter(t => !pedido.provider || pedido.provider === 'all' || pedido.provider === (t.codex ? 'codex' : 'claude')).map(t => [groupOf(t).key, groupOf(t)])).values()]
-      .sort((a, b) => a.label.localeCompare(b.label));
+    todas.sort((a, b) => b.s.updatedAt.localeCompare(a.s.updatedAt) || a.s.id.localeCompare(b.s.id));
     const diretorios = [...new Set(todas.map((t) => t.s.cwd).filter((c): c is string => !!c))].sort();
     const busca = pedido.busca?.toLowerCase() ?? null;
     const searched = todas.filter(
-      (t) => { const { s, titulo } = t; return (!pedido.provider || pedido.provider === 'all' || pedido.provider === (t.codex ? 'codex' : 'claude')) &&
-        (!pedido.group || pedido.group === groupOf(t).key) &&
+      ({ s, titulo }) =>
+        (!pedido.provider || (s.identity?.provider ?? 'claude') === pedido.provider) &&
+        (!pedido.profileId || s.identity?.profileId === pedido.profileId) &&
         (!pedido.dir || s.cwd === pedido.dir) &&
-        (!busca || titulo.toLowerCase().includes(busca) || s.id.toLowerCase().includes(busca) || (s.cwd ?? '').toLowerCase().includes(busca) || groupOf(t).label.toLowerCase().includes(busca)); },
+        (!busca || titulo.toLowerCase().includes(busca) || s.id.toLowerCase().includes(busca) || (s.cwd ?? '').toLowerCase().includes(busca)),
     );
     const counts = Object.fromEntries(FILTROS_DE_STATUS.map((f) => [f, searched.filter((t) => passesFilter(t, f)).length])) as Record<FiltroDeStatus, number>;
     let filtradas = searched.filter((t) => passesFilter(t, pedido.status));
@@ -209,43 +211,43 @@ export class ListaDeSessoes {
     // A porta já devolve por atividade, mais recentes primeiro; as outras ordens desempatam por ela.
     const sinal = pedido.sentido === 'desc' ? 1 : -1;
     if (pedido.ordem === 'duration') {
-      const dur = new Map(filtradas.map(entry => [entry, entry.codex ? -1 : duracaoDe(entry.s, agora)]));
-      filtradas = [...filtradas].sort((a, b) => sinal * (dur.get(b)! - dur.get(a)!));
+      const dur = new Map(filtradas.map(({ s }) => [s.id, external.has(s.id) ? -1 : duracaoDe(s, agora)]));
+      filtradas = [...filtradas].sort((a, b) => sinal * (dur.get(b.s.id)! - dur.get(a.s.id)!));
     } else if (pedido.ordem === 'cost') {
-      const custo = new Map<(typeof filtradas)[number], number>();
-      for (const entry of filtradas) custo.set(entry, entry.codex ? -1 : (await this.custoDe(entry.s)) ?? -1);
-      filtradas = [...filtradas].sort((a, b) => sinal * (custo.get(b)! - custo.get(a)!));
-    } else filtradas = [...filtradas].sort((a, b) => sinal * (Date.parse(b.s.updatedAt) - Date.parse(a.s.updatedAt)) || a.s.id.localeCompare(b.s.id));
+      const custo = new Map<string, number>();
+      for (const { s } of filtradas) custo.set(s.id, external.has(s.id) ? -1 : (await this.custoDe(s)) ?? -1);
+      filtradas = [...filtradas].sort((a, b) => sinal * (custo.get(b.s.id)! - custo.get(a.s.id)!));
+    } else if (pedido.sentido === 'asc') filtradas = [...filtradas].reverse();
 
     const total = filtradas.length;
     const { perPage } = pedido;
     const paginas = Math.max(1, Math.ceil(total / perPage));
     const pagina = Math.min(pedido.pagina, paginas);
     const itens: LinhaDeSessao[] = [];
-    for (const entry of filtradas.slice((pagina - 1) * perPage, pagina * perPage)) {
-      const { s, desktop, titulo, status, attention, codex } = entry;
-      const conta = codex ? null : this.contas.ofSession(s, desktop);
+    for (const { s, desktop, titulo, status, attention } of filtradas.slice((pagina - 1) * perPage, pagina * perPage)) {
+      const thread = external.get(s.id);
+      if (thread) { itens.push(codexRow(thread)); continue; }
+      const conta = this.contas.ofSession(s, desktop);
       itens.push({
         id: s.id,
+        identity: s.identity ?? legacySessionIdentity(s.id),
+        capabilities: s.capabilities ?? unknownCapabilities(),
         title: titulo,
-        provider: codex ? 'codex' : 'claude',
-        group: groupOf(entry).label,
-        groupKey: groupOf(entry).key,
         status,
         reason: status === 'waiting' ? s.awaitingReason : null,
         attention,
         lastActivity: s.updatedAt,
         start: s.startedAt,
         running: status === 'active' || status === 'waiting',
-        durationMs: codex ? 0 : duracaoDe(s, agora),
-        agents: codex ? 0 : (await this.storage.listAgents(s.id)).length,
-        costUsd: codex ? null : await this.custoDe(s),
+        durationMs: duracaoDe(s, agora),
+        agents: (await this.storage.listAgents(s.id)).length,
+        costUsd: await this.custoDe(s),
         cwd: s.cwd,
         account: conta ? { label: conta.label, color: conta.color } : null,
-        open: codex ? { target: 'codex-desktop', command: null } : this.open.describe({ sessionId: s.id, cwd: s.cwd ?? desktop?.cwd ?? null, local: desktop?.localId ?? null }),
+        open: this.open.describe({ sessionId: s.id, identity: s.identity, cwd: s.cwd ?? desktop?.cwd ?? null, local: desktop?.localId ?? null }),
       });
     }
-    return { groups, sourceError: this.codex?.error ?? null, total, registered: todas.length, page: pagina, perPage, pages: paginas, directories: diretorios, counts, items: itens };
+    return { sources: { codex: { error: this.codex?.error ?? null } }, total, registered: todas.length, page: pagina, perPage, pages: paginas, directories: diretorios, counts, items: itens };
   }
 
   /** #245: only a waiting or errored session has attention; only a waiting one reads its agents and events. */
@@ -298,4 +300,11 @@ export async function responderSessoes(res: ServerResponse, url: URL, lista: Lis
     throw e;
   }
   send(res, 200, await lista.listar(pedido));
+}
+
+/** Metadata only: an index timestamp is never a process or turn-state signal. */
+export function codexRow(t: CodexThread): LinhaDeSessao {
+  return { id: t.id, identity: t.identity, capabilities: t.capabilities, title: safeTitle(t.title) ?? t.id,
+    status: 'unknown', reason: null, attention: null, lastActivity: t.updatedAt, start: t.createdAt,
+    running: false, durationMs: null, agents: null, costUsd: null, cwd: t.cwd, account: null, open: codexOpen(t) };
 }

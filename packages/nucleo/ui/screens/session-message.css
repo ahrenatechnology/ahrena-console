@@ -1,0 +1,75 @@
+/* Sending a message to a live session (#61, C51 to C53): the compose box of the Detail and the
+   "Mandar mensagem" action of the Dashboard and Sessões. Loaded by the three screens; every class is sm-.
+   Every color comes from brand.css. */
+
+/* ---------- the compose box ---------- */
+.sm-compose { padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; border-color: color-mix(in srgb, var(--accent) 40%, var(--border)); }
+.sm-compose.sm-off { border-color: var(--border); border-style: dashed; }
+.sm-dest { display: flex; align-items: center; gap: 8px; font-size: 12.5px; min-width: 0; flex-wrap: wrap; }
+.sm-dest:empty { display: none; }
+.sm-to { color: var(--muted); }
+.sm-title { font-weight: var(--weight-semibold); min-width: 0; max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sm-chip { display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 8px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface); font-size: 11.5px; color: var(--muted); white-space: nowrap; }
+.sm-account { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--muted); white-space: nowrap; }
+.sm-account.mono { font-size: 11.5px; }
+.sm-account-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--sm-account-color, var(--rose)); display: inline-block; }
+.sm-rc { display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 8px; border-radius: 99px; font-size: 11.5px; background: var(--status-completed-badge); color: var(--status-completed-text); white-space: nowrap; }
+.sm-live { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--muted); white-space: nowrap; }
+.sm-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--status-completed-dot); display: inline-block; }
+
+.sm-field { position: relative; }
+.sm-input { display: block; width: 100%; min-height: 74px; max-height: 260px; resize: vertical; box-sizing: border-box; padding: 10px 12px 22px; border-radius: 9px; background: var(--bg); border: 1px solid var(--border); font: inherit; font-size: 13px; line-height: 1.55; color: var(--text); }
+.sm-input::placeholder { color: var(--muted); }
+.sm-input:focus { outline: 0; border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent); }
+.sm-input:disabled { cursor: not-allowed; }
+.sm-input.sm-faded { color: var(--muted); }
+.sm-count { position: absolute; right: 10px; bottom: 6px; font-size: 10.5px; color: var(--muted); pointer-events: none; }
+.sm-count.sm-over { color: var(--status-error-text); font-weight: var(--weight-semibold); }
+
+.sm-status-slot { display: flex; flex-direction: column; gap: 8px; }
+.sm-status-slot:empty { display: none; }
+.sm-status { display: flex; align-items: flex-start; gap: 8px; padding: 8px 10px; border-radius: 8px; font-size: 12px; line-height: 1.5; background: var(--raised); }
+.sm-status p { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.sm-status > .icon { margin-top: 3px; flex: none; }
+.sm-status b { font-weight: var(--weight-semibold); }
+.sm-status.sm-ok { background: color-mix(in srgb, var(--status-completed-badge) 70%, var(--surface)); }
+.sm-status.sm-ok b, .sm-status.sm-ok > .icon { color: var(--status-completed-text); }
+.sm-status.sm-wait { background: color-mix(in srgb, var(--status-waiting-badge) 70%, var(--surface)); }
+.sm-status.sm-wait b, .sm-status.sm-wait > .icon { color: var(--status-waiting-text); }
+.sm-status.sm-fail { background: color-mix(in srgb, var(--status-error-badge) 70%, var(--surface)); }
+.sm-status.sm-fail b, .sm-status.sm-fail > .icon { color: var(--status-error-text); }
+.sm-status.sm-busy b, .sm-status.sm-busy > .icon { color: var(--accent-text); }
+.sm-status.sm-busy > .icon { animation: girar 1s linear infinite; }
+.sm-code { font-family: var(--font-mono); font-size: .92em; color: var(--accent-text); background: var(--surface); padding: 1px 5px; border-radius: 4px; }
+
+.sm-foot { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.sm-note { margin: 0; display: flex; gap: 6px; align-items: flex-start; font-size: 11.5px; color: var(--muted); line-height: 1.45; flex: 1 1 260px; min-width: 0; }
+.sm-note[hidden] { display: none; }
+.sm-note > .icon { margin-top: 2px; flex: none; }
+.sm-note b { color: var(--text); font-weight: var(--weight-medium); }
+.sm-actions { display: flex; align-items: center; gap: 8px; margin-left: auto; flex: 0 1 auto; flex-wrap: wrap; justify-content: flex-end; min-width: 0; }
+.sm-cmd { display: inline-flex; align-items: center; gap: 5px; height: 30px; padding: 0 10px; border-radius: 8px; border: 1px solid var(--border); background: transparent; font-size: 12px; color: var(--text); cursor: pointer; }
+.sm-cmd:disabled { border-style: dashed; color: var(--muted); opacity: .7; cursor: not-allowed; }
+.sm-why { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; color: var(--muted); white-space: nowrap; }
+.sm-send:disabled { opacity: .45; cursor: not-allowed; }
+.sm-send[aria-busy="true"]:disabled { opacity: .6; }
+.sm-kbd { font-size: 10.5px; padding: 1px 5px; border-radius: 4px; background: color-mix(in srgb, var(--on-accent) 14%, transparent); font-weight: var(--weight-medium); }
+/* C53: the Detail's open action (issue 285, open-action.css) beside a disabled Send; its state wraps, never the row. */
+.sm-open { min-width: 0; flex-wrap: wrap; }
+.sm-compose .btn:focus-visible, .sm-cmd:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.sm-compose .btn.outline:disabled { opacity: .55; cursor: not-allowed; }
+@media (prefers-reduced-motion: reduce) { .sm-status.sm-busy > .icon { animation: none; } }
+
+/* ---------- the list action (Dashboard and Sessões, C53) ---------- */
+.sm-row-action { height: 26px; padding: 0 8px; gap: 4px; font-size: 11.5px; max-width: 100%; }
+.sm-row-label { overflow: hidden; text-overflow: ellipsis; }
+.sm-row-action:focus-visible, .sm-link-action:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.sm-link-action { display: inline-flex; align-items: center; gap: 4px; padding: 0; border: 0; background: transparent; font: inherit; font-size: 11px; font-weight: var(--weight-semibold); color: var(--accent-text); cursor: pointer; white-space: nowrap; min-width: 0; overflow: hidden; text-overflow: ellipsis; position: relative; z-index: 1; }
+.sm-link-action:hover { text-decoration: underline; }
+.sm-none { font-size: 11.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Sessões up to 1240 px of window: only the icon, with the label as the button's name (below 900 px the
+   column leaves, sessions.css). */
+@media (max-width: 1240px) {
+  .sm-row-action { padding: 0 6px; }
+  .sm-row-action .sm-row-label { display: none; }
+}

@@ -1,3 +1,4 @@
+import { isLegacyIdentity, type SessionIdentity } from '../identity.ts';
 // Where a session opens (#285, wireframes C70 and C71): the `open` descriptor the Detail head, the wall
 // cards, the Sessions rows and the Dashboard inbox items carry, and the resume command the screen's
 // "Copiar comando" copies.
@@ -54,6 +55,7 @@ export function resumeCommand(cwd: string | null | undefined, sessionId: string)
 
 /** What decides the target: the session, the Desktop's id, the machine and whether a process runs here. */
 export interface OpenFacts {
+  identity?: SessionIdentity;
   sessionId: string;
   cwd: string | null;
   /** The Claude Desktop's `local_…`, when its index knows the session. */
@@ -65,6 +67,8 @@ export interface OpenFacts {
 }
 
 export function describeOpen(f: OpenFacts): SessionOpen {
+  if (f.identity && !isLegacyIdentity(f.identity)) return { target: 'none', command: null };
+  if (f.sessionId.startsWith('session:')) return { target: 'none', command: null };
   if (f.machine) return { target: 'remote', command: null };
   if (f.local && DESKTOP_LOCAL_ID.test(f.local)) return { target: 'desktop', command: null };
   const command = resumeCommand(f.cwd, f.sessionId);
@@ -89,6 +93,7 @@ export interface LiveProcessReader {
 
 /** A session as a surface knows it, for `describe`. */
 export interface OpenSubject {
+  identity?: SessionIdentity;
   sessionId: string;
   cwd: string | null;
   local: string | null;
@@ -115,6 +120,6 @@ export class SessionOpenDescriber {
   describe(s: OpenSubject): SessionOpen {
     const machine = s.machine ?? null;
     const proc = machine ? null : this.liveProcess(s.sessionId);
-    return describeOpen({ sessionId: s.sessionId, cwd: s.cwd ?? proc?.cwd ?? null, local: s.local, machine, live: proc !== null });
+    return describeOpen({ identity: s.identity, sessionId: s.sessionId, cwd: s.cwd ?? proc?.cwd ?? null, local: s.local, machine, live: proc !== null });
   }
 }

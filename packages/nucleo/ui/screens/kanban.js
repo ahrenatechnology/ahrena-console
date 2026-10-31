@@ -11,6 +11,7 @@
 import { header, el, icon } from '../dom.js';
 import { loading, error, errorBand, empty } from '../states.js';
 import { attentionBadges, attentionOf, attentionTone, statusWithoutAttention } from '../attention.js';
+import { createMachineFilter, itemHref, itemKey, isRemote, machineTag, queryWithMachine, whereText } from '../machine-filter.js';
 
 // ---------- Funções puras (testadas em test/api/ui-kanban.test.ts) ----------
 
@@ -123,12 +124,16 @@ const SUB = {
   agents: 'Os agentes por status, só leitura',
 };
 
-const EMPTY = {
-  sessions: { title: 'Nenhuma sessão ainda', text: 'Quando uma sessão do Claude Code começar nesta máquina, ela aparece aqui.' },
-  agents: { title: 'Nenhum agente ainda', text: 'Quando uma sessão do Claude Code começar nesta máquina, os agentes dela aparecem aqui.' },
-};
+/** The empty board; `where` is where its sessions would start (issue 243: "em uma das máquinas" with Todas). */
+const emptyFor = (view, where = 'nesta máquina') =>
+  view === 'agents'
+    ? { title: 'Nenhum agente ainda', text: `Quando uma sessão do Claude Code começar ${where}, os agentes dela aparecem aqui.` }
+    : { title: 'Nenhuma sessão ainda', text: `Quando uma sessão do Claude Code começar ${where}, ela aparece aqui.` };
 
-const sessionHref = (id) => `/ui/sessions/${encodeURIComponent(id)}`;
+/** Where each view's items come from, with a remote known (issue 243): "As sessões das duas máquinas…". */
+function subWith(view, of) {
+  return `${view === 'agents' ? 'Os agentes' : 'As sessões'} ${of} por status, só leitura`;
+}
 
 function badges(item) {
   if (attentionOf(item.attention)) return el('div', { class: 'kb-badges' }, ...attentionBadges(item.attention));
@@ -146,10 +151,12 @@ function info(iconName, text, className = null) {
 
 function sessionCard(s) {
   const cost = formatCost(s.costUsd);
+  // C46: the card is narrow, so a remote one swaps the folder icon for the server's, the machine in the tooltip.
+  const lead = isRemote(s) ? el('span', { class: 'kb-av' }, machineTag(s, { iconOnly: true })) : avatar('folder');
   return el(
     'a',
-    { class: `card kb-kc kb-st-${cardTone(s)}`, href: sessionHref(s.id), title: s.title || null },
-    el('div', { class: 'kb-l1' }, avatar('folder'), el('div', { class: 'kb-name' }, el('div', { class: 'kb-tt' }, s.title || '(sem título)'), el('small', {}, shortId(s.id)))),
+    { class: `card kb-kc kb-st-${cardTone(s)}`, href: itemHref(s), title: s.title || null, 'data-key': itemKey(s) },
+    el('div', { class: 'kb-l1' }, lead, el('div', { class: 'kb-name' }, el('div', { class: 'kb-tt' }, s.title || '(sem título)'), el('small', {}, shortId(s.id)))),
     badges(s),
     s.lastPrompt ? el('blockquote', {}, s.lastPrompt) : null,
     s.cwd ? el('div', { class: 'kb-cwd' }, s.cwd) : null,
@@ -167,7 +174,8 @@ function sessionCard(s) {
 function agentCard(a) {
   return el(
     'a',
-    { class: `card kb-kc kb-agent kb-st-${cardTone(a)}`, href: sessionHref(a.sessionId), title: a.description || a.name || null },
+    // C46: no tag on an agent card (the tag is the session's), but it opens the right machine's Detail.
+    { class: `card kb-kc kb-agent kb-st-${cardTone(a)}`, href: itemHref(a, a.sessionId), 'data-key': itemKey(a), title: a.description || a.name || null },
     el('div', { class: 'kb-l1' }, avatar(a.main ? 'bot' : 'subagent'), el('div', { class: 'kb-name' }, el('div', { class: 'kb-tt' }, a.name || '(sem nome)'), a.description ? el('small', {}, a.description) : null)),
     badges(a),
     el('div', { class: 'kb-foot' }, a.model ? info('model', a.model) : null, info('duration', formatDuration(a.durationMs), a.running ? 'kb-dur kb-running' : 'kb-dur')),
@@ -190,13 +198,16 @@ export async function mount(area, ctx) {
   const refresh = el('button', { type: 'button', class: 'btn', onClick: () => draw() }, icon('refresh'), 'Atualizar');
   const head = header({ icon: 'kanban', title: 'Kanban', sub: SUB[view], actions: [toggle, refresh] });
   const sub = head.querySelector('.sub');
+  // Issue 243 (C46): the machine filter on its own row under the header; both views follow it.
+  const machines = createMachineFilter(ctx, { onChange: () => ((boardInFlight = false), draw()), reread: () => draw(), onLayout: () => draw() });
+  const subText = () => (machines.hasRemotes() ? subWith(view, whereText(machines.choice, machines.machines(), { form: 'of' })) : SUB[view]);
 
   function switchTo(v) {
     if (v === view) return;
     view = v;
     for (const [k, b] of Object.entries(buttons)) b.setAttribute('aria-pressed', String(k === view));
-    sub.textContent = SUB[view];
-    history.replaceState(history.state, '', `${location.pathname}${viewQuery(view)}`);
+    sub.textContent = subText();
+    history.replaceState(history.state, '', `${location.pathname}${queryWithMachine(viewQuery(view), machines.choice)}`);
     boardInFlight = false;
     draw();
   }
@@ -204,32 +215,36 @@ export async function mount(area, ctx) {
   async function draw() {
     const mine = ++reading;
     const v = view;
-    if (!boardInFlight) area.replaceChildren(head, loading({ label: 'Carregando o quadro', blocks: 2 }));
+    if (!boardInFlight) area.replaceChildren(head, ...machines.parts(), loading({ label: 'Carregando o quadro', blocks: 2 }));
     refresh.disabled = true;
     try {
-      const data = await ctx.read(kanbanRoute(v));
+      const data = await ctx.read(machines.route(kanbanRoute(v)));
       if (mine !== reading) return;
+      machines.update(data);
+      sub.textContent = subText();
       const columns = Array.isArray(data?.columns) ? data.columns : [];
       if (!columns.some((c) => c.total > 0)) {
         boardInFlight = false;
-        area.replaceChildren(head, empty(EMPTY[v]));
+        // C48: the chosen remote is down; the notice says why the board is empty.
+        area.replaceChildren(head, ...machines.parts(), ...(machines.chosenDown() ? [] : [empty(emptyFor(v, machines.hasRemotes() ? whereText(machines.choice, machines.machines(), { form: 'any' }) : undefined))]));
       } else {
         // A releitura ao vivo não joga a rolagem horizontal para o começo.
         const scroll = boardInFlight ? (area.querySelector('.kb-kanban')?.scrollLeft ?? 0) : 0;
         boardInFlight = true;
-        area.replaceChildren(head, board(v, columns));
+        area.replaceChildren(head, ...machines.parts(), board(v, columns));
         const fresh = area.querySelector('.kb-kanban');
         if (fresh) fresh.scrollLeft = scroll;
       }
     } catch (e) {
       if (e?.name === 'AbortError' || mine !== reading) return;
+      if (machines.recover(e)) return;
       const text = e?.message ?? String(e);
       if (boardInFlight) {
         // O quadro de antes fica; a faixa diz que esta leitura falhou.
         area.querySelector('.error-band')?.remove();
-        head.after(errorBand({ title: 'O quadro não atualizou.', text, action: { label: 'Tentar de novo', onClick: () => draw() } }));
+        (machines.parts().at(-1) ?? head).after(errorBand({ title: 'O quadro não atualizou.', text, action: { label: 'Tentar de novo', onClick: () => draw() } }));
       } else {
-        area.replaceChildren(head, error({ text, retry: () => draw() }));
+        area.replaceChildren(head, ...machines.parts(), error({ text, retry: () => draw() }));
       }
     } finally {
       if (mine === reading) refresh.disabled = false;
@@ -248,7 +263,8 @@ export async function mount(area, ctx) {
     let page = c.page ?? 1;
     // A ordem é pela última atividade: entre uma página e a próxima um card pode ter subido ou descido,
     // então o que já está na coluna não entra de novo.
-    const seen = new Set((c.items ?? []).map((i) => i.id));
+    // Issue 243: the ids of two machines can repeat, so the key is machine + id.
+    const seen = new Set((c.items ?? []).map((i) => itemKey(i)));
     let shown = seen.size;
     let hasMore = Boolean(c.hasMore);
     const more = el('button', { type: 'button', class: 'kb-more' });
@@ -264,12 +280,12 @@ export async function mount(area, ctx) {
       more.disabled = true;
       setLabel('carregando…');
       try {
-        const r = await ctx.read(kanbanRoute(v, c.id, page + 1));
+        const r = await ctx.read(machines.route(kanbanRoute(v, c.id, page + 1)));
         if (ofThis !== reading) return; // o quadro foi relido nesse meio-tempo
         const col = r?.columns?.find((x) => x.id === c.id);
         if (!col) throw new Error('a coluna não veio');
-        const newOnes = (col.items ?? []).filter((i) => !seen.has(i.id));
-        for (const i of newOnes) seen.add(i.id);
+        const newOnes = (col.items ?? []).filter((i) => !seen.has(itemKey(i)));
+        for (const i of newOnes) seen.add(itemKey(i));
         list.append(...newOnes.map(card));
         shown += newOnes.length;
         page = col.page ?? page + 1;

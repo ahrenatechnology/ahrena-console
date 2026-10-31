@@ -1,7 +1,9 @@
 // The fake GitHub's side of the console's own connection (#241, decision 0011 §9): the OAuth device
 // flow (`/login/device/code`, `/login/oauth/access_token`), `GET /user` with `X-OAuth-Scopes`,
-// `GET /user/orgs` and `GET /orgs/<org>/repos` (403 with GitHub's "OAuth App access restrictions"
-// message for a blocked org). Device codes and tokens here are obviously fake strings. It never goes to
+// `GET /user/orgs`, `GET /users/<login>/orgs`, `GET /user/memberships/orgs/<org>` and
+// `GET /orgs/<org>/repos`. A blocked org behaves as GitHub's does (#336): it is missing from
+// `/user/orgs`, its repos still answer 200 (public data) and its membership answers 403 with the
+// "OAuth App access restrictions" message. Device codes and tokens here are obviously fake strings. It never goes to
 // the network. With `requireToken`, every other request whose bearer is not `token` gets 401.
 
 /** How the fake GitHub answers the connection. Mutable: a test may change the login or token mid-way. */
@@ -23,8 +25,10 @@ export interface FakeGithubAuth {
   interval?: number;
   /** This poll (1-based) answers `slow_down`, with the interval raised by 5 s. */
   slowDownOnPoll?: number;
-  /** Organizations restricted to approved OAuth Apps: their repos answer 403. */
+  /** Organizations restricted to approved OAuth Apps: absent from `/user/orgs`, membership 403. */
   blockedOrgs?: string[];
+  /** The public memberships (`/users/<login>/orgs`). Default: every organization. */
+  publicOrgs?: string[];
   /** Data requests whose bearer is not `token` answer 401. */
   requireToken?: boolean;
 }
@@ -117,14 +121,24 @@ export function createFakeGithubAuthRoutes(
       }
       if (method !== 'GET') return null;
       const orgRepos = /^\/orgs\/([^/]+)\/repos$/.exec(path);
-      if (path !== '/user' && path !== '/user/orgs' && !orgRepos) return null;
+      const membership = /^\/user\/memberships\/orgs\/([^/]+)$/.exec(path);
+      const userOrgs = /^\/users\/([^/]+)\/orgs$/.exec(path);
+      if (path !== '/user' && path !== '/user/orgs' && !orgRepos && !membership && !userOrgs) return null;
       calls.push(`GET ${path}${url.search}`);
       if (bearerOf(init) !== auth.token) return json(401, { message: 'Bad credentials' });
       const scopes = { 'x-oauth-scopes': auth.scopes.join(', ') };
+      const blocked = (org: string) => (auth.blockedOrgs ?? []).some((b) => b.toLowerCase() === org.toLowerCase());
+      const orgList = (logins: string[]) => logins.map((login, i) => ({ login, id: 100 + i }));
       if (path === '/user') return json(200, { login: auth.login, id: 1, type: 'User' }, scopes);
-      if (path === '/user/orgs') return json(200, organizations().map((login, i) => ({ login, id: 100 + i })), scopes);
+      if (path === '/user/orgs') return json(200, orgList(organizations().filter((o) => !blocked(o))), scopes);
+      if (userOrgs) return json(200, orgList(auth.publicOrgs ?? organizations()), scopes);
+      if (membership) {
+        const org = decodeURIComponent(membership[1]);
+        if (blocked(org)) return json(403, { message: OAUTH_APP_RESTRICTED_MESSAGE }, scopes);
+        if (!organizations().some((o) => o.toLowerCase() === org.toLowerCase())) return json(404, { message: 'Not Found' }, scopes);
+        return json(200, { state: 'active', role: 'admin', organization: { login: org } }, scopes);
+      }
       const org = decodeURIComponent(orgRepos![1]);
-      if (auth.blockedOrgs?.includes(org)) return json(403, { message: OAUTH_APP_RESTRICTED_MESSAGE }, scopes);
       const names = repoNames(org);
       if (!names) return json(404, { message: 'Not Found' }, scopes);
       const perPage = Number(url.searchParams.get('per_page') ?? 30);

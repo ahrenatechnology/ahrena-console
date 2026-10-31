@@ -59,6 +59,7 @@ export const CONNECT_TEXT = {
  * already with the code. `navigate` is the shell's (`ctx.navigate`).
  */
 export function connectEmpty({ what, navigate }) {
+  if (known?.lastError === 'revoked') return revokedEmpty({ what, navigate });
   const go = () => navigate(CONNECT_UI, CONNECT_STATE);
   return el(
     'section',
@@ -71,10 +72,29 @@ export function connectEmpty({ what, navigate }) {
   );
 }
 
+/**
+ * C92 (issue 372): the stored credential that GitHub refused. The button opens Conexões without starting a
+ * flow, so the person reads why before reconnecting.
+ */
+function revokedEmpty({ what, navigate }) {
+  return el(
+    'section',
+    { class: 'card state center ghc-empty', 'data-github': 'revoked' },
+    el('div', { class: 'seal' }, icon('github')),
+    el('h2', {}, 'O GitHub recusou a credencial guardada'),
+    el('p', { class: 'ghc-what' }, what ?? ''),
+    el('button', { type: 'button', class: 'btn filled', 'data-action': 'connections', onClick: () => navigate(CONNECTIONS_UI) }, icon('github'), 'Ir para Conexões'),
+    el('p', { class: 'ghc-note' }, 'Reconecte em Conexões para voltar a ler o GitHub. Lá está o que aconteceu.'),
+  );
+}
+
 /** The C42 empty state for a screen id of `CONNECT_TEXT`. */
 export const connectEmptyFor = (screen, navigate) => connectEmpty({ what: CONNECT_TEXT[screen] ?? '', navigate });
 
 // ---------- the sidebar footer (ghFooter, C39 to C42) ----------
+
+/** The last connection status the footer read: the C42 empty state tells a revoked credential apart (issue 372). */
+let known = null;
 
 /** What the footer says for a connection status: `{ name, label, tone }`. */
 export function footerState(github) {
@@ -94,6 +114,7 @@ export function createGithubFooter({ node, read }) {
   let last = null;
   node.setAttribute('href', CONNECTIONS_UI);
   function draw(github) {
+    known = github && typeof github === 'object' ? github : null;
     const s = footerState(github);
     if (!s) {
       node.setAttribute('hidden', '');
@@ -127,8 +148,8 @@ export function createGithubFooter({ node, read }) {
 /** Why the connection is unavailable (`reason`): `{ title, text }`. */
 export const UNAVAILABLE = {
   'no-client-id': {
-    title: 'Este console não tem o aplicativo do GitHub',
-    text: 'Acontece num console montado do código antes do aplicativo da Ahrena existir. Quem montou define AHRENA_CONSOLE_GITHUB_CLIENT_ID com o Client ID de um OAuth App com device flow.',
+    title: 'Build de desenvolvimento sem o aplicativo do GitHub',
+    text: 'Este console foi iniciado a partir do código-fonte e não traz o aplicativo da Ahrena no GitHub. O app instalado traz, e conecta sem configurar nada.',
   },
   'no-vault': {
     title: 'Não há onde guardar a credencial com segurança',
@@ -154,7 +175,18 @@ export const LAST_ERROR = {
   denied: { title: 'Você recusou no GitHub', text: 'A autorização foi recusada na página do GitHub, e nada foi guardado. Gere outro código se quiser conectar.' },
   'github-error': { title: 'O GitHub não completou a conexão', text: 'O GitHub respondeu com erro enquanto esperávamos a autorização. Nada foi guardado; gere outro código.' },
   'vault-error': { title: 'Não deu para guardar a credencial', text: 'O cofre do sistema recusou a gravação, então a conexão não ficou. Confira se o cofre está desbloqueado e gere outro código.' },
+  revoked: {
+    title: 'O GitHub não aceita mais a credencial guardada',
+    text: 'Ao abrir, o console leu a credencial guardada no cofre e o GitHub respondeu que ela não vale mais (401). Uma credencial recusada não volta: é preciso reconectar, e a nova substitui a antiga no cofre.',
+  },
 };
+
+/** issue 372: why GitHub drops an app's credential (`revoked`); the core sends where it says which one it was (`securityLogUrl`). */
+export const REVOKED_CAUSES = [
+  'o acesso do Ahrena Console foi revogado em Configurações › Aplicativos do GitHub;',
+  'o mesmo aplicativo gerou mais de dez credenciais para a sua conta, nesta ou em outra máquina (o GitHub apaga a mais antiga);',
+  'ela apareceu num repositório ou gist público.',
+];
 
 /** A refused connection write in pt-BR (never the raw code). */
 export function writeErrorText(e) {

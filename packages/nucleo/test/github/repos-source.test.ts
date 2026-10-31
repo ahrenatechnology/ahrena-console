@@ -157,3 +157,22 @@ describe('#105: o detalhe pelo GraphQL', () => {
     assert.equal(releasesDoPeriodo(d.repo, desde), 1);
   });
 });
+
+describe('#341: the counts and CI of the list, by node id', () => {
+  test('one ReposCounts with the ids; a repository gone since the list (null, NOT_FOUND) is left out', async () => {
+    const counts = { issues: { totalCount: 3 }, pullRequests: { totalCount: 1 }, defaultBranchRef: { name: 'main', target: { statusCheckRollup: { state: 'SUCCESS' } } } };
+    const { f, pedidos } = fetchDe(() =>
+      Response.json({ data: { nodes: [{ id: 'R_1', ...counts }, null] }, errors: [{ type: 'NOT_FOUND', message: 'Could not resolve to a node', path: ['nodes', 1] }] }),
+    );
+    assert.deepEqual(await fonte(f).counts(['R_1', 'R_2']), [{ id: 'R_1', ...counts }]);
+    assert.equal(pedidos.length, 1);
+    assert.match(pedidos[0].body!.query, /query ReposCounts\(\$ids: \[ID!\]!\)[\s\S]*nodes\(ids: \$ids\)/);
+    assert.deepEqual(pedidos[0].body!.variables, { ids: ['R_1', 'R_2'] });
+  });
+
+  test('no ids, no call', async () => {
+    const { f, pedidos } = fetchDe(() => Response.json({}));
+    assert.deepEqual(await fonte(f).counts([]), []);
+    assert.equal(pedidos.length, 0);
+  });
+});

@@ -48,20 +48,20 @@ describe('#241 --demo-github states', () => {
   test('the state names are English and parse; anything else is refused', () => {
     assert.deepEqual(
       [...DEMO_GITHUB_STATES],
-      ['connected', 'disconnected', 'pending', 'denied', 'expired', 'missing-scopes', 'blocked-orgs', 'no-client-id', 'no-vault', 'gh', 'gh-not-authenticated'],
+      ['connected', 'disconnected', 'pending', 'denied', 'expired', 'revoked', 'missing-scopes', 'blocked-orgs', 'no-client-id', 'no-vault', 'gh', 'gh-not-authenticated'],
     );
     assert.equal(parseDemoGithubState(undefined), 'connected');
     assert.equal(parseDemoGithubState('pending'), 'pending');
     assert.throws(() => parseDemoGithubState('conectado'), /--demo-github/);
   });
 
-  test('connected (the default): dev-sintetico with every scope, the revoke link, no blocked org', async () => {
+  test('connected (the default): dev-sintetico with every scope, the revoke link, every org granted', async () => {
     const d = await boot('connected');
     const s = await d.connection.status();
     assert.equal(s.state, 'connected');
     assert.equal(s.login, 'dev-sintetico');
     assert.deepEqual(s.missingScopes, []);
-    assert.deepEqual(s.blockedOrgs, []);
+    assert.deepEqual(s.orgs, [{ login: 'exemplo-labs', access: 'granted' }, { login: 'estudio-ficticio', access: 'granted' }]);
     assert.equal(s.orgsChecked, true);
     assert.equal(s.vault, 'memory');
     assert.equal(s.clientId, 'demo-client-id');
@@ -115,6 +115,18 @@ describe('#241 --demo-github states', () => {
     d.connection.close();
   });
 
+  test('revoked: the stored credential GitHub refuses → disconnected with lastError revoked and the login; Reconnect → connected', async () => {
+    const d = await boot('revoked');
+    const s = await d.connection.status();
+    assert.deepEqual([s.state, s.lastError, s.login], ['disconnected', 'revoked', 'dev-sintetico']);
+    await d.connection.start();
+    for (let i = 0; i < 4; i++) await d.time.tick(1000);
+    await d.connection.idle();
+    const again = await d.connection.status();
+    assert.deepEqual([again.state, again.login], ['connected', 'dev-sintetico']);
+    d.connection.close();
+  });
+
   test('missing-scopes: connected with repo only → read:org and project are missing', async () => {
     const d = await boot('missing-scopes');
     const s = await d.connection.status();
@@ -127,7 +139,15 @@ describe('#241 --demo-github states', () => {
     const d = await boot('blocked-orgs');
     const s = await d.connection.status();
     assert.equal(s.state, 'connected');
-    assert.deepEqual(s.blockedOrgs, [{ login: 'estudio-ficticio', approvalUrl: 'https://github.com/settings/connections/applications/demo-client-id' }]);
+    assert.deepEqual(s.orgs, [
+      {
+        login: 'estudio-ficticio',
+        access: 'pending',
+        approvalUrl: 'https://github.com/organizations/estudio-ficticio/settings/oauth_application_policy',
+        requestUrl: 'https://github.com/settings/connections/applications/demo-client-id',
+      },
+      { login: 'exemplo-labs', access: 'granted' },
+    ]);
     d.connection.close();
   });
 

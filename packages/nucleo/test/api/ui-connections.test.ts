@@ -8,7 +8,9 @@ import { UI_FOLDER } from '../../src/api/ui.ts';
 import { ElementoFalso, instalarDomFalso, texto } from './fake-dom.ts';
 
 instalarDomFalso();
-const here = { pathname: '/ui/connections', search: '' };
+// The GitHub detail: at /ui/connections/github once Conexões is the catalog of connectors (#277); at
+// /ui/connections with a core without the cloud routes (ui-clouds.test.ts covers that fallback).
+const here = { pathname: '/ui/connections/github', search: '' };
 const replaced: string[] = [];
 Object.assign(globalThis, {
   location: here,
@@ -33,7 +35,7 @@ const connected = (extra: Status = {}): Status => ({
   scopes: ['repo', 'read:org', 'project'],
   missingScopes: [],
   scopesChecked: true,
-  blockedOrgs: [],
+  orgs: [{ login: 'exemplo-labs', access: 'granted' }],
   orgsChecked: true,
   revokeUrl: 'https://github.com/settings/connections/applications/cid',
   ...extra,
@@ -171,6 +173,28 @@ describe('Conexões: every state (C39 to C41, C44)', () => {
     });
   }
 
+  test('C92 revoked (#372): what happened, the three causes, Reconectar como <login> and the security log', async () => {
+    assert.deepEqual(providerPill(disconnected({ lastError: 'revoked' })), { label: 'precisa reconectar', tone: 'error' });
+    const m = await mountWith({ read: answer(disconnected({ lastError: 'revoked', login: 'dev-sintetico', securityLogUrl: 'https://github.com/settings/security-log' })) });
+    assert.equal(card(m).getAttribute('data-last-error'), 'revoked');
+    assert.equal(texto(card(m).querySelector('.conn-message-title')), 'O GitHub não aceita mais a credencial de dev-sintetico');
+    assert.match(texto(card(m)), /respondeu que ela não vale mais \(401\)/);
+    assert.equal(card(m).querySelectorAll('li.conn-cause').length, 3);
+    assert.match(texto(card(m)), /mais de dez credenciais/);
+    assert.equal(texto(button(m, 'connect')), 'Reconectar como dev-sintetico');
+    const log = card(m).querySelectorAll('a').find((a) => a.getAttribute('href') === 'https://github.com/settings/security-log')!;
+    assert.equal(log.getAttribute('target'), '_blank');
+    assert.match(texto(card(m).querySelector('.conn-pill-error')), /precisa reconectar/);
+    assert.doesNotMatch(texto(m.area), /\brevoked\b/, 'never the raw code');
+  });
+
+  test('C92 revoked without a login: the generic title and Reconectar', async () => {
+    const m = await mountWith({ read: answer(disconnected({ lastError: 'revoked' })) });
+    assert.equal(texto(card(m).querySelector('.conn-message-title')), 'O GitHub não aceita mais a credencial guardada');
+    assert.equal(texto(button(m, 'connect')), 'Reconectar');
+    assert.equal(card(m).querySelectorAll('a').filter((a) => /security-log/.test(a.getAttribute('href') ?? '')).length, 0, 'no securityLogUrl, no link');
+  });
+
   test('C40 pending: the code with Copiar, the github.com link in a new tab, the countdown and Cancelar', async () => {
     const m = await mountWith({ read: answer(pending()) });
     assert.equal(card(m).getAttribute('data-state'), 'pending');
@@ -204,26 +228,52 @@ describe('Conexões: every state (C39 to C41, C44)', () => {
     assert.equal(texto(button(m, 'disconnect')), 'Desconectar');
     assert.match(texto(m.area.querySelector('[data-card="vault"]')), /Conta dev-sintetico/);
     assert.equal((texto(m.area.querySelector('[data-card="used-by"]')).match(/funcionando/g) ?? []).length, 4);
-    assert.match(texto(m.area), /Nenhuma organização bloqueia o aplicativo\./);
+    const orgs = m.area.querySelectorAll('[data-card="orgs"] li.conn-org');
+    assert.deepEqual(orgs.map((o) => `${o.getAttribute('data-org')}:${o.getAttribute('data-access')}`), ['exemplo-labs:granted']);
+    assert.match(texto(orgs[0]!), /exemplo-labs liberada/);
   });
 
-  test('C41 blocked organizations: the login as text and "pedir aprovação" only for an https github.com address', async () => {
+  test('#336 organizations: the ones the token sees, the pending ones with their links, and where to approve the hidden ones', async () => {
     const m = await mountWith({
       read: answer(
         connected({
-          blockedOrgs: [
-            { login: 'estudio-ficticio', approvalUrl: 'https://github.com/orgs/estudio-ficticio/policies/applications' },
-            { login: '<img src=x onerror=alert(1)>', approvalUrl: 'javascript:alert(1)' },
+          orgs: [
+            {
+              login: 'estudio-ficticio',
+              access: 'pending',
+              approvalUrl: 'https://github.com/organizations/estudio-ficticio/settings/oauth_application_policy',
+              requestUrl: 'https://github.com/settings/connections/applications/cid',
+            },
+            { login: '<img src=x onerror=alert(1)>', access: 'pending', approvalUrl: 'javascript:alert(1)', requestUrl: 'https://evil.example/x' },
+            { login: 'exemplo-labs', access: 'granted' },
           ],
         }),
       ),
     });
-    const orgs = m.area.querySelectorAll('[data-card="orgs"] li.conn-org');
-    assert.equal(orgs.length, 2);
-    assert.match(texto(orgs[0]!), /estudio-ficticio bloqueia o aplicativo · pedir aprovação/);
-    assert.equal(orgs[0]!.querySelector('a')!.getAttribute('href'), 'https://github.com/orgs/estudio-ficticio/policies/applications');
-    assert.equal(orgs[1]!.querySelector('a'), null);
+    const section = m.area.querySelector('[data-card="orgs"]')!;
+    const orgs = section.querySelectorAll('li.conn-org');
+    assert.equal(orgs.length, 3);
+    assert.match(texto(orgs[0]!), /estudio-ficticio acesso pendente · aprovar \(dono\) · pedir/);
+    assert.deepEqual(orgs[0]!.querySelectorAll('a').map((a) => a.getAttribute('href')), [
+      'https://github.com/organizations/estudio-ficticio/settings/oauth_application_policy',
+      'https://github.com/settings/connections/applications/cid',
+    ]);
+    assert.equal(orgs[1]!.querySelector('a'), null, 'a link off https github.com is dropped');
     assert.equal(texto(orgs[1]!.querySelector('.conn-trunc')), '<img src=x onerror=alert(1)>', 'GitHub data is text, never HTML');
+    assert.match(texto(orgs[2]!), /exemplo-labs liberada/);
+    assert.match(texto(section), /O GitHub esconde as organizações que ainda não aprovaram o Ahrena Console\./);
+    assert.match(texto(section), /Third-party access › OAuth app policy/);
+    assert.ok(section.querySelectorAll('a').some((a) => a.getAttribute('href') === 'https://github.com/settings/connections/applications/cid'));
+  });
+
+  test('#336 Conferir de novo posts the orgs route', async () => {
+    const m = await mountWith({ read: answer(connected()), write: async () => ({ github: connected({ orgsChecked: false }) }) });
+    const recheck = m.area.querySelector('[data-card="orgs"] [data-action="recheck-orgs"]')!;
+    assert.equal(texto(recheck), 'Conferir de novo');
+    recheck.click();
+    await tick();
+    assert.deepEqual(m.writes.map((w) => w.route), ['/api/connections/github/orgs']);
+    assert.match(texto(m.area.querySelector('[data-card="orgs"]')), /Conferindo as organizações…/);
   });
 
   test('C44 missing scopes: the missing one marked, what stops working and Reconectar', async () => {
@@ -238,9 +288,10 @@ describe('Conexões: every state (C39 to C41, C44)', () => {
   test('C44 no-client-id: Conectar disabled, the explanation and Como configurar', async () => {
     const m = await mountWith({ read: answer(unavailable('no-client-id', { clientId: null })) });
     assert.equal(card(m).getAttribute('data-reason'), 'no-client-id');
-    assert.equal(texto(card(m).querySelector('.conn-message-title')), 'Este console não tem o aplicativo do GitHub');
+    assert.equal(texto(card(m).querySelector('.conn-message-title')), 'Build de desenvolvimento sem o aplicativo do GitHub');
     assert.ok(button(m, 'connect')!.hasAttribute('disabled'));
-    const how = card(m).querySelectorAll('a').find((a) => texto(a) === 'Como configurar')!;
+    assert.doesNotMatch(texto(card(m)), /AHRENA_CONSOLE_GITHUB_CLIENT_ID|montado do código/, 'no environment variable on the screen: that is for developers');
+    const how = card(m).querySelectorAll('a').find((a) => /^Como configurar/.test(texto(a)))!;
     assert.match(how.getAttribute('href')!, /^https:\/\/docs\.github\.com\/en\//);
   });
 
@@ -364,7 +415,7 @@ describe('Conexões: the writes (contract)', () => {
 
   // Every refusal of the four writes, phrased: never the machine code.
   for (const [status, body, phrase] of [
-    [409, { error: 'github-unavailable', reason: 'no-client-id' }, 'Este console não tem o aplicativo do GitHub.'],
+    [409, { error: 'github-unavailable', reason: 'no-client-id' }, 'Build de desenvolvimento sem o aplicativo do GitHub.'],
     [409, { error: 'github-unavailable', reason: 'no-vault' }, 'Não há onde guardar a credencial com segurança.'],
     [409, { error: 'source-is-gh' }, 'A fonte é o login do gh: conectar e desconectar ficam com o gh. Volte ao padrão para usar a conexão do console.'],
     [502, { error: 'github-error' }, 'O GitHub recusou o pedido do código. Tente de novo em instantes.'],

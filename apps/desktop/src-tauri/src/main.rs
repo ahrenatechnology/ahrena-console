@@ -13,11 +13,19 @@
 //     block (A6, A7, machines.rs) and notifies, silently, a new machine alert (#180);
 // 5b. under a remote without connection, offers "Reconectar", which asks the core to run the
 //     machine's reconnect command (`POST /api/machines/<id>/reconnect`, #244, decision 0012, A8);
-// 6. with the updater key in tauri.conf.json, looks for a new version on opening and every 6 h
-//    (updater.rs) and offers it in the menu;
+// 5c. reads the AWS SSO sessions (`/api/connectors`, #277, decision 0013) for the "Nuvens" block (A9,
+//     clouds.rs), offers "Entrar na AWS" (`POST /api/connectors/aws/sessions/<name>/login`) and
+//     notifies, silently, a session expiring or expired (A10);
+// 5d. says the state of a remote's connection (#278, A9): "túnel no ar", "sem conexão desde" with the
+//     reason, "Entrar na AWS e subir o túnel" or Reconectar (`POST /api/machines/<id>/connection/<verb>`),
+//     "Parar o túnel…" on the machine's screen, and notifies the drop with its reason (A10);
+// 6. with the updater key in tauri.conf.json, looks for a new version on opening and every 10 min
+//    (a version below 1.0) or 6 h (updater.rs, #330), on "Buscar agora" too; offers it in the menu,
+//    in a notification and, through the core, in a card on top of the /ui;
 // 7. opened by hand, also opens the console; opened at login, stays in the tray only (login.rs).
 // The app writes no hooks nor Claude configuration, bundles no Node and has no screens of its own.
 
+mod clouds;
 mod core;
 mod http;
 mod login;
@@ -60,6 +68,10 @@ struct State {
     machines: Option<Vec<Machine>>,
     /// Consecutive reads of `/api/machines` that did not answer; see `count_machine_misses`.
     machine_misses: u32,
+    /// The AWS connector of `/api/connectors` with its sessions (#277); `None` without one.
+    clouds: Option<clouds::Aws>,
+    /// Consecutive reads of `/api/connectors` that did not answer, counted like `machine_misses`.
+    cloud_misses: u32,
     /// The notifications' detector and silence; the "Notificações" check is `notices.silence.enabled`.
     notices: Notices,
     /// The `SMAppService` status is `enabled` (login.rs), reread on every menu.
@@ -67,8 +79,6 @@ struct State {
     /// `session id` → Claude Desktop's `local_…`, from the last menu.
     locals: HashMap<String, Option<String>>,
     last: Option<(Vec<Item>, Option<String>)>,
-    /// The new version the updater found.
-    update: Option<String>,
     /// "Abrir o console" was clicked while the core was not up: open it once the core is.
     open_when_up: bool,
 }
@@ -87,11 +97,12 @@ fn main() {
         no_attention: false,
         machines: None,
         machine_misses: 0,
+        clouds: None,
+        cloud_misses: 0,
         notices: Notices::default(),
         login: false,
         locals: HashMap::new(),
         last: None,
-        update: None,
         open_when_up: false,
     }));
     let (wake, signals) = channel::<()>();
@@ -116,7 +127,7 @@ fn main() {
             #[cfg(target_os = "macos")]
             {
                 let main_thread = objc2::MainThreadMarker::new().expect("Tauri's setup runs on the main thread");
-                native_notice::start(app.handle(), native_notice::Handlers { open: open_window_at, open_in_desktop, silence, reconnect }, main_thread);
+                native_notice::start(app.handle(), native_notice::Handlers { open: open_window_at, open_in_desktop, silence, reconnect, cloud_login, login_and_start, update_now, update_later }, main_thread);
             }
             TrayIconBuilder::with_id(TRAY)
                 .icon(Image::from_bytes(ICON)?)
@@ -133,8 +144,7 @@ fn main() {
                 });
             }
             redraw(app.handle(), &state);
-            let for_the_menu = state.clone();
-            if let Err(e) = updater::watch(app.handle(), move |app, version| change(app, &for_the_menu, |s| s.update = Some(version))) {
+            if let Err(e) = updater::watch(app.handle()) {
                 eprintln!("[ahrena-console] updater: {e}");
             }
 
@@ -178,8 +188,10 @@ fn follow(app: AppHandle, state: Shared, dir: PathBuf, data_dir: Option<PathBuf>
             s.attention = None;
             s.no_attention = false;
             s.machines = None;
+            s.clouds = None;
             s.notices.detector.reset();
             s.notices.machines.reset();
+            s.notices.clouds.reset();
         });
         let outcome = core::start_own_core(&dir, data_dir.as_deref());
         let open = std::mem::take(&mut open_at_launch);
@@ -249,7 +261,7 @@ fn watch_core(app: &AppHandle, state: &Shared, core: &core::Core, signals: &std:
                     s.machine_misses = misses;
                     match read {
                         MachinesRead::Read(ms) => {
-                            new = s.notices.read_machines(&ms);
+                            new = s.notices.read_machines(&ms, now_ms(), utc_offset_s());
                             s.machines = Some(ms);
                         }
                         MachinesRead::NoTelemetry => {
@@ -267,6 +279,32 @@ fn watch_core(app: &AppHandle, state: &Shared, core: &core::Core, signals: &std:
                     }
                 });
                 notify(app, &new);
+                // The clouds last (#277): `/api/connectors` is re-read on every change, `connector`
+                // ones included, and every 25 s, which also moves "expira em 14 min".
+                let read = read_clouds(port);
+                let mut new = Vec::new();
+                change(app, state, |s| {
+                    let (misses, drop) = count_machine_misses(s.cloud_misses, matches!(read, CloudsRead::NoAnswer));
+                    s.cloud_misses = misses;
+                    match read {
+                        CloudsRead::Read(aws) => {
+                            let links = s.machines.as_deref().map(machines::cloud_links).unwrap_or_default();
+                            new = s.notices.read_clouds(&aws, now_ms(), utc_offset_s(), &links);
+                            s.clouds = Some(aws);
+                        }
+                        CloudsRead::NoClouds => {
+                            s.clouds = None;
+                            s.notices.clouds.reset();
+                        }
+                        CloudsRead::NoAnswer => {
+                            if drop {
+                                s.clouds = None;
+                                s.notices.clouds.reset();
+                            }
+                        }
+                    }
+                });
+                notify(app, &new);
             }
             // A core from before #87: up, but without the list. Rereads every 30 s.
             Some(r) if r.status == 404 => {
@@ -274,8 +312,10 @@ fn watch_core(app: &AppHandle, state: &Shared, core: &core::Core, signals: &std:
                     s.attention = None;
                     s.no_attention = true;
                     s.machines = None;
+                    s.clouds = None;
                     s.notices.detector.reset();
                     s.notices.machines.reset();
+                    s.notices.clouds.reset();
                 });
                 let _ = signals.recv_timeout(Duration::from_secs(30));
                 if !core.answers() {
@@ -285,6 +325,8 @@ fn watch_core(app: &AppHandle, state: &Shared, core: &core::Core, signals: &std:
             }
             _ => return,
         }
+        // The updater's state to the núcleo, and the clicks of the /ui on it (#330).
+        updater::sync(app, port);
         // "Procurar o núcleo de novo" with the core up: only rereads.
         while signals.try_recv().is_ok() {}
         let start = Instant::now();
@@ -356,6 +398,50 @@ fn read_machines(port: u16) -> MachinesRead {
     )
 }
 
+/// What one read of the cloud connectors gave (#277).
+enum CloudsRead {
+    Read(clouds::Aws),
+    /// `/api/connectors` is 404 (a core from before #277) or has no AWS session: no "Nuvens" block.
+    NoClouds,
+    /// The route did not answer or did not parse.
+    NoAnswer,
+}
+
+/// `GET /api/connectors`. The first read also starts the core's probing (`wakeOnView`).
+fn read_clouds(port: u16) -> CloudsRead {
+    match http::get_with_status(port, "/api/connectors", Duration::from_secs(5)) {
+        Some(r) if r.status == 404 => CloudsRead::NoClouds,
+        Some(r) if r.status == 200 => match clouds::aws_from_json(&r.body) {
+            Ok(Some(aws)) => CloudsRead::Read(aws),
+            Ok(None) => CloudsRead::NoClouds,
+            Err(err) => {
+                eprintln!("[ahrena-console] clouds: /api/connectors did not parse: {err}");
+                CloudsRead::NoAnswer
+            }
+        },
+        Some(r) => {
+            eprintln!("[ahrena-console] clouds: /api/connectors answered {}", r.status);
+            CloudsRead::NoAnswer
+        }
+        None => {
+            eprintln!("[ahrena-console] clouds: /api/connectors did not answer");
+            CloudsRead::NoAnswer
+        }
+    }
+}
+
+/// The local zone's offset from UTC, in seconds, for "válida até 18:40".
+fn utc_offset_s() -> i64 {
+    #[cfg(target_os = "macos")]
+    {
+        objc2_foundation::NSTimeZone::localTimeZone().secondsFromGMT() as i64
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        0
+    }
+}
+
 /// Consecutive `NoAnswer` reads after which the "Máquinas" block is dropped rather than kept stale.
 const MACHINE_MISSES_TO_DROP: u32 = 3;
 
@@ -373,6 +459,35 @@ fn now_ms() -> u64 {
     SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_millis() as u64).unwrap_or(0)
 }
 
+/// Rebuilds the menu now, from anywhere (the updater's thread).
+fn redraw_now(app: &AppHandle) {
+    let state = app.state::<Shared>().inner().clone();
+    redraw(app, &state);
+}
+
+/// The port of the app's own core, if it is up.
+fn core_port_of(app: &AppHandle) -> Option<u16> {
+    match app.state::<Shared>().lock().unwrap_or_else(std::sync::PoisonError::into_inner).core {
+        CoreState::Up { port } => Some(port),
+        _ => None,
+    }
+}
+
+/// The "Notificações" check of the tray: off silences every notification, the updater's too.
+fn notices_on(app: &AppHandle) -> bool {
+    app.state::<Shared>().lock().unwrap_or_else(std::sync::PoisonError::into_inner).notices.silence.enabled
+}
+
+/// "Atualizar" and "Tentar de novo" in the notification (#330).
+fn update_now(app: &AppHandle) {
+    updater::install(app, false);
+}
+
+/// "Depois" in the notification (#330).
+fn update_later(app: &AppHandle) {
+    updater::later(app);
+}
+
 fn change(app: &AppHandle, state: &Shared, f: impl FnOnce(&mut State)) {
     f(&mut state.lock().unwrap());
     redraw(app, state);
@@ -387,7 +502,8 @@ fn redraw(app: &AppHandle, state: &Shared) {
         // Always reread: the user may remove the item in Ajustes.
         s.login = login::checked(login::SystemRegistration.status());
         let version = handle.package_info().version.to_string();
-        let items = menu::build(&menu::Input { core: &s.core, attention: s.attention.as_ref(), no_attention: s.no_attention, notifications: s.notices.silence.enabled, login: s.login, version: &version, update: s.update.as_deref(), machines: s.machines.as_deref(), now_ms: now_ms() });
+        let update = updater::view(&handle);
+        let items = menu::build(&menu::Input { core: &s.core, attention: s.attention.as_ref(), no_attention: s.no_attention, notifications: s.notices.silence.enabled, login: s.login, version: &version, update: update.as_ref(), machines: s.machines.as_deref(), clouds: s.clouds.as_ref(), now_ms: now_ms(), utc_offset_s: utc_offset_s() });
         let title = menu::tray_title(&s.core, s.attention.as_ref());
         if s.last.as_ref() == Some(&(items.clone(), title.clone())) {
             return;
@@ -438,6 +554,9 @@ fn native_menu(app: &AppHandle, items: &[Item]) -> tauri::Result<Menu<Wry>> {
             Item::Machine { id: machine, text, dot } => Box::new(IconMenuItem::with_id(app, format!("{}{machine}#{n}", menu::MACHINE), text, true, Some(dot_image(*dot)), None::<&str>)?),
             Item::MachineLink { id: machine, text } => Box::new(MenuItem::with_id(app, format!("{}{machine}#{n}", menu::MACHINE), text, true, None::<&str>)?),
             Item::Reconnect { id: machine, text } => Box::new(MenuItem::with_id(app, format!("{}{machine}#{n}", menu::RECONNECT), text, true, None::<&str>)?),
+            Item::Connection { id: machine, verb, text } => Box::new(MenuItem::with_id(app, format!("{}{}:{machine}#{n}", menu::CONNECTION, verb.segment()), text, true, None::<&str>)?),
+            Item::Cloud { text, dot } => Box::new(IconMenuItem::with_id(app, format!("{}{n}", menu::CLOUD), text, true, Some(dot_image(*dot)), None::<&str>)?),
+            Item::CloudLogin { session, text } => Box::new(MenuItem::with_id(app, format!("{}{session}#{n}", menu::CLOUD_LOGIN), text, true, None::<&str>)?),
             Item::Action { id, text, shortcut } => Box::new(MenuItem::with_id(app, *id, text, true, *shortcut)?),
             Item::Check { id, text, checked } => Box::new(CheckMenuItem::with_id(app, *id, *text, true, *checked, None::<&str>)?),
             Item::Separator => Box::new(PredefinedMenuItem::separator(app)?),
@@ -462,7 +581,7 @@ fn tweaks(items: &[Item]) -> Vec<native::Tweak> {
                     t.push(Tweak::Tooltip { title: alternate.clone(), tooltip: tooltip.clone() });
                 }
             }
-            Item::Detail(d) | Item::MachineLink { text: d, .. } | Item::Reconnect { text: d, .. } => t.push(Tweak::Indent(d.clone())),
+            Item::Detail(d) | Item::MachineLink { text: d, .. } | Item::Reconnect { text: d, .. } | Item::Connection { text: d, .. } | Item::CloudLogin { text: d, .. } => t.push(Tweak::Indent(d.clone())),
             _ => {}
         }
     }
@@ -523,12 +642,26 @@ fn click(app: &AppHandle, id: &str) {
             // The click already flipped the native check: rebuild the menu even without a change (error, approval).
             change(app, &state, |s| s.last = None);
         }
-        menu::ID_UPDATE => updater::install(app),
+        menu::ID_UPDATE => updater::install(app, false),
+        menu::ID_CHECK_NOW => updater::check_now(app, true),
         menu::ID_SEARCH_AGAIN => {
             let _ = app.state::<CoreLoop>().0.lock().unwrap().send(());
         }
         menu::ID_INSTALL_NODE => {
             let _ = std::process::Command::new("open").arg("https://nodejs.org/en/download").spawn();
+        }
+        _ if id.starts_with(menu::CLOUD_LOGIN) => {
+            let session = id[menu::CLOUD_LOGIN.len()..].rsplit_once('#').map(|(s, _)| s).unwrap_or("");
+            cloud_login(app, session);
+        }
+        _ if id.starts_with(menu::CLOUD) => open_window_at(app, clouds::CONNECTIONS_PATH),
+        _ if id.starts_with(menu::CONNECTION) => {
+            // `<verb>:<machine>#<n>`: the verb must be one the tray knows, the machine id is looked up by the core.
+            let rest = &id[menu::CONNECTION.len()..];
+            let rest = rest.rsplit_once('#').map(|(r, _)| r).unwrap_or(rest);
+            if let Some((verb, machine)) = rest.split_once(':').and_then(|(v, m)| Some((machines::ConnectionVerb::from_segment(v)?, m))) {
+                connection_action(app, machine, verb);
+            }
         }
         _ if id.starts_with(menu::RECONNECT) => {
             let machine = id[menu::RECONNECT.len()..].split('#').next().unwrap_or("");
@@ -579,10 +712,18 @@ fn open_in_desktop(app: &AppHandle, local: Option<String>) {
 /// explains how to set it up.
 fn reconnect(app: &AppHandle, machine: &str) {
     let shared = app.state::<Shared>().inner().clone();
-    let port = match shared.lock().unwrap_or_else(std::sync::PoisonError::into_inner).core {
-        CoreState::Up { port } => port,
-        _ => return,
+    let (port, has_connection) = {
+        let s = shared.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let has_connection = s.machines.iter().flatten().any(|m| m.summary.id == machine && m.summary.connection.is_some());
+        match s.core {
+            CoreState::Up { port } => (port, has_connection),
+            _ => return,
+        }
     };
+    // A core with #278 reconnects through the connection's job (stop, then start).
+    if has_connection {
+        return connection_action(app, machine, machines::ConnectionVerb::Reconnect);
+    }
     let Some(path) = machines::reconnect_path(machine) else { return };
     let (app, machine) = (app.clone(), machine.to_string());
     std::thread::spawn(move || match http::post_json(port, &path, "{}") {
@@ -602,6 +743,80 @@ fn reconnect(app: &AppHandle, machine: &str) {
             let _ = app.run_on_main_thread(move || open_window_at(&handle, &screen));
         }
         r => eprintln!("[ahrena-console] reconnect {machine}: {}", r.map(|r| format!("{} {}", r.status, r.body)).unwrap_or_else(|| "no answer".into())),
+    });
+}
+
+/// "Entrar na AWS e subir o túnel", "Reconectar a <label>" and "Subir o túnel" of a machine with a
+/// `connection` (#278, A9 and A10): `POST /api/machines/<id>/connection/<verb>`, with no `Origin`
+/// and a loopback `Host`, like Reconectar. Only the id goes, and the verb is one of the tray's own;
+/// the commands are machines.json's and the login is the AWS connector's fixed template. The 202
+/// brings the connection, so the running line shows before the next read; a 404 or 409 (the
+/// machine or its connection left the file, a job already runs, no profile to log in) opens the
+/// machine's screen, which says why.
+fn connection_action(app: &AppHandle, machine: &str, verb: machines::ConnectionVerb) {
+    let shared = app.state::<Shared>().inner().clone();
+    let port = match shared.lock().unwrap_or_else(std::sync::PoisonError::into_inner).core {
+        CoreState::Up { port } => port,
+        _ => return,
+    };
+    let Some(path) = machines::connection_path(machine, verb) else { return };
+    let (app, machine) = (app.clone(), machine.to_string());
+    std::thread::spawn(move || match http::post_json(port, &path, "{}") {
+        Some(r) if r.status == 202 => {
+            if let Some(connection) = machines::connection_from_response(&r.body) {
+                change(&app, &shared, |s| {
+                    for m in s.machines.iter_mut().flatten().filter(|m| m.summary.id == machine) {
+                        m.summary.connection = Some(connection.clone());
+                    }
+                });
+            }
+        }
+        Some(r) if matches!(r.status, 404 | 409) => {
+            eprintln!("[ahrena-console] connection {} {machine}: {}", verb.segment(), r.status);
+            let handle = app.clone();
+            let screen = machines::machine_path(&machine);
+            let _ = app.run_on_main_thread(move || open_window_at(&handle, &screen));
+        }
+        r => eprintln!("[ahrena-console] connection {} {machine}: {}", verb.segment(), r.map(|r| r.status.to_string()).unwrap_or_else(|| "no answer".into())),
+    });
+}
+
+/// The notification's "Entrar e subir" (#278, A10).
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+fn login_and_start(app: &AppHandle, machine: &str) {
+    connection_action(app, machine, machines::ConnectionVerb::LoginAndStart);
+}
+
+/// "Entrar na AWS (<session>)" in the menu or "Entrar" in the notification (#277): `POST
+/// /api/connectors/aws/sessions/<name>/login` in the browser mode, with no `Origin` and a loopback
+/// `Host`, like Reconectar. Only the name goes: the command is the core's fixed template, and the aws
+/// CLI opens the login page in the browser. The 202 brings the state, so "Aguardando o navegador"
+/// shows before the next read; a 404 or 409 (the session left the file, no CLI, a name the core
+/// refuses) opens Conexões, which says why.
+fn cloud_login(app: &AppHandle, session: &str) {
+    let shared = app.state::<Shared>().inner().clone();
+    let port = match shared.lock().unwrap_or_else(std::sync::PoisonError::into_inner).core {
+        CoreState::Up { port } => port,
+        _ => return,
+    };
+    let Some(path) = clouds::login_path(session) else { return };
+    let (app, session) = (app.clone(), session.to_string());
+    std::thread::spawn(move || match http::post_json(port, &path, clouds::LOGIN_BODY) {
+        Some(r) if r.status == 202 => {
+            if let Some(login) = clouds::login_from_response(&r.body) {
+                change(&app, &shared, |s| {
+                    for x in s.clouds.iter_mut().flat_map(|a| a.sessions.iter_mut()).filter(|x| x.name == session) {
+                        x.login = Some(login.clone());
+                    }
+                });
+            }
+        }
+        Some(r) if matches!(r.status, 404 | 409) => {
+            eprintln!("[ahrena-console] cloud login {session}: {}", r.status);
+            let handle = app.clone();
+            let _ = app.run_on_main_thread(move || open_window_at(&handle, clouds::CONNECTIONS_PATH));
+        }
+        r => eprintln!("[ahrena-console] cloud login {session}: {}", r.map(|r| r.status.to_string()).unwrap_or_else(|| "no answer".into())),
     });
 }
 
@@ -645,6 +860,8 @@ fn open_window(app: &AppHandle, path: Option<&str>) {
     let window = WebviewWindowBuilder::new(app, "console", WebviewUrl::External(url))
         .title("Ahrena Console")
         .inner_size(1100.0, 760.0)
+        // The /ui tells its own window from a browser tab by this mark (#330): Atualizar only works in the app.
+        .initialization_script("window.__AHRENA_APP__ = true;")
         // A link out of the /ui (github.com/login/device, Revogar no GitHub; #241) opens in the system
         // browser, never inside this window: the window only ever shows this app's core's /ui.
         .on_navigation(move |url| match link_target(url, core_port(&nav_state)) {
@@ -694,9 +911,23 @@ fn link_target(url: &tauri::Url, core_port: Option<u16>) -> LinkTarget {
     match url.scheme() {
         "http" if matches!(host, "127.0.0.1" | "localhost") && core_port.is_some() && url.port() == core_port && (url.path() == "/ui" || url.path().starts_with("/ui/")) => LinkTarget::Core,
         "about" if url.as_str() == "about:blank" => LinkTarget::Core,
-        "https" if url.username().is_empty() && url.port().is_none() && BROWSER_HOSTS.iter().any(|h| host == *h || host.ends_with(&format!(".{h}"))) => LinkTarget::Browser,
+        "https" if url.username().is_empty() && url.password().is_none() && url.port().is_none() && (BROWSER_HOSTS.iter().any(|h| host == *h || host.ends_with(&format!(".{h}"))) || aws_sso_device_host(host)) => LinkTarget::Browser,
         _ => LinkTarget::Refused,
     }
+}
+
+/// The AWS SSO device page "Abrir a página de login" links to (#334): an IAM Identity Center portal
+/// (`<name>.awsapps.com`) or a region's SSO device page (`device.sso.<region>.amazonaws.com`), one
+/// label each, never the rest of amazonaws.com. The core only shows the session's pinned portal or
+/// its region's page (`deviceCodeOnSessionPortal`, decision 0013 §2a). The portal arm is wider than
+/// that: any tenant's portal, which can redirect to an IdP its owner picks. Accepted in 0013 §2a, the
+/// same exposure as `github.io`.
+fn aws_sso_device_host(host: &str) -> bool {
+    let label = |s: &str, max: usize| !s.is_empty() && s.len() <= max && s.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-');
+    if let Some(portal) = host.strip_suffix(".awsapps.com") {
+        return label(portal, 63);
+    }
+    host.strip_prefix("device.sso.").and_then(|h| h.strip_suffix(".amazonaws.com")).is_some_and(|region| label(region, 32))
 }
 
 /// `/usr/bin/open <url>`: the URL goes as one argument, never through a shell; the child is reaped.
@@ -774,6 +1005,37 @@ mod tests {
         assert_eq!(t("file:///etc/passwd"), LinkTarget::Refused);
         assert_eq!(t("javascript:alert(1)"), LinkTarget::Refused);
         assert_eq!(link_target(&"http://127.0.0.1:53817/ui".parse().unwrap(), None), LinkTarget::Refused, "no core up");
+        assert_eq!(t("https://:secret@github.com/"), LinkTarget::Refused, "a password is userinfo too");
+    }
+
+    #[test]
+    fn aws_sso_device_pages_go_to_the_system_browser() {
+        let t = |u: &str| link_target(&u.parse().unwrap(), Some(53817));
+        assert_eq!(t("https://guardiatechnology.awsapps.com/start/#/device?user_code=BXQS-NGPB"), LinkTarget::Browser);
+        assert_eq!(t("https://d-9067abcdef.awsapps.com/start/#/device"), LinkTarget::Browser);
+        assert_eq!(t("https://device.sso.us-east-1.amazonaws.com/?user_code=BXQS-NGPB"), LinkTarget::Browser);
+        assert_eq!(t("https://device.sso.ap-southeast-2.amazonaws.com/"), LinkTarget::Browser);
+        assert_eq!(t("https://awsapps.com/"), LinkTarget::Refused, "no portal name");
+        assert_eq!(t("https://a.b.awsapps.com/"), LinkTarget::Refused, "one label before awsapps.com");
+        assert_eq!(t("https://awsapps.com.evil.example/"), LinkTarget::Refused);
+        assert_eq!(t("https://evil-awsapps.com/"), LinkTarget::Refused);
+        assert_eq!(t("http://guardiatechnology.awsapps.com/start"), LinkTarget::Refused, "https only");
+        assert_eq!(t("https://guardiatechnology.awsapps.com:8443/start"), LinkTarget::Refused, "no port");
+        assert_eq!(t("https://user@guardiatechnology.awsapps.com/start"), LinkTarget::Refused, "no userinfo");
+        assert_eq!(t("https://amazonaws.com/"), LinkTarget::Refused);
+        assert_eq!(t("https://s3.amazonaws.com/bucket/page.html"), LinkTarget::Refused, "not all of amazonaws.com");
+        assert_eq!(t("https://evil.s3.us-east-1.amazonaws.com/"), LinkTarget::Refused);
+        assert_eq!(t("https://abc.execute-api.us-east-1.amazonaws.com/"), LinkTarget::Refused);
+        assert_eq!(t("https://oidc.us-east-1.amazonaws.com/"), LinkTarget::Refused);
+        assert_eq!(t("https://device.sso.amazonaws.com/"), LinkTarget::Refused, "no region");
+        assert_eq!(t("https://device.sso.a.b.amazonaws.com/"), LinkTarget::Refused, "one region label");
+        assert_eq!(t("https://x.device.sso.us-east-1.amazonaws.com/"), LinkTarget::Refused);
+        assert_eq!(t("https://device.sso.us-east-1.amazonaws.com.evil.example/"), LinkTarget::Refused);
+        assert_eq!(t("https://device.sso.us-east-1.amazonaws.com:444/"), LinkTarget::Refused, "no port");
+        assert_eq!(t("https://GuardiaTechnology.AWSAPPS.com/start"), LinkTarget::Browser, "the parser lowercases the host");
+        assert_eq!(t("https://guardiatechnology.awsapps.com./start"), LinkTarget::Refused, "trailing dot");
+        assert_eq!(t("https://device.sso.us-east-1.amazonaws.com./"), LinkTarget::Refused, "trailing dot");
+        assert_eq!(t("https://foo%2Eevil.awsapps.com/"), LinkTarget::Refused, "an encoded dot is a second label");
     }
 
     #[test]

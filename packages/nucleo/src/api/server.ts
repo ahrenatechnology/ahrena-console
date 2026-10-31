@@ -26,21 +26,31 @@
 // | `GET /api/project`            | The GitHub Project kanban (api/project.ts, #80); `?refresh=1` re-reads |
 // | `POST /api/project/move`      | Changes a card's Status: `{ itemId, optionId }` (api/project.ts) |
 // | `GET /api/sessions/<id>` and `/agents`, `/conversation`, `/events` | The session Detail in the /ui (api/session-detail.ts, #29 and #30) |
+// | `GET /api/new-session/folders` and `POST /api/new-session` | "Nova sessão": the folders it can start in, and a new session in one of them, in the Claude Desktop or a terminal (api/new-session.ts) |
 // | `POST /api/sessions/<id>/open` | Opens the session where it runs: Claude Desktop, a terminal resuming it, or its live terminal brought forward; the núcleo picks the target (api/session-open-route.ts, #285) |
 // | `GET /api/decisions`, `GET /api/sessions/<id>/decisions` and `POST /api/decisions/<id>/promote` | The /ui's Decisions page and tab and the "Promover a registro" (api/decisions-ui.ts, #103) |
 // | `GET /api/repos` and `/api/repos/<owner>/<repo>` | GitHub repositories and metrics (`?period=`, `?refresh=1`; api/repos.ts, #104, #105) |
 // | `GET /api/agent-instructions/<owner>/<repo>` and `/file?path=` | A repository's Instructions tab: instruction files, `@imports`, `.claude/` and `.mcp.json` (`?refresh=1`; api/agent-instructions.ts, #183) |
 // | `GET /api/framework-install/<owner>/<repo>/plan`, `/pull-request` and `POST /api/framework-install/<owner>/<repo>` | Install the Ahrena Framework in a repository through a PR: the preview with the diff, the PR state and opening the PR (api/framework-install.ts, #184) |
 // | `GET /api/agent-config`, `GET` and `POST /api/agent-config/skill` | The Agent Config screen (api/agent-config.ts, src/agent-config, #63): what is in the configuration folders and editing a skill, with backup |
+// | `?machine=` on the lists above and on the Detail | The sessions of every machine, merged, or of one (api/machine-sessions.ts, #243) |
 // | `GET /api/machines`           | The machines: this one and the remote ones, with state and alerts (api/telemetry.ts, #175) |
 // | `GET /api/telemetry`          | One machine's telemetry: current reading, series and alerts (`?machine=`, `?hours=1|12`; #175) |
 // | `POST /api/machines/<id>/reconnect` and `DELETE` | Reconnect a remote machine with the command of machines.json, and Cancel (api/telemetry.ts, #244) |
+// | `GET /api/sessions/<id>/messaging`, `POST /api/sessions/<id>/messages` and `GET /api/sessions/<id>/messages/<messageId>` | Send a message a person typed in the /ui to the session's live process, through Claude Code's cross-session inbox, and read its state (api/messaging.ts, src/messaging, #61) |
+// | `GET /api/tools`              | The Tools screen: CLIs, runtimes and containers, installed and latest versions, the catalog's actions, the jobs (`?machine=`; api/tools.ts, #280) |
+// | `POST /api/tools/<toolId>/actions/<actionId>`, `DELETE /api/tools/jobs/<jobId>`, `POST /api/tools/checks` and `POST /api/tools/mcp/checks` | Run a catalog action as a job, cancel it, Verificar agora, Verificar conexões (api/tools.ts, src/tools/executor.ts, #280) |
+// | `POST /api/machines/<id>/connection/start|stop|reconnect|login-and-start`, `DELETE /api/machines/<id>/connection` | The connection of a remote machine (api/connection.ts, #278) |
+// | `GET`/`POST /api/ports/release`, and the same under `/api/machines/<id>/` | Release a listening port: SIGTERM, then SIGKILL (api/ports.ts, #286, decision 0016) |
+// | `GET /api/docker`, `GET /api/docker/plan`, `POST /api/docker/actions/<actionId>`, `DELETE /api/docker/jobs/<jobId>` | The Docker actions of a machine (api/docker.ts, src/docker, #288, decision 0017) |
+// | `GET /api/connectors`, `POST`/`DELETE /api/connectors/aws/sessions/<name>/login`, and the same under `/api/machines/<id>/` | The cloud connectors and their logins (api/clouds.ts, #277) |
+// | `GET /api/app-update`, `PUT /api/app-update/state` and `POST /api/app-update/actions/check|install|dismiss|ack` | The desktop app's update notice: the app reports, the /ui reads and clicks (api/app-update.ts, #330) |
 // | `GET /api/connections`        | The console's own GitHub connection: `{ github: <status> }` (api/connections-route.ts, #241) |
 // | `POST /api/connections/github/start`, `/cancel`, `/disconnect`, `/source` | Device flow, Cancel, Disconnect and the credential source (#241, decision 0011) |
 // | `GET /api/project/options`    | The Projects the account sees, to choose the kanban's (`?refresh=1`; api/project.ts, #241) |
 // | `POST /api/project/selection` | Stores the chosen Project: `{ owner, number, field? }` (#241) |
 //
-// #241 (decision 0011 §6): the five writes `POST /api/connections/github/(start|cancel|disconnect|source)`
+// #241 (decision 0011 §6): the six writes `POST /api/connections/github/(start|cancel|disconnect|source|orgs)`
 // and `POST /api/project/selection` are accepted ONLY from the /ui itself: exact path, our Host, `Origin`
 // exactly `http://<Host>`, JSON, at most 4 KiB, no cross-site or same-site `Sec-Fetch-Site`. A request
 // without `Origin` is 403 there, unlike the other writes. While GitHub is not connected, every
@@ -63,7 +73,12 @@
 // (api/session-open-route.ts), the Agent Config screen's `POST /api/agent-config/skill` (api/agent-config.ts), the framework
 // install's `POST /api/framework-install/<owner>/<repo>` (api/framework-install.ts, #184), and the machine
 // screen's Reconnect and Cancel, `POST` and `DELETE /api/machines/<id>/reconnect` (api/telemetry.ts, #244,
-// decision 0012).
+// decision 0012), and the Detail's Send, `POST /api/sessions/<id>/messages` (api/messaging.ts, #61), which
+// is stricter: without `Origin` it is refused too, since only text a person typed in the /ui may go.
+// The orders to a session, `POST /api/sessions/<id>/commands` (api/orders.ts), are the same: only the /ui creates them.
+// The Tools writes (#280, decision 0014) are stricter: every non-GET request under `/api/tools` skips
+// the gate above and passes only `toolsWriteAllowed` (api/tools.ts): `Origin` exactly `http://<Host>`,
+// the exact raw path, and a request with NO Origin gets 403 too (unless layer 4's hook accepts it).
 // An outside site cannot get that `Origin`, nor send JSON without the CORS preflight, and the core does
 // not answer CORS. Writing to the decisions also requires `Content-Type: application/json` and the body
 // `{ "session": "<id>" }`, and it only reaches a
@@ -82,7 +97,6 @@ import { API_VERSION } from './version.ts';
 import { MCP_PATH, createMcpRoute } from '../mcp/http.ts';
 import { isUiPath, respondUi } from './ui.ts';
 import { responderWorkflows } from './workflows.ts';
-import type { CodexIndex } from './codex-index.ts';
 import { muralDoPainel, WALL_ROUTE, responderMural } from './wall.ts';
 import { SESSIONS_ROUTE, responderSessoes, type ListaDeSessoes } from './sessions.ts';
 import { HISTORY_ROUTE, responderHistorico } from './history.ts';
@@ -96,9 +110,14 @@ import { DETAIL_ROUTE, type LeiturasDoDetalhe } from './session-detail.ts';
 import type { FleetReader } from '../mcp/fleet.ts';
 import { montarAtencao, remoteAttentionItems, ATTENTION_ROUTE, type RemoteAttentionSource } from './attention-route.ts';
 import { SessionOpenDescriber } from './session-open.ts';
-import { createSessionOpenRoute, SESSION_OPEN_FROM_UI, SESSION_OPEN_ROUTE } from './session-open-route.ts';
+import type { CodexIndex } from './codex-index.ts';
+import { codexOpen } from './codex-index.ts';
+import { createSessionOpenRoute, CODEX_OPEN_FROM_UI, SESSION_OPEN_FROM_UI, SESSION_OPEN_ROUTE } from './session-open-route.ts';
+import { createNewSessionRoute, NEW_SESSION_FOLDERS_ROUTE, NEW_SESSION_ROUTE } from './new-session.ts';
 import type { TerminalFocuser, TerminalOpener } from './terminal-launch.ts';
 import { montarDashboard, DASHBOARD_ROUTE } from './dashboard-route.ts';
+import { createMachineSessionsRoute } from './machine-sessions.ts';
+import type { MachineReader } from './machine-reader.ts';
 import { RotaAnalytics } from './analytics-route.ts';
 import { REPOS_ROUTE, type RotaDosRepos } from './repos.ts';
 import { AGENT_INSTRUCTIONS_ROUTE, type AgentInstructionsRoute } from './agent-instructions.ts';
@@ -108,14 +127,22 @@ import { DEV_CONSOLE_ROUTE, respondDevConsole, type DevConsole } from './dev-con
 import { isTelemetryRoute, reconnectFromSameOrigin, RECONNECT_ROUTE, respondReconnect, respondTelemetry } from './telemetry.ts';
 import type { ReconnectControl } from '../telemetry/reconnect.ts';
 import type { TelemetryService } from '../telemetry/service.ts';
+import { MESSAGING_ROUTE, messagesWriteFromSameOrigin, type MessagingRoute } from './messaging.ts';
+import { ORDERS_ROUTE, ordersWriteFromSameOrigin, type OrdersRoute } from './orders.ts';
+import { isToolsRoute, isToolsWrite, respondTools, respondToolsWrite, toolsWriteAllowed } from './tools.ts';
+import { dockerWriteAllowed, isDockerRoute, isDockerWrite, type DockerRoute } from './docker.ts';
+import type { ToolsControl } from '../tools/executor.ts';
 import { fromAnotherSite, fromOwnUi } from './same-origin.ts';
+import { appUpdateWriteFromSameOrigin, isAppUpdateRoute, type AppUpdateRoute } from './app-update.ts';
+import { cloudsWriteFromSameOrigin, isCloudsRoute, type CloudsRoute } from './clouds.ts';
+import { isPortsRoute, isPortsWrite, portsWriteAllowed, type PortsRoute } from './ports.ts';
+import { connectionWriteFromSameOrigin, isConnectionRoute, type ConnectionRoute } from './connection.ts';
 import { CONNECTIONS_ROUTE, PROJECT_SELECTION_ROUTE, respondConnections, respondProjectSelection, STRICT_WRITE_ROUTES, strictWriteRefusal, type ProjectSelectionTarget } from './connections-route.ts';
 import type { GithubConnection } from '../github/connection/connection.ts';
 
 export { API_VERSION };
 
 export interface ApiOptions {
-  codex?: CodexIndex | null;
   panelBuilder: MontadorDoPainel;
   hooks: HookRouteOptions;
   host?: string;
@@ -142,6 +169,8 @@ export interface ApiOptions {
   openDescriber?: SessionOpenDescriber;
   /** #285: opens a terminal resuming a session; without it, a terminal session gets 501 with the command. */
   openTerminal?: TerminalOpener | null;
+  /** "Nova sessão": a folder its list leaves out; default the scratch and temporary folders (api/new-session.ts). */
+  isThrowawayFolder?: (path: string) => boolean;
   /** #285: brings forward the terminal of a live session; without it, 409 with the command. */
   focusTerminal?: TerminalFocuser | null;
   /** #285: the Claude Desktop's `local_…` of a session for the open route; default the panel builder's index. */
@@ -166,6 +195,7 @@ export interface ApiOptions {
   analytics?: RotaAnalytics;
   /** The Sessions screen's list; turns on `GET /api/sessions`. */
   sessions?: ListaDeSessoes;
+  codex?: CodexIndex | null;
   /** The ended sessions by day; turns on `GET /api/history` (#33). */
   history?: SessionHistory;
   /** O Kanban (#31); liga `GET /api/kanban`. */
@@ -186,8 +216,26 @@ export interface ApiOptions {
   agentConfig?: AgentConfigRoute;
   /** Machine telemetry (#175); without it, `/api/machines` and `/api/telemetry` give 404. */
   telemetry?: TelemetryService | null;
+  /** #243: reads the remote machines' lists for `?machine=` (api/machine-sessions.ts); without it, only this machine. */
+  machineReader?: MachineReader | null;
   /** The reconnect of the remote machines (#244); without it, `POST /api/machines/<id>/reconnect` gives 404 or 409. */
   reconnect?: ReconnectControl | null;
+  /** Sending a message to a live session (api/messaging.ts, #61); without it, those routes give 404. */
+  messaging?: MessagingRoute;
+  /** The /ui's orders to a session, carried by the panel mod (api/orders.ts, #61); without it, those routes give 404. */
+  orders?: OrdersRoute;
+  /** The Tools screen (#280, decision 0014): the executor (or only the service, read-only); without it, `/api/tools` gives 404. */
+  tools?: ToolsControl | null;
+  /** The Docker screen's actions (#288, decision 0017; api/docker.ts): `/api/docker` on the Tools executor's queue; without it, 404. */
+  docker?: { route: DockerRoute; acceptNoOrigin: () => boolean } | null;
+  /** The cloud connectors (#277, decision 0013; api/clouds.ts): `/api/connectors` and the logins; without it, 404. */
+  clouds?: CloudsRoute | null;
+  /** The port release (#286, decision 0016; api/ports.ts): `/api/ports/release` and the same under `/api/machines/<id>/`; without it, 404. */
+  ports?: PortsRoute | null;
+  /** The desktop app's update notice (#330, api/app-update.ts): `/api/app-update`; without it, 404. */
+  appUpdate?: AppUpdateRoute | null;
+  /** The connection of the remote machines (#278, api/connection.ts): start, stop, reconnect, login-and-start, cancel; without it, 404. */
+  machineConnection?: ConnectionRoute | null;
   /** The console's own GitHub connection (#241); turns on `/api/connections` and its writes. */
   connection?: GithubConnection | null;
   /** Where `POST /api/project/selection` stores the chosen Project (#241); without it, 503 `off`. */
@@ -255,7 +303,10 @@ const sameOriginOpen = (req: IncomingMessage, port: number): boolean =>
 
 /** #285's open button: only `POST /api/sessions/<uuid>/open`, the exact raw path (a query gives 403), from the same origin. */
 const sameOriginSessionOpen = (req: IncomingMessage, port: number): boolean =>
-  req.method === 'POST' && SESSION_OPEN_FROM_UI.test(req.url ?? '') && fromOwnUi(req, port);
+  req.method === 'POST' && (SESSION_OPEN_FROM_UI.test(req.url ?? '') || CODEX_OPEN_FROM_UI.test(req.url ?? '')) && fromOwnUi(req, port);
+
+/** "Nova sessão": only `POST /api/new-session`, the exact raw path, from the same origin. */
+const sameOriginNewSession = (req: IncomingMessage, port: number): boolean => req.method === 'POST' && req.url === NEW_SESSION_ROUTE && fromOwnUi(req, port);
 
 /** `decodeURIComponent`, or the raw text when it is malformed (the id check then refuses it). */
 function decodeSegment(s: string): string {
@@ -317,6 +368,7 @@ export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
   const projectRoute = criarRotaDoProjeto(opts.project ?? { kanban: null, fonte: 'github', log });
   const openDescriber = opts.openDescriber ?? new SessionOpenDescriber();
   const wall = muralDoPainel(opts.panelBuilder, { open: openDescriber, codex: opts.codex });
+  const machineSessions = createMachineSessionsRoute({ reader: opts.machineReader, telemetry: opts.telemetry, local: { sessions: opts.sessions, wall, kanban: opts.kanban, history: opts.history, events: opts.events, dashboard: opts.fleet ? () => montarDashboard(opts.fleet!) : null, panel: opts.panelBuilder } });
   const remotes = (): readonly RemoteAttentionSource[] => (typeof opts.remoteAttention === 'function' ? opts.remoteAttention() : (opts.remoteAttention ?? []));
   const sessionOpen = createSessionOpenRoute({
     codex: opts.codex,
@@ -334,6 +386,7 @@ export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
     isRemote: (id) => remotes().some((r) => remoteAttentionItems(r.attention(), r).some((i) => i.session === id)),
     log,
   });
+  const newSession = createNewSessionRoute({ storage: opts.panelBuilder.storage, openInDesktop: opts.openInDesktop, openTerminal: opts.openTerminal, isThrowaway: opts.isThrowawayFolder, log });
   const counters = { requests: 0, panel: 0, panelMs: 0 };
   let port = 0;
 
@@ -408,7 +461,35 @@ export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
   async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
     counters.requests++;
     const url = new URL(req.url ?? '/', `http://127.0.0.1:${port}`);
-    // #241: the five writes only the /ui itself makes, checked before anything else.
+    // The Tools writes have their own, stricter gate (no Origin is 403 too), never the one below.
+    if (isToolsWrite(req, url.pathname)) {
+      if (!toolsWriteAllowed(req, port, opts.tools?.acceptNoOriginActions?.() ?? false)) {
+        req.resume();
+        return send(res, 403, { error: 'origem não permitida' });
+      }
+      return respondToolsWrite(req, res, url, opts.tools);
+    }
+    // The port release writes have their own gate too (decision 0016): the Origin, or none only when asked for.
+    if (isPortsWrite(req, url.pathname)) {
+      if (!opts.ports || !portsWriteAllowed(req, port, opts.ports.acceptNoOrigin())) {
+        req.resume();
+        return send(res, opts.ports ? 403 : 404, { error: opts.ports ? 'origem não permitida' : 'não encontrado' });
+      }
+      return opts.ports.handle(req, res, url);
+    }
+    // The Docker writes share the Tools writes' strict gate (no Origin is 403 unless this núcleo accepts remote actions).
+    if (isDockerWrite(req, url.pathname)) {
+      if (!dockerWriteAllowed(req, port, opts.docker?.acceptNoOrigin() ?? false)) {
+        req.resume();
+        return send(res, 403, { error: 'origem não permitida' });
+      }
+      if (!opts.docker) {
+        req.resume();
+        return send(res, 404, { error: 'o núcleo subiu sem a tela Docker' });
+      }
+      return opts.docker.route(req, res, url);
+    }
+    // #241: the six writes only the /ui itself makes, checked before anything else.
     if (STRICT_WRITE_ROUTES.has(url.pathname)) {
       const refusal = strictWriteRefusal(req, port, url.pathname);
       if (refusal) return send(res, refusal.status, refusal.body);
@@ -416,16 +497,25 @@ export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
       if (!opts.connection) return send(res, 404, { error: 'not-found' });
       return respondConnections(req, res, url.pathname, opts.connection);
     }
-    if (!allowedLocalRequest(req, port) && !sameOriginRead(req, port) && !sameOriginOpen(req, port) && !sameOriginSessionOpen(req, port) && !mesmaOrigemMovendo(req, port) && !sameOriginDecision(req, port) && !agentConfigWriteFromSameOrigin(req, port) && !frameworkInstallWriteFromSameOrigin(req, port) && !reconnectFromSameOrigin(req, port)) return send(res, 403, { error: 'origem não permitida' });
+    if (!allowedLocalRequest(req, port) && !sameOriginRead(req, port) && !sameOriginOpen(req, port) && !sameOriginSessionOpen(req, port) && !sameOriginNewSession(req, port) && !mesmaOrigemMovendo(req, port) && !sameOriginDecision(req, port) && !agentConfigWriteFromSameOrigin(req, port) && !frameworkInstallWriteFromSameOrigin(req, port) && !reconnectFromSameOrigin(req, port) && !messagesWriteFromSameOrigin(req, port) && !cloudsWriteFromSameOrigin(req, port) && !connectionWriteFromSameOrigin(req, port) && !ordersWriteFromSameOrigin(req, port) && !appUpdateWriteFromSameOrigin(req, port)) return send(res, 403, { error: 'origem não permitida' });
     // The Project list spends GitHub quota and the connection status is the /ui's: another site's page
     // never gets either, connected or not (#241 review 2).
     if ((url.pathname === PROJECT_OPTIONS_ROUTE || url.pathname === CONNECTIONS_ROUTE) && fromAnotherSite(req)) return send(res, 403, { error: 'forbidden' });
     if (opts.githubConnected && isGithubScreenRoute(url.pathname) && !(await opts.githubConnected())) return send(res, 409, { error: 'github-not-connected' });
     if (url.pathname.startsWith(HOOKS_PATH)) return hooks(req, res);
+    if (req.method === 'GET' && (await machineSessions(res, url))) return;
     const openMatch = OPEN.exec(url.pathname);
     if (openMatch && req.method === 'POST') return openDirect(req, res, decodeURIComponent(openMatch[1]!));
+    const codexDetail = /^\/api\/codex\/sessions\/([^/]+)$/.exec(url.pathname);
+    if (codexDetail) {
+      if (req.method !== 'GET') return send(res, 405, { error: 'use GET' });
+      const thread = opts.codex?.find(decodeSegment(codexDetail[1]!));
+      if (opts.codex?.error) return send(res, 503, { error: opts.codex.error });
+      return thread ? send(res, 200, { ...thread, open: codexOpen(thread) }) : send(res, 404, { error: 'Sessão Codex não encontrada' });
+    }
     const sessionOpenMatch = SESSION_OPEN_ROUTE.exec(url.pathname);
     if (sessionOpenMatch) return sessionOpen(req, res, decodeSegment(sessionOpenMatch[1]!));
+    if (url.pathname === NEW_SESSION_ROUTE || url.pathname === NEW_SESSION_FOLDERS_ROUTE) return newSession(req, res, url.pathname);
     if (opts.decisionsUi && (await responderDecisoesDaUi(req, res, url, opts.decisionsUi, log))) return;
     const actionMatch = DECISION_ACTION.exec(url.pathname);
     if (actionMatch) {
@@ -437,8 +527,15 @@ export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
     if (ehDoProjeto(url.pathname)) return projectRoute(req, res, url);
     if (opts.agentConfig && (url.pathname === AGENT_CONFIG_ROUTE || url.pathname.startsWith(`${AGENT_CONFIG_ROUTE}/`))) return opts.agentConfig(req, res, url);
     if (opts.frameworkInstall && url.pathname.startsWith(`${FRAMEWORK_INSTALL_ROUTE}/`)) return opts.frameworkInstall(req, res, url);
+    if (opts.machineConnection && isConnectionRoute(url.pathname)) return opts.machineConnection(req, res, url);
     const reconnectMatch = RECONNECT_ROUTE.exec(url.pathname);
     if (reconnectMatch) return respondReconnect(req, res, reconnectMatch[1]!, opts.reconnect, opts.telemetry);
+    if (opts.messaging && MESSAGING_ROUTE.test(url.pathname)) return opts.messaging(req, res, url);
+    if (opts.orders && ORDERS_ROUTE.test(url.pathname)) return opts.orders(req, res, url);
+    if (opts.clouds && isCloudsRoute(url.pathname)) return opts.clouds(req, res, url);
+    if (opts.ports && isPortsRoute(url.pathname)) return opts.ports.handle(req, res, url);
+    if (opts.docker && isDockerRoute(url.pathname)) return opts.docker.route(req, res, url);
+    if (opts.appUpdate && isAppUpdateRoute(url.pathname)) return opts.appUpdate(req, res, url);
     if (req.method !== 'GET') return send(res, 405, { error: 'use GET' });
     if (isUiPath(url.pathname)) return respondUi(res, url.pathname);
     const desktopMatch = OPEN_IN_DESKTOP.exec(url.pathname);
@@ -446,7 +543,7 @@ export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
     // `pid` proves who holds the port: whoever reads the lock only stops the core if its pid is this one (src/owner).
     if (url.pathname === '/api/overview') return send(res, 200, { ok: true, name: 'ahrena-console', version: API_VERSION, pid: process.pid, commit: opts.commit ?? null });
     if (url.pathname === CHANGES_ROUTE && opts.changes) return serveChanges(res, url, opts.changes);
-    if (url.pathname === WALL_ROUTE) return responderMural(res, wall);
+    if (url.pathname === WALL_ROUTE) return responderMural(res, wall, url.searchParams.has('parkedLimit') ? Number(url.searchParams.get('parkedLimit')) : undefined);
     if (url.pathname === EVENTS_ROUTE && opts.events) return responderEventos(res, url, opts.events);
     if (url.pathname === ATTENTION_ROUTE && opts.fleet) return send(res, 200, await montarAtencao(opts.fleet, opts.changes?.current ?? null, remotes(), openDescriber));
     if (url.pathname === DASHBOARD_ROUTE && opts.fleet) return send(res, 200, await montarDashboard(opts.fleet));
@@ -462,6 +559,7 @@ export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
     if (opts.decisions && [ADRS_ROUTE, PDRS_ROUTE].some((r) => url.pathname === r || url.pathname.startsWith(`${r}/`))) return opts.decisions(res, url);
     if (url.pathname === DEV_CONSOLE_ROUTE && opts.devConsole) return respondDevConsole(res, url, opts.devConsole);
     if (isTelemetryRoute(url.pathname)) return respondTelemetry(res, url, opts.telemetry);
+    if (isToolsRoute(url.pathname)) return respondTools(res, url, opts.tools);
     if (url.pathname === LOAD_ROUTE) {
       return send(res, 200, {
         ...counters,

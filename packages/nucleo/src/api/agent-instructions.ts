@@ -33,7 +33,7 @@
 //   caminhos caiu no commit lido (o `oid`, ou `null` quando não existe). Um valor só por
 //   repositório, substituído quando o commit muda.
 // Com o GitHub fora ou limitado, serve o que há no cache com a hora da leitura (`readAt`) e o motivo
-// (`error`). Todas as chamadas passam pela fila do GitHub do núcleo, uma de cada vez.
+// (`error`). Todas as chamadas passam pela fila do GitHub do núcleo, até `GITHUB_CALL_LIMIT` ao mesmo tempo (#341).
 //
 // ## Segurança
 //

@@ -47,6 +47,7 @@
 .sd-tab:hover { color: var(--text); }
 .sd-tab.on { color: var(--text); box-shadow: inset 0 -2px 0 var(--accent); }
 .sd-body { display: flex; flex-direction: column; gap: 14px; }
+.sd-conversation { display: contents; }
 .sd-none { margin: 0; padding: 14px 0; color: var(--muted); font-size: 12.5px; }
 
 /* ---------- Agentes (C4) ---------- */
@@ -178,3 +179,12 @@ select.sd-chip.on { color: var(--accent-text); border-color: var(--accent); }
   .sd-event-head .sd-status, .sd-event-head .attention-pill, .sd-event-head .sd-chip, .sd-event-head .sd-type { display: none; }
   .sd-node.sd-sub { margin-left: 16px; }
 }
+
+/* ---------- Issue 243 (C49): a remote session ---------- */
+/* Where it was read from, under the folder: "Lida do núcleo da Workstation, pelo túnel · há 6 s". */
+.sd-source { display: flex; align-items: center; gap: 8px; padding-left: 42px; color: var(--muted); font-size: 12px; min-width: 0; }
+.sd-source span { overflow-wrap: anywhere; }
+/* The C48 notice when the remote stops answering: the last read stays below it. */
+.sd-machine-notice { flex: none; }
+.sd-machine-notice[hidden] { display: none; }
+@media (max-width: 900px) { .sd-source { padding-left: 0; } }

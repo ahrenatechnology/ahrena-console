@@ -1,3 +1,4 @@
+import { legacySessionIdentity, unknownCapabilities } from '../identity.ts';
 // Builds the response of `GET /api/panel/<session>` (4.1, 4.2, 4.3 and 4.8): this session, what runs
 // inside it, the work by branch, the account and who needs you across all accounts.
 //
@@ -102,6 +103,8 @@ interface Candidata {
 }
 
 const UM_MIN = 60_000;
+/** The `source` of a session the history import created (ingest/history/importer.ts). */
+const IMPORT_SOURCE = 'import';
 
 /** O que o painel calcula de uma sessão já gravada, com os mesmos caches: o card do mural (#34) sai daqui. */
 export interface LeituraDaSessao {
@@ -142,7 +145,8 @@ export class MontadorDoPainel {
   /** Público para o mural (#34), que lista as sessões pela mesma porta. */
   readonly storage: Porta;
   private readonly contas: Accounts;
-  private readonly desktop: DesktopIndex | null;
+  /** Public for the Workflows tree (#332), which asks who opened whom. */
+  readonly desktop: DesktopIndex | null;
   readonly trabalho: TrabalhoPorBranch | null;
   readonly agora: () => number;
   private readonly custoMs: number;
@@ -178,7 +182,18 @@ export class MontadorDoPainel {
 
   /** A sessão no índice do Desktop (para o mural descartar a arquivada antes de ler o resto). */
   desktopDaSessao(sessionId: string): DesktopSession | null {
+    if (sessionId.startsWith('session:')) return null;
     return this.desktop?.sessionByCli(sessionId) ?? null;
+  }
+
+  /** #333: a Desktop session by its `local_…` id, for the wall's tree. */
+  desktopByLocal(localId: string): DesktopSession | null {
+    return this.desktop?.sessionByLocal(localId) ?? null;
+  }
+
+  /** #333: the Desktop sessions a session opened, the archived ones included (they come with `archived`). */
+  desktopChildren(localId: string): DesktopSession[] {
+    return this.desktop?.childrenOf(localId) ?? [];
   }
 
   /** Confere as contas e o índice do Desktop (cada um respeita o próprio intervalo). */
@@ -214,6 +229,21 @@ export class MontadorDoPainel {
     };
   }
 
+  /**
+   * #319: whether this Mac's storage has the session (after the demo's alias), as `montar` reads it,
+   * and whether it was first seen through a transcript import (`source: 'import'`, no hook of its
+   * start): such a session may be a copy of one that runs on a remote machine. `null`: not known.
+   */
+  async knows(sessionId: string): Promise<{ imported: boolean } | null> {
+    const session = await this.storage.getSession(this.apelido(sessionId));
+    return session ? { imported: session.source === IMPORT_SOURCE } : null;
+  }
+
+  /** #319: this API's own block for the panel's footer (version, commits, whether it opens the Desktop). */
+  api(): Panel['api'] {
+    return { version: this.version, commit: this.commit, folder: this.commitDaPasta(), opensSession: this.abreSessao };
+  }
+
   /** `literal`: o id pedido, sem o apelido da demonstração (o Detalhe da /ui lê qualquer sessão). */
   async montar(pedidoOriginal: PedidoDoPainel, { literal = false }: { literal?: boolean } = {}): Promise<Panel> {
     const pedido = { ...pedidoOriginal, sessionId: literal ? pedidoOriginal.sessionId : this.apelido(pedidoOriginal.sessionId) };
@@ -238,10 +268,11 @@ export class MontadorDoPainel {
 
     return {
       version: 1,
-      api: { version: this.version, commit: this.commit, folder: this.commitDaPasta(), opensSession: this.abreSessao },
+      api: this.api(),
       generatedAt: new Date(agora).toISOString(),
       session: sessao,
       context: session ? contextoDe(session, resumo!, await this.storage.listContextMeters(session.id)) : null,
+      // #319: `null` only when the storage has no such session; api/machine-panel.ts reads a remote's panel by it.
       cost: custo,
       tokens,
       background: { total: bg.length, first: bg[0]?.command ?? null },
@@ -315,10 +346,12 @@ export class MontadorDoPainel {
 
   /** O `local_…` da sessão no índice do Claude Desktop, para o "Abrir no Claude Desktop". */
   localDe(sessionId: string): string | null {
+    if (sessionId.startsWith('session:')) return null;
     return this.desktop?.sessionByCli(sessionId)?.localId ?? null;
   }
 
   private doDesktop(sessionId: string, local: string | null): DesktopSession | null {
+    if (sessionId.startsWith('session:')) return null;
     if (!this.desktop) return null;
     return this.desktop.sessionByCli(sessionId) ?? (local ? this.desktop.sessionByLocal(local) : null);
   }
@@ -337,6 +370,8 @@ export class MontadorDoPainel {
     const { atividade, faixa } = atividadeDe(session, agentes, inbox, r, desde, agora);
     return {
       id: session.id,
+      identity: session.identity ?? legacySessionIdentity(session.id),
+      capabilities: session.capabilities ?? unknownCapabilities(),
       title: desktop?.title ?? session.name ?? (session.cwd ? basename(session.cwd) : 'Sessão sem título'),
       model: session.model,
       startedAt: session.startedAt,

@@ -24,19 +24,24 @@ export function addCounts(a: TokenCounts, b: TokenCounts): TokenCounts {
 
 const total = (c: TokenCounts): number => COUNT_KEYS.reduce((s, k) => s + c[k], 0);
 
+/** The key of the message a sample belongs to. */
+export const messageKeyOf = (s: UsageSample): string => s.usage.messageId ?? s.usage.requestId ?? s.eventId;
+
+/** Whether `s` should replace `prev` as the sample of its message: more output, then more tokens in all. */
+export function isBetterSample(s: UsageSample, prev: UsageSample | undefined): boolean {
+  return (
+    !prev ||
+    s.usage.tokens.output > prev.usage.tokens.output ||
+    (s.usage.tokens.output === prev.usage.tokens.output && total(s.usage.tokens) > total(prev.usage.tokens))
+  );
+}
+
 /** Uma amostra por mensagem: a de mais saída (e, empatando, a de mais tokens no total). */
 export function dedupeByMessage(samples: Iterable<UsageSample>): UsageSample[] {
   const best = new Map<string, UsageSample>();
   for (const s of samples) {
-    const key = s.usage.messageId ?? s.usage.requestId ?? s.eventId;
-    const prev = best.get(key);
-    if (
-      !prev ||
-      s.usage.tokens.output > prev.usage.tokens.output ||
-      (s.usage.tokens.output === prev.usage.tokens.output && total(s.usage.tokens) > total(prev.usage.tokens))
-    ) {
-      best.set(key, s);
-    }
+    const key = messageKeyOf(s);
+    if (isBetterSample(s, best.get(key))) best.set(key, s);
   }
   return [...best.values()];
 }

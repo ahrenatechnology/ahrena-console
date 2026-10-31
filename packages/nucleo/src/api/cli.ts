@@ -27,7 +27,7 @@ import { createMcpServer } from '../mcp/index.ts';
 import { GithubCache } from '../github/cache.ts';
 import { GithubGraphqlSource } from '../github/github-source.ts';
 import { SqliteCacheStore } from '../github/sqlite-cache.ts';
-import { GithubCallQueue } from '../github/call-queue.ts';
+import { GITHUB_CALL_LIMIT, GithubCallQueue } from '../github/call-queue.ts';
 import { chooseVault, GithubConnection, GithubNotConnectedError } from '../github/connection/index.ts';
 import { parseProjectEnv, PROJECT_ENV } from '../github/project-selection.ts';
 import { SqliteInstallationSettings } from '../settings/installation-settings.ts';
@@ -82,6 +82,15 @@ import type { GithubAccess } from './github-access.ts';
 import { FRAMEWORK_REPO_ENV } from './framework-install.ts';
 import { createCoreGithub, type CoreGithub } from './core-github.ts';
 import { startLocalApi, API_VERSION, type LocalApi } from './server.ts';
+import { createMessagingRoute } from './messaging.ts';
+import { Messaging } from '../messaging/service.ts';
+import { SessionOrders } from '../messaging/orders.ts';
+import { createOrdersRoute } from './orders.ts';
+import { demoMessaging } from '../messaging/demo.ts';
+import { SessionsDirectory } from '../messaging/adapters/sessions-dir.ts';
+import { SocketInbox } from '../messaging/adapters/socket-inbox.ts';
+import { TranscriptTurns } from '../messaging/adapters/transcript-turns.ts';
+import { AuditFile, messagingAuditFile } from '../messaging/adapters/audit-file.ts';
 import { CodexIndex } from './codex-index.ts';
 import { ListaDeSessoes } from './sessions.ts';
 import { ResumosDeSessao } from './summary.ts';
@@ -97,7 +106,26 @@ import { publishRemoteAttentionChanges, RemoteMachine } from '../telemetry/remot
 import { RemoteMachines } from '../telemetry/remote-machines.ts';
 import { INVALID_MACHINES_FILE, publishReconnectChanges, reconnectLogFile, ReconnectRunner } from '../telemetry/reconnect.ts';
 import { loopbackGet } from '../telemetry/adapters/loopback-http.ts';
+import { MACHINE_READ_ADAPTER_TIMEOUT_MS, MachineReader } from './machine-reader.ts';
 import type { TelemetryCollector } from '../telemetry/ports.ts';
+import { SqliteToolChecksStore } from '../tools/store.ts';
+import { ToolsService } from '../tools/service.ts';
+import { MAX_MCP_PROJECTS } from '../tools/mcp-config.ts';
+import { publishToolsChanges, ToolsExecutor, toolsLogFile } from '../tools/executor.ts';
+import { AwsConnector, publishConnectorChanges } from '../clouds/aws-connector.ts';
+import { loopbackWrite } from '../clouds/remote-connectors.ts';
+import { createPortsRoute } from './ports.ts';
+import { ancestorsWith, listPortsWith, PortReleaser } from '../ports/release.ts';
+import { systemRunner } from '../telemetry/adapters/system.ts';
+import { createCloudsRoute } from './clouds.ts';
+import { createDockerRoute } from './docker.ts';
+import { DockerService } from '../docker/service.ts';
+import { systemToolRunner } from '../tools/runner.ts';
+import { AppUpdateState } from '../app-update/state.ts';
+import { createAppUpdateRoute } from './app-update.ts';
+import { MachineConnection, publishConnectionChanges } from '../telemetry/connection.ts';
+import { PlacementProbe, withPlacement } from '../telemetry/placement.ts';
+import { createConnectionRoute } from './connection.ts';
 import { LiveClaudeProcesses } from './live-processes.ts';
 import { SessionOpenDescriber } from './session-open.ts';
 import { createTerminalFocuser, createTerminalOpener } from './terminal-launch.ts';
@@ -250,11 +278,14 @@ const machine = new SessionStateMachine({
   ...(demo ? { probe: null } : {}),
 });
 const desktop = demo || o.noDesktop ? null : new DesktopIndex();
+// A demo never discovers the owner's real provider metadata.
+const codex = demo ? null : new CodexIndex();
 // The installation settings (#241, decision 0011 §8): the GitHub login, the credential source and the
 // Project chosen on the screen. Never a credential.
 const settings = new SqliteInstallationSettings(sqlite.db);
-// A single queue for the GitHub calls (decision 0001, item 6): the connection's, the screens' and the work's.
-const githubQueue = new GithubCallQueue();
+// A single queue for the GitHub calls (decision 0001, item 6): the connection's, the screens' and the work's,
+// up to `GITHUB_CALL_LIMIT` at once (#341).
+const githubQueue = new GithubCallQueue(GITHUB_CALL_LIMIT);
 // A single GitHub cache, in the database, for the work and every screen: a rate-limit pause holds for all.
 const githubCache = new GithubCache({ store: new SqliteCacheStore(storage.db) });
 // The core's GitHub (#241, src/api/core-github.ts): the connection, the credential provider and the
@@ -297,7 +328,6 @@ const openInDesktop =
 // when a request comes). The terminal launchers write their `.command` files in the data folder (0700);
 // in the demo there are none, and the route answers with the command to copy.
 const liveProcesses = demo ? null : new LiveClaudeProcesses({ folders: async () => ((await profiles?.list()) ?? []).map((p) => p.dir) });
-const codex = demo ? null : new CodexIndex();
 const openDescriber = new SessionOpenDescriber({ live: liveProcesses });
 const openTerminal = demo ? null : createTerminalOpener({ dir: join(dataDir, 'terminal-resume') });
 const focusTerminal = demo ? null : createTerminalFocuser();
@@ -428,7 +458,8 @@ if (demo) {
   addSampler(SIMULATED_WORKSTATION.id, new SimulatedCollector('workstation'));
 } else if (!o.noTelemetry) {
   const platformCollector = collectorFor();
-  if (platformCollector) addSampler('local', platformCollector);
+  // Decision 0013 section 5: the Mac's núcleo asks the cloud nothing about itself; only a remote one reads its placement.
+  if (platformCollector) addSampler('local', process.platform === 'darwin' ? platformCollector : withPlacement(platformCollector, new PlacementProbe({ log })));
   else log(`telemetry: no collector for ${process.platform}`);
   const get = loopbackGet();
   const onAlertChange = publishAlertChanges(changes);
@@ -444,6 +475,8 @@ if (demo) {
         onAlertChange,
         onAttentionChange: publishRemoteAttentionChanges(changes),
         reconnectStatus: (id) => reconnectRunner?.status(id, registry.reconnectOf(id) ?? null) ?? null,
+        connectionStatus: (id) => machineConnection?.status(id) ?? Promise.resolve(null),
+        suppressUnreachable: (id) => machineConnection?.suppressUnreachable(id) ?? false,
         log,
       }),
     // A machine removed from the file closes its alerts, and the screen and the tray hear about it.
@@ -471,6 +504,64 @@ if (demo) {
 }
 const machineEntries = (): MachineEntry[] => [localEntry, ...demoEntries, ...(remoteMachines?.list() ?? [])];
 const telemetryService = samplers.length > 0 || remoteMachines ? new TelemetryService({ store: sampleStore, tracker: alertTracker, machines: machineEntries }) : null;
+
+// Sending a message to a live session (#61): the inbox of each profile folder's `sessions/`, the
+// transcript for the confirmation, and the audit in the data folder. Synthetic in the demo.
+const messaging = demo
+  ? demoMessaging(storage, log)
+  : new Messaging({
+      live: new SessionsDirectory({ folders: () => profiles!.list() }),
+      inbox: new SocketInbox(),
+      turns: new TranscriptTurns(),
+      audit: new AuditFile(messagingAuditFile(dataDir), log),
+      log,
+    });
+// The Tools screen (#280, decision 0014): this machine's CLIs, runtimes and containers, read with the
+// catalog's fixed probes; the latest versions only from the tool_checks cache (a check reads the
+// network). Not in --demo: the demo must not read the real machine.
+// The executor (layer 2) runs the catalog's actions as jobs and logs their masked output to tools.log.
+// The MCP servers (layer 3): Claude Code's ~/.claude.json and the .mcp.json of the sessions' projects (capped).
+const toolsService = demo ? null : new ToolsService({ store: new SqliteToolChecksStore(sqlite.db), mcpProjects: () => knownProjects(storage, MAX_MCP_PROJECTS), log });
+const toolsExecutor = toolsService ? new ToolsExecutor({ service: toolsService, logFile: toolsLogFile(dataDir), onChange: publishToolsChanges(changes), log }) : null;
+// The cloud connectors (#277, decision 0013): this machine's ~/.aws/config, its SSO sessions and their logins (into reconnect.log); the remote machines' through their tunnel port. Not in --demo.
+const awsConnector = demo ? null : new AwsConnector({ logFile: reconnectLogFile(dataDir), wakeOnView: true, onChange: publishConnectorChanges(changes), log });
+// The connection of each remote machine (#278, decision 0013 section 4): start, stop, reconnect and login-and-start, on the reconnect runner.
+const machineConnection = remoteMachines && reconnectRunner ? new MachineConnection({ registry: remoteMachines, startRunner: reconnectRunner, logFile: reconnectLogFile(dataDir), cloud: awsConnector, localReading: () => sampleStore.latest('local'), onChange: publishConnectionChanges(changes), log }) : null;
+const clouds = awsConnector ? createCloudsRoute({ aws: awsConnector, remote: { port: (id) => remoteMachines?.get(id)?.port, get: loopbackGet(), write: loopbackWrite() } }) : null;
+// Releasing a listening port (#286, decision 0016): this machine's, and the remote machines' through their núcleo. Not in --demo.
+const ports = createPortsRoute({
+  releaser: demo
+    ? null
+    : new PortReleaser({ listPorts: listPortsWith(systemRunner), run: systemRunner, uid: () => process.getuid?.() ?? null, selfPid: process.pid, ancestors: ancestorsWith(systemRunner, process.ppid), kill: (pid, signal) => process.kill(pid, signal) }),
+  acceptNoOrigin: () => o.acceptRemoteActions,
+  log,
+  remote: { port: (id) => remoteMachines?.get(id)?.port, get: loopbackGet(), write: loopbackWrite({ timeoutMs: 15_000 }) },
+});
+// The Docker actions (#288, decision 0017): this machine's daemon, on the Tools executor's queue; the remote machines' through their tunnel port. Not in --demo.
+// A núcleo accepts a no-Origin write (the tunnel) only with --accept-remote-actions (or AHRENA_CONSOLE_ACCEPT_REMOTE_ACTIONS=1), as the port release does.
+const acceptRemoteActions = () => o.acceptRemoteActions;
+const docker =
+  toolsService && toolsExecutor
+    ? {
+        route: createDockerRoute({
+          service: new DockerService({
+            queue: toolsExecutor,
+            run: systemToolRunner,
+            env: () => toolsService.processEnv(),
+            platform: process.platform,
+            resolve: async (name) => (await toolsService.resolveExecutable(name)).path,
+            acceptsRemoteActions: acceptRemoteActions,
+            log,
+          }),
+          cancel: (id) => toolsExecutor.cancel(id),
+          acceptNoOriginActions: acceptRemoteActions,
+          remote: { port: (id) => remoteMachines?.get(id)?.port, get: loopbackGet(), write: loopbackWrite() },
+        }),
+        acceptNoOrigin: acceptRemoteActions,
+      }
+    : null;
+// The desktop app's update notice (#330): the app reports what it found; the /ui reads it. Not in --demo.
+const appUpdate = demo ? null : createAppUpdateRoute(new AppUpdateState(changes));
 
 let historyReady = false;
 const follower =
@@ -502,7 +593,6 @@ const api: LocalApi = await startLocalApi({
   },
   port: boundPort,
   log,
-  codex,
   openInDesktop,
   openDescriber,
   openTerminal,
@@ -525,6 +615,7 @@ const api: LocalApi = await startLocalApi({
   fleet: mcp.fleet,
   remoteAttention: () => remoteMachines?.list() ?? [],
   analytics: new RotaAnalytics({ storage, contas: accounts, versao: () => changes.current, delivery: screens.delivery }),
+  codex,
   sessions: new ListaDeSessoes({ codex, storage, contas: accounts, desktop, resumos: listSummaries, open: openDescriber }),
   history,
   kanban: new QuadroKanban({ storage, contas: accounts, desktop, resumos: listSummaries }),
@@ -535,7 +626,16 @@ const api: LocalApi = await startLocalApi({
   devConsole: screens.devConsole,
   agentConfig,
   telemetry: telemetryService,
-  reconnect: reconnectRunner,
+  machineReader: new MachineReader({ get: loopbackGet({ timeoutMs: MACHINE_READ_ADAPTER_TIMEOUT_MS }), machines: () => remoteMachines?.list() ?? [], connectionOf: (id) => machineConnection?.status(id) ?? null }),
+  reconnect: machineConnection?.legacy ?? reconnectRunner,
+  machineConnection: machineConnection ? createConnectionRoute(machineConnection) : null,
+  messaging: createMessagingRoute({ messaging, sessions: storage, accounts, log }),
+  orders: createOrdersRoute({ orders: new SessionOrders(), messaging, sessions: storage }),
+  tools: toolsExecutor,
+  ports,
+  clouds,
+  docker,
+  appUpdate,
   load: () => ({
     history: follower ? (historyReady ? 'ready' : 'importing') : 'off',
     follower: follower?.stats() ?? null,
@@ -550,6 +650,8 @@ const apiPort = (api.server.address() as AddressInfo).port;
 
 const lock = useLock ? await claimLock({ dir: dataDir, port: apiPort, version: API_VERSION, parent }) : null;
 if (lock && 'conflict' in lock) {
+  // Jobs run in their own process groups: end them (SIGTERM, then SIGKILL) so none outlives the núcleo.
+  await toolsExecutor?.stopAll().catch(() => undefined);
   await api.close().catch(() => undefined);
   await storage.close();
   adopt(lock.conflict.port, lock.conflict.version);
@@ -631,6 +733,7 @@ async function reprocessOnce() {
 
 async function shutdown() {
   stopWatcher();
+  messaging.close();
   connection.close();
   if (profileTimer) clearInterval(profileTimer);
   stopWatchingParent();
@@ -638,6 +741,10 @@ async function shutdown() {
   if (lock && !('conflict' in lock)) releaseLock(lock.token, dataDir);
   await follower?.stop().catch(() => undefined);
   await Promise.all([...samplers.map((a) => a.stop()), remoteMachines?.stop()]);
+  // #280: the jobs run detached, so they would outlive the core; stop them and write their footers first.
+  await toolsExecutor?.stopAll().catch(() => undefined);
+  await machineConnection?.stopAll().catch(() => undefined);
+  await awsConnector?.stop().catch(() => undefined);
   await api.close().catch(() => undefined);
   await storage.close();
   if (demoFolder) rmSync(demoFolder, { recursive: true, force: true });

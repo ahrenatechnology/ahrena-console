@@ -24,11 +24,13 @@ import { stat } from 'node:fs/promises';
 import { send } from '../ingest/hooks/receiver.ts';
 import type { StoragePort } from '../storage-port.ts';
 import { isUsableCwd, resumeCommand, SESSION_ID_PATTERN, type SessionOpenDescriber } from './session-open.ts';
+import { isLegacyIdentity } from '../identity.ts';
 import type { CodexIndex } from './codex-index.ts';
 import type { TerminalFocuser, TerminalOpener } from './terminal-launch.ts';
 
 export const SESSION_OPEN_ROUTE = /^\/api\/(?:codex\/)?sessions\/([^/]+)\/open$/;
 /** The raw URL the /ui posts: the UUID and nothing else (decision 0003). */
+export const CODEX_OPEN_FROM_UI = /^\/api\/codex\/sessions\/session%3A[0-9a-f]{64}\/open$/;
 export const SESSION_OPEN_FROM_UI = /^\/api\/(?:codex\/)?sessions\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/open$/i;
 
 export type OpenedAs = 'codex-desktop' | 'desktop' | 'terminal' | 'focused';
@@ -68,16 +70,17 @@ export function createSessionOpenRoute(o: SessionOpenRouteOptions): SessionOpenR
     if (req.method !== 'POST') return send(res, 405, { error: 'use POST' });
     if ((req.url ?? '').includes('?')) return send(res, 403, { error: 'origem não permitida' });
     if (!/^application\/json\b/i.test(req.headers['content-type'] ?? '')) return send(res, 415, { error: 'use application/json' });
-    if (!SESSION_ID_PATTERN.test(rawId)) return send(res, 400, { error: 'id de sessão inválido' });
+    if (!(req.url?.startsWith('/api/codex/') ? /^session:[0-9a-f]{64}$/.test(rawId) : SESSION_ID_PATTERN.test(rawId))) return send(res, 400, { error: 'id de sessão inválido' });
     const sessionId = rawId;
 
     if (req.url?.startsWith('/api/codex/')) {
       const thread = o.codex?.find(sessionId);
       if (o.codex?.error) return send(res, 503, { error: o.codex.error });
       if (!thread) return send(res, 404, { error: 'O núcleo não conhece esta sessão Codex' });
+      if (thread.capabilities.nativeOpen !== 'available') return send(res, 422, { error: 'Este perfil não pode ser aberto no aplicativo padrão' });
       if (!o.openInDesktop) return send(res, 501, { error: 'Abrir no Codex não está disponível nesta máquina' });
       try {
-        await o.openInDesktop(`codex://threads/${thread.id}`);
+        await o.openInDesktop(`codex://threads/${thread.identity.providerSessionId}`);
         return send(res, 200, { ok: true, opened: 'codex-desktop' satisfies OpenedAs });
       } catch {
         return send(res, 502, { error: 'Não foi possível solicitar a abertura no Codex. Verifique se o aplicativo está instalado.' });
@@ -88,11 +91,12 @@ export function createSessionOpenRoute(o: SessionOpenRouteOptions): SessionOpenR
       if (o.isRemote?.(sessionId)) return send(res, 422, { error: 'A sessão roda em outra máquina' });
       return send(res, 404, { error: 'o núcleo não conhece esta sessão' });
     }
+    if (session.identity && (!isLegacyIdentity(session.identity) || session.identity.providerSessionId !== sessionId)) return send(res, 422, { error: 'Identidade incompatível com a abertura no Claude' });
     await o.describer.refresh();
     const local = await o.localOf(sessionId);
     const proc = o.describer.liveProcess(sessionId);
     const cwd = session.cwd ?? proc?.cwd ?? null;
-    const open = o.describer.describe({ sessionId, cwd, local });
+    const open = o.describer.describe({ sessionId, identity: session.identity, cwd, local });
     const command = resumeCommand(cwd, sessionId);
 
     async function resume() {

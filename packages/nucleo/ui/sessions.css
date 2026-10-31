@@ -21,13 +21,20 @@
 .field > .icon:last-child { position: absolute; right: 12px; pointer-events: none; }
 .field.search > .icon:last-child, .field.square > .icon:last-child { position: static; }
 
-.seg { display: inline-flex; flex-wrap: wrap; max-width: 100%; padding: 3px; gap: 2px; background: var(--bg); border: 1px solid var(--border); border-radius: 9px; }
+.seg { display: inline-flex; padding: 3px; gap: 2px; background: var(--bg); border: 1px solid var(--border); border-radius: 9px; }
 .seg button { font: inherit; font-size: var(--text-xs); color: var(--muted); background: none; border: 0; padding: 4px 10px; border-radius: 6px; white-space: nowrap; }
 .seg button:hover { color: var(--text); }
 .seg button[aria-pressed="true"] { background: var(--raised); color: var(--text); }
 .seg button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .sessions-pill-count { font-weight: var(--weight-medium); font-family: var(--font-mono); font-size: 10.5px; color: var(--muted); margin-left: 5px; }
 .sessions-pill-count:empty { display: none; }
+/* Issue 243 (C45): with a remote, the machine filter and the status pills take a row of their own under
+   the search; in 1100 they fold into two rows (machine, then status), in 1440 they share one. */
+.sessions-status-slot { display: contents; }
+.sessions-status-slot.sessions-machine-row { display: flex; flex-basis: 100%; flex-wrap: wrap; gap: 8px 14px; align-items: center; min-width: 0; }
+.sessions-status-group { display: inline-flex; gap: 8px; align-items: center; min-width: 0; }
+.sessions-status-group .seg { flex-wrap: wrap; }
+.sessions-filter-label { font-size: 11px; color: var(--muted); white-space: nowrap; }
 
 /* ---------- tabela ---------- */
 /*
@@ -47,18 +54,21 @@
  * O layout é fixo e as colunas dividem a largura em porcentagem, então nada empurra a tabela para
  * fora: o título quebra em até duas linhas, o motivo desce para baixo do status, o tempo da
  * duração desce para baixo do "rodando" e o diretório corta no começo, com o caminho inteiro no
- * title. Abaixo de 900 px o Diretório sai.
+ * title. #61 (C53): the Mensagem column takes the room of the Diretório up to 1240 px of window, where
+ * its button keeps only the icon (beside the open icon of issue 285 the label no longer fits 1100 px); below
+ * 900 px it leaves too, and the Detail's box stays the way to send.
  */
 .table { table-layout: fixed; }
-.table .c-session { width: 22%; }
-.table .c-origin { width: 9%; }
-.table .c-status { width: 17%; }
-.table .c-activity { width: 11%; }
+.table .c-origin { width: 8%; }
+  .table .c-session { width: 17%; }
+.table .c-status { width: 14%; }
+.table .c-activity { width: 9%; }
 .table .c-duration { width: 8%; }
-.table .c-agents { width: 6%; }
+.table .c-agents { width: 7%; }
 .table .c-cost { width: 8%; }
-.table .c-dir { width: 14%; }
-.table .c-open { width: 5%; }
+.table .c-dir { width: 10%; }
+.table .c-message { width: 15%; }
+.table .c-open { width: 4%; }
 .table .nm, .table .st, .table .dur, .table th { white-space: normal; }
 .table th { overflow: hidden; text-overflow: ellipsis; letter-spacing: .05em; }
 .table .st { line-height: 1.9; }
@@ -67,17 +77,32 @@
 .table .dir { direction: rtl; text-align: left; font-family: var(--font-mono); font-size: 11px; color: var(--muted); }
 /* The open icon (issue 285): its state opens below it, over the row, so the cell does not clip it. */
 .table .sessions-open { padding-left: 0; text-align: right; overflow: visible; }
-@media (max-width: 1100px) {
+.table .msg { padding-left: 4px; }
+@media (max-width: 1240px) {
   .table .c-dir, .table .dir { display: none; }
-  .table .c-duration, .table .dur, .table .c-agents, .table .sessions-agents { display: none; }
+  .table .c-duration, .table .dur { display: none; }
+  .table .c-origin { width: 11%; }
+  .table .c-session { width: 22%; }
+  .table .c-status { width: 17%; }
+  .table .c-activity { width: 11%; }
+  .table .c-duration { width: 0%; }
+  .table .c-agents { width: 9%; }
+  .table .c-cost { width: 11%; }
+  .table .c-message { width: 14%; }
+  .table .c-open { width: 5%; }
+}
+@media (max-width: 900px) {
+  .table .c-message, .table .msg { display: none; }
   .table th, .table td { padding-left: 6px; padding-right: 6px; }
   .table th { letter-spacing: .04em; }
- .table .c-session { width: 29%; }
-  .table .c-origin { width: 12%; }
-  .table .c-status { width: 22%; }
-  .table .c-activity { width: 16%; }
+  .table .c-origin { width: 13%; }
+  .table .c-session { width: 22%; }
+  .table .c-status { width: 23%; }
+  .table .c-activity { width: 12%; }
+  .table .c-duration { width: 0%; }
+  .table .c-agents { width: 10%; }
   .table .c-cost { width: 14%; }
-  .table .c-open { width: 7%; }
+  .table .c-open { width: 6%; }
 }
 
 .table .session-row { cursor: pointer; }
@@ -109,9 +134,3 @@
 .sessions-footer { display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: var(--muted); }
 .sessions-footer .pages { display: flex; gap: 6px; }
 .btn:disabled { opacity: .45; cursor: default; }
-
-.sessions-origin { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.table .b-unknown { white-space: normal; height: auto; line-height: 1.3; }
-
-
-.table .sessions-provider, .table .c-origin { padding-left: 6px; padding-right: 6px; }

@@ -1,44 +1,60 @@
-// Read-only adapter for the installed Codex desktop index. Its schema is versioned and
-// private: fail visibly on incompatibility, never migrate or write the source database.
+// Adapter v1 for state_5.sqlite (user_version 0). Never migrate the provider database.
 import { DatabaseSync } from 'node:sqlite';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
-import { existsSync } from 'node:fs';
+import { join, resolve, dirname } from 'node:path';
+import { realpathSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { providerSessionKey, type SessionIdentity, type SessionCapabilities } from '../identity.ts';
 import { SESSION_ID_PATTERN } from './session-open.ts';
 
 export interface CodexThread {
-  id: string; title: string; cwd: string; createdAt: string; updatedAt: string;
-  group: string | null;
+  id: string; identity: SessionIdentity; capabilities: SessionCapabilities;
+  title: string; cwd: string; createdAt: string; updatedAt: string; group: string | null;
 }
+const canonical = (path: string): string => { try { return realpathSync(path); } catch { return resolve(path); } };
+const defaultPath = () => join(homedir(), '.codex', 'state_5.sqlite');
 export class CodexIndex {
   readonly path: string;
+  readonly nativeOpen: boolean;
   error: string | null = null;
-  constructor(path = join(process.env.CODEX_HOME || join(homedir(), '.codex'), 'state_5.sqlite')) { this.path = path; }
-  find(id: string): CodexThread | null { return this.read('WHERE t.archived = 0 AND t.id = ?', [id])[0] ?? null; }
-  list(): CodexThread[] { return this.read('WHERE t.archived = 0', []); }
-  private read(where: string, params: string[]): CodexThread[] {
+  constructor(path = join(process.env.CODEX_HOME || join(homedir(), '.codex'), 'state_5.sqlite')) {
+    this.path = canonical(path);
+    // The native deep link has no profile selector. Never open another index in the default app.
+    this.nativeOpen = this.path === canonical(defaultPath());
+  }
+  find(id: string): CodexThread | null { return this.list().find(t => t.id === id) ?? null; }
+  list(): CodexThread[] {
     this.error = null;
-    if (!existsSync(this.path)) return [];
     let db: DatabaseSync | undefined;
     try {
       db = new DatabaseSync(this.path, { readOnly: true });
       db.exec('PRAGMA busy_timeout = 1000');
-      const rows = db.prepare(`SELECT t.id, COALESCE(NULLIF(t.name, ''), t.title) AS title, t.cwd,
-        t.created_at, t.updated_at, t.source, s.name AS group_name FROM threads t
-        LEFT JOIN thread_sections s ON s.id = t.thread_section_id
-        ${where} ORDER BY t.updated_at DESC, t.id`).all(...params);
+      if (db.prepare('PRAGMA user_version').get()?.user_version !== 0) throw new Error('Unsupported schema');
+      const columns = new Set(db.prepare('PRAGMA table_info(threads)').all().map(r => r.name));
+      for (const name of ['id', 'title', 'cwd', 'created_at', 'updated_at', 'source', 'archived']) {
+        if (!columns.has(name)) throw new Error('Unsupported schema');
+      }
+      const named = columns.has('name');
+      const rows = db.prepare(`SELECT id, ${named ? "COALESCE(NULLIF(name, ''), title)" : 'title'} AS title,
+        cwd, created_at, updated_at, source FROM threads WHERE archived = 0 ORDER BY updated_at DESC, id`).all();
       return rows.filter(r => {
         if (!SESSION_ID_PATTERN.test(String(r.id))) return false;
-        try { return !JSON.parse(String(r.source))?.subagent; } catch { return true; }
-      }).map(r => ({
-        id: String(r.id), title: String(r.title), cwd: String(r.cwd),
-        createdAt: new Date(Number(r.created_at) * 1000).toISOString(),
-        updatedAt: new Date(Number(r.updated_at) * 1000).toISOString(),
-        group: typeof r.group_name === 'string' ? r.group_name : null,
-      }));
+        const source = String(r.source);
+        if (['cli', 'vscode', 'exec', 'appServer', 'app-server'].includes(source)) return true;
+        try { const value = JSON.parse(source); return typeof value === 'string' && ['cli', 'vscode', 'exec', 'appServer', 'app-server'].includes(value); }
+        catch { return false; } // Unknown/object sources may be subagents; fail closed.
+      }).map(r => {
+        const identity: SessionIdentity = { provider: 'codex', providerSessionId: String(r.id),
+          profileId: `codex-home:${createHash('sha256').update(dirname(this.path)).digest('hex')}`, machineId: 'local', environmentId: null };
+        return { id: providerSessionKey(identity), identity,
+          capabilities: { mode: 'external', history: 'unavailable', nativeOpen: this.nativeOpen ? 'available' : 'unavailable', sendInput: 'unavailable', interrupt: 'unavailable', approve: 'unavailable' },
+          title: String(r.title), cwd: String(r.cwd), createdAt: new Date(Number(r.created_at) * 1000).toISOString(),
+          updatedAt: new Date(Number(r.updated_at) * 1000).toISOString(), group: null };
+      });
     } catch {
-      this.error = 'Não foi possível ler o índice local do Codex. Verifique a versão e o acesso ao arquivo.';
+      this.error = 'Índice do Codex indisponível: arquivo ausente, ocupado, sem acesso ou versão incompatível.';
       return [];
     } finally { db?.close(); }
   }
 }
+export const codexOpen = (t: CodexThread) => ({ target: t.capabilities.nativeOpen === 'available' ? 'codex-desktop' as const : 'none' as const, command: null });

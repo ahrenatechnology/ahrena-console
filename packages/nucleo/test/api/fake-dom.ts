@@ -119,7 +119,10 @@ export class ElementoFalso extends NoFalso {
   }
   private adotar(n: NoFalso | string): NoFalso {
     const no = typeof n === 'string' ? new TextoFalso(n) : n;
-    if (no.parentNode) no.parentNode.childNodes = no.parentNode.childNodes.filter((c) => c !== no);
+    if (no.parentNode) {
+      blurIfInside(no);
+      no.parentNode.childNodes = no.parentNode.childNodes.filter((c) => c !== no);
+    }
     no.parentNode = this;
     return no;
   }
@@ -137,7 +140,10 @@ export class ElementoFalso extends NoFalso {
   replaceChildren(...nos: (NoFalso | string)[]): void {
     // Como o navegador: `null` viraria o texto "null"; aqui é erro, para pegar o engano.
     if (nos.some((n) => n === null || n === undefined)) throw new TypeError('replaceChildren com null');
-    for (const c of this.childNodes) c.parentNode = null;
+    for (const c of this.childNodes) {
+      blurIfInside(c);
+      c.parentNode = null;
+    }
     this.childNodes = [];
     this.append(...nos);
   }
@@ -212,6 +218,12 @@ function casa(no: ElementoFalso, partes: string[], raiz: ElementoFalso): boolean
   let i = partes.length - 2;
   for (let p = no.parentNode; p && p !== raiz && i >= 0; p = p.parentNode) if (casaSimples(p, partes[i]!)) i--;
   return i < 0;
+}
+
+/** Like the browser, a focused element taken out of the tree (even to be put back) loses the focus. */
+function blurIfInside(no: NoFalso): void {
+  const active = documentoFalso.activeElement;
+  if (active && no instanceof ElementoFalso && no.contains(active)) documentoFalso.activeElement = null;
 }
 
 const cabecaFalsa = new ElementoFalso('head');

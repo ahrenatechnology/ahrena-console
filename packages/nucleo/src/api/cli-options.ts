@@ -40,7 +40,8 @@ export const HELP = `Usage: npm run api -- [options]
                          in-memory vault and a fake gh (never the real GitHub, Keychain or gh):
                          connected (default), disconnected (Connect is approved after 3 s),
                          pending (a code never approved), denied, expired (the code expires
-                         after 5 s), missing-scopes, blocked-orgs, no-client-id, no-vault, gh,
+                         after 5 s), revoked (a stored credential GitHub refuses), missing-scopes,
+                         blocked-orgs, no-client-id, no-vault, gh,
                          gh-not-authenticated
   --demo-project <p>     Under --demo, selected (default: the simulator's Project) or none (the
                          kanban asks to choose one)
@@ -53,6 +54,8 @@ export const HELP = `Usage: npm run api -- [options]
                          (measurements on a separate port). --demo is already lock-free. Both fail if
                          the port has an owner
   --no-telemetry         Does not measure this machine: /api/machines and /api/telemetry answer 404.
+  --accept-remote-actions  Takes POST /api/ports/release without Origin, which is how a Mac's núcleo reaches this one
+                         through the tunnel (decision 0016). Default off; AHRENA_CONSOLE_ACCEPT_REMOTE_ACTIONS=1 does the same.
                          Under --demo, the telemetry is synthetic (this machine and a "workstation")
   --machines <file>      The remote machines (default ~/.ahrena-console/machines.json, #176):
                          { "machines": [{ "id", "label", "port", "reconnect"? }] }, port is the port
@@ -62,8 +65,8 @@ export const HELP = `Usage: npm run api -- [options]
   --help
 
 GitHub (decision 0011): the console connects by itself, with the OAuth device flow, and keeps the
-credential in the Keychain (macOS) or the Secret Service (Linux), never in a file. The OAuth App is
-AHRENA_CONSOLE_GITHUB_CLIENT_ID (none is built in yet: without it the connection is unavailable).
+credential in the Keychain (macOS) or the Secret Service (Linux), never in a file. The Ahrena OAuth App is
+built in; AHRENA_CONSOLE_GITHUB_CLIENT_ID overrides it with another app's Client ID (development).
 AHRENA_CONSOLE_GITHUB_SOURCE=gh uses \`gh auth token\` instead (opt-in, for development).
 AHRENA_CONSOLE_VAULT=keychain|secret-service|memory|none overrides the vault this platform has
 (memory keeps nothing across restarts; none makes the connection unavailable). Under node --test only
@@ -95,6 +98,8 @@ export interface ApiCliOptions {
   replace: boolean;
   noLock: boolean;
   noTelemetry: boolean;
+  /** --accept-remote-actions: take a port release that arrives without Origin (the tunnel, from a Mac's núcleo). Off by default (decision 0016). */
+  acceptRemoteActions: boolean;
   machines: string | undefined;
   /** --demo-github: the connection state under --demo (src/simulator/demo-github-connection.ts). */
   demoGithub: string | undefined;
@@ -122,6 +127,7 @@ export function parseApiOptions(args: string[]): ApiCliOptions {
       replace: { type: 'boolean', default: false },
       'no-lock': { type: 'boolean', default: false },
       'no-telemetry': { type: 'boolean', default: false },
+      'accept-remote-actions': { type: 'boolean', default: false },
       machines: { type: 'string' },
       'demo-github': { type: 'string' },
       'demo-project': { type: 'string' },
@@ -144,6 +150,7 @@ export function parseApiOptions(args: string[]): ApiCliOptions {
     replace: o.replace,
     noLock: o['no-lock'],
     noTelemetry: o['no-telemetry'],
+    acceptRemoteActions: o['accept-remote-actions'] || process.env.AHRENA_CONSOLE_ACCEPT_REMOTE_ACTIONS === '1',
     machines: o.machines,
     demoGithub: o['demo-github'],
     demoProject: o['demo-project'],

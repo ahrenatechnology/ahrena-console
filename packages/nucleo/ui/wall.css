@@ -64,6 +64,34 @@
 .wall-bar.wall-high::-webkit-progress-value { background: var(--status-error-dot); }
 .wall-bar.wall-high::-moz-progress-bar { background: var(--status-error-dot); }
 
+/* ---------- the children nested in a leader and the "Paradas" band (C85 to C87, issue 333) ---------- */
+/* Closed, a leader keeps the card height (the summary line fits in it); opened, it takes the row and grows with its children. */
+.wall-card.wall-span { grid-column: 1 / -1; height: auto; min-height: 252px; }
+.wall-from { margin-left: 6px; font-family: var(--font-sans); font-size: 10.5px; padding: 1px 7px; border: 1px solid var(--border); border-radius: 99px; color: var(--muted); }
+.wall-treeline { display: flex; align-items: center; gap: 6px; padding: 8px 0 0; border: 0; border-top: 1px dashed var(--border); background: none; color: var(--text); font: inherit; font-size: 11px; white-space: nowrap; cursor: pointer; text-align: left; position: relative; z-index: 1; }
+.wall-tree-total { font-weight: var(--weight-semibold); }
+.wall-tree-blocked { color: var(--status-waiting-text); }
+.wall-tree-active { color: var(--status-active-text); }
+.wall-tree-parked { color: var(--muted); }
+.wall-kids, .wall-parked-list { display: flex; flex-direction: column; gap: 6px; position: relative; z-index: 1; }
+.wall-kid { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); font-size: 12px; min-width: 0; }
+/* One level inside the other (the CSP blocks inline style): 24 px a level, six levels. */
+.wall-depth-1 { margin-left: 24px; }
+.wall-depth-2 { margin-left: 48px; }
+.wall-depth-3 { margin-left: 72px; }
+.wall-depth-4 { margin-left: 96px; }
+.wall-depth-5 { margin-left: 120px; }
+.wall-depth-6 { margin-left: 144px; }
+.wall-kid-toggle { flex: none; width: 18px; display: inline-flex; border: 0; background: none; color: var(--muted); padding: 0; cursor: pointer; }
+.wall-kid-title { font-weight: var(--weight-semibold); color: var(--text); flex: 0 1 auto; min-width: 56px; }
+.wall-kid-age { margin-left: auto; font-size: 11.5px; white-space: nowrap; }
+.wall-kid-parked { opacity: .8; }
+.wall-chip { font-family: var(--font-mono); font-size: 11px; padding: 1px 7px; border: 1px solid var(--border); border-radius: 6px; white-space: nowrap; }
+.wall-parked { margin-top: 12px; padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; }
+.wall-parked-head { display: flex; align-items: center; gap: 8px; border: 0; background: none; color: var(--text); font: inherit; cursor: pointer; text-align: left; min-width: 0; }
+.wall-parked-head b { white-space: nowrap; }
+.wall-parked-r { margin-left: auto; font-size: 12px; white-space: nowrap; }
+
 /* Três por linha até a janela do app (1100 de largura); mais estreita, duas, depois uma. */
 @media (max-width: 1200px) {
   .wall-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }

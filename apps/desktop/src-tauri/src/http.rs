@@ -39,6 +39,10 @@ pub fn get_with_status(port: u16, path: &str, wait: Duration) -> Option<Response
     request(port, "GET", path, None, wait)
 }
 
+pub fn put_json(port: u16, path: &str, body: &str) -> Option<Response> {
+    request(port, "PUT", path, Some(body), Duration::from_secs(10))
+}
+
 pub fn post_json(port: u16, path: &str, body: &str) -> Option<Response> {
     request(port, "POST", path, Some(body), Duration::from_secs(10))
 }

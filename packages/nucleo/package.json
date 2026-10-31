@@ -1,6 +1,6 @@
 {
   "name": "@ahrena-console/nucleo",
-  "version": "0.0.6",
+  "version": "0.0.11",
   "description": "Núcleo do Ahrena Console: modelo de dados, portas e adaptadores",
   "license": "Apache-2.0",
   "private": true,
@@ -16,7 +16,7 @@
     "node": ">=24"
   },
   "scripts": {
-    "test": "node --test --disable-warning=ExperimentalWarning \"test/**/*.test.ts\"",
+    "test": "node --test --test-concurrency=4 --disable-warning=ExperimentalWarning \"test/**/*.test.ts\"",
     "simulate": "node --disable-warning=ExperimentalWarning src/simulator/cli.ts",
     "api": "node --disable-warning=ExperimentalWarning src/api/cli.ts",
     "mcp": "node --disable-warning=ExperimentalWarning src/mcp/cli.ts",

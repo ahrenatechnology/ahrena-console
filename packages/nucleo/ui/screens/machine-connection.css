@@ -1,0 +1,69 @@
+/* The remote machine's connection (issue 278, C62 to C65): the cards "Conexão" and "Onde roda" and the Parar
+   confirmation, on top of a remote's screen. machine-connection.js puts this sheet in the head
+   (link[data-screen="machine-connection"]) and takes it out when the screen goes. Every own class is mc-*;
+   the bands reuse machine.css's classes (the same screen loads it) without restyling them here. Only brand.css variables. Two
+   columns up to 1299 px of window (the app opens at 1100: "Onde roda" takes its own row, fields side by
+   side), three from 1300 ("Onde roda" beside "Conexão", the same height). Nothing scrolls sideways. */
+
+.badge { display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 9px; border-radius: 99px; font-size: 11.5px; font-weight: var(--weight-medium); white-space: nowrap; flex: none; }
+.badge .p { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.b-completed { background: var(--status-completed-badge); color: var(--status-completed-text); }
+.b-waiting { background: var(--status-waiting-badge); color: var(--status-waiting-text); }
+.b-error { background: var(--status-error-badge); color: var(--status-error-text); }
+.b-abandoned { background: var(--status-abandoned-badge); color: var(--status-abandoned-text); }
+
+.mc-grid { display: grid; gap: 16px; grid-template-columns: repeat(2, minmax(0, 1fr)); min-width: 0; }
+.mc-card { padding: 14px 16px; display: flex; flex-direction: column; gap: 12px; min-width: 0; grid-column: span 2; }
+.mc-card p { margin: 0; font-size: 12.5px; }
+.mc-muted { color: var(--muted); }
+.mc-title { margin: 0; font-size: 13.5px; font-weight: var(--weight-semibold); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
+.mc-note { font-weight: var(--weight-regular); color: var(--muted); font-size: 11.5px; }
+.mc-place .mc-note { margin-left: auto; }
+.mc-head { display: flex; align-items: center; gap: 8px 12px; flex-wrap: wrap; min-width: 0; }
+.mc-act { margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; }
+.mc-act .btn[disabled], .mc-dact .btn[disabled] { opacity: .55; cursor: not-allowed; }
+
+/* the trio: Túnel, Sessão AWS, Núcleo de lá */
+.mc-trio { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.mc-cell { border: 1px solid var(--border); border-radius: 10px; padding: 9px 11px; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.mc-k { font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-weight: var(--weight-semibold); }
+.mc-v { font-size: 13px; font-weight: var(--weight-semibold); display: flex; gap: 6px; align-items: center; min-width: 0; }
+.mc-v > span { min-width: 0; overflow-wrap: anywhere; }
+.mc-v .icon { flex: none; }
+.mc-s { font-size: 11.5px; color: var(--muted); overflow-wrap: anywhere; }
+.mc-ok { color: var(--status-completed-text); }
+.mc-bad { color: var(--status-error-text); }
+.mc-warn { color: var(--status-waiting-text); }
+.mc-off { color: var(--muted); }
+.mc-cmds { font-family: var(--font-mono); font-size: 11px; color: var(--muted); display: flex; flex-direction: column; gap: 2px; overflow-wrap: anywhere; margin-top: auto; }
+
+/* Onde roda */
+.mc-kv { display: grid; gap: 8px 16px; font-size: 12.5px; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.mc-kv > div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.mc-kv-v { overflow-wrap: anywhere; }
+.mc-kv-v.mono { font-size: 11.5px; }
+.mc-src { font-size: 11.5px; color: var(--muted); margin-top: auto; overflow-wrap: anywhere; }
+.mc-card p.mc-src { font-size: 11.5px; }
+
+/* the setup card of a machine with only the start command */
+.mc-setup code { font-family: var(--font-mono); font-size: 11.5px; }
+
+/* where the reason came from, and the stopped band */
+.mc-from { font-size: 11px; color: var(--muted); margin: 0; }
+.mc-neutral { border: 1px solid var(--border); background: var(--surface); color: var(--text); }
+
+/* the Parar confirmation */
+.mc-dialog { padding: 18px 20px; display: flex; flex-direction: column; gap: 12px; max-width: 520px; width: 100%; margin: 0 auto; box-sizing: border-box; box-shadow: 0 14px 44px color-mix(in srgb, var(--mono-black) 40%, transparent); }
+.mc-dialog h2 { margin: 0; font-size: 14px; font-weight: var(--weight-semibold); overflow-wrap: anywhere; }
+.mc-dialog p { margin: 0; font-size: 12.5px; color: var(--muted); }
+.mc-dact { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
+.btn.mc-danger { background: var(--status-error-dot); color: var(--on-accent); font-weight: var(--weight-semibold); }
+.btn.mc-danger:focus-visible { outline: 2px solid var(--status-error-text); outline-offset: 2px; }
+
+@media (min-width: 1300px) {
+  .mc-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .mc-place { grid-column: span 1; }
+  .mc-place .mc-kv { grid-template-columns: minmax(0, 1fr); }
+  .mc-place.mc-wide .mc-kv { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .mc-place.mc-wide { grid-column: span 3; }
+}

@@ -12,6 +12,16 @@
 // detector: a new alert, or a machine going down (its `machine-unreachable` alert), notifies once,
 // on the transition, without sound; the first read and a rediscovery of the core only record.
 //
+// The AWS SSO sessions (#277, decision 0013 section 7, A10) have a detector of their own too: a session
+// entering `expiring` ("Sessão da AWS expira em 15 min") or `expired` ("Sessão da AWS expirada")
+// notifies once per session and per token end, without sound, with "Entrar" and "Abrir".
+//
+// The drop of a machine with a `connection` (#278, A10) is the same `machine-unreachable` notice, with
+// the reason in the title and the action that fixes it ("Entrar e subir" or "Reconectar"), once per
+// reason per drop and replacing the previous one; a drop of a tunnel the person stopped does not
+// notify, nor does the way back. The 15-minute notice of the session a tunnel depends on says
+// "<session> · a Workstation cai junto".
+//
 // The silence belongs to the app, not to the core: a small JSON in the app's data folder, with the
 // menu's main switch ("Notificações") and the sessions silenced by the notification's "Silenciar".
 
@@ -21,6 +31,7 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
+use crate::clouds;
 use crate::http;
 use crate::machines;
 use crate::menu::{Attention, AttentionItem};
@@ -45,6 +56,8 @@ pub struct Notice {
     pub origin: Origin,
     /// The machine of a machine notice, for "Reconectar" (#244); `None` for a session.
     pub machine: Option<String>,
+    /// The SSO session of a cloud notice, for "Entrar" (#277); `None` otherwise.
+    pub cloud_session: Option<String>,
 }
 
 /// What a notice is about: it decides the actions the notification offers.
@@ -59,6 +72,20 @@ pub enum Origin {
     Machine,
     /// "<label> sem conexão" of a machine with a reconnect command (#244, A8): "Reconectar" and "Abrir".
     MachineReconnect,
+    /// "<label> sem conexão: SSO expirado" of a machine whose core can log in and start (#278, A10):
+    /// "Entrar e subir" and "Abrir".
+    MachineLoginAndStart,
+    /// An AWS session expiring or expired (#277, A10) whose name goes on the command line:
+    /// "Entrar" and "Abrir".
+    CloudLogin,
+    /// The same, for a session the core cannot log in (its name, or no CLI): only "Abrir".
+    Cloud,
+    /// A new app version (#330, A12): "Atualizar" and "Depois".
+    AppUpdate,
+    /// An update that did not install (#330, A12): "Tentar de novo" and "Abrir".
+    AppUpdateFailed,
+    /// "Você está na versão mais nova" after a "Buscar agora" from the tray (#330, A12): only "Abrir".
+    AppUpToDate,
 }
 
 /// An action button of a notification.
@@ -72,6 +99,16 @@ pub enum Action {
     Silence,
     /// "Reconectar": `POST /api/machines/<id>/reconnect` (#244).
     Reconnect,
+    /// "Entrar": `POST /api/connectors/aws/sessions/<name>/login` (#277).
+    CloudLogin,
+    /// "Entrar e subir": `POST /api/machines/<id>/connection/login-and-start` (#278).
+    LoginAndStart,
+    /// "Atualizar" (#330): downloads, installs and relaunches the app.
+    UpdateNow,
+    /// "Depois" (#330): hides the update card, as the card's own Depois.
+    UpdateLater,
+    /// "Tentar de novo" (#330): the same download again.
+    RetryUpdate,
 }
 
 impl Origin {
@@ -82,11 +119,32 @@ impl Origin {
             Origin::RemoteSession => &[Action::Open, Action::Silence],
             Origin::Machine => &[Action::Open],
             Origin::MachineReconnect => &[Action::Reconnect, Action::Open],
+            Origin::MachineLoginAndStart => &[Action::LoginAndStart, Action::Open],
+            Origin::CloudLogin => &[Action::CloudLogin, Action::Open],
+            Origin::Cloud | Origin::AppUpToDate => &[Action::Open],
+            Origin::AppUpdate => &[Action::UpdateNow, Action::UpdateLater],
+            Origin::AppUpdateFailed => &[Action::RetryUpdate, Action::Open],
         }
     }
 }
 
 impl Notice {
+    /// A new app version (#330, A12), silent: a version does not block any session.
+    pub fn update_available(version: &str, notes: Option<&str>, current: &str) -> Notice {
+        let body = notes.map(str::to_string).unwrap_or_else(|| format!("Você está na versão {current}."));
+        Notice { title: format!("Ahrena Console {version} disponível"), body, sound: false, session: "app-update".into(), local: None, path: "/ui/dashboard".into(), origin: Origin::AppUpdate, machine: None, cloud_session: None }
+    }
+
+    /// The answer of a "Buscar agora" from the tray (#330, A12).
+    pub fn up_to_date(current: &str) -> Notice {
+        Notice { title: "Ahrena Console está em dia".into(), body: format!("Você está na versão mais nova · {current}"), sound: false, session: "app-update".into(), local: None, path: "/ui/dashboard".into(), origin: Origin::AppUpToDate, machine: None, cloud_session: None }
+    }
+
+    /// An update started from the tray or the notification that did not install (#330, A12).
+    pub fn update_failed(version: &str, body: &str) -> Notice {
+        Notice { title: format!("Não deu para atualizar para a {version}"), body: body.into(), sound: false, session: "app-update".into(), local: None, path: "/ui/dashboard".into(), origin: Origin::AppUpdateFailed, machine: None, cloud_session: None }
+    }
+
     pub fn from_item(i: &AttentionItem) -> Notice {
         Notice {
             title: title(i),
@@ -97,13 +155,17 @@ impl Notice {
             path: session_path(&i.session),
             origin: if i.machine.is_some() { Origin::RemoteSession } else { Origin::Session },
             machine: None,
+            cloud_session: None,
         }
     }
 
     /// A machine alert as a notification, silent: "Workstation: CPU saturada", "Workstation sem
     /// conexão". `session` carries the alert key, the notification's identifier.
-    pub fn from_machine_alert(m: &machines::MachineSummary, a: &machines::Alert) -> Notice {
+    pub fn from_machine_alert(m: &machines::MachineSummary, a: &machines::Alert, now_ms: u64, offset_s: i64) -> Notice {
         let label = machines::display_label(m);
+        if let Some(c) = m.connection.as_ref().filter(|_| a.kind == machines::UNREACHABLE_KIND && m.id != machines::LOCAL_ID) {
+            return Notice::from_connection_drop(m, a, c, now_ms, offset_s);
+        }
         let (title, body) = match a.kind.as_str() {
             machines::UNREACHABLE_KIND => (format!("{label} sem conexão"), a.detail.clone().unwrap_or_default()),
             "load-high" => (format!("{label}: CPU saturada"), a.message.clone()),
@@ -112,7 +174,119 @@ impl Notice {
         };
         // "Reconectar" only on the "sem conexão" of a machine with a command in machines.json (A8 c).
         let origin = if a.kind == machines::UNREACHABLE_KIND && m.id != machines::LOCAL_ID && m.reconnect_configured() { Origin::MachineReconnect } else { Origin::Machine };
-        Notice { title, body, sound: false, session: alert_key(&m.id, &a.id), local: None, path: machines::machine_path(&m.id), origin, machine: Some(m.id.clone()) }
+        Notice { title, body, sound: false, session: alert_key(&m.id, &a.id), local: None, path: machines::machine_path(&m.id), origin, machine: Some(m.id.clone()), cloud_session: None }
+    }
+
+    /// The drop of a machine with a `connection` (#278, A10), silent: the reason in the title and the
+    /// action that fixes it. "Workstation sem conexão: SSO expirado" with "Entrar e subir" when the
+    /// core can log in and start; "Workstation sem conexão: porta ocupada" and the other reasons with
+    /// "Reconectar"; both with "Abrir". Without a reason yet, the #244 notice ("Workstation sem
+    /// conexão" and the alert's detail). `session` is the alert's key: a later reason of the same drop
+    /// replaces this notice in the Notification Center instead of adding a second one.
+    fn from_connection_drop(m: &machines::MachineSummary, a: &machines::Alert, c: &machines::Connection, now_ms: u64, offset_s: i64) -> Notice {
+        let label = machines::display_label(m);
+        let port = m.port.map(|p| format!("a porta {p}")).unwrap_or_else(|| "a porta do túnel".into());
+        let (what, body) = match c.reason() {
+            Some("sso-expired") => {
+                let profile = c.cloud.as_ref().and_then(|x| x.profile.as_deref()).map(|p| format!("A sessão AWS do {p}")).unwrap_or_else(|| "A sessão AWS".into());
+                let body = match machines::sso_expired_at(c, now_ms) {
+                    Some(at) => format!("{profile} expirou às {}", clouds::clock(at, now_ms, offset_s)),
+                    None => format!("{profile} expirou"),
+                };
+                (Some("SSO expirado"), body)
+            }
+            Some("port-busy") => {
+                let holder = c.last_error.as_ref().and_then(|e| e.holder.as_deref()).filter(|h| !h.is_empty()).map(machines::short);
+                let body = match holder {
+                    Some(h) => format!("{h} deste Mac segura {port}"),
+                    None => format!("Outro processo deste Mac segura {port}"),
+                };
+                (Some("porta ocupada"), body)
+            }
+            Some("core-not-answering") => (Some("núcleo de lá parado"), "O túnel está no ar, mas o núcleo de lá não responde".into()),
+            Some("ssm-agent-offline") => (Some("agente SSM offline"), format!("A AWS diz que a {label} não está conectada ao SSM")),
+            Some("host-unknown") => (Some("host desconhecido"), "O ssh não achou o apelido no ~/.ssh/config deste Mac".into()),
+            Some("key-refused") => (Some("chave SSH recusada"), format!("A {label} recusou a chave deste Mac")),
+            Some("exit-code") => (
+                Some("o comando falhou"),
+                match c.last_error.as_ref().and_then(|e| e.exit_code) {
+                    Some(code) => format!("O comando de subir saiu com o código {code}"),
+                    None => "O comando de subir não terminou".into(),
+                },
+            ),
+            _ => (None, a.detail.clone().unwrap_or_default()),
+        };
+        let title = match what {
+            Some(w) => format!("{label} sem conexão: {w}"),
+            None => format!("{label} sem conexão"),
+        };
+        let origin = if c.actions.login_and_start {
+            Origin::MachineLoginAndStart
+        } else if c.actions.reconnect {
+            Origin::MachineReconnect
+        } else {
+            Origin::Machine
+        };
+        Notice { title, body, sound: false, session: alert_key(&m.id, &a.id), local: None, path: machines::machine_path(&m.id), origin, machine: Some(m.id.clone()), cloud_session: None }
+    }
+
+    /// An AWS session expiring or expired, silent (A10): "Sessão da AWS expira em 15 min",
+    /// "Sessão da AWS expirada". `session` is `cloud:aws:<name>`, so the expired notice replaces the
+    /// expiring one in the Notification Center. `None` for any other state. `linked`: the label of the
+    /// machine whose tunnel depends on the session (#278), for "sessao-exemplo · a Workstation cai junto".
+    pub fn from_cloud_session(aws: &clouds::Aws, s: &clouds::Session, now_ms: u64, offset_s: i64, linked: Option<&str>) -> Option<Notice> {
+        let (title, body) = match s.state.as_str() {
+            "expiring" => {
+                let minutes = s.expires_ms().map(|at| at.saturating_sub(now_ms).div_ceil(60_000)).unwrap_or(0);
+                let title = if minutes > 0 { format!("Sessão da AWS expira em {} min", minutes.min(15)) } else { "Sessão da AWS expira em menos de 1 min".into() };
+                let body = match linked {
+                    Some(machine) => format!("{} · a {machine} cai junto", s.name),
+                    None => s.name.clone(),
+                };
+                (title, body)
+            }
+            "expired" => {
+                let body = match s.expires_ms().filter(|at| *at <= now_ms) {
+                    Some(at) => format!("{} expirou às {}", s.name, clouds::clock(at, now_ms, offset_s)),
+                    None => format!("{} expirou", s.name),
+                };
+                ("Sessão da AWS expirada".to_string(), body)
+            }
+            _ => return None,
+        };
+        let origin = if s.offers_login(aws) { Origin::CloudLogin } else { Origin::Cloud };
+        Some(Notice { title, body, sound: false, session: format!("cloud:aws:{}", s.name), local: None, path: clouds::CONNECTIONS_PATH.into(), origin, machine: None, cloud_session: Some(s.name.clone()) })
+    }
+}
+
+/// The AWS sessions that entered `expiring` or `expired` since the previous read (#277).
+#[derive(Debug, Default)]
+pub struct CloudSessionDetector {
+    /// `<session>|<state>|<expiresAt>` of every condition seen, kept: a session that goes from
+    /// `expiring` to `unknown` (a network hiccup) and back does not notify twice for the same token
+    /// end, and a new login (a new end) notifies again. `None` before the first read (or after `reset`).
+    seen: Option<HashSet<String>>,
+}
+
+impl CloudSessionDetector {
+    /// `links`: `(session, machine label)` of the tunnels that depend on a session (machines.rs).
+    pub fn observe(&mut self, aws: &clouds::Aws, now_ms: u64, offset_s: i64, links: &[(String, String)]) -> Vec<Notice> {
+        let first = self.seen.is_none();
+        let seen = self.seen.get_or_insert_with(HashSet::new);
+        let mut notices = Vec::new();
+        for s in clouds::ordered(aws).into_iter().filter(|s| matches!(s.state.as_str(), "expiring" | "expired")) {
+            let key = format!("{}|{}|{}", s.name, s.state, s.expires_at.as_deref().unwrap_or(""));
+            if seen.insert(key) && !first {
+                let linked = links.iter().find(|(session, _)| *session == s.name).map(|(_, label)| label.as_str());
+                notices.extend(Notice::from_cloud_session(aws, s, now_ms, offset_s, linked));
+            }
+        }
+        notices
+    }
+
+    /// Forgets what was seen: the next read only records. On losing the core or its connectors.
+    pub fn reset(&mut self) {
+        self.seen = None;
     }
 }
 
@@ -130,7 +304,17 @@ pub struct MachineAlertDetector {
 }
 
 impl MachineAlertDetector {
+    #[cfg(test)]
     pub fn observe(&mut self, ms: &[machines::Machine]) -> Vec<Notice> {
+        self.observe_at(ms, 0, 0)
+    }
+
+    /// The drop of a machine with a `connection` (#278) notifies once per reason: the alert opening
+    /// notifies with the reason known then, and each new reason while the same alert stays open
+    /// notifies again, under the same identifier, so it replaces the previous notice. The reasons
+    /// seen live as `<alert key>#<reason>` next to the alert's key, and go with it when it closes.
+    /// A drop while the person stopped the tunnel ("parada por você") records but never notifies.
+    pub fn observe_at(&mut self, ms: &[machines::Machine], now_ms: u64, offset_s: i64) -> Vec<Notice> {
         let mut now: HashSet<String> = HashSet::new();
         let mut notices = Vec::new();
         for m in ms {
@@ -142,9 +326,18 @@ impl MachineAlertDetector {
             };
             for a in &t.alerts {
                 let key = alert_key(&m.summary.id, &a.id);
-                if self.previous.as_ref().is_some_and(|p| !p.contains(&key)) {
-                    notices.push(Notice::from_machine_alert(&m.summary, a));
+                let connection = m.summary.connection.as_ref().filter(|_| a.kind == machines::UNREACHABLE_KIND);
+                let reason_key = connection.map(|c| format!("{key}#{}", c.reason().unwrap_or("")));
+                let new_alert = self.previous.as_ref().is_some_and(|p| !p.contains(&key));
+                let new_reason = reason_key.as_ref().is_some_and(|r| !r.ends_with('#') && self.previous.as_ref().is_some_and(|p| !p.contains(r)));
+                let stopped = connection.is_some_and(|c| c.stopped_by_you());
+                if (new_alert || new_reason) && !stopped {
+                    notices.push(Notice::from_machine_alert(&m.summary, a, now_ms, offset_s));
                 }
+                // The reasons already notified in this drop stay while the alert is open.
+                let prefix = format!("{key}#");
+                now.extend(self.previous.iter().flatten().filter(|k| k.starts_with(&prefix)).cloned());
+                now.extend(reason_key);
                 now.insert(key);
             }
         }
@@ -255,6 +448,8 @@ pub struct Notices {
     pub detector: Detector,
     /// The machine alerts' detector (#180), behind the same switch.
     pub machines: MachineAlertDetector,
+    /// The AWS sessions' detector (#277), behind the same switch.
+    pub clouds: CloudSessionDetector,
     pub silence: Silence,
     /// `None` when the app has no data folder: the silence only lasts until it quits.
     pub file: Option<PathBuf>,
@@ -263,7 +458,7 @@ pub struct Notices {
 impl Notices {
     pub fn open(file: Option<PathBuf>) -> Notices {
         let silence = file.as_deref().map(load_or_migrate).unwrap_or_default();
-        Notices { detector: Detector::default(), machines: MachineAlertDetector::default(), silence, file }
+        Notices { detector: Detector::default(), machines: MachineAlertDetector::default(), clouds: CloudSessionDetector::default(), silence, file }
     }
 
     /// The notices of this read that pass the silence.
@@ -273,8 +468,15 @@ impl Notices {
     }
 
     /// The machine notices of this read that pass the silence (#180).
-    pub fn read_machines(&mut self, ms: &[machines::Machine]) -> Vec<Notice> {
-        let new = self.machines.observe(ms);
+    pub fn read_machines(&mut self, ms: &[machines::Machine], now_ms: u64, offset_s: i64) -> Vec<Notice> {
+        let new = self.machines.observe_at(ms, now_ms, offset_s);
+        self.silence.filter(new)
+    }
+
+    /// The AWS session notices of this read that pass the silence (#277); `links` as in
+    /// `CloudSessionDetector::observe`.
+    pub fn read_clouds(&mut self, aws: &clouds::Aws, now_ms: u64, offset_s: i64, links: &[(String, String)]) -> Vec<Notice> {
+        let new = self.clouds.observe(aws, now_ms, offset_s, links);
         self.silence.filter(new)
     }
 
@@ -343,6 +545,21 @@ pub fn file_path(app_data: Option<PathBuf>) -> Option<PathBuf> {
 mod tests {
     use super::*;
     use crate::menu::{ItemAttention, BLOCKED, IDLE};
+
+    #[test]
+    fn a12_the_update_notices_are_silent_and_offer_their_actions() {
+        let n = Notice::update_available("0.0.10", Some("Aviso de versão nova"), "0.0.9");
+        assert_eq!((n.title.as_str(), n.body.as_str(), n.sound), ("Ahrena Console 0.0.10 disponível", "Aviso de versão nova", false));
+        assert_eq!(n.origin.actions(), &[Action::UpdateNow, Action::UpdateLater]);
+        assert_eq!(Notice::update_available("0.0.10", None, "0.0.9").body, "Você está na versão 0.0.9.");
+        let ok = Notice::up_to_date("0.0.9");
+        assert_eq!((ok.title.as_str(), ok.body.as_str()), ("Ahrena Console está em dia", "Você está na versão mais nova · 0.0.9"));
+        assert_eq!(ok.origin.actions(), &[Action::Open]);
+        let failed = Notice::update_failed("0.0.10", "A conexão caiu no download. Você continua na 0.0.9.");
+        assert_eq!(failed.title, "Não deu para atualizar para a 0.0.10");
+        assert_eq!(failed.origin.actions(), &[Action::RetryUpdate, Action::Open]);
+        assert!(!failed.sound);
+    }
 
     const IDLE_REASONS: [&str; 3] = ["turn_ended", "interrupted", "first_prompt"];
 
@@ -576,7 +793,7 @@ mod tests {
 
     fn machine(id: &str, label: &str, state: &str, alerts: Option<Vec<machines::Alert>>) -> machines::Machine {
         machines::Machine {
-            summary: machines::MachineSummary { id: id.into(), label: label.into(), state: state.into(), reason: None, port: Some(14720), last_read_at: None, reconnect: None },
+            summary: machines::MachineSummary { id: id.into(), label: label.into(), state: state.into(), reason: None, port: Some(14720), last_read_at: None, reconnect: None, connection: None },
             telemetry: alerts.map(|alerts| machines::Telemetry { current: None, alerts }),
         }
     }
@@ -654,11 +871,11 @@ mod tests {
     #[test]
     fn criterion_5_respects_the_notifications_switch() {
         let mut n = Notices::open(None);
-        n.read_machines(&[machine("workstation", "Workstation", "connected", Some(vec![]))]);
+        n.read_machines(&[machine("workstation", "Workstation", "connected", Some(vec![]))], 0, 0);
         assert!(!n.toggle());
-        assert!(n.read_machines(&[machine("workstation", "Workstation", "connected", Some(vec![load()]))]).is_empty(), "off: nothing");
+        assert!(n.read_machines(&[machine("workstation", "Workstation", "connected", Some(vec![load()]))], 0, 0).is_empty(), "off: nothing");
         assert!(n.toggle());
-        let notices = n.read_machines(&[machine("workstation", "Workstation", "connected", Some(vec![load(), down()]))]);
+        let notices = n.read_machines(&[machine("workstation", "Workstation", "connected", Some(vec![load(), down()]))], 0, 0);
         assert_eq!(ids(&notices), ["machine:workstation:machine-unreachable"], "turning back on does not notify what was already open");
     }
 
@@ -775,5 +992,182 @@ mod tests {
         std::fs::write(p.0.join(LEGACY_FILE), r#"{ "ligadas": false }"#).unwrap();
         std::fs::write(p.0.join(FILE), r#"{ "enabled": true, "sessions": ["s3"] }"#).unwrap();
         assert_eq!(Notices::open(Some(p.0.join(FILE))).silence, Silence { enabled: true, sessions: ["s3".to_string()].into() });
+    }
+
+    // ---- #277: AWS sessions (A10) ----
+
+    fn with_state(mut aws: clouds::Aws, name: &str, state: &str, expires_at: Option<&str>) -> clouds::Aws {
+        let s = aws.sessions.iter_mut().find(|s| s.name == name).unwrap();
+        s.state = state.into();
+        s.expires_at = expires_at.map(String::from);
+        aws
+    }
+
+    #[test]
+    fn a10_first_read_of_the_clouds_does_not_notify() {
+        let mut d = CloudSessionDetector::default();
+        assert!(d.observe(&clouds::tests::a9(), clouds::tests::now(), 0, &[]).is_empty());
+    }
+
+    #[test]
+    fn a10_expiring_notifies_once_silently_with_login_and_open() {
+        let (mut d, now) = (CloudSessionDetector::default(), clouds::tests::now());
+        let end = "2026-10-18T18:15:00.000Z";
+        d.observe(&with_state(clouds::tests::a9(), "sessao-exemplo", "valid", Some(end)), now, 0, &[]);
+        let expiring = with_state(clouds::tests::a9(), "sessao-exemplo", "expiring", Some(end));
+        let notices = d.observe(&expiring, now, 0, &[]);
+        assert_eq!(notices.len(), 1);
+        let n = &notices[0];
+        assert_eq!((n.title.as_str(), n.body.as_str()), ("Sessão da AWS expira em 15 min", "sessao-exemplo"));
+        assert!(!n.sound, "cloud notifications are silent");
+        assert_eq!((n.session.as_str(), n.path.as_str(), n.cloud_session.as_deref()), ("cloud:aws:sessao-exemplo", "/ui/connections", Some("sessao-exemplo")));
+        assert_eq!(n.origin.actions(), [Action::CloudLogin, Action::Open]);
+        assert!(d.observe(&expiring, now + 60_000, 0, &[]).is_empty(), "the repeated read does not notify");
+        d.observe(&with_state(clouds::tests::a9(), "sessao-exemplo", "unknown", Some(end)), now, 0, &[]);
+        assert!(d.observe(&expiring, now, 0, &[]).is_empty(), "once per session and token end, across a hiccup");
+    }
+
+    #[test]
+    fn a10_expired_notifies_once_and_a_new_login_rearms() {
+        let (mut d, now) = (CloudSessionDetector::default(), clouds::tests::now());
+        let end = "2026-10-18T17:59:00.000Z";
+        d.observe(&with_state(clouds::tests::a9(), "sessao-exemplo", "expiring", Some(end)), now, 0, &[]);
+        let expired = with_state(clouds::tests::a9(), "sessao-exemplo", "expired", Some(end));
+        let notices = d.observe(&expired, now, -3 * 3_600, &[]);
+        assert_eq!(notices.len(), 1);
+        assert_eq!((notices[0].title.as_str(), notices[0].body.as_str()), ("Sessão da AWS expirada", "sessao-exemplo expirou às 14:59"));
+        assert_eq!(notices[0].origin.actions(), [Action::CloudLogin, Action::Open]);
+        assert!(d.observe(&expired, now, 0, &[]).is_empty());
+        let new_end = "2026-10-19T02:00:00.000Z";
+        d.observe(&with_state(clouds::tests::a9(), "sessao-exemplo", "valid", Some(new_end)), now, 0, &[]);
+        let again = d.observe(&with_state(clouds::tests::a9(), "sessao-exemplo", "expiring", Some(new_end)), now, 0, &[]);
+        assert_eq!(again.len(), 1, "a new token end notifies again");
+    }
+
+    #[test]
+    fn a10_session_without_login_only_opens() {
+        let (mut d, now) = (CloudSessionDetector::default(), clouds::tests::now());
+        let mut aws = clouds::tests::a9();
+        aws.sessions.retain(|s| s.name == "sessao com espaco");
+        aws.sessions[0].state = "valid".into();
+        d.observe(&aws, now, 0, &[]);
+        aws.sessions[0].state = "expired".into();
+        let notices = d.observe(&aws, now, 0, &[]);
+        assert_eq!((notices[0].body.as_str(), notices[0].origin), ("sessao com espaco expirou", Origin::Cloud));
+        assert_eq!(Origin::Cloud.actions(), [Action::Open]);
+    }
+
+    #[test]
+    fn a10_respects_the_notifications_switch_and_never_entering_does_not_notify() {
+        let now = clouds::tests::now();
+        let mut n = Notices::default();
+        n.read_clouds(&with_state(clouds::tests::a9(), "sessao-nova", "never", None), now, 0, &[]);
+        assert!(n.read_clouds(&with_state(clouds::tests::a9(), "sessao-nova", "valid", Some("2026-10-18T20:00:00.000Z")), now, 0, &[]).is_empty());
+        n.silence.enabled = false;
+        assert!(n.read_clouds(&with_state(clouds::tests::a9(), "sessao-nova", "expiring", Some("2026-10-18T18:10:00.000Z")), now, 0, &[]).is_empty());
+    }
+
+    // ---- #278: the drop of the Workstation's connection (A10) ----
+
+    /// 08:11 UTC: the session expired at 03:10, the tunnel fell at 03:11.
+    fn morning() -> u64 {
+        machines::parse_iso_ms("2026-10-19T08:11:00.000Z").unwrap()
+    }
+
+    /// The Workstation with a `connection` in `state`, with `error` as `lastError` and `actions`.
+    fn linked(state: &str, error: &str, actions: &str, alerts: Option<Vec<machines::Alert>>) -> machines::Machine {
+        let json = format!(
+            r#"[{{ "id": "workstation", "label": "Workstation", "state": "{}", "port": 14720,
+                  "connection": {{ "configured": true, "state": "{state}", "since": "2026-10-19T03:11:00.000Z", "ports": [],
+                    "cloud": {{ "connector": "aws", "profile": "perfil-dev", "session": "sessao-exemplo", "state": "expired", "expiresAt": "2026-10-19T03:10:00.000Z" }},
+                    "lastError": {error}, "actions": {actions}, "command": null, "job": null, "logFile": null }} }}]"#,
+            if alerts.as_ref().is_some_and(|a| !a.is_empty()) { "unreachable" } else { "connected" }
+        );
+        machines::Machine { summary: machines::summaries_from_json(&json).unwrap().remove(0), telemetry: alerts.map(|alerts| machines::Telemetry { current: None, alerts }) }
+    }
+
+    const SSO: &str = r#"{ "reason": "sso-expired", "at": "2026-10-19T03:11:00.000Z", "exitCode": null, "holder": null }"#;
+    const BUSY: &str = r#"{ "reason": "port-busy", "at": "2026-10-19T08:09:00.000Z", "exitCode": null, "holder": "node" }"#;
+    const LOGIN_AND_START: &str = r#"{ "start": true, "stop": false, "reconnect": true, "loginAndStart": true }"#;
+    const RECONNECT_ONLY: &str = r#"{ "start": true, "stop": false, "reconnect": true, "loginAndStart": false }"#;
+
+    #[test]
+    fn a10_sso_expired_drop_offers_login_and_start() {
+        let mut d = MachineAlertDetector::default();
+        d.observe_at(&[linked("up", "null", RECONNECT_ONLY, Some(vec![]))], morning(), 0);
+        let notices = d.observe_at(&[linked("down", SSO, LOGIN_AND_START, Some(vec![down()]))], morning(), 0);
+        assert_eq!(notices.len(), 1, "one notice for the drop: the reasoned one replaces the #244 one");
+        let n = &notices[0];
+        assert_eq!((n.title.as_str(), n.body.as_str()), ("Workstation sem conexão: SSO expirado", "A sessão AWS do perfil-dev expirou às 03:10"));
+        assert!(!n.sound);
+        assert_eq!((n.origin, n.origin.actions()), (Origin::MachineLoginAndStart, &[Action::LoginAndStart, Action::Open][..]));
+        assert_eq!((n.session.as_str(), n.path.as_str(), n.machine.as_deref()), ("machine:workstation:machine-unreachable", "/ui/machines/workstation", Some("workstation")));
+    }
+
+    #[test]
+    fn a10_port_busy_and_the_other_reasons_offer_reconnect() {
+        let cases = [
+            (BUSY, "Workstation sem conexão: porta ocupada", "node deste Mac segura a porta 14720"),
+            (r#"{ "reason": "port-busy", "holder": null }"#, "Workstation sem conexão: porta ocupada", "Outro processo deste Mac segura a porta 14720"),
+            (r#"{ "reason": "ssm-agent-offline", "exitCode": 255 }"#, "Workstation sem conexão: agente SSM offline", "A AWS diz que a Workstation não está conectada ao SSM"),
+            (r#"{ "reason": "host-unknown", "exitCode": 255 }"#, "Workstation sem conexão: host desconhecido", "O ssh não achou o apelido no ~/.ssh/config deste Mac"),
+            (r#"{ "reason": "key-refused", "exitCode": 255 }"#, "Workstation sem conexão: chave SSH recusada", "A Workstation recusou a chave deste Mac"),
+            (r#"{ "reason": "exit-code", "exitCode": 255 }"#, "Workstation sem conexão: o comando falhou", "O comando de subir saiu com o código 255"),
+            (r#"{ "reason": "core-not-answering" }"#, "Workstation sem conexão: núcleo de lá parado", "O túnel está no ar, mas o núcleo de lá não responde"),
+            ("null", "Workstation sem conexão", "A porta 14720 deste Mac não aceita conexão: o túnel está caído"),
+        ];
+        for (error, title, body) in cases {
+            let mut d = MachineAlertDetector::default();
+            d.observe_at(&[linked("up", "null", RECONNECT_ONLY, Some(vec![]))], morning(), 0);
+            let notices = d.observe_at(&[linked("failing", error, RECONNECT_ONLY, Some(vec![down()]))], morning(), 0);
+            assert_eq!((notices[0].title.as_str(), notices[0].body.as_str()), (title, body), "{error}");
+            assert_eq!(notices[0].origin.actions(), [Action::Reconnect, Action::Open], "{error}");
+        }
+        let mut d = MachineAlertDetector::default();
+        d.observe_at(&[linked("up", "null", NO_ACTION, Some(vec![]))], morning(), 0);
+        assert_eq!(d.observe_at(&[linked("down", BUSY, NO_ACTION, Some(vec![down()]))], morning(), 0)[0].origin, Origin::Machine, "no action the core can run: only Abrir");
+    }
+
+    const NO_ACTION: &str = r#"{ "start": false, "stop": false, "reconnect": false, "loginAndStart": false }"#;
+
+    #[test]
+    fn a10_once_per_reason_per_drop() {
+        let mut d = MachineAlertDetector::default();
+        d.observe_at(&[linked("up", "null", RECONNECT_ONLY, Some(vec![]))], morning(), 0);
+        assert_eq!(d.observe_at(&[linked("down", "null", RECONNECT_ONLY, Some(vec![down()]))], morning(), 0)[0].title, "Workstation sem conexão", "no reason yet");
+        let busy = [linked("failing", BUSY, RECONNECT_ONLY, Some(vec![down()]))];
+        let later = d.observe_at(&busy, morning(), 0);
+        assert_eq!(later.len(), 1, "the reason found later notifies once");
+        assert_eq!((later[0].title.as_str(), later[0].session.as_str()), ("Workstation sem conexão: porta ocupada", "machine:workstation:machine-unreachable"), "same identifier: it replaces the first");
+        assert!(d.observe_at(&busy, morning(), 0).is_empty(), "the repeated read does not notify");
+        assert!(d.observe_at(&[linked("failing", "null", RECONNECT_ONLY, Some(vec![down()]))], morning(), 0).is_empty(), "losing the reason does not notify");
+        assert!(d.observe_at(&busy, morning(), 0).is_empty(), "a reason already seen in this drop does not come back");
+        assert!(d.observe_at(&[linked("down", SSO, LOGIN_AND_START, Some(vec![down()]))], morning(), 0).len() == 1, "a new reason in the same drop does");
+        assert!(d.observe_at(&[linked("up", "null", RECONNECT_ONLY, Some(vec![]))], morning(), 0).is_empty(), "reconnected: no notice");
+        assert_eq!(d.observe_at(&busy, morning(), 0).len(), 1, "a new drop rearms every reason");
+    }
+
+    #[test]
+    fn a10_a_drop_after_stopped_by_you_does_not_notify() {
+        for state in ["stopped", "stopping"] {
+            let mut d = MachineAlertDetector::default();
+            d.observe_at(&[linked("up", "null", RECONNECT_ONLY, Some(vec![]))], morning(), 0);
+            assert!(d.observe_at(&[linked(state, "null", NO_ACTION, Some(vec![down()]))], morning(), 0).is_empty(), "{state}");
+            assert!(d.observe_at(&[linked("stopped", BUSY, NO_ACTION, Some(vec![down()]))], morning(), 0).is_empty(), "{state}: nor a reason seen meanwhile");
+        }
+    }
+
+    #[test]
+    fn a10_the_linked_session_says_the_workstation_falls_with_it() {
+        let (mut d, now) = (CloudSessionDetector::default(), clouds::tests::now());
+        let end = "2026-10-18T18:15:00.000Z";
+        let links = [("sessao-exemplo".to_string(), "Workstation".to_string())];
+        d.observe(&with_state(clouds::tests::a9(), "sessao-exemplo", "valid", Some(end)), now, 0, &links);
+        let notices = d.observe(&with_state(clouds::tests::a9(), "sessao-exemplo", "expiring", Some(end)), now, 0, &links);
+        assert_eq!((notices[0].title.as_str(), notices[0].body.as_str()), ("Sessão da AWS expira em 15 min", "sessao-exemplo · a Workstation cai junto"));
+        assert_eq!(notices[0].origin.actions(), [Action::CloudLogin, Action::Open]);
+        let mut d = CloudSessionDetector::default();
+        d.observe(&with_state(clouds::tests::a9(), "sessao-lab", "valid", Some(end)), now, 0, &links);
+        assert_eq!(d.observe(&with_state(clouds::tests::a9(), "sessao-lab", "expiring", Some(end)), now, 0, &links)[0].body, "sessao-lab", "another session: unchanged");
     }
 }

@@ -31,7 +31,9 @@ import {
   hasFilter,
   trail,
   agentName,
+  eventKey,
 } from './feed-state.js';
+import { createMachineFilter, machineIdOf, machineTag, whereText } from '../machine-filter.js';
 
 const CSS = '/ui/feed.css';
 const CLOCK_MS = 5000;
@@ -52,7 +54,7 @@ export async function mount(area, ctx) {
   const css = attachCss();
   const state = newState();
   const filters = {};
-  const items = new Map(); // id → nó da linha (com o detalhe, quando aberta)
+  const items = new Map(); // eventKey → nó da linha (com o detalhe, quando aberta)
   let generation = 0;
   let ready = false;
   let inFlight = false;
@@ -64,6 +66,19 @@ export async function mount(area, ctx) {
   const pauseButton = el('button', { type: 'button', class: 'btn', 'aria-pressed': 'false', onClick: () => (state.pausado ? drop() : freeze()) });
   const refreshButton = el('button', { type: 'button', class: 'btn', onClick: () => reload() }, icon('refresh'), 'Atualizar');
   const head = header({ icon: 'activity', title: 'Feed de atividade', sub: 'Todos os eventos das sessões, ao vivo', actions: [pauseButton, refreshButton] });
+  const sub = head.querySelector?.('.sub') ?? null;
+  // Issue 243 (C47): the machine filter on its own row under the header. The feed's own clock already asks
+  // for new events every few seconds (which reads the remotes and their state too), and every change asks
+  // again: the filter adds no timer and no debounce of its own.
+  const machines = createMachineFilter(ctx, { onChange: () => reload(), onLayout: () => placeMachineRow(), periodic: false, watchChanges: false });
+  const machineSlot = el('div', { class: 'feed-machines' });
+  machineSlot.hidden = true;
+  function placeMachineRow() {
+    const parts = machines.parts();
+    machineSlot.replaceChildren(...parts);
+    machineSlot.hidden = parts.length === 0;
+    if (sub) sub.textContent = machines.hasRemotes() ? `Todos os eventos das sessões ${whereText(machines.choice, machines.machines(), { form: 'of' })}, ao vivo` : 'Todos os eventos das sessões, ao vivo';
+  }
 
   // ---------- sobre ----------
 
@@ -134,7 +149,8 @@ export async function mount(area, ctx) {
     if (!options) return;
     optionsOf(sType, 'Tipo de evento', (options.types ?? []).map((t) => [t, t]));
     optionsOf(sTool, 'Ferramenta', (options.tools ?? []).map((t) => [t, t]));
-    optionsOf(sSession, 'Sessão', (options.sessions ?? []).map((s) => [s.id, [s.project, s.title ?? s.id].filter(Boolean).join(' › ')]));
+    // A remote session names its machine first (issue 243), as the row's path does.
+    optionsOf(sSession, 'Sessão', (options.sessions ?? []).map((s) => [s.id, [machineIdOf(s) !== 'local' ? s.machine.label : null, s.project, s.title ?? s.id].filter(Boolean).join(' › ')]));
   }
 
   // ---------- aviso de novos, faixa e corpo ----------
@@ -146,7 +162,7 @@ export async function mount(area, ctx) {
   const moreButton = el('button', { type: 'button', class: 'btn outline feed-more', onClick: () => showMore() }, 'Mostrar mais');
   const listCard = el('div', { class: 'card feed-rows' }, listEl, el('div', { class: 'feed-foot' }, moreButton));
 
-  area.replaceChildren(head, about, filtersCard, notice, band, body);
+  area.replaceChildren(head, machineSlot, about, filtersCard, notice, band, body);
   drawPause();
 
   const showBody = (node) => body.replaceChildren(node);
@@ -156,8 +172,9 @@ export async function mount(area, ctx) {
   // ---------- linhas ----------
 
   function row(ev) {
-    const isOpen = state.aberto === ev.id;
-    const route = sessionRoute(ev.session?.id);
+    const key = eventKey(ev);
+    const isOpen = state.aberto === key;
+    const route = sessionRoute(ev.session?.id, machineIdOf(ev));
     const pill = rowPill(ev);
     const arrow = el(
       'button',
@@ -166,16 +183,20 @@ export async function mount(area, ctx) {
     );
     arrow.addEventListener('click', (e) => {
       e.stopPropagation();
-      toggleOpen(ev.id);
+      toggleOpen(key);
     });
     const path = trail(ev);
+    // C47: a remote event's tag opens the path (Workstation › projeto › sessão › agente).
+    const tag = machineTag(ev);
     const headEl = el(
       'div',
       { class: `feed-row${isOpen ? ' feed-open' : ''}` },
       arrow,
       el('span', { class: 'feed-o mono feed-time' }, shortTime(ev.createdAt)),
       pill.attention ? attentionPill(pill.attention) : el('span', { class: `badge b-${pill.status}` }, el('span', { class: 'p' }), STATUS[pill.status]),
-      el('span', { class: 'feed-o feed-trunc feed-trail', title: path }, path),
+      tag
+        ? el('span', { class: 'feed-o feed-trail mf-with-tag', title: `${ev.machine.label} › ${path}` }, tag, el('span', {}, '›'), el('span', { class: 'mf-shrink' }, path))
+        : el('span', { class: 'feed-o feed-trunc feed-trail', title: path }, path),
       el('span', { class: 'feed-trunc feed-summary', title: ev.summary ?? ev.type ?? '' }, ev.summary ?? ev.type ?? ''),
       ev.tool ? el('span', { class: 'feed-chip' }, ev.tool) : null,
       el('span', { class: 'feed-o feed-rel', title: dateTime(ev.createdAt) }, relativeTime(ev.createdAt)),
@@ -183,7 +204,7 @@ export async function mount(area, ctx) {
     );
     headEl.addEventListener('click', (e) => {
       if (e.target?.closest?.('a, button')) return;
-      toggleOpen(ev.id);
+      toggleOpen(key);
     });
     return headEl;
   }
@@ -195,6 +216,7 @@ export async function mount(area, ctx) {
       ['Evento', ev.type],
       ['Registrado', dateTime(ev.createdAt)],
       ['Sessão', ev.session?.id],
+      machineIdOf(ev) !== 'local' ? ['Máquina', ev.machine.label] : null,
       ['Agente', [agentName(agent.name), shortId(agent.id)].filter(Boolean).join(' · ')],
       ['Ferramenta', ev.tool],
       ['Call id', d.callId],
@@ -206,19 +228,19 @@ export async function mount(area, ctx) {
       'div',
       { class: 'feed-detail' },
       el('div', { class: 'card feed-block' }, el('div', { class: 'eyebrow' }, 'Resumo'), block, ev.tool && ev.summary ? el('p', { class: 'feed-text' }, ev.summary) : null),
-      el('dl', { class: 'feed-kv mono' }, ...pairs.flatMap(([k, v]) => [el('dt', {}, k), el('dd', { class: 'feed-trunc', title: v ?? '' }, v || '—')])),
+      el('dl', { class: 'feed-kv mono' }, ...pairs.filter(Boolean).flatMap(([k, v]) => [el('dt', {}, k), el('dd', { class: 'feed-trunc', title: v ?? '' }, v || '—')])),
     );
   }
 
   function item(ev) {
-    const node = el('div', { class: 'feed-item', 'data-id': ev.id });
+    const node = el('div', { class: 'feed-item', 'data-id': ev.id, 'data-key': eventKey(ev) });
     fill(node, ev);
-    items.set(ev.id, { no: node, ev });
+    items.set(eventKey(ev), { no: node, ev });
     return node;
   }
 
   function fill(node, ev) {
-    node.replaceChildren(...[row(ev), state.aberto === ev.id ? detail(ev) : null].filter(Boolean));
+    node.replaceChildren(...[row(ev), state.aberto === eventKey(ev) ? detail(ev) : null].filter(Boolean));
   }
 
   function toggleOpen(id) {
@@ -233,6 +255,8 @@ export async function mount(area, ctx) {
   function drawAll() {
     items.clear();
     if (!state.events.length) {
+      // C48: the chosen remote is down; the notice above says why the feed is empty.
+      if (machines.chosenDown()) return void body.replaceChildren();
       showBody(
         hasFilter(filters)
           ? empty({ title: 'Nenhum evento com esses filtros', text: 'Mude ou limpe os filtros para ver mais.' })
@@ -249,8 +273,8 @@ export async function mount(area, ctx) {
     if (!entered.length) return;
     if (body.firstChild !== listCard || !atTop) return drawAll();
     for (const ev of cutOff) {
-      items.get(ev.id)?.no.remove();
-      items.delete(ev.id);
+      items.get(eventKey(ev))?.no.remove();
+      items.delete(eventKey(ev));
     }
     listEl.prepend(...entered.map(item));
     moreButton.hidden = !state.older;
@@ -282,8 +306,10 @@ export async function mount(area, ctx) {
     again = false;
     if (!keepList) showBody(loading({ label: 'Carregando eventos' }));
     try {
-      const r = await ctx.read(query(filters));
+      const r = await ctx.read(machines.route(query(filters)));
       if (g !== generation) return;
+      machines.update(r);
+      placeMachineRow();
       load(state, r);
       refreshOptions(r.options);
       ready = true;
@@ -292,6 +318,7 @@ export async function mount(area, ctx) {
       drawPause();
     } catch (e) {
       if (isAbort(e) || g !== generation) return;
+      if (machines.recover(e)) return;
       if (keepList && body.firstChild === listCard) showBand('Não deu para reler o feed.', e?.message);
       else showBody(error({ text: e?.message ?? String(e), retry: () => reload() }));
     }
@@ -303,9 +330,11 @@ export async function mount(area, ctx) {
     inFlight = true;
     const g = generation;
     try {
-      const r = await ctx.read(query(filters, { after: state.cursor }));
+      const r = await ctx.read(machines.route(query(filters, { after: state.cursor })));
       if (g !== generation) return;
       clearBand();
+      machines.update(r);
+      placeMachineRow();
       refreshOptions(r.options);
       drawNew(receiveNewer(state, r));
       drawPause();
@@ -328,10 +357,12 @@ export async function mount(area, ctx) {
     const g = generation;
     moreButton.disabled = true;
     try {
-      const r = await ctx.read(query(filters, { before: state.older }));
+      const r = await ctx.read(machines.route(query(filters, { before: state.older })));
       if (g !== generation) return;
-      const stale = receiveOlder(state, r);
-      listEl.append(...stale.map(item));
+      const { entered, atEnd } = receiveOlder(state, r);
+      // Issue 243: an older page of several machines can land between rows already on screen.
+      if (!atEnd) drawAll();
+      else listEl.append(...entered.map(item));
       moreButton.hidden = !state.older;
     } catch (e) {
       if (isAbort(e) || g !== generation) return;

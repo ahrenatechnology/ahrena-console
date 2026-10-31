@@ -241,6 +241,26 @@ export const SCREENS = [
     icon: 'plug',
     file: '/ui/screens/connections.js',
   },
+  {
+    // The GitHub detail (C39 to C44) once Conexões is a catalog (issue 277, C57): the same screen.
+    id: 'connections-github',
+    route: '/ui/connections/github',
+    highlights: 'connections',
+    title: 'Conexões · GitHub',
+    sub: null,
+    icon: 'github',
+    file: '/ui/screens/connections.js',
+  },
+  {
+    // The AWS sessions and profiles of this Mac or a remote machine (`?machine=<id>`, C58 to C60, issue 277).
+    id: 'connections-aws',
+    route: '/ui/connections/aws',
+    highlights: 'connections',
+    title: 'Conexões · AWS',
+    sub: null,
+    icon: 'cloud',
+    file: '/ui/screens/cloud-connections.js',
+  },
 ];
 
 // ---------- The remote machines in the sidebar (issue 178) ----------
@@ -259,6 +279,8 @@ export const machineItemId = (id) => `machine-${id}`;
 // The machine id of the core (src/telemetry/model.ts `MACHINE_ID`).
 const MACHINE_ID = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const MACHINE_STATES = new Set(['connected', 'unreachable', 'incompatible-version', 'not-configured']);
+// A connection the person stopped (issue 278) is not a drop: its own state, a grey dot.
+const stoppedByYou = (m) => m.connection && typeof m.connection === 'object' && m.connection.state === 'stopped';
 
 /** The sidebar entries of the remote machines in `GET /api/machines` (this machine is in SCREENS). */
 export function machineItems(machines) {
@@ -273,7 +295,7 @@ export function machineItems(machines) {
       id: machineItemId(m.id),
       route: `/ui/machines/${m.id}`,
       item: { label, icon: 'server', section: 'machines' },
-      state: MACHINE_STATES.has(m.state) ? m.state : 'unreachable',
+      state: stoppedByYou(m) ? 'stopped' : MACHINE_STATES.has(m.state) ? m.state : 'unreachable',
       title: label,
       icon: 'server',
     });

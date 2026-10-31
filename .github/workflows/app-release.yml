@@ -106,6 +106,12 @@ jobs:
           echo "Versão $versao; release: $release"
           echo "release=$release" >> "$GITHUB_OUTPUT"
 
+      # #327: o Client ID do OAuth App da Ahrena viaja dentro do app. Uma release sem ele sairia com
+      # o login do GitHub desligado, então só builda para release se a constante estiver preenchida.
+      - name: Client ID do GitHub embutido
+        if: steps.plano.outputs.release == 'true'
+        run: node scripts/check-github-client-id.mjs
+
       # A chave privada do updater é um segredo do repositório. Sem ela (PR de fork, ou antes de
       # o projeto gerar a chave) a build sai sem updater. Num PR a chave nunca é usada: o código
       # do PR rodaria com ela no ambiente.

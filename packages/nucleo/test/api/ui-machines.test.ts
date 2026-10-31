@@ -206,14 +206,14 @@ describe('#178 criterion 2: Esta máquina (C24) with the simulator', () => {
     const ports = part(m.area, 'ports')!;
     assert.deepEqual(all(ports, '.tm-seg button'), ['Todas 7', 'Todas as interfaces 1', 'Só loopback 6']);
     assert.deepEqual(all(ports, 'tbody tr'), [
-      '3000 só loopback node —',
-      '4720 só loopback node Núcleo do console',
-      '5432 todas as interfaces postgres —',
-      '13000, 14720, 15173 só loopback ssh túnel para ws-exemplo',
-      '18080 só loopback node segura a porta do túnel',
+      '3000 só loopback node pid 480 — Liberar',
+      '4720 só loopback node pid 401 Núcleo do console Liberar é o núcleo do console',
+      '5432 todas as interfaces postgres pid 450 — Liberar',
+      '13000, 14720, 15173 só loopback ssh pid 430 túnel para ws-exemplo Liberar derruba o túnel',
+      '18080 só loopback node pid 460 segura a porta do túnel Liberar',
     ]);
     ports.querySelector('[data-filter="exposed"]')!.click();
-    assert.deepEqual(all(part(m.area, 'ports')!, 'tbody tr'), ['5432 todas as interfaces postgres —']);
+    assert.deepEqual(all(part(m.area, 'ports')!, 'tbody tr'), ['5432 todas as interfaces postgres pid 450 — Liberar']);
     assert.equal(part(m.area, 'ports')!.querySelector('[data-filter="exposed"]')!.getAttribute('aria-pressed'), 'true');
   });
 
@@ -321,10 +321,10 @@ describe('#178 criterion 2: a remote machine (C25) with the simulator', () => {
     assert.match(texto(ports), /Portas em escuta lá/);
     assert.deepEqual(all(ports, '.tm-seg button'), ['Todas 8', 'Todas as interfaces 2', 'Só loopback 6']);
     const rows = all(ports, 'tbody tr');
-    assert.ok(rows.includes('4720 só loopback node Núcleo do console 14720 Respondendo'), rows.join('\n'));
-    assert.ok(rows.includes('3000 só loopback vite catalogo-local 13000 Respondendo'));
-    assert.ok(rows.includes('8080 só loopback node — 18080 Ocupada no Mac'));
-    assert.ok(rows.includes('15432 todas as interfaces docker-proxy loja-validacao —'));
+    assert.ok(rows.some((r) => r.startsWith('4720 só loopback node pid ') && r.includes('Núcleo do console 14720 Respondendo Liberar é o núcleo do console')), rows.join('\n'));
+    assert.ok(rows.some((r) => /^3000 só loopback vite pid \d+ catalogo-local 13000 Respondendo /.test(r)), rows.join('\n'));
+    assert.ok(rows.some((r) => /^8080 só loopback node pid \d+ — 18080 Ocupada no Mac /.test(r)), rows.join('\n'));
+    assert.ok(rows.some((r) => /^15432 todas as interfaces docker-proxy loja-validacao — Ver a stack publicada por container: a stack é a dona$/.test(r)), rows.join('\n'));
   });
 
   test('an unknown machine: "Máquina não encontrada", not a broken screen', async () => {
@@ -385,7 +385,8 @@ describe('#178 criterion 3: a remote without connection (C26)', () => {
   // Decision 0012 (issue 244) adds one write, Reconectar, which runs the user's own command and only
   // when machines.json has one (test/api/ui-machine-reconnect.test.ts); without it, nothing changes here.
   test('no button starts, stops or forwards a tunnel: the app only shows', async () => {
-    const allowed = new Set(['1 h', '12 h', 'Tentar agora', 'Tentar de novo']);
+    // The port actions (Liberar, Ver a stack, Copiar comando, issue 286) act on a process, never on the tunnel.
+    const allowed = new Set(['1 h', '12 h', 'Tentar agora', 'Tentar de novo', 'Liberar', 'Ver a stack', 'Copiar comando']);
     for (const [state, reason] of [['connected', null], ['unreachable', 'port-closed'], ['unreachable', 'no-response'], ['incompatible-version', null], ['unreachable', null]] as const) {
       setRemote(state, reason);
       for (const id of [WS.id, null]) {
@@ -398,6 +399,8 @@ describe('#178 criterion 3: a remote without connection (C26)', () => {
     const source = readFileSync(`${UI_FOLDER}screens/machine.js`, 'utf8');
     const writes = [...source.matchAll(/ctx\.write\(([^,]+),/g)].map((m) => m[1]);
     assert.deepEqual(writes, ['reconnectRoute(id)'], 'the machine screen writes only to /api/machines/<id>/reconnect');
+    const release = readFileSync(`${UI_FOLDER}screens/port-release.js`, 'utf8');
+    assert.deepEqual([...release.matchAll(/ctx\.write\(([^,]+),/g)].map((m) => m[1]), ['releaseRoute(machineId)'], 'the release dialog writes only to the release route');
   });
 });
 
@@ -449,7 +452,7 @@ describe('#178 criterion 2: a card whose group is null does not show; strange sh
     await m.ready;
     assert.deepEqual(cardIds(m.area), ['cpu', 'memory', 'disk', 'docker']);
     assert.deepEqual(all(part(m.area, 'stacks')!, 'tbody tr'), ['ok-stack 2 8080']);
-    assert.deepEqual(all(part(m.area, 'ports')!, 'tbody tr'), ['22 — — — —']);
+    assert.deepEqual(all(part(m.area, 'ports')!, 'tbody tr'), ['22 — — — — Liberar o sistema não disse quem escuta']);
     assert.match(texto(m.area), /Build cache 0 em uso · 2 recuperável/);
     // A reading that is not an object at all.
     for (const current of ['x', 42, [], null]) {
@@ -539,22 +542,24 @@ describe('#178 criterion 6: live through /api/changes, with simulator data', () 
 
 // ---------- C1: the remote sessions on the Dashboard ----------
 
-describe('Dashboard: remote sessions (supports #176/#178): the machine label and no link', () => {
-  test('inboxCards: an item with `machine` carries the label and has no href; a local one keeps its link', () => {
+describe('Dashboard: remote sessions (#178, then #243 C47 and C49): the machine icon and the remote Detail', () => {
+  test('inboxCards: an item with `machine` carries the machine and links to the remote Detail; a local one keeps its link', () => {
     const cards = dashboard.inboxCards(ATTENTION, [{ session: 'r1', model: 'claude-opus-5-5', task: 'Bash: rm' }]);
     assert.equal(cards[0].href, '/ui/sessions/l1');
     assert.equal(cards[0].machine, null);
-    assert.equal(cards[1].href, null);
+    // Issue 243 (C49): the remote Detail is read through the tunnel, with `?machine=`.
+    assert.equal(cards[1].href, `/ui/sessions/r1?machine=${WS.id}`);
     assert.deepEqual(cards[1].machine, { id: WS.id, label: 'Workstation' });
-    assert.equal(cards[1].foot, 'Workstation', 'the machine, not a local agent of the same id');
+    assert.equal(cards[1].foot, '', 'a local agent of the same id is another session: its model is not used');
   });
 
-  test('mounted: the remote card is not a link and shows the machine', async () => {
+  test('mounted: the remote card shows the server icon with the machine in the tooltip, links to the remote Detail and has its open action off', async () => {
     const numbers = { sessions: { total: 1, active: 1, waiting: 0, withError: 0 }, agents: { active: 0, sessions: 0 }, subagents: { active: 0, sessions: 0 }, events: { today: 0, lastHour: 0, total: 0 }, cost: { usd: 0, days: 30, unpriced: [] } };
     const area = new ElementoFalso('main');
     const signal = new AbortController();
+    const remoteAttention = { ...ATTENTION, items: ATTENTION.items.map((i) => (i.machine ? { ...i, open: { target: 'remote', command: null } } : i)) };
     const cleanup = await dashboard.mount(area, {
-      read: async (route: string) => (route === '/api/dashboard' ? { numbers, agents: [], activity: [] } : ATTENTION),
+      read: async (route: string) => (route.startsWith('/api/dashboard') ? { numbers, agents: [], activity: [] } : remoteAttention),
       signal: signal.signal,
       onChange: () => {},
       onRestart: () => {},
@@ -562,14 +567,16 @@ describe('Dashboard: remote sessions (supports #176/#178): the machine label and
     });
     try {
       const minis = area.querySelectorAll('.mini');
-      // issue 285: the card is a div; a local one carries the "Abrir ›" link, a remote one none.
+      // issue 285: the card is a div; a local one carries the "Abrir ›" link.
       assert.equal(minis[0]!.querySelector('a.dash-open-link')!.getAttribute('href'), '/ui/sessions/l1');
       assert.equal(minis[1]!.tagName, 'DIV');
-      assert.equal(minis[1]!.querySelectorAll('a').length, 0);
-      assert.equal(minis[1]!.querySelectorAll('button').length, 0, 'no open icon for a remote session');
+      assert.equal(minis[1]!.querySelector('a.dash-open-link')!.getAttribute('href'), `/ui/sessions/r1?machine=${WS.id}`);
       assert.equal(minis[1]!.getAttribute('data-machine'), WS.id);
-      assert.match(texto(minis[1]!), /Workstation · 2 min$/);
-      assert.doesNotMatch(texto(minis[1]!), /Abrir/);
+      const tag = minis[1]!.querySelector('.mf-tag')!;
+      assert.equal(tag.getAttribute('title'), 'Workstation');
+      assert.equal(texto(tag), '', 'icon only, the label in the tooltip');
+      // The open icon is the "outra máquina" case of C70: off, never a POST to this core.
+      assert.equal(minis[1]!.querySelector('button')!.getAttribute('aria-disabled'), 'true');
     } finally {
       signal.abort();
       cleanup?.();
@@ -579,7 +586,7 @@ describe('Dashboard: remote sessions (supports #176/#178): the machine label and
 
 // ---------- files, classes and icons ----------
 
-const FILES = ['screens/machine.js', 'screens/machine-format.js', 'screens/machine.css'];
+const FILES = ['screens/machine.js', 'screens/machine-format.js', 'screens/machine.css', 'screens/port-release.js'];
 const classesOfCss = (file: string) => new Set([...readFileSync(`${UI_FOLDER}${file}`, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/\.([a-z][a-z0-9-]*)/g)].map((m) => m[1]!));
 const SEALS = new Set(['badge', 'p', 'b-active', 'b-waiting', 'b-completed', 'b-error', 'b-abandoned']);
 
@@ -589,7 +596,7 @@ describe('#178 the screen\'s files, CSS, classes and icons', () => {
     const own = [...classesOfCss('screens/machine.css')].filter((c) => !shell.has(c) && !SEALS.has(c));
     assert.ok(own.length > 30);
     assert.deepEqual(own.filter((c) => !c.startsWith('tm-')), []);
-    const js = readFileSync(`${UI_FOLDER}screens/machine.js`, 'utf8');
+    const js = ['machine.js', 'port-release.js'].map((f) => readFileSync(`${UI_FOLDER}screens/${f}`, 'utf8')).join('\n');
     const used = [...js.matchAll(/class: [`'"]([^`'"]+)[`'"]/g)].flatMap((m) => m[1]!.split(/\s+/)).map((c) => (c.includes('${') ? c.slice(0, c.indexOf('${')) : c)).filter((c) => /^[a-z][a-z0-9-]*$/.test(c));
     assert.ok(used.length > 20);
     assert.deepEqual(used.filter((c) => !c.startsWith('tm-') && !shell.has(c) && !SEALS.has(c) && !['card', 'btn', 'outline', 'mono', 'eyebrow', 'badge', 'error-band'].includes(c)), []);

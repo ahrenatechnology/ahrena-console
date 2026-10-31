@@ -62,16 +62,18 @@ function mcpCard(m) {
   );
 }
 
-function promoteCard() {
+function promoteCard(remote = false) {
   return el(
     'section',
     { class: 'card dec-side' },
     el('div', { class: 'dec-side-ttl' }, icon('promote'), el('h3', {}, 'Promover a registro de decisão')),
     el('p', {}, 'Gera um rascunho de registro de decisão para o repositório da sessão, com contexto, decisão, alternativas e o link para a conversa. O caminho vem do núcleo e aparece antes de gravar.'),
+    // Issue 243: the draft and the save are writes of this core, about a session it does not have.
+    remote ? el('p', { class: 'dec-note' }, 'Desligado nesta sessão: ela roda em outra máquina, e o registro é gravado pelo núcleo daqui.') : null,
   );
 }
 
-export function create(ctx, base, { head: headEl = () => null, setLabel = () => {} } = {}) {
+export function create(ctx, base, { head: headEl = () => null, setLabel = () => {}, remote = null } = {}) {
   // Abre em Sessão, como o C20; Família e Branch somam as das outras sessões.
   const filters = { scope: 'session', state: 'all', q: '' };
   let target = null;
@@ -104,8 +106,11 @@ export function create(ctx, base, { head: headEl = () => null, setLabel = () => 
     const { bar, list, side, grid } = pieces();
     const session = r.session ?? headEl()?.session?.id;
     const now = Date.now();
-    list.replaceChildren(...(r.items.length ? r.items.map((d) => decisionCard(d, { session, onChange: draw, now })) : [nothing(r)]));
-    side.replaceChildren(injectionCard(r.injection), mcpCard(r.mcp), promoteCard());
+    // A remote session's decisions come from the remote (issue 243): only read here, never confirmed,
+    // dismissed or promoted by this core.
+    const readOnly = remote ? 'Esta sessão roda em outra máquina: daqui as decisões só se leem.' : null;
+    list.replaceChildren(...(r.items.length ? r.items.map((d) => decisionCard(d, { session, onChange: draw, now, readOnly, machine: remote?.id ?? null })) : [nothing(r)]));
+    side.replaceChildren(injectionCard(r.injection), mcpCard(r.mcp), promoteCard(Boolean(remote)));
     target?.replaceChildren(bar, grid);
   }
 

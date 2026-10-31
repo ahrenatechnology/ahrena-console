@@ -49,6 +49,7 @@ import {
   UNDO_MS,
   dateTime,
   plural,
+  machineDown,
   needYouText,
   when,
   whoDecided,
@@ -69,7 +70,7 @@ export const CARD_W = 34
 export const CARD_H = CARD_BORDER + CARD_LINES
 export const GAP = 2
 /** A versão deste plugin; o teste do núcleo confere com o plugin.json. */
-export const PLUGIN_VERSION = '0.0.35'
+export const PLUGIN_VERSION = '0.0.36'
 const KPI_W = 15
 /** No estreito, quantos cards de decisão cabem antes do rodapé "+N". */
 const DECISIONS_WHEN_NARROW = 3
@@ -517,6 +518,62 @@ function banner(c: DrawContext, s: PanelSession, width: number, narrow: boolean)
       </Text>
     </Box>
   )
+}
+
+// --- The machine without connection (#278, P14) ---
+
+/**
+ * The band's texts: "Workstation sem conexão · SSO expirado" (in the narrow panel, "Sem conexão ·
+ * SSO expirado"), and the line under it, with the age of what the panel shows. `null` without a
+ * remote machine whose connection is down.
+ */
+export function machineBannerTexts(p: Panel | null | undefined, narrow: boolean): { title: string; detail: string; color: (typeof STATUS_COLOR)[keyof typeof STATUS_COLOR] } | null {
+  const d = machineDown(p)
+  if (!d) return null
+  const { label, lastReadAt } = d.machine
+  const read = lastReadAt && Number.isFinite(Date.parse(lastReadAt)) ? clockTime(Date.parse(lastReadAt)) : null
+  const title = `⊘ ${narrow ? 'Sem conexão' : `${label} sem conexão`} · ${d.short}`
+  const detail = narrow
+    ? `Roda na ${label}${read ? ` · última leitura ${read}` : ''}`
+    : `Esta sessão roda na ${label}. ${read ? `O que você vê é a última leitura, de ${read}; ${d.why}.` : `${d.why[0]!.toUpperCase()}${d.why.slice(1)}.`}`
+  const state = d.machine.connection!.state
+  const color = state === 'stopped' ? STATUS_COLOR.abandoned : state === 'starting' || state === 'stopping' ? STATUS_COLOR.waiting : STATUS_COLOR.error
+  return { title, detail, color }
+}
+
+/** The machine's screen in the console, on the core the panel reads (`Link` only takes `http://localhost`). */
+export function machineUrl(c: Pick<DrawContext, 'core'>, id: string): string {
+  const port = c.core.split(':')[1] ?? String(LEGACY_PORT)
+  return `http://localhost:${port}/ui/machines/${encodeURIComponent(id)}`
+}
+
+/**
+ * P14: on a session that runs on a remote machine whose connection is not up, a band at the top of
+ * "Esta sessão" with the reason and "resolver no console ›", which opens the machine's screen. The
+ * panel runs nothing: the writes are same-origin (decision 0003), and the button is in the console.
+ */
+function machineBanner(c: DrawContext, p: Panel, width: number, narrow: boolean) {
+  const t = machineBannerTexts(p, narrow)
+  if (!t) return null
+  const { Box, Text } = c.el
+  return (
+    <Box key="machine-banner" flexDirection="column" width={width} borderStyle="round" borderColor={t.color.border} backgroundColor={t.color.background} paddingX={1} gap="xs">
+      <Text mono weight="semibold" wrap="wrap">
+        {t.title}
+      </Text>
+      <Text mono size="caption" dimColor wrap="wrap">
+        {t.detail}
+      </Text>
+      {link(c, 'machine-resolve', machineUrl(c, p.machine!.id), 'resolver no console ›')}
+    </Box>
+  )
+}
+
+/** The band's lines: the border, the title and the line under it (as they wrap) and the link. */
+function machineBannerLines(p: Panel, usable: number, narrow: boolean): number {
+  const t = machineBannerTexts(p, narrow)
+  if (!t) return 0
+  return 2 + textLines(t.title, charsFor(usable, 'body')) + textLines(t.detail, charsFor(usable, 'caption')) + 1
 }
 
 // --- Os seis cards ---
@@ -2283,6 +2340,8 @@ function linesOutsideGrid(p: Panel, g: ReturnType<typeof grid>, narrow: boolean,
   // 3, e cada faixa de uma linha com borda (decisões, precisam, PRs) ocupa 2, com o botão.
   // O topo ocupa 3; o rótulo da seção, 1 (o chip não tem borda).
   const parts = [3, 1]
+  const machine = machineBannerLines(p, usable, narrow)
+  if (machine) parts.push(machine)
   if (compact === 'confirm') parts.push(4)
   const r = p.decisions?.resume
   if (r && r.n > 0) parts.push(2 + 1 + (narrow ? 3 : 2) + 1)
@@ -2368,6 +2427,8 @@ function drawTree(c: DrawContext): RenderElement {
     ].filter((x): x is RenderElement => x !== null)
     body = [
       sectionLabel(c, g.width, 'ESTA SESSÃO', sectionChip(c, g.width, narrow, s?.account), s?.account),
+      // #278 (P14): the machine the session runs on lost its connection: first, before anything else.
+      machineBanner(c, p, g.width, narrow),
       // Decisão do Fernando (desvio aprovado do P1): o que pede a atenção dele sobe para o topo,
       // antes dos cards: a pergunta, quem precisa de você, os PRs e as decisões a confirmar. Com a
       // rolagem, no fim do painel, elas saíam de vista.
