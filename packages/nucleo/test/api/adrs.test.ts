@@ -7,7 +7,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { after, before, describe, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { openSqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
-import { createCoreDecisions, createDecisionsRoute, DecisionsService, DECISIONS_DISCOVERY_TTL, type AccountRepo } from '../../src/api/adrs.ts';
+import { createCoreDecisions, createDecisionsRoute, DecisionsService, DECISIONS_DISCOVERY_TTL, DECISIONS_INDEX_KEY, decisionsSnapshotKey, type AccountRepo } from '../../src/api/adrs.ts';
 import { Accounts, startLocalApi, MontadorDoPainel, type LocalApi } from '../../src/api/index.ts';
 import type { DecisionList, DecisionRecordView, RepoDecisions } from '../../src/adrs/model.ts';
 import { EXTRACTOR_VERSION } from '../../src/adrs/parse.ts';
@@ -47,13 +47,14 @@ interface Setup {
   bodies: string[];
   clock: { now: number };
   mode: { current: Mode };
-  account: { repos: AccountRepo[]; state: 'ready' | 'loading' };
+  account: { repos: AccountRepo[]; state: 'ready' | 'loading' | 'error'; fail: string | null };
   changes: () => Promise<{ type: string; key: string }[]>;
   push: (repos: Record<string, Record<string, string>>) => void;
   store: MemoryCacheStore;
+  cache: GithubCache;
 }
 
-function setup({ noSource = false, many = 0 } = {}): Setup {
+function setup({ noSource = false, many = 0, syncOnRead = true, store = new MemoryCacheStore() } = {}): Setup {
   const clock = { now: T0 };
   const now = () => clock.now;
   const extra = Object.fromEntries(Array.from({ length: many }, (_, i) => [`extra-${i}`, { 'README.md': '# x\n' }]));
@@ -79,14 +80,18 @@ function setup({ noSource = false, many = 0 } = {}): Setup {
   const transport = new GithubReposSource({ token: TOKEN, fetch, now, url: 'https://fake.invalid/graphql', api: 'https://fake.invalid', sleep: async () => {} });
   const cursor = new ChangeCursor({ generation: 'g', batchMs: 0, minIntervalMs: 0 });
   const start = cursor.current;
-  const store = new MemoryCacheStore();
-  const account = { state: 'ready' as 'ready' | 'loading', repos: [...Object.keys(REPOS), ...Object.keys(extra)].map((name) => ({ owner: 'org-a', name, lastPush: null as string | null })) };
+  const account = { state: 'ready' as 'ready' | 'loading' | 'error', fail: null as string | null, repos: [...Object.keys(REPOS), ...Object.keys(extra)].map((name) => ({ owner: 'org-a', name, lastPush: null as string | null })) };
+  const cache = new GithubCache({ store, now });
   const service = new DecisionsService({
     source: noSource ? null : new RepoFilesSource(transport),
-    accountRepos: async () => ({ state: account.state, error: null, account: 'dev-sintetico', repos: account.state === 'loading' ? [] : account.repos }),
-    cache: new GithubCache({ store, now }),
+    accountRepos: async () => {
+      if (account.fail) throw new Error(account.fail);
+      return { state: account.state, error: account.state === 'error' ? 'lista de repositórios fora' : null, account: 'dev-sintetico', repos: account.state === 'ready' ? account.repos : [] };
+    },
+    cache,
     changes: cursor,
     now,
+    syncOnRead,
   });
   return {
     service,
@@ -100,6 +105,7 @@ function setup({ noSource = false, many = 0 } = {}): Setup {
       gh = createFakeGithub(data(repos), { now });
     },
     store,
+    cache,
   };
 }
 
@@ -470,5 +476,104 @@ describe('#174 the /api/adrs and /api/pdrs routes', () => {
     assert.equal((await get('/api/adrsx')).status, 404);
     const post = await fetch(`${api.url}/api/adrs`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' });
     assert.equal(post.status, 405);
+  });
+});
+
+describe('#356 the background sync (decision 0015)', () => {
+  test('sync() builds the index and stores it: a new service on the same store answers at once, without GitHub', async () => {
+    const first = setup({ syncOnRead: false });
+    assert.equal(await first.service.sync(), 'done');
+    const before = await first.service.list('adr');
+    assert.equal(before.state, 'ready');
+    assert.ok(before.totals.records > 0);
+
+    // The core restarted: the same database, a new service, GitHub down.
+    const second = setup({ syncOnRead: false, store: first.store });
+    second.mode.current = 'down';
+    const after = await second.service.list('adr');
+    assert.equal(after.state, 'ready');
+    assert.deepEqual(after.groups, before.groups);
+    const tab = await second.service.repo('adr', 'org-a', 'madr');
+    assert.equal(tab.state, 'ready');
+    assert.ok(tab.records.length > 0);
+    const record = await second.service.record('adr', 'org-a', 'madr', tab.records[0].id);
+    assert.equal(record.status, 200);
+    await second.service.wait();
+    assert.equal(second.bodies.length, 0);
+  });
+
+  test('without syncOnRead a read past the validity starts nothing; Atualizar still does', async () => {
+    const s = setup({ syncOnRead: false });
+    await s.service.sync();
+    const read = s.bodies.length;
+    s.clock.now += DECISIONS_DISCOVERY_TTL + 1;
+    await list(s);
+    await repo(s, 'madr');
+    assert.equal(s.bodies.length, read);
+    await list(s, 'adr', {}, true);
+    assert.ok(s.bodies.length > read);
+  });
+
+  test('an empty store still builds on the first read', async () => {
+    const s = setup({ syncOnRead: false });
+    assert.equal((await s.service.list('adr')).state, 'loading');
+    await s.service.wait();
+    assert.equal((await s.service.list('adr')).state, 'ready');
+  });
+
+  test('the account list still loading: sync() answers pending and builds nothing', async () => {
+    const s = setup({ syncOnRead: false });
+    s.account.state = 'loading';
+    assert.equal(await s.service.sync(), 'pending');
+    s.account.state = 'ready';
+    assert.equal(await s.service.sync(), 'done');
+  });
+
+  test('an identity reset in the middle of a build: nothing the old service read is stored', async () => {
+    const s = setup({ syncOnRead: false });
+    const running = s.service.sync();
+    await s.cache.clear();
+    await running;
+    await s.service.wait();
+    assert.equal(await s.cache.peek(DECISIONS_INDEX_KEY), null);
+    assert.equal(await s.cache.peek(decisionsSnapshotKey('org-a/madr')), null);
+    // A service built after the reset stores again.
+    const next = setup({ syncOnRead: false, store: s.store });
+    assert.equal(await next.service.sync(), 'done');
+    assert.ok(await next.cache.peek(DECISIONS_INDEX_KEY));
+  });
+
+  test('a failed index build makes sync() throw, so the sync status shows the error; the next good build clears it', async () => {
+    const s = setup({ syncOnRead: false });
+    s.account.fail = 'lista de repositórios fora';
+    await assert.rejects(s.service.sync(), /lista de repositórios fora/);
+    s.account.fail = null;
+    assert.equal(await s.service.sync(), 'done');
+  });
+
+  test('the account list answering an error (as the real one does, without throwing): sync() throws it', async () => {
+    const s = setup({ syncOnRead: false });
+    s.account.state = 'error';
+    await assert.rejects(s.service.sync(), /lista de repositórios fora/);
+  });
+
+  test('every repository read failing: sync() throws, not done', async () => {
+    const s = setup({ syncOnRead: false });
+    s.mode.current = 'down';
+    await assert.rejects(s.service.sync());
+  });
+
+  test('an index in error is rebuilt on read under the sync, so the screen recovers without waiting for the next run', async () => {
+    const s = setup({ syncOnRead: false });
+    s.account.state = 'error';
+    await assert.rejects(s.service.sync());
+    assert.equal((await s.service.list('adr')).state, 'error');
+    s.account.state = 'ready';
+    s.clock.now += 60_001;
+    assert.equal((await list(s)).state, 'ready');
+  });
+
+  test('without GitHub the step is skipped', async () => {
+    assert.equal(await setup({ noSource: true, syncOnRead: false }).service.sync(), 'skipped');
   });
 });
