@@ -471,7 +471,7 @@ describe('#61/AC-1 C53: "Mandar mensagem" on Sessões and on the Dashboard', () 
       const card = all(area, '.mini').find((m) => m.getAttribute('data-session') === DETAIL_SESSION)!;
       assert.equal(one(card, 'a.dash-open-link')!.getAttribute('href'), `/ui/sessions/${DETAIL_SESSION}`);
       assert.equal(all(card, 'a').length, 1, 'one link; the action is a button beside it, not inside it');
-      assert.match(texto(one(card, '.foot')), /^Mandar mensagem Abrir ›$/);
+      assert.match(texto(one(card, '.foot')), /^Claude Mandar mensagem Abrir ›$/);
       one(card, '.sm-link-action')!.click();
       assert.deepEqual(navigated, [`/ui/sessions/${DETAIL_SESSION}?focus=message#conversation`]);
     } finally {

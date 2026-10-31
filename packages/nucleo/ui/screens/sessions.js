@@ -241,6 +241,7 @@ export async function mount(area, ctx) {
   // Issue 243 (C45, C48): the machine filter, in the URL as `?machine=` beside the other filters.
   // Sessões places its own control (`placeMachineFilter`), so a choice redraws it at once, before the read.
   const machines = createMachineFilter(ctx, {
+    periodic: false,
     onChange: () => {
       placeMachineFilter();
       change({ page: 1 });
@@ -496,8 +497,9 @@ export async function mount(area, ctx) {
   perPage = rowsThatFit();
   await read();
   // Codex changes do not emit Claude/core events. Poll metadata only while this screen is mounted.
-  const discoveryPoll = setInterval(() => { if (globalThis.document?.visibilityState !== 'hidden') read(); }, 30_000);
+  const discoveryPoll = ctx.signal?.aborted ? null : setInterval(() => { if (globalThis.document?.visibilityState !== 'hidden') read(); }, 30_000);
   discoveryPoll?.unref?.();
+  ctx.signal?.addEventListener('abort', () => clearInterval(discoveryPoll), { once: true });
   return () => {
     clearInterval(discoveryPoll);
     resizing.disconnect();

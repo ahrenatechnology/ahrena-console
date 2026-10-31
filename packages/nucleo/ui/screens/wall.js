@@ -306,7 +306,7 @@ export async function mount(area, ctx) {
   const head = header({ icon: 'wall', title: 'Mural ao vivo', sub: 'Um card por sessão aberta nesta máquina', actions: [selector, refresh, newSessionButton({ read: ctx.read, write: ctx.write })] });
   const sub = head.querySelector?.('.sub') ?? null;
   // Issue 243 (C46): the machine filter on its own row under the header.
-  const machines = createMachineFilter(ctx, { onChange: () => ((wall = null), draw(), read()), reread: () => read(), onLayout: () => draw() });
+  const machines = createMachineFilter(ctx, { periodic: false, onChange: () => ((wall = null), draw(), read()), reread: () => read(), onLayout: () => draw() });
 
   function choose(id) {
     filter = id;
@@ -381,7 +381,8 @@ export async function mount(area, ctx) {
 
   draw();
   await read();
-  const discoveryPoll = setInterval(() => { if (globalThis.document?.visibilityState !== 'hidden') read(); }, 30_000);
+  const discoveryPoll = ctx.signal?.aborted ? null : setInterval(() => { if (globalThis.document?.visibilityState !== 'hidden') read(); }, 30_000);
   discoveryPoll?.unref?.();
+  ctx.signal?.addEventListener('abort', () => clearInterval(discoveryPoll), { once: true });
   return () => { clearTimeout(wait); clearInterval(discoveryPoll); };
 }

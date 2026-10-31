@@ -77,7 +77,7 @@ test('metadata merge preserves Claude latest activity instead of state age', asy
   const time = (ago: number) => new Date(now - ago).toISOString();
   const storage = openSqliteStorage({ path: ':memory:' });
   try {
-    await storage.putSession(session({ id: 'recent-activity', status: 'completed', updatedAt: time(1000), endedAt: time(1000), awaitingInputSince: time(90_000) }));
+    await storage.putSession(session({ id: 'recent-activity', status: 'completed', updatedAt: time(1000), endedAt: time(1000), awaitingInputSince: time(90_000), awaitingReason: 'stop' }));
     await storage.putSession(session({ id: 'older-activity', status: 'completed', updatedAt: time(60_000), endedAt: time(60_000), awaitingInputSince: null }));
     const panel = new MontadorDoPainel({ storage, contas: new Accounts({ storage, file: null }), desktop: null, trabalho: null, agora: () => now });
     const wall = await muralDoPainel(panel).montar();
