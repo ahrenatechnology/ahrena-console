@@ -17,6 +17,7 @@ Decision [0009](docs/decisoes/0009-english-internals.md), issue #173.
 - The proof that a PR passes the core is CI: `.github/workflows/repo-tests.yml` runs all of `packages/nucleo/test` in 6 parallel shards on every PR (#395).
 - Locally, run only the file you touched, with `--test-concurrency=1`: `node --test --test-concurrency=1 packages/nucleo/test/<file>.test.ts`. Do not run the whole suite on a laptop; it exhausts memory.
 - A failing test is fixed or gets an issue. Never hide it behind a silent skip.
+- This is the quality gate the framework's `gates` rule asks for before review: the touched file passes locally, and CI on the head is the full run. Do not reproduce CI on the laptop.
 
 ## Session economy
 
@@ -27,6 +28,10 @@ The 5-hour limit is spent by context size, not by work done: every call re-reads
 - **Renew long sessions, do not resume them.** A coordinating session (the round's PM, a tech lead) that passes 200k of context or a day of age writes its work context (goal, decisions, PRs and branches, child sessions, next step, blockers) and proposes a fresh session started from it. It archives the old one only with the person's yes.
 - **Switching accounts is a renewal.** The prompt cache belongs to the account, so a session resumed on another account re-reads its whole context at full price. Before switching, each long session writes its work context; after switching, start fresh sessions from it instead of resuming the old ones.
 - **Archive what is done.** A child session whose PR merged gets offered for archiving; an idle session still wakes on every notification.
+
+## Precedence
+
+Where the Ahrena Framework index below differs from a rule above, the rule above wins.
 
 <!-- ahrena:framework:start -->
 ## Ahrena Framework
