@@ -148,7 +148,7 @@ describe('Detalhe da sessão: /api/sessions/<id>', () => {
 
   test('Conversa: o texto do transcript volta como texto, sem virar HTML', async () => {
     const id = 'sim-detalhe-html';
-    await storage.putSession({ ...(await storage.getSession(DETAIL_SESSION))!, id, awaitingInputSince: null, awaitingReason: null });
+    await storage.putSession({ ...(await storage.getSession(DETAIL_SESSION))!, id, identity: undefined, awaitingInputSince: null, awaitingReason: null });
     const veneno = '<img src=x onerror="alert(1)"> `<b>`';
     await storage.appendEvent({ id: `${id}-e1`, sessionId: id, agentId: null, type: 'UserPrompt', toolName: null, summary: veneno, data: null, createdAt: new Date(AGORA).toISOString() });
     const c = await read<ConversaDoDetalhe>(`/api/sessions/${id}/conversation`);

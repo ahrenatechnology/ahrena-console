@@ -1,3 +1,4 @@
+import { legacySessionIdentity } from '../../src/identity.ts';
 // The activity feed (#94): GET /api/events. Synthetic fixtures and the simulator, never real data.
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, describe, test } from 'node:test';
@@ -99,13 +100,13 @@ describe('#94 GET /api/events: a montagem', () => {
       attention: null,
       tool: 'Bash',
       summary: 'Bash: npm test',
-      session: { id: 's2', title: null, project: 'api' },
+      session: { id: 's2', title: null, project: 'api', identity: legacySessionIdentity('s2') },
       agent: { id: null, name: 'main' },
       detail: { callId: 'toolu_1', input: 'npm test' },
     } satisfies EventoDoFeed);
     assert.deepEqual(porId.get('e3')?.agent, { id: 's1:main', name: 'main' });
     assert.deepEqual(porId.get('e3')?.detail, { callId: 'toolu_2', input: '/repo/app/a.ts' });
-    assert.deepEqual(porId.get('e3')?.session, { id: 's1', title: 'ajuste do login', project: 'app' });
+    assert.deepEqual(porId.get('e3')?.session, { id: 's1', title: 'ajuste do login', project: 'app', identity: legacySessionIdentity('s1') });
     assert.deepEqual(porId.get('e4')?.agent, { id: 's1:sub1', name: 'revisor' }, 'o agent_id do hook acha o subagente <sessão>:<id>');
     assert.equal(porId.get('e4')?.status, 'waiting');
     assert.equal(porId.get('e5')?.status, 'error');
@@ -132,7 +133,7 @@ describe('#94 GET /api/events: a montagem', () => {
       r.options?.sessions.map((s) => s.id).sort(),
       ['s1', 's2'],
     );
-    assert.deepEqual(r.options?.sessions.find((s) => s.id === 's1'), { id: 's1', title: 'ajuste do login', project: 'app' });
+    assert.deepEqual(r.options?.sessions.find((s) => s.id === 's1'), { id: 's1', title: 'ajuste do login', project: 'app', identity: legacySessionIdentity('s1') });
     assert.equal((await ok(`before=${r.older}`)).options, null);
     assert.equal((await ok(`after=${r.cursor}`)).options, null);
   });
