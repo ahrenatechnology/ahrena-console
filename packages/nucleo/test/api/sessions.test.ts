@@ -317,7 +317,7 @@ describe('#28 a tela Sessões', () => {
     const midWidths = { ...largas, ...larguras(css.slice(mid, corte)) };
     const estreitas = { ...midWidths, ...larguras(css.slice(corte)) };
     const classes = COLUMNS.map(([c]: [string]) => c);
-    const withoutDir = classes.filter((c: string) => c !== 'c-dir');
+    const withoutDir = classes.filter((c: string) => c !== 'c-dir' && c !== 'c-duration');
     const narrowColumns = withoutDir.filter((c: string) => c !== 'c-message');
     assert.deepEqual(Object.keys(largas).sort(), [...classes].sort(), 'toda coluna tem largura');
     assert.equal(classes.reduce((t: number, c: string) => t + largas[c]!, 0), 100);
@@ -328,7 +328,7 @@ describe('#28 a tela Sessões', () => {
     assert.match(css.slice(corte), /\.table \.c-message, \.table \.msg \{ display: none; \}/);
     assert.doesNotMatch(css, /overflow-x:\s*auto/, 'a tabela não rola');
     // Mínimos em px, com o respiro das células (20 px na larga, 12 na estreita).
-    const MINIMO: Record<string, number> = { 'c-session': 180, 'c-status': 140, 'c-activity': 90, 'c-duration': 85, 'c-agents': 74, 'c-cost': 85, 'c-dir': 100, 'c-message': 145, 'c-open': 36 };
+    const MINIMO: Record<string, number> = { 'c-origin': 70, 'c-session': 160, 'c-status': 130, 'c-activity': 85, 'c-duration': 75, 'c-agents': 65, 'c-cost': 75, 'c-dir': 95, 'c-message': 140, 'c-open': 36 };
     // Up to 1240 px the message button is only its icon, and the cell still holds "sem processo vivo".
     const MINIMO_MEIO: Record<string, number> = { ...MINIMO, 'c-message': 110 };
     const MINIMO_ESTREITO: Record<string, number> = { ...MINIMO, 'c-open': 32, 'c-session': 130, 'c-activity': 70, 'c-duration': 75, 'c-agents': 60, 'c-cost': 80 };

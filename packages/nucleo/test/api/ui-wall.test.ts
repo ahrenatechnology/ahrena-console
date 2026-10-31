@@ -224,7 +224,7 @@ describe('Mural: a tela montada', () => {
       assert.doesNotMatch(area.textContent, /Esperando/);
 
       // Ativa: título + badge, projeto · branch, o que está fazendo, a grade e as barras.
-      assert.match(cards[0]!.textContent, /^Sessão ativa-1Ativaprojeto-exemplo · feat\/1-exemploRodar a bateria/);
+      assert.match(cards[0]!.textContent, /^Sessão ativa-1AtivaClaude projeto-exemplo · feat\/1-exemploRodar a bateria/);
       assert.match(cards[0]!.textContent, /ModeloOpusEsforçoaltoAgentes2Custo~1,84Plano 3\/5contexto 31%Detalhe ›$/);
       const [plano, contexto] = comClasse(cards[0]!, 'wall-bar');
       assert.equal(plano!.tag, 'progress');
@@ -233,7 +233,7 @@ describe('Mural: a tela montada', () => {
       assert.ok(!contexto!.classes.includes('wall-high'));
 
       // Blocked: "Precisa de você", the strong reason chip and what it asks; without a plan it is 0/0.
-      assert.match(cards[1]!.textContent, /Precisa de vocêprojeto-exemplo · feat\/1-exemploPede permissãoBash: npm run migrate/);
+      assert.match(cards[1]!.textContent, /Precisa de vocêClaude projeto-exemplo · feat\/1-exemploPede permissãoBash: npm run migrate/);
       assert.match(cards[1]!.textContent, /Esforço—.*Plano 0\/0/);
       assert.deepEqual(comClasse(cards[1]!, 'attention-pill-blocked').length, 1);
       assert.deepEqual(comClasse(cards[1]!, 'attention-chip').map((m) => m.classes.includes('attention-chip-light')), [false]);

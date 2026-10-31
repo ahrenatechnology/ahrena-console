@@ -1,3 +1,4 @@
+import { CodexIndex, codexOpen, type CodexThread } from './codex-index.ts';
 import { PROVIDERS, legacySessionIdentity, unknownCapabilities, type Provider, type SessionIdentity, type SessionCapabilities } from '../identity.ts';
 // The session list of the Sessions screen (C3, #28): `GET /api/sessions`, paginated and with the filters
 // on the server.
@@ -66,7 +67,7 @@ export interface LinhaDeSessao {
   capabilities: SessionCapabilities;
   id: string;
   title: string;
-  status: DisplayStatus;
+  status: DisplayStatus | 'unknown';
   /** Por que espera, quando espera (`notification`, `interrupted`, `stop`, `session_start`). */
   reason: AwaitingReason | null;
   /** #245: `blocked` ("Precisa de você") or `idle` ("Ociosa"), with the reason; `null` when not waiting on you and not in error. */
@@ -75,8 +76,8 @@ export interface LinhaDeSessao {
   start: string;
   /** Ativa ou esperando: a duração ainda corre. */
   running: boolean;
-  durationMs: number;
-  agents: number;
+  durationMs: number | null;
+  agents: number | null;
   /** Estimativa; `null` quando há uso e nada dele tem preço. */
   costUsd: number | null;
   cwd: string | null;
@@ -86,6 +87,7 @@ export interface LinhaDeSessao {
 }
 
 export interface ListaDeSessoesHttp {
+  sources: { codex: { error: string | null } };
   total: number;
   /** Todas as sessões registradas, sem filtro: o "12 sessões registradas" do cabeçalho. */
   registered: number;
@@ -139,6 +141,7 @@ export function pedidoDeSessoes(url: URL): PedidoDeSessoes {
 }
 
 export interface OpcoesDaLista {
+  codex?: CodexIndex | null;
   storage: StoragePort;
   contas: Accounts;
   desktop?: DesktopIndex | null;
@@ -150,6 +153,7 @@ export interface OpcoesDaLista {
 }
 
 export class ListaDeSessoes {
+  private readonly codex: CodexIndex | null;
   private readonly storage: StoragePort;
   private readonly contas: Accounts;
   private readonly desktop: DesktopIndex | null;
@@ -158,7 +162,8 @@ export class ListaDeSessoes {
   private readonly open: SessionOpenDescriber;
   private readonly custos = new Map<string, { updatedAt: string; usd: number | null }>();
 
-  constructor({ storage, contas, desktop = null, resumos, agora = Date.now, open = new SessionOpenDescriber() }: OpcoesDaLista) {
+  constructor({ codex = null, storage, contas, desktop = null, resumos, agora = Date.now, open = new SessionOpenDescriber() }: OpcoesDaLista) {
+    this.codex = codex;
     this.open = open;
     this.storage = storage;
     this.contas = contas;
@@ -170,7 +175,7 @@ export class ListaDeSessoes {
   async listar(pedido: PedidoDeSessoes): Promise<ListaDeSessoesHttp> {
     await Promise.all([this.contas.refresh(), this.desktop?.refresh(), this.open.refresh()]);
     const agora = this.agora();
-    const todas: { s: Session; desktop: DesktopSession | null; titulo: string; status: DisplayStatus; attention: SessionAttention | null }[] = [];
+    const todas: { s: Session; desktop: DesktopSession | null; titulo: string; status: DisplayStatus | 'unknown'; attention: SessionAttention | null }[] = [];
     let cursor: string | null = null;
     do {
       const page = await this.storage.listSessions({ limit: 500, cursor });
@@ -181,6 +186,17 @@ export class ListaDeSessoes {
       cursor = page.nextCursor;
     } while (cursor);
 
+    const external = new Map((this.codex?.list() ?? []).map(t => [t.id, t]));
+    for (const t of external.values()) {
+      const existing = todas.findIndex(({ s }) => s.id === t.id);
+      if (existing >= 0) todas.splice(existing, 1);
+      const s: Session = { id: t.id, identity: t.identity, capabilities: t.capabilities, name: t.title,
+        status: 'completed', cwd: t.cwd, model: null, source: 'codex-index', startedAt: t.createdAt,
+        endedAt: null, awaitingInputSince: null, awaitingReason: null, updatedAt: t.updatedAt,
+        accountId: null, accountSource: null, accountConfidence: 'unknown', metadata: {} };
+      todas.push({ s, desktop: null, titulo: safeTitle(t.title) ?? t.id, status: 'unknown', attention: null });
+    }
+    todas.sort((a, b) => b.s.updatedAt.localeCompare(a.s.updatedAt) || a.s.id.localeCompare(b.s.id));
     const diretorios = [...new Set(todas.map((t) => t.s.cwd).filter((c): c is string => !!c))].sort();
     const busca = pedido.busca?.toLowerCase() ?? null;
     const searched = todas.filter(
@@ -196,11 +212,11 @@ export class ListaDeSessoes {
     // A porta já devolve por atividade, mais recentes primeiro; as outras ordens desempatam por ela.
     const sinal = pedido.sentido === 'desc' ? 1 : -1;
     if (pedido.ordem === 'duration') {
-      const dur = new Map(filtradas.map(({ s }) => [s.id, duracaoDe(s, agora)]));
+      const dur = new Map(filtradas.map(({ s }) => [s.id, external.has(s.id) ? -1 : duracaoDe(s, agora)]));
       filtradas = [...filtradas].sort((a, b) => sinal * (dur.get(b.s.id)! - dur.get(a.s.id)!));
     } else if (pedido.ordem === 'cost') {
       const custo = new Map<string, number>();
-      for (const { s } of filtradas) custo.set(s.id, (await this.custoDe(s)) ?? -1);
+      for (const { s } of filtradas) custo.set(s.id, external.has(s.id) ? -1 : (await this.custoDe(s)) ?? -1);
       filtradas = [...filtradas].sort((a, b) => sinal * (custo.get(b.s.id)! - custo.get(a.s.id)!));
     } else if (pedido.sentido === 'asc') filtradas = [...filtradas].reverse();
 
@@ -210,6 +226,8 @@ export class ListaDeSessoes {
     const pagina = Math.min(pedido.pagina, paginas);
     const itens: LinhaDeSessao[] = [];
     for (const { s, desktop, titulo, status, attention } of filtradas.slice((pagina - 1) * perPage, pagina * perPage)) {
+      const thread = external.get(s.id);
+      if (thread) { itens.push(codexRow(thread)); continue; }
       const conta = this.contas.ofSession(s, desktop);
       itens.push({
         id: s.id,
@@ -230,7 +248,7 @@ export class ListaDeSessoes {
         open: this.open.describe({ sessionId: s.id, identity: s.identity, cwd: s.cwd ?? desktop?.cwd ?? null, local: desktop?.localId ?? null }),
       });
     }
-    return { total, registered: todas.length, page: pagina, perPage, pages: paginas, directories: diretorios, counts, items: itens };
+    return { sources: { codex: { error: this.codex?.error ?? null } }, total, registered: todas.length, page: pagina, perPage, pages: paginas, directories: diretorios, counts, items: itens };
   }
 
   /** #245: only a waiting or errored session has attention; only a waiting one reads its agents and events. */
@@ -250,7 +268,7 @@ export class ListaDeSessoes {
 }
 
 /** Whether a row passes a `status` filter: `all`, its displayed status, or its attention level (#245). */
-function passesFilter(t: { status: DisplayStatus; attention: SessionAttention | null }, filtro: FiltroDeStatus): boolean {
+function passesFilter(t: { status: DisplayStatus | 'unknown'; attention: SessionAttention | null }, filtro: FiltroDeStatus): boolean {
   if (filtro === 'all') return true;
   if (ATTENTION_FILTERS.includes(filtro)) return t.attention?.level === filtro;
   return t.status === filtro;
@@ -283,4 +301,11 @@ export async function responderSessoes(res: ServerResponse, url: URL, lista: Lis
     throw e;
   }
   send(res, 200, await lista.listar(pedido));
+}
+
+/** Metadata only: an index timestamp is never a process or turn-state signal. */
+export function codexRow(t: CodexThread): LinhaDeSessao {
+  return { id: t.id, identity: t.identity, capabilities: t.capabilities, title: safeTitle(t.title) ?? t.id,
+    status: 'unknown', reason: null, attention: null, lastActivity: t.updatedAt, start: t.createdAt,
+    running: false, durationMs: null, agents: null, costUsd: null, cwd: t.cwd, account: null, open: codexOpen(t) };
 }

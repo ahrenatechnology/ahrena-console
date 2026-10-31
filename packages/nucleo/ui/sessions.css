@@ -59,13 +59,14 @@
  * 900 px it leaves too, and the Detail's box stays the way to send.
  */
 .table { table-layout: fixed; }
-.table .c-session { width: 19%; }
-.table .c-status { width: 15%; }
-.table .c-activity { width: 10%; }
-.table .c-duration { width: 9%; }
-.table .c-agents { width: 8%; }
-.table .c-cost { width: 9%; }
-.table .c-dir { width: 11%; }
+.table .c-origin { width: 8%; }
+  .table .c-session { width: 17%; }
+.table .c-status { width: 14%; }
+.table .c-activity { width: 9%; }
+.table .c-duration { width: 8%; }
+.table .c-agents { width: 7%; }
+.table .c-cost { width: 8%; }
+.table .c-dir { width: 10%; }
 .table .c-message { width: 15%; }
 .table .c-open { width: 4%; }
 .table .nm, .table .st, .table .dur, .table th { white-space: normal; }
@@ -79,10 +80,12 @@
 .table .msg { padding-left: 4px; }
 @media (max-width: 1240px) {
   .table .c-dir, .table .dir { display: none; }
+  .table .c-duration, .table .dur { display: none; }
+  .table .c-origin { width: 11%; }
   .table .c-session { width: 22%; }
   .table .c-status { width: 17%; }
   .table .c-activity { width: 11%; }
-  .table .c-duration { width: 11%; }
+  .table .c-duration { width: 0%; }
   .table .c-agents { width: 9%; }
   .table .c-cost { width: 11%; }
   .table .c-message { width: 14%; }
@@ -92,10 +95,11 @@
   .table .c-message, .table .msg { display: none; }
   .table th, .table td { padding-left: 6px; padding-right: 6px; }
   .table th { letter-spacing: .04em; }
+  .table .c-origin { width: 13%; }
   .table .c-session { width: 22%; }
   .table .c-status { width: 23%; }
   .table .c-activity { width: 12%; }
-  .table .c-duration { width: 13%; }
+  .table .c-duration { width: 0%; }
   .table .c-agents { width: 10%; }
   .table .c-cost { width: 14%; }
   .table .c-open { width: 6%; }

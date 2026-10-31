@@ -7,6 +7,7 @@
 // As funções sem DOM (formatação e o que cada card mostra) saem exportadas para o teste.
 
 import { header, el, icon } from '../dom.js';
+import { sessionOrigin } from '../session-origin.js';
 import { loading, error, errorBand, empty } from '../states.js';
 import { attentionOf, attentionPill, attentionTone, isBlocked, isIdle, reasonChip, statusWithoutAttention } from '../attention.js';
 import { openAction } from '../open-action.js';
@@ -24,7 +25,7 @@ export const HIGH_CONTEXT = 80;
 export const PARKED_PAGE = 7;
 export const PARKED_MAX = 100;
 
-export const STATUS_LABEL = { active: 'Ativa', completed: 'Concluída', error: 'Com erro', abandoned: 'Abandonada' };
+export const STATUS_LABEL = { unknown: 'Indisponível', active: 'Ativa', completed: 'Concluída', error: 'Com erro', abandoned: 'Abandonada' };
 const EFFORTS = { low: 'baixo', medium: 'médio', high: 'alto', xhigh: 'muito alto', max: 'máximo' };
 
 // The same groups as the core's `count` (issue 245): blocked (errors included), idle, active.
@@ -81,7 +82,7 @@ export function cardContent(c) {
     // Issue 243: two machines can have the same id; a remote card opens its Detail with `?machine=`.
     key: itemKey(c),
     machine: c.machine ?? null,
-    href: itemHref(c),
+    href: itemHref(c) + (c.identity?.provider === 'codex' ? '?provider=codex' : ''),
     open: c.open ?? null,
     status: c.status,
     attention,
@@ -92,11 +93,11 @@ export function cardContent(c) {
     grade: [
       ['Modelo', modelName(c.model)],
       ['Esforço', effort(c.effort)],
-      ['Agentes', String(c.agents?.total ?? 0)],
+      ['Agentes', c.identity?.provider === 'codex' ? 'Indisponível' : String(c.agents?.total ?? 0)],
       ['Custo', cost(c.cost?.usd)],
     ],
-    agents: c.agents ?? { active: 0, total: 0 },
-    plan: { done: plan.done, total: plan.total, label: `Plano ${plan.done}/${plan.total}`, current: c.plan?.current ?? null },
+    agents: c.identity?.provider === 'codex' ? null : c.agents ?? { active: 0, total: 0 },
+    plan: { done: plan.done, total: plan.total, label: c.identity?.provider === 'codex' ? 'Plano indisponível' : `Plano ${plan.done}/${plan.total}`, current: c.plan?.current ?? null },
     context: { pct, label: pct === null ? 'contexto —' : `contexto ${pct}%`, high: pct !== null && pct >= HIGH_CONTEXT },
   };
 }
@@ -184,13 +185,13 @@ function card(c, write, nest) {
     'div',
     { class: `card wall-card wall-st-${v.tone}${summary ? ' wall-lead' : ''}${opened ? ' wall-span' : ''}`, 'data-session': v.id, 'data-key': v.key },
     el('div', { class: 'wall-l1' }, link, badge(v)),
-    tag ? el('div', { class: 'wall-prj mf-with-tag' }, el('span', { class: 'mf-shrink' }, v.origem), tag) : el('div', { class: 'wall-prj wall-trunc' }, v.origem, parentTitle ? el('span', { class: 'wall-from', title: `Aberta por ${parentTitle}` }, `filha de ${parentTitle}`) : null),
+    tag ? el('div', { class: 'wall-prj mf-with-tag' }, el('span', { class: 'mf-shrink' }, v.origem), tag) : el('div', { class: 'wall-prj wall-trunc' }, sessionOrigin(c.identity?.provider), ' ', v.origem, parentTitle ? el('span', { class: 'wall-from', title: `Aberta por ${parentTitle}` }, `filha de ${parentTitle}`) : null),
     cardRow(v.linha),
     el(
       'div',
       { class: 'wall-gr' },
       ...v.grade.map(([label, value]) =>
-        el('div', label === 'Agentes' ? { title: `${v.agents.active} ativos de ${v.agents.total}` } : label === 'Custo' ? { title: value === '—' ? 'Sem preço para o modelo' : `US$ ${value.slice(1)}, estimado` } : {}, label, el('b', { class: 'wall-trunc' }, value)),
+        el('div', label === 'Agentes' ? { title: v.agents === null ? 'Indisponível nesta fonte' : `${v.agents.active} ativos de ${v.agents.total}` } : label === 'Custo' ? { title: c.identity?.provider === 'codex' ? 'Indisponível nesta fonte' : value === '—' ? 'Sem preço para o modelo' : `US$ ${value.slice(1)}, estimado` } : {}, label, el('b', { class: 'wall-trunc' }, value)),
       ),
     ),
     el('div', { class: 'wall-planrow' }, el('span', { title: v.plan.current ?? null }, v.plan.label), el('span', {}, v.context.label)),
@@ -305,7 +306,7 @@ export async function mount(area, ctx) {
   const head = header({ icon: 'wall', title: 'Mural ao vivo', sub: 'Um card por sessão aberta nesta máquina', actions: [selector, refresh, newSessionButton({ read: ctx.read, write: ctx.write })] });
   const sub = head.querySelector?.('.sub') ?? null;
   // Issue 243 (C46): the machine filter on its own row under the header.
-  const machines = createMachineFilter(ctx, { onChange: () => ((wall = null), draw(), read()), reread: () => read(), onLayout: () => draw() });
+  const machines = createMachineFilter(ctx, { periodic: false, onChange: () => ((wall = null), draw(), read()), reread: () => read(), onLayout: () => draw() });
 
   function choose(id) {
     filter = id;
@@ -321,7 +322,8 @@ export async function mount(area, ctx) {
     for (const f of FILTERS) buttons.get(f.id).replaceChildren(filterLabel(f, wall.count));
     const f = FILTERS.find((x) => x.id === filter);
     const cards = (wall.cards ?? []).filter(f.passa);
-    const band = failure ? errorBand({ title: 'O mural não atualizou.', text: failure.message, action: { label: 'Tentar de novo', onClick: () => read() } }) : null;
+    const sourceError = wall.sources?.codex?.error;
+    const band = sourceError ? errorBand({ title: 'Codex indisponível', text: sourceError }) : failure ? errorBand({ title: 'O mural não atualizou.', text: failure.message, action: { label: 'Tentar de novo', onClick: () => read() } }) : null;
     const nest = {
       isOpen: (id) => opened.has(id),
       toggle: (id) => (opened.has(id) ? opened.delete(id) : opened.add(id), draw()),
@@ -379,5 +381,8 @@ export async function mount(area, ctx) {
 
   draw();
   await read();
-  return () => clearTimeout(wait);
+  const discoveryPoll = ctx.signal?.aborted ? null : setInterval(() => { if (globalThis.document?.visibilityState !== 'hidden') read(); }, 30_000);
+  discoveryPoll?.unref?.();
+  ctx.signal?.addEventListener('abort', () => clearInterval(discoveryPoll), { once: true });
+  return () => { clearTimeout(wait); clearInterval(discoveryPoll); };
 }

@@ -637,7 +637,7 @@ describe('the filter adds no second clock to a screen that has its own', () => {
     }
   });
 
-  test('a screen without a clock of its own (Mural) gets the 30 s re-read while a remote is known', async () => {
+  test('Mural uses one discovery clock even while a remote is known', async () => {
     setUrl('/ui/wall');
     const f = context(() => ({ count: {}, cards: [], machines: machinesUp }));
     const delays = await intervalsOf(() => wall.mount(new ElementoFalso('main'), f.ctx));

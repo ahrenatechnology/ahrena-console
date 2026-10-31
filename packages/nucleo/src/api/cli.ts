@@ -100,6 +100,7 @@ import { SessionsDirectory } from '../messaging/adapters/sessions-dir.ts';
 import { SocketInbox } from '../messaging/adapters/socket-inbox.ts';
 import { TranscriptTurns } from '../messaging/adapters/transcript-turns.ts';
 import { AuditFile, messagingAuditFile } from '../messaging/adapters/audit-file.ts';
+import { CodexIndex } from './codex-index.ts';
 import { ListaDeSessoes } from './sessions.ts';
 import { ResumosDeSessao } from './summary.ts';
 import { FeedDeEventos } from './events.ts';
@@ -288,6 +289,8 @@ const machine = new SessionStateMachine({
   ...(demo ? { probe: null } : {}),
 });
 const desktop = demo || o.noDesktop ? null : new DesktopIndex();
+// A demo never discovers the owner's real provider metadata.
+const codex = demo ? null : new CodexIndex();
 // The installation settings (#241, decision 0011 §8): the GitHub login, the credential source and the
 // Project chosen on the screen. Never a credential.
 const settings = new SqliteInstallationSettings(sqlite.db);
@@ -654,7 +657,8 @@ const api: LocalApi = await startLocalApi({
   fleet: mcp.fleet,
   remoteAttention: () => remoteMachines?.list() ?? [],
   analytics: new RotaAnalytics({ storage, contas: accounts, versao: () => changes.current, delivery: screens.delivery }),
-  sessions: new ListaDeSessoes({ storage, contas: accounts, desktop, resumos: listSummaries, open: openDescriber }),
+  codex,
+  sessions: new ListaDeSessoes({ codex, storage, contas: accounts, desktop, resumos: listSummaries, open: openDescriber }),
   history,
   kanban: new QuadroKanban({ storage, contas: accounts, desktop, resumos: listSummaries }),
   repos: screens.repos,

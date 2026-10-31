@@ -26,7 +26,7 @@ export interface PanelAccount {
 
 /** The bottom line of the "Esta sessão" card: what the session is doing now. */
 export interface SessionActivity {
-  type: 'tool' | 'delegating' | 'question' | 'permission' | 'error' | 'prompt' | 'your-turn' | 'interrupted' | 'completed' | 'abandoned' | 'idle';
+  type: 'unknown' | 'tool' | 'delegating' | 'question' | 'permission' | 'error' | 'prompt' | 'your-turn' | 'interrupted' | 'completed' | 'abandoned' | 'idle';
   text: string;
 }
 
@@ -396,6 +396,8 @@ export interface PanelDecisions {
  * machine. "Open" and the order are in api/wall.ts. Dates in ISO 8601 (UTC).
  */
 export interface Wall {
+  sources?: { codex: { error: string | null } };
+  sourceError?: string | null;
   version: 1;
   generatedAt: string;
   /**
@@ -449,14 +451,16 @@ export interface WallCard {
   capabilities?: SessionCapabilities;
   /** Id da sessão: o card leva a `/ui/sessions/<id>`. */
   id: string;
+  provider?: 'claude' | 'codex';
+  group?: string | null;
   /** Like `PanelSession.title`. */
   title: string;
   /** O nome da pasta da sessão (basename do cwd); `null` sem pasta. */
   project: string | null;
   branch: string | null;
   /** O badge. */
-  status: DisplayStatus;
-  state: InboxState;
+  status: DisplayStatus | 'unknown';
+  state: InboxState | 'unknown';
   reason: AwaitingReason | null;
   /** Espera `notification` ou `interrupted`, e o erro (like `NeedsYouItem.urgent`). */
   urgent: boolean;
@@ -470,7 +474,7 @@ export interface WallCard {
   /** O esforço (`effort`) da sessão, do índice do Claude Desktop; `null` quando o núcleo não sabe. */
   effort: string | null;
   /** Agentes: o principal mais os subagentes; os trabalhando agora e todos os que a sessão já teve. */
-  agents: { active: number; total: number };
+  agents: { active: number; total: number } | null;
   /** `usd: null`: há uso, mas sem preço ("sem preço", nunca zero). */
   cost: { usd: number | null; estimate: true };
   plan: { done: number; total: number; current: string | null } | null;
