@@ -46,7 +46,7 @@ interface Setup {
   bodies: string[];
   clock: { now: number };
   mode: { current: Mode };
-  account: { repos: AccountRepo[]; state: 'ready' | 'loading'; fail: string | null };
+  account: { repos: AccountRepo[]; state: 'ready' | 'loading' | 'error'; fail: string | null };
   changes: () => Promise<{ type: string; key: string }[]>;
   push: (repos: Record<string, Record<string, string>>) => void;
   store: MemoryCacheStore;
@@ -79,13 +79,13 @@ function setup({ noSource = false, many = 0, syncOnRead = true, store = new Memo
   const transport = new GithubReposSource({ token: TOKEN, fetch, now, url: 'https://fake.invalid/graphql', api: 'https://fake.invalid', sleep: async () => {} });
   const cursor = new ChangeCursor({ generation: 'g', batchMs: 0, minIntervalMs: 0 });
   const start = cursor.current;
-  const account = { state: 'ready' as 'ready' | 'loading', fail: null as string | null, repos: [...Object.keys(REPOS), ...Object.keys(extra)].map((name) => ({ owner: 'org-a', name, lastPush: null as string | null })) };
+  const account = { state: 'ready' as 'ready' | 'loading' | 'error', fail: null as string | null, repos: [...Object.keys(REPOS), ...Object.keys(extra)].map((name) => ({ owner: 'org-a', name, lastPush: null as string | null })) };
   const cache = new GithubCache({ store, now });
   const service = new DecisionsService({
     source: noSource ? null : new RepoFilesSource(transport),
     accountRepos: async () => {
       if (account.fail) throw new Error(account.fail);
-      return { state: account.state, error: null, account: 'dev-sintetico', repos: account.state === 'loading' ? [] : account.repos };
+      return { state: account.state, error: account.state === 'error' ? 'lista de repositórios fora' : null, account: 'dev-sintetico', repos: account.state === 'ready' ? account.repos : [] };
     },
     cache,
     changes: cursor,
@@ -548,6 +548,28 @@ describe('#356 the background sync (decision 0015)', () => {
     await assert.rejects(s.service.sync(), /lista de repositórios fora/);
     s.account.fail = null;
     assert.equal(await s.service.sync(), 'done');
+  });
+
+  test('the account list answering an error (as the real one does, without throwing): sync() throws it', async () => {
+    const s = setup({ syncOnRead: false });
+    s.account.state = 'error';
+    await assert.rejects(s.service.sync(), /lista de repositórios fora/);
+  });
+
+  test('every repository read failing: sync() throws, not done', async () => {
+    const s = setup({ syncOnRead: false });
+    s.mode.current = 'down';
+    await assert.rejects(s.service.sync());
+  });
+
+  test('an index in error is rebuilt on read under the sync, so the screen recovers without waiting for the next run', async () => {
+    const s = setup({ syncOnRead: false });
+    s.account.state = 'error';
+    await assert.rejects(s.service.sync());
+    assert.equal((await s.service.list('adr')).state, 'error');
+    s.account.state = 'ready';
+    s.clock.now += 60_001;
+    assert.equal((await list(s)).state, 'ready');
   });
 
   test('without GitHub the step is skipped', async () => {

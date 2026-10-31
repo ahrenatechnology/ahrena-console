@@ -64,6 +64,8 @@ interface StepState {
   error: string | null;
   /** When it is due; `0` is now. */
   nextAt: number;
+  /** `requestNow` while it ran: due again as soon as it ends, not after its interval. */
+  requested: boolean;
 }
 
 const iso = (ms: number | null) => (ms === null ? null : new Date(ms).toISOString());
@@ -79,7 +81,7 @@ export class GithubBackgroundSync {
   private ticking: Promise<void> | null = null;
 
   constructor({ steps, now = Date.now, pauseLeftMs = () => 0, tickMs = SYNC_TICK_MS, log = () => {} }: GithubBackgroundSyncOptions) {
-    this.states = steps.map((step) => ({ step, running: false, startedAt: null, finishedAt: null, durationMs: null, outcome: null, error: null, nextAt: 0 }));
+    this.states = steps.map((step) => ({ step, running: false, startedAt: null, finishedAt: null, durationMs: null, outcome: null, error: null, nextAt: 0, requested: false }));
     this.now = now;
     this.pauseLeftMs = pauseLeftMs;
     this.tickMs = tickMs;
@@ -113,7 +115,9 @@ export class GithubBackgroundSync {
   /** Makes a step due now (an identity reset, in cli.ts) and runs it on the next tick. */
   requestNow(name: string): void {
     const s = this.states.find((x) => x.step.name === name);
-    if (s) s.nextAt = 0;
+    if (!s) return;
+    s.nextAt = 0;
+    if (s.running) s.requested = true;
   }
 
   status(): SyncStatus {
@@ -152,7 +156,8 @@ export class GithubBackgroundSync {
         s.running = false;
         s.finishedAt = this.now();
         s.durationMs = s.finishedAt - s.startedAt;
-        s.nextAt = s.finishedAt + (s.outcome === 'pending' ? this.tickMs : s.step.everyMs);
+        s.nextAt = s.requested ? 0 : s.finishedAt + (s.outcome === 'pending' ? this.tickMs : s.step.everyMs);
+        s.requested = false;
       }
     }
   }

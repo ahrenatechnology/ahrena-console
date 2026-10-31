@@ -275,7 +275,13 @@ export class DecisionsService {
     // The account's repository list was still loading: the build did not run, try again on the next tick.
     if (this.index.at === -Infinity) return 'pending';
     if (this.indexFailure) throw new Error(this.indexFailure);
-    return this.index.value?.state === 'no-github' ? 'skipped' : 'done';
+    const idx = this.index.value;
+    if (idx?.state === 'no-github') return 'skipped';
+    // The account's list failed (it answers an error, it does not throw), or no repository could be read:
+    // the step failed, and the sync status shows why.
+    if (idx?.state === 'error') throw new Error(idx.error ?? 'a lista de repositórios da conta falhou');
+    if (idx?.state === 'ready' && idx.repos.length > 0 && idx.repos.every((k) => this.repos.get(k)?.value?.error)) throw new Error(idx.error ?? 'nenhum repositório da conta pôde ser lido');
+    return 'done';
   }
 
   /** A lista de todos os repositórios, do tipo pedido; dispara a montagem por trás se venceu. */
@@ -286,7 +292,8 @@ export class DecisionsService {
       this.index.at = -Infinity;
       this.index.force = true;
     }
-    if (refresh || this.syncOnRead || !this.index.value) this.triggerIndex();
+    // An index in error is rebuilt on read too (within the validity), so the screen recovers with GitHub.
+    if (refresh || this.syncOnRead || !this.index.value || this.index.value.state === 'error') this.triggerIndex();
     const idx = this.index.value;
     if (!idx) return emptyDecisionList(kind, 'loading', null);
     if (idx.state !== 'ready') return { ...emptyDecisionList(kind, idx.state, idx.error), account: idx.account };

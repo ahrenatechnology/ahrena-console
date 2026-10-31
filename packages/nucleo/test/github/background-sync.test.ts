@@ -90,6 +90,26 @@ describe('#356 GithubBackgroundSync', () => {
     await sync.tick();
     assert.deepEqual(ran, ['project', 'project']);
   });
+
+  test('requestNow while the step runs is not lost: the step is due again as soon as it ends', async () => {
+    const ran: string[] = [];
+    let sync: GithubBackgroundSync;
+    const asked: SyncStep = {
+      name: 'decisions',
+      everyMs: 900_000,
+      async run() {
+        ran.push('decisions');
+        if (ran.length === 1) sync.requestNow('decisions');
+        return 'done';
+      },
+    };
+    sync = new GithubBackgroundSync({ steps: [asked], now: () => T0 });
+    await sync.tick();
+    await sync.tick();
+    assert.deepEqual(ran, ['decisions', 'decisions']);
+    await sync.tick();
+    assert.deepEqual(ran, ['decisions', 'decisions']);
+  });
 });
 
 describe('#356 the sync steps and the status route', () => {
