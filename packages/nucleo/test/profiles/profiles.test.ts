@@ -162,8 +162,8 @@ describe('Profiles in the port', () => {
     const contas = new Accounts({ storage, file: arquivo });
     await contas.refresh();
     const sessao = (accountId: string) => ({ id: 's', accountId, accountSource: 'config' as const });
-    assert.deepEqual(contas.ofSession(sessao(`${UUID_A}/${ORG_A}`), null), { id: `${UUID_A}/${ORG_A}`, label: 'Equipe Exemplo', color: ACCOUNT_COLORS[0], source: 'config' });
-    assert.deepEqual(contas.ofSession(sessao(`${UUID_B}/${ORG_B}`), null), { id: `${UUID_B}/${ORG_B}`, label: 'cliente', color: '#1baf7a', source: 'config' });
+    assert.deepEqual(contas.ofSession(sessao(`${UUID_A}/${ORG_A}`), null), { id: `${UUID_A}/${ORG_A}`, label: 'Equipe Exemplo', color: ACCOUNT_COLORS[0], source: 'config', identity: (await storage.getAccount(`${UUID_A}/${ORG_A}`))?.identity, confidence: 'unknown' });
+    assert.deepEqual(contas.ofSession(sessao(`${UUID_B}/${ORG_B}`), null), { id: `${UUID_B}/${ORG_B}`, label: 'cliente', color: '#1baf7a', source: 'config', identity: (await storage.getAccount(`${UUID_B}/${ORG_B}`))?.identity, confidence: 'unknown' });
     await storage.close();
   });
 

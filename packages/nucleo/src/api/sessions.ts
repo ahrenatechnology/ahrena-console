@@ -1,3 +1,4 @@
+import { PROVIDERS, legacySessionIdentity, unknownCapabilities, type Provider, type SessionIdentity, type SessionCapabilities } from '../identity.ts';
 // The session list of the Sessions screen (C3, #28): `GET /api/sessions`, paginated and with the filters
 // on the server.
 //
@@ -49,6 +50,8 @@ export const ORDENS = ['activity', 'duration', 'cost'] as const;
 export type Ordem = (typeof ORDENS)[number];
 
 export interface PedidoDeSessoes {
+  provider?: Provider;
+  profileId?: string;
   status: FiltroDeStatus;
   busca: string | null;
   dir: string | null;
@@ -59,6 +62,8 @@ export interface PedidoDeSessoes {
 }
 
 export interface LinhaDeSessao {
+  identity: SessionIdentity;
+  capabilities: SessionCapabilities;
   id: string;
   title: string;
   status: DisplayStatus;
@@ -108,6 +113,10 @@ export function pedidoDeSessoes(url: URL): PedidoDeSessoes {
     if (!validos.includes(v as T)) throw new ErroDoPedido(`${nome}: um de ${validos.join(', ')}`);
     return v as T;
   };
+  const provider = p.get('provider');
+  if (provider !== null && !PROVIDERS.includes(provider as Provider)) throw new ErroDoPedido('provider inválido');
+  const profileId = p.get('profileId');
+  if (profileId !== null && (!profileId || profileId.length > 4096 || /[\u0000-\u001f]/.test(profileId))) throw new ErroDoPedido('profileId inválido');
   const busca = (p.get('search') ?? '').trim();
   if (busca.length > BUSCA_MAXIMA) throw new ErroDoPedido('search grande demais');
   const dir = p.get('dir') || null;
@@ -117,6 +126,8 @@ export function pedidoDeSessoes(url: URL): PedidoDeSessoes {
   const perPage = Number(p.get('perPage') || POR_PAGINA);
   if (!Number.isInteger(perPage) || perPage < 1 || perPage > PER_PAGE_MAX) throw new ErroDoPedido(`perPage: um inteiro de 1 a ${PER_PAGE_MAX}`);
   return {
+    ...(provider ? { provider: provider as Provider } : {}),
+    ...(profileId ? { profileId } : {}),
     status: um('status', FILTROS_DE_STATUS, 'all'),
     busca: busca || null,
     dir,
@@ -174,6 +185,8 @@ export class ListaDeSessoes {
     const busca = pedido.busca?.toLowerCase() ?? null;
     const searched = todas.filter(
       ({ s, titulo }) =>
+        (!pedido.provider || (s.identity?.provider ?? 'claude') === pedido.provider) &&
+        (!pedido.profileId || s.identity?.profileId === pedido.profileId) &&
         (!pedido.dir || s.cwd === pedido.dir) &&
         (!busca || titulo.toLowerCase().includes(busca) || s.id.toLowerCase().includes(busca) || (s.cwd ?? '').toLowerCase().includes(busca)),
     );
@@ -200,6 +213,8 @@ export class ListaDeSessoes {
       const conta = this.contas.ofSession(s, desktop);
       itens.push({
         id: s.id,
+        identity: s.identity ?? legacySessionIdentity(s.id),
+        capabilities: s.capabilities ?? unknownCapabilities(),
         title: titulo,
         status,
         reason: status === 'waiting' ? s.awaitingReason : null,
@@ -212,7 +227,7 @@ export class ListaDeSessoes {
         costUsd: await this.custoDe(s),
         cwd: s.cwd,
         account: conta ? { label: conta.label, color: conta.color } : null,
-        open: this.open.describe({ sessionId: s.id, cwd: s.cwd ?? desktop?.cwd ?? null, local: desktop?.localId ?? null }),
+        open: this.open.describe({ sessionId: s.id, identity: s.identity, cwd: s.cwd ?? desktop?.cwd ?? null, local: desktop?.localId ?? null }),
       });
     }
     return { total, registered: todas.length, page: pagina, perPage, pages: paginas, directories: diretorios, counts, items: itens };

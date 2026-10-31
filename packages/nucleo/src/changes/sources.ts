@@ -23,7 +23,7 @@ import type { ChangeCursor } from './cursor.ts';
 
 /** What the screens show of the session. Left out is what changes on every hook: `updatedAt` and `metadata`. */
 export function visibleFields(s: Session): string {
-  return JSON.stringify([s.name, s.status, s.cwd, s.model, s.endedAt, s.awaitingInputSince, s.awaitingReason, s.accountId]);
+  return JSON.stringify([s.name, s.status, s.cwd, s.model, s.endedAt, s.awaitingInputSince, s.awaitingReason, s.accountId, s.identity, s.capabilities, s.accountSource, s.accountConfidence]);
 }
 
 /** What the screens show of the agent: it enters, changes status or ends. */

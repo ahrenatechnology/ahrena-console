@@ -1,3 +1,4 @@
+import { isLegacyIdentity } from '../identity.ts';
 // The account of each session for the panel (decision 0006). The source with the lowest order wins, among:
 //
 // - the account stored on the session (`Session.accountId` and `accountSource`, from the port);
@@ -16,7 +17,7 @@
 import { readFile, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { accountSourceRank, claudeAccountId, type AccountSource, type ClaudeAccount, type Session } from '../model.ts';
+import { accountSourceRank, claudeAccountId, type AccountSource, type ProviderAccount, type Session } from '../model.ts';
 import { ACCOUNT_COLORS } from '../profiles/colors.ts';
 import type { StoragePort } from '../storage-port.ts';
 import type { DesktopSession } from './desktop-index.ts';
@@ -59,7 +60,7 @@ export class Accounts {
   private readonly intervalMs: number;
   private readonly now: () => number;
   private configured = new Map<string, { label?: string; color?: string }>();
-  private fromPort = new Map<string, ClaudeAccount>();
+  private fromPort = new Map<string, ProviderAccount>();
   private readonly order: string[] = [];
   /** The account each session's panel reported from its environment. */
   private readonly fromEnv = new Map<string, string>();
@@ -104,15 +105,16 @@ export class Accounts {
   }
 
   /** The session's account: the lowest-order source among the port, the environment and the Desktop index. */
-  ofSession(session: Pick<Session, 'id' | 'accountId' | 'accountSource'>, desktop: DesktopSession | null): PanelAccount | null {
+  ofSession(session: Pick<Session, 'id' | 'accountId' | 'accountSource' | 'identity' | 'accountConfidence'>, desktop: DesktopSession | null): PanelAccount | null {
     const candidates: { id: string; source: AccountSource }[] = [];
     if (session.accountId && session.accountSource) candidates.push({ id: session.accountId, source: session.accountSource });
-    const env = this.fromEnv.get(session.id);
+    const legacy = !session.identity || isLegacyIdentity(session.identity);
+    const env = legacy ? this.fromEnv.get(session.id) : null;
     if (env) candidates.push({ id: env, source: 'env' });
-    if (desktop && desktop.accounts.length === 1) candidates.push({ id: desktop.accounts[0], source: 'desktop' });
+    if (legacy && desktop && desktop.accounts.length === 1) candidates.push({ id: desktop.accounts[0], source: 'desktop' });
     if (candidates.length === 0) return null;
     candidates.sort((a, b) => accountSourceRank(a.source) - accountSourceRank(b.source));
-    return this.build(candidates[0].id, candidates[0].source);
+    return { ...this.build(candidates[0].id, candidates[0].source), confidence: candidates[0].id === session.accountId && candidates[0].source === session.accountSource ? session.accountConfidence ?? 'unknown' : 'unknown' };
   }
 
   /** The account with this id as a profile folder knows it (`profile`), with the same label and color as everywhere. */
@@ -128,6 +130,6 @@ export class Accounts {
     const a = this.fromPort.get(id);
     const c = this.configured.get(id);
     const color = c?.color ?? (a?.color && HEX.test(a.color) ? a.color : null) ?? ACCOUNT_COLORS[i % ACCOUNT_COLORS.length];
-    return { id, label: c?.label ?? a?.label ?? orgLabel(a?.organizationName) ?? `conta ${i + 1}`, color, source };
+    return { id, identity: a?.identity ?? null, confidence: a?.confidence ?? 'unknown', label: c?.label ?? a?.label ?? orgLabel(a?.organizationName) ?? `conta ${i + 1}`, color, source };
   }
 }
