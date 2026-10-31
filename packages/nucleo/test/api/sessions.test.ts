@@ -1,8 +1,8 @@
+import { OWNER_TOKEN, ownerRequest as request } from '../owner-http.ts';
 // The Sessions screen (C3, #28): the `GET /api/sessions` route (filters, order and page on the server)
 // with simulator data, and the pieces of the screen that need no browser.
 import assert from 'node:assert/strict';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
-import { request } from 'node:http';
 import { after, before, describe, test } from 'node:test';
 import { openSqliteStorage, type SqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
 import { Accounts, startLocalApi, ListaDeSessoes, MontadorDoPainel, pedidoDeSessoes, type LocalApi, type ListaDeSessoesHttp, type PedidoDeSessoes } from '../../src/api/index.ts';
@@ -54,7 +54,7 @@ describe('#28 GET /api/sessions com o simulador', () => {
     const contas = new Accounts({ storage, file: null });
     lista = new ListaDeSessoes({ storage, contas, agora: () => AGORA });
     const montador = new MontadorDoPainel({ storage, contas, desktop: null, trabalho: null });
-    api = await startLocalApi({ panelBuilder: montador, hooks: { storage }, port: 0, log: () => {}, sessions: lista });
+    api = await startLocalApi({ ownerToken: () => OWNER_TOKEN, panelBuilder: montador, hooks: { storage }, port: 0, log: () => {}, sessions: lista });
   });
   after(async () => {
     await api.close();

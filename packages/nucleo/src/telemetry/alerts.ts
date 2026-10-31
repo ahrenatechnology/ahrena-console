@@ -128,7 +128,9 @@ export function machineUnreachableAlert(label: string, port: number, reason: Unr
     level: 'error',
     message: `${label} sem conexão`,
     detail:
-      reason === 'port-closed'
+      reason === 'owner-auth-required'
+        ? 'O núcleo remoto exige autenticação do dono; a conexão remota ainda não fornece essa prova.'
+        : reason === 'port-closed'
         ? `A porta ${port} deste Mac não aceita conexão: o túnel está caído`
         : `O túnel está de pé na porta ${port}, mas o núcleo de lá não respondeu`,
     since,

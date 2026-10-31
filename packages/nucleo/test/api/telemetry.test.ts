@@ -1,9 +1,9 @@
+import { OWNER_TOKEN, ownerFetch as fetch, ownerRequest as request } from '../owner-http.ts';
 // GET /api/machines and GET /api/telemetry (#175) on 127.0.0.1, over in-memory SQLite with the
 // simulator's synthetic telemetry: the shape of both responses, the 1 h and 12 h windows, the 400 and
 // 404 of each parameter, the núcleo without telemetry, the Origin and Host defenses (decision 0003),
 // an alert that enters arriving through /api/changes, and the simulator (this machine and the "workstation").
 import assert from 'node:assert/strict';
-import { request } from 'node:http';
 import { describe, test } from 'node:test';
 import { openSqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
 import { Accounts, MontadorDoPainel, startLocalApi } from '../../src/api/index.ts';
@@ -33,7 +33,7 @@ async function boot(opts: { withTelemetry?: boolean } = {}) {
   }
   const telemetry = opts.withTelemetry === false ? undefined : new TelemetryService({ store, tracker, machines, now: () => NOW });
   const montador = new MontadorDoPainel({ storage, contas: new Accounts({ storage, file: null }), desktop: null, trabalho: null });
-  const api = await startLocalApi({ panelBuilder: montador, hooks: { storage }, port: 0, log: () => {}, changes: cursor, telemetry });
+  const api = await startLocalApi({ ownerToken: () => OWNER_TOKEN, panelBuilder: montador, hooks: { storage }, port: 0, log: () => {}, changes: cursor, telemetry });
   return {
     api,
     store,

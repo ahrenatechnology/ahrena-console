@@ -1,3 +1,4 @@
+import { ownerFetch as fetch } from '../owner-http.ts';
 // Sending a message to a live session from the /ui (#61, wireframes C51 to C53), end to end: the real
 // screens (ui/screens/session-detail.js, session-message.js, sessions.js, dashboard.js) mounted in the
 // minimal DOM, reading and writing the real local API of the demo over HTTP, with the real messaging

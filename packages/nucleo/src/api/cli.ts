@@ -81,6 +81,7 @@ import {
 import type { GithubAccess } from './github-access.ts';
 import { FRAMEWORK_REPO_ENV } from './framework-install.ts';
 import { createCoreGithub, type CoreGithub } from './core-github.ts';
+import { readOwnerTokenFile } from './owner-auth.ts';
 import { startLocalApi, API_VERSION, type LocalApi } from './server.ts';
 import { createMessagingRoute } from './messaging.ts';
 import { Messaging } from '../messaging/service.ts';
@@ -578,7 +579,9 @@ const follower =
 
 // The API takes over the socket reserved above: the port is never free in between (with port 0,
 // the one the system assigned stays this core's).
+let ownerToken: string | null = null;
 const api: LocalApi = await startLocalApi({
+  ownerToken: () => ownerToken,
   listenOn: reservation,
   panelBuilder,
   hooks: {
@@ -656,6 +659,7 @@ if (lock && 'conflict' in lock) {
   await storage.close();
   adopt(lock.conflict.port, lock.conflict.version);
 }
+ownerToken = lock && !('conflict' in lock) ? lock.token : readOwnerTokenFile(process.env.AHRENA_CONSOLE_OWNER_TOKEN_FILE);
 startGuard?.release();
 // The instance registry (decision 0010, item 3): only cores with a lock. A --demo or a --no-lock
 // core is not this installation's core, so nobody should find it there.
