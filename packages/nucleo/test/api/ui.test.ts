@@ -122,6 +122,7 @@ describe('/ui in the core', () => {
   // Each is the exact piece the URL search catches and appears exactly once in the file: the
   // `blobUrl` template does not open the door to another github.com address.
   const LINK_TARGETS: Record<string, string[]> = {
+    'screens/claude-config.js': ['https://code.claude.com/docs/en/settings', 'https://code.claude.com/docs/en/model-config'],
     'screens/agent-instructions.js': ['https://docs.claude.com/en/docs/claude-code/memory'],
     'screens/agent-instructions-markdown.js': ['https://github.com/${repo.split('],
     // ADR e PDR (#174): "Como escrever uma ADR", no vazio.
