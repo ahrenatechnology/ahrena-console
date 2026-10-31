@@ -1,3 +1,4 @@
+import { mountCodexConfig } from './codex-config.js';
 import { mountClaudeConfig } from './claude-config.js';
 // The Agent Config screen (#63, wireframes C16 and C17): what Claude Code has configured on this
 // machine and in the chosen project, and editing a skill with backup.
@@ -161,6 +162,10 @@ globalThis.addEventListener?.('beforeunload', (ev) => {
 });
 
 export async function mount(area, ctx) {
+  if (new URLSearchParams(location.search).get('provider') === 'codex') {
+    await ensureCss();
+    return mountCodexConfig(area, ctx);
+  }
   if (new URLSearchParams(location.search).get('tab') === 'settings') {
     await ensureCss();
     return mountClaudeConfig(area, ctx);
@@ -178,7 +183,7 @@ export async function mount(area, ctx) {
   const projectSlot = el('span', { class: 'ac-project' });
   const seg = el('div', { class: 'ac-seg', role: 'group', 'aria-label': 'Escopo' });
   const refreshButton = el('button', { type: 'button', class: 'btn', onClick: () => load({ quiet: true, withSkill: true }) }, icon('refresh'), 'Atualizar');
-  const pageHeader = header({ icon: 'bot', title: 'Agent Config', sub: SUB, actions: [projectSlot, seg, refreshButton] });
+  const pageHeader = header({ icon: 'bot', title: 'Agent Config', sub: SUB, actions: [el('a', { class: 'btn outline', href: '/ui/agent-config?provider=codex' }, 'Codex · somente leitura'), projectSlot, seg, refreshButton] });
 
   function drawSeg() {
     seg.replaceChildren(

@@ -491,7 +491,10 @@ export class ToolsService {
 
     let state: ToolState;
     let note: string | null = entry.note ?? null;
-    if (d?.probeError === 'shim-not-readable') {
+    if (d?.probeError === 'passive-version-unknown') {
+      state = 'manual';
+      note = 'Executável encontrado; versão desconhecida. Nenhum comando Codex foi executado.';
+    } else if (d?.probeError === 'shim-not-readable') {
       state = 'manual';
       note = 'no Windows a sonda não lê esta ferramenta (atalho .cmd)';
     } else if (d?.binaryPath && !installed) {

@@ -126,8 +126,11 @@ export interface MetricasDoRepo {
   tabs: { issues: number; prs: number; sessions: number };
   /** Soma de adições menos remoções desde o primeiro commit (code_frequency); `inPeriod`, o saldo do período. */
   lines: { total: number; inPeriod: number } | null;
-  /** Commits por semana no período, a mais antiga primeiro (commit_activity, até 52 semanas). */
-  commits: { total: number; perWeek: number; weeks: number[] } | null;
+  /**
+   * Commits por semana no período, a mais antiga primeiro (commit_activity, até 52 semanas), e por
+   * dia (`AAAA-MM-DD` em UTC, o mais antigo primeiro, até hoje).
+   */
+  commits: { total: number; perWeek: number; weeks: number[]; days: Array<{ day: string; commits: number }> } | null;
   frequency: { weeks: SemanaDeFrequencia[]; added: number; removed: number } | null;
   /**
    * `closed` (no período) e `open` (agora) são os totais do GitHub. `byType` e a mediana (sobre

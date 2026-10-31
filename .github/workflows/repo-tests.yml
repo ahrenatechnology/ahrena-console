@@ -1,5 +1,5 @@
-# Repository-wide tests (test/ at the root): the brand tokens and the guard that keeps the
-# internals in English (decision 0009). Plain Node, no dependencies to install.
+# Repository-wide tests: the root guard (brand tokens, internals in English, decision 0009) and the
+# whole core suite in packages/nucleo/test, sharded.
 
 name: repo-tests
 
@@ -30,17 +30,30 @@ jobs:
       - name: Tests
         run: node --test 'test/*.test.mjs'
 
-      - name: Billing admission tests (no inference)
-        run: node --test 'packages/nucleo/test/runtime/*.test.ts'
+  # The whole core suite on every PR, split into shards so each job stays short. The proof that a
+  # PR passes the core is this CI, not a local run (#395): locally, run only the touched file with
+  # --test-concurrency=1.
+  nucleo:
+    name: nucleo (shard ${{ matrix.shard }}/6)
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4, 5, 6]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
 
       # Discovery/native routes and the central owner gate need executable coverage on every PR.
       - name: Install core test dependencies
         working-directory: packages/nucleo
         run: npm ci --ignore-scripts
 
-      - name: Claude configuration and owner boundary (no inference)
-        run: node --test --test-concurrency=1 packages/nucleo/test/agent-config/*.test.ts packages/nucleo/test/api/ui.test.ts packages/nucleo/test/api/owner-auth.test.ts
-
-      - name: Core tests (synthetic fixtures, no inference)
+      - name: Core tests
         working-directory: packages/nucleo
-        run: npm test
+        run: node --test --test-concurrency=2 --disable-warning=ExperimentalWarning --test-shard=${{ matrix.shard }}/6 "test/**/*.test.ts"

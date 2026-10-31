@@ -159,6 +159,28 @@ describe('Detalhe da sessão: /api/sessions/<id>', () => {
     assert.doesNotMatch(tela, /innerHTML|outerHTML|insertAdjacentHTML|document\.write/);
   });
 
+  test('Conversa: the full text with its newlines, from data.text or the hook prompt, and the hook prompt once', async () => {
+    const id = 'sim-detalhe-texto';
+    await storage.putSession({ ...(await storage.getSession(DETAIL_SESSION))!, id, identity: undefined, awaitingInputSince: null, awaitingReason: null });
+    const at = (s: number) => new Date(AGORA + s * 1000).toISOString();
+    const prompt = `# Pedido\n\n- um\n- dois\n\n${'x'.repeat(3_000)}`;
+    const reply = `Feito:\n\n\`\`\`ts\nconst a = 1;\n\`\`\`\n${'y'.repeat(3_000)}`;
+    const summaryOf = (t: string) => `${t.replace(/\s+/g, ' ').slice(0, 199)}…`;
+    const ev = (n: number, type: string, summary: string | null, data: unknown) =>
+      storage.appendEvent({ id: `${id}-e${n}`, sessionId: id, agentId: null, type, toolName: null, summary, data: data as never, createdAt: at(n) });
+    await ev(1, 'UserPromptSubmit', summaryOf(prompt), { prompt });
+    await ev(2, 'UserPrompt', summaryOf(prompt), { parentUuid: null, transcriptAgentId: null, text: prompt });
+    await ev(3, 'AssistantMessage', summaryOf(reply), { parentUuid: null, transcriptAgentId: null, text: reply });
+    // An event stored before data.text: the transcript prompt only has the summary, and still dedupes against the hook.
+    const other = 'Segundo pedido\ncom duas linhas';
+    await ev(4, 'UserPromptSubmit', other, { prompt: other });
+    await ev(5, 'UserPrompt', other.replace(/\s+/g, ' '), null);
+    // The hook's "prompt" label with no prompt in data is not the person's text.
+    await ev(6, 'UserPromptSubmit', 'prompt', null);
+    const c = await read<ConversaDoDetalhe>(`/api/sessions/${id}/conversation`);
+    assert.deepEqual(c.messages.map((m) => [m.role, m.text]), [['you', prompt], ['assistant', reply], ['you', other], ['you', null]]);
+  });
+
   test('Linha do tempo (C6): do mais novo para o mais velho, filtros e páginas', async () => {
     const base = `/api/sessions/${DETAIL_SESSION}/events`;
     const tudo = await read<EventosDoDetalhe>(`${base}?limit=500`);

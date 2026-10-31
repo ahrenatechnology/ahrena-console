@@ -8,6 +8,7 @@
 // comes out `null`.
 
 import { isClaude } from '../../states/probe.ts';
+import { buildTerminals, DARWIN_TERMINALS_PS, LINUX_TERMINALS_PS, parseTerminalsPs, parseTunnelSshd } from '../terminals.ts';
 import type {
   ClaudeProcesses,
   CpuReading,
@@ -22,6 +23,7 @@ import type {
   NetworkReading,
   ProcessGroup,
   TelemetryReading,
+  TerminalsReading,
   TopProcess,
   TunnelReading,
   VolumeReading,
@@ -172,6 +174,13 @@ export function claudeOf(stats: PsRow[], args: PsArgsRow[]): ClaudeProcesses {
   const desktop = stats.filter((r) => isClaudeDesktop(r.comm));
   // The npm package runs on node with `process.title = 'claude'`: `comm` says what the command line does not.
   const cli = stats.filter((r) => !isClaudeDesktop(r.comm) && (baseName(r.comm) === 'claude' || isClaude(line.get(r.pid) ?? r.comm)));
+  return { processes: group([...cli, ...desktop]), cli: group(cli), desktop: group(desktop) };
+}
+
+/** Only observed executable identities, never a substring in another process's prompt/args. */
+export function codexOf(stats: PsRow[]): ClaudeProcesses {
+  const desktop = stats.filter(r => r.comm.includes('/Codex.app/'));
+  const cli = stats.filter(r => !r.comm.includes('/Codex.app/') && ['codex', 'codex.exe'].includes(baseName(r.comm)));
   return { processes: group([...cli, ...desktop]), cli: group(cli), desktop: group(desktop) };
 }
 
@@ -372,7 +381,7 @@ export abstract class PlatformCollector implements TelemetryCollector {
     };
     this.prevCpus = cpus;
 
-    const [memory, gpu, df, netSample, ps, ports, docker] = await Promise.all([
+    const [memory, gpu, df, netSample, ps, ports, docker, terminals] = await Promise.all([
       this.memory().catch(() => ({ totalBytes: os.totalmem(), usedBytes: os.totalmem() - os.freemem(), swapTotalBytes: null, swapUsedBytes: null, pressure: null })),
       orNull(() => this.gpu()),
       this.run('df', ['-P']),
@@ -380,6 +389,7 @@ export abstract class PlatformCollector implements TelemetryCollector {
       orNull(() => this.processes()),
       orNull(() => this.listeningPorts()),
       orNull(() => this.docker()),
+      orNull(() => this.terminals()),
     ]);
     const network = netSample ? networkOf(netSample, this.prevNet) : null;
     this.prevNet = netSample;
@@ -395,11 +405,29 @@ export abstract class PlatformCollector implements TelemetryCollector {
       disk: { volumes: df ? await volumesOf(parseDfP(df), this.deps) : [] },
       network,
       claude: ps ? claudeOf(ps.stats, ps.args) : null,
+      codex: ps ? codexOf(ps.stats) : null,
       topProcesses: ps ? topProcessesOf(ps.stats) : null,
       docker,
       ports,
       tunnels,
+      terminals,
     };
+  }
+
+  /** The terminal sessions (#350); `null` when `ps` did not answer. */
+  async terminals(): Promise<TerminalsReading | null> {
+    const out = await this.run('ps', this.platform === 'darwin' ? DARWIN_TERMINALS_PS : LINUX_TERMINALS_PS);
+    if (out === null) return null;
+    const { corePort } = this.deps;
+    const ss = this.platform === 'linux' && corePort !== undefined ? await this.run('ss', ['-tnp']) : null;
+    return buildTerminals(parseTerminalsPs(out), {
+      nowMs: this.now(),
+      uid: this.deps.os.uid(),
+      selfPid: this.deps.selfPid ?? process.pid,
+      tunnelSshd: ss && corePort !== undefined ? parseTunnelSshd(ss, corePort) : undefined,
+      interactive: this.deps.interactiveCommands?.(),
+      remoteActions: this.deps.acceptRemoteActions?.() ?? false,
+    });
   }
 
   /** `null` without `docker` on the PATH or without the daemon (`docker ps` fails). */

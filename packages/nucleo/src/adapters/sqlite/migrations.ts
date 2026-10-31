@@ -1,3 +1,4 @@
+import { RUNTIME_MIGRATION_SQL } from '../../runtime/migration.ts';
 // Migrações do esquema SQLite. A versão aplicada fica em `PRAGMA user_version`.
 // Regra: migração publicada não muda; mudança de esquema é uma migração nova no fim da lista.
 
@@ -291,6 +292,7 @@ export const MIGRATIONS: readonly Migration[] = [
         COALESCE(json_extract(identity, '$.machineId'), ''), COALESCE(json_extract(identity, '$.environmentId'), ''));
     `,
   },
+  { version: 15, description: 'Durable managed runtime runs and requests (#383)', sql: RUNTIME_MIGRATION_SQL },
 ];
 
 export function schemaVersion(db: DatabaseSync): number {

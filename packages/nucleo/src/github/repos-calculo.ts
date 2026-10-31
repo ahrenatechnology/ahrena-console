@@ -75,10 +75,24 @@ export function commits12(atividade: readonly SemanaDeCommits[] | null): number[
   return [...Array(12 - ultimas.length).fill(0), ...ultimas];
 }
 
-export function commitsDoPeriodo(atividade: readonly SemanaDeCommits[], desde: number): NonNullable<MetricasDoRepo['commits']> {
-  const semanas = [...atividade].sort((a, b) => a.week - b.week).filter((s) => naJanela(s.week, desde)).map((s) => s.total);
+/**
+ * Commits do período por semana e por dia. Os dias saem do `days` do `commit_activity` (domingo
+ * primeiro); entram os que tocam o período e já começaram até `now` (a semana corrente traz os dias
+ * futuros zerados). Semana sem `days` não vira dia nenhum: nada de distribuição inventada.
+ */
+export function commitsDoPeriodo(atividade: readonly SemanaDeCommits[], desde: number, now = Infinity): NonNullable<MetricasDoRepo['commits']> {
+  const inWindow = [...atividade].sort((a, b) => a.week - b.week).filter((s) => naJanela(s.week, desde));
+  const semanas = inWindow.map((s) => s.total);
   const total = semanas.reduce((s, x) => s + x, 0);
-  return { total, perWeek: semanas.length ? arred(total / semanas.length, 1) : 0, weeks: semanas };
+  const days: { day: string; commits: number }[] = [];
+  for (const s of inWindow) {
+    if (s.days?.length !== 7) continue;
+    s.days.forEach((commits, i) => {
+      const start = s.week * 1000 + i * DIA_MS;
+      if (start + DIA_MS > desde && start <= now) days.push({ day: diaIso(start), commits });
+    });
+  }
+  return { total, perWeek: semanas.length ? arred(total / semanas.length, 1) : 0, weeks: semanas, days };
 }
 
 /** Linhas de código: a soma de adições menos remoções desde o primeiro commit; o saldo do período. */

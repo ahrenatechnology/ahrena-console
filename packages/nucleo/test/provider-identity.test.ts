@@ -76,7 +76,7 @@ test('migration 14 preserves IDs, events, links, counts and is idempotent', asyn
     db.prepare(`INSERT INTO events (id,session_id,type,created_at) VALUES ('event',?,'SessionStart',?)`).run(uuid,T0);
     db.prepare(`INSERT INTO agents (id,session_id,type,status,started_at,updated_at) VALUES ('agent',?,'main','working',?,?)`).run(uuid,T0,T0);
     const before = db.prepare('SELECT * FROM events').all();
-    assert.deepEqual(migrate(db), [14]);
+    assert.deepEqual(migrate(db), MIGRATIONS.filter(m => m.version >= 14).map(m => m.version));
     assert.deepEqual(migrate(db), []);
     assert.deepEqual(db.prepare('SELECT * FROM events').all(), before);
     assert.equal(db.prepare('SELECT count(*) AS n FROM agents').get()!.n, 1);

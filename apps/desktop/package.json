@@ -1,6 +1,6 @@
 {
   "name": "ahrena-console-desktop",
-  "version": "0.0.11",
+  "version": "0.0.12",
   "private": true,
   "description": "App desktop do Ahrena Console: a bandeja na barra de menus (decisão 0005)",
   "license": "Apache-2.0",

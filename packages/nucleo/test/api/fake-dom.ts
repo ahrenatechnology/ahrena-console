@@ -228,8 +228,14 @@ function blurIfInside(no: NoFalso): void {
 
 const cabecaFalsa = new ElementoFalso('head');
 
+const ouvintesDoDocumento = new Map<string, Set<Ouvinte>>();
+
 export const documentoFalso = {
   activeElement: null as ElementoFalso | null,
+  addEventListener: (tipo: string, ouvinte: Ouvinte) => void (ouvintesDoDocumento.get(tipo) ?? ouvintesDoDocumento.set(tipo, new Set()).get(tipo)!).add(ouvinte),
+  removeEventListener: (tipo: string, ouvinte: Ouvinte) => void ouvintesDoDocumento.get(tipo)?.delete(ouvinte),
+  /** Entrega o evento aos ouvintes do documento (as teclas que não estão em nenhum campo). */
+  dispatchEvent: (ev: EventoFalso) => void [...(ouvintesDoDocumento.get(ev.type) ?? [])].forEach((o) => o({ preventDefault() {}, ...ev })),
   head: cabecaFalsa,
   querySelector: (seletor: string) => cabecaFalsa.querySelector(seletor),
   createElement: (tag: string) => new ElementoFalso(tag),

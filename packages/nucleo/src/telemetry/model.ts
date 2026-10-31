@@ -183,6 +183,8 @@ export interface TelemetryReading {
   disk: { volumes: VolumeReading[] };
   network: NetworkReading | null;
   claude: ClaudeProcesses | null;
+  /** Optional for older remote collectors; observed processes do not prove session readiness. */
+  codex?: ClaudeProcesses | null;
   /** The six using the most CPU. */
   topProcesses: TopProcess[] | null;
   /** `null` without `docker` on the PATH or without the daemon. */
@@ -192,6 +194,46 @@ export interface TelemetryReading {
   tunnels: TunnelReading[] | null;
   /** Where the machine runs, read by its own núcleo (#278, decision 0013 section 5); absent from older readings. */
   placement?: Placement;
+  /** The terminal sessions (#350); `null` when `ps` did not answer, absent from older readings. */
+  terminals?: TerminalsReading | null;
+}
+
+// ---------------------------------------------------------------------------------------------
+// Terminal sessions (#350)
+
+/** Why this núcleo never signals a process: the tunnel's `sshd`, the núcleo itself (and what runs it), another user. */
+export type TerminalProtection = 'tunnel' | 'core' | 'other-user';
+/** `idle`: only the prompt; `running`: a command in the foreground; `stopped`: that command was suspended (Ctrl-Z). */
+export type TerminalState = 'idle' | 'running' | 'stopped';
+
+export interface TerminalSession {
+  /** The terminal as `ps` names it: `pts/0` on Linux, `ttys003` on the Mac. */
+  tty: string;
+  /** The same, safe in a URL path: `pts-0`, `ttys003`. */
+  id: string;
+  user: string;
+  /** Only the user's own sessions can be acted on. */
+  own: boolean;
+  /** What holds the terminal: the `sshd` of an ssh connection, a terminal app on the Mac, or nothing known. */
+  connection: { kind: 'sshd' | 'app' | 'local'; pid: number | null; label: string | null; since: string | null; ttys: string[]; protection: TerminalProtection | null };
+  shell: { pid: number; args: string } | null;
+  /** The foreground command; `null` when `idle`. `pid` is the process group leader the actions are checked against. */
+  foreground: { pid: number; pgid: number; args: string; ageSec: number; processes: number; protection: TerminalProtection | null } | null;
+  /** What "Encerrar a sessão" signals: the connection's `sshd`, or the shell where there is no `sshd`. */
+  end: { pid: number | null; protection: TerminalProtection | null };
+  state: TerminalState;
+  /** The foreground command passed the limit without being a known interactive one, or is a Claude scratchpad script. */
+  stuck: boolean;
+  /** The Claude session whose scratchpad the command runs from, when the path says it. */
+  claudeSessionId: string | null;
+}
+
+export interface TerminalsReading {
+  sessions: TerminalSession[];
+  /** The limit in seconds that makes a command "presa". */
+  stuckAfterSec: number;
+  /** This núcleo accepts actions that come through the tunnel (`--accept-remote-actions`); the Mac's screen offers "Copiar comando" when not. */
+  remoteActions: boolean;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -222,7 +264,7 @@ export interface Placement {
 // Alerts
 
 /** `machine-unreachable` (#176): a remote machine the núcleo cannot read; computed on this Mac, not over there. */
-export type AlertKind = 'load-high' | 'volume-full' | 'port-exposed' | 'tunnel-busy' | 'machine-unreachable';
+export type AlertKind = 'load-high' | 'volume-full' | 'port-exposed' | 'tunnel-busy' | 'machine-unreachable' | 'terminal-stuck';
 export type AlertLevel = 'error' | 'warning';
 
 export interface Alert {

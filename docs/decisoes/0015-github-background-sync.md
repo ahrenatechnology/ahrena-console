@@ -28,7 +28,7 @@ O custo, então, cresce com quantas vezes as telas são abertas, e a espera cai 
 
    Sem GitHub conectado ou sem Project escolhido, o passo é pulado. Com o GitHub pausado por limite (403/429), o passo espera a pausa acabar.
 2. **Snapshots no SQLite.** O índice de decisões (`adrs:index`) e a leitura de cada repositório (`adrs:repo:<owner>/<repo>`) passam a ser gravados no `github_cache`, como o quadro do Project já era. Depois de reiniciar, a tela serve o último snapshot na hora.
-3. **As rotas não esperam.** `/api/adrs` e `/api/pdrs` servem o snapshot e não disparam montagem para os repositórios que o job cobre; `/api/project` serve o quadro guardado, de qualquer idade até 24 h, com `stale` quando passou do TTL. Só a primeira leitura de todas, com o banco vazio, espera o GitHub.
+3. **As rotas não esperam.** `/api/adrs` e `/api/pdrs` servem o snapshot e não disparam montagem para os repositórios que o job cobre; `/api/project` serve o quadro guardado, de qualquer idade até 24 h, com `stale` quando o job perdeu uma rodada (duas vezes o TTL, 4 min). No próprio TTL ainda não: o job relê 2 min depois do fim da última rodada, e o quadro sadio apareceria velho por alguns segundos a cada ciclo. Só a primeira leitura de todas, com o banco vazio, espera o GitHub.
 4. **Atualizar** (`?refresh=1`) continua forçando a releitura daquela fonte, com o mínimo de 30 s da 0001.
 5. **Status** em `GET /api/github/sync`: cada passo com a última rodada, a próxima, a duração e o último erro.
 
@@ -36,7 +36,7 @@ O custo, então, cresce com quantas vezes as telas são abertas, e a espera cai 
 
 Por pessoa, com o núcleo ligado, com ou sem tela aberta. Os pontos são do limite primário do GraphQL (5.000 por hora); as leituras REST têm um limite próprio, também de 5.000 por hora, e um 304 não conta nele.
 
-| Passo | Por rodada | Rodadas por hora | Conta de 206 repositórios, Project de até 100 itens | Máximo: 500 repositórios, Project de 200 itens |
+| Passo | Por rodada | Rodadas por hora | Conta de 206 repositórios, Project de até 100 itens | Conta grande: 500 repositórios, Project de 200 itens |
 | --- | --- | ---: | ---: | ---: |
 | `project` | cerca de 3 pontos por página de 100 itens | 30 | 90 | 180 |
 | `decisions`: lista de repositórios da conta | a montagem da 0001 (Repositórios): 1 por página de 100, 1 por lote de 25 nas contagens, 1 do resumo | 4 | 4 × 13 = 52 | 4 × 26 = 104 |
@@ -56,6 +56,6 @@ Comparação: a 0001 estimava cerca de 120 pontos por hora com a tela de trabalh
 
 ## Consequências
 
-- O núcleo lê o GitHub mesmo sem tela aberta: o custo deixa de ser zero quando ninguém olha. São cerca de 190 pontos por hora na conta de 206 repositórios e até 390 no máximo (ver Orçamento).
+- O núcleo lê o GitHub mesmo sem tela aberta: o custo deixa de ser zero quando ninguém olha. São cerca de 190 pontos por hora na conta de 206 repositórios e cerca de 390 numa conta grande. No teto do código (500 repositórios e Project de 500 itens, 5 páginas) chega a cerca de 650 (13%). Ver Orçamento.
 - A primeira partida, com o banco vazio, ainda espera o GitHub na primeira tela.
 - Um repositório aberto fora da lista da conta (pela URL) continua sendo lido sob demanda, como hoje.

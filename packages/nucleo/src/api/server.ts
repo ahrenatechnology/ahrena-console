@@ -1,3 +1,5 @@
+import { isRuntimeRoute, respondRuntime } from './runtime.ts';
+import type { ManagedRuntime } from '../runtime/service.ts';
 // The core's minimal local API (start of #21), on 127.0.0.1: the hooks and the panel on the same port.
 //
 // | Route                         | What                                                      |
@@ -38,12 +40,14 @@
 // | `GET /api/telemetry`          | One machine's telemetry: current reading, series and alerts (`?machine=`, `?hours=1|12`; #175) |
 // | `POST /api/machines/<id>/reconnect` and `DELETE` | Reconnect a remote machine with the command of machines.json, and Cancel (api/telemetry.ts, #244) |
 // | `GET /api/sessions/<id>/messaging`, `POST /api/sessions/<id>/messages` and `GET /api/sessions/<id>/messages/<messageId>` | Send a message a person typed in the /ui to the session's live process, through Claude Code's cross-session inbox, and read its state (api/messaging.ts, src/messaging, #61) |
+// | `POST /api/terminals/<id>/actions/<action>` | Interrupt a terminal's foreground command or end its session, by ids (api/terminals.ts, #350) |
 // | `GET /api/tools`              | The Tools screen: CLIs, runtimes and containers, installed and latest versions, the catalog's actions, the jobs (`?machine=`; api/tools.ts, #280) |
 // | `POST /api/tools/<toolId>/actions/<actionId>`, `DELETE /api/tools/jobs/<jobId>`, `POST /api/tools/checks` and `POST /api/tools/mcp/checks` | Run a catalog action as a job, cancel it, Verificar agora, Verificar conexões (api/tools.ts, src/tools/executor.ts, #280) |
 // | `POST /api/machines/<id>/connection/start|stop|reconnect|login-and-start`, `DELETE /api/machines/<id>/connection` | The connection of a remote machine (api/connection.ts, #278) |
 // | `GET`/`POST /api/ports/release`, and the same under `/api/machines/<id>/` | Release a listening port: SIGTERM, then SIGKILL (api/ports.ts, #286, decision 0016) |
 // | `GET /api/docker`, `GET /api/docker/plan`, `POST /api/docker/actions/<actionId>`, `DELETE /api/docker/jobs/<jobId>` | The Docker actions of a machine (api/docker.ts, src/docker, #288, decision 0017) |
 // | `GET /api/connectors`, `POST`/`DELETE /api/connectors/aws/sessions/<name>/login`, and the same under `/api/machines/<id>/` | The cloud connectors and their logins (api/clouds.ts, #277) |
+// | `GET /api/github/sync` | The GitHub background sync's steps: last run, next run, last error (decision 0015, #356) |
 // | `GET /api/app-update`, `PUT /api/app-update/state` and `POST /api/app-update/actions/check|install|dismiss|ack` | The desktop app's update notice: the app reports, the /ui reads and clicks (api/app-update.ts, #330) |
 // | `GET /api/connections`        | The console's own GitHub connection: `{ github: <status> }` (api/connections-route.ts, #241) |
 // | `POST /api/connections/github/start`, `/cancel`, `/disconnect`, `/source` | Device flow, Cancel, Disconnect and the credential source (#241, decision 0011) |
@@ -112,12 +116,16 @@ import { isTelemetryRoute, reconnectFromSameOrigin, RECONNECT_ROUTE, respondReco
 import type { ReconnectControl } from '../telemetry/reconnect.ts';
 import type { TelemetryService } from '../telemetry/service.ts';
 import { MESSAGING_ROUTE, messagesWriteFromSameOrigin, type MessagingRoute } from './messaging.ts';
+import { TRANSCRIPTION_ROUTE, transcriptionWriteFromSameOrigin, type TranscriptionRoute } from './transcription.ts';
 import { ORDERS_ROUTE, ordersWriteFromSameOrigin, type OrdersRoute } from './orders.ts';
+import { isTerminalsRoute, respondTerminalsWrite, terminalsWriteAllowed } from './terminals.ts';
+import type { TerminalControl } from '../telemetry/terminal-actions.ts';
 import { isToolsRoute, isToolsWrite, respondTools, respondToolsWrite, toolsWriteAllowed } from './tools.ts';
 import { dockerWriteAllowed, isDockerRoute, isDockerWrite, type DockerRoute } from './docker.ts';
 import type { ToolsControl } from '../tools/executor.ts';
 import { fromAnotherSite, fromOwnUi } from './same-origin.ts';
 import { appUpdateWriteFromSameOrigin, isAppUpdateRoute, type AppUpdateRoute } from './app-update.ts';
+import type { GithubBackgroundSync } from '../github/background-sync.ts';
 import { cloudsWriteFromSameOrigin, isCloudsRoute, type CloudsRoute } from './clouds.ts';
 import { isPortsRoute, isPortsWrite, portsWriteAllowed, type PortsRoute } from './ports.ts';
 import { connectionWriteFromSameOrigin, isConnectionRoute, type ConnectionRoute } from './connection.ts';
@@ -127,6 +135,8 @@ import type { GithubConnection } from '../github/connection/connection.ts';
 export { API_VERSION };
 
 export interface ApiOptions {
+  /** Managed runtime is separate from legacy external messaging. */
+  runtime?: ManagedRuntime;
   /** Owner-only credential source; absent/unknown fails closed, including before lock claim. */
   ownerToken?: OwnerToken;
   panelBuilder: MontadorDoPainel;
@@ -208,10 +218,14 @@ export interface ApiOptions {
   reconnect?: ReconnectControl | null;
   /** Sending a message to a live session (api/messaging.ts, #61); without it, those routes give 404. */
   messaging?: MessagingRoute;
+  /** Dictation in the compose box (api/transcription.ts, #352); without it, `/api/transcription` gives 404. */
+  transcription?: TranscriptionRoute | null;
   /** The /ui's orders to a session, carried by the panel mod (api/orders.ts, #61); without it, those routes give 404. */
   orders?: OrdersRoute;
   /** The Tools screen (#280, decision 0014): the executor (or only the service, read-only); without it, `/api/tools` gives 404. */
   tools?: ToolsControl | null;
+  /** The terminal sessions' actions (#350): `POST /api/terminals/<id>/actions/<action>`; without it, 404. */
+  terminals?: TerminalControl | null;
   /** The Docker screen's actions (#288, decision 0017; api/docker.ts): `/api/docker` on the Tools executor's queue; without it, 404. */
   docker?: { route: DockerRoute; acceptNoOrigin: () => boolean } | null;
   /** The cloud connectors (#277, decision 0013; api/clouds.ts): `/api/connectors` and the logins; without it, 404. */
@@ -220,6 +234,8 @@ export interface ApiOptions {
   ports?: PortsRoute | null;
   /** The desktop app's update notice (#330, api/app-update.ts): `/api/app-update`; without it, 404. */
   appUpdate?: AppUpdateRoute | null;
+  /** The GitHub background sync (decision 0015): `GET /api/github/sync`; without it, 404. */
+  githubSync?: Pick<GithubBackgroundSync, 'status'> | null;
   /** The connection of the remote machines (#278, api/connection.ts): start, stop, reconnect, login-and-start, cancel; without it, 404. */
   machineConnection?: ConnectionRoute | null;
   /** The console's own GitHub connection (#241); turns on `/api/connections` and its writes. */
@@ -256,6 +272,7 @@ export const PANEL_ROUTE = '/api/panel';
 export const OPEN_ROUTE = '/open';
 export const LOAD_ROUTE = '/api/load';
 export const DECISIONS_ROUTE = '/api/decisions';
+export const GITHUB_SYNC_ROUTE = '/api/github/sync';
 
 const PANEL = /^\/api\/panel\/([^/]+)$/;
 const OPEN = /^\/open\/([^/]+)$/;
@@ -448,6 +465,10 @@ export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
     counters.requests++;
     const url = new URL(req.url ?? '/', `http://127.0.0.1:${port}`);
     if (ownerProofRequired(req.method, url.pathname) && !authorizeOwner(req, res, port, opts.ownerToken ?? (() => null))) return;
+    if (isRuntimeRoute(url.pathname)) {
+      const token = opts.ownerToken?.();
+      return respondRuntime(req, res, url, port, opts.runtime, () => !!token && opts.ownerToken?.() === token && !res.destroyed);
+    }
     // The Tools writes have their own, stricter gate (no Origin is 403 too), never the one below.
     if (isToolsWrite(req, url.pathname)) {
       if (!toolsWriteAllowed(req, port, opts.tools?.acceptNoOriginActions?.() ?? false)) {
@@ -455,6 +476,14 @@ export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
         return send(res, 403, { error: 'origem não permitida' });
       }
       return respondToolsWrite(req, res, url, opts.tools);
+    }
+    // The terminal actions have a gate of their own, as strict as the Tools': no Origin is 403 too.
+    if (isTerminalsRoute(url.pathname) && req.method !== 'GET') {
+      if (!terminalsWriteAllowed(req, port, opts.terminals?.acceptNoOriginActions() ?? false)) {
+        req.resume();
+        return send(res, 403, { error: 'origem não permitida' });
+      }
+      return respondTerminalsWrite(req, res, url, opts.terminals);
     }
     // The port release writes have their own gate too (decision 0016): the Origin, or none only when asked for.
     if (isPortsWrite(req, url.pathname)) {
@@ -484,7 +513,7 @@ export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
       if (!opts.connection) return send(res, 404, { error: 'not-found' });
       return respondConnections(req, res, url.pathname, opts.connection);
     }
-    if (!allowedLocalRequest(req, port) && !sameOriginRead(req, port) && !sameOriginOpen(req, port) && !sameOriginSessionOpen(req, port) && !sameOriginNewSession(req, port) && !mesmaOrigemMovendo(req, port) && !sameOriginDecision(req, port) && !agentConfigWriteFromSameOrigin(req, port) && !frameworkInstallWriteFromSameOrigin(req, port) && !reconnectFromSameOrigin(req, port) && !messagesWriteFromSameOrigin(req, port) && !cloudsWriteFromSameOrigin(req, port) && !connectionWriteFromSameOrigin(req, port) && !ordersWriteFromSameOrigin(req, port) && !appUpdateWriteFromSameOrigin(req, port)) return send(res, 403, { error: 'origem não permitida' });
+    if (!allowedLocalRequest(req, port) && !sameOriginRead(req, port) && !sameOriginOpen(req, port) && !sameOriginSessionOpen(req, port) && !sameOriginNewSession(req, port) && !mesmaOrigemMovendo(req, port) && !sameOriginDecision(req, port) && !agentConfigWriteFromSameOrigin(req, port) && !frameworkInstallWriteFromSameOrigin(req, port) && !reconnectFromSameOrigin(req, port) && !messagesWriteFromSameOrigin(req, port) && !transcriptionWriteFromSameOrigin(req, port) && !cloudsWriteFromSameOrigin(req, port) && !connectionWriteFromSameOrigin(req, port) && !ordersWriteFromSameOrigin(req, port) && !appUpdateWriteFromSameOrigin(req, port)) return send(res, 403, { error: 'origem não permitida' });
     // The Project list spends GitHub quota and the connection status is the /ui's: another site's page
     // never gets either, connected or not (#241 review 2).
     if ((url.pathname === PROJECT_OPTIONS_ROUTE || url.pathname === CONNECTIONS_ROUTE) && fromAnotherSite(req)) return send(res, 403, { error: 'forbidden' });
@@ -518,11 +547,13 @@ export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
     const reconnectMatch = RECONNECT_ROUTE.exec(url.pathname);
     if (reconnectMatch) return respondReconnect(req, res, reconnectMatch[1]!, opts.reconnect, opts.telemetry);
     if (opts.messaging && MESSAGING_ROUTE.test(url.pathname)) return opts.messaging(req, res, url);
+    if (opts.transcription && url.pathname === TRANSCRIPTION_ROUTE) return opts.transcription(req, res, url);
     if (opts.orders && ORDERS_ROUTE.test(url.pathname)) return opts.orders(req, res, url);
     if (opts.clouds && isCloudsRoute(url.pathname)) return opts.clouds(req, res, url);
     if (opts.ports && isPortsRoute(url.pathname)) return opts.ports.handle(req, res, url);
     if (opts.docker && isDockerRoute(url.pathname)) return opts.docker.route(req, res, url);
     if (opts.appUpdate && isAppUpdateRoute(url.pathname)) return opts.appUpdate(req, res, url);
+    if (opts.githubSync && url.pathname === GITHUB_SYNC_ROUTE) return req.method === 'GET' ? send(res, 200, opts.githubSync.status()) : send(res, 405, { error: 'use GET' });
     if (req.method !== 'GET') return send(res, 405, { error: 'use GET' });
     if (isUiPath(url.pathname)) return respondUi(res, url.pathname);
     const desktopMatch = OPEN_IN_DESKTOP.exec(url.pathname);

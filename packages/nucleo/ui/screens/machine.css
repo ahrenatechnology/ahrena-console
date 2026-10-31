@@ -178,6 +178,29 @@
 .tm-rc-setup .tm-legend { gap: 8px 18px; }
 .tm-rc-setup .tm-legend .icon { vertical-align: -2px; }
 
+/* Sessões de terminal (C96 a C99, issue 350) */
+.tm-term-table td { vertical-align: top; }
+.tm-term-table td small { display: block; font-size: 11.5px; margin-top: 2px; overflow-wrap: anywhere; }
+.tm-term-cmd { font-weight: var(--weight-medium, 500); overflow-wrap: anywhere; }
+.tm-term-stuck { background: var(--status-error-badge); }
+.tm-term-actions { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+.tm-term-action { display: flex; flex-direction: column; gap: 2px; align-items: flex-start; max-width: 26ch; }
+.tm-term-action .btn { white-space: normal; text-align: left; }
+.tm-term-action .btn[disabled] { opacity: .5; cursor: not-allowed; }
+.tm-term-band { align-items: center; justify-content: space-between; }
+.tm-term-band > div { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.tm-term-band.tm-rc-warn { border: 1px solid var(--status-waiting-dot); background: var(--status-waiting-badge); }
+.tm-term-band.tm-rc-error { border: 1px solid var(--status-error-dot); background: var(--status-error-badge); }
+.tm-term-dialog { padding: 18px 20px; display: flex; flex-direction: column; gap: 12px; max-width: 520px; width: 100%; margin: 0 auto; box-sizing: border-box; box-shadow: 0 14px 44px color-mix(in srgb, var(--mono-black) 40%, transparent); }
+.tm-term-dialog h2 { margin: 0; font-size: 14px; font-weight: var(--weight-semibold); overflow-wrap: anywhere; }
+.tm-term-dialog p { margin: 0; font-size: 12.5px; color: var(--muted); }
+.tm-term-kv { display: grid; grid-template-columns: max-content 1fr; gap: 4px 14px; margin: 0; font-size: 12.5px; }
+.tm-term-kv dt { color: var(--muted); }
+.tm-term-kv dd { margin: 0; overflow-wrap: anywhere; }
+.tm-term-sends { display: flex; flex-direction: column; gap: 4px; padding: 8px 10px; border-radius: 8px; background: var(--raised); }
+.tm-term-sends code { font-family: var(--font-mono); font-size: 12px; }
+.tm-term-dialog-buttons { display: flex; gap: 8px; justify-content: flex-end; }
+.tm-term-danger { background: var(--status-error-dot); border-color: var(--status-error-dot); }
 /* ---------- Liberar uma porta (issue 286, wireframes C88 to C91) ---------- */
 .tm-table td.tm-rp-act { text-align: right; white-space: nowrap; }
 .tm-rp-act .btn { margin-left: auto; }
