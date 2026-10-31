@@ -6,14 +6,19 @@ import { NOW } from './scenarios'
 
 type Sent = { method: string; url: string; body: any }
 
-function fakes(on: any, opts: { orders: { orderId: string; kind: string }[]; commands: string[]; run?: (command: string) => { text?: string } | Error }) {
+function fakes(on: any, opts: { orders: { orderId: string; kind: string }[]; commands: string[]; run?: (command: string) => { text?: string } | Error; ownerLock?: boolean }) {
   mock.env(on, { AHRENA_CONSOLE_HOME: '/owner-test' })
   on('fs.list', async () => ({ value: [] }))
   on('fs.read', async (_$: unknown, e: { path: string }) => {
-    if (e.path !== '/owner-test/nucleo.json') throw new Error('ENOENT')
+    if (e.path !== '/owner-test/nucleo.json' || opts.ownerLock === false) throw new Error('ENOENT')
     return { value: JSON.stringify({ port: 4999, pid: 123, token: 'a'.repeat(64) }) }
   })
   const sent: Sent[] = []
+  const toasts: string[] = []
+  on('ui.toast', async (_$: unknown, e: { text?: string } | string) => {
+    toasts.push(typeof e === 'string' ? e : (e.text ?? ''))
+    return { value: undefined }
+  })
   const ran: string[] = []
   let queue = [...opts.orders]
   const timer = mock.clock(on, { now: NOW })
@@ -30,9 +35,10 @@ function fakes(on: any, opts: { orders: { orderId: string; kind: string }[]; com
     return r
   })
   on('http.fetch', async (_$: unknown, e: { url: string; init?: { method?: string; body?: string; headers?: Record<string, string> } }) => {
-    expect(e.init?.headers?.authorization).toBe(`Bearer ${'a'.repeat(64)}`)
     const method = e.init?.method ?? 'GET'
     sent.push({ method, url: e.url, body: e.init?.body ? JSON.parse(e.init.body) : null })
+    // Like the core after #391: no owner proof, no answer.
+    if (e.init?.headers?.authorization !== `Bearer ${'a'.repeat(64)}`) return { value: { status: 403, ok: false, headers: {}, text: '{"error":"Acesso restrito ao dono do console."}' } }
     if (method === 'GET' && e.url.endsWith('/commands')) {
       const orders = queue
       queue = []
@@ -40,7 +46,7 @@ function fakes(on: any, opts: { orders: { orderId: string; kind: string }[]; com
     }
     return { value: { status: 200, ok: true, headers: {}, text: '{"ok":true}' } }
   })
-  return { sent, ran, timer }
+  return { sent, ran, timer, toasts }
 }
 
 /** The tick fires, then the fetch, the command and the confirmation each take a turn of the loop. */
@@ -97,4 +103,21 @@ test('asks once per tick and stops when the session ends', { options: { port: 49
   await $.session.start({ cwd: '/tmp', surface: 'desktop', isInteractive: true })
   await tick(f, 8_000)
   expect(f.sent.filter((s) => s.method === 'GET').length).toBe(2)
+})
+
+test('the order fetch carries the owner proof: with it the order arrives and no refusal is shown', { options: { port: 4999 } }, async ($, on) => {
+  const f = fakes(on, { orders: [{ orderId: 'o-7', kind: 'compact' }], commands: ['compact'] })
+  await $.session.start({ cwd: '/tmp', surface: 'desktop', isInteractive: true })
+  await tick(f)
+  expect(f.ran).toEqual(['compact'])
+  expect(f.toasts).toEqual([])
+})
+
+test('without a readable owner proof the core refuses (403), no order runs, and the mod says so once', { options: { port: 4999 } }, async ($, on) => {
+  const f = fakes(on, { orders: [{ orderId: 'o-8', kind: 'compact' }], commands: ['compact'], ownerLock: false })
+  await $.session.start({ cwd: '/tmp', surface: 'desktop', isInteractive: true })
+  await tick(f, 8_000)
+  expect(f.ran).toEqual([])
+  expect(f.toasts.length).toBe(1)
+  expect(f.toasts[0]).toContain('403')
 })
