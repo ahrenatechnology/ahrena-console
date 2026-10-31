@@ -201,7 +201,7 @@ describe('#178 criterion 2: Esta máquina (C24) with the simulator', () => {
       '18080 8080 Ocupada no Mac node, deste Mac, segura a 18080',
     ]);
     // Processos do Claude and the top CPU users.
-    assert.match(texto(part(m.area, 'claude')), /claude \(CLI\) 4 .*Claude Desktop 7 .*Os que mais usam CPU node 14% · claude 6%/);
+    assert.match(texto(part(m.area, 'claude')), /Claude \(CLI\) 4 .*Claude Desktop 7 .*Os que mais usam CPU node 14% · claude 6%/);
     // Portas em escuta: filter counts, grouping, whose each one is.
     const ports = part(m.area, 'ports')!;
     assert.deepEqual(all(ports, '.tm-seg button'), ['Todas 7', 'Todas as interfaces 1', 'Só loopback 6']);
