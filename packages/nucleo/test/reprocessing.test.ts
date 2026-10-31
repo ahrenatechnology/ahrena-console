@@ -87,7 +87,7 @@ describe('reprocessamento das sessões já importadas', () => {
     store.db.exec('DELETE FROM session_plans; DELETE FROM session_plan_history');
     assert.deepEqual(await historico(), []);
 
-    const r = await reprocessarHistorico({ storage: store, decisoes, root });
+    const r = await reprocessarHistorico({ storage: store, decisoes, raiz: root });
     assert.deepEqual([r.sessoes, r.comPlano, r.planos], [1, 1, 3]);
     assert.deepEqual(await historico(), [[3, 'current', '0/1'], [2, 'abandoned', '0/2'], [1, 'completed', '2/2']]);
     const d = await decisoes.listDecisions({ sessionId: S });
@@ -95,7 +95,7 @@ describe('reprocessamento das sessões já importadas', () => {
     assert.equal(r.decisoes, d.items.length);
 
     // De novo: nada duplica.
-    const outra = await reprocessarHistorico({ storage: store, decisoes, root });
+    const outra = await reprocessarHistorico({ storage: store, decisoes, raiz: root });
     assert.equal(outra.decisoes, 0);
     assert.equal((await store.listPlanRecords(S)).length, 3);
   });
@@ -184,6 +184,10 @@ describe('full message text (Conversa)', () => {
     const texts = async () => (await store.listEvents(S)).items.filter((e) => e.type !== 'ToolUse').map((e) => (e.data as { text?: string } | null)?.text ?? null);
     assert.deepEqual(await texts(), [null, null, null]);
 
+    // An imported session finds its transcript by metadata.import.file under the root: a missing root would fail here.
+    const meta = (await store.getSession(S))!.metadata as { transcriptPath?: string; import?: { file?: string } };
+    assert.equal(meta.transcriptPath, undefined);
+    assert.equal(typeof meta.import?.file, 'string');
     const r = await reprocessMessageText({ storage: store, root });
     assert.deepEqual(r, { sessions: 1, messages: 3 });
     assert.deepEqual(await texts(), ['Primeira linha\n\nsegunda linha', 'Resposta\n- um\n- dois', 'Do subagente\nfim']);

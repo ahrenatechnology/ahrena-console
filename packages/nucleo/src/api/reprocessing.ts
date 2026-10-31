@@ -78,7 +78,7 @@ export async function reprocessarHistorico(o: {
     for (const s of page.items) {
       r.sessoes++;
       try {
-        const t = transcriptDe(s, o.root);
+        const t = transcriptDe(s, o.raiz);
         const arquivo = t && existsSync(t) ? t : null;
         const relidos = arquivo ? await transcriptEvents(arquivo, s.id, isPlanEvent) : [];
         const n = await rebuildPlan(o.storage, s.id, relidos);
@@ -158,7 +158,7 @@ function transcriptsDosSubagentes(principal: string): string[] {
 }
 
 /** Uma passada por todas as sessões: refaz os medidores de contexto e os estouros. */
-export async function reprocessarContexto(o: { storage: StoragePort; root: string; log?: (m: string) => void }): Promise<{ sessoes: number; medidores: number }> {
+export async function reprocessarContexto(o: { storage: StoragePort; raiz: string; log?: (m: string) => void }): Promise<{ sessoes: number; medidores: number }> {
   const r = { sessoes: 0, medidores: 0 };
   let cursor: string | null = null;
   do {
@@ -166,7 +166,7 @@ export async function reprocessarContexto(o: { storage: StoragePort; root: strin
     for (const s of page.items) {
       r.sessoes++;
       try {
-        const t = transcriptDe(s, o.root);
+        const t = transcriptDe(s, o.raiz);
         const arquivos = t && existsSync(t) ? [t, ...transcriptsDosSubagentes(t)] : [];
         const relidos: SessionEvent[] = [];
         for (const a of arquivos) relidos.push(...(await transcriptEvents(a, s.id, (e) => e.type === 'Compaction')));
