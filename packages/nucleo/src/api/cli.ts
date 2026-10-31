@@ -411,6 +411,9 @@ mcp.server.register(waitForChanges({ changes, accounts }));
 // source (AHRENA_CONSOLE_GITHUB_SOURCE=gh). Under --demo, the same connection on the fake GitHub, in the
 // state of --demo-github, never the real GitHub, Keychain or gh. An identity change clears github_cache
 // and rebuilds every screen (and forgets the work by branch).
+// Built after the screens below; an identity reset makes its steps due at once, so the new account's
+// data replaces the old one without waiting for the next run.
+let githubSync: GithubBackgroundSync | null = null;
 coreGithub = await createCoreGithub({
   demo,
   noGithub: o.noGithub && !demo,
@@ -429,13 +432,17 @@ coreGithub = await createCoreGithub({
   env: process.env,
   frameworkRepo: process.env[FRAMEWORK_REPO_ENV],
   demoProject: o.demoProject !== 'none',
-  onReset: () => work.forget(),
+  onReset: () => {
+    work.forget();
+    githubSync?.requestNow('project');
+    githubSync?.requestNow('decisions');
+  },
   log,
 });
 const { connection, screens } = coreGithub;
 // Decision 0015 (#356): the core reads GitHub on a timer and the GitHub screens answer from the database.
 // Under --no-github there is no connection and no sync.
-const githubSync = coreGithub.connected
+githubSync = coreGithub.connected
   ? new GithubBackgroundSync({ steps: githubSyncSteps(screens, coreGithub.connected), pauseLeftMs: () => githubCache.pauseLeftMs(), log })
   : null;
 

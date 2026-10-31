@@ -589,12 +589,15 @@ describe('#356 the board from the store (decision 0015)', () => {
     }
   });
 
-  test('GithubProject.snapshot: null with nothing stored, fresh inside the TTL', async () => {
+  test('GithubProject.snapshot: null with nothing stored; stale only once the sync missed a run (twice the TTL)', async () => {
     const { now, kanban } = doGithub();
     assert.equal(await kanban.snapshot(), null);
     await kanban.board();
     assert.equal((await kanban.snapshot())!.stale, false);
-    now.add(2 * 60_000 + 1);
+    // Past the TTL, while the sync's next run is still on its way: not stale.
+    now.add(2 * 60_000 + 15_000);
+    assert.equal((await kanban.snapshot())!.stale, false);
+    now.add(2 * 60_000);
     assert.equal((await kanban.snapshot())!.stale, true);
   });
 });

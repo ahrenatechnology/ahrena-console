@@ -110,7 +110,7 @@ export class GithubBackgroundSync {
     return this.ticking;
   }
 
-  /** Makes a step due now (the Atualizar of a screen) and runs it on the next tick. */
+  /** Makes a step due now (an identity reset, in cli.ts) and runs it on the next tick. */
   requestNow(name: string): void {
     const s = this.states.find((x) => x.step.name === name);
     if (s) s.nextAt = 0;

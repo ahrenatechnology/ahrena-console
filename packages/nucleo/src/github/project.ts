@@ -351,13 +351,15 @@ export class GithubProject {
   }
 
   /**
-   * The stored board, of any age up to 24 h, without calling GitHub (decision 0015): `stale` once it
-   * is past the Project's TTL. `null` when nothing was ever stored.
+   * The stored board, of any age up to 24 h, without calling GitHub (decision 0015): `stale` once the
+   * sync missed a run, twice the Project's TTL. Not at the TTL itself: the sync re-reads every TTL
+   * counted from the end of its last run, so every cycle would show a healthy board as stale for a few
+   * seconds. `null` when nothing was ever stored.
    */
   async snapshot(): Promise<ProjectBoard | null> {
     const hit = await this.cache.peek<ProjectBoardValue>(this.key);
     if (!hit) return null;
-    const old = this.now() - hit.fetchedAt > GITHUB_TTL.project;
+    const old = this.now() - hit.fetchedAt > 2 * GITHUB_TTL.project;
     return this.view(hit.value, hit.fetchedAt, old, old ? 'o sincronismo em segundo plano ainda não releu o quadro' : null);
   }
 

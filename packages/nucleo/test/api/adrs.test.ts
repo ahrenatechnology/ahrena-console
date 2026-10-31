@@ -6,7 +6,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { after, before, describe, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { openSqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
-import { createCoreDecisions, createDecisionsRoute, DecisionsService, DECISIONS_DISCOVERY_TTL, type AccountRepo } from '../../src/api/adrs.ts';
+import { createCoreDecisions, createDecisionsRoute, DecisionsService, DECISIONS_DISCOVERY_TTL, DECISIONS_INDEX_KEY, decisionsSnapshotKey, type AccountRepo } from '../../src/api/adrs.ts';
 import { Accounts, startLocalApi, MontadorDoPainel, type LocalApi } from '../../src/api/index.ts';
 import type { DecisionList, DecisionRecordView, RepoDecisions } from '../../src/adrs/model.ts';
 import { EXTRACTOR_VERSION } from '../../src/adrs/parse.ts';
@@ -46,10 +46,11 @@ interface Setup {
   bodies: string[];
   clock: { now: number };
   mode: { current: Mode };
-  account: { repos: AccountRepo[]; state: 'ready' | 'loading' };
+  account: { repos: AccountRepo[]; state: 'ready' | 'loading'; fail: string | null };
   changes: () => Promise<{ type: string; key: string }[]>;
   push: (repos: Record<string, Record<string, string>>) => void;
   store: MemoryCacheStore;
+  cache: GithubCache;
 }
 
 function setup({ noSource = false, many = 0, syncOnRead = true, store = new MemoryCacheStore() } = {}): Setup {
@@ -78,11 +79,15 @@ function setup({ noSource = false, many = 0, syncOnRead = true, store = new Memo
   const transport = new GithubReposSource({ token: TOKEN, fetch, now, url: 'https://fake.invalid/graphql', api: 'https://fake.invalid', sleep: async () => {} });
   const cursor = new ChangeCursor({ generation: 'g', batchMs: 0, minIntervalMs: 0 });
   const start = cursor.current;
-  const account = { state: 'ready' as 'ready' | 'loading', repos: [...Object.keys(REPOS), ...Object.keys(extra)].map((name) => ({ owner: 'org-a', name, lastPush: null as string | null })) };
+  const account = { state: 'ready' as 'ready' | 'loading', fail: null as string | null, repos: [...Object.keys(REPOS), ...Object.keys(extra)].map((name) => ({ owner: 'org-a', name, lastPush: null as string | null })) };
+  const cache = new GithubCache({ store, now });
   const service = new DecisionsService({
     source: noSource ? null : new RepoFilesSource(transport),
-    accountRepos: async () => ({ state: account.state, error: null, account: 'dev-sintetico', repos: account.state === 'loading' ? [] : account.repos }),
-    cache: new GithubCache({ store, now }),
+    accountRepos: async () => {
+      if (account.fail) throw new Error(account.fail);
+      return { state: account.state, error: null, account: 'dev-sintetico', repos: account.state === 'loading' ? [] : account.repos };
+    },
+    cache,
     changes: cursor,
     now,
     syncOnRead,
@@ -99,6 +104,7 @@ function setup({ noSource = false, many = 0, syncOnRead = true, store = new Memo
       gh = createFakeGithub(data(repos), { now });
     },
     store,
+    cache,
   };
 }
 
@@ -519,6 +525,28 @@ describe('#356 the background sync (decision 0015)', () => {
     s.account.state = 'loading';
     assert.equal(await s.service.sync(), 'pending');
     s.account.state = 'ready';
+    assert.equal(await s.service.sync(), 'done');
+  });
+
+  test('an identity reset in the middle of a build: nothing the old service read is stored', async () => {
+    const s = setup({ syncOnRead: false });
+    const running = s.service.sync();
+    await s.cache.clear();
+    await running;
+    await s.service.wait();
+    assert.equal(await s.cache.peek(DECISIONS_INDEX_KEY), null);
+    assert.equal(await s.cache.peek(decisionsSnapshotKey('org-a/madr')), null);
+    // A service built after the reset stores again.
+    const next = setup({ syncOnRead: false, store: s.store });
+    assert.equal(await next.service.sync(), 'done');
+    assert.ok(await next.cache.peek(DECISIONS_INDEX_KEY));
+  });
+
+  test('a failed index build makes sync() throw, so the sync status shows the error; the next good build clears it', async () => {
+    const s = setup({ syncOnRead: false });
+    s.account.fail = 'lista de repositórios fora';
+    await assert.rejects(s.service.sync(), /lista de repositórios fora/);
+    s.account.fail = null;
     assert.equal(await s.service.sync(), 'done');
   });
 
