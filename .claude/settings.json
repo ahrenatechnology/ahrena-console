@@ -16,6 +16,10 @@
     "ahrena-contributing@ahrena": true,
     "ahrena-engineering-fundamentals@ahrena": true,
     "ahrena-engineering-typescript@ahrena": true,
-    "ahrena-engineering-frontend@ahrena": true
+    "ahrena-engineering-frontend@ahrena": true,
+    "ahrena-engineering-delivery@ahrena": true,
+    "ahrena-engineering-backend@ahrena": true,
+    "ahrena-engineering-quality@ahrena": true,
+    "ahrena-engineering-security@ahrena": true
   }
 }
