@@ -1,3 +1,4 @@
+import { mountClaudeConfig } from './claude-config.js';
 // The Agent Config screen (#63, wireframes C16 and C17): what Claude Code has configured on this
 // machine and in the chosen project, and editing a skill with backup.
 //
@@ -20,6 +21,7 @@ export const SKILL_NAME = /^[a-z0-9][a-z0-9._-]{0,63}$/;
 
 export const TABS = [
   { id: 'overview', label: 'Visão geral', icon: 'wall' },
+  { id: 'settings', label: 'Configurações do Claude', icon: 'settings' },
   { id: 'skills', label: 'Skills', icon: 'suggested', summary: 'skills' },
   { id: 'subagents', label: 'Subagentes', icon: 'users', summary: 'subagents' },
   { id: 'commands', label: 'Comandos', icon: 'slash', summary: 'commands' },
@@ -159,6 +161,10 @@ globalThis.addEventListener?.('beforeunload', (ev) => {
 });
 
 export async function mount(area, ctx) {
+  if (new URLSearchParams(location.search).get('tab') === 'settings') {
+    await ensureCss();
+    return mountClaudeConfig(area, ctx);
+  }
   let url = readUrl(location.search);
   const signal = ctx.signal;
   await ensureCss();
@@ -223,6 +229,7 @@ export async function mount(area, ctx) {
         );
         link.addEventListener('click', (ev) => {
           if (ev.button !== 0 || ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.altKey) return;
+          if (t.id === 'settings') return;
           ev.preventDefault();
           goTo({ tab: t.id, project: url.project });
           draw();
