@@ -83,8 +83,9 @@ function tooLarge(req: IncomingMessage, res: ServerResponse): void {
     if (!res.headersSent) send(res, 413, { error: ERRORS.too_large, reason: 'too_large' });
   };
   const cutoff = setTimeout(() => {
+    // Drop the socket only once the 413 is flushed, or a slow client gets no answer at all.
+    res.once('finish', () => req.destroy());
     reply();
-    req.destroy();
   }, BODY_CUTOFF_MS);
   cutoff.unref();
   req.once('end', () => {

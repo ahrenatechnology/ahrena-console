@@ -4,9 +4,10 @@
 import assert from 'node:assert/strict';
 import type { ChildProcess } from 'node:child_process';
 import { EventEmitter } from 'node:events';
+import { existsSync, readFileSync, statSync } from 'node:fs';
 import { createServer, request as rawRequest, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { PassThrough } from 'node:stream';
+import { join } from 'node:path';
 import { after, before, describe, test } from 'node:test';
 import { MAX_AUDIO_BYTES, createTranscriptionRoute, isExpectedWav } from '../../src/api/transcription.ts';
 import { TranscriptionError, cleanText, createTranscription, resolveWhisperConfig } from '../../src/transcription/whisper.ts';
@@ -280,13 +281,12 @@ describe('the transcription building blocks', () => {
 
 // ---------- The core starting its own whisper-server ----------
 
-type FakeChild = EventEmitter & { stdout: PassThrough; stderr: PassThrough; exitCode: number | null; killed: string | null; kill: (signal: string) => boolean };
+type FakeChild = EventEmitter & { args: string[]; exitCode: number | null; killed: string | null; kill: (signal: string) => boolean };
 
-/** A stand-in for the spawned `whisper-server`: what it prints is driven by the test. */
+/** A stand-in for the spawned `whisper-server`; it keeps the argv the core gave it. */
 function fakeChild(): FakeChild {
   const child = new EventEmitter() as FakeChild;
-  child.stdout = new PassThrough();
-  child.stderr = new PassThrough();
+  child.args = [];
   child.exitCode = null;
   child.killed = null;
   child.kill = (signal: string) => {
@@ -299,70 +299,88 @@ function fakeChild(): FakeChild {
 }
 
 const CHILD_PORT = 41999;
+const URL_BASE = `http://127.0.0.1:${CHILD_PORT}`;
 
-function spawned(child: FakeChild, asked: string[], { logs = [], startTimeoutMs = 2000 }: { logs?: string[]; startTimeoutMs?: number } = {}) {
+/** Who answers on the port: nobody yet, our child (serving its `--public` folder), or another process. */
+type Listener = 'nobody' | 'child' | 'impostor';
+
+function spawned(child: FakeChild, port: { on: Listener }, asked: string[], { startTimeoutMs = 2000 }: { startTimeoutMs?: number } = {}) {
   return createTranscription({
     config: { url: null, bin: '/v/bin/whisper-server', model: '/v/models/ggml.bin' },
     exists: () => true,
     freePort: async () => CHILD_PORT,
-    start: () => child as unknown as ChildProcess,
+    start: (_bin, args) => {
+      child.args = args;
+      return child as unknown as ChildProcess;
+    },
     startTimeoutMs,
-    log: (m) => logs.push(m),
     fetch: (async (input: string | URL | Request) => {
-      asked.push(String(input));
-      return new Response(JSON.stringify({ text: ' Olá ' }), { status: 200, headers: { 'content-type': 'application/json' } });
+      const url = String(input);
+      if (port.on === 'nobody') throw new TypeError('fetch failed: ECONNREFUSED');
+      if (url.endsWith('/inference')) {
+        asked.push(url);
+        return new Response(JSON.stringify({ text: ' Olá ' }), { status: 200, headers: { 'content-type': 'application/json' } });
+      }
+      if (port.on === 'impostor') return new Response('a guess', { status: 200 });
+      const publicDir = child.args[child.args.indexOf('--public') + 1]!;
+      try {
+        return new Response(readFileSync(join(publicDir, url.slice(URL_BASE.length + 1))), { status: 200 });
+      } catch {
+        return new Response('not found', { status: 404 });
+      }
     }) as typeof fetch,
   });
 }
 
 describe('the core starting its own whisper-server', () => {
-  test('sends the audio only after its own child says it bound the port', async () => {
+  test('sends the audio only after the port serves the secret of its own child', async () => {
     const child = fakeChild();
+    const port = { on: 'nobody' as Listener };
     const asked: string[] = [];
-    const logs: string[] = [];
-    const t = spawned(child, asked, { logs });
+    const t = spawned(child, port, asked);
     try {
       const pending = t.transcribe(wav());
-      await new Promise((r) => setTimeout(r, 150));
-      assert.deepEqual(asked, [], 'nothing is sent while the model loads, not even a probe of the port');
-      child.stdout.write('whisper_init_from_file: loading model\nsegment: um texto ditado\n');
-      child.stderr.write(`\nwhisper server listening at http://127.0.0.1:${CHILD_PORT}\n\n`);
+      await new Promise((r) => setTimeout(r, 300));
+      assert.deepEqual(asked, [], 'nothing is sent while the model loads');
+      const publicDir = child.args[child.args.indexOf('--public') + 1]!;
+      assert.equal(statSync(publicDir).mode & 0o777, 0o700, 'only this user can list or read the proof');
+      port.on = 'child';
       const r = await pending;
       assert.equal(r.text, 'Olá');
-      assert.deepEqual(asked, [`http://127.0.0.1:${CHILD_PORT}/inference`]);
-      assert.ok(!logs.join('\n').includes('um texto ditado'), 'the child output is never logged');
+      assert.deepEqual(asked, [`${URL_BASE}/inference`]);
+      t.close();
+      assert.equal(existsSync(publicDir), false, 'the proof folder is removed when the server stops');
     } finally {
       t.close();
     }
   });
 
-  test('a child that lost the port to another process fails to start, and the audio goes nowhere', async () => {
+  test('another process holding the port never gets the audio: start_failed at the deadline, child stopped', async () => {
     const child = fakeChild();
+    const port = { on: 'impostor' as Listener };
     const asked: string[] = [];
-    const t = spawned(child, asked);
+    const t = spawned(child, port, asked, { startTimeoutMs: 600 });
+    try {
+      await assert.rejects(t.transcribe(wav()), (e: unknown) => e instanceof TranscriptionError && e.code === 'start_failed');
+      assert.deepEqual(asked, []);
+      assert.equal(child.killed, 'SIGTERM');
+    } finally {
+      t.close();
+    }
+  });
+
+  test('a child that lost the port exits: start_failed, and the audio goes nowhere', async () => {
+    const child = fakeChild();
+    const port = { on: 'impostor' as Listener };
+    const asked: string[] = [];
+    const t = spawned(child, port, asked);
     try {
       const pending = t.transcribe(wav());
       await new Promise((r) => setTimeout(r, 60));
-      child.stderr.write(`\ncouldn't bind to server socket: hostname=127.0.0.1 port=${CHILD_PORT}\n\n`);
       child.exitCode = 1;
       child.emit('exit', 1);
       await assert.rejects(pending, (e: unknown) => e instanceof TranscriptionError && e.code === 'start_failed');
       assert.deepEqual(asked, []);
-    } finally {
-      t.close();
-    }
-  });
-
-  test('a listening line for another port does not count, and the child is stopped at the deadline', async () => {
-    const child = fakeChild();
-    const asked: string[] = [];
-    const t = spawned(child, asked, { startTimeoutMs: 300 });
-    try {
-      const pending = t.transcribe(wav());
-      child.stdout.write(`whisper server listening at http://127.0.0.1:${CHILD_PORT + 1}\n`);
-      await assert.rejects(pending, (e: unknown) => e instanceof TranscriptionError && e.code === 'start_failed');
-      assert.deepEqual(asked, []);
-      assert.equal(child.killed, 'SIGTERM');
     } finally {
       t.close();
     }

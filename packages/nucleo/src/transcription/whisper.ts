@@ -5,8 +5,10 @@
 // machine. The audio and the text are never logged.
 
 import { spawn, type ChildProcess } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { randomBytes } from 'node:crypto';
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 export const MODEL_NAME = 'large-v3-turbo';
@@ -94,6 +96,15 @@ function freeLoopbackPort(): Promise<number> {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+/** A fresh 0700 folder (mkdtemp) with one random file holding a random value: what only our child can serve. */
+function readinessProof(): { dir: string; file: string; value: string; remove: () => void } {
+  const dir = mkdtempSync(join(tmpdir(), 'ahrena-whisper-'));
+  const file = `${randomBytes(16).toString('hex')}.txt`;
+  const value = randomBytes(32).toString('hex');
+  writeFileSync(join(dir, file), value, { mode: 0o600, flag: 'wx' });
+  return { dir, file, value, remove: () => rmSync(dir, { recursive: true, force: true }) };
+}
+
 /** What whisper.cpp prints for silence and for sounds, which are not words. */
 const NOISE = /\[(?:BLANK_AUDIO|MUSIC|NOISE|SILENCE)\]|\((?:music|silence)\)/gi;
 
@@ -107,7 +118,7 @@ export function createTranscription(opts: TranscriptionOptions): Transcription {
   const doFetch = opts.fetch ?? fetch;
   const startChild =
     opts.start ??
-    ((bin, args) => spawn(bin, args, { stdio: ['ignore', 'pipe', 'pipe'], detached: false }));
+    ((bin, args) => spawn(bin, args, { stdio: 'ignore', detached: false }));
   const freePort = opts.freePort ?? freeLoopbackPort;
 
   let child: ChildProcess | null = null;
@@ -115,6 +126,7 @@ export function createTranscription(opts: TranscriptionOptions): Transcription {
   let starting: Promise<string> | null = null;
   let idle: NodeJS.Timeout | null = null;
   let busy = false;
+  let cleanup: (() => void) | null = null;
 
   const availability = (): TranscriptionAvailability => {
     if (config.url) return { available: true, reason: null, model: MODEL_NAME };
@@ -131,6 +143,13 @@ export function createTranscription(opts: TranscriptionOptions): Transcription {
     starting = null;
     if (!config.url) base = null;
     if (c && c.exitCode === null) c.kill('SIGTERM');
+    removeProof();
+  }
+
+  function removeProof(): void {
+    const remove = cleanup;
+    cleanup = null;
+    remove?.();
   }
 
   function armIdle(): void {
@@ -148,8 +167,18 @@ export function createTranscription(opts: TranscriptionOptions): Transcription {
     if (starting) return starting;
     starting = (async () => {
       const port = await freePort();
+      // Ready only when the port answers with a secret only OUR child can read. The port is free
+      // between `freePort` and the child's bind, which comes after the model loads (seconds), and
+      // `--port` is in its argv, which `ps` shows to every user of the machine: a plain probe would
+      // accept whoever bound it first, and that process would get the owner's audio and choose the
+      // text (#302 threat model). The child serves `--public` from a fresh 0700 folder holding a
+      // random file with a random value; another user can neither list nor read it, so a server that
+      // returns the value is ours. (Its "listening" line is no signal: it goes to a fully buffered
+      // stdout.) A child that lost the port exits: start_failed.
+      const proof = readinessProof();
+      cleanup = proof.remove;
       log('transcription: starting whisper-server on 127.0.0.1');
-      const c = startChild(config.bin, ['-m', config.model, '--host', LOOPBACK, '--port', String(port), '-l', 'pt']);
+      const c = startChild(config.bin, ['-m', config.model, '--host', LOOPBACK, '--port', String(port), '--public', proof.dir, '-l', 'pt']);
       child = c;
       let gone = false;
       c.once('exit', () => {
@@ -158,37 +187,26 @@ export function createTranscription(opts: TranscriptionOptions): Transcription {
           child = null;
           starting = null;
           if (!config.url) base = null;
+          removeProof();
         }
       });
       c.once('error', () => {
         gone = true;
       });
       const url = `http://${LOOPBACK}:${port}`;
-      // Ready only when OUR child says it bound the port. The port is free between `freePort` and the
-      // child's bind, which comes after the model loads (seconds), and `--port` is in its argv, which
-      // `ps` shows to every user of the machine: probing the port would accept whoever bound it first,
-      // and that process would get the owner's audio and choose the text (#302 threat model). A child
-      // that lost the port prints "couldn't bind" and exits: start_failed. Its output carries the
-      // transcribed text, so it is only scanned for this line and dropped, never logged or kept.
-      const ready = `whisper server listening at ${url}\n`;
-      let seen = '';
-      let bound = false;
-      const scan = (chunk: Buffer) => {
-        if (bound) return;
-        seen = (seen + chunk.toString('utf8')).slice(-512);
-        if (seen.includes(ready)) bound = true;
-      };
-      c.stdout?.on('data', scan);
-      c.stderr?.on('data', scan);
       const deadline = Date.now() + startTimeoutMs;
       while (Date.now() < deadline) {
         if (gone) throw new TranscriptionError('start_failed', 'o whisper-server não subiu');
-        if (bound) {
-          seen = '';
-          base = url;
-          return url;
+        try {
+          const r = await doFetch(`${url}/${proof.file}`, { signal: AbortSignal.timeout(2000) });
+          if (r.ok && (await r.text()) === proof.value) {
+            base = url;
+            return url;
+          }
+        } catch {
+          // not bound yet
         }
-        await sleep(50);
+        await sleep(250);
       }
       stopChild();
       throw new TranscriptionError('start_failed', 'o whisper-server não respondeu a tempo');
