@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { SqliteStorage } from '../src/adapters/sqlite/sqlite-storage.ts';
-import { providerAccountKey, providerSessionKey, scopedEntityId, legacySessionIdentity, validateClaudeAccount, type ProviderAccount } from '../src/model.ts';
+import { applySessionAccount, providerAccountKey, providerSessionKey, scopedEntityId, legacySessionIdentity, validateClaudeAccount, type ProviderAccount } from '../src/model.ts';
 import { account, agent, event, session, T0 } from './fixtures.ts';
 
 const identity = { ...legacySessionIdentity('same-id'), provider: 'codex' as const };
@@ -135,4 +135,19 @@ test('provider-prefixed and punctuated credentials and raw auth containers never
       assert.equal(await store.getAgent(agentId), null);
     }
   } finally { await store.close(); }
+});
+
+
+test('replacing an account attribution resets its confidence without changing legacy shapes', () => {
+  const confirmed = session({ accountId: 'account-a', accountSource: 'transcript', accountConfidence: 'confirmed' });
+  const replaced = applySessionAccount(confirmed, 'account-b', 'env');
+  assert.equal(replaced.accountId, 'account-b');
+  assert.equal(replaced.accountSource, 'env');
+  assert.equal(replaced.accountConfidence, 'unknown');
+  assert.equal(confirmed.accountConfidence, 'confirmed');
+  assert.equal(applySessionAccount(confirmed, 'account-b', 'profile'), confirmed);
+  assert.equal(applySessionAccount(confirmed, 'account-a', 'env').accountConfidence, 'unknown');
+  const legacy = { accountId: 'account-a', accountSource: 'transcript' as const };
+  assert.deepEqual(applySessionAccount(legacy, 'account-b', 'env'), { accountId: 'account-b', accountSource: 'env' });
+  assert.equal('accountConfidence' in applySessionAccount(legacy, 'account-b', 'env'), false);
 });

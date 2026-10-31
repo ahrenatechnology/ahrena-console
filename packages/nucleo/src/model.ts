@@ -219,13 +219,14 @@ export function accountSourceOverrides(incoming: AccountSource | null, current: 
  * Aplica à sessão a conta resolvida por uma fonte, seguindo a precedência. Devolve a mesma
  * sessão quando a fonte não vence a gravada, ou uma cópia com a conta nova.
  */
-export function applySessionAccount<S extends Pick<Session, 'accountId' | 'accountSource'>>(
+export function applySessionAccount<S extends Pick<Session, 'accountId' | 'accountSource' | 'accountConfidence'>>(
   session: S,
   accountId: string,
   source: AccountSource,
 ): S {
   if (!accountSourceOverrides(source, session.accountSource)) return session;
-  return { ...session, accountId, accountSource: source };
+  // Confidence belongs to the prior attribution, not to whichever account wins next.
+  return { ...session, accountId, accountSource: source, ...('accountConfidence' in session ? { accountConfidence: 'unknown' as const } : {}) };
 }
 
 export class InvalidModelError extends Error {
