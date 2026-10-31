@@ -65,6 +65,7 @@ describe('#350 secrets in command lines', () => {
     assert.equal(maskSecrets('tool --token abc123 --name ok'), 'tool --token *** --name ok');
     assert.equal(maskSecrets('tool --api-key=abc123'), 'tool --api-key=***');
     assert.equal(maskSecrets('run PASSWORD=abc ./x'), 'run PASSWORD=*** ./x');
+    assert.equal(maskSecrets('env GITHUB_TOKEN=ghp_abc AWS_SECRET_ACCESS_KEY=xyz DB_PASSWORD=p npm publish'), 'env GITHUB_TOKEN=*** AWS_SECRET_ACCESS_KEY=*** DB_PASSWORD=*** npm publish');
     assert.equal(maskSecrets('curl -H Authorization: Bearer abc.def'), 'curl -H Authorization: Bearer ***');
     assert.equal(maskSecrets('mysql -psecret db'), 'mysql -p*** db');
     assert.equal(maskSecrets('bash ./destrava-pedro.sh'), 'bash ./destrava-pedro.sh');

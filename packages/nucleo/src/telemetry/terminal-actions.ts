@@ -85,6 +85,8 @@ export class LocalTerminalActions {
       protection = session.end.protection;
     }
     if (protection) return { kind: 'refused', reason: protection };
+    // `kill(0)` is the núcleo's own group and `kill(-1)` every process of the user: never a target.
+    if (Math.abs(pidToSignal) <= 1) return { kind: 'changed' };
     try {
       (this.o.signal ?? process.kill)(pidToSignal, signal);
     } catch (err) {

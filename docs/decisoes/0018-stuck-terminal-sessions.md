@@ -60,6 +60,8 @@ Encerrar a sessão fecha **todos** os terminais da conexão (`pts/0` e `pts/1` t
 - **Agir lá é desligado por padrão**, pelo mesmo motivo da 0014 §5 e da 0016 §3: o túnel faz o pedido do Mac parecer local. O núcleo de lá aceita um `POST` sem `Origin` só se subiu com `--accept-remote-actions` ou `AHRENA_CONSOLE_ACCEPT_REMOTE_ACTIONS=1`, a mesma opção das portas (0016) e do Docker (0017). Quem liga é quem está na Workstation.
 - **A tela sabe antes de clicar:** a leitura traz `remoteActions`. Desligado, cada ação é **Copiar comando** (`kill -INT -- -<pgid>`, `kill -HUP <pid>`), para colar num terminal de lá, que não é o preso. Um núcleo de lá sem a rota (404) mostra a mensagem de atualizar o núcleo.
 - O Mac manda só `{ pid, confirm? }`, sem `Origin`, e reprojeta a resposta (motivos de uma lista, textos curtos). Depois de um envio, relê a máquina.
+- **Desde a #391, a remota fecha antes disso.** Toda escrita, e a leitura da telemetria, pede a prova do dono, e o túnel não leva a prova do dono de lá; o token daqui nunca vai para lá (0003). Até a #388 trazer uma credencial remota revisada, a Workstation aparece sem conexão (`owner-auth-required`) e as ações de lá respondem 403, mesmo com `--accept-remote-actions`. O caminho acima é o que vale quando a #388 chegar.
+- **Não há chave no `config.json` para ligar as ações remotas.** O wireframe C99 mostrava `"terminal": { "acceptRemoteActions": true }`; a tela diz só o flag e a variável, que são os que o núcleo lê.
 
 ## Alternativas consideradas
 

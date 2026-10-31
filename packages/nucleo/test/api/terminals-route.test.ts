@@ -3,6 +3,7 @@
 // `--accept-remote-actions`; JSON only; a body with only pid, machine and confirm.
 import assert from 'node:assert/strict';
 import { request } from 'node:http';
+import { OWNER_TOKEN, ownerRequest } from '../owner-http.ts';
 import { after, describe, test } from 'node:test';
 import { openSqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
 import { Accounts, MontadorDoPainel, startLocalApi } from '../../src/api/index.ts';
@@ -18,16 +19,16 @@ const control: TerminalControl = {
 
 const storage = openSqliteStorage({ path: ':memory:' });
 const montador = new MontadorDoPainel({ storage, contas: new Accounts({ storage, file: null }), desktop: null, trabalho: null });
-const api = await startLocalApi({ panelBuilder: montador, hooks: { storage }, port: 0, log: () => {}, terminals: control });
+const api = await startLocalApi({ ownerToken: () => OWNER_TOKEN, panelBuilder: montador, hooks: { storage }, port: 0, log: () => {}, terminals: control });
 const host = `127.0.0.1:${new URL(api.url).port}`;
 after(async () => {
   await api.close();
   await storage.close();
 });
 
-function post(path: string, headers: Record<string, string>, body?: string, method = 'POST'): Promise<{ status: number; body: Record<string, unknown> }> {
+function post(path: string, headers: Record<string, string>, body?: string, method = 'POST', owner = true): Promise<{ status: number; body: Record<string, unknown> }> {
   return new Promise((resolve, reject) => {
-    const r = request(`${api.url}${path}`, { method, agent: false, headers: { host, ...headers } }, (res) => {
+    const r = (owner ? ownerRequest : request)(`${api.url}${path}`, { method, agent: false, headers: { host, ...headers } }, (res) => {
       let text = '';
       res.setEncoding('utf8');
       res.on('data', (c: string) => (text += c));
@@ -41,6 +42,15 @@ const ui = { origin: `http://${host}`, 'content-type': 'application/json' };
 const PATH = '/api/terminals/pts-0/actions/interrupt';
 
 describe('#350 the gate', () => {
+  test('without the owner proof (#391) the write is 403 and nothing runs, even from the same Origin', async () => {
+    calls.length = 0;
+    accept = true;
+    assert.equal((await post(PATH, ui, '{"pid":41233}', 'POST', false)).status, 403);
+    assert.equal((await post(PATH, { 'content-type': 'application/json' }, '{"pid":41233}', 'POST', false)).status, 403);
+    accept = false;
+    assert.deepEqual(calls, []);
+  });
+
   test('same Origin and JSON: 200 with the result, and the control gets the ids', async () => {
     calls.length = 0;
     const r = await post(PATH, ui, '{"pid":41233}');

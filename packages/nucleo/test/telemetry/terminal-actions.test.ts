@@ -93,6 +93,16 @@ describe('#350 local actions', () => {
     assert.deepEqual(await setup({ throws: 'EPERM' }).local.act('pts-0', 'interrupt', 41233, false), { kind: 'refused', reason: 'other-user' });
     await assert.rejects(setup({ throws: 'EIO' }).local.act('pts-0', 'interrupt', 41233, false));
   });
+
+  test('a group 0 or 1 is never a target: kill(0) is the núcleo\'s own group, kill(-1) every process', async () => {
+    for (const pgid of [0, 1]) {
+      const r = reading();
+      const s = r.sessions.find((x) => x.id === 'pts-0')!;
+      const { local, sent } = setup({ read: async () => ({ ...r, sessions: [{ ...s, foreground: { ...s.foreground!, pgid } }] }) });
+      assert.deepEqual(await local.act('pts-0', 'interrupt', 41233, false), { kind: 'changed' });
+      assert.deepEqual(sent, []);
+    }
+  });
 });
 
 describe('#350 forward to a remote machine', () => {

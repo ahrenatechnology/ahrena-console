@@ -49,12 +49,12 @@ export function parseElapsed(s: string): number | null {
   return Number(m[1] ?? 0) * 86400 + Number(m[2] ?? 0) * 3600 + Number(m[3]) * 60 + Number(m[4]);
 }
 
-/** A command line can carry a secret: URL credentials, `--token x`, `password=x`, `Bearer x`, `-pSECRET`. Masked before it is kept. */
+/** A command line can carry a secret: URL credentials, `--token x`, `password=x` and `GITHUB_TOKEN=x`, `Bearer x`, `-pSECRET`. Masked before it is kept. */
 export function maskSecrets(args: string): string {
   return args
     .replace(/(\w+:\/\/)[^\s/@]*:[^\s/@]*@/g, '$1***@')
     .replace(/(--[\w-]*(?:pass(?:word)?|token|secret|key|auth)[\w-]*[= ])\S+/gi, '$1***')
-    .replace(/\b((?:pass(?:word)?|token|secret|api[_-]?key)=)\S+/gi, '$1***')
+    .replace(/\b([\w-]*(?:pass(?:word)?|token|secret|api[_-]?key)[\w-]*=)\S+/gi, '$1***')
     .replace(/\b(Bearer|Basic)\s+\S+/g, '$1 ***')
     .replace(/(\s-p)\S+/g, '$1***');
 }

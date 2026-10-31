@@ -132,7 +132,7 @@ export function machineTerminals(ctx, { id, local, label: labelOf, repaint, rere
     });
     const readOnly =
       !local && !terminals.remoteActions
-        ? el('div', { class: 'tm-only-shows', role: 'note' }, icon('info'), el('p', {}, el('b', {}, 'Só leitura.'), ` A ${label()} não aceita ações vindas deste Mac, e cada ação vira Copiar comando, para colar num terminal de lá. Para ligar, na ${label()}, grave `, el('code', {}, '"terminal": { "acceptRemoteActions": true }'), ' no ', el('code', {}, '~/.ahrena-console/config.json'), ' (ou suba o núcleo com ', el('code', {}, 'AHRENA_CONSOLE_ACCEPT_REMOTE_ACTIONS=1'), ').'))
+        ? el('div', { class: 'tm-only-shows', role: 'note' }, icon('info'), el('p', {}, el('b', {}, 'Só leitura.'), ` A ${label()} não aceita ações vindas deste Mac, e cada ação vira Copiar comando, para colar num terminal de lá. Para ligar, na ${label()}, suba o núcleo com `, el('code', {}, 'AHRENA_CONSOLE_ACCEPT_REMOTE_ACTIONS=1'), ' (ou ', el('code', {}, '--accept-remote-actions'), ').'))
         : null;
     const body = rows.length
       ? el(

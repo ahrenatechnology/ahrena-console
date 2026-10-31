@@ -66,7 +66,9 @@ export async function respondTerminalsWrite(req: IncomingMessage, res: ServerRes
   if (text === null) return send(res, 413, { error: 'corpo grande demais' });
   if (!control) return send(res, 404, NO_TERMINALS);
   const m = ACTION_ROUTE.exec(url.pathname);
-  if (!m || !TERMINAL_ID.test(m[1]!) || !isTerminalAction(m[2]!)) return send(res, 404, { error: 'ação desconhecida' });
+  const id = m?.[1];
+  const action = m?.[2];
+  if (id === undefined || action === undefined || !TERMINAL_ID.test(id) || !isTerminalAction(action)) return send(res, 404, { error: 'ação desconhecida' });
   let body: unknown;
   try {
     body = JSON.parse(text);
@@ -80,7 +82,7 @@ export async function respondTerminalsWrite(req: IncomingMessage, res: ServerRes
   if (typeof machine !== 'string' || !MACHINE_ID.test(machine)) return send(res, 400, { error: 'machine inválida: letras minúsculas, números e hífen' });
   if (typeof confirm !== 'boolean') return send(res, 400, { error: 'confirm: true ou false' });
 
-  const r = await control.act(machine, m[1]!, m[2] as never, pid, confirm);
+  const r = await control.act(machine, id, action, pid, confirm);
   switch (r.kind) {
     case 'sent':
       return send(res, 200, { result: 'sent', action: r.action, signal: r.signal, pid: r.pid, target: r.target });
