@@ -40,7 +40,7 @@ import { chmodSync, closeSync, fchmodSync, mkdirSync, openSync, renameSync, stat
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import type { ChangeCursor } from '../changes/cursor.ts';
-import { isAdminExecutable, type ActionId } from './catalog.ts';
+import { isAdminExecutable } from './catalog.ts';
 import type { ActionPlanResult, JobsView, ToolActionView, ToolsOverview } from './service.ts';
 
 export const TOOLS_LOG_FILE = 'tools.log';
@@ -61,7 +61,8 @@ export type JobState = 'queued' | 'running' | 'succeeded' | 'failed' | 'timed-ou
 export interface ToolJob {
   id: string;
   toolId: string;
-  actionId: ActionId;
+  /** A catalog `ActionId` for a tool; a Docker action id (src/docker/catalog.ts) for `toolId: 'docker'`. */
+  actionId: string;
   /** pt-BR, for display: `Atualizar GitHub CLI`. */
   label: string;
   machine: string;
@@ -118,6 +119,24 @@ export interface ToolsControl {
    */
   acceptNoOriginActions?(): boolean;
 }
+
+/**
+ * A job built by the caller from its own closed catalog (the Docker one, src/docker): the executor adds
+ * the queue, the process rules, the masked output and Cancel; it knows nothing of where the steps came from.
+ */
+export interface JobSpec {
+  toolId: string;
+  actionId: string;
+  label: string;
+  steps: string[][];
+  timeoutSeconds: number;
+  targetVersion: string | null;
+  /** The same key already queued or running gets that job back; default `<toolId> <actionId>`. */
+  key?: string;
+  /** Runs after the last step exits 0 (the Docker reading is dropped here). */
+  after?: () => void | Promise<void>;
+}
+export type EnqueueResult = { kind: 'queued'; job: ToolJob };
 
 type Spawn = (command: string, args: readonly string[], options: SpawnOptions) => ChildProcess;
 
@@ -193,6 +212,8 @@ export class ToolsExecutor implements ToolsControl {
   private readonly checks = new Map<string, Promise<ToolsOverview | null>>();
   private readonly mcpChecks = new Map<string, Promise<ToolsOverview | null>>();
   private readonly endNotes = new Map<string, string>();
+  private readonly keys = new Map<string, string>();
+  private readonly afters = new Map<string, () => void | Promise<void>>();
   private closing = false;
 
   constructor(options: ToolsExecutorOptions) {
@@ -238,27 +259,35 @@ export class ToolsExecutor implements ToolsControl {
     if (r.action.planDigest !== planDigest) return { kind: 'stale', plan: r.action };
     // The núcleo never runs an admin step, whatever its argv[0] (decision 0014 section 3).
     if (!r.action.runnable || r.action.admin) return { kind: 'blocked', plan: r.action };
+    return this.enqueue(machine, { toolId: r.toolId, actionId: r.actionId, label: r.label, steps: r.action.steps, timeoutSeconds: r.action.timeoutSeconds, targetVersion: r.action.targetVersion });
+  }
+
+  /** Queues a prebuilt job (one at a time per machine, FIFO); the same key already queued or running gets that job back. */
+  enqueue(machine: string, spec: JobSpec): EnqueueResult {
     const m = this.jobsOf(machine);
-    const same = [m.current, ...m.queue].find((j) => j && j.toolId === r.toolId && j.actionId === r.actionId && (j.state === 'queued' || j.state === 'running'));
+    const key = spec.key ?? `${spec.toolId} ${spec.actionId}`;
+    const same = [m.current, ...m.queue].find((j) => j && this.keys.get(j.id) === key && (j.state === 'queued' || j.state === 'running'));
     if (same) return { kind: 'queued', job: copyJob(same) };
     const job: ToolJob = {
       id: randomBytes(6).toString('hex'),
-      toolId: r.toolId,
-      actionId: r.actionId,
-      label: r.label,
+      toolId: spec.toolId,
+      actionId: spec.actionId,
+      label: spec.label,
       machine,
       state: 'queued',
-      steps: r.action.steps.map((s) => [...s]),
+      steps: spec.steps.map((s) => [...s]),
       step: 0,
       phase: 'running',
       startedAt: null,
       endedAt: null,
       exitCode: null,
-      timeoutSeconds: r.action.timeoutSeconds,
-      targetVersion: r.action.targetVersion,
+      timeoutSeconds: spec.timeoutSeconds,
+      targetVersion: spec.targetVersion,
       output: [],
       logFile: this.logFile,
     };
+    this.keys.set(job.id, key);
+    if (spec.after) this.afters.set(job.id, spec.after);
     m.queue.push(job);
     m.batch ??= { total: 0, done: 0 };
     m.batch.total++;
@@ -276,6 +305,8 @@ export class ToolsExecutor implements ToolsControl {
         const [job] = m.queue.splice(queued, 1);
         job!.state = 'canceled';
         job!.endedAt = new Date(this.now()).toISOString();
+        this.keys.delete(job!.id);
+        this.afters.delete(job!.id);
         this.remember(m, job!);
         this.o.log?.(`tools (${machine}): job ${jobId} canceled before it started`);
         this.wakeIdle(m);
@@ -349,6 +380,8 @@ export class ToolsExecutor implements ToolsControl {
       for (const job of m.queue.splice(0)) {
         job.state = 'canceled';
         job.endedAt = new Date(this.now()).toISOString();
+        this.keys.delete(job.id);
+        this.afters.delete(job.id);
         this.remember(m, job);
       }
       const job = m.current;
@@ -396,6 +429,8 @@ export class ToolsExecutor implements ToolsControl {
       .finally(() => {
         m.current = null;
         this.running.delete(job.id);
+        this.keys.delete(job.id);
+        this.afters.delete(job.id);
         this.remember(m, job);
         for (const resolve of m.afterCurrent.splice(0)) resolve();
         // The next job (its own change) or, with the queue drained, the batch closed; then this end's change.
@@ -452,6 +487,7 @@ export class ToolsExecutor implements ToolsControl {
       } else {
         this.o.service.invalidate();
       }
+      await Promise.resolve(this.afters.get(job.id)?.()).catch(() => undefined);
       this.end(job, 'succeeded', 0);
     } finally {
       const seconds = Math.round((this.now() - startedMs) / 1000);

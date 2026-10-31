@@ -16,7 +16,7 @@
     "node": ">=24"
   },
   "scripts": {
-    "test": "node --test --disable-warning=ExperimentalWarning \"test/**/*.test.ts\"",
+    "test": "node --test --test-concurrency=4 --disable-warning=ExperimentalWarning \"test/**/*.test.ts\"",
     "simulate": "node --disable-warning=ExperimentalWarning src/simulator/cli.ts",
     "api": "node --disable-warning=ExperimentalWarning src/api/cli.ts",
     "mcp": "node --disable-warning=ExperimentalWarning src/mcp/cli.ts",

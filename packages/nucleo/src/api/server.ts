@@ -26,6 +26,7 @@
 // | `GET /api/project`            | The GitHub Project kanban (api/project.ts, #80); `?refresh=1` re-reads |
 // | `POST /api/project/move`      | Changes a card's Status: `{ itemId, optionId }` (api/project.ts) |
 // | `GET /api/sessions/<id>` and `/agents`, `/conversation`, `/events` | The session Detail in the /ui (api/session-detail.ts, #29 and #30) |
+// | `GET /api/new-session/folders` and `POST /api/new-session` | "Nova sessão": the folders it can start in, and a new session in one of them, in the Claude Desktop or a terminal (api/new-session.ts) |
 // | `POST /api/sessions/<id>/open` | Opens the session where it runs: Claude Desktop, a terminal resuming it, or its live terminal brought forward; the núcleo picks the target (api/session-open-route.ts, #285) |
 // | `GET /api/decisions`, `GET /api/sessions/<id>/decisions` and `POST /api/decisions/<id>/promote` | The /ui's Decisions page and tab and the "Promover a registro" (api/decisions-ui.ts, #103) |
 // | `GET /api/repos` and `/api/repos/<owner>/<repo>` | GitHub repositories and metrics (`?period=`, `?refresh=1`; api/repos.ts, #104, #105) |
@@ -40,6 +41,8 @@
 // | `GET /api/tools`              | The Tools screen: CLIs, runtimes and containers, installed and latest versions, the catalog's actions, the jobs (`?machine=`; api/tools.ts, #280) |
 // | `POST /api/tools/<toolId>/actions/<actionId>`, `DELETE /api/tools/jobs/<jobId>`, `POST /api/tools/checks` and `POST /api/tools/mcp/checks` | Run a catalog action as a job, cancel it, Verificar agora, Verificar conexões (api/tools.ts, src/tools/executor.ts, #280) |
 // | `POST /api/machines/<id>/connection/start|stop|reconnect|login-and-start`, `DELETE /api/machines/<id>/connection` | The connection of a remote machine (api/connection.ts, #278) |
+// | `GET`/`POST /api/ports/release`, and the same under `/api/machines/<id>/` | Release a listening port: SIGTERM, then SIGKILL (api/ports.ts, #286, decision 0016) |
+// | `GET /api/docker`, `GET /api/docker/plan`, `POST /api/docker/actions/<actionId>`, `DELETE /api/docker/jobs/<jobId>` | The Docker actions of a machine (api/docker.ts, src/docker, #288, decision 0017) |
 // | `GET /api/connectors`, `POST`/`DELETE /api/connectors/aws/sessions/<name>/login`, and the same under `/api/machines/<id>/` | The cloud connectors and their logins (api/clouds.ts, #277) |
 // | `GET /api/app-update`, `PUT /api/app-update/state` and `POST /api/app-update/actions/check|install|dismiss|ack` | The desktop app's update notice: the app reports, the /ui reads and clicks (api/app-update.ts, #330) |
 // | `GET /api/connections`        | The console's own GitHub connection: `{ github: <status> }` (api/connections-route.ts, #241) |
@@ -108,6 +111,7 @@ import type { FleetReader } from '../mcp/fleet.ts';
 import { montarAtencao, remoteAttentionItems, ATTENTION_ROUTE, type RemoteAttentionSource } from './attention-route.ts';
 import { SessionOpenDescriber } from './session-open.ts';
 import { createSessionOpenRoute, SESSION_OPEN_FROM_UI, SESSION_OPEN_ROUTE } from './session-open-route.ts';
+import { createNewSessionRoute, NEW_SESSION_FOLDERS_ROUTE, NEW_SESSION_ROUTE } from './new-session.ts';
 import type { TerminalFocuser, TerminalOpener } from './terminal-launch.ts';
 import { montarDashboard, DASHBOARD_ROUTE } from './dashboard-route.ts';
 import { createMachineSessionsRoute } from './machine-sessions.ts';
@@ -124,10 +128,12 @@ import type { TelemetryService } from '../telemetry/service.ts';
 import { MESSAGING_ROUTE, messagesWriteFromSameOrigin, type MessagingRoute } from './messaging.ts';
 import { ORDERS_ROUTE, ordersWriteFromSameOrigin, type OrdersRoute } from './orders.ts';
 import { isToolsRoute, isToolsWrite, respondTools, respondToolsWrite, toolsWriteAllowed } from './tools.ts';
+import { dockerWriteAllowed, isDockerRoute, isDockerWrite, type DockerRoute } from './docker.ts';
 import type { ToolsControl } from '../tools/executor.ts';
 import { fromAnotherSite, fromOwnUi } from './same-origin.ts';
 import { appUpdateWriteFromSameOrigin, isAppUpdateRoute, type AppUpdateRoute } from './app-update.ts';
 import { cloudsWriteFromSameOrigin, isCloudsRoute, type CloudsRoute } from './clouds.ts';
+import { isPortsRoute, isPortsWrite, portsWriteAllowed, type PortsRoute } from './ports.ts';
 import { connectionWriteFromSameOrigin, isConnectionRoute, type ConnectionRoute } from './connection.ts';
 import { CONNECTIONS_ROUTE, PROJECT_SELECTION_ROUTE, respondConnections, respondProjectSelection, STRICT_WRITE_ROUTES, strictWriteRefusal, type ProjectSelectionTarget } from './connections-route.ts';
 import type { GithubConnection } from '../github/connection/connection.ts';
@@ -161,6 +167,8 @@ export interface ApiOptions {
   openDescriber?: SessionOpenDescriber;
   /** #285: opens a terminal resuming a session; without it, a terminal session gets 501 with the command. */
   openTerminal?: TerminalOpener | null;
+  /** "Nova sessão": a folder its list leaves out; default the scratch and temporary folders (api/new-session.ts). */
+  isThrowawayFolder?: (path: string) => boolean;
   /** #285: brings forward the terminal of a live session; without it, 409 with the command. */
   focusTerminal?: TerminalFocuser | null;
   /** #285: the Claude Desktop's `local_…` of a session for the open route; default the panel builder's index. */
@@ -215,8 +223,12 @@ export interface ApiOptions {
   orders?: OrdersRoute;
   /** The Tools screen (#280, decision 0014): the executor (or only the service, read-only); without it, `/api/tools` gives 404. */
   tools?: ToolsControl | null;
+  /** The Docker screen's actions (#288, decision 0017; api/docker.ts): `/api/docker` on the Tools executor's queue; without it, 404. */
+  docker?: { route: DockerRoute; acceptNoOrigin: () => boolean } | null;
   /** The cloud connectors (#277, decision 0013; api/clouds.ts): `/api/connectors` and the logins; without it, 404. */
   clouds?: CloudsRoute | null;
+  /** The port release (#286, decision 0016; api/ports.ts): `/api/ports/release` and the same under `/api/machines/<id>/`; without it, 404. */
+  ports?: PortsRoute | null;
   /** The desktop app's update notice (#330, api/app-update.ts): `/api/app-update`; without it, 404. */
   appUpdate?: AppUpdateRoute | null;
   /** The connection of the remote machines (#278, api/connection.ts): start, stop, reconnect, login-and-start, cancel; without it, 404. */
@@ -289,6 +301,9 @@ const sameOriginOpen = (req: IncomingMessage, port: number): boolean =>
 /** #285's open button: only `POST /api/sessions/<uuid>/open`, the exact raw path (a query gives 403), from the same origin. */
 const sameOriginSessionOpen = (req: IncomingMessage, port: number): boolean =>
   req.method === 'POST' && SESSION_OPEN_FROM_UI.test(req.url ?? '') && fromOwnUi(req, port);
+
+/** "Nova sessão": only `POST /api/new-session`, the exact raw path, from the same origin. */
+const sameOriginNewSession = (req: IncomingMessage, port: number): boolean => req.method === 'POST' && req.url === NEW_SESSION_ROUTE && fromOwnUi(req, port);
 
 /** `decodeURIComponent`, or the raw text when it is malformed (the id check then refuses it). */
 function decodeSegment(s: string): string {
@@ -367,6 +382,7 @@ export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
     isRemote: (id) => remotes().some((r) => remoteAttentionItems(r.attention(), r).some((i) => i.session === id)),
     log,
   });
+  const newSession = createNewSessionRoute({ storage: opts.panelBuilder.storage, openInDesktop: opts.openInDesktop, openTerminal: opts.openTerminal, isThrowaway: opts.isThrowawayFolder, log });
   const counters = { requests: 0, panel: 0, panelMs: 0 };
   let port = 0;
 
@@ -449,6 +465,26 @@ export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
       }
       return respondToolsWrite(req, res, url, opts.tools);
     }
+    // The port release writes have their own gate too (decision 0016): the Origin, or none only when asked for.
+    if (isPortsWrite(req, url.pathname)) {
+      if (!opts.ports || !portsWriteAllowed(req, port, opts.ports.acceptNoOrigin())) {
+        req.resume();
+        return send(res, opts.ports ? 403 : 404, { error: opts.ports ? 'origem não permitida' : 'não encontrado' });
+      }
+      return opts.ports.handle(req, res, url);
+    }
+    // The Docker writes share the Tools writes' strict gate (no Origin is 403 unless this núcleo accepts remote actions).
+    if (isDockerWrite(req, url.pathname)) {
+      if (!dockerWriteAllowed(req, port, opts.docker?.acceptNoOrigin() ?? false)) {
+        req.resume();
+        return send(res, 403, { error: 'origem não permitida' });
+      }
+      if (!opts.docker) {
+        req.resume();
+        return send(res, 404, { error: 'o núcleo subiu sem a tela Docker' });
+      }
+      return opts.docker.route(req, res, url);
+    }
     // #241: the six writes only the /ui itself makes, checked before anything else.
     if (STRICT_WRITE_ROUTES.has(url.pathname)) {
       const refusal = strictWriteRefusal(req, port, url.pathname);
@@ -457,7 +493,7 @@ export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
       if (!opts.connection) return send(res, 404, { error: 'not-found' });
       return respondConnections(req, res, url.pathname, opts.connection);
     }
-    if (!allowedLocalRequest(req, port) && !sameOriginRead(req, port) && !sameOriginOpen(req, port) && !sameOriginSessionOpen(req, port) && !mesmaOrigemMovendo(req, port) && !sameOriginDecision(req, port) && !agentConfigWriteFromSameOrigin(req, port) && !frameworkInstallWriteFromSameOrigin(req, port) && !reconnectFromSameOrigin(req, port) && !messagesWriteFromSameOrigin(req, port) && !cloudsWriteFromSameOrigin(req, port) && !connectionWriteFromSameOrigin(req, port) && !ordersWriteFromSameOrigin(req, port) && !appUpdateWriteFromSameOrigin(req, port)) return send(res, 403, { error: 'origem não permitida' });
+    if (!allowedLocalRequest(req, port) && !sameOriginRead(req, port) && !sameOriginOpen(req, port) && !sameOriginSessionOpen(req, port) && !sameOriginNewSession(req, port) && !mesmaOrigemMovendo(req, port) && !sameOriginDecision(req, port) && !agentConfigWriteFromSameOrigin(req, port) && !frameworkInstallWriteFromSameOrigin(req, port) && !reconnectFromSameOrigin(req, port) && !messagesWriteFromSameOrigin(req, port) && !cloudsWriteFromSameOrigin(req, port) && !connectionWriteFromSameOrigin(req, port) && !ordersWriteFromSameOrigin(req, port) && !appUpdateWriteFromSameOrigin(req, port)) return send(res, 403, { error: 'origem não permitida' });
     // The Project list spends GitHub quota and the connection status is the /ui's: another site's page
     // never gets either, connected or not (#241 review 2).
     if ((url.pathname === PROJECT_OPTIONS_ROUTE || url.pathname === CONNECTIONS_ROUTE) && fromAnotherSite(req)) return send(res, 403, { error: 'forbidden' });
@@ -468,6 +504,7 @@ export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
     if (openMatch && req.method === 'POST') return openDirect(req, res, decodeURIComponent(openMatch[1]!));
     const sessionOpenMatch = SESSION_OPEN_ROUTE.exec(url.pathname);
     if (sessionOpenMatch) return sessionOpen(req, res, decodeSegment(sessionOpenMatch[1]!));
+    if (url.pathname === NEW_SESSION_ROUTE || url.pathname === NEW_SESSION_FOLDERS_ROUTE) return newSession(req, res, url.pathname);
     if (opts.decisionsUi && (await responderDecisoesDaUi(req, res, url, opts.decisionsUi, log))) return;
     const actionMatch = DECISION_ACTION.exec(url.pathname);
     if (actionMatch) {
@@ -485,6 +522,8 @@ export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
     if (opts.messaging && MESSAGING_ROUTE.test(url.pathname)) return opts.messaging(req, res, url);
     if (opts.orders && ORDERS_ROUTE.test(url.pathname)) return opts.orders(req, res, url);
     if (opts.clouds && isCloudsRoute(url.pathname)) return opts.clouds(req, res, url);
+    if (opts.ports && isPortsRoute(url.pathname)) return opts.ports.handle(req, res, url);
+    if (opts.docker && isDockerRoute(url.pathname)) return opts.docker.route(req, res, url);
     if (opts.appUpdate && isAppUpdateRoute(url.pathname)) return opts.appUpdate(req, res, url);
     if (req.method !== 'GET') return send(res, 405, { error: 'use GET' });
     if (isUiPath(url.pathname)) return respondUi(res, url.pathname);

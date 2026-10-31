@@ -10,6 +10,7 @@ import { header, el, icon } from '../dom.js';
 import { loading, error, errorBand, empty } from '../states.js';
 import { attentionOf, attentionPill, attentionTone, isBlocked, isIdle, reasonChip, statusWithoutAttention } from '../attention.js';
 import { openAction } from '../open-action.js';
+import { newSessionButton } from '../new-session.js';
 import { createMachineFilter, itemHref, itemKey, machineTag, sinceText, whereText } from '../machine-filter.js';
 
 const STYLE = '/ui/wall.css';
@@ -301,7 +302,7 @@ export async function mount(area, ctx) {
     }),
   );
   const refresh = el('button', { type: 'button', class: 'btn', 'data-action': 'refresh', onClick: () => read() }, icon('refresh'), 'Atualizar');
-  const head = header({ icon: 'wall', title: 'Mural ao vivo', sub: 'Um card por sessão aberta nesta máquina', actions: [selector, refresh] });
+  const head = header({ icon: 'wall', title: 'Mural ao vivo', sub: 'Um card por sessão aberta nesta máquina', actions: [selector, refresh, newSessionButton({ read: ctx.read, write: ctx.write })] });
   const sub = head.querySelector?.('.sub') ?? null;
   // Issue 243 (C46): the machine filter on its own row under the header.
   const machines = createMachineFilter(ctx, { onChange: () => ((wall = null), draw(), read()), reread: () => read(), onLayout: () => draw() });
