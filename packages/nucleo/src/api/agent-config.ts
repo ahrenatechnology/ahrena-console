@@ -1,3 +1,4 @@
+import { readCodexConfig, type CodexConfigRequest } from '../agent-config/codex.ts';
 // The routes of the Agent Config screen (#63, wireframes C16 and C17). Reading and writing live in
 // src/agent-config/; only HTTP and the write's origin exception stay here.
 //
@@ -38,6 +39,7 @@ export interface AgentConfigOptions {
   /** Backups folder; default `~/.ahrena-console/backups`. */
   backups?: string;
   session?: (id: string) => Promise<Session | null>;
+  codexConfig?: Pick<CodexConfigRequest, 'home' | 'codexHome' | 'systemDir' | 'path'>;
   claudeConfig?: { home?: string; managedDir?: string; platform?: NodeJS.Platform };
   log?: (message: string) => void;
   now?: () => Date;
@@ -124,6 +126,25 @@ export function createAgentConfigRoute(opts: AgentConfigOptions): AgentConfigRou
   }
 
   async function route(req: IncomingMessage, res: ServerResponse, url: URL) {
+    if (url.pathname === `${AGENT_CONFIG_ROUTE}/codex`) {
+      if (req.method !== 'GET') return send(res, 405, { error: 'use GET' });
+      try {
+        const unavailable = () => readCodexConfig({ project: null, unavailable: true });
+        if (url.searchParams.has('machine') && url.searchParams.get('machine') !== 'local') return send(res, 200, await unavailable());
+        const sessionId = url.searchParams.get('session');
+        const session = sessionId ? await opts.session?.(sessionId) : null;
+        if (sessionId && !session) return send(res, 404, { error: 'Sessão não encontrada.' });
+        if (session && (session.identity?.provider !== 'codex' || session.identity.machineId || session.identity.environmentId)) return send(res, 200, await unavailable());
+        const projects = await opts.projects();
+        const project = session ? session.cwd && projects.includes(session.cwd) ? session.cwd : null : chooseProject(url.searchParams.get('project'), projects);
+        const profile = sessionId ? null : url.searchParams.get('profile');
+        const result = await readCodexConfig({ ...opts.codexConfig, project, profile, session: !!sessionId });
+        if (profile && !result.profiles.some(p => p.id === profile)) return send(res, 400, { error: 'Perfil desconhecido.' });
+        return send(res, 200, { ...result, projects, session: sessionId ?? null });
+      } catch {
+        return send(res, 400, { error: 'Configuração desconhecida. Não foi possível resolver as fontes.' });
+      }
+    }
     if (url.pathname === `${AGENT_CONFIG_ROUTE}/claude`) {
       if (req.method !== 'GET') return send(res, 405, { error: 'use GET' });
       try {

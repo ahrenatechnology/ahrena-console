@@ -183,6 +183,8 @@ export interface TelemetryReading {
   disk: { volumes: VolumeReading[] };
   network: NetworkReading | null;
   claude: ClaudeProcesses | null;
+  /** Optional for older remote collectors; observed processes do not prove session readiness. */
+  codex?: ClaudeProcesses | null;
   /** The six using the most CPU. */
   topProcesses: TopProcess[] | null;
   /** `null` without `docker` on the PATH or without the daemon. */
