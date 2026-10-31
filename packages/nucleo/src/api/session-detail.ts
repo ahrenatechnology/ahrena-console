@@ -32,7 +32,9 @@ const PAGINA_DE_EVENTOS = 50;
 const MAX_PAGINA = 500;
 const MAX_MENSAGENS = 200;
 const MAX_DADOS = 4_000;
-const MAX_TEXTO = 2_000;
+// Measured on a copy of a real database (670 sessions): the heaviest conversation is 156 KB over its last 200
+// messages, p99 of a message 4.9 KB; the 6.4 MB of 200 × 32k is a ceiling no session comes near.
+const MAX_TEXTO = 32_000;
 const MAX_FERRAMENTAS = 8;
 
 // ---------- Contrato ----------
@@ -435,13 +437,17 @@ export class LeiturasDoDetalhe {
     for (const e of eventos) {
       if (quem.de(e.agentId) !== agente) continue;
       if (PROMPTS.has(e.type)) {
-        const texto = cortar(textoDoPrompt(e), MAX_TEXTO);
-        // O hook e o transcript contam o mesmo prompt: o segundo, igual e logo depois, não entra.
+        const texto = cortar(messageText(e), MAX_TEXTO);
+        // The hook and the transcript both carry the same prompt: the second one, same text and right after, is left out.
         const anterior = [...mensagens].reverse().find((m) => m.role === 'you');
-        if (anterior && anterior.text === texto && Math.abs(Date.parse(e.createdAt) - Date.parse(anterior.at)) < 120_000) continue;
+        if (anterior && samePrompt(anterior.text, texto) && Math.abs(Date.parse(e.createdAt) - Date.parse(anterior.at)) < 120_000) {
+          // An old event may only have the short summary: the fuller text wins.
+          if ((texto?.length ?? 0) > (anterior.text?.length ?? 0)) anterior.text = texto;
+          continue;
+        }
         mensagens.push({ id: e.id, role: 'you', at: e.createdAt, text: texto, model: null, tokens: null, tools: [] });
-      } else if (e.type === 'AssistantMessage' && e.summary) {
-        mensagens.push(mensagemDoAssistente(e, cortar(e.summary, MAX_TEXTO)));
+      } else if (e.type === 'AssistantMessage' && messageText(e)) {
+        mensagens.push(mensagemDoAssistente(e, cortar(messageText(e), MAX_TEXTO)));
       } else if (CHAMADAS.has(e.type) && e.toolName) {
         const id = idDaChamada(e) ?? e.id;
         const ja = chamadas.get(id);
@@ -510,8 +516,27 @@ export class LeiturasDoDetalhe {
   }
 }
 
-function textoDoPrompt(e: SessionEvent): string | null {
-  return e.summary === 'prompt' && e.type === 'UserPromptSubmit' ? (str(obj(e.data)?.prompt) ?? null) : (e.summary ?? str(obj(e.data)?.prompt));
+/**
+ * A message's full text: the transcript's `data.text`, the hook's `data.prompt` on `UserPromptSubmit`,
+ * and the summary (200 chars, whitespace collapsed) only for events stored before either existed.
+ */
+function messageText(e: SessionEvent): string | null {
+  const d = obj(e.data);
+  const full = str(d?.text) ?? (e.type === 'UserPromptSubmit' ? str(d?.prompt) : null);
+  if (full?.trim()) return full.trim();
+  // The hook's `prompt` summary is a label, not the text: with no prompt in data there is nothing to show.
+  if (e.type === 'UserPromptSubmit' && e.summary === 'prompt') return null;
+  return e.summary ?? str(d?.prompt)?.trim() ?? null;
+}
+
+/** Same prompt, even when one side is only the old summary: whitespace collapsed, a cut `…` compared as a prefix. */
+function samePrompt(a: string | null, b: string | null): boolean {
+  if (a === null || b === null) return a === b;
+  const x = a.replace(/\s+/g, ' ').trim();
+  const y = b.replace(/\s+/g, ' ').trim();
+  if (x === y) return true;
+  const [short, long] = x.length <= y.length ? [x, y] : [y, x];
+  return short.endsWith('…') && short.length > 1 && long.startsWith(short.slice(0, -1));
 }
 
 function mensagemDoAssistente(e: SessionEvent, texto: string | null): MensagemDaConversa {
