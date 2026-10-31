@@ -19,6 +19,7 @@
 //   a read already in flight; `reconnect()` is the machine's reconnect status, from the runner.
 
 import type { ChangeCursor } from '../changes/cursor.ts';
+import { sanitizeTerminals } from './terminals.ts';
 import { machineUnreachableAlert, type AlertChange, type AlertTracker } from './alerts.ts';
 import type { RemoteMachineConfig } from './machines-config.ts';
 import { RETENTION_MS, SAMPLE_INTERVAL_MS, TELEMETRY_VERSION, type Alert, type AlertKind, type ConnectionStatus, type MachineState, type ReconnectStatus, type TelemetryReading } from './model.ts';
@@ -70,7 +71,7 @@ export const MAX_REMOTE_READING_BYTES = 256 * 1024;
 export const MAX_REMOTE_VOLUMES = 64;
 export const MAX_REMOTE_ALERTS = 50;
 /** The remote's alert kinds this núcleo knows; `machine-unreachable` is this Mac's to compute. */
-const REMOTE_ALERT_KINDS: readonly AlertKind[] = ['load-high', 'volume-full', 'port-exposed', 'tunnel-busy'];
+const REMOTE_ALERT_KINDS: readonly AlertKind[] = ['load-high', 'volume-full', 'port-exposed', 'tunnel-busy', 'terminal-stuck'];
 
 /**
  * The remote's reading, projected onto `TelemetryReading`, with `takenAt` set to when THIS Mac read
@@ -118,6 +119,8 @@ export function storableReading(v: unknown, readAt: number): TelemetryReading | 
   // Where it runs (#278): only what passes the placement patterns.
   const placement = sanitizePlacement(v.placement);
   if (placement) reading.placement = placement;
+  const terminals = sanitizeTerminals(v.terminals);
+  if (terminals) reading.terminals = terminals;
   return Buffer.byteLength(JSON.stringify(reading)) <= MAX_REMOTE_READING_BYTES ? reading : null;
 }
 

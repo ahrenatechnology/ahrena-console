@@ -38,6 +38,7 @@
 // | `GET /api/telemetry`          | One machine's telemetry: current reading, series and alerts (`?machine=`, `?hours=1|12`; #175) |
 // | `POST /api/machines/<id>/reconnect` and `DELETE` | Reconnect a remote machine with the command of machines.json, and Cancel (api/telemetry.ts, #244) |
 // | `GET /api/sessions/<id>/messaging`, `POST /api/sessions/<id>/messages` and `GET /api/sessions/<id>/messages/<messageId>` | Send a message a person typed in the /ui to the session's live process, through Claude Code's cross-session inbox, and read its state (api/messaging.ts, src/messaging, #61) |
+// | `POST /api/terminals/<id>/actions/<action>` | Interrupt a terminal's foreground command or end its session, by ids (api/terminals.ts, #350) |
 // | `GET /api/tools`              | The Tools screen: CLIs, runtimes and containers, installed and latest versions, the catalog's actions, the jobs (`?machine=`; api/tools.ts, #280) |
 // | `POST /api/tools/<toolId>/actions/<actionId>`, `DELETE /api/tools/jobs/<jobId>`, `POST /api/tools/checks` and `POST /api/tools/mcp/checks` | Run a catalog action as a job, cancel it, Verificar agora, Verificar conexões (api/tools.ts, src/tools/executor.ts, #280) |
 // | `POST /api/machines/<id>/connection/start|stop|reconnect|login-and-start`, `DELETE /api/machines/<id>/connection` | The connection of a remote machine (api/connection.ts, #278) |
@@ -127,6 +128,8 @@ import type { ReconnectControl } from '../telemetry/reconnect.ts';
 import type { TelemetryService } from '../telemetry/service.ts';
 import { MESSAGING_ROUTE, messagesWriteFromSameOrigin, type MessagingRoute } from './messaging.ts';
 import { ORDERS_ROUTE, ordersWriteFromSameOrigin, type OrdersRoute } from './orders.ts';
+import { isTerminalsRoute, respondTerminalsWrite, terminalsWriteAllowed } from './terminals.ts';
+import type { TerminalControl } from '../telemetry/terminal-actions.ts';
 import { isToolsRoute, isToolsWrite, respondTools, respondToolsWrite, toolsWriteAllowed } from './tools.ts';
 import { dockerWriteAllowed, isDockerRoute, isDockerWrite, type DockerRoute } from './docker.ts';
 import type { ToolsControl } from '../tools/executor.ts';
@@ -223,6 +226,8 @@ export interface ApiOptions {
   orders?: OrdersRoute;
   /** The Tools screen (#280, decision 0014): the executor (or only the service, read-only); without it, `/api/tools` gives 404. */
   tools?: ToolsControl | null;
+  /** The terminal sessions' actions (#350): `POST /api/terminals/<id>/actions/<action>`; without it, 404. */
+  terminals?: TerminalControl | null;
   /** The Docker screen's actions (#288, decision 0017; api/docker.ts): `/api/docker` on the Tools executor's queue; without it, 404. */
   docker?: { route: DockerRoute; acceptNoOrigin: () => boolean } | null;
   /** The cloud connectors (#277, decision 0013; api/clouds.ts): `/api/connectors` and the logins; without it, 404. */
@@ -464,6 +469,14 @@ export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
         return send(res, 403, { error: 'origem não permitida' });
       }
       return respondToolsWrite(req, res, url, opts.tools);
+    }
+    // The terminal actions have a gate of their own, as strict as the Tools': no Origin is 403 too.
+    if (isTerminalsRoute(url.pathname) && req.method !== 'GET') {
+      if (!terminalsWriteAllowed(req, port, opts.terminals?.acceptNoOriginActions() ?? false)) {
+        req.resume();
+        return send(res, 403, { error: 'origem não permitida' });
+      }
+      return respondTerminalsWrite(req, res, url, opts.terminals);
     }
     // The port release writes have their own gate too (decision 0016): the Origin, or none only when asked for.
     if (isPortsWrite(req, url.pathname)) {

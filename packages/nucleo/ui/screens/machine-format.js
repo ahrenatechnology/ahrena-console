@@ -8,6 +8,7 @@
 // throws on a strange reading. The test imports this file directly.
 
 import { attentionOfItem } from '../attention.js';
+import { normalizeTerminals } from './machine-terminals-format.js';
 
 export const MACHINES_ROUTE = '/api/machines';
 export const TELEMETRY_ROUTE = '/api/telemetry';
@@ -220,6 +221,7 @@ export function normalizeReading(r) {
     docker: normalizeDocker(r.docker),
     ports: normalizePorts(r.ports),
     tunnels: normalizeTunnels(r.tunnels),
+    terminals: normalizeTerminals(r.terminals),
   };
 }
 
