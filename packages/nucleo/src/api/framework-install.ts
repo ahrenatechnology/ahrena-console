@@ -71,7 +71,7 @@
 //   para o cache do banco (a #183 só guarda a forma dele): o texto fica só em memória, pelo `oid`;
 // - `framework-install:target:<owner>/<repo>`: permissão, HEAD do padrão e o PR do branch, TTL de 60 s;
 // - `framework-install:catalog:<framework>`: o catálogo (marketplace e regras), TTL de 1 h.
-// Todas as chamadas passam pela fila do GitHub do núcleo, uma de cada vez.
+// Todas as chamadas passam pela fila do GitHub do núcleo, até `GITHUB_CALL_LIMIT` ao mesmo tempo (#341).
 //
 // ## Segurança
 //

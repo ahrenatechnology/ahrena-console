@@ -1,3 +1,4 @@
+import { OWNER_TOKEN } from '../owner-http.ts';
 // A deterministic demo server: the --demo of scenario p4, the decisions of p9, the workflows, the
 // Detail, the history, the repos and the project of the demo, every clock fixed at NOW and the change
 // cursor with a fixed generation. `old-routes.test.ts` proves on it that the old Portuguese routes
@@ -9,6 +10,7 @@ import { openSqliteStorage, type SqliteStorage } from '../../src/adapters/sqlite
 import { Accounts, FeedDeEventos, LeiturasDoDetalhe, ListaDeSessoes, MontadorDoPainel, QuadroKanban, TrabalhoPorBranch, startLocalApi, type LocalApi } from '../../src/api/index.ts';
 import { RotaAnalytics } from '../../src/api/analytics-route.ts';
 import type { MessagingRoute } from '../../src/api/messaging.ts';
+import type { TranscriptionRoute } from '../../src/api/transcription.ts';
 import type { OrdersRoute } from '../../src/api/orders.ts';
 import { DecisoesDaUi } from '../../src/api/decisions-ui.ts';
 import { criarReposDoNucleo } from '../../src/api/repos.ts';
@@ -49,11 +51,13 @@ export interface DemoApi {
 /** `messaging`: the routes of #61 over the demo storage, built by the caller from `storage` (the screens' tests). */
 export interface DemoApiOptions {
   messaging?: (storage: SqliteStorage) => MessagingRoute;
+  /** The dictation route of #352, over a fake whisper. */
+  transcription?: TranscriptionRoute;
   /** The per-session orders (#61, mod part), built the same way. */
   orders?: (storage: SqliteStorage) => OrdersRoute;
 }
 
-export async function startDemoApi({ messaging, orders }: DemoApiOptions = {}): Promise<DemoApi> {
+export async function startDemoApi({ messaging, orders, transcription }: DemoApiOptions = {}): Promise<DemoApi> {
   const clock = () => NOW;
   const opened: string[] = [];
   const records = mkdtempSync(join(tmpdir(), 'ahrena-demo-api-'));
@@ -83,7 +87,7 @@ export async function startDemoApi({ messaging, orders }: DemoApiOptions = {}): 
     raiz: (repo) => (repo === DEMO_REPO ? repoFolder : null),
   });
   const project = new GithubProject({ source: new SimulatorProject(NOW), cache: new GithubCache({ store: new SqliteCacheStore(sqlite.db), now: clock }), project: SIMULATOR_PROJECT });
-  const api = await startLocalApi({
+  const api = await startLocalApi({ ownerToken: () => OWNER_TOKEN,
     panelBuilder: builder,
     hooks: { storage },
     port: 0,
@@ -101,6 +105,7 @@ export async function startDemoApi({ messaging, orders }: DemoApiOptions = {}): 
     decisionsUi,
     repos: repos.rota,
     messaging: messaging?.(sqlite),
+    transcription,
     orders: orders?.(sqlite),
   });
   return {

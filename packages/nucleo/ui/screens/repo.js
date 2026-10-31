@@ -14,14 +14,15 @@
 import { el, icon } from '../dom.js';
 import { loading, error, errorBand, empty } from '../states.js';
 import {
-  bars,
+  activityGrid,
+  dayLabel,
+  frequencyGrid,
   trafficCardKind,
   signed,
   decimal,
   duration,
   screenState,
   slices,
-  frequency,
   ago,
   integer,
   kilo,
@@ -77,36 +78,53 @@ const note = (text) => el('p', { class: 'repo-empty' }, text);
 /** A nota da amostra paginada que não cobre o total: `Por tipo sobre 100 de 240 issues lidas.` */
 const partialSample = (a, start, name) => (a?.truncated ? el('span', { class: 'repo-note' }, `${start} sobre ${integer(a.read)} de ${integer(a.total)} ${name}.`) : null);
 
-function commitsChart(weeks) {
-  const W = 520;
-  const H = 90;
-  const n = weeks.length;
-  const total = weeks.reduce((s, x) => s + x, 0);
-  const g = svg('svg', { viewBox: `0 0 ${W} ${H + 16}`, class: 'repo-chart', role: 'img', 'aria-label': `Commits por semana, ${n} semanas: ${integer(total)} no total, ${integer(weeks[n - 1])} nesta semana` });
-  bars(weeks, W, H).forEach((b, i) => g.append(svg('rect', { x: b.x, y: b.y, width: b.largura, height: b.altura, rx: 1.5, class: i === n - 1 ? 'repo-chart-bar repo-chart-current' : 'repo-chart-bar' })));
-  g.append(
-    svg('line', { x1: 0, x2: W, y1: H + 0.5, y2: H + 0.5, class: 'repo-chart-base' }),
-    svg('text', { x: 0, y: H + 13 }, `${n} ${n === 1 ? 'semana' : 'semanas'} atrás`),
-    svg('text', { x: W, y: H + 13, 'text-anchor': 'end' }, 'esta semana'),
-  );
-  return g;
+// The grids follow GitHub's contribution graph: one cell per day (commits) or per week (code
+// frequency), coloured by heat level. The SVG scales to the card, up to 1.5× its own size, so 30 days
+// do not turn into giant tiles.
+const STEP = 13;
+const CELL = 10;
+const GRID_LEFT = 28;
+const GRID_TOP = 14;
+// The heat classes by level, spelled out so the class guard checks each against repos.css.
+const HEAT = ['repo-h0', 'repo-h1', 'repo-h2', 'repo-h3', 'repo-h4'];
+const ADDED = ['repo-ha0', 'repo-ha1', 'repo-ha2', 'repo-ha3', 'repo-ha4'];
+const REMOVED = ['repo-hr0', 'repo-hr1', 'repo-hr2', 'repo-hr3', 'repo-hr4'];
+const capped = (node, width) => (node.style.maxWidth = `${Math.round(width * 1.5)}px`, node);
+const legend = () => el('div', { class: 'repo-leg repo-heat-leg' }, el('span', {}, 'menos'), ...HEAT.map((h) => el('span', { class: `repo-heat-sample ${h}`, 'aria-hidden': 'true' })), el('span', {}, 'mais'));
+
+function commitsChart(c) {
+  const grid = activityGrid(c.days);
+  const width = GRID_LEFT + grid.columns * STEP;
+  const children = [
+    ...grid.months.map((m) => svg('text', { x: GRID_LEFT + m.column * STEP, y: 9 }, m.label)),
+    ...['seg', 'qua', 'sex'].map((d, i) => svg('text', { x: 0, y: GRID_TOP + i * 2 * STEP + 8 }, d)),
+    ...grid.cells.map((x) =>
+      svg('rect', { class: `repo-heat-cell ${HEAT[x.level]}`, x: GRID_LEFT + x.column * STEP, y: GRID_TOP + x.row * STEP, width: CELL, height: CELL, rx: 2 }, svg('title', {}, `${dayLabel(x.day)}: ${integer(x.commits)} ${x.commits === 1 ? 'commit' : 'commits'}`)),
+    ),
+  ];
+  const g = svg('svg', { viewBox: `0 0 ${width} ${GRID_TOP + 7 * STEP}`, class: 'repo-chart repo-heat', role: 'img', 'aria-label': `Commits por dia, ${c.weeks.length} semanas: ${integer(c.total)} no total, ${integer(c.weeks.at(-1) ?? 0)} nesta semana` }, ...children);
+  return [capped(g, width), legend()];
 }
 
 function frequencyChart(f) {
-  const W = 520;
-  const H = 120;
-  const MIDDLE = 64;
-  const n = f.weeks.length;
-  const g = svg('svg', { viewBox: `0 0 ${W} ${H + 14}`, class: 'repo-chart', role: 'img', 'aria-label': `Frequência de código, ${n} semanas: ${signed(f.added, kilo)} linhas adicionadas e ${signed(-f.removed, kilo)} removidas` });
-  for (const s of frequency(f.weeks, W, MIDDLE, 58, 52)) {
-    g.append(svg('rect', { x: s.x, y: s.cima.y, width: s.largura, height: s.cima.altura, rx: 1.5, class: 'repo-chart-add' }), svg('rect', { x: s.x, y: s.baixo.y, width: s.largura, height: s.baixo.altura, rx: 1.5, class: 'repo-chart-rem' }));
-  }
-  g.append(
-    svg('line', { x1: 0, x2: W, y1: MIDDLE, y2: MIDDLE, class: 'repo-chart-base' }),
-    svg('text', { x: 0, y: H + 12 }, `${n} ${n === 1 ? 'semana' : 'semanas'} atrás`),
-    svg('text', { x: W, y: H + 12, 'text-anchor': 'end' }, 'esta semana'),
+  const BIG = 19;
+  const SIDE = 16;
+  const weeks = frequencyGrid(f.weeks);
+  const n = weeks.length;
+  const width = GRID_LEFT + n * BIG;
+  const row = (y, level, text) =>
+    weeks.map((w, i) => svg('rect', { class: `repo-heat-cell ${level(w)}`, x: GRID_LEFT + i * BIG, y, width: SIDE, height: SIDE, rx: 2.5 }, svg('title', {}, text(w))));
+  const g = svg(
+    'svg',
+    { viewBox: `0 0 ${width} ${2 * BIG + 14}`, class: 'repo-chart repo-heat', role: 'img', 'aria-label': `Frequência de código, ${n} semanas: ${signed(f.added, kilo)} linhas adicionadas e ${signed(-f.removed, kilo)} removidas` },
+    svg('text', { x: 0, y: 12 }, 'adic.'),
+    svg('text', { x: 0, y: BIG + 12 }, 'rem.'),
+    ...row(0, (w) => ADDED[w.addedLevel], (w) => `Semana de ${dayLabel(w.week)}: ${signed(w.added, kilo)} linhas`),
+    ...row(BIG, (w) => REMOVED[w.removedLevel], (w) => `Semana de ${dayLabel(w.week)}: ${signed(-w.removed, kilo)} linhas`),
+    svg('text', { x: GRID_LEFT, y: 2 * BIG + 12 }, `${n} ${n === 1 ? 'semana' : 'semanas'} atrás`),
+    svg('text', { x: width, y: 2 * BIG + 12, 'text-anchor': 'end' }, 'esta semana'),
   );
-  return g;
+  return capped(g, width);
 }
 
 export async function mount(area, ctx) {
@@ -256,9 +274,10 @@ export async function mount(area, ctx) {
 
   function commitsCard() {
     const c = data.commits;
-    if (!c) return card('Commits por semana', null, note(value(null, 'commits')));
-    if (!c.weeks.length) return card('Commits por semana', null, note('Nenhuma semana no período'));
-    return card('Commits por semana', `${c.weeks.length} ${c.weeks.length === 1 ? 'semana' : 'semanas'}`, commitsChart(c.weeks));
+    if (!c) return card('Commits por dia', null, note(value(null, 'commits')));
+    if (!c.weeks.length) return card('Commits por dia', null, note('Nenhuma semana no período'));
+    if (!c.days?.length) return card('Commits por dia', null, note('Sem detalhe por dia no período'));
+    return card('Commits por dia', `${c.weeks.length} ${c.weeks.length === 1 ? 'semana' : 'semanas'}`, ...commitsChart(c));
   }
 
   function frequencyCard() {

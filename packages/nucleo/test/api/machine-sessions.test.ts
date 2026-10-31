@@ -1,3 +1,4 @@
+import { OWNER_TOKEN, ownerFetch as fetch } from '../owner-http.ts';
 // #243: `?machine=` on the list routes and the Detail, against a remote núcleo faked on loopback. The
 // "remote" is a real API over its own simulated database, behind a proxy that plays the tunnel: it
 // takes only `GET` with the remote's own Host, records every path, and can be slowed down, closed,
@@ -39,7 +40,7 @@ async function startCore(seed: number, extra: Partial<ApiOptions> = {}, storage?
   const fleet = new FleetReader({ storage, accounts, now: () => NOW, timeZone: 'UTC' });
   const panelBuilder = new MontadorDoPainel({ storage, contas: accounts, desktop: null, trabalho: null, agora: () => NOW });
   const sessionList = new ListaDeSessoes({ storage, contas: accounts, agora: () => NOW });
-  const api = await startLocalApi({
+  const api = await startLocalApi({ ownerToken: () => OWNER_TOKEN,
     panelBuilder,
     hooks: { storage },
     port: 0,

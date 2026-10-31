@@ -32,8 +32,9 @@ export interface RepoDaLista {
    * não chegaram (o GitHub ainda calcula, com 202, ou a leitura por repositório não terminou).
    */
   commits12: number[];
-  openIssues: number;
-  openPrs: number;
+  /** `null` until the counts read after the light list arrived (#341). */
+  openIssues: number | null;
+  openPrs: number | null;
   ci: CiDoRepo;
   sessions: SessoesDoRepo;
   /** ISO. */
@@ -53,10 +54,11 @@ export interface ResumoDosRepos {
   repositories: number;
   /** Repositórios com ao menos uma sessão no mês. */
   withSessionsThisMonth: number;
-  openPrs: number;
+  /** `null` until the counts arrived (#341); the sum of the repositories that have them. */
+  openPrs: number | null;
   /** PRs abertos, fora rascunho, com review exigido e ainda sem aprovação (`review:required`). */
   prsAwaitingReview: number;
-  openIssues: number;
+  openIssues: number | null;
   issuesClosedThisWeek: number;
   /** Workflow runs concluídos nos últimos 7 dias; `greenRate` de 0 a 1, `null` sem execuções. */
   ci: { greenRate: number | null; runs: number; days: 7 };
@@ -124,8 +126,11 @@ export interface MetricasDoRepo {
   tabs: { issues: number; prs: number; sessions: number };
   /** Soma de adições menos remoções desde o primeiro commit (code_frequency); `inPeriod`, o saldo do período. */
   lines: { total: number; inPeriod: number } | null;
-  /** Commits por semana no período, a mais antiga primeiro (commit_activity, até 52 semanas). */
-  commits: { total: number; perWeek: number; weeks: number[] } | null;
+  /**
+   * Commits por semana no período, a mais antiga primeiro (commit_activity, até 52 semanas), e por
+   * dia (`AAAA-MM-DD` em UTC, o mais antigo primeiro, até hoje).
+   */
+  commits: { total: number; perWeek: number; weeks: number[]; days: Array<{ day: string; commits: number }> } | null;
   frequency: { weeks: SemanaDeFrequencia[]; added: number; removed: number } | null;
   /**
    * `closed` (no período) e `open` (agora) são os totais do GitHub. `byType` e a mediana (sobre

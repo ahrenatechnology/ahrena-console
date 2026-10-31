@@ -1,9 +1,9 @@
+import { OWNER_TOKEN, ownerRequest as request } from '../owner-http.ts';
 // The project kanban chosen on the screen (#241, decision 0011 §7): GET /api/project/options lists
 // the Projects the account sees, POST /api/project/selection stores one, and GET /api/project follows
 // the selection (env > setting > demo > none) and says where it came from. And the 409 gate: while
 // GitHub is not connected, every GitHub-backed screen route answers 409 without any outbound call.
 import assert from 'node:assert/strict';
-import { request } from 'node:http';
 import { describe, test } from 'node:test';
 import { openSqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
 import { Accounts, MontadorDoPainel, startLocalApi, type ApiOptions, type LocalApi } from '../../src/api/index.ts';
@@ -11,6 +11,7 @@ import { createGithubScreens } from '../../src/api/github-screens.ts';
 import { ChangeCursor } from '../../src/changes/cursor.ts';
 import { GithubCallQueue } from '../../src/github/call-queue.ts';
 import { GithubCache, MemoryCacheStore, RateLimitedError } from '../../src/github/cache.ts';
+import { GithubGatewayError, GithubHttpError, GithubScopeError, GraphqlResponseError } from '../../src/github/github-source.ts';
 import { GithubConnection, MemoryVault } from '../../src/github/connection/index.ts';
 import { GithubProject } from '../../src/github/project.ts';
 import { ProjectOptions, type ProjectOptionsReader } from '../../src/github/project-options.ts';
@@ -47,7 +48,7 @@ function call(api: LocalApi, path: string, { method = 'GET', headers = {} as Rec
 async function boot(extra: Partial<ApiOptions>) {
   const storage = openSqliteStorage({ path: ':memory:' });
   const panelBuilder = new MontadorDoPainel({ storage, contas: new Accounts({ storage, file: null }), desktop: null, trabalho: null });
-  const api = await startLocalApi({ panelBuilder, hooks: { storage }, port: 0, log: () => {}, ...extra });
+  const api = await startLocalApi({ ownerToken: () => OWNER_TOKEN, panelBuilder, hooks: { storage }, port: 0, log: () => {}, ...extra });
   const host = `127.0.0.1:${new URL(api.url).port}`;
   return {
     api,
@@ -81,7 +82,11 @@ describe('#241/AC-5 the Project options and the selection', () => {
     try {
       const r = await call(b.api, '/api/project/options', { headers: { host: b.host } });
       assert.equal(r.status, 200, r.text);
-      assert.deepEqual(Object.keys(r.json), ['projects', 'selection', 'envOverride', 'fetchedAt', 'stale', 'reason']);
+      assert.deepEqual(Object.keys(r.json), ['projects', 'owners', 'selection', 'envOverride', 'fetchedAt', 'stale', 'reason']);
+      assert.deepEqual(r.json.owners.slice(0, 2), [
+        { login: 'dev-sintetico', ownerType: 'user', projects: 2, blocked: null, fixUrl: null },
+        { login: 'exemplo', ownerType: 'organization', projects: 1, blocked: null, fixUrl: null },
+      ]);
       assert.deepEqual(r.json.projects.map((x: { owner: string; number: number }) => `${x.owner}/${x.number}`), ['dev-sintetico/1', 'dev-sintetico/2', 'exemplo/3']);
       assert.deepEqual(r.json.projects[2], { owner: 'exemplo', ownerType: 'organization', number: 3, title: 'Ahrena Console', url: 'https://github.com/orgs/exemplo/projects/3', items: 12, hasStatusField: true, closed: false });
       assert.equal(r.json.selection, null);
@@ -115,13 +120,63 @@ describe('#241/AC-5 the Project options and the selection', () => {
     } finally {
       await b.close();
     }
-    const down = project({}, { list: () => Promise.reject(new Error('GitHub respondeu 500')) });
-    const c = await boot(down.opts);
+    for (const err of [new GithubHttpError('GitHub respondeu 500', 500), new GithubGatewayError('GitHub respondeu 504: timeout', 504), new TypeError('fetch failed')]) {
+      const down = project({}, { list: () => Promise.reject(err) });
+      const c = await boot(down.opts);
+      try {
+        const r = await call(c.api, '/api/project/options', { headers: { host: c.host } });
+        assert.deepEqual([r.status, r.json.code], [502, 'github-down'], err.message);
+        assert.match(r.json.error, /^o GitHub não respondeu e não há lista no cache: /);
+      } finally {
+        await c.close();
+      }
+    }
+  });
+
+  test('#340 GitHub answering with a refusal is github-refused with its message, not "não respondeu"; a missing scope is no-scope', async () => {
+    for (const err of [new GraphqlResponseError('GitHub: Something went wrong while executing your query.', ['viewer']), new GithubHttpError('GitHub respondeu 401: Bad credentials', 401)]) {
+      const refused = project({}, { list: () => Promise.reject(err) });
+      const c = await boot(refused.opts);
+      try {
+        const r = await call(c.api, '/api/project/options', { headers: { host: c.host } });
+        assert.deepEqual([r.status, r.json.code, r.json.error], [502, 'github-refused', `o GitHub recusou a lista de Projects: ${err.message}`]);
+      } finally {
+        await c.close();
+      }
+    }
+    const scope = project({}, { list: () => Promise.reject(new GithubScopeError('o token do GitHub não tem o escopo pedido: project')) });
+    const d = await boot(scope.opts);
     try {
-      const r = await call(c.api, '/api/project/options', { headers: { host: c.host } });
-      assert.deepEqual([r.status, r.json.code], [502, 'github-down']);
+      const r = await call(d.api, '/api/project/options', { headers: { host: d.host } });
+      assert.deepEqual([r.status, r.json.code, r.json.scope], [401, 'no-scope', 'project']);
     } finally {
-      await c.close();
+      await d.close();
+    }
+  });
+
+  test('#340 a blocked owner carries the link that fixes it: the app page for an OAuth restriction, the SSO page for SAML', async () => {
+    const owners = [
+      { login: 'me', ownerType: 'user' as const, projects: 0, blocked: null },
+      { login: 'restricted-org', ownerType: 'organization' as const, projects: 8, blocked: { reason: 'oauth-restricted' as const, message: 'OAuth App access restrictions' } },
+      { login: 'saml-org', ownerType: 'organization' as const, projects: 1, blocked: { reason: 'saml' as const, message: 'SAML enforcement' } },
+      { login: 'other-org', ownerType: 'organization' as const, projects: null, blocked: { reason: 'forbidden' as const, message: 'no' } },
+    ];
+    const p = project({}, { list: async () => ({ projects: [], owners }) });
+    const b = await boot(p.opts);
+    try {
+      const r = await call(b.api, '/api/project/options', { headers: { host: b.host } });
+      assert.equal(r.status, 200, r.text);
+      assert.deepEqual(
+        r.json.owners.map((o: { login: string; fixUrl: string | null }) => [o.login, o.fixUrl]),
+        [
+          ['me', null],
+          ['restricted-org', `https://github.com/settings/connections/applications/${process.env.AHRENA_CONSOLE_GITHUB_CLIENT_ID?.trim() || 'Ov23liVOZdlk3SA82JdZ'}`],
+          ['saml-org', 'https://github.com/orgs/saml-org/sso'],
+          ['other-org', null],
+        ],
+      );
+    } finally {
+      await b.close();
     }
   });
 

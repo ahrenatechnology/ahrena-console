@@ -1,6 +1,6 @@
 // #269: GitHub's GraphQL gives up on a query after ~10 s and answers 502. A fake GitHub here answers
 // 502 to any page bigger than a limit, the way the real one did for 100 repositories with counts and
-// CI. Nothing goes to the network and no token is read.
+// CI (since #341 the list page is light, 100 per page, and the counts come apart). Nothing goes to the network and no token is read.
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import { RateLimitedError } from '../../src/github/cache.ts';
@@ -14,6 +14,7 @@ interface Call {
 }
 
 const repo = (i: number) => ({
+  id: `R_${i}`,
   name: `repo-${i}`,
   nameWithOwner: `org-${i % 3}/repo-${i}`,
   url: `https://example.invalid/org-${i % 3}/repo-${i}`,
@@ -22,9 +23,6 @@ const repo = (i: number) => ({
   viewerPermission: 'READ',
   owner: { login: `org-${i % 3}`, __typename: 'Organization' },
   primaryLanguage: null,
-  issues: { totalCount: 0 },
-  pullRequests: { totalCount: 0 },
-  defaultBranchRef: null,
 });
 
 const pr = { createdAt: '2026-10-01T00:00:00Z', mergedAt: null, closedAt: null, state: 'OPEN', additions: 1, deletions: 1, headRefName: 'x', author: null, reviews: null, pedidosDeMudanca: null };
@@ -74,8 +72,8 @@ function source(fetch: typeof globalThis.fetch) {
 const pages = (calls: Call[], operation: string) => calls.filter((c) => c.operation === operation).map((c) => c.variables.first);
 
 describe('#269 AC-1: the repository list in pages GitHub answers in time', () => {
-  test('237 repositories against a GitHub that answers 502 above 25 per page: the whole list, no retry', async () => {
-    const gh = fakeGithub({ repos: 237, maxPage: 25 });
+  test('237 repositories against a GitHub that answers 502 above a full page: the whole list, no retry', async () => {
+    const gh = fakeGithub({ repos: 237, maxPage: LIST_PAGE_SIZE });
     const { s, sleeps } = source(gh.fetch);
     const list = await s.lista();
     assert.equal(list.repos.length, 237);
@@ -85,34 +83,35 @@ describe('#269 AC-1: the repository list in pages GitHub answers in time', () =>
     assert.deepEqual(sleeps, []);
   });
 
-  test('a GitHub that only answers 10 per page: the page halves on each 502 and stays small for the rest', async () => {
-    const gh = fakeGithub({ repos: 40, maxPage: 10 });
+  test('a GitHub that only answers 40 per page: the page halves on each 502 and stays small for the rest', async () => {
+    const gh = fakeGithub({ repos: 160, maxPage: 40 });
     const { s, sleeps } = source(gh.fetch);
     const list = await s.lista();
-    assert.equal(list.repos.length, 40);
-    // 25 → 502, 12 → 502, 6 → answers; the next pages ask for 6.
-    assert.deepEqual(pages(gh.calls, 'ReposLista').slice(0, 4), [25, 12, 6, 6]);
+    assert.equal(list.repos.length, 160);
+    // 100 → 502, 50 → 502, 25 → answers; the next pages ask for 25.
+    assert.deepEqual(pages(gh.calls, 'ReposLista').slice(0, 4), [100, 50, 25, 25]);
     assert.deepEqual(sleeps, [1_000, 3_000]);
   });
 
-  test('a page already shrunk to 6 that fails again asks for the minimum, never less', async () => {
-    const gh = fakeGithub({ repos: 20, maxPage: 6, fails: (c) => c.variables.after !== null });
+  test('a page already shrunk to 25 that fails again halves from there', async () => {
+    const gh = fakeGithub({ repos: 80, maxPage: 25, fails: (c) => c.variables.after !== null });
     const { s } = source(gh.fetch);
     const list = await s.lista();
-    assert.equal(list.repos.length, 6);
-    // First page: 25 → 12 → 6 answers. Second: 6 → 3 and 1 would go below the floor, so 5 and 5.
-    assert.deepEqual(pages(gh.calls, 'ReposLista'), [25, 12, 6, 6, MIN_PAGE_SIZE, MIN_PAGE_SIZE]);
+    assert.equal(list.repos.length, 25);
+    // First page: 100 → 50 → 25 answers. Second: 25 → 12 → 6, still above the floor.
+    assert.deepEqual(pages(gh.calls, 'ReposLista'), [100, 50, 25, 25, 12, 6]);
+    assert.ok(pages(gh.calls, 'ReposLista').every((first) => Number(first) >= MIN_PAGE_SIZE));
   });
 });
 
 describe('#269 AC-3: a page that keeps failing leaves what was read', () => {
-  test('the second page answers 502 every time: the first 25 come, and `incomplete` says 25 of 60 and why', async () => {
-    const gh = fakeGithub({ repos: 60, fails: (c) => c.operation === 'ReposLista' && c.variables.after !== null });
+  test('the second page answers 502 every time: the first 100 come, and `incomplete` says 100 of 240 and why', async () => {
+    const gh = fakeGithub({ repos: 240, fails: (c) => c.operation === 'ReposLista' && c.variables.after !== null });
     const { s, sleeps } = source(gh.fetch);
     const list = await s.lista();
-    assert.equal(list.repos.length, 25);
+    assert.equal(list.repos.length, LIST_PAGE_SIZE);
     assert.equal(list.login, 'someone');
-    assert.deepEqual({ ...list.incomplete, error: undefined }, { read: 25, total: 60, error: undefined });
+    assert.deepEqual({ ...list.incomplete, error: undefined }, { read: LIST_PAGE_SIZE, total: 240, error: undefined });
     assert.match(list.incomplete!.error, /GitHub respondeu 502/);
     // The failing page was tried three times before giving up.
     assert.equal(gh.calls.length, 1 + 3);
@@ -128,7 +127,7 @@ describe('#269 AC-3: a page that keeps failing leaves what was read', () => {
 
   test('a rate limit on a later page is not a partial list: it goes up for the cache to pause', async () => {
     let n = 0;
-    const gh = fakeGithub({ repos: 60 });
+    const gh = fakeGithub({ repos: 240 });
     const limited = (async (input: string | URL | Request, init?: RequestInit) =>
       ++n === 2 ? Response.json({ message: 'API rate limit exceeded' }, { status: 429, headers: { 'retry-after': '5' } }) : gh.fetch(input, init)) as typeof globalThis.fetch;
     await assert.rejects(source(limited).s.lista(), RateLimitedError);

@@ -11,6 +11,7 @@ import { openAction } from '../open-action.js';
 import { create as workflowTab } from './session-detail-workflow.js';
 import { create as decisionsTab } from './session-detail-decisions.js';
 import { createComposeBox } from './session-message.js';
+import { messageBody } from './chat-text.js';
 import { downNotice, isMachineUnreachable, LOCAL, machineFromQuery, normalizeMachines, readAgeText, REMOTE_REREAD_MS, routeWithMachine, touchesRemotes, withQuery } from '../machine-filter.js';
 import { attentionOf, attentionPill, isBlocked, isIdle, reasonChip, reasonLabel, attentionDot, statusWithoutAttention } from '../attention.js';
 
@@ -367,7 +368,8 @@ function drawTop(c, refresh, write, source = null) {
   // The yellow band only when the session is stuck (or stopped by an error); idle gets one muted line.
   const blocked = isBlocked(s.attention) || s.status === 'error';
   const notice = s.banner && blocked ? band(c) : isIdle(s.attention) ? idleLine(c) : null;
-  return [row1, pills, folder, source, notice].filter(Boolean);
+  const config = el('a', { class: 'btn outline', href: `/ui/agent-config?tab=settings&provider=${s.identity?.provider === 'codex' ? 'codex' : 'claude'}&session=${encodeURIComponent(s.id)}${source ? '&machine=remote' : ''}` }, 'Configuração em vigor');
+  return [row1, pills, folder, source, config, notice].filter(Boolean);
 }
 
 function idleLine(c) {
@@ -565,9 +567,13 @@ const TOOL_STATE = {
   running: { rotulo: 'Rodando', icone: 'clock' },
 };
 
+/** "mcp__ccd_turn__update_plan" → "update_plan"; the full name stays in the tooltip. */
+const shortTool = (name) => String(name ?? '').replace(/^mcp__.+__/, '');
+
 function conversationTab(ctx, base, { head, remote = null } = {}) {
   let target = null;
-  let agent = null;
+  // `?agent=<id>` (the Workflow tab's steps, issue 332) opens the conversation of that subagent.
+  let agent = new URLSearchParams(location.search).get('agent');
   // #61: the compose box at the foot of the tab. It is made once and survives every re-draw of the
   // list, so the text being typed and the message in flight stay.
   let compose = null;
@@ -583,6 +589,7 @@ function conversationTab(ctx, base, { head, remote = null } = {}) {
     }));
   const opened = new Set();
   const closed = new Set();
+  const openedRuns = new Set();
   const list = el('div', { class: 'card sd-messages' });
   const selector = el('select', { class: 'sd-select', 'aria-label': 'Agente' });
   const count = el('span', { class: 'sd-pill mono' });
@@ -601,7 +608,7 @@ function conversationTab(ctx, base, { head, remote = null } = {}) {
       agent = c.agent;
       selector.replaceChildren(...c.agents.map((a) => el('option', { value: a.id, selected: a.id === c.agent }, a.name)));
       count.replaceChildren(icon('conversation'), `${num(c.total)} mensage${c.total === 1 ? 'm' : 'ns'}`);
-      list.replaceChildren(...(c.messages.length ? c.messages.map(message) : [el('p', { class: 'sd-none' }, 'Nenhuma mensagem deste agente ainda.')]));
+      list.replaceChildren(...(c.messages.length ? conversation(c.messages) : [el('p', { class: 'sd-none' }, 'Nenhuma mensagem deste agente ainda.')]));
       content.replaceChildren(bar, list);
     } catch (e) {
       if (e.name === 'AbortError') return;
@@ -609,8 +616,43 @@ function conversationTab(ctx, base, { head, remote = null } = {}) {
     }
   }
 
-  function message(m) {
+  // The text leads; the tool calls are the how, folded into one "N ações" line. A run of assistant
+  // messages that only call tools folds into a single line, so a long stretch of work reads as one
+  // step. A call waiting for permission stays out and open: it asks for the person.
+  // The tool-only messages before an assistant reply fold into that reply, above its text, the way a
+  // chat shows "used N tools" inside the turn; a run with no reply after it gets its own assistant row.
+  const asks = (f) => f.state === 'permission';
+  function conversation(messages) {
+    const nodes = [];
+    let run = [];
+    let runAt = null;
+    for (const m of messages) {
+      if (m.role !== 'you' && !m.text && !m.tools.some(asks)) {
+        run.push(...m.tools);
+        runAt ??= m;
+        continue;
+      }
+      if (m.role !== 'you') {
+        nodes.push(message(m, run));
+      } else {
+        if (run.length) nodes.push(message({ ...runAt, tools: [] }, run));
+        nodes.push(message(m, []));
+      }
+      run = [];
+      runAt = null;
+    }
+    if (run.length) nodes.push(message({ ...runAt, tools: [] }, run));
+    return nodes;
+  }
+
+  function message(m, before = []) {
     const you = m.role === 'you';
+    const body = m.text ? messageBody(m.text) : { nodes: [], system: false };
+    const done = [...before, ...m.tools.filter((f) => !asks(f))];
+    // A message with only harness tags (a reminder, a task notice, a slash command) reads as a notice row.
+    if (you && body.system) {
+      return el('div', { class: 'sd-msg sd-system', title: HOUR.format(new Date(m.at)) }, el('span', { class: 'sd-avatar' }), el('div', { class: 'sd-content' }, ...body.nodes));
+    }
     return el(
       'article',
       { class: `sd-msg ${you ? 'sd-you' : 'sd-assistant'}` },
@@ -626,10 +668,37 @@ function conversationTab(ctx, base, { head, remote = null } = {}) {
           m.tokens ? el('span', { class: 'sd-pill mono', title: 'Tokens de entrada e de saída' }, `↓ ${tokens(m.tokens.input)} · ↑ ${tokens(m.tokens.output)}`) : null,
           el('time', { class: 'mono', datetime: m.at }, HOUR.format(new Date(m.at))),
         ),
-        m.text ? el('p', {}, ...withCode(m.text)) : null,
-        ...m.tools.map(tool),
+        done.length ? activity(done) : null,
+        ...body.nodes,
+        ...m.tools.filter(asks).map(tool),
       ),
     );
+  }
+
+  function activity(tools) {
+    // Keyed by its first call, so an open fold stays open across the live re-draws.
+    const key = tools[0].id;
+    const isOpen = openedRuns.has(key);
+    const failed = tools.filter((f) => f.state === 'error').length;
+    const names = [...new Set(tools.map((f) => shortTool(f.name)))];
+    const body = el('div', { class: 'sd-activity-body', hidden: !isOpen }, ...tools.map(tool));
+    const head = el(
+      'button',
+      { type: 'button', class: 'sd-activity-head', 'aria-expanded': isOpen ? 'true' : 'false' },
+      icon(isOpen ? 'chevron-down' : 'chevron-right'),
+      el('span', { class: 'sd-activity-count' }, `${num(tools.length)} aç${tools.length === 1 ? 'ão' : 'ões'}`),
+      el('span', { class: 'sd-activity-names' }, names.slice(0, 4).join(', ') + (names.length > 4 ? '…' : '')),
+      failed ? el('span', { class: 'sd-e-error' }, icon('error'), `${num(failed)} com erro`) : null,
+    );
+    head.addEventListener('click', () => {
+      const open = body.hidden;
+      body.hidden = !open;
+      head.setAttribute('aria-expanded', open ? 'true' : 'false');
+      head.firstChild.replaceWith(icon(open ? 'chevron-down' : 'chevron-right'));
+      if (open) openedRuns.add(key);
+      else openedRuns.delete(key);
+    });
+    return el('div', { class: 'sd-activity' }, head, body);
   }
 
   function tool(f) {
@@ -647,7 +716,7 @@ function conversationTab(ctx, base, { head, remote = null } = {}) {
       'button',
       { type: 'button', class: 'sd-tool-head', 'aria-expanded': isOpen ? 'true' : 'false' },
       icon(isOpen ? 'chevron-down' : 'chevron-right'),
-      el('b', { class: 'mono sd-name' }, f.name),
+      el('b', { class: 'mono sd-name', title: f.name }, shortTool(f.name)),
       el('span', { class: 'mono sd-summary' }, f.summary ?? ''),
       st ? el('span', { class: `mono sd-situation sd-e-${f.state}` }, icon(st.icone), st.rotulo) : null,
     );
@@ -666,7 +735,11 @@ function conversationTab(ctx, base, { head, remote = null } = {}) {
     async show(node) {
       target = node;
       await draw();
-      if (target === node) node.replaceChildren(content, composeBox().node);
+      if (target !== node) return;
+      node.replaceChildren(content, composeBox().node);
+      // Opening the tab lands on the latest message and the compose box, like a chat; a live re-draw
+      // does not scroll, so someone reading further up is not pulled down.
+      composeBox().node.scrollIntoView?.({ block: 'end' });
       // "Mandar mensagem" from a list opens here with `?focus=message`: the box takes the focus once.
       if (new URLSearchParams(location.search).get('focus') === 'message') {
         history.replaceState(null, '', `${location.pathname}${withQuery(location.search, { focus: null })}${location.hash}`);

@@ -33,6 +33,12 @@ export class WriteError extends ReadError {
   }
 }
 
+// Injected only by the owner's native window, never by the HTTP-served HTML.
+function ownerHeaders() {
+  const token = globalThis.__AHRENA_OWNER_TOKEN__;
+  return typeof token === 'string' && /^[a-f0-9]{64}$/.test(token) ? { authorization: `Bearer ${token}` } : {};
+}
+
 const LOCAL_HOSTS = new Set(['127.0.0.1', 'localhost', '[::1]']);
 
 export function httpReader({ base = globalThis.location?.origin, fetch = globalThis.fetch?.bind(globalThis) } = {}) {
@@ -46,7 +52,7 @@ export function httpReader({ base = globalThis.location?.origin, fetch = globalT
     if (url.origin !== origin.origin || !url.pathname.startsWith('/api/')) throw new ReadError(`rota fora do núcleo: ${route}`, { route });
     let response;
     try {
-      response = await fetch(url, { signal, headers: { accept: 'application/json' }, credentials: 'omit', cache: 'no-store' });
+      response = await fetch(url, { signal, headers: { ...ownerHeaders(), accept: 'application/json' }, credentials: 'omit', cache: 'no-store' });
     } catch (err) {
       if (err?.name === 'AbortError') throw err;
       throw new ReadError(`O núcleo em ${origin.host} não respondeu`, { route });
@@ -80,12 +86,13 @@ export function read(route, options) {
 
 const WRITE_METHODS = new Set(['POST', 'DELETE']);
 
-/** The HTTP writer: POST with a JSON body (or DELETE), only to `/api/` of the local core, without credentials. */
+/** The HTTP writer: POST with a JSON body (or DELETE; a `Blob` or bytes go as they are, with their own type: the dictation's WAV), only to `/api/` of the local core, without credentials. */
 export function httpWriter({ base = globalThis.location?.origin, fetch = globalThis.fetch?.bind(globalThis) } = {}) {
   const origin = new URL(base);
   if (origin.protocol !== 'http:' || !LOCAL_HOSTS.has(origin.hostname)) {
     throw new WriteError(`o console só escreve no núcleo local, não ${origin.origin}`);
   }
+  const isBinary = (b) => (typeof Blob !== 'undefined' && b instanceof Blob) || b instanceof ArrayBuffer || ArrayBuffer.isView(b);
   return async function writeOverHttp(route, body, { signal, method = 'POST' } = {}) {
     if (typeof route !== 'string' || !route.startsWith('/api/')) throw new WriteError(`rota fora da API: ${route}`, { route });
     if (!WRITE_METHODS.has(method)) throw new WriteError(`método de escrita não aceito: ${method}`, { route });
@@ -96,8 +103,10 @@ export function httpWriter({ base = globalThis.location?.origin, fetch = globalT
       response = await fetch(
         url,
         method === 'DELETE'
-          ? { method, signal, headers: { accept: 'application/json' }, credentials: 'omit', cache: 'no-store' }
-          : { method, signal, headers: { accept: 'application/json', 'content-type': 'application/json' }, body: JSON.stringify(body ?? {}), credentials: 'omit', cache: 'no-store' },
+          ? { method, signal, headers: { ...ownerHeaders(), accept: 'application/json' }, credentials: 'omit', cache: 'no-store' }
+          : isBinary(body)
+            ? { method, signal, headers: { ...ownerHeaders(), accept: 'application/json', 'content-type': body.type || 'application/octet-stream' }, body, credentials: 'omit', cache: 'no-store' }
+            : { method, signal, headers: { ...ownerHeaders(), accept: 'application/json', 'content-type': 'application/json' }, body: JSON.stringify(body ?? {}), credentials: 'omit', cache: 'no-store' },
       );
     } catch (err) {
       if (err?.name === 'AbortError') throw err;
@@ -122,6 +131,17 @@ let writer = null;
 /** Swaps the write transport (the artifact passes the `host:` writer). */
 export function useWriter(next) {
   writer = next;
+}
+
+/** Whether this page can write to a core: the HTTP writer works on a local origin; the artifact has none. */
+export function canWrite() {
+  if (writer) return true;
+  try {
+    writer = httpWriter();
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /** Sends `body` (JSON) to a route of the core API and returns the JSON of the answer; `{ method: 'DELETE' }` deletes. */

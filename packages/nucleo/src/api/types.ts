@@ -1,3 +1,4 @@
+import type { SessionIdentity, SessionCapabilities, AccountIdentity, EvidenceConfidence } from '../identity.ts';
 // The contract of `GET /api/panel/<session>`: everything the side panel draws, in a single request.
 // Since #173 phase 2b the keys and fixed values are English. The mod reads this route since 0.0.31
 // (#187), and its types (plugins/ahrena-console/types) repeat these: changing one is changing both
@@ -12,6 +13,8 @@ import type { ConnectionError, ConnectionState } from '../telemetry/model.ts';
 
 /** A session's account on the panel (decision 0006). */
 export interface PanelAccount {
+  identity?: AccountIdentity | null;
+  confidence?: EvidenceConfidence;
   /** `<accountUuid>/<organizationUuid>`; só para agrupar, nunca para mostrar. */
   id: string;
   label: string;
@@ -39,6 +42,8 @@ export interface SessionBanner {
 
 /** The "Esta sessão" card. */
 export interface PanelSession {
+  identity?: SessionIdentity;
+  capabilities?: SessionCapabilities;
   id: string;
   title: string;
   model: string | null;
@@ -408,10 +413,40 @@ export interface Wall {
   };
   /** Primeiro as que precisam de você (as urgentes antes), depois as ociosas, depois a atividade mais recente (#245). */
   cards: WallCard[];
+  /**
+   * #333, the "Paradas" band: open to nobody but not archived, idle for more than the watcher's 180 min and
+   * not asking you anything. `total` counts them all; `items` are the most recent ones, as many as the
+   * request's `parkedLimit` (7 by default). A session nested in a leader's tree counts there, not here.
+   */
+  parked: { total: number; items: WallCard[] };
+}
+
+/** #333: a session a card's session opened (any depth), with the state the wall shows for it. */
+export interface WallChild {
+  id: string;
+  title: string;
+  status: DisplayStatus;
+  state: InboxState;
+  attention: SessionAttention | null;
+  since: string;
+  /** Idle for more than the watcher's 180 min and asking nothing of you. */
+  parked: boolean;
+  children: WallChild[];
+}
+
+/** #333: the counts of a leader's whole tree, every level. `children` of a card is the first level. */
+export interface WallTree {
+  total: number;
+  /** `attention.level` `blocked`. */
+  blocked: number;
+  active: number;
+  parked: number;
 }
 
 /** A wall card. */
 export interface WallCard {
+  identity?: SessionIdentity;
+  capabilities?: SessionCapabilities;
   /** Id da sessão: o card leva a `/ui/sessions/<id>`. */
   id: string;
   /** Like `PanelSession.title`. */
@@ -442,4 +477,10 @@ export interface WallCard {
   context: { pct: number; used: number; limit: number; label: string } | null;
   /** #285: where the card's open button goes (Claude Desktop, a terminal, the live terminal) and the command to copy. */
   open: SessionOpen;
+  /** #333: the sessions this one opened, nested; the archived ones are left out. Empty without any. */
+  children: WallChild[];
+  /** #333: the counts of the whole tree under `children`; `null` without children. */
+  tree: WallTree | null;
+  /** #333: the session that opened this one, when it is a card too (a child that needs you shows up on its own as well). */
+  parentId: string | null;
 }

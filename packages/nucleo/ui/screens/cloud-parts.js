@@ -5,12 +5,12 @@
 //   sent (this Mac or a remote one), the write in flight, the refusal in pt-BR, and the remote that cannot
 //   log in by itself (C67 state 4: the screen shows the command instead).
 // - `loginBandFor` draws what a session shows while a login runs or just ended: waiting for the browser
-//   with the time against the limit (C59), the device code shown big with "Abrir a página de login" and
+//   with the time against the limit (C59), the device code shown big with "Abrir a página de login" (the code already in the link) and
 //   "Copiar o código" (C67), entered, did not finish, or the command to run over there.
 // - `tickClocks` advances, once a second, the time of every running login on screen without repainting.
 
 import { el, icon } from '../dom.js';
-import { LOCAL_ID, canLogin, deviceCodeLeft, portalLine, endedText, fallbackCommand, isFallback, loginBand, loginClock, loginCommand, loginLabel, loginRoute, writeErrorText } from './cloud-format.js';
+import { LOCAL_ID, canLogin, deviceCodeLeft, portalLine, prefilledLink, endedText, fallbackCommand, isFallback, loginBand, loginClock, loginCommand, loginLabel, loginRoute, writeErrorText } from './cloud-format.js';
 
 const STYLE = '/ui/screens/clouds.css';
 
@@ -188,7 +188,7 @@ function deviceCodeBand(session, where, now) {
   if (!dc) {
     body.push('Esperando a aws CLI de lá mostrar o código de confirmação.', clock(l, now));
   } else {
-    const open = el('a', { class: 'btn filled', href: dc.verificationUri, target: '_blank', rel: 'noopener noreferrer', 'data-cl-action': 'open-login' }, icon('external'), 'Abrir a página de login');
+    const open = el('a', { class: 'btn filled', href: prefilledLink(dc.verificationUri, dc.userCode) ?? dc.verificationUri, target: '_blank', rel: 'noopener noreferrer', 'data-cl-action': 'open-login' }, icon('external'), 'Abrir a página de login');
     body.push(
       'A aws CLI de lá espera você confirmar este código no navegador ',
       el('b', {}, 'deste Mac'),

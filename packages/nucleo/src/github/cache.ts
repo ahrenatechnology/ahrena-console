@@ -136,6 +136,11 @@ export class GithubCache {
     this.minForcedRefreshMs = minForcedRefreshMs;
   }
 
+  /** Bumped by `clear()`: a value read before it must not be stored after it (`put` does not check). */
+  get epoch(): number {
+    return this.generation;
+  }
+
   /** Até quando as chamadas estão suspensas por limite do GitHub (ms desde a época). */
   get pausedUntil(): number {
     return this.blockedUntil;

@@ -3,11 +3,13 @@
 
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, describe, test } from 'node:test';
-import { InvalidModelError } from '../src/model.ts';
+import { legacySessionIdentity, unknownCapabilities, InvalidModelError } from '../src/model.ts';
 import type { StoragePort } from '../src/storage-port.ts';
 import type { PlanRecord, SessionPlan } from '../src/plan/model.ts';
 import type { ContextMeter } from '../src/context/model.ts';
 import { T0, account, agent, at, event, pricing, session, usage } from './fixtures.ts';
+
+const normalizedAccount = (a: ReturnType<typeof account>) => ({ ...a, identity: { provider: 'claude', providerAccountId: a.accountUuid, organizationId: a.organizationUuid, profileId: null, machineId: null, environmentId: null }, confidence: 'unknown' });
 
 export function storageContract(name: string, create: () => Promise<StoragePort>): void {
   describe(`contrato da porta de armazenamento: ${name}`, () => {
@@ -23,7 +25,7 @@ export function storageContract(name: string, create: () => Promise<StoragePort>
       test('grava e lê a sessão inteira, com metadados', async () => {
         const s = session({ metadata: { branch: 'main', turnos: 3 } });
         await store.putSession(s);
-        assert.deepEqual(await store.getSession('s1'), s);
+        assert.deepEqual(await store.getSession('s1'), { ...s, identity: legacySessionIdentity(s.id), capabilities: unknownCapabilities(), accountConfidence: 'unknown' });
       });
 
       test('sessão inexistente é null', async () => {
@@ -34,7 +36,7 @@ export function storageContract(name: string, create: () => Promise<StoragePort>
         await store.putSession(session());
         const done = session({ status: 'completed', endedAt: at(30), updatedAt: at(30) });
         await store.putSession(done);
-        assert.deepEqual(await store.getSession('s1'), done);
+        assert.deepEqual(await store.getSession('s1'), { ...done, identity: legacySessionIdentity(done.id), capabilities: unknownCapabilities(), accountConfidence: 'unknown' });
       });
 
       test('waiting é camada: grava awaitingInputSince e o motivo sem mudar o status persistido', async () => {
@@ -101,7 +103,7 @@ export function storageContract(name: string, create: () => Promise<StoragePort>
       test('grava e lê a conta inteira, com pastas e metadados', async () => {
         const a = account({ color: '#5b8def', configDirs: ['/simulacao/.claude', '/simulacao/.claude-b'], metadata: { x: 1 } });
         await store.putAccount(a);
-        assert.deepEqual(await store.getAccount(a.id), a);
+        assert.deepEqual(await store.getAccount(a.id), { ...a, identity: { provider: 'claude', providerAccountId: a.accountUuid, organizationId: a.organizationUuid, profileId: null, machineId: null, environmentId: null }, confidence: 'unknown' });
         assert.equal(await store.getAccount('nada/nada'), null);
       });
 
@@ -109,7 +111,7 @@ export function storageContract(name: string, create: () => Promise<StoragePort>
         await store.putAccount(account());
         const editada = account({ label: 'Cliente X (sintético)', organizationName: null, lastSeenAt: at(10) });
         await store.putAccount(editada);
-        assert.deepEqual(await store.listAccounts(), [editada]);
+        assert.deepEqual(await store.listAccounts(), [normalizedAccount(editada)]);
       });
 
       test('lista na ordem em que foram vistas pela primeira vez', async () => {
@@ -117,7 +119,7 @@ export function storageContract(name: string, create: () => Promise<StoragePort>
         const a1 = account({ n: 1, firstSeenAt: at(0) });
         const a3 = account({ n: 3, firstSeenAt: at(2), lastSeenAt: at(2) });
         for (const a of [a3, a1, a2]) await store.putAccount(a);
-        assert.deepEqual(await store.listAccounts(), [a1, a2, a3]);
+        assert.deepEqual(await store.listAccounts(), [a1, a2, a3].map(normalizedAccount));
       });
 
       test('a mesma pessoa em duas orgs são duas contas', async () => {
@@ -136,7 +138,7 @@ export function storageContract(name: string, create: () => Promise<StoragePort>
       test('a sessão guarda a conta e a procedência', async () => {
         const s = session({ accountId: account().id, accountSource: 'transcript' });
         await store.putSession(s);
-        assert.deepEqual(await store.getSession('s1'), s);
+        assert.deepEqual(await store.getSession('s1'), { ...s, identity: legacySessionIdentity(s.id), capabilities: unknownCapabilities(), accountConfidence: 'unknown' });
       });
 
       test('recusa conta sem procedência, procedência sem conta e procedência fora da lista', async () => {
@@ -236,6 +238,19 @@ export function storageContract(name: string, create: () => Promise<StoragePort>
         assert.deepEqual(p1.items.map((e) => e.id), ['e0', 'e1', 'e2']);
         assert.deepEqual(p2.items.map((e) => e.id), ['e3', 'e4']);
         assert.equal(p2.nextCursor, null);
+      });
+
+      test('setEventText fills data.text and keeps the rest of data', async () => {
+        await store.appendEvent(event({ id: 'e1' }));
+        await store.appendEvent(event({ id: 'e2', data: null }));
+        assert.equal(await store.setEventText('e1', 'linha 1\n\n  linha 2'), true);
+        assert.equal(await store.setEventText('e2', 'só texto'), true);
+        assert.equal(await store.setEventText('nao-existe', 'x'), false);
+        const { items } = await store.listEvents('s1');
+        assert.deepEqual(items[0].data, { command: 'npm test', text: 'linha 1\n\n  linha 2' });
+        assert.deepEqual(items[1].data, { text: 'só texto' });
+        assert.equal(await store.setEventText('e1', 'de novo'), true);
+        assert.deepEqual((await store.listEvents('s1')).items[0].data, { command: 'npm test', text: 'de novo' });
       });
 
       test('recusa evento sem tipo ou com data fora do padrão', async () => {

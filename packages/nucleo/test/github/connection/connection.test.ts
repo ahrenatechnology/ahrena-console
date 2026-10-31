@@ -7,6 +7,7 @@ import {
   GithubConnection,
   GithubConnectionError,
   GithubNotConnectedError,
+  MAX_CHECKED_ORGS,
   MemoryVault,
   missingScopes,
   type CredentialVault,
@@ -362,18 +363,102 @@ describe('#241/AC-2 connecting through the device flow', () => {
     assert.deepEqual(st.missingScopes, ['read:org', 'project']);
   });
 
-  test('blocked orgs are found in the background through the single call queue', async () => {
+  test('#336 the orgs the token sees and the public ones that restrict the app, through the single call queue', async () => {
     const s = setup({ auth: { blockedOrgs: ['estudio-ficticio'] } });
     await connect(s);
     const st = await s.conn.status();
     assert.equal(st.orgsChecked, true);
-    assert.deepEqual(st.blockedOrgs, [{ login: 'estudio-ficticio', approvalUrl: APPROVAL }]);
+    assert.deepEqual(st.orgs, [
+      { login: 'estudio-ficticio', access: 'pending', approvalUrl: 'https://github.com/organizations/estudio-ficticio/settings/oauth_application_policy', requestUrl: APPROVAL },
+      { login: 'exemplo-labs', access: 'granted' },
+    ]);
     const apiCalls = s.gh.calls.filter((c) => c.startsWith('GET '));
-    assert.deepEqual(apiCalls, ['GET /user', 'GET /user/orgs?per_page=100', 'GET /orgs/exemplo-labs/repos?per_page=1', 'GET /orgs/estudio-ficticio/repos?per_page=1']);
+    assert.deepEqual(apiCalls, ['GET /user', 'GET /user/orgs?per_page=100', 'GET /users/dev-sintetico/orgs?per_page=100', 'GET /user/memberships/orgs/estudio-ficticio']);
     assert.equal(s.queued.length, apiCalls.length, 'every API call went through the queue');
   });
 
-  test('a failing org list leaves orgsChecked false and no blocked org', async () => {
+  test('#336 without the public list, the orgs the token sees still show', async () => {
+    const s = setup({ auth: { blockedOrgs: ['estudio-ficticio'] } });
+    const fetch = (async (input: string | URL | Request, init?: RequestInit) =>
+      String(input).includes('/users/') ? new Response('{}', { status: 502 }) : s.gh.fetch(input, init)) as typeof globalThis.fetch;
+    const conn = new GithubConnection({ ...connOptions(s), fetch });
+    await conn.start();
+    while (s.timers.length) {
+      s.timers.shift()!.fn();
+      await conn.idle();
+    }
+    const st = await conn.status();
+    assert.deepEqual([st.orgsChecked, st.orgs], [true, [{ login: 'exemplo-labs', access: 'granted' }]]);
+  });
+
+  test('#336 recheckOrgs reads the orgs again after an owner approves the app', async () => {
+    const s = setup({ auth: { blockedOrgs: ['estudio-ficticio'] } });
+    await connect(s);
+    assert.equal((await s.conn.status()).orgs?.[0]?.access, 'pending');
+    s.auth.blockedOrgs = [];
+    const during = await s.conn.recheckOrgs();
+    assert.equal(during.orgsChecked, false);
+    await s.conn.idle();
+    const st = await s.conn.status();
+    assert.deepEqual([st.orgsChecked, st.orgs], [true, [{ login: 'exemplo-labs', access: 'granted' }, { login: 'estudio-ficticio', access: 'granted' }]]);
+  });
+
+  test('#336 a recheck that fails says so and can run again; the next one succeeds', async () => {
+    const s = setup({ auth: { blockedOrgs: ['estudio-ficticio'] } });
+    let down = false;
+    const fetch = (async (input: string | URL | Request, init?: RequestInit) =>
+      down && String(input).includes('/user/orgs') ? new Response('{}', { status: 502 }) : s.gh.fetch(input, init)) as typeof globalThis.fetch;
+    const conn = new GithubConnection({ ...connOptions(s), fetch });
+    await conn.start();
+    while (s.timers.length) {
+      s.timers.shift()!.fn();
+      await conn.idle();
+    }
+    const before = (await conn.status()).orgs;
+    down = true;
+    await conn.recheckOrgs();
+    await conn.idle();
+    const failed = await conn.status();
+    assert.deepEqual([failed.orgsChecked, failed.orgsFailed, failed.orgs], [true, true, before], 'what the earlier check found stays');
+    down = false;
+    s.auth.blockedOrgs = [];
+    assert.equal((await conn.recheckOrgs()).orgsChecked, false, 'a failed check does not block the next one');
+    await conn.idle();
+    const st = await conn.status();
+    assert.deepEqual([st.orgsChecked, st.orgsFailed, st.orgs?.map((o) => o.access)], [true, false, ['granted', 'granted']]);
+  });
+
+  test('#336 a recheck while a check runs starts no second one', async () => {
+    const s = setup();
+    await connect(s);
+    const reads = () => s.gh.calls.filter((c) => c.startsWith('GET /user/orgs')).length;
+    const n = reads();
+    await Promise.all([s.conn.recheckOrgs(), s.conn.recheckOrgs()]);
+    await s.conn.idle();
+    assert.equal(reads(), n + 1);
+  });
+
+  test('#336 each list keeps at most MAX_CHECKED_ORGS', async () => {
+    const many = Array.from({ length: MAX_CHECKED_ORGS + 5 }, (_, i) => `org-${i}`);
+    const s = setup({ auth: { publicOrgs: many } });
+    const fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes('/user/orgs')) return Response.json(many.slice(0, MAX_CHECKED_ORGS + 5).map((login) => ({ login })));
+      if (url.includes('/users/')) return Response.json(many.map((login) => ({ login: `${login}-pub` })));
+      if (url.includes('/user/memberships/orgs/')) return Response.json({ state: 'active' });
+      return s.gh.fetch(input, init);
+    }) as typeof globalThis.fetch;
+    const conn = new GithubConnection({ ...connOptions(s), fetch });
+    await conn.start();
+    while (s.timers.length) {
+      s.timers.shift()!.fn();
+      await conn.idle();
+    }
+    const st = await conn.status();
+    assert.equal(st.orgs?.length, MAX_CHECKED_ORGS);
+  });
+
+  test('a failing org list ends the check as failed, with no org', async () => {
     const s = setup();
     const fetch = (async (input: string | URL | Request, init?: RequestInit) =>
       String(input).includes('/user/orgs') ? new Response('{}', { status: 502 }) : s.gh.fetch(input, init)) as typeof globalThis.fetch;
@@ -384,7 +469,7 @@ describe('#241/AC-2 connecting through the device flow', () => {
       await conn.idle();
     }
     const st = await conn.status();
-    assert.deepEqual([st.state, st.orgsChecked, st.blockedOrgs], ['connected', false, []]);
+    assert.deepEqual([st.state, st.orgsChecked, st.orgsFailed, st.orgs], ['connected', true, true, []]);
   });
 });
 
@@ -444,10 +529,10 @@ describe('#241/AC-3 the credential lives only in the vault', () => {
     await assert.rejects(s.conn.token(), GithubNotConnectedError);
   });
 
-  test('a credential GitHub rejects (401) is not served; the vault is left alone', async () => {
+  test('a credential GitHub rejects (401) is not served (revoked); the vault is left alone', async () => {
     const s = setup({ seed: { 'dev-sintetico': 'gho_revoked' } });
     const st = await s.conn.status();
-    assert.deepEqual([st.state, st.lastError], ['disconnected', 'github-error']);
+    assert.deepEqual([st.state, st.lastError], ['disconnected', 'revoked']);
     await assert.rejects(s.conn.token(), GithubNotConnectedError);
     assert.equal(await s.vault.inner.get('dev-sintetico'), 'gho_revoked');
   });
@@ -876,5 +961,41 @@ describe('#241 review 2 (Argos)', () => {
     const st = await connect(s);
     assert.deepEqual([st.state, st.login], ['connected', 'second-account']);
     assert.ok(s.logs.some((l) => /previous vault entry could not be deleted/.test(l)));
+  });
+});
+
+// #372: an app update starts a new core on the same data dir. It reads the vault entry the old core
+// wrote; nothing about the update itself drops the connection.
+describe('a new core on the same data dir (#372)', () => {
+  test('a valid stored credential: the new core is connected without a device flow', async () => {
+    const s = setup();
+    assert.equal((await connect(s)).state, 'connected');
+    s.conn.close();
+    const next = new GithubConnection(connOptions(s));
+    const st = await next.status();
+    assert.deepEqual([st.state, st.login], ['connected', 'dev-sintetico']);
+  });
+
+  test('a credential GitHub revoked meanwhile: revoked, with the login to reconnect; reconnecting replaces the entry', async () => {
+    const s = setup();
+    await connect(s);
+    s.conn.close();
+    s.auth.token = OTHER_TOKEN; // GitHub revoked the stored token and will issue another one
+    const next = new GithubConnection({ ...connOptions(s), log: (line) => void s.logs.push(line) });
+    const st = await next.status();
+    assert.deepEqual([st.state, st.lastError, st.login, st.securityLogUrl], ['disconnected', 'revoked', 'dev-sintetico', 'https://github.com/settings/security-log']);
+    await assert.rejects(next.token(), GithubNotConnectedError);
+    assert.equal(s.settings.get('github.login'), 'dev-sintetico', 'the login stays for Reconnect');
+    assert.ok(s.logs.some((l) => l === 'github: GitHub rejected the credential (401)'));
+    await next.start();
+    for (let poll = s.timers.shift(); poll; poll = s.timers.shift()) {
+      s.advance(poll.ms);
+      poll.fn();
+      await next.idle();
+    }
+    const again = await next.status();
+    assert.deepEqual([again.state, again.login, again.lastError], ['connected', 'dev-sintetico', undefined]);
+    assert.equal(await s.vault.inner.get('dev-sintetico'), OTHER_TOKEN);
+    next.close();
   });
 });

@@ -149,8 +149,9 @@ const pushOf = (r) => (r.lastPush ? Date.parse(r.lastPush) || 0 : -Infinity);
 const ORDER = {
   recente: (a, b) => pushOf(b) - pushOf(a) || byName(a, b),
   nome: byName,
-  issues: (a, b) => b.openIssues - a.openIssues || byName(a, b),
-  prs: (a, b) => b.openPrs - a.openPrs || byName(a, b),
+  // Counts not read yet (`null`, issue 341) go after the real zeros.
+  issues: (a, b) => (b.openIssues ?? -1) - (a.openIssues ?? -1) || byName(a, b),
+  prs: (a, b) => (b.openPrs ?? -1) - (a.openPrs ?? -1) || byName(a, b),
   sessoes: (a, b) => b.sessions.active - a.sessions.active || b.sessions.thisMonth - a.sessions.thisMonth || byName(a, b),
 };
 
@@ -184,30 +185,47 @@ export function sparkline(values, width = 90, height = 22) {
   return values.map((n, i) => `${one(i * step + 1)},${one(height - 2 - (n / max) * (height - 4))}`).join(' ');
 }
 
-/** Barras verticais de baixo para cima até `base`: `{ x, y, largura, altura }` por valor. */
-export function bars(values, width = 520, base = 90) {
-  if (!values?.length) return [];
-  const max = Math.max(...values) || 1;
-  const slot = width / values.length;
-  return values.map((n, i) => {
-    const h = (n / max) * (base - 6);
-    return { x: one(i * slot + 1), y: one(base - h), largura: one(Math.max(1, slot - 3)), altura: one(h) };
+/** The heat of a value against the largest one: 0 (nothing) to 4, like GitHub's contribution graph. */
+export function heat(v, max) {
+  return v > 0 && max > 0 ? Math.min(4, Math.max(1, Math.ceil((v / max) * 4))) : 0;
+}
+
+const MONTHS = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+
+/** `2026-10-13` becomes `13 out`. */
+export const dayLabel = (day) => `${Number(day.slice(8, 10))} ${MONTHS[Number(day.slice(5, 7)) - 1]}`;
+
+/**
+ * The commit grid: one cell per day, a column per week, rows Monday to Sunday (as on the Analytics
+ * heatmap). `{ columns, cells: [{ day, commits, column, row, level }], months: [{ column, label }] }`;
+ * a month's label sits on the column of its 1st, at least 3 columns from the previous one.
+ */
+export function activityGrid(days) {
+  if (!days?.length) return { columns: 0, cells: [], months: [] };
+  // The place comes from the date, not the index: the core leaves out weeks without `days`.
+  const ms = (day) => Date.parse(`${day}T00:00:00Z`);
+  const first = ms(days[0].day);
+  const shift = (new Date(first).getUTCDay() + 6) % 7;
+  const max = Math.max(0, ...days.map((d) => d.commits));
+  const cells = days.map((d) => {
+    const offset = Math.round((ms(d.day) - first) / 86_400_000) + shift;
+    return { day: d.day, commits: d.commits, column: Math.floor(offset / 7), row: offset % 7, level: heat(d.commits, max) };
   });
+  const months = [];
+  for (const c of cells) {
+    if (c.day.endsWith('-01') && (months.length === 0 || c.column - months.at(-1).column >= 3)) months.push({ column: c.column, label: MONTHS[Number(c.day.slice(5, 7)) - 1] });
+  }
+  return { columns: cells.at(-1).column + 1, cells, months };
 }
 
 /**
- * Frequência de código: adicionadas para cima e removidas para baixo de `meio`, na mesma escala.
- * `{ x, largura, cima: { y, altura }, baixo: { y, altura } }` por semana.
+ * Code frequency as two rows of weekly cells, added on top and removed below, on one scale.
+ * `[{ week, added, removed, addedLevel, removedLevel }]`.
  */
-export function frequency(weeks, width = 520, middle = 64, topHeight = 58, bottomHeight = 52) {
+export function frequencyGrid(weeks) {
   if (!weeks?.length) return [];
-  const max = Math.max(...weeks.map((s) => Math.max(s.added, s.removed))) || 1;
-  const slot = width / weeks.length;
-  return weeks.map((s, i) => {
-    const top = (s.added / max) * topHeight;
-    const bottom = (s.removed / max) * bottomHeight;
-    return { x: one(i * slot + 1), largura: one(Math.max(1, slot - 4)), cima: { y: one(middle - top), altura: one(top) }, baixo: { y: middle, altura: one(bottom) } };
-  });
+  const max = Math.max(...weeks.map((s) => Math.max(s.added, s.removed)));
+  return weeks.map((s) => ({ week: s.week.slice(0, 10), added: s.added, removed: s.removed, addedLevel: heat(s.added, max), removedLevel: heat(s.removed, max) }));
 }
 
 /** Porcentagens (0 a 100) de partes de um total; total zero dá zeros. */

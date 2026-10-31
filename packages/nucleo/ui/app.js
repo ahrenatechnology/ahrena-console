@@ -8,6 +8,7 @@ import { error, empty } from './states.js';
 import { findScreen, litItem } from './screens.js';
 import { createNav } from './nav.js';
 import { createGithubFooter, connectionChanged } from './github-connect.js';
+import { createAppUpdate, appUpdateChanged, hasUpdate } from './app-update.js';
 
 const nav = document.getElementById('nav');
 const area = document.getElementById('content');
@@ -31,6 +32,19 @@ setInterval(readConnectors, 60_000);
 const githubFooter = createGithubFooter({ node: document.getElementById('github'), read });
 githubFooter.refresh();
 
+// The app's update notice (issue 330): the card above the screens, and the panel the footer's version opens.
+const appUpdate = createAppUpdate({ read, write, noticeNode: document.getElementById('update-notice'), panelNode: document.getElementById('update-panel') });
+appUpdate.refresh().then(drawLive);
+// The relative times in the open panel ("verificado há 3 min") move on their own.
+setInterval(() => appUpdate.tick(), 30_000);
+// A click outside the panel and the footer's version closes it, like Esc.
+document.addEventListener('click', (ev) => {
+  if (!appUpdate.isOpen || !(ev.target instanceof Element) || ev.target.closest('#update-panel, .up-version')) return;
+  appUpdate.close();
+  drawLive();
+});
+document.addEventListener('keydown', (ev) => ev.key === 'Escape' && appUpdate.isOpen && (appUpdate.close(), drawLive()));
+
 // ---------- Live ----------
 
 let version = null;
@@ -45,6 +59,7 @@ function restart() {
   readMachines();
   readConnectors();
   githubFooter.refresh();
+  appUpdate.refresh().then(drawLive);
   if (!connected) return void (connected = true);
   if (screenFailed) return open();
   for (const f of listeners.restart) f();
@@ -59,6 +74,14 @@ async function readVersion() {
 
 const LABELS = { connecting: 'Conectando', live: 'Ao vivo', offline: 'Sem conexão' };
 
+// The version in the footer is a button (issue 330): it opens the version panel, and has a dot while a newer one waits.
+function versionButton() {
+  if (!version) return el('span', { class: 'version mono' }, '');
+  const fresh = hasUpdate(appUpdate.view);
+  const button = el('button', { type: 'button', class: 'version up-version mono', 'aria-haspopup': 'dialog', 'aria-expanded': String(appUpdate.isOpen), title: fresh ? 'Há uma versão nova do app' : 'Versão do app', 'data-new': fresh || undefined, onClick: () => (appUpdate.toggle(), drawLive()) }, fresh ? el('span', { class: 'up-dot', role: 'img', 'aria-label': 'versão nova' }) : null, `v${version}`);
+  return button;
+}
+
 function drawLive() {
   const { state, error: e, nextAttempt } = liveState;
   const seconds = nextAttempt ? Math.max(1, Math.round((nextAttempt - Date.now()) / 1000)) : null;
@@ -67,7 +90,7 @@ function drawLive() {
   liveCard.replaceChildren(
     icon(state === 'offline' ? 'offline' : 'live'),
     el('b', {}, LABELS[state]),
-    el('span', { class: 'version mono' }, version ? `v${version}` : ''),
+    versionButton(),
   );
   for (const p of document.querySelectorAll('[data-live]')) {
     p.dataset.state = state;
@@ -89,6 +112,7 @@ startLive({
     if (changes.some((c) => c.type === 'alert')) readMachines();
     if (connectionChanged(changes)) githubFooter.refresh();
     if (changes.some((c) => c.type === 'connector')) readConnectors();
+    if (appUpdateChanged(changes)) appUpdate.refresh().then(drawLive);
     for (const f of listeners.change) f(changes);
   },
 });

@@ -1,3 +1,4 @@
+import { OWNER_TOKEN, ownerFetch as fetch } from '../owner-http.ts';
 // GET /api/history (#33, C15) on 127.0.0.1: the page by days, the cursor, the search, the 400 of each
 // parameter and the core with no history. Simulator data (P4), with the time zone fixed at UTC.
 import assert from 'node:assert/strict';
@@ -20,7 +21,7 @@ async function subir(comHistorico = true) {
   await seedPanelHistory(storage, decisoes, 'p4', AGORA);
   const montador = new MontadorDoPainel({ storage, contas: new Accounts({ storage, file: null }), desktop: null, trabalho: null, decisoes, agora: () => AGORA, apelido: () => PANEL_SESSION });
   const historico = comHistorico ? new SessionHistory({ storage, decisions: decisoes, timeZone: 'UTC' }) : undefined;
-  const api = await startLocalApi({ panelBuilder: montador, hooks: { storage }, port: 0, log: () => {}, history: historico });
+  const api = await startLocalApi({ ownerToken: () => OWNER_TOKEN, panelBuilder: montador, hooks: { storage }, port: 0, log: () => {}, history: historico });
   return {
     get: (q = '') => fetch(`${api.url}/api/history${q}`),
     fechar: async () => {

@@ -37,7 +37,7 @@
 //   valor: o mesmo texto noutra pasta é relido (a pasta decide ADR ou PDR).
 // Com o GitHub limitando ou fora, serve o que há no cache (até 24 h) com a hora dele (`readAt`), o
 // motivo (`error`) e, quando o GitHub disse até quando, `retryAt`. Todas as chamadas passam pela fila
-// do GitHub do núcleo, uma de cada vez.
+// do GitHub do núcleo, até `GITHUB_CALL_LIMIT` ao mesmo tempo (#341).
 //
 // ## Segurança
 //
@@ -199,7 +199,20 @@ export interface DecisionsOptions {
   validityMs?: number;
   queue?: GithubCallQueue;
   log?: (message: string) => void;
+  /**
+   * `true` (the default): a read past the validity rebuilds behind, as before #356. `false` under the
+   * background sync (decision 0015): the account's repositories are rebuilt only by `sync()` and by
+   * Atualizar; a read never starts a build, except when nothing was ever stored.
+   */
+  syncOnRead?: boolean;
 }
+
+/** The stored snapshots (decision 0015): the index and each repository's read survive a restart. */
+export const DECISIONS_INDEX_KEY = 'adrs:index';
+export const decisionsSnapshotKey = (repoKey: string) => `adrs:repo:${repoKey}`;
+
+/** A repository's read as stored: the texts as pairs. */
+type StoredRead = Omit<RepoRead, 'texts'> & { texts: [string, string][] };
 
 /** No 404 de um registro do outro tipo, `kind` diz qual é, para a tela ir para a rota certa. */
 export type RecordAnswer = { status: 200; body: DecisionRecordView } | { status: 400 | 404 | 503; body: { error: string; kind?: DecisionKind } };
@@ -222,10 +235,17 @@ export class DecisionsService {
   /** O último push de cada repositório da lista, para a aba e o registro também invalidarem por ele. */
   private readonly lastPush = new Map<string, string | null>();
   private noToken: string | null = null;
+  private readonly syncOnRead: boolean;
+  /** The snapshots loaded from the store, once (decision 0015). */
+  private hydrated: Promise<void> | null = null;
+  /** The cache's epoch when this service was built: after an identity reset (`clear`), nothing it read is stored. */
+  private readonly epoch: number;
+  /** Why the last index build failed; `sync()` throws it so the sync status shows it. */
+  private indexFailure: string | null = null;
   /** Chamadas que passaram pelo cache até a fonte (medição e testes). */
   calls = { source: 0 };
 
-  constructor({ source, accountRepos, cache, changes = null, now = Date.now, validityMs = 60_000, queue = new GithubCallQueue(), log = () => {} }: DecisionsOptions) {
+  constructor({ source, accountRepos, cache, changes = null, now = Date.now, validityMs = 60_000, queue = new GithubCallQueue(), log = () => {}, syncOnRead = true }: DecisionsOptions) {
     this.source = source;
     this.accountRepos = accountRepos ?? (async () => ({ state: 'ready', error: null, account: null, repos: [] }));
     this.cache = cache ?? new GithubCache({ store: new MemoryCacheStore(), now });
@@ -234,16 +254,46 @@ export class DecisionsService {
     this.validityMs = validityMs;
     this.queue = queue;
     this.log = log;
+    this.syncOnRead = syncOnRead;
+    this.epoch = this.cache.epoch;
+  }
+
+  /**
+   * The background sync's step (decision 0015): rebuilds the index of every repository of the account
+   * and waits for it. Answers `skipped` without GitHub, `pending` while the account's repository list
+   * is still loading.
+   */
+  async sync({ force = false }: { force?: boolean } = {}): Promise<'done' | 'skipped' | 'pending'> {
+    if (!this.source) return 'skipped';
+    await this.hydrate();
+    if (!this.index.running) {
+      this.index.at = -Infinity;
+      this.index.force = force;
+    }
+    this.triggerIndex();
+    await this.index.running;
+    // The account's repository list was still loading: the build did not run, try again on the next tick.
+    if (this.index.at === -Infinity) return 'pending';
+    if (this.indexFailure) throw new Error(this.indexFailure);
+    const idx = this.index.value;
+    if (idx?.state === 'no-github') return 'skipped';
+    // The account's list failed (it answers an error, it does not throw), or no repository could be read:
+    // the step failed, and the sync status shows why.
+    if (idx?.state === 'error') throw new Error(idx.error ?? 'a lista de repositórios da conta falhou');
+    if (idx?.state === 'ready' && idx.repos.length > 0 && idx.repos.every((k) => this.repos.get(k)?.value?.error)) throw new Error(idx.error ?? 'nenhum repositório da conta pôde ser lido');
+    return 'done';
   }
 
   /** A lista de todos os repositórios, do tipo pedido; dispara a montagem por trás se venceu. */
   async list(kind: DecisionKind, filters: DecisionFilters = {}, { refresh = false } = {}): Promise<DecisionList> {
     if (!this.source) return emptyDecisionList(kind, 'no-github', null);
+    await this.hydrate();
     if (refresh && !this.index.running) {
       this.index.at = -Infinity;
       this.index.force = true;
     }
-    this.triggerIndex();
+    // An index in error is rebuilt on read too (within the validity), so the screen recovers with GitHub.
+    if (refresh || this.syncOnRead || !this.index.value || this.index.value.state === 'error') this.triggerIndex();
     const idx = this.index.value;
     if (!idx) return emptyDecisionList(kind, 'loading', null);
     if (idx.state !== 'ready') return { ...emptyDecisionList(kind, idx.state, idx.error), account: idx.account };
@@ -254,12 +304,13 @@ export class DecisionsService {
   async repo(kind: DecisionKind | 'all', owner: string, name: string, { refresh = false } = {}): Promise<RepoDecisions> {
     const label = `${owner}/${name}`;
     if (!this.source) return emptyRepoDecisions(kind, label, 'no-github', null);
-    const e = this.entry(decisionsRepoKey(owner, name));
+    await this.hydrate();
+    const e = await this.loadedEntry(decisionsRepoKey(owner, name));
     if (refresh && !e.running) {
       e.at = -Infinity;
       e.force = true;
     }
-    this.triggerRepo(e, this.ref(owner, name));
+    if (refresh || this.readTriggers(decisionsRepoKey(owner, name), e)) this.triggerRepo(e, this.ref(owner, name));
     const v = e.value;
     if (!v) return emptyRepoDecisions(kind, label, 'loading', null);
     if (v.state !== 'ready') return { ...emptyRepoDecisions(kind, v.repo, v.state, v.error), readAt: v.readAt };
@@ -293,8 +344,9 @@ export class DecisionsService {
   async record(kind: DecisionKind, owner: string, name: string, id: string): Promise<RecordAnswer> {
     if (!RECORD_ID.test(id) || id === '.' || id === '..') return { status: 400, body: { error: 'id: o nome do arquivo, sem .md' } };
     if (!this.source) return { status: 503, body: { error: NO_GITHUB } };
-    const e = this.entry(decisionsRepoKey(owner, name));
-    this.triggerRepo(e, this.ref(owner, name));
+    await this.hydrate();
+    const e = await this.loadedEntry(decisionsRepoKey(owner, name));
+    if (this.readTriggers(decisionsRepoKey(owner, name), e)) this.triggerRepo(e, this.ref(owner, name));
     if (!e.value && e.running) await e.running;
     const v = e.value;
     if (!v) return { status: 503, body: { error: 'a leitura do repositório ainda não terminou' } };
@@ -345,6 +397,49 @@ export class DecisionsService {
     }
   }
 
+  // ---------- the snapshots (decision 0015) ----------
+
+  /** Whether a read of this repository starts a build: always outside the sync, and for what the sync does not cover. */
+  private readTriggers(key: string, e: Entry<RepoRead>): boolean {
+    return this.syncOnRead || !this.listed.has(key) || !e.value;
+  }
+
+  /** Loads the stored index and the reads of its repositories, once. Up to 24 h old (`peek`). */
+  private hydrate(): Promise<void> {
+    this.hydrated ??= (async () => {
+      try {
+        const idx = await this.cache.peek<IndexValue>(DECISIONS_INDEX_KEY);
+        if (!idx || this.index.value) return;
+        for (const key of idx.value.repos) await this.loadRead(key, this.entry(key));
+        this.listed = new Set(idx.value.repos);
+        this.index.value = idx.value;
+        this.index.at = idx.fetchedAt;
+      } catch (err) {
+        this.log(`adrs: the stored index could not be read: ${reason(err)}`);
+      }
+    })();
+    return this.hydrated;
+  }
+
+  /** The entry of a repository, with its stored read when memory has none. */
+  private async loadedEntry(key: string): Promise<Entry<RepoRead>> {
+    const e = this.entry(key);
+    if (!e.value && !e.running) await this.loadRead(key, e);
+    return e;
+  }
+
+  private async loadRead(key: string, e: Entry<RepoRead>): Promise<void> {
+    const hit = await this.cache.peek<StoredRead>(decisionsSnapshotKey(key)).catch(() => null);
+    if (!hit || e.value) return;
+    e.value = { ...hit.value, texts: new Map(hit.value.texts) };
+    e.at = hit.fetchedAt;
+  }
+
+  private store(key: string, value: unknown): void {
+    if (this.cache.epoch !== this.epoch) return;
+    this.cache.put(key, value).catch((err: unknown) => this.log(`adrs: ${key} could not be stored: ${reason(err)}`));
+  }
+
   // ---------- a montagem ----------
 
   /** O repositório com o último push que a lista da conta conhece (sem lista, `null`: vale o TTL). */
@@ -375,9 +470,11 @@ export class DecisionsService {
     e.running = this.buildIndex(e.force)
       .then((ok) => {
         done = ok;
+        this.indexFailure = null;
       })
       .catch((err: unknown) => {
         const msg = reason(err);
+        this.indexFailure = msg;
         this.log(`adrs: a montagem da lista falhou: ${msg}`);
         this.publishIndex(e.value && e.value.state === 'ready' ? { ...e.value, error: msg } : { state: 'error', error: msg, account: null, repos: [] });
       })
@@ -426,6 +523,7 @@ export class DecisionsService {
   private publishIndex(value: IndexValue): void {
     const before = this.index.value === null ? null : JSON.stringify(this.index.value);
     this.index.value = value;
+    if (value.state === 'ready') this.store(DECISIONS_INDEX_KEY, value);
     if (before !== JSON.stringify(value)) this.changes?.record({ type: 'adrs', key: DECISIONS_LIST_KEY, sessionId: null, accountId: null });
   }
 
@@ -433,6 +531,7 @@ export class DecisionsService {
     const shape = (v: RepoRead | null) => (v ? JSON.stringify({ ...v, texts: [...v.texts.keys()] }) : null);
     const changed = shape(e.value) !== shape(value);
     e.value = value;
+    if (value.state === 'ready' || value.state === 'not-found') this.store(decisionsSnapshotKey(value.repo.toLowerCase()), { ...value, texts: [...value.texts] } satisfies StoredRead);
     if (!changed) return;
     this.changes?.record({ type: 'adrs', key: value.repo.toLowerCase(), sessionId: null, accountId: null });
     // Um repositório que a lista mostra mudou: a lista também.
@@ -703,10 +802,12 @@ export interface CoreDecisionsOptions {
   log?: (message: string) => void;
   /** The credential provider and transport (#241). Required outside the demo and `--no-github`; the demo takes only its token. */
   github?: GithubAccess | null;
+  /** `false` under the background sync (decision 0015): see `DecisionsOptions.syncOnRead`. */
+  syncOnRead?: boolean;
 }
 
 /** Monta o serviço e a rota como o núcleo usa (cli.ts): a credencial do provedor (#241), cache no banco, a fila do núcleo. */
-export function createCoreDecisions({ demo, noGithub, cache, changes, queue, accountRepos, log, github }: CoreDecisionsOptions): { service: DecisionsService; route: DecisionsRoute } {
+export function createCoreDecisions({ demo, noGithub, cache, changes, queue, accountRepos, log, github, syncOnRead = true }: CoreDecisionsOptions): { service: DecisionsService; route: DecisionsRoute } {
   // A demo aponta para um endereço que não resolve: mesmo que o falso falhasse, nada sai para o GitHub.
   const transport = githubReposTransport({
     demo,
@@ -715,6 +816,6 @@ export function createCoreDecisions({ demo, noGithub, cache, changes, queue, acc
     demoFetch: () => createFakeGithub(DEMO_GITHUB_DATA, { delayMs: 120 }).fetch,
     demoBase: FAKE_GITHUB_BASE,
   });
-  const service = new DecisionsService({ source: transport ? new RepoFilesSource(transport) : null, accountRepos, cache, changes, queue, ...(log ? { log } : {}) });
+  const service = new DecisionsService({ source: transport ? new RepoFilesSource(transport) : null, accountRepos, cache, changes, queue, syncOnRead, ...(log ? { log } : {}) });
   return { service, route: createDecisionsRoute(service) };
 }

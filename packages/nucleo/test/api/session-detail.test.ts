@@ -1,3 +1,4 @@
+import { OWNER_TOKEN, ownerFetch as fetch } from '../owner-http.ts';
 // The session Detail in the /ui (#29 and #30): the `/api/sessions/<id>…` routes over the simulator's
 // data (the P4 demo plus the session asking for permission), and the "Abrir no Claude Desktop"
 // through the page itself, without opening the door to another Origin (decision 0003).
@@ -44,7 +45,7 @@ describe('Detalhe da sessão: /api/sessions/<id>', () => {
     // Como na --demo: o painel troca qualquer id pelo da sessão do cenário; o Detalhe, não.
     const montador = new MontadorDoPainel({ storage, contas: new Accounts({ storage, file: null }), desktop: null, trabalho, agora: () => AGORA, apelido: () => PANEL_SESSION });
     const detalhe = new LeiturasDoDetalhe({ storage, montador, agora: () => AGORA, local: demoLocal });
-    api = await startLocalApi({ panelBuilder: montador, hooks: { storage }, port: 0, log: () => {}, detail: detalhe, openInDesktop: async (url) => void abertos.push(url) });
+    api = await startLocalApi({ ownerToken: () => OWNER_TOKEN, panelBuilder: montador, hooks: { storage }, port: 0, log: () => {}, detail: detalhe, openInDesktop: async (url) => void abertos.push(url) });
     host = new URL(api.url).host;
   });
   after(async () => {
@@ -148,7 +149,7 @@ describe('Detalhe da sessão: /api/sessions/<id>', () => {
 
   test('Conversa: o texto do transcript volta como texto, sem virar HTML', async () => {
     const id = 'sim-detalhe-html';
-    await storage.putSession({ ...(await storage.getSession(DETAIL_SESSION))!, id, awaitingInputSince: null, awaitingReason: null });
+    await storage.putSession({ ...(await storage.getSession(DETAIL_SESSION))!, id, identity: undefined, awaitingInputSince: null, awaitingReason: null });
     const veneno = '<img src=x onerror="alert(1)"> `<b>`';
     await storage.appendEvent({ id: `${id}-e1`, sessionId: id, agentId: null, type: 'UserPrompt', toolName: null, summary: veneno, data: null, createdAt: new Date(AGORA).toISOString() });
     const c = await read<ConversaDoDetalhe>(`/api/sessions/${id}/conversation`);
@@ -156,6 +157,28 @@ describe('Detalhe da sessão: /api/sessions/<id>', () => {
     // A tela só põe dado no DOM por `textContent` (el()); nunca por innerHTML.
     const tela = readFileSync(`${UI_FOLDER}screens/session-detail.js`, 'utf8');
     assert.doesNotMatch(tela, /innerHTML|outerHTML|insertAdjacentHTML|document\.write/);
+  });
+
+  test('Conversa: the full text with its newlines, from data.text or the hook prompt, and the hook prompt once', async () => {
+    const id = 'sim-detalhe-texto';
+    await storage.putSession({ ...(await storage.getSession(DETAIL_SESSION))!, id, identity: undefined, awaitingInputSince: null, awaitingReason: null });
+    const at = (s: number) => new Date(AGORA + s * 1000).toISOString();
+    const prompt = `# Pedido\n\n- um\n- dois\n\n${'x'.repeat(3_000)}`;
+    const reply = `Feito:\n\n\`\`\`ts\nconst a = 1;\n\`\`\`\n${'y'.repeat(3_000)}`;
+    const summaryOf = (t: string) => `${t.replace(/\s+/g, ' ').slice(0, 199)}…`;
+    const ev = (n: number, type: string, summary: string | null, data: unknown) =>
+      storage.appendEvent({ id: `${id}-e${n}`, sessionId: id, agentId: null, type, toolName: null, summary, data: data as never, createdAt: at(n) });
+    await ev(1, 'UserPromptSubmit', summaryOf(prompt), { prompt });
+    await ev(2, 'UserPrompt', summaryOf(prompt), { parentUuid: null, transcriptAgentId: null, text: prompt });
+    await ev(3, 'AssistantMessage', summaryOf(reply), { parentUuid: null, transcriptAgentId: null, text: reply });
+    // An event stored before data.text: the transcript prompt only has the summary, and still dedupes against the hook.
+    const other = 'Segundo pedido\ncom duas linhas';
+    await ev(4, 'UserPromptSubmit', other, { prompt: other });
+    await ev(5, 'UserPrompt', other.replace(/\s+/g, ' '), null);
+    // The hook's "prompt" label with no prompt in data is not the person's text.
+    await ev(6, 'UserPromptSubmit', 'prompt', null);
+    const c = await read<ConversaDoDetalhe>(`/api/sessions/${id}/conversation`);
+    assert.deepEqual(c.messages.map((m) => [m.role, m.text]), [['you', prompt], ['assistant', reply], ['you', other], ['you', null]]);
   });
 
   test('Linha do tempo (C6): do mais novo para o mais velho, filtros e páginas', async () => {

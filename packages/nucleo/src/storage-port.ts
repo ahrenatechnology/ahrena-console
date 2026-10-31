@@ -10,7 +10,9 @@
 
 import type {
   Agent,
-  ClaudeAccount,
+  SessionIdentity,
+  Provider,
+  ProviderAccount,
   ModelPricing,
   SessionEvent,
   Session,
@@ -27,12 +29,16 @@ export interface Page<T> {
 }
 
 export interface ListSessionsQuery {
+  provider?: Provider;
+  profileId?: string | null;
+  machineId?: string | null;
+  environmentId?: string | null;
   /** Filtra pelo status persistido. */
   status?: readonly SessionStatus[];
   /** `true`: só as que esperam alguém; `false`: só as que não esperam. */
   awaiting?: boolean;
   cwd?: string;
-  /** Filtra pela conta (`ClaudeAccount.id`); `null` na lista pede as sessões "Sem conta". */
+  /** Filtra pela conta (`ProviderAccount.id`); `null` na lista pede as sessões "Sem conta". */
   accountIds?: readonly (string | null)[];
   /** Padrão 50, máximo 500. */
   limit?: number;
@@ -96,14 +102,15 @@ export interface StoragePort {
   /** Grava a sessão inteira (cria ou substitui). */
   putSession(session: Session): Promise<void>;
   getSession(id: string): Promise<Session | null>;
+  getSessionByIdentity(identity: SessionIdentity): Promise<Session | null>;
   /** Mais recentes primeiro, por `updatedAt`. */
   listSessions(query?: ListSessionsQuery): Promise<Page<Session>>;
 
   /** Grava a conta inteira (cria ou substitui). */
-  putAccount(account: ClaudeAccount): Promise<void>;
-  getAccount(id: string): Promise<ClaudeAccount | null>;
+  putAccount(account: ProviderAccount): Promise<void>;
+  getAccount(id: string): Promise<ProviderAccount | null>;
   /** Na ordem em que foram vistas pela primeira vez. Sem paginação: são poucas por máquina. */
-  listAccounts(): Promise<ClaudeAccount[]>;
+  listAccounts(): Promise<ProviderAccount[]>;
 
   putAgent(agent: Agent): Promise<void>;
   getAgent(id: string): Promise<Agent | null>;
@@ -112,6 +119,8 @@ export interface StoragePort {
 
   /** Acrescenta o evento. Devolve `false` se o id já existia (o evento não é duplicado nem alterado). */
   appendEvent(event: SessionEvent): Promise<boolean>;
+  /** Sets `data.text` of an existing event, keeping the rest of its `data`. Returns `false` if the id does not exist. */
+  setEventText(id: string, text: string): Promise<boolean>;
   /** Em ordem cronológica. */
   listEvents(sessionId: string, query?: ListEventsQuery): Promise<Page<SessionEvent>>;
   /** Todas as sessões, mais novos primeiro, com filtros e o ao vivo (feed, #94). */

@@ -126,16 +126,19 @@ describe('#241/AC-2 device flow client', () => {
     await assert.rejects(client.user('gho_wrong'), (err: GithubAuthError) => err.status === 401 && err.code === 'unauthorized');
   });
 
-  test('orgs lists the logins; orgAccess says blocked only for the OAuth App restriction', async () => {
+  test('#336 orgs leaves out a restricting org, publicOrgs keeps it, orgAccess reads the membership', async () => {
     const { client, requests } = setup({ blockedOrgs: ['estudio-ficticio'] });
-    assert.deepEqual(await client.orgs(TOKEN), ['exemplo-labs', 'estudio-ficticio']);
+    assert.deepEqual(await client.orgs(TOKEN), ['exemplo-labs']);
     assert.equal(requests.at(-1)!.url, `${API}/user/orgs?per_page=100`);
+    assert.deepEqual(await client.publicOrgs(TOKEN, 'dev-sintetico'), ['exemplo-labs', 'estudio-ficticio']);
+    assert.equal(requests.at(-1)!.url, `${API}/users/dev-sintetico/orgs?per_page=100`);
     assert.equal(await client.orgAccess(TOKEN, 'exemplo-labs'), 'ok');
-    assert.equal(requests.at(-1)!.url, `${API}/orgs/exemplo-labs/repos?per_page=1`);
+    assert.equal(requests.at(-1)!.url, `${API}/user/memberships/orgs/exemplo-labs`);
     assert.equal(await client.orgAccess(TOKEN, 'estudio-ficticio'), 'blocked');
     assert.equal(await client.orgAccess(TOKEN, 'nobody-here'), 'unknown');
     const failing = new GithubDeviceFlowClient({ clientId: 'x', fetch: (async () => new Response('{}', { status: 500 })) as never, apiUrl: API });
     assert.equal(await failing.orgAccess(TOKEN, 'exemplo-labs'), 'unknown');
+    await assert.rejects(failing.publicOrgs(TOKEN, 'dev-sintetico'), (err: GithubAuthError) => err.code === 'http-500');
     const forbidden = new GithubDeviceFlowClient({ clientId: 'x', fetch: (async () => Response.json({ message: 'Resource not accessible' }, { status: 403 })) as never, apiUrl: API });
     assert.equal(await forbidden.orgAccess(TOKEN, 'exemplo-labs'), 'unknown');
   });

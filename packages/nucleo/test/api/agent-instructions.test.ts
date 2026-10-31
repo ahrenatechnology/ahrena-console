@@ -1,3 +1,4 @@
+import { OWNER_TOKEN, ownerFetch as fetch } from '../owner-http.ts';
 // As instruções dos agentes de um repositório (#183) pelo serviço e pela rota, contra o GitHub falso
 // (src/simulator/fake-github.ts): nenhuma chamada à API real e nenhum token na resposta.
 import assert from 'node:assert/strict';
@@ -364,7 +365,7 @@ describe('#183 the /api/agent-instructions route', () => {
     s = setup();
     const storage = openSqliteStorage({ path: ':memory:' });
     const montador = new MontadorDoPainel({ storage, contas: new Accounts({ storage, file: null }), desktop: null, trabalho: null });
-    api = await startLocalApi({ panelBuilder: montador, hooks: { storage }, port: 0, log: () => {}, agentInstructions: createAgentInstructionsRoute(s.service) });
+    api = await startLocalApi({ ownerToken: () => OWNER_TOKEN, panelBuilder: montador, hooks: { storage }, port: 0, log: () => {}, agentInstructions: createAgentInstructionsRoute(s.service) });
   });
   after(() => api.close());
 

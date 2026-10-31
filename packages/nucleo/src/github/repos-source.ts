@@ -4,7 +4,8 @@
 //
 // | Consulta       | O que traz                                                          | Custo  |
 // | -------------- | ------------------------------------------------------------------- | -----: |
-// | ReposLista     | login, orgs e até 25 repos por página, com contagens e CI do padrão  | 1      |
+// | ReposLista     | login, orgs e até 100 repos por página, só nome, push, linguagem, permissão | 1 |
+// | ReposCounts    | the open counts and the default branch's CI of 25 repos, by `nodes(ids:)` | 1  |
 // | ReposResumo    | duas buscas só com `issueCount`: PRs esperando review, issues fechadas na semana | 1 |
 // | RepoDetalhe    | o repositório, as 100 releases mais novas, a 1ª página de PRs (25), issues fechadas e abertas do período (100), e duas contagens (PRs mergeados e fechados sem merge) | ≈ 4 |
 // | RepoBusca      | as páginas seguintes de uma das buscas, até o teto                  | ≈ 2    |
@@ -14,9 +15,12 @@
 // `PAGINAS_DA_BUSCA`. `ContagensCruas` leva os dois números, e a resposta diz se a amostra cortou.
 //
 // The GraphQL API gives up on a query after ~10 s and answers 502 (#269). Measured on an account
-// with ~240 repositories: 100 repos per `ReposLista` page took over 10 s (the open counts and the
-// CI rollup cost 5 to 9 s each per 100), 25 took ~3 s; a page of 100 PRs with reviews took 5 to
-// 8 s, 25 took ~2 s. So the heavy pages are 25 (`LIST_PAGE_SIZE`, `PR_PAGE_SIZE`); a 502/503/504
+// with ~240 repositories: 100 repos per page with the open counts and the CI rollup took over 10 s
+// (5 to 9 s each per 100), 25 took ~3 s; a page of 100 PRs with reviews took 5 to 8 s, 25 took
+// ~2 s. #341: without them (and without `defaultBranchRef`, ~2 to 3 s per 100 on its own) a page
+// of 100 repos takes ~1.2 s, so the list is read light, 100 per page (`LIST_PAGE_SIZE`), and the
+// counts and CI come after by `nodes(ids:)`, 25 per batch (`LIST_COUNTS_BATCH`, ~2.5 s each), the
+// batches at the same time through the core's queue. The PR sample pages stay 25 (`PR_PAGE_SIZE`). A 502/503/504
 // is retried (`retryOnGateway`) with half the page each time, down to `MIN_PAGE_SIZE`; and a later
 // page that still fails leaves what was read, with `incomplete` saying which part is missing.
 //
@@ -35,8 +39,10 @@ export const GITHUB_API_URL = 'https://api.github.com';
  * `PR_PAGE_SIZE` para os PRs (500 PRs), de 100 para as issues.
  */
 export const PAGINAS_DA_BUSCA = { prs: 20, fechadas: 5, abertas: 3 } as const;
-/** Repositories per `ReposLista` page: 100 made GitHub time out (502) on a large account. */
-export const LIST_PAGE_SIZE = 25;
+/** Repositories per `ReposLista` page: the light page (#341); with the counts and CI, 100 made GitHub time out (#269). */
+export const LIST_PAGE_SIZE = 100;
+/** Repositories per `ReposCounts` batch: the counts and the CI rollup of 25 take ~2.5 s (#341). */
+export const LIST_COUNTS_BATCH = 25;
 /** Repositories the list reads, at most. */
 export const LIST_MAX_REPOS = 500;
 /** PRs per page of the detail's PR sample (each one brings its reviews). */
@@ -64,10 +70,19 @@ export interface RepoCru {
   defaultBranchRef: { name: string; target: { statusCheckRollup?: { state: string } | null } | null } | null;
 }
 
+/** A repository of the light list (#341): no open counts, no CI; those come by `counts()`. */
+export type ListRepoRaw = Omit<RepoCru, 'issues' | 'pullRequests' | 'defaultBranchRef'> & {
+  /** GraphQL node id, for `counts()`. */
+  id: string;
+};
+
+/** The open counts and the default branch's CI rollup of one repository (#341). */
+export type RepoCountsRaw = Pick<RepoCru, 'issues' | 'pullRequests' | 'defaultBranchRef'> & { id: string };
+
 export interface ListaCrua {
   login: string;
   organizacoes: string[];
-  repos: RepoCru[];
+  repos: ListRepoRaw[];
   /** A later page failed after every retry: `repos` has what was read before it. */
   incomplete?: { read: number; total: number; error: string };
 }
@@ -150,6 +165,8 @@ export type RespostaRest<T> =
 /** Porta da fonte dos repositórios; a demonstração usa o adaptador do GitHub com o `fetch` do GitHub falso. */
 export interface FonteDosRepos {
   lista(): Promise<ListaCrua>;
+  /** The counts and CI of the repositories with these node ids (at most `LIST_COUNTS_BATCH`); one that is gone is left out. */
+  counts(ids: readonly string[]): Promise<RepoCountsRaw[]>;
   /** A conta e as orgs dela, para as buscas ficarem nos repositórios da lista. `desde`: AAAA-MM-DD. */
   resumo(login: string, organizacoes: readonly string[], desde: string): Promise<ResumoCru>;
   /** `null`: o repositório não existe ou não é visível. `desde`: AAAA-MM-DD. */
@@ -171,9 +188,10 @@ export class SemGithubError extends Error {
 }
 
 const RATE = 'rateLimit { cost remaining resetAt }';
-const REPO = `name nameWithOwner url isPrivate pushedAt viewerPermission owner { login __typename } primaryLanguage { name }
-  issues(states: OPEN) { totalCount } pullRequests(states: OPEN) { totalCount }
+const LIST_REPO = 'id name nameWithOwner url isPrivate pushedAt viewerPermission owner { login __typename } primaryLanguage { name }';
+const COUNTS = `issues(states: OPEN) { totalCount } pullRequests(states: OPEN) { totalCount }
   defaultBranchRef { name target { ... on Commit { statusCheckRollup { state } } } }`;
+const REPO = `${LIST_REPO} ${COUNTS}`;
 const INFO = `${REPO} stargazerCount forkCount watchers { totalCount } licenseInfo { spdxId name }
   latestRelease { tagName publishedAt } releases(first: 100, orderBy: { field: CREATED_AT, direction: DESC }) { totalCount nodes { publishedAt } }`;
 const PR = `createdAt mergedAt closedAt state additions deletions headRefName author { login __typename }
@@ -186,7 +204,9 @@ export const CONSULTAS_DOS_REPOS = {
   lista: `query ReposLista($first: Int!, $after: String) { ${RATE}
   viewer { login organizations(first: 100) { nodes { login } }
     repositories(first: $first, after: $after, isArchived: false, affiliations: [OWNER, ORGANIZATION_MEMBER], ownerAffiliations: [OWNER, ORGANIZATION_MEMBER], orderBy: { field: PUSHED_AT, direction: DESC }) {
-      totalCount pageInfo { hasNextPage endCursor } nodes { ${REPO} } } } }`,
+      totalCount pageInfo { hasNextPage endCursor } nodes { ${LIST_REPO} } } } }`,
+  counts: `query ReposCounts($ids: [ID!]!) { ${RATE}
+  nodes(ids: $ids) { ... on Repository { id ${COUNTS} } } }`,
   resumo: `query ReposResumo($review: String!, $fechadas: String!) { ${RATE}
   review: search(query: $review, type: ISSUE, first: 1) { issueCount }
   fechadas: search(query: $fechadas, type: ISSUE, first: 1) { issueCount } }`,
@@ -247,8 +267,8 @@ export class GithubReposSource implements FonteDosRepos {
   }
 
   async lista(): Promise<ListaCrua> {
-    type Data = { viewer: { login: string; organizations: { nodes: { login: string }[] }; repositories: { totalCount: number; pageInfo: { hasNextPage: boolean; endCursor: string | null }; nodes: RepoCru[] } } };
-    const repos: RepoCru[] = [];
+    type Data = { viewer: { login: string; organizations: { nodes: { login: string }[] }; repositories: { totalCount: number; pageInfo: { hasNextPage: boolean; endCursor: string | null }; nodes: ListRepoRaw[] } } };
+    const repos: ListRepoRaw[] = [];
     let after: string | null = null;
     let login = '';
     let organizacoes: string[] = [];
@@ -274,6 +294,13 @@ export class GithubReposSource implements FonteDosRepos {
       after = data.viewer.repositories.pageInfo.endCursor;
     }
     return { login, organizacoes, repos };
+  }
+
+  async counts(ids: readonly string[]): Promise<RepoCountsRaw[]> {
+    if (ids.length === 0) return [];
+    // A repository deleted since the list comes back `null` with a NOT_FOUND error: left out.
+    const data = await this.graphql<{ nodes: (RepoCountsRaw | null)[] }>('ReposCounts', CONSULTAS_DOS_REPOS.counts, { ids }, true);
+    return data.nodes.filter((n): n is RepoCountsRaw => !!n?.id);
   }
 
   async resumo(login: string, organizacoes: readonly string[], desde: string): Promise<ResumoCru> {

@@ -1,3 +1,4 @@
+import { OWNER_TOKEN, ownerFetch as fetch } from '../owner-http.ts';
 // One version for the product (issue #261): the core announces its package's `version`, which the
 // release bumps with the desktop app's (the app's `cargo test` checks the two match). Before, a
 // constant fixed at 0.0.1 made the app 0.0.4 show "v0.0.1" in the /ui footer.
@@ -19,7 +20,7 @@ describe('#261: the core announces its package version', () => {
   test('AC-1: /api/overview, the panel footer and the MCP serverInfo say it', async () => {
     const storage = openSqliteStorage({ path: ':memory:' });
     const accounts = new Accounts({ storage, file: null });
-    const api = await startLocalApi({ panelBuilder: new MontadorDoPainel({ storage, contas: accounts, desktop: null, trabalho: null }), hooks: { storage }, port: 0, log: () => {} });
+    const api = await startLocalApi({ ownerToken: () => OWNER_TOKEN, panelBuilder: new MontadorDoPainel({ storage, contas: accounts, desktop: null, trabalho: null }), hooks: { storage }, port: 0, log: () => {} });
     try {
       const overview = (await (await fetch(`${api.url}/api/overview`)).json()) as { version: string };
       assert.equal(overview.version, PACKAGE_VERSION);

@@ -2,8 +2,8 @@
 //
 // - Reads `GET /api/connections` (`{ github }`) and draws the state: disconnected (the scopes the console
 //   will ask for and why), pending (the device-flow code, the link to github.com and the countdown),
-//   connected (account, scopes, blocked organizations) and unavailable (why, and what to do).
-// - Writes `POST /api/connections/github/start | cancel | disconnect | source`, each answering
+//   connected (account, scopes, the organizations and the ones pending approval) and unavailable (why, and what to do).
+// - Writes `POST /api/connections/github/start | cancel | disconnect | source | orgs`, each answering
 //   `{ github }`; a refusal is phrased in pt-BR (`writeErrorText`), never the raw code.
 // - Live: every transition is a `connections` change in `/api/changes`; while a code waits, the screen
 //   also re-reads every `interval` seconds, so it advances by itself when the person authorizes.
@@ -16,7 +16,7 @@
 
 import { el, header, icon } from '../dom.js';
 import { loading, error, errorBand } from '../states.js';
-import { CONNECTIONS_ROUTE, CONNECTIONS_UI, connectionChanged, githubHttpsUrl, LAST_ERROR, UNAVAILABLE, writeErrorText } from '../github-connect.js';
+import { CONNECTIONS_ROUTE, CONNECTIONS_UI, connectionChanged, githubHttpsUrl, LAST_ERROR, REVOKED_CAUSES, UNAVAILABLE, writeErrorText } from '../github-connect.js';
 import { tryCatalog } from './cloud-connections.js';
 
 const STYLE = '/ui/screens/connections.css';
@@ -24,6 +24,7 @@ export const START_ROUTE = '/api/connections/github/start';
 export const CANCEL_ROUTE = '/api/connections/github/cancel';
 export const DISCONNECT_ROUTE = '/api/connections/github/disconnect';
 export const SOURCE_ROUTE = '/api/connections/github/source';
+export const ORGS_ROUTE = '/api/connections/github/orgs';
 
 /** The device-flow documentation, for "Como configurar" when the OAuth App is missing. */
 const HOW_TO_CONFIGURE = 'https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/authorizing-oauth-apps#device-flow';
@@ -65,6 +66,7 @@ export function providerPill(github) {
   if (github?.state === 'connected') return (github.missingScopes ?? []).length ? { label: 'conectado, incompleto', tone: 'waiting' } : { label: 'conectado', tone: 'completed' };
   if (github?.state === 'pending') return { label: 'esperando a autorização', tone: 'waiting', busy: true };
   if (github?.state === 'unavailable') return { label: 'indisponível', tone: 'waiting' };
+  if (github?.lastError === 'revoked') return { label: 'precisa reconectar', tone: 'error' };
   return github?.lastError ? { label: 'não conectado', tone: 'error' } : { label: 'não conectado', tone: 'waiting' };
 }
 
@@ -157,6 +159,7 @@ export async function mount(area, ctx) {
   const cancel = () => act(CANCEL_ROUTE);
   const disconnect = () => act(DISCONNECT_ROUTE);
   const setSource = (source) => act(SOURCE_ROUTE, { source });
+  const recheckOrgs = () => act(ORGS_ROUTE);
 
   // ---------- timers: the countdown and the poll while a code waits ----------
 
@@ -268,9 +271,31 @@ export async function mount(area, ctx) {
     const failed = LAST_ERROR[g.lastError];
     const actions = failed || !consoleSource ? [] : [button('Conectar ao GitHub', { iconName: 'github', filled: true, action: 'connect', route: START_ROUTE, onClick: start })];
     const parts = [];
-    if (failed) parts.push(message({ title: failed.title, text: failed.text, buttons: [button('Gerar outro código', { iconName: 'refresh', filled: true, action: 'connect', route: START_ROUTE, onClick: start })] }));
+    if (g.lastError === 'revoked') parts.push(revokedMessage(g));
+    else if (failed) parts.push(message({ title: failed.title, text: failed.text, buttons: [button('Gerar outro código', { iconName: 'refresh', filled: true, action: 'connect', route: START_ROUTE, onClick: start })] }));
     parts.push(el('div', { class: 'conn-split' }, scopesSection(undefined, { note: 'O console só escreve no GitHub em dois casos, sempre por um clique seu: mover um card e abrir o PR do instalador.' }), howItWorks()));
     return el('section', { class: 'card conn-card', 'data-state': 'disconnected', 'data-last-error': g.lastError ?? '' }, providerHead(actions), el('div', { class: 'conn-body' }, ...parts));
+  }
+
+  /** C92 (issue 372): the stored credential GitHub refused when the core loaded it. */
+  function revokedMessage(g) {
+    const login = typeof g.login === 'string' && g.login ? g.login : null;
+    const securityLog = githubHttpsUrl(g.securityLogUrl);
+    return message({
+      title: login ? `O GitHub não aceita mais a credencial de ${login}` : LAST_ERROR.revoked.title,
+      text: LAST_ERROR.revoked.text,
+      extra: el(
+        'div',
+        { class: 'conn-message' },
+        muted('O GitHub derruba a credencial de um aplicativo quando:'),
+        el('ul', { class: 'conn-causes' }, ...REVOKED_CAUSES.map((c) => el('li', { class: 'conn-cause' }, c))),
+        muted('O log de segurança do GitHub diz qual foi.'),
+      ),
+      buttons: [
+        button(login ? `Reconectar como ${login}` : 'Reconectar', { iconName: 'refresh', filled: true, action: 'connect', route: START_ROUTE, onClick: start }),
+        securityLog ? external(securityLog, 'Ver o log de segurança', 'btn outline conn-link-btn') : null,
+      ].filter(Boolean),
+    });
   }
 
   function pendingCard() {
@@ -318,21 +343,40 @@ export async function mount(area, ctx) {
     );
   }
 
+  // The orgs the token sees, and the ones that restrict the app (issue 336). GitHub hides the private
+  // memberships of an org that has not approved the app, so the note says where to approve them.
   function orgsList() {
     const g = github;
-    const blocked = Array.isArray(g.blockedOrgs) ? g.blockedOrgs.filter((o) => o && typeof o.login === 'string') : [];
-    const rows = blocked.map((o) => {
-      const url = githubHttpsUrl(o.approvalUrl);
-      return el(
-        'li',
-        { class: 'conn-org', 'data-org': o.login },
-        el('span', { class: 'conn-muted' }, icon('organization')),
-        el('span', { class: 'conn-trunc' }, o.login),
-        el('span', { class: 'conn-org-state' }, 'bloqueia o aplicativo', url ? ' · ' : null, url ? external(url, 'pedir aprovação') : null),
-      );
+    const orgs = Array.isArray(g.orgs) ? g.orgs.filter((o) => o && typeof o.login === 'string') : [];
+    const rows = orgs.map((o) => {
+      const pending = o.access === 'pending';
+      const approve = pending ? githubHttpsUrl(o.approvalUrl) : null;
+      const request = pending ? githubHttpsUrl(o.requestUrl) : null;
+      const state = pending
+        ? el('span', { class: 'conn-org-state' }, 'acesso pendente', approve ? ' · ' : null, approve ? external(approve, 'aprovar (dono)') : null, request ? ' · ' : null, request ? external(request, 'pedir') : null)
+        : el('span', { class: 'conn-org-state conn-org-granted' }, icon('done'), 'liberada');
+      return el('li', { class: 'conn-org', 'data-org': o.login, 'data-access': pending ? 'pending' : 'granted' }, el('span', { class: 'conn-muted' }, icon('organization')), el('span', { class: 'conn-trunc' }, o.login), state);
     });
-    const status = !g.orgsChecked ? 'Conferindo as organizações…' : blocked.length ? null : 'Nenhuma organização bloqueia o aplicativo.';
-    return [rows.length ? el('ul', { class: 'conn-orgs' }, ...rows) : null, status ? muted(status) : null, muted('Uma organização que restringe aplicativos esconde os dados até o dono aprovar.', 'conn-small')];
+    const status = !g.orgsChecked
+      ? 'Conferindo as organizações…'
+      : g.orgsFailed
+        ? 'Não deu para conferir as organizações no GitHub agora. Tente de novo em instantes.'
+        : orgs.length
+          ? null
+          : 'O token não enxerga nenhuma organização.';
+    const app = githubHttpsUrl(g.revokeUrl);
+    const recheck = g.orgsChecked ? button('Conferir de novo', { iconName: 'refresh', action: 'recheck-orgs', route: ORGS_ROUTE, onClick: recheckOrgs }) : null;
+    return [
+      rows.length ? el('ul', { class: 'conn-orgs' }, ...rows) : null,
+      status ? muted(status) : null,
+      el(
+        'p',
+        { class: 'conn-muted conn-small' },
+        'Falta alguma? O GitHub esconde as organizações que ainda não aprovaram o Ahrena Console. O dono aprova uma vez, em Settings › Third-party access › OAuth app policy da organização',
+        app ? ['; ou ', external(app, 'abra o aplicativo no GitHub'), ' e use Grant (se você é dono) ou Request (pede ao dono).'] : '.',
+      ),
+      recheck ? el('div', { class: 'conn-actions' }, recheck) : null,
+    ];
   }
 
   function connectedCard() {

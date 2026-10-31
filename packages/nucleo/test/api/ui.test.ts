@@ -1,9 +1,9 @@
+import { OWNER_TOKEN, ownerFetch as fetch, ownerRequest as request } from '../owner-http.ts';
 // The console interface at /ui (#26): the server serves the page and the sub-routes, refuses a foreign
 // Origin and Host (decision 0003), and the read layer and the "Ao vivo" (live) work against the API with
 // simulator data.
 import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
-import { request } from 'node:http';
 import { after, before, describe, test } from 'node:test';
 import { openSqliteStorage, type SqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
 import { Accounts, startLocalApi, MontadorDoPainel, TrabalhoPorBranch, type LocalApi } from '../../src/api/index.ts';
@@ -61,7 +61,7 @@ describe('/ui in the core', () => {
     await seedPanelScenario(storage, 'p1');
     const work = new TrabalhoPorBranch({ fonte: null, cache: new GithubCache({ store: new SqliteCacheStore(sqlite.db) }) });
     const builder = new MontadorDoPainel({ storage, contas: new Accounts({ storage, file: null }), desktop: null, trabalho: work });
-    api = await startLocalApi({ panelBuilder: builder, hooks: { storage }, port: 0, log: () => {}, changes: cursor });
+    api = await startLocalApi({ ownerToken: () => OWNER_TOKEN, panelBuilder: builder, hooks: { storage }, port: 0, log: () => {}, changes: cursor });
     host = new URL(api.url).host;
   });
   after(async () => {
@@ -122,6 +122,7 @@ describe('/ui in the core', () => {
   // Each is the exact piece the URL search catches and appears exactly once in the file: the
   // `blobUrl` template does not open the door to another github.com address.
   const LINK_TARGETS: Record<string, string[]> = {
+    'screens/claude-config.js': ['https://code.claude.com/docs/en/settings', 'https://code.claude.com/docs/en/model-config'],
     'screens/agent-instructions.js': ['https://docs.claude.com/en/docs/claude-code/memory'],
     'screens/agent-instructions-markdown.js': ['https://github.com/${repo.split('],
     // ADR e PDR (#174): "Como escrever uma ADR", no vazio.
@@ -169,7 +170,7 @@ describe('/ui in the core', () => {
   });
 
   test('read(route) reads the API over HTTP and only the local core API', async () => {
-    const read = httpReader({ base: api.url });
+    const read = httpReader({ base: api.url, fetch });
     const overview = await read('/api/overview');
     assert.equal(overview.name, 'ahrena-console');
     // The old Portuguese key `nome` is gone (#173, phase 6).
@@ -193,7 +194,7 @@ describe('/ui in the core', () => {
     const changes: { type: string; key: string }[][] = [];
     let restarts = 0;
     const live = startLive({
-      read: httpReader({ base: api.url }),
+      read: httpReader({ base: api.url, fetch }),
       wait: 5,
       onState: ({ state }: { state: string }) => states.push(state),
       onRestart: () => restarts++,
@@ -217,7 +218,7 @@ describe('/ui in the core', () => {
     const waits: number[] = [];
     let restarts = 0;
     let offline = 3;
-    const real = httpReader({ base: api.url });
+    const real = httpReader({ base: api.url, fetch });
     const live = startLive({
       read: (route: string, o: unknown) => (offline-- > 0 ? httpReader({ base: 'http://127.0.0.1:1' })(route, o) : real(route, o)),
       wait: 5,

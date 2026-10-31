@@ -12,6 +12,12 @@ Decision [0009](docs/decisoes/0009-english-internals.md), issue #173.
 - The old Portuguese routes, /ui URLs, CLI options and environment variables were aliases until phase 6 of #173 and are gone: do not bring them back.
 - Comments, docs/, README, commit and PR messages: proposal in decision 0009, pending confirmation.
 
+## Tests
+
+- The proof that a PR passes the core is CI: `.github/workflows/repo-tests.yml` runs all of `packages/nucleo/test` in 6 parallel shards on every PR (#395).
+- Locally, run only the file you touched, with `--test-concurrency=1`: `node --test --test-concurrency=1 packages/nucleo/test/<file>.test.ts`. Do not run the whole suite on a laptop; it exhausts memory.
+- A failing test is fixed or gets an issue. Never hide it behind a silent skip.
+
 ## Session economy
 
 The 5-hour limit is spent by context size, not by work done: every call re-reads the whole conversation. Audit of 2026-10-21: 63% of a window went to calls above 300k tokens, and 43% to re-reading long sessions after an account switch. Issues #292 and #293.

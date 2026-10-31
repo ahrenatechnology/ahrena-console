@@ -1,9 +1,9 @@
+import { OWNER_TOKEN, ownerRequest as request } from '../owner-http.ts';
 // The project kanban in the API (#80, C11): GET /api/project and POST /api/project/move, in the
 // contract's shape, with the errors mapped and the origin defenses of decision 0003. GitHub is always fake:
 // the recorded real read (test/github/fixtures/project.json), a fake `fetch` or the simulator's Project.
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { request } from 'node:http';
 import { describe, test } from 'node:test';
 import { openSqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
 import { Accounts, startLocalApi, MontadorDoPainel, type LocalApi } from '../../src/api/index.ts';
@@ -69,7 +69,7 @@ const mover = (api: LocalApi, corpo: unknown, headers: Record<string, string> = 
 async function subir(projeto?: OpcoesDoProjeto) {
   const storage = openSqliteStorage({ path: ':memory:' });
   const montador = new MontadorDoPainel({ storage, contas: new Accounts({ storage, file: null }), desktop: null, trabalho: null, agora: () => AGORA });
-  const api = await startLocalApi({ panelBuilder: montador, hooks: { storage }, port: 0, log: () => {}, ...(projeto ? { project: projeto } : {}) });
+  const api = await startLocalApi({ ownerToken: () => OWNER_TOKEN, panelBuilder: montador, hooks: { storage }, port: 0, log: () => {}, ...(projeto ? { project: projeto } : {}) });
   const host = `127.0.0.1:${new URL(api.url).port}`;
   return {
     api,
@@ -562,5 +562,42 @@ describe('GET /api/project and POST /api/project/move: the English body', () => 
     } finally {
       await s.fechar();
     }
+  });
+});
+
+describe('#356 the board from the store (decision 0015)', () => {
+  test('the GET answers the stored board without GitHub; past the TTL it says stale; Atualizar reads again', async () => {
+    let calls = 0;
+    const fetch = replayFetch(recordedBoard);
+    const counted = (async (...args: Parameters<typeof fetch>) => (calls++, fetch(...args))) as typeof fetch;
+    const { now, kanban } = doGithub(recordedBoard, counted);
+    const s = await subir({ kanban, fonte: 'github', fromStore: true });
+    try {
+      const first = await pedir(s.api, '/api/project', { headers: { host: s.host } });
+      assert.equal(first.status, 200);
+      assert.equal(calls, 1, 'an empty store waits for GitHub once');
+      now.add(10 * 60_000);
+      const later = await pedir(s.api, '/api/project', { headers: { host: s.host } });
+      assert.equal(later.status, 200);
+      assert.equal(later.json.stale, true);
+      assert.deepEqual(later.json.lanes, first.json.lanes);
+      assert.equal(calls, 1, 'the stored board does not call GitHub');
+      await pedir(s.api, '/api/project?refresh=1', { headers: { host: s.host } });
+      assert.equal(calls, 2);
+    } finally {
+      await s.fechar();
+    }
+  });
+
+  test('GithubProject.snapshot: null with nothing stored; stale only once the sync missed a run (twice the TTL)', async () => {
+    const { now, kanban } = doGithub();
+    assert.equal(await kanban.snapshot(), null);
+    await kanban.board();
+    assert.equal((await kanban.snapshot())!.stale, false);
+    // Past the TTL, while the sync's next run is still on its way: not stale.
+    now.add(2 * 60_000 + 15_000);
+    assert.equal((await kanban.snapshot())!.stale, false);
+    now.add(2 * 60_000);
+    assert.equal((await kanban.snapshot())!.stale, true);
   });
 });

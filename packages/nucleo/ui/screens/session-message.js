@@ -13,8 +13,13 @@
 //
 // What the person types lives only in the textarea and in the POST body: never in a URL, a log or the
 // DOM as HTML. Everything from the core goes in through `textContent` (`el()`).
+//
+// Dictation (issue 352, decision 0019, session-voice.js): a microphone beside Enviar records, the WAV goes
+// to `POST /api/transcription` (the core's local whisper-server) and the text lands in the textarea at
+// the cursor, never sent by itself. `GET /api/transcription` says whether the core can transcribe.
 
 import { el, icon } from '../dom.js';
+import { MAX_SECONDS, BARS, clock, createRecordingBar, dictationSupported, microphoneError, secondsText, startRecording } from './session-voice.js';
 
 const HOUR = new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '2-digit' });
 
@@ -266,10 +271,13 @@ const isMac = () => /Mac|iPhone|iPad/.test(globalThis.navigator?.platform ?? glo
  * open action (issue 285) for a session with no live process, or `null`; `onDelivered()` re-reads the conversation.
  * Returns `{ node, refresh(), focus() }`.
  */
-export function createComposeBox(ctx, sessionId, { head = () => null, openControl = () => null, onDelivered = () => {}, onShowConversation = () => {}, remote = false } = {}) {
+export function createComposeBox(ctx, sessionId, { head = () => null, openControl = () => null, onDelivered = () => {}, onShowConversation = () => {}, remote = false, voice = {} } = {}) {
   useMessageStyle();
   const kbd = isMac() ? '⌘↵' : 'Ctrl↵';
-  const placeholder = `Escreva para a sessão… (${kbd} envia)`;
+  const { start: startMic = startRecording, supported = dictationSupported } = voice;
+  const typePlaceholder = `Escreva para a sessão… (${kbd} envia)`;
+  const dictatePlaceholder = `Escreva ou dite para a sessão… (${kbd} envia · Ctrl+Espaço dita)`;
+  let placeholder = typePlaceholder;
 
   let availability = null;
   /** This box's own message, from the 202 of its POST: `{ messageId, state, … }`. Only it touches the text. */
@@ -290,6 +298,19 @@ export function createComposeBox(ctx, sessionId, { head = () => null, openContro
   let order = null;
   let orderTimer = null;
 
+  // Dictation. `voiceState`: idle, opening (the browser's permission prompt), recording, transcribing.
+  let voiceState = 'idle';
+  /** What `GET /api/transcription` said (`{ available, reason }`), `null` until it answers. */
+  let transcription = null;
+  let micDenied = false;
+  let recorder = null;
+  let tick = null;
+  let levels = [];
+  let audioSeconds = 0;
+  let caret = null;
+  /** The line the last dictation left: `{ kind, icon, title, text }`. */
+  let dictation = null;
+
   const textarea = el('textarea', { class: 'sm-input', rows: '3', 'aria-label': 'Mensagem para a sessão', placeholder, spellcheck: 'true' });
   const counter = el('span', { class: 'sm-count mono' });
   const field = el('div', { class: 'sm-field' }, textarea, counter);
@@ -303,7 +324,8 @@ export function createComposeBox(ctx, sessionId, { head = () => null, openContro
     el('span', {}, 'Chega à sessão como mensagem ', el('b', {}, 'de outra sessão'), ': não aprova permissão, não roda comando e não muda configuração.'),
   );
   const foot = el('div', { class: 'sm-foot' }, note, actions);
-  const node = el('section', { class: 'card sm-compose', 'aria-label': 'Mandar mensagem à sessão' }, dest, field, status, foot);
+  const recbar = createRecordingBar();
+  const node = el('section', { class: 'card sm-compose', 'aria-label': 'Mandar mensagem à sessão' }, dest, field, recbar.node, status, foot);
 
   const text = () => textarea.value ?? '';
   const bytes = () => byteLength(text());
@@ -313,14 +335,168 @@ export function createComposeBox(ctx, sessionId, { head = () => null, openContro
     // A new text after a settled message starts over: the old state no longer describes the box.
     if (!sending && message && message.state !== 'not_delivered') message = null;
     if (!sending) notice = null;
+    dictation = null;
     draw();
   });
+  const isDictateKey = (ev) => ev.ctrlKey && !ev.metaKey && !ev.altKey && (ev.code === 'Space' || ev.key === ' ');
   textarea.addEventListener('keydown', (ev) => {
     if (ev.key === 'Enter' && (ev.metaKey || ev.ctrlKey)) {
       ev.preventDefault();
       send();
+    } else if (isDictateKey(ev)) {
+      // Ctrl+Espaço, not ⌘+Espaço: that one is the Spotlight's.
+      ev.preventDefault();
+      void startDictation();
     }
   });
+
+  // ---------- Dictation ----------
+
+  /** Why the microphone is off, one sentence for the status line; `null` when it is on (or the core has not answered yet). */
+  function voiceOffReason() {
+    if (!supported()) return 'este navegador não grava áudio (não tem getUserMedia).';
+    if (micDenied) return 'o navegador negou o microfone. Libere nas permissões do site e recarregue a página.';
+    if (transcription?.available === false) {
+      if (transcription.reason === 'not_installed') return 'o whisper.cpp não está instalado nesta máquina. Rode `npm run core -- voice install`.';
+      if (transcription.reason === 'model_missing') return 'falta o modelo do whisper nesta máquina. Rode `npm run core -- voice install`.';
+    }
+    return null;
+  }
+  /** The microphone can be pressed: the core and the browser can do it, and nothing else holds the box. */
+  const micReady = () => transcription?.available === true && !voiceOffReason() && voiceState === 'idle' && !sending && message?.state !== 'sending' && !foreign;
+
+  async function readTranscription() {
+    try {
+      const a = await ctx.read('/api/transcription');
+      transcription = typeof a?.available === 'boolean' ? a : { available: false, reason: 'no_route' };
+    } catch (e) {
+      if (e?.name === 'AbortError') return;
+      // A core without the route (older than the dictation): the microphone stays off, with no line about it.
+      transcription = { available: false, reason: 'no_route' };
+    }
+    draw();
+  }
+
+  function stopTick() {
+    clearInterval(tick);
+    tick = null;
+  }
+
+  function insertAtCursor(words) {
+    const value = textarea.value ?? '';
+    const start = Math.min(caret?.start ?? value.length, value.length);
+    const end = Math.min(caret?.end ?? start, value.length);
+    const before = value.slice(0, start);
+    const after = value.slice(end);
+    const lead = before && !/\s$/.test(before) ? ' ' : '';
+    const trail = after && !/^\s/.test(after) ? ' ' : '';
+    textarea.value = before + lead + words + trail + after;
+    const at = (before + lead + words).length;
+    caret = { start: at, end: at };
+    textarea.setSelectionRange?.(at, at);
+  }
+
+  async function startDictation() {
+    if (remote || !micReady()) return;
+    voiceState = 'opening';
+    dictation = null;
+    caret = { start: textarea.selectionStart ?? (textarea.value ?? '').length, end: textarea.selectionEnd ?? textarea.selectionStart ?? (textarea.value ?? '').length };
+    draw();
+    let rec;
+    try {
+      rec = await startMic();
+    } catch (e) {
+      voiceState = 'idle';
+      const m = microphoneError(e);
+      if (m.denied) micDenied = true;
+      else dictation = { kind: 'fail', icon: 'error', title: 'Sem microfone.', text: m.text };
+      return draw();
+    }
+    if (ctx.signal?.aborted) return rec.cancel();
+    recorder = rec;
+    voiceState = 'recording';
+    levels = [];
+    document.addEventListener('keydown', onRecordingKey);
+    tick = setInterval(() => {
+      levels.push(rec.level());
+      if (levels.length > BARS) levels.shift();
+      recbar.update(rec.seconds(), levels);
+      if (rec.seconds() >= MAX_SECONDS) void finishDictation();
+    }, 60);
+    draw();
+    recbar.update(0, levels);
+    actions.querySelector?.('.sm-stop')?.focus?.();
+  }
+
+  function onRecordingKey(ev) {
+    if (ev.key === 'Escape') {
+      ev.preventDefault();
+      cancelDictation();
+    } else if (isDictateKey(ev)) {
+      ev.preventDefault();
+      void finishDictation();
+    }
+  }
+
+  function endRecording() {
+    stopTick();
+    const rec = recorder;
+    recorder = null;
+    if (rec) document.removeEventListener('keydown', onRecordingKey);
+    return rec;
+  }
+
+  function cancelDictation() {
+    endRecording()?.cancel();
+    voiceState = 'idle';
+    draw();
+    textarea.focus?.();
+  }
+
+  async function finishDictation() {
+    const rec = endRecording();
+    if (!rec) return;
+    audioSeconds = rec.seconds();
+    voiceState = 'transcribing';
+    draw();
+    let taken;
+    try {
+      taken = await rec.stop();
+    } catch {
+      voiceState = 'idle';
+      dictation = { kind: 'fail', icon: 'error', title: 'Não gravou.', text: 'O navegador não entregou o áudio. Tente de novo.' };
+      return draw();
+    }
+    audioSeconds = taken.seconds;
+    draw();
+    if (audioSeconds < 0.4) {
+      voiceState = 'idle';
+      dictation = { kind: 'info', icon: 'info', title: 'Gravação curta demais.', text: 'Segure um pouco mais e fale perto do microfone.' };
+      return draw();
+    }
+    try {
+      const r = await ctx.write('/api/transcription', taken.wav);
+      voiceState = 'idle';
+      const words = String(r?.text ?? '').trim();
+      if (!words) {
+        dictation = { kind: 'info', icon: 'info', title: 'Não ouvi fala.', text: 'O áudio veio sem palavras. Tente de novo, mais perto do microfone.' };
+        return draw();
+      }
+      // A new text after a settled message starts over, as typing does.
+      if (message && message.state !== 'not_delivered') message = null;
+      notice = null;
+      insertAtCursor(words);
+      dictation = { kind: 'ok', icon: 'check-circle-2', title: `Transcrito em ${secondsText(r.durationMs ?? 0)}.`, text: 'Revise o texto e envie. Ditar de novo continua de onde está o cursor.' };
+      wantFocus = true;
+      draw();
+    } catch (e) {
+      voiceState = 'idle';
+      if (e?.name === 'AbortError') return;
+      if (e?.body?.reason === 'unavailable') void readTranscription();
+      dictation = { kind: 'fail', icon: 'error', title: 'Não transcreveu.', text: e?.message ?? 'O núcleo não conseguiu transcrever.' };
+      draw();
+    }
+  }
 
   const orderOpen = () => order !== null && (order.state === 'queued' || order.state === 'running');
 
@@ -333,6 +509,12 @@ export function createComposeBox(ctx, sessionId, { head = () => null, openContro
       button('clear', 'sm-cmd mono', 'Limpa a conversa; roda quando a sessão estiver ociosa', '/clear'),
       remoteControl ? null : button('remote-control', 'sm-cmd', 'Liga o Remote Control desta sessão', icon('live'), 'Remote control'),
     ];
+  }
+
+  function micButton() {
+    const off = voiceOffReason();
+    const ready = micReady();
+    return el('button', { type: 'button', class: 'sm-mic', disabled: !ready, title: off ? 'Ditado desligado' : 'Ditar (Ctrl+Espaço)', 'aria-label': 'Ditar', onClick: () => void startDictation() }, icon('mic'));
   }
 
   function sendButton(label = 'Enviar', { busy = false, iconName = 'your-turn', enabled = sendable() } = {}) {
@@ -395,6 +577,9 @@ export function createComposeBox(ctx, sessionId, { head = () => null, openContro
       note.hidden = true;
       return;
     }
+    // Dictation only draws on a box that can send.
+    field.hidden = voiceState === 'recording';
+    recbar.node.hidden = voiceState !== 'recording';
 
     if (!a.available && !message) {
       // C53: dashed, no destination, no note and no commands; the reason and what to do.
@@ -413,10 +598,11 @@ export function createComposeBox(ctx, sessionId, { head = () => null, openContro
 
     node.setAttribute('class', 'card sm-compose');
     note.hidden = false;
-    textarea.placeholder = placeholder;
+    placeholder = micReady() || voiceState !== 'idle' ? dictatePlaceholder : typePlaceholder;
+    textarea.placeholder = voiceState === 'transcribing' ? 'Transcrevendo…' : placeholder;
     dest.replaceChildren(...(a.available ? destination(a).filter(Boolean) : []));
     const state = message?.state ?? null;
-    textarea.disabled = sending || state === 'sending';
+    textarea.disabled = sending || state === 'sending' || voiceState === 'transcribing';
     textarea.classList.toggle('sm-faded', textarea.disabled);
 
     const lines = [];
@@ -426,7 +612,11 @@ export function createComposeBox(ctx, sessionId, { head = () => null, openContro
     if (o) lines.push(statusLine(o));
     if (foreign) lines.push(statusLine({ kind: 'wait', icon: 'clock', title: 'Outra mensagem a caminho.', text: foreign.text }));
     if (notice) lines.push(statusLine({ kind: notice.kind, icon: notice.kind === 'fail' ? 'error' : 'clock', title: notice.title, text: notice.text }));
+    if (voiceState === 'transcribing') lines.push(statusLine({ kind: 'busy', icon: 'wall-loader', title: `Transcrevendo ${clock(audioSeconds)} de áudio…`, text: 'whisper large-v3-turbo nesta máquina; o áudio não sai dela.' }));
+    else if (dictation) lines.push(statusLine(dictation));
     if (!s && !o && !notice && !foreign) lines.push(permissionWarning());
+    const off = voiceOffReason();
+    if (off && !dictation && !notice) lines.push(statusLine({ kind: 'info', icon: 'info', title: 'Ditado desligado:', text: off }));
     status.replaceChildren(...lines.filter(Boolean));
 
     const send = [];
@@ -436,7 +626,12 @@ export function createComposeBox(ctx, sessionId, { head = () => null, openContro
       if (state === 'delivered') send.push(el('button', { type: 'button', class: 'btn outline', onClick: () => onShowConversation() }, icon('conversation'), 'Ver na conversa'));
       send.push(sendButton());
     }
-    actions.replaceChildren(...commandButtons(a.remoteControl).filter(Boolean), ...send);
+    if (voiceState === 'recording') {
+      actions.replaceChildren(
+        el('button', { type: 'button', class: 'btn outline sm-cancel', onClick: () => cancelDictation() }, icon('x'), 'Cancelar'),
+        el('button', { type: 'button', class: 'btn filled sm-stop', onClick: () => void finishDictation() }, icon('stop'), 'Parar e transcrever'),
+      );
+    } else actions.replaceChildren(...commandButtons(a.remoteControl).filter(Boolean), micButton(), ...send);
     if (wantFocus && !textarea.disabled) {
       wantFocus = false;
       textarea.focus();
@@ -603,16 +798,20 @@ export function createComposeBox(ctx, sessionId, { head = () => null, openContro
     stopOrderPolling();
     stopPolling();
     clearTimeout(retryTimer);
+    endRecording()?.cancel();
   });
 
   // Issue 243: a session of another machine has no inbox on this core; nothing is read or sent from here.
   if (remote) availability = { available: false, reason: 'other_machine', processes: 0 };
   draw();
-  if (!remote) readAvailability();
+  if (!remote) {
+    readAvailability();
+    readTranscription();
+  }
   return {
     node,
     /** Re-reads the availability (a live change of the session); the text and the message in flight stay. */
-    refresh: () => (remote || sending || watched() || orderOpen() ? undefined : readAvailability()),
+    refresh: () => (remote || sending || watched() || orderOpen() || voiceState !== 'idle' ? undefined : readAvailability()),
     /** Focuses the text as soon as the box can take it ("Mandar mensagem" from a list). */
     focus() {
       wantFocus = true;

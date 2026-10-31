@@ -122,3 +122,10 @@
   .ac-summary { grid-template-columns: minmax(0, 1fr); }
   .ac-banner { flex-wrap: wrap; }
 }
+
+.ac-config-table { width: 100%; border-collapse: collapse; text-align: left; font-size: .85rem; }
+.ac-config-table th, .ac-config-table td { padding: .65rem; border-bottom: 1px solid var(--border); overflow-wrap: anywhere; }
+.ac-panel details { padding: .65rem 0; }
+.ac-panel summary { cursor: pointer; }
+
+.ac-config-scroll { overflow-x: auto; }

@@ -1,7 +1,7 @@
 // The Delivery tab's GitHub read (#266), which never waits for GitHub, as src/api/repos.ts: the
 // answer comes from what is in the cache of decision 0001 (`GithubCache`, the core's one), and a
 // repository whose read expired (`DELIVERY_TTL_MS`) or does not exist yet is read again behind it,
-// one call at a time in the core's GitHub queue. When a read lands, the change
+// through the core's GitHub queue (up to `GITHUB_CALL_LIMIT` calls at once, #341). When a read lands, the change
 // `{ type: 'repos', key: 'delivery' }` goes to the cursor and the screen re-reads.
 //
 // One read per repository covers 90 days (`DELIVERY_FETCH_DAYS`); 7 and 30 days are cut from it.

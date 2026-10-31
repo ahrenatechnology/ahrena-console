@@ -1,3 +1,4 @@
+import { OWNER_TOKEN, ownerFetch as fetch } from '../owner-http.ts';
 // Repositórios (#104) e métricas de um repositório (#105) pelo serviço e pela rota, contra o GitHub
 // falso (src/simulator/fake-github.ts): nenhuma chamada à API real e nenhum token lido. As sessões
 // vêm do cenário P1 do simulador, pela mesma leitura do MCP.
@@ -5,9 +6,10 @@ import assert from 'node:assert/strict';
 import { after, before, describe, test } from 'node:test';
 import { openSqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
 import { Accounts, startLocalApi, MontadorDoPainel, type LocalApi } from '../../src/api/index.ts';
-import { criarReposDoNucleo, criarRotaDosRepos, ReposDoGithub, TTL_DOS_REPOS, type ListaDeRepos, type MetricasDoRepo, type RepoDaLista } from '../../src/api/repos.ts';
+import { criarReposDoNucleo, criarRotaDosRepos, LIST_VIEW_KEY, ReposDoGithub, TTL_DOS_REPOS, type ListaDeRepos, type MetricasDoRepo, type RepoDaLista } from '../../src/api/repos.ts';
 import { SessoesPorRepo } from '../../src/api/repos-sessions.ts';
 import { GithubCache, MemoryCacheStore } from '../../src/github/cache.ts';
+import { GITHUB_CALL_LIMIT, GithubCallQueue } from '../../src/github/call-queue.ts';
 import { GithubReposSource, type FonteDosRepos } from '../../src/github/repos-source.ts';
 import { FleetReader } from '../../src/mcp/fleet.ts';
 import { ChangeCursor, type RecordedChange } from '../../src/changes/cursor.ts';
@@ -58,10 +60,16 @@ interface OpcoesDaMontagem {
   fonte?: FonteDosRepos;
   /** O sinal do teto de cada pedido (o teste aborta na mão, sem esperar 20 s). */
   sinalDoPedido?: (ms: number) => AbortSignal;
+  /** The GitHub call queue (#341: the core's has a limit). Default: the service's own, one at a time. */
+  queue?: GithubCallQueue;
+  /** The store under the cache (#341: a second service over it is a core restart). */
+  store?: MemoryCacheStore;
+  /** The clock's start. */
+  t0?: number;
 }
 
-async function montar({ base = dados(), fonteNula = false, token, atrasoMs = 0, fonte: fonteDada, sinalDoPedido }: OpcoesDaMontagem = {}): Promise<Montagem> {
-  const relogio = { agora: T0 };
+async function montar({ base = dados(), fonteNula = false, token, atrasoMs = 0, fonte: fonteDada, sinalDoPedido, queue, store = new MemoryCacheStore(), t0 = T0 }: OpcoesDaMontagem = {}): Promise<Montagem> {
+  const relogio = { agora: t0 };
   const agora = () => relogio.agora;
   const gh = createFakeGithub(base, { now: agora });
   const modo = { atual: 'ok' as Modo };
@@ -96,7 +104,7 @@ async function montar({ base = dados(), fonteNula = false, token, atrasoMs = 0, 
   const inicio = cursor.current;
   const sessoes = new SessoesPorRepo({ frota, git: demoGit(base), cacheMs: 0, aoDescobrir: () => cursor.record({ type: 'repos', key: 'list', sessionId: null, accountId: null }) });
   const agendados: Montagem['agendados'] = [];
-  const cache = new GithubCache({ store: new MemoryCacheStore(), now: agora });
+  const cache = new GithubCache({ store, now: agora });
   const logs: string[] = [];
   const repos = new ReposDoGithub({
     fonte,
@@ -106,6 +114,7 @@ async function montar({ base = dados(), fonteNula = false, token, atrasoMs = 0, 
     agora,
     agendar: (fn, ms) => agendados.push({ fn, ms }),
     log: (msg) => logs.push(msg),
+    ...(queue ? { queue } : {}),
   });
   return {
     repos,
@@ -213,13 +222,14 @@ describe('#104 CA3: consulta enxuta e cache da decisão 0001', () => {
     assert.equal(m.repos.chamadas.fonte, 2);
   });
 
-  test('uma ReposLista, um ReposResumo e, em série, commits e CI só dos repositórios recentes; dentro da validade, nenhuma chamada', async () => {
+  test('one ReposLista, one ReposCounts, one ReposResumo, then commits and CI of the recent repositories only, in that queue order; within the TTL, no call', async () => {
     const m = await montar();
     await listaPronta(m);
     const desde = new Date(T0 - 7 * 24 * 60 * MIN).toISOString().slice(0, 10);
     const runs = (r: string) => `GET /repos/${r}/actions/runs?created=%3E%3D${desde}&status=completed&per_page=100&exclude_pull_requests=true`;
     assert.deepEqual(m.chamadas, [
       'GRAPHQL ReposLista',
+      'GRAPHQL ReposCounts',
       'GRAPHQL ReposResumo',
       'GET /repos/org-a/motor-de-regras/stats/commit_activity',
       runs('org-a/motor-de-regras'),
@@ -579,7 +589,7 @@ describe('#104 e #105: a rota /api/repos no núcleo', () => {
     m = await montar();
     const storage = openSqliteStorage({ path: ':memory:' });
     const montador = new MontadorDoPainel({ storage, contas: new Accounts({ storage, file: null }), desktop: null, trabalho: null });
-    api = await startLocalApi({ panelBuilder: montador, hooks: { storage }, port: 0, log: () => {}, repos: criarRotaDosRepos(m.repos) });
+    api = await startLocalApi({ ownerToken: () => OWNER_TOKEN, panelBuilder: montador, hooks: { storage }, port: 0, log: () => {}, repos: criarRotaDosRepos(m.repos) });
   });
   after(() => api.close());
 
@@ -674,5 +684,103 @@ describe('#104 e #105: o serviço como o núcleo monta', () => {
     } finally {
       globalThis.fetch = original;
     }
+  });
+});
+
+describe('#341: the list shows before its counts, and at once after a restart', () => {
+  test('the light list is published before the counts: while they are read, rows and summary have no counts', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    const real = new GithubReposSource({ token: 'token-de-teste', fetch: createFakeGithub(dados(), { now: () => T0 }).fetch, now: () => T0, api: 'https://falso.invalid', url: 'https://falso.invalid/graphql' });
+    const fonte: FonteDosRepos = {
+      lista: () => real.lista(),
+      counts: async (ids) => (await gate, real.counts(ids)),
+      resumo: (...a) => real.resumo(...a),
+      detalhe: (...a) => real.detalhe(...a),
+      rest: (...a) => real.rest(...a),
+    };
+    const m = await montar({ fonte });
+    let l = await m.repos.lista();
+    for (let i = 0; i < 100 && l.groups.length === 0; i++) {
+      await new Promise((r) => setImmediate(r));
+      l = await m.repos.lista();
+    }
+    assert.equal(l.state, 'ready');
+    assert.equal(l.summary.repositories, 4);
+    assert.deepEqual([linha(l, 'org-a/motor-de-regras').openIssues, linha(l, 'org-a/motor-de-regras').openPrs, linha(l, 'org-a/motor-de-regras').ci], [null, null, null]);
+    assert.equal(l.summary.openPrs, null);
+    assert.equal(l.summary.openIssues, null);
+    release();
+    await m.repos.esperar();
+    l = await m.repos.lista();
+    assert.deepEqual([linha(l, 'org-a/motor-de-regras').openIssues, linha(l, 'org-a/motor-de-regras').openPrs, linha(l, 'org-a/motor-de-regras').ci], [4, 2, 'failed']);
+    assert.equal(l.summary.openPrs, 3);
+  });
+
+  test('after a restart, the first read answers the last assembled list at once and rebuilds behind it', async () => {
+    const store = new MemoryCacheStore();
+    const before = await listaPronta(await montar({ store }));
+    // A new core over the same cache, past every TTL, with GitHub not answering.
+    const m = await montar({ store, t0: T0 + 2 * 60 * MIN });
+    m.modo.atual = 'pendurado';
+    const l = await semEsperar(m.repos.lista());
+    assert.equal(l.state, 'ready');
+    assert.equal(l.summary.repositories, 4);
+    assert.deepEqual(linha(l, 'org-a/motor-de-regras').commits12, linha(before, 'org-a/motor-de-regras').commits12);
+    assert.equal(linha(l, 'org-a/motor-de-regras').openIssues, 4);
+    assert.equal(l.updatedAt, before.updatedAt);
+    // The rebuild went out.
+    assert.equal(m.pedidos.total, 1);
+  });
+
+  test('a kept list older than 24 h since its ReposLista read is not restored, even when it was assembled later from that stale read', async () => {
+    const store = new MemoryCacheStore();
+    await listaPronta(await montar({ store }));
+    // 20 h later GitHub is down: the list is assembled again from the ReposLista read at T0 (stale).
+    const down = await montar({ store, t0: T0 + 20 * 60 * MIN });
+    down.modo.atual = 'falha';
+    const stale = await listaPronta(down);
+    assert.equal(stale.state, 'ready');
+    assert.match(stale.error ?? '', /rede fora/);
+    // 25 h after that read, the kept list is not served, though it was written 5 h ago.
+    const m = await montar({ store, t0: T0 + 25 * 60 * MIN });
+    m.modo.atual = 'pendurado';
+    assert.equal((await semEsperar(m.repos.lista())).state, 'loading');
+  });
+
+  test('a list read before the GitHub identity changed is never restored (#241)', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    const store = new MemoryCacheStore();
+    const real = new GithubReposSource({ token: 'token-de-teste', fetch: createFakeGithub(dados(), { now: () => T0 }).fetch, now: () => T0, api: 'https://falso.invalid', url: 'https://falso.invalid/graphql' });
+    const fonte: FonteDosRepos = {
+      lista: () => real.lista(),
+      counts: async (ids) => (await gate, real.counts(ids)),
+      resumo: (...a) => real.resumo(...a),
+      detalhe: (...a) => real.detalhe(...a),
+      rest: (...a) => real.rest(...a),
+    };
+    const m = await montar({ fonte, store });
+    await m.repos.lista();
+    for (let i = 0; i < 100 && !(await m.cache.peek(LIST_VIEW_KEY)); i++) await new Promise((r) => setImmediate(r));
+    assert.ok(await m.cache.peek(LIST_VIEW_KEY), 'the light list is kept');
+    // Disconnect or another login, mid-build: what is assembled afterwards is not kept either.
+    await m.cache.clear();
+    release();
+    await m.repos.esperar();
+    assert.equal(await m.cache.peek(LIST_VIEW_KEY), null);
+    const restarted = await montar({ store });
+    restarted.modo.atual = 'pendurado';
+    assert.equal((await semEsperar(restarted.repos.lista())).state, 'loading');
+  });
+
+  test("with the core's queue the list's calls overlap, never more than GITHUB_CALL_LIMIT at once", async () => {
+    const m = await montar({ atrasoMs: 3, queue: new GithubCallQueue(GITHUB_CALL_LIMIT) });
+    const l = await listaPronta(m);
+    assert.equal(l.state, 'ready');
+    assert.ok(m.pedidos.maximoEmVoo > 1, `max in flight ${m.pedidos.maximoEmVoo}`);
+    assert.ok(m.pedidos.maximoEmVoo <= GITHUB_CALL_LIMIT, `max in flight ${m.pedidos.maximoEmVoo}`);
+    assert.equal(l.summary.openPrs, 3);
+    assert.ok(l.summary.ci.runs > 0);
   });
 });

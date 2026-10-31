@@ -10,8 +10,8 @@ const NOW = Date.parse('2026-10-21T09:12:00.000Z');
 const check = (toolId: string, checkedAt = NOW): ToolCheck => ({ toolId, sourceId: 'homebrew', installed: '2.81.0', latest: '2.83.1', checkedAt, error: null });
 
 describe('#280 tool_checks', () => {
-  test('migration 13 is the last one and adds the table', () => {
-    assert.equal(MIGRATIONS.at(-1)?.version, 13);
+  test('migration 13 adds the table and remains in the migration history', () => {
+    assert.ok(MIGRATIONS.some(m => m.version === 13));
     const storage = openSqliteStorage({ path: ':memory:' });
     const cols = (storage.db.prepare('PRAGMA table_info(tool_checks)').all() as { name: string }[]).map((c) => c.name);
     assert.deepEqual(cols, ['machine_id', 'tool_id', 'source_id', 'installed', 'latest', 'checked_at', 'error']);

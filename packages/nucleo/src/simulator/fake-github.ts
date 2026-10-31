@@ -184,6 +184,21 @@ interface Series {
   contributors: { author: { login: string; type: string }; total: number; weeks: { w: number; a: number; d: number; c: number }[] }[];
 }
 
+/**
+ * A week's commits spread over its days, Sunday first, like `commit_activity`: weekdays busier, a
+ * day off now and then, and the days after `now` empty. The days add up to `total`.
+ */
+function commitDays(seed: string, total: number, weekStart: number, now: number): number[] {
+  const r = new SeededRandom(seed);
+  const weights = [0.15, 1, 1, 1, 1, 0.8, 0.15].map((w, i) => (weekStart + i * DAY > now ? 0 : r.next() < 0.15 ? 0 : w * (0.4 + r.next())));
+  const sum = weights.reduce((a, w) => a + w, 0);
+  if (!sum) return [total, 0, 0, 0, 0, 0, 0];
+  const days = weights.map((w) => Math.floor((total * w) / sum));
+  const best = weights.indexOf(Math.max(...weights));
+  days[best] += total - days.reduce((a, d) => a + d, 0);
+  return days;
+}
+
 /** A repository's series, from 3 years back up to the week of `now`. */
 function generateSeries(repo: FakeRepo, now: number): Series {
   const r = new SeededRandom(`${repo.owner}/${repo.name}`);
@@ -282,6 +297,7 @@ function generateSeries(repo: FakeRepo, now: number): Series {
 
 function rawRepo(repo: FakeRepo, now: number) {
   return {
+    id: `R_${repo.owner}/${repo.name}`,
     name: repo.name,
     nameWithOwner: `${repo.owner}/${repo.name}`,
     url: `https://github.com/${repo.owner}/${repo.name}`,
@@ -480,6 +496,11 @@ export function createFakeGithub(data: FakeGithubData, { now = Date.now, delayMs
         },
       };
     }
+    if (op === 'ReposCounts') {
+      // `nodes(ids:)` (#341): the ids `rawRepo` gives; an unknown one is `null`, as GitHub answers.
+      const ids = (v.ids as unknown as string[]) ?? [];
+      return { rateLimit, nodes: ids.map((id) => (repoById(id) ? rawRepo(repoById(id)!, now()) : null)) };
+    }
     if (op === 'RepoFilesDiscovery') {
       // Um lote de até 20 repositórios (`$o<i>`, `$n<i>`), cada um sob `r<i>` (#174).
       const out: Record<string, unknown> = { rateLimit };
@@ -611,7 +632,7 @@ export function createFakeGithub(data: FakeGithubData, { now = Date.now, delayMs
     }
     switch (resource) {
       case 'stats/commit_activity':
-        return { status: 200, body: s.weeks.slice(-52).map((w) => ({ week: w.week, total: w.total, days: [0, 0, 0, 0, 0, 0, 0] })) };
+        return { status: 200, body: s.weeks.slice(-52).map((w) => ({ week: w.week, total: w.total, days: commitDays(`${k}:${w.week}`, w.total, w.week * 1000, now()) })) };
       case 'stats/code_frequency':
         return { status: 200, body: s.weeks.map((w) => [w.week, w.added, -w.removed]) };
       case 'stats/contributors':
@@ -721,11 +742,11 @@ function projectOptions(data: FakeGithubData, rateLimit: unknown): unknown {
     rateLimit,
     viewer: {
       login: data.login,
-      projectsV2: { nodes: [node(data.login, 'User', 1, 'Notas soltas', 4, false), node(data.login, 'User', 2, 'Arquivo de 2025', 12, true, true)] },
+      projectsV2: { totalCount: 2, nodes: [node(data.login, 'User', 1, 'Notas soltas', 4, false), node(data.login, 'User', 2, 'Arquivo de 2025', 12, true, true)] },
       organizations: {
         nodes: [
-          { login: 'exemplo', projectsV2: { nodes: [node('exemplo', 'Organization', 3, 'Ahrena Console', 12, true)] } },
-          ...data.organizations.map((login) => ({ login, projectsV2: { nodes: [] } })),
+          { login: 'exemplo', projectsV2: { totalCount: 1, nodes: [node('exemplo', 'Organization', 3, 'Ahrena Console', 12, true)] } },
+          ...data.organizations.map((login) => ({ login, projectsV2: { totalCount: 0, nodes: [] } })),
         ],
       },
     },

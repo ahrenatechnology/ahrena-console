@@ -116,6 +116,11 @@ describe('issue 277: the pure formats (cloud-format.js)', () => {
     assert.equal(good.sessions[0].login.deviceCode.userCode, 'ABCD-EFGH');
     for (const uri of ['http://device.sso.regiao-exemplo-1.amazonaws.com/', 'https://amazonaws.com.evil.example/', 'https://user:pw@x.awsapps.com/', 'javascript:alert(1)', null]) assert.equal(format.verificationLink(uri), null, String(uri));
     assert.equal(format.verificationLink('https://exemplo.awsapps.com/start/#/device'), 'https://exemplo.awsapps.com/start/#/device');
+    assert.equal(format.prefilledLink('https://device.sso.regiao-exemplo-1.amazonaws.com/', 'ABCD-EFGH'), 'https://device.sso.regiao-exemplo-1.amazonaws.com/?user_code=ABCD-EFGH');
+    assert.equal(format.prefilledLink('https://exemplo.awsapps.com/start/#/device', 'ABCD-EFGH'), 'https://exemplo.awsapps.com/start/#/device?user_code=ABCD-EFGH');
+    assert.equal(format.prefilledLink('https://device.sso.regiao-exemplo-1.amazonaws.com/?user_code=WXYZ-1234', 'ABCD-EFGH'), 'https://device.sso.regiao-exemplo-1.amazonaws.com/?user_code=WXYZ-1234', 'a link that already carries a code is kept');
+    assert.equal(format.prefilledLink('https://device.sso.regiao-exemplo-1.amazonaws.com/', '<script>'), 'https://device.sso.regiao-exemplo-1.amazonaws.com/', 'a code out of shape never goes in the URL');
+    assert.equal(format.prefilledLink('https://phishing.example/', 'ABCD-EFGH'), null);
     assert.deepEqual(format.normalizeRemote({ status: 'unreachable', connectors: [] }), { status: 'unreachable', connectors: null });
     assert.equal(format.normalizeRemote({ nope: 1 }), null);
   });
@@ -385,7 +390,7 @@ describe('issue 277: Conexões › AWS (C58, C59)', () => {
     assert.equal(replaced.at(-1), '/ui/connections/aws?machine=workstation', 'the login flag leaves the URL');
     assert.equal(texto(m.area.querySelector('.cl-user-code')), 'ABCD-EFGH');
     const link = m.area.querySelector('a[data-cl-action="open-login"]')!;
-    assert.equal(link.getAttribute('href'), 'https://device.sso.regiao-exemplo-1.amazonaws.com/');
+    assert.equal(link.getAttribute('href'), 'https://device.sso.regiao-exemplo-1.amazonaws.com/?user_code=ABCD-EFGH', 'the code goes in the link: no copy and paste');
     assert.equal(link.getAttribute('target'), '_blank');
     assert.match(texto(m.area), /Copiar o código/);
     assert.match(texto(m.area), /Roda lá: aws sso login --sso-session sessao-exemplo --use-device-code --no-browser/);

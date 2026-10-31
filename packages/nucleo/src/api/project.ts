@@ -28,9 +28,12 @@ import {
   type ProjectCard,
   type ProjectMoveResult,
 } from '../github/project.ts';
+import { GithubGatewayError, GithubHttpError, GithubScopeError } from '../github/github-source.ts';
 import { send } from '../ingest/hooks/receiver.ts';
 import { fromAnotherSite, fromOwnUi } from './same-origin.ts';
-import type { ProjectOptions } from '../github/project-options.ts';
+import type { ProjectOptions, ProjectOwner } from '../github/project-options.ts';
+import { githubApplicationUrl } from '../github/connection/connection.ts';
+import { resolveGithubClientId } from '../github/connection/device-flow.ts';
 import type { ProjectEnvOverride, ResolvedProjectSelection } from '../github/project-selection.ts';
 import { ciDoPr, reviewDoPr, type PrCi, type PrReview } from './work.ts';
 
@@ -48,6 +51,8 @@ const OPCAO = /^[A-Za-z0-9_-]{1,64}$/;
 export interface KanbanDoProjeto {
   readonly project: { owner: string; number: number; field: string };
   board(opts?: { force?: boolean }): Promise<ProjectBoard>;
+  /** The stored board without calling GitHub (decision 0015); `null` when there is none. */
+  snapshot?(): Promise<ProjectBoard | null>;
   move(itemId: string, optionId: string): Promise<ProjectMoveResult>;
   pauseLeftMs(): number;
 }
@@ -66,6 +71,8 @@ export interface OpcoesDoProjeto {
   options?: Pick<ProjectOptions, 'list'> | null;
   /** #241: where the credential comes from, for the `no-scope` hint. Default `console` (reconnect in Conexões). */
   credentialSource?: () => 'console' | 'gh';
+  /** Decision 0015: the GET answers the stored board (`snapshot`) and waits for GitHub only without one. */
+  fromStore?: boolean;
 }
 
 /** What the routes use from the Project resolver (src/github/project-selection.ts). */
@@ -182,6 +189,26 @@ function noScopeError(source: 'console' | 'gh'): Erro {
   return { status: 401, code: 'no-scope', error: 'sem permissão no GitHub Project: falta o escopo project; reconecte o GitHub em Conexões', extra: { scope: 'project' } };
 }
 
+/**
+ * #340: where a blocked owner gets unblocked. An OAuth App restriction is lifted on the app's page
+ * (Grant, or Request for a member; the `gh` source's app is not ours, so its list of apps); SAML on the
+ * organization's single sign-on page.
+ */
+function fixUrlOf(owner: ProjectOwner, source: 'console' | 'gh'): string | null {
+  if (!owner.blocked) return null;
+  if (owner.blocked.reason === 'saml') return `https://github.com/orgs/${encodeURIComponent(owner.login)}/sso`;
+  if (owner.blocked.reason !== 'oauth-restricted') return null;
+  const clientId = source === 'console' ? resolveGithubClientId() : null;
+  return clientId ? githubApplicationUrl(clientId) : 'https://github.com/settings/applications';
+}
+
+/** GitHub did not answer: the network failed, the request timed out or GitHub answered 5xx. */
+function githubUnreachable(err: unknown): boolean {
+  if (err instanceof GithubGatewayError || err instanceof TypeError) return true;
+  if (err instanceof GithubHttpError) return err.status >= 500;
+  return err instanceof Error && (err.name === 'AbortError' || err.name === 'TimeoutError');
+}
+
 function enviarErro(res: ServerResponse, e: Erro): void {
   if (e.headers) for (const [k, v] of Object.entries(e.headers)) res.setHeader(k, v);
   send(res, e.status, { error: e.error, code: e.code, ...(e.extra ?? {}) });
@@ -218,7 +245,7 @@ function lerCorpo(req: IncomingMessage): Promise<string | null> {
 // site's page never gets it (`fromAnotherSite`, api/same-origin.ts).
 
 /** As duas rotas do kanban. O servidor já conferiu Host e Origin. */
-export function criarRotaDoProjeto({ kanban: fixedKanban, fonte, semProjeto = false, log = () => {}, resolver = null, options = null, credentialSource = () => 'console' }: OpcoesDoProjeto) {
+export function criarRotaDoProjeto({ kanban: fixedKanban, fonte, semProjeto = false, log = () => {}, resolver = null, options = null, credentialSource = () => 'console', fromStore = false }: OpcoesDoProjeto) {
   const currentKanban = () => (resolver ? resolver.kanban() : fixedKanban);
   const stoppedError = () => (resolver || semProjeto ? SEM_PROJETO : DESLIGADO);
   const selectionOf = (kanban: KanbanDoProjeto): { selection: ResolvedProjectSelection; envOverride: ProjectEnvOverride | null } =>
@@ -231,7 +258,10 @@ export function criarRotaDoProjeto({ kanban: fixedKanban, fonte, semProjeto = fa
     if (!kanban) return enviarErro(res, stoppedError());
     const forcar = url.searchParams.get('refresh') === '1';
     try {
-      send(res, 200, { ...quadroDe(await kanban.board({ force: forcar }), fonte), ...selectionOf(kanban) });
+      // Decision 0015: under the background sync the GET answers what is stored; only Atualizar and an
+      // empty store wait for GitHub.
+      const stored = fromStore && !forcar ? await kanban.snapshot?.() : null;
+      send(res, 200, { ...quadroDe(stored ?? (await kanban.board({ force: forcar })), fonte), ...selectionOf(kanban) });
     } catch (err) {
       enviarErro(res, erroDe(err, kanban, 'github-down', credentialSource()));
     }
@@ -242,12 +272,15 @@ export function criarRotaDoProjeto({ kanban: fixedKanban, fonte, semProjeto = fa
     if (!options) return enviarErro(res, DESLIGADO);
     try {
       const l = await options.list({ refresh: url.searchParams.get('refresh') === '1' });
-      send(res, 200, { projects: l.projects, selection: resolver?.selection() ?? null, envOverride: resolver?.envOverride() ?? null, fetchedAt: l.fetchedAt, stale: l.stale, reason: l.reason });
+      send(res, 200, { projects: l.projects, owners: l.owners.map((o) => ({ ...o, fixUrl: fixUrlOf(o, credentialSource()) })), selection: resolver?.selection() ?? null, envOverride: resolver?.envOverride() ?? null, fetchedAt: l.fetchedAt, stale: l.stale, reason: l.reason });
     } catch (err) {
       const cause = err instanceof NoDataError ? err.cause : err;
       if (cause instanceof RateLimitedError) return enviarErro(res, { status: 429, code: 'rate-limited', error: 'o GitHub limitou as chamadas; tente de novo em instantes', headers: { 'retry-after': segundos(cause.retryAfterMs) } });
+      if (cause instanceof GithubScopeError) return enviarErro(res, noScopeError(credentialSource()));
       const reason = cause instanceof Error ? cause.message : String(cause);
-      enviarErro(res, { status: 502, code: 'github-down', error: `o GitHub não respondeu e não há lista no cache: ${reason}` });
+      // #340: only a network failure or a 5xx is "não respondeu"; an answer that refuses is a refusal.
+      if (githubUnreachable(cause)) return enviarErro(res, { status: 502, code: 'github-down', error: `o GitHub não respondeu e não há lista no cache: ${reason}` });
+      enviarErro(res, { status: 502, code: 'github-refused', error: `o GitHub recusou a lista de Projects: ${reason}` });
     }
   }
 

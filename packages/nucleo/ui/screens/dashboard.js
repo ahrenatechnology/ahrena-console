@@ -10,6 +10,7 @@ import { loading, error, errorBand, empty } from '../states.js';
 import { lastAvailability, loadAvailability, messageAction, useMessageStyle } from './session-message.js';
 import { attentionOf, attentionOfItem, attentionPill, attentionTone, attentionDot, isBlocked, isIdle, reasonChip, statusWithoutAttention } from '../attention.js';
 import { openAction } from '../open-action.js';
+import { newSessionButton } from '../new-session.js';
 import { attentionForChoice, createMachineFilter, isRemote, itemHref, itemKey, machineTag, remoteParts, sessionHref, whereText } from '../machine-filter.js';
 
 const STYLE = '/ui/dashboard.css';
@@ -349,7 +350,7 @@ export async function mount(area, ctx) {
   useStyle();
   useMessageStyle();
   const refresh = el('button', { type: 'button', class: 'btn', onClick: () => draw() }, icon('refresh'), 'Atualizar');
-  const head = header({ icon: 'dashboard', title: 'Dashboard', sub: 'O agora das suas sessões', actions: [refresh] });
+  const head = header({ icon: 'dashboard', title: 'Dashboard', sub: 'O agora das suas sessões', actions: [refresh, newSessionButton({ read: ctx.read, write: ctx.write })] });
   const sub = head.querySelector?.('.sub') ?? null;
   // Issue 243 (C47): the machine filter on its own row under the header. The Dashboard's own background
   // re-read (BACKGROUND_MS) and its re-read on every change already cover the remotes: the filter adds no
