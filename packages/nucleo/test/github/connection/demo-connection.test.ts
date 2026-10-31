@@ -48,7 +48,7 @@ describe('#241 --demo-github states', () => {
   test('the state names are English and parse; anything else is refused', () => {
     assert.deepEqual(
       [...DEMO_GITHUB_STATES],
-      ['connected', 'disconnected', 'pending', 'denied', 'expired', 'missing-scopes', 'blocked-orgs', 'no-client-id', 'no-vault', 'gh', 'gh-not-authenticated'],
+      ['connected', 'disconnected', 'pending', 'denied', 'expired', 'revoked', 'missing-scopes', 'blocked-orgs', 'no-client-id', 'no-vault', 'gh', 'gh-not-authenticated'],
     );
     assert.equal(parseDemoGithubState(undefined), 'connected');
     assert.equal(parseDemoGithubState('pending'), 'pending');
@@ -112,6 +112,18 @@ describe('#241 --demo-github states', () => {
     await d.connection.idle();
     const s = await d.connection.status();
     assert.deepEqual([s.state, s.lastError], ['disconnected', 'expired']);
+    d.connection.close();
+  });
+
+  test('revoked: the stored credential GitHub refuses → disconnected with lastError revoked and the login; Reconnect → connected', async () => {
+    const d = await boot('revoked');
+    const s = await d.connection.status();
+    assert.deepEqual([s.state, s.lastError, s.login], ['disconnected', 'revoked', 'dev-sintetico']);
+    await d.connection.start();
+    for (let i = 0; i < 4; i++) await d.time.tick(1000);
+    await d.connection.idle();
+    const again = await d.connection.status();
+    assert.deepEqual([again.state, again.login], ['connected', 'dev-sintetico']);
     d.connection.close();
   });
 

@@ -327,12 +327,12 @@ describe('#241/AC-7 the credential never leaks (sentinel)', () => {
       await a.get('/api/repos?refresh=1');
       assert.deepEqual(gh.calls.filter((c) => c.startsWith('UNAUTHORIZED')), [], 'the provider credential is the one that flowed');
 
-      // A restart whose /user answers 401 for the stored credential: disconnected, github-error.
+      // A restart whose /user answers 401 for the stored credential: disconnected, revoked (#372).
       auth.token = OTHER;
       const restarted = await boot();
       b.api = restarted.api;
       const rejected = await restarted.get('/api/connections');
-      assert.deepEqual([rejected.json.github.state, rejected.json.github.lastError], ['disconnected', 'github-error'], rejected.raw);
+      assert.deepEqual([rejected.json.github.state, rejected.json.github.lastError], ['disconnected', 'revoked'], rejected.raw);
       assert.ok(gh.calls.includes('UNAUTHORIZED /user') || gh.calls.some((c) => c === 'GET /user'));
       restarted.connection.close();
       await restarted.api.close();

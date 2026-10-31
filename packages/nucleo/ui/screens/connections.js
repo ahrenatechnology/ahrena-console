@@ -16,7 +16,7 @@
 
 import { el, header, icon } from '../dom.js';
 import { loading, error, errorBand } from '../states.js';
-import { CONNECTIONS_ROUTE, CONNECTIONS_UI, connectionChanged, githubHttpsUrl, LAST_ERROR, UNAVAILABLE, writeErrorText } from '../github-connect.js';
+import { CONNECTIONS_ROUTE, CONNECTIONS_UI, connectionChanged, githubHttpsUrl, LAST_ERROR, REVOKED_CAUSES, UNAVAILABLE, writeErrorText } from '../github-connect.js';
 import { tryCatalog } from './cloud-connections.js';
 
 const STYLE = '/ui/screens/connections.css';
@@ -66,6 +66,7 @@ export function providerPill(github) {
   if (github?.state === 'connected') return (github.missingScopes ?? []).length ? { label: 'conectado, incompleto', tone: 'waiting' } : { label: 'conectado', tone: 'completed' };
   if (github?.state === 'pending') return { label: 'esperando a autorização', tone: 'waiting', busy: true };
   if (github?.state === 'unavailable') return { label: 'indisponível', tone: 'waiting' };
+  if (github?.lastError === 'revoked') return { label: 'precisa reconectar', tone: 'error' };
   return github?.lastError ? { label: 'não conectado', tone: 'error' } : { label: 'não conectado', tone: 'waiting' };
 }
 
@@ -270,9 +271,31 @@ export async function mount(area, ctx) {
     const failed = LAST_ERROR[g.lastError];
     const actions = failed || !consoleSource ? [] : [button('Conectar ao GitHub', { iconName: 'github', filled: true, action: 'connect', route: START_ROUTE, onClick: start })];
     const parts = [];
-    if (failed) parts.push(message({ title: failed.title, text: failed.text, buttons: [button('Gerar outro código', { iconName: 'refresh', filled: true, action: 'connect', route: START_ROUTE, onClick: start })] }));
+    if (g.lastError === 'revoked') parts.push(revokedMessage(g));
+    else if (failed) parts.push(message({ title: failed.title, text: failed.text, buttons: [button('Gerar outro código', { iconName: 'refresh', filled: true, action: 'connect', route: START_ROUTE, onClick: start })] }));
     parts.push(el('div', { class: 'conn-split' }, scopesSection(undefined, { note: 'O console só escreve no GitHub em dois casos, sempre por um clique seu: mover um card e abrir o PR do instalador.' }), howItWorks()));
     return el('section', { class: 'card conn-card', 'data-state': 'disconnected', 'data-last-error': g.lastError ?? '' }, providerHead(actions), el('div', { class: 'conn-body' }, ...parts));
+  }
+
+  /** C92 (issue 372): the stored credential GitHub refused when the core loaded it. */
+  function revokedMessage(g) {
+    const login = typeof g.login === 'string' && g.login ? g.login : null;
+    const securityLog = githubHttpsUrl(g.securityLogUrl);
+    return message({
+      title: login ? `O GitHub não aceita mais a credencial de ${login}` : LAST_ERROR.revoked.title,
+      text: LAST_ERROR.revoked.text,
+      extra: el(
+        'div',
+        { class: 'conn-message' },
+        muted('O GitHub derruba a credencial de um aplicativo quando:'),
+        el('ul', { class: 'conn-causes' }, ...REVOKED_CAUSES.map((c) => el('li', { class: 'conn-cause' }, c))),
+        muted('O log de segurança do GitHub diz qual foi.'),
+      ),
+      buttons: [
+        button(login ? `Reconectar como ${login}` : 'Reconectar', { iconName: 'refresh', filled: true, action: 'connect', route: START_ROUTE, onClick: start }),
+        securityLog ? external(securityLog, 'Ver o log de segurança', 'btn outline conn-link-btn') : null,
+      ].filter(Boolean),
+    });
   }
 
   function pendingCard() {
