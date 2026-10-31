@@ -81,6 +81,8 @@ export interface ToolEntry {
   readonly group: ToolGroup;
   /** `null` for an MCP server (read from Claude Code's config, layer 3). */
   readonly probe: ToolProbe | null;
+  /** Filesystem discovery only: never execute this provider, even for --version. */
+  readonly passive?: boolean;
   /** Only on these platforms; elsewhere the state is `na` with `naNote`. All when absent. */
   readonly platforms?: readonly Platform[];
   readonly note?: string;
@@ -209,6 +211,11 @@ const uvInstallSteps = [['uv', 'python', 'install', VERSION_TOKEN]];
 const uvUpdateSteps = [['uv', 'python', 'upgrade', VERSION_TOKEN]];
 
 export const CATALOG: readonly ToolEntry[] = [
+  {
+    id: 'codex', label: 'Codex', group: 'cli', passive: true,
+    note: 'Descoberta passiva; versão desconhecida sem metadados locais. Não comprova login, franquia ou execução.',
+    probe: { argv: ['codex'], version: /^(\d+\.\d+\.\d+)$/ }, sources: [],
+  },
   // ---- CLIs ------------------------------------------------------------------------------------
   {
     id: 'claude',

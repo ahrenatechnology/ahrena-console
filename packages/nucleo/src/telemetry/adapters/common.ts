@@ -177,6 +177,13 @@ export function claudeOf(stats: PsRow[], args: PsArgsRow[]): ClaudeProcesses {
   return { processes: group([...cli, ...desktop]), cli: group(cli), desktop: group(desktop) };
 }
 
+/** Only observed executable identities, never a substring in another process's prompt/args. */
+export function codexOf(stats: PsRow[]): ClaudeProcesses {
+  const desktop = stats.filter(r => r.comm.includes('/Codex.app/'));
+  const cli = stats.filter(r => !r.comm.includes('/Codex.app/') && ['codex', 'codex.exe'].includes(baseName(r.comm)));
+  return { processes: group([...cli, ...desktop]), cli: group(cli), desktop: group(desktop) };
+}
+
 export function topProcessesOf(stats: PsRow[], k = TOP_PROCESSES): TopProcess[] {
   return [...stats]
     .sort((a, b) => b.cpuPct - a.cpuPct || a.pid - b.pid)
@@ -398,6 +405,7 @@ export abstract class PlatformCollector implements TelemetryCollector {
       disk: { volumes: df ? await volumesOf(parseDfP(df), this.deps) : [] },
       network,
       claude: ps ? claudeOf(ps.stats, ps.args) : null,
+      codex: ps ? codexOf(ps.stats) : null,
       topProcesses: ps ? topProcessesOf(ps.stats) : null,
       docker,
       ports,

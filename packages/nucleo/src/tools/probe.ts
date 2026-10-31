@@ -9,6 +9,9 @@
 //   fnm; then the path on the PATH itself. No match: `manual` (no action). `{npmPrefix}` is the active Node's prefix, so a global npm
 //   package is told apart from one of Homebrew.
 
+import { constants } from 'node:fs';
+import { open } from 'node:fs/promises';
+import { dirname, join } from 'node:path';
 import { realpath as fsRealpath } from 'node:fs/promises';
 import { posix, win32 } from 'node:path';
 import { appliesTo, NPM_PREFIX_TOKEN, sourcesFor, type DetectedSourceId, type Platform, type ToolEntry, type ToolProbe } from './catalog.ts';
@@ -88,6 +91,10 @@ export async function probeTool(entry: ToolEntry, ctx: ProbeContext): Promise<De
   if (!binaryPath) return none;
   const realPath = await (ctx.realpath ?? fsRealpath)(binaryPath).catch(() => binaryPath);
   const sourceId = detectSource(entry, realPath, ctx, binaryPath);
+  if (entry.passive) {
+    const installed = await passiveCodexVersion(realPath);
+    return { toolId: entry.id, installed, binaryPath, realPath, sourceId: 'manual', probeError: installed ? null : 'passive-version-unknown' };
+  }
   // Node refuses to spawn a .cmd/.bat without a shell (EINVAL), and the probe never uses one: the tool is
   // shown as manual, not failed.
   if (ctx.platform === 'win32' && /\.(cmd|bat)$/i.test(binaryPath)) return { toolId: entry.id, installed: null, binaryPath, realPath, sourceId: 'manual', probeError: 'shim-not-readable' };
@@ -111,4 +118,20 @@ export async function probeAll(entries: readonly ToolEntry[], ctx: ProbeContext)
   const results = await Promise.all(rest.map((e) => probeTool(e, { ...ctx, npmPrefix })));
   for (const d of results) out.set(d.toolId, d);
   return out;
+}
+
+/** Only the npm package adjacent to its actual bin/codex.js; arbitrary binaries stay unknown. */
+export async function passiveCodexVersion(binary: string): Promise<string | null> {
+  if (!/[/\\]@openai[/\\]codex[/\\]bin[/\\]codex\.js$/.test(binary)) return null;
+  let file;
+  try {
+    file = await open(join(dirname(dirname(binary)), 'package.json'), constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+    const st = await file.stat();
+    if (!st.isFile() || st.nlink !== 1 || st.size > 65536) return null;
+    const buffer = Buffer.alloc(65537);
+    const { bytesRead } = await file.read(buffer, 0, buffer.length, 0);
+    if (bytesRead > 65536) return null;
+    const value = JSON.parse(buffer.subarray(0, bytesRead).toString('utf8'));
+    return value.name === '@openai/codex' && typeof value.version === 'string' && /^\d{1,4}\.\d{1,4}\.\d{1,4}$/.test(value.version) ? value.version : null;
+  } catch { return null; } finally { await file?.close(); }
 }
