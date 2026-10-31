@@ -74,7 +74,12 @@ const byDepthThenName = (a: string, b: string) => a.split('/').length - b.split(
  * Lê tudo o que um agente herda do repositório. `paths` é a lista de arquivos conhecidos (a árvore,
  * mais os alvos de import achados); `read(path)` devolve o texto. `truncated`: o GitHub cortou a árvore.
  */
-export function readInstructions(paths: readonly string[], read: (path: string) => string | undefined, { truncated = false } = {}): InstructionsContent {
+export function readInstructions(paths: readonly string[], read: (path: string) => string | undefined, { truncated = false, provider = 'claude' }: { truncated?: boolean; provider?: 'claude' | 'codex' } = {}): InstructionsContent {
+  if (provider === 'codex') {
+    const files: InstructionFile[] = [...new Set(paths)].filter(p => /(^|\/)AGENTS(?:\.override)?\.md$/.test(p)).sort(byDepthThenName).map(path => ({ path, kind: path.includes('/') ? 'agents-nested' : 'agents-root', folder: posix.dirname(path) === '.' ? '' : posix.dirname(path), importedBy: [], tree: { path, status: 'ok', imports: [] } }));
+    // Codex does not implement Claude @imports. Content is not needed for presence inspection.
+    return { truncated, empty: files.length === 0, files, rules: [], skills: [], agents: [], commands: [], hooks: [], plugins: [], marketplaces: [], mcp: [], settings: 'none', warnings: truncated ? [{ kind: 'truncated' }] : [] };
+  }
   const set = new Set(paths);
   const exists = (p: string) => set.has(p);
   const sorted = [...set].sort(byDepthThenName);

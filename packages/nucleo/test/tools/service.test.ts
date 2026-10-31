@@ -32,6 +32,7 @@ describe('#280 ToolsService.overview without a check', () => {
     assert.deepEqual(
       o.items.map((i) => [i.id, i.group, i.installed, i.source, i.state]),
       [
+        ['codex', 'cli', null, null, 'missing'],
         ['claude', 'cli', '2.1.299', 'native', 'checking'],
         ['git', 'cli', '2.39.5', 'manual', 'manual'],
         ['gh', 'cli', '2.81.0', 'homebrew', 'checking'],
