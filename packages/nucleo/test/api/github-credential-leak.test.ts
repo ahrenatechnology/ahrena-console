@@ -1,3 +1,4 @@
+import { OWNER_TOKEN, ownerRequest as request } from '../owner-http.ts';
 // The credential does not leak (#241, decision 0011 §3 and §9). A full flow, wired the production way
 // (src/api/core-github.ts, as cli.ts does outside the demo) with the fake GitHub as the transport and an
 // in-memory vault holding the sentinel once connected:
@@ -18,7 +19,6 @@
 import assert from 'node:assert/strict';
 import { randomBytes } from 'node:crypto';
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs';
-import { request } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, describe, test } from 'node:test';
@@ -208,7 +208,7 @@ describe('#241/AC-7 the credential never leaks (sentinel)', () => {
       });
       work ??= new TrabalhoPorBranch({ fonte: new GithubGraphqlSource({ token: core.access!.token, fetch, url: `${FAKE_GITHUB_BASE}/graphql` }), cache, git });
       const { connection, screens } = core;
-      const api = await startLocalApi({
+      const api = await startLocalApi({ ownerToken: () => OWNER_TOKEN,
         panelBuilder: new MontadorDoPainel({ storage, contas: accounts, desktop: null, trabalho: work }),
         hooks: { storage },
         port: 0,

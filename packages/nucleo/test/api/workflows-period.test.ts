@@ -1,6 +1,6 @@
+import { OWNER_TOKEN, ownerRequest as request } from '../owner-http.ts';
 // #332: the Workflows page without the cap of 500 (period, pages, active sessions always in) and the tree between sessions.
 import assert from 'node:assert/strict';
-import { request } from 'node:http';
 import { after, before, describe, test } from 'node:test';
 import { openSqliteStorage, type SqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
 import { Accounts, startLocalApi, MontadorDoPainel, type LocalApi } from '../../src/api/index.ts';
@@ -88,7 +88,7 @@ describe('GET /api/workflows with a period, pages and the tree', () => {
     for (const id of ['pm', 'tl', 'work']) await storage.putAgent(agent({ id: `${id}:main`, sessionId: id, type: 'main', name: null }));
     Object.assign(desktopRows, { local_pm: row('pm', null), local_tl: row('tl', 'local_pm'), local_work: row('work', 'local_tl') });
     const montador = new MontadorDoPainel({ storage, contas: new Accounts({ storage, file: null }), desktop: fakeDesktop, trabalho: null, agora: () => NOW });
-    api = await startLocalApi({ panelBuilder: montador, hooks: { storage }, port: 0, log: () => {} });
+    api = await startLocalApi({ ownerToken: () => OWNER_TOKEN, panelBuilder: montador, hooks: { storage }, port: 0, log: () => {} });
   });
   after(async () => {
     await api.close();
@@ -135,7 +135,7 @@ describe('GET /api/workflows with a period, pages and the tree', () => {
     const big = openSqliteStorage({ path: ':memory:' });
     for (let i = 0; i < 620; i++) await big.putSession(session({ id: `b${i}`, status: 'completed', updatedAt: ago(1 + i / 1000), startedAt: ago(2) }));
     const montador = new MontadorDoPainel({ storage: big, contas: new Accounts({ storage: big, file: null }), desktop: null, trabalho: null, agora: () => NOW });
-    const bigApi = await startLocalApi({ panelBuilder: montador, hooks: { storage: big }, port: 0, log: () => {} });
+    const bigApi = await startLocalApi({ ownerToken: () => OWNER_TOKEN, panelBuilder: montador, hooks: { storage: big }, port: 0, log: () => {} });
     const { body } = await get(bigApi.url, '/api/workflows');
     assert.equal(body.sessions, 620);
     assert.equal(body.trees.total, 620);
@@ -147,7 +147,7 @@ describe('GET /api/workflows with a period, pages and the tree', () => {
 
 describe('the read caches (#332, review round 1)', () => {
   const build = async (storage: SqliteStorage) =>
-    startLocalApi({ panelBuilder: new MontadorDoPainel({ storage, contas: new Accounts({ storage, file: null }), desktop: null, trabalho: null, agora: () => NOW }), hooks: { storage }, port: 0, log: () => {} });
+    startLocalApi({ ownerToken: () => OWNER_TOKEN, panelBuilder: new MontadorDoPainel({ storage, contas: new Accounts({ storage, file: null }), desktop: null, trabalho: null, agora: () => NOW }), hooks: { storage }, port: 0, log: () => {} });
 
   test('a session that flips from active to abandoned without a new updatedAt is read again', async () => {
     const storage = openSqliteStorage({ path: ':memory:' });
@@ -193,11 +193,11 @@ describe('GET /api/sessions/<id>/workflow: who opened whom', () => {
       sessionByLocal: (id: string) => rows[id] ?? null,
       childrenOf: (id: string) => Object.values(rows).filter((d) => d.parentLocalId === id),
     } as unknown as DesktopIndex;
-    const withIndex = await startLocalApi({ panelBuilder: new MontadorDoPainel({ storage, contas: new Accounts({ storage, file: null }), desktop, trabalho: null, agora: () => NOW }), hooks: { storage }, port: 0, log: () => {} });
+    const withIndex = await startLocalApi({ ownerToken: () => OWNER_TOKEN, panelBuilder: new MontadorDoPainel({ storage, contas: new Accounts({ storage, file: null }), desktop, trabalho: null, agora: () => NOW }), hooks: { storage }, port: 0, log: () => {} });
     const { body } = await get(withIndex.url, '/api/sessions/tl/workflow');
     assert.deepEqual([body.lineage.parent?.sessionId, body.lineage.children.map((c: any) => c.sessionId)], ['pm', ['kid']]);
     await withIndex.close();
-    const without = await startLocalApi({ panelBuilder: new MontadorDoPainel({ storage, contas: new Accounts({ storage, file: null }), desktop: null, trabalho: null, agora: () => NOW }), hooks: { storage }, port: 0, log: () => {} });
+    const without = await startLocalApi({ ownerToken: () => OWNER_TOKEN, panelBuilder: new MontadorDoPainel({ storage, contas: new Accounts({ storage, file: null }), desktop: null, trabalho: null, agora: () => NOW }), hooks: { storage }, port: 0, log: () => {} });
     assert.deepEqual((await get(without.url, '/api/sessions/tl/workflow')).body.lineage, { parent: null, children: [] });
     await without.close();
     await storage.close();

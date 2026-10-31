@@ -112,7 +112,7 @@ export function normalizeMachine(m) {
     id: m.id,
     label: str(m.label, 40) ?? m.id,
     state: str(m.state, 40) ?? 'unreachable',
-    reason: m.reason === 'port-closed' || m.reason === 'no-response' ? m.reason : null,
+    reason: m.reason === 'port-closed' || m.reason === 'no-response' || m.reason === 'owner-auth-required' ? m.reason : null,
     version: num(m.version),
     port: num(m.port),
     lastReadAt: str(m.lastReadAt, 40),
@@ -556,6 +556,7 @@ export function remoteCondition(machine) {
   if (!machine || machine.id === LOCAL_ID || machine.state === 'connected') return null;
   if (machine.state === 'incompatible-version') return 'version';
   if (machine.state === 'unreachable' && machine.reason === 'port-closed') return 'band';
+  if (machine.state === 'unreachable' && machine.reason === 'owner-auth-required') return 'owner-auth-required';
   if (machine.state === 'unreachable' && machine.reason === 'no-response') return 'no-response';
   if (machine.state === 'unreachable') return 'first-read';
   return 'band';

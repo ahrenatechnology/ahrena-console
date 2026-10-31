@@ -1,3 +1,4 @@
+import { OWNER_TOKEN, ownerFetch as fetch } from '../owner-http.ts';
 // #245: every English route that feeds a /ui screen with a session's state answers the same
 // `attention: { level: 'blocked' | 'idle', reason } | null`, from `atencaoDe` only, and the counts split
 // blocked from idle where the screen shows counts. The old Portuguese routes are gone (#173 phase 6).
@@ -55,7 +56,7 @@ describe('#245 attention on every /ui route', () => {
     const accounts = new Accounts({ storage, file: null });
     const now = () => NOW;
     const panelBuilder = new MontadorDoPainel({ storage, contas: accounts, desktop: null, trabalho: null, agora: now });
-    api = await startLocalApi({
+    api = await startLocalApi({ ownerToken: () => OWNER_TOKEN,
       panelBuilder,
       hooks: { storage },
       port: 0,

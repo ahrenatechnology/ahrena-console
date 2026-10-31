@@ -1,3 +1,4 @@
+import { OWNER_TOKEN, ownerRequest as request } from '../owner-http.ts';
 // The Agent Config screen (#63). Reading: only names, paths and counts leave the configuration
 // folders; no env, oauth, e-mail, command or URL value. The routes through the local API: the skill
 // read and written with backup, and each write defense (origin and Host from decision 0003,
@@ -5,7 +6,6 @@
 // test file is one more process running alongside the forwarder's short-timing tests.
 import assert from 'node:assert/strict';
 import { existsSync, linkSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
-import { request } from 'node:http';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { after, before, describe, test } from 'node:test';
@@ -310,7 +310,7 @@ function get(url: string, path: string, { method = 'GET', headers = {} as Record
 async function withApi(route: AgentConfigRoute, fn: (url: string) => Promise<void>): Promise<void> {
   const s = openSqliteStorage({ path: ':memory:' });
   const builder = new MontadorDoPainel({ storage: s, contas: new Accounts({ storage: s, file: null }), desktop: null, trabalho: new TrabalhoPorBranch({ fonte: null, cache: new GithubCache({ store: new SqliteCacheStore(s.db) }) }) });
-  const a = await startLocalApi({ panelBuilder: builder, hooks: { storage: s }, port: 0, log: () => {}, agentConfig: route });
+  const a = await startLocalApi({ ownerToken: () => OWNER_TOKEN, panelBuilder: builder, hooks: { storage: s }, port: 0, log: () => {}, agentConfig: route });
   try {
     await fn(a.url);
   } finally {
@@ -380,7 +380,7 @@ describe('#63 /api/agent-config and /api/agent-config/skill', () => {
     const work = new TrabalhoPorBranch({ fonte: null, cache: new GithubCache({ store: new SqliteCacheStore(sqlite.db) }) });
     const builder = new MontadorDoPainel({ storage: sqlite, contas: new Accounts({ storage: sqlite, file: null }), desktop: null, trabalho: work });
     const agentConfig = createAgentConfigRoute({ folders: async () => [home], projects: async () => [project], backups, now: () => new Date('2026-10-20T12:34:56.789Z') });
-    api = await startLocalApi({ panelBuilder: builder, hooks: { storage: sqlite }, port: 0, log: () => {}, agentConfig });
+    api = await startLocalApi({ ownerToken: () => OWNER_TOKEN, panelBuilder: builder, hooks: { storage: sqlite }, port: 0, log: () => {}, agentConfig });
     host = new URL(api.url).host;
     [U0, C0, P, R] = await Promise.all([rootIdFor('u', home.dir), rootIdFor('c', home.claudeJson), rootIdFor('p', join(project, '.claude')), rootIdFor('r', project)]);
   });

@@ -1,3 +1,4 @@
+import { OWNER_TOKEN, ownerFetch as fetch } from '../owner-http.ts';
 // #285: "Abrir no Claude Desktop / no terminal / Ir para o terminal". The `open` descriptor on the Detail
 // head, the wall cards, the Sessions rows and the attention items, and `POST /api/sessions/<id>/open`,
 // with stubbed launchers: no Claude Desktop, terminal or osascript is touched. Synthetic sessions only.
@@ -60,7 +61,7 @@ describe('#285 open the session where it runs', () => {
     const live = { refresh: async () => {}, find: (id: string): LiveProcess | null => (id === LIVE ? { pid: 777, sessionId: LIVE, cwd: liveDir, procStart: 'Tue Oct 20 04:00:34 2026' } : null) };
     const describer = new SessionOpenDescriber({ live });
     const panelBuilder = new MontadorDoPainel({ storage, contas: accounts, desktop, trabalho: null });
-    return startLocalApi({
+    return startLocalApi({ ownerToken: () => OWNER_TOKEN,
       panelBuilder,
       hooks: { storage },
       port: 0,

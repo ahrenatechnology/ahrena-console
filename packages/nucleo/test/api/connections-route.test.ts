@@ -1,10 +1,10 @@
+import { OWNER_TOKEN, ownerRequest as request } from '../owner-http.ts';
 // The connection routes (#241, decision 0011 §6): GET /api/connections and the four writes under
 // /api/connections/github, plus POST /api/project/selection. The five writes are accepted ONLY from the
 // /ui itself: POST, the exact path (no query), our Host, `Origin` exactly `http://<Host>`, JSON, at most
 // 4 KiB, and not a browser saying cross-site or same-site. Without `Origin` (another local process, the
 // MCP, the mod, the CLI) they are 403 even though other writes let such a request through.
 import assert from 'node:assert/strict';
-import { request } from 'node:http';
 import { after, before, describe, test } from 'node:test';
 import { openSqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
 import { Accounts, MontadorDoPainel, startLocalApi, type LocalApi } from '../../src/api/index.ts';
@@ -70,7 +70,7 @@ async function boot(o: { clientId?: string | null; vault?: MemoryVault | null; e
     clearTimer: () => undefined,
   });
   const resolver = new ProjectResolver({ env: {}, settings, build: () => null });
-  const api = await startLocalApi({ panelBuilder, hooks: { storage }, port: 0, log: () => {}, connection, projectSelection: resolver });
+  const api = await startLocalApi({ ownerToken: () => OWNER_TOKEN, panelBuilder, hooks: { storage }, port: 0, log: () => {}, connection, projectSelection: resolver });
   const host = `127.0.0.1:${new URL(api.url).port}`;
   const ui = (extra: Record<string, string> = {}) => ({ host, origin: `http://${host}`, 'content-type': 'application/json', ...extra });
   const post = (path: string, body = BODIES[path] ?? '{}', headers = ui()) => call(api, path, { method: 'POST', headers, body });
@@ -138,7 +138,7 @@ describe('#241/AC-2 GET /api/connections and the github writes', () => {
   test('review 2 (decided): another site reading the status is 403, like the Project options', async () => {
     for (const site of ['cross-site', 'same-site']) {
       const r = await call(b.api, '/api/connections', { headers: { host: b.host, 'sec-fetch-site': site } });
-      assert.deepEqual([r.status, r.json], [403, { error: 'forbidden' }], site);
+      assert.deepEqual([r.status, r.json], [403, { error: 'Acesso restrito ao dono do console. Abra pelo app.' }], site);
     }
     for (const site of ['same-origin', 'none']) {
       const r = await call(b.api, '/api/connections', { headers: { host: b.host, 'sec-fetch-site': site } });

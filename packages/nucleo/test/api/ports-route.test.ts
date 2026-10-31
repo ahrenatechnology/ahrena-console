@@ -1,9 +1,10 @@
+import { OWNER_TOKEN, ownerRequest as request } from '../owner-http.ts';
 // The port release routes (#286, decision 0016) on 127.0.0.1: the strict gate (Origin exactly ours;
 // no Origin only when started with --accept-remote-actions), the body's three keys, the refusals, and
 // the remote machine's relay to a FAKE remote núcleo on loopback (only port, pid and signal travel,
 // as a request without Origin; the remote's refusals are re-projected).
 import assert from 'node:assert/strict';
-import { createServer, request, type IncomingMessage } from 'node:http';
+import { createServer, type IncomingMessage } from 'node:http';
 import { describe, test } from 'node:test';
 import { openSqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
 import { Accounts, MontadorDoPainel, startLocalApi } from '../../src/api/index.ts';
@@ -58,7 +59,7 @@ async function boot(opts: { accept?: boolean; remotes?: Record<string, number> }
   const route = createPortsRoute({ releaser, log: (l) => lines.push(l), acceptNoOrigin: () => opts.accept ?? false, remote: { port: (id) => opts.remotes?.[id], get: loopbackGet({ timeoutMs: 1000 }), write: loopbackWrite({ timeoutMs: 1000 }) } });
   const storage = openSqliteStorage({ path: ':memory:' });
   const montador = new MontadorDoPainel({ storage, contas: new Accounts({ storage, file: null }), desktop: null, trabalho: null });
-  const api = await startLocalApi({ panelBuilder: montador, hooks: { storage }, port: 0, log: () => {}, ports: route });
+  const api = await startLocalApi({ ownerToken: () => OWNER_TOKEN, panelBuilder: montador, hooks: { storage }, port: 0, log: () => {}, ports: route });
   const port = Number(new URL(api.url).port);
   return { api, signals, lines, host: `127.0.0.1:${port}`, origin: `http://127.0.0.1:${port}`, close: async () => { await api.close(); await storage.close(); } };
 }

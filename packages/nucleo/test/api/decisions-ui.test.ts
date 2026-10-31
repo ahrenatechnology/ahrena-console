@@ -1,9 +1,9 @@
+import { OWNER_TOKEN, ownerFetch as fetch, ownerRequest as request } from '../owner-http.ts';
 // The decisions in the core's /ui (#103): the C21 page (all decisions, grouped, with search), the
 // Detail's C20 tab (scope, injection and MCP), the origin exception of the /ui itself writing (decision
 // 0003) and the "Promover a registro". Simulator data (P9) and temporary folders, never the real repo.
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { request } from 'node:http';
 import { mkdir, mkdtemp, readdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -51,7 +51,7 @@ async function cenario(opcoes: Partial<ConstructorParameters<typeof DecisoesDaUi
   const montador = new MontadorDoPainel({ storage, contas: new Accounts({ storage, file: null }), desktop: null, trabalho: null, decisoes, agora: () => AGORA });
   const opcoesDaUi = { decisions: decisoes, storage, alvoDe: (id: string) => montador.alvoDaSessao(id), agora: () => AGORA, ...opcoes };
   const decisoesUi = new DecisoesDaUi(opcoesDaUi);
-  const api = await startLocalApi({ panelBuilder: montador, hooks: { storage }, port: 0, log: () => {}, decisionsUi: decisoesUi });
+  const api = await startLocalApi({ ownerToken: () => OWNER_TOKEN, panelBuilder: montador, hooks: { storage }, port: 0, log: () => {}, decisionsUi: decisoesUi });
   const host = new URL(api.url).host;
   const ler = async <T>(caminho: string, headers: Record<string, string> = {}) => {
     const r = await fetch(`${api.url}${caminho}`, { headers });

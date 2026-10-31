@@ -1,3 +1,7 @@
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { writeLock } from '../../src/owner/lock.ts';
+import { OWNER_TOKEN } from '../owner-http.ts';
 // Contract of `wait_for_changes` with the official MCP client (@modelcontextprotocol/sdk, the same
 // devDependency as test/mcp/sdk-contract.test.ts): it validates each `structuredContent` against the
 // `outputSchema` and fails the call if a field is extra or missing. Over HTTP (/mcp) and over stdio (the
@@ -25,6 +29,7 @@ describe('wait_for_changes with the official client', () => {
   let storage: SqliteStorage;
   let changes: ChangeCursor;
   let api: LocalApi;
+  let ownerDir: string;
   before(async () => {
     sqlite = openSqliteStorage({ path: ':memory:' });
     await seed(sqlite);
@@ -33,10 +38,13 @@ describe('wait_for_changes with the official client', () => {
     const accounts = new Accounts({ storage, file: null });
     const { server } = createMcpServer({ storage, accounts });
     server.register(waitForChanges({ changes, accounts }));
-    api = await startLocalApi({ panelBuilder: new MontadorDoPainel({ storage, contas: accounts, desktop: null, trabalho: null }), hooks: { storage }, port: 0, log: () => {}, mcp: server, changes });
+    api = await startLocalApi({ ownerToken: () => OWNER_TOKEN, panelBuilder: new MontadorDoPainel({ storage, contas: accounts, desktop: null, trabalho: null }), hooks: { storage }, port: 0, log: () => {}, mcp: server, changes });
+    ownerDir = mkdtempSync(join(tmpdir(), 'ahrena-sdk-owner-'));
+    writeLock({ pid: process.pid, port: Number(new URL(api.url).port), version: '0.0.1', startedAt: new Date().toISOString(), token: OWNER_TOKEN, parent: null }, ownerDir);
   });
   after(async () => {
     await api.close();
+    rmSync(ownerDir, { recursive: true, force: true });
     await sqlite.close();
   });
 
@@ -89,13 +97,13 @@ describe('wait_for_changes with the official client', () => {
     }
   }
 
-  test('HTTP: the output passes the outputSchema', () => exercise(new StreamableHTTPClientTransport(new URL(`${api.url}/mcp`))));
+  test('HTTP: the output passes the outputSchema', () => exercise(new StreamableHTTPClientTransport(new URL(`${api.url}/mcp`), { requestInit: { headers: { authorization: `Bearer ${OWNER_TOKEN}` } } })));
 
   test('stdio (the Desktop bridge): the output passes the outputSchema', () =>
     exercise(
       new StdioClientTransport({
         command: process.execPath,
-        args: ['--disable-warning=ExperimentalWarning', CLI, '--port', new URL(api.url).port],
+        args: ['--disable-warning=ExperimentalWarning', CLI, '--data-dir', ownerDir, '--port', new URL(api.url).port],
         stderr: 'ignore',
       }),
     ));
