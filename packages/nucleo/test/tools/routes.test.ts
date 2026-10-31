@@ -1,10 +1,10 @@
+import { OWNER_TOKEN, ownerFetch as fetch, ownerRequest as request } from '../owner-http.ts';
 // #280 layer 2: the Tools writes on 127.0.0.1 with the fake Mac (machines.ts) and a fake spawn:
 // nothing real ever runs. The strict same-origin gate (no Origin, a foreign Origin, `Origin: null`
 // and a query string all get 403 with nothing spawned; 415 without JSON), the planDigest (409 with
 // the new plan, 202 with the job), the admin refusal (403), Cancel, Verificar agora, the jobs in
 // GET /api/tools and the `tools` change on /api/changes.
 import assert from 'node:assert/strict';
-import { request } from 'node:http';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -37,7 +37,7 @@ async function boot(o: { script?: (call: SpawnCall) => void; acceptNoOrigin?: bo
   });
   const storage = openSqliteStorage({ path: ':memory:' });
   const montador = new MontadorDoPainel({ storage, contas: new Accounts({ storage, file: null }), desktop: null, trabalho: null });
-  const api = await startLocalApi({ panelBuilder: montador, hooks: { storage }, port: 0, log: () => {}, changes: cursor, tools: executor });
+  const api = await startLocalApi({ ownerToken: () => OWNER_TOKEN, panelBuilder: montador, hooks: { storage }, port: 0, log: () => {}, changes: cursor, tools: executor });
   const port = Number(new URL(api.url).port);
   const host = `127.0.0.1:${port}`;
   const origin = `http://${host}`;

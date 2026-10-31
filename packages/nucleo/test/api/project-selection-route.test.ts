@@ -1,9 +1,9 @@
+import { OWNER_TOKEN, ownerRequest as request } from '../owner-http.ts';
 // The project kanban chosen on the screen (#241, decision 0011 §7): GET /api/project/options lists
 // the Projects the account sees, POST /api/project/selection stores one, and GET /api/project follows
 // the selection (env > setting > demo > none) and says where it came from. And the 409 gate: while
 // GitHub is not connected, every GitHub-backed screen route answers 409 without any outbound call.
 import assert from 'node:assert/strict';
-import { request } from 'node:http';
 import { describe, test } from 'node:test';
 import { openSqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
 import { Accounts, MontadorDoPainel, startLocalApi, type ApiOptions, type LocalApi } from '../../src/api/index.ts';
@@ -48,7 +48,7 @@ function call(api: LocalApi, path: string, { method = 'GET', headers = {} as Rec
 async function boot(extra: Partial<ApiOptions>) {
   const storage = openSqliteStorage({ path: ':memory:' });
   const panelBuilder = new MontadorDoPainel({ storage, contas: new Accounts({ storage, file: null }), desktop: null, trabalho: null });
-  const api = await startLocalApi({ panelBuilder, hooks: { storage }, port: 0, log: () => {}, ...extra });
+  const api = await startLocalApi({ ownerToken: () => OWNER_TOKEN, panelBuilder, hooks: { storage }, port: 0, log: () => {}, ...extra });
   const host = `127.0.0.1:${new URL(api.url).port}`;
   return {
     api,

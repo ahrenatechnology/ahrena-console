@@ -1,6 +1,6 @@
+import { OWNER_TOKEN, ownerRequest as request } from '../owner-http.ts';
 // #96 e #97 pela API, contra a demonstração `--demo --scenario p4` (simulator/workflows.ts).
 import assert from 'node:assert/strict';
-import { request } from 'node:http';
 import { after, before, describe, test } from 'node:test';
 import { openSqliteStorage, type SqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
 import { Accounts, startLocalApi, MontadorDoPainel, TrabalhoPorBranch, type LocalApi, type RespostaDosWorkflows, type WorkflowDaSessao } from '../../src/api/index.ts';
@@ -35,7 +35,7 @@ describe('Workflows na API, com a demonstração do p4', () => {
     await seedDemoWorkflows(storage, AGORA);
     trabalho = new TrabalhoPorBranch({ fonte: new SimulatorWorkSource(), git: SimulatorWorkSource.git, agora: () => AGORA });
     const montador = new MontadorDoPainel({ storage, contas: new Accounts({ storage, file: null }), desktop: null, trabalho, agora: () => AGORA });
-    api = await startLocalApi({ panelBuilder: montador, hooks: { storage }, port: 0, log: () => {} });
+    api = await startLocalApi({ ownerToken: () => OWNER_TOKEN, panelBuilder: montador, hooks: { storage }, port: 0, log: () => {} });
   });
   after(async () => {
     await api.close();

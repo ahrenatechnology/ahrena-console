@@ -180,7 +180,7 @@ describe('forwarder with the core away', () => {
     try {
       const r = await runHook('Notification', HOOK_PAYLOADS.Notification, { AHRENA_CONSOLE_URL: `http://127.0.0.1:${port}` });
       assert.equal(r.code, 0);
-      assert.match(r.log, new RegExp(`Notification recusado pelo núcleo http://127\\.0\\.0\\.1:${port}: HTTP 500 quebrado`));
+      assert.match(r.log, new RegExp(`Notification recusado pelo núcleo http://127\\.0\\.0\\.1:${port}: HTTP 500`));
     } finally {
       await new Promise((r) => angry.close(r));
     }
@@ -564,4 +564,24 @@ describe('forwarder fans out to every live core in the registry (decision 0010, 
       await ok.close();
     }
   });
+});
+
+test('forwarder authenticates from the protected owner lock without exposing its secret', async () => {
+  const token = 'b'.repeat(64);
+  const ownerDir = mkdtempSync(join(dir, 'owner-proof-'));
+  let authorization: string | undefined;
+  const server = createServer((req, res) => {
+    authorization = req.headers.authorization;
+    req.resume();
+    res.writeHead(202).end('{}');
+  });
+  const port = await listen(server);
+  writeFileSync(join(ownerDir, 'nucleo.json'), JSON.stringify({ port, pid: process.pid, token }), { mode: 0o600 });
+  try {
+    const result = await runHook('SessionStart', HOOK_PAYLOADS.SessionStart, { AHRENA_CONSOLE_HOME: ownerDir, AHRENA_CONSOLE_URL: `http://127.0.0.1:${port}` });
+    assert.equal(authorization, `Bearer ${token}`);
+    assert.ok(!`${result.stdout}${result.stderr}${result.log}`.includes(token));
+  } finally {
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
 });

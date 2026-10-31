@@ -1,9 +1,9 @@
+import { OWNER_TOKEN, ownerRequest as request } from '../owner-http.ts';
 // The project kanban in the API (#80, C11): GET /api/project and POST /api/project/move, in the
 // contract's shape, with the errors mapped and the origin defenses of decision 0003. GitHub is always fake:
 // the recorded real read (test/github/fixtures/project.json), a fake `fetch` or the simulator's Project.
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { request } from 'node:http';
 import { describe, test } from 'node:test';
 import { openSqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
 import { Accounts, startLocalApi, MontadorDoPainel, type LocalApi } from '../../src/api/index.ts';
@@ -69,7 +69,7 @@ const mover = (api: LocalApi, corpo: unknown, headers: Record<string, string> = 
 async function subir(projeto?: OpcoesDoProjeto) {
   const storage = openSqliteStorage({ path: ':memory:' });
   const montador = new MontadorDoPainel({ storage, contas: new Accounts({ storage, file: null }), desktop: null, trabalho: null, agora: () => AGORA });
-  const api = await startLocalApi({ panelBuilder: montador, hooks: { storage }, port: 0, log: () => {}, ...(projeto ? { project: projeto } : {}) });
+  const api = await startLocalApi({ ownerToken: () => OWNER_TOKEN, panelBuilder: montador, hooks: { storage }, port: 0, log: () => {}, ...(projeto ? { project: projeto } : {}) });
   const host = `127.0.0.1:${new URL(api.url).port}`;
   return {
     api,
