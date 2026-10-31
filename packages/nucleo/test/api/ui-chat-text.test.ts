@@ -84,6 +84,15 @@ describe('harness tags', () => {
     assert.deepEqual(tags(nodes, 'dd').map(texto), ['bwbug79bw', 'toolu_01', '/tmp/x.output']);
   });
 
+  test('a notice opened stays open when a live redraw builds it again', () => {
+    const src = '<system-reminder>\nLinked sessions now\n</system-reminder>';
+    const head = byClass(messageBody(src).nodes, 'sd-note-head')[0]!;
+    head.dispatchEvent({ type: 'click' });
+    const again = messageBody(src).nodes;
+    assert.equal(byClass(again, 'sd-note-head')[0]!.getAttribute('aria-expanded'), 'true');
+    assert.equal(byClass(again, 'sd-note-body')[0]!.getAttribute('hidden'), null);
+  });
+
   test('a notification cut before its closing tag still reads as its card', () => {
     const { nodes, system } = messageBody('<task-notification> <task-id>bwbug79bw</task-id> <tool-use-id>toolu_01</tool-use-id> <output-file>/tmp/claude-8540…');
     assert.equal(system, true);

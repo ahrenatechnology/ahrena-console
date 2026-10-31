@@ -384,14 +384,14 @@ describe('transcript reading', () => {
     assert.equal(p!.type, 'UserPrompt');
     assert.equal(p!.data.text, prompt.trim());
     assert.equal(p!.summary, prompt.replace(/\s+/g, ' ').trim());
-    const longo = 'a\n'.repeat(20_000);
-    const [m] = parseLine(line('assistant', 'a1', { role: 'assistant', model: 'claude-x', content: [{ type: 'text', text: longo }] }), names)!.events;
+    const long = 'a\n'.repeat(20_000);
+    const [m] = parseLine(line('assistant', 'a1', { role: 'assistant', model: 'claude-x', content: [{ type: 'text', text: long }] }), names)!.events;
     assert.equal(m!.type, 'AssistantMessage');
     assert.equal(m!.data.text!.length, MESSAGE_TEXT_MAX);
     assert.ok(m!.data.text!.endsWith('…') && m!.data.text!.startsWith('a\na\n'));
     assert.equal(m!.summary!.length, SUMMARY_MAX);
-    const [vazio] = parseLine(line('assistant', 'a2', { role: 'assistant', model: 'claude-x', content: [{ type: 'text', text: '  \n ' }] }), names)!.events;
-    assert.equal('text' in vazio!.data, false);
+    const [empty] = parseLine(line('assistant', 'a2', { role: 'assistant', model: 'claude-x', content: [{ type: 'text', text: '  \n ' }] }), names)!.events;
+    assert.equal('text' in empty!.data, false);
   });
 
   test('dedupe by message keeps the final entry and aggregates by bucket', () => {

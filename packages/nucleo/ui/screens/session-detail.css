@@ -145,6 +145,7 @@
 .sd-md-copy { display: grid; place-items: center; width: 24px; height: 24px; border: 0; border-radius: 6px; background: transparent; color: var(--muted); }
 .sd-md-copy:hover { background: var(--surface); color: var(--text); }
 .sd-md-copy.sd-copied { color: var(--status-completed-text); }
+.sd-md-copy.sd-copy-failed { color: var(--status-error-text); }
 .sd-md-table { overflow-x: auto; }
 .sd-md table { border-collapse: collapse; font-size: 12.5px; }
 .sd-md th, .sd-md td { border: 1px solid var(--border); padding: 6px 10px; text-align: left; vertical-align: top; }
@@ -158,6 +159,8 @@
 .sd-note-head:hover { background: var(--raised); }
 .sd-note-head:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .sd-note-head > .icon { flex: none; color: var(--muted); }
+.sd-note-head > .icon:first-child { transition: transform .12s; }
+.sd-note-head[aria-expanded="true"] > .icon:first-child { transform: rotate(90deg); }
 .sd-note-head b { font-weight: var(--weight-semibold); white-space: nowrap; }
 .sd-note-preview { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
 .sd-note-quiet .sd-note-head { border-style: dashed; background: transparent; color: var(--muted); }

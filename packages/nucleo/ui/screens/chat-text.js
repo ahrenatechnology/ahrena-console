@@ -139,7 +139,12 @@ function codeBlock(code, lang) {
       await navigator.clipboard.writeText(code);
       copy.classList.add('sd-copied');
       setTimeout(() => copy.classList.remove('sd-copied'), 1200);
-    } catch {}
+    } catch {
+      // Refused clipboard (plain HTTP to a remote core, a denied permission): say so on the button.
+      copy.classList.add('sd-copy-failed');
+      copy.title = 'Não foi possível copiar';
+      setTimeout(() => { copy.classList.remove('sd-copy-failed'); copy.title = 'Copiar'; }, 2500);
+    }
   });
   return el('div', { class: 'sd-md-pre' }, el('div', { class: 'sd-md-pre-head' }, el('span', { class: 'mono' }, lang || 'código'), copy), el('pre', { class: 'mono' }, el('code', {}, code)));
 }
@@ -171,16 +176,23 @@ export function pieces(text) {
   return out;
 }
 
+// The notices open, by title and preview: a live redraw rebuilds them and must not close the one being read.
+const openedNotices = new Set();
+
 /** A collapsed notice: icon, title, one-line preview; the click shows the body. */
 function notice({ iconName, title, preview, body, tone = '' }) {
-  const detail = el('div', { class: 'sd-note-body', hidden: true }, ...(Array.isArray(body) ? body : [body]));
-  const head = el('button', { type: 'button', class: 'sd-note-head', 'aria-expanded': 'false' },
+  const key = `${title}\u0000${preview ?? ''}`;
+  const isOpen = openedNotices.has(key);
+  const detail = el('div', { class: 'sd-note-body', hidden: !isOpen }, ...(Array.isArray(body) ? body : [body]));
+  const head = el('button', { type: 'button', class: 'sd-note-head', 'aria-expanded': String(isOpen) },
     icon('chevron-right'), icon(iconName), el('b', {}, title), preview ? el('span', { class: 'sd-note-preview' }, preview) : null);
   head.addEventListener('click', () => {
-    const open = detail.hidden;
-    detail.hidden = !open;
+    const open = detail.hasAttribute('hidden');
+    if (open) detail.removeAttribute('hidden');
+    else detail.setAttribute('hidden', '');
     head.setAttribute('aria-expanded', String(open));
-    head.firstChild.replaceWith(icon(open ? 'chevron-down' : 'chevron-right'));
+    if (open) openedNotices.add(key);
+    else openedNotices.delete(key);
   });
   return el('div', { class: `sd-note ${tone}` }, head, detail);
 }

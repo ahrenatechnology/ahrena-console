@@ -78,7 +78,7 @@ export async function reprocessarHistorico(o: {
     for (const s of page.items) {
       r.sessoes++;
       try {
-        const t = transcriptDe(s, o.raiz);
+        const t = transcriptDe(s, o.root);
         const arquivo = t && existsSync(t) ? t : null;
         const relidos = arquivo ? await transcriptEvents(arquivo, s.id, isPlanEvent) : [];
         const n = await rebuildPlan(o.storage, s.id, relidos);
@@ -158,7 +158,7 @@ function transcriptsDosSubagentes(principal: string): string[] {
 }
 
 /** Uma passada por todas as sessões: refaz os medidores de contexto e os estouros. */
-export async function reprocessarContexto(o: { storage: StoragePort; raiz: string; log?: (m: string) => void }): Promise<{ sessoes: number; medidores: number }> {
+export async function reprocessarContexto(o: { storage: StoragePort; root: string; log?: (m: string) => void }): Promise<{ sessoes: number; medidores: number }> {
   const r = { sessoes: 0, medidores: 0 };
   let cursor: string | null = null;
   do {
@@ -166,7 +166,7 @@ export async function reprocessarContexto(o: { storage: StoragePort; raiz: strin
     for (const s of page.items) {
       r.sessoes++;
       try {
-        const t = transcriptDe(s, o.raiz);
+        const t = transcriptDe(s, o.root);
         const arquivos = t && existsSync(t) ? [t, ...transcriptsDosSubagentes(t)] : [];
         const relidos: SessionEvent[] = [];
         for (const a of arquivos) relidos.push(...(await transcriptEvents(a, s.id, (e) => e.type === 'Compaction')));
@@ -189,7 +189,7 @@ const MESSAGE_TYPES = new Set(['UserPrompt', 'AssistantMessage']);
  * One pass over every session: the prompts and the agent's messages imported before `data.text`
  * existed get their full text, re-read from the transcript (and from the subagents').
  */
-export async function reprocessMessageText(o: { storage: StoragePort; raiz: string; log?: (m: string) => void }): Promise<{ sessions: number; messages: number }> {
+export async function reprocessMessageText(o: { storage: StoragePort; root: string; log?: (m: string) => void }): Promise<{ sessions: number; messages: number }> {
   const r = { sessions: 0, messages: 0 };
   let cursor: string | null = null;
   do {
@@ -197,7 +197,7 @@ export async function reprocessMessageText(o: { storage: StoragePort; raiz: stri
     for (const s of page.items) {
       r.sessions++;
       try {
-        const t = transcriptDe(s, o.raiz);
+        const t = transcriptDe(s, o.root);
         const files = t && existsSync(t) ? [t, ...transcriptsDosSubagentes(t)] : [];
         for (const f of files) {
           for (const e of await transcriptEvents(f, s.id, (ev) => MESSAGE_TYPES.has(ev.type))) {
@@ -206,6 +206,8 @@ export async function reprocessMessageText(o: { storage: StoragePort; raiz: stri
           }
         }
       } catch (err) {
+        // Accepted: a transcript that fails to read leaves that session on the 200-character summary; the pass is
+        // still marked done, or one broken file would re-read every transcript on every start.
         o.log?.(`message text of ${s.id}: ${(err as Error).message}`);
       }
     }

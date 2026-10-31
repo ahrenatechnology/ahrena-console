@@ -729,7 +729,7 @@ async function reprocessOnce() {
     log(`context meter rebuilt: ${r.medidores} meters in ${r.sessoes} sessions`);
   }
   if (!storage.isReprocessed(MESSAGE_TEXT_REPROCESSING)) {
-    const r = await reprocessMessageText({ storage, raiz: o.projects ?? defaultProjectsRoot(), log });
+    const r = await reprocessMessageText({ storage, root: o.projects ?? defaultProjectsRoot(), log });
     storage.markReprocessed(MESSAGE_TEXT_REPROCESSING, new Date().toISOString());
     log(`message text filled: ${r.messages} messages in ${r.sessions} sessions`);
   }

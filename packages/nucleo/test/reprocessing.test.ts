@@ -87,7 +87,7 @@ describe('reprocessamento das sessões já importadas', () => {
     store.db.exec('DELETE FROM session_plans; DELETE FROM session_plan_history');
     assert.deepEqual(await historico(), []);
 
-    const r = await reprocessarHistorico({ storage: store, decisoes, raiz: root });
+    const r = await reprocessarHistorico({ storage: store, decisoes, root });
     assert.deepEqual([r.sessoes, r.comPlano, r.planos], [1, 1, 3]);
     assert.deepEqual(await historico(), [[3, 'current', '0/1'], [2, 'abandoned', '0/2'], [1, 'completed', '2/2']]);
     const d = await decisoes.listDecisions({ sessionId: S });
@@ -95,7 +95,7 @@ describe('reprocessamento das sessões já importadas', () => {
     assert.equal(r.decisoes, d.items.length);
 
     // De novo: nada duplica.
-    const outra = await reprocessarHistorico({ storage: store, decisoes, raiz: root });
+    const outra = await reprocessarHistorico({ storage: store, decisoes, root });
     assert.equal(outra.decisoes, 0);
     assert.equal((await store.listPlanRecords(S)).length, 3);
   });
@@ -175,17 +175,17 @@ describe('ruído nas decisões (#131)', () => {
 describe('full message text (Conversa)', () => {
   test('fills data.text of the prompts and messages imported before it existed, subagents included', async () => {
     const { root } = projeto([tx.prompt(o('u1', 1), 'Primeira linha\n\nsegunda linha'), tx.say(o('a1', 2), 'Resposta\n- um\n- dois')]);
-    const pasta = join(root, '-repo-app', S, 'subagents');
-    mkdirSync(pasta, { recursive: true });
-    writeFileSync(join(pasta, 'agent-x1.jsonl'), jsonl([tx.say({ ...o('s1', 3), agentId: 'x1' }, 'Do subagente\nfim')]).map((l) => `${l}\n`).join(''));
+    const dir = join(root, '-repo-app', S, 'subagents');
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, 'agent-x1.jsonl'), jsonl([tx.say({ ...o('s1', 3), agentId: 'x1' }, 'Do subagente\nfim')]).map((l) => `${l}\n`).join(''));
     await importHistory({ storage: store, root });
     // As an old import left them: no data.text.
     store.db.exec(`UPDATE events SET data = json_remove(data, '$.text')`);
-    const textos = async () => (await store.listEvents(S)).items.filter((e) => e.type !== 'ToolUse').map((e) => (e.data as { text?: string } | null)?.text ?? null);
-    assert.deepEqual(await textos(), [null, null, null]);
+    const texts = async () => (await store.listEvents(S)).items.filter((e) => e.type !== 'ToolUse').map((e) => (e.data as { text?: string } | null)?.text ?? null);
+    assert.deepEqual(await texts(), [null, null, null]);
 
-    const r = await reprocessMessageText({ storage: store, raiz: root });
+    const r = await reprocessMessageText({ storage: store, root });
     assert.deepEqual(r, { sessions: 1, messages: 3 });
-    assert.deepEqual(await textos(), ['Primeira linha\n\nsegunda linha', 'Resposta\n- um\n- dois', 'Do subagente\nfim']);
+    assert.deepEqual(await texts(), ['Primeira linha\n\nsegunda linha', 'Resposta\n- um\n- dois', 'Do subagente\nfim']);
   });
 });

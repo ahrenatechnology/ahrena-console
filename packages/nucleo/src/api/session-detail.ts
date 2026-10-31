@@ -32,6 +32,8 @@ const PAGINA_DE_EVENTOS = 50;
 const MAX_PAGINA = 500;
 const MAX_MENSAGENS = 200;
 const MAX_DADOS = 4_000;
+// Measured on a copy of a real database (670 sessions): the heaviest conversation is 156 KB over its last 200
+// messages, p99 of a message 4.9 KB; the 6.4 MB of 200 × 32k is a ceiling no session comes near.
 const MAX_TEXTO = 32_000;
 const MAX_FERRAMENTAS = 8;
 
