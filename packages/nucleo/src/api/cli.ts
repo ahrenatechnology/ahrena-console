@@ -40,7 +40,7 @@ import { isOlderCommit } from '../owner/commit.ts';
 import { claimLock, codeWarning, planStart, ReplaceError, watchParent } from '../owner/owner.ts';
 import { waitForCore, isPidAlive, reservePort, releasePort } from '../owner/probe.ts';
 import { readLock, releaseLock, prepareDir } from '../owner/lock.ts';
-import { defaultDataDir, parseInstallation, resolveDataDir, resolvePort } from '../owner/installation.ts';
+import { consoleHome, defaultDataDir, parseInstallation, resolveDataDir, resolvePort } from '../owner/installation.ts';
 import { instanceId, listInstances, removeInstance, writeInstance } from '../owner/registry.ts';
 import { acquireStartGuard, type StartGuard } from '../owner/start-guard.ts';
 import { ChangeCursor } from '../changes/cursor.ts';
@@ -83,6 +83,8 @@ import { FRAMEWORK_REPO_ENV } from './framework-install.ts';
 import { createCoreGithub, type CoreGithub } from './core-github.ts';
 import { startLocalApi, API_VERSION, type LocalApi } from './server.ts';
 import { createMessagingRoute } from './messaging.ts';
+import { createTranscriptionRoute } from './transcription.ts';
+import { createTranscription, resolveWhisperConfig } from '../transcription/whisper.ts';
 import { Messaging } from '../messaging/service.ts';
 import { SessionOrders } from '../messaging/orders.ts';
 import { createOrdersRoute } from './orders.ts';
@@ -519,6 +521,9 @@ const messaging = demo
 // The executor (layer 2) runs the catalog's actions as jobs and logs their masked output to tools.log.
 // The MCP servers (layer 3): Claude Code's ~/.claude.json and the .mcp.json of the sessions' projects (capped).
 const toolsService = demo ? null : new ToolsService({ store: new SqliteToolChecksStore(sqlite.db), mcpProjects: () => knownProjects(storage, MAX_MCP_PROJECTS), log });
+// Dictation (#352, decision 0015): the whisper-server of this machine, started on the first use. Not in --demo.
+const transcription = demo ? null : createTranscription({ config: resolveWhisperConfig(consoleHome()), log });
+process.once('exit', () => transcription?.close());
 const toolsExecutor = toolsService ? new ToolsExecutor({ service: toolsService, logFile: toolsLogFile(dataDir), onChange: publishToolsChanges(changes), log }) : null;
 // The cloud connectors (#277, decision 0013): this machine's ~/.aws/config, its SSO sessions and their logins (into reconnect.log); the remote machines' through their tunnel port. Not in --demo.
 const awsConnector = demo ? null : new AwsConnector({ logFile: reconnectLogFile(dataDir), wakeOnView: true, onChange: publishConnectorChanges(changes), log });
@@ -626,6 +631,7 @@ const api: LocalApi = await startLocalApi({
   reconnect: machineConnection?.legacy ?? reconnectRunner,
   machineConnection: machineConnection ? createConnectionRoute(machineConnection) : null,
   messaging: createMessagingRoute({ messaging, sessions: storage, accounts, log }),
+  transcription: transcription ? createTranscriptionRoute({ transcription, log }) : null,
   orders: createOrdersRoute({ orders: new SessionOrders(), messaging, sessions: storage }),
   tools: toolsExecutor,
   ports,
@@ -730,6 +736,7 @@ async function reprocessOnce() {
 async function shutdown() {
   stopWatcher();
   messaging.close();
+  transcription?.close();
   connection.close();
   if (profileTimer) clearInterval(profileTimer);
   stopWatchingParent();

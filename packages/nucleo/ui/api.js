@@ -80,12 +80,13 @@ export function read(route, options) {
 
 const WRITE_METHODS = new Set(['POST', 'DELETE']);
 
-/** The HTTP writer: POST with a JSON body (or DELETE), only to `/api/` of the local core, without credentials. */
+/** The HTTP writer: POST with a JSON body (or DELETE; a `Blob` or bytes go as they are, with their own type: the dictation's WAV), only to `/api/` of the local core, without credentials. */
 export function httpWriter({ base = globalThis.location?.origin, fetch = globalThis.fetch?.bind(globalThis) } = {}) {
   const origin = new URL(base);
   if (origin.protocol !== 'http:' || !LOCAL_HOSTS.has(origin.hostname)) {
     throw new WriteError(`o console só escreve no núcleo local, não ${origin.origin}`);
   }
+  const isBinary = (b) => (typeof Blob !== 'undefined' && b instanceof Blob) || b instanceof ArrayBuffer || ArrayBuffer.isView(b);
   return async function writeOverHttp(route, body, { signal, method = 'POST' } = {}) {
     if (typeof route !== 'string' || !route.startsWith('/api/')) throw new WriteError(`rota fora da API: ${route}`, { route });
     if (!WRITE_METHODS.has(method)) throw new WriteError(`método de escrita não aceito: ${method}`, { route });
@@ -97,7 +98,9 @@ export function httpWriter({ base = globalThis.location?.origin, fetch = globalT
         url,
         method === 'DELETE'
           ? { method, signal, headers: { accept: 'application/json' }, credentials: 'omit', cache: 'no-store' }
-          : { method, signal, headers: { accept: 'application/json', 'content-type': 'application/json' }, body: JSON.stringify(body ?? {}), credentials: 'omit', cache: 'no-store' },
+          : isBinary(body)
+            ? { method, signal, headers: { accept: 'application/json', 'content-type': body.type || 'application/octet-stream' }, body, credentials: 'omit', cache: 'no-store' }
+            : { method, signal, headers: { accept: 'application/json', 'content-type': 'application/json' }, body: JSON.stringify(body ?? {}), credentials: 'omit', cache: 'no-store' },
       );
     } catch (err) {
       if (err?.name === 'AbortError') throw err;
