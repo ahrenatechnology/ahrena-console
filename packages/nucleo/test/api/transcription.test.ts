@@ -1,12 +1,13 @@
-// Dictation (#352, decision 0015) on the core: the route over a FAKE whisper-server (a local HTTP server
+// Dictation (#352, decision 0019) on the core: the route over a FAKE whisper-server (a local HTTP server
 // that answers like whisper.cpp's `/inference`), the same-origin gate, the limits and the config.
 // Never a real whisper, never a real microphone: the audio here is a few bytes of silence.
 import assert from 'node:assert/strict';
-import { createServer, request, type Server } from 'node:http';
+import { createServer, request as rawRequest, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { after, before, describe, test } from 'node:test';
 import { MAX_AUDIO_BYTES, createTranscriptionRoute, isExpectedWav } from '../../src/api/transcription.ts';
 import { cleanText, createTranscription, resolveWhisperConfig } from '../../src/transcription/whisper.ts';
+import { ownerRequest } from '../owner-http.ts';
 import { startDemoApi, type DemoApi } from './demo-api.ts';
 
 /** A 16 kHz mono PCM16 WAV of `samples` zeros. */
@@ -75,11 +76,12 @@ interface Reply {
   status: number;
   body: any;
 }
-function call(demo: DemoApi, method: string, headers: Record<string, string | undefined>, body?: Buffer): Promise<Reply> {
+function call(demo: DemoApi, method: string, headers: Record<string, string | undefined>, body?: Buffer, { owner = true }: { owner?: boolean } = {}): Promise<Reply> {
   return new Promise((resolve, reject) => {
     const h: Record<string, string> = {};
     for (const [k, v] of Object.entries(headers)) if (v !== undefined) h[k] = v;
-    const req = request(`${demo.api.url}/api/transcription`, { method, headers: h }, (res) => {
+    const send = owner ? ownerRequest : rawRequest;
+    const req = send(`${demo.api.url}/api/transcription`, { method, headers: h }, (res) => {
       const parts: Buffer[] = [];
       res.on('data', (p: Buffer) => parts.push(p));
       res.on('end', () => {
@@ -144,6 +146,20 @@ describe('POST /api/transcription', () => {
       const r = await call(b.demo, 'POST', { 'content-type': 'audio/wav' }, wav());
       assert.equal(r.status, 403);
       assert.equal(r.body.reason, 'ui_only');
+    } finally {
+      await b.close();
+    }
+  });
+
+  test('refuses the /ui itself without the owner proof, and the whisper is never asked (#302)', async () => {
+    const b = await boot({ url: fakeUrl });
+    inferences.length = 0;
+    try {
+      const r = await call(b.demo, 'POST', { origin: `http://${b.demo.host}`, 'content-type': 'audio/wav' }, wav(), { owner: false });
+      assert.equal(r.status, 403);
+      const status = await call(b.demo, 'GET', { origin: `http://${b.demo.host}` }, undefined, { owner: false });
+      assert.equal(status.status, 403);
+      assert.equal(inferences.length, 0);
     } finally {
       await b.close();
     }

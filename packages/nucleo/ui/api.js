@@ -33,6 +33,12 @@ export class WriteError extends ReadError {
   }
 }
 
+// Injected only by the owner's native window, never by the HTTP-served HTML.
+function ownerHeaders() {
+  const token = globalThis.__AHRENA_OWNER_TOKEN__;
+  return typeof token === 'string' && /^[a-f0-9]{64}$/.test(token) ? { authorization: `Bearer ${token}` } : {};
+}
+
 const LOCAL_HOSTS = new Set(['127.0.0.1', 'localhost', '[::1]']);
 
 export function httpReader({ base = globalThis.location?.origin, fetch = globalThis.fetch?.bind(globalThis) } = {}) {
@@ -46,7 +52,7 @@ export function httpReader({ base = globalThis.location?.origin, fetch = globalT
     if (url.origin !== origin.origin || !url.pathname.startsWith('/api/')) throw new ReadError(`rota fora do núcleo: ${route}`, { route });
     let response;
     try {
-      response = await fetch(url, { signal, headers: { accept: 'application/json' }, credentials: 'omit', cache: 'no-store' });
+      response = await fetch(url, { signal, headers: { ...ownerHeaders(), accept: 'application/json' }, credentials: 'omit', cache: 'no-store' });
     } catch (err) {
       if (err?.name === 'AbortError') throw err;
       throw new ReadError(`O núcleo em ${origin.host} não respondeu`, { route });
@@ -97,10 +103,10 @@ export function httpWriter({ base = globalThis.location?.origin, fetch = globalT
       response = await fetch(
         url,
         method === 'DELETE'
-          ? { method, signal, headers: { accept: 'application/json' }, credentials: 'omit', cache: 'no-store' }
+          ? { method, signal, headers: { ...ownerHeaders(), accept: 'application/json' }, credentials: 'omit', cache: 'no-store' }
           : isBinary(body)
-            ? { method, signal, headers: { accept: 'application/json', 'content-type': body.type || 'application/octet-stream' }, body, credentials: 'omit', cache: 'no-store' }
-            : { method, signal, headers: { accept: 'application/json', 'content-type': 'application/json' }, body: JSON.stringify(body ?? {}), credentials: 'omit', cache: 'no-store' },
+            ? { method, signal, headers: { ...ownerHeaders(), accept: 'application/json', 'content-type': body.type || 'application/octet-stream' }, body, credentials: 'omit', cache: 'no-store' }
+            : { method, signal, headers: { ...ownerHeaders(), accept: 'application/json', 'content-type': 'application/json' }, body: JSON.stringify(body ?? {}), credentials: 'omit', cache: 'no-store' },
       );
     } catch (err) {
       if (err?.name === 'AbortError') throw err;

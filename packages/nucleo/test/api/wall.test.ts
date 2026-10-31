@@ -1,3 +1,4 @@
+import { OWNER_TOKEN, ownerFetch as fetch } from '../owner-http.ts';
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import { openSqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
@@ -193,7 +194,7 @@ describe('mural ao vivo (#34)', () => {
 
   test('GET /api/wall pela API local', async () => {
     const storage = await semear();
-    const api = await startLocalApi({ panelBuilder: painelDe(storage), hooks: { storage }, port: 0, log: () => {} });
+    const api = await startLocalApi({ ownerToken: () => OWNER_TOKEN, panelBuilder: painelDe(storage), hooks: { storage }, port: 0, log: () => {} });
     try {
       const r = await fetch(`${api.url}/api/wall`);
       assert.equal(r.status, 200);
@@ -358,7 +359,7 @@ describe('mural ao vivo: a que espera por mim fica e as Paradas (#333)', () => {
   test('GET /api/wall?parkedLimit=… pela API local', async () => {
     const storage = openSqliteStorage({ path: ':memory:' });
     for (let i = 0; i < 9; i++) await storage.putSession(session({ id: `p${i}`, status: 'completed', endedAt: iso(300 + i), updatedAt: iso(300 + i) }));
-    const api = await startLocalApi({ panelBuilder: painelDe(storage), hooks: { storage }, port: 0, log: () => {} });
+    const api = await startLocalApi({ ownerToken: () => OWNER_TOKEN, panelBuilder: painelDe(storage), hooks: { storage }, port: 0, log: () => {} });
     try {
       const mural = (await (await fetch(`${api.url}/api/wall`)).json()) as Wall;
       assert.deepEqual([mural.parked.total, mural.parked.items.length], [9, 7]);

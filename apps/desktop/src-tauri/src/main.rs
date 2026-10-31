@@ -28,6 +28,7 @@
 mod clouds;
 mod core;
 mod http;
+mod owner_auth;
 mod login;
 mod machines;
 mod menu;
@@ -183,6 +184,7 @@ fn main() {
 /// itself.
 fn follow(app: AppHandle, state: Shared, dir: PathBuf, data_dir: Option<PathBuf>, signals: std::sync::mpsc::Receiver<()>, mut open_at_launch: bool) {
     loop {
+        owner_auth::clear();
         change(&app, &state, |s| {
             s.core = CoreState::Searching;
             s.attention = None;
@@ -215,6 +217,22 @@ fn follow(app: AppHandle, state: Shared, dir: PathBuf, data_dir: Option<PathBuf>
                 continue;
             }
         };
+        if core.pid.is_none() && core::demo_port() == Some(core.port) {
+            let file = core::env_var("AHRENA_CONSOLE_OWNER_TOKEN_FILE").map(PathBuf::from);
+            owner_auth::configure_demo(file.as_deref(), core.port);
+        } else {
+            owner_auth::configure(data_dir.as_deref(), core.port, core.pid);
+        }
+        if owner_auth::token(core.port).is_none() {
+            change(&app, &state, |s| {
+                s.core = CoreState::Stopped { reason: "Não foi possível autenticar o dono do núcleo".into(), no_node: false };
+                s.open_when_up = false;
+            });
+            if let Err(RecvTimeoutError::Disconnected) = signals.recv_timeout(Duration::from_secs(30)) {
+                return;
+            }
+            continue;
+        }
         let mut asked = false;
         change(&app, &state, |s| {
             s.core = CoreState::Up { port: core.port };
@@ -846,6 +864,7 @@ fn open_window(app: &AppHandle, path: Option<&str>) {
             }
         }
     };
+    let Some(token) = owner_auth::token(port) else { return };
     let Ok(url) = format!("http://127.0.0.1:{port}{}", path.unwrap_or("/ui")).parse::<tauri::Url>() else { return };
     if let Some(w) = app.get_webview_window("console") {
         // The port is random: a window still on another port (an old core) is moved to this one.
@@ -861,7 +880,7 @@ fn open_window(app: &AppHandle, path: Option<&str>) {
         .title("Ahrena Console")
         .inner_size(1100.0, 760.0)
         // The /ui tells its own window from a browser tab by this mark (#330): Atualizar only works in the app.
-        .initialization_script("window.__AHRENA_APP__ = true;")
+        .initialization_script(owner_auth::initialization_script(port, &token))
         // A link out of the /ui (github.com/login/device, Revogar no GitHub; #241) opens in the system
         // browser, never inside this window: the window only ever shows this app's core's /ui.
         .on_navigation(move |url| match link_target(url, core_port(&nav_state)) {
@@ -942,14 +961,12 @@ fn open_in_browser(url: &tauri::Url) {
     }
 }
 
-/// Moves an existing console window to the `/ui` of the core on `port`, if it shows another port.
-fn follow_core_port(app: &AppHandle, port: u16) {
+/// A newly adopted core gets a new bootstrap, even if its port was reused after a restart.
+fn follow_core_port(app: &AppHandle, _port: u16) {
     let Some(w) = app.get_webview_window("console") else { return };
-    if w.url().ok().and_then(|u| u.port()) == Some(port) {
-        return;
-    }
-    if let Ok(url) = format!("http://127.0.0.1:{port}/ui").parse::<tauri::Url>() {
-        let _ = w.navigate(url);
+    let visible = w.is_visible().unwrap_or(false);
+    if w.destroy().is_ok() && visible {
+        open_console(app);
     }
 }
 

@@ -7,6 +7,12 @@ import { NOW } from './scenarios'
 type Sent = { method: string; url: string; body: any }
 
 function fakes(on: any, opts: { orders: { orderId: string; kind: string }[]; commands: string[]; run?: (command: string) => { text?: string } | Error }) {
+  mock.env(on, { AHRENA_CONSOLE_HOME: '/owner-test' })
+  on('fs.list', async () => ({ value: [] }))
+  on('fs.read', async (_$: unknown, e: { path: string }) => {
+    if (e.path !== '/owner-test/nucleo.json') throw new Error('ENOENT')
+    return { value: JSON.stringify({ port: 4999, pid: 123, token: 'a'.repeat(64) }) }
+  })
   const sent: Sent[] = []
   const ran: string[] = []
   let queue = [...opts.orders]
@@ -23,7 +29,8 @@ function fakes(on: any, opts: { orders: { orderId: string; kind: string }[]; com
     if (r instanceof Error) throw r
     return r
   })
-  on('http.fetch', async (_$: unknown, e: { url: string; init?: { method?: string; body?: string } }) => {
+  on('http.fetch', async (_$: unknown, e: { url: string; init?: { method?: string; body?: string; headers?: Record<string, string> } }) => {
+    expect(e.init?.headers?.authorization).toBe(`Bearer ${'a'.repeat(64)}`)
     const method = e.init?.method ?? 'GET'
     sent.push({ method, url: e.url, body: e.init?.body ? JSON.parse(e.init.body) : null })
     if (method === 'GET' && e.url.endsWith('/commands')) {

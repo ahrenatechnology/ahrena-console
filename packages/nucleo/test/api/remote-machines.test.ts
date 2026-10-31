@@ -1,3 +1,4 @@
+import { OWNER_TOKEN, ownerFetch as fetch } from '../owner-http.ts';
 // The remote machines (#176) through this Mac's own API on 127.0.0.1: `GET /api/machines` with one
 // remote, `GET /api/telemetry?machine=<id>` while the remote is down, and the remote sessions in
 // `GET /api/attention`. The remote is a FAKE núcleo on loopback (test/telemetry/fake-remote.ts); the
@@ -64,7 +65,7 @@ async function boot() {
   });
   const telemetry = new TelemetryService({ store, tracker, machines: [localMachine(), remote], now: () => NOW });
   const montador = new MontadorDoPainel({ storage, contas, desktop: null, trabalho: null });
-  api = await startLocalApi({ panelBuilder: montador, hooks: { storage }, port: 0, log: () => {}, changes: cursor, telemetry, fleet: frota, remoteAttention: [remote] });
+  api = await startLocalApi({ ownerToken: () => OWNER_TOKEN, panelBuilder: montador, hooks: { storage }, port: 0, log: () => {}, changes: cursor, telemetry, fleet: frota, remoteAttention: [remote] });
   const url = api.url;
   return { remote, frota, get: (path: string) => fetch(`${url}${path}`) };
 }

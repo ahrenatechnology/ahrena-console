@@ -1,7 +1,7 @@
+import { OWNER_TOKEN, ownerRequest as request } from '../owner-http.ts';
 // O Kanban só leitura (#31): a rota `GET /api/kanban` nas duas visões (sessões e agentes), com
 // dados do simulador.
 import assert from 'node:assert/strict';
-import { request } from 'node:http';
 import { after, before, describe, test } from 'node:test';
 import { openSqliteStorage, type SqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
 import { Accounts, startLocalApi, MontadorDoPainel, type LocalApi } from '../../src/api/index.ts';
@@ -73,7 +73,7 @@ describe('#31 GET /api/kanban com o simulador', () => {
     const contas = new Accounts({ storage, file: null });
     quadro = new QuadroKanban({ storage, contas, agora: () => AGORA });
     const montador = new MontadorDoPainel({ storage, contas, desktop: null, trabalho: null });
-    api = await startLocalApi({ panelBuilder: montador, hooks: { storage }, port: 0, log: () => {}, kanban: quadro });
+    api = await startLocalApi({ ownerToken: () => OWNER_TOKEN, panelBuilder: montador, hooks: { storage }, port: 0, log: () => {}, kanban: quadro });
   });
   after(async () => {
     await api.close();

@@ -7,6 +7,7 @@
 // Diferente do painel, que só consulta o núcleo com o painel aberto (decisão 0004), isto roda em toda
 // sessão com o mod: sem isso a ordem nunca chegaria a uma sessão sem o painel aberto. É um GET barato,
 // só desta sessão, a cada ORDERS_EVERY_MS; o núcleo entrega cada ordem uma vez só.
+import { ownerHeaders } from './discover'
 import type { EngineInterface as Engine } from 'claude-code'
 
 export const ORDERS_EVERY_MS = 4000
@@ -45,7 +46,7 @@ async function confirm($: Engine, core: string, sessionId: string, order: Order,
   try {
     await $.http.fetch(`http://${core}/api/sessions/${encodeURIComponent(sessionId)}/commands/${encodeURIComponent(order.orderId)}/done`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: { 'content-type': 'application/json', ...(await ownerHeaders($, core)) },
       body: JSON.stringify(ok ? { ok } : { ok, reason: (reason ?? 'sem motivo').slice(0, MAX_REASON) }),
     })
   } catch {
@@ -72,7 +73,7 @@ export async function runOrder($: Engine, core: string, sessionId: string, order
 /** Uma busca: pede as ordens desta sessão e roda cada uma, sem esperar a sessão ficar ociosa para a próxima busca. */
 export async function pollOrders($: Engine, core: string): Promise<void> {
   const sessionId = await $.session.id()
-  const res = await $.http.fetch(`http://${core}/api/sessions/${encodeURIComponent(sessionId)}/commands`)
+  const res = await $.http.fetch(`http://${core}/api/sessions/${encodeURIComponent(sessionId)}/commands`, { headers: await ownerHeaders($, core) })
   if (res.status === 403 && !refusedOnce) {
     // O núcleo recusou a busca: se o fetch do engine mandar `Sec-Fetch-Site`, nenhuma ordem chega. Avisa uma vez.
     refusedOnce = true

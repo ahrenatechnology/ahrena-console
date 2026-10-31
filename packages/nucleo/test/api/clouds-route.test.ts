@@ -1,10 +1,11 @@
+import { OWNER_TOKEN, ownerRequest as request } from '../owner-http.ts';
 // The cloud connector routes (#277, decision 0013 section 6) on 127.0.0.1, with a FAKE `aws`
 // (test/clouds/fake-aws.ts) and a FAKE remote núcleo on loopback: the shapes of GET /api/connectors,
 // Entrar and Cancelar, 404 for an unknown or unsupported session, the Origin defense (another Origin
 // gets 403 and nothing is spawned), the body's fixed enum, and the remote machine's read and
 // forwarding (only the session name travels, as a local request, with mode device-code).
 import assert from 'node:assert/strict';
-import { createServer, request, type IncomingMessage } from 'node:http';
+import { createServer, type IncomingMessage } from 'node:http';
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, test } from 'node:test';
@@ -62,7 +63,7 @@ async function boot(state: Partial<FakeAwsState> = {}, remotes: Record<string, n
   const storage = openSqliteStorage({ path: ':memory:' });
   const montador = new MontadorDoPainel({ storage, contas: new Accounts({ storage, file: null }), desktop: null, trabalho: null });
   const clouds = createCloudsRoute({ aws, remote: { port: (id) => remotes[id], get: loopbackGet({ timeoutMs: 1000 }), write: loopbackWrite({ timeoutMs: 1000 }) } });
-  const api = await startLocalApi({ panelBuilder: montador, hooks: { storage }, port: 0, log: (m) => logs.push(m), clouds });
+  const api = await startLocalApi({ ownerToken: () => OWNER_TOKEN, panelBuilder: montador, hooks: { storage }, port: 0, log: (m) => logs.push(m), clouds });
   const port = Number(new URL(api.url).port);
   return {
     f,

@@ -1,4 +1,4 @@
-// `npm run core -- voice install` (#352, decision 0015): puts a `whisper-server` and the ggml model under
+// `npm run core -- voice install` (#352, decision 0019): puts a `whisper-server` and the ggml model under
 // `consoleHome()/voice` for the core's dictation. It builds whisper.cpp from a PINNED tag (with CUDA when
 // the machine has an NVIDIA GPU and `nvcc`; else on the CPU, which is slower) and downloads the model from
 // the whisper.cpp repository on Hugging Face. Every process runs with an argument list, no shell, and

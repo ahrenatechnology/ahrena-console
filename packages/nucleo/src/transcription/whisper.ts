@@ -1,4 +1,4 @@
-// Dictation (#352, decision 0015): the transcription of what a person said into the compose box,
+// Dictation (#352, decision 0019): the transcription of what a person said into the compose box,
 // by a whisper.cpp `whisper-server` on this machine. The core starts it on the first request, keeps
 // it while it is used and stops it when idle and at shutdown; or, with `AHRENA_CONSOLE_WHISPER_URL`,
 // only points at one that already runs. It listens on 127.0.0.1 only and the audio never leaves the

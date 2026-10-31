@@ -14,7 +14,7 @@
 // What the person types lives only in the textarea and in the POST body: never in a URL, a log or the
 // DOM as HTML. Everything from the core goes in through `textContent` (`el()`).
 //
-// Dictation (issue 352, decision 0015, session-voice.js): a microphone beside Enviar records, the WAV goes
+// Dictation (issue 352, decision 0019, session-voice.js): a microphone beside Enviar records, the WAV goes
 // to `POST /api/transcription` (the core's local whisper-server) and the text lands in the textarea at
 // the cursor, never sent by itself. `GET /api/transcription` says whether the core can transcribe.
 

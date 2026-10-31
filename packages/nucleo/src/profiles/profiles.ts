@@ -106,7 +106,9 @@ export class Profiles {
   private async saveNow(account: ProfileAccount, dir: string | null): Promise<ClaudeAccount> {
     const id = claudeAccountId(account.accountUuid, account.organizationUuid);
     const now = this.now();
-    const stored = this.storage ? await this.storage.getAccount(id) : null;
+    const candidate = this.storage ? await this.storage.getAccount(id) : null;
+    const stored = candidate && typeof candidate.organizationUuid === 'string' && (!candidate.identity || candidate.identity.provider === 'claude')
+      ? { ...candidate, organizationUuid: candidate.organizationUuid } : null;
     const color = stored?.color ?? freeColor(this.storage ? (await this.storage.listAccounts()).map((a) => a.color) : []);
     const a: ClaudeAccount = {
       id,

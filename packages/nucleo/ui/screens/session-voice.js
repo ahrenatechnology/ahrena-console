@@ -1,4 +1,4 @@
-// Dictation in the compose box (issue 352, decision 0015): records the microphone in the browser and makes
+// Dictation in the compose box (issue 352, decision 0019): records the microphone in the browser and makes
 // the WAV the core's whisper-server reads (16 kHz, mono, PCM16), with no ffmpeg anywhere.
 //
 // The audio lives in memory only: it goes in the body of one POST to /api/transcription and nowhere

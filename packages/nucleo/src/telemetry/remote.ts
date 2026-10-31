@@ -242,6 +242,8 @@ export class RemoteMachine implements MachineEntry {
     } else if (t.status === 200 && isObject(t.body) && isNumber(t.body.version)) {
       const version = t.body.version;
       next = version === TELEMETRY_VERSION ? { state: 'connected', reason: null, version } : { state: 'incompatible-version', reason: null, version };
+    } else if (t.status === 403) {
+      next = { state: 'unreachable', reason: 'owner-auth-required', version: null };
     } else if (t.status === 200 || t.status === 404) {
       // A núcleo that answers but has no telemetry this one understands (an older one gives 404).
       next = { state: 'incompatible-version', reason: null, version: null };

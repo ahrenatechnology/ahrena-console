@@ -1,8 +1,8 @@
+import { OWNER_TOKEN, ownerRequest as request } from '../owner-http.ts';
 // #288: the Docker actions. The catalog's plans from a fixed inventory, the readings through a fake
 // runner, the service's digest rules and the routes' gate on 127.0.0.1 with a fake spawn and a fake
 // remote: nothing real ever runs, and nothing but ids read from the daemon reaches an argv.
 import assert from 'node:assert/strict';
-import { request } from 'node:http';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -196,7 +196,7 @@ async function boot(o: { systemDocker?: boolean; inventory?: Inventory; script?:
   const route = createDockerRoute({ service, cancel: (id) => executor.cancel(id), acceptNoOriginActions: () => o.acceptNoOrigin ?? false, remote: (o.remote as never) ?? null });
   const storage = openSqliteStorage({ path: ':memory:' });
   const montador = new MontadorDoPainel({ storage, contas: new Accounts({ storage, file: null }), desktop: null, trabalho: null });
-  const api = await startLocalApi({ panelBuilder: montador, hooks: { storage }, port: 0, log: () => {}, changes: cursor, tools: executor, docker: { route, acceptNoOrigin: () => o.acceptNoOrigin ?? false } });
+  const api = await startLocalApi({ ownerToken: () => OWNER_TOKEN, panelBuilder: montador, hooks: { storage }, port: 0, log: () => {}, changes: cursor, tools: executor, docker: { route, acceptNoOrigin: () => o.acceptNoOrigin ?? false } });
   const port = Number(new URL(api.url).port);
   const host = `127.0.0.1:${port}`;
   const origin = `http://${host}`;

@@ -327,6 +327,8 @@ function cardDe(leitura: LeituraDaSessao, open: SessionOpenDescriber, children: 
   const pasta = sessao.cwd ?? desktop?.cwd ?? null;
   return {
     id: sessao.id,
+    identity: sessao.identity,
+    capabilities: sessao.capabilities,
     title: sessao.title,
     project: pasta ? basename(pasta) : null,
     branch,
@@ -343,7 +345,7 @@ function cardDe(leitura: LeituraDaSessao, open: SessionOpenDescriber, children: 
     cost: { usd: custo?.usd ?? null, estimate: true },
     plan: plano ? { done: plano.done, total: plano.total, current: plano.current } : null,
     context: contexto ? { pct: contexto.pct, used: contexto.used, limit: contexto.limit, label: contexto.label } : null,
-    open: open.describe({ sessionId: sessao.id, cwd: pasta, local: desktop?.localId ?? null }),
+    open: open.describe({ sessionId: sessao.id, identity: sessao.identity, cwd: pasta, local: desktop?.localId ?? null }),
     children,
     tree,
     parentId,

@@ -1,3 +1,4 @@
+import { OWNER_TOKEN, ownerFetch as fetch } from '../owner-http.ts';
 // `GET /api/dashboard` (#27): the Dashboard's numbers, active agents and activity (C1), with
 // the synthetic data of the simulator and of the MCP tests. No real data.
 import assert from 'node:assert/strict';
@@ -209,7 +210,7 @@ describe('GET /api/dashboard', () => {
   });
 
   const subir = (frota?: FleetReader) =>
-    startLocalApi({ panelBuilder: new MontadorDoPainel({ storage, contas, desktop: null, trabalho: null as never }), hooks: { storage }, port: 0, log: () => {}, ...(frota ? { fleet: frota } : {}) });
+    startLocalApi({ ownerToken: () => OWNER_TOKEN, panelBuilder: new MontadorDoPainel({ storage, contas, desktop: null, trabalho: null as never }), hooks: { storage }, port: 0, log: () => {}, ...(frota ? { fleet: frota } : {}) });
 
   test('responde o dashboard quando o núcleo tem a frota', async () => {
     const agora = NOW;

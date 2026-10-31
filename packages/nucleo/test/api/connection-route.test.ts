@@ -1,10 +1,10 @@
+import { OWNER_TOKEN, ownerRequest as request } from '../owner-http.ts';
 // The connection routes of a remote machine (#278, decision 0013 section 6) on 127.0.0.1, with a FAKE
 // command (a tiny node script that writes a marker or sleeps) and a stub AWS login: the shapes, 202,
 // 404 for an unknown id, 405, 409 with each reason, Cancel, `connection` in each GET /api/machines
 // remote item, the old Reconnect route kept as an alias, the `<id>:connection` change, and the Origin
 // defense of decision 0003: another Origin gets 403 and nothing is spawned. Placeholders only.
 import assert from 'node:assert/strict';
-import { request } from 'node:http';
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -99,7 +99,7 @@ async function boot(mode: 'marker' | 'sleep' = 'marker') {
   });
   const telemetry = new TelemetryService({ store, tracker, machines: [localMachine(), remote('ws-exemplo', 14720), remote('ws-dois', 14721)] });
   const montador = new MontadorDoPainel({ storage, contas: new Accounts({ storage, file: null }), desktop: null, trabalho: null });
-  const api = await startLocalApi({ panelBuilder: montador, hooks: { storage }, port: 0, log: () => {}, changes: cursor, telemetry, reconnect: conn.legacy, machineConnection: createConnectionRoute(conn) });
+  const api = await startLocalApi({ ownerToken: () => OWNER_TOKEN, panelBuilder: montador, hooks: { storage }, port: 0, log: () => {}, changes: cursor, telemetry, reconnect: conn.legacy, machineConnection: createConnectionRoute(conn) });
   const port = Number(new URL(api.url).port);
   return {
     api,

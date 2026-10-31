@@ -47,13 +47,16 @@ export async function serveStdio({ handle, input = process.stdin, output = proce
  * comes back with `isError` saying how to start the core), so the client does not mark the server
  * as broken just because the core has not started yet. Every request tries HTTP again.
  */
-export function httpBridge(url: string, { withoutCore, fetcher = fetch }: { withoutCore: MessageHandler; fetcher?: typeof fetch }): MessageHandler {
+export function httpBridge(url: string, { withoutCore, fetcher = fetch, ownerToken }: { withoutCore: MessageHandler; fetcher?: typeof fetch; ownerToken?: () => string | null }): MessageHandler {
   return async (message) => {
+    const token = ownerToken?.();
+    if (ownerToken && !token) return withoutCore(message);
     let res: Response;
     try {
       res = await fetcher(url, {
         method: 'POST',
-        headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream' },
+        headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream', ...(token ? { authorization: `Bearer ${token}` } : {}) },
+        redirect: 'error',
         body: JSON.stringify(message),
       });
     } catch {
@@ -67,6 +70,7 @@ export function httpBridge(url: string, { withoutCore, fetcher = fetch }: { with
     } catch {
       return errorWithId(message, `resposta inesperada do núcleo (HTTP ${res.status})`);
     }
+    if (res.status === 403) return errorWithId(message, 'Acesso restrito ao dono do console. Reconecte ao núcleo.');
     // The HTTP 4xx does not know the id (the body was not even read, or was not JSON-RPC): on stdio,
     // the client matches the answer by id, so it carries the request's.
     if (!Array.isArray(body) && body.id === null && body.error) return errorWithId(message, body.error.message, body.error.code);

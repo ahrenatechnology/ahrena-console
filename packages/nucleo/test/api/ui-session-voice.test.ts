@@ -1,4 +1,4 @@
-// Dictation in the compose box (#352, decision 0015, wireframe of the five states), end to end: the real
+// Dictation in the compose box (#352, decision 0019, wireframe of the five states), end to end: the real
 // compose box (ui/screens/session-message.js, session-voice.js) mounted in the minimal DOM, the real
 // POST /api/transcription of the demo core over a FAKE whisper-server, and a FAKE microphone: the box's
 // `voice` option takes the recorder, so there is no getUserMedia, no sound card, no real whisper.
@@ -14,6 +14,7 @@ import { Messaging } from '../../src/messaging/service.ts';
 import { DETAIL_SESSION } from '../../src/simulator/detail.ts';
 import { createTranscription } from '../../src/transcription/whisper.ts';
 import { ElementoFalso, documentoFalso, instalarDomFalso, texto } from './fake-dom.ts';
+import { ownerFetch as fetch } from '../owner-http.ts';
 import { startDemoApi, type DemoApi } from './demo-api.ts';
 
 instalarDomFalso();

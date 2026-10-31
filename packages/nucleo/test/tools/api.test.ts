@@ -1,3 +1,4 @@
+import { OWNER_TOKEN, ownerFetch as fetch } from '../owner-http.ts';
 // #280 layer 1: GET /api/tools on 127.0.0.1 with a fake machine: the contract's shape, ?machine=,
 // the núcleo without the service, and the Origin defenses every read has (decision 0003).
 import assert from 'node:assert/strict';
@@ -10,7 +11,7 @@ import { macService } from './machines.ts';
 async function boot(tools: ToolsService | null) {
   const storage = openSqliteStorage({ path: ':memory:' });
   const montador = new MontadorDoPainel({ storage, contas: new Accounts({ storage, file: null }), desktop: null, trabalho: null });
-  const api = await startLocalApi({ panelBuilder: montador, hooks: { storage }, port: 0, log: () => {}, tools });
+  const api = await startLocalApi({ ownerToken: () => OWNER_TOKEN, panelBuilder: montador, hooks: { storage }, port: 0, log: () => {}, tools });
   return {
     get: (path: string, headers: Record<string, string> = {}) => fetch(`${api.url}${path}`, { headers }),
     origin: new URL(api.url).origin,

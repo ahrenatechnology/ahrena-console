@@ -1,4 +1,4 @@
-// Dictation in the compose box (#352, decision 0015): a person speaks, the /ui records and sends the
+// Dictation in the compose box (#352, decision 0019): a person speaks, the /ui records and sends the
 // WAV here, the local `whisper-server` (src/transcription) turns it into text and the box shows it.
 //
 // | Route                    | What                                                                                  |
@@ -6,6 +6,8 @@
 // | `GET /api/transcription` | `{ version, available, reason, model }`: whether the core can transcribe              |
 // | `POST /api/transcription`| a 16 kHz mono PCM16 WAV (`audio/wav`) → `{ text, durationMs }`                         |
 //
+// Both routes are private: the owner proof (#302, owner-auth.ts) is checked in server.ts before
+// anything here runs, so without the bearer the whisper is never reached.
 // The POST is a same-origin exception of decision 0003, as the messages' (`transcriptionWriteFromSameOrigin`,
 // called in server.ts `handle`): only `POST`, the exact raw path, `Origin` exactly `http://<Host>` with our
 // Host, and a request WITHOUT `Origin` is refused too (`ui_only`): only audio the /ui recorded may go.

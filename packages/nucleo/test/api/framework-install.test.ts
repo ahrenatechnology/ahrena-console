@@ -1,3 +1,4 @@
+import { OWNER_TOKEN, ownerFetch as fetch } from '../owner-http.ts';
 // Instalar o Ahrena Framework pelo console (#184), pelo serviço e pelas rotas, contra o GitHub falso
 // (src/simulator/fake-github.ts): nenhum PR real, nenhuma chamada à API real e nenhum token na resposta.
 import assert from 'node:assert/strict';
@@ -626,7 +627,7 @@ describe('#184 the /api/framework-install routes', () => {
     s = setup();
     const storage = openSqliteStorage({ path: ':memory:' });
     const montador = new MontadorDoPainel({ storage, contas: new Accounts({ storage, file: null }), desktop: null, trabalho: null });
-    api = await startLocalApi({ panelBuilder: montador, hooks: { storage }, port: 0, log: () => {}, frameworkInstall: createFrameworkInstallRoute(s.service) });
+    api = await startLocalApi({ ownerToken: () => OWNER_TOKEN, panelBuilder: montador, hooks: { storage }, port: 0, log: () => {}, frameworkInstall: createFrameworkInstallRoute(s.service) });
     port = Number(new URL(api.url).port);
   });
   after(() => api.close());

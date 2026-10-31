@@ -1,6 +1,7 @@
+import { OWNER_TOKEN, ownerRequest as request } from '../owner-http.ts';
 // The per-session orders (#61, mod part): the queue with a fake clock, and the routes on 127.0.0.1.
 import assert from 'node:assert/strict';
-import { createServer, request } from 'node:http';
+import { createServer} from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -88,7 +89,7 @@ async function boot(available = true) {
   const accounts = new Accounts({ storage, file: null });
   const montador = new MontadorDoPainel({ storage, contas: accounts, desktop: null, trabalho: null });
   const messaging = { availability: async () => ({ available, reason: available ? null : 'no_live_process', entrypoint: null, remoteControl: false, configDir: null, accountId: null, processes: available ? 1 : 0, inFlight: null }) };
-  const api = await startLocalApi({ panelBuilder: montador, hooks: { storage }, port: 0, orders: createOrdersRoute({ orders: new SessionOrders(), messaging: messaging as never, sessions: storage }) });
+  const api = await startLocalApi({ ownerToken: () => OWNER_TOKEN, panelBuilder: montador, hooks: { storage }, port: 0, orders: createOrdersRoute({ orders: new SessionOrders(), messaging: messaging as never, sessions: storage }) });
   const host = `127.0.0.1:${new URL(api.url).port}`;
   return { url: api.url, host, sessionId, close: async () => (await api.close(), await storage.close()) };
 }
