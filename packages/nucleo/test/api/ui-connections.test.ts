@@ -173,6 +173,28 @@ describe('Conexões: every state (C39 to C41, C44)', () => {
     });
   }
 
+  test('C92 revoked (#372): what happened, the three causes, Reconectar como <login> and the security log', async () => {
+    assert.deepEqual(providerPill(disconnected({ lastError: 'revoked' })), { label: 'precisa reconectar', tone: 'error' });
+    const m = await mountWith({ read: answer(disconnected({ lastError: 'revoked', login: 'dev-sintetico', securityLogUrl: 'https://github.com/settings/security-log' })) });
+    assert.equal(card(m).getAttribute('data-last-error'), 'revoked');
+    assert.equal(texto(card(m).querySelector('.conn-message-title')), 'O GitHub não aceita mais a credencial de dev-sintetico');
+    assert.match(texto(card(m)), /respondeu que ela não vale mais \(401\)/);
+    assert.equal(card(m).querySelectorAll('li.conn-cause').length, 3);
+    assert.match(texto(card(m)), /mais de dez credenciais/);
+    assert.equal(texto(button(m, 'connect')), 'Reconectar como dev-sintetico');
+    const log = card(m).querySelectorAll('a').find((a) => a.getAttribute('href') === 'https://github.com/settings/security-log')!;
+    assert.equal(log.getAttribute('target'), '_blank');
+    assert.match(texto(card(m).querySelector('.conn-pill-error')), /precisa reconectar/);
+    assert.doesNotMatch(texto(m.area), /\brevoked\b/, 'never the raw code');
+  });
+
+  test('C92 revoked without a login: the generic title and Reconectar', async () => {
+    const m = await mountWith({ read: answer(disconnected({ lastError: 'revoked' })) });
+    assert.equal(texto(card(m).querySelector('.conn-message-title')), 'O GitHub não aceita mais a credencial guardada');
+    assert.equal(texto(button(m, 'connect')), 'Reconectar');
+    assert.equal(card(m).querySelectorAll('a').filter((a) => /security-log/.test(a.getAttribute('href') ?? '')).length, 0, 'no securityLogUrl, no link');
+  });
+
   test('C40 pending: the code with Copiar, the github.com link in a new tab, the countdown and Cancelar', async () => {
     const m = await mountWith({ read: answer(pending()) });
     assert.equal(card(m).getAttribute('data-state'), 'pending');
