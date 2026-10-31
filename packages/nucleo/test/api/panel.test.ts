@@ -255,7 +255,7 @@ describe('conta da sessão (decisão 0006)', () => {
     const s = (over: Partial<{ accountId: string | null; accountSource: 'config' | 'env' | null }> = {}) => ({ id: 's1', accountId: null, accountSource: null, ...over });
     const desktop = (escopos: string[]) => ({ localId: 'local_x', cliSessionId: 's1', title: null, branch: null, cwd: null, parentLocalId: null, archived: false, accounts: escopos });
     assert.equal(contas.ofSession(s(), desktop([`${UUID_A}/${ORG_A}`, `${UUID_B}/${ORG_B}`])), null, 'duas pastas: a pasta não diz a conta');
-    assert.deepEqual(contas.ofSession(s(), desktop([`${UUID_B}/${ORG_B}`])), { id: `${UUID_B}/${ORG_B}`, label: 'cliente', color: '#1baf7a', source: 'desktop' });
+    assert.deepEqual(contas.ofSession(s(), desktop([`${UUID_B}/${ORG_B}`])), { id: `${UUID_B}/${ORG_B}`, label: 'cliente', color: '#1baf7a', source: 'desktop', identity: null, confidence: 'unknown' });
     const daPorta = contas.ofSession(s({ accountId: `${UUID_A}/${ORG_A}`, accountSource: 'config' }), desktop([`${UUID_B}/${ORG_B}`]));
     assert.deepEqual(daPorta && [daPorta.label, daPorta.color, daPorta.source], ['equipe', '#df285d', 'config'], 'config vence desktop');
     contas.reportEnv('s1', UUID_B, ORG_B);

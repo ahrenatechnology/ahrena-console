@@ -1,3 +1,4 @@
+import { legacySessionIdentity, type SessionIdentity } from '../identity.ts';
 // The activity feed (C8, #94): `GET /api/events`, the events of every session, newest first,
 // with filters, the page backwards (`before`) and the live view (`after`).
 //
@@ -56,6 +57,7 @@ export function statusDoEvento(tipo: string): StatusDoEvento {
 }
 
 export interface SessaoDoFeed {
+  identity: SessionIdentity | null;
   id: string;
   title: string | null;
   project: string | null;
@@ -249,6 +251,7 @@ export interface OpcoesDoFeedDeEventos {
 }
 
 const sessaoDoFeed = (id: string, s: Session | null): SessaoDoFeed => ({
+  identity: s ? s.identity ?? legacySessionIdentity(s.id) : null,
   id: textoDeUmaLinha(id, MAX.id) ?? '',
   title: textoDeUmaLinha(s?.name, MAX.titulo),
   project: s?.cwd ? textoDeUmaLinha(basename(s.cwd), MAX.projeto) : null,
