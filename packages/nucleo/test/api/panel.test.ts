@@ -1,3 +1,4 @@
+import { OWNER_TOKEN, ownerFetch as fetch } from '../owner-http.ts';
 import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -304,7 +305,7 @@ describe('servidor da API local', () => {
 
   test('hooks e painel na mesma porta; Origin ou Host de fora dá 403', async () => {
     const montador = new MontadorDoPainel({ storage, contas: new Accounts({ storage, file: null }), desktop: null, trabalho: null });
-    const api = await startLocalApi({ panelBuilder: montador, hooks: { storage }, port: 0, log: () => {} });
+    const api = await startLocalApi({ ownerToken: () => OWNER_TOKEN, panelBuilder: montador, hooks: { storage }, port: 0, log: () => {} });
     try {
       assert.equal((await fetch(`${api.url}/api/overview`)).status, 200);
       assert.equal((await fetch(`${api.url}/api/overview`, { headers: { origin: 'https://exemplo.com' } })).status, 403);

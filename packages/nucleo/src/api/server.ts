@@ -63,27 +63,11 @@
 //
 // `?local=`, `?account=`, `?org=`, `?model=` and `?cwd=` on the panel are what it reads from its own session;
 // `?decisions=<scope>` brings the open decision list in the same request.
-// A request with an `Origin`, or with a `Host` that is not ours, gets 403 (decision 0003). The exception is
-// the /ui itself reading: a `GET` whose `Origin` is exactly `http://<Host>` (a browser may send `Origin`
-// even on a same-origin `fetch`). A write with `Origin` is still refused, except three, only with `Origin`
-// exactly `http://<Host>` and the exact path (no query): the Detail's "Abrir no Claude Desktop",
-// `POST /open/<local_…>`, the project Kanban's `POST /api/project/move` (api/project.ts) and the
-// decisions through the /ui (#103), `POST /api/decisions/<id>/(confirm|dismiss|adjust|undo|promote)`,
-// the "Abrir no Claude Desktop / no terminal / Ir para o terminal" of #285, `POST /api/sessions/<uuid>/open`
-// (api/session-open-route.ts), the Agent Config screen's `POST /api/agent-config/skill` (api/agent-config.ts), the framework
-// install's `POST /api/framework-install/<owner>/<repo>` (api/framework-install.ts, #184), and the machine
-// screen's Reconnect and Cancel, `POST` and `DELETE /api/machines/<id>/reconnect` (api/telemetry.ts, #244,
-// decision 0012), and the Detail's Send, `POST /api/sessions/<id>/messages` (api/messaging.ts, #61), which
-// is stricter: without `Origin` it is refused too, since only text a person typed in the /ui may go.
-// The orders to a session, `POST /api/sessions/<id>/commands` (api/orders.ts), are the same: only the /ui creates them.
-// The Tools writes (#280, decision 0014) are stricter: every non-GET request under `/api/tools` skips
-// the gate above and passes only `toolsWriteAllowed` (api/tools.ts): `Origin` exactly `http://<Host>`,
-// the exact raw path, and a request with NO Origin gets 403 too (unless layer 4's hook accepts it).
-// An outside site cannot get that `Origin`, nor send JSON without the CORS preflight, and the core does
-// not answer CORS. Writing to the decisions also requires `Content-Type: application/json` and the body
-// `{ "session": "<id>" }`, and it only reaches a
-// decision that session sees, from its account.
+// Owner proof is mandatory before every write and private read (#302), including future routes.
+// The route-specific Origin/Host restrictions below are additional browser defenses, not identity.
+// Only static /ui, /api/overview and /api/hooks/health GETs are anonymous. See ADR0003.
 
+import { authorizeOwner, ownerProofRequired, type OwnerToken } from './owner-auth.ts';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import type { AddressInfo, Server as NetServer } from 'node:net';
 import { allowedLocalRequest, createHookRoute, HOOKS_PATH, send, type HookRouteOptions } from '../ingest/hooks/receiver.ts';
@@ -141,6 +125,8 @@ import type { GithubConnection } from '../github/connection/connection.ts';
 export { API_VERSION };
 
 export interface ApiOptions {
+  /** Owner-only credential source; absent/unknown fails closed, including before lock claim. */
+  ownerToken?: OwnerToken;
   panelBuilder: MontadorDoPainel;
   hooks: HookRouteOptions;
   host?: string;
@@ -457,6 +443,7 @@ export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
   async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
     counters.requests++;
     const url = new URL(req.url ?? '/', `http://127.0.0.1:${port}`);
+    if (ownerProofRequired(req.method, url.pathname) && !authorizeOwner(req, res, port, opts.ownerToken ?? (() => null))) return;
     // The Tools writes have their own, stricter gate (no Origin is 403 too), never the one below.
     if (isToolsWrite(req, url.pathname)) {
       if (!toolsWriteAllowed(req, port, opts.tools?.acceptNoOriginActions?.() ?? false)) {
@@ -569,7 +556,7 @@ export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
 
   const server = createServer((req, res) => {
     handle(req, res).catch((err) => {
-      log(`error on ${req.url}: ${(err as Error).message}`);
+      log('request handler failed'); // Never log URLs/headers or exception text that could contain credentials.
       if (!res.headersSent) send(res, 500, { error: 'erro interno' });
     });
   });

@@ -781,3 +781,14 @@ describe('#178 criterion 2: the focus stays on the button through a repaint', ()
     assert.equal(active().getAttribute('data-hours'), '12');
   });
 });
+
+test('remote owner-auth refusal explains the security block instead of claiming the core is offline', () => {
+  const machine = format.normalizeMachine({ id: 'remote', label: 'Remota', state: 'unreachable', reason: 'owner-auth-required' });
+  assert.equal(format.remoteCondition(machine), 'owner-auth-required');
+  const card = screen.conditionParts(machine, null);
+  assert.equal(card.faded, true);
+  const copy = card.parts.map(texto).join(' ');
+  assert.match(copy, /Acesso remoto bloqueado/);
+  assert.match(copy, /autenticação do dono/);
+  assert.doesNotMatch(copy, /Suba o núcleo/);
+});

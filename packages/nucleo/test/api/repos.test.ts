@@ -1,3 +1,4 @@
+import { OWNER_TOKEN, ownerFetch as fetch } from '../owner-http.ts';
 // Repositórios (#104) e métricas de um repositório (#105) pelo serviço e pela rota, contra o GitHub
 // falso (src/simulator/fake-github.ts): nenhuma chamada à API real e nenhum token lido. As sessões
 // vêm do cenário P1 do simulador, pela mesma leitura do MCP.
@@ -588,7 +589,7 @@ describe('#104 e #105: a rota /api/repos no núcleo', () => {
     m = await montar();
     const storage = openSqliteStorage({ path: ':memory:' });
     const montador = new MontadorDoPainel({ storage, contas: new Accounts({ storage, file: null }), desktop: null, trabalho: null });
-    api = await startLocalApi({ panelBuilder: montador, hooks: { storage }, port: 0, log: () => {}, repos: criarRotaDosRepos(m.repos) });
+    api = await startLocalApi({ ownerToken: () => OWNER_TOKEN, panelBuilder: montador, hooks: { storage }, port: 0, log: () => {}, repos: criarRotaDosRepos(m.repos) });
   });
   after(() => api.close());
 

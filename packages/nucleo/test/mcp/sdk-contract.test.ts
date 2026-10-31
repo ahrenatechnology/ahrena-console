@@ -1,3 +1,7 @@
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { writeLock } from '../../src/owner/lock.ts';
+import { OWNER_TOKEN } from '../owner-http.ts';
 // Contract with the official MCP client (@modelcontextprotocol/sdk, a devDependency at the version
 // Claude Code uses): it validates each `structuredContent` against the tool's `outputSchema` and
 // fails the call with -32602 if a field is extra or missing. Over HTTP (/mcp) and over stdio (the
@@ -63,25 +67,29 @@ for (const [name, seedWith] of [
   describe(`contract with the official client: ${name}`, () => {
     let storage: SqliteStorage;
     let api: LocalApi;
+    let ownerDir: string;
     before(async () => {
       storage = openSqliteStorage({ path: ':memory:' });
       await seedWith(storage);
       const accounts = new Accounts({ storage, file: null });
       const { server } = createMcpServer({ storage, accounts, now: () => NOW, timeZone: 'UTC' });
-      api = await startLocalApi({ panelBuilder: new MontadorDoPainel({ storage, contas: accounts, desktop: null, trabalho: null }), hooks: { storage }, port: 0, log: () => {}, mcp: server });
+      api = await startLocalApi({ ownerToken: () => OWNER_TOKEN, panelBuilder: new MontadorDoPainel({ storage, contas: accounts, desktop: null, trabalho: null }), hooks: { storage }, port: 0, log: () => {}, mcp: server });
+      ownerDir = mkdtempSync(join(tmpdir(), 'ahrena-sdk-owner-'));
+      writeLock({ pid: process.pid, port: Number(new URL(api.url).port), version: '0.0.1', startedAt: new Date().toISOString(), token: OWNER_TOKEN, parent: null }, ownerDir);
     });
     after(async () => {
       await api.close();
+      rmSync(ownerDir, { recursive: true, force: true });
       await storage.close();
     });
 
-    test('HTTP: the tools output passes the outputSchema', () => exercise(new StreamableHTTPClientTransport(new URL(`${api.url}/mcp`))));
+    test('HTTP: the tools output passes the outputSchema', () => exercise(new StreamableHTTPClientTransport(new URL(`${api.url}/mcp`), { requestInit: { headers: { authorization: `Bearer ${OWNER_TOKEN}` } } })));
 
     test('stdio (the Desktop bridge): the tools output passes the outputSchema', () =>
       exercise(
         new StdioClientTransport({
           command: process.execPath,
-          args: ['--disable-warning=ExperimentalWarning', CLI, '--port', new URL(api.url).port],
+          args: ['--disable-warning=ExperimentalWarning', CLI, '--data-dir', ownerDir, '--port', new URL(api.url).port],
           stderr: 'ignore',
         }),
       ));
@@ -92,7 +100,7 @@ test('stdio without the core: the official client connects, lists the tools and 
   // A port nobody listens on: start and stop an API to get a free one.
   const storage = openSqliteStorage({ path: ':memory:' });
   const accounts = new Accounts({ storage, file: null });
-  const api = await startLocalApi({ panelBuilder: new MontadorDoPainel({ storage, contas: accounts, desktop: null, trabalho: null }), hooks: { storage }, port: 0, log: () => {} });
+  const api = await startLocalApi({ ownerToken: () => OWNER_TOKEN, panelBuilder: new MontadorDoPainel({ storage, contas: accounts, desktop: null, trabalho: null }), hooks: { storage }, port: 0, log: () => {} });
   const port = new URL(api.url).port;
   await api.close();
   await storage.close();

@@ -192,6 +192,7 @@ export function connectionTrio(connection, machine, reading, now = Date.now()) {
   const read = reading?.takenAt ?? null;
   if (machine?.state === 'connected') core = { tone: 'ok', icon: 'activity', value: 'Respondendo', sub: read ? `lido ${ago(read, now)}` : 'sem leitura ainda' };
   else if (machine?.state === 'incompatible-version') core = { tone: 'warn', icon: 'git-compare', value: 'Versão diferente', sub: 'responde, com outra telemetria' };
+  else if (machine?.state === 'unreachable' && machine.reason === 'owner-auth-required') core = { tone: 'warn', icon: 'server-off', value: 'Acesso bloqueado', sub: 'autenticação do dono necessária' };
   else if (machine?.state === 'unreachable' && machine.reason === 'no-response') core = { tone: 'warn', icon: 'server-off', value: 'Não responde', sub: 'a porta aceita, ninguém responde' };
   else core = { tone: 'off', icon: 'circle-dashed', value: 'Sem leitura', sub: read ? `a última é de ${hm(read)}` : 'nenhuma leitura guardada' };
 

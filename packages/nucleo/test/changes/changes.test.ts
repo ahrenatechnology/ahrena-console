@@ -1,3 +1,4 @@
+import { OWNER_TOKEN, ownerFetch as fetch } from '../owner-http.ts';
 // Change cursor and long polling (item 2.4). The clock is fake: no wait depends on real time.
 
 import assert from 'node:assert/strict';
@@ -352,7 +353,7 @@ describe('HTTP route', () => {
     const storage = withChanges(sqlite, cursor);
     const work = new TrabalhoPorBranch({ fonte: null, cache: new GithubCache({ store: new SqliteCacheStore(sqlite.db) }) });
     const builder = new MontadorDoPainel({ storage, contas: new Accounts({ storage, file: null }), desktop: null, trabalho: work });
-    const api = await startLocalApi({ panelBuilder: builder, hooks: { storage }, port: 0, log: () => {}, changes: cursor });
+    const api = await startLocalApi({ ownerToken: () => OWNER_TOKEN, panelBuilder: builder, hooks: { storage }, port: 0, log: () => {}, changes: cursor });
     try {
       const start = (await (await fetch(`${api.url}/api/changes`)).json()) as WaitResult;
       assert.equal(start.reset, true);

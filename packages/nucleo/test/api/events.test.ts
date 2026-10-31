@@ -1,3 +1,4 @@
+import { OWNER_TOKEN, ownerFetch as fetch } from '../owner-http.ts';
 // The activity feed (#94): GET /api/events. Synthetic fixtures and the simulator, never real data.
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, describe, test } from 'node:test';
@@ -284,7 +285,7 @@ describe('#94 GET /api/events: a rota HTTP, ponta a ponta', () => {
   test('sobe na porta 0 com o cenário do simulador; só GET; Origin de fora dá 403', async () => {
     await seedPanelScenario(storage, 'p4');
     const montador = new MontadorDoPainel({ storage, contas: new Accounts({ storage, file: null }), desktop: null, trabalho: null });
-    const api = await startLocalApi({ panelBuilder: montador, hooks: { storage }, port: 0, log: () => {}, events: feed });
+    const api = await startLocalApi({ ownerToken: () => OWNER_TOKEN, panelBuilder: montador, hooks: { storage }, port: 0, log: () => {}, events: feed });
     try {
       const r = await fetch(`${api.url}/api/events?limit=5`);
       assert.equal(r.status, 200);
@@ -311,7 +312,7 @@ describe('#94 GET /api/events: a rota HTTP, ponta a ponta', () => {
 
   test('sem a opção eventos, a rota não existe', async () => {
     const montador = new MontadorDoPainel({ storage, contas: new Accounts({ storage, file: null }), desktop: null, trabalho: null });
-    const api = await startLocalApi({ panelBuilder: montador, hooks: { storage }, port: 0, log: () => {} });
+    const api = await startLocalApi({ ownerToken: () => OWNER_TOKEN, panelBuilder: montador, hooks: { storage }, port: 0, log: () => {} });
     try {
       assert.equal((await fetch(`${api.url}/api/events`)).status, 404);
     } finally {

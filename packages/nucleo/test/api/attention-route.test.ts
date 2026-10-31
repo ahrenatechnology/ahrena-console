@@ -1,3 +1,4 @@
+import { OWNER_TOKEN, ownerFetch as fetch } from '../owner-http.ts';
 // `GET /api/attention` (#87): the tray's list, with the synthetic data of the simulator and of the MCP
 // tests. No real data.
 import assert from 'node:assert/strict';
@@ -107,7 +108,7 @@ describe('GET /api/attention', () => {
     await seedPanelScenario(storage, 'p3', NOW);
     mudancas = new ChangeCursor();
     const montador = new MontadorDoPainel({ storage, contas, desktop: null, trabalho: null, agora: () => NOW });
-    api = await startLocalApi({ panelBuilder: montador, hooks: { storage }, port: 0, log: () => {}, fleet: frota, changes: mudancas });
+    api = await startLocalApi({ ownerToken: () => OWNER_TOKEN, panelBuilder: montador, hooks: { storage }, port: 0, log: () => {}, fleet: frota, changes: mudancas });
   });
   afterEach(() => api.close());
 
@@ -140,7 +141,7 @@ describe('GET /api/attention', () => {
 
   test('sem a frota, a rota não existe', async () => {
     const montador = new MontadorDoPainel({ storage, contas, desktop: null, trabalho: null });
-    const outra = await startLocalApi({ panelBuilder: montador, hooks: { storage }, port: 0, log: () => {} });
+    const outra = await startLocalApi({ ownerToken: () => OWNER_TOKEN, panelBuilder: montador, hooks: { storage }, port: 0, log: () => {} });
     assert.equal((await fetch(`${outra.url}/api/attention`)).status, 404);
     await outra.close();
   });
@@ -193,7 +194,7 @@ describe('#245 GET /api/attention: blocked and idle', () => {
   test('GET /api/attention answers the new counts and `attention` on each item', async () => {
     await seed(storage);
     const montador = new MontadorDoPainel({ storage, contas, desktop: null, trabalho: null, agora: () => NOW });
-    const api = await startLocalApi({ panelBuilder: montador, hooks: { storage }, port: 0, log: () => {}, fleet: frota });
+    const api = await startLocalApi({ ownerToken: () => OWNER_TOKEN, panelBuilder: montador, hooks: { storage }, port: 0, log: () => {}, fleet: frota });
     try {
       const fresh = (await (await fetch(`${api.url}/api/attention`)).json()) as RespostaDaAtencao;
       assert.deepEqual([fresh.blocked, fresh.idle], [4, 3]);
