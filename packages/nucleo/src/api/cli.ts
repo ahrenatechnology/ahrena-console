@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+import { ManagedRuntime } from '../runtime/service.ts';
+import { SqliteRuntimeStore } from '../runtime/sqlite.ts';
 // Starts the core's local API: imports the history, follows the transcripts, receives the hooks, runs
 // the state machine and answers the panel, all on 127.0.0.1. `npm run api -- --help`; the options are
 // in cli-options.ts (the old Portuguese names still work until phase 6 of #173).
@@ -610,9 +612,12 @@ const follower =
 
 // The API takes over the socket reserved above: the port is never free in between (with port 0,
 // the one the system assigned stays this core's).
+const runtimeStore = new SqliteRuntimeStore(sqlite.db, changes);
+runtimeStore.recoverDisconnected();
 let ownerToken: string | null = null;
 const api: LocalApi = await startLocalApi({
   ownerToken: () => ownerToken,
+  runtime: new ManagedRuntime(storage, runtimeStore),
   listenOn: reservation,
   panelBuilder,
   hooks: {

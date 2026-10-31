@@ -1,3 +1,5 @@
+import { isRuntimeRoute, respondRuntime } from './runtime.ts';
+import type { ManagedRuntime } from '../runtime/service.ts';
 // The core's minimal local API (start of #21), on 127.0.0.1: the hooks and the panel on the same port.
 //
 // | Route                         | What                                                      |
@@ -131,6 +133,8 @@ import type { GithubConnection } from '../github/connection/connection.ts';
 export { API_VERSION };
 
 export interface ApiOptions {
+  /** Managed runtime is separate from legacy external messaging. */
+  runtime?: ManagedRuntime;
   /** Owner-only credential source; absent/unknown fails closed, including before lock claim. */
   ownerToken?: OwnerToken;
   panelBuilder: MontadorDoPainel;
@@ -457,6 +461,10 @@ export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
     counters.requests++;
     const url = new URL(req.url ?? '/', `http://127.0.0.1:${port}`);
     if (ownerProofRequired(req.method, url.pathname) && !authorizeOwner(req, res, port, opts.ownerToken ?? (() => null))) return;
+    if (isRuntimeRoute(url.pathname)) {
+      const token = opts.ownerToken?.();
+      return respondRuntime(req, res, url, port, opts.runtime, () => !!token && opts.ownerToken?.() === token && !res.destroyed);
+    }
     // The Tools writes have their own, stricter gate (no Origin is 403 too), never the one below.
     if (isToolsWrite(req, url.pathname)) {
       if (!toolsWriteAllowed(req, port, opts.tools?.acceptNoOriginActions?.() ?? false)) {
