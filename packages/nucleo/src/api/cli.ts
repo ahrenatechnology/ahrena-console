@@ -392,7 +392,7 @@ const demoAgentConfig = demo ? mountDemoAgentConfig() : null;
 if (demoAgentConfig) process.once('exit', demoAgentConfig.remove);
 const agentConfig = demoAgentConfig
   ? createAgentConfigRoute({ folders: async () => demoAgentConfig.folders, projects: async () => [demoAgentConfig.project], backups: demoAgentConfig.backups, log })
-  : createAgentConfigRoute({ folders: () => profiles!.list(), projects: () => knownProjects(storage), log });
+  : createAgentConfigRoute({ folders: () => profiles!.list(), projects: () => knownProjects(storage), session: id => storage.getSession(id), log });
 const profileTimer = profiles ? setInterval(() => void syncProfiles(), 60_000) : null;
 profileTimer?.unref();
 
