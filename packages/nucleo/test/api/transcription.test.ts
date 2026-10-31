@@ -2,11 +2,14 @@
 // that answers like whisper.cpp's `/inference`), the same-origin gate, the limits and the config.
 // Never a real whisper, never a real microphone: the audio here is a few bytes of silence.
 import assert from 'node:assert/strict';
+import type { ChildProcess } from 'node:child_process';
+import { EventEmitter } from 'node:events';
 import { createServer, request as rawRequest, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
+import { PassThrough } from 'node:stream';
 import { after, before, describe, test } from 'node:test';
 import { MAX_AUDIO_BYTES, createTranscriptionRoute, isExpectedWav } from '../../src/api/transcription.ts';
-import { cleanText, createTranscription, resolveWhisperConfig } from '../../src/transcription/whisper.ts';
+import { TranscriptionError, cleanText, createTranscription, resolveWhisperConfig } from '../../src/transcription/whisper.ts';
 import { ownerRequest } from '../owner-http.ts';
 import { startDemoApi, type DemoApi } from './demo-api.ts';
 
@@ -272,5 +275,96 @@ describe('the transcription building blocks', () => {
     assert.equal(e.bin, '/a/b');
     assert.equal(e.model, '/a/m.bin');
     assert.equal(resolveWhisperConfig('/h', { AHRENA_CONSOLE_WHISPER_URL: 'http://127.0.0.1:9000/' }).url, 'http://127.0.0.1:9000/');
+  });
+});
+
+// ---------- The core starting its own whisper-server ----------
+
+type FakeChild = EventEmitter & { stdout: PassThrough; stderr: PassThrough; exitCode: number | null; killed: string | null; kill: (signal: string) => boolean };
+
+/** A stand-in for the spawned `whisper-server`: what it prints is driven by the test. */
+function fakeChild(): FakeChild {
+  const child = new EventEmitter() as FakeChild;
+  child.stdout = new PassThrough();
+  child.stderr = new PassThrough();
+  child.exitCode = null;
+  child.killed = null;
+  child.kill = (signal: string) => {
+    child.killed = signal;
+    child.exitCode = 0;
+    child.emit('exit', 0);
+    return true;
+  };
+  return child;
+}
+
+const CHILD_PORT = 41999;
+
+function spawned(child: FakeChild, asked: string[], { logs = [], startTimeoutMs = 2000 }: { logs?: string[]; startTimeoutMs?: number } = {}) {
+  return createTranscription({
+    config: { url: null, bin: '/v/bin/whisper-server', model: '/v/models/ggml.bin' },
+    exists: () => true,
+    freePort: async () => CHILD_PORT,
+    start: () => child as unknown as ChildProcess,
+    startTimeoutMs,
+    log: (m) => logs.push(m),
+    fetch: (async (input: string | URL | Request) => {
+      asked.push(String(input));
+      return new Response(JSON.stringify({ text: ' Olá ' }), { status: 200, headers: { 'content-type': 'application/json' } });
+    }) as typeof fetch,
+  });
+}
+
+describe('the core starting its own whisper-server', () => {
+  test('sends the audio only after its own child says it bound the port', async () => {
+    const child = fakeChild();
+    const asked: string[] = [];
+    const logs: string[] = [];
+    const t = spawned(child, asked, { logs });
+    try {
+      const pending = t.transcribe(wav());
+      await new Promise((r) => setTimeout(r, 150));
+      assert.deepEqual(asked, [], 'nothing is sent while the model loads, not even a probe of the port');
+      child.stdout.write('whisper_init_from_file: loading model\nsegment: um texto ditado\n');
+      child.stderr.write(`\nwhisper server listening at http://127.0.0.1:${CHILD_PORT}\n\n`);
+      const r = await pending;
+      assert.equal(r.text, 'Olá');
+      assert.deepEqual(asked, [`http://127.0.0.1:${CHILD_PORT}/inference`]);
+      assert.ok(!logs.join('\n').includes('um texto ditado'), 'the child output is never logged');
+    } finally {
+      t.close();
+    }
+  });
+
+  test('a child that lost the port to another process fails to start, and the audio goes nowhere', async () => {
+    const child = fakeChild();
+    const asked: string[] = [];
+    const t = spawned(child, asked);
+    try {
+      const pending = t.transcribe(wav());
+      await new Promise((r) => setTimeout(r, 60));
+      child.stderr.write(`\ncouldn't bind to server socket: hostname=127.0.0.1 port=${CHILD_PORT}\n\n`);
+      child.exitCode = 1;
+      child.emit('exit', 1);
+      await assert.rejects(pending, (e: unknown) => e instanceof TranscriptionError && e.code === 'start_failed');
+      assert.deepEqual(asked, []);
+    } finally {
+      t.close();
+    }
+  });
+
+  test('a listening line for another port does not count, and the child is stopped at the deadline', async () => {
+    const child = fakeChild();
+    const asked: string[] = [];
+    const t = spawned(child, asked, { startTimeoutMs: 300 });
+    try {
+      const pending = t.transcribe(wav());
+      child.stdout.write(`whisper server listening at http://127.0.0.1:${CHILD_PORT + 1}\n`);
+      await assert.rejects(pending, (e: unknown) => e instanceof TranscriptionError && e.code === 'start_failed');
+      assert.deepEqual(asked, []);
+      assert.equal(child.killed, 'SIGTERM');
+    } finally {
+      t.close();
+    }
   });
 });

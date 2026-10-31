@@ -107,7 +107,7 @@ export function createTranscription(opts: TranscriptionOptions): Transcription {
   const doFetch = opts.fetch ?? fetch;
   const startChild =
     opts.start ??
-    ((bin, args) => spawn(bin, args, { stdio: 'ignore', detached: false }));
+    ((bin, args) => spawn(bin, args, { stdio: ['ignore', 'pipe', 'pipe'], detached: false }));
   const freePort = opts.freePort ?? freeLoopbackPort;
 
   let child: ChildProcess | null = null;
@@ -164,16 +164,31 @@ export function createTranscription(opts: TranscriptionOptions): Transcription {
         gone = true;
       });
       const url = `http://${LOOPBACK}:${port}`;
+      // Ready only when OUR child says it bound the port. The port is free between `freePort` and the
+      // child's bind, which comes after the model loads (seconds), and `--port` is in its argv, which
+      // `ps` shows to every user of the machine: probing the port would accept whoever bound it first,
+      // and that process would get the owner's audio and choose the text (#302 threat model). A child
+      // that lost the port prints "couldn't bind" and exits: start_failed. Its output carries the
+      // transcribed text, so it is only scanned for this line and dropped, never logged or kept.
+      const ready = `whisper server listening at ${url}\n`;
+      let seen = '';
+      let bound = false;
+      const scan = (chunk: Buffer) => {
+        if (bound) return;
+        seen = (seen + chunk.toString('utf8')).slice(-512);
+        if (seen.includes(ready)) bound = true;
+      };
+      c.stdout?.on('data', scan);
+      c.stderr?.on('data', scan);
       const deadline = Date.now() + startTimeoutMs;
       while (Date.now() < deadline) {
         if (gone) throw new TranscriptionError('start_failed', 'o whisper-server não subiu');
-        try {
-          await doFetch(`${url}/`, { signal: AbortSignal.timeout(2000) });
+        if (bound) {
+          seen = '';
           base = url;
           return url;
-        } catch {
-          await sleep(250);
         }
+        await sleep(50);
       }
       stopChild();
       throw new TranscriptionError('start_failed', 'o whisper-server não respondeu a tempo');
