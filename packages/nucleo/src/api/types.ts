@@ -1,3 +1,4 @@
+import type { SessionIdentity, SessionCapabilities, AccountIdentity, EvidenceConfidence } from '../identity.ts';
 // The contract of `GET /api/panel/<session>`: everything the side panel draws, in a single request.
 // Since #173 phase 2b the keys and fixed values are English. The mod reads this route since 0.0.31
 // (#187), and its types (plugins/ahrena-console/types) repeat these: changing one is changing both
@@ -12,6 +13,8 @@ import type { ConnectionError, ConnectionState } from '../telemetry/model.ts';
 
 /** A session's account on the panel (decision 0006). */
 export interface PanelAccount {
+  identity?: AccountIdentity | null;
+  confidence?: EvidenceConfidence;
   /** `<accountUuid>/<organizationUuid>`; só para agrupar, nunca para mostrar. */
   id: string;
   label: string;
@@ -39,6 +42,8 @@ export interface SessionBanner {
 
 /** The "Esta sessão" card. */
 export interface PanelSession {
+  identity?: SessionIdentity;
+  capabilities?: SessionCapabilities;
   id: string;
   title: string;
   model: string | null;
@@ -440,6 +445,8 @@ export interface WallTree {
 
 /** A wall card. */
 export interface WallCard {
+  identity?: SessionIdentity;
+  capabilities?: SessionCapabilities;
   /** Id da sessão: o card leva a `/ui/sessions/<id>`. */
   id: string;
   /** Like `PanelSession.title`. */

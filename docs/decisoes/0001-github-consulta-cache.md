@@ -1,6 +1,6 @@
 # 0001 · Consulta ao GitHub: enxuta, com cache e busca sob demanda
 
-- **Status:** aceita
+- **Status:** aceita. Partes substituídas: a credencial, pela [0011](0011-github-device-flow-keychain.md); duas proibições do item 6 (laço de aquecimento e leitura na partida), pela [0015](0015-github-background-sync.md)
 - **Data:** 18/10/2026
 - **Spike:** #40 (backlog 5.1), parte do épico #6
 - **Afeta:** 5.2, 5.3, 4.3, 7.9 e a porta de armazenamento (#11)
@@ -76,9 +76,9 @@ O GitHub documenta que um 304 com autenticação não consome o limite primário
    - **Delta:** issue mais nova substitui a do cache; se mudou de pai, a árvore se refaz.
    - **Botão de atualizar:** força a releitura, com intervalo mínimo de 30 s.
    - **Limite atingido** (403/429): pausa pelo `retry-after`, senão até o `x-ratelimit-reset`, senão 2 min, e serve o cache.
-6. **Proibido:** laço de aquecimento, leitura de todas as organizações na partida e consultas em paralelo ao GitHub. A primeira tela lê só o que vai mostrar.
+6. **Proibido:** laço de aquecimento, leitura de todas as organizações na partida e consultas em paralelo ao GitHub. A primeira tela lê só o que vai mostrar. (O laço de aquecimento e a leitura na partida foram substituídos pela [0015](0015-github-background-sync.md): o núcleo sincroniza o GitHub em background. A fila única e "a primeira tela lê só o que vai mostrar" continuam.)
 
-   **Emenda de 25/10/2026 (#341):** a fila única do núcleo passa a deixar até 4 chamadas ao mesmo tempo (`GITHUB_CALL_LIMIT`, `packages/nucleo/src/github/call-queue.ts`), na ordem de chegada; uma fila criada sem limite continua uma de cada vez. Motivo: com a conta de 206 repositórios em 3 orgs, a lista levava 74,5 s com 70 chamadas em série, e a soma do tempo das chamadas era a espera inteira. 4 fica muito abaixo do limite secundário do GitHub (100 pedidos simultâneos) e do limite de pontos por minuto; o limite primário não muda, porque o número de chamadas é o mesmo. O resto do item continua: nada de aquecimento nem de leitura na partida.
+   **Emenda de 25/10/2026 (#341):** a fila única do núcleo passa a deixar até 4 chamadas ao mesmo tempo (`GITHUB_CALL_LIMIT`, `packages/nucleo/src/github/call-queue.ts`), na ordem de chegada; uma fila criada sem limite continua uma de cada vez. Motivo: com a conta de 206 repositórios em 3 orgs, a lista levava 74,5 s com 70 chamadas em série, e a soma do tempo das chamadas era a espera inteira. 4 fica muito abaixo do limite secundário do GitHub (100 pedidos simultâneos) e do limite de pontos por minuto; o limite primário não muda, porque o número de chamadas é o mesmo. O resto do item continua: nada de aquecimento nem de leitura na partida. (Esta frase foi substituída pela [0015](0015-github-background-sync.md).)
 
 **Orçamento resultante, por pessoa, com a tela aberta:** Project a cada 2 min (30/h) + delta a cada 60 s (60/h) + algumas expansões (cerca de 30/h) ≈ 120 pontos por hora, contra 540 do paliativo e milhares do formato antigo. É menos de 3% do limite primário, e nenhuma consulta passa de 1 s de servidor.
 
