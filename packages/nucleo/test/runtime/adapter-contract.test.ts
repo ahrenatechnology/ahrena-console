@@ -35,7 +35,7 @@ for (const provider of ['claude', 'codex'] as const) test(`${provider}: same fak
     assert.equal(result.status, 'transport_error');
     f.runs.transition(f.scope, record.id, 'transport_error', 1003);
     assert.equal((adapter as FakeAdapter).calls, before + 1);
-    assert.throws(() => f.runs.claimResponse(f.scope, record.id, request.id, { kind: 'approval', decision: 'approve' }, 1004));
+    assert.throws(() => f.runs.claimResponse(f.scope, record.id, request.id, { kind: 'approval', decision: 'approve' }, () => 1004));
   } finally { await f.storage.close(); }
 });
 
@@ -48,6 +48,6 @@ test('restart invalidates pending requests without a transport or implicit appro
     assert.equal(f.runs.recoverDisconnected(1003), 1);
     assert.equal(f.runs.recoverDisconnected(1004), 0);
     assert.equal(f.runs.getRun(record.id)!.state, 'transport_error');
-    assert.throws(() => f.runs.claimResponse(f.scope, record.id, request.id, { kind: 'approval', decision: 'approve' }, 1005));
+    assert.throws(() => f.runs.claimResponse(f.scope, record.id, request.id, { kind: 'approval', decision: 'approve' }, () => 1005));
   } finally { await f.storage.close(); }
 });

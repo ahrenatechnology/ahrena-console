@@ -24,25 +24,35 @@ export class SqliteRuntimeStore {
   listRuns(sessionId: string): RuntimeRun[] {
     return this.db.prepare('SELECT * FROM runtime_runs WHERE session_id = ? ORDER BY created_at DESC, id LIMIT 100').all(sessionId).map(run);
   }
-  private transaction<T>(scope: RuntimeScope, fn: () => T): T {
+  private transaction<T>(scope: RuntimeScope, fn: () => T, changed: (result: T) => boolean = () => true): T {
     this.db.exec('BEGIN IMMEDIATE');
     let result: T;
     try { result = fn(); this.db.exec('COMMIT'); }
     catch (error) { this.db.exec('ROLLBACK'); throw error; }
-    this.changes?.record({ type: 'state', key: scope.sessionId, sessionId: scope.sessionId, accountId: scope.accountId });
+    if (changed(result)) this.changes?.record({ type: 'state', key: scope.sessionId, sessionId: scope.sessionId, accountId: scope.accountId });
     return result;
   }
   /** A core restart is a disconnect, never permission to resend an uncertain command. */
   recoverDisconnected(now = Date.now()): number {
     const active = this.db.prepare("SELECT * FROM runtime_runs WHERE state IN ('prepared','running')").all().map(run);
-    for (const record of active) this.transaction(record, () => {
-      this.db.prepare("UPDATE runtime_runs SET state = 'transport_error' WHERE id = ?").run(record.id);
-      this.db.prepare("UPDATE runtime_requests SET state = 'invalidated' WHERE run_id = ? AND state = 'pending'").run(record.id);
-      this.event(record, record.id, null, 'runtime.transport_error', now);
-    });
-    return active.length;
+    let recovered = 0;
+    for (const record of active) {
+      const didRecover = this.transaction(record, () => {
+        const changed = this.db.prepare("UPDATE runtime_runs SET state = 'transport_error' WHERE id = ? AND state IN ('prepared','running')").run(record.id);
+        if (changed.changes !== 1) return false;
+        this.db.prepare("UPDATE runtime_requests SET state = 'invalidated' WHERE run_id = ? AND state = 'pending'").run(record.id);
+        this.event(record, record.id, null, 'runtime.transport_error', now);
+        return true;
+      }, changed => changed);
+      if (didRecover) recovered++;
+    }
+    return recovered;
   }
   private assertScope(scope: RuntimeScope): void {
+    if (!scope || !['claude', 'codex'].includes(scope.provider) ||
+        [scope.accountId, scope.profileId, scope.sessionId].some(value => typeof value !== 'string' || !value.trim())) {
+      throw new RuntimeError('scope_mismatch');
+    }
     const row = this.db.prepare('SELECT identity, account_id, capabilities FROM sessions WHERE id = ?').get(scope.sessionId);
     const account = this.db.prepare('SELECT identity FROM accounts WHERE id = ?').get(scope.accountId);
     const identity = row && JSON.parse(row.identity as string);
@@ -73,9 +83,10 @@ export class SqliteRuntimeStore {
     });
   }
   /** A refused command preserves its target run/request; no request is consumed or run changed. */
-  recordRefusal(scope: RuntimeScope, runId: string | null, command: RuntimeCommand, now = Date.now()): string {
-    if (command.operation === 'start') return this.createRun(scope, now, 'blocked').id;
+  recordRefusal(scope: RuntimeScope, runId: string | null, command: RuntimeCommand, clock: () => number = Date.now): string {
+    if (command.operation === 'start') return this.createRun(scope, clock(), 'blocked').id;
     return this.transaction(scope, () => {
+      const now = clock();
       this.assertScope(scope);
       const record = runId ? this.getRun(runId) : null;
       if (!record || !sameRuntimeScope(scope, record) ||
@@ -130,8 +141,10 @@ export class SqliteRuntimeStore {
     if (response.kind === 'approval' ? !['approve', 'deny'].includes(response.decision) :
         typeof response.answer !== 'string' || response.answer.length === 0 || response.answer.length > 4096) throw new RuntimeError('invalid_response');
   }
-  claimResponse(scope: RuntimeScope, runId: string, requestId: string, response: RuntimeResponse, now = Date.now()): void {
+  claimResponse(scope: RuntimeScope, runId: string, requestId: string, response: RuntimeResponse, clock: () => number = Date.now): void {
     this.transaction(scope, () => {
+      // BEGIN IMMEDIATE may wait for another writer. Expiry must use time after that wait.
+      const now = clock();
       this.assertResponse(scope, runId, requestId, response, now);
       const updated = this.db.prepare("UPDATE runtime_requests SET state = 'claimed' WHERE id = ? AND state = 'pending' AND expires_at > ?").run(requestId, now);
       if (updated.changes !== 1) throw new RuntimeError('stale_request');

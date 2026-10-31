@@ -15,7 +15,7 @@ try {
   if (Atomics.wait(barrier, 1, 0, 30_000) === 'timed-out') throw new Error('Claim barrier timed out');
   const store = new SqliteRuntimeStore(storage.db);
   try {
-    store.claimResponse(scope, runId, requestId, { kind: 'approval', decision: 'approve' }, 1003);
+    store.claimResponse(scope, runId, requestId, { kind: 'approval', decision: 'approve' }, () => 1003);
     parentPort!.postMessage({ type: 'result', status: 'accepted' });
   } catch (error) {
     if (!(error instanceof RuntimeError) || error.code !== 'stale_request') throw error;
