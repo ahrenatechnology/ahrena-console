@@ -129,6 +129,29 @@ describe('the orders routes', () => {
     }
   });
 
+  test('the mod\'s fetch needs the owner proof (#403): without it 403 and the order stays queued, with it 200', async () => {
+    const b = await boot();
+    try {
+      const ui = { origin: `http://${b.host}`, 'content-type': 'application/json' };
+      const base = `/api/sessions/${b.sessionId}/commands`;
+      const made = await call(b.url, 'POST', base, ui, JSON.stringify({ kind: 'compact' }));
+      assert.equal(made.status, 202);
+      const id = made.json.orderId as string;
+      const json = { 'content-type': 'application/json' };
+      // What the mod sends: no Origin, no Sec-Fetch-Site; the only difference between the two calls is the bearer.
+      for (const authorization of ['', `Bearer ${'b'.repeat(64)}`]) {
+        assert.equal((await call(b.url, 'GET', base, { authorization })).status, 403, `GET without proof (${authorization ? 'wrong token' : 'none'})`);
+        assert.equal((await call(b.url, 'POST', `${base}/${id}/done`, { ...json, authorization }, JSON.stringify({ ok: true }))).status, 403, 'confirm without proof');
+      }
+      const got = await call(b.url, 'GET', base, { authorization: `Bearer ${OWNER_TOKEN}` });
+      assert.equal(got.status, 200);
+      assert.deepEqual(got.json, { orders: [{ orderId: id, kind: 'compact' }] }, 'the refused calls did not claim the order');
+      assert.equal((await call(b.url, 'POST', `${base}/${id}/done`, { ...json, authorization: `Bearer ${OWNER_TOKEN}` }, JSON.stringify({ ok: true }))).status, 200);
+    } finally {
+      await b.close();
+    }
+  });
+
   test('refuses what is not the /ui, an unknown kind, an unknown session and a session with no live process', async () => {
     const b = await boot();
     try {
