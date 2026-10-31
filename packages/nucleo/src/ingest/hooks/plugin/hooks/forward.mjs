@@ -35,7 +35,7 @@
 //
 // Plain JavaScript with no dependencies, so it runs on any Node >= 18 without the core installed.
 
-import { appendFileSync, mkdirSync, readdirSync, readFileSync, statSync, truncateSync } from 'node:fs';
+import { constants, openSync, closeSync, fstatSync, lstatSync, appendFileSync, mkdirSync, readdirSync, readFileSync, statSync, truncateSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
@@ -183,20 +183,50 @@ function eventName(body) {
   return m ? m[1] : 'desconhecido';
 }
 
+/** Load only a protected lock for this port; reload each delivery after core restarts. */
+function ownerToken(base) {
+  const port = Number(new URL(base).port);
+  const candidates = [{ dir: env.AHRENA_CONSOLE_DATA_DIR || home }];
+  try {
+    for (const name of readdirSync(join(home, 'instances'))) {
+      if (!INSTANCE_ID.test(name.replace(/\.json$/, ''))) continue;
+      const entry = JSON.parse(readFileSync(join(home, 'instances', name), 'utf8'));
+      if (entry.port === port && typeof entry.dataDir === 'string') candidates.push({ dir: entry.dataDir, pid: entry.pid });
+    }
+  } catch { /* No registry yet. */ }
+  for (const candidate of candidates) {
+    let fd;
+    try {
+      const folder = lstatSync(candidate.dir);
+      if (!folder.isDirectory() || folder.uid !== process.getuid?.() || (folder.mode & 0o077)) continue;
+      fd = openSync(join(candidate.dir, 'nucleo.json'), constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+      const st = fstatSync(fd);
+      if (!st.isFile() || st.uid !== process.getuid?.() || (st.mode & 0o077) || st.size > MAX_ENTRY) continue;
+      const lock = JSON.parse(readFileSync(fd, 'utf8'));
+      if (lock.port === port && (candidate.pid === undefined || lock.pid === candidate.pid) && typeof lock.token === 'string' && /^[a-f0-9]{64}$/.test(lock.token)) return lock.token;
+    } catch { /* No owner proof: the core refuses the unauthenticated delivery. */ }
+    finally { if (fd !== undefined) closeSync(fd); }
+  }
+  return null;
+}
+
 /** Sends one delivery to one core; a failure becomes a log line naming the core. */
 async function send(base, event, payload, deliveryId) {
   try {
+    const token = ownerToken(base);
     const res = await fetch(`${base}/api/hooks`, {
+      redirect: 'error',
       method: 'POST',
       headers: {
         'content-type': 'application/json',
+        ...(token ? { authorization: `Bearer ${token}` } : {}),
         'x-ahrena-delivery-id': deliveryId,
         'x-ahrena-hook-at': firedAt,
       },
       body: payload,
       signal: AbortSignal.timeout(Math.max(deadline - Date.now(), 50)),
     });
-    if (!res.ok) record(`${event} recusado pelo núcleo ${base}: HTTP ${res.status} ${(await res.text()).slice(0, 200)}`);
+    if (!res.ok) record(`${event} recusado pelo núcleo ${base}: HTTP ${res.status}`);
   } catch (err) {
     const cause = err?.cause?.code || err?.name || 'erro';
     // Nobody on the legacy port is the normal case after the transition: not a failure.

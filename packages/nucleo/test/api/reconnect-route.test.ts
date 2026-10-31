@@ -1,10 +1,10 @@
+import { OWNER_TOKEN, ownerRequest as request } from '../owner-http.ts';
 // POST and DELETE /api/machines/<id>/reconnect (#244, decision 0012 section 4) on 127.0.0.1, with a
 // FAKE command (a tiny node script in a temporary folder that writes a marker file or sleeps): 202,
 // 404, 409, the cancel, `reconnect` in each GET /api/machines item, and the Origin defense of decision
 // 0003 (another Origin gets 403 and the command never runs; the same-origin /ui and the no-Origin
 // loopback request pass). A body is ignored: nothing from the request reaches the command.
 import assert from 'node:assert/strict';
-import { request } from 'node:http';
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -62,7 +62,7 @@ async function boot(mode: 'marker' | 'sleep' = 'marker') {
   });
   const telemetry = new TelemetryService({ store, tracker, machines: [localMachine(), remote('ws-exemplo', 14720), remote('ws-dois', 14721)] });
   const montador = new MontadorDoPainel({ storage, contas: new Accounts({ storage, file: null }), desktop: null, trabalho: null });
-  const api = await startLocalApi({ panelBuilder: montador, hooks: { storage }, port: 0, log: () => {}, changes: cursor, telemetry, reconnect: runner });
+  const api = await startLocalApi({ ownerToken: () => OWNER_TOKEN, panelBuilder: montador, hooks: { storage }, port: 0, log: () => {}, changes: cursor, telemetry, reconnect: runner });
   const port = Number(new URL(api.url).port);
   return {
     api,

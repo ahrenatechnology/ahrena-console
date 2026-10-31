@@ -3617,6 +3617,27 @@ function connectionsStatesScreen() {
   <div class="faixa"><span class="ic">${ic('info')}</span><div><b>AHRENA_CONSOLE_PROJECT está definida.</b> O Kanban do projeto mostra exemplo-labs #7 por ela, e a escolha da tela fica guardada para quando a variável sair.</div></div>`
 }
 
+// C92 (issue #372): the stored credential that GitHub refused (401) when a núcleo starts, as after an
+// update. Not the device-flow error of C44: nothing went wrong in a flow, the token died on GitHub.
+function connectionsRevokedScreen() {
+  const why = (t) => `<li style="margin:2px 0">${t}</li>`
+  return `${connCab()}
+  <div style="display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:14px">
+    <div style="display:flex;flex-direction:column;gap:8px;min-width:0"><div class="olhinho">1 · O GitHub recusou a credencial guardada</div>
+    <div class="cartao" style="padding:14px 16px;display:flex;flex-direction:column;gap:10px">${ghProviderHead('<span class="pill b-error">precisa reconectar</span>', '')}
+      <div style="border-top:1px solid var(--border);padding-top:10px;display:flex;flex-direction:column;gap:6px"><b style="font-size:13px">O GitHub não aceita mais a credencial de dev-sintetico</b>
+        <span class="c-muted" style="font-size:12px;line-height:1.6">Ao abrir, o console leu a credencial guardada no Keychain e o GitHub respondeu que ela não vale mais (401). Uma credencial recusada não volta: é preciso reconectar, e a nova substitui a antiga no Keychain.</span>
+        <span class="c-muted" style="font-size:12px;line-height:1.6">O GitHub derruba a credencial de um aplicativo quando:</span>
+        <ul class="c-muted" style="font-size:12px;line-height:1.5;margin:0;padding-left:18px">${why('o acesso do Ahrena Console foi revogado em <b>Configurações › Aplicativos</b> do GitHub;')}${why('o mesmo aplicativo gerou mais de dez credenciais para a sua conta, nesta ou em outra máquina (o GitHub apaga a mais antiga);')}${why('ela apareceu num repositório ou gist público.')}</ul>
+        <span class="c-muted" style="font-size:12px;line-height:1.6">O log de segurança do GitHub diz qual foi.</span></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap"><span class="btn cheio">${ic('refresh-cw')}Reconectar como dev-sintetico</span><span class="btn contorno">${ic('external-link')}Ver o log de segurança</span></div></div></div>
+    <div style="display:flex;flex-direction:column;gap:8px;min-width:0"><div class="olhinho">2 · Nas outras telas</div>
+    <div class="cartao" style="padding:14px 16px;display:flex;flex-direction:column;gap:8px"><b style="font-size:13px">Repositórios, Kanban do projeto, Dev Console</b>
+      <span class="c-muted" style="font-size:12px;line-height:1.6">O mesmo vazio da C42, com a frase trocada: “O GitHub recusou a credencial guardada. Reconecte em Conexões.” O botão leva a Conexões, como hoje.</span>
+      <div class="faixa" style="margin:0"><span class="ic">${ic('alert-triangle')}</span><div><b>O GitHub recusou a credencial guardada.</b> Reconecte para voltar a ler o GitHub.</div><span class="btn contorno">Ir para Conexões</span></div></div></div>
+  </div>`
+}
+
 // =====================================================================
 // TOOLS (C72 to C76, issue #280, decision 0014)
 // =====================================================================
@@ -4720,6 +4741,8 @@ const TELAS = [
     n: N(['O quadro do Kanban do projeto (C11).'], ['A escolha fica nas preferências da instalação, sem variável de ambiente; nada aponta para o Project da Ahrena.', 'Um Project sem campo de seleção não vira quadro: a linha diz isso.']) },
   { id: 'console-connections-states', cod: 'C44', nome: 'Conexões · estados', sub: 'O que não é o caminho feliz: o console sem o aplicativo do GitHub configurado, a máquina sem cofre, um escopo faltando e o código expirado ou recusado. Embaixo, as faixas da fonte gh e de AHRENA_CONSOLE_PROJECT definida (esta no Kanban do projeto). Em 1100.', html: () => `<div class="fila">${frameGh(1100, 'connections', connectionsStatesScreen(), 'off')}</div>`,
     n: N(['—'], ['Sem cofre o console não conecta: a credencial nunca vai para arquivo.', 'Sem o aplicativo configurado, Conectar fica desligado e a tela diz por quê; nada aponta para um aplicativo de outra pessoa.']) },
+  { id: 'console-connections-revoked', cod: 'C92', nome: 'Conexões · credencial recusada pelo GitHub', sub: 'Issue #372. O núcleo subiu (depois de uma atualização, por exemplo), leu a credencial do Keychain e o GitHub respondeu 401. Hoje a tela cai em “O GitHub não completou a conexão”, que fala de um código que ninguém pediu. Agora: a pílula diz precisa reconectar, o texto diz o que aconteceu e as três causas que o GitHub tem para derrubar a credencial, e Reconectar já leva o login (1). As telas que leem o GitHub dizem o mesmo (2). Em 1100.', html: () => `<div class="fila">${frameGh(1100, 'connections', connectionsRevokedScreen(), 'off')}</div>`,
+    n: N(['—'], ['Separado do erro do device flow: a credencial existia e funcionou; quem a derrubou foi o GitHub.', 'A credencial recusada sai da memória e não é usada de novo; a entrada do Keychain fica até a reconexão, que a substitui.']) },
 
   // ---------- sessions of every machine (issue #243): the existing screens, drawn with the `machines` option ----------
   { id: 'console-sessions-machines', cod: 'C45', nome: 'Sessões com todas as máquinas', sub: 'Feature sessões de todas as máquinas (#243). Sessões junta as desta máquina e as da Workstation. A barra de filtros ganha o filtro de máquina, Todas · Esta máquina · Workstation, com Todas por padrão; cada linha remota leva o rótulo da máquina, e as locais não levam nada. Em 1100 e 1440.', html: () => `<div class="fila">${bothWidths(w => frameAt(w, 'sessoes', telaSessoes({ ws: 'ok' })))}</div>`,

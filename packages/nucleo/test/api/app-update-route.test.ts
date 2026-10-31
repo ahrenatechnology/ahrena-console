@@ -1,7 +1,7 @@
+import { OWNER_TOKEN, ownerRequest as request } from '../owner-http.ts';
 // The app update notice's state and routes (#330, wireframes C77 to C80): what the app reports, what the
 // /ui reads and clicks, Depois for 24 h or until a newer version, the Origin defense and the changes feed.
 import assert from 'node:assert/strict';
-import { request } from 'node:http';
 import { describe, test } from 'node:test';
 import { openSqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
 import { Accounts, MontadorDoPainel, startLocalApi } from '../../src/api/index.ts';
@@ -82,7 +82,7 @@ async function boot() {
   const state = new AppUpdateState(cursor);
   const storage = openSqliteStorage({ path: ':memory:' });
   const montador = new MontadorDoPainel({ storage, contas: new Accounts({ storage, file: null }), desktop: null, trabalho: null });
-  const api = await startLocalApi({ panelBuilder: montador, hooks: { storage }, port: 0, log: () => {}, changes: cursor, appUpdate: createAppUpdateRoute(state) });
+  const api = await startLocalApi({ ownerToken: () => OWNER_TOKEN, panelBuilder: montador, hooks: { storage }, port: 0, log: () => {}, changes: cursor, appUpdate: createAppUpdateRoute(state) });
   const port = Number(new URL(api.url).port);
   const host = `127.0.0.1:${port}`;
   const call = (method: string, path: string, body?: unknown, headers: Record<string, string> = {}) =>

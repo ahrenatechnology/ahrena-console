@@ -96,3 +96,30 @@ export async function discoverCore($: Engine): Promise<string | null> {
   }
   return null
 }
+
+/** Read only the credential belonging to the selected local core; never persist it in panel state. */
+export async function ownerHeaders($: Engine, core: string): Promise<Record<string, string>> {
+  const port = /^127\.0\.0\.1:(\d+)$/.exec(core)?.[1]
+  if (!port) return {}
+  const dir = await instancesDir($)
+  if (!dir) return {}
+  const candidates: { path: string; pid?: number }[] = [{ path: `${dir.slice(0, -'/instances'.length)}/nucleo.json` }]
+  try {
+    for (const name of await $.fs.list(dir)) {
+      if (name.kind !== 'file' || !FILE.test(name.name)) continue
+      try {
+        const raw = await $.fs.read(`${dir}/${name.name}`)
+        const entry = JSON.parse(typeof raw === 'string' ? raw : '')
+        if (toInstance(entry, name.name)?.port === Number(port) && typeof entry.dataDir === 'string' && entry.dataDir.startsWith('/')) candidates.push({ path: `${entry.dataDir}/nucleo.json`, pid: entry.pid })
+      } catch { /* A disappearing entry is not proof. */ }
+    }
+  } catch { /* The owner's dev lock can exist before its registry entry. */ }
+  for (const candidate of candidates) {
+    try {
+      const raw = await $.fs.read(candidate.path)
+      const lock = JSON.parse(typeof raw === 'string' ? raw : '')
+      if (lock.port === Number(port) && (candidate.pid === undefined || lock.pid === candidate.pid) && typeof lock.token === 'string' && /^[a-f0-9]{64}$/.test(lock.token)) return { authorization: `Bearer ${lock.token}` }
+    } catch { /* No readable owner lock: the core will refuse the request. */ }
+  }
+  return {}
+}

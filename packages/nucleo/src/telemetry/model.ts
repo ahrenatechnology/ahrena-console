@@ -27,7 +27,7 @@ export type MachineState = (typeof MACHINE_STATES)[number];
  *   at once or answers with an HTTP error other than 404 (the tunnel is up, the núcleo is not).
  *   A 200 without a telemetry `version`, or a 404, is `incompatible-version` instead.
  */
-export const UNREACHABLE_REASONS = ['port-closed', 'no-response'] as const;
+export const UNREACHABLE_REASONS = ['port-closed', 'no-response', 'owner-auth-required'] as const;
 export type UnreachableReason = (typeof UNREACHABLE_REASONS)[number];
 
 /** This machine. Remote machines use the `id` from `~/.ahrena-console/machines.json` (#176). */

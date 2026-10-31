@@ -257,6 +257,66 @@ describe('the wiring', () => {
     }
   });
 
+  test('Atualizar shows busy at once, ignores a second click, and stays busy while the núcleo only counted it', async () => {
+    useWriter(async () => view());
+    const n = nodes();
+    const sent: string[] = [];
+    let release: (() => void) | null = null;
+    const widget = up.createAppUpdate({
+      read: async () => view({ requests: { check: 0, install: 1 } }),
+      write: (route: string) => (sent.push(route), new Promise<Obj>((r) => (release = () => r(view({ requests: { check: 0, install: 1 } }))))),
+      ...n,
+      win: { __AHRENA_APP__: true },
+      setTimer: () => 1,
+      clearTimer: () => {},
+    });
+    await widget.refresh();
+    const going = widget.act('install');
+    const busy = labelled(n.noticeNode, 'Iniciando…');
+    assert.ok(busy, 'the button says the click went out before the answer');
+    assert.equal(busy!.getAttribute('aria-busy'), 'true');
+    assert.equal(labelled(n.noticeNode, 'Depois')!.hasAttribute('disabled'), true);
+    await widget.act('install');
+    assert.deepEqual(sent, ['/api/app-update/actions/install'], 'a second click sends nothing');
+    release!();
+    await going;
+    await widget.refresh();
+    assert.ok(labelled(n.noticeNode, 'Iniciando…'), 'the app has not moved yet: still busy');
+  });
+
+  test('the busy state ends when the app moves, when the click fails, or after PENDING_MS', async () => {
+    for (const ending of ['phase', 'fail', 'timeout'] as const) {
+      useWriter(async () => view());
+      const n = nodes();
+      let current = view();
+      let timer: (() => void) | null = null;
+      const widget = up.createAppUpdate({
+        read: async () => current,
+        write: async () => (ending === 'fail' ? Promise.reject(new Error('404')) : current),
+        ...n,
+        win: { __AHRENA_APP__: true },
+        setTimer: (f: () => void, ms: number) => (ms === up.PENDING_MS ? (timer = f) : null, 1),
+        clearTimer: () => {},
+      });
+      await widget.refresh();
+      widget.toggle();
+      await widget.act('check');
+      if (ending === 'fail') {
+        assert.ok(labelled(n.panelNode, 'Buscar agora'), ending);
+        continue;
+      }
+      assert.ok(labelled(n.panelNode, 'Buscando…'), ending);
+      assert.equal(labelled(n.panelNode, 'Atualizar')!.hasAttribute('disabled'), true, 'the other button waits');
+      assert.equal(labelled(n.noticeNode, 'Atualizar')!.hasAttribute('disabled'), true, "the card's Atualizar waits too");
+      if (ending === 'phase') {
+        current = view({ phase: 'idle', lastCheckAt: NOW });
+        await widget.refresh();
+      } else timer!();
+      assert.ok(labelled(n.panelNode, 'Buscar agora'), ending);
+      assert.equal(labelled(n.noticeNode, 'Atualizar')!.hasAttribute('disabled'), false, ending);
+    }
+  });
+
   test('index.html has the strip above the main area and the panel; app.js wires the footer version', () => {
     const page = readFileSync(`${UI_FOLDER}index.html`, 'utf8');
     assert.match(page, /<div class="cc-notice" id="update-notice" hidden><\/div>\s*<main class="cc-main" id="content"><\/main>/);

@@ -1,15 +1,16 @@
+import { legacySessionIdentity, unknownCapabilities, validateIdentity, isLegacyIdentity, scopedEntityPrefix, validateProviderMetadata, type SessionIdentity } from '../../identity.ts';
 // Adaptador SQLite da porta de armazenamento, com o `node:sqlite` embutido no Node (sem módulo nativo).
 
 import { DatabaseSync } from 'node:sqlite';
 import {
   validateAgent,
-  validateClaudeAccount,
+  validateProviderAccount,
   validateEvent,
   validateModelPricing,
   validateSession,
   validateTokenUsage,
   type Agent,
-  type ClaudeAccount,
+  type ProviderAccount,
   type ModelPricing,
   type Session,
   type SessionEvent,
@@ -37,6 +38,9 @@ export interface SqliteStorageOptions {
 }
 
 type Row = Record<string, unknown>;
+function identityParts(i: SessionIdentity): (string | null)[] {
+  return [i.provider, i.providerSessionId, i.profileId, i.machineId, i.environmentId];
+}
 
 function encodeCursor(parts: string[]): string {
   return Buffer.from(JSON.stringify(parts)).toString('base64url');
@@ -116,6 +120,9 @@ const maisNovoPrimeiro = (a: SessionEvent, b: SessionEvent): number =>
 
 function toSession(r: Row): Session {
   return {
+    identity: r.identity ? JSON.parse(r.identity as string) : legacySessionIdentity(r.id as string),
+    capabilities: r.capabilities ? JSON.parse(r.capabilities as string) : unknownCapabilities(),
+    accountConfidence: r.account_confidence as Session['accountConfidence'] ?? 'unknown',
     id: r.id as string,
     name: r.name as string | null,
     status: r.status as Session['status'],
@@ -133,11 +140,13 @@ function toSession(r: Row): Session {
   };
 }
 
-function toAccount(r: Row): ClaudeAccount {
+function toAccount(r: Row): ProviderAccount {
   return {
+    identity: r.identity ? JSON.parse(r.identity as string) : undefined,
+    confidence: r.confidence as ProviderAccount['confidence'] ?? 'unknown',
     id: r.id as string,
     accountUuid: r.account_uuid as string,
-    organizationUuid: r.organization_uuid as string,
+    organizationUuid: r.identity && JSON.parse(r.identity as string).organizationId === null ? null : r.organization_uuid as string,
     organizationName: r.organization_name as string | null,
     organizationType: r.organization_type as string | null,
     label: r.label as string | null,
@@ -297,21 +306,38 @@ export class SqliteStorage implements StoragePort {
 
   async putSession(s: Session): Promise<void> {
     validateSession(s);
+    const identity = s.identity ?? legacySessionIdentity(s.id);
+    const existing = this.db.prepare('SELECT identity FROM sessions WHERE id = ?').get(s.id);
+    if (existing?.identity && JSON.stringify(identityParts(JSON.parse(existing.identity as string))) !== JSON.stringify(identityParts(identity))) throw new Error('Session identity is immutable');
+    if (s.accountId) {
+      const account = this.db.prepare('SELECT identity FROM accounts WHERE id = ?').get(s.accountId);
+      if (account?.identity) {
+        const a = JSON.parse(account.identity as string);
+        if (['provider', 'profileId', 'machineId', 'environmentId'].some(k => a[k] !== identity[k as keyof SessionIdentity])) throw new Error('Account scope differs from session');
+      } else if (!isLegacyIdentity(identity) || s.accountId.startsWith('account:')) throw new Error('Scoped session requires an identified account');
+    }
+    if (!existing && (s.id.startsWith('session:') || !isLegacyIdentity(identity))) {
+      for (const table of ['events', 'agents']) {
+        if (this.db.prepare(`SELECT 1 FROM ${table} WHERE session_id = ? LIMIT 1`).get(s.id)) throw new Error('Cannot adopt orphan entities into a scoped session');
+      }
+    }
     this.db
       .prepare(
         `INSERT INTO sessions (id, name, status, cwd, model, source, started_at, ended_at,
-           awaiting_input_since, awaiting_reason, updated_at, account_id, account_source, metadata)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           awaiting_input_since, awaiting_reason, updated_at, account_id, account_source, metadata, identity, capabilities, account_confidence)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT (id) DO UPDATE SET
            name = excluded.name, status = excluded.status, cwd = excluded.cwd, model = excluded.model,
            source = excluded.source, started_at = excluded.started_at, ended_at = excluded.ended_at,
            awaiting_input_since = excluded.awaiting_input_since, awaiting_reason = excluded.awaiting_reason,
            updated_at = excluded.updated_at, account_id = excluded.account_id,
-           account_source = excluded.account_source, metadata = excluded.metadata`,
+           account_source = excluded.account_source, metadata = excluded.metadata,
+           identity = excluded.identity, capabilities = excluded.capabilities, account_confidence = excluded.account_confidence`,
       )
       .run(
         s.id, s.name, s.status, s.cwd, s.model, s.source, s.startedAt, s.endedAt,
         s.awaitingInputSince, s.awaitingReason, s.updatedAt, s.accountId, s.accountSource, json(s.metadata),
+        json(identity), json(s.capabilities ?? unknownCapabilities()), s.accountConfidence ?? 'unknown',
       );
   }
 
@@ -320,10 +346,22 @@ export class SqliteStorage implements StoragePort {
     return row ? toSession(row) : null;
   }
 
+  async getSessionByIdentity(identity: SessionIdentity): Promise<Session | null> {
+    validateIdentity(identity);
+    const row = this.db.prepare(`SELECT * FROM sessions WHERE json_extract(identity, '$.provider') = ?
+      AND json_extract(identity, '$.providerSessionId') = ?
+      AND json_extract(identity, '$.profileId') IS ? AND json_extract(identity, '$.machineId') IS ?
+      AND json_extract(identity, '$.environmentId') IS ?`).get(...identityParts(identity));
+    return row ? toSession(row) : null;
+  }
+
   async listSessions(query: ListSessionsQuery = {}): Promise<Page<Session>> {
     const limit = pageSize(query.limit);
     const where: string[] = [];
-    const params: (string | number)[] = [];
+    const params: (string | number | null)[] = [];
+    for (const key of ['provider', 'profileId', 'machineId', 'environmentId'] as const) {
+      if (query[key] !== undefined) { where.push(`json_extract(identity, '$.${key}') IS ?`); params.push(query[key]!); }
+    }
     if (query.status) {
       if (query.status.length === 0) return { items: [], nextCursor: null };
       where.push(`status IN (${query.status.map(() => '?').join(', ')})`);
@@ -358,37 +396,46 @@ export class SqliteStorage implements StoragePort {
     return { items, nextCursor: rows.length > limit && last ? encodeCursor([last.updatedAt, last.id]) : null };
   }
 
-  async putAccount(a: ClaudeAccount): Promise<void> {
-    validateClaudeAccount(a);
+  async putAccount(a: ProviderAccount): Promise<void> {
+    validateProviderAccount(a);
+    const identity = a.identity ?? { provider: 'claude', providerAccountId: a.accountUuid, organizationId: a.organizationUuid, profileId: null, machineId: null, environmentId: null };
+    const existing = this.db.prepare('SELECT identity FROM accounts WHERE id = ?').get(a.id);
+    if (existing?.identity) {
+      const old = JSON.parse(existing.identity as string);
+      if (Object.keys(identity).some(k => old[k] !== identity[k as keyof typeof identity])) throw new Error('Account identity is immutable');
+    }
     this.db
       .prepare(
         `INSERT INTO accounts (id, account_uuid, organization_uuid, organization_name, organization_type,
-           label, color, config_dirs, first_seen_at, last_seen_at, metadata)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           label, color, config_dirs, first_seen_at, last_seen_at, metadata, identity, confidence)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT (id) DO UPDATE SET
            account_uuid = excluded.account_uuid, organization_uuid = excluded.organization_uuid,
            organization_name = excluded.organization_name, organization_type = excluded.organization_type,
            label = excluded.label, color = excluded.color, config_dirs = excluded.config_dirs,
            first_seen_at = excluded.first_seen_at, last_seen_at = excluded.last_seen_at,
-           metadata = excluded.metadata`,
+           metadata = excluded.metadata, identity = excluded.identity, confidence = excluded.confidence`,
       )
       .run(
-        a.id, a.accountUuid, a.organizationUuid, a.organizationName, a.organizationType,
-        a.label, a.color, JSON.stringify(a.configDirs), a.firstSeenAt, a.lastSeenAt, json(a.metadata),
+        a.id, a.accountUuid, a.organizationUuid ?? '', a.organizationName, a.organizationType,
+        a.label, a.color, JSON.stringify(a.configDirs), a.firstSeenAt, a.lastSeenAt, json(a.metadata), json(identity), a.confidence ?? 'unknown',
       );
   }
 
-  async getAccount(id: string): Promise<ClaudeAccount | null> {
+  async getAccount(id: string): Promise<ProviderAccount | null> {
     const row = this.db.prepare('SELECT * FROM accounts WHERE id = ?').get(id);
     return row ? toAccount(row) : null;
   }
 
-  async listAccounts(): Promise<ClaudeAccount[]> {
+  async listAccounts(): Promise<ProviderAccount[]> {
     return this.db.prepare('SELECT * FROM accounts ORDER BY first_seen_at, id').all().map(toAccount);
   }
 
   async putAgent(a: Agent): Promise<void> {
     validateAgent(a);
+    this.validateEntityScope(a.sessionId, a.id, 'agent');
+    this.validateAgentReference(a.sessionId, a.parentAgentId);
+    if (a.sessionId.startsWith('session:')) validateProviderMetadata(a.metadata);
     this.db
       .prepare(
         `INSERT INTO agents (id, session_id, name, type, subagent_type, status, task, current_tool,
@@ -419,8 +466,31 @@ export class SqliteStorage implements StoragePort {
       .map(toAgent);
   }
 
+  private validateEntityScope(sessionId: string, id: string, kind: 'event' | 'agent'): void {
+    const row = this.db.prepare('SELECT identity FROM sessions WHERE id = ?').get(sessionId);
+    const scoped = sessionId.startsWith('session:') || (row?.identity && !isLegacyIdentity(JSON.parse(row.identity as string)));
+    if (scoped) {
+      if (!row) throw new Error('Scoped entities require an existing session');
+      const prefix = scopedEntityPrefix(sessionId, kind);
+      if (!id.startsWith(prefix) || !/^[a-f0-9]{64}$/.test(id.slice(prefix.length))) throw new Error(`Scoped session requires a session-scoped ${kind} id`);
+    }
+    const table = kind === 'event' ? 'events' : 'agents';
+    const existing = this.db.prepare(`SELECT session_id FROM ${table} WHERE id = ?`).get(id);
+    if (existing && existing.session_id !== sessionId && (scoped || kind === 'agent' || String(existing.session_id).startsWith('session:'))) throw new Error(`${kind} belongs to another session`);
+  }
+
+  private validateAgentReference(sessionId: string, agentId: string | null): void {
+    if (agentId === null) return;
+    const agent = this.db.prepare('SELECT session_id FROM agents WHERE id = ?').get(agentId);
+    if (agent && agent.session_id !== sessionId) throw new Error('Agent reference belongs to another session');
+    if (sessionId.startsWith('session:')) this.validateEntityScope(sessionId, agentId, 'agent');
+    else if (agentId.startsWith('agent:')) throw new Error('Scoped agent reference requires its session');
+  }
+
   async appendEvent(e: SessionEvent): Promise<boolean> {
     validateEvent(e);
+    this.validateEntityScope(e.sessionId, e.id, 'event');
+    this.validateAgentReference(e.sessionId, e.agentId);
     const result = this.db
       .prepare(
         `INSERT INTO events (id, session_id, agent_id, type, tool_name, summary, data, created_at, seq)

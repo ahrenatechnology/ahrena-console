@@ -1,3 +1,4 @@
+import { OWNER_TOKEN, ownerFetch as fetch } from '../owner-http.ts';
 // The session's decisions in the panel (#102): count, list by scope, account, Confirm and Dismiss,
 // through the builder and through the API on 127.0.0.1. Simulator data (P9) and synthetic drafts.
 import assert from 'node:assert/strict';
@@ -141,7 +142,7 @@ describe('decisões no painel', () => {
 describe('API das decisões em 127.0.0.1', () => {
   test('lista por escopo; Confirmar e Descartar só por JSON, da sessão que enxerga, com quem e quando', async () => {
     const { storage, decisoes, montador } = await cenario();
-    const api = await startLocalApi({ panelBuilder: montador, hooks: { storage }, port: 0, log: () => {} });
+    const api = await startLocalApi({ ownerToken: () => OWNER_TOKEN, panelBuilder: montador, hooks: { storage }, port: 0, log: () => {} });
     const post = (caminho: string, corpo: unknown, headers: Record<string, string> = { 'content-type': 'application/json' }) =>
       fetch(`${api.url}${caminho}`, { method: 'POST', headers, body: JSON.stringify(corpo) });
     try {
@@ -211,7 +212,7 @@ describe('API das decisões em 127.0.0.1', () => {
 
   test('#131: Desfazer volta o Confirmar e o Descartar; Ajustar grava a versão da pessoa e o Desfazer a devolve', async () => {
     const { storage, decisoes, montador } = await cenario();
-    const api = await startLocalApi({ panelBuilder: montador, hooks: { storage }, port: 0, log: () => {} });
+    const api = await startLocalApi({ ownerToken: () => OWNER_TOKEN, panelBuilder: montador, hooks: { storage }, port: 0, log: () => {} });
     const post = async (id: string, acao: string, corpo: Record<string, unknown> = {}) => {
       const r = await fetch(`${api.url}/api/decisions/${encodeURIComponent(id)}/${acao}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ session: 'qualquer', ...corpo }) });
       return { status: r.status, decisao: r.ok ? ((await r.json()) as { decision: PanelDecision }).decision : null };
@@ -280,7 +281,7 @@ describe('API das decisões em 127.0.0.1', () => {
 
   test('#131: /open/<local_…> redireciona para a conversa no Claude Desktop; outro id, não', async () => {
     const { storage, montador } = await cenario();
-    const api = await startLocalApi({ panelBuilder: montador, hooks: { storage }, port: 0, log: () => {} });
+    const api = await startLocalApi({ ownerToken: () => OWNER_TOKEN, panelBuilder: montador, hooks: { storage }, port: 0, log: () => {} });
     try {
       const local = 'local_00000000-0000-4000-8000-0000000000f1';
       const r = await fetch(`${api.url}/open/${local}`, { redirect: 'manual' });
@@ -305,7 +306,7 @@ describe('API das decisões em 127.0.0.1', () => {
       if (falhar) throw new Error('open saiu com 1');
       abertos.push(url);
     };
-    const api = await startLocalApi({ panelBuilder: montador, hooks: { storage }, port: 0, log: () => {}, openInDesktop: abrirNoDesktop });
+    const api = await startLocalApi({ ownerToken: () => OWNER_TOKEN, panelBuilder: montador, hooks: { storage }, port: 0, log: () => {}, openInDesktop: abrirNoDesktop });
     const post = (caminho: string, headers: Record<string, string> = { 'content-type': 'application/json' }) => fetch(`${api.url}${caminho}`, { method: 'POST', headers, body: '{}' });
     const local = 'local_00000000-0000-4000-8000-0000000000f1';
     try {
@@ -326,7 +327,7 @@ describe('API das decisões em 127.0.0.1', () => {
       await api.close();
     }
     // Sem quem abra (fora do macOS): 501, e o painel fica com o link de reserva.
-    const semOpen = await startLocalApi({ panelBuilder: montador, hooks: { storage }, port: 0, log: () => {} });
+    const semOpen = await startLocalApi({ ownerToken: () => OWNER_TOKEN, panelBuilder: montador, hooks: { storage }, port: 0, log: () => {} });
     try {
       assert.equal((await fetch(`${semOpen.url}/open/${local}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' })).status, 501);
       assert.equal(((await (await fetch(`${semOpen.url}/api/panel/qualquer`)).json()) as Panel).api.opensSession, false);

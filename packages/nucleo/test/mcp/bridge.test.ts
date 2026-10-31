@@ -4,6 +4,7 @@
 // its own name), except where the bridge has to start a real one. Nothing touches 4720, the real
 // ~/.ahrena-console, nor a core the test did not start.
 
+import { OWNER_TOKEN } from '../owner-http.ts';
 import assert from 'node:assert/strict';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { existsSync, mkdtempSync, rmSync } from 'node:fs';
@@ -111,9 +112,10 @@ async function register(installation: Installation, o: { pid?: number; name?: st
     port,
     version: '0.0.1',
     commit: null,
-    dataDir: join(home, 'data', installation),
+    dataDir: join(home, 'data', `${installation}-${pid}`),
     startedAt: new Date(clock).toISOString(),
   };
+  writeLock({ pid, port, version: entry.version, startedAt: entry.startedAt, token: OWNER_TOKEN, parent: null }, entry.dataDir);
   writeInstance(entry, { home: consoleDir });
   return { ...entry, server };
 }
@@ -392,7 +394,9 @@ describe('the MCP stdio bridge and the instance registry', { timeout: 90_000 }, 
   test('--port talks only to that port: no registry, no start', async () => {
     await register('dev');
     const forced = await fakeCore('forced', idle().pid!);
-    const b = bridge('--port', String(forced.port));
+    const forcedDir = join(home, 'forced-owner');
+    writeLock({ pid: process.pid, port: forced.port, version: '0.0.1', startedAt: new Date().toISOString(), token: OWNER_TOKEN, parent: null }, forcedDir);
+    const b = bridge('--data-dir', forcedDir, '--port', String(forced.port));
     assert.equal((await b.call()).text, 'forced');
     await b.close();
     assert.equal(readLock(consoleDir), null);

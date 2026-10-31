@@ -1,3 +1,4 @@
+import { OWNER_TOKEN, ownerFetch as fetch } from '../owner-http.ts';
 import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -254,7 +255,7 @@ describe('conta da sessão (decisão 0006)', () => {
     const s = (over: Partial<{ accountId: string | null; accountSource: 'config' | 'env' | null }> = {}) => ({ id: 's1', accountId: null, accountSource: null, ...over });
     const desktop = (escopos: string[]) => ({ localId: 'local_x', cliSessionId: 's1', title: null, branch: null, cwd: null, parentLocalId: null, archived: false, accounts: escopos });
     assert.equal(contas.ofSession(s(), desktop([`${UUID_A}/${ORG_A}`, `${UUID_B}/${ORG_B}`])), null, 'duas pastas: a pasta não diz a conta');
-    assert.deepEqual(contas.ofSession(s(), desktop([`${UUID_B}/${ORG_B}`])), { id: `${UUID_B}/${ORG_B}`, label: 'cliente', color: '#1baf7a', source: 'desktop' });
+    assert.deepEqual(contas.ofSession(s(), desktop([`${UUID_B}/${ORG_B}`])), { id: `${UUID_B}/${ORG_B}`, label: 'cliente', color: '#1baf7a', source: 'desktop', identity: null, confidence: 'unknown' });
     const daPorta = contas.ofSession(s({ accountId: `${UUID_A}/${ORG_A}`, accountSource: 'config' }), desktop([`${UUID_B}/${ORG_B}`]));
     assert.deepEqual(daPorta && [daPorta.label, daPorta.color, daPorta.source], ['equipe', '#df285d', 'config'], 'config vence desktop');
     contas.reportEnv('s1', UUID_B, ORG_B);
@@ -304,7 +305,7 @@ describe('servidor da API local', () => {
 
   test('hooks e painel na mesma porta; Origin ou Host de fora dá 403', async () => {
     const montador = new MontadorDoPainel({ storage, contas: new Accounts({ storage, file: null }), desktop: null, trabalho: null });
-    const api = await startLocalApi({ panelBuilder: montador, hooks: { storage }, port: 0, log: () => {} });
+    const api = await startLocalApi({ ownerToken: () => OWNER_TOKEN, panelBuilder: montador, hooks: { storage }, port: 0, log: () => {} });
     try {
       assert.equal((await fetch(`${api.url}/api/overview`)).status, 200);
       assert.equal((await fetch(`${api.url}/api/overview`, { headers: { origin: 'https://exemplo.com' } })).status, 403);

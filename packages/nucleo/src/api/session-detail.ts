@@ -292,7 +292,7 @@ export class LeiturasDoDetalhe {
     const [agentes, eventos] = await Promise.all([this.storage.listAgents(session.id), this.todosOsEventos(session.id)]);
     const local = this.montador.localDe(session.id) ?? this.local(session.id);
     await this.open.refresh();
-    const desktopLocal = local && LOCAL.test(local) ? local : null;
+    const desktopLocal = !session.id.startsWith('session:') && local && LOCAL.test(local) ? local : null;
     const pede = painel.session?.banner?.type === 'permission' ? (await this.montador.resumos.ler(session.id, session.updatedAt)).ultimaFerramenta : null;
     return {
       version: 1,
@@ -302,7 +302,7 @@ export class LeiturasDoDetalhe {
       branch: painel.session?.branch ?? painel.work?.branch ?? null,
       local: desktopLocal,
       opensSession: painel.api.opensSession,
-      open: this.open.describe({ sessionId: session.id, cwd: session.cwd ?? painel.session?.cwd ?? null, local: desktopLocal }),
+      open: this.open.describe({ sessionId: session.id, identity: session.identity, cwd: session.cwd ?? painel.session?.cwd ?? null, local: desktopLocal }),
       command: pede?.resumo ?? null,
       endedAt: session.endedAt ?? (session.status === 'active' ? null : session.updatedAt),
       counts: { agents: agentes.length, events: eventos.length },

@@ -529,10 +529,10 @@ describe('#241/AC-3 the credential lives only in the vault', () => {
     await assert.rejects(s.conn.token(), GithubNotConnectedError);
   });
 
-  test('a credential GitHub rejects (401) is not served; the vault is left alone', async () => {
+  test('a credential GitHub rejects (401) is not served (revoked); the vault is left alone', async () => {
     const s = setup({ seed: { 'dev-sintetico': 'gho_revoked' } });
     const st = await s.conn.status();
-    assert.deepEqual([st.state, st.lastError], ['disconnected', 'github-error']);
+    assert.deepEqual([st.state, st.lastError], ['disconnected', 'revoked']);
     await assert.rejects(s.conn.token(), GithubNotConnectedError);
     assert.equal(await s.vault.inner.get('dev-sintetico'), 'gho_revoked');
   });
@@ -961,5 +961,41 @@ describe('#241 review 2 (Argos)', () => {
     const st = await connect(s);
     assert.deepEqual([st.state, st.login], ['connected', 'second-account']);
     assert.ok(s.logs.some((l) => /previous vault entry could not be deleted/.test(l)));
+  });
+});
+
+// #372: an app update starts a new core on the same data dir. It reads the vault entry the old core
+// wrote; nothing about the update itself drops the connection.
+describe('a new core on the same data dir (#372)', () => {
+  test('a valid stored credential: the new core is connected without a device flow', async () => {
+    const s = setup();
+    assert.equal((await connect(s)).state, 'connected');
+    s.conn.close();
+    const next = new GithubConnection(connOptions(s));
+    const st = await next.status();
+    assert.deepEqual([st.state, st.login], ['connected', 'dev-sintetico']);
+  });
+
+  test('a credential GitHub revoked meanwhile: revoked, with the login to reconnect; reconnecting replaces the entry', async () => {
+    const s = setup();
+    await connect(s);
+    s.conn.close();
+    s.auth.token = OTHER_TOKEN; // GitHub revoked the stored token and will issue another one
+    const next = new GithubConnection({ ...connOptions(s), log: (line) => void s.logs.push(line) });
+    const st = await next.status();
+    assert.deepEqual([st.state, st.lastError, st.login, st.securityLogUrl], ['disconnected', 'revoked', 'dev-sintetico', 'https://github.com/settings/security-log']);
+    await assert.rejects(next.token(), GithubNotConnectedError);
+    assert.equal(s.settings.get('github.login'), 'dev-sintetico', 'the login stays for Reconnect');
+    assert.ok(s.logs.some((l) => l === 'github: GitHub rejected the credential (401)'));
+    await next.start();
+    for (let poll = s.timers.shift(); poll; poll = s.timers.shift()) {
+      s.advance(poll.ms);
+      poll.fn();
+      await next.idle();
+    }
+    const again = await next.status();
+    assert.deepEqual([again.state, again.login, again.lastError], ['connected', 'dev-sintetico', undefined]);
+    assert.equal(await s.vault.inner.get('dev-sintetico'), OTHER_TOKEN);
+    next.close();
   });
 });

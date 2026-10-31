@@ -422,7 +422,7 @@ export function reconnectParts(machine, reading, { retry = () => {}, start = () 
   if (!view) return null;
   const rc = machine.reconnect;
   // The last reading fades as in C26: with the tunnel down, or up with no core answering.
-  const offline = ['band', 'no-response'].includes(remoteCondition(machine));
+  const offline = ['band', 'no-response', 'owner-auth-required'].includes(remoteCondition(machine));
   const again = (label, iconName) => rcButton({ label, iconName, filled: true, action: 'start', busy: pending === 'start', onClick: start });
   const tryNow = () => rcButton({ label: 'Tentar agora', action: 'retry', onClick: retry });
   if (view.kind === 'running') {
@@ -527,6 +527,9 @@ export function conditionParts(machine, reading, { retry = () => {}, version = n
   if (condition === 'band') {
     const b = bandText(machine, reading, now);
     return { faded: true, parts: [errorBand({ title: b.title, text: b.text, action: { label: 'Tentar agora', onClick: retry } })] };
+  }
+  if (condition === 'owner-auth-required') {
+    return { faded: true, parts: [stateCard({ iconName: 'server-off', tone: 'waiting', title: 'Acesso remoto bloqueado', text: 'O núcleo remoto exige autenticação do dono. Use o app na própria máquina até configurar um acesso remoto autenticado.' }), showOnlyNote()] };
   }
   if (condition === 'no-response') {
     const port = machine.port ? `A porta ${machine.port} aceita a conexão` : 'O túnel aceita a conexão';
