@@ -588,7 +588,7 @@ export class ReposDoGithub {
       error: erros[0] ?? null,
       computing: calculando,
       lines: Array.isArray(frequencia) ? linhasDe(frequencia, desde) : null,
-      commits: Array.isArray(atividade) ? commitsDoPeriodo(atividade, desde) : null,
+      commits: Array.isArray(atividade) ? commitsDoPeriodo(atividade, desde, agora) : null,
       frequency: Array.isArray(frequencia) ? frequenciaDoPeriodo(frequencia, desde) : null,
       contributors: Array.isArray(contribuidores) ? contribuidoresDoPeriodo(contribuidores, desde).slice(0, 100) : null,
       languages: linguagens ? linguagensDe(linguagens) : null,

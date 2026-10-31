@@ -121,7 +121,29 @@ describe('#105 CA1: linhas de código, commits por semana e frequência', () => 
 
   test('commits por semana: total e média das semanas do período', () => {
     const atividade = [{ week: semanaSeg(20), total: 9 }, { week: semanaSeg(2), total: 4 }, { week: semanaSeg(1), total: 6 }, { week: semanaSeg(0), total: 2 }];
-    assert.deepEqual(commitsDoPeriodo(atividade, inicioDoPeriodo('30d', AGORA)), { total: 12, perWeek: 4, weeks: [4, 6, 2] });
+    assert.deepEqual(commitsDoPeriodo(atividade, inicioDoPeriodo('30d', AGORA)), { total: 12, perWeek: 4, weeks: [4, 6, 2], days: [] });
+  });
+
+  test('commits per day: the days that touch the period up to now, Sunday first, none invented', () => {
+    const sunday = (d: string) => Date.parse(`${d}T00:00:00Z`) / 1000;
+    const atividade = [
+      { week: sunday('2026-09-13'), total: 7, days: [1, 1, 1, 1, 1, 1, 1] },
+      { week: sunday('2026-10-04'), total: 4 },
+      { week: sunday('2026-10-11'), total: 3, days: [0, 1, 0, 0, 2, 0, 0] },
+    ];
+    // 30 days before Thursday 2026-10-15 12:00 start on 09-15 at noon; the week of 10-04 has no `days`.
+    assert.deepEqual(commitsDoPeriodo(atividade, inicioDoPeriodo('30d', AGORA), AGORA).days, [
+      { day: '2026-09-15', commits: 1 },
+      { day: '2026-09-16', commits: 1 },
+      { day: '2026-09-17', commits: 1 },
+      { day: '2026-09-18', commits: 1 },
+      { day: '2026-09-19', commits: 1 },
+      { day: '2026-10-11', commits: 0 },
+      { day: '2026-10-12', commits: 1 },
+      { day: '2026-10-13', commits: 0 },
+      { day: '2026-10-14', commits: 0 },
+      { day: '2026-10-15', commits: 2 },
+    ]);
   });
 });
 
