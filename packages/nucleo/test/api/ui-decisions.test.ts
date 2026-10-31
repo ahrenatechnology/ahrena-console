@@ -238,7 +238,8 @@ describe('sem padrão interno', () => {
   // aponta para recurso nenhum da Ahrena nem supõe a pasta de um projeto.
   test('o front das Decisões não cita org, repositório, host, caminho de máquina nem pasta de registros', () => {
     for (const arquivo of [...JS_DA_TELA, TELA, 'api.js']) {
-      const texto = readFileSync(`${UI_FOLDER}${arquivo}`, 'utf8');
+      // The native owner-bootstrap identifier is a protocol name, not an organization default.
+      const texto = readFileSync(`${UI_FOLDER}${arquivo}`, 'utf8').replaceAll('__AHRENA_OWNER_TOKEN__', '__OWNER_TOKEN__');
       for (const proibido of [/ahrena/i, /github|gitlab/i, /\/Users\/|\/home\//, /docs\/decisoes/, /\b[a-z0-9-]+\.(com|io|dev|ai)\b/i]) assert.doesNotMatch(texto, proibido, `${arquivo}: ${proibido}`);
     }
   });

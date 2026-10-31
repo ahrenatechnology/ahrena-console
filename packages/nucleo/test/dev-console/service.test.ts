@@ -1,3 +1,4 @@
+import { OWNER_TOKEN, ownerFetch as fetch } from '../owner-http.ts';
 // The assembled Dev Console and its route (#177): the simulator's synthetic context, a fake GitHub,
 // sessions and decisions in an in-memory database, and a fake `git` for the folders. No network, no real data.
 import assert from 'node:assert/strict';
@@ -276,7 +277,7 @@ describe('GET /api/dev-console', () => {
   beforeEach(async () => {
     const contas = new Accounts({ storage, file: null });
     const montador = new MontadorDoPainel({ storage, contas, desktop: null, trabalho: null, agora: now });
-    api = await startLocalApi({ panelBuilder: montador, hooks: { storage }, port: 0, log: () => {}, devConsole });
+    api = await startLocalApi({ ownerToken: () => OWNER_TOKEN, panelBuilder: montador, hooks: { storage }, port: 0, log: () => {}, devConsole });
   });
   afterEach(() => api.close());
 
@@ -309,7 +310,7 @@ describe('GET /api/dev-console', () => {
   test('without the Dev Console, the route does not exist', async () => {
     const contas = new Accounts({ storage, file: null });
     const montador = new MontadorDoPainel({ storage, contas, desktop: null, trabalho: null });
-    const outra = await startLocalApi({ panelBuilder: montador, hooks: { storage }, port: 0, log: () => {} });
+    const outra = await startLocalApi({ ownerToken: () => OWNER_TOKEN, panelBuilder: montador, hooks: { storage }, port: 0, log: () => {} });
     assert.equal((await fetch(`${outra.url}/api/dev-console`)).status, 404);
     await outra.close();
   });

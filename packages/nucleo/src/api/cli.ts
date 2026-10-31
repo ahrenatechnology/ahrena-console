@@ -81,6 +81,7 @@ import {
 import type { GithubAccess } from './github-access.ts';
 import { FRAMEWORK_REPO_ENV } from './framework-install.ts';
 import { createCoreGithub, type CoreGithub } from './core-github.ts';
+import { readOwnerTokenFile } from './owner-auth.ts';
 import { startLocalApi, API_VERSION, type LocalApi } from './server.ts';
 import { createMessagingRoute } from './messaging.ts';
 import { Messaging } from '../messaging/service.ts';
@@ -113,7 +114,13 @@ import { MAX_MCP_PROJECTS } from '../tools/mcp-config.ts';
 import { publishToolsChanges, ToolsExecutor, toolsLogFile } from '../tools/executor.ts';
 import { AwsConnector, publishConnectorChanges } from '../clouds/aws-connector.ts';
 import { loopbackWrite } from '../clouds/remote-connectors.ts';
+import { createPortsRoute } from './ports.ts';
+import { ancestorsWith, listPortsWith, PortReleaser } from '../ports/release.ts';
+import { systemRunner } from '../telemetry/adapters/system.ts';
 import { createCloudsRoute } from './clouds.ts';
+import { createDockerRoute } from './docker.ts';
+import { DockerService } from '../docker/service.ts';
+import { systemToolRunner } from '../tools/runner.ts';
 import { AppUpdateState } from '../app-update/state.ts';
 import { createAppUpdateRoute } from './app-update.ts';
 import { MachineConnection, publishConnectionChanges } from '../telemetry/connection.ts';
@@ -519,6 +526,38 @@ const awsConnector = demo ? null : new AwsConnector({ logFile: reconnectLogFile(
 // The connection of each remote machine (#278, decision 0013 section 4): start, stop, reconnect and login-and-start, on the reconnect runner.
 const machineConnection = remoteMachines && reconnectRunner ? new MachineConnection({ registry: remoteMachines, startRunner: reconnectRunner, logFile: reconnectLogFile(dataDir), cloud: awsConnector, localReading: () => sampleStore.latest('local'), onChange: publishConnectionChanges(changes), log }) : null;
 const clouds = awsConnector ? createCloudsRoute({ aws: awsConnector, remote: { port: (id) => remoteMachines?.get(id)?.port, get: loopbackGet(), write: loopbackWrite() } }) : null;
+// Releasing a listening port (#286, decision 0016): this machine's, and the remote machines' through their núcleo. Not in --demo.
+const ports = createPortsRoute({
+  releaser: demo
+    ? null
+    : new PortReleaser({ listPorts: listPortsWith(systemRunner), run: systemRunner, uid: () => process.getuid?.() ?? null, selfPid: process.pid, ancestors: ancestorsWith(systemRunner, process.ppid), kill: (pid, signal) => process.kill(pid, signal) }),
+  acceptNoOrigin: () => o.acceptRemoteActions,
+  log,
+  remote: { port: (id) => remoteMachines?.get(id)?.port, get: loopbackGet(), write: loopbackWrite({ timeoutMs: 15_000 }) },
+});
+// The Docker actions (#288, decision 0017): this machine's daemon, on the Tools executor's queue; the remote machines' through their tunnel port. Not in --demo.
+// A núcleo accepts a no-Origin write (the tunnel) only with --accept-remote-actions (or AHRENA_CONSOLE_ACCEPT_REMOTE_ACTIONS=1), as the port release does.
+const acceptRemoteActions = () => o.acceptRemoteActions;
+const docker =
+  toolsService && toolsExecutor
+    ? {
+        route: createDockerRoute({
+          service: new DockerService({
+            queue: toolsExecutor,
+            run: systemToolRunner,
+            env: () => toolsService.processEnv(),
+            platform: process.platform,
+            resolve: async (name) => (await toolsService.resolveExecutable(name)).path,
+            acceptsRemoteActions: acceptRemoteActions,
+            log,
+          }),
+          cancel: (id) => toolsExecutor.cancel(id),
+          acceptNoOriginActions: acceptRemoteActions,
+          remote: { port: (id) => remoteMachines?.get(id)?.port, get: loopbackGet(), write: loopbackWrite() },
+        }),
+        acceptNoOrigin: acceptRemoteActions,
+      }
+    : null;
 // The desktop app's update notice (#330): the app reports what it found; the /ui reads it. Not in --demo.
 const appUpdate = demo ? null : createAppUpdateRoute(new AppUpdateState(changes));
 
@@ -537,7 +576,9 @@ const follower =
 
 // The API takes over the socket reserved above: the port is never free in between (with port 0,
 // the one the system assigned stays this core's).
+let ownerToken: string | null = null;
 const api: LocalApi = await startLocalApi({
+  ownerToken: () => ownerToken,
   listenOn: reservation,
   panelBuilder,
   hooks: {
@@ -590,7 +631,9 @@ const api: LocalApi = await startLocalApi({
   messaging: createMessagingRoute({ messaging, sessions: storage, accounts, log }),
   orders: createOrdersRoute({ orders: new SessionOrders(), messaging, sessions: storage }),
   tools: toolsExecutor,
+  ports,
   clouds,
+  docker,
   appUpdate,
   load: () => ({
     history: follower ? (historyReady ? 'ready' : 'importing') : 'off',
@@ -612,6 +655,7 @@ if (lock && 'conflict' in lock) {
   await storage.close();
   adopt(lock.conflict.port, lock.conflict.version);
 }
+ownerToken = lock && !('conflict' in lock) ? lock.token : readOwnerTokenFile(process.env.AHRENA_CONSOLE_OWNER_TOKEN_FILE);
 startGuard?.release();
 // The instance registry (decision 0010, item 3): only cores with a lock. A --demo or a --no-lock
 // core is not this installation's core, so nobody should find it there.

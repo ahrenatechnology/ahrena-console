@@ -508,3 +508,107 @@ test('o wall.css não estiliza classe de outra tela: as próprias levam wall-', 
     assert.deepEqual([...classes(outra)].filter((c) => minhas.includes(c)), [], `wall.css e ${outra} estilizam as mesmas classes`);
   }
 });
+
+// ---------- #333: the children nested in a leader and the "Paradas" band (C85 to C87) ----------
+
+const { treeSummary, childContent, parkedContent } = tela;
+const child = (id: string, extra: Card = {}) => ({ id, title: `Filha ${id}`, status: 'active', state: 'active', attention: null, since: '2026-10-20T11:00:00Z', parked: false, children: [], ...extra });
+const WALL_WITH_CHILDREN = {
+  ...MURAL,
+  cards: [
+    cardDeExemplo('lider', {
+      tree: { total: 4, blocked: 1, active: 2, parked: 1 },
+      children: [
+        child('tl', { status: 'waiting', state: 'waiting', attention: { level: 'idle', reason: 'turn_ended' }, children: [child('neta', { children: [child('bisneta')] })] }),
+        child('pede', { status: 'waiting', state: 'waiting', attention: { level: 'blocked', reason: 'question' } }),
+        child('velha', { status: 'completed', state: 'completed', parked: true }),
+      ],
+    }),
+    cardDeExemplo('pede', { title: 'Pendências', status: 'waiting', state: 'waiting', attention: { level: 'blocked', reason: 'question' }, activity: { type: 'question', text: 'Confere a v0.0.36?' }, parentId: 'lider' }),
+  ],
+  parked: { total: 9, items: [cardDeExemplo('p1', { status: 'completed', state: 'completed', activity: { type: 'completed', text: '' } }), cardDeExemplo('p2', { status: 'abandoned', state: 'active', activity: { type: 'idle', text: 'Interrompida (Esc)' } })] },
+};
+
+describe('Wall: nested children and Paradas (#333)', () => {
+  test("the leader's summary: the counts of the whole tree, without the zeros, singular and plural", () => {
+    assert.deepEqual(treeSummary({ total: 4, blocked: 1, active: 2, parked: 1 })?.map((p: { text: string }) => p.text), ['4 filhas', '1 precisa de você', '2 ativas', '1 parada']);
+    assert.deepEqual(treeSummary({ total: 1, blocked: 0, active: 0, parked: 0 })?.map((p: { text: string }) => p.text), ['1 filha']);
+    assert.deepEqual(treeSummary({ total: 3, blocked: 2, active: 0, parked: 2 })?.map((p: { text: string }) => p.text), ['3 filhas', '2 precisam de você', '2 paradas']);
+    assert.equal(treeSummary(null), null);
+    assert.equal(treeSummary({ total: 0, blocked: 0, active: 0, parked: 0 }), null);
+  });
+
+  test('childContent and parkedContent: what each row shows', () => {
+    const now = Date.parse('2026-10-20T16:00:00Z');
+    assert.equal(childContent(child('x', { since: '2026-10-20T11:00:00Z' }), now).since, 'há 5 h');
+    assert.equal(parkedContent(null), null);
+    assert.equal(parkedContent({ total: 0, items: [] }), null);
+    assert.deepEqual(parkedContent({ total: 23, items: new Array(7) }), { title: 'Paradas (23)', shown: 7, total: 23, more: 16 });
+    assert.equal(parkedContent({ total: 250, items: new Array(7) })?.more, 93, 'the core stops at 100');
+  });
+
+  test('a leader comes with its summary closed; opening shows the children, and each level opens closed inside its mother', async () => {
+    const { area, sair } = await montarTela(async () => WALL_WITH_CHILDREN);
+    try {
+      await ate(() => comClasse(area, 'wall-card').length === 2);
+      const treeLine = area.todos((e) => e.getAttribute('data-tree') === 'lider')[0]!;
+      assert.match(treeLine.textContent, /4 filhas.*1 precisa de você.*2 ativas.*1 parada/);
+      assert.equal(treeLine.getAttribute('aria-expanded'), 'false');
+      assert.equal(comClasse(area, 'wall-kid').length, 0, 'closed');
+      treeLine.click();
+      assert.deepEqual(area.todos((e) => e.getAttribute('data-child') !== null).map((e) => e.getAttribute('data-child')), ['tl', 'pede', 'velha'], 'only the first level');
+      assert.ok(comClasse(area, 'wall-span').length === 1, 'an opened leader takes the row');
+      const openKid = comClasse(area.todos((e) => e.getAttribute('data-child') === 'tl')[0]!, 'wall-kid-toggle')[0]!;
+      openKid.click();
+      assert.deepEqual(area.todos((e) => e.getAttribute('data-child') !== null).map((e) => e.getAttribute('data-child')), ['tl', 'neta', 'pede', 'velha'], 'the granddaughter shows, the great-granddaughter does not yet');
+      assert.match(area.todos((e) => e.getAttribute('data-child') === 'velha')[0]!.textContent, /parada/);
+      assert.equal(area.todos((e) => e.getAttribute('data-child') === 'pede')[0]!.todos((e) => e.tag === 'a')[0]!.getAttribute('href')?.includes('/ui/sessions/pede'), true, 'each child opens its own session');
+    } finally {
+      await sair();
+    }
+  });
+
+  test('the child that needs you is a card of its own and says whose it is', async () => {
+    const { area, sair } = await montarTela(async () => WALL_WITH_CHILDREN);
+    try {
+      await ate(() => comClasse(area, 'wall-card').length === 2);
+      const kid = area.todos((e) => e.getAttribute('data-session') === 'pede' && e.classes.includes('wall-card'))[0]!;
+      assert.match(comClasse(kid, 'wall-from')[0]!.textContent, /filha de Sessão lider/);
+    } finally {
+      await sair();
+    }
+  });
+
+  test('Paradas: closed with the counter; opened, the rows and "Mostrar mais", which re-reads with parkedLimit; only under Todas', async () => {
+    const routes: string[] = [];
+    const { area, sair, rotas: r } = await montarTela(async (rota) => (routes.push(rota), WALL_WITH_CHILDREN));
+    try {
+      await ate(() => comClasse(area, 'wall-card').length === 2);
+      const bandHead = () => area.todos((e) => e.getAttribute('data-parked') === 'toggle')[0]!;
+      assert.match(bandHead().textContent, /Paradas \(9\)/);
+      assert.match(bandHead().textContent, /Recolhida/);
+      assert.equal(comClasse(area, 'wall-parked-list').length, 0);
+      bandHead().click();
+      assert.deepEqual(area.todos((e) => e.getAttribute('data-parked-row') !== null).map((e) => e.getAttribute('data-parked-row')), ['p1', 'p2']);
+      assert.match(bandHead().textContent, /Mostrando 2 de 9/);
+      area.todos((e) => e.getAttribute('data-parked') === 'more')[0]!.click();
+      await ate(() => r.length === 2);
+      assert.equal(r[1], '/api/wall?machine=all&parkedLimit=100');
+      area.todos((e) => e.getAttribute('data-filter') === 'blocked')[0]!.click();
+      assert.equal(area.todos((e) => e.getAttribute('data-parked') === 'toggle').length, 0, 'outside Todas the band does not show');
+    } finally {
+      await sair();
+    }
+  });
+
+  test('an older core without children or Paradas shows the wall as before', async () => {
+    const { area, sair } = await montarTela(async () => MURAL);
+    try {
+      await ate(() => comClasse(area, 'wall-card').length === 5);
+      assert.equal(area.todos((e) => e.getAttribute('data-tree') !== null).length, 0);
+      assert.equal(area.todos((e) => e.getAttribute('data-parked') !== null).length, 0);
+    } finally {
+      await sair();
+    }
+  });
+});

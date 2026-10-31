@@ -1,3 +1,4 @@
+import { OWNER_TOKEN, ownerFetch as fetch } from '../owner-http.ts';
 // A tela Dashboard da /ui (#27, C1): a formatação, o que cada parte mostra e a montagem da tela
 // num DOM mínimo, lendo a API de verdade com os dados do simulador (cenário p1).
 import assert from 'node:assert/strict';
@@ -182,7 +183,7 @@ describe('Dashboard: a tela montada sobre a API (simulador p1)', () => {
     await seedPanelScenario(sqlite, 'p1');
     const contas = new Accounts({ storage: sqlite, file: null });
     const frota = new FleetReader({ storage: sqlite, accounts: contas, cacheMs: 0, costMs: 0 });
-    api = await startLocalApi({ panelBuilder: new MontadorDoPainel({ storage: sqlite, contas, desktop: null, trabalho: null as never }), hooks: { storage: sqlite }, port: 0, log: () => {}, fleet: frota });
+    api = await startLocalApi({ ownerToken: () => OWNER_TOKEN, panelBuilder: new MontadorDoPainel({ storage: sqlite, contas, desktop: null, trabalho: null as never }), hooks: { storage: sqlite }, port: 0, log: () => {}, fleet: frota });
   });
   after(async () => {
     await api.close();

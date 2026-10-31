@@ -9,6 +9,16 @@
 
 > Medido com o Claude Code CLI 2.1.302 e o Claude Agent SDK (TypeScript) 0.3.302, no macOS 26.7. As sessões são **reais** (o CLI instalado), mas o modelo é uma API falsa em `127.0.0.1` que responde com eco: pastas de configuração temporárias, `HOME` falso, chave falsa. Não fiz login, não li nem escrevi a configuração real de ninguém e não gastei plano. O que só se mede com login de assinatura está marcado como **a confirmar**.
 
+## Atualização 2026-10-31 — somente franquia (#382)
+
+A proposta abaixo e a prova com API falsa **não autorizam execução gerenciada por assinatura**.
+O [diagnóstico e contrato de admissão](../billing-admission.md) documenta a investigação oficial
+atual: sem prova confiável de extras desabilitados, o estado é `unknown` e launch, retomada e
+cada novo turno são recusados. Login não comprova faturamento. Não há fallback para API, créditos
+ou outra conta. A resolução completa de configuração (#295), os adaptadores (#123/#384) e a
+integração do runtime/fila (#383/#385) continuam dependências. A descoberta não é bloqueada.
+Nenhuma inferência real foi executada nesta investigação.
+
 ## A Anthropic já pensou nisso?
 
 Em partes, e cada parte vê **uma conta**. O caminho oficial para embutir o Claude Code num app é o **Agent SDK**, que conversa com o CLI pelo protocolo `stream-json`: chat em streaming, retomada pelo id, permissões e interrupção. Para conversar com sessões locais de fora do terminal, a Anthropic tem o **Remote Control**, mas o cliente é só dela (claude.ai/code, o app do celular e o Claude Desktop), sem interface para um cliente próprio. Para despachar e acompanhar várias sessões, tem a **agent view** (`claude agents`), no terminal; e para uma sessão mandar prompt a outra, a **mensageria entre sessões**. Nenhuma junta várias contas numa caixa só, e a política de uso diz que um produto de terceiros não oferece o login do claude.ai. O console fica com o que falta: uma janela, todas as contas, e o `claude` da própria pessoa, sem tocar em credencial.
@@ -210,7 +220,7 @@ O **9.5** ([#62](https://github.com/ahrenatechnology/ahrena-console/issues/62)) 
 
 | Risco | Efeito | Mitigação |
 | --- | --- | --- |
-| A Anthropic ler o console conduzindo `-p` com a assinatura como "produto de terceiros oferecendo o login do claude.ai" | O chat por assinatura fica fora da política | O console não toca em credencial e roda o binário sem modificação, que é o uso permitido. **Confirmar com a Anthropic** antes do 9.9 sair do time; enquanto isso, o mesmo host aceita uma pasta de configuração com API key do Console |
+| A Anthropic ler o console conduzindo `-p` com a assinatura como "produto de terceiros oferecendo o login do claude.ai" | O chat por assinatura fica fora da política | O console não toca em credencial e roda o binário sem modificação, que é o uso permitido. **Confirmar com a Anthropic** antes do 9.9 sair do time; enquanto faltar prova de somente franquia, o host gerenciado recusa execução, sem fallback para API (#382) |
 | O uso pelo console contar como fora do "uso individual comum" dos limites do Pro e do Max | Limite cortado sem aviso | Sem automação: cada prompt vem de uma pessoa, uma sessão por vez por pedido |
 | O formato da caixa de entrada ou de `sessions/<pid>.json` mudar | A entrega ao terminal para | Testes de contrato por versão; reserva pela fila do plugin (9.4); o `doctor` avisa |
 | `status` de `sessions/<pid>.json` atrasado | A janela diz "ocupada" depois do fim | Usar como dica; a trava é o pid vivo, não o `status` |

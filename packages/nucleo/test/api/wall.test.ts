@@ -1,3 +1,4 @@
+import { OWNER_TOKEN, ownerFetch as fetch } from '../owner-http.ts';
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import { openSqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
@@ -184,14 +185,16 @@ describe('mural ao vivo (#34)', () => {
     assert.equal(await doTerminal(), null, 'o primeiro pedido não espera o git');
     await trabalho.esperar();
     assert.equal(await doTerminal(), 'feat/7-terminal');
-    assert.deepEqual(pastas, ['/simulacao/terminal'], 'só a sessão sem branch roda git, uma vez (cache de 60 s)');
-    assert.deepEqual(trabalho.chamadas, { github: 0, git: 1 }, 'nunca o GitHub');
+    // #333: the parked sessions (no branch known either) read it too, each folder once.
+    assert.equal(pastas.filter((p) => p === '/simulacao/terminal').length, 1, 'a sessão sem branch roda git uma vez (cache de 60 s)');
+    assert.equal(new Set(pastas).size, pastas.length, 'cada pasta, uma vez');
+    assert.equal(trabalho.chamadas.github, 0, 'nunca o GitHub');
     await storage.close();
   });
 
   test('GET /api/wall pela API local', async () => {
     const storage = await semear();
-    const api = await startLocalApi({ panelBuilder: painelDe(storage), hooks: { storage }, port: 0, log: () => {} });
+    const api = await startLocalApi({ ownerToken: () => OWNER_TOKEN, panelBuilder: painelDe(storage), hooks: { storage }, port: 0, log: () => {} });
     try {
       const r = await fetch(`${api.url}/api/wall`);
       assert.equal(r.status, 200);
@@ -205,6 +208,163 @@ describe('mural ao vivo (#34)', () => {
       const antiga = await fetch(`${api.url}/api/mural`);
       assert.equal(antiga.status, 404);
       assert.deepEqual(await antiga.json(), { error: 'não encontrado' });
+    } finally {
+      await api.close();
+      await storage.close();
+    }
+  });
+});
+
+/** The Desktop index as a map of `local_…` rows, for the tree and the archive. */
+function desktopOf(rows: DesktopSession[]): DesktopIndex {
+  const row = (cli: string, extra: Partial<DesktopSession> = {}): DesktopSession => ({ localId: `local_${cli}`, cliSessionId: cli, title: cli, branch: null, cwd: null, parentLocalId: null, archived: false, accounts: [], ...extra });
+  const all = rows.map((r) => row(r.cliSessionId!, r));
+  return {
+    refresh: async () => {},
+    sessionByCli: (id: string) => all.find((r) => r.cliSessionId === id) ?? null,
+    sessionByLocal: (local: string) => all.find((r) => r.localId === local) ?? null,
+    childrenOf: (local: string) => all.filter((r) => r.parentLocalId === local),
+  } as unknown as DesktopIndex;
+}
+const asked = (reason: string) => ({ states: { waitingWhenAbandoned: { since: iso(400), reason } } });
+
+describe('mural ao vivo: a que espera por mim fica e as Paradas (#333)', () => {
+  test('abandoned while waiting on a blocking request stays on the wall, with the age of the request', async () => {
+    const storage = openSqliteStorage({ path: ':memory:' });
+    await storage.putSession(session({ id: 'asks', cwd: '/x/asks', status: 'abandoned', endedAt: iso(300), updatedAt: iso(400), metadata: asked('notification') }));
+    const mural = await muralDe(storage).montar();
+    assert.deepEqual(mural.cards.map((c) => c.id), ['asks']);
+    assert.equal(mural.cards[0]!.attention?.level, 'blocked');
+    assert.equal(mural.cards[0]!.since, iso(400), 'há 400 min, not the 180');
+    assert.equal(mural.parked.total, 0);
+    await storage.close();
+  });
+
+  test('Esc, a new session at the prompt and a plain end asked nothing: they go to Paradas, not to the cards', async () => {
+    const storage = openSqliteStorage({ path: ':memory:' });
+    await storage.putSession(session({ id: 'esc', status: 'abandoned', updatedAt: iso(400), metadata: asked('interrupted') }));
+    await storage.putSession(session({ id: 'prompt', status: 'abandoned', updatedAt: iso(500), metadata: asked('session_start') }));
+    await storage.putSession(session({ id: 'plain', status: 'abandoned', updatedAt: iso(600), metadata: {} }));
+    await storage.putSession(session({ id: 'done', status: 'completed', endedAt: iso(700), updatedAt: iso(700) }));
+    const mural = await muralDe(storage).montar();
+    assert.deepEqual(mural.cards, []);
+    assert.equal(mural.parked.total, 4);
+    assert.deepEqual(mural.parked.items.map((c) => c.id), ['esc', 'prompt', 'plain', 'done'], 'the most recent first');
+    await storage.close();
+  });
+
+  test('the archived are in neither the cards nor Paradas, and what is older than the window is history', async () => {
+    const storage = openSqliteStorage({ path: ':memory:' });
+    await storage.putSession(session({ id: 'archived-asks', status: 'abandoned', updatedAt: iso(400), metadata: asked('notification') }));
+    await storage.putSession(session({ id: 'archived-idle', status: 'completed', endedAt: iso(400), updatedAt: iso(400) }));
+    await storage.putSession(session({ id: 'ancient', status: 'completed', endedAt: iso(60 * 24 * 40), updatedAt: iso(60 * 24 * 40) }));
+    const desktop = desktopOf([{ cliSessionId: 'archived-asks', archived: true } as DesktopSession, { cliSessionId: 'archived-idle', archived: true } as DesktopSession]);
+    const mural = await muralDe(storage, desktop).montar();
+    assert.deepEqual(mural.cards, []);
+    assert.equal(mural.parked.total, 0);
+    await storage.close();
+  });
+
+  test('Paradas: the total counts them all, `parkedLimit` picks the rows (7 by default, at most 100)', async () => {
+    const storage = openSqliteStorage({ path: ':memory:' });
+    for (let i = 0; i < 12; i++) await storage.putSession(session({ id: `p${i}`, status: 'completed', endedAt: iso(300 + i), updatedAt: iso(300 + i) }));
+    const mural = muralDe(storage);
+    const padrao = await mural.montar();
+    assert.equal(padrao.parked.total, 12);
+    assert.equal(padrao.parked.items.length, 7);
+    assert.equal((await mural.montar({ parkedLimit: 12 })).parked.items.length, 12);
+    assert.equal((await mural.montar({ parkedLimit: 0 })).parked.items.length, 7, 'a bad limit falls back to the default');
+    assert.equal(padrao.count.all, 0, 'the band is not in the count of the cards');
+    await storage.close();
+  });
+
+  test('a leader carries its children, every level, and the child that needs you is a card too', async () => {
+    const storage = openSqliteStorage({ path: ':memory:' });
+    await storage.putSession(session({ id: 'pm', status: 'active', updatedAt: iso(1) }));
+    await storage.putSession(session({ id: 'tl', status: 'active', updatedAt: iso(2), awaitingInputSince: iso(2), awaitingReason: 'stop' }));
+    await storage.putSession(session({ id: 'pending', status: 'abandoned', updatedAt: iso(400), metadata: asked('notification') }));
+    await storage.putSession(session({ id: 'working', status: 'active', updatedAt: iso(1) }));
+    await storage.putSession(session({ id: 'stale', status: 'completed', endedAt: iso(500), updatedAt: iso(500) }));
+    await storage.putSession(session({ id: 'grand', status: 'active', updatedAt: iso(1) }));
+    const desktop = desktopOf([
+      { cliSessionId: 'pm' } as DesktopSession,
+      { cliSessionId: 'tl', parentLocalId: 'local_pm' } as DesktopSession,
+      { cliSessionId: 'pending', parentLocalId: 'local_tl' } as DesktopSession,
+      { cliSessionId: 'working', parentLocalId: 'local_tl' } as DesktopSession,
+      { cliSessionId: 'stale', parentLocalId: 'local_tl' } as DesktopSession,
+      { cliSessionId: 'grand', parentLocalId: 'local_working' } as DesktopSession,
+    ]);
+    const mural = await muralDe(storage, desktop).montar();
+    assert.deepEqual(mural.cards.map((c) => c.id), ['pending', 'pm'], 'the child that needs you first; the idle and the active ones nest');
+    const pm = mural.cards.find((c) => c.id === 'pm')!;
+    assert.equal(pm.parentId, null);
+    assert.deepEqual(pm.children.map((c) => c.id), ['tl']);
+    assert.deepEqual(pm.children[0]!.children.map((c) => c.id), ['pending', 'working', 'stale']);
+    assert.deepEqual(pm.children[0]!.children[1]!.children.map((c) => c.id), ['grand']);
+    assert.deepEqual(pm.tree, { total: 5, blocked: 1, active: 2, parked: 1 }, 'all levels: tl is idle, pending needs you, working and grand are active, stale is parked');
+    const pending = mural.cards.find((c) => c.id === 'pending')!;
+    assert.equal(pending.parentId, 'pm', 'its leader is the nearest card above it');
+    assert.equal(pending.tree, null);
+    assert.equal(mural.parked.total, 0, 'a parked child counts in its leader, not in Paradas');
+    await storage.close();
+  });
+
+  test('mother archived: the live child is a card of its own; nobody shows up twice', async () => {
+    const storage = openSqliteStorage({ path: ':memory:' });
+    await storage.putSession(session({ id: 'mother', status: 'active', updatedAt: iso(1) }));
+    await storage.putSession(session({ id: 'daughter', status: 'active', updatedAt: iso(1) }));
+    await storage.putSession(session({ id: 'orphan-stale', status: 'completed', endedAt: iso(500), updatedAt: iso(500) }));
+    const desktop = desktopOf([
+      { cliSessionId: 'mother', archived: true } as DesktopSession,
+      { cliSessionId: 'daughter', parentLocalId: 'local_mother' } as DesktopSession,
+      { cliSessionId: 'orphan-stale', parentLocalId: 'local_mother' } as DesktopSession,
+    ]);
+    const mural = await muralDe(storage, desktop).montar();
+    assert.deepEqual(mural.cards.map((c) => [c.id, c.parentId, c.children]), [['daughter', null, []]]);
+    assert.deepEqual(mural.parked.items.map((c) => c.id), ['orphan-stale'], 'a parked child of an archived mother is plain Paradas');
+    await storage.close();
+  });
+
+  test('an archived middle: the sessions below it are in the grandmother\'s tree, never in neither place', async () => {
+    const storage = openSqliteStorage({ path: ':memory:' });
+    await storage.putSession(session({ id: 'grandma', status: 'active', updatedAt: iso(1) }));
+    await storage.putSession(session({ id: 'mid', status: 'active', updatedAt: iso(1) }));
+    await storage.putSession(session({ id: 'live', status: 'active', updatedAt: iso(1) }));
+    await storage.putSession(session({ id: 'stale', status: 'completed', endedAt: iso(500), updatedAt: iso(500) }));
+    const desktop = desktopOf([
+      { cliSessionId: 'grandma' } as DesktopSession,
+      { cliSessionId: 'mid', parentLocalId: 'local_grandma', archived: true } as DesktopSession,
+      { cliSessionId: 'live', parentLocalId: 'local_mid' } as DesktopSession,
+      { cliSessionId: 'stale', parentLocalId: 'local_mid' } as DesktopSession,
+    ]);
+    const mural = await muralDe(storage, desktop).montar();
+    assert.deepEqual(mural.cards.map((c) => c.id), ['grandma']);
+    assert.deepEqual(mural.cards[0]!.children.map((c) => c.id), ['live', 'stale'], 'the archived one is not listed, its children are');
+    assert.deepEqual(mural.cards[0]!.tree, { total: 2, blocked: 0, active: 1, parked: 1 });
+    assert.equal(mural.parked.total, 0);
+    await storage.close();
+  });
+
+  test('a cycle in the Desktop index does not loop', async () => {
+    const storage = openSqliteStorage({ path: ':memory:' });
+    await storage.putSession(session({ id: 'a', status: 'active', updatedAt: iso(1) }));
+    await storage.putSession(session({ id: 'b', status: 'active', updatedAt: iso(1) }));
+    const desktop = desktopOf([{ cliSessionId: 'a', parentLocalId: 'local_b' } as DesktopSession, { cliSessionId: 'b', parentLocalId: 'local_a' } as DesktopSession]);
+    const mural = await muralDe(storage, desktop).montar();
+    assert.equal(mural.cards.length, 1, 'one of them leads and the other nests: nobody vanishes');
+    assert.equal(mural.cards[0]!.tree?.total, 1);
+    await storage.close();
+  });
+
+  test('GET /api/wall?parkedLimit=… pela API local', async () => {
+    const storage = openSqliteStorage({ path: ':memory:' });
+    for (let i = 0; i < 9; i++) await storage.putSession(session({ id: `p${i}`, status: 'completed', endedAt: iso(300 + i), updatedAt: iso(300 + i) }));
+    const api = await startLocalApi({ ownerToken: () => OWNER_TOKEN, panelBuilder: painelDe(storage), hooks: { storage }, port: 0, log: () => {} });
+    try {
+      const mural = (await (await fetch(`${api.url}/api/wall`)).json()) as Wall;
+      assert.deepEqual([mural.parked.total, mural.parked.items.length], [9, 7]);
+      const todas = (await (await fetch(`${api.url}/api/wall?parkedLimit=50`)).json()) as Wall;
+      assert.equal(todas.parked.items.length, 9);
     } finally {
       await api.close();
       await storage.close();

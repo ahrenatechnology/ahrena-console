@@ -1,3 +1,4 @@
+import { ownerFetch as fetch } from '../owner-http.ts';
 // Issue #173, phase 6: the old Portuguese routes, query parameters, values and request bodies were
 // aliases of the English ones until the published mod (v0.0.34) and app (0.0.5) moved to English.
 // Now an old route is an unknown path (404, or 405 for a write), an old parameter or value is not

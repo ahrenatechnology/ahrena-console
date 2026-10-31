@@ -1,3 +1,4 @@
+import { OWNER_TOKEN } from '../owner-http.ts';
 // A deterministic demo server: the --demo of scenario p4, the decisions of p9, the workflows, the
 // Detail, the history, the repos and the project of the demo, every clock fixed at NOW and the change
 // cursor with a fixed generation. `old-routes.test.ts` proves on it that the old Portuguese routes
@@ -83,7 +84,7 @@ export async function startDemoApi({ messaging, orders }: DemoApiOptions = {}): 
     raiz: (repo) => (repo === DEMO_REPO ? repoFolder : null),
   });
   const project = new GithubProject({ source: new SimulatorProject(NOW), cache: new GithubCache({ store: new SqliteCacheStore(sqlite.db), now: clock }), project: SIMULATOR_PROJECT });
-  const api = await startLocalApi({
+  const api = await startLocalApi({ ownerToken: () => OWNER_TOKEN,
     panelBuilder: builder,
     hooks: { storage },
     port: 0,

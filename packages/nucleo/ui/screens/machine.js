@@ -64,6 +64,9 @@ import {
   isMachineId,
   portFilter,
   portRows,
+  releaseAction,
+  releaseRoute,
+  withoutReleased,
   remoteCondition,
   remoteCorePort,
   remotePortOwner,
@@ -80,6 +83,8 @@ import {
   yOf,
 } from './machine-format.js';
 import { cloudProfiles } from './cloud-profiles.js';
+import { dockerActions } from './docker-actions.js';
+import { openRelease } from './port-release.js';
 import { machineConnection } from './machine-connection.js';
 
 const STYLE = '/ui/screens/machine.css';
@@ -286,9 +291,22 @@ function stacksCard(stacks) {
   );
 }
 
+// The Ação cell of a row (issue 286): Liberar, or why not, or Ver a stack, or the command to copy.
+function releaseCell(row, act) {
+  const a = releaseAction(row, act.context);
+  const why = (text) => (text ? el('small', { class: 'tm-rp-why' }, text) : null);
+  const button = (label, iconName, props) => el('button', { type: 'button', class: 'btn outline', 'data-port-action': props['data-port-action'], ...props }, icon(iconName), label);
+  let content;
+  if (a.kind === 'release') content = [button('Liberar', a.warn ? 'alert' : 'power', { 'data-port-action': 'release', onClick: () => act.release(row, Boolean(a.warn)) }), why(a.warn)];
+  else if (a.kind === 'stack') content = [button('Ver a stack', 'container', { 'data-port-action': 'stack', onClick: () => act.stack() }), why(a.why)];
+  else if (a.kind === 'copy') content = [button('Copiar comando', 'copy', { 'data-port-action': 'copy', onClick: (e) => act.copy(a.command, e.currentTarget) }), el('small', { class: 'tm-rp-why mono' }, a.command)];
+  else content = [button('Liberar', 'power', { 'data-port-action': 'off', disabled: true }), why(a.why)];
+  return el('td', { class: 'tm-rp-act' }, ...content.filter(Boolean));
+}
+
 const LISTEN = { all: ['b-waiting', 'todas as interfaces'], loopback: ['b-abandoned', 'só loopback'] };
 
-function portsCard(portsList, { local, owner, forwards, filter, setFilter }) {
+function portsCard(portsList, { local, owner, forwards, filter, setFilter, act = null, band = null }) {
   const segment = el(
     'div',
     { class: 'tm-seg', role: 'group', 'aria-label': 'Filtrar as portas' },
@@ -296,19 +314,21 @@ function portsCard(portsList, { local, owner, forwards, filter, setFilter }) {
   );
   const rows = portRows(portFilter(portsList, filter), owner).map((r) => {
     const listen = LISTEN[r.interface] ? el('span', { class: `tm-pill ${LISTEN[r.interface][0]}` }, LISTEN[r.interface][1]) : el('span', { class: 'mono' }, r.address ?? DASH);
-    const cells = [td(r.ports.join(', '), 'mono'), el('td', {}, listen), td(r.process), td(r.owner, r.owner ? null : 'tm-muted')];
+    const cells = [td(r.ports.join(', '), 'mono'), el('td', {}, listen), el('td', {}, r.process ?? DASH, r.pid ? el('small', { class: 'tm-rp-pid mono' }, `pid ${r.pid}`) : null), td(r.owner, r.owner ? null : 'tm-muted')];
     if (!local) {
       const f = r.ports.length === 1 ? forwards.get(r.ports[0]) : null;
       cells.push(f ? el('td', { class: 'mono' }, `${f.localPort} `, pill(TUNNEL_PORT_STATE[f.state])) : td(DASH, 'tm-muted'));
     }
+    if (act) cells.push(releaseCell(r, act));
     return el('tr', { 'data-port': r.ports[0] }, ...cells);
   });
-  const head = ['Porta', 'Escuta em', 'Processo', 'De quem', ...(local ? [] : ['No Mac'])];
+  const head = ['Porta', 'Escuta em', 'Processo', 'De quem', ...(local ? [] : ['No Mac']), ...(act ? ['Ação'] : [])];
   return el(
     'section',
     // The whole row: the list is long, and a short card beside it would leave a hole (rule 9, issue 255).
     { class: 'card tm-card tm-span-full', 'data-part': 'ports' },
     el('h2', { class: 'tm-title' }, icon('radio-tower'), el('span', {}, local ? 'Portas em escuta' : 'Portas em escuta lá'), segment),
+    band,
     rows.length ? table(head, rows, local ? ' tm-cols-ports' : ' tm-cols-ports-remote') : el('p', { class: 'tm-muted' }, 'Nenhuma porta neste filtro.'),
   );
 }
@@ -401,7 +421,7 @@ export function reconnectParts(machine, reading, { retry = () => {}, start = () 
   if (!view) return null;
   const rc = machine.reconnect;
   // The last reading fades as in C26: with the tunnel down, or up with no core answering.
-  const offline = ['band', 'no-response'].includes(remoteCondition(machine));
+  const offline = ['band', 'no-response', 'owner-auth-required'].includes(remoteCondition(machine));
   const again = (label, iconName) => rcButton({ label, iconName, filled: true, action: 'start', busy: pending === 'start', onClick: start });
   const tryNow = () => rcButton({ label: 'Tentar agora', action: 'retry', onClick: retry });
   if (view.kind === 'running') {
@@ -453,8 +473,13 @@ export function reconnectParts(machine, reading, { retry = () => {}, start = () 
 
 // ---------- the body ----------
 
+/** `release` is `{ release(row, warn), stack(), copy(command, button), band }` from the screen; without it the card only shows. */
+function releaseOptions(release, context) {
+  return release ? { act: { context, release: release.release, stack: release.stack, copy: release.copy }, band: release.band ?? null } : {};
+}
+
 /** Everything under the header for one reading: the cards, then the grid. Exported for the test. */
-export function machineBody(data, { local, filter = 'all', setFilter = () => {}, now = Date.now(), ownPort = null } = {}) {
+export function machineBody(data, { local, filter = 'all', setFilter = () => {}, now = Date.now(), ownPort = null, release = null, dockerActions: hasActions = false } = {}) {
   const { reading, series, alerts, machines, machine, sessions, localReading, remoteReadings = new Map(), hours = 1 } = data;
   const parts = [];
   if (!reading) {
@@ -473,17 +498,18 @@ export function machineBody(data, { local, filter = 'all', setFilter = () => {},
     const claude = reading.claude ? claudeCard(reading.claude, reading.topProcesses, { wide: !reading.tunnels }) : null;
     if (reading.tunnels) grid.push(el('div', { class: 'card-column tm-side' }, alertsCard(alerts, now), claude));
     else grid.push(alertsCard(alerts, now), ...(claude ? [claude] : []));
-    if (reading.ports) grid.push(portsCard(reading.ports, { local, owner: localPortOwner(reading.tunnels, ownPort), forwards: new Map(), filter, setFilter }));
+    if (reading.ports) grid.push(portsCard(reading.ports, { local, owner: localPortOwner(reading.tunnels, ownPort), forwards: new Map(), filter, setFilter, ...releaseOptions(release, { ownPort, remote: null }) }));
     if (!machines.some((m) => m.id !== LOCAL_ID)) grid.push(el('div', { class: 'tm-span-full' }, noRemoteCard()));
   } else {
     grid.push(alertsCard(alerts, now));
     if (reading.volumes.length) grid.push(volumesCard(reading, { local }));
     if (reading.docker) grid.push(dockerCard(reading.docker));
     if (sessions) grid.push(sessionsCard(sessions));
-    if (reading.docker?.stacks.length) grid.push(stacksCard(reading.docker.stacks));
+    // The Docker actions card (below the grid) lists the stacks with their buttons: this read-only one stays only without it.
+    if (reading.docker?.stacks.length && !hasActions) grid.push(stacksCard(reading.docker.stacks));
     if (reading.ports) {
       const owner = remotePortOwner(reading.docker, remoteCorePort(localReading, machine));
-      grid.push(portsCard(reading.ports, { local, owner, forwards: forwardsOf(localReading, machine), filter, setFilter }));
+      grid.push(portsCard(reading.ports, { local, owner, forwards: forwardsOf(localReading, machine), filter, setFilter, ...releaseOptions(release, { ownPort, remote: data.releaseCap ?? { status: 'unsupported', remoteActions: false } }) }));
     }
   }
   parts.push(el('div', { class: 'tm-grid' }, ...grid));
@@ -496,6 +522,9 @@ export function conditionParts(machine, reading, { retry = () => {}, version = n
   if (condition === 'band') {
     const b = bandText(machine, reading, now);
     return { faded: true, parts: [errorBand({ title: b.title, text: b.text, action: { label: 'Tentar agora', onClick: retry } })] };
+  }
+  if (condition === 'owner-auth-required') {
+    return { faded: true, parts: [stateCard({ iconName: 'server-off', tone: 'waiting', title: 'Acesso remoto bloqueado', text: 'O núcleo remoto exige autenticação do dono. Use o app na própria máquina até configurar um acesso remoto autenticado.' }), showOnlyNote()] };
   }
   if (condition === 'no-response') {
     const port = machine.port ? `A porta ${machine.port} aceita a conexão` : 'O túnel aceita a conexão';
@@ -538,8 +567,14 @@ export async function mount(area, ctx) {
   // reconnect state it failed on (a new state from the core hides it).
   let pending = null;
   let problem = null;
+  // Liberar uma porta (issue 286): the ports released since the last sample, and the note that says so.
+  const released = new Map();
+  let releaseNote = null;
+  let noteTimer = null;
   // The "Perfis de nuvem" card (issue 277, C66 and C67): its own module, which reads and polls by itself.
   const cloud = cloudProfiles(ctx, id);
+  // The Docker card with the actions (issue 288, C92 to C95): its own module, which reads by itself; it replaces the read-only stacks card while it shows the stacks.
+  const docker = dockerActions(ctx, id, { repaint: () => last && paint(last) });
   // The remote's connection (issue 278, C62 to C65): its own module; `null` keeps the screen as it was.
   const conn = local ? null : machineConnection(ctx, id, { reread: () => draw(), repaint: () => last && paint(last) });
 
@@ -590,9 +625,11 @@ export async function mount(area, ctx) {
     if (sub) sub.textContent = (conn ? conn.headerLine(line) : line) || (local ? 'A telemetria medida pelo núcleo daqui' : 'Máquina remota');
     if (!local && machine) pillSlot.replaceChildren(pill(conn?.pill() ?? statePill(machine)));
     const ownPort = Number(globalThis.location?.port) || null;
-    const body = data.reading || local || remoteCondition(machine) === null ? machineBody(data, { local, filter, setFilter, now, ownPort }) : [];
+    const shownData = data.reading ? { ...data, reading: withoutReleased(data.reading, released) } : data;
+    const release = { release: startRelease, stack: showStacks, copy: copyCommand, band: releaseBand() };
+    const body = data.reading || local || remoteCondition(machine) === null ? machineBody(shownData, { local, filter, setFilter, now, ownPort, release: condition.faded ? null : release, dockerActions: docker.available() }) : [];
     const shown = condition.faded && data.reading ? [el('div', { class: 'tm-faded', 'aria-label': 'Última leitura guardada' }, ...body)] : body;
-    replaceKeepingFocus(head, ...condition.parts, cloud.node(label), ...shown);
+    replaceKeepingFocus(head, ...condition.parts, cloud.node(label), ...shown, docker.node());
   }
 
   // A repaint (a filter, the 30 s re-read) rebuilds the buttons: the focus goes back to the same one.
@@ -610,6 +647,47 @@ export async function mount(area, ctx) {
     // Reconectar becomes Cancelar (and back): the focus goes to the band's first button.
     const target = area.querySelector(key) ?? (key.startsWith('[data-rc-action') ? area.querySelector('[data-rc-action]') : null);
     target?.focus();
+  }
+
+  function releaseBand() {
+    if (!releaseNote) return null;
+    return el('div', { class: 'tm-rc-band tm-rc-ok tm-rp-band', role: 'status', 'data-part': 'release-note' }, icon('ok'), el('div', {}, el('b', {}, `Porta ${releaseNote.port} liberada.`), ` ${releaseNote.process ?? 'O processo'} (pid ${releaseNote.pid}) saiu com ${releaseNote.signal === 'KILL' ? 'SIGKILL' : 'SIGTERM'}.`));
+  }
+
+  function startRelease(row, warn) {
+    const tunnel = warn ? last?.reading?.tunnels?.find((t) => t.ports.some((p) => row.ports.includes(p.localPort))) : null;
+    openRelease(ctx, {
+      machineId: id,
+      machineLabel: last?.machine?.label ?? id,
+      row,
+      warn,
+      tunnelMachineId: tunnel ? (machineOfTunnel(tunnel, last.machines)?.id ?? null) : null,
+      onRefresh: () => draw(),
+      onDone: ({ port, pid, process, signal }) => {
+        for (const p of row.ports) released.set(`${p}:${pid}`, Date.now());
+        releaseNote = { port, pid, process, signal };
+        clearTimeout(noteTimer);
+        noteTimer = setTimeout(() => {
+          releaseNote = null;
+          if (last && !ctx.signal.aborted) paint(last);
+        }, 20_000);
+        if (last) paint(last);
+        draw();
+      },
+    });
+  }
+
+  // "Ver a stack": the Docker part is its own card on the Workstation's screen (issue 288).
+  function showStacks() {
+    area.querySelector?.('[data-part="stacks"]')?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+  }
+
+  function copyCommand(command, button) {
+    globalThis.navigator?.clipboard?.writeText?.(command)?.then?.(() => {
+      const before = button.lastChild?.textContent;
+      if (before) button.lastChild.textContent = 'Copiado';
+      setTimeout(() => button.lastChild && before && (button.lastChild.textContent = before), 1500);
+    });
   }
 
   const reconnectKey = (machine) => `${machine?.reconnect?.state ?? ''}|${machine?.reconnect?.startedAt ?? ''}`;
@@ -661,7 +739,12 @@ export async function mount(area, ctx) {
       const machine = machines.find((m) => m.id === id) ?? normalizeMachines([telemetry?.machine])[0] ?? null;
       let localReading = null;
       const remoteReadings = new Map();
-      if (!local) localReading = normalizeReading((await optional(telemetryRoute(LOCAL_ID, 1)))?.current);
+      let releaseCap = null;
+      if (!local) {
+        localReading = normalizeReading((await optional(telemetryRoute(LOCAL_ID, 1)))?.current);
+        const cap = await optional(releaseRoute(id));
+        releaseCap = { status: typeof cap?.status === 'string' ? cap.status : 'unsupported', remoteActions: cap?.remoteActions === true };
+      }
       else if (reading?.tunnels) {
         const reached = reading.tunnels.map((t) => machineOfTunnel(t, machines)).filter((m) => m && m.state === 'connected');
         for (const m of new Set(reached)) {
@@ -682,6 +765,7 @@ export async function mount(area, ctx) {
         sessions: sessionsOf(attention, id),
         localReading,
         remoteReadings,
+        releaseCap,
       };
       paint(last);
     } catch (e) {
@@ -718,6 +802,7 @@ export async function mount(area, ctx) {
   // read comes back aborts the signal before the shell could register that function.
   const stop = () => {
     clearTimeout(wait);
+    clearTimeout(noteTimer);
     clearInterval(background);
     clearInterval(ticker);
   };

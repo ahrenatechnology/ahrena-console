@@ -10,6 +10,7 @@ import { loading, error, errorBand, empty } from '../states.js';
 import { attentionBadges, attentionOf, statusWithoutAttention } from '../attention.js';
 import { lastAvailability, loadAvailability, messageAction, useMessageStyle } from './session-message.js';
 import { openAction } from '../open-action.js';
+import { newSessionButton } from '../new-session.js';
 import { createMachineFilter, isRemote, itemHref, itemKey, machineTag, queryWithMachine, remoteParts, whereText } from '../machine-filter.js';
 
 // The `status` and `order` values of `/api/sessions` (English since phase 2b of issue 173). issue 245: the
@@ -251,7 +252,7 @@ export async function mount(area, ctx) {
     icon: 'sessions',
     title: 'Sessões',
     sub: '…',
-    actions: [el('button', { type: 'button', class: 'btn', onClick: () => read() }, icon('refresh'), 'Atualizar')],
+    actions: [el('button', { type: 'button', class: 'btn', onClick: () => read() }, icon('refresh'), 'Atualizar'), newSessionButton({ read: ctx.read, write: ctx.write })],
   });
   const sub = head.querySelector('.sub');
 

@@ -9,6 +9,7 @@
 // start its own with `--parent` on itself, and that core exits when the bridge and every registered
 // client exit.
 
+import { ownerTokenForPort } from './owner-credentials.ts';
 import { parseArgs } from 'node:util';
 import { parseInstallation, resolveDataDir, resolvePort, type Installation } from '../owner/installation.ts';
 import { startOrAdopt } from '../owner/start.ts';
@@ -101,7 +102,7 @@ class Unreachable extends Error {}
 const unreachable: MessageHandler = async () => {
   throw new Unreachable();
 };
-const send = (port: number, m: unknown) => httpBridge(url(port), { withoutCore: unreachable })(m);
+const send = (port: number, m: unknown) => httpBridge(url(port), { withoutCore: unreachable, ownerToken: () => ownerTokenForPort(port, resolveDataDir({ installation, dataDir: o['data-dir'] })) })(m);
 
 /** At most this many cores tried for one message (a stale entry, then the next one). */
 const MAX_TRIES = 3;

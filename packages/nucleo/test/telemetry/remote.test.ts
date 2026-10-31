@@ -1,3 +1,4 @@
+import { ownerFetch as fetch } from '../owner-http.ts';
 // A remote machine (#176) read from a FAKE remote núcleo on loopback (fake-remote.ts): the requests
 // it makes, each state and reason, the reading kept in SQLite while the remote is down, and the
 // "Workstation sem conexão" alert on /api/changes. No external network; the 3 s deadline is
@@ -154,15 +155,15 @@ describe('#176/AC-3 the remote state', () => {
     assert.deepEqual(await remote.pollOnce(), { state: 'incompatible-version', reason: null, version: null });
   });
 
-  test('#176/AC-3 a remote that refuses the Host (403) is no-response', async () => {
+  test('a remote authentication refusal is explicit and stays fail-closed', async () => {
     const f = await fake({ current: remoteReading() });
     const get: RemoteGet = async (port, path) => {
-      // A núcleo that wants another Host: what the fake does with a wrong one.
+      // No credential handoff exists for tunneled HTTP yet.
       const r = await loopbackGet({ timeoutMs: READ_TIMEOUT_MS })(port, path);
       return r.kind === 'response' ? { ...r, status: 403 } : r;
     };
     const { remote } = setup(f.port, { get });
-    assert.deepEqual(await remote.pollOnce(), { state: 'unreachable', reason: 'no-response', version: null });
+    assert.deepEqual(await remote.pollOnce(), { state: 'unreachable', reason: 'owner-auth-required', version: null });
   });
 });
 

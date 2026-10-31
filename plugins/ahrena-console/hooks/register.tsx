@@ -15,7 +15,7 @@ import type { PanelDecision, DecisionScope, Reading, Panel, SessionQuestion, Nee
 import { draw, decisionScopeOf, type Actions, type Elements } from './render'
 import { GRAPH_STATE, type GraphState } from './graph'
 import { UNDO_MS, decisionsText, statusLine, model, unarchiveRequest, needYouText, statusGlyph, tokens } from './format'
-import { LEGACY_CORE, discoverCore } from './discover'
+import { LEGACY_CORE, discoverCore, ownerHeaders } from './discover'
 import { ORDERS_EVERY_MS, pollOrders } from './orders'
 
 // Id próprio: `ahrena-console` foi o do painel de teste (spikes/painel-teste), e o engine guarda
@@ -224,7 +224,7 @@ async function refresh($: Engine, nextView?: Partial<View>, again = false) {
   const looked = !resolved
   try {
     await resolveCore($)
-    const res = await $.http.fetch(`http://${core}${await tickPath($, v)}`)
+    const res = await $.http.fetch(`http://${core}${await tickPath($, v)}`, { headers: await ownerHeaders($, core) })
     const panel = res.ok && res.text ? (JSON.parse(res.text) as Panel) : null
     if (!panel || panel.version !== 1) throw new Error(res.ok ? 'resposta inválida' : `HTTP ${res.status}`)
     const liveContext = await engineContext($)
@@ -358,7 +358,7 @@ async function decide($: Engine, id: string, label: string, action: DecisionActi
     await resolveCore($)
     const res = await $.http.fetch(`http://${core}/api/decisions/${encodeURIComponent(id)}/${action}${query}`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: { 'content-type': 'application/json', ...(await ownerHeaders($, core)) },
       body: JSON.stringify({ session: await $.session.id(), ...(text === null ? {} : { text }) }),
     })
     const body = (() => {
@@ -526,7 +526,7 @@ async function openSession($: Engine, local: string, title: string) {
     await resolveCore($)
     const res = await $.http.fetch(`http://${core}/open/${encodeURIComponent(local)}`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: { 'content-type': 'application/json', ...(await ownerHeaders($, core)) },
       body: '{}',
     })
     if (res.ok) $.ui.toast(`Abrindo "${title}" no Claude Desktop…`)

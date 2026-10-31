@@ -1,3 +1,4 @@
+import { OWNER_TOKEN, ownerRequest as request } from '../owner-http.ts';
 // The messaging routes (#61) end to end on 127.0.0.1, with the real adapters over a temporary
 // configuration folder and a FAKE inbox: a Unix-socket server in a temporary folder that, like
 // Claude Code 2.1.302, takes one line per message and then writes the peer turn to the session's
@@ -7,7 +8,6 @@
 // and #61/AC-2 (automated tests cover it). `/clear` and `/compact` are out of this slice (the mod).
 import assert from 'node:assert/strict';
 import { appendFileSync, chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { request } from 'node:http';
 import { createServer, type Server } from 'node:net';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
@@ -106,7 +106,7 @@ async function boot({ processes = 1, confirm = true, fakeClock = false, remoteCo
   });
   const accounts = new Accounts({ storage, file: null });
   const montador = new MontadorDoPainel({ storage, contas: accounts, desktop: null, trabalho: null });
-  const api = await startLocalApi({ panelBuilder: montador, hooks: { storage }, port: 0, log, messaging: createMessagingRoute({ messaging, sessions: storage, accounts }) });
+  const api = await startLocalApi({ ownerToken: () => OWNER_TOKEN, panelBuilder: montador, hooks: { storage }, port: 0, log, messaging: createMessagingRoute({ messaging, sessions: storage, accounts }) });
   const port = Number(new URL(api.url).port);
   return {
     url: api.url,
