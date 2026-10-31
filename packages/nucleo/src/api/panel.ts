@@ -1,3 +1,4 @@
+import { legacySessionIdentity, unknownCapabilities } from '../identity.ts';
 // Builds the response of `GET /api/panel/<session>` (4.1, 4.2, 4.3 and 4.8): this session, what runs
 // inside it, the work by branch, the account and who needs you across all accounts.
 //
@@ -181,7 +182,18 @@ export class MontadorDoPainel {
 
   /** A sessão no índice do Desktop (para o mural descartar a arquivada antes de ler o resto). */
   desktopDaSessao(sessionId: string): DesktopSession | null {
+    if (sessionId.startsWith('session:')) return null;
     return this.desktop?.sessionByCli(sessionId) ?? null;
+  }
+
+  /** #333: a Desktop session by its `local_…` id, for the wall's tree. */
+  desktopByLocal(localId: string): DesktopSession | null {
+    return this.desktop?.sessionByLocal(localId) ?? null;
+  }
+
+  /** #333: the Desktop sessions a session opened, the archived ones included (they come with `archived`). */
+  desktopChildren(localId: string): DesktopSession[] {
+    return this.desktop?.childrenOf(localId) ?? [];
   }
 
   /** Confere as contas e o índice do Desktop (cada um respeita o próprio intervalo). */
@@ -334,10 +346,12 @@ export class MontadorDoPainel {
 
   /** O `local_…` da sessão no índice do Claude Desktop, para o "Abrir no Claude Desktop". */
   localDe(sessionId: string): string | null {
+    if (sessionId.startsWith('session:')) return null;
     return this.desktop?.sessionByCli(sessionId)?.localId ?? null;
   }
 
   private doDesktop(sessionId: string, local: string | null): DesktopSession | null {
+    if (sessionId.startsWith('session:')) return null;
     if (!this.desktop) return null;
     return this.desktop.sessionByCli(sessionId) ?? (local ? this.desktop.sessionByLocal(local) : null);
   }
@@ -356,6 +370,8 @@ export class MontadorDoPainel {
     const { atividade, faixa } = atividadeDe(session, agentes, inbox, r, desde, agora);
     return {
       id: session.id,
+      identity: session.identity ?? legacySessionIdentity(session.id),
+      capabilities: session.capabilities ?? unknownCapabilities(),
       title: desktop?.title ?? session.name ?? (session.cwd ? basename(session.cwd) : 'Sessão sem título'),
       model: session.model,
       startedAt: session.startedAt,

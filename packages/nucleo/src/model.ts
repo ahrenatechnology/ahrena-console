@@ -1,3 +1,5 @@
+import { validateIdentity, validateCapabilities, validateProviderMetadata, providerSessionKey, providerAccountKey, isLegacyIdentity, type SessionIdentity, type AccountIdentity, type SessionCapabilities, type EvidenceConfidence } from './identity.ts';
+export * from './identity.ts';
 // Modelo de dados do núcleo: sessão, conta, agente, evento, uso de tokens e preço.
 // Segue o modelo do Claude Code Agent Monitor (benchmark interno do Agent Monitor, seção 3),
 // com as regras copiadas, não o código. Datas são strings ISO 8601 em UTC (ordenáveis como texto).
@@ -43,10 +45,12 @@ export type AccountSource = (typeof ACCOUNT_SOURCES)[number];
  * Conta e org do Claude, vistas em alguma sessão. O id é `<accountUuid>/<organizationUuid>`:
  * a mesma pessoa em duas orgs são duas contas. Nunca guarda token nem chave.
  */
-export interface ClaudeAccount {
+export interface ProviderAccount {
+  identity?: AccountIdentity;
+  confidence?: EvidenceConfidence;
   id: string;
   accountUuid: string;
-  organizationUuid: string;
+  organizationUuid: string | null;
   organizationName: string | null;
   /** Tipo da org como o Claude informa (ex.: `claude_max`, `claude_team`). */
   organizationType: string | null;
@@ -61,7 +65,13 @@ export interface ClaudeAccount {
   metadata: Metadata;
 }
 
+/** Compatibility alias for existing Claude producers. */
+export interface ClaudeAccount extends ProviderAccount { organizationUuid: string }
+
 export interface Session {
+  identity?: SessionIdentity;
+  capabilities?: SessionCapabilities;
+  accountConfidence?: EvidenceConfidence;
   id: string;
   name: string | null;
   status: SessionStatus;
@@ -209,13 +219,14 @@ export function accountSourceOverrides(incoming: AccountSource | null, current: 
  * Aplica à sessão a conta resolvida por uma fonte, seguindo a precedência. Devolve a mesma
  * sessão quando a fonte não vence a gravada, ou uma cópia com a conta nova.
  */
-export function applySessionAccount<S extends Pick<Session, 'accountId' | 'accountSource'>>(
+export function applySessionAccount<S extends Pick<Session, 'accountId' | 'accountSource' | 'accountConfidence'>>(
   session: S,
   accountId: string,
   source: AccountSource,
 ): S {
   if (!accountSourceOverrides(source, session.accountSource)) return session;
-  return { ...session, accountId, accountSource: source };
+  // Confidence belongs to the prior attribution, not to whichever account wins next.
+  return { ...session, accountId, accountSource: source, ...('accountConfidence' in session ? { accountConfidence: 'unknown' as const } : {}) };
 }
 
 export class InvalidModelError extends Error {
@@ -260,6 +271,14 @@ function requirePrice(entity: string, field: string, value: unknown, nullable = 
 
 export function validateSession(s: Session): void {
   requireId('Session', 'id', s.id);
+  if (s.identity) {
+    validateIdentity(s.identity);
+    if (s.id.startsWith('session:') || !isLegacyIdentity(s.identity)) validateProviderMetadata(s.metadata);
+    if (s.id !== providerSessionKey(s.identity) && !(isLegacyIdentity(s.identity) && s.id === s.identity.providerSessionId)) fail('Session', 'id does not match identity');
+  } else if (s.id.startsWith('session:')) fail('Session', 'scoped id requires identity');
+  if (s.capabilities) validateCapabilities(s.capabilities);
+  if (s.accountConfidence !== undefined) requireOneOf('Session', 'accountConfidence', s.accountConfidence, ['confirmed', 'inferred', 'unknown']);
+  if (s.accountId === null && s.accountConfidence && s.accountConfidence !== 'unknown') fail('Session', 'unidentified account cannot have confidence');
   requireOneOf('Session', 'status', s.status, SESSION_STATUSES);
   requireTimestamp('Session', 'startedAt', s.startedAt);
   requireTimestamp('Session', 'endedAt', s.endedAt, true);
@@ -277,9 +296,20 @@ export function validateSession(s: Session): void {
 }
 
 export function validateClaudeAccount(a: ClaudeAccount): void {
-  requireId('ClaudeAccount', 'accountUuid', a.accountUuid);
+  if (a.identity && a.identity.provider !== 'claude') fail('ClaudeAccount', 'provider must be claude');
   requireId('ClaudeAccount', 'organizationUuid', a.organizationUuid);
-  if (a.id !== claudeAccountId(a.accountUuid, a.organizationUuid)) {
+  validateProviderAccount(a);
+}
+
+export function validateProviderAccount(a: ProviderAccount): void {
+  requireId('ClaudeAccount', 'accountUuid', a.accountUuid);
+  if (!a.identity || a.identity.provider === 'claude') requireId('ClaudeAccount', 'organizationUuid', a.organizationUuid);
+  if (a.identity) validateIdentity(a.identity, true);
+  if (a.identity && (a.identity.providerAccountId !== a.accountUuid || a.identity.organizationId !== a.organizationUuid)) fail('Account', 'identity differs from compatibility fields');
+  if (a.id.startsWith('account:') || (a.identity && (a.identity.provider !== 'claude' || a.identity.profileId !== null || a.identity.machineId !== null || a.identity.environmentId !== null))) validateProviderMetadata(a.metadata);
+  if (a.confidence !== undefined) requireOneOf('Account', 'confidence', a.confidence, ['confirmed', 'inferred', 'unknown']);
+  const legacy = !a.identity || (a.identity.provider === 'claude' && a.identity.profileId === null && a.identity.machineId === null && a.identity.environmentId === null && a.identity.providerAccountId === a.accountUuid && a.identity.organizationId === a.organizationUuid);
+  if (!(legacy && a.id === claudeAccountId(a.accountUuid, a.organizationUuid!)) && (!a.identity || a.id !== providerAccountKey(a.identity))) {
     fail('ClaudeAccount', `id precisa ser <accountUuid>/<organizationUuid>, recebeu ${JSON.stringify(a.id)}`);
   }
   if (!Array.isArray(a.configDirs) || a.configDirs.some((d) => typeof d !== 'string' || d.length === 0)) {

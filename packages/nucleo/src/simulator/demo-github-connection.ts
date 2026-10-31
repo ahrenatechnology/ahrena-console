@@ -10,6 +10,7 @@
 // | `pending`              | Boots with a code the fake never approves; Cancel → disconnected          |
 // | `denied`               | Boots with a code the first poll refuses → disconnected, `lastError: denied` (Connect repeats it) |
 // | `expired`              | Boots with a code that expires after 5 s → disconnected, `lastError: expired` (Connect repeats it) |
+// | `revoked`              | Boots with a stored credential GitHub refuses (401) → `lastError: revoked` (#372); Reconnect → connected |
 // | `missing-scopes`       | Connected with `repo` only: `read:org` and `project` missing (Reconnect)  |
 // | `blocked-orgs`         | Connected; `estudio-ficticio` restricts OAuth Apps                        |
 // | `no-client-id`         | Unavailable, `no-client-id` (the OAuth App is not configured)             |
@@ -25,9 +26,11 @@ import { MemoryVault } from '../github/connection/vault.ts';
 import type { InstallationSettings } from '../settings/installation-settings.ts';
 import { createFakeGithub, DEMO_GITHUB_DATA, FAKE_GITHUB_BASE, type FakeGithub, type FakeGithubAuth } from './fake-github.ts';
 
-export const DEMO_GITHUB_STATES = ['connected', 'disconnected', 'pending', 'denied', 'expired', 'missing-scopes', 'blocked-orgs', 'no-client-id', 'no-vault', 'gh', 'gh-not-authenticated'] as const;
+export const DEMO_GITHUB_STATES = ['connected', 'disconnected', 'pending', 'denied', 'expired', 'revoked', 'missing-scopes', 'blocked-orgs', 'no-client-id', 'no-vault', 'gh', 'gh-not-authenticated'] as const;
 export type DemoGithubState = (typeof DEMO_GITHUB_STATES)[number];
 
+/** The credential a `revoked` demo boots with: the fake GitHub refuses it. */
+const DEMO_REVOKED_TOKEN = 'gho_DEMO0revoked0000000000000000000000';
 /** An obviously fake credential: the demo's only one. */
 export const DEMO_GITHUB_TOKEN = 'gho_DEMO0not0a0real0token000000000000';
 export const DEMO_GITHUB_CLIENT_ID = 'demo-client-id';
@@ -74,10 +77,10 @@ export async function createDemoGithubConnection(state: DemoGithubState, o: Demo
     ...(state === 'blocked-orgs' ? { blockedOrgs: ['estudio-ficticio'] } : {}),
   };
   const fake = createFakeGithub(DEMO_GITHUB_DATA, { auth, ...(o.now ? { now: o.now } : {}) });
-  if (connectedAtBoot) o.settings.set('github.login', DEMO_LOGIN);
+  if (connectedAtBoot || state === 'revoked') o.settings.set('github.login', DEMO_LOGIN);
   if (state === 'gh' || state === 'gh-not-authenticated') o.settings.set('github.source', 'gh');
   const connection = new GithubConnection({
-    vault: state === 'no-vault' ? null : new MemoryVault(connectedAtBoot ? { [DEMO_LOGIN]: DEMO_GITHUB_TOKEN } : {}),
+    vault: state === 'no-vault' ? null : new MemoryVault(connectedAtBoot ? { [DEMO_LOGIN]: DEMO_GITHUB_TOKEN } : state === 'revoked' ? { [DEMO_LOGIN]: DEMO_REVOKED_TOKEN } : {}),
     settings: o.settings,
     clientId: state === 'no-client-id' ? null : DEMO_GITHUB_CLIENT_ID,
     fetch: fake.fetch,

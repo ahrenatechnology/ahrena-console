@@ -1,8 +1,8 @@
+import { OWNER_TOKEN, ownerRequest as request } from '../owner-http.ts';
 // A tela Analytics (#95 e #32): `GET /api/analytics` (Visão geral) e `GET /api/analytics/cost` (Custo),
 // com fixtures sintéticas, relógio fixo e o histórico simulado da --demo.
 
 import assert from 'node:assert/strict';
-import { request } from 'node:http';
 import { after, before, describe, test } from 'node:test';
 import { openSqliteStorage, type SqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
 import { Accounts, startLocalApi, MontadorDoPainel, TrabalhoPorBranch, type LocalApi } from '../../src/api/index.ts';
@@ -282,7 +282,7 @@ describe('as rotas no servidor', () => {
     storage = await fixtures();
     const contas = new Accounts({ storage, file: null });
     const montador = new MontadorDoPainel({ storage, contas, desktop: null, trabalho: new TrabalhoPorBranch({ fonte: null }) });
-    api = await startLocalApi({ panelBuilder: montador, hooks: { storage }, port: 0, log: () => {}, analytics: new RotaAnalytics({ storage, contas, agora: () => AGORA }) });
+    api = await startLocalApi({ ownerToken: () => OWNER_TOKEN, panelBuilder: montador, hooks: { storage }, port: 0, log: () => {}, analytics: new RotaAnalytics({ storage, contas, agora: () => AGORA }) });
   });
   after(async () => {
     await api.close();
@@ -308,7 +308,7 @@ describe('as rotas no servidor', () => {
   test('sem a rota ligada, 404', async () => {
     const contas = new Accounts({ storage, file: null });
     const montador = new MontadorDoPainel({ storage, contas, desktop: null, trabalho: new TrabalhoPorBranch({ fonte: null }) });
-    const sem = await startLocalApi({ panelBuilder: montador, hooks: { storage }, port: 0, log: () => {} });
+    const sem = await startLocalApi({ ownerToken: () => OWNER_TOKEN, panelBuilder: montador, hooks: { storage }, port: 0, log: () => {} });
     try {
       assert.equal((await pedir(sem.url, '/api/analytics')).status, 404);
     } finally {

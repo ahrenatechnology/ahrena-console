@@ -1,3 +1,7 @@
+import { OWNER_TOKEN, ownerFetch as fetch } from '../owner-http.ts';
+import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 // `--demo --demo-github <state>` through cli.ts (#241): the core boots the connection in the state the
 // /ui is built against, on the fake GitHub, and the GitHub-backed screens follow it (409 while not
 // connected). `--demo-project none` leaves the kanban without a Project.
@@ -8,10 +12,14 @@ import { after, describe, test } from 'node:test';
 
 const CLI = fileURLToPath(new URL('../../src/api/cli.ts', import.meta.url));
 const children: ChildProcess[] = [];
+const ownerDir = mkdtempSync(join(tmpdir(), 'ahrena-demo-owner-'));
+const ownerFile = join(ownerDir, 'token');
+writeFileSync(ownerFile, OWNER_TOKEN, { mode: 0o600 });
+after(() => rmSync(ownerDir, { recursive: true, force: true }));
 after(() => children.forEach((c) => c.kill('SIGTERM')));
 
 async function demo(...args: string[]): Promise<string> {
-  const child = spawn(process.execPath, ['--disable-warning=ExperimentalWarning', CLI, '--demo', '--port', '0', '--no-telemetry', ...args], { stdio: ['ignore', 'ignore', 'pipe'] });
+  const child = spawn(process.execPath, ['--disable-warning=ExperimentalWarning', CLI, '--demo', '--port', '0', '--no-telemetry', ...args], { stdio: ['ignore', 'ignore', 'pipe'], env: { ...process.env, AHRENA_CONSOLE_OWNER_TOKEN_FILE: ownerFile } });
   children.push(child);
   let err = '';
   return new Promise((resolve, reject) => {

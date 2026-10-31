@@ -1,3 +1,4 @@
+import { OWNER_TOKEN, ownerFetch as fetch } from '../owner-http.ts';
 // MCP server (2.1): protocol, HTTP and stdio transports, and the tools
 // `sessions_needing_attention` and `fleet_overview`, with synthetic data (fixtures and simulator).
 
@@ -313,7 +314,7 @@ describe('transports', () => {
     await seedCases();
     const accounts = new Accounts({ storage, file: null });
     const builder = new MontadorDoPainel({ storage, contas: accounts, desktop: null, trabalho: null });
-    api = await startLocalApi({ panelBuilder: builder, hooks: { storage }, port: 0, log: () => {}, mcp: server });
+    api = await startLocalApi({ ownerToken: () => OWNER_TOKEN, panelBuilder: builder, hooks: { storage }, port: 0, log: () => {}, mcp: server });
   });
   afterEach(() => api.close());
 
@@ -377,7 +378,7 @@ describe('transports', () => {
   });
 
   test('httpBridge: the Desktop path goes back and forth through the core’s /mcp', async () => {
-    const bridge = httpBridge(`${api.url}/mcp`, { withoutCore: async () => assert.fail('the core is up') });
+    const bridge = httpBridge(`${api.url}/mcp`, { ownerToken: () => OWNER_TOKEN, withoutCore: async () => assert.fail('the core is up') });
     const init = (await bridge({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-06-18' } })) as JsonRpcResponse;
     assert.equal((init.result as { protocolVersion: string }).protocolVersion, '2025-06-18');
     assert.equal(await bridge({ jsonrpc: '2.0', method: 'notifications/initialized' }), null);
@@ -403,7 +404,7 @@ describe('transports', () => {
   test('httpBridge without the core: initialize and tools/list answer; tools/call comes back with isError', async () => {
     await api.close();
     const withoutCore = serverWithoutCore('suba o núcleo');
-    const bridge = httpBridge(`${api.url}/mcp`, { withoutCore: (m) => withoutCore.handle(m) });
+    const bridge = httpBridge(`${api.url}/mcp`, { ownerToken: () => OWNER_TOKEN, withoutCore: (m) => withoutCore.handle(m) });
     const init = (await bridge({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-03-26' } })) as JsonRpcResponse;
     assert.equal((init.result as { protocolVersion: string }).protocolVersion, '2025-03-26');
     const list = (await bridge({ jsonrpc: '2.0', id: 2, method: 'tools/list' })) as JsonRpcResponse;
@@ -412,7 +413,7 @@ describe('transports', () => {
     const call = (await bridge({ jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'fleet_overview', arguments: {} } })) as JsonRpcResponse;
     assert.equal(call.id, 3);
     assert.deepEqual(call.result, { content: [{ type: 'text', text: 'suba o núcleo' }], isError: true });
-    api = await startLocalApi({ panelBuilder: new MontadorDoPainel({ storage, contas: new Accounts({ storage, file: null }), desktop: null, trabalho: null }), hooks: { storage }, port: 0, log: () => {}, mcp: server });
+    api = await startLocalApi({ ownerToken: () => OWNER_TOKEN, panelBuilder: new MontadorDoPainel({ storage, contas: new Accounts({ storage, file: null }), desktop: null, trabalho: null }), hooks: { storage }, port: 0, log: () => {}, mcp: server });
   });
 
   test('stdio: one message per line, only JSON on the output', async () => {

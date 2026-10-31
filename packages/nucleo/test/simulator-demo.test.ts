@@ -1,3 +1,4 @@
+import { ownerFetch as fetch } from './owner-http.ts';
 // The API's --demo (#103): the panel alias, the old session ids that left in phase 6 of #173 and
 // the temporary folders where Promote writes.
 import assert from 'node:assert/strict';

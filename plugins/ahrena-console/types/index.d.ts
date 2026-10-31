@@ -2,11 +2,25 @@
 // que o mod guarda. Os tipos da resposta repetem packages/nucleo/src/api/tipos.ts; mudar um é
 // mudar os dois (o teste do núcleo confere os nomes dos campos).
 
+export type IdentityScope = { provider: 'claude' | 'codex'; profileId: string | null; machineId: string | null; environmentId: string | null }
+export type SessionIdentity = IdentityScope & { providerSessionId: string }
+export type AccountIdentity = IdentityScope & { providerAccountId: string; organizationId: string | null }
+export type EvidenceConfidence = 'confirmed' | 'inferred' | 'unknown'
+export type CapabilityState = 'available' | 'unavailable' | 'unknown'
+export type SessionCapabilities = {
+  mode: 'external' | 'managed' | 'unknown'
+  history: CapabilityState
+  nativeOpen: CapabilityState
+  sendInput: CapabilityState
+  interrupt: CapabilityState
+  approve: CapabilityState
+}
+
 export type DisplayStatus = 'active' | 'completed' | 'error' | 'abandoned' | 'waiting'
 export type InboxState = DisplayStatus | 'delegating' | 'background'
 export type AwaitingReason = 'notification' | 'interrupted' | 'stop' | 'session_start'
 /** `color` em hex; `source` pela ordem da decisão 0006. */
-export type PanelAccount = { id: string; label: string; color: string; source: 'env' | 'config' | 'transcript' | 'desktop' | 'profile' }
+export type PanelAccount = { identity?: AccountIdentity | null; confidence?: EvidenceConfidence; id: string; label: string; color: string; source: 'env' | 'config' | 'transcript' | 'desktop' | 'profile' }
 
 export type SessionActivity = {
   type: 'tool' | 'delegating' | 'question' | 'permission' | 'error' | 'prompt' | 'your-turn' | 'interrupted' | 'completed' | 'abandoned' | 'idle'
@@ -22,6 +36,8 @@ export type SessionAttention = {
 }
 
 export type PanelSession = {
+  identity?: SessionIdentity
+  capabilities?: SessionCapabilities
   id: string
   title: string
   model: string | null

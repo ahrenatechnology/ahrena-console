@@ -268,6 +268,29 @@ export const MIGRATIONS: readonly Migration[] = [
   { version: 12, description: INSTALLATION_SETTINGS_MIGRATION_DESCRIPTION, sql: INSTALLATION_SETTINGS_MIGRATION_SQL },
   // The Tools checks schema lives in its own folder (src/tools/migration.ts).
   { version: 13, description: TOOLS_MIGRATION_DESCRIPTION, sql: TOOLS_MIGRATION_SQL },
+  {
+    version: 14,
+    description: 'Provider-scoped session and account identity (#377)',
+    sql: `
+      ALTER TABLE sessions ADD COLUMN identity TEXT;
+      ALTER TABLE sessions ADD COLUMN capabilities TEXT;
+      ALTER TABLE sessions ADD COLUMN account_confidence TEXT NOT NULL DEFAULT 'unknown';
+      UPDATE sessions SET identity = json_object('provider', 'claude', 'providerSessionId', id,
+        'profileId', NULL, 'machineId', NULL, 'environmentId', NULL);
+      CREATE UNIQUE INDEX sessions_by_identity ON sessions (
+        json_extract(identity, '$.provider'), json_extract(identity, '$.providerSessionId'),
+        COALESCE(json_extract(identity, '$.profileId'), ''), COALESCE(json_extract(identity, '$.machineId'), ''),
+        COALESCE(json_extract(identity, '$.environmentId'), ''));
+      ALTER TABLE accounts ADD COLUMN identity TEXT;
+      ALTER TABLE accounts ADD COLUMN confidence TEXT NOT NULL DEFAULT 'unknown';
+      UPDATE accounts SET identity = json_object('provider', 'claude', 'providerAccountId', account_uuid,
+        'organizationId', organization_uuid, 'profileId', NULL, 'machineId', NULL, 'environmentId', NULL);
+      CREATE UNIQUE INDEX accounts_by_identity ON accounts (
+        json_extract(identity, '$.provider'), json_extract(identity, '$.providerAccountId'),
+        COALESCE(json_extract(identity, '$.organizationId'), ''), COALESCE(json_extract(identity, '$.profileId'), ''),
+        COALESCE(json_extract(identity, '$.machineId'), ''), COALESCE(json_extract(identity, '$.environmentId'), ''));
+    `,
+  },
 ];
 
 export function schemaVersion(db: DatabaseSync): number {

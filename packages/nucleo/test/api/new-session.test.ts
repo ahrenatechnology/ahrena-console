@@ -1,3 +1,4 @@
+import { OWNER_TOKEN, ownerFetch as fetch } from '../owner-http.ts';
 // "Nova sessão": `GET /api/new-session/folders` and `POST /api/new-session`, with stubbed launchers: no
 // Claude Desktop or terminal is touched. Synthetic sessions only.
 import assert from 'node:assert/strict';
@@ -47,7 +48,7 @@ describe('new session', () => {
     const startApi = (over: Partial<Parameters<typeof startLocalApi>[0]> = {}) => {
       const accounts = new Accounts({ storage, file: null });
       const panelBuilder = new MontadorDoPainel({ storage, contas: accounts, desktop: new DesktopIndex({ root: join(root, 'desktop') }), trabalho: null });
-      return startLocalApi({
+      return startLocalApi({ ownerToken: () => OWNER_TOKEN,
         panelBuilder,
         hooks: { storage },
         port: 0,

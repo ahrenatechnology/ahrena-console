@@ -1,3 +1,4 @@
+import { OWNER_TOKEN, ownerFetch as fetch } from '../owner-http.ts';
 // #319: the panel of a session that runs on a remote machine (P14), against a remote núcleo faked on
 // loopback, as in machine-sessions.test.ts: a real API over its own simulated database, behind a
 // proxy that plays the tunnel (only `GET`, the remote's own Host), records every path and can answer
@@ -53,7 +54,7 @@ interface Core {
 async function startCore(storage: SqliteStorage, extra: Partial<ApiOptions> = {}): Promise<Core> {
   const accounts = new Accounts({ storage, file: null });
   const panelBuilder = new MontadorDoPainel({ storage, contas: accounts, desktop: null, trabalho: null, agora: () => NOW });
-  const api = await startLocalApi({
+  const api = await startLocalApi({ ownerToken: () => OWNER_TOKEN,
     panelBuilder,
     hooks: { storage },
     port: 0,

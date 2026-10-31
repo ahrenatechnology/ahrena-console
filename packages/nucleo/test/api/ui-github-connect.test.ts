@@ -65,6 +65,22 @@ describe('github-connect.js: the pure parts', () => {
     assert.equal(gc.footerState(null), null);
   });
 
+  test('C92 (#372): with a revoked credential the empty state says so and opens Conexões without a flow', () => {
+    const footer = gc.createGithubFooter({ node: new ElementoFalso('a'), read: async () => ({}) });
+    footer.draw({ state: 'disconnected', lastError: 'revoked', login: 'dev-sintetico' });
+    const went: unknown[][] = [];
+    const node = gc.connectEmptyFor('repos', (...a: unknown[]) => void went.push(a));
+    assert.equal(node.getAttribute('data-github'), 'revoked');
+    assert.equal(texto(node.querySelector('h2')), 'O GitHub recusou a credencial guardada');
+    assert.equal(texto(node.querySelector('.ghc-what')), gc.CONNECT_TEXT.repos);
+    const b = node.querySelector('[data-action="connections"]')!;
+    assert.equal(texto(b), 'Ir para Conexões');
+    b.click();
+    assert.deepEqual(went, [['/ui/connections']], 'no ?start=1: the person reads why first');
+    footer.draw({ state: 'disconnected', lastError: null });
+    assert.equal(gc.connectEmptyFor('repos', () => undefined).getAttribute('data-github'), 'not-connected');
+  });
+
   test('the footer card reads /api/connections, links to Conexões and follows each refresh', async () => {
     let github: Record<string, unknown> = { state: 'disconnected' };
     const reads: string[] = [];

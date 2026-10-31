@@ -98,7 +98,8 @@ No CI, o [app-ci.yml](../../.github/workflows/app-ci.yml) roda `cargo test`, `ca
 
 | Variável | Efeito |
 | --- | --- |
-| `AHRENA_CONSOLE_DEMO_PORT=<n>` | Não sobe núcleo: só mostra o desta porta (uma `npm run api -- --demo --port <n>`), para os prints |
+| `AHRENA_CONSOLE_DEMO_PORT=<n>` | Não sobe núcleo: só mostra o desta porta, para os prints; exige o arquivo privado abaixo, compartilhado com o núcleo de demo |
+| `AHRENA_CONSOLE_OWNER_TOKEN_FILE=<arquivo>` | No modo demo, arquivo regular do dono, `0600`, com exatamente 64 caracteres hexadecimais minúsculos; sem credencial válida o app recusa abrir a interface. O núcleo normal usa seu lock privado, sem fallback |
 | `AHRENA_CONSOLE_NODE=<caminho>` | Usa este `node`; vazio, finge que não há Node (para ver o A4) |
 | `AHRENA_CONSOLE_CORE_DIR=<pasta>` | Usa este `packages/nucleo` em vez do que vai no app |
 | `AHRENA_CONSOLE_OPEN_MENU_AFTER=<s>` | Abre o menu sozinho depois de tantos segundos (prints) |
@@ -107,10 +108,14 @@ No CI, o [app-ci.yml](../../.github/workflows/app-ci.yml) roda `cargo test`, `ca
 
 Os nomes antigos, em português (`AHRENA_NUCLEO_PORTA`, `AHRENA_NODE`…), saíram na fase 6 da #173.
 
-Pelo Finder, `open --env` passa as variáveis:
+Para o demo, crie um segredo novo sem imprimi-lo, passe o mesmo arquivo ao núcleo e ao app e apague a pasta ao terminar. Execute a partir de `apps/desktop`:
 
 ```bash
-open --env AHRENA_CONSOLE_DEMO_PORT=4797 "src-tauri/target/release/bundle/macos/Ahrena Console.app"
+demo_auth_dir=$(mktemp -d)
+export AHRENA_CONSOLE_OWNER_TOKEN_FILE="$demo_auth_dir/owner-token"
+node -e 'require("node:fs").writeFileSync(process.env.AHRENA_CONSOLE_OWNER_TOKEN_FILE, require("node:crypto").randomBytes(32).toString("hex"), { mode: 0o600 })'
+npm --prefix ../../packages/nucleo run api -- --demo --port 4797 &
+open --env AHRENA_CONSOLE_DEMO_PORT=4797 --env "AHRENA_CONSOLE_OWNER_TOKEN_FILE=$AHRENA_CONSOLE_OWNER_TOKEN_FILE" "src-tauri/target/release/bundle/macos/Ahrena Console.app"
 ```
 
 ## Release

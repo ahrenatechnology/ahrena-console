@@ -40,7 +40,8 @@ export const HELP = `Usage: npm run api -- [options]
                          in-memory vault and a fake gh (never the real GitHub, Keychain or gh):
                          connected (default), disconnected (Connect is approved after 3 s),
                          pending (a code never approved), denied, expired (the code expires
-                         after 5 s), missing-scopes, blocked-orgs, no-client-id, no-vault, gh,
+                         after 5 s), revoked (a stored credential GitHub refuses), missing-scopes,
+                         blocked-orgs, no-client-id, no-vault, gh,
                          gh-not-authenticated
   --demo-project <p>     Under --demo, selected (default: the simulator's Project) or none (the
                          kanban asks to choose one)

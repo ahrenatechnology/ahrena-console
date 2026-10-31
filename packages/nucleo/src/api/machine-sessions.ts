@@ -272,7 +272,10 @@ class MachineSessionsRoute {
 
   private async list(path: string, url: URL, chosen: Chosen[]): Promise<{ status: number; body: unknown }> {
     if (path === SESSIONS_ROUTE) return { status: 200, body: await this.sessions(pedidoDeSessoes(url), chosen) };
-    if (path === WALL_ROUTE) return { status: 200, body: await this.wall(chosen) };
+    if (path === WALL_ROUTE) {
+      const limit = url.searchParams.has('parkedLimit') ? Number(url.searchParams.get('parkedLimit')) : undefined;
+      return { status: 200, body: await this.wall(chosen, limit) };
+    }
     if (path === KANBAN_ROUTE) return { status: 200, body: await this.kanban(pedidoDoKanban(url), chosen) };
     if (path === HISTORY_ROUTE) {
       const parsed = parseHistoryRequest(url.searchParams);
@@ -329,17 +332,25 @@ class MachineSessionsRoute {
   }
 
   // `/api/wall`
-  private async wall(chosen: Chosen[]) {
+  private async wall(chosen: Chosen[], parkedLimit?: number) {
     const parts = await Promise.all(
       chosen.map(async (c) => {
         if (!c.source) {
           if (c.tag.id !== LOCAL_MACHINE_ID) return null;
-          const w = await this.o.local.wall!.montar();
-          return { id: c.tag.id, generatedAt: w.generatedAt, cards: w.cards.map((x) => withMachine(x, c.tag)) as Record<string, unknown>[] };
+          const w = await this.o.local.wall!.montar({ parkedLimit });
+          return {
+            id: c.tag.id,
+            generatedAt: w.generatedAt,
+            cards: w.cards.map((x) => withMachine(x, c.tag)) as Record<string, unknown>[],
+            parked: { total: w.parked.total, items: w.parked.items.map((x) => withMachine(x, c.tag)) as Record<string, unknown>[] },
+          };
         }
         const part = await this.remote(c, async (source, reader) => {
-          const body = await reader.read(source, WALL_ROUTE);
-          return isObject(body) && Array.isArray(body.cards) ? { id: c.tag.id, generatedAt: null, cards: remoteRows(body.cards, 'wall-card', c.tag) } : null;
+          const body = await reader.read(source, parkedLimit === undefined ? WALL_ROUTE : `${WALL_ROUTE}?parkedLimit=${encodeURIComponent(String(parkedLimit))}`);
+          if (!isObject(body) || !Array.isArray(body.cards)) return null;
+          // An older remote core has no "Paradas": it counts as none.
+          const parked = isObject(body.parked) && typeof body.parked.total === 'number' && Array.isArray(body.parked.items) ? { total: body.parked.total, items: remoteRows(body.parked.items, 'wall-card', c.tag) } : { total: 0, items: [] };
+          return { id: c.tag.id, generatedAt: null, cards: remoteRows(body.cards, 'wall-card', c.tag), parked };
         });
         if (part) this.remoteSessions.noteSessions(c.tag.id, part.cards.map((x) => x.id));
         return part;
@@ -355,6 +366,13 @@ class MachineSessionsRoute {
       generatedAt: got.find((p) => p.generatedAt)?.generatedAt ?? new Date().toISOString(),
       count: wallCount(cards),
       cards,
+      parked: {
+        total: got.reduce((n, p) => n + p.parked.total, 0),
+        items: got
+          .flatMap((p) => p.parked.items)
+          .sort(newerFirst<Record<string, unknown>>((c) => c.since))
+          .slice(0, Math.min(Math.max(Math.trunc(parkedLimit ?? 7) || 7, 1), 100)),
+      },
       byMachine: got.map((p) => ({ id: p.id, count: wallCount(p.cards) })),
     };
   }
