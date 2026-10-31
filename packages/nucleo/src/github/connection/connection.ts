@@ -28,7 +28,8 @@ import { isValidAccount, type CredentialVault, type VaultKind } from './vault.ts
 
 export type GithubConnectionState = 'disconnected' | 'pending' | 'connected' | 'unavailable';
 export type GithubSourceFrom = 'env' | 'settings' | 'default';
-export type GithubLastError = 'expired' | 'denied' | 'github-error' | 'vault-error';
+/** `revoked`: the stored credential was refused by GitHub (401) when loaded, as after an update (#372). */
+export type GithubLastError = 'expired' | 'denied' | 'github-error' | 'vault-error' | 'revoked';
 export type GithubUnavailableReason = 'no-client-id' | 'no-vault' | 'gh-not-installed' | 'gh-not-authenticated' | 'github-off';
 
 /** What GET /api/connections answers under `github`. Never the credential, never the device code. */
@@ -47,7 +48,7 @@ export interface GithubConnectionStatus {
   verificationUri?: string;
   expiresAt?: string;
   interval?: number;
-  /** connected (and pending while reconnecting) */
+  /** connected (and pending while reconnecting); disconnected `revoked`: the login to reconnect as */
   login?: string | null;
   scopes?: string[];
   missingScopes?: string[];
@@ -59,6 +60,8 @@ export interface GithubConnectionStatus {
   /** The last org check failed (GitHub down, rate limit): `orgs` is what an earlier check found. */
   orgsFailed?: boolean;
   revokeUrl?: string;
+  /** disconnected `revoked`: where GitHub says why it dropped the credential (#372) */
+  securityLogUrl?: string;
   /** unavailable */
   reason?: GithubUnavailableReason;
 }
@@ -98,6 +101,9 @@ export class GithubConnectionError extends Error {
 export function githubOrgPolicyUrl(org: string): string {
   return `https://github.com/organizations/${encodeURIComponent(org)}/settings/oauth_application_policy`;
 }
+
+/** The person's security log on github.com: it names what revoked a credential (`oauth_authorization.destroy`). */
+export const GITHUB_SECURITY_LOG_URL = 'https://github.com/settings/security-log';
 
 /** Where a person approves (or revokes) the OAuth App: the same page on github.com. */
 export function githubApplicationUrl(clientId: string): string {
@@ -459,7 +465,7 @@ export class GithubConnection {
       if (err instanceof GithubAuthError && err.status === 401) {
         this.credential = null;
         if (source === 'gh') this.ghFailed = true;
-        else this.lastError = 'github-error';
+        else this.lastError = 'revoked'; // the login stays: Reconnect replaces the vault entry
         this.log('github: GitHub rejected the credential (401)');
         this.onChange();
         return;
@@ -685,7 +691,7 @@ export class GithubConnection {
       };
     }
     if (connected) return { ...common('connected'), ...connected };
-    return { ...common('disconnected'), lastError: this.lastError };
+    return { ...common('disconnected'), lastError: this.lastError, ...(this.lastError === 'revoked' ? { login: this.login, securityLogUrl: GITHUB_SECURITY_LOG_URL } : {}) };
   }
 
   /** The pending orgs first: they are the ones that need a click. */

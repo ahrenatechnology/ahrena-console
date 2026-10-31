@@ -144,7 +144,8 @@ export class MontadorDoPainel {
   /** Público para o mural (#34), que lista as sessões pela mesma porta. */
   readonly storage: Porta;
   private readonly contas: Accounts;
-  private readonly desktop: DesktopIndex | null;
+  /** Public for the Workflows tree (#332), which asks who opened whom. */
+  readonly desktop: DesktopIndex | null;
   readonly trabalho: TrabalhoPorBranch | null;
   readonly agora: () => number;
   private readonly custoMs: number;
@@ -181,6 +182,16 @@ export class MontadorDoPainel {
   /** A sessão no índice do Desktop (para o mural descartar a arquivada antes de ler o resto). */
   desktopDaSessao(sessionId: string): DesktopSession | null {
     return this.desktop?.sessionByCli(sessionId) ?? null;
+  }
+
+  /** #333: a Desktop session by its `local_…` id, for the wall's tree. */
+  desktopByLocal(localId: string): DesktopSession | null {
+    return this.desktop?.sessionByLocal(localId) ?? null;
+  }
+
+  /** #333: the Desktop sessions a session opened, the archived ones included (they come with `archived`). */
+  desktopChildren(localId: string): DesktopSession[] {
+    return this.desktop?.childrenOf(localId) ?? [];
   }
 
   /** Confere as contas e o índice do Desktop (cada um respeita o próprio intervalo). */

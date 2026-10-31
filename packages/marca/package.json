@@ -14,6 +14,6 @@
   },
   "scripts": {
     "gerar": "node src/gerar.ts",
-    "test": "node --test \"test/**/*.test.ts\""
+    "test": "node --test --test-concurrency=4 \"test/**/*.test.ts\""
   }
 }

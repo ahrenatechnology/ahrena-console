@@ -45,6 +45,7 @@
 
 .conn-message { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .conn-message-title { font-size: 13px; font-weight: var(--weight-semibold); }
+.conn-causes { margin: 0; padding-left: 18px; color: var(--muted); font-size: 12px; line-height: 1.5; }
 .conn-buttons { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
 .conn-link-btn { color: var(--text); }
 :where(.conn-card, .conn-dialog, .conn-band) .btn[disabled] { opacity: .45; cursor: not-allowed; }
