@@ -55,7 +55,7 @@ export async function mountCodexConfig(area, ctx) {
           el('p', {}, 'Presença declarada; aplicação à sessão desconhecida. AGENTS.override.md precede AGENTS.md no mesmo diretório. Codex lê AGENTS.md diretamente, sem importação por CLAUDE.md. Skills de plugins/sistema, caminhos alternativos e ferramentas negociadas não foram enumerados.'),
           ...d.assets.map(a => el('p', {}, `${KIND[a.kind]} · ${a.id} · ${a.source} · ${a.location} · ${STATUS[a.status]} · aplicação desconhecida`)),
           d.assets.length ? '' : el('p', {}, 'Nenhum item encontrado nas fontes inspecionadas.')),
-        el('p', {}, 'Documentação: ', el('a', { href: 'https://developers.openai.com/codex/config-basic', target: '_blank', rel: 'noreferrer' }, 'precedência'), ' · ', el('a', { href: 'https://developers.openai.com/codex/config-advanced', target: '_blank', rel: 'noreferrer' }, 'perfis e versões')));
+        el('p', {}, 'Precedência e formatos de perfil seguem a documentação oficial do Codex; a versão instalada pode ter regras diferentes.'));
     } catch {
       if (ctx.signal.aborted || current !== sequence) return;
       area.replaceChildren(pageHeader(), error({ text: 'Não foi possível ler a configuração.', retry: load }));
