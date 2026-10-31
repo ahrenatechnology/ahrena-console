@@ -16,6 +16,8 @@
 // requires `Content-Type: application/json` (415) and has its own body limit, larger than the
 // decisions': past it, 413 right away, without reading the rest, and the connection closes.
 
+import { readClaudeConfig, sessionProfile } from '../agent-config/claude.ts';
+import type { Session } from '../model.ts';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { send } from '../ingest/hooks/receiver.ts';
 import type { ConfigFolder } from '../profiles/discovery.ts';
@@ -35,6 +37,8 @@ export interface AgentConfigOptions {
   projects: () => Promise<readonly string[]>;
   /** Backups folder; default `~/.ahrena-console/backups`. */
   backups?: string;
+  session?: (id: string) => Promise<Session | null>;
+  claudeConfig?: { home?: string; managedDir?: string; platform?: NodeJS.Platform };
   log?: (message: string) => void;
   now?: () => Date;
 }
@@ -120,6 +124,35 @@ export function createAgentConfigRoute(opts: AgentConfigOptions): AgentConfigRou
   }
 
   async function route(req: IncomingMessage, res: ServerResponse, url: URL) {
+    if (url.pathname === `${AGENT_CONFIG_ROUTE}/claude`) {
+      if (req.method !== 'GET') return send(res, 405, { error: 'use GET' });
+      try {
+        const sessionId = url.searchParams.get('session');
+        const requestedProfile = url.searchParams.get('profile');
+        if (url.searchParams.has('machine') && url.searchParams.get('machine') !== 'local') {
+          return send(res, 200, await readClaudeConfig({ folders: [], project: null, unavailable: true }));
+        }
+        const [folders, projects] = await Promise.all([opts.folders(), opts.projects()]);
+        let project = chooseProject(url.searchParams.get('project'), projects);
+        let profile = requestedProfile;
+        if (sessionId) {
+          const session = await opts.session?.(sessionId);
+          if (!session) return send(res, 404, { error: 'Sessão não encontrada.' });
+          if ((session.identity?.provider && session.identity.provider !== 'claude') || session.identity?.machineId || session.identity?.environmentId) {
+            return send(res, 200, await readClaudeConfig({ folders: [], project: null, unavailable: true }));
+          }
+          project = session.cwd && projects.includes(session.cwd) ? session.cwd : null;
+          // Profile ids are opaque. Never accept the request's profile as session evidence.
+          profile = await sessionProfile(session, folders);
+        }
+        const result = await readClaudeConfig({ ...opts.claudeConfig, folders, project, profile, session: !!sessionId });
+        if (requestedProfile && !sessionId && !result.profiles.some(p => p.id === requestedProfile)) return send(res, 400, { error: 'Perfil desconhecido.' });
+        return send(res, 200, { ...result, projects, session: sessionId ?? null });
+      } catch {
+        // Filesystem/parser/provider errors may carry raw settings or credentials.
+        return send(res, 400, { error: 'Configuração desconhecida. Não foi possível resolver as fontes.' });
+      }
+    }
     if (url.pathname === AGENT_CONFIG_ROUTE) {
       if (req.method !== 'GET') return send(res, 405, { error: 'use GET' });
       const [folders, projects] = await Promise.all([opts.folders(), opts.projects()]);

@@ -38,6 +38,9 @@ jobs:
         working-directory: packages/nucleo
         run: npm ci --ignore-scripts
 
+      - name: Claude configuration and owner boundary (no inference)
+        run: node --test --test-concurrency=1 packages/nucleo/test/agent-config/*.test.ts packages/nucleo/test/api/ui.test.ts packages/nucleo/test/api/owner-auth.test.ts
+
       - name: Core tests (synthetic fixtures, no inference)
         working-directory: packages/nucleo
         run: npm test

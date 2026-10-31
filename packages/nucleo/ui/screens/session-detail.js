@@ -380,7 +380,8 @@ function drawTop(c, refresh, write, source = null) {
   // The yellow band only when the session is stuck (or stopped by an error); idle gets one muted line.
   const blocked = isBlocked(s.attention) || s.status === 'error';
   const notice = s.banner && blocked ? band(c) : isIdle(s.attention) ? idleLine(c) : null;
-  return [row1, pills, folder, source, notice].filter(Boolean);
+  const config = el('a', { class: 'btn outline', href: `/ui/agent-config?tab=settings&session=${encodeURIComponent(s.id)}${source ? '&machine=remote' : ''}` }, 'Configuração em vigor');
+  return [row1, pills, folder, source, config, notice].filter(Boolean);
 }
 
 function idleLine(c) {
