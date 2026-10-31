@@ -31,7 +31,7 @@ The 5-hour limit is spent by context size, not by work done: every call re-reads
 
 ## Precedence
 
-Where the Ahrena Framework index below differs from a rule above, the rule above wins.
+Where the Ahrena Framework — the index below, the agency directive in CLAUDE.md, or any plugin agent or skill — differs from a rule above, the rule above wins.
 
 <!-- ahrena:framework:start -->
 ## Ahrena Framework
