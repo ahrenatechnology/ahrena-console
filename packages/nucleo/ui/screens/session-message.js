@@ -310,6 +310,10 @@ export function createComposeBox(ctx, sessionId, { head = () => null, openContro
   let caret = null;
   /** The line the last dictation left: `{ kind, icon, title, text }`. */
   let dictation = null;
+  let modelTimer = null;
+  let modelRequested = false;
+  let modelFailures = 0;
+  let modelAnnounced = null;
 
   const textarea = el('textarea', { class: 'sm-input', rows: '3', 'aria-label': 'Mensagem para a sessão', placeholder, spellcheck: 'true' });
   const counter = el('span', { class: 'sm-count mono' });
@@ -325,7 +329,8 @@ export function createComposeBox(ctx, sessionId, { head = () => null, openContro
   );
   const foot = el('div', { class: 'sm-foot' }, note, actions);
   const recbar = createRecordingBar();
-  const node = el('section', { class: 'card sm-compose', 'aria-label': 'Mandar mensagem à sessão' }, dest, field, recbar.node, status, foot);
+  const announce = el('div', { class: 'sm-sr', role: 'status' });
+  const node = el('section', { class: 'card sm-compose', 'aria-label': 'Mandar mensagem à sessão' }, dest, field, recbar.node, status, announce, foot);
 
   const text = () => textarea.value ?? '';
   const bytes = () => byteLength(text());
@@ -358,23 +363,134 @@ export function createComposeBox(ctx, sessionId, { head = () => null, openContro
     if (micDenied) return 'o navegador negou o microfone. Libere nas permissões do site e recarregue a página.';
     if (transcription?.available === false) {
       if (transcription.reason === 'not_installed') return 'o whisper.cpp não está instalado nesta máquina. Rode `npm run core -- voice install`.';
-      if (transcription.reason === 'model_missing') return 'falta o modelo do whisper nesta máquina. Rode `npm run core -- voice install`.';
+      // With a `download` the core manages the model itself (issue 405): the line below offers the download.
+      if (transcription.reason === 'model_missing' && !transcription.download) return 'falta o modelo do whisper nesta máquina. Rode `npm run core -- voice install`.';
     }
     return null;
   }
   /** The microphone can be pressed: the core and the browser can do it, and nothing else holds the box. */
-  const micReady = () => transcription?.available === true && !voiceOffReason() && voiceState === 'idle' && !sending && message?.state !== 'sending' && !foreign;
+  /** Nothing else holds the box: no dictation step, no message on its way. */
+  const boxFree = () => voiceState === 'idle' && !sending && message?.state !== 'sending' && !foreign;
+  const micReady = () => transcription?.available === true && !voiceOffReason() && boxFree();
 
   async function readTranscription() {
     try {
       const a = await ctx.read('/api/transcription');
       transcription = typeof a?.available === 'boolean' ? a : { available: false, reason: 'no_route' };
+      modelFailures = 0;
     } catch (e) {
       if (e?.name === 'AbortError') return;
+      if (transcription) {
+        // A poll that fails mid-download: the last known state stays on screen and the poll backs off.
+        modelFailures++;
+        return void watchModel();
+      }
       // A core without the route (older than the dictation): the microphone stays off, with no line about it.
       transcription = { available: false, reason: 'no_route' };
     }
+    announceModel();
     draw();
+    watchModel();
+  }
+
+  // ---------- The voice model download (issue 405) ----------
+
+  /** The model is missing and the core can fetch it: `{ state, receivedBytes, totalBytes, error? }`, else `null`. */
+  const modelDownload = () => (transcription?.available === false && transcription.reason === 'model_missing' ? (transcription.download ?? null) : null);
+  /** The model can be asked for now: missing, nothing downloading, the box and the browser free. */
+  const modelStartable = () => {
+    const d = modelDownload();
+    return !!d && (d.state === 'idle' || d.state === 'failed') && !modelRequested && !voiceOffReason() && boxFree();
+  };
+  const modelBusy = () => modelDownload()?.state === 'downloading' || modelDownload()?.state === 'verifying';
+
+  /** Asks the core for the download until it leaves downloading/verifying; stops when the box is gone. */
+  function watchModel() {
+    clearTimeout(modelTimer);
+    modelTimer = null;
+    if (!modelBusy() || ctx.signal?.aborted) return;
+    const delay = Math.min(timing.pollMs * 2 ** modelFailures, timing.pollMs * 16);
+    modelTimer = setTimeout(() => void readTranscription(), delay);
+  }
+
+  /** Screen readers hear the start and the end of the download, not every progress rebuild. */
+  function announceModel() {
+    const state = transcription?.available === true ? 'done' : (modelDownload()?.state ?? null);
+    const before = modelAnnounced;
+    modelAnnounced = state;
+    if (state === before) return;
+    if (state === 'downloading') announce.textContent = 'Baixando o modelo de voz.';
+    else if (state === 'verifying') announce.textContent = 'Conferindo o modelo.';
+    else if (state === 'done' && (before === 'downloading' || before === 'verifying')) announce.textContent = 'Modelo de voz pronto. O ditado está disponível.';
+  }
+
+  async function startModelDownload() {
+    const d = modelDownload();
+    if (!d || modelBusy() || modelRequested) return;
+    modelRequested = true;
+    // Shown at once, before the core answers.
+    transcription = { ...transcription, download: { ...d, state: 'downloading', error: undefined } };
+    announceModel();
+    draw();
+    try {
+      const r = await ctx.write('/api/transcription/model', {});
+      if (r?.download) transcription = { ...transcription, download: r.download };
+    } catch (e) {
+      modelRequested = false;
+      if (e?.name === 'AbortError') return;
+      transcription = { ...transcription, download: { ...d, state: 'failed', error: 'network_error' } };
+      announceModel();
+      return void draw();
+    }
+    modelRequested = false;
+    draw();
+    // The POST may have answered `idle` (nothing started): ask the core what is true now.
+    void readTranscription();
+  }
+
+  const MODEL_ERRORS = {
+    http_error: 'O servidor do modelo recusou o pedido. Tente de novo daqui a pouco.',
+    network_error: 'A rede falhou no meio do download. O que já veio fica guardado e o download continua de onde parou.',
+    disk_error: 'Não deu para gravar o modelo: o disco está cheio ou a pasta do console não aceita escrita.',
+    checksum_mismatch: 'O arquivo baixado veio corrompido e foi descartado. Tente de novo.',
+  };
+
+  /** `1,6 GB` / `412 MB`, in pt-BR. */
+  function megabytes(n) {
+    if (n >= 1e9) return `${(n / 1e9).toFixed(1).replace('.', ',')} GB`;
+    return `${Math.round(n / 1e6).toLocaleString('pt-BR')} MB`;
+  }
+
+  function modelLine() {
+    const d = modelDownload();
+    if (!d) return null;
+    const download = (label, iconName) => el('button', { type: 'button', class: 'btn outline sm-model-act', onClick: () => void startModelDownload() }, icon(iconName), label);
+    if (d.state === 'failed') {
+      return statusLine({ kind: 'fail', icon: 'error', title: 'Não baixou o modelo de voz.', text: MODEL_ERRORS[d.error] ?? 'Não deu para baixar o modelo de voz. Tente de novo.' }, download('Tentar de novo', 'refresh'));
+    }
+    if (d.state === 'verifying') {
+      return statusLine({ kind: 'busy', icon: 'wall-loader', title: 'Conferindo o modelo…', text: '', live: false }, modelBar(100));
+    }
+    if (d.state === 'downloading') {
+      const known = d.totalBytes > 0;
+      const percent = known ? Math.min(100, Math.round((d.receivedBytes / d.totalBytes) * 100)) : null;
+      const text = known ? `${megabytes(d.receivedBytes)} de ${megabytes(d.totalBytes)} (${percent}%)` : `${megabytes(d.receivedBytes)} até agora`;
+      return statusLine({ kind: 'busy', icon: 'wall-loader', title: 'Baixando o modelo de voz:', text, live: false }, modelBar(percent));
+    }
+    return statusLine({ kind: 'info', icon: 'info', title: 'O ditado precisa baixar o modelo de voz', text: `(${d.totalBytes > 0 ? megabytes(d.totalBytes) : '1,6 GB'}, uma vez só).`, live: false }, download('Baixar modelo', 'an-download'));
+  }
+
+  function modelBar(percent) {
+    return el('progress', {
+      class: 'sm-model-bar',
+      role: 'progressbar',
+      max: 100,
+      value: percent,
+      'aria-label': 'Download do modelo de voz',
+      'aria-valuemin': 0,
+      'aria-valuemax': 100,
+      'aria-valuenow': percent,
+    });
   }
 
   function stopTick() {
@@ -397,7 +513,10 @@ export function createComposeBox(ctx, sessionId, { head = () => null, openContro
   }
 
   async function startDictation() {
-    if (remote || !micReady()) return;
+    if (remote) return;
+    // The model is missing: the microphone (and Ctrl+Espaço) starts the download, as Baixar modelo does.
+    if (modelStartable()) return void startModelDownload();
+    if (!micReady()) return;
     voiceState = 'opening';
     dictation = null;
     caret = { start: textarea.selectionStart ?? (textarea.value ?? '').length, end: textarea.selectionEnd ?? textarea.selectionStart ?? (textarea.value ?? '').length };
@@ -514,7 +633,8 @@ export function createComposeBox(ctx, sessionId, { head = () => null, openContro
   function micButton() {
     const off = voiceOffReason();
     const ready = micReady();
-    return el('button', { type: 'button', class: 'sm-mic', disabled: !ready, title: off ? 'Ditado desligado' : 'Ditar (Ctrl+Espaço)', 'aria-label': 'Ditar', onClick: () => void startDictation() }, icon('mic'));
+    const label = off ? 'Ditado desligado' : modelStartable() ? 'Clique para baixar o modelo de voz e ativar o ditado' : modelDownload() ? 'Baixando o modelo de voz' : 'Ditar (Ctrl+Espaço)';
+    return el('button', { type: 'button', class: 'sm-mic', disabled: !ready && !modelStartable(), title: label, 'aria-label': label.startsWith('Ditar') ? 'Ditar' : label, onClick: () => void startDictation() }, icon('mic'));
   }
 
   function sendButton(label = 'Enviar', { busy = false, iconName = 'your-turn', enabled = sendable() } = {}) {
@@ -529,7 +649,9 @@ export function createComposeBox(ctx, sessionId, { head = () => null, openContro
 
   function statusLine(s, action = null) {
     if (!s) return null;
-    return el('div', { class: `sm-status sm-${s.kind}`, role: s.kind === 'fail' ? 'alert' : 'status' }, icon(s.icon), el('p', {}, el('b', {}, s.title), ' ', ...withCode(s.text)), action);
+    // A download in progress is rebuilt every second: it is no live region (see `announce`).
+    const role = s.kind === 'fail' ? 'alert' : s.live === false ? null : 'status';
+    return el('div', { class: `sm-status sm-${s.kind}`, role }, icon(s.icon), el('p', {}, el('b', {}, s.title), ' ', ...withCode(s.text)), action);
   }
 
   function destination(a) {
@@ -617,6 +739,7 @@ export function createComposeBox(ctx, sessionId, { head = () => null, openContro
     if (!s && !o && !notice && !foreign) lines.push(permissionWarning());
     const off = voiceOffReason();
     if (off && !dictation && !notice) lines.push(statusLine({ kind: 'info', icon: 'info', title: 'Ditado desligado:', text: off }));
+    if (!off && !dictation && !notice) lines.push(modelLine());
     status.replaceChildren(...lines.filter(Boolean));
 
     const send = [];
@@ -798,6 +921,7 @@ export function createComposeBox(ctx, sessionId, { head = () => null, openContro
     stopOrderPolling();
     stopPolling();
     clearTimeout(retryTimer);
+    clearTimeout(modelTimer);
     endRecording()?.cancel();
   });
 
