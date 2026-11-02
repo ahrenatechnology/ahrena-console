@@ -87,12 +87,24 @@ fn the_app_identifier() {
 /// next to tauri.conf.json, so the file must exist and keep the key.
 #[test]
 fn the_info_plist_explains_the_microphone() {
-    let plist = read("Info.plist");
-    let after_key = plist.split("<key>NSMicrophoneUsageDescription</key>").nth(1).expect("Info.plist without NSMicrophoneUsageDescription");
-    let description = after_key.split("<string>").nth(1).and_then(|s| s.split("</string>").next()).expect("NSMicrophoneUsageDescription without a <string>");
+    let plist = read_without_comments("Info.plist");
+    let after_key = plist.split("<key>NSMicrophoneUsageDescription</key>").nth(1).expect("Info.plist without NSMicrophoneUsageDescription outside a comment");
+    let after_key = after_key.trim_start();
+    assert!(after_key.starts_with("<string>"), "NSMicrophoneUsageDescription is not followed by a <string>");
+    let description = after_key["<string>".len()..].split("</string>").next().expect("NSMicrophoneUsageDescription string is not closed");
     assert!(!description.trim().is_empty(), "NSMicrophoneUsageDescription is empty");
     // Merged by name, not listed in the conf: a custom path in bundle.macOS.infoPlist would replace the lookup.
     assert!(conf()["bundle"]["macOS"].get("infoPlist").is_none(), "bundle.macOS.infoPlist set: Info.plist next to the conf may not be the one merged");
+}
+
+/// The text of `relative` with the XML comments removed, so a key inside a comment does not count.
+fn read_without_comments(relative: &str) -> String {
+    let mut text = read(relative);
+    while let Some(start) = text.find("<!--") {
+        let end = text[start..].find("-->").map_or(text.len(), |e| start + e + 3);
+        text.replace_range(start..end, "");
+    }
+    text
 }
 
 /// The bundle is signed with the hardened runtime, which silently denies the microphone unless the
@@ -100,8 +112,8 @@ fn the_info_plist_explains_the_microphone() {
 /// conf must keep pointing at it.
 #[test]
 fn the_entitlements_allow_audio_input() {
-    let entitlements = read("Entitlements.plist");
-    let after_key = entitlements.split("<key>com.apple.security.device.audio-input</key>").nth(1).expect("Entitlements.plist without com.apple.security.device.audio-input");
+    let entitlements = read_without_comments("Entitlements.plist");
+    let after_key = entitlements.split("<key>com.apple.security.device.audio-input</key>").nth(1).expect("Entitlements.plist without com.apple.security.device.audio-input outside a comment");
     assert!(after_key.trim_start().starts_with("<true/>"), "audio-input entitlement is not true");
     assert_eq!(conf()["bundle"]["macOS"]["entitlements"], "Entitlements.plist", "bundle.macOS.entitlements must point at Entitlements.plist");
 }
