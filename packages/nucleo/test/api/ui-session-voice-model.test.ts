@@ -69,7 +69,9 @@ async function openBox() {
       if (route.includes('/messaging')) return { available: true, reason: null, processes: 1, entrypoint: 'claude-desktop', remoteControl: false, account: null };
       assert.equal(route, '/api/transcription');
       getCount++;
-      return gets.length > 1 ? gets.shift() : gets[0];
+      const answer = gets.length > 1 ? gets.shift() : gets[0];
+      if (answer instanceof Error) throw answer;
+      return answer;
     },
     write: async (route: string, _body: unknown, _options?: object) => {
       posts.push(route);
@@ -199,5 +201,34 @@ describe('voice model download in the compose box', () => {
     click(button(node, 'Baixar modelo'));
     await until(() => !!button(node, 'Tentar de novo'), 'the retry button');
     assert.match(statusText(node), /rede/i);
+  });
+
+  test('a poll that fails mid-download keeps the progress and retries until the core answers', async () => {
+    script(missing(downloading(412_000_000)), new Error('down'), new Error('down'), missing(downloading(900_000_000)), ready);
+    const { node } = await openBox();
+    await until(() => getCount >= 2, 'the failing poll');
+    assert.match(statusText(node), /Baixando o modelo de voz: 412 MB/);
+    assert.equal(disabled(one(node, '.sm-mic')), true);
+    await until(() => !disabled(one(node, '.sm-mic')), 'the mic after the core came back');
+  });
+
+  test('busy lines are no live region; start and end are announced once, failure is an alert', async () => {
+    script(missing(downloading(1_000_000)), missing({ state: 'verifying', receivedBytes: TOTAL, totalBytes: TOTAL }), ready);
+    const { node } = await openBox();
+    assert.equal(one(node, '.sm-status')?.getAttribute('role'), null);
+    assert.match(texto(one(node, '.sm-sr')), /Baixando o modelo de voz\./);
+    await until(() => /Conferindo/.test(statusText(node)), 'verifying');
+    assert.equal(one(node, '.sm-status')?.getAttribute('role'), null);
+    await until(() => /pronto/.test(texto(one(node, '.sm-sr'))), 'the end announcement');
+  });
+
+  test('an unknown error code gets a neutral message; the idle line uses the core\'s total', async () => {
+    script(missing({ state: 'failed', receivedBytes: 0, totalBytes: TOTAL, error: 'weird' }));
+    const a = await openBox();
+    assert.match(statusText(a.node), /Não deu para baixar o modelo de voz/);
+    assert.doesNotMatch(statusText(a.node), /rede/i);
+    script(missing({ state: 'idle', receivedBytes: 0, totalBytes: 3_100_000_000 }));
+    const b = await openBox();
+    assert.match(statusText(b.node), /\(3,1 GB, uma vez só\)/);
   });
 });

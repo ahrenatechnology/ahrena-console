@@ -312,6 +312,8 @@ export function createComposeBox(ctx, sessionId, { head = () => null, openContro
   let dictation = null;
   let modelTimer = null;
   let modelRequested = false;
+  let modelFailures = 0;
+  let modelAnnounced = null;
 
   const textarea = el('textarea', { class: 'sm-input', rows: '3', 'aria-label': 'Mensagem para a sessão', placeholder, spellcheck: 'true' });
   const counter = el('span', { class: 'sm-count mono' });
@@ -327,7 +329,8 @@ export function createComposeBox(ctx, sessionId, { head = () => null, openContro
   );
   const foot = el('div', { class: 'sm-foot' }, note, actions);
   const recbar = createRecordingBar();
-  const node = el('section', { class: 'card sm-compose', 'aria-label': 'Mandar mensagem à sessão' }, dest, field, recbar.node, status, foot);
+  const announce = el('div', { class: 'sm-sr', role: 'status' });
+  const node = el('section', { class: 'card sm-compose', 'aria-label': 'Mandar mensagem à sessão' }, dest, field, recbar.node, status, announce, foot);
 
   const text = () => textarea.value ?? '';
   const bytes = () => byteLength(text());
@@ -372,11 +375,18 @@ export function createComposeBox(ctx, sessionId, { head = () => null, openContro
     try {
       const a = await ctx.read('/api/transcription');
       transcription = typeof a?.available === 'boolean' ? a : { available: false, reason: 'no_route' };
+      modelFailures = 0;
     } catch (e) {
       if (e?.name === 'AbortError') return;
+      if (transcription) {
+        // A poll that fails mid-download: the last known state stays on screen and the poll backs off.
+        modelFailures++;
+        return void watchModel();
+      }
       // A core without the route (older than the dictation): the microphone stays off, with no line about it.
       transcription = { available: false, reason: 'no_route' };
     }
+    announceModel();
     draw();
     watchModel();
   }
@@ -392,7 +402,19 @@ export function createComposeBox(ctx, sessionId, { head = () => null, openContro
     clearTimeout(modelTimer);
     modelTimer = null;
     if (!modelBusy() || ctx.signal?.aborted) return;
-    modelTimer = setTimeout(() => void readTranscription(), timing.pollMs);
+    const delay = Math.min(timing.pollMs * 2 ** modelFailures, timing.pollMs * 16);
+    modelTimer = setTimeout(() => void readTranscription(), delay);
+  }
+
+  /** Screen readers hear the start and the end of the download, not every progress rebuild. */
+  function announceModel() {
+    const state = transcription?.available === true ? 'done' : (modelDownload()?.state ?? null);
+    const before = modelAnnounced;
+    modelAnnounced = state;
+    if (state === before) return;
+    if (state === 'downloading') announce.textContent = 'Baixando o modelo de voz.';
+    else if (state === 'verifying') announce.textContent = 'Conferindo o modelo.';
+    else if (state === 'done' && (before === 'downloading' || before === 'verifying')) announce.textContent = 'Modelo de voz pronto. O ditado está disponível.';
   }
 
   async function startModelDownload() {
@@ -401,6 +423,7 @@ export function createComposeBox(ctx, sessionId, { head = () => null, openContro
     modelRequested = true;
     // Shown at once, before the core answers.
     transcription = { ...transcription, download: { ...d, state: 'downloading', error: undefined } };
+    announceModel();
     draw();
     try {
       const r = await ctx.write('/api/transcription/model', {});
@@ -409,6 +432,7 @@ export function createComposeBox(ctx, sessionId, { head = () => null, openContro
       modelRequested = false;
       if (e?.name === 'AbortError') return;
       transcription = { ...transcription, download: { ...d, state: 'failed', error: 'network_error' } };
+      announceModel();
       return void draw();
     }
     modelRequested = false;
@@ -435,18 +459,18 @@ export function createComposeBox(ctx, sessionId, { head = () => null, openContro
     if (!d) return null;
     const download = (label, iconName) => el('button', { type: 'button', class: 'btn outline sm-model-act', onClick: () => void startModelDownload() }, icon(iconName), label);
     if (d.state === 'failed') {
-      return statusLine({ kind: 'fail', icon: 'error', title: 'Não baixou o modelo de voz.', text: MODEL_ERRORS[d.error] ?? MODEL_ERRORS.network_error }, download('Tentar de novo', 'refresh'));
+      return statusLine({ kind: 'fail', icon: 'error', title: 'Não baixou o modelo de voz.', text: MODEL_ERRORS[d.error] ?? 'Não deu para baixar o modelo de voz. Tente de novo.' }, download('Tentar de novo', 'refresh'));
     }
     if (d.state === 'verifying') {
-      return statusLine({ kind: 'busy', icon: 'wall-loader', title: 'Conferindo o modelo…', text: '' }, modelBar(100));
+      return statusLine({ kind: 'busy', icon: 'wall-loader', title: 'Conferindo o modelo…', text: '', live: false }, modelBar(100));
     }
     if (d.state === 'downloading') {
       const known = d.totalBytes > 0;
       const percent = known ? Math.min(100, Math.round((d.receivedBytes / d.totalBytes) * 100)) : null;
       const text = known ? `${megabytes(d.receivedBytes)} de ${megabytes(d.totalBytes)} (${percent}%)` : `${megabytes(d.receivedBytes)} até agora`;
-      return statusLine({ kind: 'busy', icon: 'wall-loader', title: 'Baixando o modelo de voz:', text }, modelBar(percent));
+      return statusLine({ kind: 'busy', icon: 'wall-loader', title: 'Baixando o modelo de voz:', text, live: false }, modelBar(percent));
     }
-    return statusLine({ kind: 'info', icon: 'info', title: 'O ditado precisa baixar o modelo de voz', text: '(1,6 GB, uma vez só).' }, download('Baixar modelo', 'an-download'));
+    return statusLine({ kind: 'info', icon: 'info', title: 'O ditado precisa baixar o modelo de voz', text: `(${d.totalBytes > 0 ? megabytes(d.totalBytes) : '1,6 GB'}, uma vez só).` }, download('Baixar modelo', 'an-download'));
   }
 
   function modelBar(percent) {
@@ -614,7 +638,9 @@ export function createComposeBox(ctx, sessionId, { head = () => null, openContro
 
   function statusLine(s, action = null) {
     if (!s) return null;
-    return el('div', { class: `sm-status sm-${s.kind}`, role: s.kind === 'fail' ? 'alert' : 'status' }, icon(s.icon), el('p', {}, el('b', {}, s.title), ' ', ...withCode(s.text)), action);
+    // A download in progress is rebuilt every second: it is no live region (see `announce`).
+    const role = s.kind === 'fail' ? 'alert' : s.live === false ? null : 'status';
+    return el('div', { class: `sm-status sm-${s.kind}`, role }, icon(s.icon), el('p', {}, el('b', {}, s.title), ' ', ...withCode(s.text)), action);
   }
 
   function destination(a) {
