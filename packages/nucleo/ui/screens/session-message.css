@@ -31,6 +31,12 @@
 .sm-status { display: flex; align-items: flex-start; gap: 8px; padding: 8px 10px; border-radius: 8px; font-size: 12px; line-height: 1.5; background: var(--raised); }
 .sm-status p { margin: 0; min-width: 0; overflow-wrap: anywhere; }
 .sm-status > .icon { margin-top: 3px; flex: none; }
+.sm-status p { flex: 1; }
+.sm-model-bar { appearance: none; flex: none; align-self: center; width: 120px; max-width: 35%; height: 6px; border: 0; border-radius: 99px; background: var(--surface); overflow: hidden; }
+.sm-model-bar::-webkit-progress-bar { background: var(--surface); border-radius: 99px; }
+.sm-model-bar::-webkit-progress-value { background: var(--accent); border-radius: 99px; }
+.sm-model-bar::-moz-progress-bar { background: var(--accent); border-radius: 99px; }
+.sm-model-act { flex: none; align-self: center; }
 .sm-status b { font-weight: var(--weight-semibold); }
 .sm-status.sm-ok { background: color-mix(in srgb, var(--status-completed-badge) 70%, var(--surface)); }
 .sm-status.sm-ok b, .sm-status.sm-ok > .icon { color: var(--status-completed-text); }
