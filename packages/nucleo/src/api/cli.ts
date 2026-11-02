@@ -91,6 +91,7 @@ import { readOwnerTokenFile } from './owner-auth.ts';
 import { startLocalApi, API_VERSION, type LocalApi } from './server.ts';
 import { createMessagingRoute } from './messaging.ts';
 import { createTranscriptionRoute } from './transcription.ts';
+import { createModelDownload } from '../transcription/model-download.ts';
 import { createTranscription, resolveWhisperConfig } from '../transcription/whisper.ts';
 import { Messaging } from '../messaging/service.ts';
 import { SessionOrders } from '../messaging/orders.ts';
@@ -554,7 +555,10 @@ const messaging = demo
 // The MCP servers (layer 3): Claude Code's ~/.claude.json and the .mcp.json of the sessions' projects (capped).
 const toolsService = demo ? null : new ToolsService({ store: new SqliteToolChecksStore(sqlite.db), mcpProjects: () => knownProjects(storage, MAX_MCP_PROJECTS), log });
 // Dictation (#352, decision 0019): the whisper-server of this machine, started on the first use. Not in --demo.
-const transcription = demo ? null : createTranscription({ config: resolveWhisperConfig(consoleHome()), log });
+// The model is downloaded by the core on the first use (#405, decision 0019 item 10), so it survives the /ui tab closing.
+const whisperConfig = demo ? null : resolveWhisperConfig(consoleHome());
+const transcription = whisperConfig ? createTranscription({ config: whisperConfig, log }) : null;
+const modelDownload = whisperConfig && !whisperConfig.url ? createModelDownload({ target: whisperConfig.model, log }) : null;
 process.once('exit', () => transcription?.close());
 const toolsExecutor = toolsService ? new ToolsExecutor({ service: toolsService, logFile: toolsLogFile(dataDir), onChange: publishToolsChanges(changes), log }) : null;
 // The cloud connectors (#277, decision 0013): this machine's ~/.aws/config, its SSO sessions and their logins (into reconnect.log); the remote machines' through their tunnel port. Not in --demo.
@@ -668,7 +672,7 @@ const api: LocalApi = await startLocalApi({
   reconnect: machineConnection?.legacy ?? reconnectRunner,
   machineConnection: machineConnection ? createConnectionRoute(machineConnection) : null,
   messaging: createMessagingRoute({ messaging, sessions: storage, accounts, log }),
-  transcription: transcription ? createTranscriptionRoute({ transcription, log }) : null,
+  transcription: transcription ? createTranscriptionRoute({ transcription, modelDownload, log }) : null,
   orders: createOrdersRoute({ orders: new SessionOrders(), messaging, sessions: storage }),
   tools: toolsExecutor,
   terminals: terminalControl,

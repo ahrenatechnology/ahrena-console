@@ -5,10 +5,16 @@
 // | ------------------------ | ------------------------------------------------------------------------------------- |
 // | `GET /api/transcription` | `{ version, available, reason, model }`: whether the core can transcribe              |
 // | `POST /api/transcription`| a 16 kHz mono PCM16 WAV (`audio/wav`) → `{ text, durationMs }`                         |
+// | `POST /api/transcription/model` | starts the model download (#405) → `{ version, download }`; idempotent        |
 //
-// Both routes are private: the owner proof (#302, owner-auth.ts) is checked in server.ts before
+// `GET` also carries `download: { state: 'idle'|'downloading'|'verifying'|'failed', receivedBytes, totalBytes, error? }`
+// while `reason` is `model_missing` (the download is core-owned, see transcription/model-download.ts).
+// `POST .../model`: 503 `not_installed` when there is no whisper-server; 200 `idle` and nothing started when
+// the model is already there or when `AHRENA_CONSOLE_WHISPER_URL` points at a running server (no download manager); a second call while it downloads returns the current state.
+//
+// All routes are private: the owner proof (#302, owner-auth.ts) is checked in server.ts before
 // anything here runs, so without the bearer the whisper is never reached.
-// The POST is a same-origin exception of decision 0003, as the messages' (`transcriptionWriteFromSameOrigin`,
+// The POSTs are a same-origin exception of decision 0003, as the messages' (`transcriptionWriteFromSameOrigin`,
 // called in server.ts `handle`): only `POST`, the exact raw path, `Origin` exactly `http://<Host>` with our
 // Host, and a request WITHOUT `Origin` is refused too (`ui_only`): only audio the /ui recorded may go.
 // The body is up to `MAX_AUDIO_BYTES` (5 minutes of 16 kHz mono PCM16 and a header). Neither the audio
@@ -16,9 +22,11 @@
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { send } from '../ingest/hooks/receiver.ts';
+import type { ModelDownload } from '../transcription/model-download.ts';
 import { TranscriptionError, type Transcription } from '../transcription/whisper.ts';
 
 export const TRANSCRIPTION_ROUTE = '/api/transcription';
+export const TRANSCRIPTION_MODEL_ROUTE = '/api/transcription/model';
 /** 5 minutes of 16 kHz mono PCM16 is 9 600 000 bytes; the rest is the header and some slack. */
 export const MAX_AUDIO_BYTES = 10 * 1024 * 1024;
 
@@ -33,7 +41,7 @@ const ERRORS = {
 } as const;
 
 export function transcriptionWriteFromSameOrigin(req: IncomingMessage, port: number): boolean {
-  if (req.method !== 'POST' || req.url !== TRANSCRIPTION_ROUTE) return false;
+  if (req.method !== 'POST' || (req.url !== TRANSCRIPTION_ROUTE && req.url !== TRANSCRIPTION_MODEL_ROUTE)) return false;
   const host = req.headers.host;
   const origin = req.headers.origin;
   if (typeof origin !== 'string') return false;
@@ -96,11 +104,23 @@ function tooLarge(req: IncomingMessage, res: ServerResponse): void {
   req.resume();
 }
 
-export function createTranscriptionRoute({ transcription, log = () => {} }: { transcription: Transcription; log?: (message: string) => void }): TranscriptionRoute {
-  return async (req, res) => {
+export function createTranscriptionRoute({ transcription, modelDownload = null, log = () => {} }: { transcription: Transcription; modelDownload?: ModelDownload | null; log?: (message: string) => void }): TranscriptionRoute {
+  return async (req, res, url) => {
+    if (url.pathname === TRANSCRIPTION_MODEL_ROUTE) {
+      req.resume();
+      if (req.method !== 'POST') return send(res, 405, { error: 'use POST' });
+      if (typeof req.headers.origin !== 'string') return send(res, 403, { error: ERRORS.ui_only, reason: 'ui_only' });
+      const a = transcription.availability();
+      if (a.reason === 'not_installed') return send(res, 503, { error: ERRORS.unavailable, reason: 'not_installed' });
+      // No download manager (a running whisper-server via AHRENA_CONSOLE_WHISPER_URL): nothing to fetch, idle.
+      if (!modelDownload) return send(res, 200, { version: 1, download: { state: 'idle', receivedBytes: 0, totalBytes: 0 } });
+      return send(res, 200, { version: 1, download: a.reason === 'model_missing' ? modelDownload.start() : modelDownload.status() });
+    }
     if (req.method === 'GET') {
       const a = transcription.availability();
-      return send(res, 200, { version: 1, available: a.available, reason: a.reason, model: a.model });
+      const d = modelDownload?.status();
+      const download = d && (a.reason === 'model_missing' || d.state !== 'idle') ? d : undefined;
+      return send(res, 200, { version: 1, available: a.available, reason: a.reason, model: a.model, ...(download && { download }) });
     }
     if (req.method !== 'POST') {
       req.resume();

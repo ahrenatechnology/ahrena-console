@@ -114,7 +114,7 @@ import { isTelemetryRoute, reconnectFromSameOrigin, RECONNECT_ROUTE, respondReco
 import type { ReconnectControl } from '../telemetry/reconnect.ts';
 import type { TelemetryService } from '../telemetry/service.ts';
 import { MESSAGING_ROUTE, messagesWriteFromSameOrigin, type MessagingRoute } from './messaging.ts';
-import { TRANSCRIPTION_ROUTE, transcriptionWriteFromSameOrigin, type TranscriptionRoute } from './transcription.ts';
+import { TRANSCRIPTION_MODEL_ROUTE, TRANSCRIPTION_ROUTE, transcriptionWriteFromSameOrigin, type TranscriptionRoute } from './transcription.ts';
 import { ORDERS_ROUTE, ordersWriteFromSameOrigin, type OrdersRoute } from './orders.ts';
 import { isTerminalsRoute, respondTerminalsWrite, terminalsWriteAllowed } from './terminals.ts';
 import type { TerminalControl } from '../telemetry/terminal-actions.ts';
@@ -536,7 +536,7 @@ export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
     const reconnectMatch = RECONNECT_ROUTE.exec(url.pathname);
     if (reconnectMatch) return respondReconnect(req, res, reconnectMatch[1]!, opts.reconnect, opts.telemetry);
     if (opts.messaging && MESSAGING_ROUTE.test(url.pathname)) return opts.messaging(req, res, url);
-    if (opts.transcription && url.pathname === TRANSCRIPTION_ROUTE) return opts.transcription(req, res, url);
+    if (opts.transcription && (url.pathname === TRANSCRIPTION_ROUTE || url.pathname === TRANSCRIPTION_MODEL_ROUTE)) return opts.transcription(req, res, url);
     if (opts.orders && ORDERS_ROUTE.test(url.pathname)) return opts.orders(req, res, url);
     if (opts.clouds && isCloudsRoute(url.pathname)) return opts.clouds(req, res, url);
     if (opts.ports && isPortsRoute(url.pathname)) return opts.ports.handle(req, res, url);
