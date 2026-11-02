@@ -363,7 +363,7 @@ export function createComposeBox(ctx, sessionId, { head = () => null, openContro
     if (micDenied) return 'o navegador negou o microfone. Libere nas permissões do site e recarregue a página.';
     if (transcription?.available === false) {
       if (transcription.reason === 'not_installed') return 'o whisper.cpp não está instalado nesta máquina. Rode `npm run core -- voice install`.';
-      // With a `download` the core manages the model itself (#405): the line below offers the download.
+      // With a `download` the core manages the model itself (issue 405): the line below offers the download.
       if (transcription.reason === 'model_missing' && !transcription.download) return 'falta o modelo do whisper nesta máquina. Rode `npm run core -- voice install`.';
     }
     return null;
@@ -391,7 +391,7 @@ export function createComposeBox(ctx, sessionId, { head = () => null, openContro
     watchModel();
   }
 
-  // ---------- The voice model download (#405) ----------
+  // ---------- The voice model download (issue 405) ----------
 
   /** The model is missing and the core can fetch it: `{ state, receivedBytes, totalBytes, error? }`, else `null`. */
   const modelDownload = () => (transcription?.available === false && transcription.reason === 'model_missing' ? (transcription.download ?? null) : null);
