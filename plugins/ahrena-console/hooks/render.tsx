@@ -70,7 +70,7 @@ export const CARD_W = 34
 export const CARD_H = CARD_BORDER + CARD_LINES
 export const GAP = 2
 /** A versão deste plugin; o teste do núcleo confere com o plugin.json. */
-export const PLUGIN_VERSION = '0.0.37'
+export const PLUGIN_VERSION = '0.0.38'
 const KPI_W = 15
 /** No estreito, quantos cards de decisão cabem antes do rodapé "+N". */
 const DECISIONS_WHEN_NARROW = 3
@@ -149,6 +149,8 @@ export type Actions = {
   reply: (message: string) => void
   /** #145: pede à sessão do painel para desarquivar a filha (`unarchive_session`, a pessoa aprova). */
   unarchive: (f: PanelChild) => void
+  /** #406 (P18): mostra de novo a faixa acima do prompt, oculta pelo "Ocultar" dela. */
+  showBand: () => void
 }
 
 export type DrawContext = {
@@ -165,6 +167,8 @@ export type DrawContext = {
   /** `127.0.0.1:<porta>` do núcleo. */
   core: string
   actions: Actions
+  /** #406 (P18): a faixa acima do prompt está oculta; o painel ganha a linha que a mostra de novo. */
+  bandHidden?: boolean
 }
 
 // --- SVG (barras, rosca, linha do custo, logo, ícone sem conexão) ---
@@ -2452,6 +2456,7 @@ function drawTree(c: DrawContext): RenderElement {
     <Box flexDirection="column" alignItems="center" gap={1} paddingY={1} minWidth={0}>
       {top(c, g.width)}
       {body.filter((x): x is RenderElement => x !== null)}
+      {c.bandHidden ? showBandRow(c, g.width, narrow) : null}
       {footer(c, g.width)}
     </Box>
   )
@@ -2481,6 +2486,65 @@ function footer(c: DrawContext, width: number) {
           pasta em {api!.folder}: reinicie a API
         </Text>
       ) : null}
+    </Box>
+  )
+}
+
+// --- #406: a faixa acima do prompt (P17) e o caminho de volta no painel (P18) ---
+
+/** Acima disso, a faixa ganha a dica cinza (P17, o largo); no estreito (~38 colunas), só o rótulo e os botões. */
+export const BAND_HINT_MIN_COLUMNS = 60
+export const BAND_HIDDEN_TOAST = 'Atalho oculto · para mostrar de novo, abra o painel'
+
+/**
+ * P17: uma linha, sem borda (um Box com borda ganha uma linha a mais no Desktop), sem logo e sem
+ * dado do núcleo. "Ahrena Console" no laranja do título, Abrir colado e Ocultar na ponta, os dois
+ * Button `plain` (o primário nativo é mais alto que a linha). A dica corta antes dos botões.
+ */
+export function drawAboveBand(el: Pick<Elements, 'Box' | 'Text' | 'Button'>, cols: number, actions: { open: () => void; hide: () => void }): RenderElement {
+  const { Box, Text, Button } = el
+  const wide = cols > BAND_HINT_MIN_COLUMNS
+  return (
+    <Box key="above-band" flexDirection="row" alignItems="center" gap={1} width={cols} minWidth={0}>
+      <Box key="band-label" flexShrink={0}>
+        <Text mono weight="bold" color={ORANGE}>
+          Ahrena Console
+        </Text>
+      </Box>
+      {wide ? (
+        <Box key="band-hint" flexShrink={1} minWidth={0}>
+          <Text mono dimColor wrap="truncate-end">
+            painel da sessão fechado · o /console também abre
+          </Text>
+        </Box>
+      ) : null}
+      <Box key="band-open" flexShrink={0}>
+        <Button key="open-pane" plain label="Abrir" onPress={actions.open} />
+      </Box>
+      <Box key="band-space" flexGrow={1} />
+      <Box key="band-hide" flexShrink={0}>
+        <Button key="hide-band" plain dimColor label="Ocultar" onPress={actions.hide} />
+      </Box>
+    </Box>
+  )
+}
+
+/**
+ * P18: no fim do painel, só enquanto a faixa está oculta, uma linha sem borda. No estreito, só o
+ * botão; no largo, o texto cinza à esquerda e o botão à direita, como os outros pés do painel.
+ */
+function showBandRow(c: DrawContext, width: number, narrow: boolean) {
+  const { Box, Text } = c.el
+  return (
+    <Box key="show-band-row" flexDirection="row" alignItems="center" justifyContent={narrow ? 'flex-start' : 'space-between'} gap={1} width={width}>
+      {narrow ? null : (
+        <Box flexShrink={1} minWidth={0}>
+          <Text mono size="footnote" dimColor wrap="truncate-end">
+            o atalho acima do prompt está oculto
+          </Text>
+        </Box>
+      )}
+      {opener(c, 'show-band', 'Mostrar atalho acima do prompt', c.actions.showBand)}
     </Box>
   )
 }
