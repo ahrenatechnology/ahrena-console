@@ -94,3 +94,14 @@ fn the_info_plist_explains_the_microphone() {
     // Merged by name, not listed in the conf: a custom path in bundle.macOS.infoPlist would replace the lookup.
     assert!(conf()["bundle"]["macOS"].get("infoPlist").is_none(), "bundle.macOS.infoPlist set: Info.plist next to the conf may not be the one merged");
 }
+
+/// The bundle is signed with the hardened runtime, which silently denies the microphone unless the
+/// signature carries the audio-input entitlement (decision 0019): the file must keep the key and the
+/// conf must keep pointing at it.
+#[test]
+fn the_entitlements_allow_audio_input() {
+    let entitlements = read("Entitlements.plist");
+    let after_key = entitlements.split("<key>com.apple.security.device.audio-input</key>").nth(1).expect("Entitlements.plist without com.apple.security.device.audio-input");
+    assert!(after_key.trim_start().starts_with("<true/>"), "audio-input entitlement is not true");
+    assert_eq!(conf()["bundle"]["macOS"]["entitlements"], "Entitlements.plist", "bundle.macOS.entitlements must point at Entitlements.plist");
+}
