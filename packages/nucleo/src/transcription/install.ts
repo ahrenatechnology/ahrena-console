@@ -87,6 +87,8 @@ export interface ModelDownloadOptions {
   url?: string;
   sha256?: string;
   fetch?: typeof fetch;
+  /** Gives up (network_error, `.part` kept) after this long without a byte; 60 s by default. */
+  stallMs?: number;
   /** Called as bytes arrive (`downloading`) and once more while the digest is checked (`verifying`). */
   onProgress?: (p: { phase: 'downloading' | 'verifying'; receivedBytes: number; totalBytes: number }) => void;
 }
@@ -97,47 +99,67 @@ export interface ModelDownloadOptions {
  * it); a download that fails on the network keeps its `.part`; a digest that does not match deletes it.
  */
 export async function downloadModel(to: string, opts: ModelDownloadOptions = {}): Promise<void> {
-  const { log = () => {}, url = MODEL_URL, sha256: expected = MODEL_SHA256, fetch: doFetch = fetch, onProgress = () => {} } = opts;
+  const { log = () => {}, url = MODEL_URL, sha256: expected = MODEL_SHA256, fetch: doFetch = fetch, onProgress = () => {}, stallMs = 60_000 } = opts;
   const part = `${to}.part`;
-  const have = existsSync(part) ? statSync(part).size : 0;
-  let res: Response;
-  try {
-    res = await doFetch(url, { redirect: 'follow', headers: have > 0 ? { range: `bytes=${have}-` } : {} });
-  } catch {
-    throw new ModelDownloadError('network_error', 'download do modelo: sem conexão');
-  }
-  let start = 0;
+  const ctl = new AbortController();
+  let timer: NodeJS.Timeout | null = null;
+  const poke = () => {
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(() => ctl.abort(), stallMs);
+  };
+  let have = existsSync(part) ? statSync(part).size : 0;
   let total = 0;
-  if (res.status === 416 && have > 0) {
-    // The .part is already the whole file (or longer than it): the digest decides.
-    start = have;
-    total = have;
-    await res.body?.cancel().catch(() => {});
-  } else if (!res.ok || !res.body) {
-    await res.body?.cancel().catch(() => {});
-    throw new ModelDownloadError('http_error', `download do modelo: HTTP ${res.status}`);
-  } else {
-    const length = Number(res.headers.get('content-length') ?? 0);
-    start = res.status === 206 ? have : 0;
-    total = start + length;
-    log(`downloading ${url} (${Math.round(total / 1e6)} MB${start > 0 ? `, resuming at ${Math.round(start / 1e6)} MB` : ''})`);
-    let received = start;
-    onProgress({ phase: 'downloading', receivedBytes: received, totalBytes: total });
-    const counter = new Transform({
-      transform(chunk: Buffer, _enc, cb) {
-        received += chunk.length;
-        onProgress({ phase: 'downloading', receivedBytes: received, totalBytes: total });
-        cb(null, chunk);
-      },
-    });
-    const out = createWriteStream(part, { flags: start > 0 ? 'a' : 'w' });
-    try {
-      await pipeline(Readable.fromWeb(res.body as never), counter, out);
-    } catch (e) {
-      throw e instanceof Error && 'code' in e && typeof e.code === 'string' && /^E(NOSPC|ACCES|PERM|ROFS|DQUOT|IO)$/.test(e.code)
-        ? new ModelDownloadError('disk_error', 'download do modelo: não foi possível gravar no disco')
-        : new ModelDownloadError('network_error', 'download do modelo: a conexão caiu');
+  try {
+    poke();
+    let res: Response;
+    for (;;) {
+      try {
+        res = await doFetch(url, { redirect: 'follow', headers: have > 0 ? { range: `bytes=${have}-` } : {}, signal: ctl.signal });
+      } catch {
+        throw new ModelDownloadError('network_error', 'download do modelo: sem conexão');
+      }
+      // A 206 that starts anywhere but where the .part ends would corrupt the file: start over without a range.
+      if (res.status === 206 && Number(/^bytes (\d+)-/.exec(res.headers.get('content-range') ?? '')?.[1]) !== have) {
+        await res.body?.cancel().catch(() => {});
+        rmSync(part, { force: true });
+        have = 0;
+        continue;
+      }
+      break;
     }
+    if (res.status === 416 && have > 0) {
+      // The .part is already the whole file (or longer than it): the digest decides.
+      total = have;
+      await res.body?.cancel().catch(() => {});
+    } else if (!res.ok || !res.body) {
+      await res.body?.cancel().catch(() => {});
+      throw new ModelDownloadError('http_error', `download do modelo: HTTP ${res.status}`);
+    } else {
+      const length = Number(res.headers.get('content-length') ?? 0);
+      const start = res.status === 206 ? have : 0;
+      total = start + length;
+      log(`downloading ${url} (${Math.round(total / 1e6)} MB${start > 0 ? `, resuming at ${Math.round(start / 1e6)} MB` : ''})`);
+      let received = start;
+      onProgress({ phase: 'downloading', receivedBytes: received, totalBytes: total });
+      const counter = new Transform({
+        transform(chunk: Buffer, _enc, cb) {
+          poke();
+          received += chunk.length;
+          onProgress({ phase: 'downloading', receivedBytes: received, totalBytes: total });
+          cb(null, chunk);
+        },
+      });
+      const out = createWriteStream(part, { flags: start > 0 ? 'a' : 'w' });
+      try {
+        await pipeline(Readable.fromWeb(res.body as never), counter, out, { signal: ctl.signal });
+      } catch (e) {
+        throw e instanceof Error && 'code' in e && typeof e.code === 'string' && /^E(NOSPC|ACCES|PERM|ROFS|DQUOT|IO)$/.test(e.code)
+          ? new ModelDownloadError('disk_error', 'download do modelo: não foi possível gravar no disco')
+          : new ModelDownloadError('network_error', ctl.signal.aborted ? 'download do modelo: sem dados por tempo demais' : 'download do modelo: a conexão caiu');
+      }
+    }
+  } finally {
+    if (timer) clearTimeout(timer);
   }
   const size = statSync(part).size;
   onProgress({ phase: 'verifying', receivedBytes: size, totalBytes: Math.max(total, size) });
@@ -175,6 +197,7 @@ export async function installVoice({ home, log, cuda = null }: InstallOptions): 
   const src = join(folder, 'src');
   const bin = join(folder, 'bin', 'whisper-server');
   const model = join(folder, 'models', `ggml-${MODEL_NAME}.bin`);
+  mkdirSync(folder, { recursive: true, mode: 0o700 });
   mkdirSync(join(folder, 'bin'), { recursive: true });
   mkdirSync(join(folder, 'models'), { recursive: true });
 

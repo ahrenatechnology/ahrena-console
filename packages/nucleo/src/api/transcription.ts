@@ -10,7 +10,7 @@
 // `GET` also carries `download: { state: 'idle'|'downloading'|'verifying'|'failed', receivedBytes, totalBytes, error? }`
 // while `reason` is `model_missing` (the download is core-owned, see transcription/model-download.ts).
 // `POST .../model`: 503 `not_installed` when there is no whisper-server; 200 `idle` and nothing started when
-// the model is already there; a second call while it downloads returns the current state.
+// the model is already there or when `AHRENA_CONSOLE_WHISPER_URL` points at a running server (no download manager); a second call while it downloads returns the current state.
 //
 // All routes are private: the owner proof (#302, owner-auth.ts) is checked in server.ts before
 // anything here runs, so without the bearer the whisper is never reached.
@@ -111,7 +111,9 @@ export function createTranscriptionRoute({ transcription, modelDownload = null, 
       if (req.method !== 'POST') return send(res, 405, { error: 'use POST' });
       if (typeof req.headers.origin !== 'string') return send(res, 403, { error: ERRORS.ui_only, reason: 'ui_only' });
       const a = transcription.availability();
-      if (a.reason === 'not_installed' || !modelDownload) return send(res, 503, { error: ERRORS.unavailable, reason: 'not_installed' });
+      if (a.reason === 'not_installed') return send(res, 503, { error: ERRORS.unavailable, reason: 'not_installed' });
+      // No download manager (a running whisper-server via AHRENA_CONSOLE_WHISPER_URL): nothing to fetch, idle.
+      if (!modelDownload) return send(res, 200, { version: 1, download: { state: 'idle', receivedBytes: 0, totalBytes: 0 } });
       return send(res, 200, { version: 1, download: a.reason === 'model_missing' ? modelDownload.start() : modelDownload.status() });
     }
     if (req.method === 'GET') {

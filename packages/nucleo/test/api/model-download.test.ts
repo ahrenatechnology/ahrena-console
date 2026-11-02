@@ -24,6 +24,8 @@ const WRONG_SHA = '0'.repeat(64);
 const seenRanges: (string | undefined)[] = [];
 let gate: Promise<void> | null = null; // while set, the body stops after the first half until released
 let hits = 0;
+let stall = false; // send half the body and never finish
+let badRange = false; // answer a Range with a 206 that starts at 0
 let host: Server;
 let modelUrl = '';
 
@@ -38,9 +40,14 @@ before(async () => {
       return void res.end();
     }
     const body = MODEL.subarray(from);
-    res.writeHead(m ? 206 : 200, { 'content-length': body.length });
+    if (badRange && m) {
+      res.writeHead(206, { 'content-length': MODEL.length, 'content-range': `bytes 0-${MODEL.length - 1}/${MODEL.length}` });
+      return void res.end(MODEL);
+    }
+    res.writeHead(m ? 206 : 200, { 'content-length': body.length, ...(m && { 'content-range': `bytes ${from}-${MODEL.length - 1}/${MODEL.length}` }) });
     const half = Math.floor(body.length / 2);
     res.write(body.subarray(0, half));
+    if (stall) return;
     void (gate ?? Promise.resolve()).then(() => res.end(body.subarray(half)));
   });
   await new Promise<void>((r) => host.listen(0, '127.0.0.1', r));
@@ -122,6 +129,38 @@ describe('downloadModel', () => {
       await assert.rejects(downloadModel(to, { url: modelUrl, sha256: SHA, fetch: dead }), (e: unknown) => e instanceof ModelDownloadError && e.code === 'network_error');
       assert.equal(existsSync(to), false);
     } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('downloadModel guards', () => {
+  test('a stall (no bytes for stallMs) is network_error and keeps the .part so it can be retried', async () => {
+    const dir = tmp();
+    const to = join(dir, 'ggml.bin');
+    stall = true;
+    try {
+      await assert.rejects(downloadModel(to, { url: modelUrl, sha256: SHA, stallMs: 150 }), (e: unknown) => e instanceof ModelDownloadError && e.code === 'network_error');
+      assert.ok(existsSync(`${to}.part`), 'the partial file stays');
+      stall = false;
+      await downloadModel(to, { url: modelUrl, sha256: SHA });
+      assert.deepEqual(readFileSync(to), MODEL);
+    } finally {
+      stall = false;
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('a 206 whose Content-Range does not start at the .part size restarts the file from zero', async () => {
+    const dir = tmp();
+    const to = join(dir, 'ggml.bin');
+    badRange = true;
+    try {
+      writeFileSync(`${to}.part`, MODEL.subarray(0, 5000));
+      await downloadModel(to, { url: modelUrl, sha256: SHA });
+      assert.deepEqual(readFileSync(to), MODEL);
+    } finally {
+      badRange = false;
       rmSync(dir, { recursive: true, force: true });
     }
   });
@@ -268,6 +307,41 @@ describe('GET /api/transcription and POST /api/transcription/model', () => {
       assert.equal(existsSync(b.model), false);
     } finally {
       await b.close();
+    }
+  });
+
+  test('a stale failed state is reset to idle in GET and POST once the model file exists', async () => {
+    const b = await boot({ sha: WRONG_SHA });
+    try {
+      await startModel(b);
+      await b.download.settled();
+      assert.equal((await status(b)).body.download.state, 'failed');
+      mkdirSync(join(b.dir, 'models'), { recursive: true });
+      writeFileSync(b.model, MODEL);
+      const g = await status(b);
+      assert.equal(g.body.available, true);
+      assert.equal('download' in g.body, false, 'no stale failure on an available model');
+      const p = await startModel(b);
+      assert.equal(p.status, 200);
+      assert.deepEqual(p.body.download, { state: 'idle', receivedBytes: 0, totalBytes: 0 });
+    } finally {
+      await b.close();
+    }
+  });
+
+  test('with a running whisper-server (no download manager) POST is 200 idle, not 503', async () => {
+    const dir = tmp();
+    const transcription = createTranscription({ config: { url: 'http://127.0.0.1:9', bin: join(dir, 'x'), model: join(dir, 'm') } });
+    const demo = await startDemoApi({ transcription: createTranscriptionRoute({ transcription }) });
+    try {
+      const b = { demo } as Boot;
+      const r = await startModel(b);
+      assert.equal(r.status, 200);
+      assert.deepEqual(r.body.download, { state: 'idle', receivedBytes: 0, totalBytes: 0 });
+    } finally {
+      transcription.close();
+      await demo.close();
+      rmSync(dir, { recursive: true, force: true });
     }
   });
 

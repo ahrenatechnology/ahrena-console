@@ -3,7 +3,7 @@
 // it survives the /ui tab closing. One at a time; the state lives in memory and is what
 // `GET /api/transcription` reports. Nothing but sizes and a failure code is logged or kept.
 
-import { mkdirSync } from 'node:fs';
+import { existsSync, mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { downloadModel, ModelDownloadError, type ModelDownloadFailure, type ModelDownloadOptions } from './install.ts';
 
@@ -25,29 +25,36 @@ export interface ModelDownload {
   settled(): Promise<void>;
 }
 
-export interface ModelDownloadConfig extends Pick<ModelDownloadOptions, 'url' | 'sha256' | 'fetch'> {
+export interface ModelDownloadConfig extends Pick<ModelDownloadOptions, 'url' | 'sha256' | 'fetch' | 'stallMs'> {
   /** Where the model lands (`WhisperConfig.model`). */
   target: string;
   log?: (message: string) => void;
 }
 
-export function createModelDownload({ target, log = () => {}, url, sha256, fetch }: ModelDownloadConfig): ModelDownload {
+export function createModelDownload({ target, log = () => {}, url, sha256, fetch, stallMs }: ModelDownloadConfig): ModelDownload {
   let current: ModelDownloadStatus = { state: 'idle', receivedBytes: 0, totalBytes: 0 };
   let running: Promise<void> = Promise.resolve();
 
+  // A failure is stale once the model is there (another route put it, or an earlier retry finished).
+  const settle = () => {
+    if (current.state === 'failed' && existsSync(target)) current = { state: 'idle', receivedBytes: 0, totalBytes: 0 };
+  };
+
   return {
-    status: () => ({ ...current }),
+    status: () => (settle(), { ...current }),
     start() {
+      settle();
       if (current.state === 'downloading' || current.state === 'verifying') return { ...current };
       current = { state: 'downloading', receivedBytes: 0, totalBytes: 0 };
       log('transcription: model download started');
       running = (async () => {
         try {
-          mkdirSync(dirname(target), { recursive: true });
+          mkdirSync(dirname(target), { recursive: true, mode: 0o700 });
           await downloadModel(target, {
             url,
             sha256,
             fetch,
+            stallMs,
             onProgress: (p) => {
               current = { state: p.phase, receivedBytes: p.receivedBytes, totalBytes: p.totalBytes };
             },
