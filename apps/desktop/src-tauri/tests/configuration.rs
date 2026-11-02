@@ -81,3 +81,16 @@ fn the_public_key_is_text_and_the_updater_artifacts_are_left_to_ci() {
 fn the_app_identifier() {
     assert_eq!(conf()["identifier"], "dev.ahrena.console");
 }
+
+/// Voice dictation records in the app's WKWebView (decision 0019): without NSMicrophoneUsageDescription
+/// macOS never asks, and the microphone stays off. Tauri's bundler merges the `Info.plist` that sits
+/// next to tauri.conf.json, so the file must exist and keep the key.
+#[test]
+fn the_info_plist_explains_the_microphone() {
+    let plist = read("Info.plist");
+    let after_key = plist.split("<key>NSMicrophoneUsageDescription</key>").nth(1).expect("Info.plist without NSMicrophoneUsageDescription");
+    let description = after_key.split("<string>").nth(1).and_then(|s| s.split("</string>").next()).expect("NSMicrophoneUsageDescription without a <string>");
+    assert!(!description.trim().is_empty(), "NSMicrophoneUsageDescription is empty");
+    // Merged by name, not listed in the conf: a custom path in bundle.macOS.infoPlist would replace the lookup.
+    assert!(conf()["bundle"]["macOS"].get("infoPlist").is_none(), "bundle.macOS.infoPlist set: Info.plist next to the conf may not be the one merged");
+}
