@@ -10,7 +10,7 @@ import type { AddressInfo } from 'node:net';
 import { join } from 'node:path';
 import { after, before, describe, test } from 'node:test';
 import { MAX_AUDIO_BYTES, createTranscriptionRoute, isExpectedWav } from '../../src/api/transcription.ts';
-import { TranscriptionError, cleanText, createTranscription, resolveWhisperConfig } from '../../src/transcription/whisper.ts';
+import { TranscriptionError, cleanText, createTranscription, readProofBody, resolveWhisperConfig } from '../../src/transcription/whisper.ts';
 import { ownerRequest } from '../owner-http.ts';
 import { startDemoApi, type DemoApi } from './demo-api.ts';
 
@@ -355,6 +355,21 @@ describe('the core starting its own whisper-server', () => {
     }
   });
 
+  test('the proof folder is gone as soon as the server is ready, before the server stops', async () => {
+    const child = fakeChild();
+    const port = { on: 'child' as Listener };
+    const asked: string[] = [];
+    const t = spawned(child, port, asked);
+    try {
+      const pending = t.transcribe(wav());
+      await pending;
+      const publicDir = child.args[child.args.indexOf('--public') + 1]!;
+      assert.equal(existsSync(publicDir), false, 'a crash of the core after readiness leaves nothing in tmpdir');
+    } finally {
+      t.close();
+    }
+  });
+
   test('another process holding the port never gets the audio: start_failed at the deadline, child stopped', async () => {
     const child = fakeChild();
     const port = { on: 'impostor' as Listener };
@@ -383,6 +398,59 @@ describe('the core starting its own whisper-server', () => {
       assert.deepEqual(asked, []);
     } finally {
       t.close();
+    }
+  });
+});
+
+describe('the readiness answer is read with a bound', () => {
+  test('an endless body is cut off after a few bytes and the stream is cancelled', async () => {
+    let pulled = 0;
+    let cancelled = false;
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        pulled += 1;
+        controller.enqueue(new Uint8Array(1024).fill(97));
+      },
+      cancel() {
+        cancelled = true;
+      },
+    });
+    assert.equal(await readProofBody(new Response(body), 64), null);
+    assert.ok(pulled <= 3, `read ${pulled} chunks of an endless body`);
+    assert.equal(cancelled, true);
+  });
+
+  test('a declared length that differs from the proof is refused without reading', async () => {
+    const r = new Response('x'.repeat(10), { headers: { 'content-length': '1000000' } });
+    assert.equal(await readProofBody(r, 64), null);
+  });
+
+  test('the exact proof is returned', async () => {
+    assert.equal(await readProofBody(new Response('abc'), 3), 'abc');
+  });
+
+  test('a real hostile server sending an endless body never makes the core buffer it', async () => {
+    let sent = 0;
+    const srv = createServer((_req, res) => {
+      res.writeHead(200);
+      const pump = () => {
+        while (sent < 1e9) {
+          sent += 65536;
+          if (!res.write(Buffer.alloc(65536, 97))) return void res.once('drain', pump);
+        }
+      };
+      pump();
+      res.on('close', () => {});
+    });
+    await new Promise<void>((r) => srv.listen(0, '127.0.0.1', r));
+    try {
+      const { port } = srv.address() as AddressInfo;
+      const r = await fetch(`http://127.0.0.1:${port}/x`);
+      assert.equal(await readProofBody(r, 64), null);
+      assert.ok(sent < 64 * 1024 * 1024, `the hostile server got to send ${sent} bytes`);
+    } finally {
+      srv.closeAllConnections();
+      srv.close();
     }
   });
 });
