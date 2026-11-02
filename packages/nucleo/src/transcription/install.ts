@@ -7,9 +7,9 @@
 
 import { execFileSync, spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { chmodSync, copyFileSync, createReadStream, createWriteStream, existsSync, mkdirSync, readFileSync, renameSync, rmSync } from 'node:fs';
+import { chmodSync, copyFileSync, createReadStream, createWriteStream, existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync } from 'node:fs';
 import { join } from 'node:path';
-import { Readable } from 'node:stream';
+import { Readable, Transform } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { MODEL_NAME, voiceFolder } from './whisper.ts';
 
@@ -70,13 +70,81 @@ function has(cmd: string): Promise<boolean> {
   });
 }
 
-async function downloadModel(to: string, log: (m: string) => void): Promise<void> {
-  const res = await fetch(MODEL_URL, { redirect: 'follow' });
-  if (!res.ok || !res.body) throw new Error(`download do modelo: HTTP ${res.status}`);
+export type ModelDownloadFailure = 'http_error' | 'network_error' | 'disk_error' | 'checksum_mismatch';
+
+export class ModelDownloadError extends Error {
+  readonly code: ModelDownloadFailure;
+  constructor(code: ModelDownloadFailure, message: string) {
+    super(message);
+    this.name = 'ModelDownloadError';
+    this.code = code;
+  }
+}
+
+export interface ModelDownloadOptions {
+  log?: (m: string) => void;
+  /** The pinned URL and digest by default; the tests point them at a local server and a fake digest. */
+  url?: string;
+  sha256?: string;
+  fetch?: typeof fetch;
+  /** Called as bytes arrive (`downloading`) and once more while the digest is checked (`verifying`). */
+  onProgress?: (p: { phase: 'downloading' | 'verifying'; receivedBytes: number; totalBytes: number }) => void;
+}
+
+/**
+ * Downloads the model to `to` through `to.part`, then checks the pinned SHA-256 and renames. A `.part`
+ * left by an earlier attempt is resumed with a `Range` request (a server that answers 200 instead restarts
+ * it); a download that fails on the network keeps its `.part`; a digest that does not match deletes it.
+ */
+export async function downloadModel(to: string, opts: ModelDownloadOptions = {}): Promise<void> {
+  const { log = () => {}, url = MODEL_URL, sha256: expected = MODEL_SHA256, fetch: doFetch = fetch, onProgress = () => {} } = opts;
   const part = `${to}.part`;
-  log(`downloading ${MODEL_URL} (${Math.round(Number(res.headers.get('content-length') ?? 0) / 1e6)} MB)`);
-  await pipeline(Readable.fromWeb(res.body as never), createWriteStream(part));
-  await verify(part, MODEL_SHA256, 'modelo');
+  const have = existsSync(part) ? statSync(part).size : 0;
+  let res: Response;
+  try {
+    res = await doFetch(url, { redirect: 'follow', headers: have > 0 ? { range: `bytes=${have}-` } : {} });
+  } catch {
+    throw new ModelDownloadError('network_error', 'download do modelo: sem conexão');
+  }
+  let start = 0;
+  let total = 0;
+  if (res.status === 416 && have > 0) {
+    // The .part is already the whole file (or longer than it): the digest decides.
+    start = have;
+    total = have;
+    await res.body?.cancel().catch(() => {});
+  } else if (!res.ok || !res.body) {
+    await res.body?.cancel().catch(() => {});
+    throw new ModelDownloadError('http_error', `download do modelo: HTTP ${res.status}`);
+  } else {
+    const length = Number(res.headers.get('content-length') ?? 0);
+    start = res.status === 206 ? have : 0;
+    total = start + length;
+    log(`downloading ${url} (${Math.round(total / 1e6)} MB${start > 0 ? `, resuming at ${Math.round(start / 1e6)} MB` : ''})`);
+    let received = start;
+    onProgress({ phase: 'downloading', receivedBytes: received, totalBytes: total });
+    const counter = new Transform({
+      transform(chunk: Buffer, _enc, cb) {
+        received += chunk.length;
+        onProgress({ phase: 'downloading', receivedBytes: received, totalBytes: total });
+        cb(null, chunk);
+      },
+    });
+    const out = createWriteStream(part, { flags: start > 0 ? 'a' : 'w' });
+    try {
+      await pipeline(Readable.fromWeb(res.body as never), counter, out);
+    } catch (e) {
+      throw e instanceof Error && 'code' in e && typeof e.code === 'string' && /^E(NOSPC|ACCES|PERM|ROFS|DQUOT|IO)$/.test(e.code)
+        ? new ModelDownloadError('disk_error', 'download do modelo: não foi possível gravar no disco')
+        : new ModelDownloadError('network_error', 'download do modelo: a conexão caiu');
+    }
+  }
+  const size = statSync(part).size;
+  onProgress({ phase: 'verifying', receivedBytes: size, totalBytes: Math.max(total, size) });
+  if ((await sha256(part)) !== expected) {
+    rmSync(part, { force: true });
+    throw new ModelDownloadError('checksum_mismatch', 'modelo: o SHA-256 do arquivo baixado não confere com o fixado; apagado.');
+  }
   renameSync(part, to);
 }
 
@@ -126,7 +194,7 @@ export async function installVoice({ home, log, cuda = null }: InstallOptions): 
     if (!gpu) log('built for the CPU');
   } else log(`whisper-server already at ${bin}`);
 
-  if (!existsSync(model)) await downloadModel(model, log);
+  if (!existsSync(model)) await downloadModel(model, { log });
   else log(`model already at ${model}`);
   return { bin, model, cuda: cuda ?? false };
 }
