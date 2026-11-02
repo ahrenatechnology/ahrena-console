@@ -7,20 +7,20 @@ import { NOW, SCENARIOS } from './scenarios'
 const PANE_ID = 'ahrena-console-sessao'
 const CORE = 'http://127.0.0.1:4999'
 const ORDERS_URL = `${CORE}/api/sessions/test-session/commands`
-// The test's `$` raises no `ui.close`: a plugin beside the mod closes the pane, as the person's mark
-// would, through the same chain (the mod's ui.close hook, then the engine's).
+// #406: The test's `$` raises no `ui.close`: a plugin beside the mod closes the pane, as the person's mark
+// #406: would, through the same chain (the mod's ui.close hook, then the engine's).
 const CLOSE = { command: 'close-pane', args: '', origin: { kind: 'user' }, presentation: 'text' } as any
 const closer = {
   name: 'pane-closer',
   register: (on: any) => {
-    // An inline plugin runs on its own: it sees none of this file's constants.
+    // #406: An inline plugin runs on its own: it sees none of this file's constants.
     on('command.run', { command: 'close-pane' }, async ($: any) => {
       await $.ui.close({ id: 'ahrena-console-sessao' })
       return { text: 'closed' }
     })
   },
 }
-// Another plugin's band, composed with what lies beneath it as the mod's is.
+// #406: Another plugin's band, composed with what lies beneath it as the mod's is.
 const otherBand = {
   name: 'other-band',
   register: (on: any) => {
@@ -49,9 +49,9 @@ const PANE = {
 } as const
 const WIDE_PANE = { ...PANE, props: { ...PANE.props, bodyColumns: 121 } }
 
-// The engine beneath the mod: a pane list, /console's open and close, the store, the clock, toasts,
-// and a fake core that records every request it gets. What the engine draws in the band when the mod
-// passes (`next(e)`), or beneath the mod's own band, is the Text "engine band".
+// #406: The engine beneath the mod: a pane list, /console's open and close, the store, the clock, toasts,
+// #406: and a fake core that records every request it gets. What the engine draws in the band when the mod
+// #406: passes (`next(e)`), or beneath the mod's own band, is the Text "engine band".
 function fakes(on: any, opts: { store?: Record<string, unknown> } = {}) {
   mock.env(on, { AHRENA_CONSOLE_HOME: '/owner-test' })
   mock.store(on, opts.store ?? {})
@@ -107,13 +107,13 @@ function fakes(on: any, opts: { store?: Record<string, unknown> } = {}) {
 
 const start = ($: any) => $.session.start({ cwd: '/tmp', surface: 'desktop', isInteractive: true })
 
-/** Lets a press's handler (`void openPane($)`, `void hideBand($)`) run to the end. */
+/** #406: Lets a press's handler (`void openPane($)`, `void hideBand($)`) run to the end. */
 async function settle(f: ReturnType<typeof fakes>) {
   for (let i = 0; i < 10; i++) await f.timer.advance(1)
 }
 
 /**
- * Whether the band the mod draws is there. What lies beneath it (`next(e)`, here the engine's "engine
+ * #406: whether the band the mod draws is there. What lies beneath it (`next(e)`, here the engine's "engine
  * band") is always drawn: passed on alone, or composed above the mod's own.
  */
 async function bandShown($: any, target: object = BAND, surface = 'desktop') {
@@ -134,10 +134,10 @@ test('criterion 1: on desktop with the pane closed, one row "Ahrena Console" wit
   expect((await ui.find({ key: 'open-pane' }))?.props).toMatchObject({ label: 'Abrir', plain: true })
   expect((await ui.find({ key: 'hide-band' }))?.props).toMatchObject({ label: 'Ocultar', plain: true, dimColor: true })
   expect(await ui.find({ type: 'Text', text: /painel da sessão fechado/ })).toBeUndefined()
-  // One row with no border: a bordered Box gains a row on the Desktop.
+  // #406: One row with no border: a bordered Box gains a row on the Desktop.
   expect((await ui.findAll({ type: 'Box' })).every((b) => !b.props.borderStyle)).toBe(true)
   expect(await ui.find({ type: 'Svg' })).toBeUndefined()
-  // No border, but the slightly raised background of P17 (`--raised` of the dark theme).
+  // #406: No border, but the slightly raised background of P17 (`--raised` of the dark theme).
   expect((await ui.find({ key: 'above-band' }))?.props.backgroundColor).toBe('#28282f')
   await ui.unmount()
 
@@ -189,12 +189,12 @@ test('criterion 3: with the pane open the band is not drawn, and after ui.close 
   const f = fakes(on)
   await start($)
   expect(await bandShown($)).toBe(true)
-  // /console: the mod asks for a redraw, and the band leaves.
+  // #406: /console: the mod asks for a redraw, and the band leaves.
   let before = f.redraws()
   await $.command.run(CONSOLE)
   expect(f.redraws()).toBeGreaterThan(before)
   expect(await bandShown($)).toBe(false)
-  // Closed: a redraw again, and the band is back.
+  // #406: Closed: a redraw again, and the band is back.
   before = f.redraws()
   await $.command.run(CLOSE)
   expect(f.redraws()).toBeGreaterThan(before)
@@ -243,11 +243,11 @@ test('criterion 5: Ocultar persists in $.store across a new session; /console st
   expect(f.redraws()).toBeGreaterThan(before)
   expect(await bandShown($)).toBe(false)
 
-  // A new session: the choice is still in the store.
+  // #406: A new session: the choice is still in the store.
   await start($)
   expect(await bandShown($)).toBe(false)
 
-  // /console still opens the pane, and its last row is the way back (P18): narrow, just the button.
+  // #406: /console still opens the pane, and its last row is the way back (P18): narrow, just the button.
   before = f.redraws()
   await $.command.run(CONSOLE)
   expect(f.redraws()).toBeGreaterThan(before)
@@ -256,7 +256,7 @@ test('criterion 5: Ocultar persists in $.store across a new session; /console st
   expect((await ui.find({ key: 'show-band' }))?.props).toMatchObject({ label: 'Mostrar atalho acima do prompt', plain: true })
   expect(await ui.find({ type: 'Text', text: /o atalho acima do prompt está oculto/ })).toBeUndefined()
   await ui.unmount()
-  // Wide: the grey text on the left, the button on the right.
+  // #406: Wide: the grey text on the left, the button on the right.
   ui = await $.ui.mount({ ...WIDE_PANE, surface: 'desktop' })
   expect(await ui.find({ type: 'Text', text: 'o atalho acima do prompt está oculto' })).toBeDefined()
   before = f.redraws()
@@ -265,7 +265,7 @@ test('criterion 5: Ocultar persists in $.store across a new session; /console st
   await settle(f)
   expect(f.redraws()).toBeGreaterThan(before)
 
-  // Shown again: the row leaves the pane; the band waits for the pane to close (P17, state 3).
+  // #406: Shown again: the row leaves the pane; the band waits for the pane to close (P17, state 3).
   ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
   expect(await ui.find({ key: 'show-band' })).toBeUndefined()
   await ui.unmount()
@@ -336,8 +336,8 @@ test('criterion 5: a toast already shown by an earlier session is not shown agai
 })
 
 // The proof for decision 0004 / #81: the band adds no request to the core. With the pane closed, the
-// band drawn on both widths, Ocultar pressed and a minute on the clock either side, every request the
-// core got is the order fetch (startOrders), and nothing else.
+// #81: band drawn on both widths, Ocultar pressed and a minute on the clock either side, every request the
+// #81: core got is the order fetch (startOrders), and nothing else.
 test('criterion 6: with the pane closed, the band and Ocultar make no core request besides the order fetch', OPTIONS, async ($, on) => {
   const f = fakes(on)
   await start($)

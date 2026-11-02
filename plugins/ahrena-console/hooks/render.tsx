@@ -2504,7 +2504,7 @@ export const BAND_HIDDEN_TOAST = 'Atalho oculto · para mostrar de novo, abra o 
  * Button `plain` (o primário nativo é mais alto que a linha). A dica corta antes dos botões.
  */
 export function drawAboveBand(el: Pick<Elements, 'Box' | 'Text' | 'Button'>, cols: number, actions: { open: () => void; hide: () => void }): RenderElement {
-  // Sem borda, mas com o fundo elevado do P17, que separa a faixa da conversa.
+  // #406: Sem borda, mas com o fundo elevado do P17, que separa a faixa da conversa.
   const { Box, Text, Button } = el
   const wide = cols > BAND_HINT_MIN_COLUMNS
   return (
@@ -2533,7 +2533,7 @@ export function drawAboveBand(el: Pick<Elements, 'Box' | 'Text' | 'Button'>, col
 }
 
 /**
- * P18: no fim do painel, só enquanto a faixa está oculta, uma linha sem borda. No estreito, só o
+ * #406, P18: no fim do painel, só enquanto a faixa está oculta, uma linha sem borda. No estreito, só o
  * botão; no largo, o texto cinza à esquerda e o botão à direita, como os outros pés do painel.
  */
 function showBandRow(c: DrawContext, width: number, narrow: boolean) {

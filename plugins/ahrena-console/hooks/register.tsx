@@ -274,7 +274,7 @@ async function ourPane($: Engine) {
  */
 async function openPane($: Engine): Promise<string> {
   const opened = await $.ui.open({ id: PANE, title: 'Ahrena Console', focus: true })
-  // Aberto, a faixa acima do prompt sai.
+  // #406: Aberto, a faixa acima do prompt sai.
   redraw($)
   if (opened.isPlaced) {
     startPolling($)
@@ -284,16 +284,16 @@ async function openPane($: Engine): Promise<string> {
 }
 
 // #406: a faixa acima do prompt (P17). O "Ocultar" fica no $.store, que sobrevive a uma sessão
-// nova; o toast do primeiro Ocultar, uma vez só, guardado por outra chave.
+// #406: nova; o toast do primeiro Ocultar, uma vez só, guardado por outra chave.
 const BAND_HIDDEN = 'aboveBandHidden'
 const BAND_TOAST_SHOWN = 'aboveBandToastShown'
 
-/** O $.store não redesenha quem o lê: a faixa e o painel são desenhados de novo à mão. */
+/** #406: O $.store não redesenha quem o lê: a faixa e o painel são desenhados de novo à mão. */
 function redraw($: Engine) {
   try {
     $.ui.invalidate('ui.render')
   } catch {
-    // sem o redesenho, a faixa muda na próxima vez que o engine a desenhar
+    // #406: sem o redesenho, a faixa muda na próxima vez que o engine a desenhar
   }
 }
 
@@ -641,7 +641,7 @@ export const register: Register = (on, options) => {
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     if (e.surface !== 'desktop' || e.props.hasSurvey) return next(e)
     if (await isBandHidden($)) return next(e)
-    // Aberto mas sem lugar (isPlaced: false), o painel não está à vista: a faixa fica.
+    // #406: Aberto mas sem lugar (isPlaced: false), o painel não está à vista: a faixa fica.
     if ((await ourPane($).catch(() => undefined))?.isPlaced) return next(e)
     const el = $.ui.resolve(e) as unknown as Elements
     const band = drawAboveBand(el, e.props.bodyColumns, {
@@ -649,7 +649,7 @@ export const register: Register = (on, options) => {
         void openPane($).catch((err: unknown) => $.ui.toast(`Não deu para abrir o painel do Ahrena Console: ${reasonOf(err)}.`)),
       hide: () => void hideBand($).catch((err: unknown) => $.ui.toast(`Não deu para ocultar o atalho: ${reasonOf(err)}.`)),
     })
-    // A faixa dos outros plugins (e a do engine) fica: a nossa vem embaixo, junto do prompt.
+    // #406: A faixa dos outros plugins (e a do engine) fica: a nossa vem embaixo, junto do prompt.
     const others = await next(e)
     const { Box } = el
     return (
