@@ -118,6 +118,10 @@ npm --prefix ../../packages/nucleo run api -- --demo --port 4797 &
 open --env AHRENA_CONSOLE_DEMO_PORT=4797 --env "AHRENA_CONSOLE_OWNER_TOKEN_FILE=$AHRENA_CONSOLE_OWNER_TOKEN_FILE" "src-tauri/target/release/bundle/macos/Ahrena Console.app"
 ```
 
+## whisper-server (ditado por voz)
+
+O app leva o `whisper-server` do whisper.cpp (tag e commit fixos em `packages/nucleo/src/transcription/whisper-cpp.json`, o mesmo arquivo do `voice install`), compilado para macOS arm64 com Metal e sem dependências ([decisão 0019](../../docs/decisoes/0019-voice-dictation.md), item 10). `scripts/build-whisper-server.sh` o compila para `src-tauri/resources/whisper/` (fora do git); o CI roda o script antes da build do app, com cache pela tag. Sem o binário ali o `tauri build` ainda empacota, só que sem ele (o app x64 sobe assim). Ao subir o próprio núcleo, o app aponta `AHRENA_CONSOLE_WHISPER_BIN` para ele, a menos que a variável já esteja definida. O binário embutido só vale para um núcleo que o próprio app sobe: um núcleo que já roda mantém o ambiente dele até reiniciar. `AHRENA_CONSOLE_WHISPER_BIN` vazia conta como escolha da pessoa e desliga o embutido.
+
 ## Release
 
 Para mantenedores. A release sai do [app-release.yml](../../.github/workflows/app-release.yml), com o `tauri-action`, num DMG por arquitetura (`aarch64` e `x64`), assinado ad hoc.

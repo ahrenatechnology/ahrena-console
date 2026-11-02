@@ -7,3 +7,8 @@ data/
 *.log
 plugins/*/.claude-plugin/types/
 .toolchain/
+
+# whisper-server build output and work dir (apps/desktop/scripts/build-whisper-server.sh)
+apps/desktop/.whisper-build/
+apps/desktop/src-tauri/resources/whisper/*
+!apps/desktop/src-tauri/resources/whisper/.gitkeep

@@ -117,3 +117,37 @@ fn the_entitlements_allow_audio_input() {
     assert!(after_key.trim_start().starts_with("<true/>"), "audio-input entitlement is not true");
     assert_eq!(conf()["bundle"]["macOS"]["entitlements"], "Entitlements.plist", "bundle.macOS.entitlements must point at Entitlements.plist");
 }
+
+/// The app ships a prebuilt `whisper-server` (decision 0019 item 10, #405): the bundle takes the
+/// folder the build script fills, to `whisper/` (where core.rs looks), and both app workflows run
+/// that script before the tauri build. Dropping either leaves the app without dictation, silently.
+#[test]
+fn the_bundle_ships_the_whisper_server_and_ci_builds_it() {
+    let conf = conf();
+    assert_eq!(conf["bundle"]["resources"]["resources/whisper/"], "whisper/", "bundle.resources must map resources/whisper/ to whisper/");
+    // The folder must exist in a checkout, or the bundler fails where the binary is not built (x64).
+    assert!(Path::new(env!("CARGO_MANIFEST_DIR")).join("resources/whisper/.gitkeep").is_file(), "resources/whisper/.gitkeep");
+    assert!(Path::new(env!("CARGO_MANIFEST_DIR")).join("../scripts/build-whisper-server.sh").is_file(), "apps/desktop/scripts/build-whisper-server.sh");
+    for workflow in ["../../../.github/workflows/app-ci.yml", "../../../.github/workflows/app-release.yml"] {
+        let text = read(workflow);
+        let build = text.find("apps/desktop/scripts/build-whisper-server.sh").unwrap_or_else(|| panic!("{workflow} does not run build-whisper-server.sh"));
+        let tauri = text.find("npx tauri build").or_else(|| text.find("tauri-apps/tauri-action")).unwrap_or_else(|| panic!("{workflow} without a tauri build"));
+        assert!(build < tauri, "{workflow}: the whisper-server build must come before the tauri build");
+        assert!(text.contains("actions/cache@"), "{workflow}: the whisper-server build is cached by tag");
+    }
+}
+
+/// The pinned whisper.cpp lives in one file that `voice install` (install.ts) and the build script both read.
+#[test]
+fn the_whisper_pin_has_one_source() {
+    let pin = json("../../../packages/nucleo/src/transcription/whisper-cpp.json");
+    let commit = pin["commit"].as_str().expect("whisper-cpp.json without commit");
+    assert!(commit.len() == 40 && commit.bytes().all(|b| b.is_ascii_hexdigit()), "commit is not a full sha: {commit}");
+    assert!(pin["tag"].as_str().is_some_and(|t| t.starts_with('v')), "whisper-cpp.json without tag");
+    assert!(read("../../../packages/nucleo/src/transcription/install.ts").contains("whisper-cpp.json"), "install.ts must read whisper-cpp.json");
+    let script = read("../scripts/build-whisper-server.sh");
+    assert!(script.contains("whisper-cpp.json"), "the build script must read whisper-cpp.json");
+    for flag in ["-DGGML_METAL=ON", "-DGGML_METAL_EMBED_LIBRARY=ON", "-DBUILD_SHARED_LIBS=OFF"] {
+        assert!(script.contains(flag), "the build script without {flag}");
+    }
+}

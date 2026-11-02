@@ -150,9 +150,10 @@ fn main() {
             }
 
             let resources = app.path().resource_dir().ok();
+            let whisper = core::bundled_whisper(resources.as_deref());
             let data_dir = app.path().app_data_dir().ok();
             let handle = app.handle().clone();
-            std::thread::spawn(move || follow(handle, state, core::core_dir(resources), data_dir, signals, open_at_launch));
+            std::thread::spawn(move || follow(handle, state, core::core_dir(resources), whisper, data_dir, signals, open_at_launch));
             open_menu_later(app.handle());
             Ok(())
         })
@@ -182,7 +183,7 @@ fn main() {
 /// `open_at_launch`: opens the console if the core is up already on the first attempt (a launch by
 /// hand); if it only comes up later (no Node, "Procurar de novo"), the console does not show up by
 /// itself.
-fn follow(app: AppHandle, state: Shared, dir: PathBuf, data_dir: Option<PathBuf>, signals: std::sync::mpsc::Receiver<()>, mut open_at_launch: bool) {
+fn follow(app: AppHandle, state: Shared, dir: PathBuf, whisper: Option<PathBuf>, data_dir: Option<PathBuf>, signals: std::sync::mpsc::Receiver<()>, mut open_at_launch: bool) {
     loop {
         owner_auth::clear();
         change(&app, &state, |s| {
@@ -195,7 +196,7 @@ fn follow(app: AppHandle, state: Shared, dir: PathBuf, data_dir: Option<PathBuf>
             s.notices.machines.reset();
             s.notices.clouds.reset();
         });
-        let outcome = core::start_own_core(&dir, data_dir.as_deref());
+        let outcome = core::start_own_core(&dir, data_dir.as_deref(), whisper.as_deref());
         let open = std::mem::take(&mut open_at_launch);
         let core = match outcome.core {
             Some(core) => {

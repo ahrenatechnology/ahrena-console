@@ -57,6 +57,23 @@ jobs:
       - name: Clippy
         run: cargo clippy --all-targets -- -D warnings
 
+      # O whisper-server do ditado (decisão 0019, item 10, #405): compilado aqui, de uma tag fixa
+      # (packages/nucleo/src/transcription/whisper-cpp.json), e levado no .app como recurso. O cache
+      # tem a chave da tag e do script; o runner macOS é arm64 e traz o cmake (sem ele o passo falha).
+      - name: Cache whisper-server
+        id: whisper-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: apps/desktop/src-tauri/resources/whisper/whisper-server
+          key: whisper-server-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('packages/nucleo/src/transcription/whisper-cpp.json', 'apps/desktop/scripts/build-whisper-server.sh') }}
+
+      - name: Build whisper-server
+        if: steps.whisper-cache.outputs.cache-hit != 'true'
+        working-directory: ${{ github.workspace }}
+        run: |
+          command -v cmake >/dev/null || { echo '::error::cmake is not on the runner image PATH; the whisper-server build needs it.'; exit 1; }
+          apps/desktop/scripts/build-whisper-server.sh
+
       # Os recursos do bundle (packages/nucleo e packages/marca/gerado) já estão no repositório.
       - name: Build de debug do .app
         working-directory: apps/desktop
