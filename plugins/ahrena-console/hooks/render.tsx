@@ -61,7 +61,7 @@ import {
 } from './format'
 import { gridHeight, CARD_BORDER, SPACE, CARD_LINES, textLines } from './height'
 import { GRAPH_STATE, shortCount, buildGraph, paginate, type GraphState, type GraphLine } from './graph'
-import { paleta, status as STATUS_COR } from './brand'
+import { paleta, status as STATUS_COR, temas } from './brand'
 import { charsFor, columns, fit, kids, type Node } from './fit'
 import { LEGACY_PORT } from './discover'
 
@@ -86,6 +86,8 @@ const GRAY = paleta.gray['200']
 const BORDER = paleta.gray['500']
 const KPI_BG = paleta.gray['900']
 const CARD_BG = paleta.gray['800']
+/** O fundo levemente elevado da faixa acima do prompt (P17, `--raised` do tema escuro). */
+export const BAND_BG = temas.dark.raised
 const BADGE = {
   orange: STATUS_COR.active.dark.badge,
   yellow: STATUS_COR.waiting.dark.badge,
@@ -2502,10 +2504,11 @@ export const BAND_HIDDEN_TOAST = 'Atalho oculto · para mostrar de novo, abra o 
  * Button `plain` (o primário nativo é mais alto que a linha). A dica corta antes dos botões.
  */
 export function drawAboveBand(el: Pick<Elements, 'Box' | 'Text' | 'Button'>, cols: number, actions: { open: () => void; hide: () => void }): RenderElement {
+  // Sem borda, mas com o fundo elevado do P17, que separa a faixa da conversa.
   const { Box, Text, Button } = el
   const wide = cols > BAND_HINT_MIN_COLUMNS
   return (
-    <Box key="above-band" flexDirection="row" alignItems="center" gap={1} width={cols} minWidth={0}>
+    <Box key="above-band" flexDirection="row" alignItems="center" gap={1} width={cols} minWidth={0} backgroundColor={BAND_BG}>
       <Box key="band-label" flexShrink={0}>
         <Text mono weight="bold" color={ORANGE}>
           Ahrena Console

@@ -303,7 +303,7 @@ async function isBandHidden($: Engine): Promise<boolean> {
 
 async function hideBand($: Engine) {
   await $.store.set(BAND_HIDDEN, true)
-  if ((await $.store.get(BAND_TOAST_SHOWN)) !== true) {
+  if ((await $.store.get(BAND_TOAST_SHOWN).catch(() => undefined)) !== true) {
     await $.store.set(BAND_TOAST_SHOWN, true)
     $.ui.toast(BAND_HIDDEN_TOAST)
   }
@@ -314,6 +314,8 @@ async function showBand($: Engine) {
   await $.store.delete(BAND_HIDDEN)
   redraw($)
 }
+
+const reasonOf = (err: unknown) => (err as Error)?.message ?? String(err)
 
 // Cada tick confere o painel antes de pedir: fechado ou não desenhado, o polling para;
 // aberto atrás de outra aba, o tick passa sem pedir nada.
@@ -639,12 +641,23 @@ export const register: Register = (on, options) => {
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     if (e.surface !== 'desktop' || e.props.hasSurvey) return next(e)
     if (await isBandHidden($)) return next(e)
-    if (await ourPane($).catch(() => undefined)) return next(e)
+    // Aberto mas sem lugar (isPlaced: false), o painel não está à vista: a faixa fica.
+    if ((await ourPane($).catch(() => undefined))?.isPlaced) return next(e)
     const el = $.ui.resolve(e) as unknown as Elements
-    return drawAboveBand(el, e.props.bodyColumns, {
-      open: () => void openPane($),
-      hide: () => void hideBand($),
+    const band = drawAboveBand(el, e.props.bodyColumns, {
+      open: () =>
+        void openPane($).catch((err: unknown) => $.ui.toast(`Não deu para abrir o painel do Ahrena Console: ${reasonOf(err)}.`)),
+      hide: () => void hideBand($).catch((err: unknown) => $.ui.toast(`Não deu para ocultar o atalho: ${reasonOf(err)}.`)),
     })
+    // A faixa dos outros plugins (e a do engine) fica: a nossa vem embaixo, junto do prompt.
+    const others = await next(e)
+    const { Box } = el
+    return (
+      <Box flexDirection="column">
+        {others}
+        {band}
+      </Box>
+    )
   })
 
   // #140: a pergunta com que o turno termina, direto do engine, sem passar pelo núcleo. Só a do
@@ -762,7 +775,7 @@ export const register: Register = (on, options) => {
         showPrs: () => void changeView($, { screen: 'prs' }),
         reply: (message) => void reply($, message),
         unarchive: (f) => void unarchive($, f),
-        showBand: () => void showBand($),
+        showBand: () => void showBand($).catch((err: unknown) => $.ui.toast(`Não deu para mostrar o atalho: ${reasonOf(err)}.`)),
       },
     })
   })
