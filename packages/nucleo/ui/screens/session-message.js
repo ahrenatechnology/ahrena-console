@@ -395,6 +395,11 @@ export function createComposeBox(ctx, sessionId, { head = () => null, openContro
 
   /** The model is missing and the core can fetch it: `{ state, receivedBytes, totalBytes, error? }`, else `null`. */
   const modelDownload = () => (transcription?.available === false && transcription.reason === 'model_missing' ? (transcription.download ?? null) : null);
+  /** The model can be asked for now: missing, nothing downloading, the box and the browser free. */
+  const modelStartable = () => {
+    const d = modelDownload();
+    return !!d && (d.state === 'idle' || d.state === 'failed') && !modelRequested && !voiceOffReason() && voiceState === 'idle' && !sending && !foreign;
+  };
   const modelBusy = () => modelDownload()?.state === 'downloading' || modelDownload()?.state === 'verifying';
 
   /** Asks the core for the download until it leaves downloading/verifying; stops when the box is gone. */
@@ -506,7 +511,10 @@ export function createComposeBox(ctx, sessionId, { head = () => null, openContro
   }
 
   async function startDictation() {
-    if (remote || !micReady()) return;
+    if (remote) return;
+    // The model is missing: the microphone (and Ctrl+Espaço) starts the download, as Baixar modelo does.
+    if (modelStartable()) return void startModelDownload();
+    if (!micReady()) return;
     voiceState = 'opening';
     dictation = null;
     caret = { start: textarea.selectionStart ?? (textarea.value ?? '').length, end: textarea.selectionEnd ?? textarea.selectionStart ?? (textarea.value ?? '').length };
@@ -623,7 +631,7 @@ export function createComposeBox(ctx, sessionId, { head = () => null, openContro
   function micButton() {
     const off = voiceOffReason();
     const ready = micReady();
-    return el('button', { type: 'button', class: 'sm-mic', disabled: !ready, title: off ? 'Ditado desligado' : modelDownload() ? 'Baixe o modelo de voz para ditar' : 'Ditar (Ctrl+Espaço)', 'aria-label': 'Ditar', onClick: () => void startDictation() }, icon('mic'));
+    return el('button', { type: 'button', class: 'sm-mic', disabled: !ready && !modelStartable(), title: off ? 'Ditado desligado' : modelStartable() ? 'Clique para baixar o modelo de voz e ativar o ditado' : modelDownload() ? 'Baixando o modelo de voz' : 'Ditar (Ctrl+Espaço)', 'aria-label': 'Ditar', onClick: () => void startDictation() }, icon('mic'));
   }
 
   function sendButton(label = 'Enviar', { busy = false, iconName = 'your-turn', enabled = sendable() } = {}) {

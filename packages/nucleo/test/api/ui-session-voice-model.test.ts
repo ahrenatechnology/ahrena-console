@@ -231,4 +231,32 @@ describe('voice model download in the compose box', () => {
     const b = await openBox();
     assert.match(statusText(b.node), /\(3,1 GB, uma vez só\)/);
   });
+
+  test('model missing (idle): the mic is enabled, explains itself, and a click starts the download', async () => {
+    script(missing(idle), missing(downloading(0)));
+    const { node } = await openBox();
+    const mic = one(node, '.sm-mic');
+    assert.equal(disabled(mic), false);
+    assert.match(String(mic!.getAttribute('title')), /Clique para baixar o modelo de voz e ativar o ditado/);
+    click(mic);
+    await until(() => posts.length === 1, 'the POST');
+    assert.deepEqual(posts, ['/api/transcription/model']);
+  });
+
+  test('model failed: the mic click retries; Ctrl+Espaço does the same', async () => {
+    script(missing({ state: 'failed', receivedBytes: 5, totalBytes: TOTAL, error: 'network_error' }), missing(downloading(5)));
+    const { node } = await openBox();
+    assert.equal(disabled(one(node, '.sm-mic')), false);
+    one(node, 'textarea')!.dispatchEvent({ type: 'keydown', ctrlKey: true, code: 'Space', key: ' ', preventDefault() {} });
+    await until(() => posts.length === 1, 'the POST from the shortcut');
+  });
+
+  test('while downloading, a mic click or the shortcut starts nothing new', async () => {
+    script(missing(downloading(1_000_000)));
+    const { node } = await openBox();
+    click(one(node, '.sm-mic'));
+    one(node, 'textarea')!.dispatchEvent({ type: 'keydown', ctrlKey: true, code: 'Space', key: ' ', preventDefault() {} });
+    await sleep(40);
+    assert.equal(posts.length, 0);
+  });
 });
