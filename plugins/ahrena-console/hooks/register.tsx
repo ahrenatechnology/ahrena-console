@@ -315,7 +315,7 @@ async function showBand($: Engine) {
   redraw($)
 }
 
-const reasonOf = (err: unknown) => (err as Error)?.message ?? String(err)
+const reasonOf = (err: unknown) => (err instanceof Error ? err.message : String(err))
 
 // Cada tick confere o painel antes de pedir: fechado ou não desenhado, o polling para;
 // aberto atrás de outra aba, o tick passa sem pedir nada.
