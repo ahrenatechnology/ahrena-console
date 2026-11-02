@@ -12,7 +12,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface as Engine, PromptOrigin, Register } from 'claude-code'
 
 import type { PanelDecision, DecisionScope, Reading, Panel, SessionQuestion, NeedsYou, View } from '../types'
-import { draw, decisionScopeOf, type Actions, type Elements } from './render'
+import { BAND_HIDDEN_TOAST, draw, drawAboveBand, decisionScopeOf, type Actions, type Elements } from './render'
 import { GRAPH_STATE, type GraphState } from './graph'
 import { UNDO_MS, decisionsText, statusLine, model, unarchiveRequest, needYouText, statusGlyph, tokens } from './format'
 import { LEGACY_CORE, discoverCore, ownerHeaders } from './discover'
@@ -266,6 +266,56 @@ async function refresh($: Engine, nextView?: Partial<View>, again = false) {
 async function ourPane($: Engine) {
   return (await $.ui.panes()).find((p) => p.id === PANE)
 }
+
+/**
+ * Abre o painel: o /console e o "Abrir" da faixa (#406) passam por aqui. Posto, o polling começa;
+ * aberto sem lugar agora (largura, superfície), o engine desenha quando houver, e o render começa
+ * o polling. Devolve o que o /console diz.
+ */
+async function openPane($: Engine): Promise<string> {
+  const opened = await $.ui.open({ id: PANE, title: 'Ahrena Console', focus: true })
+  // #406: Aberto, a faixa acima do prompt sai.
+  redraw($)
+  if (opened.isPlaced) {
+    startPolling($)
+    return 'Painel do Ahrena Console aberto.'
+  }
+  return `O painel do Ahrena Console fica aberto e aparece quando houver lugar (${opened.reason}).`
+}
+
+// #406: a faixa acima do prompt (P17). O "Ocultar" fica no $.store, que sobrevive a uma sessão
+// #406: nova; o toast do primeiro Ocultar, uma vez só, guardado por outra chave.
+const BAND_HIDDEN = 'aboveBandHidden'
+const BAND_TOAST_SHOWN = 'aboveBandToastShown'
+
+/** #406: O $.store não redesenha quem o lê: a faixa e o painel são desenhados de novo à mão. */
+function redraw($: Engine) {
+  try {
+    $.ui.invalidate('ui.render')
+  } catch {
+    // #406: sem o redesenho, a faixa muda na próxima vez que o engine a desenhar
+  }
+}
+
+async function isBandHidden($: Engine): Promise<boolean> {
+  return (await $.store.get(BAND_HIDDEN).catch(() => undefined)) === true
+}
+
+async function hideBand($: Engine) {
+  await $.store.set(BAND_HIDDEN, true)
+  if ((await $.store.get(BAND_TOAST_SHOWN).catch(() => undefined)) !== true) {
+    await $.store.set(BAND_TOAST_SHOWN, true)
+    $.ui.toast(BAND_HIDDEN_TOAST)
+  }
+  redraw($)
+}
+
+async function showBand($: Engine) {
+  await $.store.delete(BAND_HIDDEN)
+  redraw($)
+}
+
+const reasonOf = (err: unknown) => (err instanceof Error ? err.message : String(err))
 
 // Cada tick confere o painel antes de pedir: fechado ou não desenhado, o polling para;
 // aberto atrás de outra aba, o tick passa sem pedir nada.
@@ -572,25 +622,42 @@ export const register: Register = (on, options) => {
     return next(e)
   })
 
-  on('command.run', { command: 'console' }, async ($) => {
-    const opened = await $.ui.open({ id: PANE, title: 'Ahrena Console', focus: true })
-    if (opened.isPlaced) {
-      startPolling($)
-      return { text: 'Painel do Ahrena Console aberto.' }
-    }
-    // Aberto, mas sem lugar agora (largura, superfície): o engine desenha quando houver, e o
-    // render começa o polling. O motivo vem do engine.
-    return { text: `O painel do Ahrena Console fica aberto e aparece quando houver lugar (${opened.reason}).` }
-  })
+  on('command.run', { command: 'console' }, async ($) => ({ text: await openPane($) }))
 
-  // Fechou (a pessoa, o plugin ou um unload): o polling para na hora.
+  // Fechou (a pessoa, o plugin ou um unload): o polling para na hora, e a faixa volta (#406).
   on('ui.close', async ($, e, next) => {
     try {
       if (e.id === PANE) stopPolling($)
     } catch {
       // parar nunca deve impedir o painel de fechar
     }
-    return next(e)
+    const closed = await next(e)
+    if (e.id === PANE) redraw($)
+    return closed
+  })
+
+  // #406 (P17): a faixa acima do prompt, só no Desktop, com o painel fechado, sem a pesquisa e sem
+  // o "Ocultar". Não pede nada ao núcleo (decisão 0004, #81): o texto é fixo, e só o "Abrir" começa o polling.
+  on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
+    if (e.surface !== 'desktop' || e.props.hasSurvey) return next(e)
+    if (await isBandHidden($)) return next(e)
+    // #406: Aberto mas sem lugar (isPlaced: false), o painel não está à vista: a faixa fica.
+    if ((await ourPane($).catch(() => undefined))?.isPlaced) return next(e)
+    const el = $.ui.resolve(e) as unknown as Elements
+    const band = drawAboveBand(el, e.props.bodyColumns, {
+      open: () =>
+        void openPane($).catch((err: unknown) => $.ui.toast(`Não deu para abrir o painel do Ahrena Console: ${reasonOf(err)}.`)),
+      hide: () => void hideBand($).catch((err: unknown) => $.ui.toast(`Não deu para ocultar o atalho: ${reasonOf(err)}.`)),
+    })
+    // #406: A faixa dos outros plugins (e a do engine) fica: a nossa vem embaixo, junto do prompt.
+    const others = await next(e)
+    const { Box } = el
+    return (
+      <Box flexDirection="column">
+        {others}
+        {band}
+      </Box>
+    )
   })
 
   // #140: a pergunta com que o turno termina, direto do engine, sem passar pelo núcleo. Só a do
@@ -667,6 +734,7 @@ export const register: Register = (on, options) => {
     const el = $.ui.resolve(e) as unknown as Elements
     const v = normalizeView(await read($, view))
     const q = ((await read($, question)) ?? null) as SessionQuestion | null
+    const bandHidden = await isBandHidden($)
     columns = e.props.bodyColumns ?? 38
     bodyRows = (e.props as { scroll?: { bodyRows?: number } }).scroll?.bodyRows
     return draw({
@@ -678,6 +746,7 @@ export const register: Register = (on, options) => {
       lines: (e.props as { scroll?: { bodyRows?: number } }).scroll?.bodyRows,
       now,
       core,
+      bandHidden,
       actions: {
         showNeedYou: () => void changeView($, { screen: 'need-you' }),
         close: () => void changeView($, { screen: 'session' }),
@@ -706,6 +775,7 @@ export const register: Register = (on, options) => {
         showPrs: () => void changeView($, { screen: 'prs' }),
         reply: (message) => void reply($, message),
         unarchive: (f) => void unarchive($, f),
+        showBand: () => void showBand($).catch((err: unknown) => $.ui.toast(`Não deu para mostrar o atalho: ${reasonOf(err)}.`)),
       },
     })
   })
