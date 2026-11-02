@@ -904,7 +904,7 @@ body.captura[data-width="1100"] .width-col[data-w="1440"], body.captura[data-wid
 .pn-options .pn-option-list .on { background: var(--raised); font-weight: 600; }
 
 /* ---------- the band above the prompt and the way back (P17 and P18, issue #406) ---------- */
-.ap-fora { display: flex; flex-direction: column; font-family: var(--font-mono); font-size: 12.5px; }
+.ap-frame { display: flex; flex-direction: column; font-family: var(--font-mono); font-size: 12.5px; }
 .ap-app { display: flex; align-items: stretch; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; color: var(--text); line-height: 1.5; }
 .ap-chat { flex: none; box-sizing: border-box; display: flex; flex-direction: column; gap: 1ch; padding: 1.4ch 2ch 1.5ch; }
 .ap-msg { font-family: var(--font-sans); font-size: 12.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -3427,7 +3427,7 @@ function aboveChat(cols, { band = false, survey = false, toast = false } = {}) {
     </div>`
 }
 function aboveFrame(label, cols, opts, caption, paneOpen) {
-  return `<div class="ap-fora" style="width:calc(${cols}ch + ${paneOpen ? '38ch + 1px' : '0px'} + 2px)"><p class="rotulo">${label}</p>
+  return `<div class="ap-frame" style="width:calc(${cols}ch + ${paneOpen ? '38ch + 1px' : '0px'} + 2px)"><p class="rotulo">${label}</p>
     <div class="ap-app">${aboveChat(cols, opts)}${paneOpen ? `<div class="ap-pane"><div class="aba"><b>Ahrena Console</b><span>painel da sessão</span><span class="x">${ic('x')}</span></div><div class="pn-placeholder">… o painel do P1 …</div></div>` : ''}</div>
     <div class="ap-caption">${caption}</div></div>`
 }
