@@ -105,6 +105,35 @@ function readinessProof(): { dir: string; file: string; value: string; remove: (
   return { dir, file, value, remove: () => rmSync(dir, { recursive: true, force: true }) };
 }
 
+/**
+ * The body of a readiness answer, read only as far as the proof can be: a listener that is not our
+ * child may send an endless body, and the core must not buffer it. Null when the answer cannot be the
+ * proof (a declared length that differs, or more bytes than the proof has); the rest is cancelled.
+ */
+export async function readProofBody(r: Response, expectedLength: number): Promise<string | null> {
+  const declared = r.headers.get('content-length');
+  if (declared !== null && Number(declared) !== expectedLength) {
+    await r.body?.cancel().catch(() => {});
+    return null;
+  }
+  if (!r.body) return '';
+  const reader = r.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    while (total <= expectedLength) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+      total += value.byteLength;
+    }
+  } finally {
+    await reader.cancel().catch(() => {});
+  }
+  if (total > expectedLength) return null;
+  return Buffer.concat(chunks).toString('utf8');
+}
+
 /** What whisper.cpp prints for silence and for sounds, which are not words. */
 const NOISE = /\[(?:BLANK_AUDIO|MUSIC|NOISE|SILENCE)\]|\((?:music|silence)\)/gi;
 
@@ -199,7 +228,10 @@ export function createTranscription(opts: TranscriptionOptions): Transcription {
         if (gone) throw new TranscriptionError('start_failed', 'o whisper-server não subiu');
         try {
           const r = await doFetch(`${url}/${proof.file}`, { signal: AbortSignal.timeout(2000) });
-          if (r.ok && (await r.text()) === proof.value) {
+          if (r.ok && (await readProofBody(r, proof.value.length)) === proof.value) {
+            // The child has served the file; nothing reads the folder again, so it need not outlive
+            // this moment (a crash of the core would otherwise leave it in tmpdir).
+            removeProof();
             base = url;
             return url;
           }
