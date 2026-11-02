@@ -66,6 +66,7 @@ async function openBox() {
   const ctx = {
     params: { id: 's1' },
     read: async (route: string) => {
+      if (route.includes('/messages/')) return { messageId: 'm1', state: 'sending' };
       if (route.includes('/messaging')) return { available: true, reason: null, processes: 1, entrypoint: 'claude-desktop', remoteControl: false, account: null };
       assert.equal(route, '/api/transcription');
       getCount++;
@@ -74,6 +75,7 @@ async function openBox() {
       return answer;
     },
     write: async (route: string, _body: unknown, _options?: object) => {
+      if (route.endsWith('/messages')) return { messageId: 'm1', state: 'sending' };
       posts.push(route);
       return postAnswer();
     },
@@ -257,6 +259,34 @@ describe('voice model download in the compose box', () => {
     click(one(node, '.sm-mic'));
     one(node, 'textarea')!.dispatchEvent({ type: 'keydown', ctrlKey: true, code: 'Space', key: ' ', preventDefault() {} });
     await sleep(40);
+    assert.equal(posts.length, 0);
+  });
+
+  test('the mic label follows its title: the download action, not Ditar', async () => {
+    script(missing(idle), missing(downloading(1_000_000)));
+    const { node } = await openBox();
+    const mic = one(node, '.sm-mic')!;
+    assert.equal(mic.getAttribute('aria-label'), 'Clique para baixar o modelo de voz e ativar o ditado');
+    click(mic);
+    await until(() => /Baixando/.test(String(one(node, '.sm-mic')!.getAttribute('aria-label'))), 'the busy label');
+    assert.equal(one(node, '.sm-mic')!.getAttribute('aria-label'), one(node, '.sm-mic')!.getAttribute('title'));
+  });
+
+  test('the idle model line is no live region', async () => {
+    script(missing(idle));
+    const { node } = await openBox();
+    assert.equal(one(node, '.sm-status')?.getAttribute('role'), null);
+  });
+
+  test('a message in flight holds the mic, model missing or not', async () => {
+    script(missing(idle));
+    const { node } = await openBox();
+    (one(node, 'textarea') as any).value = 'oi';
+    one(node, 'textarea')!.dispatchEvent({ type: 'input' });
+    click(button(node, 'Enviar'));
+    await until(() => disabled(one(node, '.sm-mic')), 'the mic to be held');
+    click(one(node, '.sm-mic'));
+    await sleep(30);
     assert.equal(posts.length, 0);
   });
 });

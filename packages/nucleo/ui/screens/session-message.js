@@ -369,7 +369,9 @@ export function createComposeBox(ctx, sessionId, { head = () => null, openContro
     return null;
   }
   /** The microphone can be pressed: the core and the browser can do it, and nothing else holds the box. */
-  const micReady = () => transcription?.available === true && !voiceOffReason() && voiceState === 'idle' && !sending && message?.state !== 'sending' && !foreign;
+  /** Nothing else holds the box: no dictation step, no message on its way. */
+  const boxFree = () => voiceState === 'idle' && !sending && message?.state !== 'sending' && !foreign;
+  const micReady = () => transcription?.available === true && !voiceOffReason() && boxFree();
 
   async function readTranscription() {
     try {
@@ -398,7 +400,7 @@ export function createComposeBox(ctx, sessionId, { head = () => null, openContro
   /** The model can be asked for now: missing, nothing downloading, the box and the browser free. */
   const modelStartable = () => {
     const d = modelDownload();
-    return !!d && (d.state === 'idle' || d.state === 'failed') && !modelRequested && !voiceOffReason() && voiceState === 'idle' && !sending && !foreign;
+    return !!d && (d.state === 'idle' || d.state === 'failed') && !modelRequested && !voiceOffReason() && boxFree();
   };
   const modelBusy = () => modelDownload()?.state === 'downloading' || modelDownload()?.state === 'verifying';
 
@@ -475,7 +477,7 @@ export function createComposeBox(ctx, sessionId, { head = () => null, openContro
       const text = known ? `${megabytes(d.receivedBytes)} de ${megabytes(d.totalBytes)} (${percent}%)` : `${megabytes(d.receivedBytes)} até agora`;
       return statusLine({ kind: 'busy', icon: 'wall-loader', title: 'Baixando o modelo de voz:', text, live: false }, modelBar(percent));
     }
-    return statusLine({ kind: 'info', icon: 'info', title: 'O ditado precisa baixar o modelo de voz', text: `(${d.totalBytes > 0 ? megabytes(d.totalBytes) : '1,6 GB'}, uma vez só).` }, download('Baixar modelo', 'an-download'));
+    return statusLine({ kind: 'info', icon: 'info', title: 'O ditado precisa baixar o modelo de voz', text: `(${d.totalBytes > 0 ? megabytes(d.totalBytes) : '1,6 GB'}, uma vez só).`, live: false }, download('Baixar modelo', 'an-download'));
   }
 
   function modelBar(percent) {
@@ -631,7 +633,8 @@ export function createComposeBox(ctx, sessionId, { head = () => null, openContro
   function micButton() {
     const off = voiceOffReason();
     const ready = micReady();
-    return el('button', { type: 'button', class: 'sm-mic', disabled: !ready && !modelStartable(), title: off ? 'Ditado desligado' : modelStartable() ? 'Clique para baixar o modelo de voz e ativar o ditado' : modelDownload() ? 'Baixando o modelo de voz' : 'Ditar (Ctrl+Espaço)', 'aria-label': 'Ditar', onClick: () => void startDictation() }, icon('mic'));
+    const label = off ? 'Ditado desligado' : modelStartable() ? 'Clique para baixar o modelo de voz e ativar o ditado' : modelDownload() ? 'Baixando o modelo de voz' : 'Ditar (Ctrl+Espaço)';
+    return el('button', { type: 'button', class: 'sm-mic', disabled: !ready && !modelStartable(), title: label, 'aria-label': label.startsWith('Ditar') ? 'Ditar' : label, onClick: () => void startDictation() }, icon('mic'));
   }
 
   function sendButton(label = 'Enviar', { busy = false, iconName = 'your-turn', enabled = sendable() } = {}) {
