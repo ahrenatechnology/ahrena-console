@@ -28,6 +28,7 @@ on:
     paths:
       - .github/workflows/app-release.yml
       - apps/desktop/src-tauri/tauri.conf.json
+      - apps/desktop/scripts/build-whisper-server.sh
 
 permissions:
   contents: read
@@ -148,6 +149,24 @@ jobs:
       - name: Dependências do app
         working-directory: apps/desktop
         run: npm ci
+
+      # O whisper-server do ditado (decisão 0019, item 10, #405): compilado aqui, de uma tag fixa
+      # (packages/nucleo/src/transcription/whisper-cpp.json), e levado no .app como recurso. O cache
+      # tem a chave da tag e do script; o runner macOS é arm64 e já traz o cmake. Só o app aarch64 o leva:
+      # o x64 sobe sem ele, e o ditado nele usa o `voice install`.
+      - name: Cache do whisper-server
+        if: matrix.arquitetura == 'aarch64'
+        id: whisper-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: apps/desktop/src-tauri/resources/whisper/whisper-server
+          key: whisper-server-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('packages/nucleo/src/transcription/whisper-cpp.json', 'apps/desktop/scripts/build-whisper-server.sh') }}
+
+      - name: Build do whisper-server
+        if: matrix.arquitetura == 'aarch64' && steps.whisper-cache.outputs.cache-hit != 'true'
+        run: |
+          command -v cmake >/dev/null || brew install cmake
+          apps/desktop/scripts/build-whisper-server.sh
 
       - name: Build (e release, se for o caso)
         id: tauri

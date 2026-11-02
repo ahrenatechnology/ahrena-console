@@ -248,6 +248,21 @@ pub fn core_dir(resources: Option<PathBuf>) -> PathBuf {
     PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../../../packages/nucleo"))
 }
 
+/// The `whisper-server` the app ships (decision 0019 item 10), relative to the app's resources.
+pub const BUNDLED_WHISPER: &str = "whisper/whisper-server";
+
+/// The value for `AHRENA_CONSOLE_WHISPER_BIN` of the core the app starts: the bundled binary, only
+/// when it exists and the person has not set the variable (theirs wins, even empty).
+pub fn whisper_bin(bundled: Option<PathBuf>, bundled_exists: bool, already_set: Option<&str>) -> Option<PathBuf> {
+    bundled.filter(|_| bundled_exists && already_set.is_none())
+}
+
+/// The bundled `whisper-server` for the app's resources folder, if it is there.
+pub fn bundled_whisper(resources: Option<&Path>) -> Option<PathBuf> {
+    let bin = resources?.join(BUNDLED_WHISPER);
+    whisper_bin(Some(bin.clone()), bin.is_file(), env_var("AHRENA_CONSOLE_WHISPER_BIN").as_deref())
+}
+
 /// Debug override for the tray screenshots: `AHRENA_CONSOLE_DEMO_PORT`, the port of a simulator
 /// `--demo`. Set, the app starts no core and only
 /// shows that one. Never set by the app itself.
@@ -257,7 +272,7 @@ pub fn demo_port() -> Option<u16> {
 
 /// Starts (or, within its own installation, adopts) the app's core. `data_dir`: the app's data
 /// folder, from Tauri (`~/Library/Application Support/dev.ahrena.console`).
-pub fn start_own_core(core: &Path, data_dir: Option<&Path>) -> Outcome {
+pub fn start_own_core(core: &Path, data_dir: Option<&Path>, whisper: Option<&Path>) -> Outcome {
     let cli = core.join(OWNER_CLI);
     match choose(demo_port(), find_node(), cli.is_file()) {
         Plan::Watch { port } => {
@@ -274,6 +289,9 @@ pub fn start_own_core(core: &Path, data_dir: Option<&Path>) -> Outcome {
             command.args(start_args(&cli, data_dir, std::process::id())).current_dir(core).stdin(Stdio::null()).stderr(Stdio::null());
             for name in FOREIGN_ENV {
                 command.env_remove(name);
+            }
+            if let Some(bin) = whisper {
+                command.env("AHRENA_CONSOLE_WHISPER_BIN", bin);
             }
             match command.output() {
                 Ok(out) => read_start(&String::from_utf8_lossy(&out.stdout), data_dir, bundled_version(core).as_deref()),
@@ -309,6 +327,18 @@ mod tests {
     #[test]
     fn without_the_bundled_core_it_is_stopped() {
         assert!(matches!(choose(None, node(), false), Plan::Stopped { no_node: false, .. }));
+    }
+
+    #[test]
+    fn the_bundled_whisper_is_used_only_when_it_exists_and_the_person_set_nothing() {
+        let bin = || Some(PathBuf::from("/App/Contents/Resources/whisper/whisper-server"));
+        assert_eq!(whisper_bin(bin(), true, None), bin());
+        assert_eq!(whisper_bin(bin(), false, None), None, "the binary is not in the app");
+        assert_eq!(whisper_bin(bin(), true, Some("/opt/whisper-server")), None, "the person's variable wins");
+        assert_eq!(whisper_bin(bin(), true, Some("")), None, "set, even empty, is the person's choice");
+        assert_eq!(whisper_bin(None, true, None), None);
+        assert_eq!(bundled_whisper(None), None);
+        assert_eq!(bundled_whisper(Some(Path::new("/nowhere"))), None);
     }
 
     #[test]

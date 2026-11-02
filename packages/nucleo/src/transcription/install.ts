@@ -7,17 +7,21 @@
 
 import { execFileSync, spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { chmodSync, copyFileSync, createReadStream, createWriteStream, existsSync, mkdirSync, renameSync, rmSync } from 'node:fs';
+import { chmodSync, copyFileSync, createReadStream, createWriteStream, existsSync, mkdirSync, readFileSync, renameSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { MODEL_NAME, voiceFolder } from './whisper.ts';
 
-/** The whisper.cpp release the install builds. Moving it is a decision: the server's flags can change. */
-export const WHISPER_CPP_TAG = 'v1.9.5';
-/** The commit the tag points at: the clone is refused when the tag moved. */
-export const WHISPER_CPP_COMMIT = 'd1be6fde11ac6e0407606b4e42fe72d34add8037';
-export const WHISPER_CPP_REPO = 'https://github.com/ggml-org/whisper.cpp';
+/**
+ * The whisper.cpp release the install builds, in `whisper-cpp.json` (the desktop app's CI build,
+ * apps/desktop/scripts/build-whisper-server.sh, reads the same file). Moving it is a decision: the
+ * server's flags can change. The commit is the one the tag points at: the clone is refused when the tag moved.
+ */
+const PIN = JSON.parse(readFileSync(new URL('./whisper-cpp.json', import.meta.url), 'utf8')) as { tag: string; commit: string; repo: string };
+export const WHISPER_CPP_TAG: string = PIN.tag;
+export const WHISPER_CPP_COMMIT: string = PIN.commit;
+export const WHISPER_CPP_REPO: string = PIN.repo;
 export const CMAKE_VERSION = '3.31.6';
 /** SHA-256 of Kitware's `cmake-<version>-linux-<arch>.tar.gz` (from the release's `-SHA-256.txt`). */
 export const CMAKE_SHA256: Record<string, string> = {
