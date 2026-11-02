@@ -902,6 +902,33 @@ body.captura[data-width="1100"] .width-col[data-w="1440"], body.captura[data-wid
 .pn-options .pn-option-list { border: 1px solid var(--border); border-radius: 8px; background: var(--bg); padding: 4px 0; width: 30ch; }
 .pn-options .pn-option-list div { padding: 2px 1.2ch; white-space: nowrap; }
 .pn-options .pn-option-list .on { background: var(--raised); font-weight: 600; }
+
+/* ---------- the band above the prompt and the way back (P17 and P18, issue #406) ---------- */
+.ap-frame { display: flex; flex-direction: column; font-family: var(--font-mono); font-size: 12.5px; }
+.ap-app { display: flex; align-items: stretch; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; color: var(--text); line-height: 1.5; }
+.ap-chat { flex: none; box-sizing: border-box; display: flex; flex-direction: column; gap: 1ch; padding: 1.4ch 2ch 1.5ch; }
+.ap-msg { font-family: var(--font-sans); font-size: 12.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ap-msg b { color: var(--text); font-weight: 500; }
+.ap-band { display: flex; align-items: center; gap: 2ch; height: 1.5em; padding: 0 1ch; border-radius: 6px; background: var(--raised); white-space: nowrap; overflow: hidden; }
+.ap-band .ap-label { color: var(--accent-text); font-weight: 600; }
+.ap-band .ap-hint { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.ap-band .ap-end { margin-left: auto; }
+.pn-link.ap-dim { color: var(--muted); }
+.ap-prompt { display: flex; flex-direction: column; gap: .6ch; border: 1px solid var(--border); border-radius: 10px; padding: .9ch 1.2ch .7ch; background: var(--bg); font-family: var(--font-sans); font-size: 12.5px; }
+.ap-prompt .ap-ph { color: var(--muted); height: 2.6em; }
+.ap-prompt .ap-bar { display: flex; align-items: center; gap: 1.5ch; color: var(--muted); font-size: 11px; white-space: nowrap; }
+.ap-prompt .ap-bar .ap-send { margin-left: auto; width: 22px; height: 22px; border-radius: 6px; background: var(--raised); border: 1px solid var(--border); display: grid; place-items: center; }
+.ap-survey { border: 1px dashed var(--border); border-radius: 10px; padding: .7ch 1.2ch; color: var(--muted); font-family: var(--font-sans); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ap-pane { flex: none; width: 38ch; border-left: 1px solid var(--border); display: flex; flex-direction: column; }
+.ap-pane .aba { display: flex; align-items: center; gap: 8px; padding: 7px 12px; background: var(--bg); border-bottom: 1px solid var(--border); font-family: var(--font-sans); font-size: 11.5px; color: var(--muted); }
+.ap-pane .aba b { color: var(--text); font-weight: 500; } .ap-pane .aba .x { margin-left: auto; }
+.ap-pane .pn-placeholder { margin: 1ch 2ch; }
+.ap-caption { margin-top: 6px; font-family: var(--font-sans); font-size: 11px; color: var(--muted); white-space: normal; }
+.ap-caption b { color: var(--status-completed-text); font-weight: 500; }
+.ap-toast { align-self: flex-end; display: flex; align-items: center; gap: 1ch; padding: .6ch 1.2ch; border: 1px solid var(--border); border-radius: 8px; background: var(--raised); font-family: var(--font-sans); font-size: 12px; box-shadow: 0 4px 14px rgba(0,0,0,.18); white-space: nowrap; }
+.ap-toast .ap-toast-x { color: var(--muted); margin-left: 1ch; }
+.ap-show-row { display: flex; align-items: center; gap: 1ch; padding: 0 1.2ch; white-space: nowrap; }
+.ap-show-row .pn-link { margin-left: auto; }
 /* ---------- the app's update notice (C77 to C80, A11, A12, issue #330) ---------- */
 .up-banner { display: flex; gap: 12px; align-items: center; padding: 12px 14px; border-radius: 12px; font-size: 12.5px; min-width: 0;
   background: color-mix(in srgb, var(--accent) 10%, var(--surface)); border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--border)); }
@@ -3380,6 +3407,43 @@ function needYouHover(offline) {
   return `<div class="fila pn-below">${pane(38, body, st, 'a dica ocupa as linhas de baixo do pé, como hoje · <b>sem estouro</b>')}${pane(121, body, st, 'a dica numa linha só · <b>sem estouro</b>')}</div>`
 }
 
+// P17 and P18 · the band above the prompt (#406). The mod draws it with ui.render on { component: 'AbovePrompt' },
+// only on the desktop surface, only while the pane is closed and the prompt shows no survey. It is one row with no
+// border (a bordered Box gains about one more row on the Desktop), and its two Buttons are `plain`: the native primary
+// Button is a ~28 px box, taller than the row. No live data: with the pane closed the mod asks the core nothing new
+// (decision 0004, #81), so the band never shows a count.
+function aboveBand(wide) {
+  return `<div class="ap-band"><span class="ap-label">Ahrena Console</span>${wide ? '<span class="c-muted ap-hint">painel da sessão fechado · o /console também abre</span>' : ''}<span class="pn-link">Abrir</span><span class="pn-link ap-dim ap-end">Ocultar</span></div>`
+}
+function aboveChat(cols, { band = false, survey = false, toast = false } = {}) {
+  const wide = cols > 60
+  return `<div class="ap-chat" style="width:${cols}ch">
+      ${toast ? `<div class="ap-toast">${ic('eye-off')}<span>Atalho oculto · para mostrar de novo, abra o painel</span><span class="ap-toast-x">${ic('x')}</span></div>` : ''}
+      <div class="ap-msg"><b>Claude</b> · ${wide ? 'Pronto: a migração do esquema de pedidos passou nos testes. Abro o PR?' : 'Pronto: a migração passou. Abro o PR?'}</div>
+      ${survey ? `<div class="ap-survey">${wide ? 'a pesquisa do app (Como está o Claude Code nesta sessão?) · e.props.hasSurvey' : 'a pesquisa do app · hasSurvey'}</div>` : ''}
+      ${band ? aboveBand(wide) : ''}
+      <div class="ap-prompt"><div class="ap-ph">Responda ao Claude…</div>
+        <div class="ap-bar">${ic('plus')}<span>Opus 5.5</span>${wide ? '<span>· motor-de-regras</span>' : ''}<span class="ap-send">${ic('arrow-up')}</span></div></div>
+    </div>`
+}
+function aboveFrame(label, cols, opts, caption, paneOpen) {
+  return `<div class="ap-frame" style="width:calc(${cols}ch + ${paneOpen ? '38ch + 1px' : '0px'} + 2px)"><p class="rotulo">${label}</p>
+    <div class="ap-app">${aboveChat(cols, opts)}${paneOpen ? `<div class="ap-pane"><div class="aba"><b>Ahrena Console</b><span>painel da sessão</span><span class="x">${ic('x')}</span></div><div class="pn-placeholder">… o painel do P1 …</div></div>` : ''}</div>
+    <div class="ap-caption">${caption}</div></div>`
+}
+function aboveStates() {
+  return `<div class="fila">${aboveFrame('1 · painel fechado · estreito · 38 colunas', 38, { band: true }, 'uma linha, ~19 px no Desktop, sem borda · rótulo, Abrir e Ocultar em 30 colunas · <b>sem estouro</b>')}${aboveFrame('1 · painel fechado · largo · 121 colunas', 121, { band: true }, 'a dica cinza só no largo, e corta pelo fim antes dos botões · <b>sem estouro</b>')}</div>
+  <div class="fila pn-below">${aboveFrame('2 · depois de Ocultar', 72, { toast: true }, 'a faixa sai e não volta em sessão nova (fica no $.store) · o toast nativo do engine aparece <b>uma vez só</b>, no primeiro Ocultar · o /console continua abrindo o painel · para mostrar de novo, o P18')}${aboveFrame('3 · painel aberto', 72, {}, 'a faixa sai enquanto o painel está aberto; ao fechar o painel (ui.close), ela volta', true)}${aboveFrame('4 · o prompt mostra a pesquisa', 72, { survey: true }, 'com e.props.hasSurvey a faixa não aparece: a pesquisa tem o lugar · fora do desktop (terminal), next(e) e nada muda')}</div>`
+}
+// P18 · the way back after "Ocultar": one plain Button at the end of the pane, only while the band is hidden.
+function paneShowBand() {
+  const body = wide => `${pnServidor()}<div class="pn-sec">Esta sessão<span class="r">auto · 5 s</span></div>
+      <div class="pn-placeholder">… os seis cards do P1 …</div>${pnDec(4, 0)}${pnPe({ precisam: 2 }, wide)}
+      <div class="ap-show-row">${wide ? '<span class="c-muted">o atalho acima do prompt está oculto</span>' : ''}<span class="pn-link">Mostrar atalho acima do prompt</span></div>`
+  const st = '● Ativa · 2 precisam de você'
+  return `<div class="fila">${pane(38, body, st, 'uma linha a mais, sem borda, só enquanto o atalho está oculto · 30 col · <b>sem estouro</b>')}${pane(121, body, st, 'à direita, como os outros pés do painel · <b>sem estouro</b>')}</div>`
+}
+
 // ---------- cloud profiles per machine (C66 and C67, #277): each núcleo reads its own machine ----------
 // rows: [cloud, session, profiles, pillHtml, actionHtml]
 const cpTable = rows => `<table class="tabela"><thead><tr><th>Nuvem</th><th>Sessão</th><th>Perfis</th><th>Estado</th><th></th></tr></thead><tbody>
@@ -4316,7 +4380,7 @@ const dkConfirmFlow = () => `<div class="tl-flow">
   <div class="tl-step"><div class="rotulo">6 · A stack mudou entre abrir e confirmar · 409, nada rodou · 1100 px</div>${dkWrap(1100, true, dkStale, 640)}</div>
 </div>`
 
-=======
+// =====================================================================
 // WORKFLOWS: THE PR LOOP, THE TREE BETWEEN SESSIONS, NO CAP OF 500 (C81 to C84, issue #332).
 // The loop is read from what each subagent was asked and what it answered: the PR comes from the
 // subagent's task (`#320`, `PR #320`, the PR URL) and, when there is one, from its branch; the same rule
@@ -4586,6 +4650,22 @@ const TELAS = [
        'No Select, a opção Workstation diz "Workstation · sem conexão" no próprio rótulo (o Select do mod recebe só valor e rótulo, sem cor por opção) e continua escolhível: escolhida, a lista fica vazia com a mesma linha neutra.',
        'Sem ícone na linha neutra, nas duas larguras: o mod desenha texto (o <code>wifi-off</code> é do console, C48).',
        'O mod não reconecta nem sobe o túnel: o link leva ao console, como no P14.']) },
+  { id: 'above-prompt-band', cod: 'P17', nome: 'Faixa acima do prompt, com o painel fechado', sub: 'Feature O Ahrena Console à vista com o painel fechado (#406). Uma linha acima do prompt: "Ahrena Console", Abrir (o mesmo que o /console) e Ocultar. Some depois de Ocultar, com o painel aberto e quando o prompt mostra a pesquisa. Não mostra dado do núcleo.', html: aboveStates,
+    n: N(['Nada: o CCAM não vive dentro do Claude Code. A ideia vem do pedido de um ícone na barra dos painéis, que a API de mods não tem.'],
+      ['<b>Uma linha, sem borda</b>: o mod desenha um Box em <code>ui.render</code> de <code>{ component: \'AbovePrompt\' }</code>. Box com borda ganha respiro no Desktop (~36 px, duas linhas); o fundo levemente elevado separa a faixa da conversa sem isso.',
+       '<b>Abrir e Ocultar são Button <code>plain</code></b>, Ocultar com <code>dimColor</code>: o botão primário nativo é uma caixa de ~28 px, mais alta que a linha. Abrir fica colado ao rótulo; Ocultar, na ponta.',
+       'O rótulo usa o laranja do título do painel (#f47720). Sem o logo: um Svg de uma linha disputaria com o texto e não diz mais que o nome.',
+       '<b>Sem dado vivo</b> (decisão 0004, #81): com o painel fechado, nenhuma consulta nova ao núcleo. Nada de "N precisam de você" na faixa; o texto é fixo. A busca de ordens continua a única consulta sempre ligada.',
+       'No largo, uma dica cinza diz que o painel está fechado e que o /console também abre; ela corta pelo fim antes dos botões. No estreito, só o rótulo e os botões (30 colunas).',
+       'Aparece só na superfície <code>desktop</code>, com o painel fechado e sem <code>hasSurvey</code>. No terminal, <code>next(e)</code>.',
+       'Ocultar grava no <code>$.store</code> e vale para as sessões novas. Não pede confirmação: voltar é um clique no painel (P18).',
+       '<b>O toast "Atalho oculto · para mostrar de novo, abra o painel" aparece uma vez só</b>, no primeiro Ocultar, pelo toast nativo do engine. Uma marca no <code>$.store</code> guarda que ele já foi mostrado; um Ocultar depois de Mostrar (P18) não o repete. Sem ele, a volta só fica à vista com o painel aberto.']) },
+  { id: 'pane-show-band', cod: 'P18', nome: 'Mostrar a faixa de novo, pelo painel', sub: 'Feature O caminho de volta depois de Ocultar (#406). Com a faixa oculta, o painel ganha uma linha no fim: "Mostrar atalho acima do prompt". Clicada, a linha some e a faixa volta da próxima vez que o painel fechar.', html: paneShowBand,
+    n: N(['Nada.'],
+      ['Um Button <code>plain</code> numa linha sem borda, no fim do painel, depois de "N precisam de você". Só aparece enquanto a faixa está oculta: quem nunca ocultou não vê nada novo.',
+       'No fim, e não no cabeçalho (o card do servidor): o cabeçalho é estado do núcleo, e a linha não é sobre o núcleo. No fim ela não empurra os cards.',
+       'No estreito, só o botão (30 colunas); no largo, à esquerda diz que o atalho está oculto e o botão vai para a direita, como "Ver" nos outros pés.',
+       'O painel está aberto quando se clica: a faixa não aparece na hora (P17, estado 3), só quando o painel fechar.']) },
   { cap: 'app', titulo: 'App de bandeja (Tauri)', desc: 'O app da decisão 0005 (issues #87 e #88): bandeja, menu e notificação nativos do macOS, e a janela com a interface que o núcleo serve.' },
   { id: 'app-bandeja-0', cod: 'A1', nome: 'Bandeja sem ninguém precisando de você', sub: 'Ninguém precisa de você: só o ícone na barra de menus. As ociosas aparecem só como contagem cinza no resumo.', html: () => `<div class="fila"><div class="mac">${APP.zero()}</div></div>`,
     n: N(['O menu da bandeja (<code>desktop/src/tray.ts</code>): título, "Listening on :4820" com ponto verde, o resumo, Open Dashboard ⌘O, Open at Login, Quit ⌘Q.', 'Ícone template preto, que o macOS pinta.'], ['Sem Restart Server, Show Logs e Open in Browser: o app adota o núcleo, não é dono dele.', 'O resumo fica no que pede ação (precisam de você, com erro), sem "eventos de hoje".']) },
@@ -4935,8 +5015,9 @@ function montar() {
     <li><b>O painel do mod com todas as máquinas (#262, a aprovar):</b> "Ver" lista as sessões deste Mac e da Workstation juntas, por idade; o card remoto diz "Workstation" no começo da linha de meta, no lugar da relação, e abre o detalhe no console; um Select só junta a Família e o filtro (Família · Todas as máquinas · Esta máquina · Workstation), na linha de baixo no estreito; sem conexão, as sessões de lá saem e uma linha neutra diz desde quando, com "resolver no console ›"; "N precisam de você" soma as máquinas e a dica divide por máquina e por conta (P15, P16).</li>
     <li><b>Workflows: o laço por PR, a árvore entre sessões e sem o corte de 500 (#332, a aprovar):</b> a aba Workflow do detalhe agrupa por PR (C81, C82) e a página Workflows ganha a árvore entre sessões (C83) e o período com páginas (C84). Escolhas em aberto, cada uma com a recomendação no PR: (1) de onde vem o PR de um subagente: tarefa, depois branch, depois issue; (2) o que conta como rodada e como pedido de mudança: cada chamada do Argos, e o veredito na última linha da resposta; (3) quando o laço "parou": sessão concluída ou abandonada com pedido de mudança sem resposta; (4) a aba do detalhe: "Por PR" como padrão, "Todos os nós" mantém o grafo de hoje; (5) a árvore: aba na página Workflows e faixa Aberta por / Abriu no detalhe; (6) o fim do corte: período de 30 dias por padrão, páginas de 50, ativas sempre dentro, KPIs sobre o período inteiro; (7) uma tarefa com dois PRs fica no primeiro, com o outro em chip.</li>
     <li><b>Mural ao vivo: a que espera por mim fica, Paradas e as filhas (#333, a aprovar):</b> a sessão não arquivada que pede algo continua no mural sem o limite de 180 min, a faixa Paradas guarda as paradas sem pedido, e a líder mostra as filhas recolhidas, com a que precisa de você no topo (C85 a C87). Escolhas em aberto, cada uma com a recomendação no PR: (1) o que é "pediu algo"; (2) onde mora a faixa Paradas; (3) a filha que precisa de mim: card próprio e dentro da líder; (4) a líder aberta ocupa a linha inteira; (5) o resumo da líder conta a árvore toda; (6) mãe arquivada com filha viva; (7) Paradas pagina de 7 em 7.</li>
-    <li><b>Backlog:</b> Feed de atividade, Analytics completo, Workflows e o detalhe com o grafo de agentes estavam para depois da entrega. Entraram aqui a pedido do dono; o PM decide se viram itens da 0.0.1.</li></ol></section>`
+    <li><b>A faixa acima do prompt (#406, aprovado):</b> com o painel fechado, na superfície desktop, uma linha acima do prompt com "Ahrena Console", Abrir e Ocultar, sem borda e sem dado do núcleo; some com o painel aberto, com a pesquisa do app e depois de Ocultar, guardado no <code>$.store</code>, com um toast uma vez só no primeiro Ocultar. O caminho de volta é uma linha no fim do painel, "Mostrar atalho acima do prompt", só enquanto a faixa está oculta (P17, P18).</li>
     <li><b>Sessões de terminal (#350, a aprovar):</b> card novo em cada máquina (C96 a C99). Presa é o comando em primeiro plano acima de 15 min que não é interativo conhecido, ou um script de scratchpad do Claude. Interromper o comando sobe em escada, um clique por degrau (SIGINT no grupo, SIGTERM, SIGKILL com segunda confirmação); Encerrar a sessão é SIGHUP no sshd e fecha todos os terminais da conexão. Nunca o sshd do túnel, o núcleo, o app nem outro usuário. Na Workstation, só leitura por padrão, com o mesmo flag de ações remotas da decisão 0014. <b>Os processos claude/ccd-cli antigos do servidor remoto do Claude Desktop ficam de fora</b>: não são terminais; card próprio, em outra issue. <b>A decidir:</b> um servidor de desenvolvimento deixado em primeiro plano de propósito (npm run dev) vira Presa depois de 15 min; a proposta é a lista editável terminal.interactiveCommands.</li>
+    <li><b>Backlog:</b> Feed de atividade, Analytics completo, Workflows e o detalhe com o grafo de agentes estavam para depois da entrega. Entraram aqui a pedido do dono; o PM decide se viram itens da 0.0.1.</li></ol></section>`
   indice.innerHTML = htmlI; main.innerHTML = htmlM
   if (window.lucide) lucide.createIcons()
 }
