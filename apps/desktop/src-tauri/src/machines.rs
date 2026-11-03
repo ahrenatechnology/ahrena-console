@@ -325,11 +325,10 @@ pub fn connection_reason_line(s: &MachineSummary, c: &Connection, now_ms: u64) -
     })
 }
 
-/// When the linked SSO session expired: the token's end, else when the core saw it; `None` in the future.
+/// When the core saw the linked SSO session expired (never the cache's access-token end, #417); `None` in the future.
 pub fn sso_expired_at(c: &Connection, now_ms: u64) -> Option<u64> {
-    let cloud = c.cloud.as_ref().and_then(|x| x.expires_at.as_deref()).and_then(parse_iso_ms);
     let seen = c.last_error.as_ref().and_then(|e| e.at.as_deref()).and_then(parse_iso_ms);
-    cloud.or(seen).filter(|at| *at <= now_ms)
+    seen.filter(|at| *at <= now_ms)
 }
 
 /// The SSO sessions the machines' tunnels depend on, with the machine's label: "· a Workstation usa"

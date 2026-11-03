@@ -237,15 +237,15 @@ describe('#278 machine-connection-format: the connection of GET /api/machines', 
     const t = (over: Obj, m: Obj = machine) => f.connectionTrio(f.normalizeConnection(connOf(over)), m, reading, NOW).map((c: Obj) => [c.label, c.tone, c.value, c.sub]);
     const up = t({});
     assert.deepEqual(up[0], ['Túnel', 'ok', 'No ar', 'há 3 h 12 min · 3 portas']);
-    assert.deepEqual([up[1]![0], up[1]![1], up[1]![3]], ['Sessão AWS', 'ok', 'perfil-dev · faltam 7 h']);
-    assert.match(up[1]![2] as string, /^Válida até (amanhã )?\d\d:\d\d$/);
+    assert.deepEqual([up[1]![0], up[1]![1], up[1]![3]], ['Sessão AWS', 'ok', 'perfil-dev']);
+    assert.equal(up[1]![2], 'Válida', 'never a time: the cache end is the 1 h access token (#417)');
     assert.deepEqual(up[2], ['Núcleo de lá', 'ok', 'Respondendo', 'lido há 6 s']);
     const off = { ...machine, state: 'unreachable', reason: 'port-closed' };
     const d = t({ state: 'down', since: iso(5 * H), ports: [], cloud: expired }, off);
     assert.deepEqual(d[0]!.slice(0, 3), ['Túnel', 'bad', 'Fora']);
     assert.match(d[0]![3] as string, /^desde \d\d:\d\d · nenhum processo ssh$/);
-    assert.deepEqual(d[1]!.slice(0, 3), ['Sessão AWS', 'bad', 'Expirada há 5 h']);
-    assert.match(d[1]![3] as string, /^perfil-dev · expirou às \d\d:\d\d$/);
+    assert.deepEqual(d[1]!.slice(0, 3), ['Sessão AWS', 'bad', 'Expirada']);
+    assert.equal(d[1]![3], 'perfil-dev');
     assert.deepEqual(d[2]!.slice(0, 3), ['Núcleo de lá', 'off', 'Sem leitura']);
     assert.deepEqual(t({ state: 'stopped', since: iso(M) }, off)[0]!.slice(0, 3), ['Túnel', 'off', 'Parado por você']);
     const login = t({ state: 'starting', job: { kind: 'login-and-start', steps: ['login', 'start', 'read'], step: 'login', state: 'running', startedAt: iso(48_000), stepStartedAt: iso(48_000) } }, off);
@@ -258,8 +258,8 @@ describe('#278 machine-connection-format: the connection of GET /api/machines', 
     const machine = { id: WS.id, label: WS.label, port: WS.port, state: 'unreachable', reason: 'port-closed' };
     const r = (lastError: Obj, over: Obj = {}) => f.reasonBand(f.normalizeConnection(down({ lastError: { at: iso(0), exitCode: null, holder: null, ...lastError }, ...over })), machine, { takenAt: iso(5 * H - M) }, NOW);
     const sso = r({ reason: 'sso-expired' }, { cloud: expired });
-    assert.equal(sso.title, 'Túnel fora · SSO expirado há 5 h.');
-    assert.match(sso.text, /^A sessão sessao-exemplo, que o perfil-dev usa, expirou às \d\d:\d\d, e o túnel caiu às \d\d:\d\d\. Entre na AWS e o console sobe o túnel em seguida\.$/);
+    assert.equal(sso.title, 'Túnel fora · SSO expirado.');
+    assert.match(sso.text, /^A sessão sessao-exemplo, que o perfil-dev usa, expirou, e o túnel caiu às \d\d:\d\d\. Entre na AWS e o console sobe o túnel em seguida\.$/);
     assert.equal(sso.command, 'Roda: aws sso login --sso-session sessao-exemplo, depois /caminho/para/conectar.sh tunnel start');
     assert.equal(sso.from, 'do estado do perfil-dev no conector AWS');
     assert.deepEqual(sso.actions, ['only-login', 'login-and-start']);
@@ -288,7 +288,7 @@ describe('#278 machine-connection-format: the connection of GET /api/machines', 
     assert.deepEqual(f.stepClock(c.job, NOW), { elapsed: '0:16', limit: '3:00', seconds: 16, max: 180 });
     const b = f.jobBand(c, 'Workstation', NOW);
     assert.equal(b.title, 'Subindo o túnel…');
-    assert.match(b.text, /^a sessão AWS vale até .+; agora roda o comando de subir\.$/);
+    assert.equal(b.text, 'roda o comando de subir.');
     assert.equal(b.command, 'Roda: /caminho/para/conectar.sh tunnel start · até 3 min');
     const l = f.jobBand(f.normalizeConnection(connOf({ state: 'starting', job: { ...job, step: 'login', stepTimeoutSeconds: 300 } })), 'Workstation', NOW);
     assert.deepEqual(l, { title: 'Entrando na AWS…', text: 'aguardando o login no navegador. Quando terminar, o console sobe o túnel sozinho.', command: 'Roda: aws sso login --sso-session sessao-exemplo · até 5 min' });
@@ -364,7 +364,7 @@ describe('#278 the Workstation screen with its connection (C62 to C65)', () => {
     await m.ready;
     const b = band(m.area)!;
     assert.ok(b.classList.contains('error-band'));
-    assert.match(texto(b), /^Túnel fora · SSO expirado há 5 h\. A sessão sessao-exemplo, que o perfil-dev usa, expirou às/);
+    assert.match(texto(b), /^Túnel fora · SSO expirado\. A sessão sessao-exemplo, que o perfil-dev usa, expirou, e o túnel caiu às/);
     assert.deepEqual(buttons(b), ['Só entrar', 'Entrar na AWS e subir o túnel']);
     assert.ok(button(m.area, 'login-and-start').classList.contains('filled'));
     assert.equal(pill(m.area), 'Sem conexão');
@@ -409,7 +409,7 @@ describe('#278 the Workstation screen with its connection (C62 to C65)', () => {
     connection = down({ state: 'starting', job: { kind: 'login-and-start', steps: ['login', 'start', 'read'], step: 'start', state: 'running', startedAt: iso(70_000), endedAt: null, stepStartedAt: iso(16_000), stepTimeoutSeconds: 180, startedBy: 'ui' } });
     const m = mount();
     await m.ready;
-    assert.match(texto(band(m.area)), /^Subindo o túnel… a sessão AWS vale até .+; agora roda o comando de subir\./);
+    assert.match(texto(band(m.area)), /^Subindo o túnel… roda o comando de subir\./);
     assert.equal(cell(m.area, 'tunnel'), 'Túnel Subindo rodando o comando de subir');
     assert.equal(pill(m.area), 'Subindo o túnel');
   });

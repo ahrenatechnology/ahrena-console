@@ -67,13 +67,15 @@ describe('#277 AwsConnector', () => {
     }
   });
 
-  test('#277 expiring (15 min or less), expired (token error with a cache file), never (no cache file), unknown (another error)', async () => {
+  test('#417 probe ok is valid near or past the access token end; expired (token error with a cache file), never (no cache file), unknown (another error)', async () => {
     const { f, c } = setup({ sts: 'ok' });
     try {
       writeCache(f, 'sessao-exemplo', 10 * 60_000);
       await c.probeAll();
-      assert.equal((await c.view()).sessions[0]!.state, 'expiring');
-      assert.equal((await c.view()).state, 'expiring');
+      assert.equal((await c.view()).sessions[0]!.state, 'valid');
+      assert.equal((await c.view()).state, 'valid');
+      writeCache(f, 'sessao-exemplo', -3600_000);
+      assert.equal((await c.view()).sessions[0]!.state, 'valid', 'past the access token end while the probe is ok');
 
       f.set({ sts: 'expired' });
       writeCache(f, 'sessao-exemplo', -3600_000);
@@ -96,16 +98,13 @@ describe('#277 AwsConnector', () => {
   });
 
   test('#277 the state rules', () => {
-    const now = Date.now();
-    const at = (ms: number) => new Date(now + ms).toISOString();
-    assert.equal(sessionState('ok', null, now), 'valid');
-    assert.equal(sessionState('ok', at(-1000), now), 'expiring');
-    assert.equal(sessionState('expired', null, now), 'never');
-    assert.equal(sessionState('expired', at(3600_000), now), 'expired');
-    assert.equal(sessionState(null, null, now), 'never');
-    assert.equal(sessionState(null, at(-1), now), 'expired');
-    assert.equal(sessionState(null, at(60_000), now), 'expiring');
-    assert.equal(sessionState(null, at(3600_000), now), 'valid');
+    assert.equal(sessionState('ok', false), 'valid');
+    assert.equal(sessionState('ok', true), 'valid');
+    assert.equal(sessionState('expired', false), 'never');
+    assert.equal(sessionState('expired', true), 'expired');
+    assert.equal(sessionState('unknown', true), 'unknown');
+    assert.equal(sessionState(null, false), 'never');
+    assert.equal(sessionState(null, true), 'unknown', 'not probed: the access token end alone never expires a session');
     assert.deepEqual(parseAwsVersion('aws-cli/2.22.1 Python/3.12'), { major: 2, minor: 22 });
     assert.equal(parseAwsVersion('outra coisa'), null);
   });
@@ -136,7 +135,7 @@ describe('#277 AwsConnector', () => {
     }
   });
 
-  test('#277 no aws on the PATH: missing-cli, sessions from the cache alone, no login', async () => {
+  test('#277 no aws on the PATH: missing-cli, a cache file alone proves no session, no login', async () => {
     const { f, c } = setup({}, {}, 'empty');
     try {
       writeCache(f, 'sessao-exemplo', 2 * 3600_000);
@@ -144,7 +143,7 @@ describe('#277 AwsConnector', () => {
       const v = await c.view();
       assert.deepEqual(v.cli, { found: false, version: null, deviceCodeSupported: false });
       assert.equal(v.state, 'missing-cli');
-      assert.equal(v.sessions[0]!.state, 'valid');
+      assert.equal(v.sessions[0]!.state, 'unknown');
       assert.equal(v.sessions[0]!.checkedAt, null);
       assert.deepEqual(await c.login('sessao-exemplo', 'browser', 'ui'), { kind: 'refused', reason: 'cli-missing' });
       assert.deepEqual(f.calls(), []);

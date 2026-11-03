@@ -230,24 +230,15 @@ impl Notice {
         Notice { title, body, sound: false, session: alert_key(&m.id, &a.id), local: None, path: machines::machine_path(&m.id), origin, machine: Some(m.id.clone()), cloud_session: None }
     }
 
-    /// An AWS session expiring or expired, silent (A10): "Sessão da AWS expira em 15 min",
-    /// "Sessão da AWS expirada". `session` is `cloud:aws:<name>`, so the expired notice replaces the
-    /// expiring one in the Notification Center. `None` for any other state. `linked`: the label of the
+    /// An AWS session expired, silent (A10): "Sessão da AWS expirada". `session` is
+    /// `cloud:aws:<name>`. `None` for any other state. `linked`: the label of the
     /// machine whose tunnel depends on the session (#278), for "sessao-exemplo · a Workstation cai junto".
-    pub fn from_cloud_session(aws: &clouds::Aws, s: &clouds::Session, now_ms: u64, offset_s: i64, linked: Option<&str>) -> Option<Notice> {
+    pub fn from_cloud_session(aws: &clouds::Aws, s: &clouds::Session, _now_ms: u64, _offset_s: i64, linked: Option<&str>) -> Option<Notice> {
         let (title, body) = match s.state.as_str() {
-            "expiring" => {
-                let minutes = s.expires_ms().map(|at| at.saturating_sub(now_ms).div_ceil(60_000)).unwrap_or(0);
-                let title = if minutes > 0 { format!("Sessão da AWS expira em {} min", minutes.min(15)) } else { "Sessão da AWS expira em menos de 1 min".into() };
-                let body = match linked {
-                    Some(machine) => format!("{} · a {machine} cai junto", s.name),
-                    None => s.name.clone(),
-                };
-                (title, body)
-            }
+            // Only a login that really dropped: the cache's end is the 1 h access token (#417), never shown.
             "expired" => {
-                let body = match s.expires_ms().filter(|at| *at <= now_ms) {
-                    Some(at) => format!("{} expirou às {}", s.name, clouds::clock(at, now_ms, offset_s)),
+                let body = match linked {
+                    Some(machine) => format!("{} expirou · a {machine} cai junto", s.name),
                     None => format!("{} expirou", s.name),
                 };
                 ("Sessão da AWS expirada".to_string(), body)
@@ -259,11 +250,11 @@ impl Notice {
     }
 }
 
-/// The AWS sessions that entered `expiring` or `expired` since the previous read (#277).
+/// The AWS sessions that entered `expired` since the previous read (#277).
 #[derive(Debug, Default)]
 pub struct CloudSessionDetector {
     /// `<session>|<state>|<expiresAt>` of every condition seen, kept: a session that goes from
-    /// `expiring` to `unknown` (a network hiccup) and back does not notify twice for the same token
+    /// `expired` to `unknown` (a network hiccup) and back does not notify twice for the same token
     /// end, and a new login (a new end) notifies again. `None` before the first read (or after `reset`).
     seen: Option<HashSet<String>>,
 }
@@ -274,7 +265,7 @@ impl CloudSessionDetector {
         let first = self.seen.is_none();
         let seen = self.seen.get_or_insert_with(HashSet::new);
         let mut notices = Vec::new();
-        for s in clouds::ordered(aws).into_iter().filter(|s| matches!(s.state.as_str(), "expiring" | "expired")) {
+        for s in clouds::ordered(aws).into_iter().filter(|s| s.state == "expired") {
             let key = format!("{}|{}|{}", s.name, s.state, s.expires_at.as_deref().unwrap_or(""));
             if seen.insert(key) && !first {
                 let linked = links.iter().find(|(session, _)| *session == s.name).map(|(_, label)| label.as_str());
@@ -1010,38 +1001,26 @@ mod tests {
     }
 
     #[test]
-    fn a10_expiring_notifies_once_silently_with_login_and_open() {
+    fn a10_expiring_never_notifies_and_expired_notifies_once_silently_with_login_and_open() {
         let (mut d, now) = (CloudSessionDetector::default(), clouds::tests::now());
         let end = "2026-10-18T18:15:00.000Z";
         d.observe(&with_state(clouds::tests::a9(), "sessao-exemplo", "valid", Some(end)), now, 0, &[]);
-        let expiring = with_state(clouds::tests::a9(), "sessao-exemplo", "expiring", Some(end));
-        let notices = d.observe(&expiring, now, 0, &[]);
+        assert!(d.observe(&with_state(clouds::tests::a9(), "sessao-exemplo", "expiring", Some(end)), now, 0, &[]).is_empty(), "the access token's end is not the session's");
+        let expired = with_state(clouds::tests::a9(), "sessao-exemplo", "expired", Some(end));
+        let notices = d.observe(&expired, now, 0, &[]);
         assert_eq!(notices.len(), 1);
         let n = &notices[0];
-        assert_eq!((n.title.as_str(), n.body.as_str()), ("Sessão da AWS expira em 15 min", "sessao-exemplo"));
+        assert_eq!((n.title.as_str(), n.body.as_str()), ("Sessão da AWS expirada", "sessao-exemplo expirou"));
         assert!(!n.sound, "cloud notifications are silent");
         assert_eq!((n.session.as_str(), n.path.as_str(), n.cloud_session.as_deref()), ("cloud:aws:sessao-exemplo", "/ui/connections", Some("sessao-exemplo")));
         assert_eq!(n.origin.actions(), [Action::CloudLogin, Action::Open]);
-        assert!(d.observe(&expiring, now + 60_000, 0, &[]).is_empty(), "the repeated read does not notify");
+        assert!(d.observe(&expired, now + 60_000, 0, &[]).is_empty(), "the repeated read does not notify");
         d.observe(&with_state(clouds::tests::a9(), "sessao-exemplo", "unknown", Some(end)), now, 0, &[]);
-        assert!(d.observe(&expiring, now, 0, &[]).is_empty(), "once per session and token end, across a hiccup");
-    }
-
-    #[test]
-    fn a10_expired_notifies_once_and_a_new_login_rearms() {
-        let (mut d, now) = (CloudSessionDetector::default(), clouds::tests::now());
-        let end = "2026-10-18T17:59:00.000Z";
-        d.observe(&with_state(clouds::tests::a9(), "sessao-exemplo", "expiring", Some(end)), now, 0, &[]);
-        let expired = with_state(clouds::tests::a9(), "sessao-exemplo", "expired", Some(end));
-        let notices = d.observe(&expired, now, -3 * 3_600, &[]);
-        assert_eq!(notices.len(), 1);
-        assert_eq!((notices[0].title.as_str(), notices[0].body.as_str()), ("Sessão da AWS expirada", "sessao-exemplo expirou às 14:59"));
-        assert_eq!(notices[0].origin.actions(), [Action::CloudLogin, Action::Open]);
-        assert!(d.observe(&expired, now, 0, &[]).is_empty());
+        assert!(d.observe(&expired, now, 0, &[]).is_empty(), "once per session and token end, across a hiccup");
         let new_end = "2026-10-19T02:00:00.000Z";
         d.observe(&with_state(clouds::tests::a9(), "sessao-exemplo", "valid", Some(new_end)), now, 0, &[]);
-        let again = d.observe(&with_state(clouds::tests::a9(), "sessao-exemplo", "expiring", Some(new_end)), now, 0, &[]);
-        assert_eq!(again.len(), 1, "a new token end notifies again");
+        let again = d.observe(&with_state(clouds::tests::a9(), "sessao-exemplo", "expired", Some(new_end)), now, 0, &[]);
+        assert_eq!(again.len(), 1, "a new login notifies again");
     }
 
     #[test]
@@ -1064,7 +1043,7 @@ mod tests {
         n.read_clouds(&with_state(clouds::tests::a9(), "sessao-nova", "never", None), now, 0, &[]);
         assert!(n.read_clouds(&with_state(clouds::tests::a9(), "sessao-nova", "valid", Some("2026-10-18T20:00:00.000Z")), now, 0, &[]).is_empty());
         n.silence.enabled = false;
-        assert!(n.read_clouds(&with_state(clouds::tests::a9(), "sessao-nova", "expiring", Some("2026-10-18T18:10:00.000Z")), now, 0, &[]).is_empty());
+        assert!(n.read_clouds(&with_state(clouds::tests::a9(), "sessao-nova", "expired", Some("2026-10-18T18:10:00.000Z")), now, 0, &[]).is_empty());
     }
 
     // ---- #278: the drop of the Workstation's connection (A10) ----
@@ -1098,7 +1077,7 @@ mod tests {
         let notices = d.observe_at(&[linked("down", SSO, LOGIN_AND_START, Some(vec![down()]))], morning(), 0);
         assert_eq!(notices.len(), 1, "one notice for the drop: the reasoned one replaces the #244 one");
         let n = &notices[0];
-        assert_eq!((n.title.as_str(), n.body.as_str()), ("Workstation sem conexão: SSO expirado", "A sessão AWS do perfil-dev expirou às 03:10"));
+        assert_eq!((n.title.as_str(), n.body.as_str()), ("Workstation sem conexão: SSO expirado", "A sessão AWS do perfil-dev expirou às 03:11"));
         assert!(!n.sound);
         assert_eq!((n.origin, n.origin.actions()), (Origin::MachineLoginAndStart, &[Action::LoginAndStart, Action::Open][..]));
         assert_eq!((n.session.as_str(), n.path.as_str(), n.machine.as_deref()), ("machine:workstation:machine-unreachable", "/ui/machines/workstation", Some("workstation")));
@@ -1163,11 +1142,11 @@ mod tests {
         let end = "2026-10-18T18:15:00.000Z";
         let links = [("sessao-exemplo".to_string(), "Workstation".to_string())];
         d.observe(&with_state(clouds::tests::a9(), "sessao-exemplo", "valid", Some(end)), now, 0, &links);
-        let notices = d.observe(&with_state(clouds::tests::a9(), "sessao-exemplo", "expiring", Some(end)), now, 0, &links);
-        assert_eq!((notices[0].title.as_str(), notices[0].body.as_str()), ("Sessão da AWS expira em 15 min", "sessao-exemplo · a Workstation cai junto"));
+        let notices = d.observe(&with_state(clouds::tests::a9(), "sessao-exemplo", "expired", Some(end)), now, 0, &links);
+        assert_eq!((notices[0].title.as_str(), notices[0].body.as_str()), ("Sessão da AWS expirada", "sessao-exemplo expirou · a Workstation cai junto"));
         assert_eq!(notices[0].origin.actions(), [Action::CloudLogin, Action::Open]);
         let mut d = CloudSessionDetector::default();
         d.observe(&with_state(clouds::tests::a9(), "sessao-lab", "valid", Some(end)), now, 0, &links);
-        assert_eq!(d.observe(&with_state(clouds::tests::a9(), "sessao-lab", "expiring", Some(end)), now, 0, &links)[0].body, "sessao-lab", "another session: unchanged");
+        assert_eq!(d.observe(&with_state(clouds::tests::a9(), "sessao-lab", "expired", Some(end)), now, 0, &links)[0].body, "sessao-lab expirou", "another session: unchanged");
     }
 }

@@ -1,5 +1,5 @@
-// "Até quando", variant A (decision 0013 section 3, #277): the end of an SSO session, from the AWS
-// CLI v2's token cache. The cache file holds the access token itself, so this reader is narrow:
+// "Até quando", variant A (decision 0013 section 3, #277): the end of the SSO ACCESS TOKEN (1 h,
+// renewed by the CLI), not of the session (#417), from the AWS CLI v2's token cache. The cache file holds the access token itself, so this reader is narrow:
 //
 // - The file is the one the CLI names for that session: `sha1(<sso-session name>).json` for the
 //   new format, `sha1(<start URL>).json` for a legacy profile, in `~/.aws/sso/cache`. No listing of

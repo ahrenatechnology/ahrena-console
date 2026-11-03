@@ -10,7 +10,7 @@
 //   DELETE that cancels. "Só entrar" is the issue-277 login of this Mac's session, in browser mode.
 
 import { DASH, ago, clockOf, clockTime, duration, isMachineId, spanText } from './machine-format.js';
-import { timeLeft, whenText } from './cloud-format.js';
+import { timeLeft } from './cloud-format.js';
 
 export const CONNECTION_STATES = ['up', 'down', 'starting', 'stopping', 'failing', 'stopped'];
 export const CONNECTION_REASONS = ['sso-expired', 'port-busy', 'core-not-answering', 'ssm-agent-offline', 'host-unknown', 'key-refused', 'exit-code'];
@@ -210,12 +210,11 @@ function cloudCell(c, job, now) {
   if (job?.step === 'login') return { tone: 'warn', icon: 'wall-loader', value: 'Entrando…', sub: `${p} · no navegador deste Mac` };
   switch (cl.state) {
     case 'valid':
-      return { tone: 'ok', icon: 'key', value: cl.expiresAt ? `Válida até ${whenText(cl.expiresAt, now)}` : 'Válida', sub: cl.expiresAt ? `${p} · faltam ${timeLeft(cl.expiresAt, now)}` : p };
+      return { tone: 'ok', icon: 'key', value: 'Válida', sub: p };
     case 'expiring':
       return { tone: 'warn', icon: 'alert', value: cl.expiresAt ? `Expira em ${timeLeft(cl.expiresAt, now)}` : 'Expira logo', sub: `${p} · o túnel cai junto` };
     case 'expired': {
-      const since = sinceText(cl.expiresAt, now);
-      return { tone: 'bad', icon: 'key', value: since && since !== 'agora' ? `Expirada há ${since}` : 'Expirada', sub: cl.expiresAt ? `${p} · expirou às ${hm(cl.expiresAt)}` : p };
+      return { tone: 'bad', icon: 'key', value: 'Expirada', sub: p };
     }
     case 'never':
       return { tone: 'off', icon: 'key', value: 'Nunca entrou', sub: `${p} · sem login neste Mac` };
@@ -297,7 +296,7 @@ export function jobBand(connection, label, now = Date.now()) {
   }
   if (job.step === 'start') {
     const cl = connection.cloud;
-    const valid = cl && (cl.state === 'valid' || cl.state === 'expiring') && cl.expiresAt ? `a sessão AWS vale até ${whenText(cl.expiresAt, now)}; agora roda` : 'roda';
+    const valid = 'roda';
     return { title: job.kind === 'reconnect' ? 'Reconectando…' : 'Subindo o túnel…', text: `${valid} o comando de subir.`, command: c ? `Roda: ${c.start.join(' ')}${until(job.stepTimeoutSeconds ?? c.startTimeoutSeconds)}` : null };
   }
   return { title: job.kind === 'stop' ? 'Parando o túnel…' : 'Quase lá…', text: `lendo a ${label} agora.`, command: null };
@@ -315,17 +314,16 @@ export function reasonBand(connection, machine, reading, now = Date.now()) {
   switch (e?.reason) {
     case 'sso-expired': {
       const cl = connection.cloud;
-      const since = sinceText(cl?.expiresAt, now);
       const dropped = reading?.takenAt ?? connection.since;
       const session = cl?.session;
       const what = session ? `A sessão ${session}, que o ${cl.profile} usa,` : 'A sessão AWS que o túnel usa';
-      const when = cl?.expiresAt ? ` expirou às ${hm(cl.expiresAt)}` : ' expirou';
+      const when = ' expirou';
       const start = connection.command?.start.join(' ');
       return {
         kind: 'sso-expired',
         tone: 'error',
         icon: 'key',
-        title: since && since !== 'agora' && cl?.state === 'expired' ? `Túnel fora · SSO expirado há ${since}.` : 'Túnel fora · SSO expirado.',
+        title: 'Túnel fora · SSO expirado.',
         text: `${what}${when}${dropped ? `, e o túnel caiu às ${hm(dropped)}` : ''}. Entre na AWS e o console sobe o túnel em seguida.`,
         from: cl?.state === 'expired' ? `do estado do ${cl.profile} no conector AWS` : fromLog,
         command: session && start ? `Roda: ${loginLine(session)}, depois ${start}` : null,
