@@ -60,6 +60,7 @@ O núcleo de **cada máquina** lê a configuração das CLIs **dela** (o `~/.aws
 **"Até quando" é a pergunta 1 para o Fernando.** A CLI não tem um comando que diga quando a sessão SSO expira sem devolver credencial junto. O dado está no cache da CLI (`~/.aws/sso/cache/*.json`, campo `expiresAt`), no mesmo arquivo do token.
 
 - **A (recomendada).** O núcleo abre o arquivo do cache daquela sessão, tira só `expiresAt` e descarta o resto na mesma função, sem log, sem guardar e sem devolver mais nada. Um teste com token sentinela prova que ele não aparece em nenhuma resposta, log ou banco. É ler um arquivo de credencial, mesmo sem usar o que importa nele.
+- *Nota (#417, 03/11):* o `expiresAt` do cache é o token de acesso de 1 h, que a CLI renova sozinha, não o fim da sessão; o estado vem só do probe, e o `expiresAt` não aparece mais como fim da sessão.
 - **B.** O núcleo nunca abre o cache. A tela diz "válida", "entrou às 09:12 (há 3 h)" quando o login foi pelo console, e "deve expirar por volta de 17:12" só se a pessoa disser a duração da sessão na configuração do conector (`sessionHours`). Sem isso, "válida, sem hora de fim".
 
 Os wireframes desenham a variante A; a B muda só o texto da linha do "até quando".

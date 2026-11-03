@@ -169,11 +169,10 @@ export function whenText(isoTime, now = Date.now()) {
 export function sessionPill(session, now = Date.now()) {
   if (session?.login?.state === 'running') return { tone: 'b-waiting', label: 'Entrando…' };
   const s = session?.state;
-  if (s === 'valid') return { tone: 'b-completed', label: session.expiresAt ? `Válida até ${whenText(session.expiresAt, now)}` : 'Válida' };
+  if (s === 'valid') return { tone: 'b-completed', label: 'Válida' };
   if (s === 'expiring') return { tone: 'b-waiting', label: session.expiresAt ? `Expira em ${timeLeft(session.expiresAt, now)}` : 'Expira logo' };
   if (s === 'expired') {
-    const t = since(session.expiresAt, now);
-    return { tone: 'b-error', label: t && t !== 'agora' ? `Expirada há ${t}` : 'Expirada' };
+    return { tone: 'b-error', label: 'Expirada' };
   }
   if (s === 'never') return { tone: 'b-abandoned', label: 'Nunca entrou' };
   return { tone: 'b-abandoned', label: 'Desconhecida' };
@@ -240,7 +239,7 @@ export function awsCardLines(aws, now = Date.now()) {
   const expiring = aws.sessions.filter((s) => s.state === 'expiring');
   const valid = aws.sessions.filter((s) => s.state === 'valid');
   let second;
-  if (expired.length) second = [expired.length === 1 ? `${expired[0].name} expirou${expired[0].expiresAt ? ` às ${clockTime(expired[0].expiresAt)}` : ''}` : `${list(expired.map((s) => s.name))} expiraram`];
+  if (expired.length) second = [expired.length === 1 ? `${expired[0].name} expirou` : `${list(expired.map((s) => s.name))} expiraram`];
   else if (expiring.length) second = [`${expiring[0].name} expira em ${timeLeft(expiring[0].expiresAt, now) ?? 'pouco'}`];
   else if (valid.length === aws.sessions.length) second = [`${list(valid.map((s) => s.name))} ${valid.length === 1 ? 'válida' : 'válidas'}`];
   else second = [`${list(aws.sessions.filter((s) => s.state === 'never').map((s) => s.name)) || 'Uma sessão'} sem login ainda`];
@@ -345,7 +344,7 @@ export function endedText(kind, session, { where = null, now = Date.now() } = {}
   const profiles = session.profiles.length;
   if (kind === 'succeeded') {
     const at = l.endedAt ? clockTime(l.endedAt) : null;
-    const until = session.state === 'valid' && session.expiresAt ? whenText(session.expiresAt, now) : null;
+    const until = null; // the cache's end is the 1 h access token, not the session's (issue 417)
     if (where) return { title: `A ${where} entrou na AWS${at ? ` às ${at}` : ''}.`, text: `${until ? `A sessão de lá vale até ${until}. ` : ''}A credencial ficou na aws CLI de lá; nada passou por este Mac.` };
     return { title: `Entrou${at ? ` às ${at}` : ''}.`, text: until ? `A sessão vale até ${until}, para ${profiles === 1 ? 'o perfil' : `os ${profiles} perfis`}.` : `A sessão vale para ${profiles === 1 ? 'o perfil' : `os ${profiles} perfis`} desta sessão.` };
   }
@@ -415,8 +414,8 @@ export function sessionMeta(session) {
 export function sessionFoot(session, now = Date.now()) {
   const checked = session.checkedAt ? `conferida ${ago(session.checkedAt, now)}` : 'ainda não conferida';
   const n = session.profiles.length;
-  if (session.state === 'expired') return `Expirou${session.expiresAt ? ` às ${clockTime(session.expiresAt)}` : ''}. Um login vale para ${n === 1 ? 'o perfil' : `os ${n} perfis`} desta sessão.`;
-  if (session.state === 'valid' || session.state === 'expiring') return `${session.expiresAt ? `Faltam ${timeLeft(session.expiresAt, now)} · ` : ''}${checked}`;
+  if (session.state === 'expired') return `Expirou. Um login vale para ${n === 1 ? 'o perfil' : `os ${n} perfis`} desta sessão.`;
+  if (session.state === 'valid' || session.state === 'expiring') return checked;
   if (session.state === 'never') return `Sem login ainda nesta máquina. Um login vale para ${n === 1 ? 'o perfil' : `os ${n} perfis`} desta sessão.`;
   return `Estado desconhecido · ${checked}`;
 }
@@ -440,11 +439,7 @@ export function allSessions(machines) {
   for (const m of machines ?? []) {
     for (const s of m?.aws?.sessions ?? []) rows.push({ machineId: m.id, machine: m.label, cloud: 'AWS', session: s, aws: m.aws });
   }
-  const time = (s) => {
-    const t = Date.parse(s.expiresAt ?? '');
-    return Number.isFinite(t) ? t : Infinity;
-  };
-  return rows.sort((a, b) => URGENCY[a.session.state] - URGENCY[b.session.state] || time(a.session) - time(b.session) || a.machine.localeCompare(b.machine) || a.session.name.localeCompare(b.session.name));
+  return rows.sort((a, b) => URGENCY[a.session.state] - URGENCY[b.session.state] || a.machine.localeCompare(b.machine) || a.session.name.localeCompare(b.session.name));
 }
 
 /** "3 perfis", or the one profile's name. */

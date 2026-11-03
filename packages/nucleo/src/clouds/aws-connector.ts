@@ -13,11 +13,11 @@
 //     supported name>`, every 5 min, right after a login that exited 0, at most one per session at a
 //     time, 15 s timeout. Only ok / expired / unknown is kept: the output is never logged, stored or
 //     returned (stderr is only matched against `EXPIRED_PATTERNS` to tell expired from unknown);
-//   - the token cache's `expiresAt` (variant A, aws-sso-cache.ts).
-//   `valid` (probe ok, more than 15 min left), `expiring` (probe ok, 15 min or less, or already past
-//   the token's end while the CLI still answers), `expired` (the probe says so, or no probe yet and
-//   the cache's end is past), `never` (no cache file: never logged in on this machine), `unknown`
-//   (the probe failed for another reason: network, a timeout). Without a v2 CLI nothing is probed and
+//   - the token cache (aws-sso-cache.ts): only whether it exists. Its `expiresAt` is the 1 h access
+//   token, renewed by the CLI, not the end of the session (#417), so it never decides a state.
+//   `valid` (probe ok, however near or past the access token's end), `expiring` (no longer produced),
+//   `expired` (the probe says so), `never` (no cache file: never logged in on this machine), `unknown`
+//   (the probe failed for another reason: network, a timeout; or no probe yet). Without a v2 CLI nothing is probed and
 //   the state comes from the cache alone.
 // - The connector's own `state`: `missing-cli`, `unsupported-cli` (v1), `not-configured` (no SSO
 //   session in the file), or the worst session state (expired > expiring > unknown > never > valid).
@@ -39,7 +39,6 @@ import { AwsLoginRunner, loginArgv, type AwsLoginRunnerOptions, type LoginCancel
 
 export const PROBE_INTERVAL_MS = 5 * 60 * 1000;
 export const PROBE_TIMEOUT_MS = 15_000;
-export const EXPIRING_MS = 15 * 60 * 1000;
 
 /** What the CLI prints when the SSO token is gone (matched on stderr only, never kept). */
 export const EXPIRED_PATTERNS = [/Token has expired/i, /Error loading SSO Token/i, /SSO session .*(has expired|is invalid)/i, /token .*(is expired|has expired)/i, /UnauthorizedException/, /refresh failed/i, /ExpiredToken/];
@@ -289,7 +288,7 @@ export class AwsConnector {
         startUrlHost: s.startUrlHost,
         region: s.region,
         loginSupported: s.loginSupported,
-        state: sessionState(probe?.result ?? null, expiresAt, now),
+        state: sessionState(probe?.result ?? null, expiresAt !== null),
         expiresAt,
         checkedAt: probe?.at ?? null,
         profiles: s.profiles.map((p) => ({ ...p })),
@@ -348,15 +347,16 @@ export class AwsConnector {
   }
 }
 
-export function sessionState(probe: ProbeResult | null, expiresAt: string | null, now: number): SessionState {
-  const left = expiresAt ? Date.parse(expiresAt) - now : null;
-  if (probe === 'ok') return left !== null && left <= EXPIRING_MS ? 'expiring' : 'valid';
-  if (probe === 'expired') return expiresAt ? 'expired' : 'never';
+/**
+ * The cache's `expiresAt` is the 1 h access token, which the CLI renews by itself (#417): it says
+ * whether a cache file exists, never when the session ends. Only the probe decides valid / expired.
+ */
+export function sessionState(probe: ProbeResult | null, hasCache: boolean): SessionState {
+  if (probe === 'ok') return 'valid';
+  if (probe === 'expired') return hasCache ? 'expired' : 'never';
   if (probe === 'unknown') return 'unknown';
-  // Not probed yet (or the CLI cannot probe): the cache alone.
-  if (left === null) return 'never';
-  if (left <= 0) return 'expired';
-  return left <= EXPIRING_MS ? 'expiring' : 'valid';
+  // Not probed yet (or the CLI cannot probe): a cache file proves a past login, nothing more.
+  return hasCache ? 'unknown' : 'never';
 }
 
 /** Each change of the connector as `{ type: 'connector', key: 'aws' }` on /api/changes. */

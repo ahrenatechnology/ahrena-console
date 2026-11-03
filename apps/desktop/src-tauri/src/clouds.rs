@@ -120,14 +120,13 @@ impl Session {
     }
 
     /// "Entrar na AWS (<session>)" in the menu and "Entrar" in the notice: only for a session that
-    /// asks for it (expiring or expired) and whose name can go on the command line.
+    /// asks for it (the login really dropped: expired) and whose name can go on the command line.
     pub fn offers_login(&self, aws: &Aws) -> bool {
-        self.login_supported && matches!(self.state.as_str(), "expiring" | "expired") && !matches!(aws.state.as_str(), "missing-cli" | "unsupported-cli")
+        self.login_supported && self.state == "expired" && !matches!(aws.state.as_str(), "missing-cli" | "unsupported-cli")
     }
 }
 
-/// The sessions in the menu's order: the one closest to expiring first (the expired ones, then the
-/// expiring, then the valid by their end), and those without an end (unknown, never) last.
+/// The sessions in the menu's order: expired first, then valid, unknown, never (a stable order inside a bucket, not a deadline).
 pub fn ordered(aws: &Aws) -> Vec<&Session> {
     let bucket = |s: &Session| match s.state.as_str() {
         "expired" => 0,
@@ -139,11 +138,6 @@ pub fn ordered(aws: &Aws) -> Vec<&Session> {
     let mut sessions: Vec<&Session> = aws.sessions.iter().collect();
     sessions.sort_by(|a, b| (bucket(a), a.expires_ms().unwrap_or(u64::MAX), &a.name).cmp(&(bucket(b), b.expires_ms().unwrap_or(u64::MAX), &b.name)));
     sessions
-}
-
-/// Whole minutes left until `at`, rounded up: "expira em 14 min" from 13 min 20 s.
-fn minutes_left(at: u64, now_ms: u64) -> u64 {
-    at.saturating_sub(now_ms).div_ceil(60_000)
 }
 
 /// "18:40" on the same local day as `now_ms`, "23/10 09:00" on another. `offset_s`: the local zone's
@@ -172,29 +166,19 @@ fn civil_from_days(z: i64) -> (i64, i64, i64) {
     (yoe + era * 400 + i64::from(m <= 2), m, d)
 }
 
-/// The state part of a session line: "expira em 14 min", "válida até 18:40", "expirada há 5 h",
+/// The state part of a session line: "válida", "expirada",
 /// "nunca entrou", "estado desconhecido".
-pub fn status_text(s: &Session, now_ms: u64, offset_s: i64) -> String {
-    let at = s.expires_ms();
+pub fn status_text(s: &Session, _now_ms: u64, _offset_s: i64) -> String {
     match s.state.as_str() {
-        "expiring" => match at.map(|a| minutes_left(a, now_ms)) {
-            Some(m) if m > 0 => format!("expira em {m} min"),
-            _ => "expira em menos de 1 min".into(),
-        },
-        "valid" => match at {
-            Some(a) => format!("válida até {}", clock(a, now_ms, offset_s)),
-            None => "válida".into(),
-        },
-        "expired" => match at.filter(|a| *a <= now_ms) {
-            Some(a) => format!("expirada {}", machines::ago(now_ms.saturating_sub(a) / 60_000)),
-            None => "expirada".into(),
-        },
+        // The cache's end is the 1 h access token, renewed by the CLI (#417): never shown as the session's end.
+        "valid" => "válida".into(),
+        "expired" => "expirada".into(),
         "never" => "nunca entrou".into(),
         _ => "estado desconhecido".into(),
     }
 }
 
-/// The session's line in the "Nuvens" block: "AWS · sessao-exemplo · expira em 14 min".
+/// The session's line in the "Nuvens" block: "AWS · sessao-exemplo · expirada".
 pub fn line(s: &Session, now_ms: u64, offset_s: i64) -> String {
     format!("AWS · {} · {}", s.name, status_text(s, now_ms, offset_s))
 }
@@ -213,8 +197,7 @@ pub mod tests {
 
     pub const NOW: &str = "2026-10-18T18:00:00.000Z";
 
-    /// `GET /api/connectors` as the core answers it, with synthetic sessions (A9): one expiring in
-    /// 14 min, one valid until 18:40 (UTC in the tests), one expired 5 h ago, one never logged in, one
+    /// `GET /api/connectors` as the core answers it, with synthetic sessions (A9): one valid near its access token's end, one valid until 18:40 (UTC in the tests), one expired 5 h ago, one never logged in, one
     /// whose name does not go on the command line, and GCP and Azure still "soon".
     pub const A9: &str = r#"{ "connectors": [
       { "kind": "aws", "state": "expired",
@@ -226,7 +209,7 @@ pub mod tests {
             "profiles": [{ "name": "perfil-lab", "accountId": "000000000000", "roleName": "papel-exemplo", "region": "regiao-exemplo-1" }],
             "login": { "state": "idle", "mode": null, "startedAt": null, "endedAt": null, "timeoutSeconds": 300, "exitCode": null, "startedBy": null, "logFile": "/d/reconnect.log", "deviceCode": null } },
           { "name": "sessao-velha", "kind": "legacy", "loginSupported": true, "state": "expired", "expiresAt": "2026-10-18T13:00:00.000Z", "profiles": [], "login": null },
-          { "name": "sessao-exemplo", "kind": "sso-session", "loginSupported": true, "state": "expiring", "expiresAt": "2026-10-18T18:13:20.000Z", "profiles": [],
+          { "name": "sessao-exemplo", "kind": "sso-session", "loginSupported": true, "state": "valid", "expiresAt": "2026-10-18T18:13:20.000Z", "profiles": [],
             "login": { "state": "idle" } },
           { "name": "sessao-nova", "kind": "sso-session", "loginSupported": true, "state": "never", "expiresAt": null, "profiles": [] },
           { "name": "sessao com espaco", "kind": "sso-session", "loginSupported": false, "state": "expired", "expiresAt": null, "profiles": [] }
@@ -271,20 +254,20 @@ pub mod tests {
         assert_eq!(
             lines,
             [
-                "AWS · sessao-velha · expirada há 5 h",
+                "AWS · sessao-velha · expirada",
                 "AWS · sessao com espaco · expirada",
-                "AWS · sessao-exemplo · expira em 14 min",
-                "AWS · sessao-lab · válida até 18:40",
+                "AWS · sessao-exemplo · válida",
+                "AWS · sessao-lab · válida",
                 "AWS · sessao-nova · nunca entrou",
             ]
         );
     }
 
     #[test]
-    fn login_offered_only_for_expiring_or_expired_with_a_supported_name() {
+    fn login_offered_only_for_expired_with_a_supported_name() {
         let aws = a9();
         let offered: Vec<&str> = ordered(&aws).into_iter().filter(|s| s.offers_login(&aws)).map(|s| s.name.as_str()).collect();
-        assert_eq!(offered, ["sessao-velha", "sessao-exemplo"]);
+        assert_eq!(offered, ["sessao-velha"], "an old `expiring` state from a stale core offers nothing either");
         let mut no_cli = aws.clone();
         no_cli.state = "missing-cli".into();
         assert!(!no_cli.sessions.iter().any(|s| s.offers_login(&no_cli)), "without the CLI the core would refuse");
@@ -294,14 +277,11 @@ pub mod tests {
     fn status_texts() {
         let n = now();
         let s = |state: &str, at: Option<&str>| Session { name: "s".into(), login_supported: true, state: state.into(), expires_at: at.map(String::from), login: None };
-        assert_eq!(status_text(&s("expiring", Some("2026-10-18T18:00:30.000Z")), n, 0), "expira em 1 min");
-        assert_eq!(status_text(&s("expiring", Some("2026-10-18T17:59:00.000Z")), n, 0), "expira em menos de 1 min", "past the end while the CLI still answers");
-        assert_eq!(status_text(&s("expiring", None), n, 0), "expira em menos de 1 min");
-        assert_eq!(status_text(&s("valid", Some("2026-10-18T21:40:00.000Z")), n, -3 * 3_600), "válida até 18:40", "in the local zone");
-        assert_eq!(status_text(&s("valid", Some("2026-10-19T09:00:00.000Z")), n, 0), "válida até 19/10 09:00", "another day carries the date");
+        assert_eq!(status_text(&s("valid", Some("2026-10-18T18:00:30.000Z")), n, 0), "válida", "near the access token's end");
+        assert_eq!(status_text(&s("valid", Some("2026-10-18T17:59:00.000Z")), n, 0), "válida", "past the access token's end");
         assert_eq!(status_text(&s("valid", None), n, 0), "válida");
-        assert_eq!(status_text(&s("expired", Some("2026-10-18T17:59:40.000Z")), n, 0), "expirada há menos de 1 min");
-        assert_eq!(status_text(&s("expired", Some("2026-10-18T19:00:00.000Z")), n, 0), "expirada", "the probe says expired before the cache's end");
+        assert_eq!(status_text(&s("expired", Some("2026-10-18T17:59:40.000Z")), n, 0), "expirada");
+        assert_eq!(status_text(&s("expired", None), n, 0), "expirada");
         assert_eq!(status_text(&s("never", None), n, 0), "nunca entrou");
         assert_eq!(status_text(&s("unknown", None), n, 0), "estado desconhecido");
     }

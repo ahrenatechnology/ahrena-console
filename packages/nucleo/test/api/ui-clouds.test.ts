@@ -75,11 +75,12 @@ const connectorsBody = (a: Obj | null = aws()) => ({ connectors: [...(a ? [a] : 
 const DEVICE = { verificationUri: 'https://device.sso.regiao-exemplo-1.amazonaws.com/', userCode: 'ABCD-EFGH', expiresAt: iso(Date.now() + 9 * 60_000) };
 
 describe('issue 277: the pure formats (cloud-format.js)', () => {
-  test('the session pill: valid until, expiring in, expired for, never, unknown, and a running login wins', () => {
+  test('the session pill: valid (never until a time, #417), expired, never, unknown, and a running login wins', () => {
     const s = (state: string, expiresAt: string | null, l: Obj = login()) => format.sessionPill(format.normalizeConnectors(connectorsBody(aws({ sessions: [session({ state, expiresAt, login: l })] }))).aws.sessions[0], NOW);
-    assert.deepEqual(s('expired', iso(NOW - 5 * 3_600_000)), { tone: 'b-error', label: 'Expirada há 5 h' });
+    assert.deepEqual(s('expired', iso(NOW - 5 * 3_600_000)), { tone: 'b-error', label: 'Expirada' });
     assert.deepEqual(s('expiring', iso(NOW + 14 * 60_000)), { tone: 'b-waiting', label: 'Expira em 14 min' });
-    assert.match(s('valid', iso(NOW + 3_600_000)).label, /^Válida até \d\d:\d\d$/);
+    assert.equal(s('valid', iso(NOW + 3_600_000)).label, 'Válida');
+    assert.equal(s('valid', iso(NOW - 3_600_000)).label, 'Válida', 'past the access token end');
     assert.deepEqual(s('never', null), { tone: 'b-abandoned', label: 'Nunca entrou' });
     assert.deepEqual(s('unknown', null), { tone: 'b-abandoned', label: 'Desconhecida' });
     assert.deepEqual(s('expired', null, login({ state: 'running', startedAt: iso(NOW) })), { tone: 'b-waiting', label: 'Entrando…' });
@@ -96,7 +97,7 @@ describe('issue 277: the pure formats (cloud-format.js)', () => {
     assert.equal(format.awsConnected(n(aws({ state: 'not-configured', sessions: [] }))), false);
     const lines = format.awsCardLines(n(aws()), NOW).map((l: (string | Obj)[]) => l.map((p) => (typeof p === 'string' ? p : Object.values(p)[0])).join(''));
     assert.equal(lines[0], '1 sessão SSO · 3 perfis lidos do ~/.aws/config');
-    assert.match(lines[1], /^sessao-exemplo expirou às \d\d:\d\d$/);
+    assert.equal(lines[1], 'sessao-exemplo expirou');
     assert.deepEqual(format.connectorsDot(connectorsBody()), { state: 'cloud-error', label: 'AWS · 1 sessão expirada' });
     assert.equal(format.connectorsDot(connectorsBody(aws({ state: 'valid', sessions: [session({ state: 'valid' })] }))).state, 'cloud-ok');
     assert.equal(format.connectorsDot(connectorsBody(aws({ state: 'expiring', sessions: [session({ state: 'expiring', expiresAt: iso(NOW + 600_000) })] }))).state, 'cloud-warn');
@@ -323,7 +324,7 @@ describe('issue 277: Conexões, the catalog (C57, C60, C61)', () => {
     assert.match(texto(m.area.querySelector('[data-connector="aws"]')), /1 sessão expirada/);
     assert.equal(m.area.querySelector('[data-connector="github"] a[data-cl-action="open-github"]')!.getAttribute('href'), '/ui/connections/github');
     const rows = m.area.querySelectorAll('[data-card="all-sessions"] tbody tr').map((r) => `${r.getAttribute('data-machine')}:${r.getAttribute('data-session')}`);
-    assert.deepEqual(rows, ['workstation:sessao-exemplo', 'local:sessao-exemplo']);
+    assert.deepEqual(rows, ['local:sessao-exemplo', 'workstation:sessao-exemplo']);
     // Entrar opens that machine's AWS screen, which starts the login (the click's history state carries it).
     m.area.querySelector('[data-card="all-sessions"] tr[data-machine="workstation"] button[data-cl-action="login"]')!.click();
     assert.deepEqual(m.navigated, [{ route: '/ui/connections/aws?machine=workstation&login=sessao-exemplo', state: { startLogin: 'sessao-exemplo' } }]);

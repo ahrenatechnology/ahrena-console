@@ -223,7 +223,7 @@ pub struct Input<'a> {
     pub clouds: Option<&'a clouds::Aws>,
     /// Now, in ms since the epoch: the age of an unreachable machine and of an alert.
     pub now_ms: u64,
-    /// The local zone's offset from UTC, in seconds: "válida até 18:40".
+    /// The local zone's offset from UTC, in seconds: "válida".
     pub utc_offset_s: i64,
 }
 
@@ -1265,15 +1265,14 @@ mod tests {
         let at = t.iter().position(|x| x == "Nuvens").expect("Nuvens");
         assert!(machines_at < at && t[at - 1] == "—", "after Máquinas, with a separator: {t:?}");
         assert_eq!(
-            &t[at..at + 10],
+            &t[at..at + 9],
             [
                 "Nuvens",
-                "AWS · sessao-velha · expirada há 5 h",
+                "AWS · sessao-velha · expirada",
                 "  Entrar na AWS (sessao-velha)",
                 "AWS · sessao com espaco · expirada",
-                "AWS · sessao-exemplo · expira em 14 min",
-                "  Entrar na AWS (sessao-exemplo)",
-                "AWS · sessao-lab · válida até 18:40",
+                "AWS · sessao-exemplo · válida",
+                "AWS · sessao-lab · válida",
                 "AWS · sessao-nova · nunca entrou",
                 "—",
                 "4 ativas",
@@ -1288,9 +1287,9 @@ mod tests {
         let n = CoreState::Up { port: 4720 };
         let m = build(&with_clouds(&n, Some(&a), None, Some(&aws)));
         let dots: Vec<Dot> = m.iter().filter_map(|i| if let Item::Cloud { dot, .. } = i { Some(*dot) } else { None }).collect();
-        assert_eq!(dots, [Dot::Red, Dot::Red, Dot::Yellow, Dot::Green, Dot::Empty]);
+        assert_eq!(dots, [Dot::Red, Dot::Red, Dot::Green, Dot::Green, Dot::Empty]);
         let logins: Vec<&str> = m.iter().filter_map(|i| if let Item::CloudLogin { session, .. } = i { Some(session.as_str()) } else { None }).collect();
-        assert_eq!(logins, ["sessao-velha", "sessao-exemplo"]);
+        assert_eq!(logins, ["sessao-velha"], "Entrar only when the login really dropped");
         let t = texts(&m);
         assert_eq!(&t[3..8], ["Ninguém precisa de você", "4 ativas", "nenhuma com erro", "—", "Nuvens"], "A1: after the three lines");
     }
@@ -1303,7 +1302,7 @@ mod tests {
         let n = CoreState::Up { port: 4720 };
         let m = build(&with_clouds(&n, Some(&a), None, Some(&aws)));
         let t = texts(&m);
-        let at = t.iter().position(|x| x == "AWS · sessao-exemplo · expira em 14 min").unwrap();
+        let at = t.iter().position(|x| x == "AWS · sessao-exemplo · válida").unwrap();
         assert_eq!(t[at + 1], "  Aguardando o navegador · 0:48");
         assert!(matches!(m[at + 1], Item::Detail(_)), "grey, no click");
         assert!(!m.iter().any(|i| matches!(i, Item::CloudLogin { session, .. } if session == "sessao-exemplo")));
@@ -1455,8 +1454,8 @@ mod tests {
         let (a, ms, aws) = (Attention::from_json(ZERO).unwrap(), ws_machines("connected", &c), clouds::tests::a9());
         let n = CoreState::Up { port: 4720 };
         let t = texts(&build(&with_clouds(&n, Some(&a), Some(&ms), Some(&aws))));
-        assert!(t.contains(&"AWS · sessao-exemplo · expira em 14 min · a Workstation usa".to_string()), "{t:?}");
-        assert!(t.contains(&"AWS · sessao-lab · válida até 18:40".to_string()), "only the linked one");
+        assert!(t.contains(&"AWS · sessao-exemplo · válida · a Workstation usa".to_string()), "{t:?}");
+        assert!(t.contains(&"AWS · sessao-lab · válida".to_string()), "only the linked one");
     }
 
     #[test]
