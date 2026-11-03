@@ -23,11 +23,19 @@ Decision [0009](docs/decisoes/0009-english-internals.md), issue #173.
 
 The 5-hour limit is spent by context size, not by work done: every call re-reads the whole conversation. Audit of 2026-10-21: 63% of a window went to calls above 300k tokens, and 43% to re-reading long sessions after an account switch. Issues #292 and #293.
 
-- **Child sessions start on Sonnet.** Every `start_session` passes `model: "sonnet"`. Use Opus only when the piece is design-heavy or needs judgment (architecture, a decision record, a hard review), and say why in the brief. Subagents (`Agent`) default to Sonnet through `CLAUDE_CODE_SUBAGENT_MODEL` in `.claude/settings.json`.
+Measured 2026-10-29 to 2026-11-03 on 28 backstage sessions: 77% of turns and 64% of tokens came from wake-ups (inter-session messages, child-session notices, CI, background tasks), not from the person; the median context at wake-up was 300-520k; no child ran on Sonnet. The caps on context size did not cap wake-ups. Issue #420.
+
+- **Budget per role: what counts is turns x context, not minutes.**
+  - Leader (round PM, tech lead): Opus. Renews at 200k of context or 100 turns, whichever comes first (about 3h at the current pace).
+  - Executor child: Sonnet, owns one PR, up to 200k (about 15 turns in backstage). Past that it writes its work context and renews; it does not compact and carry on.
+  - Plan or decision child: Opus, same ceiling. The brief says why it needs Opus (design-heavy or judgment: architecture, a decision record, a hard review).
+- **Child sessions start on Sonnet.** Every `start_session` passes `model: "sonnet"`, except the plan or decision child above. Subagents (`Agent`) default to Sonnet through `CLAUDE_CODE_SUBAGENT_MODEL` in `.claude/settings.json`.
 - **Compact at 200k.** `.claude/settings.json` sets `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE=20`, which is 200k on the 1M window. Do not raise it.
-- **Renew long sessions, do not resume them.** A coordinating session (the round's PM, a tech lead) that passes 200k of context or a day of age writes its work context (goal, decisions, PRs and branches, child sessions, next step, blockers) and proposes a fresh session started from it. It archives the old one only with the person's yes.
+- **Renew long sessions, do not resume them.** A coordinating session (the round's PM, a tech lead) that passes 200k of context, 100 turns or a day of age writes its work context (goal, decisions, PRs and branches, child sessions, next step, blockers) and proposes a fresh session started from it. It archives the old one only with the person's yes.
+- **Fewer wake-ups: a child speaks to its leader only when it finishes or is blocked.** Finished is a PR open or merged; blocked is needing a decision. A progress report is not a message. The child runs to the end of the task without ending a turn to report, because each ended turn wakes the leader.
+- **CI and Auto-fix stay on the child that owns the PR**, never on the leader.
 - **Switching accounts is a renewal.** The prompt cache belongs to the account, so a session resumed on another account re-reads its whole context at full price. Before switching, each long session writes its work context; after switching, start fresh sessions from it instead of resuming the old ones.
-- **Archive what is done.** A child session whose PR merged gets offered for archiving; an idle session still wakes on every notification.
+- **Archive what is done.** The child whose PR merged is archived at once, because an idle session still wakes on every notification.
 
 ## Precedence
 
