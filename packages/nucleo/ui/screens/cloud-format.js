@@ -344,7 +344,7 @@ export function endedText(kind, session, { where = null, now = Date.now() } = {}
   const profiles = session.profiles.length;
   if (kind === 'succeeded') {
     const at = l.endedAt ? clockTime(l.endedAt) : null;
-    const until = null; // the cache's end is the 1 h access token, not the session's (#417)
+    const until = null; // the cache's end is the 1 h access token, not the session's (issue 417)
     if (where) return { title: `A ${where} entrou na AWS${at ? ` às ${at}` : ''}.`, text: `${until ? `A sessão de lá vale até ${until}. ` : ''}A credencial ficou na aws CLI de lá; nada passou por este Mac.` };
     return { title: `Entrou${at ? ` às ${at}` : ''}.`, text: until ? `A sessão vale até ${until}, para ${profiles === 1 ? 'o perfil' : `os ${profiles} perfis`}.` : `A sessão vale para ${profiles === 1 ? 'o perfil' : `os ${profiles} perfis`} desta sessão.` };
   }
