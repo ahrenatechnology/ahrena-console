@@ -49,6 +49,7 @@ jobs:
         with:
           node-version: 24
 
+      # Discovery/native routes and the central owner gate need executable coverage on every PR.
       - name: Install core test dependencies
         working-directory: packages/nucleo
         run: npm ci --ignore-scripts

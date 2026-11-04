@@ -98,7 +98,9 @@ import { DETAIL_ROUTE, type LeiturasDoDetalhe } from './session-detail.ts';
 import type { FleetReader } from '../mcp/fleet.ts';
 import { montarAtencao, remoteAttentionItems, ATTENTION_ROUTE, type RemoteAttentionSource } from './attention-route.ts';
 import { SessionOpenDescriber } from './session-open.ts';
-import { createSessionOpenRoute, SESSION_OPEN_FROM_UI, SESSION_OPEN_ROUTE } from './session-open-route.ts';
+import type { CodexIndex } from './codex-index.ts';
+import { codexOpen } from './codex-index.ts';
+import { createSessionOpenRoute, CODEX_OPEN_FROM_UI, SESSION_OPEN_FROM_UI, SESSION_OPEN_ROUTE } from './session-open-route.ts';
 import { createNewSessionRoute, NEW_SESSION_FOLDERS_ROUTE, NEW_SESSION_ROUTE } from './new-session.ts';
 import type { TerminalFocuser, TerminalOpener } from './terminal-launch.ts';
 import { montarDashboard, DASHBOARD_ROUTE } from './dashboard-route.ts';
@@ -189,6 +191,7 @@ export interface ApiOptions {
   analytics?: RotaAnalytics;
   /** The Sessions screen's list; turns on `GET /api/sessions`. */
   sessions?: ListaDeSessoes;
+  codex?: CodexIndex | null;
   /** The ended sessions by day; turns on `GET /api/history` (#33). */
   history?: SessionHistory;
   /** O Kanban (#31); liga `GET /api/kanban`. */
@@ -303,7 +306,7 @@ const sameOriginOpen = (req: IncomingMessage, port: number): boolean =>
 
 /** #285's open button: only `POST /api/sessions/<uuid>/open`, the exact raw path (a query gives 403), from the same origin. */
 const sameOriginSessionOpen = (req: IncomingMessage, port: number): boolean =>
-  req.method === 'POST' && SESSION_OPEN_FROM_UI.test(req.url ?? '') && fromOwnUi(req, port);
+  req.method === 'POST' && (SESSION_OPEN_FROM_UI.test(req.url ?? '') || CODEX_OPEN_FROM_UI.test(req.url ?? '')) && fromOwnUi(req, port);
 
 /** "Nova sessão": only `POST /api/new-session`, the exact raw path, from the same origin. */
 const sameOriginNewSession = (req: IncomingMessage, port: number): boolean => req.method === 'POST' && req.url === NEW_SESSION_ROUTE && fromOwnUi(req, port);
@@ -367,10 +370,11 @@ export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
   const mcp = opts.mcp ? createMcpRoute(opts.mcp) : null;
   const projectRoute = criarRotaDoProjeto(opts.project ?? { kanban: null, fonte: 'github', log });
   const openDescriber = opts.openDescriber ?? new SessionOpenDescriber();
-  const wall = muralDoPainel(opts.panelBuilder, { open: openDescriber });
+  const wall = muralDoPainel(opts.panelBuilder, { open: openDescriber, codex: opts.codex });
   const machineSessions = createMachineSessionsRoute({ reader: opts.machineReader, telemetry: opts.telemetry, local: { sessions: opts.sessions, wall, kanban: opts.kanban, history: opts.history, events: opts.events, dashboard: opts.fleet ? () => montarDashboard(opts.fleet!) : null, panel: opts.panelBuilder } });
   const remotes = (): readonly RemoteAttentionSource[] => (typeof opts.remoteAttention === 'function' ? opts.remoteAttention() : (opts.remoteAttention ?? []));
   const sessionOpen = createSessionOpenRoute({
+    codex: opts.codex,
     storage: opts.panelBuilder.storage,
     localOf:
       opts.localOf ??
@@ -518,6 +522,13 @@ export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
     if (req.method === 'GET' && (await machineSessions(res, url))) return;
     const openMatch = OPEN.exec(url.pathname);
     if (openMatch && req.method === 'POST') return openDirect(req, res, decodeURIComponent(openMatch[1]!));
+    const codexDetail = /^\/api\/codex\/sessions\/([^/]+)$/.exec(url.pathname);
+    if (codexDetail) {
+      if (req.method !== 'GET') return send(res, 405, { error: 'use GET' });
+      const thread = opts.codex?.find(decodeSegment(codexDetail[1]!));
+      if (opts.codex?.error) return send(res, 503, { error: opts.codex.error });
+      return thread ? send(res, 200, { ...thread, open: codexOpen(thread) }) : send(res, 404, { error: 'Sessão Codex não encontrada' });
+    }
     const sessionOpenMatch = SESSION_OPEN_ROUTE.exec(url.pathname);
     if (sessionOpenMatch) return sessionOpen(req, res, decodeSegment(sessionOpenMatch[1]!));
     if (url.pathname === NEW_SESSION_ROUTE || url.pathname === NEW_SESSION_FOLDERS_ROUTE) return newSession(req, res, url.pathname);

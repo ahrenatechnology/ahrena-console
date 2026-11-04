@@ -25,13 +25,13 @@ import { write as defaultWrite } from './api.js';
 /** How long a success stays beside the button. */
 export const SUCCESS_MS = 4000;
 
-const OPENED_TEXT = { desktop: 'Aberta no Claude Desktop', terminal: 'Aberta no terminal', focused: 'Terminal à frente' };
+const OPENED_TEXT = { 'codex-desktop': 'Abertura solicitada ao Codex', desktop: 'Aberta no Claude Desktop', terminal: 'Aberta no terminal', focused: 'Terminal à frente' };
 
 /** The text of a success, by the route's `opened`. */
 export const openedText = (opened) => OPENED_TEXT[opened] ?? 'Aberta';
 
 /** The write route of a session's open. */
-export const openRoute = (id) => `/api/sessions/${encodeURIComponent(id)}/open`;
+export const openRoute = (id, provider = 'claude') => `/api/${provider === 'codex' ? 'codex/' : ''}sessions/${encodeURIComponent(id)}/open`;
 
 /**
  * What the action shows for an `open` descriptor, without DOM; `null` when there is nothing to show
@@ -39,6 +39,8 @@ export const openRoute = (id) => `/api/sessions/${encodeURIComponent(id)}/open`;
  */
 export function describeOpenAction(open, { machine = null } = {}) {
   switch (open?.target) {
+    case 'codex-desktop':
+      return { target: 'codex-desktop', label: 'Abrir no Codex', icon: 'monitor', external: true, title: 'Abre a conversa no Codex', disabled: false, where: null };
     case 'desktop':
       return { target: 'desktop', label: 'Abrir no Claude Desktop', icon: 'monitor', external: true, title: 'Abre a conversa no Claude Desktop', disabled: false, where: null };
     case 'terminal':
@@ -65,8 +67,8 @@ export function describeOpenAction(open, { machine = null } = {}) {
 }
 
 /** Asks the core to open the session: the answer (`{ ok, opened }`) or the `WriteError` it threw. */
-export function openSession(id, { write = defaultWrite } = {}) {
-  return write(openRoute(id), {});
+export function openSession(id, { write = defaultWrite, provider = 'claude' } = {}) {
+  return write(openRoute(id, provider), {});
 }
 
 /** The state after an answer, without DOM: `{ kind: 'ok', text }` or `{ kind: 'fail', text, command }`. */
@@ -209,7 +211,7 @@ export function openAction(session, { size = 'full', write = defaultWrite, machi
     setState(key, { kind: 'busy', text: 'Abrindo…', command: null, until: null });
     let state;
     try {
-      state = stateOfAnswer(await openSession(id, { write }));
+      state = stateOfAnswer(await openSession(id, { write, provider: session.identity?.provider ?? (session.open?.target === 'codex-desktop' ? 'codex' : 'claude') }));
     } catch (e) {
       if (e?.name === 'AbortError') state = null;
       else state = stateOfAnswer(null, e instanceof Error ? e : new Error(String(e)));
