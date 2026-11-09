@@ -503,13 +503,13 @@ export class SqliteStorage implements StoragePort {
     return Number(result.changes) === 1;
   }
 
-  async setEventText(id: string, text: string): Promise<boolean> {
-    const result = this.db
+  async setEventText(id: string, text: string): Promise<string | null> {
+    const row = this.db
       .prepare(
-        `UPDATE events SET data = json_set(CASE WHEN json_type(data) = 'object' THEN data ELSE '{}' END, '$.text', ?) WHERE id = ?`,
+        `UPDATE events SET data = json_set(CASE WHEN json_type(data) = 'object' THEN data ELSE '{}' END, '$.text', ?) WHERE id = ? RETURNING session_id`,
       )
-      .run(text, id);
-    return Number(result.changes) === 1;
+      .get(text, id) as { session_id: string } | undefined;
+    return row ? row.session_id : null;
   }
 
   async listEvents(sessionId: string, query: ListEventsQuery = {}): Promise<Page<SessionEvent>> {
