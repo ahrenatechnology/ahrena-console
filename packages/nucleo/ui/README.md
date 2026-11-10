@@ -14,7 +14,7 @@ A moldura do console ([#26](https://github.com/ahrenatechnology/ahrena-console/i
 | `new-session.css` | O estilo do botão e do popover (classes `ns-`), carregado uma vez pelo `index.html` |
 | `machine-filter.js` | As sessões de todas as máquinas ([#243](https://github.com/ahrenatechnology/ahrena-console/issues/243), C45 a C49): o filtro "Máquina" (Todas · Esta máquina · uma por remota, pelo `label`), o rótulo do item remoto (`machineTag`, só o ícone com o nome na dica onde o card é estreito), o aviso neutro de remota sem conexão (`downNotice`, C48; nunca a `errorBand`), as chaves `máquina:id` (`itemKey`) e o link do Detalhe remoto (`sessionHref(id, machine)`, `/ui/sessions/<id>?machine=<id>`). A parte sem DOM vem antes da linha "DOM" (o teste importa direto). Ver "O parâmetro `?machine=`" abaixo |
 | `machine-filter.css` | O estilo do filtro, do rótulo e do aviso (classes `mf-`), carregado uma vez pelo `index.html`, como o `open-action.css` |
-| `live.js` | Long polling em `GET /api/changes?since=<cursor>&wait=25` |
+| `live.js` | SSE `GET /api/stream` como caminho principal, com queda para o long polling de `GET /api/changes?since=<cursor>&wait=25` |
 | `states.js` | Os três estados de toda tela (C19): `loading`, `empty`, `error`, e a `errorBand` |
 | `dom.js` | `el()`, `icon()` e `header()` |
 | `shell.css` | O estilo da moldura. Toda cor é variável da marca |

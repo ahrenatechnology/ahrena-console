@@ -372,11 +372,15 @@ export async function mount(area, ctx) {
     }
   }
 
+  // issue 414 (L4): uma atividade nova de uma sessão agora chega como mudança `activity` (chave = a sessão)
+  // pelo long polling/stream, então o feed pede os novos na hora que ela chega, sem esperar o relógio.
+  // As outras mudanças (estado, plano, decisão) também pedem os novos, como já faziam.
   ctx.onChange(() => fetchNew());
   ctx.onRestart(() => reload({ manterLista: true }));
 
-  // Evento novo sozinho não é mudança no long polling (só estado, plano, decisão...): o relógio também
-  // pergunta pelos novos, para o feed não esperar a próxima mudança de estado.
+  // Rede de segurança: antes, um evento novo sozinho não era mudança no long polling, e o relógio era o
+  // caminho para o feed não esperar a próxima mudança de estado. Agora o `activity` (acima) é o caminho
+  // principal; o relógio fica só como reserva, caso uma atividade não vire mudança ou o ao vivo esteja mudo.
   const clock = setInterval(() => {
     if (ctx.liveState?.() !== 'offline') fetchNew();
     const now = Date.now();

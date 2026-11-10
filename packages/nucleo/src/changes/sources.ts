@@ -1,10 +1,14 @@
 // Where the changes come from: the writes through the ports and the state machine.
 //
-// - `withChanges(storage, cursor)` wraps the port (Proxy): `putSession`, `putPlan` and `putAccount`
-//   record a change after writing; the rest goes straight through (including SQLite's `db`).
-//   `putSession` only records when a field the screens show changes (`visibleFields`): every hook
-//   writes the session to move `updatedAt` forward, and that alone wakes nobody up. New activity
-//   (events) is not a change: state, plan and decisions have their own types.
+// - `withChanges(storage, cursor)` wraps the port (Proxy): `putSession`, `putPlan`, `putAccount`,
+//   `appendEvent` and `setEventText` record a change after writing; the rest goes straight through
+//   (including SQLite's `db`). `putSession` only records when a field the screens show changes
+//   (`visibleFields`): every hook writes the session to move `updatedAt` forward, and that alone wakes
+//   nobody up.
+// - `appendEvent` records `activity` for the event's session, only when the storage took a new event
+//   (its `Promise<boolean>` is `true`; a duplicate id records nothing). `setEventText` records
+//   `activity` for the event's session when the text fill changed a row (its return is the `sessionId`,
+//   or `null` when no event matched). This is what lets the Feed and the Conversa tab drop their 5 s clock (#414).
 // - `putAgent` records `session` (the agent's session) when what the Kanban shows of the agent
 //   changes (`visibleAgentFields`): a subagent that starts or ends touches the Agents view (#31).
 // - `decisionsWithChanges(port, cursor, accounts)` does the same with `putDecision`.
@@ -83,6 +87,20 @@ export function withChanges<T extends StoragePort>(storage: T, cursor: ChangeCur
     async putAccount(account) {
       await storage.putAccount(account);
       cursor.record({ type: 'account', key: account.id, sessionId: null, accountId: account.id });
+    },
+    async appendEvent(event) {
+      const isNew = await storage.appendEvent(event);
+      if (!isNew) return isNew;
+      const accountId = await accounts.accountOf(event.sessionId);
+      cursor.record({ type: 'activity', key: event.sessionId, sessionId: event.sessionId, accountId });
+      return isNew;
+    },
+    async setEventText(id, text) {
+      const sessionId = await storage.setEventText(id, text);
+      if (sessionId === null) return sessionId;
+      const accountId = await accounts.accountOf(sessionId);
+      cursor.record({ type: 'activity', key: sessionId, sessionId, accountId });
+      return sessionId;
     },
   };
   return new Proxy(storage, {

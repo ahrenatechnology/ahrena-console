@@ -602,17 +602,157 @@ function conversationTab(ctx, base, { head, remote = null } = {}) {
   // live change does not take the focus, the caret or an IME composition away from the person typing.
   const content = el('div', { class: 'sd-conversation' });
 
+  // issue 414 (L5): the conversation is a growing model keyed by `message.id`. A live update reads only the
+  // delta (`?after=<cursor>`) and upserts by id — a new id appends at the end, a seen id replaces its node
+  // in place (so a tool line going running→ok/erro swaps only that one node and keeps the open blocks
+  // open). Stuck to the bottom, the list follows the new blocks; scrolled up on purpose it holds the read
+  // position and shows the "N novas mensagens" pill, which lands at the bottom and sticks again on click.
+  let messages = [];
+  let cursor = null;
+  let stuck = true;
+  let pending = 0;
+  const newPill = el('button', { type: 'button', class: 'sd-newpill', hidden: true });
+  newPill.addEventListener('click', () => landAtBottom());
+
+  // The scroll container is the shell's main column (`.cc-main`, the only overflow box around the tab).
+  const scroller = () => list.closest?.('.cc-main') ?? null;
+  function atBottom() {
+    const s = scroller();
+    if (!s) return true;
+    return s.scrollHeight - s.scrollTop - s.clientHeight <= 48;
+  }
+  function landAtBottom() {
+    const s = scroller();
+    if (s) s.scrollTop = s.scrollHeight;
+    stuck = true;
+    pending = 0;
+    drawPill();
+  }
+  function drawPill() {
+    newPill.hidden = pending <= 0;
+    if (pending > 0) newPill.replaceChildren(icon('arrow-down'), `${num(pending)} ${pending === 1 ? 'nova mensagem' : 'novas mensagens'}`);
+  }
+  function onScroll() {
+    if (atBottom()) {
+      stuck = true;
+      if (pending) {
+        pending = 0;
+        drawPill();
+      }
+    } else {
+      stuck = false;
+    }
+  }
+  let listening = null;
+  function listen() {
+    const s = scroller();
+    if (s === listening) return;
+    stopListening();
+    s?.addEventListener('scroll', onScroll);
+    listening = s;
+  }
+  function stopListening() {
+    listening?.removeEventListener('scroll', onScroll);
+    listening = null;
+  }
+  ctx.signal?.addEventListener?.('abort', stopListening);
+
+  // A message's signature changes whenever anything that affects its node does: text, model, tokens, or any
+  // of its tools' state, summary or payload size. A changed signature is what tells the diff to swap a node.
+  const toolSig = (f) => `${f.id}|${f.name}|${f.state}|${f.summary ?? ''}|${String(f.input ?? '').length}|${String(f.result ?? '').length}`;
+  const msgSig = (m) => `${m.id}|${m.role}|${m.text ?? ''}|${m.model ?? ''}|${m.tokens ? `${m.tokens.input}/${m.tokens.output}` : ''}|${m.tools.map(toolSig).join(';')}`;
+  const sigOf = (msgs) => msgs.map(msgSig).join('#');
+
+  const emptyNote = () => el('p', { class: 'sd-none' }, 'Nenhuma mensagem deste agente ainda.');
+
+  function render(entries) {
+    list.replaceChildren(...(entries.length ? entries.map((e) => e.node) : [emptyNote()]));
+  }
+
+  // Keyed, in-place diff: an unchanged node is left alone, a changed node is swapped for its new build, a
+  // new id is inserted, trailing nodes are trimmed. No `replaceChildren` of the whole list, so the siblings,
+  // the scroll and the blocks the person opened stay put. Messages only append or change in place (upsert by
+  // id), so the walk never has to reorder.
+  function reconcile(entries) {
+    for (const c of [...list.childNodes]) if (c.getAttribute?.('data-mid') == null) c.remove();
+    if (!entries.length) {
+      list.replaceChildren(emptyNote());
+      return;
+    }
+    let i = 0;
+    for (const e of entries) {
+      const cur = list.childNodes[i];
+      const curKey = cur?.getAttribute?.('data-mid') ?? null;
+      if (curKey === e.key) {
+        if (cur.getAttribute('data-sig') !== e.sig) {
+          list.insertBefore(e.node, cur);
+          cur.remove();
+        }
+        i++;
+      } else {
+        if (cur) list.insertBefore(e.node, cur);
+        else list.append(e.node);
+        i++;
+      }
+    }
+    while (list.childNodes[i]) list.childNodes[i].remove();
+  }
+
+  function applyFull(c) {
+    messages = c.messages ?? [];
+    cursor = c.cursor ?? null;
+    agent = c.agent;
+    selector.replaceChildren(...c.agents.map((a) => el('option', { value: a.id, selected: a.id === c.agent }, a.name)));
+    count.replaceChildren(icon('conversation'), `${num(c.total)} mensage${c.total === 1 ? 'm' : 'ns'}`);
+    render(buildEntries(messages));
+    content.replaceChildren(bar, list, newPill);
+    pending = 0;
+    // Match the real scroll position: on the first draw the scroller is not attached yet (so this is
+    // true and show() lands at the bottom), but a `reset` while the reader is scrolled up keeps it there
+    // instead of yanking the view down on the next delta.
+    stuck = atBottom();
+    drawPill();
+  }
+
   async function draw() {
     try {
       const c = await ctx.read(`${base}/conversation${agent ? `?agent=${encodeURIComponent(agent)}` : ''}`);
-      agent = c.agent;
-      selector.replaceChildren(...c.agents.map((a) => el('option', { value: a.id, selected: a.id === c.agent }, a.name)));
-      count.replaceChildren(icon('conversation'), `${num(c.total)} mensage${c.total === 1 ? 'm' : 'ns'}`);
-      list.replaceChildren(...(c.messages.length ? conversation(c.messages) : [el('p', { class: 'sd-none' }, 'Nenhuma mensagem deste agente ainda.')]));
-      content.replaceChildren(bar, list);
+      applyFull(c);
     } catch (e) {
       if (e.name === 'AbortError') return;
       content.replaceChildren(error({ title: 'Não deu para ler a conversa', text: e.message, retry: draw }));
+    }
+  }
+
+  // A live update: read only the delta since the cursor and upsert by id. Without a cursor (the core does
+  // not yet speak the delta contract) it falls back to a full read, as before. A `reset` re-reads it all.
+  async function live() {
+    if (cursor == null) return draw();
+    let c;
+    try {
+      c = await ctx.read(`${base}/conversation?after=${encodeURIComponent(cursor)}${agent ? `&agent=${encodeURIComponent(agent)}` : ''}`);
+    } catch (e) {
+      // A live blip keeps what is on screen; the next change or the background re-read tries again.
+      return;
+    }
+    if (c.reset) return applyFull(c);
+    cursor = c.cursor ?? cursor;
+    if (typeof c.total === 'number') count.replaceChildren(icon('conversation'), `${num(c.total)} mensage${c.total === 1 ? 'm' : 'ns'}`);
+    let fresh = 0;
+    for (const m of c.messages ?? []) {
+      const i = messages.findIndex((x) => x.id === m.id);
+      if (i >= 0) messages[i] = m;
+      else {
+        messages.push(m);
+        fresh++;
+      }
+    }
+    if (!(c.messages?.length)) return;
+    reconcile(buildEntries(messages));
+    if (stuck) landAtBottom();
+    else if (fresh > 0) {
+      pending += fresh;
+      drawPill();
     }
   }
 
@@ -622,27 +762,40 @@ function conversationTab(ctx, base, { head, remote = null } = {}) {
   // The tool-only messages before an assistant reply fold into that reply, above its text, the way a
   // chat shows "used N tools" inside the turn; a run with no reply after it gets its own assistant row.
   const asks = (f) => f.state === 'permission';
-  function conversation(messages) {
-    const nodes = [];
-    let run = [];
+  // Builds the folded nodes, each tagged with its primary `message.id` (`data-mid`) and a content
+  // signature (`data-sig`) so the live diff can tell a changed node from an unchanged one.
+  function buildEntries(msgs) {
+    const entries = [];
+    let run = []; // source messages folded into the next reply (tool-only assistant turns)
+    let runTools = [];
     let runAt = null;
-    for (const m of messages) {
+    const push = (owner, before, source) => {
+      const node = message(owner, before);
+      const key = String(owner.id);
+      const sig = sigOf(source);
+      node.setAttribute('data-mid', key);
+      node.setAttribute('data-sig', sig);
+      entries.push({ key, sig, node });
+    };
+    for (const m of msgs) {
       if (m.role !== 'you' && !m.text && !m.tools.some(asks)) {
-        run.push(...m.tools);
+        run.push(m);
+        runTools.push(...m.tools);
         runAt ??= m;
         continue;
       }
       if (m.role !== 'you') {
-        nodes.push(message(m, run));
+        push(m, runTools, [...run, m]);
       } else {
-        if (run.length) nodes.push(message({ ...runAt, tools: [] }, run));
-        nodes.push(message(m, []));
+        if (run.length) push({ ...runAt, tools: [] }, runTools, [...run]);
+        push(m, [], [m]);
       }
       run = [];
+      runTools = [];
       runAt = null;
     }
-    if (run.length) nodes.push(message({ ...runAt, tools: [] }, run));
-    return nodes;
+    if (run.length) push({ ...runAt, tools: [] }, runTools, [...run]);
+    return entries;
   }
 
   function message(m, before = []) {
@@ -737,17 +890,22 @@ function conversationTab(ctx, base, { head, remote = null } = {}) {
       await draw();
       if (target !== node) return;
       node.replaceChildren(content, composeBox().node);
-      // Opening the tab lands on the latest message and the compose box, like a chat; a live re-draw
-      // does not scroll, so someone reading further up is not pulled down.
+      // Opening the tab lands on the latest message and the compose box, like a chat; a live update does
+      // not scroll when the reader is up the list, so someone reading further up is not pulled down.
       composeBox().node.scrollIntoView?.({ block: 'end' });
+      listen();
+      landAtBottom();
       // "Mandar mensagem" from a list opens here with `?focus=message`: the box takes the focus once.
       if (new URLSearchParams(location.search).get('focus') === 'message') {
         history.replaceState(null, '', `${location.pathname}${withQuery(location.search, { focus: null })}${location.hash}`);
         composeBox().focus();
       }
     },
-    hide: () => (target = null),
-    refresh: () => (compose?.refresh(), draw()),
+    hide: () => {
+      target = null;
+      stopListening();
+    },
+    refresh: () => (compose?.refresh(), live()),
   };
 }
 
