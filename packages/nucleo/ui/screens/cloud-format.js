@@ -320,7 +320,7 @@ export function verificationLink(uri) {
 /**
  * The device code's page with the code already filled in (`?user_code=`), so the person only confirms it:
  * the SSO device page reads it from the query, the portal (`…/start/#/device`) from the hash. A URL that
- * already carries one is kept, and so is an authorize link (`request_uri`, the `<region>.signin.aws` page of #431):
+ * already carries one is kept, and so is an authorize link (`request_uri`, the `<region>.signin.aws` page, issue 431):
  * the CLI built that request, the person types the code there. Anything `verificationLink` refuses is `null`.
  */
 export function prefilledLink(uri, userCode) {
