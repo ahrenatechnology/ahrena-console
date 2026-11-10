@@ -357,6 +357,27 @@ main { min-width: 0; padding-block: 24px 80px; padding-left: max(16px, env(safe-
 .ferrbloco .n { color: var(--accent-text); font-weight: 600; } .ferrbloco .cmd { color: var(--muted); }
 .ferrbloco .ok { margin-left: auto; color: var(--status-completed-text); display: inline-flex; gap: 4px; align-items: center; }
 .ferrbloco .esp { margin-left: auto; color: var(--status-waiting-text); display: inline-flex; gap: 4px; align-items: center; }
+.ferrbloco .run { margin-left: auto; color: var(--status-active-text); display: inline-flex; gap: 4px; align-items: center; }
+.ferrbloco .err { margin-left: auto; color: var(--status-error-text); display: inline-flex; gap: 4px; align-items: center; }
+/* live conversation (#414): the scroll states and the in-place tool update */
+.lv-bar { display: flex; gap: 10px; align-items: center; }
+.lv-feed { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--status-active-text); font-weight: 500; }
+.lv-feed .ponto { background: var(--status-active-dot); box-shadow: 0 0 0 0 color-mix(in srgb, var(--status-active-dot) 60%, transparent); animation: lv-pulse 1.8s infinite; }
+@keyframes lv-pulse { 70% { box-shadow: 0 0 0 7px transparent; } 100% { box-shadow: 0 0 0 0 transparent; } }
+.lv-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.lv-panel { display: flex; flex-direction: column; gap: 8px; }
+.lv-vp { position: relative; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); height: 312px; overflow: hidden; padding: 14px 18px 14px 16px; display: flex; flex-direction: column; gap: 14px; }
+.lv-vp.top { mask-image: linear-gradient(to bottom, transparent 0, #000 30px); -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 30px); }
+.lv-vp.bottom { justify-content: flex-end; mask-image: linear-gradient(to top, transparent 0, #000 30px); -webkit-mask-image: linear-gradient(to top, transparent 0, #000 30px); }
+.lv-track { position: absolute; top: 12px; right: 6px; bottom: 12px; width: 5px; border-radius: 99px; background: color-mix(in srgb, var(--muted) 16%, transparent); }
+.lv-thumb { position: absolute; right: 6px; width: 5px; border-radius: 99px; background: color-mix(in srgb, var(--muted) 52%, transparent); }
+.lv-newpill { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); display: inline-flex; align-items: center; gap: 7px; height: 30px; padding: 0 14px; border-radius: 99px; background: var(--accent); color: var(--on-accent); font-size: 12px; font-weight: 600; box-shadow: 0 8px 24px color-mix(in srgb, var(--mono-black) 45%, transparent); white-space: nowrap; }
+.lv-flash { outline: 2px solid color-mix(in srgb, var(--status-active-dot) 55%, transparent); outline-offset: 4px; border-radius: 10px; }
+.lv-new-label { display: inline-flex; align-items: center; gap: 5px; font-size: 10px; letter-spacing: .04em; text-transform: uppercase; font-weight: 600; color: var(--status-active-text); }
+.lv-cap { font-size: 11.5px; color: var(--muted); line-height: 1.5; } .lv-cap b { color: var(--text); font-weight: 600; }
+.lv-step { display: grid; grid-template-columns: minmax(0, 1fr) 28px minmax(0, 1fr); gap: 12px; align-items: start; }
+.lv-step .lv-mid { display: grid; place-items: center; color: var(--muted); padding-top: 40px; }
+.lv-stale { outline: 2px dashed color-mix(in srgb, var(--muted) 45%, transparent); outline-offset: 4px; border-radius: 10px; opacity: .55; }
 /* gráficos */
 .graf text { font-family: var(--font-mono); font-size: 10px; fill: var(--muted); }
 /* mural */
@@ -1263,6 +1284,72 @@ function telaConversaIdle() {
       <div class="corpo">Extraí <code>comBackoff()</code> em <code>src/fila/retry.ts</code> e fiz o commit. Rodo os testes?</div>
       <div class="ferrbloco">${ic('chevron-right')}<span class="n">Bash</span><span class="cmd trunc">git commit -m "retry: extract backoff"</span><span class="ok">${ic('check-circle-2')}OK</span></div></div></div>
   </div>`
+}
+
+// #414: the live Conversa tab. Fixes the three states the story asks the wireframe to pin down:
+// the list stuck to the bottom, the reader scrolled up with the "N novas mensagens" pill, and a tool
+// line that changes state in place without redrawing the list. The optional "live, receiving" state
+// is the strip under the header. Synthetic data, simulator vocabulary.
+function telaLiveConversation() {
+  const s = byId('c3f09b52')
+  // A user turn and an assistant turn, used inside each viewport. `flash` marks a just-arrived block.
+  const mUser = (h, body) => `<div class="msg"><span class="av eu">${ic('user')}</span><div><div class="quem">Você<span class="h">${h}</span></div><div class="corpo">${body}</div></div></div>`
+  const mBot = (h, tok, body, tool = '') => `<div class="msg"><span class="av">${ic('bot')}</span><div><div class="quem">Assistente<span class="chip">Opus 5.5</span><span class="chip">${tok}</span><span class="h">${h}</span></div>
+      <div class="corpo">${body}</div>${tool}</div></div>`
+  const tool = (open, cmd, state) => `<div class="ferrbloco">${ic(open ? 'chevron-down' : 'chevron-right')}<span class="n">Bash</span><span class="cmd trunc">${cmd}</span>${state}</div>`
+  const stOk = `<span class="ok">${ic('check-circle-2')}OK</span>`
+  const stRun = `<span class="run">${ic('loader-2')}Rodando</span>`
+  const stErr = `<span class="err">${ic('x-circle')}Erro · exit 1</span>`
+  // The in-place tool change keeps any block the person opened open: a sub-detail line stands in for that.
+  const openBody = `<div class="corpo" style="margin-top:6px;color:var(--muted);font-size:11.5px;font-family:var(--font-mono)">+ 3 testes · <span class="c-active">rodando cobrança.spec.ts</span></div>`
+
+  // Panel A — the list stuck to the bottom: a new block lands at the end and the viewport follows.
+  const novaBody = `<span class="lv-new-label">${ic('sparkles')}nova · chegou agora</span><br>Extraindo o cálculo de juros em <code>calcularJuros()</code>.`
+  const presa = `<div class="lv-panel">
+    <div class="olhinho">${ic('arrow-down')}Presa ao fim · a lista acompanha</div>
+    <div class="lv-vp bottom">
+      <div class="lv-track"></div><div class="lv-thumb" style="bottom:12px;height:46%"></div>
+      ${mUser('22:58', 'explica a mudança antes de continuar')}
+      ${mBot('22:59', '↓ 2,3 k · ↑ 540', 'Separei a cobrança num serviço. Rodo a bateria de pagamentos.', tool(false, 'npm test -- pagamentos', stOk))}
+      <div class="lv-flash">${mBot('22:59', '↓ 1,1 k · ↑ 180', novaBody, tool(false, 'Edit src/pagamentos/juros.ts', stOk))}</div>
+    </div>
+    <div class="lv-cap"><b>Com a lista no fim,</b> a mensagem nova (texto ou chamada de ferramenta) entra embaixo e a lista desce junto, como num chat. Só o bloco novo é pedido e desenhado.</div>
+  </div>`
+
+  // Panel B — scrolled up on purpose: the position holds and the "N novas mensagens" pill appears.
+  const rolada = `<div class="lv-panel">
+    <div class="olhinho">${ic('arrow-up')}Rolada para cima · a posição se mantém</div>
+    <div class="lv-vp top">
+      <div class="lv-track"></div><div class="lv-thumb" style="top:12px;height:40%"></div>
+      ${mUser('22:51', 'quebre o módulo de pagamentos em serviços')}
+      ${mBot('22:53', '↓ 3,2 k · ↑ 820', 'Mapeei as chamadas de <code>cobrar()</code> e vou separar em três serviços: cobrança, juros e recibo.', tool(false, 'Grep cobrar(', stOk))}
+      ${mUser('22:55', 'começa pela cobrança')}
+      <div class="lv-newpill">${ic('arrow-down')}3 novas mensagens</div>
+    </div>
+    <div class="lv-cap"><b>Quem rolou para cima de propósito</b> não é puxado para baixo: a leitura fica onde está e aparece o aviso <b>"N novas mensagens"</b>. Clicar nele leva ao fim e prende a lista de novo.</div>
+  </div>`
+
+  // The tool-state change, in place: a "Rodando" line becomes "OK" or "Erro" without redrawing the list,
+  // and the block the person opened stays open.
+  const ferramenta = `<div class="lv-panel">
+    <div class="olhinho">${ic('wrench')}Ferramenta muda de estado · só a linha muda</div>
+    <div class="lv-step">
+      <div class="cartao" style="padding:12px 14px">${mBot('23:01', '↓ 2,0 k · ↑ 260', 'Rodando a bateria de pagamentos.', tool(true, 'npm test -- pagamentos', stRun) + openBody)}</div>
+      <div class="lv-mid">${ic('arrow-right')}</div>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <div class="cartao" style="padding:12px 14px">${mBot('23:01', '↓ 2,0 k · ↑ 260', 'Rodando a bateria de pagamentos.', tool(true, 'npm test -- pagamentos', stOk) + openBody)}</div>
+        <div class="cartao" style="padding:12px 14px">${mBot('23:01', '↓ 2,0 k · ↑ 260', 'Rodando a bateria de pagamentos.', tool(true, 'npm test -- pagamentos', stErr) + openBody)}</div>
+      </div>
+    </div>
+    <div class="lv-cap"><b>Quando o resultado chega,</b> a mesma linha passa de <span class="c-active">Rodando</span> para <span class="c-completed">OK</span> ou <span class="c-error">Erro</span>, sem redesenhar a lista inteira; os blocos que a pessoa abriu continuam abertos.</div>
+  </div>`
+
+  return `${detCab(s)}
+  <div class="detail-idle-note"><span class="lv-feed"><span class="ponto"></span>Ao vivo · recebendo mensagens</span><span class="lv-cap" style="margin:0">A aba acompanha o transcrito enquanto o turno roda; cada bloco entra em até 1,5 s, sem a sessão mudar de estado.</span></div>
+  ${abas(1, 4, '248/1.980')}
+  <div class="lv-bar"><span class="campo" style="width:260px">Agente principal<span style="margin-left:auto">${ic('chevron-down')}</span></span><span class="chip">${ic('message-square')}184 mensagens</span><span class="btn contorno">${ic('refresh-cw')}Atualizar</span></div>
+  <div class="lv-grid">${presa}${rolada}</div>
+  ${ferramenta}`
 }
 
 function telaLinhaTempo() {
@@ -4702,6 +4789,8 @@ const TELAS = [
     n: N(['Session Detail · Agents: chips copiáveis, 6 KPIs, Top Tools, Task Progress, Token Flow e a árvore de agentes.'], ['Barras de ferramenta no laranja, sem uma cor por ferramenta: a paleta fica fechada.', 'Custo por nó da árvore.']) },
   { id: 'console-det-conversa', cod: 'C5', nome: 'Detalhe · Conversa', sub: 'Em cima, a sessão precisa de você (pede uma permissão): faixa amarela no topo e o bloco da ferramenta aguardando. Embaixo, uma sessão ociosa (o turno acabou): sem faixa, só uma linha neutra (3.5, #245).', html: () => `<div style="display:flex;flex-direction:column;gap:16px">${cc1100('sessoes', telaConversa())}${cc1100('sessoes', telaConversaIdle())}</div>`,
     n: N(['Conversation: seletor de agente, mensagens com modelo e tokens, blocos de ferramenta que expandem, código inline.', 'A faixa amarela de waiting do Session Detail.'], ['"Abrir no Claude Desktop", com o nome inteiro, no lugar de responder ali: responder é o épico 9.', 'A faixa amarela só aparece quando a sessão trava. Ociosa não tem faixa (#245).']) },
+  { id: 'console-live-conversation', cod: 'C100', nome: 'Detalhe · Conversa ao vivo', sub: 'Issue #414. A aba Conversa de uma sessão ativa recebendo mensagens ao vivo: a faixa "Ao vivo · recebendo mensagens" sob o cabeçalho, e os três estados que a história fixa. Presa ao fim: com a lista no fim, o bloco novo (texto ou chamada de ferramenta) entra embaixo e a lista acompanha. Rolada para cima: a posição de leitura se mantém e aparece o aviso "N novas mensagens", que leva ao fim ao ser clicado. Ferramenta muda de estado: a linha "Rodando" passa a "OK" ou "Erro" na própria linha, sem redesenhar a lista, e os blocos abertos continuam abertos. Em 1100 e 1440.', html: () => `<div style="display:flex;flex-direction:column;gap:12px">${widthCol(1100, '1100 px · a janela do app', frameAt(1100, 'sessoes', telaLiveConversation()))}${widthCol(1440, '1440 px', frameAt(1440, 'sessoes', telaLiveConversation()))}</div>`,
+    n: N(['A aba Conversation do Session Detail (C5): seletor de agente, mensagens com modelo e tokens, blocos de ferramenta que expandem.', 'A pílula "Live" do cabeçalho de página, aqui trazida para dentro do detalhe como a faixa "Ao vivo · recebendo mensagens".'], ['O CCAM relê a conversa inteira só quando o estado muda; aqui a aba acompanha o transcrito bloco a bloco, sem mudança de estado, e redesenha só o bloco novo ou alterado (AC-2, AC-3).', 'A lista presa ao fim e o aviso "N novas mensagens" ao rolar para cima são da proposta do diagnóstico da issue (passo 2): o CCAM não tem nenhum dos dois, sempre cola no fim.', 'O aviso diz o número exato de blocos novos ("3 novas mensagens"); clicá-lo leva ao fim e prende a lista de novo.', 'A troca de estado da ferramenta é na própria linha (Rodando → OK/Erro), sem replaceChildren na lista, e preserva os blocos que a pessoa abriu (AC-5). O vermelho "Erro" segue o design: falhou.', 'Texto palavra a palavra não entra: o Claude Code grava o transcrito bloco a bloco, então o alvo é por bloco, não por caractere.', 'Ícones reaproveitados do Lucide (arrow-down, arrow-up, wrench, loader-2, check-circle-2, x-circle); nenhum desenho novo. A barra de rolagem é só ilustrativa, para marcar onde a leitura está.']) },
   { id: 'console-det-tempo', cod: 'C6', nome: 'Detalhe · Linha do tempo', sub: 'Os eventos da sessão, filtráveis e expansíveis (3.5).', html: () => `<div class="fila">${cc1100('sessoes', telaLinhaTempo())}</div>`,
     n: N(['Timeline: busca, intervalo De–Até, filtros Status, Event type, Tool e Agent, linhas que expandem com o chip da ferramenta.'], ['O tipo do hook aparece na linha, para ler a máquina de estados.']) },
   { id: 'console-det-workflow', cod: 'C7', nome: 'Detalhe · Workflow', sub: 'O grafo de agentes da sessão: o laço dev → review → ajustes → review, e a linha do tempo dos agentes em paralelo.', html: () => `<div class="fila">${cc('sessoes', telaDetWorkflow())}</div>`,
