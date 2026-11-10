@@ -127,9 +127,21 @@ export interface MensagemDaConversa {
 export interface ConversaDoDetalhe {
   agents: { id: string; name: string }[];
   agent: string;
-  /** Mensagens do agente, todas; `messages` traz só as últimas `limit`. */
+  /** Mensagens do agente, todas; `messages` traz só as últimas `limit` (ou, com `?after=`, só as novas/alteradas). */
   total: number;
   messages: MensagemDaConversa[];
+  /**
+   * Cursor opaco (`<generation>.<seq>`) para a próxima chamada `?after=`. `seq` é a posição no fluxo de
+   * eventos da sessão (o maior `SessionEvent.seq`), robusta a eventos fora de ordem e a resultados que
+   * alteram mensagens antigas.
+   */
+  cursor: string;
+  /**
+   * Só no caminho delta (`?after=`): o cursor era de outra geração, velho demais ou inválido; `messages`
+   * traz a conversa inteira de novo e o cliente deve substituí-la. Ausente na carga inicial e quando o
+   * delta é incremental.
+   */
+  reset?: boolean;
 }
 
 export interface EventoDoDetalhe {
@@ -165,6 +177,22 @@ export interface OpcoesDoDetalhe {
   local?: (sessionId: string) => string | null;
   /** #285: the head's `open`; without it, no session counts as live in a terminal. */
   open?: SessionOpenDescriber;
+  /**
+   * #414: a geração do cursor do delta da Conversa. Muda a cada subida do núcleo (um cursor de outra
+   * geração pede `reset`). Aleatória por padrão; fixa nos testes.
+   */
+  conversationGeneration?: string;
+}
+
+/** Uma mensagem da Conversa com o maior `seq` dos eventos que a compõem (o que o delta compara). */
+interface ConversationLine {
+  msg: MensagemDaConversa;
+  seq: number;
+}
+
+/** Geração aleatória do cursor da Conversa, no mesmo formato do cursor de mudanças (`<generation>.<seq>`). */
+function randomGeneration(): string {
+  return Math.floor(Math.random() * 36 ** 6).toString(36);
 }
 
 type Json = Record<string, unknown>;
@@ -258,13 +286,15 @@ export class LeiturasDoDetalhe {
   private readonly agora: () => number;
   private readonly local: (sessionId: string) => string | null;
   private readonly open: SessionOpenDescriber;
+  private readonly conversationGeneration: string;
 
-  constructor({ storage, montador, agora = Date.now, local = () => null, open = new SessionOpenDescriber() }: OpcoesDoDetalhe) {
+  constructor({ storage, montador, agora = Date.now, local = () => null, open = new SessionOpenDescriber(), conversationGeneration = randomGeneration() }: OpcoesDoDetalhe) {
     this.open = open;
     this.storage = storage;
     this.montador = montador;
     this.agora = agora;
     this.local = local;
+    this.conversationGeneration = conversationGeneration;
   }
 
   /** Responde uma rota do Detalhe; o servidor só a registra. */
@@ -273,7 +303,7 @@ export class LeiturasDoDetalhe {
     const session = await this.storage.getSession(id);
     if (!session) return send(res, 404, { error: 'o núcleo não conhece esta sessão' });
     if (aba === 'agents') return send(res, 200, await this.agentes(session));
-    if (aba === 'conversation') return send(res, 200, await this.conversa(session, url.searchParams.get('agent'), url.searchParams.get('limit')));
+    if (aba === 'conversation') return send(res, 200, await this.conversation(session, url.searchParams.get('agent'), url.searchParams.get('limit'), url.searchParams.get('after')));
     if (aba === 'events') return send(res, 200, await this.eventos(session, url.searchParams));
     send(res, 200, await this.cabeca(session));
   }
@@ -416,49 +446,91 @@ export class LeiturasDoDetalhe {
     };
   }
 
-  async conversa(session: Session, agentePedido: string | null, limitePedido: string | null): Promise<ConversaDoDetalhe> {
+  /**
+   * A Conversa de um agente (C5), nos dois caminhos (#414):
+   * - sem `after`: a carga inicial — as últimas `limit` mensagens, mais um `cursor` para a próxima chamada;
+   * - com `after=<cursor>`: só as mensagens novas ou alteradas desde o cursor (uma chamada de ferramenta
+   *   que mudou de estado conta como alterada), cada uma com seu `id` estável para o cliente aplicar por id.
+   * Um cursor de outra geração, velho demais ou inválido devolve `reset: true` com a conversa inteira.
+   */
+  async conversation(session: Session, agentePedido: string | null, limitePedido: string | null, after: string | null): Promise<ConversaDoDetalhe> {
     const [lista, eventos] = await Promise.all([this.storage.listAgents(session.id), this.todosOsEventos(session.id)]);
     const quem = new Agentes(session.id, lista);
     const opcoes = quem.opcoes();
     const agente = opcoes.some((o) => o.id === agentePedido) ? agentePedido! : quem.principal;
     const limite = Math.min(MAX_MENSAGENS, Math.max(1, Number(limitePedido) || MAX_MENSAGENS));
 
-    const mensagens: MensagemDaConversa[] = [];
+    const { lines, maxSeq } = this.buildConversation(session, eventos, quem, agente);
+    const cursor = `${this.conversationGeneration}.${maxSeq}`;
+    const total = lines.length;
+
+    const since = after !== null ? this.parseConversationCursor(after, maxSeq) : null;
+    if (after !== null && since === null) {
+      // Cursor de outra geração, velho demais ou inválido: o cliente relê tudo.
+      return { agents: opcoes, agent: agente, total, messages: lines.slice(-limite).map((l) => l.msg), cursor, reset: true };
+    }
+    if (since !== null) {
+      // Delta: só as mensagens cujo maior `seq` passou do cursor (novas ou alteradas), nunca a conversa inteira.
+      const changed = lines.filter((l) => l.seq > since).slice(-MAX_MENSAGENS);
+      return { agents: opcoes, agent: agente, total, messages: changed.map((l) => l.msg), cursor };
+    }
+    return { agents: opcoes, agent: agente, total, messages: lines.slice(-limite).map((l) => l.msg), cursor };
+  }
+
+  /** Monta as mensagens do agente, cada uma com o maior `seq` dos eventos que a compõem, e o `seq` do fluxo. */
+  private buildConversation(session: Session, eventos: SessionEvent[], quem: Agentes, agente: string): { lines: ConversationLine[]; maxSeq: number } {
+    let maxSeq = 0;
+    const bumpSeq = (e: SessionEvent): number => {
+      const s = e.seq ?? 0;
+      if (s > maxSeq) maxSeq = s;
+      return s;
+    };
+
+    const lines: ConversationLine[] = [];
     const chamadas = new Map<string, FerramentaNaConversa>();
+    const toolLine = new Map<string, ConversationLine>();
     let ultimaChamada: FerramentaNaConversa | null = null;
-    const atual = (e: SessionEvent): MensagemDaConversa => {
-      const ultima = mensagens.at(-1);
-      if (ultima?.role === 'assistant') return ultima;
-      const nova = mensagemDoAssistente(e, null);
-      mensagens.push(nova);
+    const atual = (e: SessionEvent, seq: number): ConversationLine => {
+      const ultima = lines.at(-1);
+      if (ultima?.msg.role === 'assistant') return ultima;
+      const nova: ConversationLine = { msg: mensagemDoAssistente(e, null), seq };
+      lines.push(nova);
       return nova;
     };
 
     for (const e of eventos) {
+      // O `seq` do fluxo avança com todo evento da sessão, de qualquer agente; a conversa em si é filtrada.
+      const seq = bumpSeq(e);
       if (quem.de(e.agentId) !== agente) continue;
       if (PROMPTS.has(e.type)) {
         const texto = cortar(messageText(e), MAX_TEXTO);
         // The hook and the transcript both carry the same prompt: the second one, same text and right after, is left out.
-        const anterior = [...mensagens].reverse().find((m) => m.role === 'you');
-        if (anterior && samePrompt(anterior.text, texto) && Math.abs(Date.parse(e.createdAt) - Date.parse(anterior.at)) < 120_000) {
+        const anterior = [...lines].reverse().find((l) => l.msg.role === 'you');
+        if (anterior && samePrompt(anterior.msg.text, texto) && Math.abs(Date.parse(e.createdAt) - Date.parse(anterior.msg.at)) < 120_000) {
           // An old event may only have the short summary: the fuller text wins.
-          if ((texto?.length ?? 0) > (anterior.text?.length ?? 0)) anterior.text = texto;
+          if ((texto?.length ?? 0) > (anterior.msg.text?.length ?? 0)) anterior.msg.text = texto;
+          if (seq > anterior.seq) anterior.seq = seq;
           continue;
         }
-        mensagens.push({ id: e.id, role: 'you', at: e.createdAt, text: texto, model: null, tokens: null, tools: [] });
+        lines.push({ msg: { id: e.id, role: 'you', at: e.createdAt, text: texto, model: null, tokens: null, tools: [] }, seq });
       } else if (e.type === 'AssistantMessage' && messageText(e)) {
-        mensagens.push(mensagemDoAssistente(e, cortar(messageText(e), MAX_TEXTO)));
+        lines.push({ msg: mensagemDoAssistente(e, cortar(messageText(e), MAX_TEXTO)), seq });
       } else if (CHAMADAS.has(e.type) && e.toolName) {
         const id = idDaChamada(e) ?? e.id;
         const ja = chamadas.get(id);
         const entrada = emJson(obj(e.data)?.tool_input ?? null);
         if (ja) {
           ja.input ??= entrada;
+          const line = toolLine.get(id);
+          if (line && seq > line.seq) line.seq = seq;
           continue;
         }
         const f: FerramentaNaConversa = { id, name: e.toolName, summary: e.summary, state: null, input: entrada, result: null };
         chamadas.set(id, f);
-        atual(e).tools.push(f);
+        const line = atual(e, seq);
+        line.msg.tools.push(f);
+        toolLine.set(id, line);
+        if (seq > line.seq) line.seq = seq;
         ultimaChamada = f;
       } else if (RESULTADOS.has(e.type)) {
         const id = idDaChamada(e);
@@ -466,6 +538,9 @@ export class LeiturasDoDetalhe {
         if (!f) continue;
         f.state = falhou(e) ? 'error' : 'ok';
         f.result ??= e.type === 'ToolResult' ? cortar(e.summary, MAX_DADOS) : emJson(obj(e.data)?.tool_response ?? null);
+        // O resultado altera uma mensagem antiga (a dona da chamada): ela conta como alterada no delta.
+        const line = id ? toolLine.get(id) : null;
+        if (line && seq > line.seq) line.seq = seq;
       }
     }
     // A última chamada sem resultado: é ela que pede permissão, ou a que está rodando.
@@ -475,7 +550,15 @@ export class LeiturasDoDetalhe {
       else if (session.status === 'active' && !session.awaitingInputSince) ultima.state = 'running';
     }
 
-    return { agents: opcoes, agent: agente, total: mensagens.length, messages: mensagens.slice(-limite) };
+    return { lines, maxSeq };
+  }
+
+  /** O `seq` de um cursor válido (mesma geração, não do futuro); `null` pede `reset`. */
+  private parseConversationCursor(cursor: string, maxSeq: number): number | null {
+    const m = /^([0-9a-z]+)\.(\d{1,15})$/.exec(cursor);
+    if (!m || m[1] !== this.conversationGeneration) return null;
+    const seq = Number(m[2]);
+    return seq <= maxSeq ? seq : null;
   }
 
   async eventos(session: Session, params: URLSearchParams): Promise<EventosDoDetalhe> {
