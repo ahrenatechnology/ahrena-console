@@ -304,7 +304,7 @@ export function fallbackCommand(session) {
 
 const AWS_HOST = /(^|\.)(awsapps\.com|amazonaws\.com|aws)$/i;
 
-/** Same value as `MAX_VERIFICATION_URI_CHARS` in src/clouds/aws-login.ts (the browser bundle cannot import it): a real signin.aws link is 521 characters (#446). */
+/** Same value as `MAX_VERIFICATION_URI_CHARS` in src/clouds/aws-login.ts (the browser bundle cannot import it): a real signin.aws link is 521 characters (issue 446). */
 const MAX_VERIFICATION_URI_CHARS = 2048;
 
 /** The device code's page: https on an AWS host, no credentials in the URL; the URL or `null`. */
