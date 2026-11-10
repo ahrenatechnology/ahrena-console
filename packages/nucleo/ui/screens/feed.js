@@ -372,7 +372,7 @@ export async function mount(area, ctx) {
     }
   }
 
-  // #414 (L4): uma atividade nova de uma sessão agora chega como mudança `activity` (chave = a sessão)
+  // issue 414 (L4): uma atividade nova de uma sessão agora chega como mudança `activity` (chave = a sessão)
   // pelo long polling/stream, então o feed pede os novos na hora que ela chega, sem esperar o relógio.
   // As outras mudanças (estado, plano, decisão) também pedem os novos, como já faziam.
   ctx.onChange(() => fetchNew());
