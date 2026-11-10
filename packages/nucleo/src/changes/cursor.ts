@@ -29,8 +29,12 @@
 // state, a login moving, its CLI's config file); the key is the connector (`aws`). Only the HTTP route.
 // `app-update` (#330): the desktop app's update notice changed (what the app found, a download moving, a click on Depois,
 // Buscar agora or Atualizar); the key is `app`. Only the HTTP route exposes it.
+// `activity` (#414): a session's event stream moved — a new event was appended, or an already-drawn event's
+// transcript text was filled in; the key is the session id, with the session and its account. It is what lets
+// the Feed and the Conversa tab drop their 5 s clock. Only the HTTP route exposes it; MCP's `wait_for_changes`
+// filters it out (mcp.ts), like `repos`.
 // The values are English since #173 phase 2b; the old Portuguese ones left in phase 6.
-export const CHANGE_TYPES = ['session', 'state', 'needs-you', 'plan', 'decision', 'account', 'repos', 'alert', 'agent-instructions', 'framework-install', 'adrs', 'connections', 'tools', 'connector', 'app-update'] as const;
+export const CHANGE_TYPES = ['session', 'state', 'needs-you', 'plan', 'decision', 'activity', 'account', 'repos', 'alert', 'agent-instructions', 'framework-install', 'adrs', 'connections', 'tools', 'connector', 'app-update'] as const;
 export type ChangeType = (typeof CHANGE_TYPES)[number];
 
 export interface RecordedChange {
@@ -61,6 +65,12 @@ export interface WaitOptions {
   timeoutMs?: number;
   /** Aborting answers at once with whatever there is (the HTTP client gave up, the server closed). */
   signal?: AbortSignal;
+  /**
+   * Minimum interval between the start of this wait and its answer, overriding the cursor's default
+   * (`DEFAULT_MIN_INTERVAL_MS`). The SSE stream passes `0`: it holds the connection, so there is no long
+   * polling loop to throttle. Burst batching (`batchMs`) still applies, so a burst comes out in one answer.
+   */
+  minIntervalMs?: number;
 }
 
 export interface WaitResult {
@@ -194,7 +204,7 @@ export class ChangeCursor {
       const onAbort = () => waiter.answer(false);
       const waiter: Waiter = {
         since,
-        answerAt: this.clock.now() + this.minIntervalMs,
+        answerAt: this.clock.now() + Math.max(0, options.minIntervalMs ?? this.minIntervalMs),
         filters,
         timer: null,
         batching: false,

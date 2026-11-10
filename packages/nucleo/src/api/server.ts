@@ -77,6 +77,7 @@ import type { AddressInfo, Server as NetServer } from 'node:net';
 import { allowedLocalRequest, createHookRoute, HOOKS_PATH, send, type HookRouteOptions } from '../ingest/hooks/receiver.ts';
 import type { ChangeCursor } from '../changes/cursor.ts';
 import { CHANGES_ROUTE, serveChanges } from '../changes/http.ts';
+import { STREAM_ROUTE, serveStream } from '../changes/stream.ts';
 import { ErroDaDecisao, ESCOPOS_DAS_DECISOES, type AcaoNaDecisao } from './decisions.ts';
 import { responderDecisoesDaUi, type DecisoesDaUi } from './decisions-ui.ts';
 import type { MontadorDoPainel, PedidoDoPainel } from './panel.ts';
@@ -550,6 +551,7 @@ export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
     // `pid` proves who holds the port: whoever reads the lock only stops the core if its pid is this one (src/owner).
     if (url.pathname === '/api/overview') return send(res, 200, { ok: true, name: 'ahrena-console', version: API_VERSION, pid: process.pid, commit: opts.commit ?? null });
     if (url.pathname === CHANGES_ROUTE && opts.changes) return serveChanges(res, url, opts.changes);
+    if (url.pathname === STREAM_ROUTE && opts.changes) return serveStream(req, res, url, opts.changes);
     if (url.pathname === WALL_ROUTE) return responderMural(res, wall, url.searchParams.has('parkedLimit') ? Number(url.searchParams.get('parkedLimit')) : undefined);
     if (url.pathname === EVENTS_ROUTE && opts.events) return responderEventos(res, url, opts.events);
     if (url.pathname === ATTENTION_ROUTE && opts.fleet) return send(res, 200, await montarAtencao(opts.fleet, opts.changes?.current ?? null, remotes(), openDescriber));

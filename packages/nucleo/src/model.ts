@@ -120,6 +120,13 @@ export interface SessionEvent {
   summary: string | null;
   data: unknown;
   createdAt: string;
+  /**
+   * Posição no fluxo de gravação, monotônica por ordem de inserção (não por `createdAt`), robusta a
+   * eventos que chegam fora de ordem. Avança no `appendEvent` e no `setEventText` (o backfill do texto
+   * do transcript). É o que o delta da Conversa (#414) usa como cursor; só a leitura a preenche, o
+   * `appendEvent` a calcula sozinho e ignora o valor passado.
+   */
+  seq?: number;
 }
 
 export interface TokenCounts {

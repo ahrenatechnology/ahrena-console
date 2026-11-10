@@ -258,7 +258,7 @@ describe('Feed de atividade: a tela', () => {
     return {
       pedidos,
       sair,
-      mudar: () => ouvintes.mudar.forEach((f) => f()),
+      mudar: (changes?: unknown) => ouvintes.mudar.forEach((f) => (f as (c?: unknown) => void)(changes)),
       ctx: {
         params: {},
         signal: sair.signal,
@@ -368,6 +368,22 @@ describe('Feed de atividade: a tela', () => {
     soltar({ events: [], cursor: 'k2', older: null });
     await espera();
     assert.deepEqual(linhasDe(area), ['b', 'a']);
+    limpar();
+  });
+
+  test('AC-1: uma mudança `activity` da sessão faz o feed pedir e pôr o evento novo no topo, sem esperar o relógio de 5 s', async () => {
+    let fila: unknown[] = [{ events: [evento('e1', 30)], cursor: 'k1', older: null, options: null }];
+    const f = ctxFalso(() => fila.shift());
+    const area = new Elemento('main');
+    const limpar = await mount(area, f.ctx);
+    assert.deepEqual(linhasDe(area), ['e1']);
+    // Chega uma atividade nova desta sessão: o novo tipo de mudança `activity` (chave = a sessão) pelo onChange.
+    fila = [{ events: [evento('e2', 1)], cursor: 'k2', older: null, options: null }];
+    f.mudar([{ type: 'activity', key: 'c3f09b52-4e1', sessionId: 'c3f09b52-4e1', seq: 7 }]);
+    await espera();
+    // O feed pediu o delta na hora — não foi o relógio: o teste não avança os 5 s do setInterval.
+    assert.equal(f.pedidos.at(-1), '/api/events?after=k1&machine=all');
+    assert.deepEqual(linhasDe(area), ['e2', 'e1'], 'o evento novo entrou no topo');
     limpar();
   });
 

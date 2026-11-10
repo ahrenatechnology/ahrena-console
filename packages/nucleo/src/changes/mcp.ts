@@ -7,9 +7,9 @@
 // goes out: only the type, the session id and the decision id. The wait listens to `ctx.signal`, which
 // aborts when the client closes the connection.
 //
-// The `repos` type (#104, #105), and `agent-instructions` (#183) and `tools` (#280) with it, is for the screen only, through the HTTP route: here it is not in the
-// enum and the wait always filters by the MCP types, so that a repository build does not wake up
-// whoever waits without a filter or with `account: "none"` (the `repos` changes have no account).
+// The `repos` type (#104, #105), and `agent-instructions` (#183), `tools` (#280) and `activity` (#414) with it, is for the screen only, through the HTTP route: here it is not in the
+// enum and the wait always filters by the MCP types, so that a repository build (or a session's event stream) does not wake up
+// whoever waits without a filter or with `account: "none"`.
 
 import type { Accounts } from '../api/accounts.ts';
 import { matchesAccountFilter } from '../mcp/fleet.ts';
@@ -29,9 +29,9 @@ import {
 
 export const WAIT_FOR_CHANGES = 'wait_for_changes';
 
-/** The types MCP exposes: all but the screen-only ones (the GitHub screens' `repos`, `agent-instructions`, `framework-install`, `adrs`, the /ui's `connections` (#241) and `connector` (#277), and the Tools screen's `tools`). */
-type ScreenOnlyType = 'repos' | 'agent-instructions' | 'framework-install' | 'adrs' | 'connections' | 'tools' | 'connector' | 'app-update';
-const SCREEN_ONLY_TYPES = new Set<ChangeType>(['repos', 'agent-instructions', 'framework-install', 'adrs', 'connections', 'tools', 'connector', 'app-update'] satisfies ScreenOnlyType[]);
+/** The types MCP exposes: all but the screen-only ones (the GitHub screens' `repos`, `agent-instructions`, `framework-install`, `adrs`, the /ui's `connections` (#241) and `connector` (#277), the Tools screen's `tools`, and the Feed/Conversa `activity` (#414)). */
+type ScreenOnlyType = 'repos' | 'agent-instructions' | 'framework-install' | 'adrs' | 'connections' | 'tools' | 'connector' | 'app-update' | 'activity';
+const SCREEN_ONLY_TYPES = new Set<ChangeType>(['repos', 'agent-instructions', 'framework-install', 'adrs', 'connections', 'tools', 'connector', 'app-update', 'activity'] satisfies ScreenOnlyType[]);
 export const MCP_CHANGE_TYPES = CHANGE_TYPES.filter((t): t is Exclude<ChangeType, ScreenOnlyType> => !SCREEN_ONLY_TYPES.has(t));
 export type McpChangeType = (typeof MCP_CHANGE_TYPES)[number];
 
