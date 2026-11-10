@@ -332,3 +332,38 @@ describe('o estilo das Decisões (ui/decisions.css)', () => {
     assert.doesNotMatch(css, /min-width:\s*[1-9]\d*px/, 'min-width em px empurra a linha para fora');
   });
 });
+
+describe('the decision card: Confirm and Dismiss (#435)', () => {
+  const toConfirm = { id: 'd1', label: 'D-1', title: 'Use X', state: 'to_confirm', origin: 'suggested', scope: 'session', decidedAt: '2026-11-10T10:00:00Z', decidedBy: 'agent', sessionId: 's1' };
+  const settle = () => new Promise((ok) => setTimeout(ok, 0));
+
+  async function cardWith(onChange: () => unknown, writer: () => Promise<unknown>) {
+    const { instalarDomFalso } = await import('./fake-dom.ts');
+    instalarDomFalso();
+    // @ts-expect-error: browser module, plain JavaScript
+    const { useWriter } = await import('../../ui/api.js');
+    // @ts-expect-error: idem
+    const { decisionCard } = await import('../../ui/screens/decisions-common.js');
+    useWriter(writer);
+    const card = decisionCard(toConfirm, { onChange });
+    const [confirm, dismiss] = card.querySelectorAll('button');
+    return { confirm, dismiss };
+  }
+
+  test('on success the neighbour button is released even when onChange keeps the card', async () => {
+    const { confirm, dismiss } = await cardWith(() => {}, async () => ({}));
+    confirm.click();
+    assert.equal(dismiss.getAttribute('aria-disabled'), 'true', 'waits while the write runs');
+    await settle();
+    assert.equal(dismiss.getAttribute('aria-disabled'), null);
+  });
+
+  test('an onChange that throws shows the failed state and releases the neighbour', async () => {
+    const { confirm, dismiss } = await cardWith(() => { throw new Error('redraw broke'); }, async () => ({}));
+    confirm.click();
+    await settle();
+    assert.equal(confirm.getAttribute('data-state'), 'failed');
+    assert.equal(confirm.getAttribute('aria-busy'), null);
+    assert.equal(dismiss.getAttribute('aria-disabled'), null);
+  });
+});
