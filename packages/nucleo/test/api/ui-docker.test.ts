@@ -174,11 +174,12 @@ describe('#288 the Docker card', () => {
     assert.match(text, /old_cache 7 MB fica: usado por cache-user/);
     assert.match(text, /docker volume rm old_data/);
     const go = t.dialog()!.querySelector('[data-dk-confirm]') as ElementoFalso;
-    assert.ok(go.hasAttribute('disabled'), 'disabled until the consent');
+    assert.equal(go.getAttribute('aria-disabled'), 'true', 'disabled until the consent');
+    assert.equal(go.getAttribute('title'), 'Marque que entendeu para confirmar');
     const box = t.dialog()!.querySelector('[data-dk-consent]') as ElementoFalso;
     (box as unknown as { checked: boolean }).checked = true;
     box.dispatchEvent({ type: 'change', target: box });
-    await until(() => !(t.dialog()!.querySelector('[data-dk-confirm]') as ElementoFalso).hasAttribute('disabled'));
+    await until(() => !(t.dialog()!.querySelector('[data-dk-confirm]') as ElementoFalso).hasAttribute('aria-disabled'));
   });
 
   test('Limpar: the five kinds are explained, the first is marked, and a single one runs its own plan', async () => {

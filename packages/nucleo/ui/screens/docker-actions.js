@@ -58,10 +58,20 @@ function loadStyle(signal) {
 }
 
 // Busy is the component's (shell.css): aria-busy, no `disabled`, clicks ignored. `kind` is the variant.
-const button = ({ label, iconName = null, kind = 'outline', danger = false, onClick, disabled = false, busy = false, attrs = {} }) =>
+const button = ({ label, iconName = null, kind = 'outline', danger = false, onClick, disabled = false, disabledWhy = null, busy = false, attrs = {} }) =>
   el(
     'button',
-    { type: 'button', class: `btn sm ${kind}${danger ? ' danger' : ''}`, disabled: disabled && !busy, 'aria-busy': busy ? 'true' : null, 'aria-disabled': busy ? 'true' : null, onClick: busy ? null : onClick, ...attrs },
+    {
+      type: 'button',
+      class: `btn sm ${kind}${danger ? ' danger' : ''}${label === '' ? ' icon-only' : ''}`,
+      // A disabled button with a reason stays focusable (aria-disabled) and says why in `title`.
+      disabled: disabled && !busy && !disabledWhy,
+      'aria-busy': busy ? 'true' : null,
+      'aria-disabled': busy || (disabled && disabledWhy) ? 'true' : null,
+      title: disabled && disabledWhy ? disabledWhy : null,
+      onClick: busy || (disabled && disabledWhy) ? null : onClick,
+      ...attrs,
+    },
     iconName ? icon(iconName) : null,
     label,
   );
@@ -250,7 +260,7 @@ export function dockerActions(ctx, machineId = LOCAL_ID, { repaint = () => {} } 
         button({ label: 'Cancelar', onClick: closeDialog }),
         copyOnly ? button({ label: 'Copiar comando', iconName: 'copy', kind: 'filled', onClick: () => copy(commandText(plan)) }) : null,
         plan.admin ? button({ label: 'Rodei, verificar de novo', iconName: 'refresh', onClick: () => (closeDialog(), read()) }) : null,
-        copyOnly ? null : button({ label: confirmLabel(plan), iconName: danger ? 'trash' : 'play', kind: 'filled', danger, busy, disabled: needsConsent && !dialog.consent, attrs: { 'data-dk-confirm': '' }, onClick: () => confirm(plan) }),
+        copyOnly ? null : button({ label: confirmLabel(plan), iconName: danger ? 'trash' : 'play', kind: 'filled', danger, busy, disabled: needsConsent && !dialog.consent, disabledWhy: 'Marque que entendeu para confirmar', attrs: { 'data-dk-confirm': '' }, onClick: () => confirm(plan) }),
       ),
     );
     dialog.root.replaceChildren(body);

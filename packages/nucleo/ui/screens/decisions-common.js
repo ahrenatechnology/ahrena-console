@@ -154,10 +154,10 @@ export function decisionCard(d, { session = d.sessionId, onChange = () => {}, no
         async () => {
           const { route, body } = actionRequest(d.id, action, { session });
           await write(route, body);
-          onChange();
         },
         { note: notice },
       );
+      if (ok) onChange();
       if (!ok && !ignored) other.removeAttribute('aria-disabled');
     };
     confirm.addEventListener('click', act('confirm', confirm, dismiss));
