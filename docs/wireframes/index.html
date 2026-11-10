@@ -614,6 +614,88 @@ main { min-width: 0; padding-block: 24px 80px; padding-left: max(16px, env(safe-
 .tl-ct-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: stretch; }
 .tl-ct-state { display: flex; flex-direction: column; min-width: 0; }
 .tl-kv > span { min-width: 0; overflow-wrap: anywhere; } .tl-ct-state .cartao { flex: 1; }
+/* ---------- Single machine screen and button states (434-1 to 434-7, 435-1, issues #434 and #435) ---------- */
+/* Button component proposal (#435). Every state is drawn with a class so the sheet can show them side by side;
+   in code the states are :hover, :active, :focus-visible, [aria-busy="true"], [data-state], [aria-disabled="true"]. */
+.bt { --bt-h: 32px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; height: var(--bt-h); padding: 0 13px; border-radius: 8px; border: 1px solid transparent; font-family: var(--font-sans); font-size: 13px; line-height: 1; color: var(--text); background: transparent; white-space: nowrap; flex: none; cursor: pointer; }
+.bt svg { width: 14px; height: 14px; flex: none; }
+.bt.sm { --bt-h: 28px; padding: 0 10px; gap: 6px; font-size: 12px; } .bt.lg { --bt-h: 40px; padding: 0 18px; gap: 8px; font-size: 14px; } .bt.lg svg { width: 16px; height: 16px; }
+.bt.icon-only { width: var(--bt-h); padding: 0; }
+.bt.outline { border-color: var(--border); background: var(--surface); }
+.bt.filled { background: var(--accent); color: var(--on-accent); font-weight: 600; }
+.bt.ghost { color: var(--muted); }
+.bt.danger { color: var(--status-error-text); border-color: color-mix(in srgb, var(--status-error-dot) 45%, var(--border)); background: var(--surface); }
+.bt.danger.filled { background: var(--status-error-dot); border-color: transparent; color: var(--on-accent); }
+.bt.outline.is-hover { background: var(--raised); } .bt.filled.is-hover { filter: brightness(1.1); } .bt.ghost.is-hover { background: var(--raised); color: var(--text); }
+.bt.danger.is-hover { background: var(--status-error-badge); } .bt.danger.filled.is-hover { background: var(--status-error-dot); filter: brightness(1.1); }
+.bt.is-pressed { transform: translateY(1px); }
+.bt.outline.is-pressed, .bt.ghost.is-pressed { background: var(--bg); box-shadow: inset 0 2px 3px color-mix(in srgb, #000 28%, transparent); }
+.bt.filled.is-pressed { filter: brightness(.86); box-shadow: inset 0 2px 3px color-mix(in srgb, #000 30%, transparent); }
+.bt.danger.is-pressed { background: color-mix(in srgb, var(--status-error-badge) 60%, var(--bg)); box-shadow: inset 0 2px 3px color-mix(in srgb, #000 28%, transparent); } .bt.danger.filled.is-pressed { background: var(--status-error-dot); }
+.bt.is-focus { outline: 2px solid var(--accent); outline-offset: 2px; }
+.bt[aria-busy="true"] { cursor: progress; } .bt[aria-busy="true"] svg { animation: bt-spin 1s linear infinite; }
+.bt.is-done { color: var(--status-completed-text); border-color: color-mix(in srgb, var(--status-completed-dot) 55%, var(--border)); background: color-mix(in srgb, var(--status-completed-badge) 70%, var(--surface)); }
+.bt.is-failed { color: var(--status-error-text); border-color: var(--status-error-dot); background: color-mix(in srgb, var(--status-error-badge) 70%, var(--surface)); }
+.bt[aria-disabled="true"] { opacity: .5; cursor: not-allowed; }
+@keyframes bt-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .bt[aria-busy="true"] svg { animation: none; } }
+.bt-msg { display: flex; gap: 6px; align-items: flex-start; font-size: 11.5px; line-height: 1.4; color: var(--status-error-text); max-width: 190px; white-space: normal; } .bt-msg svg { width: 13px; height: 13px; flex: none; margin-top: 1px; }
+.bt-why { display: flex; gap: 6px; align-items: flex-start; font-size: 11.5px; line-height: 1.4; color: var(--muted); max-width: 190px; white-space: normal; } .bt-why svg { width: 13px; height: 13px; flex: none; margin-top: 1px; }
+.bt-cell { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; min-height: 76px; }
+.bt-sheet { width: 100%; border-collapse: collapse; font-size: 12px; }
+.bt-sheet th { text-align: left; font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-weight: 600; padding: 8px 10px; border-bottom: 1px solid var(--border); }
+.bt-sheet td { padding: 10px; border-bottom: 1px solid var(--border); vertical-align: top; } .bt-sheet tr:last-child td { border-bottom: 0; }
+.bt-sheet td.bt-rowh { width: 120px; color: var(--muted); font-size: 12px; } .bt-sheet td.bt-rowh b { display: block; color: var(--text); font-weight: 600; font-family: var(--font-mono); font-size: 12px; }
+.bt-sizes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.bt-size { padding: 14px 16px; display: flex; flex-direction: column; gap: 12px; } .bt-size h6 { margin: 0; font-size: 12.5px; font-weight: 600; } .bt-size h6 small { font-weight: 400; color: var(--muted); font-family: var(--font-mono); margin-left: 6px; }
+.bt-size .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; } .bt-size p { margin: 0; font-size: 11.5px; color: var(--muted); line-height: 1.5; }
+.bt-flow { display: flex; align-items: stretch; gap: 10px; }
+.bt-step { flex: 1 1 0; min-width: 0; padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; } .bt-step .t { font-family: var(--font-mono); font-size: 11px; color: var(--muted); } .bt-step p { margin: 0; font-size: 11.5px; color: var(--muted); line-height: 1.5; }
+.bt-arrow { align-self: center; color: var(--muted); flex: none; }
+.bt-rules { margin: 0; padding-left: 18px; font-size: 12.5px; line-height: 1.7; } .bt-rules b { font-weight: 600; }
+/* machine screen */
+.ms-wrap { position: relative; } .ms-wrap > .ms-no { position: absolute; left: -19px; top: 2px; width: 16px; height: 16px; border-radius: 50%; background: var(--raised); color: var(--muted); font-size: 10px; font-weight: 600; display: grid; place-items: center; font-family: var(--font-mono); }
+.ms-band { display: grid; gap: 16px; align-items: stretch; } .ms-band > .cartao { min-width: 0; }
+.ms-23 { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); } .ms-half { grid-template-columns: repeat(2, minmax(0, 1fr)); } .ms-one { grid-template-columns: minmax(0, 1fr); }
+.ms-one > .cl-sess { grid-column: 1 / -1 !important; }
+.ms-stats { display: grid; gap: 10px; }
+.ms-stats .stat { height: auto; min-height: 94px; padding: 12px; gap: 6px; } .ms-stats .stat .v { font-size: 22px; } .ms-stats .stat .v small { font-size: 10.5px; margin-left: 4px; }
+.ms-stats .stat .ic { top: 11px; right: 10px; font-size: 15px; } .ms-stats .stat .rot { font-size: 10px; } .ms-stats .stat .s { font-size: 11px; line-height: 1.35; }
+.ms-quiet { background: transparent; border-color: color-mix(in srgb, var(--border) 65%, transparent); }
+.ms-quiet h5 { font-size: 12.5px; font-weight: 500; color: var(--muted); } .ms-quiet h5 svg { width: 14px; height: 14px; }
+.ms-quiet .tm-alerts > div { padding: 7px 0; font-size: 12px; color: var(--muted); } .ms-quiet .tm-alerts > div:last-child { border-bottom: 0; }
+.ms-proc { display: grid; grid-template-columns: minmax(0, 1.5fr) 34px minmax(0, 1fr) 54px 62px; gap: 10px; align-items: center; font-size: 12px; color: var(--muted); padding: 6px 0; border-bottom: 1px solid var(--border); } .ms-proc:last-of-type { border-bottom: 0; }
+.ms-proc > span:first-child { color: var(--text); } .ms-proc .mono { text-align: right; }
+.ms-mini { height: 4px; border-radius: 99px; background: var(--raised); display: block; overflow: hidden; } .ms-mini i { display: block; height: 100%; background: color-mix(in srgb, var(--accent) 60%, var(--muted)); }
+.ms-conn-tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.ms-tile { padding: 9px 12px; display: flex; flex-direction: column; gap: 3px; background: var(--bg); } .ms-tile small { color: var(--muted); font-size: 11.5px; } .ms-tile b { font-size: 13px; display: flex; gap: 6px; align-items: center; }
+.ms-kv { display: flex; flex-direction: column; gap: 10px; } .ms-kv > div { display: flex; flex-direction: column; gap: 1px; font-size: 13px; } .ms-kv .olhinho { font-size: 10px; }
+.ms-cmds { font-family: var(--font-mono); font-size: 11px; color: var(--muted); line-height: 1.6; display: flex; flex-direction: column; }
+.ms-strip { display: flex; gap: 22px; flex-wrap: wrap; align-items: flex-start; padding: 12px 16px; } .ms-strip > div { display: flex; flex-direction: column; gap: 2px; font-size: 12.5px; } .ms-strip .olhinho { font-size: 10px; }
+.ms-h-acts { display: inline-flex; gap: 8px; margin-left: 14px; }
+.ms-ver { align-items: flex-start; } .ms-ver .mono { font-size: 11.5px; }
+.ms-t { width: 100%; border-collapse: collapse; font-size: 12.5px; } .ms-t th { text-align: left; font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-weight: 600; padding: 8px 10px; border-bottom: 1px solid var(--border); }
+.ms-t td { padding: 8px 10px; border-bottom: 1px solid var(--border); vertical-align: middle; } .ms-t tr:last-child td { border-bottom: 0; } .ms-t td:first-child, .ms-t th:first-child { padding-left: 0; } .ms-t td:last-child, .ms-t th:last-child { padding-right: 0; }
+.ms-t .nm small { display: block; color: var(--muted); font-size: 10.5px; font-family: var(--font-mono); margin-top: 1px; }
+.ms-acts-cell { width: 188px; } .ms-acts { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; white-space: normal; }
+.ms-today td.acts { white-space: nowrap; text-align: right; } .ms-today td.acts .bt + .bt { margin-left: 6px; }
+.ms-today td.nm { white-space: normal; }
+.ms-narrow { width: 720px; overflow: hidden; position: relative; } .ms-narrow.free { overflow: visible; }
+.ms-clip-mark { position: absolute; top: 0; bottom: 0; right: 0; width: 3px; background: var(--status-error-dot); }
+.ms-callout { display: flex; gap: 8px; align-items: flex-start; font-size: 12px; line-height: 1.5; color: var(--status-error-text); max-width: 720px; } .ms-callout svg { flex: none; margin-top: 2px; width: 14px; height: 14px; }
+.ms-menu { position: relative; display: inline-flex; } .ms-pop { position: absolute; right: 0; top: 32px; z-index: 3; min-width: 168px; padding: 5px; border-radius: 10px; background: var(--surface); border: 1px solid var(--border); box-shadow: 0 10px 28px color-mix(in srgb, #000 35%, transparent); display: flex; flex-direction: column; }
+.ms-pop span { display: flex; gap: 8px; align-items: center; padding: 7px 9px; border-radius: 6px; font-size: 12px; } .ms-pop span svg { width: 14px; height: 14px; } .ms-pop span.on { background: var(--raised); } .ms-pop hr { border: 0; border-top: 1px solid var(--border); margin: 4px 0; } .ms-pop .d { color: var(--status-error-text); }
+.ms-err { border-color: color-mix(in srgb, var(--status-error-dot) 40%, var(--border)); }
+.ms-err-box { display: flex; gap: 10px; align-items: flex-start; padding: 12px 14px; border-radius: 9px; background: color-mix(in srgb, var(--status-error-badge) 60%, var(--surface)); font-size: 12.5px; line-height: 1.5; } .ms-err-box > svg { color: var(--status-error-text); flex: none; margin-top: 2px; width: 16px; height: 16px; }
+.ms-err-box b { color: var(--status-error-text); display: block; } .ms-err-box .mono { font-size: 11px; color: var(--muted); display: block; margin-top: 4px; } .ms-err-box .bt { margin-top: 8px; }
+.ms-ex { display: flex; flex-direction: column; gap: 16px; padding: 20px 24px 22px; background: var(--bg); border: 1px solid var(--border); border-radius: 12px; font-family: var(--font-sans); color: var(--text); }
+.ms-q { padding: 14px 16px; border-style: dashed; border-color: var(--status-waiting-dot); display: flex; gap: 12px; align-items: flex-start; font-size: 12.5px; line-height: 1.55; } .ms-q > svg { color: var(--status-waiting-text); flex: none; margin-top: 2px; } .ms-q b { color: var(--status-waiting-text); }
+.ms-gap { border: 1px dashed var(--border); border-radius: 12px; padding: 16px; text-align: center; font-size: 12px; color: var(--muted); }
+.ms-opt { display: flex; flex-direction: column; gap: 8px; } .ms-opt > .rotulo { margin: 0; }
+.ms-note { font-size: 11.5px; color: var(--muted); line-height: 1.5; margin: 0; }
+.ms-cause { padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; font-size: 12.5px; line-height: 1.6; max-width: 720px; } .ms-cause code { font-family: var(--font-mono); font-size: 11.5px; background: var(--bg); border: 1px solid var(--border); border-radius: 5px; padding: 1px 6px; }
+.ms-ts .tabela td { white-space: normal; padding: 8px 8px; } .ms-ts .tabela th { padding: 8px; } .ms-ts .btn { white-space: normal; text-align: left; height: auto; min-height: 26px; padding-top: 3px; padding-bottom: 3px; } .ms-ts .tabela td:last-child { min-width: 128px; }
+.ms-pick { display: inline-flex; gap: 6px; align-items: center; height: 20px; padding: 0 8px; border-radius: 99px; background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--accent-text); font-size: 10.5px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; font-family: var(--font-sans); }
 /* ---------- modo captura ---------- */
 body.captura .topo, body.captura .indice, body.captura .notas, body.captura .capitulo, body.captura .tela:not(.alvo), body.captura .perguntas, body.captura #perguntas { display: none !important; }
 body.captura .pagina { display: block; } body.captura main { padding: 20px 24px; display: inline-block; } body.captura .tela { margin: 0; }
@@ -4946,6 +5028,22 @@ const TELAS = [
     n: N(['O “recuperável” do Docker na C25.'], ['docker system prune, --all e volume prune não estão: apagam o que ainda se usa. Volumes ficam para o passo de Liberar volume, com confirmação de dados.', 'O espaço é “até”: imagens e cache dividem camadas. O núcleo mostra o número real, lido de novo, quando termina.', 'A mesma fila das Ferramentas: uma ação por vez, por máquina.']) },
   { id: 'console-docker-daemon', cod: 'C95', nome: 'Docker · reiniciar o daemon', sub: 'O Docker não responde: a tela mostra o card com o último sinal. Docker sem root (Ubuntu) e Colima (Mac): o console roda. Docker do sistema: pede sudo, a tela mostra o comando para você rodar. Workstation com as ações desligadas, o padrão: tudo vira Copiar comando. Em 1100.', html: () => dkDaemonScreens(),
     n: N(['Nada.'], ['Reiniciar o daemon para os containers que rodam: a confirmação diz quantos e se o live-restore está ligado.', 'Sem sudo, como na decisão 0014: o que pede senha é da pessoa.', 'Ações na Workstation usam a mesma chave da 0014, tools.acceptRemoteActions: uma chave só, ligada por quem está lá.']) },
+  { id: 'machine-screen-local', cod: '434-1', nome: 'Máquina única · Esta máquina', sub: 'Issue #434. Uma tela só para as duas máquinas, com a estética da Workstation de hoje. Esta máquina: oito faixas de cima para baixo, sem Conexão, sem Onde roda e sem o card de GPU. Os números na borda esquerda são a ordem que o Fernando aprova: 1 Perfis de nuvem, 2 cards de recursos numa fileira, 3 CPU e memória (2/3) ao lado de Volumes (1/3), 4 Processos do Claude e O que pede atenção em tom apagado, 5 Conexão e Onde roda (só remota), 6 Sessões de terminal, 7 Portas em escuta, 8 Docker. Em 1440 as faixas lado a lado ficam lado a lado; em 1100 elas empilham e nada rola para o lado.', html: () => msLocalHtml(),
+    n: N(['A fileira de cards de recursos e o gráfico de CPU e memória do Agent Monitor.'], ['Uma tela só: hoje são duas (C24 e C25), com cards e ordem diferentes. Esta passa a ser a única; a Workstation só acrescenta o que existe lá.', 'Processos do Claude e O que pede atenção descem e ficam apagados: o que o Fernando olha primeiro são os números.', 'Faixa 5 ausente aqui: a pergunta aberta está no 434-4.', 'A #288 previa abas na tela da máquina; as faixas ganham: nada fica escondido atrás de uma aba.']) },
+  { id: 'machine-screen-workstation', cod: '434-2', nome: 'Máquina única · Workstation', sub: 'Issue #434. A mesma tela, com o que só existe na máquina remota: o card de GPU entre Disco e Rede (só onde há GPU), a faixa 5 com Conexão (2/3) e Onde roda (1/3), e a coluna No Mac nas portas. O resto é igual, no mesmo lugar. Uma Workstation sem GPU não mostra o card de GPU e a fileira segue com seis cards. Em 1440 e 1100.', html: () => msRemoteHtml(),
+    n: N(['Os cards da C25 (CPU saturada, GPU, Disco) e a Conexão e o Onde roda da C62.'], ['A C25 tinha Carga contra os vCPUs e um card Docker de recursos; aqui a carga vira CPU % no mesmo gráfico da Esta máquina, e o Docker tem uma faixa só, a 8.', 'A fileira tem sete cards em 1100 (a janela do app): os textos de apoio quebram em duas linhas, nenhum card passa de 110 px de largura.']) },
+  { id: 'machine-screen-attention-alt', cod: '434-3', nome: 'Máquina única · O que pede atenção, duas posições', sub: 'Issue #434, critério 3. Em cima, a proposta: Processos do Claude e O que pede atenção juntos na faixa 4, os dois em tom apagado. Embaixo, a alternativa: O que pede atenção ao lado de Conexão, na faixa 5, e Onde roda vira uma linha dentro de Conexão. Fernando escolhe.', html: () => msAltHtml(),
+    n: N(['Nada.'], ['A proposta mantém a faixa 5 só com o que é da conexão. A alternativa põe o alerta (a porta do túnel, a conexão que caiu) perto de quem o explica, mas o alerta some da vista em máquinas locais, onde não há Conexão.']) },
+  { id: 'machine-screen-local-placeholder', cod: '434-4', nome: 'Máquina única · pergunta aberta: o que no lugar de Conexão', sub: 'Issue #434, critério 6. Pergunta aberta para o Fernando: na máquina local, o que mostrar no lugar de Conexão e Onde roda? A: nada, as Sessões de terminal sobem. B: um card curto, “O que o Mac roda”, com o modelo, o sistema, o núcleo do console, o Docker e o app da bandeja, todos lidos daqui.', html: () => msPlaceholderHtml(),
+    n: N(['Nada.'], ['A proposta é A: o card B repete o que a barra lateral e o cabeçalho já dizem (macOS, versão), e a tela local fica sem um card sem ação.', 'B ajuda se o Fernando quiser comparar, de relance, o Mac com a Workstation (modelo, versão do núcleo): é onde o aviso de núcleo antigo da Workstation (434-7) teria um espelho.']) },
+  { id: 'machine-screen-errors', cod: '434-5', nome: 'Máquina única · uma leitura falha', sub: 'Issue #434, caso de erro. A leitura de volumes, a de portas e a do Docker falharam: só esses três cards mostram o erro, em palavras simples, com o texto do sistema em letra pequena e Tentar de novo. O gráfico, ao lado de Volumes, e o resto da tela seguem.', html: () => msErrorsHtml(),
+    n: N(['Nada.'], ['Hoje uma leitura que falha derruba a tela da Workstation inteira para “Sem conexão” (C26); aqui o defeito de um card não é o da máquina. A máquina fora do ar continua sendo a C26.']) },
+  { id: 'button-states', cod: '435-1', nome: 'Botões · os estados e os tamanhos', sub: 'Issue #435. O componente de botão, em todas as variantes e estados: normal, hover, pressionado, foco do teclado, ocupado (aria-busy), concluído, falhou (com o erro em palavras simples) e desabilitado (com o motivo). Os tamanhos sm 28 px, md 32 px e lg 40 px, o caminho do clique em milissegundos e as regras do componente. Os estados são classes só para o wireframe os mostrar lado a lado; no código são :hover, :active, :focus-visible, aria-busy, data-state e aria-disabled.', html: () => btHtml(),
+    n: N(['Nada: o CCAM não tem ações que mexem na máquina.'], ['Hoje só o outline tem hover e nenhum botão tem :active; o ocupado só gira o ícone, e cada tela inventa o seu desabilitado, concluído e falhou.', 'O md passa de 30 para 32 px e o sm é o 28 px que o Docker já redefine; o lg é novo. A escolha dos tamanhos é do Fernando.']) },
+  { id: 'docker-actions-narrow', cod: '434-6', nome: 'Docker · os botões dentro do card', sub: 'Issues #434 e #435. O que acontece hoje com a linha de ações de um container num card de 720 px (Remover… cortado pela borda), a causa no CSS e duas soluções: os botões quebram para a segunda linha (recomendada) ou viram um menu Ações.', html: () => msNarrowHtml(),
+    n: N(['Nada.'], ['Quebrar mantém as três ações à vista e não pede componente novo; o menu mantém a linha curta e afasta o Remover….']) },
+  { id: 'docker-stale-core', cod: '434-7', nome: 'Docker · Workstation com o núcleo antigo', sub: 'Issue #434, caso de borda. O núcleo da Workstation é anterior ao Docker com ações (de 22/10, 201 commits atrás da main): o card mostra o aviso de versão e a lista de containers só para leitura, sem nenhuma ação. Em 1100.', html: () => msStaleHtml(),
+    n: N(['Nada.'], ['O aviso diz o que falta e por quê, sem botão: atualizar o núcleo remoto é operação, não é desta tela.']) },
   { id: 'console-update-banner', cod: 'C77', nome: 'Aviso de versão nova no topo da /ui', sub: 'Feature Aviso de versão nova (#330). Atualização disponível: versão 0.0.10, com a linha do que mudou quando o latest.json tem notas, Atualizar e Depois. Fica no topo de todas as telas, acima do cabeçalho, e não alarga a página. Em 1100 e 1440.', html: () => updateBannerScreens(),
     n: N(['Nada: o CCAM não tem updater.'], ['Hoje (#90) a versão nova só aparece no menu da bandeja; a #330 a traz para a janela.', 'Cor da marca, não o amarelo de "precisa de você".']) },
   { id: 'console-update-banner-states', cod: 'C78', nome: 'Os estados do aviso', sub: 'Baixando (a barra, sem Atualizar), instalando e reiniciando, erro ao baixar (Tentar de novo), atualizado, sem notas, e depois de Depois: o card some até a próxima versão ou por 24 h (a aprovar). Em 1100, o topo da tela.', html: () => updateBannerStates(),
@@ -5073,6 +5171,186 @@ const tsRemote = (actions) => frameAt(1100, 'machine-ws', `${workstationHeader('
 const tsAlert = () => `<div class="tl-step"><div class="rotulo">Notificação da bandeja · terminal-stuck</div>
   <div class="cartao" style="max-width:380px;padding:12px 14px;display:flex;gap:10px"><span class="ic c-error">${ic('square-terminal')}</span><div><b>Terminal preso na Workstation</b><div class="c-muted" style="font-size:12px">pts/0 há 26 min rodando <span class="mono">destrava-pedro.sh</span>, da sessão “Destravar o pedro”.</div><div style="margin-top:8px;display:flex;gap:8px"><span class="btn contorno">Ver terminais</span></div></div></div></div>`
 
+
+// =====================================================================
+// SINGLE MACHINE SCREEN (434-1 to 434-7, issue #434) and BUTTON STATES (435-1, issue #435)
+// One screen for "Esta máquina" and the Workstation, in eight bands. Remote only: Conexão, Onde roda and the
+// GPU card. At 1100 px the side-by-side bands stack; at 1440 px they sit side by side. The numbers on the left
+// edge are the band order the owner approves.
+// =====================================================================
+const bt = (label, { v = 'outline', size = 'md', icon = '', state = '', cls = '', why = '', aria = '' } = {}) => {
+  const ico = state === 'busy' ? 'loader-2' : state === 'done' ? 'check' : state === 'failed' ? 'alert-circle' : icon
+  const attrs = state === 'busy' ? ' aria-busy="true"' : state === 'disabled' ? ' aria-disabled="true"' : ''
+  const sc = ['hover', 'pressed', 'focus', 'done', 'failed'].includes(state) ? ` is-${state}` : ''
+  return `<span class="bt ${v} ${size}${sc}${label === '' ? ' icon-only' : ''}${cls ? ' ' + cls : ''}"${attrs}${why ? ` title="${why}"` : ''}${aria ? ` aria-label="${aria}"` : ''}>${ico ? ic(ico) : ''}${label}</span>`
+}
+const msBand = (w, n, cols, ...cards) => `<div class="ms-wrap"><span class="ms-no">${n}</span><div class="ms-band ${w >= 1440 ? cols : 'ms-one'}">${cards.join('')}</div></div>`
+const msOne = (n, card) => `<div class="ms-wrap"><span class="ms-no">${n}</span><div class="ms-band ms-one">${card}</div></div>`
+const msHead = remote => remote
+  ? cab('server', 'Workstation', 'ws-exemplo · Ubuntu 24.04 · 16 vCPUs · 62 GB · T4 · porta 14720 do Mac · lido há 6 s', `<span class="badge b-completed"><span class="p"></span>Conectada</span>${hourToggle}`)
+  : cab('monitor', 'Esta máquina', 'mac-exemplo · macOS 26 · 12 núcleos (8 P + 4 E) · 36 GB · lido há 4 s', hourToggle)
+const msStat = (rot, v, unit, sub, icon, color = 'var(--accent-text)', bad = false) => `<div class="cartao stat${bad ? ' tm-bad' : ''}"><span class="rot">${rot}</span><span class="ic" style="color:${color}">${ic(icon)}</span><span class="v tab">${v}${unit ? `<small>${unit}</small>` : ''}</span><span class="s">${sub}</span></div>`
+const msStats = (w, remote) => {
+  const cards = remote
+    ? [msStat('CPU', '24,6', 'de 16', 'saturada há 12 min', 'cpu', 'var(--status-error-text)', true), msStat('Memória', '29', 'GB', 'de 62 · swap 8,2', 'memory-stick'), msStat('Disco', '86%', '', '/ · 24 GB livres', 'hard-drive', 'var(--status-waiting-text)'),
+      msStat('GPU', '2%', '', '1,8 de 15 GB de VRAM', 'monitor-dot'), msStat('Rede', '1,1', 'MB/s ↓', '↑ 90 kB/s', 'wifi'), msStat('Claude', '10', 'proc.', '9 CLI · 1 núcleo', 'bot'), msStat('Sessões', '12', '', '2 precisam de você', 'folder-open', 'var(--status-waiting-text)')]
+    : [msStat('CPU', '34%', '', 'carga 4,1 de 12', 'cpu'), msStat('Memória', '21,4', 'GB', 'de 36 · swap 0,8', 'memory-stick'), msStat('Disco', '61%', '', '380 GB livres', 'hard-drive'),
+      msStat('Rede', '2,4', 'MB/s ↓', '↑ 310 kB/s', 'wifi'), msStat('Claude', '11', 'proc.', '4 CLI · 7 Desktop', 'bot'), msStat('Sessões', '6', '', '3 precisam de você', 'folder-open', 'var(--status-waiting-text)')]
+  return `<div class="ms-wrap"><span class="ms-no">2</span><div class="ms-stats" style="grid-template-columns:repeat(${cards.length},minmax(0,1fr))">${cards.join('')}</div></div>`
+}
+const msProfiles = (w, remote) => msOne(1, cpCard(w, remote
+  ? { where: 'da Workstation · lidos pelo núcleo de lá, pelo túnel', rows: CP_WS(''), foot: `${ic('info')}Entrar inicia o login lá; o código aparece aqui para você confirmar no navegador deste Mac.` }
+  : { where: 'deste Mac · lidos do ~/.aws/config e das configurações do gcloud daqui', rows: CP_MAC, foot: `${ic('info')}Entrar abre o navegador deste Mac e roda o login da aws CLI daqui.` }))
+const msChart = remote => `<div class="cartao tm-card"><h5>${ic('activity')}CPU e memória<small>a cada 30 s · guardado por 12 h</small></h5>
+  ${tmSeries(remote ? [[wave(2, 120, 62, 14), 'var(--accent)'], [wave(5, 120, 47, 2), 'var(--rose)']] : [[wave(1, 120, 32, 14), 'var(--accent)'], [wave(4, 120, 58, 4), 'var(--rose)']], { max: 100 })}${tmAxis(1)}
+  <div class="tm-legend"><span><i style="background:var(--accent)"></i>CPU, %</span><span><i style="background:var(--rose)"></i>Memória usada, %</span></div></div>`
+const msVolumes = remote => `<div class="cartao tm-card"><h5>${ic('hard-drive')}Volumes</h5>
+  ${remote ? `${tmMeter('/', 146, 170, 'GB')}${tmMeter('/home', 109, 492, 'GB')}${tmMeter('/tmp', 23, 206, 'GB')}` : `${tmMeter('/', 232, 612, 'GB')}${tmMeter('/Volumes/Dados', 0.9, 2, 'TB')}`}
+  <div class="olhinho" style="margin-top:4px">Rede</div><div class="tm-legend"><span>${remote ? 'ens5 · rota padrão' : 'en0 · Wi-Fi · rota padrão'}</span><span class="mono">${remote ? '↓ 310 GB · ↑ 44 GB' : '↓ 41 GB · ↑ 6 GB'} desde o boot</span></div></div>`
+const msProcesses = remote => `<div class="cartao tm-card ms-quiet"><h5>${ic('bot')}Processos do Claude</h5>
+  <div>${(remote ? [['claude (CLI)', '9', 14, '16,4%', '3,1 GB'], ['Núcleo do console', '1', 2, '0,8%', '120 MB']] : [['claude (CLI)', '4', 11, '11,2%', '1,4 GB'], ['Claude Desktop', '7', 7, '6,8%', '1,2 GB'], ['Núcleo do console', '1', 1, '0,9%', '140 MB']])
+    .map(([n, q, p, c, m]) => `<div class="ms-proc"><span>${n}</span><span class="mono">×${q}</span><span class="ms-mini"><i style="width:${p * 4}%"></i></span><span class="mono">${c}</span><span class="mono">${m}</span></div>`).join('')}</div>
+  <div class="tm-legend"><span>Os que mais usam CPU:</span><span class="mono">${remote ? 'python 38% · node 14% · claude 9%' : 'node 14% · claude 6% · WebKit 4% · Code Helper 3%'}</span></div></div>`
+const msAttention = remote => `<div class="cartao tm-card ms-quiet"><h5>${ic('bell')}O que pede atenção<small>${remote ? 3 : 2}</small></h5>
+  ${tmAlerts(remote ? [['error', 'CPU saturada: carga de 24,6 em 16 vCPUs', 'python treino.py usa 9 núcleos', 'há 12 min'], ['waiting', 'O volume / passou de 85%', '146 de 170 GB', 'há 1 h'], ['waiting', 'A porta 15432 escuta em todas as interfaces', 'postgres da stack loja-validacao', 'há 2 dias']]
+    : [['waiting', 'A porta 5432 escuta em todas as interfaces', 'postgres · qualquer um na rede alcança', 'há 2 h'], ['waiting', 'A porta 18080 do túnel está ocupada', 'node deste Mac segura a porta', 'há 20 min']])}</div>`
+const msConnection = () => `<div class="cartao tm-card"><h5>${ic('cable')}Conexão<small>túnel SSH sobre AWS SSM</small><span class="ms-h-acts">${bt('Reconectar', { size: 'sm', icon: 'refresh-cw' })}${bt('Parar o túnel', { size: 'sm', icon: 'square' })}</span></h5>
+  <div class="ms-conn-tiles">
+    <div class="cartao ms-tile"><span class="olhinho">Túnel</span><b class="c-completed">${ic('check-circle-2')}No ar</b><small>há 3 h 12 min · 4 portas</small></div>
+    <div class="cartao ms-tile"><span class="olhinho">Sessão AWS</span><b class="c-completed">${ic('key-round')}Válida</b><small>sessao-exemplo</small></div>
+    <div class="cartao ms-tile"><span class="olhinho">Núcleo de lá</span><b class="c-completed">${ic('activity')}Respondendo</b><small>lido agora</small></div></div>
+  <table class="ms-t"><thead><tr><th>No Mac</th><th>Lá</th><th>Estado</th><th>O que é</th></tr></thead><tbody>
+    <tr><td class="mono">14720</td><td class="mono">4720</td><td>${tmPort('up')}</td><td>Núcleo da Workstation</td></tr>
+    <tr><td class="mono">13000</td><td class="mono">3000</td><td>${tmPort('up')}</td><td>vite · catalogo-exemplo</td></tr>
+    <tr><td class="mono">15173</td><td class="mono">5173</td><td>${tmPort('idle')}</td><td class="c-muted">nada escuta na 5173 de lá</td></tr>
+    <tr><td class="mono">18080</td><td class="mono">8080</td><td>${tmPort('busy')}</td><td class="c-muted">node, deste Mac, segura a 18080</td></tr></tbody></table>
+  <div class="ms-cmds"><span>subir: /usr/bin/ssh -f -N -o ControlPersist=no ahrena-tunnel</span><span>parar: /usr/bin/ssh -O exit ahrena-tunnel</span></div></div>`
+const msWhere = () => `<div class="cartao tm-card"><h5>${ic('map-pin')}Onde roda<small>lido pelo núcleo de lá</small></h5>
+  <div class="ms-kv"><div><span class="olhinho">Provedor</span>AWS</div><div><span class="olhinho">Tipo</span>g4dn.4xlarge</div><div><span class="olhinho">Região</span>us-east-1 · us-east-1d</div><div><span class="olhinho">Id</span><span class="mono">i-0c153e03562714d75</span></div></div>
+  <span class="ms-note">Fonte: metadados da instância · lido às 23:15</span></div>`
+const msLocalStrip = () => `<div class="cartao ms-strip"><div style="flex:0 0 100%;flex-direction:row;gap:8px;align-items:center">${ic('laptop')}<b>O que o Mac roda</b><span class="c-muted" style="font-size:11.5px">lido daqui, sem conexão nenhuma</span></div>
+  <div><span class="olhinho">Modelo</span>MacBook Pro · Apple M2 Pro</div><div><span class="olhinho">Sistema</span>macOS 26</div><div><span class="olhinho">Núcleo do console</span><span class="mono">0.0.13 · porta 4720</span></div><div><span class="olhinho">Docker</span>Colima 0.9.1</div><div><span class="olhinho">App da bandeja</span><span class="mono">0.0.13</span></div></div>`
+const msPorts = (w, remote) => `<div class="cartao tm-card"><h5>${ic('radio-tower')}Portas em escuta<small><span class="seg"><span class="on">Todas ${remote ? 9 : 7}</span><span>Todas as interfaces ${remote ? 2 : 1}</span><span>Só loopback ${remote ? 7 : 6}</span></span></small></h5>
+  <table class="ms-t"><thead><tr><th>Porta</th><th>Escuta em</th><th>Processo</th><th>De quem</th>${remote ? '<th>No Mac</th>' : ''}</tr></thead><tbody>
+  ${(remote
+    ? [['22', 'todas', 'sshd', 'sistema', '<span class="c-muted">—</span>'], ['15432', 'todas', 'postgres', 'loja-validacao', '<span class="c-muted">—</span>'], ['4720', 'lo', 'node', 'Núcleo do console', `<span class="mono">14720</span> ${tmPort('up')}`], ['8080', 'lo', 'node', 'painel-metricas', `<span class="mono">18080</span> ${tmPort('busy')}`]]
+    : [['4720', 'lo', 'node', 'Núcleo do console'], ['5432', 'todas', 'postgres', '<span class="c-muted">—</span>'], ['3000', 'lo', 'node', 'vitrine-demo'], ['13000, 14720, 15173', 'lo', 'ssh', 'túnel para ws-exemplo']])
+    .map(([p, l, pr, who, mac]) => `<tr><td class="mono">${p}</td><td>${tmListen(l)}</td><td>${pr}</td><td>${who}</td>${mac ? `<td>${mac}</td>` : ''}</tr>`).join('')}</tbody></table></div>`
+const msTerminals = remote => `<div class="ms-ts" style="display:contents">${tsCard(tsTable(remote ? TS_ROWS_WS.slice(0, 2) : [
+  { pts: 'ttys003', conn: 'Terminal.app', from: 'desde 09:01', shell: 'zsh -l', cmd: '', age: '—', state: 'idle', acts: `${tsBtn('Interromper o comando', 'square', { off: true })} ${TS_END}` },
+  { pts: 'ttys007', conn: 'iTerm2', from: 'desde 10:15', shell: 'zsh -l', cmd: 'node servidor.js', age: '2 min', state: 'run', acts: `${TS_KILL} ${TS_END}` }]), 'lido a cada 30 s · limite de “presa”: 15 min')}</div>`
+
+// ---------- Docker rows: the actions wrap inside the card (recommended), the real cause is drawn in 434-6 ----------
+const MS_DK = [['tessera-kcc-it-postgres', 'postgres:16', 'running', '—', 'há 2 dias'], ['floci-aws-localstack', 'floci/aws:3.2', 'running', '—', 'há 5 h'],
+  ['floci-aws-gp-local-ecs-9d41e0', 'floci/ecs-task:gp', 'stopped', '—', 'há 6 dias'], ['loomapi-local-db-1', 'postgres:16', 'stopped', 'loomapi-local', 'há 6 dias']]
+const msDkActs = (st, o = {}) => (st === 'running'
+  ? [bt(o.busy ? 'Parando…' : 'Parar', { size: 'sm', icon: 'square', state: o.busy ? 'busy' : '' }), bt('Reiniciar', { size: 'sm', icon: 'rotate-cw', state: o.busy ? 'disabled' : '' }), bt('Remover…', { v: 'danger', size: 'sm', icon: 'trash-2', state: o.busy ? 'disabled' : '' })]
+  : [bt('Subir', { size: 'sm', icon: 'play' }), bt('Remover…', { v: 'danger', size: 'sm', icon: 'trash-2' })]).join('')
+const msDkMenu = (open) => `<span class="ms-menu">${bt('Ações', { size: 'sm', icon: 'more-horizontal' })}${open ? `<span class="ms-pop"><span class="on">${ic('square')}Parar</span><span>${ic('rotate-cw')}Reiniciar</span><hr><span class="d">${ic('trash-2')}Remover…</span></span>` : ''}</span>`
+// mode: 'wrap' (recommended), 'menu' (alternative), 'today' (what ships now), 'none' (core too old: no actions column)
+const msDkTable = (mode, o = {}) => {
+  const today = mode === 'today', none = mode === 'none'
+  const rows = o.rows ?? MS_DK
+  return `<table class="ms-t${today ? ' ms-today' : ''}"><thead><tr><th>Nome</th>${today ? '<th>Imagem</th>' : ''}<th>Estado</th><th>Stack</th><th>${today ? 'Criado' : 'Desde'}</th>${none ? '' : '<th></th>'}</tr></thead><tbody>
+  ${rows.map(([n, img, st, stack, since], i) => `<tr><td class="nm mono">${n}${today ? '' : `<small>${img}</small>`}</td>${today ? `<td class="mono c-muted" style="white-space:normal">${img}</td>` : ''}<td>${dkState(st)}</td><td class="mono">${stack === '—' ? '<span class="c-muted">—</span>' : stack}</td><td class="c-muted">${since}</td>
+    ${none ? '' : today ? `<td class="acts">${msDkActs(st)}</td>` : mode === 'menu' ? `<td style="text-align:right">${msDkMenu(o.pop && i === 0)}</td>` : `<td class="ms-acts-cell"><div class="ms-acts">${msDkActs(st, { busy: o.busyRow === i })}</div></td>`}</tr>`).join('')}</tbody></table>`
+}
+const msDocker = (w, remote, kind = 'ok') => {
+  const stale = kind === 'stale', n = remote ? 148 : 23
+  const acts = stale ? '' : `<span class="ms-h-acts">${bt('Reiniciar o Docker', { size: 'sm', icon: 'power' })}${bt(`Limpar ${n} parados`, { v: 'filled', size: 'sm', icon: 'brush-cleaning' })}</span>`
+  const warn = `<div class="faixa mc-neutral ms-ver"><span class="ic">${ic('triangle-alert')}</span><div><b>O núcleo da Workstation é antigo demais para as ações do Docker.</b> O processo de lá roda desde 22/10 e está 201 commits atrás da <span class="mono">main</span>; ele ainda não sabe parar, reiniciar nem remover. A lista abaixo é só leitura. Para agir daqui, o núcleo de lá precisa ser atualizado.</div></div>`
+  return `<div class="cartao tm-card"><h5>${ic('container')}Docker<small>${remote ? '31 rodando · 148 parados · 3 stacks · 34 GB, 31 recuperáveis' : '11 rodando · 23 parados · 2 stacks · 9 GB, 4 recuperáveis'}</small>${acts}</h5>
+    ${stale ? warn : ''}<div class="olhinho">Containers</div>${msDkTable(stale ? 'none' : 'wrap')}
+    <div class="dk-more c-muted">Mostrando 4 de ${remote ? 179 : 34} · <span class="dk-link">Ver os próximos 25</span></div></div>`
+}
+const msScreen = (w, remote) => `${msHead(remote)}${msProfiles(w, remote)}${msStats(w, remote)}
+  ${msBand(w, 3, 'ms-23', msChart(remote), msVolumes(remote))}
+  ${msBand(w, 4, 'ms-half', msProcesses(remote), msAttention(remote))}
+  ${remote ? msBand(w, 5, 'ms-23', msConnection(), msWhere()) : ''}
+  ${msOne(6, msTerminals(remote))}${msOne(7, msPorts(w, remote))}${msOne(8, msDocker(w, remote))}`
+
+// ---------- excerpts (no sidebar): the width of the main area of a 1100 or a 1440 window ----------
+const msEx = (w, inner, label = '') => `<div class="width-col">${label ? `<div class="rotulo">${label}</div>` : ''}<div class="ms-ex" style="width:${w - 220}px">${inner}</div></div>`
+const msErrCard = (icon, title, what, detail, small = '') => `<div class="cartao tm-card ms-err"><h5>${ic(icon)}${title}<small>${small}</small></h5>
+  <div class="ms-err-box">${ic('alert-circle')}<div><b>${what}</b>O resto da tela segue; só este card ficou sem leitura.<span class="mono">${detail}</span>${bt('Tentar de novo', { size: 'sm', icon: 'rotate-cw' })}</div></div></div>`
+
+// 434-1 and 434-2: the screens
+const msLocalHtml = () => `<div class="fila">${[1440, 1100].map(w => widthCol(w, `${w} px`, frameAt(w, 'machine-local', msScreen(w, false)))).join('')}</div>`
+const msRemoteHtml = () => `<div class="fila">${[1440, 1100].map(w => widthCol(w, `${w} px`, frameAt(w, 'machine-ws', msScreen(w, true)))).join('')}</div>`
+
+// 434-3: "O que pede atenção" in band 4 (proposal) or beside Conexão (alternative)
+const msAltHtml = () => `<div class="fila">${msEx(1440, `
+  ${msBand(1440, 4, 'ms-half', msProcesses(true), msAttention(true))}${msBand(1440, 5, 'ms-23', msConnection(), msWhere())}`, 'Proposta · Processos do Claude e O que pede atenção juntos, em tom apagado (faixa 4); Conexão e Onde roda na 5')}
+  ${msEx(1440, `
+  ${msOne(4, msProcesses(true))}${msBand(1440, 5, 'ms-23', msConnection(), msAttention(true))}
+  <div class="cartao ms-q">${ic('help-circle')}<div><b>Na alternativa, onde fica Onde roda?</b> Ele vira uma linha dentro de Conexão (provedor, tipo, região, id), no lugar da terça parte. Na máquina local não há Conexão: O que pede atenção fica ao lado de Processos do Claude, em 2/3 + 1/3.</div></div>`, 'Alternativa · O que pede atenção ao lado de Conexão (faixa 5)')}</div>`
+
+// 434-4: the open question, the local machine in place of Conexão and Onde roda
+const msTermStub = () => `<div class="cartao tm-card ms-quiet"><h5>${ic('square-terminal')}Sessões de terminal<small>faixa 6, a mesma de sempre</small></h5></div>`
+const msPlaceholderHtml = () => `<div class="fila">${msEx(1440, `
+  <div class="cartao ms-q">${ic('help-circle')}<div><b>Pergunta aberta para o Fernando.</b> Na máquina local, Conexão e Onde roda não existem. O que ocupa a faixa 5: nada (A), ou um card curto com o que o Mac roda (B)? Por padrão o wireframe desenha a A nas telas inteiras (434-1).</div></div>
+  <div class="ms-opt"><div class="rotulo">A · Nada: a faixa some e as Sessões de terminal sobem <span class="ms-pick">proposta</span></div>
+    ${msBand(1440, 4, 'ms-half', msProcesses(false), msAttention(false))}<div class="ms-gap">faixa 5 não existe na máquina local · Sessões de terminal vem logo em seguida</div>${msOne(6, msTermStub())}</div>
+  <div class="ms-opt"><div class="rotulo">B · Um card curto: “O que o Mac roda”</div>
+    ${msBand(1440, 4, 'ms-half', msProcesses(false), msAttention(false))}${msOne(5, msLocalStrip())}${msOne(6, msTermStub())}</div>`, 'Faixas 4 a 6 da máquina local, em 1440 px')}</div>`
+
+// 434-5: one read fails, the rest continues
+const msErrorsHtml = () => `<div class="fila">${msEx(1440, `
+  ${msBand(1440, 3, 'ms-23', msChart(true), msErrCard('hard-drive', 'Volumes', 'Não consegui ler os volumes.', 'df não respondeu em 5 s · tentamos de novo a cada 30 s'))}
+  ${msOne(7, msErrCard('radio-tower', 'Portas em escuta', 'Não consegui ler as portas em escuta.', 'ss saiu com o código 1: permissão negada em /proc/net'))}
+  ${msOne(8, msErrCard('container', 'Docker', 'O Docker não respondeu.', 'Cannot connect to the Docker daemon at unix:///var/run/docker.sock'))}
+  <p class="ms-note">Cada card lê sozinho. O que falhou mostra o motivo em palavras simples, o texto do sistema em letra pequena e Tentar de novo, que usa o estado ocupado do botão (435-1). Os outros cards continuam com a leitura de agora. Uma leitura que já funcionou e agora falha deixa o último valor esmaecido em vez de apagá-lo (como na C98).</p>`, 'A Workstation com três leituras que falharam · faixas 3, 7 e 8')}</div>`
+
+// 435-1: the button component, every state
+const BT_VARIANTS = [['outline', 'outline', 'contorno'], ['filled', 'filled', 'cheio'], ['ghost', 'ghost', 'sem borda'], ['danger', 'danger', 'perigo'], ['danger filled', 'danger filled', 'perigo cheio, só em confirmação']]
+const BT_STATES = [['Normal', ''], ['Hover', 'hover'], ['Pressionado', 'pressed'], ['Foco do teclado', 'focus'], ['Ocupado', 'busy'], ['Concluído', 'done'], ['Falhou', 'failed'], ['Desabilitado', 'disabled']]
+const btLabel = (st, base) => st === 'busy' ? 'Reiniciando…' : st === 'done' ? 'Reiniciado' : st === 'failed' ? 'Tentar de novo' : base
+const btCell = (variant, st, i) => {
+  const v = variant.split(' ').filter(Boolean)
+  const b = bt(btLabel(st, 'Reiniciar'), { v: v[0], cls: v.slice(1).join(' '), icon: 'rotate-cw', state: st })
+  const extra = i > 0 ? '' : st === 'failed' ? `<span class="bt-msg">${ic('alert-circle')}O Docker não respondeu. Nada foi reiniciado.</span>` : st === 'disabled' ? `<span class="bt-why">${ic('info')}A Workstation não aceita ações vindas deste Mac.</span>` : ''
+  return `<div class="bt-cell">${b}${extra}</div>`
+}
+const btSheet = () => `<div class="cartao" style="padding:6px 14px 10px"><table class="bt-sheet"><thead><tr><th></th>${BT_STATES.map(([l]) => `<th>${l}</th>`).join('')}</tr></thead><tbody>
+  ${BT_VARIANTS.map(([v, code, nome], i) => `<tr><td class="bt-rowh"><b>${code}</b>${nome}</td>${BT_STATES.map(([, st]) => `<td>${btCell(v, st, i)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`
+const btSizes = () => `<div class="bt-sizes">${[['sm', '28 px', '12 px de texto', 'Linhas de tabela e cabeçalhos de card: Parar, Remover…, Reiniciar.'], ['md', '32 px', '13 px de texto', 'O padrão: ações de uma tela, como Entrar, Reconectar, Limpar.'], ['lg', '40 px', '14 px de texto', 'A ação principal de uma confirmação: Confirmar e parar.']].map(([s, h, f, uso]) => `<div class="cartao bt-size"><h6>${s}<small>${h} · ${f}</small></h6>
+  <div class="row">${bt('Reiniciar', { size: s, icon: 'rotate-cw' })}${bt('Limpar', { v: 'filled', size: s, icon: 'brush-cleaning' })}${bt('Reiniciar', { v: 'ghost', size: s })}${bt('', { size: s, icon: 'more-horizontal', aria: 'Mais ações' })}</div>
+  <div class="row">${bt('Reiniciando…', { size: s, icon: 'rotate-cw', state: 'busy' })}${bt('Reiniciado', { size: s, state: 'done' })}</div><p>${uso}</p></div>`).join('')}</div>`
+const btFlow = () => `<div class="bt-flow">
+  <div class="cartao bt-step"><span class="t">0 ms · o dedo desce</span>${bt('Reiniciar', { icon: 'rotate-cw', state: 'pressed' })}<p>Pressionado: desce 1 px e escurece, igual nas quatro variantes.</p></div><span class="bt-arrow">${ic('arrow-right')}</span>
+  <div class="cartao bt-step"><span class="t">≤ 100 ms · o clique pegou</span>${bt('Reiniciando…', { icon: 'rotate-cw', state: 'busy' })}<p>Ocupado, em qualquer botão, com ou sem ícone. Cliques repetidos são ignorados e o foco fica onde estava.</p></div><span class="bt-arrow">${ic('arrow-right')}</span>
+  <div class="cartao bt-step"><span class="t">ao terminar · 2 s</span>${bt('Reiniciado', { state: 'done' })}<p>Concluído, no próprio botão; volta ao normal sozinho.</p></div>
+  <div class="cartao bt-step"><span class="t">ao falhar · até o próximo clique</span><div class="bt-cell" style="min-height:0">${bt('Tentar de novo', { state: 'failed' })}<span class="bt-msg">${ic('alert-circle')}O Docker não respondeu. Nada foi reiniciado.</span></div><p>Falhou, com o motivo em palavras simples logo abaixo.</p></div></div>`
+const btRules = () => `<div class="cartao" style="padding:14px 18px"><ul class="bt-rules">
+  <li><b>Um componente só.</b> As telas deixam de ter o seu: somem as regras de botão de <span class="mono">docker.css</span>, <span class="mono">kanban.css</span>, <span class="mono">app-update.css</span>, <span class="mono">decisions.css</span> e <span class="mono">sessions.css</span>, e os <span class="mono">.dk-ok</span> e <span class="mono">.dk-fail</span> dão lugar aos estados de baixo.</li>
+  <li><b>Variantes:</b> <span class="mono">outline</span>, <span class="mono">filled</span>, <span class="mono">ghost</span> e <span class="mono">danger</span> (com a versão <span class="mono">filled</span> só para a confirmação de uma ação destrutiva). <b>Tamanhos:</b> <span class="mono">sm</span>, <span class="mono">md</span> e <span class="mono">lg</span>; a tela não redefine altura nem fonte.</li>
+  <li><b>Ocupado</b> (<span class="mono">aria-busy="true"</span>): o ícone vira o spinner (se o botão não tem ícone, entra um à esquerda), o rótulo vai ao gerúndio e a largura não muda, para o botão não pular. Cliques repetidos são ignorados; o foco fica no botão.</li>
+  <li><b>Concluído e Falhou</b> são curtos e ficam no próprio botão; o resultado é anunciado em <span class="mono">aria-live="polite"</span> (Falhou, em <span class="mono">role="alert"</span>). O erro vem em palavras simples; o texto do sistema só no detalhe.</li>
+  <li><b>Desabilitado</b> tem um visual só (meia opacidade, cursor de proibido) e <b>sempre diz o motivo</b>, em texto ao lado e em <span class="mono">aria-describedby</span>. Sem motivo para dizer, o botão não é desabilitado: some, ou a ação fica disponível.</li>
+  <li><b>Foco do teclado</b> aparece só com <span class="mono">:focus-visible</span>: anel de 2 px na cor da marca, afastado 2 px. <b>Movimento reduzido:</b> o spinner vira um ícone parado.</li></ul></div>`
+const btHtml = () => `<div class="tl-flow"><div class="tl-step"><div class="rotulo">1 · Todos os estados, em todas as variantes (a linha de cima mostra o texto de erro e o motivo do desabilitado)</div>${btSheet()}</div>
+  <div class="tl-step"><div class="rotulo">2 · Tamanhos</div>${btSizes()}</div>
+  <div class="tl-step"><div class="rotulo">3 · O que o clique devolve, e quando</div>${btFlow()}</div>
+  <div class="tl-step"><div class="rotulo">4 · Regras do componente</div>${btRules()}</div></div>`
+
+// 434-6: the Docker action row at ~720 px, the real cause, and two fixes
+const msNarrowCard = (mode, o = {}) => `<div class="cartao tm-card ms-narrow${mode === 'menu' ? ' free' : ''}"${mode === 'menu' ? ' style="min-height:300px"' : ''}><h5>${ic('container')}Docker<small>1 rodando · 3 parados</small></h5>${msDkTable(mode, o)}${mode === 'today' ? '<span class="ms-clip-mark"></span>' : ''}</div>`
+const msNarrowHtml = () => `<div class="tl-flow">
+  <div class="tl-step"><div class="rotulo">1 · Hoje, num card de 720 px: o Remover… passa da borda e é cortado</div>
+    <div style="display:flex;flex-direction:column;gap:10px">${msNarrowCard('today')}
+    <div class="ms-callout">${ic('alert-circle')}<span>A faixa vermelha é a borda do card. Os três botões da linha do container não cabem ao lado de Nome, Imagem, Estado, Stack e Criado, e o terceiro, Remover…, fica cortado: não dá nem para clicar nele.</span></div>
+    <div class="cartao ms-cause"><b>A causa</b><span>No <span class="mono">packages/nucleo/ui/screens/docker.css</span> a célula das ações é <code>.dk-acts { text-align: right; white-space: nowrap; }</code>. Numa célula de tabela, <code>nowrap</code> impede a quebra: a coluna passa a medir os três botões somados (cerca de 290 px) e a tabela, em vez de apertar as outras colunas, cresce além do card. O card não rola (<code>min-width: 0</code>) e a borda corta o que passou. Não é só o 720 px: qualquer janela em que a soma das colunas passe da largura do card repete o corte.</span>
+    <span>O conserto não é encolher o botão: é tirar o <code>nowrap</code> da célula, dar a ela uma largura fixa e deixar os botões quebrarem dentro dela (<code>display: flex; flex-wrap: wrap</code> num <code>div</code> dentro da célula).</span></div></div></div>
+  <div class="tl-step"><div class="rotulo">2 · Proposta: os botões quebram para a segunda linha, dentro do card <span class="ms-pick">recomendada</span></div>
+    ${msNarrowCard('wrap', { busyRow: 1 })}
+    <p class="ms-note" style="max-width:720px;margin-top:8px">A coluna das ações tem 188 px: cabem dois botões por linha e o terceiro desce, alinhado à direita. A imagem passa para baixo do nome, o que dispensa a coluna Imagem. Nada fica escondido e não nasce um componente novo (menu); em compensação a linha dos containers rodando fica com duas linhas de altura. A segunda linha mostra o estado ocupado (Parando…) com as outras ações desabilitadas enquanto uma roda.</p></div>
+  <div class="tl-step"><div class="rotulo">3 · Alternativa: um menu “Ações” por linha (uma linha só, três itens no menu)</div>
+    ${msNarrowCard('menu', { pop: true })}
+    <p class="ms-note" style="max-width:720px;margin-top:8px">Linha de uma altura só e Remover… separado dos outros por uma linha, mais longe do clique distraído. Em compensação, precisa de um menu (teclado, foco, fechar ao clicar fora) e esconde as ações que o Fernando mais usa; Parar vira dois cliques. A confirmação de Remover… continua a mesma (C93).</p></div></div>`
+
+// 434-7: the Workstation's old núcleo: a version warning and no actions
+const msStaleHtml = () => `<div class="fila">${msEx(1100, `${msOne(8, msDocker(1100, true, 'stale'))}
+  <p class="ms-note">Sem Reiniciar o Docker, sem Limpar, sem coluna de ações: nenhum botão, nem desabilitado. O núcleo de lá é de 22/10, 201 commits atrás da main; atualizá-lo é operação e fica fora desta issue. Quando ele passar a oferecer as ações, o aviso some e o card vira o do 434-2.</p>`, 'Docker da Workstation com o núcleo antigo · 1100 px')}</div>`
 
 // =====================================================================
 // Montagem
