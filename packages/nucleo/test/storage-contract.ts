@@ -254,6 +254,27 @@ export function storageContract(name: string, create: () => Promise<StoragePort>
         assert.deepEqual((await store.listEvents('s1')).items[0].data, { command: 'npm test', text: 'de novo' });
       });
 
+      test('#414 seq segue a ordem de gravação, não a de createdAt (robusto a fora de ordem)', async () => {
+        await store.appendEvent(event({ id: 'cedo', createdAt: at(5) }));
+        await store.appendEvent(event({ id: 'atrasado', createdAt: at(1) })); // createdAt mais velho, gravado depois
+        const { items } = await store.listEvents('s1');
+        const seqOf = (id: string) => items.find((e) => e.id === id)!.seq!;
+        assert.ok(seqOf('atrasado') > seqOf('cedo'), 'o gravado depois tem seq maior, mesmo com createdAt mais velho');
+      });
+
+      test('#414 setEventText avança o seq do evento: o fluxo se move no backfill', async () => {
+        await store.appendEvent(event({ id: 'msg', createdAt: at(1) }));
+        await store.appendEvent(event({ id: 'depois', createdAt: at(2) }));
+        const seqOf = async (id: string) => (await store.listEvents('s1')).items.find((e) => e.id === id)!.seq!;
+        const before = await seqOf('msg');
+        assert.ok((await seqOf('depois')) > before, 'de início, msg é anterior a depois');
+        assert.equal(await store.setEventText('msg', 'texto do transcript'), 's1');
+        const after = await seqOf('msg');
+        assert.ok(after > before, 'o backfill empurra o evento para a frente do fluxo');
+        const maxSeq = Math.max(...(await store.listEvents('s1')).items.map((e) => e.seq!));
+        assert.equal(after, maxSeq, 'passa a ser o maior seq da sessão');
+      });
+
       test('recusa evento sem tipo ou com data fora do padrão', async () => {
         await assert.rejects(store.appendEvent(event({ type: '' })), InvalidModelError);
         await assert.rejects(store.appendEvent(event({ createdAt: '02/11/2026' })), InvalidModelError);
@@ -290,7 +311,10 @@ export function storageContract(name: string, create: () => Promise<StoragePort>
         const p3 = await store.listRecentEvents({ limit: 2, before: p2.nextCursor });
         assert.deepEqual(ids(p3), ['e1']);
         assert.equal(p3.nextCursor, null);
-        assert.deepEqual(p3.items[0], event({ id: 'e1', sessionId: 's1', createdAt: at(1), type: 'UserPromptSubmit', toolName: null, summary: 'pedido' }));
+        // `seq` é a posição de gravação (#414), preenchida na leitura; o resto bate com o evento gravado.
+        const { seq, ...rest } = p3.items[0];
+        assert.equal(typeof seq, 'number');
+        assert.deepEqual(rest, event({ id: 'e1', sessionId: 's1', createdAt: at(1), type: 'UserPromptSubmit', toolName: null, summary: 'pedido' }));
       });
 
       test('createdAt empatado desempata pelo id, sem repetir nem pular', async () => {

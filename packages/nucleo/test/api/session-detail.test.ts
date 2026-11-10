@@ -181,6 +181,74 @@ describe('Detalhe da sessão: /api/sessions/<id>', () => {
     assert.deepEqual(c.messages.map((m) => [m.role, m.text]), [['you', prompt], ['assistant', reply], ['you', other], ['you', null]]);
   });
 
+  // #414: o delta da Conversa (`?after=<cursor>`), que troca o replaceChildren de ~156 KB por aplicar por id.
+  async function seedSession(id: string): Promise<(n: number, type: string, data: unknown, over?: { toolName?: string; summary?: string }) => Promise<boolean>> {
+    const base = (await storage.getSession(DETAIL_SESSION))!;
+    await storage.putSession({ ...base, id, identity: undefined, awaitingInputSince: null, awaitingReason: null, status: 'active', endedAt: null });
+    const at = (s: number) => new Date(AGORA + s * 1000).toISOString();
+    return (n, type, data, over = {}) =>
+      storage.appendEvent({ id: `${id}-e${n}`, sessionId: id, agentId: null, type, toolName: over.toolName ?? null, summary: over.summary ?? null, data: data as never, createdAt: at(n) });
+  }
+
+  test('#414/AC-3 o delta com ?after= traz só as mensagens novas, não a conversa inteira', async () => {
+    const id = 'sim-delta-ac3';
+    const ev = await seedSession(id);
+    await ev(1, 'UserPrompt', { text: 'primeira pergunta' });
+    await ev(2, 'AssistantMessage', { text: 'primeira resposta' });
+
+    const initial = await read<ConversaDoDetalhe>(`/api/sessions/${id}/conversation`);
+    assert.deepEqual(initial.messages.map((m) => m.text), ['primeira pergunta', 'primeira resposta']);
+    assert.equal(initial.total, 2);
+    assert.ok(initial.cursor, 'a carga inicial traz um cursor opaco para a próxima chamada');
+    assert.equal(initial.reset, undefined, 'sem ?after não há reset');
+    const initialIds = initial.messages.map((m) => m.id);
+
+    await ev(3, 'UserPrompt', { text: 'segunda pergunta' });
+    await ev(4, 'AssistantMessage', { text: 'segunda resposta' });
+    const delta = await read<ConversaDoDetalhe>(`/api/sessions/${id}/conversation?after=${encodeURIComponent(initial.cursor)}`);
+    assert.equal(delta.reset, undefined, 'cursor válido: incremental, não reset');
+    assert.equal(delta.total, 4, 'total é o tamanho da conversa inteira');
+    assert.deepEqual(delta.messages.map((m) => m.text), ['segunda pergunta', 'segunda resposta'], 'só as novas');
+    assert.ok(delta.messages.every((m) => !initialIds.includes(m.id)), 'nenhuma mensagem antiga volta no delta');
+    assert.notEqual(delta.cursor, initial.cursor, 'o cursor avança');
+
+    const empty = await read<ConversaDoDetalhe>(`/api/sessions/${id}/conversation?after=${encodeURIComponent(delta.cursor)}`);
+    assert.deepEqual(empty.messages, [], 'sem nada novo, o delta vem vazio');
+    assert.equal(empty.total, 4);
+  });
+
+  test('#414/AC-5 (servidor) ferramenta running→ok reaparece no delta como mensagem alterada, mesmo id', async () => {
+    const id = 'sim-delta-ac5';
+    const ev = await seedSession(id);
+    await ev(1, 'AssistantMessage', { text: 'vou rodar o teste' });
+    await ev(2, 'PreToolUse', { tool_use_id: 'tu-1', tool_input: { command: 'npm test' } }, { toolName: 'Bash', summary: 'npm test' });
+
+    const initial = await read<ConversaDoDetalhe>(`/api/sessions/${id}/conversation`);
+    const msg = initial.messages.find((m) => m.tools.length > 0)!;
+    assert.equal(msg.tools[0]!.state, 'running', 'sem resultado e sessão ativa: a ferramenta está rodando');
+    const { id: msgId } = msg;
+    const toolId = msg.tools[0]!.id;
+
+    // O resultado chega (RESULTADOS): running → ok, alterando uma mensagem já desenhada.
+    await ev(3, 'PostToolUse', { tool_use_id: 'tu-1', tool_response: { success: true } }, { toolName: 'Bash', summary: 'ok' });
+    const delta = await read<ConversaDoDetalhe>(`/api/sessions/${id}/conversation?after=${encodeURIComponent(initial.cursor)}`);
+    const changedMsg = delta.messages.find((m) => m.id === msgId);
+    assert.ok(changedMsg, 'a mensagem que contém a ferramenta volta no delta, com o mesmo message.id');
+    assert.equal(changedMsg!.tools[0]!.id, toolId, 'mesma tool.id: o cliente troca só aquela linha');
+    assert.equal(changedMsg!.tools[0]!.state, 'ok', 'agora a ferramenta está ok');
+  });
+
+  test('#414 o delta com cursor de outra geração devolve reset com a conversa inteira', async () => {
+    const id = 'sim-delta-reset';
+    const ev = await seedSession(id);
+    await ev(1, 'UserPrompt', { text: 'oi' });
+    await ev(2, 'AssistantMessage', { text: 'olá' });
+    const delta = await read<ConversaDoDetalhe>(`/api/sessions/${id}/conversation?after=zzzzzz.999999`);
+    assert.equal(delta.reset, true, 'cursor de outra geração: o cliente relê tudo');
+    assert.deepEqual(delta.messages.map((m) => m.text), ['oi', 'olá'], 'a conversa inteira volta');
+    assert.ok(delta.cursor, 'e um cursor novo e válido');
+  });
+
   test('Linha do tempo (C6): do mais novo para o mais velho, filtros e páginas', async () => {
     const base = `/api/sessions/${DETAIL_SESSION}/events`;
     const tudo = await read<EventosDoDetalhe>(`${base}?limit=500`);

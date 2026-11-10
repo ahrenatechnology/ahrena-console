@@ -186,6 +186,7 @@ function toEvent(r: Row): SessionEvent {
     summary: r.summary as string | null,
     data: r.data === null ? null : JSON.parse(r.data as string),
     createdAt: r.created_at as string,
+    seq: r.seq as number,
   };
 }
 
@@ -504,9 +505,14 @@ export class SqliteStorage implements StoragePort {
   }
 
   async setEventText(id: string, text: string): Promise<string | null> {
+    // O backfill também avança o `seq`: uma mutação que os observadores (o delta da Conversa, #414)
+    // precisam ver é um passo do fluxo. Sem isso, o cliente acorda pelo `activity` e não acha o que mudou.
     const row = this.db
       .prepare(
-        `UPDATE events SET data = json_set(CASE WHEN json_type(data) = 'object' THEN data ELSE '{}' END, '$.text', ?) WHERE id = ? RETURNING session_id`,
+        `UPDATE events
+         SET data = json_set(CASE WHEN json_type(data) = 'object' THEN data ELSE '{}' END, '$.text', ?),
+             seq = (SELECT COALESCE(MAX(seq), 0) + 1 FROM events)
+         WHERE id = ? RETURNING session_id`,
       )
       .get(text, id) as { session_id: string } | undefined;
     return row ? row.session_id : null;
