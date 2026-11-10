@@ -485,6 +485,19 @@ describe('issue 277: the Perfis de nuvem card (C66, C67)', () => {
   });
 });
 
+describe('issue 431: the <region>.signin.aws device page', () => {
+  const link = 'https://us-east-2.signin.aws/platform/authorize?request_uri=TEST';
+  test('AC-4 the link carrying a request_uri is opened as printed; the code is typed from the screen', () => {
+    assert.equal(format.verificationLink(link), link);
+    assert.equal(format.prefilledLink(link, 'ABCD-EFGH'), link, 'no user_code is added to an authorize request the CLI built');
+  });
+  test('AC-4 the page is named by its host, without calling it the session portal', () => {
+    const line = format.portalLine(link, { name: 'sessao-exemplo', startUrlHost: 'exemplo.awsapps.com' });
+    assert.equal(line.host, 'us-east-2.signin.aws');
+    assert.doesNotMatch(line.text, /portal da sessão/);
+  });
+});
+
 describe('issue 277: the page named under a device code (decision 0013 §2a, review of #310)', () => {
   const session = { name: 'sessao-exemplo', startUrlHost: 'exemplo.awsapps.com' };
   test('the session portal is named as the session portal', () => {

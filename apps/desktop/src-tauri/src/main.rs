@@ -935,16 +935,20 @@ fn link_target(url: &tauri::Url, core_port: Option<u16>) -> LinkTarget {
     }
 }
 
-/// The AWS SSO device page "Abrir a página de login" links to (#334): an IAM Identity Center portal
-/// (`<name>.awsapps.com`) or a region's SSO device page (`device.sso.<region>.amazonaws.com`), one
-/// label each, never the rest of amazonaws.com. The core only shows the session's pinned portal or
-/// its region's page (`deviceCodeOnSessionPortal`, decision 0013 §2a). The portal arm is wider than
-/// that: any tenant's portal, which can redirect to an IdP its owner picks. Accepted in 0013 §2a, the
-/// same exposure as `github.io`.
+/// The AWS SSO device page "Abrir a página de login" links to (#334, #431): an IAM Identity Center
+/// portal (`<name>.awsapps.com`), a region's SSO device page (`device.sso.<region>.amazonaws.com`) or
+/// the sign-in page AWS moved some regions to (`<region>.signin.aws`), one label each, never the rest
+/// of amazonaws.com or of `.aws`. The core only shows the session's pinned portal or the page of the
+/// region it already knows (`deviceCodeOnSessionPortal`, decision 0013 §2a). The portal arm is wider
+/// than that: any tenant's portal, which can redirect to an IdP its owner picks. Accepted in 0013 §2a,
+/// the same exposure as `github.io`.
 fn aws_sso_device_host(host: &str) -> bool {
     let label = |s: &str, max: usize| !s.is_empty() && s.len() <= max && s.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-');
     if let Some(portal) = host.strip_suffix(".awsapps.com") {
         return label(portal, 63);
+    }
+    if let Some(region) = host.strip_suffix(".signin.aws") {
+        return label(region, 32);
     }
     host.strip_prefix("device.sso.").and_then(|h| h.strip_suffix(".amazonaws.com")).is_some_and(|region| label(region, 32))
 }
@@ -1053,6 +1057,26 @@ mod tests {
         assert_eq!(t("https://guardiatechnology.awsapps.com./start"), LinkTarget::Refused, "trailing dot");
         assert_eq!(t("https://device.sso.us-east-1.amazonaws.com./"), LinkTarget::Refused, "trailing dot");
         assert_eq!(t("https://foo%2Eevil.awsapps.com/"), LinkTarget::Refused, "an encoded dot is a second label");
+    }
+
+    #[test]
+    fn link_target_sends_aws_signin_region_pages_to_the_system_browser() {
+        let t = |u: &str| link_target(&u.parse().unwrap(), Some(53817));
+        assert_eq!(t("https://us-east-2.signin.aws/platform/authorize?request_uri=TEST"), LinkTarget::Browser);
+        assert_eq!(t("https://ap-southeast-2.signin.aws/platform/authorize?request_uri=TEST"), LinkTarget::Browser);
+        assert_eq!(t("https://signin.aws/platform/authorize"), LinkTarget::Refused, "no region");
+        assert_eq!(t("https://a.b.signin.aws/"), LinkTarget::Refused, "one region label");
+        assert_eq!(t("https://evil.us-east-2.signin.aws/"), LinkTarget::Refused);
+        assert_eq!(t("https://us-east-2.signin.aws.evil.example/"), LinkTarget::Refused);
+        assert_eq!(t("https://us-east-2.signin.aws./"), LinkTarget::Refused, "trailing dot");
+        assert_eq!(t("https://us-east-2.signin.aws:8443/"), LinkTarget::Refused, "no port");
+        assert_eq!(t("https://user@us-east-2.signin.aws/"), LinkTarget::Refused, "no userinfo");
+        assert_eq!(t("http://us-east-2.signin.aws/"), LinkTarget::Refused, "https only");
+        assert_eq!(t("https://us-east-2.console.aws/"), LinkTarget::Refused, "other *.aws hosts");
+        assert_eq!(t("https://us-east-2.aws/"), LinkTarget::Refused);
+        assert_eq!(t("https://aws/"), LinkTarget::Refused);
+        assert_eq!(t("https://US-EAST-2.SIGNIN.AWS/x"), LinkTarget::Browser, "the parser lowercases the host");
+        assert_eq!(t("https://us%2Eeast.signin.aws/"), LinkTarget::Refused, "an encoded dot is a second label");
     }
 
     #[test]

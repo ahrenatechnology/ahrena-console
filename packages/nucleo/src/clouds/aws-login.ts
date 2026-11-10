@@ -78,19 +78,24 @@ export function acceptVerificationUri(candidate: string): string | null {
 }
 
 /**
- * Whether a device code's verification URL is on a session's portal (`startUrlHost`) or on the SSO
- * device page of its region (`device.sso.<region>.amazonaws.com`). The caller passes the portal it
- * trusts, never the one the same unauthenticated answer claims (remote-connectors.ts, SessionPortals).
+ * Whether a device code's verification URL is on a session's portal (`startUrlHost`), on the SSO
+ * device page of its region (`device.sso.<region>.amazonaws.com`) or on the sign-in page AWS moved
+ * some regions to (`<region>.signin.aws`, #431). Every host is compared whole, never by suffix, and
+ * the URL must be https with no userinfo and no port. The caller passes the portal and the region it
+ * trusts, never the ones the same unauthenticated answer claims (remote-connectors.ts, SessionPortals).
  */
 export function deviceCodeOnSessionPortal(verificationUri: string, startUrlHost: string | null, region: string | null): boolean {
-  let host: string;
+  let url: URL;
   try {
-    host = new URL(verificationUri).hostname;
+    url = new URL(verificationUri);
   } catch {
     return false;
   }
+  if (url.protocol !== 'https:' || url.username || url.password || url.port) return false;
+  const host = url.hostname;
   if (startUrlHost && host === startUrlHost.toLowerCase()) return true;
-  return !!region && /^[a-z0-9-]{1,32}$/.test(region) && host === `device.sso.${region}.amazonaws.com`;
+  if (!region || !/^[a-z0-9-]{1,32}$/.test(region)) return false;
+  return host === `device.sso.${region}.amazonaws.com` || host === `${region}.signin.aws`;
 }
 
 /** The first accepted URI and the first user code in the CLI's stdout; anything else is ignored. */
