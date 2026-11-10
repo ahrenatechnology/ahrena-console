@@ -19,8 +19,8 @@
 // What each card shows comes from machine-format.js, which the test imports without the DOM.
 
 import { header, el, icon } from '../dom.js';
+import { runButtonAction } from '../button-action.js';
 import { loading, error, empty, errorBand } from '../states.js';
-import { attentionPill } from '../attention.js';
 import {
   ATTENTION_ROUTE,
   DASH,
@@ -29,7 +29,6 @@ import {
   MACHINES_ROUTE,
   PORT_FILTERS,
   REREAD_MS,
-  SESSIONS_SHOWN,
   START_CORE_COMMAND,
   TUNNEL_PORT_STATE,
   WINDOWS,
@@ -45,8 +44,6 @@ import {
   reconnectView,
   bytes,
   chartOf,
-  dockerRows,
-  duration,
   ago,
   forwardsOf,
   headerLine,
@@ -70,15 +67,11 @@ import {
   remoteCondition,
   remoteCorePort,
   remotePortOwner,
-  sessionMeta,
-  sessionAttention,
   sessionsOf,
-  stackContainers,
   statCards,
   statePill,
   telemetryRoute,
   touchesMachine,
-  tunnelPortWhat,
   volumeLine,
   yOf,
 } from './machine-format.js';
@@ -142,7 +135,7 @@ function chart(series, reading, { local, hours, now = Date.now() }) {
   const hasData = c.lines.some((l) => l.values.some((v) => v !== null));
   return el(
     'section',
-    { class: 'card tm-card tm-span-wide', 'data-part': 'chart' },
+    { class: 'card tm-card', 'data-part': 'chart' },
     el('h2', { class: 'tm-title' }, icon('activity'), el('span', {}, c.title), c.note ? el('small', { class: 'tm-note' }, c.note) : null),
     hasData ? s : el('p', { class: 'tm-muted' }, 'Ainda não há amostras nesta janela.'),
     el('div', { class: 'tm-axis mono' }, ...axisLabels(hours).map((t) => el('span', {}, t))),
@@ -164,14 +157,16 @@ function meter(v) {
   );
 }
 
-function volumesCard(reading, { local }) {
+function volumesCard(reading) {
   const children = reading.volumes.map(meter);
-  if (local && reading.network) {
+  if (reading.network) {
     const n = reading.network;
     const totals = n.rxBytesTotal !== null && n.txBytesTotal !== null ? `↓ ${bytes(n.rxBytesTotal)} · ↑ ${bytes(n.txBytesTotal)} desde o boot` : null;
     children.push(el('div', { class: 'eyebrow tm-sub-eyebrow' }, 'Rede'), el('div', { class: 'tm-legend' }, n.interface ? el('span', {}, `${n.interface} · rota padrão`) : null, totals ? el('span', { class: 'mono' }, totals) : null));
   }
-  return card('Volumes', 'hard-drive', null, ...children);
+  const node = card('Volumes', 'hard-drive', null, ...children);
+  node.setAttribute('data-part', 'volumes');
+  return node;
 }
 
 const ALERT_ICON = { error: ['error', 'tm-c-error'], warning: ['alert', 'tm-c-waiting'], info: ['info', 'tm-c-muted'] };
@@ -192,7 +187,10 @@ function alertsCard(alerts, now) {
         ),
       )
     : el('p', { class: 'tm-muted' }, 'Nada pede atenção agora.');
-  return card('O que pede atenção', 'bell', String(alerts.length), body);
+  const node = card('O que pede atenção', 'bell', String(alerts.length), body);
+  node.classList.add('tm-quiet');
+  node.setAttribute('data-part', 'alerts');
+  return node;
 }
 
 function table(head, rows, extraClass = '') {
@@ -201,37 +199,9 @@ function table(head, rows, extraClass = '') {
 
 const td = (content, cls = null) => el('td', { class: cls }, content ?? DASH);
 
-function tunnelCard(tunnels, machines, remoteReadings, now) {
-  const blocks = [];
-  if (!tunnels.length) blocks.push(el('p', { class: 'tm-muted' }, 'Nenhum túnel ssh encaminhando portas agora. O app só mostra: subir o túnel continua com a ferramenta que você já usa.'));
-  for (const t of tunnels) {
-    const machine = machineOfTunnel(t, machines);
-    const remotePorts = machine ? (remoteReadings.get(machine.id)?.ports ?? null) : null;
-    const since = t.since ? `no ar há ${duration(t.since, now)} · ` : '';
-    blocks.push(
-      el('div', { class: 'tm-legend' }, pill(['b-completed', `${t.destination} · túnel`]), el('span', {}, `${since}${t.ports.length} ${t.ports.length === 1 ? 'porta' : 'portas'}`)),
-      table(
-        ['No Mac', 'Lá', 'Estado', 'O que é, lido do núcleo de lá'],
-        t.ports.map((p) =>
-          el(
-            'tr',
-            { 'data-port': p.localPort },
-            td(String(p.localPort), 'mono'),
-            td(String(p.remotePort), 'mono'),
-            el('td', {}, pill(TUNNEL_PORT_STATE[p.state])),
-            td(tunnelPortWhat(p, { machine, remotePorts }), p.state === 'up' ? null : 'tm-muted'),
-          ),
-        ),
-        ' tm-cols-tunnel',
-      ),
-    );
-  }
-  return el('section', { class: 'card tm-card tm-span-wide', 'data-part': 'tunnel' }, el('h2', { class: 'tm-title' }, icon('cable'), el('span', {}, 'Túnel e portas encaminhadas'), el('small', { class: 'tm-note' }, 'lido dos processos ssh e da sonda de cada porta')), ...blocks);
-}
-
 const percent = (n) => (n === null ? DASH : `${String(Math.round(n * 10) / 10).replace('.', ',')}%`);
 
-function claudeCard(claude, top, { wide = false, provider = 'Claude' } = {}) {
+function claudeCard(claude, top, { provider = 'Claude' } = {}) {
   const rows = [
     [`${provider} (CLI)`, claude.cli],
     [`${provider} Desktop`, claude.desktop],
@@ -240,55 +210,11 @@ function claudeCard(claude, top, { wide = false, provider = 'Claude' } = {}) {
     .map(([name, g]) => el('tr', {}, td(name), td(String(g.count), 'mono'), td(percent(g.cpuPct), 'mono'), td(g.memoryBytes === null ? DASH : bytes(g.memoryBytes), 'mono')));
   return el(
     'section',
-    { class: `card tm-card ${wide ? 'tm-span-wide' : 'tm-span-half'}`, 'data-part': provider.toLowerCase() },
+    { class: 'card tm-card tm-quiet', 'data-part': provider.toLowerCase() },
     el('h2', { class: 'tm-title' }, icon('bot'), el('span', {}, `Processos do ${provider}`)),
     table(['Processo', 'Qtde', 'CPU', 'Memória'], rows),
     top?.length ? el('div', { class: 'eyebrow tm-sub-eyebrow' }, 'Os que mais usam CPU') : null,
     top?.length ? el('p', { class: 'tm-legend mono tm-wrap' }, top.map((p) => `${p.name} ${Math.round(p.cpuPct)}%`).join(' · ')) : null,
-  );
-}
-
-function dockerCard(docker) {
-  const rows = dockerRows(docker.space);
-  const meters = rows.map((r) => {
-    const used = el('i', { class: 'tm-stack-part tm-stack-used' });
-    const free = el('i', { class: 'tm-stack-part tm-stack-free' });
-    used.style.setProperty('--w', `${r.usedPct.toFixed(1)}%`);
-    free.style.setProperty('--w', `${r.reclaimablePct.toFixed(1)}%`);
-    return el('div', { class: 'tm-meter' }, el('div', { class: 'tm-meter-top' }, el('span', {}, r.label), el('span', { class: 'mono' }, r.text)), el('div', { class: 'tm-stack', role: 'img', 'aria-label': `${r.label}: ${r.text}` }, used, free));
-  });
-  const body = meters.length
-    ? [...meters, el('div', { class: 'tm-legend' }, el('span', {}, el('i', { class: 'tm-key tm-key-a' }), 'Em uso'), el('span', {}, el('i', { class: 'tm-key tm-key-b' }), 'Recuperável'))]
-    : [el('p', { class: 'tm-muted' }, `${docker.running} em execução · ${docker.stopped} parados. O espaço em disco não respondeu a tempo.`)];
-  return card('Docker', 'container', meters.length ? 'em GB' : null, ...body);
-}
-
-function sessionsCard(items) {
-  if (!items.length) return card('Sessões do Claude lá', 'sessions', 'do /api/attention de lá', el('p', { class: 'tm-muted' }, 'Nenhuma sessão de lá precisa de você nem está ociosa agora.'));
-  const shown = items.slice(0, SESSIONS_SHOWN);
-  const rest = items.length - shown.length;
-  return card(
-    'Sessões do Claude lá',
-    'sessions',
-    'do /api/attention de lá',
-    el(
-      'ul',
-      { class: 'tm-sessions' },
-      ...shown.map((i) => el('li', { 'data-session': String(i.session ?? '') }, el('div', { class: 'tm-session-name' }, el('b', {}, String(i.title || i.project || i.session || '')), el('small', { class: 'mono' }, sessionMeta(i))), attentionPill(sessionAttention(i)))),
-    ),
-    rest > 0 ? el('p', { class: 'tm-muted tm-small' }, `e mais ${rest} · as que esperam também vão para a bandeja`) : null,
-  );
-}
-
-function stacksCard(stacks) {
-  return el(
-    'section',
-    { class: 'card tm-card tm-span-full', 'data-part': 'stacks' },
-    el('h2', { class: 'tm-title' }, icon('layers'), el('span', {}, 'Stacks Docker')),
-    table(
-      ['Stack', 'Containers', 'Portas'],
-      stacks.map((s) => el('tr', { 'data-stack': s.name }, td(s.name, 'mono'), td(stackContainers(s), 'mono'), td(s.ports.length ? s.ports.join(', ') : DASH, 'mono'))),
-    ),
   );
 }
 
@@ -327,7 +253,7 @@ function portsCard(portsList, { local, owner, forwards, filter, setFilter, act =
   return el(
     'section',
     // The whole row: the list is long, and a short card beside it would leave a hole (rule 9, issue 255).
-    { class: 'card tm-card tm-span-full', 'data-part': 'ports' },
+    { class: 'card tm-card', 'data-part': 'ports' },
     el('h2', { class: 'tm-title' }, icon('radio-tower'), el('span', {}, local ? 'Portas em escuta' : 'Portas em escuta lá'), segment),
     band,
     rows.length ? table(head, rows, local ? ' tm-cols-ports' : ' tm-cols-ports-remote') : el('p', { class: 'tm-muted' }, 'Nenhuma porta neste filtro.'),
@@ -479,47 +405,93 @@ function releaseOptions(release, context) {
   return release ? { act: { context, release: release.release, stack: release.stack, copy: release.copy }, band: release.band ?? null } : {};
 }
 
-/** Everything under the header for one reading: the cards, then the grid. Exported for the test. */
-export function machineBody(data, { local, filter = 'all', setFilter = () => {}, now = Date.now(), ownPort = null, release = null, dockerActions: hasActions = false, terminals = null } = {}) {
-  const { reading, series, alerts, machines, machine, sessions, localReading, remoteReadings = new Map(), hours = 1 } = data;
+/**
+ * One card that could not be read (issue 434, error case): the reason in plain words, what the system said in
+ * small type when there is one, and "Tentar de novo". Only this card is replaced; the rest of the screen goes on.
+ */
+function readErrorCard({ part, iconName, title, what, detail = null, retry }) {
+  const button = el('button', { type: 'button', class: 'btn sm outline', 'data-action': 'retry-read' }, icon('refresh'), 'Tentar de novo');
+  button.addEventListener('click', () => runButtonAction(button, () => retry(), { busyLabel: 'Lendo…' }));
+  return el(
+    'section',
+    { class: 'card tm-card tm-read-error', 'data-part': part },
+    el('h2', { class: 'tm-title' }, icon(iconName), el('span', {}, title)),
+    el('div', { class: 'tm-read-error-box', role: 'alert' }, icon('error'), el('div', {}, el('b', {}, what), el('p', { class: 'tm-muted' }, 'O resto da tela segue; só este card ficou sem leitura.'), detail ? el('small', { class: 'mono tm-muted' }, detail) : null, button)),
+  );
+}
+
+/** The band of Processos do Claude (and the Codex ones) beside O que pede atenção, both in a quiet tone. */
+function processesBand(reading, alerts, now) {
+  const claude = reading.claude ? claudeCard(reading.claude, reading.topProcesses) : null;
+  const codex = reading.codex ? claudeCard(reading.codex, null, { provider: 'Codex' }) : null;
+  const left = [claude, codex].filter(Boolean);
+  const children = [];
+  if (left.length === 1) children.push(left[0]);
+  else if (left.length > 1) children.push(el('div', { class: 'card-column' }, ...left));
+  children.push(alertsCard(alerts, now));
+  return el('div', { class: `tm-band tm-band-half${left.length ? '' : ' tm-band-single'}`, 'data-band': 'attention' }, ...children);
+}
+
+/**
+ * Everything under the header for one reading, band by band (issue 434, criterion 2): the resource cards,
+ * the chart beside Volumes, Processos do Claude beside O que pede atenção, then (remote only) `connection`, the
+ * Sessões de terminal, the ports and `docker`. The profiles above and the bands of the condition are the
+ * screen's. Exported for the test.
+ */
+export function machineBody(data, { local, filter = 'all', setFilter = () => {}, now = Date.now(), ownPort = null, release = null, terminals = null, connection = null, docker = null, retry = () => {} } = {}) {
+  const { reading, series, alerts, machines, machine, sessions, localReading, hours = 1 } = data;
   const parts = [];
   if (!reading) {
+    if (connection) parts.push(connection);
     parts.push(empty({ icon: 'activity', title: 'Ainda não há leitura', text: local ? 'A primeira amostra chega em até 30 s.' : `O núcleo ainda não leu a ${machine?.label ?? 'máquina'}.` }));
+    if (docker) parts.push(docker);
     return parts;
   }
   parts.push(el('div', { class: 'tm-stats' }, ...statCards(reading, { local, sessions, alerts, now }).map(statCard)));
-  const grid = [chart(series, reading, { local, hours, now })];
-  if (local) {
-    if (reading.volumes.length || reading.network) grid.push(volumesCard(reading, { local }));
-    if (reading.tunnels) grid.push(tunnelCard(reading.tunnels, machines, remoteReadings, now));
-    // The two short cards stack beside the tunnel (rule 9, issue 255): the long port list goes below, on
-    // its own row, instead of next to the Claude processes with a hole under them.
-    // Without a tunnel reading (a Linux core, a failed probe) there is nothing to stack beside: the
-    // alerts take one column and the Claude processes the other two, so the row stays full.
-    if (reading.codex) grid.push(claudeCard(reading.codex, null, { provider: 'Codex' }));
-    const claude = reading.claude ? claudeCard(reading.claude, reading.topProcesses, { wide: !reading.tunnels }) : null;
-    if (reading.tunnels) grid.push(el('div', { class: 'card-column tm-side' }, alertsCard(alerts, now), claude));
-    else grid.push(alertsCard(alerts, now), ...(claude ? [claude] : []));
-    const terminalsNode = terminals?.card(reading.terminals, sessions, { now });
-    if (terminalsNode) grid.push(terminalsNode);
-    if (reading.ports) grid.push(portsCard(reading.ports, { local, owner: localPortOwner(reading.tunnels, ownPort), forwards: new Map(), filter, setFilter, ...releaseOptions(release, { ownPort, remote: null }) }));
-    if (!machines.some((m) => m.id !== LOCAL_ID)) grid.push(el('div', { class: 'tm-span-full' }, noRemoteCard()));
-  } else {
-    grid.push(alertsCard(alerts, now));
-    if (reading.volumes.length) grid.push(volumesCard(reading, { local }));
-    if (reading.docker) grid.push(dockerCard(reading.docker));
-    if (sessions) grid.push(sessionsCard(sessions));
-    // The Docker actions card (below the grid) lists the stacks with their buttons: this read-only one stays only without it.
-    if (reading.docker?.stacks.length && !hasActions) grid.push(stacksCard(reading.docker.stacks));
-    const terminalsNode = terminals?.card(reading.terminals, sessions, { now });
-    if (terminalsNode) grid.push(terminalsNode);
-    if (reading.ports) {
-      const owner = remotePortOwner(reading.docker, remoteCorePort(localReading, machine));
-      grid.push(portsCard(reading.ports, { local, owner, forwards: forwardsOf(localReading, machine), filter, setFilter, ...releaseOptions(release, { ownPort, remote: data.releaseCap ?? { status: 'unsupported', remoteActions: false } }) }));
-    }
+  const volumes = reading.volumes.length
+    ? volumesCard(reading)
+    : readErrorCard({ part: 'volumes', iconName: 'hard-drive', title: 'Volumes', what: 'Não consegui ler os volumes.', detail: 'A leitura chegou vazia; o núcleo tenta de novo a cada 30 s.', retry });
+  parts.push(el('div', { class: 'tm-band tm-band-23', 'data-band': 'chart' }, chart(series, reading, { local, hours, now }), volumes));
+  parts.push(processesBand(reading, alerts, now));
+  if (connection) parts.push(connection);
+  const terminalsNode = terminals?.card(reading.terminals, sessions, { now });
+  if (terminalsNode) parts.push(terminalsNode);
+  if (!reading.ports) parts.push(readErrorCard({ part: 'ports', iconName: 'radio-tower', title: local ? 'Portas em escuta' : 'Portas em escuta lá', what: 'Não consegui ler as portas em escuta.', detail: 'A leitura chegou vazia; o núcleo tenta de novo a cada 30 s.', retry }));
+  else if (local) parts.push(portsCard(reading.ports, { local, owner: localPortOwner(reading.tunnels, ownPort), forwards: new Map(), filter, setFilter, ...releaseOptions(release, { ownPort, remote: null }) }));
+  else {
+    const owner = remotePortOwner(reading.docker, remoteCorePort(localReading, machine));
+    parts.push(portsCard(reading.ports, { local, owner, forwards: forwardsOf(localReading, machine), filter, setFilter, ...releaseOptions(release, { ownPort, remote: data.releaseCap ?? { status: 'unsupported', remoteActions: false } }) }));
   }
-  parts.push(el('div', { class: 'tm-grid' }, ...grid));
+  if (docker) parts.push(docker);
+  if (local && !machines.some((m) => m.id !== LOCAL_ID)) parts.push(noRemoteCard());
   return parts;
+}
+
+/** "34 GB, 31 recuperáveis": what the Docker of the machine takes and how much of it a clean could free. */
+function dockerSpaceNote(space) {
+  if (!space?.length) return null;
+  const total = space.reduce((sum, x) => sum + x.sizeBytes, 0);
+  const free = space.reduce((sum, x) => sum + x.reclaimableBytes, 0);
+  return `${bytes(total)}, ${bytes(free)} recuperáveis`;
+}
+
+/** The nodes in runs: those not in `live` go together into a `.tm-faded` box, the live ones stay as they are. */
+function fadedRuns(nodes, live, attributes) {
+  const out = [];
+  let run = null;
+  for (const node of nodes) {
+    if (live.has(node)) {
+      run = null;
+      out.push(node);
+      continue;
+    }
+    if (!run) {
+      run = el('div', { class: 'tm-faded', ...attributes });
+      out.push(run);
+    }
+    run.append(node);
+  }
+  return out;
 }
 
 /** The C26 part of a remote that is not connected: what goes above the (maybe faded) reading. */
@@ -580,7 +552,7 @@ export async function mount(area, ctx) {
   // The "Perfis de nuvem" card (issue 277, C66 and C67): its own module, which reads and polls by itself.
   const cloud = cloudProfiles(ctx, id);
   // The Docker card with the actions (issue 288, C92 to C95): its own module, which reads by itself; it replaces the read-only stacks card while it shows the stacks.
-  const docker = dockerActions(ctx, id, { repaint: () => last && paint(last) });
+  const docker = dockerActions(ctx, id, { repaint: () => last && paint(last), readOnlyStacks: () => last?.reading?.docker?.stacks ?? null, spaceNote: () => dockerSpaceNote(last?.reading?.docker?.space) });
   // The remote's connection (issue 278, C62 to C65): its own module; `null` keeps the screen as it was.
   const conn = local ? null : machineConnection(ctx, id, { reread: () => draw(), repaint: () => last && paint(last) });
   // The terminal sessions card (issue 350, C96 to C99): the actions and their confirmations are its own.
@@ -636,10 +608,18 @@ export async function mount(area, ctx) {
     terminals.take(data.reading?.terminals ?? null, data.sessions);
     const shownData = data.reading ? { ...data, reading: withoutReleased(data.reading, released) } : data;
     const release = { release: startRelease, stack: showStacks, copy: copyCommand, band: releaseBand() };
-    const body = data.reading || local || remoteCondition(machine) === null ? machineBody(shownData, { local, filter, setFilter, now, ownPort, release: condition.faded ? null : release, dockerActions: docker.available(), terminals }) : [];
     const dialog = terminals.dialogNode();
-    const shown = condition.faded && data.reading ? [el('div', { class: 'tm-faded', 'aria-label': 'Última leitura guardada' }, ...body)] : dialog ? [el('div', { class: 'tm-faded' }, ...body)] : body;
-    replaceKeepingFocus(head, ...condition.parts, ...(dialog ? [dialog] : []), ...(terminals.bandNode() ? [terminals.bandNode()] : []), cloud.node(label), ...shown, docker.node());
+    const connection = condition.row ?? null;
+    docker.refresh();
+    const dockerNode = docker.node();
+    const body = data.reading || local || remoteCondition(machine) === null ? machineBody(shownData, { local, filter, setFilter, now, ownPort, release: condition.faded ? null : release, terminals, connection, docker: dockerNode, retry: () => draw() }) : [];
+    // Without a body (a remote that is not connected and has no reading) the cards that read by themselves stay.
+    const bands = body.length ? body : [connection, dockerNode].filter(Boolean);
+    // The last reading fades (offline) or sits behind a question (a dialog); the connection and Docker cards, which act, never do.
+    const live = new Set([connection, dockerNode]);
+    const fade = condition.faded ? { 'aria-label': 'Última leitura guardada' } : dialog ? {} : null;
+    const shown = fade ? fadedRuns(bands, live, fade) : bands;
+    replaceKeepingFocus(head, ...condition.parts, ...(dialog ? [dialog] : []), ...(terminals.bandNode() ? [terminals.bandNode()] : []), cloud.node(label), ...shown);
   }
 
   // A repaint (a filter, the 30 s re-read) rebuilds the buttons: the focus goes back to the same one.
@@ -689,7 +669,7 @@ export async function mount(area, ctx) {
 
   // "Ver a stack": the Docker part is its own card on the Workstation's screen (issue 288).
   function showStacks() {
-    area.querySelector?.('[data-part="stacks"]')?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+    area.querySelector?.('[data-part="docker-actions"]')?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
   }
 
   function copyCommand(command, button) {
@@ -748,19 +728,11 @@ export async function mount(area, ctx) {
       const reading = normalizeReading(telemetry?.current);
       const machine = machines.find((m) => m.id === id) ?? normalizeMachines([telemetry?.machine])[0] ?? null;
       let localReading = null;
-      const remoteReadings = new Map();
       let releaseCap = null;
       if (!local) {
         localReading = normalizeReading((await optional(telemetryRoute(LOCAL_ID, 1)))?.current);
         const cap = await optional(releaseRoute(id));
         releaseCap = { status: typeof cap?.status === 'string' ? cap.status : 'unsupported', remoteActions: cap?.remoteActions === true };
-      }
-      else if (reading?.tunnels) {
-        const reached = reading.tunnels.map((t) => machineOfTunnel(t, machines)).filter((m) => m && m.state === 'connected');
-        for (const m of new Set(reached)) {
-          const r = normalizeReading((await optional(telemetryRoute(m.id, 1)))?.current);
-          if (r) remoteReadings.set(m.id, r);
-        }
       }
       if (mine !== request || ctx.signal.aborted) return;
       conn?.take(machinesBody, telemetry);
@@ -774,7 +746,6 @@ export async function mount(area, ctx) {
         machine,
         sessions: sessionsOf(attention, id),
         localReading,
-        remoteReadings,
         releaseCap,
       };
       paint(last);

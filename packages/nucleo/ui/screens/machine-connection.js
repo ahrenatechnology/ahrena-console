@@ -151,7 +151,7 @@ function setupCard(machine) {
   );
 }
 
-const grid = (...cards) => el('div', { class: 'mc-grid' }, ...cards);
+const grid = (...cards) => el('div', { class: 'mc-grid', 'data-band': 'connection' }, ...cards);
 
 // ---------- the controller ----------
 
@@ -414,8 +414,9 @@ export function machineConnection(ctx, id, { reread = () => {}, repaint = () => 
       return connection ? headerWithPlacement(text, placement) : text;
     },
     /**
-     * What goes above the reading, `{ faded, parts }`, or `null` without a `connection` (the screen as it
-     * was). `legacy` is what the machine screen would show without it (C26 and C50).
+     * What goes above the reading, `{ faded, parts, row }`, or `null` without a `connection` (the screen as it
+     * was). `parts` are the bands and the dialog; `row` is band 5, Conexão beside Onde roda (issue 434).
+     * `legacy` is what the machine screen would show without it (C26 and C50).
      */
     view(data, legacy, now = Date.now()) {
       if (!connection) return null;
@@ -423,8 +424,8 @@ export function machineConnection(ctx, id, { reread = () => {}, repaint = () => 
       const { machine, reading } = data;
       const offline = machine?.state !== 'connected' && machine?.state !== 'incompatible-version';
       const place = (wide = false) => placementCard(placement, { stale: offline, hasReading, wide });
-      if (mode === 'none') return { faded: legacy.faded, parts: [...legacy.parts, grid(place(true))] };
-      if (mode === 'start-only') return { faded: legacy.faded, parts: [...legacy.parts, grid(setupCard(machine), place())] };
+      if (mode === 'none') return { faded: legacy.faded, parts: [...legacy.parts], row: grid(place(true)) };
+      if (mode === 'start-only') return { faded: legacy.faded, parts: [...legacy.parts], row: grid(setupCard(machine), place()) };
       if (connection.state !== 'up' || !connection.command?.stop) dialog = false;
       const b = bandFor(machine, reading, legacy, now);
       const parts = [];
@@ -432,12 +433,13 @@ export function machineConnection(ctx, id, { reread = () => {}, repaint = () => 
       // Up with another telemetry version, or the green "Reconectada" of C50: the old part still says it.
       // Its "the app only shows" note is not true any more: it stays out.
       else if (connection.state === 'up' || remoteCondition(machine) === 'first-read') parts.push(...legacy.parts.filter((p) => !p.classList?.contains('tm-only-shows')));
+      // The two cards are band 5 of the machine screen (issue 434): they are not part of what goes above the reading.
       const top = grid(connectionCard(machine, reading, data, now), place());
-      if (dialog) parts.push(dialogNode(machine), el('div', { class: 'tm-faded' }, top));
-      else parts.push(top);
+      if (dialog) parts.push(dialogNode(machine));
+      const row = dialog ? el('div', { class: 'tm-faded' }, top) : top;
       const faded = offline && remoteCondition(machine) !== 'first-read';
-      rendered = parts;
-      return { faded, parts };
+      rendered = [...parts, row];
+      return { faded, parts, row };
     },
   };
 }

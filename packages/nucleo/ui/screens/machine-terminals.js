@@ -144,7 +144,7 @@ export function machineTerminals(ctx, { id, local, label: labelOf, repaint, rere
       : el('p', { class: 'tm-muted' }, 'Nenhum terminal aberto. Sem conexão ssh nem pseudo-terminal nesta máquina; quando uma aba abrir, ela aparece aqui.');
     return el(
       'section',
-      { class: 'card tm-card tm-span-full', 'data-part': 'terminals' },
+      { class: 'card tm-card', 'data-part': 'terminals' },
       el('h2', { class: 'tm-title' }, icon('square-terminal'), el('span', {}, 'Sessões de terminal'), el('small', { class: 'tm-note' }, `lido a cada 30 s · limite de “presa”: ${Math.round(terminals.stuckAfterSec / 60)} min`)),
       readOnly,
       body,

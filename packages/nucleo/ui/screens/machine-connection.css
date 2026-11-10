@@ -1,9 +1,9 @@
 /* The remote machine's connection (issue 278, C62 to C65): the cards "Conexão" and "Onde roda" and the Parar
    confirmation, on top of a remote's screen. machine-connection.js puts this sheet in the head
    (link[data-screen="machine-connection"]) and takes it out when the screen goes. Every own class is mc-*;
-   the bands reuse machine.css's classes (the same screen loads it) without restyling them here. Only brand.css variables. Two
-   columns up to 1299 px of window (the app opens at 1100: "Onde roda" takes its own row, fields side by
-   side), three from 1300 ("Onde roda" beside "Conexão", the same height). Nothing scrolls sideways. */
+   the bands reuse machine.css's classes (the same screen loads it) without restyling them here. Only brand.css variables. Up to
+   1100 px of window the cards stack (the app opens at 1100: "Onde roda" takes its own row, fields side by
+   side); from 1101 "Conexão" takes two thirds and "Onde roda" one third. Nothing scrolls sideways. */
 
 .badge { display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 9px; border-radius: 99px; font-size: 11.5px; font-weight: var(--weight-medium); white-space: nowrap; flex: none; }
 .badge .p { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
@@ -12,8 +12,8 @@
 .b-error { background: var(--status-error-badge); color: var(--status-error-text); }
 .b-abandoned { background: var(--status-abandoned-badge); color: var(--status-abandoned-text); }
 
-.mc-grid { display: grid; gap: 16px; grid-template-columns: repeat(2, minmax(0, 1fr)); min-width: 0; }
-.mc-card { padding: 14px 16px; display: flex; flex-direction: column; gap: 12px; min-width: 0; grid-column: span 2; }
+.mc-grid { display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr); min-width: 0; }
+.mc-card { padding: 14px 16px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
 .mc-card p { margin: 0; font-size: 12.5px; }
 .mc-muted { color: var(--muted); }
 .mc-title { margin: 0; font-size: 13.5px; font-weight: var(--weight-semibold); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
@@ -59,10 +59,12 @@
 .btn.mc-danger { background: var(--status-error-dot); color: var(--on-accent); font-weight: var(--weight-semibold); }
 .btn.mc-danger:focus-visible { outline: 2px solid var(--status-error-text); outline-offset: 2px; }
 
-@media (min-width: 1300px) {
-  .mc-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-  .mc-place { grid-column: span 1; }
+/* Band 5 of the machine screen (issue 434): Conexão (2/3) beside Onde roda (1/3) from 1101 px of window; up to
+   1100 px they stack, and "Onde roda" has its fields side by side. */
+.mc-place .mc-kv { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.mc-grid > .mc-place.mc-wide { grid-column: 1 / -1; }
+@media (min-width: 1101px) {
+  .mc-grid { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); }
   .mc-place .mc-kv { grid-template-columns: minmax(0, 1fr); }
   .mc-place.mc-wide .mc-kv { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-  .mc-place.mc-wide { grid-column: span 3; }
 }

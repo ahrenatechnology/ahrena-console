@@ -337,6 +337,33 @@ describe('#278 the Workstation screen with its connection (C62 to C65)', () => {
     assert.doesNotMatch(sub(m.area), /AWS/);
   });
 
+  const bandIds = (area: ElementoFalso) => area.children.map((c) => c.getAttribute('data-band') ?? c.getAttribute('data-part') ?? (c.classList.contains('tm-stats') ? 'stats' : c.classList.contains('cc-head') ? 'head' : c.classList.contains('tm-faded') ? 'faded' : '?'));
+
+  test('#434 criterion 2: Conexão (2/3) beside Onde roda (1/3) is band 5, after the attention band and before the ports', async () => {
+    const m = mount();
+    await m.ready;
+    assert.deepEqual(bandIds(m.area), ['head', 'cloud-profiles', 'stats', 'chart', 'attention', 'connection', 'ports', 'docker-actions']);
+    const row = m.area.querySelector('[data-band="connection"]')!;
+    assert.deepEqual(row.children.map((c) => c.getAttribute('data-part')), ['connection', 'placement']);
+    assert.ok(row.classList.contains('mc-grid'));
+    const css = readFileSync(`${UI_FOLDER}screens/machine-connection.css`, 'utf8');
+    assert.match(css.slice(css.indexOf('@media (min-width: 1101px)')), /\.mc-grid \{ grid-template-columns: minmax\(0, 2fr\) minmax\(0, 1fr\); \}/);
+    assert.doesNotMatch(css, /min-width: 1300px/);
+  });
+
+  test('#434 criterion 2: with the tunnel down the readings fade but Conexão and Docker, which act, do not', async () => {
+    setRemote('unreachable', 'port-closed');
+    connection = down();
+    const m = mount();
+    await m.ready;
+    const ids = bandIds(m.area);
+    assert.deepEqual(ids.filter((x) => x !== 'faded'), ['head', 'connection-band', 'cloud-profiles', 'connection', 'docker-actions']);
+    const fadedRuns = m.area.children.filter((c) => c.classList.contains('tm-faded'));
+    assert.equal(fadedRuns.length, 2, 'the bands above and the bands below Conexão');
+    assert.deepEqual(fadedRuns[0]!.children.map((c) => c.getAttribute('data-band') ?? (c.classList.contains('tm-stats') ? 'stats' : '?')), ['stats', 'chart', 'attention']);
+    assert.ok(m.area.querySelector('[data-band="connection"]')!.parentNode === m.area, 'Conexão is not inside a faded run');
+  });
+
   test('C62 up: the trio, the ports, what runs, Reconnect and Stop, and the "where it runs" card; the header has AWS and the region', async () => {
     const m = mount();
     await m.ready;

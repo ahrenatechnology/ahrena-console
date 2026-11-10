@@ -262,51 +262,51 @@ export function sessionsOf(attention, machineId) {
  */
 export function statCards(reading, { local, sessions = null, alerts = [], now = Date.now() } = {}) {
   if (!reading) return [];
-  const cards = [];
-  const { cpu, memory, gpu, volumes, network, claude, docker } = reading;
+  // Issue 434, criterion 2, band 2: CPU, Memória, Disco, GPU (only where there is one), Rede, Claude, Sessões.
+  const byId = {};
+  const { cpu, memory, gpu, volumes, network, claude } = reading;
   if (cpu) {
     const saturated = cpu.cores !== null && cpu.load.one !== null && cpu.load.one > cpu.cores;
-    if (local) cards.push({ id: 'cpu', label: 'CPU', icon: 'model', value: cpu.usedPct === null ? DASH : `${f0.format(Math.round(cpu.usedPct))}%`, unit: null, sub: cpu.load.one === null ? '' : `carga ${decimal(cpu.load.one)}${cpu.cores ? ` de ${cpu.cores}` : ''}`, tone: saturated ? 'bad' : 'ok' });
+    if (local) byId.cpu = { id: 'cpu', label: 'CPU', icon: 'model', value: cpu.usedPct === null ? DASH : `${f0.format(Math.round(cpu.usedPct))}%`, unit: null, sub: cpu.load.one === null ? '' : `carga ${decimal(cpu.load.one)}${cpu.cores ? ` de ${cpu.cores}` : ''}`, tone: saturated ? 'bad' : 'ok' };
     else {
       const loadAlert = alerts.find((a) => a.kind === 'load-high');
       const sub = saturated ? (loadAlert?.since ? `saturada ${ago(loadAlert.since, now)}` : 'saturada') : cpu.usedPct === null ? '' : `${f0.format(Math.round(cpu.usedPct))}% de uso`;
-      cards.push({ id: 'cpu', label: 'CPU', icon: 'model', value: cpu.load.one === null ? DASH : decimal(cpu.load.one), unit: cpu.cores ? `de ${cpu.cores}` : null, sub, tone: saturated ? 'bad' : 'ok' });
+      byId.cpu = { id: 'cpu', label: 'CPU', icon: 'model', value: cpu.load.one === null ? DASH : decimal(cpu.load.one), unit: cpu.cores ? `de ${cpu.cores}` : null, sub, tone: saturated ? 'bad' : 'ok' };
     }
   }
   if (memory) {
     const swap = memory.swapUsedBytes === null ? '' : local || memory.swapTotalBytes === null ? `swap ${gib(memory.swapUsedBytes)} GB` : `swap ${gib(memory.swapUsedBytes)} de ${gib(memory.swapTotalBytes)}`;
-    cards.push({ id: 'memory', label: 'Memória', icon: 'memory-stick', value: gib(memory.usedBytes), unit: `de ${gib(memory.totalBytes)} GB`, sub: swap, tone: 'ok' });
-  }
-  if (!local && gpu) {
-    const vram = gpu.memoryUsedBytes !== null && gpu.memoryTotalBytes !== null ? `${gib(gpu.memoryUsedBytes)} de ${gib(gpu.memoryTotalBytes)} GB VRAM` : (gpu.name ?? '');
-    cards.push({ id: 'gpu', label: 'GPU', icon: 'monitor-dot', value: gpu.usedPct === null ? DASH : `${f0.format(Math.round(gpu.usedPct))}%`, unit: null, sub: vram, tone: 'ok' });
+    byId.memory = { id: 'memory', label: 'Memória', icon: 'memory-stick', value: gib(memory.usedBytes), unit: `de ${gib(memory.totalBytes)} GB`, sub: swap, tone: 'ok' };
   }
   const root = volumes.find((v) => v.mount === '/') ?? volumes[0];
   if (root) {
     const free = `${bytes(root.freeBytes)} livres`;
-    cards.push({ id: 'disk', label: 'Disco', icon: 'hard-drive', value: `${f0.format(Math.round(root.usedPct))}%`, unit: null, sub: local ? free : `${root.mount} · ${free}`, tone: levelOf(root.usedPct) === 'ok' ? 'ok' : 'warn' });
+    byId.disk = { id: 'disk', label: 'Disco', icon: 'hard-drive', value: `${f0.format(Math.round(root.usedPct))}%`, unit: null, sub: local ? free : `${root.mount} · ${free}`, tone: levelOf(root.usedPct) === 'ok' ? 'ok' : 'warn' };
   }
-  if (local && network) {
-    cards.push({ id: 'network', label: 'Rede', icon: 'wifi', value: network.rxBytesPerSec === null ? DASH : decimal(network.rxBytesPerSec / (network.rxBytesPerSec >= 1e6 ? 1e6 : 1e3)), unit: network.rxBytesPerSec === null ? null : `${network.rxBytesPerSec >= 1e6 ? 'MB/s' : 'kB/s'} ↓`, sub: network.txBytesPerSec === null ? '' : `↑ ${rate(network.txBytesPerSec)}`, tone: 'ok' });
+  // GPU is among what only the remote machine has (issue 434).
+  if (!local && gpu) {
+    const vram = gpu.memoryUsedBytes !== null && gpu.memoryTotalBytes !== null ? `${gib(gpu.memoryUsedBytes)} de ${gib(gpu.memoryTotalBytes)} GB VRAM` : (gpu.name ?? '');
+    byId.gpu = { id: 'gpu', label: 'GPU', icon: 'monitor-dot', value: gpu.usedPct === null ? DASH : `${f0.format(Math.round(gpu.usedPct))}%`, unit: null, sub: vram, tone: 'ok' };
   }
-  if (local && claude) {
+  if (network) {
+    byId.network = { id: 'network', label: 'Rede', icon: 'wifi', value: network.rxBytesPerSec === null ? DASH : decimal(network.rxBytesPerSec / (network.rxBytesPerSec >= 1e6 ? 1e6 : 1e3)), unit: network.rxBytesPerSec === null ? null : `${network.rxBytesPerSec >= 1e6 ? 'MB/s' : 'kB/s'} ↓`, sub: network.txBytesPerSec === null ? '' : `↑ ${rate(network.txBytesPerSec)}`, tone: 'ok' };
+  }
+  if (claude) {
     const parts = [claude.cli ? `${claude.cli.count} CLI` : null, claude.desktop ? `${claude.desktop.count} Desktop` : null].filter(Boolean);
-    cards.push({ id: 'claude', label: 'Claude', icon: 'bot', value: f0.format(claude.processes.count), unit: 'proc.', sub: parts.join(' · '), tone: 'ok' });
-  }
-  if (!local && docker) {
-    const reclaimable = docker.space ? docker.space.reduce((s, x) => s + x.reclaimableBytes, 0) : null;
-    const sub = [plural(docker.stacks.length, 'stack', 'stacks'), reclaimable ? `${bytes(reclaimable)} a liberar` : null].filter(Boolean).join(' · ');
-    cards.push({ id: 'docker', label: 'Docker', icon: 'container', value: f0.format(docker.running + docker.stopped), unit: null, sub, tone: 'ok' });
+    byId.claude = { id: 'claude', label: 'Claude', icon: 'bot', value: f0.format(claude.processes.count), unit: 'proc.', sub: parts.join(' · '), tone: 'ok' };
   }
   if (sessions) {
     // issue 245: "precisam de você" counts only the blocked ones; the idle ones are said apart.
     const blocked = sessions.filter((i) => sessionAttention(i).level === 'blocked').length;
     const idle = sessions.length - blocked;
     const sub = blocked ? `${blocked} ${blocked === 1 ? 'precisa' : 'precisam'} de você` : idle ? `${idle} ${idle === 1 ? 'ociosa' : 'ociosas'}` : 'ninguém precisa de você';
-    cards.push({ id: 'sessions', label: local ? 'Sessões' : 'Sessões lá', icon: 'sessions', value: f0.format(sessions.length), unit: null, sub, tone: 'session' });
+    byId.sessions = { id: 'sessions', label: 'Sessões', icon: 'sessions', value: f0.format(sessions.length), unit: null, sub, tone: 'session' };
   }
-  return cards;
+  return STAT_ORDER.map((id) => byId[id]).filter(Boolean);
 }
+
+/** The order of the resource cards (issue 434, criterion 2). */
+const STAT_ORDER = ['cpu', 'memory', 'disk', 'gpu', 'network', 'claude', 'sessions'];
 
 /** A volume's line: "232 de 612 GB · 38%", in the unit of the total. */
 export function volumeLine(v) {

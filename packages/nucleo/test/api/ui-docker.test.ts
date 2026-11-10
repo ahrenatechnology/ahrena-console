@@ -4,7 +4,9 @@
 // stale plan (409), the consent for the volumes, Limpar with its five kinds, a running job and its Cancel, the
 // Docker that does not answer, and the Workstation with actions off (Copiar comando). No network.
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { afterEach, describe, test } from 'node:test';
+import { UI_FOLDER } from '../../src/api/ui.ts';
 import { documentoFalso, ElementoFalso, instalarDomFalso, texto } from './fake-dom.ts';
 
 instalarDomFalso();
@@ -108,33 +110,72 @@ describe('#288 the pure formats (docker-format.js)', () => {
 });
 
 describe('#288 the Docker card', () => {
-  test('a núcleo without the route hides the card; nothing is read before the first paint', async () => {
+  const bare = (read: (route: string) => Promise<unknown>, machineId = 'local', options: Obj = {}) => {
+    const abort = new AbortController();
+    cleanups.push(() => abort.abort());
+    const c = dockerActions({ signal: abort.signal, read, write: async () => ({}), onChange: () => {} }, machineId, options);
+    return { c, node: c.node() };
+  };
+
+  test('#434 criterion 4 (old core): a núcleo without the route shows the version notice, the read-only stacks and no button', async () => {
+    const reads: string[] = [];
+    const t = bare(async (r: string) => (reads.push(r), Promise.reject(Object.assign(new Error('x'), { status: 404 }))), 'ws-exemplo', { readOnlyStacks: () => [{ name: 'loja-validacao', running: 0, stopped: 15, ports: [15432] }] });
+    await until(() => reads.length === 1);
+    await until(() => t.node.querySelector('[data-part="docker-version-notice"]') !== null);
+    assert.ok(!t.node.hasAttribute('hidden'), 'the card stays on screen');
+    assert.match(texto(t.node), /O núcleo da Workstation é antigo demais para as ações do Docker\./);
+    assert.deepEqual(t.node.querySelectorAll('[data-stack]').map((r: ElementoFalso) => texto(r)), ['loja-validacao 0 · 15 parados 15432']);
+    assert.equal(t.node.querySelectorAll('button').length, 0, 'no action, not even a disabled one');
+  });
+
+  test('#434 criterion 4: nothing is read before the first paint, and the card says it is reading', async () => {
     const reads: string[] = [];
     const abort = new AbortController();
     cleanups.push(() => abort.abort());
-    const c = dockerActions({ signal: abort.signal, read: async (r: string) => (reads.push(r), Promise.reject(Object.assign(new Error('x'), { status: 404 }))), write: async () => ({}), onChange: () => {} }, 'local');
+    const c = dockerActions({ signal: abort.signal, read: async (r: string) => (reads.push(r), new Promise(() => {})), write: async () => ({}), onChange: () => {} }, 'local');
     assert.deepEqual(reads, []);
     const node = c.node();
-    await until(() => reads.length === 1);
-    await new Promise((r) => setTimeout(r, 5));
-    assert.ok(node.hasAttribute('hidden'));
-    assert.equal(c.available(), false);
+    assert.match(texto(node), /Docker Lendo o Docker…/);
+  });
+
+  test('#434 error case: a read that fails shows the reason in plain words only here, with Tentar de novo that reads again', async () => {
+    let fail = true;
+    const reads: string[] = [];
+    const t = bare(async (r: string) => (reads.push(r), fail ? Promise.reject(new Error('Cannot connect to the Docker daemon')) : view()));
+    await until(() => t.node.querySelector('[data-part="docker-read-error"]') !== null);
+    const text = texto(t.node);
+    assert.match(text, /Não consegui ler o Docker\. O resto da tela segue; só este card ficou sem leitura\. Cannot connect to the Docker daemon Tentar de novo/);
+    assert.equal(t.node.querySelectorAll('[data-dk-action]').length, 0);
+    fail = false;
+    clickWhere(t.node, '[data-action="retry-read"]');
+    await until(() => t.node.querySelector('.tm-note') !== null);
+    assert.ok(reads.length >= 2);
+    assert.equal(t.node.querySelector('[data-part="docker-read-error"]'), null);
+  });
+
+  test('#434 error case: a later failed read keeps the last view and says so above it', async () => {
+    let fail = false;
+    const t = card('local', { view: () => (fail ? (() => { throw new Error('x'); })() : view()) });
+    await until(() => t.node.querySelector('.tm-note') !== null);
+    fail = true;
+    t.change([{ type: 'tools' }]);
+    await until(() => /Mostrando a última leitura/.test(texto(t.node)));
+    assert.ok(t.node.querySelector('[data-stack]'), 'the last view stays');
   });
 
   test('stacks and containers with the buttons the núcleo offers on each', async () => {
     const t = card('local', { view: () => view() });
-    await until(() => !t.node.hasAttribute('hidden'));
+    await until(() => t.node.querySelector('.tm-note') !== null);
     assert.deepEqual(t.node.querySelectorAll('[data-stack] button').map((b: ElementoFalso) => texto(b)), ['Parar', 'Remover…']);
     const loose = t.node.querySelector('[data-container="9d41e0b3a7c2"]') as ElementoFalso;
     assert.deepEqual(loose.querySelectorAll('button').map((b: ElementoFalso) => texto(b)), ['Reiniciar', 'Remover…'], 'a stopped container has no Parar');
     assert.match(texto(t.node), /2 rodando · 1 parados · 1 stack/);
-    assert.equal(t.c.available(), true);
     assert.deepEqual(t.node.querySelectorAll('[data-dk-filter]').map((b: ElementoFalso) => texto(b)), ['Todos 3', 'Rodando 2', 'Parados 1', 'Sem stack 2']);
   });
 
   test('a click asks for the plan and the dialog shows the núcleo\'s command; Confirmar sends the ids and the digest', async () => {
     const t = card('local', { view: () => view(), plan: () => ({ plan: plan() }) });
-    await until(() => !t.node.hasAttribute('hidden'));
+    await until(() => t.node.querySelector('.tm-note') !== null);
     clickWhere(t.node, '[data-stack="tessera306"] [data-dk-action="stack-stop"]');
     await until(() => t.dialog() !== null);
     assert.equal(t.reads.at(-1), '/api/docker/plan?machine=local&action=stack-stop&target=tessera306');
@@ -152,7 +193,7 @@ describe('#288 the Docker card', () => {
   test('a stale plan (409) shows the new plan in the same dialog and nothing was run', async () => {
     const fresh = plan({ planDigest: 'fedcba9876543210', steps: [['docker', 'stop', '3f9a1c20d4be']], ids: ['3f9a1c20d4be'], running: 1 });
     const t = card('local', { view: () => view(), plan: () => ({ plan: plan() }), write: async () => Promise.reject(Object.assign(new Error('o plano mudou'), { status: 409, body: { plan: fresh } })) });
-    await until(() => !t.node.hasAttribute('hidden'));
+    await until(() => t.node.querySelector('.tm-note') !== null);
     clickWhere(t.node, '[data-dk-action="stack-stop"]');
     await until(() => t.dialog() !== null);
     clickWhere(t.dialog()!, '[data-dk-confirm]');
@@ -166,7 +207,7 @@ describe('#288 the Docker card', () => {
   test('the volumes of a removed stack: the consent comes first, and the volume still in use stays', async () => {
     const volumes = plan({ actionId: 'stack-remove-volumes', target: 'old', label: 'Remover os volumes da stack old', steps: [['docker', 'volume', 'rm', 'old_data']], volumes: [{ name: 'old_data', sizeBytes: 5_000_000, keptBy: null }, { name: 'old_cache', sizeBytes: 7_000_000, keptBy: 'cache-user' }], count: 1, estimateBytes: 5_000_000, running: 0, ids: [] });
     const t = card('local', { view: () => view({ leftovers: [{ name: 'old', volumes: 2, actions: ['stack-remove-volumes'] }] }), plan: () => ({ plan: volumes }) });
-    await until(() => !t.node.hasAttribute('hidden'));
+    await until(() => t.node.querySelector('.tm-note') !== null);
     clickWhere(t.node, '[data-leftover="old"] button');
     await until(() => t.dialog() !== null);
     const text = texto(t.dialog());
@@ -185,7 +226,7 @@ describe('#288 the Docker card', () => {
   test('Limpar: the five kinds are explained, the first is marked, and a single one runs its own plan', async () => {
     const images = plan({ actionId: 'clean', target: 'images', label: 'Limpar as imagens sem nome', steps: [['docker', 'image', 'prune', '--force']], ids: [], estimateBytes: 2_200_000_000, count: 12, running: 0, planDigest: 'aaaaaaaaaaaaaaaa' });
     const t = card('local', { view: () => view(), plan: () => ({ plan: images }) });
-    await until(() => !t.node.hasAttribute('hidden'));
+    await until(() => t.node.querySelector('.tm-note') !== null);
     clickWhere(t.node, '[data-dk-action="clean"]');
     await until(() => t.dialog() !== null);
     const text = texto(t.dialog());
@@ -223,9 +264,8 @@ describe('#288 the Docker card', () => {
 
   test('the Docker does not answer: only Reiniciar o Docker is offered, with the plan from the núcleo', async () => {
     const t = card('local', { view: () => view({ available: false, stacks: [], containers: [], clean: [], summary: { running: 0, stopped: 0, stacks: 0 } }), plan: () => ({ plan: plan({ actionId: 'daemon-restart', target: 'rootless', label: 'Reiniciar o Docker', steps: [['systemctl', '--user', 'restart', 'docker']], ids: [], running: 0 }) }) });
-    await until(() => !t.node.hasAttribute('hidden'));
+    await until(() => t.node.querySelector('.tm-note') !== null);
     assert.match(texto(t.node), /O Docker não respondeu/);
-    assert.equal(t.c.available(), false, 'machine.js keeps its read-only stacks card');
     clickWhere(t.node, '[data-part="docker-down"] [data-dk-action="daemon-restart"]');
     await until(() => t.dialog() !== null);
     assert.match(texto(t.dialog()), /systemctl --user restart docker/);
@@ -234,7 +274,7 @@ describe('#288 the Docker card', () => {
   test('the Docker of the system: the dialog has Copiar comando and no Confirmar', async () => {
     const sys = plan({ actionId: 'daemon-restart', target: 'system', label: 'Reiniciar o Docker', steps: [['sudo', 'systemctl', 'restart', 'docker']], admin: true, runnable: false, ids: [], running: 0 });
     const t = card('local', { view: () => view({ daemon: { kind: 'system', offered: true } }), plan: () => ({ plan: sys }) });
-    await until(() => !t.node.hasAttribute('hidden'));
+    await until(() => t.node.querySelector('.tm-note') !== null);
     clickWhere(t.node, '[data-dk-action="daemon-restart"]');
     await until(() => t.dialog() !== null);
     assert.equal(t.dialog()!.querySelector('[data-dk-confirm]'), null);
@@ -245,7 +285,7 @@ describe('#288 the Docker card', () => {
 
   test('the Workstation with actions off (the default): a band says why, the buttons copy, and Confirmar never appears', async () => {
     const t = card('ws-exemplo', { view: () => view({ machine: 'ws-exemplo', acceptsRemoteActions: false }), plan: () => ({ plan: plan() }) });
-    await until(() => !t.node.hasAttribute('hidden'));
+    await until(() => t.node.querySelector('.tm-note') !== null);
     assert.match(texto(t.node), /As ações na Workstation estão desligadas/);
     clickWhere(t.node, '[data-stack] [data-dk-action="stack-stop"]');
     await until(() => t.dialog() !== null);
@@ -256,10 +296,37 @@ describe('#288 the Docker card', () => {
 
   test('a refusal over there (403 remote-actions-disabled) turns the dialog into the copy mode', async () => {
     const t = card('ws-exemplo', { view: () => view({ machine: 'ws-exemplo', acceptsRemoteActions: true }), plan: () => ({ plan: plan() }), write: async () => Promise.reject(Object.assign(new Error('x'), { status: 403, body: { reason: 'remote-actions-disabled', error: 'x' } })) });
-    await until(() => !t.node.hasAttribute('hidden'));
+    await until(() => t.node.querySelector('.tm-note') !== null);
     clickWhere(t.node, '[data-stack] [data-dk-action="stack-stop"]');
     await until(() => t.dialog() !== null);
     clickWhere(t.dialog()!, '[data-dk-confirm]');
     await until(() => /não aceita ações pelo túnel/.test(texto(t.dialog())));
+  });
+});
+
+describe('#434 criterion 5: the buttons of the Docker card stay whole inside the card', () => {
+  test('every row puts its buttons in a wrapping row of the actions cell, Remover… among them', async () => {
+    const t = card('local', { view: () => view() });
+    await until(() => t.node.querySelector('.tm-note') !== null);
+    const rows = t.node.querySelectorAll('[data-container]');
+    assert.equal(rows.length, 3);
+    for (const row of rows as ElementoFalso[]) {
+      const cell = row.querySelector('td.dk-acts') as ElementoFalso;
+      const wrap = cell.querySelector('.dk-acts-row') as ElementoFalso;
+      assert.ok(wrap, 'the buttons are inside the wrapping row');
+      assert.ok(wrap.querySelectorAll('button').some((b: ElementoFalso) => texto(b) === 'Remover…'), 'Remover… is one of them');
+      assert.equal(cell.querySelectorAll('button').length, wrap.querySelectorAll('button').length, 'and nothing sits outside it');
+    }
+    // The image is under the name, not a column of its own: the table is one column shorter.
+    assert.deepEqual((t.node.querySelector('[data-part="docker-containers"] thead') as ElementoFalso).querySelectorAll('th').map((h: ElementoFalso) => texto(h)), ['Nome', 'Estado', 'Stack', 'Criado', '']);
+  });
+
+  test('docker.css: the actions cell does not forbid wrapping, has a width of its own and the row wraps; narrow windows drop the secondary columns', () => {
+    const css = readFileSync(`${UI_FOLDER}screens/docker.css`, 'utf8');
+    const rule = (selector: string) => css.match(new RegExp(`${selector.replace(/[.[\\]]/g, '\\$&')} \\{([^}]*)\\}`))?.[1] ?? '';
+    assert.doesNotMatch(css, /\.dk-acts[^{]*\{[^}]*white-space: nowrap/, 'the cause of the clipped Remover: nowrap on a table cell');
+    assert.match(rule('.dk-table th.dk-acts, .dk-table td.dk-acts'), /width: 208px/);
+    assert.match(rule('.dk-acts-row'), /display: flex; flex-wrap: wrap/);
+    assert.match(css, /@media \(max-width: 760px\) \{[^}]*\.dk-col-stack, \.dk-col-since \{ display: none; \}/);
   });
 });
