@@ -39,7 +39,6 @@
 .fwi-head-ico { font-size: 18px; }
 .fwi-head-title { margin: 0; font-size: 14px; font-weight: var(--weight-semibold); }
 .fwi-head-actions { margin-left: auto; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-.fwi-head-actions .btn[disabled] { opacity: .55; cursor: default; }
 .fwi-steps { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin: 0; padding: 0; list-style: none; font-size: 12px; }
 .fwi-steps > li { display: inline-flex; align-items: center; }
 .fwi-step { display: inline-flex; gap: 6px; align-items: center; color: var(--muted); white-space: nowrap; }

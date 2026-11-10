@@ -21,7 +21,6 @@
 .mc-place .mc-note { margin-left: auto; }
 .mc-head { display: flex; align-items: center; gap: 8px 12px; flex-wrap: wrap; min-width: 0; }
 .mc-act { margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; }
-.mc-act .btn[disabled], .mc-dact .btn[disabled] { opacity: .55; cursor: not-allowed; }
 
 /* the trio: Túnel, Sessão AWS, Núcleo de lá */
 .mc-trio { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }

@@ -57,8 +57,24 @@ function loadStyle(signal) {
   signal?.addEventListener('abort', () => link.remove?.());
 }
 
-const button = ({ label, iconName = null, kind = 'outline', danger = false, onClick, disabled = false, attrs = {} }) =>
-  el('button', { type: 'button', class: `btn ${kind}${danger ? ' dk-danger' : ''}`, disabled, onClick, ...attrs }, iconName ? icon(iconName) : null, label);
+// Busy is the component's (shell.css): aria-busy, no `disabled`, clicks ignored. `kind` is the variant.
+const button = ({ label, iconName = null, kind = 'outline', danger = false, onClick, disabled = false, disabledWhy = null, busy = false, attrs = {} }) =>
+  el(
+    'button',
+    {
+      type: 'button',
+      class: `btn sm ${kind}${danger ? ' danger' : ''}${label === '' ? ' icon-only' : ''}`,
+      // A disabled button with a reason stays focusable (aria-disabled) and says why in `title`.
+      disabled: disabled && !busy && !disabledWhy,
+      'aria-busy': busy ? 'true' : null,
+      'aria-disabled': busy || (disabled && disabledWhy) ? 'true' : null,
+      title: disabled && disabledWhy ? disabledWhy : null,
+      onClick: busy || (disabled && disabledWhy) ? null : onClick,
+      ...attrs,
+    },
+    iconName ? icon(iconName) : null,
+    label,
+  );
 
 /** `el` handles only onClick: other events are attached here. */
 const on = (node, type, fn) => (node.addEventListener(type, fn), node);
@@ -219,7 +235,7 @@ export function dockerActions(ctx, machineId = LOCAL_ID, { repaint = () => {} } 
     const body = el(
       'div',
       { class: 'card dk-dialog', role: 'dialog', 'aria-modal': 'true', 'aria-label': plan.label },
-      el('div', { class: 'dk-dialog-head' }, icon(danger ? 'trash' : 'container'), el('b', {}, plan.label), button({ label: '', iconName: 'x', kind: 'dk-ghost', onClick: closeDialog, attrs: { 'aria-label': 'Fechar' } })),
+      el('div', { class: 'dk-dialog-head' }, icon(danger ? 'trash' : 'container'), el('b', {}, plan.label), button({ label: '', iconName: 'x', kind: 'ghost', onClick: closeDialog, attrs: { 'aria-label': 'Fechar' } })),
       el('dl', { class: 'dk-kv' }, ...rows.flatMap(([k, v]) => [el('dt', {}, k), el('dd', {}, v)])),
       volumes,
       el('div', { class: 'eyebrow' }, plan.admin ? 'Rode no Terminal, exatamente' : copyOnly ? 'Para rodar, exatamente' : 'Vai rodar, exatamente'),
@@ -244,7 +260,7 @@ export function dockerActions(ctx, machineId = LOCAL_ID, { repaint = () => {} } 
         button({ label: 'Cancelar', onClick: closeDialog }),
         copyOnly ? button({ label: 'Copiar comando', iconName: 'copy', kind: 'filled', onClick: () => copy(commandText(plan)) }) : null,
         plan.admin ? button({ label: 'Rodei, verificar de novo', iconName: 'refresh', onClick: () => (closeDialog(), read()) }) : null,
-        copyOnly ? null : button({ label: confirmLabel(plan), iconName: danger ? 'trash' : 'play', kind: 'filled', danger, disabled: busy || (needsConsent && !dialog.consent), attrs: { 'data-dk-confirm': '' }, onClick: () => confirm(plan) }),
+        copyOnly ? null : button({ label: confirmLabel(plan), iconName: danger ? 'trash' : 'play', kind: 'filled', danger, busy, disabled: needsConsent && !dialog.consent, disabledWhy: 'Marque que entendeu para confirmar', attrs: { 'data-dk-confirm': '' }, onClick: () => confirm(plan) }),
       ),
     );
     dialog.root.replaceChildren(body);
@@ -296,7 +312,7 @@ export function dockerActions(ctx, machineId = LOCAL_ID, { repaint = () => {} } 
     return el(
       'div',
       { class: `dk-band ${ok ? 'dk-ok' : 'dk-fail'}`, role: ok ? 'status' : 'alert', 'data-part': 'docker-job' },
-      el('div', { class: 'dk-band-top' }, icon(ok ? 'check-circle-2' : 'error'), el('p', {}, el('b', {}, ok ? `${last.label}: pronto.` : `${last.label}: não terminou.`), ` ${text}`), button({ label: 'Fechar', kind: 'dk-ghost', iconName: 'x', onClick: () => (dismissed.add(last.id), paint()), attrs: { 'aria-label': 'Fechar o aviso' } })),
+      el('div', { class: 'dk-band-top' }, icon(ok ? 'check-circle-2' : 'error'), el('p', {}, el('b', {}, ok ? `${last.label}: pronto.` : `${last.label}: não terminou.`), ` ${text}`), button({ label: 'Fechar', kind: 'ghost', iconName: 'x', onClick: () => (dismissed.add(last.id), paint()), attrs: { 'aria-label': 'Fechar o aviso' } })),
       !ok && last.output.length ? el('div', { class: 'dk-out mono' }, ...last.output.slice(-4).map((l) => el('span', {}, l))) : null,
       !ok ? el('div', { class: 'dk-band-actions' }, button({ label: 'Copiar a saída', iconName: 'copy', onClick: () => copy(last.output.join('\n')) }), daemonDown && view.daemon.offered ? button({ label: 'Reiniciar o Docker', iconName: 'power', kind: 'filled', onClick: () => openPlan('daemon-restart', null) }) : null) : null,
     );
@@ -343,7 +359,7 @@ export function dockerActions(ctx, machineId = LOCAL_ID, { repaint = () => {} } 
         el(
           'div',
           { class: 'card dk-dialog dk-wide', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Limpar o Docker' },
-          el('div', { class: 'dk-dialog-head' }, icon('trash'), el('b', {}, `Limpar o Docker${local ? '' : ' da Workstation'}`), button({ label: '', iconName: 'x', kind: 'dk-ghost', onClick: closeDialog, attrs: { 'aria-label': 'Fechar' } })),
+          el('div', { class: 'dk-dialog-head' }, icon('trash'), el('b', {}, `Limpar o Docker${local ? '' : ' da Workstation'}`), button({ label: '', iconName: 'x', kind: 'ghost', onClick: closeDialog, attrs: { 'aria-label': 'Fechar' } })),
           el('p', { class: 'dk-note' }, icon('info'), 'Marque o que limpar. Cada item é um comando só, do catálogo, e o espaço é uma estimativa do docker system df: o número real aparece quando termina.'),
           el(
             'div',
@@ -402,7 +418,7 @@ export function dockerActions(ctx, machineId = LOCAL_ID, { repaint = () => {} } 
         el(
           'div',
           { class: 'card dk-dialog dk-wide', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Confirmar a limpeza' },
-          el('div', { class: 'dk-dialog-head' }, icon('trash'), el('b', {}, 'Confirmar a limpeza'), button({ label: '', iconName: 'x', kind: 'dk-ghost', onClick: closeDialog, attrs: { 'aria-label': 'Fechar' } })),
+          el('div', { class: 'dk-dialog-head' }, icon('trash'), el('b', {}, 'Confirmar a limpeza'), button({ label: '', iconName: 'x', kind: 'ghost', onClick: closeDialog, attrs: { 'aria-label': 'Fechar' } })),
           el('dl', { class: 'dk-kv' }, el('dt', {}, 'Onde'), el('dd', {}, local ? 'Esta máquina · como o seu usuário' : 'Workstation · como o usuário de lá'), el('dt', {}, 'Ordem'), el('dd', {}, 'um de cada vez, na ordem abaixo'), el('dt', {}, 'Libera'), el('dd', {}, sum ? `até ${bytes(sum)} (estimativa; o número real aparece no fim)` : 'o que houver')),
           el('div', { class: 'eyebrow' }, copyOnly ? 'Para rodar, exatamente' : 'Vai rodar, exatamente'),
           ...plans.flatMap(commandLines).map((line) => el('code', { class: 'dk-cmd mono' }, line)),
@@ -412,7 +428,7 @@ export function dockerActions(ctx, machineId = LOCAL_ID, { repaint = () => {} } 
             'div',
             { class: 'dk-dialog-actions' },
             button({ label: 'Voltar', onClick: () => (closeDialog(), openClean()) }),
-            copyOnly ? button({ label: 'Copiar comandos', iconName: 'copy', kind: 'filled', onClick: () => copy(plans.map(commandText).join('\n')) }) : button({ label: `Confirmar os ${plans.length}`, iconName: 'play', kind: 'filled', disabled: busy, attrs: { 'data-dk-confirm': '' }, onClick: () => run() }),
+            copyOnly ? button({ label: 'Copiar comandos', iconName: 'copy', kind: 'filled', onClick: () => copy(plans.map(commandText).join('\n')) }) : button({ label: `Confirmar os ${plans.length}`, iconName: 'play', kind: 'filled', busy, attrs: { 'data-dk-confirm': '' }, onClick: () => run() }),
           ),
         ),
       );

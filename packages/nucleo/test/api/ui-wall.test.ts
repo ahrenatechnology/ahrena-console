@@ -47,6 +47,7 @@ class Elemento extends No {
   atributos = new Map<string, string>();
   ouvintes = new Map<string, ((e: unknown) => void)[]>();
   html = '';
+  readonly style = { setProperty: (_k: string, _v: string) => {}, removeProperty: (_k: string) => {} };
   readonly tag: string;
   constructor(tag: string) {
     super();

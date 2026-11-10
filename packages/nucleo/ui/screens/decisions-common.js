@@ -7,6 +7,7 @@
 
 import { el, icon } from '../dom.js';
 import { write } from '../api.js';
+import { runButtonAction } from '../button-action.js';
 
 // ---------- Estilo ----------
 
@@ -142,23 +143,27 @@ export function decisionCard(d, { session = d.sessionId, onChange = () => {}, no
   const actions = el('div', { class: 'dec-actions' });
   if (d.state === 'to_confirm') {
     // `readOnly` (issue 243: a remote session's decision) keeps the buttons, off, with the reason.
-    const confirm = el('button', { type: 'button', class: 'btn filled', disabled: Boolean(readOnly), title: readOnly }, 'Confirmar');
-    const dismiss = el('button', { type: 'button', class: 'btn outline', disabled: Boolean(readOnly), title: readOnly }, 'Descartar');
-    const act = (action) => async () => {
+    const confirm = el('button', { type: 'button', class: 'btn sm filled', disabled: Boolean(readOnly), title: readOnly }, 'Confirmar');
+    const dismiss = el('button', { type: 'button', class: 'btn sm outline', disabled: Boolean(readOnly), title: readOnly }, 'Descartar');
+    // The clicked button owns busy and the failure (button-action.js); the other waits, with its focus.
+    const act = (action, button, other) => async () => {
       if (readOnly) return;
-      confirm.disabled = dismiss.disabled = true;
-      notice.textContent = '';
-      try {
-        const { route, body } = actionRequest(d.id, action, { session });
-        await write(route, body);
-        onChange();
-      } catch (e) {
-        notice.textContent = e.message;
-        confirm.disabled = dismiss.disabled = false;
-      }
+      other.setAttribute('aria-disabled', 'true');
+      const { ok, ignored } = await runButtonAction(
+        button,
+        async () => {
+          const { route, body } = actionRequest(d.id, action, { session });
+          await write(route, body);
+          // Inside the action: if the redraw throws, the button shows the failed state instead of the error escaping.
+          await onChange();
+        },
+        { note: notice },
+      );
+      // The neighbour waits only while the write runs: released on success too, in case onChange kept this card.
+      if (!ignored) other.removeAttribute('aria-disabled');
     };
-    confirm.addEventListener('click', act('confirm'));
-    dismiss.addEventListener('click', act('dismiss'));
+    confirm.addEventListener('click', act('confirm', confirm, dismiss));
+    dismiss.addEventListener('click', act('dismiss', dismiss, confirm));
     actions.append(confirm, dismiss);
   } else {
     const link = conversationLink(d);

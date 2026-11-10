@@ -5,10 +5,6 @@
 .dk-card { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
 .dk-card .dk-title { flex-wrap: wrap; }
 .dk-toolbar { margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; }
-.dk-card .btn { height: 28px; padding: 0 10px; font-size: 12px; gap: 6px; white-space: nowrap; }
-.dk-card .btn.dk-ghost { border-color: transparent; background: transparent; color: var(--muted); padding: 0 6px; }
-.dk-card .btn.dk-danger, .dk-dialog .btn.dk-danger { color: var(--status-error-text); }
-.dk-card .btn.filled.dk-danger, .dk-dialog .btn.filled.dk-danger { background: var(--status-error-dot); color: var(--on-accent); }
 .dk-acts { text-align: right; white-space: nowrap; }
 .dk-acts .btn + .btn { margin-left: 6px; }
 .dk-ports, .dk-image { overflow-wrap: anywhere; }

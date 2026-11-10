@@ -70,7 +70,6 @@
 .ac-input { flex: 1; min-width: 0; font: inherit; font-size: 12.5px; color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: 8px; height: 32px; padding: 0 10px; }
 .ac-input::placeholder { color: var(--muted); }
 .ac-input[aria-invalid="true"] { border-color: var(--status-error-dot); }
-.ac-search-row .btn { height: 34px; }
 
 .ac-list { display: flex; flex-direction: column; gap: 10px; }
 .ac-list-wide { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); }
