@@ -153,6 +153,19 @@ describe('#288 the Docker card', () => {
     assert.equal(t.node.querySelector('[data-part="docker-read-error"]'), null);
   });
 
+  test('#434 the read error and the "last reading" notice are status, and the retry keeps its focus through a repaint', async () => {
+    const t = card('local', { view: () => { throw new Error('Cannot connect to the Docker daemon'); } });
+    await until(() => t.node.querySelector('[data-part="docker-read-error"]') !== null);
+    assert.equal(t.node.querySelector('[data-part="docker-read-error"]')!.getAttribute('role'), 'status');
+    const active = () => documentoFalso.activeElement;
+    const retry = t.node.querySelector('[data-action="retry-read"]') as ElementoFalso;
+    retry.focus();
+    t.change([{ type: 'tools' }]);
+    await until(() => active() !== retry && t.node.querySelector('[data-action="retry-read"]') !== retry);
+    assert.equal(active()?.getAttribute('data-action'), 'retry-read');
+    assert.ok(t.node.contains(active()!), 'the new button, in the card');
+  });
+
   test('#434 error case: a later failed read keeps the last view and says so above it', async () => {
     let fail = false;
     const t = card('local', { view: () => (fail ? (() => { throw new Error('x'); })() : view()) });

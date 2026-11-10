@@ -550,11 +550,18 @@ export function dockerActions(ctx, machineId = LOCAL_ID, { readOnlyStacks = () =
     button.addEventListener('click', () => runButtonAction(button, () => read(), { busyLabel: 'Lendo…' }));
     return [
       title(),
-      el('div', { class: 'tm-read-error-box', role: 'alert', 'data-part': 'docker-read-error' }, icon('error'), el('div', {}, el('b', {}, problem?.what ?? 'Não consegui ler o Docker.'), el('p', { class: 'tm-muted' }, 'O resto da tela segue; só este card ficou sem leitura.'), problem?.detail ? el('small', { class: 'mono tm-muted' }, problem.detail) : null, button)),
+      el('div', { class: 'tm-read-error-box', role: 'status', 'data-part': 'docker-read-error' }, icon('error'), el('div', {}, el('b', {}, problem?.what ?? 'Não consegui ler o Docker.'), el('p', { class: 'tm-muted' }, 'O resto da tela segue; só este card ficou sem leitura.'), problem?.detail ? el('small', { class: 'mono tm-muted' }, problem.detail) : null, button)),
     ];
   }
 
   function paint() {
+    // The retry button is rebuilt by every repaint (15 s, or 2 s with a job): the focus goes back to it.
+    const retryHadFocus = Boolean(node.querySelector('[data-action="retry-read"]') && globalThis.document?.activeElement?.getAttribute?.('data-action') === 'retry-read' && node.contains(globalThis.document.activeElement));
+    paintCard();
+    if (retryHadFocus) node.querySelector('[data-action="retry-read"]')?.focus?.();
+  }
+
+  function paintCard() {
     if (status === 'loading') return fill(node, title(), el('p', { class: 'tm-muted' }, 'Lendo o Docker…'));
     if (status === 'unsupported') return fill(node, ...unsupportedBody());
     if (status === 'error' || !view) {
@@ -567,7 +574,7 @@ export function dockerActions(ctx, machineId = LOCAL_ID, { readOnlyStacks = () =
       node,
       title(el('small', { class: 'tm-note' }, [`${view.summary.running} rodando`, `${view.summary.stopped} parados`, plural(view.summary.stacks, 'stack', 'stacks'), spaceNote()].filter(Boolean).join(' · ')), toolbar()),
       !local && !view.acceptsRemoteActions ? el('div', { class: 'dk-band dk-lock', role: 'note' }, el('div', { class: 'dk-band-top' }, icon('lock'), el('p', {}, el('b', {}, 'As ações na Workstation estão desligadas.'), ' O túnel faz o pedido do Mac parecer local lá, então a Workstation só aceita ações quando ela mesma liga: AHRENA_CONSOLE_ACCEPT_REMOTE_ACTIONS=1 no núcleo de lá. Até lá, cada ação mostra o comando para copiar.'))) : null,
-      problem ? el('p', { class: 'dk-problem', role: 'alert' }, `${problem.what} Mostrando a última leitura.`) : null,
+      problem ? el('p', { class: 'dk-problem', role: 'status' }, `${problem.what} Mostrando a última leitura.`) : null,
       notice ? el('p', { class: notice.tone === 'error' ? 'dk-problem' : 'tm-muted', role: 'alert' }, notice.text) : null,
       view.available ? jobBand() : downCard(),
       view.available ? el('div', { class: 'eyebrow' }, 'Stacks') : null,

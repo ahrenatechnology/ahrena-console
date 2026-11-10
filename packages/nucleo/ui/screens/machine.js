@@ -410,13 +410,13 @@ function releaseOptions(release, context) {
  * small type when there is one, and "Tentar de novo". Only this card is replaced; the rest of the screen goes on.
  */
 function readErrorCard({ part, iconName, title, what, detail = null, retry, label }) {
-  const button = el('button', { type: 'button', class: 'btn sm outline', 'data-action': 'retry-read', 'aria-label': `Tentar de novo: ${label}` }, icon('refresh'), 'Tentar de novo');
+  const button = el('button', { type: 'button', class: 'btn sm outline', 'data-action': 'retry-read', 'data-retry-for': part, 'aria-label': `Tentar de novo: ${label}` }, icon('refresh'), 'Tentar de novo');
   button.addEventListener('click', () => runButtonAction(button, () => retry(), { busyLabel: 'Lendo…' }));
   return el(
     'section',
     { class: 'card tm-card tm-read-error', 'data-part': part },
     el('h2', { class: 'tm-title' }, icon(iconName), el('span', {}, title)),
-    el('div', { class: 'tm-read-error-box', role: 'alert' }, icon('error'), el('div', {}, el('b', {}, what), el('p', { class: 'tm-muted' }, 'O resto da tela segue; só este card ficou sem leitura.'), detail ? el('small', { class: 'mono tm-muted' }, detail) : null, button)),
+    el('div', { class: 'tm-read-error-box', role: 'status' }, icon('error'), el('div', {}, el('b', {}, what), el('p', { class: 'tm-muted' }, 'O resto da tela segue; só este card ficou sem leitura.'), detail ? el('small', { class: 'mono tm-muted' }, detail) : null, button)),
   );
 }
 
@@ -630,6 +630,7 @@ export async function mount(area, ctx) {
       if (active.getAttribute?.('data-filter')) key = `[data-filter="${active.getAttribute('data-filter')}"]`;
       else if (active.getAttribute?.('data-hours')) key = `[data-hours="${active.getAttribute('data-hours')}"]`;
       else if (active.getAttribute?.('data-rc-action')) key = `[data-rc-action="${active.getAttribute('data-rc-action')}"]`;
+      else if (active.getAttribute?.('data-retry-for')) key = `[data-retry-for="${active.getAttribute('data-retry-for')}"]`;
       else if (active.getAttribute?.('data-mc-action')) key = `[data-mc-action="${active.getAttribute('data-mc-action')}"]`;
     }
     area.replaceChildren(...nodes);

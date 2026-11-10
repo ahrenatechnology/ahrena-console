@@ -819,6 +819,35 @@ describe('#178 criterion 6: leaving the screen stops the re-reads', () => {
   });
 });
 
+describe('#434 the persistent read error: announced as a status, retry keeps its focus through a repaint', () => {
+  const noVolumes = async (route: string) => {
+    const r = (await coreRead(route)) as { current?: { disk?: unknown } };
+    return route.startsWith('/api/telemetry') && r.current ? { ...r, current: { ...r.current, disk: { volumes: [] }, network: null } } : r;
+  };
+
+  test('the error box is role status, so each repaint does not re-announce it', async () => {
+    const m = mount(null, noVolumes);
+    await m.ready;
+    const box = part(m.area, 'volumes')!.querySelector('.tm-read-error-box')!;
+    assert.equal(box.getAttribute('role'), 'status');
+    assert.equal(m.area.querySelectorAll('.tm-read-error-box[role="alert"]').length, 0);
+  });
+
+  test('the retry button of a card keeps the focus after a repaint, on the same card', async () => {
+    const m = mount(null, noVolumes);
+    await m.ready;
+    const active = () => (document as unknown as { activeElement: ElementoFalso }).activeElement;
+    const retry = part(m.area, 'volumes')!.querySelector('[data-action="retry-read"]')!;
+    retry.focus();
+    const old = active();
+    const reads = m.reads.length;
+    m.change([{ type: 'alert', key: 'local:port-exposed:5432' }]);
+    await until(() => m.reads.length > reads && active() !== old);
+    assert.equal(active().getAttribute('data-action'), 'retry-read');
+    assert.ok(part(m.area, 'volumes')!.contains(active()), 'the volumes retry, not the ports one');
+  });
+});
+
 describe('#178 criterion 2: the focus stays on the button through a repaint', () => {
   test('a port filter keeps the focus after the click and after the re-read', async () => {
     const m = mount(null);
