@@ -40,11 +40,18 @@ export class ElementoFalso extends NoFalso {
   readonly ouvintes = new Map<string, Set<Ouvinte>>();
   value = '';
   innerHTMLFalso = '';
+  // Scroll metrics: 0 by default; a test sets them on a scroll container to drive the stuck-to-bottom logic.
+  scrollTop = 0;
+  scrollHeight = 0;
+  clientHeight = 0;
 
   constructor(tag: string) {
     super();
     this.tagName = tag.toUpperCase();
   }
+
+  scrollIntoView(): void {}
+  scrollTo(): void {}
 
   get children(): ElementoFalso[] {
     return this.childNodes.filter((n): n is ElementoFalso => n instanceof ElementoFalso);
@@ -83,6 +90,20 @@ export class ElementoFalso extends NoFalso {
   }
   removeAttribute(k: string): void {
     this.atributos.delete(k);
+  }
+  /** `hidden` reflects the attribute, as in the browser: `el.hidden = true/false` sets or clears it. */
+  get hidden(): boolean {
+    return this.hasAttribute('hidden');
+  }
+  set hidden(v: boolean) {
+    if (v) this.setAttribute('hidden', '');
+    else this.removeAttribute('hidden');
+  }
+  replaceWith(...nos: (NoFalso | string)[]): void {
+    const p = this.parentNode;
+    if (!p) return;
+    for (const n of nos) p.insertBefore(typeof n === 'string' ? new TextoFalso(n) : n, this);
+    this.remove();
   }
   get classList() {
     const read = () => new Set((this.getAttribute('class') ?? '').split(/\s+/).filter(Boolean));
