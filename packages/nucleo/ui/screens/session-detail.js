@@ -602,7 +602,7 @@ function conversationTab(ctx, base, { head, remote = null } = {}) {
   // live change does not take the focus, the caret or an IME composition away from the person typing.
   const content = el('div', { class: 'sd-conversation' });
 
-  // #414 (L5): the conversation is a growing model keyed by `message.id`. A live update reads only the
+  // issue 414 (L5): the conversation is a growing model keyed by `message.id`. A live update reads only the
   // delta (`?after=<cursor>`) and upserts by id — a new id appends at the end, a seen id replaces its node
   // in place (so a tool line going running→ok/erro swaps only that one node and keeps the open blocks
   // open). Stuck to the bottom, the list follows the new blocks; scrolled up on purpose it holds the read

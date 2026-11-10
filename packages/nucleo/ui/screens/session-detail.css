@@ -116,7 +116,7 @@
 .sd-select { min-width: 280px; }
 .sd-bar .sd-pill { height: 30px; }
 .sd-bar .btn { height: 34px; }
-/* #414 (L5): the "N novas mensagens" pill, floating at the bottom when the reader is scrolled up. */
+/* issue 414 (L5): the "N novas mensagens" pill, floating at the bottom when the reader is scrolled up. */
 .sd-newpill { position: fixed; left: 50%; bottom: 96px; transform: translateX(-50%); z-index: 30; display: inline-flex; align-items: center; gap: 7px; height: 34px; padding: 0 16px; border: 0; border-radius: 99px; cursor: pointer; background: var(--accent); color: var(--on-accent); font: inherit; font-size: 13px; font-weight: var(--weight-semibold); box-shadow: 0 8px 24px color-mix(in srgb, var(--mono-black) 40%, transparent); }
 .sd-newpill:hover { filter: brightness(1.05); }
 .sd-messages { padding: 18px 20px; display: flex; flex-direction: column; gap: 18px; }
