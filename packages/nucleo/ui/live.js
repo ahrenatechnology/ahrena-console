@@ -1,11 +1,13 @@
 // "Ao vivo": the SSE stream `GET /api/stream` as the main path, with a fall back to the long polling of
 // `GET /api/changes?since=<cursor>&wait=25` through the read layer. (issue 414, L6)
 //
-// - SSE first: `/api/stream` (resumed with `?since=<cursor>` on the first connection, and by the browser's
-//   own `Last-Event-ID` on a reconnect). Each event carries the new cursor in its `id:`.
+// - SSE first: `/api/stream`, resumed with `?since=<cursor>` on the first connection. Each event carries
+//   the new cursor in its `id:`.
 //   - `event: reset` (and the first connection with no cursor) calls `onRestart`: the screens re-read all.
 //   - `event: changes` calls `onChange(changes)`.
-//   - `event: error`, or the connection dropping or `/api/stream` not being there, falls back to long polling.
+//   - `event: error`, or the connection dropping or `/api/stream` not being there: this client closes the
+//     stream (it does not lean on the browser's own `Last-Event-ID` reconnect) and hands over to the long
+//     polling below, which resumes from that same cursor.
 // - Long polling (the fall back, and the only path where SSE is not available): the first request goes
 //   without a cursor and comes back at once with `reset: true`; news calls `onChange`; a timeout keeps
 //   looping. It resumes from the last cursor the stream reached (`?since=<cursor>`), so nothing is lost in
