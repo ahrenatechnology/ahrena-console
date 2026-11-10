@@ -13,6 +13,7 @@ import { AlertTracker } from '../../src/telemetry/alerts.ts';
 import { SqliteTelemetryStore } from '../../src/telemetry/adapters/sqlite.ts';
 import { TELEMETRY_VERSION, type MachineState, type UnreachableReason } from '../../src/telemetry/model.ts';
 import { TelemetrySampler } from '../../src/telemetry/sampler.ts';
+import { buildTerminals, parseTerminalsPs } from '../../src/telemetry/terminals.ts';
 import { localMachine, TelemetryService, type MachineStatus } from '../../src/telemetry/service.ts';
 import { ElementoFalso, instalarDomFalso, texto } from './fake-dom.ts';
 
@@ -157,6 +158,8 @@ const all = (area: ElementoFalso, selector: string) => area.querySelectorAll(sel
 const cardIds = (area: ElementoFalso) => area.querySelectorAll('.tm-stat').map((n) => n.getAttribute('data-card'));
 const part = (area: ElementoFalso, name: string) => area.querySelector(`[data-part="${name}"]`);
 const buttons = (area: ElementoFalso) => all(area, 'button');
+/** The screen's bands in order: what each child of the area is (issue 434, criterion 2). */
+const bandIds = (area: ElementoFalso) => area.children.map((c) => c.getAttribute('data-band') ?? c.getAttribute('data-part') ?? (c.classList.contains('tm-stats') ? 'stats' : c.classList.contains('cc-head') ? 'head' : c.classList.contains('tm-faded') ? 'faded' : '?'));
 
 // ---------- C24: this machine ----------
 
@@ -176,7 +179,7 @@ describe('#178 criterion 2: Esta máquina (C24) with the simulator', () => {
     assert.equal(texto(m.area.querySelector('[data-card="sessions"] .tm-stat-s')), '1 precisa de você');
   });
 
-  test('the chart with 1 h and 12 h, volumes with the network, alerts, the tunnel, the Claude processes and the ports', async () => {
+  test('the chart with 1 h and 12 h, volumes with the network, alerts, the Claude processes and the ports', async () => {
     const m = mount(null);
     await m.ready;
     const chart = part(m.area, 'chart')!;
@@ -191,15 +194,8 @@ describe('#178 criterion 2: Esta máquina (C24) with the simulator', () => {
     // O que pede atenção: the port on all interfaces and the busy tunnel port.
     assert.ok(all(m.area, '.tm-alerts li').some((x) => /5432/.test(x)));
     assert.ok(all(m.area, '.tm-alerts li').some((x) => /18080/.test(x)));
-    // The tunnel, with each forwarded port's state; the remote core is named from machines.json.
-    const tunnel = part(m.area, 'tunnel')!;
-    assert.match(texto(tunnel), /ws-exemplo · túnel no ar há 3 h 12 min · 4 portas/);
-    assert.deepEqual(all(tunnel, 'tbody tr'), [
-      '14720 4720 Respondendo Núcleo da Workstation',
-      '13000 3000 Respondendo vite',
-      '15173 5173 Ninguém escuta lá nada escuta na 5173 de lá',
-      '18080 8080 Ocupada no Mac node, deste Mac, segura a 18080',
-    ]);
+    // #434 criterion 2: the screen has no tunnel card of its own any more; the tunnel is a row of the ports.
+    assert.equal(part(m.area, 'tunnel'), null);
     // Processos do Claude and the top CPU users.
     assert.match(texto(part(m.area, 'claude')), /Claude \(CLI\) 4 .*Claude Desktop 7 .*Os que mais usam CPU node 14% · claude 6%/);
     // Portas em escuta: filter counts, grouping, whose each one is.
@@ -217,37 +213,96 @@ describe('#178 criterion 2: Esta máquina (C24) with the simulator', () => {
     assert.equal(part(m.area, 'ports')!.querySelector('[data-filter="exposed"]')!.getAttribute('aria-pressed'), 'true');
   });
 
-  test('#255 rule 9: the alerts and the Claude processes stack beside the tunnel, and the ports take the whole row', async () => {
+  test('#434 criteria 2 and 6: the bands of Esta máquina, top to bottom, with no Conexão and no Onde roda', async () => {
     const m = mount(null);
     await m.ready;
-    const grid = m.area.querySelector('.tm-grid')!;
-    const column = grid.querySelector('.card-column')!;
-    assert.equal(column.parentNode, grid);
-    assert.ok(column.classList.contains('tm-side'));
-    assert.equal(column.children.length, 2);
-    assert.ok(column.children[0]!.querySelector('.tm-alerts'), 'O que pede atenção first, as in the wireframe');
-    assert.equal(column.children[1]!.getAttribute('data-part'), 'claude');
-    // The wireframe order: chart, volumes, tunnel, the stacked column, then the ports on their own row.
-    assert.deepEqual(
-      grid.children.map((c) => c.getAttribute('data-part') ?? (c.classList.contains('card-column') ? 'column' : c.querySelector('.tm-meter') ? 'volumes' : '?')),
-      ['chart', 'volumes', 'tunnel', 'column', 'ports'],
-    );
-    assert.ok(part(m.area, 'ports')!.classList.contains('tm-span-full'));
+    assert.deepEqual(bandIds(m.area), ['head', 'cloud-profiles', 'stats', 'chart', 'attention', 'ports', 'docker-actions']);
+    assert.equal(part(m.area, 'connection'), null);
+    assert.equal(part(m.area, 'placement'), null);
+    const chart = m.area.querySelector('[data-band="chart"]')!;
+    assert.deepEqual(chart.children.map((c) => c.getAttribute('data-part')), ['chart', 'volumes'], 'the chart (2/3) beside Volumes (1/3)');
+    assert.ok(chart.classList.contains('tm-band-23'));
+    const attention = m.area.querySelector('[data-band="attention"]')!;
+    assert.deepEqual(attention.children.map((c) => c.getAttribute('data-part')), ['claude', 'alerts'], 'Processos do Claude beside O que pede atenção');
   });
 
-  test('#255 rule 9: without a tunnel reading nothing stacks; the alerts take one column and the Claude processes the other two', async () => {
-    const noTunnel = async (route: string) => {
-      const r = (await coreRead(route)) as { current?: Record<string, unknown> };
-      return route.startsWith('/api/telemetry') && r.current ? { ...r, current: { ...r.current, tunnels: null } } : r;
-    };
-    const m = mount(null, noTunnel);
+  test('#434 criterion 3: Processos do Claude and O que pede atenção are in the quiet tone', async () => {
+    const m = mount(null);
     await m.ready;
-    assert.equal(part(m.area, 'tunnel'), null);
-    assert.equal(m.area.querySelector('.card-column'), null);
-    const grid = m.area.querySelector('.tm-grid')!;
-    assert.ok(grid.children.some((c) => c.querySelector('.tm-alerts')), 'O que pede atenção is a plain grid item');
-    assert.equal(part(m.area, 'claude')!.parentNode, grid);
-    assert.ok(part(m.area, 'claude')!.classList.contains('tm-span-wide'));
+    const attention = m.area.querySelector('[data-band="attention"]')!;
+    assert.equal(attention.children.length, 2);
+    assert.ok(attention.children.every((c) => c.classList.contains('tm-quiet')), 'both in a quieter tone than the resource cards');
+    const stats = m.area.querySelectorAll('.tm-stat');
+    assert.ok(stats.length > 0);
+    assert.ok(stats.every((c) => !c.classList.contains('tm-quiet')), 'the stat cards are not quiet');
+  });
+
+  test('#434 criterion 2: Sessões de terminal comes right after the attention band, where Conexão would be, and before the ports', async () => {
+    const ps = ' 2210   812  2210      -1 ?        Ss      5400  1000 seguim   sshd: seguim@pts/0\n 2231  2210  2231   41233 pts/0    Ss      5400  1000 seguim   -bash\n';
+    const terminals = JSON.parse(JSON.stringify(buildTerminals(parseTerminalsPs(ps), { nowMs: NOW, uid: 1000, selfPid: 999_999 })));
+    const withTerminals = async (route: string) => {
+      const r = (await coreRead(route)) as { current?: Record<string, unknown> };
+      return route.startsWith('/api/telemetry') && r.current ? { ...r, current: { ...r.current, terminals } } : r;
+    };
+    const m = mount(null, withTerminals);
+    await m.ready;
+    assert.deepEqual(bandIds(m.area), ['head', 'cloud-profiles', 'stats', 'chart', 'attention', 'terminals', 'ports', 'docker-actions']);
+  });
+
+  test('#434 criterion 2: without a Claude reading O que pede atenção takes the whole band', async () => {
+    const noClaude = async (route: string) => {
+      const r = (await coreRead(route)) as { current?: Record<string, unknown> };
+      return route.startsWith('/api/telemetry') && r.current ? { ...r, current: { ...r.current, claude: null, codex: null } } : r;
+    };
+    const m = mount(null, noClaude);
+    await m.ready;
+    assert.equal(part(m.area, 'claude'), null);
+    const band = m.area.querySelector('[data-band="attention"]')!;
+    assert.equal(band.children.length, 1);
+    assert.ok(band.classList.contains('tm-band-single'));
+  });
+
+  test('#434 error case: the volumes read fails: only the Volumes card shows the reason, the chart beside it and the rest go on', async () => {
+    const noVolumes = async (route: string) => {
+      const r = (await coreRead(route)) as { current?: { disk?: unknown } };
+      return route.startsWith('/api/telemetry') && r.current ? { ...r, current: { ...r.current, disk: { volumes: [] }, network: null } } : r;
+    };
+    const m = mount(null, noVolumes);
+    await m.ready;
+    const card = part(m.area, 'volumes')!;
+    assert.ok(card.classList.contains('tm-read-error'));
+    assert.match(texto(card), /Volumes Não consegui ler os volumes\. O resto da tela segue; só este card ficou sem leitura\. .* Tentar de novo/);
+    assert.ok(part(m.area, 'chart'), 'the chart beside it is still there');
+    assert.ok(part(m.area, 'ports')!.querySelector('tbody tr'), 'and so are the ports');
+    // "Tentar de novo" reads the machine again.
+    const before = m.reads.length;
+    card.querySelector('button')!.click();
+    await until(() => m.reads.length > before);
+  });
+
+  test('#434 error case: no volumes but a network reading: the Volumes card stays, it hosts the network block', async () => {
+    const noVolumes = async (route: string) => {
+      const r = (await coreRead(route)) as { current?: { disk?: unknown } };
+      return route.startsWith('/api/telemetry') && r.current ? { ...r, current: { ...r.current, disk: { volumes: [] } } } : r;
+    };
+    const m = mount(null, noVolumes);
+    await m.ready;
+    const card = part(m.area, 'volumes')!;
+    assert.ok(!card.classList.contains('tm-read-error'));
+    assert.match(texto(card), /Rede/);
+  });
+
+  test('#434 error case: the ports read fails: only the Portas em escuta card shows the reason', async () => {
+    const noPorts = async (route: string) => {
+      const r = (await coreRead(route)) as { current?: Record<string, unknown> };
+      return route.startsWith('/api/telemetry') && r.current ? { ...r, current: { ...r.current, ports: null } } : r;
+    };
+    const m = mount(null, noPorts);
+    await m.ready;
+    const card = part(m.area, 'ports')!;
+    assert.ok(card.classList.contains('tm-read-error'));
+    assert.match(texto(card), /Portas em escuta Não consegui ler as portas em escuta\./);
+    assert.ok(part(m.area, 'volumes') && !part(m.area, 'volumes')!.classList.contains('tm-read-error'));
   });
 
   test('12 h: the toggle reads hours=12, keeps it in the URL and the axis follows', async () => {
@@ -283,40 +338,30 @@ describe('#178 criterion 2: Esta máquina (C24) with the simulator', () => {
 // ---------- C25: the remote machine ----------
 
 describe('#178 criterion 2: a remote machine (C25) with the simulator', () => {
-  test('the cards: CPU (load against vCPUs), Memória, GPU, Disco, Docker, Sessões lá; the header with the port and the state', async () => {
+  test('#434 criterion 2: the cards CPU (load against vCPUs), Memória, Disco, GPU, Rede, Claude, Sessões; the header with the port and the state', async () => {
     const m = mount(WS.id);
     await m.ready;
-    assert.deepEqual(cardIds(m.area), ['cpu', 'memory', 'gpu', 'disk', 'docker', 'sessions']);
+    assert.deepEqual(cardIds(m.area), ['cpu', 'memory', 'disk', 'gpu', 'network', 'claude', 'sessions']);
     const head = texto(m.area.querySelector('.cc-head'));
     assert.match(head, /^Workstation .*ws-exemplo · Ubuntu 24\.04\.1 LTS · 16 vCPUs · 62 GB · GPU Exemplo T4 · porta 14720 do Mac · lido /);
     assert.match(head, /Conectada/);
     assert.match(texto(m.area.querySelector('[data-card="cpu"]')), /CPU .* de 16/);
     assert.match(texto(m.area.querySelector('[data-card="gpu"]')), /de 15 GB VRAM/);
     assert.match(texto(m.area.querySelector('[data-card="disk"]')), /86% \/ · 24 GB livres/);
-    assert.match(texto(m.area.querySelector('[data-card="docker"]')), /106 4 stacks · 31,4 GB a liberar/);
-    assert.match(texto(m.area.querySelector('[data-card="sessions"]')), /Sessões lá 5 2 precisam de você/);
+    assert.equal(m.area.querySelector('[data-card="docker"]'), null, 'Docker is the last band, not a resource card');
+    assert.match(texto(m.area.querySelector('[data-card="sessions"]')), /Sessões 5 2 precisam de você/);
   });
 
-  test('the load chart with the vCPU line, volumes, Docker in use and reclaimable, the sessions over there, the stacks and the ports with the Mac port', async () => {
+  test('the load chart with the vCPU line, volumes and the ports with the Mac port', async () => {
     const m = mount(WS.id);
     await m.ready;
     const chart = part(m.area, 'chart')!;
     assert.match(texto(chart), /Carga e memória a linha tracejada é o número de vCPUs .*Carga de 1 min Memória usada, GB \(de 62\) 16 vCPUs/);
     assert.ok(chart.querySelector('line.tm-limit'));
-    assert.deepEqual(all(m.area, '.tm-meter-top').slice(0, 3), ['/ 146 de 170 GB · 86%', '/home 109 de 492 GB · 22%', '/tmp 23 de 206 GB · 11%']);
-    assert.deepEqual(all(m.area, '.tm-meter-top').slice(3), ['Imagens 25,2 em uso · 8,7 recuperável', 'Containers 1,8 em uso · 0,7 recuperável', 'Volumes 4,6 em uso · 12,6 recuperável', 'Build cache 2,3 em uso · 9,4 recuperável']);
-    // The widths come from data through CSSOM, never a style attribute.
-    const used = m.area.querySelector('.tm-stack-used')!;
-    assert.match(used.style.getPropertyValue('--w'), /^\d+(\.\d)?%$/);
-    // Sessions of this machine only, four shown and the rest counted; no link (this core does not serve them).
-    const sessions = all(m.area, '.tm-sessions li');
-    assert.equal(sessions.length, 4);
-    assert.match(sessions[0]!, /Migração do esquema de pedidos motor-de-regras · 2 min Precisa de você/, 'an older core without attention: level needs is blocked (issue 245)');
-    assert.match(sessions[1]!, /Com erro/);
-    assert.match(texto(m.area), /e mais 1 · as que esperam também vão para a bandeja/);
-    assert.equal(m.area.querySelectorAll('.tm-sessions a').length, 0);
+    assert.deepEqual(all(m.area, '.tm-meter-top'), ['/ 146 de 170 GB · 86%', '/home 109 de 492 GB · 22%', '/tmp 23 de 206 GB · 11%']);
+    // #434: the Docker space is a line of the Docker card, the sessions are the stat card and the stacks are the Docker card's own.
+    assert.equal(part(m.area, 'stacks'), null);
     assert.doesNotMatch(texto(m.area), /De outra máquina/);
-    assert.deepEqual(all(part(m.area, 'stacks')!, 'tbody tr'), ['catalogo-local 8 3000', 'loja-validacao 0 · 15 parados 15432, 17233', 'motor-regras-int 12 18353', 'painel-metricas 9 14565']);
     const ports = part(m.area, 'ports')!;
     assert.match(texto(ports), /Portas em escuta lá/);
     assert.deepEqual(all(ports, '.tm-seg button'), ['Todas 8', 'Todas as interfaces 2', 'Só loopback 6']);
@@ -325,6 +370,23 @@ describe('#178 criterion 2: a remote machine (C25) with the simulator', () => {
     assert.ok(rows.some((r) => /^3000 só loopback vite pid \d+ catalogo-local 13000 Respondendo /.test(r)), rows.join('\n'));
     assert.ok(rows.some((r) => /^8080 só loopback node pid \d+ — 18080 Ocupada no Mac /.test(r)), rows.join('\n'));
     assert.ok(rows.some((r) => /^15432 todas as interfaces docker-proxy loja-validacao — Ver a stack publicada por container: a stack é a dona$/.test(r)), rows.join('\n'));
+  });
+
+  test('#434 criterion 1: the Workstation has the same bands as Esta máquina (Conexão and Onde roda only with a connection), and the Docker card is on screen too', async () => {
+    const m = mount(WS.id);
+    await m.ready;
+    assert.deepEqual(bandIds(m.area), ['head', 'cloud-profiles', 'stats', 'chart', 'attention', 'ports', 'docker-actions']);
+    assert.ok(!part(m.area, 'docker-actions')!.hasAttribute('hidden'));
+  });
+
+  test('#434 corner case: a machine without GPU shows no GPU card, and the row carries on', async () => {
+    const noGpu = async (route: string) => {
+      const r = (await coreRead(route)) as { current?: Record<string, unknown> };
+      return route.startsWith('/api/telemetry') && r.current ? { ...r, current: { ...r.current, gpu: null } } : r;
+    };
+    const m = mount(WS.id, noGpu);
+    await m.ready;
+    assert.deepEqual(cardIds(m.area), ['cpu', 'memory', 'disk', 'network', 'claude', 'sessions']);
   });
 
   test('an unknown machine: "Máquina não encontrada", not a broken screen', async () => {
@@ -347,7 +409,7 @@ describe('#178 criterion 3: a remote without connection (C26)', () => {
     assert.match(texto(m.area.querySelector('.cc-head .sub')), /última leitura às \d\d:\d\d$/);
     const faded = m.area.querySelector('.tm-faded')!;
     assert.ok(faded, 'the last reading, faded');
-    assert.deepEqual(faded.querySelectorAll('.tm-stat').map((n) => n.getAttribute('data-card')), ['cpu', 'memory', 'gpu', 'disk', 'docker', 'sessions']);
+    assert.deepEqual(faded.querySelectorAll('.tm-stat').map((n) => n.getAttribute('data-card')), ['cpu', 'memory', 'disk', 'gpu', 'network', 'claude', 'sessions']);
     // "Tentar agora" only re-reads.
     const before = m.reads.length;
     m.area.querySelector('.error-band button')!.click();
@@ -427,11 +489,11 @@ describe('#178 criterion 2: a card whose group is null does not show; strange sh
     disk: { volumes: [{ mount: '/', totalBytes: 100e9, usedBytes: 50e9, freeBytes: 50e9, usedPct: 50 }] },
   };
 
-  test('null groups: GPU, Docker, ports and the stacks are left out', async () => {
+  test('null groups: GPU, Docker and the stacks are left out; the ports and the volumes say they could not be read', async () => {
     const m = mount(WS.id, readerWith({ ...reading, gpu: null, network: null, claude: null, topProcesses: null, docker: null, ports: null, tunnels: null }));
     await m.ready;
     assert.deepEqual(cardIds(m.area), ['cpu', 'memory', 'disk']);
-    assert.equal(part(m.area, 'ports'), null);
+    assert.ok(part(m.area, 'ports')!.classList.contains('tm-read-error'), 'a null ports group is a failed read, said in its own card');
     assert.equal(part(m.area, 'stacks'), null);
     assert.ok(part(m.area, 'chart'));
   });
@@ -450,10 +512,8 @@ describe('#178 criterion 2: a card whose group is null does not show; strange sh
     };
     const m = mount(WS.id, readerWith(weird));
     await m.ready;
-    assert.deepEqual(cardIds(m.area), ['cpu', 'memory', 'disk', 'docker']);
-    assert.deepEqual(all(part(m.area, 'stacks')!, 'tbody tr'), ['ok-stack 2 8080']);
+    assert.deepEqual(cardIds(m.area), ['cpu', 'memory', 'disk']);
     assert.deepEqual(all(part(m.area, 'ports')!, 'tbody tr'), ['22 — — — — Liberar o sistema não disse quem escuta']);
-    assert.match(texto(m.area), /Build cache 0 em uso · 2 recuperável/);
     // A reading that is not an object at all.
     for (const current of ['x', 42, [], null]) {
       const n = mount(WS.id, readerWith(current));
@@ -602,20 +662,24 @@ describe('#178 the screen\'s files, CSS, classes and icons', () => {
     assert.deepEqual(used.filter((c) => !c.startsWith('tm-') && !shell.has(c) && !SEALS.has(c) && !['card', 'btn', 'outline', 'mono', 'eyebrow', 'badge', 'error-band'].includes(c)), []);
   });
 
-  test('#255 rule 9: the stacked column is plain grid items in two columns and a flex column in three; a stretched chart grows', () => {
+  test('#434 criterion 2: the bands sit side by side from 1101 px of window and stack up to 1100 px; a stretched chart grows', () => {
     const css = readFileSync(`${UI_FOLDER}screens/machine.css`, 'utf8');
-    const wide = css.slice(css.indexOf('@media (min-width: 1300px)'));
-    assert.match(css, /\.tm-side \{ display: contents; \}/);
-    assert.match(wide.slice(0, wide.indexOf('}\n}')), /\.tm-side \{ display: flex; \}/);
+    const wide = css.slice(css.indexOf('@media (min-width: 1101px)'));
+    assert.match(css, /\.tm-band \{[^}]*grid-template-columns: minmax\(0, 1fr\)/, 'one column by default');
+    assert.match(wide.slice(0, wide.indexOf('\n}')), /\.tm-band-23 \{ grid-template-columns: minmax\(0, 2fr\) minmax\(0, 1fr\)/);
+    assert.match(wide.slice(0, wide.indexOf('\n}')), /\.tm-band-half \{ grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/);
+    assert.doesNotMatch(css, /min-width: 1300px/);
     assert.match(css, /\.tm-chart \{[^}]*flex: 1 0 120px;/);
+    const connection = readFileSync(`${UI_FOLDER}screens/machine-connection.css`, 'utf8');
+    assert.match(connection.slice(connection.indexOf('@media (min-width: 1101px)')), /\.mc-grid \{ grid-template-columns: minmax\(0, 2fr\) minmax\(0, 1fr\)/, 'Conexão (2/3) beside Onde roda (1/3)');
   });
 
   test('criterion 4 (static part): nothing scrolls horizontally: fixed tables, wrapping text, no overflow-x', () => {
     const css = readFileSync(`${UI_FOLDER}screens/machine.css`, 'utf8');
     assert.doesNotMatch(css, /overflow-x/);
     assert.match(css, /\.tm-table \{[^}]*table-layout: fixed/);
-    assert.match(css, /\.tm-grid \{[^}]*minmax\(0, 1fr\)/);
-    assert.match(css, /\.tm-stats \{[^}]*minmax\(0, 1fr\)/);
+    assert.match(css, /\.tm-band \{[^}]*minmax\(0, 1fr\)/);
+    assert.match(css, /\.tm-stats \{[^}]*minmax\(100px, 1fr\)/);
     assert.match(css, /\.tm-config \{[^}]*white-space: pre-wrap/);
   });
 
@@ -752,6 +816,35 @@ describe('#178 criterion 6: leaving the screen stops the re-reads', () => {
     } finally {
       mock.timers.reset();
     }
+  });
+});
+
+describe('#434 the persistent read error: announced as a status, retry keeps its focus through a repaint', () => {
+  const noVolumes = async (route: string) => {
+    const r = (await coreRead(route)) as { current?: { disk?: unknown } };
+    return route.startsWith('/api/telemetry') && r.current ? { ...r, current: { ...r.current, disk: { volumes: [] }, network: null } } : r;
+  };
+
+  test('the error box is role status, so each repaint does not re-announce it', async () => {
+    const m = mount(null, noVolumes);
+    await m.ready;
+    const box = part(m.area, 'volumes')!.querySelector('.tm-read-error-box')!;
+    assert.equal(box.getAttribute('role'), 'status');
+    assert.equal(m.area.querySelectorAll('.tm-read-error-box[role="alert"]').length, 0);
+  });
+
+  test('the retry button of a card keeps the focus after a repaint, on the same card', async () => {
+    const m = mount(null, noVolumes);
+    await m.ready;
+    const active = () => (document as unknown as { activeElement: ElementoFalso }).activeElement;
+    const retry = part(m.area, 'volumes')!.querySelector('[data-action="retry-read"]')!;
+    retry.focus();
+    const old = active();
+    const reads = m.reads.length;
+    m.change([{ type: 'alert', key: 'local:port-exposed:5432' }]);
+    await until(() => m.reads.length > reads && active() !== old);
+    assert.equal(active().getAttribute('data-action'), 'retry-read');
+    assert.ok(part(m.area, 'volumes')!.contains(active()), 'the volumes retry, not the ports one');
   });
 });
 

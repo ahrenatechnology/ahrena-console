@@ -4,8 +4,9 @@
 //
 // - machine.js mounts it once, `dockerActions(ctx, id)`, and puts `node()` in every paint. It reads by
 //   itself: on a `tools` change (the jobs), every 2 s while a job runs and every 15 s otherwise (a remote
-//   sends no change events). A núcleo without the route (404) or any failure on the first read hides the
-//   card: the screen keeps its read-only stacks card (`available()` is false).
+//   sends no change events). The card is on screen on both machines (issue 434): a núcleo without the route
+//   (404) shows the version notice with the read-only stacks of the telemetry and no action; a read that
+//   fails shows the reason in plain words, only here, with "Tentar de novo".
 // - Nothing typed becomes a command. A button asks `GET /api/docker/plan`; the dialog shows that plan's
 //   argv, the place it runs, what happens and the timeout; Confirmar sends the action id, the target id and
 //   the plan's digest. A 409 shows the new plan; a 404 re-reads.
@@ -16,7 +17,8 @@
 // - A job's output is the núcleo's masked tail (200 lines): shown as text, never as HTML.
 
 import { el, icon } from '../dom.js';
-import { bytes, DASH } from './machine-format.js';
+import { runButtonAction } from '../button-action.js';
+import { bytes, DASH, stackContainers } from './machine-format.js';
 import {
   ACTION_BUTTONS,
   FILTERS,
@@ -84,11 +86,12 @@ const fill = (parent, ...children) => parent.replaceChildren(...children.filter(
 
 const stateBadge = (running) => el('span', { class: `badge ${running ? 'b-active' : 'b-abandoned'}` }, el('span', { class: 'p' }), running ? 'Rodando' : 'Parado');
 
-export function dockerActions(ctx, machineId = LOCAL_ID, { repaint = () => {} } = {}) {
+export function dockerActions(ctx, machineId = LOCAL_ID, { readOnlyStacks = () => null, spaceNote = () => null } = {}) {
   const local = machineId === LOCAL_ID;
   const where = local ? 'Esta máquina' : 'Workstation';
-  const node = el('section', { class: 'card tm-card tm-span-full dk-card', 'data-part': 'docker-actions', hidden: true });
-  let status = 'loading'; // 'loading' | 'hidden' | 'ok' | 'unreachable' | 'unsupported'
+  const node = el('section', { class: 'card tm-card dk-card', 'data-part': 'docker-actions' });
+  let status = 'loading'; // 'loading' | 'ok' | 'unreachable' | 'unsupported' | 'error'
+  let problem = null; // the last failed read, in plain words (the first read, or a later one while the last view stays)
   let view = null;
   let filter = 'all';
   let query = '';
@@ -99,7 +102,6 @@ export function dockerActions(ctx, machineId = LOCAL_ID, { repaint = () => {} } 
   let notice = null; // { tone, text } after a refused write
   let dismissed = new Set(); // the ids of the ended jobs the person closed
   let started = false;
-  let wasAvailable = false;
 
   const canRun = () => local || view?.acceptsRemoteActions === true;
 
@@ -109,20 +111,28 @@ export function dockerActions(ctx, machineId = LOCAL_ID, { repaint = () => {} } 
     try {
       const d = normalizeDocker(await ctx.read(dockerRoute(machineId)));
       if (n !== request || ctx.signal.aborted) return;
-      if (!d) status = 'hidden';
-      else if (d.status === 'ok') ((status = 'ok'), (view = d.view));
-      else status = view ? 'ok' : d.status;
+      if (!d) failed(new Error('resposta inesperada'));
+      else if (d.status === 'ok') ((status = 'ok'), (view = d.view), (problem = null));
+      else ((status = view && d.status === 'unreachable' ? 'ok' : d.status), (problem = null));
     } catch (e) {
       if (e?.name === 'AbortError' || n !== request || ctx.signal.aborted) return;
-      if (e?.status === 404 || !view) status = 'hidden';
+      // A núcleo that does not know the route is an old one (404): the notice, not an error.
+      if (e?.status === 404) ((status = 'unsupported'), (problem = null));
+      else failed(e);
     }
     paint();
     schedule();
   }
 
+  // The first read that fails is the card's error; a later one keeps the last view and says so above it.
+  function failed(e) {
+    problem = { what: 'Não consegui ler o Docker.', detail: typeof e?.message === 'string' && e.message ? e.message : null };
+    if (!view) status = 'error';
+  }
+
   function schedule() {
     clearTimeout(timer);
-    if (ctx.signal.aborted || status === 'hidden') return;
+    if (ctx.signal.aborted) return;
     timer = setTimeout(read, jobRunning(view?.jobs.current) ? RUNNING_POLL_MS : POLL_MS);
   }
 
@@ -450,6 +460,9 @@ export function dockerActions(ctx, machineId = LOCAL_ID, { repaint = () => {} } 
 
   const confirmLabel = (plan) => ({ 'stack-stop': 'Confirmar e parar', 'stack-start': 'Confirmar e subir', 'stack-remove': 'Remover a stack', 'stack-remove-volumes': `Apagar ${plan.count ?? ''} volumes`.replace('  ', ' '), 'container-stop': 'Confirmar e parar', 'container-restart': 'Confirmar e reiniciar', 'container-remove': 'Remover o container', 'daemon-restart': 'Confirmar e reiniciar' })[plan.actionId] ?? 'Confirmar';
 
+  /** The actions cell: its own width, the buttons wrap to a second line inside it (never clipped by the card). */
+  const actsCell = (buttons) => el('td', { class: 'dk-acts' }, el('div', { class: 'dk-acts-row' }, ...buttons));
+
   function stacksTable() {
     const rows = view.stacks.map((s) =>
       el(
@@ -459,14 +472,14 @@ export function dockerActions(ctx, machineId = LOCAL_ID, { repaint = () => {} } 
         el('td', {}, el('span', { class: `badge ${s.running && s.stopped ? 'b-waiting' : s.running ? 'b-active' : 'b-abandoned'}` }, el('span', { class: 'p' }), s.running && s.stopped ? 'Parte parada' : s.running ? 'Rodando' : 'Parada')),
         el('td', { class: 'mono' }, stackLine(s)),
         el('td', { class: 'mono dk-ports' }, s.ports.length ? s.ports.join(', ') : DASH),
-        el('td', { class: 'dk-acts' }, ...actionButtons(s.actions, s.name)),
+        actsCell(actionButtons(s.actions, s.name)),
       ),
     );
     const leftovers = view.leftovers.map((s) =>
-      el('tr', { 'data-leftover': s.name }, el('td', { class: 'mono' }, s.name), el('td', {}, el('span', { class: 'badge b-abandoned' }, el('span', { class: 'p' }), 'Removida')), el('td', { class: 'tm-muted', colspan: '2' }, `${plural(s.volumes, 'volume ficou', 'volumes ficaram')} no disco`), el('td', { class: 'dk-acts' }, ...actionButtons(s.actions, s.name))),
+      el('tr', { 'data-leftover': s.name }, el('td', { class: 'mono' }, s.name), el('td', {}, el('span', { class: 'badge b-abandoned' }, el('span', { class: 'p' }), 'Removida')), el('td', { class: 'tm-muted', colspan: '2' }, `${plural(s.volumes, 'volume ficou', 'volumes ficaram')} no disco`), actsCell(actionButtons(s.actions, s.name))),
     );
     if (!rows.length && !leftovers.length) return el('p', { class: 'tm-muted' }, 'Nenhuma stack do Compose nesta máquina.');
-    return el('table', { class: 'tm-table' }, el('thead', {}, el('tr', {}, ...['Stack', 'Estado', 'Containers', 'Portas', ''].map((h) => el('th', {}, h)))), el('tbody', {}, ...rows, ...leftovers));
+    return el('table', { class: 'tm-table dk-table dk-table-stacks' }, el('thead', {}, el('tr', {}, ...['Stack', 'Estado', 'Containers', 'Portas', ''].map((h, i) => el('th', { class: i === 4 ? 'dk-acts' : null }, h)))), el('tbody', {}, ...rows, ...leftovers));
   }
 
   function containersTable() {
@@ -482,12 +495,12 @@ export function dockerActions(ctx, machineId = LOCAL_ID, { repaint = () => {} } 
       matching.length
         ? el(
             'table',
-            { class: 'tm-table' },
-            el('thead', {}, el('tr', {}, ...['Nome', 'Imagem', 'Estado', 'Stack', 'Criado', ''].map((h) => el('th', {}, h)))),
+            { class: 'tm-table dk-table dk-table-containers' },
+            el('thead', {}, el('tr', {}, ...[['Nome', null], ['Estado', 'dk-col-state'], ['Stack', 'dk-col-stack'], ['Criado', 'dk-col-since'], ['', 'dk-acts']].map(([h, cls]) => el('th', { class: cls }, h)))),
             el(
               'tbody',
               {},
-              ...page.map((c) => el('tr', { 'data-container': c.id }, el('td', { class: 'mono' }, c.name), el('td', { class: 'mono tm-muted dk-image' }, c.image), el('td', {}, stateBadge(c.running)), el('td', { class: 'mono' }, c.stack ?? DASH), el('td', { class: 'tm-muted' }, since(c.createdAt)), el('td', { class: 'dk-acts' }, ...actionButtons(c.actions, c.id)))),
+              ...page.map((c) => el('tr', { 'data-container': c.id }, el('td', { class: 'dk-name' }, el('span', { class: 'mono' }, c.name), el('small', { class: 'mono tm-muted dk-image' }, c.image)), el('td', { class: 'dk-col-state' }, stateBadge(c.running)), el('td', { class: 'mono dk-col-stack' }, c.stack ?? DASH), el('td', { class: 'tm-muted dk-col-since' }, since(c.createdAt)), actsCell(actionButtons(c.actions, c.id)))),
             ),
           )
         : el('p', { class: 'tm-muted' }, view.containers.length ? 'Nenhum container com este filtro.' : 'Nenhum container nesta máquina.'),
@@ -513,22 +526,55 @@ export function dockerActions(ctx, machineId = LOCAL_ID, { repaint = () => {} } 
     );
   }
 
+  const title = (...extra) => el('h2', { class: 'tm-title dk-title' }, icon('container'), el('span', {}, 'Docker'), ...extra);
+
+  /** The old núcleo's card (issue 434): the notice, and the stacks the telemetry knows, read-only. */
+  function unsupportedBody() {
+    const stacks = readOnlyStacks();
+    return [
+      title(),
+      el(
+        'div',
+        { class: 'dk-band dk-lock', role: 'note', 'data-part': 'docker-version-notice' },
+        el('div', { class: 'dk-band-top' }, icon('alert'), el('p', {}, el('b', {}, `O núcleo ${local ? 'daqui' : `da ${where}`} é antigo demais para as ações do Docker.`), ` Ele ainda não sabe parar, reiniciar nem remover.${stacks ? ' A lista abaixo é só leitura.' : ''} Para agir daqui, atualize o núcleo ${local ? 'deste Mac' : 'de lá'}.`)),
+      ),
+      stacks?.length
+        ? el('table', { class: 'tm-table dk-table' }, el('thead', {}, el('tr', {}, ...['Stack', 'Containers', 'Portas'].map((h) => el('th', {}, h)))), el('tbody', {}, ...stacks.map((st) => el('tr', { 'data-stack': st.name }, el('td', { class: 'mono' }, st.name), el('td', { class: 'mono' }, stackContainers(st)), el('td', { class: 'mono dk-ports' }, st.ports.length ? st.ports.join(', ') : DASH)))))
+        : null,
+    ];
+  }
+
+  /** The read that failed: the reason in plain words, what the system said in small type, and a retry. Only this card. */
+  function errorBody() {
+    const button = el('button', { type: 'button', class: 'btn sm outline', 'data-action': 'retry-read', 'aria-label': 'Tentar de novo: o Docker' }, icon('refresh'), 'Tentar de novo');
+    button.addEventListener('click', () => runButtonAction(button, () => read(), { busyLabel: 'Lendo…' }));
+    return [
+      title(),
+      el('div', { class: 'tm-read-error-box', role: 'status', 'data-part': 'docker-read-error' }, icon('error'), el('div', {}, el('b', {}, problem?.what ?? 'Não consegui ler o Docker.'), el('p', { class: 'tm-muted' }, 'O resto da tela segue; só este card ficou sem leitura.'), problem?.detail ? el('small', { class: 'mono tm-muted' }, problem.detail) : null, button)),
+    ];
+  }
+
   function paint() {
-    if (status === 'hidden' || status === 'loading') {
-      node.setAttribute('hidden', '');
-      return;
-    }
-    node.removeAttribute('hidden');
-    if (status === 'unsupported' || status === 'unreachable' || !view) {
-      node.replaceChildren(el('h2', { class: 'tm-title dk-title' }, icon('container'), el('span', {}, 'Docker')), el('p', { class: 'tm-muted' }, status === 'unsupported' ? `O núcleo da ${where} é de uma versão sem as ações do Docker. Atualize o núcleo de lá.` : `Sem conexão com a ${where}. As ações voltam quando ela responder.`));
-      return;
+    // The retry button is rebuilt by every repaint (15 s, or 2 s with a job): the focus goes back to it.
+    const retryHadFocus = Boolean(node.querySelector('[data-action="retry-read"]') && globalThis.document?.activeElement?.getAttribute?.('data-action') === 'retry-read' && node.contains(globalThis.document.activeElement));
+    paintCard();
+    if (retryHadFocus) node.querySelector('[data-action="retry-read"]')?.focus?.();
+  }
+
+  function paintCard() {
+    if (status === 'loading') return fill(node, title(), el('p', { class: 'tm-muted' }, 'Lendo o Docker…'));
+    if (status === 'unsupported') return fill(node, ...unsupportedBody());
+    if (status === 'error' || !view) {
+      if (status === 'unreachable') return fill(node, title(), el('p', { class: 'tm-muted', role: 'status' }, `Sem conexão com a ${where}. As ações voltam quando ela responder.`));
+      return fill(node, ...errorBody());
     }
     const active = globalThis.document?.activeElement;
     const keep = active && node.contains(active) ? (active.getAttribute?.('data-dk-filter') ? `[data-dk-filter="${active.getAttribute('data-dk-filter')}"]` : null) : null;
     fill(
       node,
-      el('h2', { class: 'tm-title dk-title' }, icon('container'), el('span', {}, 'Docker'), el('small', { class: 'tm-note' }, `${view.summary.running} rodando · ${view.summary.stopped} parados · ${plural(view.summary.stacks, 'stack', 'stacks')}`), toolbar()),
+      title(el('small', { class: 'tm-note' }, [`${view.summary.running} rodando`, `${view.summary.stopped} parados`, plural(view.summary.stacks, 'stack', 'stacks'), spaceNote()].filter(Boolean).join(' · ')), toolbar()),
       !local && !view.acceptsRemoteActions ? el('div', { class: 'dk-band dk-lock', role: 'note' }, el('div', { class: 'dk-band-top' }, icon('lock'), el('p', {}, el('b', {}, 'As ações na Workstation estão desligadas.'), ' O túnel faz o pedido do Mac parecer local lá, então a Workstation só aceita ações quando ela mesma liga: AHRENA_CONSOLE_ACCEPT_REMOTE_ACTIONS=1 no núcleo de lá. Até lá, cada ação mostra o comando para copiar.'))) : null,
+      problem ? el('p', { class: 'dk-problem', role: 'status' }, `${problem.what} Mostrando a última leitura.`) : null,
       notice ? el('p', { class: notice.tone === 'error' ? 'dk-problem' : 'tm-muted', role: 'alert' }, notice.text) : null,
       view.available ? jobBand() : downCard(),
       view.available ? el('div', { class: 'eyebrow' }, 'Stacks') : null,
@@ -537,9 +583,6 @@ export function dockerActions(ctx, machineId = LOCAL_ID, { repaint = () => {} } 
       view.available ? containersTable() : null,
     );
     if (keep) node.querySelector(keep)?.focus?.();
-    // machine.js drops its read-only stacks card once this one shows them: repaint it only when that changes.
-    const now = status === 'ok' && view.available;
-    if (now !== wasAvailable) ((wasAvailable = now), repaint());
   }
 
   return {
@@ -548,11 +591,14 @@ export function dockerActions(ctx, machineId = LOCAL_ID, { repaint = () => {} } 
       loadStyle(ctx.signal);
       if (!started) {
         started = true;
+        paint();
         read();
       }
       return node;
     },
-    /** Whether it shows the stacks (machine.js then drops its read-only stacks card). */
-    available: () => status === 'ok' && view !== null && view.available,
+    /** Paints again with the stacks of a new telemetry reading (the old núcleo's read-only list). */
+    refresh() {
+      if (started && status === 'unsupported') paint();
+    },
   };
 }

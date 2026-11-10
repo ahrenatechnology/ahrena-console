@@ -3,7 +3,7 @@
    leaves; while it is there, the other screens' CSS is loaded too, so every own class starts with
    `tm-` and the shared ones are only the shell's and the status seals (`badge`, `b-*`), repeated in
    each screen's CSS. Every color comes from brand.css. Nothing scrolls horizontally from a 1100 px
-   window: two columns up to 1299 px of window, three from 1300. */
+   window: the bands sit side by side from 1101 px of window and stack up to 1100 px (issue 434). */
 
 /* ---------- seals: the same block as dashboard.css, on purpose ---------- */
 .badge { display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 9px; border-radius: 99px; font-size: 11.5px; font-weight: var(--weight-medium); white-space: nowrap; flex: none; }
@@ -30,22 +30,19 @@
 .tm-seg button[aria-pressed="true"] { background: var(--raised); color: var(--text); }
 .tm-seg button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
-/* ---------- the cards on top ---------- */
-.tm-stats { display: grid; gap: 12px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
-.tm-stat { padding: 14px 16px; min-height: 84px; display: flex; flex-direction: column; justify-content: space-between; gap: 2px; position: relative; min-width: 0; }
-.tm-stat-label { font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-weight: var(--weight-semibold); padding-right: 22px; }
-.tm-stat-ic { position: absolute; top: 13px; right: 14px; font-size: 17px; }
-.tm-stat-v { font-size: 24px; font-weight: var(--weight-semibold); font-family: var(--font-mono); letter-spacing: -.02em; line-height: 1.1; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
-.tm-stat-v small { font-size: 12px; font-family: var(--font-sans); color: var(--muted); font-weight: var(--weight-regular); margin-left: 6px; letter-spacing: 0; }
-.tm-stat-s { font-size: 11.5px; color: var(--muted); overflow-wrap: anywhere; }
+/* ---------- band 2: the resource cards, one row (issue 434) ---------- */
+.tm-stats { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); }
+.tm-stat { padding: 12px; min-height: 94px; display: flex; flex-direction: column; justify-content: space-between; gap: 6px; position: relative; min-width: 0; }
+.tm-stat-label { font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-weight: var(--weight-semibold); padding-right: 20px; }
+.tm-stat-ic { position: absolute; top: 11px; right: 10px; font-size: 15px; }
+.tm-stat-v { font-size: 22px; font-weight: var(--weight-semibold); font-family: var(--font-mono); letter-spacing: -.02em; line-height: 1.1; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.tm-stat-v small { font-size: 10.5px; font-family: var(--font-sans); color: var(--muted); font-weight: var(--weight-regular); margin-left: 4px; letter-spacing: 0; }
+.tm-stat-s { font-size: 11px; line-height: 1.35; color: var(--muted); overflow-wrap: anywhere; }
 .tm-stat.tm-bad { background: color-mix(in srgb, var(--status-error-badge) 80%, var(--surface)); border-color: color-mix(in srgb, var(--status-error-dot) 40%, var(--border)); }
 
-/* ---------- the grid ---------- */
-.tm-grid { display: grid; gap: 16px; align-items: start; grid-auto-flow: dense; grid-template-columns: repeat(2, minmax(0, 1fr)); }
-.tm-span-wide, .tm-span-half, .tm-span-full { grid-column: span 2; }
-/* The alerts and the Claude processes, stacked beside the tunnel in three columns (.card-column in
-   shell.css); in two columns they are plain grid items again, alerts beside the volumes. */
-.tm-side { display: contents; }
+/* ---------- the bands (issue 434): side by side from 1101 px of window, stacked up to 1100 px ---------- */
+.tm-band { display: grid; gap: 16px; align-items: stretch; grid-template-columns: minmax(0, 1fr); min-width: 0; }
+.tm-band > * { min-width: 0; }
 .tm-card { padding: 14px 16px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
 .tm-title { margin: 0; font-size: 13.5px; font-weight: var(--weight-semibold); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
 .tm-title > .tm-note, .tm-title > .tm-seg { margin-left: auto; }
@@ -53,13 +50,23 @@
 .tm-sub-eyebrow { margin-top: 4px; }
 .tm-card p { margin: 0; font-size: 12.5px; }
 
-@media (min-width: 1300px) {
-  .tm-stats { grid-template-columns: repeat(6, minmax(0, 1fr)); }
-  .tm-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-  .tm-span-half { grid-column: span 1; }
-  .tm-side { display: flex; }
-  .tm-span-full { grid-column: span 3; }
+@media (min-width: 1101px) {
+  .tm-band-23 { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); }
+  .tm-band-half { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .tm-band-single { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* Band 4: Processos do Claude and O que pede atenção, in a quieter tone than the resource cards. */
+.tm-quiet { background: transparent; border-color: color-mix(in srgb, var(--border) 65%, transparent); }
+.tm-quiet .tm-title { font-size: 12.5px; font-weight: var(--weight-medium); color: var(--muted); }
+.tm-quiet .tm-table td, .tm-quiet .tm-alerts li { color: var(--muted); font-size: 12px; }
+.tm-quiet .tm-alerts li { padding: 7px 0; }
+
+/* One card that could not be read: the reason in plain words, and only this card (issue 434, error case). */
+.tm-read-error-box { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--status-error-dot); background: var(--status-error-badge); font-size: 12.5px; min-width: 0; }
+.tm-read-error-box > .icon { flex: none; margin-top: 1px; color: var(--status-error-text); }
+.tm-read-error-box > div { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; min-width: 0; overflow-wrap: anywhere; }
+.tm-read-error-box b { color: var(--status-error-text); font-weight: var(--weight-semibold); }
 
 /* ---------- the chart ---------- */
 /* A chart card stretched to its row (rule 9) gives the extra height to the chart, not to a blank band. */
@@ -89,23 +96,15 @@
 .tm-bar.tm-bar-warn::-moz-progress-bar { background: var(--status-waiting-dot); }
 .tm-bar.tm-bar-bad::-webkit-progress-value { background: var(--status-error-dot); }
 .tm-bar.tm-bar-bad::-moz-progress-bar { background: var(--status-error-dot); }
-.tm-stack { display: flex; height: 8px; border-radius: 99px; overflow: hidden; background: var(--raised); }
-.tm-stack-part { display: block; height: 100%; width: var(--w, 0); }
-.tm-stack-used { background: var(--accent); }
-.tm-stack-free { background: var(--rose); }
 
 /* ---------- alerts and sessions ---------- */
-.tm-alerts, .tm-sessions { list-style: none; margin: 0; padding: 0; }
+.tm-alerts { list-style: none; margin: 0; padding: 0; }
 .tm-alerts li { display: flex; gap: 10px; align-items: flex-start; padding: 9px 0; border-bottom: 1px solid var(--border); font-size: 12.5px; }
-.tm-alerts li:last-child, .tm-sessions li:last-child { border-bottom: 0; }
+.tm-alerts li:last-child { border-bottom: 0; }
 .tm-alert-ic { font-size: 15px; line-height: 1.2; flex: none; }
 .tm-alert-text { min-width: 0; overflow-wrap: anywhere; }
 .tm-alert-text small { display: block; color: var(--muted); font-size: 11.5px; }
 .tm-alert-age { margin-left: auto; color: var(--muted); font-size: 11.5px; white-space: nowrap; padding-left: 8px; }
-.tm-sessions li { display: flex; gap: 10px; align-items: center; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--border); }
-.tm-session-name { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-.tm-session-name b { font-weight: var(--weight-medium); font-size: 12.5px; overflow-wrap: anywhere; }
-.tm-session-name small { color: var(--muted); font-size: 11px; overflow-wrap: anywhere; }
 
 /* ---------- tables: fixed layout, nothing scrolls ---------- */
 .tm-table { width: 100%; border-collapse: collapse; font-size: 12.5px; table-layout: fixed; }

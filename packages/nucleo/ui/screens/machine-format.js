@@ -19,8 +19,6 @@ export const WINDOWS = [1, 12];
 export const REREAD_MS = 30_000;
 /** A volume at or above this is yellow; at or above `VOLUME_FULL_PCT` + 5, red (the core alerts at 85). */
 export const VOLUME_FULL_PCT = 85;
-/** The sessions of a remote machine listed in its card; the rest is "e mais N". */
-export const SESSIONS_SHOWN = 4;
 export const DASH = '—';
 
 const GB = 1e9;
@@ -262,69 +260,57 @@ export function sessionsOf(attention, machineId) {
  */
 export function statCards(reading, { local, sessions = null, alerts = [], now = Date.now() } = {}) {
   if (!reading) return [];
-  const cards = [];
-  const { cpu, memory, gpu, volumes, network, claude, docker } = reading;
+  // Issue 434, criterion 2, band 2: CPU, Memória, Disco, GPU (only where there is one), Rede, Claude, Sessões.
+  const byId = {};
+  const { cpu, memory, gpu, volumes, network, claude } = reading;
   if (cpu) {
     const saturated = cpu.cores !== null && cpu.load.one !== null && cpu.load.one > cpu.cores;
-    if (local) cards.push({ id: 'cpu', label: 'CPU', icon: 'model', value: cpu.usedPct === null ? DASH : `${f0.format(Math.round(cpu.usedPct))}%`, unit: null, sub: cpu.load.one === null ? '' : `carga ${decimal(cpu.load.one)}${cpu.cores ? ` de ${cpu.cores}` : ''}`, tone: saturated ? 'bad' : 'ok' });
+    if (local) byId.cpu = { id: 'cpu', label: 'CPU', icon: 'model', value: cpu.usedPct === null ? DASH : `${f0.format(Math.round(cpu.usedPct))}%`, unit: null, sub: cpu.load.one === null ? '' : `carga ${decimal(cpu.load.one)}${cpu.cores ? ` de ${cpu.cores}` : ''}`, tone: saturated ? 'bad' : 'ok' };
     else {
       const loadAlert = alerts.find((a) => a.kind === 'load-high');
       const sub = saturated ? (loadAlert?.since ? `saturada ${ago(loadAlert.since, now)}` : 'saturada') : cpu.usedPct === null ? '' : `${f0.format(Math.round(cpu.usedPct))}% de uso`;
-      cards.push({ id: 'cpu', label: 'CPU', icon: 'model', value: cpu.load.one === null ? DASH : decimal(cpu.load.one), unit: cpu.cores ? `de ${cpu.cores}` : null, sub, tone: saturated ? 'bad' : 'ok' });
+      byId.cpu = { id: 'cpu', label: 'CPU', icon: 'model', value: cpu.load.one === null ? DASH : decimal(cpu.load.one), unit: cpu.cores ? `de ${cpu.cores}` : null, sub, tone: saturated ? 'bad' : 'ok' };
     }
   }
   if (memory) {
     const swap = memory.swapUsedBytes === null ? '' : local || memory.swapTotalBytes === null ? `swap ${gib(memory.swapUsedBytes)} GB` : `swap ${gib(memory.swapUsedBytes)} de ${gib(memory.swapTotalBytes)}`;
-    cards.push({ id: 'memory', label: 'Memória', icon: 'memory-stick', value: gib(memory.usedBytes), unit: `de ${gib(memory.totalBytes)} GB`, sub: swap, tone: 'ok' });
-  }
-  if (!local && gpu) {
-    const vram = gpu.memoryUsedBytes !== null && gpu.memoryTotalBytes !== null ? `${gib(gpu.memoryUsedBytes)} de ${gib(gpu.memoryTotalBytes)} GB VRAM` : (gpu.name ?? '');
-    cards.push({ id: 'gpu', label: 'GPU', icon: 'monitor-dot', value: gpu.usedPct === null ? DASH : `${f0.format(Math.round(gpu.usedPct))}%`, unit: null, sub: vram, tone: 'ok' });
+    byId.memory = { id: 'memory', label: 'Memória', icon: 'memory-stick', value: gib(memory.usedBytes), unit: `de ${gib(memory.totalBytes)} GB`, sub: swap, tone: 'ok' };
   }
   const root = volumes.find((v) => v.mount === '/') ?? volumes[0];
   if (root) {
     const free = `${bytes(root.freeBytes)} livres`;
-    cards.push({ id: 'disk', label: 'Disco', icon: 'hard-drive', value: `${f0.format(Math.round(root.usedPct))}%`, unit: null, sub: local ? free : `${root.mount} · ${free}`, tone: levelOf(root.usedPct) === 'ok' ? 'ok' : 'warn' });
+    byId.disk = { id: 'disk', label: 'Disco', icon: 'hard-drive', value: `${f0.format(Math.round(root.usedPct))}%`, unit: null, sub: local ? free : `${root.mount} · ${free}`, tone: levelOf(root.usedPct) === 'ok' ? 'ok' : 'warn' };
   }
-  if (local && network) {
-    cards.push({ id: 'network', label: 'Rede', icon: 'wifi', value: network.rxBytesPerSec === null ? DASH : decimal(network.rxBytesPerSec / (network.rxBytesPerSec >= 1e6 ? 1e6 : 1e3)), unit: network.rxBytesPerSec === null ? null : `${network.rxBytesPerSec >= 1e6 ? 'MB/s' : 'kB/s'} ↓`, sub: network.txBytesPerSec === null ? '' : `↑ ${rate(network.txBytesPerSec)}`, tone: 'ok' });
+  // GPU is among what only the remote machine has (issue 434).
+  if (!local && gpu) {
+    const vram = gpu.memoryUsedBytes !== null && gpu.memoryTotalBytes !== null ? `${gib(gpu.memoryUsedBytes)} de ${gib(gpu.memoryTotalBytes)} GB VRAM` : (gpu.name ?? '');
+    byId.gpu = { id: 'gpu', label: 'GPU', icon: 'monitor-dot', value: gpu.usedPct === null ? DASH : `${f0.format(Math.round(gpu.usedPct))}%`, unit: null, sub: vram, tone: 'ok' };
   }
-  if (local && claude) {
+  if (network) {
+    byId.network = { id: 'network', label: 'Rede', icon: 'wifi', value: network.rxBytesPerSec === null ? DASH : decimal(network.rxBytesPerSec / (network.rxBytesPerSec >= 1e6 ? 1e6 : 1e3)), unit: network.rxBytesPerSec === null ? null : `${network.rxBytesPerSec >= 1e6 ? 'MB/s' : 'kB/s'} ↓`, sub: network.txBytesPerSec === null ? '' : `↑ ${rate(network.txBytesPerSec)}`, tone: 'ok' };
+  }
+  if (claude) {
     const parts = [claude.cli ? `${claude.cli.count} CLI` : null, claude.desktop ? `${claude.desktop.count} Desktop` : null].filter(Boolean);
-    cards.push({ id: 'claude', label: 'Claude', icon: 'bot', value: f0.format(claude.processes.count), unit: 'proc.', sub: parts.join(' · '), tone: 'ok' });
-  }
-  if (!local && docker) {
-    const reclaimable = docker.space ? docker.space.reduce((s, x) => s + x.reclaimableBytes, 0) : null;
-    const sub = [plural(docker.stacks.length, 'stack', 'stacks'), reclaimable ? `${bytes(reclaimable)} a liberar` : null].filter(Boolean).join(' · ');
-    cards.push({ id: 'docker', label: 'Docker', icon: 'container', value: f0.format(docker.running + docker.stopped), unit: null, sub, tone: 'ok' });
+    byId.claude = { id: 'claude', label: 'Claude', icon: 'bot', value: f0.format(claude.processes.count), unit: 'proc.', sub: parts.join(' · '), tone: 'ok' };
   }
   if (sessions) {
     // issue 245: "precisam de você" counts only the blocked ones; the idle ones are said apart.
     const blocked = sessions.filter((i) => sessionAttention(i).level === 'blocked').length;
     const idle = sessions.length - blocked;
     const sub = blocked ? `${blocked} ${blocked === 1 ? 'precisa' : 'precisam'} de você` : idle ? `${idle} ${idle === 1 ? 'ociosa' : 'ociosas'}` : 'ninguém precisa de você';
-    cards.push({ id: 'sessions', label: local ? 'Sessões' : 'Sessões lá', icon: 'sessions', value: f0.format(sessions.length), unit: null, sub, tone: 'session' });
+    byId.sessions = { id: 'sessions', label: 'Sessões', icon: 'sessions', value: f0.format(sessions.length), unit: null, sub, tone: 'session' };
   }
-  return cards;
+  return STAT_ORDER.map((id) => byId[id]).filter(Boolean);
 }
+
+/** The order of the resource cards (issue 434, criterion 2). */
+const STAT_ORDER = ['cpu', 'memory', 'disk', 'gpu', 'network', 'claude', 'sessions'];
 
 /** A volume's line: "232 de 612 GB · 38%", in the unit of the total. */
 export function volumeLine(v) {
   const unit = v.totalBytes >= 1e12 ? 1e12 : GB;
   const name = unit === 1e12 ? 'TB' : 'GB';
   return `${decimal(v.usedBytes / unit)} de ${decimal(v.totalBytes / unit)} ${name} · ${f0.format(Math.round(v.usedPct))}%`;
-}
-
-const DOCKER_TYPES = { Images: 'Imagens', 'Local Volumes': 'Volumes', 'Build Cache': 'Build cache', Containers: 'Containers' };
-
-/** Docker space in GB: in use and reclaimable, and each part's share of the biggest row (0 to 100). */
-export function dockerRows(space) {
-  if (!space?.length) return [];
-  const max = Math.max(...space.map((s) => s.sizeBytes), 1);
-  return space.map((s) => {
-    const inUse = s.sizeBytes - s.reclaimableBytes;
-    return { label: DOCKER_TYPES[s.type] ?? s.type, text: `${decimal(inUse / GB)} em uso · ${decimal(s.reclaimableBytes / GB)} recuperável`, usedPct: (inUse / max) * 100, reclaimablePct: (s.reclaimableBytes / max) * 100 };
-  });
 }
 
 /** "12" or "0 · 15 parados". */
@@ -335,19 +321,6 @@ export const TUNNEL_PORT_STATE = { up: ['b-completed', 'Respondendo'], idle: ['b
 /** The machine that a tunnel reaches: the one whose `port` (machines.json) the tunnel forwards. */
 export function machineOfTunnel(tunnel, machines) {
   return machines.find((m) => m.id !== LOCAL_ID && m.port !== null && tunnel.ports.some((p) => p.localPort === m.port)) ?? null;
-}
-
-/**
- * "O que é" of a forwarded port: the remote core when it is the machine's port; what listens on
- * the other side when that machine's reading has it; the state's own explanation otherwise.
- */
-export function tunnelPortWhat(p, { machine = null, remotePorts = null } = {}) {
-  if (p.state === 'idle') return `nada escuta na ${p.remotePort} de lá`;
-  if (p.state === 'busy') return `${p.heldBy ?? 'outro processo'}, deste Mac, segura a ${p.localPort}`;
-  if (p.state === 'down') return 'nada escuta nesta porta do Mac';
-  if (machine && p.localPort === machine.port) return `Núcleo da ${machine.label}`;
-  const there = remotePorts?.find((x) => x.port === p.remotePort);
-  return there?.process ?? DASH;
 }
 
 /**
@@ -700,12 +673,6 @@ export function reconnectExample(machine) {
  */
 export function sessionAttention(item) {
   return attentionOfItem(item) ?? { level: 'idle', reason: null };
-}
-
-/** "motor-de-regras · 2 min" under a session's name. */
-export function sessionMeta(item) {
-  const age = Number.isFinite(item.minutes) ? (item.minutes < 1 ? 'agora' : `${Math.round(item.minutes)} min`) : null;
-  return [typeof item.project === 'string' ? item.project.slice(0, 200) : null, age].filter(Boolean).join(' · ');
 }
 
 /** The example `machines.json`, with the keys the core reads (src/telemetry/machines-config.ts). */

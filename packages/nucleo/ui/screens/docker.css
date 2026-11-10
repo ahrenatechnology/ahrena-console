@@ -5,8 +5,20 @@
 .dk-card { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
 .dk-card .dk-title { flex-wrap: wrap; }
 .dk-toolbar { margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; }
-.dk-acts { text-align: right; white-space: nowrap; }
-.dk-acts .btn + .btn { margin-left: 6px; }
+/* The actions column (issue 434, criterion 5). It used to be `white-space: nowrap`: in a table cell that makes the
+   column as wide as the three buttons side by side, the table grows past the card and the third one ("Remover")
+   is clipped by the card's edge. Now the cell has a width of its own and the buttons wrap to a second line inside it. */
+.dk-table th.dk-acts, .dk-table td.dk-acts { width: 208px; text-align: right; }
+.dk-acts-row { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
+.dk-table th.dk-col-state { width: 110px; }
+.dk-table th.dk-col-stack { width: 16%; }
+.dk-table th.dk-col-since { width: 92px; }
+.dk-name small { display: block; font-size: 10.5px; margin-top: 1px; }
+/* Narrow windows: the secondary columns go, and the actions column shrinks to what two buttons need. */
+@media (max-width: 760px) {
+  .dk-col-stack, .dk-col-since { display: none; }
+  .dk-table th.dk-acts, .dk-table td.dk-acts { width: 150px; }
+}
 .dk-ports, .dk-image { overflow-wrap: anywhere; }
 .dk-containers { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
 .dk-containers-head { display: flex; gap: 12px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
