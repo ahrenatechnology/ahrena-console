@@ -154,11 +154,13 @@ export function decisionCard(d, { session = d.sessionId, onChange = () => {}, no
         async () => {
           const { route, body } = actionRequest(d.id, action, { session });
           await write(route, body);
+          // Inside the action: if the redraw throws, the button shows the failed state instead of the error escaping.
+          await onChange();
         },
         { note: notice },
       );
-      if (ok) onChange();
-      if (!ok && !ignored) other.removeAttribute('aria-disabled');
+      // The neighbour waits only while the write runs: released on success too, in case onChange kept this card.
+      if (!ignored) other.removeAttribute('aria-disabled');
     };
     confirm.addEventListener('click', act('confirm', confirm, dismiss));
     dismiss.addEventListener('click', act('dismiss', dismiss, confirm));
