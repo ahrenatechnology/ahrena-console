@@ -7,7 +7,6 @@
 .kb-seg button:hover { color: var(--text); }
 .kb-seg button[aria-pressed="true"] { background: var(--raised); color: var(--text); }
 .kb-seg button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-.cc-head .btn:disabled { opacity: .6; cursor: progress; }
 
 /* ---------- o quadro ---------- */
 /* Colunas lado a lado; se não couberem, o quadro rola na horizontal. Ele ocupa o resto da altura e

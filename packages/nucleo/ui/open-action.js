@@ -21,6 +21,7 @@
 
 import { el, icon } from './dom.js';
 import { write as defaultWrite } from './api.js';
+import { setBusy } from './button-action.js';
 
 /** How long a success stays beside the button. */
 export const SUCCESS_MS = 4000;
@@ -144,7 +145,7 @@ export function openAction(session, { size = 'full', write = defaultWrite, machi
     ? el('button', { type: 'button', class: 'open-icon', title: d.title, 'aria-label': d.disabled ? d.title : d.label, 'data-open-target': d.target }, icon(iconName))
     : el(
         'button',
-        { type: 'button', class: `btn outline open-button`, title: d.title, 'data-open-target': d.target },
+        { type: 'button', class: `btn outline ${size === 'full' ? 'md' : 'sm'} open-button`, title: d.title, 'data-open-target': d.target },
         icon(iconName),
         label,
         size === 'full' && d.external ? icon('external') : null,
@@ -173,11 +174,10 @@ export function openAction(session, { size = 'full', write = defaultWrite, machi
     const st = openStateOf(key);
     // In flight: aria-disabled and aria-busy, not `disabled`, so the focus stays on the button.
     if (st?.kind === 'busy') {
-      button.setAttribute('aria-disabled', 'true');
-      button.setAttribute('aria-busy', 'true');
+      setBusy(button, true);
     } else {
-      button.removeAttribute('aria-busy');
-      if (!d.disabled) button.removeAttribute('aria-disabled');
+      setBusy(button, false);
+      if (d.disabled) button.setAttribute('aria-disabled', 'true');
     }
     status.setAttribute('data-state', st?.kind ?? 'idle');
     if (!st) return void status.replaceChildren();
@@ -233,7 +233,7 @@ function closeButton(onClose) {
 /** "Copiar comando": the resume line to the clipboard, with "Copiado" as the answer. */
 function copyButton(command, iconOnly) {
   const text = el('span', { class: 'open-copy-label' }, 'Copiar comando');
-  const b = el('button', { type: 'button', class: `btn outline open-copy${iconOnly ? ' open-copy-icon' : ''}`, title: 'Copiar comando', 'aria-label': 'Copiar comando' }, icon('copy'), iconOnly ? null : text);
+  const b = el('button', { type: 'button', class: `btn outline sm open-copy${iconOnly ? ' open-copy-icon' : ''}`, title: 'Copiar comando', 'aria-label': 'Copiar comando' }, icon('copy'), iconOnly ? null : text);
   b.addEventListener('click', async (ev) => {
     stop(ev);
     let done;

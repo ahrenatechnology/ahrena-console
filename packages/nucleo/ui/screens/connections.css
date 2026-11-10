@@ -48,7 +48,6 @@
 .conn-causes { margin: 0; padding-left: 18px; color: var(--muted); font-size: 12px; line-height: 1.5; }
 .conn-buttons { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
 .conn-link-btn { color: var(--text); }
-:where(.conn-card, .conn-dialog, .conn-band) .btn[disabled] { opacity: .45; cursor: not-allowed; }
 .btn.conn-danger { background: var(--status-error-text); color: var(--surface); }
 
 /* C40: the code and the steps. */

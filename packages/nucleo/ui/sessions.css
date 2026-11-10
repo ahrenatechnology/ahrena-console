@@ -129,4 +129,3 @@
 
 .sessions-footer { display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: var(--muted); }
 .sessions-footer .pages { display: flex; gap: 6px; }
-.btn:disabled { opacity: .45; cursor: default; }

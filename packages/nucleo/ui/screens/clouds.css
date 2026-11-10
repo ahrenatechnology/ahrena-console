@@ -46,7 +46,6 @@
 .cl-foot-note { font-size: 11px; color: var(--muted); margin-right: auto; overflow-wrap: anywhere; }
 .cl-soon { border-style: dashed; background: transparent; }
 .cl-soon .cl-logo { color: var(--muted); }
-.cl-conn .btn[disabled], .cl-sess .btn[disabled] { opacity: .45; cursor: not-allowed; }
 .cl-none { padding: 18px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; text-align: center; border-style: dashed; background: transparent; font-size: 12.5px; color: var(--muted); min-width: 0; }
 .cl-none b { color: var(--text); font-size: 13.5px; }
 .cl-none-ic { font-size: 22px; color: var(--muted); }
