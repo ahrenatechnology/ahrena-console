@@ -243,13 +243,14 @@ export function storageContract(name: string, create: () => Promise<StoragePort>
       test('setEventText fills data.text and keeps the rest of data', async () => {
         await store.appendEvent(event({ id: 'e1' }));
         await store.appendEvent(event({ id: 'e2', data: null }));
-        assert.equal(await store.setEventText('e1', 'linha 1\n\n  linha 2'), true);
-        assert.equal(await store.setEventText('e2', 'só texto'), true);
-        assert.equal(await store.setEventText('nao-existe', 'x'), false);
+        // setEventText returns the affected event's sessionId, or null when no event matched.
+        assert.equal(await store.setEventText('e1', 'linha 1\n\n  linha 2'), 's1');
+        assert.equal(await store.setEventText('e2', 'só texto'), 's1');
+        assert.equal(await store.setEventText('nao-existe', 'x'), null);
         const { items } = await store.listEvents('s1');
         assert.deepEqual(items[0].data, { command: 'npm test', text: 'linha 1\n\n  linha 2' });
         assert.deepEqual(items[1].data, { text: 'só texto' });
-        assert.equal(await store.setEventText('e1', 'de novo'), true);
+        assert.equal(await store.setEventText('e1', 'de novo'), 's1');
         assert.deepEqual((await store.listEvents('s1')).items[0].data, { command: 'npm test', text: 'de novo' });
       });
 

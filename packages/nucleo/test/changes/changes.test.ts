@@ -28,7 +28,7 @@ import {
   type Clock,
   type WaitResult,
 } from '../../src/changes/index.ts';
-import { T0, account, agent, session } from '../fixtures.ts';
+import { T0, account, agent, event, session } from '../fixtures.ts';
 import { draft } from '../decisions/helpers.ts';
 import { registerDecision } from '../../src/decisions/registry.ts';
 import { ToolError, ArgumentError } from '../../src/mcp/protocol.ts';
@@ -325,6 +325,65 @@ describe('change sources', () => {
     assert.deepEqual(new Set(all.changes.map((m) => m.type)), new Set(['session', 'state', 'needs-you']));
     await sqlite.close();
   });
+
+  test('AC-1: a new appendEvent records an activity on its session and wakes a type=activity long poll, with no clock; a duplicate records nothing', async () => {
+    const { cursor } = setup();
+    const sqlite = openSqliteStorage({ path: ':memory:' });
+    const storage = withChanges(sqlite, cursor);
+    await storage.putSession(session({ id: 's1', accountId: 'conta-a', accountSource: 'transcript' }));
+    const c0 = cursor.current;
+    // A client long polling only for `activity`; the wait must come from the event, not from any timer.
+    const waiter = observe(cursor.wait(c0, { filters: { types: ['activity'] }, timeoutMs: 10_000 }));
+    await tick();
+    assert.equal(waiter.value, null, 'nothing yet, and no clock has advanced');
+    assert.equal(await storage.appendEvent(event({ id: 'e1', sessionId: 's1' })), true);
+    const r = await waiter.p;
+    assert.deepEqual(r.changes.map((m) => [m.type, m.key, m.sessionId, m.accountId]), [['activity', 's1', 's1', 'conta-a']]);
+    assert.equal(r.timedOut, false, 'woke on the event, not on the timeout');
+
+    // A duplicate id (appendEvent returns false) is not a change.
+    const c1 = cursor.current;
+    assert.equal(await storage.appendEvent(event({ id: 'e1', sessionId: 's1' })), false);
+    assert.equal(cursor.current, c1, 'a duplicate event records no activity');
+    await storage.close();
+  });
+
+  test('AC-6: a burst of appendEvent comes out in a single batched answer, not one per event', async () => {
+    const { cursor, clock } = setup({ batchMs: 50 });
+    const sqlite = openSqliteStorage({ path: ':memory:' });
+    const storage = withChanges(sqlite, cursor);
+    await storage.putSession(session({ id: 's1', accountId: 'conta-a', accountSource: 'transcript' }));
+    await storage.putSession(session({ id: 's2', accountId: 'conta-a', accountSource: 'transcript' }));
+    const waiter = observe(cursor.wait(cursor.current, { filters: { types: ['activity'] } }));
+    await tick();
+    for (let i = 0; i < 20; i++) {
+      assert.equal(await storage.appendEvent(event({ id: `e${i}`, sessionId: i % 2 === 0 ? 's1' : 's2' })), true);
+    }
+    await tick();
+    assert.equal(waiter.value, null, 'the burst is still batching');
+    assert.equal(clock.timers.size, 1, 'a single batching timer, not one answer per event');
+    clock.advance(50);
+    const r = await waiter.p;
+    assert.deepEqual(r.changes.map((m) => m.key), ['s1', 's2'], 'one activity per session, in a single answer');
+    await storage.close();
+  });
+
+  test('setEventText records an activity on the event\'s session; an unknown id records nothing', async () => {
+    const { cursor } = setup();
+    const sqlite = openSqliteStorage({ path: ':memory:' });
+    const storage = withChanges(sqlite, cursor);
+    await storage.putSession(session({ id: 's1', accountId: 'conta-a', accountSource: 'transcript' }));
+    await storage.appendEvent(event({ id: 'e1', sessionId: 's1' }));
+    const c0 = cursor.current;
+    assert.equal(await storage.setEventText('e1', 'linha preenchida'), 's1');
+    const r = await cursor.wait(c0, { filters: { types: ['activity'] } });
+    assert.deepEqual(r.changes.map((m) => [m.type, m.key, m.sessionId, m.accountId]), [['activity', 's1', 's1', 'conta-a']]);
+
+    const c1 = cursor.current;
+    assert.equal(await storage.setEventText('nao-existe', 'x'), null);
+    assert.equal(cursor.current, c1, 'an unknown id writes nothing and records no activity');
+    await storage.close();
+  });
 });
 
 describe('HTTP route', () => {
@@ -340,6 +399,8 @@ describe('HTTP route', () => {
     assert.deepEqual((p('account=a,no-account') as Exclude<ReturnType<typeof p>, string>).filters.accountIds, ['a', null]);
     assert.deepEqual((p('account=a,sem-conta') as Exclude<ReturnType<typeof p>, string>).filters.accountIds, ['a', 'sem-conta']);
     assert.equal(typeof p('type=plano'), 'string');
+    // `activity` (#414) is a real change type: the HTTP route accepts it as a filter, derived from CHANGE_TYPES.
+    assert.deepEqual((p('type=activity') as Exclude<ReturnType<typeof p>, string>).filters.types, ['activity']);
     assert.equal(NO_ACCOUNT, 'no-account');
     assert.equal((p('') as { timeoutMs: number }).timeoutMs, DEFAULT_WAIT_MS);
     assert.equal(typeof p('type=outro'), 'string');
@@ -367,8 +428,13 @@ describe('HTTP route', () => {
       const r = await request;
       assert.deepEqual(r.changes.map((m) => [m.type, m.key]), [['session', 'sess-http']]);
 
+      // The same SessionStart also appended the event, so an `activity` change (#414) is queued right
+      // behind the `session` one; read it (wait=0) so the next wait starts from an empty cursor.
+      const after = (await (await fetch(`${api.url}/api/changes?since=${r.cursor}&wait=0`)).json()) as WaitResult;
+      assert.deepEqual(after.changes.map((m) => [m.type, m.key]), [['activity', 'sess-http']]);
+
       const ac = new AbortController();
-      const quitter = fetch(`${api.url}/api/changes?since=${r.cursor}&wait=20`, { signal: ac.signal }).catch(() => null);
+      const quitter = fetch(`${api.url}/api/changes?since=${after.cursor}&wait=20`, { signal: ac.signal }).catch(() => null);
       while (cursor.openWaits === 0) await tick();
       ac.abort();
       await quitter;
@@ -376,7 +442,7 @@ describe('HTTP route', () => {
       const load = (await (await fetch(`${api.url}/api/load`)).json()) as { openWaits: number };
       assert.equal(load.openWaits, 0);
 
-      const open = [1, 2].map(() => fetch(`${api.url}/api/changes?since=${r.cursor}&wait=20`));
+      const open = [1, 2].map(() => fetch(`${api.url}/api/changes?since=${after.cursor}&wait=20`));
       while (cursor.openWaits < 2) await tick();
       const full = await fetch(`${api.url}/api/changes?since=${r.cursor}&wait=20`);
       assert.equal(full.status, 503);
