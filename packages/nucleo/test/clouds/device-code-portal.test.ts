@@ -3,7 +3,7 @@
 
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { deviceCodeOnSessionPortal } from '../../src/clouds/aws-login.ts';
+import { deviceCodeOnSessionPortal, MAX_VERIFICATION_URI_CHARS } from '../../src/clouds/aws-login.ts';
 import { sanitizeConnectors, sanitizeLoginAnswer, type SessionPortals } from '../../src/clouds/remote-connectors.ts';
 
 test('#277 deviceCodeOnSessionPortal: the session portal or its region device page, nothing else', () => {
@@ -87,6 +87,16 @@ test('#277 a remote device code is judged against the portal of an EARLIER code-
   codeOf(remote(null), portals);
   assert.deepEqual(codeOf(remote('https://exemplo.awsapps.com/start/#/device'), portals), { verificationUri: 'https://exemplo.awsapps.com/start/#/device', userCode: 'ABCD-EFGH', expiresAt: '2026-10-22T09:10:00.000Z' });
   assert.equal(codeOf(remote('https://outro-portal.awsapps.com/start/#/device'), portals), null);
+});
+
+test('#446 a remote device code of real length (600+ chars) reaches the screen, and one past the cap does not', () => {
+  const head = 'https://us-east-2.signin.aws/platform/authorize?request_uri=';
+  const real = `${head}${'A1b2'.repeat(130)}&identitystore_id=d-0000000000`;
+  assert.ok(real.length >= 600, String(real.length));
+  const portals: SessionPortals = new Map();
+  codeOf(remote(null, 'exemplo.awsapps.com', 'us-east-2'), portals);
+  assert.deepEqual(codeOf(remote(real, 'exemplo.awsapps.com', 'us-east-2'), portals), { verificationUri: real, userCode: 'ABCD-EFGH', expiresAt: '2026-10-22T09:10:00.000Z' });
+  assert.equal(codeOf(remote(head + 'a'.repeat(MAX_VERIFICATION_URI_CHARS), 'exemplo.awsapps.com', 'us-east-2'), portals), null);
 });
 
 test('#277 an answer that changes the portal along with the code does not pass, and a later code-free answer does not overwrite the memory', () => {
