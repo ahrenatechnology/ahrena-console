@@ -65,6 +65,12 @@ export interface WaitOptions {
   timeoutMs?: number;
   /** Aborting answers at once with whatever there is (the HTTP client gave up, the server closed). */
   signal?: AbortSignal;
+  /**
+   * Minimum interval between the start of this wait and its answer, overriding the cursor's default
+   * (`DEFAULT_MIN_INTERVAL_MS`). The SSE stream passes `0`: it holds the connection, so there is no long
+   * polling loop to throttle. Burst batching (`batchMs`) still applies, so a burst comes out in one answer.
+   */
+  minIntervalMs?: number;
 }
 
 export interface WaitResult {
@@ -198,7 +204,7 @@ export class ChangeCursor {
       const onAbort = () => waiter.answer(false);
       const waiter: Waiter = {
         since,
-        answerAt: this.clock.now() + this.minIntervalMs,
+        answerAt: this.clock.now() + Math.max(0, options.minIntervalMs ?? this.minIntervalMs),
         filters,
         timer: null,
         batching: false,
