@@ -58,6 +58,17 @@ describe('#277 device-code extraction', () => {
     for (const ok of ['https://exemplo.awsapps.com/start/#/device', 'https://exemplo.signin.aws/device', 'https://oidc.regiao-exemplo-1.amazonaws.com/x']) assert.equal(acceptVerificationUri(ok), ok, ok);
   });
 
+  test('#431 AC-4 the new output (both URLs equal, request_uri, no user_code) gives that URL and the code', () => {
+    const uri = 'https://us-east-2.signin.aws/platform/authorize?request_uri=TEST';
+    const out = ['Browser will not be automatically opened.', 'Please visit the following URL:', '', uri, '', 'Alternatively, you may visit the following URL which will autofill the code upon loading:', uri, '', 'Then enter the code:', '', 'ABCD-EFGH', ''];
+    assert.deepEqual(extractDeviceCode(out.join('\n')), { verificationUri: uri, userCode: 'ABCD-EFGH' });
+    assert.equal(acceptVerificationUri(uri), uri);
+  });
+
+  test('#431 AC-2 acceptVerificationUri keeps refusing userinfo, a port, a trailing dot and a bare signin.aws on the new host', () => {
+    for (const bad of ['https://user@us-east-2.signin.aws/x', 'https://us-east-2.signin.aws:8443/x', 'https://us-east-2.signin.aws.evil.com/x', 'https://us-east-2.signin.aws./x', 'http://us-east-2.signin.aws/x']) assert.equal(acceptVerificationUri(bad), null, bad);
+  });
+
   test('#277 rejects a non-AWS URL, http, credentials, a port, look-alike hosts, and codes of another shape', () => {
     for (const bad of [
       'https://evil.example/device',

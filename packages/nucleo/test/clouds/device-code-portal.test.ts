@@ -15,7 +15,44 @@ test('#277 deviceCodeOnSessionPortal: the session portal or its region device pa
   assert.equal(deviceCodeOnSessionPortal('not a url', 'exemplo.awsapps.com', 'regiao-exemplo-1'), false);
 });
 
-const remote = (verificationUri: string | null, startUrlHost = 'exemplo.awsapps.com') => ({
+// #431: AWS moved some regions' device page to `https://<region>.signin.aws/platform/authorize?request_uri=...`.
+const SIGNIN_URI = 'https://us-east-2.signin.aws/platform/authorize?request_uri=TEST';
+
+test('#431 AC-1 deviceCodeOnSessionPortal accepts <region>.signin.aws for exactly the region the Mac knows', () => {
+  assert.equal(deviceCodeOnSessionPortal(SIGNIN_URI, 'exemplo.awsapps.com', 'us-east-2'), true);
+  assert.equal(deviceCodeOnSessionPortal(SIGNIN_URI, null, 'us-east-2'), true, 'no portal known, the region alone is enough');
+});
+
+test('#431 AC-2 deviceCodeOnSessionPortal refuses every other signin.aws or *.aws host', () => {
+  const refused: [string, string | null][] = [
+    ['https://us-east-1.signin.aws/platform/authorize?request_uri=TEST', 'us-east-2'],
+    ['https://us-east-2.signin.aws.evil.com/platform/authorize', 'us-east-2'],
+    ['https://evil.us-east-2.signin.aws/platform/authorize', 'us-east-2'],
+    ['https://evil-us-east-2.signin.aws/platform/authorize', 'us-east-2'],
+    ['https://signin.aws/platform/authorize', 'us-east-2'],
+    ['https://us-east-2.signin.aws./platform/authorize', 'us-east-2'],
+    ['https://us-east-2.signin.aws:8443/platform/authorize', 'us-east-2'],
+    ['https://user@us-east-2.signin.aws/platform/authorize', 'us-east-2'],
+    ['http://us-east-2.signin.aws/platform/authorize', 'us-east-2'],
+    ['https://us-east-2.console.aws/platform/authorize', 'us-east-2'],
+    ['https://us-east-2.aws/platform/authorize', 'us-east-2'],
+    ['https://anything.aws/platform/authorize', 'us-east-2'],
+    [SIGNIN_URI, null],
+    [SIGNIN_URI, ''],
+    [SIGNIN_URI, 'us-east-2.evil'],
+    [SIGNIN_URI, 'US-EAST-2'],
+  ];
+  for (const [uri, region] of refused) assert.equal(deviceCodeOnSessionPortal(uri, 'exemplo.awsapps.com', region), false, `${uri} / ${region}`);
+  // The uppercase host is the same host for the parser: the URL class lowercases it.
+  assert.equal(deviceCodeOnSessionPortal('https://US-EAST-2.SIGNIN.AWS/x', null, 'us-east-2'), true);
+});
+
+test('#431 AC-3 the two old formats are still accepted', () => {
+  assert.equal(deviceCodeOnSessionPortal('https://exemplo.awsapps.com/start/#/device?user_code=ABCD-EFGH', 'exemplo.awsapps.com', 'us-east-2'), true);
+  assert.equal(deviceCodeOnSessionPortal('https://device.sso.us-east-2.amazonaws.com/?user_code=ABCD-EFGH', 'exemplo.awsapps.com', 'us-east-2'), true);
+});
+
+const remote = (verificationUri: string | null, startUrlHost = 'exemplo.awsapps.com', region = 'regiao-exemplo-1') => ({
   connectors: [
     {
       kind: 'aws',
@@ -27,7 +64,7 @@ const remote = (verificationUri: string | null, startUrlHost = 'exemplo.awsapps.
           name: 'sessao-exemplo',
           kind: 'sso-session',
           startUrlHost,
-          region: 'regiao-exemplo-1',
+          region,
           loginSupported: true,
           state: 'expired',
           profiles: [],
@@ -73,4 +110,27 @@ test('#277 a name that starts with "-" or "." never goes on the aws command line
     for (const ok of ['sessao-exemplo', 'perfil_dev', '0perfil', '_x']) assert.ok(re.test(ok), ok);
     for (const bad of ['-profile', '--debug', '.hidden', '', 'a b', 'x'.repeat(65)]) assert.ok(!re.test(bad), bad);
   }
+});
+
+test('#431 AC-1 AC-2 a remote device code on <region>.signin.aws is shown only for the region remembered from an earlier code-free answer', () => {
+  const portals: SessionPortals = new Map();
+  const dc = { verificationUri: SIGNIN_URI, userCode: 'ABCD-EFGH', expiresAt: '2026-10-22T09:10:00.000Z' };
+  // No earlier reading: the answer cannot vouch for itself.
+  assert.equal(codeOf(remote(SIGNIN_URI, 'exemplo.awsapps.com', 'us-east-2'), portals), null);
+  codeOf(remote(null, 'exemplo.awsapps.com', 'us-east-2'), portals);
+  assert.deepEqual(codeOf(remote(SIGNIN_URI, 'exemplo.awsapps.com', 'us-east-2'), portals), dc);
+  // The host of another region is dropped.
+  assert.equal(codeOf(remote('https://us-east-1.signin.aws/platform/authorize?request_uri=TEST', 'exemplo.awsapps.com', 'us-east-2'), portals), null);
+  // A region taken from the same answer is not the remembered one: the answer claims us-east-1 and its host agrees.
+  assert.equal(codeOf(remote('https://us-east-1.signin.aws/platform/authorize?request_uri=TEST', 'exemplo.awsapps.com', 'us-east-1'), portals), null);
+  // Look-alikes, port and userinfo never reach the screen.
+  for (const bad of ['https://us-east-2.signin.aws.evil.com/x', 'https://signin.aws/x', 'https://us-east-2.signin.aws:8443/x', 'https://user@us-east-2.signin.aws/x', 'https://us-east-2.signin.aws./x'])
+    assert.equal(codeOf(remote(bad, 'exemplo.awsapps.com', 'us-east-2'), portals), null, bad);
+});
+
+test('#431 AC-3 the old formats still pass end to end for a us-east-2 session', () => {
+  const portals: SessionPortals = new Map();
+  codeOf(remote(null, 'exemplo.awsapps.com', 'us-east-2'), portals);
+  assert.ok(codeOf(remote('https://exemplo.awsapps.com/start/#/device', 'exemplo.awsapps.com', 'us-east-2'), portals));
+  assert.ok(codeOf(remote('https://device.sso.us-east-2.amazonaws.com/?user_code=ABCD-EFGH', 'exemplo.awsapps.com', 'us-east-2'), portals));
 });

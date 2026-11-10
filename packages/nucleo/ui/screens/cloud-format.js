@@ -320,12 +320,13 @@ export function verificationLink(uri) {
 /**
  * The device code's page with the code already filled in (`?user_code=`), so the person only confirms it:
  * the SSO device page reads it from the query, the portal (`…/start/#/device`) from the hash. A URL that
- * already carries one is kept; anything `verificationLink` refuses is `null`.
+ * already carries one is kept, and so is an authorize link (`request_uri`, the `<region>.signin.aws` page of #431):
+ * the CLI built that request, the person types the code there. Anything `verificationLink` refuses is `null`.
  */
 export function prefilledLink(uri, userCode) {
   const link = verificationLink(uri);
   if (!link || typeof userCode !== 'string' || !/^[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(userCode)) return link;
-  if (/[?&#]user_code=/.test(link)) return link;
+  if (/[?&#]user_code=/.test(link) || /[?&]request_uri=/.test(link)) return link;
   const u = new URL(link);
   if (u.hash) u.hash = `${u.hash.slice(1)}${u.hash.includes('?') ? '&' : '?'}user_code=${userCode}`;
   else u.searchParams.set('user_code', userCode);
