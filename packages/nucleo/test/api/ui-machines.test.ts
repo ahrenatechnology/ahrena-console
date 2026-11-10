@@ -213,7 +213,7 @@ describe('#178 criterion 2: Esta máquina (C24) with the simulator', () => {
     assert.equal(part(m.area, 'ports')!.querySelector('[data-filter="exposed"]')!.getAttribute('aria-pressed'), 'true');
   });
 
-  test('#434 criterion 2: the bands of Esta máquina, top to bottom, with no Conexão and no Onde roda', async () => {
+  test('#434 criteria 2 and 6: the bands of Esta máquina, top to bottom, with no Conexão and no Onde roda', async () => {
     const m = mount(null);
     await m.ready;
     assert.deepEqual(bandIds(m.area), ['head', 'cloud-profiles', 'stats', 'chart', 'attention', 'ports', 'docker-actions']);
@@ -224,7 +224,17 @@ describe('#178 criterion 2: Esta máquina (C24) with the simulator', () => {
     assert.ok(chart.classList.contains('tm-band-23'));
     const attention = m.area.querySelector('[data-band="attention"]')!;
     assert.deepEqual(attention.children.map((c) => c.getAttribute('data-part')), ['claude', 'alerts'], 'Processos do Claude beside O que pede atenção');
+  });
+
+  test('#434 criterion 3: Processos do Claude and O que pede atenção are in the quiet tone', async () => {
+    const m = mount(null);
+    await m.ready;
+    const attention = m.area.querySelector('[data-band="attention"]')!;
+    assert.equal(attention.children.length, 2);
     assert.ok(attention.children.every((c) => c.classList.contains('tm-quiet')), 'both in a quieter tone than the resource cards');
+    const stats = m.area.querySelectorAll('.tm-stat');
+    assert.ok(stats.length > 0);
+    assert.ok(stats.every((c) => !c.classList.contains('tm-quiet')), 'the stat cards are not quiet');
   });
 
   test('#434 criterion 2: Sessões de terminal comes right after the attention band, where Conexão would be, and before the ports', async () => {
@@ -255,7 +265,7 @@ describe('#178 criterion 2: Esta máquina (C24) with the simulator', () => {
   test('#434 error case: the volumes read fails: only the Volumes card shows the reason, the chart beside it and the rest go on', async () => {
     const noVolumes = async (route: string) => {
       const r = (await coreRead(route)) as { current?: { disk?: unknown } };
-      return route.startsWith('/api/telemetry') && r.current ? { ...r, current: { ...r.current, disk: { volumes: [] } } } : r;
+      return route.startsWith('/api/telemetry') && r.current ? { ...r, current: { ...r.current, disk: { volumes: [] }, network: null } } : r;
     };
     const m = mount(null, noVolumes);
     await m.ready;
@@ -268,6 +278,18 @@ describe('#178 criterion 2: Esta máquina (C24) with the simulator', () => {
     const before = m.reads.length;
     card.querySelector('button')!.click();
     await until(() => m.reads.length > before);
+  });
+
+  test('#434 error case: no volumes but a network reading: the Volumes card stays, it hosts the network block', async () => {
+    const noVolumes = async (route: string) => {
+      const r = (await coreRead(route)) as { current?: { disk?: unknown } };
+      return route.startsWith('/api/telemetry') && r.current ? { ...r, current: { ...r.current, disk: { volumes: [] } } } : r;
+    };
+    const m = mount(null, noVolumes);
+    await m.ready;
+    const card = part(m.area, 'volumes')!;
+    assert.ok(!card.classList.contains('tm-read-error'));
+    assert.match(texto(card), /Rede/);
   });
 
   test('#434 error case: the ports read fails: only the Portas em escuta card shows the reason', async () => {
@@ -339,7 +361,6 @@ describe('#178 criterion 2: a remote machine (C25) with the simulator', () => {
     assert.deepEqual(all(m.area, '.tm-meter-top'), ['/ 146 de 170 GB · 86%', '/home 109 de 492 GB · 22%', '/tmp 23 de 206 GB · 11%']);
     // #434: the Docker space is a line of the Docker card, the sessions are the stat card and the stacks are the Docker card's own.
     assert.equal(part(m.area, 'stacks'), null);
-    assert.equal(m.area.querySelectorAll('.tm-sessions').length, 0);
     assert.doesNotMatch(texto(m.area), /De outra máquina/);
     const ports = part(m.area, 'ports')!;
     assert.match(texto(ports), /Portas em escuta lá/);

@@ -252,7 +252,7 @@ function portsCard(portsList, { local, owner, forwards, filter, setFilter, act =
   const head = ['Porta', 'Escuta em', 'Processo', 'De quem', ...(local ? [] : ['No Mac']), ...(act ? ['Ação'] : [])];
   return el(
     'section',
-    // The whole row: the list is long, and a short card beside it would leave a hole (rule 9, issue 255).
+    // Band 7, issue 434.
     { class: 'card tm-card', 'data-part': 'ports' },
     el('h2', { class: 'tm-title' }, icon('radio-tower'), el('span', {}, local ? 'Portas em escuta' : 'Portas em escuta lá'), segment),
     band,
@@ -409,8 +409,8 @@ function releaseOptions(release, context) {
  * One card that could not be read (issue 434, error case): the reason in plain words, what the system said in
  * small type when there is one, and "Tentar de novo". Only this card is replaced; the rest of the screen goes on.
  */
-function readErrorCard({ part, iconName, title, what, detail = null, retry }) {
-  const button = el('button', { type: 'button', class: 'btn sm outline', 'data-action': 'retry-read' }, icon('refresh'), 'Tentar de novo');
+function readErrorCard({ part, iconName, title, what, detail = null, retry, label }) {
+  const button = el('button', { type: 'button', class: 'btn sm outline', 'data-action': 'retry-read', 'aria-label': `Tentar de novo: ${label}` }, icon('refresh'), 'Tentar de novo');
   button.addEventListener('click', () => runButtonAction(button, () => retry(), { busyLabel: 'Lendo…' }));
   return el(
     'section',
@@ -448,15 +448,15 @@ export function machineBody(data, { local, filter = 'all', setFilter = () => {},
     return parts;
   }
   parts.push(el('div', { class: 'tm-stats' }, ...statCards(reading, { local, sessions, alerts, now }).map(statCard)));
-  const volumes = reading.volumes.length
+  const volumes = reading.volumes.length || reading.network
     ? volumesCard(reading)
-    : readErrorCard({ part: 'volumes', iconName: 'hard-drive', title: 'Volumes', what: 'Não consegui ler os volumes.', detail: 'A leitura chegou vazia; o núcleo tenta de novo a cada 30 s.', retry });
+    : readErrorCard({ part: 'volumes', iconName: 'hard-drive', title: 'Volumes', what: 'Não consegui ler os volumes.', detail: 'A leitura chegou vazia; o núcleo tenta de novo a cada 30 s.', retry, label: 'ler os volumes' });
   parts.push(el('div', { class: 'tm-band tm-band-23', 'data-band': 'chart' }, chart(series, reading, { local, hours, now }), volumes));
   parts.push(processesBand(reading, alerts, now));
   if (connection) parts.push(connection);
   const terminalsNode = terminals?.card(reading.terminals, sessions, { now });
   if (terminalsNode) parts.push(terminalsNode);
-  if (!reading.ports) parts.push(readErrorCard({ part: 'ports', iconName: 'radio-tower', title: local ? 'Portas em escuta' : 'Portas em escuta lá', what: 'Não consegui ler as portas em escuta.', detail: 'A leitura chegou vazia; o núcleo tenta de novo a cada 30 s.', retry }));
+  if (!reading.ports) parts.push(readErrorCard({ part: 'ports', iconName: 'radio-tower', title: local ? 'Portas em escuta' : 'Portas em escuta lá', what: 'Não consegui ler as portas em escuta.', detail: 'A leitura chegou vazia; o núcleo tenta de novo a cada 30 s.', retry, label: 'as portas em escuta' }));
   else if (local) parts.push(portsCard(reading.ports, { local, owner: localPortOwner(reading.tunnels, ownPort), forwards: new Map(), filter, setFilter, ...releaseOptions(release, { ownPort, remote: null }) }));
   else {
     const owner = remotePortOwner(reading.docker, remoteCorePort(localReading, machine));
@@ -552,7 +552,7 @@ export async function mount(area, ctx) {
   // The "Perfis de nuvem" card (issue 277, C66 and C67): its own module, which reads and polls by itself.
   const cloud = cloudProfiles(ctx, id);
   // The Docker card with the actions (issue 288, C92 to C95): its own module, which reads by itself; it replaces the read-only stacks card while it shows the stacks.
-  const docker = dockerActions(ctx, id, { repaint: () => last && paint(last), readOnlyStacks: () => last?.reading?.docker?.stacks ?? null, spaceNote: () => dockerSpaceNote(last?.reading?.docker?.space) });
+  const docker = dockerActions(ctx, id, { readOnlyStacks: () => last?.reading?.docker?.stacks ?? null, spaceNote: () => dockerSpaceNote(last?.reading?.docker?.space) });
   // The remote's connection (issue 278, C62 to C65): its own module; `null` keeps the screen as it was.
   const conn = local ? null : machineConnection(ctx, id, { reread: () => draw(), repaint: () => last && paint(last) });
   // The terminal sessions card (issue 350, C96 to C99): the actions and their confirmations are its own.

@@ -546,7 +546,7 @@ export function dockerActions(ctx, machineId = LOCAL_ID, { readOnlyStacks = () =
 
   /** The read that failed: the reason in plain words, what the system said in small type, and a retry. Only this card. */
   function errorBody() {
-    const button = el('button', { type: 'button', class: 'btn sm outline', 'data-action': 'retry-read' }, icon('refresh'), 'Tentar de novo');
+    const button = el('button', { type: 'button', class: 'btn sm outline', 'data-action': 'retry-read', 'aria-label': 'Tentar de novo: o Docker' }, icon('refresh'), 'Tentar de novo');
     button.addEventListener('click', () => runButtonAction(button, () => read(), { busyLabel: 'Lendo…' }));
     return [
       title(),
@@ -558,7 +558,7 @@ export function dockerActions(ctx, machineId = LOCAL_ID, { readOnlyStacks = () =
     if (status === 'loading') return fill(node, title(), el('p', { class: 'tm-muted' }, 'Lendo o Docker…'));
     if (status === 'unsupported') return fill(node, ...unsupportedBody());
     if (status === 'error' || !view) {
-      if (status === 'unreachable') return fill(node, title(), el('p', { class: 'tm-muted' }, `Sem conexão com a ${where}. As ações voltam quando ela responder.`));
+      if (status === 'unreachable') return fill(node, title(), el('p', { class: 'tm-muted', role: 'status' }, `Sem conexão com a ${where}. As ações voltam quando ela responder.`));
       return fill(node, ...errorBody());
     }
     const active = globalThis.document?.activeElement;

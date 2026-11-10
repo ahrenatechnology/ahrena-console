@@ -19,8 +19,6 @@ export const WINDOWS = [1, 12];
 export const REREAD_MS = 30_000;
 /** A volume at or above this is yellow; at or above `VOLUME_FULL_PCT` + 5, red (the core alerts at 85). */
 export const VOLUME_FULL_PCT = 85;
-/** The sessions of a remote machine listed in its card; the rest is "e mais N". */
-export const SESSIONS_SHOWN = 4;
 export const DASH = '—';
 
 const GB = 1e9;
@@ -315,18 +313,6 @@ export function volumeLine(v) {
   return `${decimal(v.usedBytes / unit)} de ${decimal(v.totalBytes / unit)} ${name} · ${f0.format(Math.round(v.usedPct))}%`;
 }
 
-const DOCKER_TYPES = { Images: 'Imagens', 'Local Volumes': 'Volumes', 'Build Cache': 'Build cache', Containers: 'Containers' };
-
-/** Docker space in GB: in use and reclaimable, and each part's share of the biggest row (0 to 100). */
-export function dockerRows(space) {
-  if (!space?.length) return [];
-  const max = Math.max(...space.map((s) => s.sizeBytes), 1);
-  return space.map((s) => {
-    const inUse = s.sizeBytes - s.reclaimableBytes;
-    return { label: DOCKER_TYPES[s.type] ?? s.type, text: `${decimal(inUse / GB)} em uso · ${decimal(s.reclaimableBytes / GB)} recuperável`, usedPct: (inUse / max) * 100, reclaimablePct: (s.reclaimableBytes / max) * 100 };
-  });
-}
-
 /** "12" or "0 · 15 parados". */
 export const stackContainers = (s) => (s.stopped ? `${s.running} · ${s.stopped} ${s.stopped === 1 ? 'parado' : 'parados'}` : String(s.running));
 
@@ -335,19 +321,6 @@ export const TUNNEL_PORT_STATE = { up: ['b-completed', 'Respondendo'], idle: ['b
 /** The machine that a tunnel reaches: the one whose `port` (machines.json) the tunnel forwards. */
 export function machineOfTunnel(tunnel, machines) {
   return machines.find((m) => m.id !== LOCAL_ID && m.port !== null && tunnel.ports.some((p) => p.localPort === m.port)) ?? null;
-}
-
-/**
- * "O que é" of a forwarded port: the remote core when it is the machine's port; what listens on
- * the other side when that machine's reading has it; the state's own explanation otherwise.
- */
-export function tunnelPortWhat(p, { machine = null, remotePorts = null } = {}) {
-  if (p.state === 'idle') return `nada escuta na ${p.remotePort} de lá`;
-  if (p.state === 'busy') return `${p.heldBy ?? 'outro processo'}, deste Mac, segura a ${p.localPort}`;
-  if (p.state === 'down') return 'nada escuta nesta porta do Mac';
-  if (machine && p.localPort === machine.port) return `Núcleo da ${machine.label}`;
-  const there = remotePorts?.find((x) => x.port === p.remotePort);
-  return there?.process ?? DASH;
 }
 
 /**
@@ -700,12 +673,6 @@ export function reconnectExample(machine) {
  */
 export function sessionAttention(item) {
   return attentionOfItem(item) ?? { level: 'idle', reason: null };
-}
-
-/** "motor-de-regras · 2 min" under a session's name. */
-export function sessionMeta(item) {
-  const age = Number.isFinite(item.minutes) ? (item.minutes < 1 ? 'agora' : `${Math.round(item.minutes)} min`) : null;
-  return [typeof item.project === 'string' ? item.project.slice(0, 200) : null, age].filter(Boolean).join(' · ');
 }
 
 /** The example `machines.json`, with the keys the core reads (src/telemetry/machines-config.ts). */
