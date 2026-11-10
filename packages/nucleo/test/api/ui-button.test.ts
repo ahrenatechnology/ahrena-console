@@ -133,6 +133,34 @@ describe('runButtonAction', () => {
     assert.equal(calls, 1);
   });
 
+  test('a click on a disabled (aria-disabled) button is ignored: the action does not run', async () => {
+    const { button } = makeButton(false);
+    setDisabled(button, 'Falta escolher a máquina');
+    let calls = 0;
+    const result = await runButtonAction(button, async () => void calls++);
+    assert.deepEqual(result, { ignored: true });
+    assert.equal(calls, 0);
+    assert.equal(buttonStateOf(button), 'disabled');
+    assert.equal(button.getAttribute('aria-busy'), null);
+  });
+
+  test('the width lock is released after the done and failed labels are shown, not before', async () => {
+    for (const outcome of ['done', 'failed']) {
+      const { button } = makeButton(false);
+      const labelsAtRelease: string[] = [];
+      const style = button.style;
+      const original = style.removeProperty.bind(style);
+      style.removeProperty = (name: string) => {
+        if (name === 'min-width') labelsAtRelease.push(texto(button));
+        return original(name);
+      };
+      const action = outcome === 'done' ? async () => {} : () => Promise.reject(new Error('x'));
+      await runButtonAction(button, action, { doneLabel: 'Reiniciado', failedLabel: 'Tentar de novo', doneMs: 1 });
+      assert.equal(labelsAtRelease.at(-1), outcome === 'done' ? 'Reiniciado' : 'Tentar de novo');
+      await settle();
+    }
+  });
+
   test('done: data-state="done" with the done label, then back to normal after doneMs', async () => {
     const { button } = makeButton(true);
     const result = await runButtonAction(button, async () => 'ok', { doneLabel: 'Reiniciado', doneMs: 5 });

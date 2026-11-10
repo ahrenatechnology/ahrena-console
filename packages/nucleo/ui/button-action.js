@@ -35,7 +35,7 @@ export function buttonStateOf(button) {
 }
 
 /** Marks the button busy (or not), without `disabled`: the keyboard focus stays on it. */
-export function setBusy(button, busy) {
+export function setBusy(button, busy, { keepWidth = false } = {}) {
   if (busy) {
     const width = button.offsetWidth;
     if (width) button.style.setProperty('min-width', `${width}px`);
@@ -44,7 +44,7 @@ export function setBusy(button, busy) {
   } else {
     button.removeAttribute('aria-busy');
     button.removeAttribute('aria-disabled');
-    button.style.removeProperty('min-width');
+    if (!keepWidth) button.style.removeProperty('min-width');
   }
 }
 
@@ -110,7 +110,7 @@ function reset(button) {
 /**
  * Runs `action` for a click on `button`: busy while it runs, then done (and back to normal after
  * `doneMs`) or failed (the button reads "Tentar de novo" and a note says what went wrong in plain
- * words, until the next click). A click while busy does nothing and returns `{ ignored: true }`.
+ * words, until the next click). A click while busy or disabled does nothing and returns `{ ignored: true }`.
  * Otherwise the answer is `{ ok: true, value }` or `{ ok: false, error }`; the action's own error
  * never escapes, so a handler can `await` this without a try/catch.
  *
@@ -119,7 +119,8 @@ function reset(button) {
  * one inserted right after the button). An `AbortError` is not a failure: the button goes back to normal.
  */
 export async function runButtonAction(button, action, { busyLabel = null, doneLabel = null, failedLabel = FAILED_LABEL, errorText = plainError, doneMs = DONE_MS, note = null } = {}) {
-  if (buttonStateOf(button) === 'busy') return { ignored: true };
+  const before = buttonStateOf(button);
+  if (before === 'busy' || before === 'disabled') return { ignored: true };
   reset(button);
   removeNote(button);
   setBusy(button, true);
@@ -130,18 +131,22 @@ export async function runButtonAction(button, action, { busyLabel = null, doneLa
   } catch (error) {
     result = { ok: false, error };
   }
-  setBusy(button, false);
+  // The width lock stays until the final label is on the button, so the row does not jump in between.
+  setBusy(button, false, { keepWidth: true });
+  const releaseWidth = () => button.style.removeProperty('min-width');
   if (result.ok) {
-    if (!doneLabel) return (restoreChildren(button), result);
+    if (!doneLabel) return (restoreChildren(button), releaseWidth(), result);
     button.setAttribute('data-state', 'done');
     showLabel(button, doneLabel, 'check-circle-2');
+    releaseWidth();
     button.btnTimer = setTimeout(() => reset(button), doneMs);
     button.btnTimer?.unref?.();
     return result;
   }
-  if (result.error?.name === 'AbortError') return (restoreChildren(button), result);
+  if (result.error?.name === 'AbortError') return (restoreChildren(button), releaseWidth(), result);
   button.setAttribute('data-state', 'failed');
   showLabel(button, failedLabel, 'error');
+  releaseWidth();
   const message = buttonNote(errorText(result.error), { tone: 'error', iconName: 'error' });
   button.btnNote = { node: note ?? message, owned: !note };
   if (note) note.replaceChildren(...message.childNodes);
