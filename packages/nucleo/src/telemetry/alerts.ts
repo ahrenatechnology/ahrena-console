@@ -145,15 +145,18 @@ export function formatAge(sec: number): string {
 }
 
 /**
- * A remote machine that does not answer, as the screen says it: "Workstation sem conexão". The
- * detail tells the two cases of decision 0008 section 3 apart: the tunnel down, or the tunnel up
- * and the núcleo over there not answering.
+ * A remote machine that does not answer, as the screen says it. The three owner-proof reasons
+ * (`owner-auth-required`, `owner-auth-failed`, `owner-auth-mismatch`, #388) read "Workstation sem
+ * acesso": the tunnel is up and the core over there refuses this Mac. The others read "Workstation
+ * sem conexão", and the detail tells the two cases of decision 0008 section 3 apart: the tunnel
+ * down, or the tunnel up and the núcleo over there not answering.
  */
 export function machineUnreachableAlert(label: string, port: number, reason: UnreachableReason, since: string): Alert {
   return {
     id: 'machine-unreachable',
     kind: 'machine-unreachable',
-    level: 'error',
+    // Yellow when there is something to configure (the proof is missing), red when it failed (wireframe 388-4).
+    level: reason === 'owner-auth-required' ? 'warning' : 'error',
     // The owner proof (#388): the tunnel is up and the port answers, so the core over there refuses: "sem acesso".
     message: reason.startsWith('owner-auth-') ? `${label} sem acesso` : `${label} sem conexão`,
     detail:

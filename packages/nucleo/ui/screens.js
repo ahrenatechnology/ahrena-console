@@ -11,6 +11,8 @@
 // The sidebar blocks: the everyday screens (no title), then Delivery, Decisions, Machines and
 // Control. A block without items does not show. Decisions holds the session decisions ("Das sessões")
 // and the architecture (ADR) and product (PDR) records of the repositories (issue 174).
+import { OWNER_AUTH } from './screens/machine-format.js';
+
 export const SECTIONS = [
   { id: 'main', label: null },
   { id: 'delivery', label: 'Entrega' },
@@ -283,8 +285,8 @@ const MACHINE_STATES = new Set(['connected', 'unreachable', 'incompatible-versio
 const stoppedByYou = (m) => m.connection && typeof m.connection === 'object' && m.connection.state === 'stopped';
 // The tunnel is up and the core over there asks for the owner proof (issue 388): one state for the three
 // reasons, its own yellow dot, and the reason on the dot's label (the color alone does not say it).
-const OWNER_AUTH_LABELS = { 'owner-auth-required': 'Acesso bloqueado', 'owner-auth-failed': 'Prova do dono falhou', 'owner-auth-mismatch': 'Identidade diferente' };
-const ownerAuthOf = (m) => (m.state === 'unreachable' && Object.hasOwn(OWNER_AUTH_LABELS, m.reason ?? '') ? m.reason : null);
+// The labels come from machine-format.js's OWNER_AUTH, so the pill and the dot cannot drift apart.
+const ownerAuthOf = (m) => (m.state === 'unreachable' && Object.hasOwn(OWNER_AUTH, m.reason ?? '') ? m.reason : null);
 
 /** The sidebar entries of the remote machines in `GET /api/machines` (this machine is in SCREENS). */
 export function machineItems(machines) {
@@ -301,7 +303,7 @@ export function machineItems(machines) {
       route: `/ui/machines/${m.id}`,
       item: { label, icon: 'server', section: 'machines' },
       state: stoppedByYou(m) ? 'stopped' : auth ? 'owner-auth' : MACHINE_STATES.has(m.state) ? m.state : 'unreachable',
-      ...(auth ? { stateLabel: OWNER_AUTH_LABELS[auth] } : {}),
+      ...(auth ? { stateLabel: OWNER_AUTH[auth].dot } : {}),
       title: label,
       icon: 'server',
     });

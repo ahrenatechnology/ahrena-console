@@ -109,7 +109,7 @@ describe('#175/AC-3 alerts over the samples', () => {
 });
 
 describe('#388 the alert of a remote that refuses the owner proof', () => {
-  test('388-4: the title says "sem acesso" for the three owner-proof reasons and "sem conexão" for the tunnel down and the core not answering', () => {
+  test('AC1 · 388-4: the title says "sem acesso" for the three owner-proof reasons and "sem conexão" for the tunnel down and the core not answering', () => {
     const titles = Object.fromEntries(UNREACHABLE_REASONS.map((r) => [r, machineUnreachableAlert('Workstation', 14720, r, iso(T0)).message]));
     assert.deepEqual(titles, {
       'port-closed': 'Workstation sem conexão',
@@ -119,6 +119,13 @@ describe('#388 the alert of a remote that refuses the owner proof', () => {
       'owner-auth-mismatch': 'Workstation sem acesso',
     });
   });
+
+  for (const reason of UNREACHABLE_REASONS) {
+    const level = reason === 'owner-auth-required' ? 'warning' : 'error';
+    test(`AC1 · 388-4: ${reason} raises the alert at level ${level} (yellow to configure, red for a failure)`, () => {
+      assert.equal(machineUnreachableAlert('Workstation', 14720, reason, iso(T0)).level, level);
+    });
+  }
 
   test('AC3 · 388-4: the alert of each reason names no credential, key or command output', () => {
     for (const r of UNREACHABLE_REASONS) {

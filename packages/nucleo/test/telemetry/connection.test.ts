@@ -157,7 +157,7 @@ describe('#278 the connection state, derived', () => {
 describe('#388 the owner-proof credential command, as the screen shows it', () => {
   const SENTINEL = 'sentinela-credencial-0f1e2d3c';
   test('AC3 · 388-2: only the configured argv of connection.credential goes out, never its output, a credential or a failure', () => {
-    const credential = { command: ['/usr/bin/ssh', '-T', 'ahrena-tunnel', '/caminho/para/node', 'remote-credential', '--port', '4720'], timeoutSeconds: 20 };
+    const credential = { command: ['/usr/bin/ssh', '-T', 'ahrena-tunnel', '/path/to/node', 'remote-credential', '--port', '4720'], timeoutSeconds: 20 };
     const refused: MachineStatus = { state: 'unreachable', reason: 'owner-auth-failed', version: null };
     const { status } = deriveConnection(
       base({ config: { start: cmd('marker', 'x'), stop: cmd('marker', 'y'), credential }, machine: refused, failure: { reason: 'exit-code', at: '2026-11-02T11:59:00.000Z', exitCode: 1, output: SENTINEL, stderr: SENTINEL } as never }),

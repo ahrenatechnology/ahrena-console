@@ -223,14 +223,10 @@ export class RemotePanels {
   }
 }
 
-/** The machine's unreachable reason (#388), from the closed list only; a status that fails or says another thing gives `null`. */
+/** The machine's unreachable reason (#388), from the closed list only; a status that says another thing gives `null`. */
 function reasonOf(source: RemoteSessionSource): PanelMachine['reason'] {
-  try {
-    const reason = source.status().reason;
-    return reason && (UNREACHABLE_REASONS as readonly string[]).includes(reason) ? reason : null;
-  } catch {
-    return null;
-  }
+  const reason = source.status().reason;
+  return reason && (UNREACHABLE_REASONS as readonly string[]).includes(reason) ? reason : null;
 }
 
 /** `/api/panel/<id>` with the mod's own parameters, nothing else. */

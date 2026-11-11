@@ -37,8 +37,8 @@ const screen = await import(
 const UI_FOLDER = new URL('../../ui/', import.meta.url).pathname;
 const NOW = Date.now();
 const WS = { id: 'ws-exemplo', label: 'Workstation', port: 14720 };
-const START = ['/caminho/para/conectar.sh', 'tunnel', 'start'];
-const STOP = ['/caminho/para/conectar.sh', 'tunnel', 'stop'];
+const START = ['/path/to/connect.sh', 'tunnel', 'start'];
+const STOP = ['/path/to/connect.sh', 'tunnel', 'stop'];
 const H = 3_600_000;
 const M = 60_000;
 const iso = (msAgo: number) => new Date(NOW - msAgo).toISOString();
@@ -287,7 +287,7 @@ describe('#388 the Workstation screen when its core refuses the proof', () => {
     });
   }
 
-  const CREDENTIAL = ['/usr/bin/ssh', '-T', '-o', 'BatchMode=yes', 'ahrena-tunnel', '/caminho/para/node', '/caminho/para/cli.ts', 'remote-credential', '--port', '4720'];
+  const CREDENTIAL = ['/usr/bin/ssh', '-T', '-o', 'BatchMode=yes', 'ahrena-tunnel', '/path/to/node', '/path/to/cli.ts', 'remote-credential', '--port', '4720'];
 
   test('AC3 · 388-2 and 388-3: a configured credential command shows in the card as its argv only, never its output', async () => {
     for (const reason of ['owner-auth-failed', 'owner-auth-mismatch'] as const) {
@@ -348,7 +348,7 @@ describe('#388 the Workstation screen when its core refuses the proof', () => {
 // ---------- the sidebar ----------
 
 describe('#388 the sidebar dot', () => {
-  test('388-4: one waiting dot for the three owner-proof reasons, with the reason as its label; the tunnel down keeps the grey dot', async () => {
+  test('AC1 · 388-4: one waiting dot for the three owner-proof reasons, with the reason as its label; the tunnel down keeps the grey dot', async () => {
     const list = [
       { id: 'ws-a', label: 'A', state: 'unreachable', reason: 'owner-auth-required' },
       { id: 'ws-b', label: 'B', state: 'unreachable', reason: 'owner-auth-failed' },
@@ -373,7 +373,7 @@ describe('#388 the sidebar dot', () => {
     assert.match(css, /\.cc-nav-dot\[data-state="owner-auth"\] \{ background: var\(--status-waiting-dot\); \}/);
   });
 
-  test('388-4: a connection stopped by you stays its own grey state, whatever the reason', () => {
+  test('AC1 · 388-4: a connection stopped by you stays its own grey state, whatever the reason', () => {
     const items = machineItems([{ id: 'ws-a', state: 'unreachable', reason: 'owner-auth-failed', connection: { state: 'stopped' } }]);
     assert.equal(items[0].state, 'stopped');
   });
