@@ -9,7 +9,7 @@
 // - The writes take only the machine id the core sent: `/api/machines/<id>/connection/<action>` and the
 //   DELETE that cancels. "Só entrar" is the issue-277 login of this Mac's session, in browser mode.
 
-import { DASH, ago, clockOf, clockTime, duration, isMachineId, spanText } from './machine-format.js';
+import { DASH, OWNER_AUTH, ago, clockOf, clockTime, duration, isMachineId, ownerAuthReason, spanText } from './machine-format.js';
 import { timeLeft } from './cloud-format.js';
 
 export const CONNECTION_STATES = ['up', 'down', 'starting', 'stopping', 'failing', 'stopped'];
@@ -85,9 +85,10 @@ function normalizeCommand(c) {
   const start = args(c.start);
   if (!start.length) return null;
   const stop = args(c.stop);
+  const credential = args(c.credential);
   const t = int(c.startTimeoutSeconds);
   const s = int(c.stopTimeoutSeconds);
-  return { start, stop: stop.length ? stop : null, startTimeoutSeconds: t && t > 0 ? t : null, stopTimeoutSeconds: s && s > 0 ? s : null };
+  return { start, stop: stop.length ? stop : null, startTimeoutSeconds: t && t > 0 ? t : null, stopTimeoutSeconds: s && s > 0 ? s : null, ...(credential.length ? { credential } : {}) };
 }
 
 /** The `connection` of a remote in `GET /api/machines`, or `null` when the core sent none (an older core). */
@@ -181,18 +182,21 @@ export function connectionTrio(connection, machine, reading, now = Date.now()) {
   const c = connection;
   const job = running(c);
   const n = c.ports.length;
+  const auth = ownerAuthReason(machine);
   let tunnel;
   if (c.state === 'up') tunnel = { tone: 'ok', icon: 'check-circle-2', value: 'No ar', sub: [c.since ? `há ${duration(c.since, now)}` : null, n ? plural(n, 'porta', 'portas') : null].filter(Boolean).join(' · ') || 'respondendo pela porta do Mac' };
   else if (c.state === 'stopping' || (job && job.step === 'stop')) tunnel = { tone: 'warn', icon: 'wall-loader', value: 'Parando', sub: 'rodando o comando de parar' };
   else if (c.state === 'starting') tunnel = { tone: 'warn', icon: 'wall-loader', value: job?.step === 'login' ? 'Esperando' : 'Subindo', sub: job?.step === 'login' ? 'sobe quando o login terminar' : job?.step === 'read' ? 'lendo a máquina' : 'rodando o comando de subir' };
   else if (c.state === 'stopped') tunnel = { tone: 'off', icon: 'pause', value: 'Parado por você', sub: `${c.since ? `às ${hm(c.since)} · ` : ''}quedas não avisam` };
+  // The owner proof (issue 388): the port answers and the core over there refuses, so the tunnel is up.
+  else if (auth) tunnel = { tone: 'ok', icon: 'check-circle-2', value: 'No ar', sub: n ? plural(n, 'porta', 'portas') : 'a porta responde' };
   else tunnel = { tone: 'bad', icon: 'error', value: 'Fora', sub: [c.since ? `desde ${hm(c.since)}` : null, n ? null : 'nenhum processo ssh'].filter(Boolean).join(' · ') };
 
   let core;
   const read = reading?.takenAt ?? null;
   if (machine?.state === 'connected') core = { tone: 'ok', icon: 'activity', value: 'Respondendo', sub: read ? `lido ${ago(read, now)}` : 'sem leitura ainda' };
   else if (machine?.state === 'incompatible-version') core = { tone: 'warn', icon: 'git-compare', value: 'Versão diferente', sub: 'responde, com outra telemetria' };
-  else if (machine?.state === 'unreachable' && machine.reason === 'owner-auth-required') core = { tone: 'warn', icon: 'server-off', value: 'Acesso bloqueado', sub: 'autenticação do dono necessária' };
+  else if (auth) core = { ...OWNER_AUTH[auth].core };
   else if (machine?.state === 'unreachable' && machine.reason === 'no-response') core = { tone: 'warn', icon: 'server-off', value: 'Não responde', sub: 'a porta aceita, ninguém responde' };
   else core = { tone: 'off', icon: 'circle-dashed', value: 'Sem leitura', sub: read ? `a última é de ${hm(read)}` : 'nenhuma leitura guardada' };
 
@@ -240,6 +244,24 @@ export function connectionPorts(connection, machine, remotePorts = null) {
   });
 }
 
+/**
+ * The owner-proof line of the card's commands (issue 388, 388-1 to 388-3), `{ text, tone }` or `null`: without
+ * `connection.credential` (388-1) the yellow "sem connection.credential"; with it, its configured list, as the
+ * start and stop lines show theirs. Never what the command printed: the core does not send it.
+ */
+export function credentialLine(machine, connection = null) {
+  const auth = ownerAuthReason(machine);
+  if (!auth) return null;
+  if (auth === 'owner-auth-required') return { text: 'prova do dono: sem connection.credential no machines.json', tone: 'waiting' };
+  const argv = connection?.command?.credential;
+  return argv ? { text: `prova do dono: ${argv.join(' ')}`, tone: null } : null;
+}
+
+/** The core over there refuses the owner proof (issue 388) and no job runs: the port answers, so the tunnel is up. */
+export function tunnelUpForOwnerAuth(connection, machine) {
+  return Boolean(ownerAuthReason(machine)) && (connection.state === 'down' || connection.state === 'failing') && connection.job?.state !== 'running';
+}
+
 /** The mono lines at the foot of the card: what runs, and the cloud profile it depends on. */
 export function commandLines(connection) {
   const c = connection.command;
@@ -250,9 +272,13 @@ export function commandLines(connection) {
   return out;
 }
 
-/** The buttons in the card's title: `up` has Reconectar and Parar (with a stop command), `stopped` has Subir. */
-export function cardActions(connection) {
+/**
+ * The buttons in the card's title: `up` has Reconectar and Parar (with a stop command), `stopped` has Subir. A machine
+ * whose core refuses the owner proof (issue 388) has the tunnel up though the core says `down`: the `up` buttons.
+ */
+export function cardActions(connection, machine = null) {
   const a = connection.actions;
+  if (tunnelUpForOwnerAuth(connection, machine)) return [a.reconnect ? 'reconnect' : null, connection.command?.stop ? 'stop' : null].filter(Boolean);
   if (connection.state === 'up') return [a.reconnect ? 'reconnect' : null, a.stop ? 'stop' : null].filter(Boolean);
   if (connection.state === 'stopped') return a.start ? ['start'] : [];
   return [];

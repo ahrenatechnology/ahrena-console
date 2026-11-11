@@ -460,7 +460,8 @@ describe('#178 criterion 3: a remote without connection (C26)', () => {
     }
     const source = readFileSync(`${UI_FOLDER}screens/machine.js`, 'utf8');
     const writes = [...source.matchAll(/ctx\.write\(([^,]+),/g)].map((m) => m[1]);
-    assert.deepEqual(writes, ['reconnectRoute(id)'], 'the machine screen writes only to /api/machines/<id>/reconnect');
+    // Issue 388: "Tentar agora" asks the core for the remote owner's proof; it neither starts nor stops a tunnel.
+    assert.deepEqual(writes, ['ownerProofRetryRoute(id)', 'reconnectRoute(id)'], 'the machine screen writes only to /api/machines/<id>/owner-proof/retry and /reconnect');
     const release = readFileSync(`${UI_FOLDER}screens/port-release.js`, 'utf8');
     assert.deepEqual([...release.matchAll(/ctx\.write\(([^,]+),/g)].map((m) => m[1]), ['releaseRoute(machineId)'], 'the release dialog writes only to the release route');
   });
@@ -875,13 +876,13 @@ describe('#178 criterion 2: the focus stays on the button through a repaint', ()
   });
 });
 
-test('remote owner-auth refusal explains the security block instead of claiming the core is offline', () => {
+test('AC1 · 388-1: a remote owner-auth refusal explains the missing owner proof instead of claiming the core is offline', () => {
   const machine = format.normalizeMachine({ id: 'remote', label: 'Remota', state: 'unreachable', reason: 'owner-auth-required' });
   assert.equal(format.remoteCondition(machine), 'owner-auth-required');
   const card = screen.conditionParts(machine, null);
   assert.equal(card.faded, true);
   const copy = card.parts.map(texto).join(' ');
-  assert.match(copy, /Acesso remoto bloqueado/);
-  assert.match(copy, /autenticação do dono/);
+  assert.match(copy, /A Remota pede a prova do dono, e este Mac ainda não sabe pedi-la\./);
+  assert.match(copy, /Comando de credencial/);
   assert.doesNotMatch(copy, /Suba o núcleo/);
 });

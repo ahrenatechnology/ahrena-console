@@ -104,6 +104,34 @@ const num = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
 const str = (v, max = 200) => (typeof v === 'string' && v ? v.slice(0, max) : null);
 const list = (v, max = 500) => (Array.isArray(v) ? v.slice(0, max) : []);
 
+// The reasons of `unreachable` (src/telemetry/model.ts UNREACHABLE_REASONS); any other is dropped.
+const UNREACHABLE_REASONS = ['port-closed', 'no-response', 'owner-auth-required', 'owner-auth-failed', 'owner-auth-mismatch'];
+
+/**
+ * The three reasons a remote's core refuses this Mac (issue 388, decision 0020 section 6): the tunnel is up
+ * and the core over there asks for the owner's proof. What the header pill, the core tile of Conexão and the
+ * sidebar dot say for each (wireframes 388-1 to 388-4).
+ */
+export const OWNER_AUTH = {
+  'owner-auth-required': { pill: ['b-waiting', 'Acesso bloqueado'], dot: 'Acesso bloqueado', core: { tone: 'warn', icon: 'lock', value: 'Acesso bloqueado', sub: 'falta a prova do dono' } },
+  'owner-auth-failed': { pill: ['b-error', 'Prova do dono falhou'], dot: 'Prova do dono falhou', core: { tone: 'bad', icon: 'key-round', value: 'Prova falhou', sub: 'o comando de credencial não trouxe prova' } },
+  'owner-auth-mismatch': { pill: ['b-error', 'Identidade diferente'], dot: 'Identidade diferente', core: { tone: 'bad', icon: 'shield-alert', value: 'Outra identidade', sub: 'não é a máquina da primeira prova' } },
+};
+
+/**
+ * The `connection.credential` example of 388-1, to copy into machines.json (decision 0020 section 1): placeholders
+ * only, the two paths to replace. A list, no shell, and no secret in it: the credential comes back on the ssh output.
+ */
+export const OWNER_AUTH_CREDENTIAL_EXAMPLE = `"credential": {
+  "command": ["/usr/bin/ssh", "-T", "-o", "BatchMode=yes", "-o", "SessionType=default",
+    "-o", "ControlMaster=no", "-o", "ClearAllForwardings=yes", "ahrena-tunnel",
+    "/caminho/para/node", "/caminho/para/ahrena-console/packages/nucleo/src/owner/cli.ts",
+    "remote-credential", "--port", "4720"],
+  "timeoutSeconds": 20 }`;
+
+/** The owner-proof reason of a remote, or `null` (another state or reason). */
+export const ownerAuthReason = (machine) => (machine?.state === 'unreachable' && Object.hasOwn(OWNER_AUTH, machine.reason ?? '') ? machine.reason : null);
+
 /** The machine summary of `GET /api/machines`, or `null` without an id. */
 export function normalizeMachine(m) {
   if (!isObject(m) || !str(m.id, 64)) return null;
@@ -111,7 +139,7 @@ export function normalizeMachine(m) {
     id: m.id,
     label: str(m.label, 40) ?? m.id,
     state: str(m.state, 40) ?? 'unreachable',
-    reason: m.reason === 'port-closed' || m.reason === 'no-response' || m.reason === 'owner-auth-required' ? m.reason : null,
+    reason: UNREACHABLE_REASONS.includes(m.reason) ? m.reason : null,
     version: num(m.version),
     port: num(m.port),
     lastReadAt: str(m.lastReadAt, 40),
@@ -517,6 +545,8 @@ export function headerLine(reading, machine, { local, offline, now = Date.now() 
 export function statePill(machine) {
   if (machine.reconnect?.state === 'running') return ['b-waiting', 'Reconectando'];
   if (machine.state === 'connected') return ['b-completed', 'Conectada'];
+  const auth = ownerAuthReason(machine);
+  if (auth) return OWNER_AUTH[auth].pill;
   if (machine.state === 'incompatible-version') return ['b-waiting', 'Versão diferente'];
   if (machine.state === 'unreachable' && !machine.reason) return ['b-abandoned', 'Conectando'];
   return ['b-error', 'Sem conexão'];
@@ -525,13 +555,14 @@ export function statePill(machine) {
 /**
  * What a remote machine that is not `connected` shows (C26): `band` (the tunnel is down: the red band
  * over the faded last reading), `no-response` (the tunnel is up and the core over there is not),
- * `version` (another telemetry version), `first-read` (configured, not read yet). `null` when connected.
+ * `version` (another telemetry version), `first-read` (configured, not read yet), and the three owner-proof
+ * reasons as they are (issue 388: `owner-auth-required`, `owner-auth-failed`, `owner-auth-mismatch`). `null` when connected.
  */
 export function remoteCondition(machine) {
   if (!machine || machine.id === LOCAL_ID || machine.state === 'connected') return null;
   if (machine.state === 'incompatible-version') return 'version';
   if (machine.state === 'unreachable' && machine.reason === 'port-closed') return 'band';
-  if (machine.state === 'unreachable' && machine.reason === 'owner-auth-required') return 'owner-auth-required';
+  if (ownerAuthReason(machine)) return machine.reason;
   if (machine.state === 'unreachable' && machine.reason === 'no-response') return 'no-response';
   if (machine.state === 'unreachable') return 'first-read';
   return 'band';
@@ -555,6 +586,8 @@ export const RECONNECT_STATES = ['idle', 'running', 'succeeded', 'failed', 'time
 export const RECONNECTED_SHOWN_MS = 10 * 60_000;
 
 export const reconnectRoute = (id) => `${MACHINES_ROUTE}/${encodeURIComponent(id)}/reconnect`;
+/** "Tentar agora" on the owner-proof bands (issue 388): the core requests the remote proof now, then reads the machine. */
+export const ownerProofRetryRoute = (id) => `${MACHINES_ROUTE}/${encodeURIComponent(id)}/owner-proof/retry`;
 
 /** The `reconnect` of a machine, or `null` when the core sent none (or not an object). */
 export function normalizeReconnect(r) {

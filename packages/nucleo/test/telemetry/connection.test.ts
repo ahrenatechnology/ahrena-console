@@ -154,6 +154,26 @@ describe('#278 the connection state, derived', () => {
   });
 });
 
+describe('#388 the owner-proof credential command, as the screen shows it', () => {
+  const SENTINEL = 'sentinela-credencial-0f1e2d3c';
+  test('AC3 · 388-2: only the configured argv of connection.credential goes out, never its output, a credential or a failure', () => {
+    const credential = { command: ['/usr/bin/ssh', '-T', 'ahrena-tunnel', '/path/to/node', 'remote-credential', '--port', '4720'], timeoutSeconds: 20 };
+    const refused: MachineStatus = { state: 'unreachable', reason: 'owner-auth-failed', version: null };
+    const { status } = deriveConnection(
+      base({ config: { start: cmd('marker', 'x'), stop: cmd('marker', 'y'), credential }, machine: refused, failure: { reason: 'exit-code', at: '2026-11-02T11:59:00.000Z', exitCode: 1, output: SENTINEL, stderr: SENTINEL } as never }),
+    );
+    assert.deepEqual(status.command!.credential, credential.command);
+    assert.deepEqual(Object.keys(status.command!).sort(), ['credential', 'start', 'startTimeoutSeconds', 'stop', 'stopTimeoutSeconds']);
+    assert.ok(!JSON.stringify(status).includes(SENTINEL));
+    assert.notEqual(status.command!.credential, credential.command, 'a copy, not the config list');
+  });
+
+  test('AC3 · 388-1: without connection.credential the command has no credential key, as before', () => {
+    const { status } = deriveConnection(base());
+    assert.equal('credential' in status.command!, false);
+  });
+});
+
 describe('#278 the reason, in the order of the closed list', () => {
   const expired = { cloud: { connector: 'aws' as const, profile: 'perfil-dev', session: 'sessao-exemplo', state: 'expired' as const, expiresAt: '2026-11-02T03:10:00.000Z' }, loginPossible: true };
   const failure = { reason: 'host-unknown' as ConnectionReason, at: '2026-11-02T11:58:00.000Z', exitCode: 255 };

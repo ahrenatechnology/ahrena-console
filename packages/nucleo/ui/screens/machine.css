@@ -140,11 +140,11 @@
    that failed (it is also an .error-band), yellow while the command runs, green when it brought the
    machine back. The text column wraps; the buttons stay on the right. ---------- */
 .tm-rc-band { display: flex; align-items: flex-start; gap: 12px; padding: 10px 14px; border-radius: 12px; font-size: 13px; min-width: 0; }
-.tm-rc-band.tm-rc-running { border: 1px solid var(--status-waiting-dot); background: var(--status-waiting-badge); }
+.tm-rc-band.tm-rc-running, .tm-rc-band.tm-rc-waiting { border: 1px solid var(--status-waiting-dot); background: var(--status-waiting-badge); }
 .tm-rc-band.tm-rc-ok { border: 1px solid color-mix(in srgb, var(--status-completed-dot) 50%, var(--border)); background: color-mix(in srgb, var(--status-completed-badge) 70%, var(--surface)); }
 .tm-rc-ic { font-size: 18px; line-height: 1; flex: none; margin-top: 1px; display: inline-flex; }
 .tm-rc-error .tm-rc-ic { color: var(--status-error-text); }
-.tm-rc-running .tm-rc-ic, .tm-rc-running .tm-rc-text > p > b { color: var(--status-waiting-text); }
+.tm-rc-running .tm-rc-ic, .tm-rc-running .tm-rc-text > p > b, .tm-rc-waiting .tm-rc-ic, .tm-rc-waiting .tm-rc-text > p > b { color: var(--status-waiting-text); }
 .tm-rc-ok .tm-rc-ic, .tm-rc-ok .tm-rc-text > p > b { color: var(--status-completed-text); }
 .tm-rc-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; overflow-wrap: anywhere; }
 .tm-rc-text p { margin: 0; }
@@ -175,6 +175,9 @@
 .tm-rc-howto .tm-config { margin-top: 6px; }
 .tm-rc-setup .tm-legend { gap: 8px 18px; }
 .tm-rc-setup .tm-legend .icon { vertical-align: -2px; }
+/* The credential command of the owner proof (issue 388, 388-1): the decision on the right of the title. */
+.tm-rc-setup .tm-title > small { margin-left: auto; font-size: 11.5px; font-weight: var(--weight-regular); }
+.tm-rc-setup > .tm-rc-actions { justify-content: flex-start; }
 
 /* Sessões de terminal (C96 a C99, issue 350) */
 .tm-term-table td { vertical-align: top; }

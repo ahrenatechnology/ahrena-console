@@ -9,7 +9,7 @@ import type { SessionAttention } from './attention.ts';
 import type { SessionOpen } from './session-open.ts';
 import type { AccountSource, AwaitingReason, DisplayStatus } from '../model.ts';
 import type { InboxState } from '../states/inbox.ts';
-import type { ConnectionError, ConnectionState } from '../telemetry/model.ts';
+import type { ConnectionError, ConnectionState, UnreachableReason } from '../telemetry/model.ts';
 
 /** A session's account on the panel (decision 0006). */
 export interface PanelAccount {
@@ -318,6 +318,12 @@ export interface PanelMachine {
   label: string;
   lastReadAt: string | null;
   connection: PanelMachineConnection | null;
+  /**
+   * Why the machine is unreachable, from its status (#388, 388-5): the mod tells the three owner-proof reasons
+   * (the tunnel is up, the core over there refuses) from a drop. `null` when it answers. Only the reason: nothing
+   * else of the status goes out.
+   */
+  reason?: UnreachableReason | null;
 }
 
 /** The scope of the decision list (P9's Select). */

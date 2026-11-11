@@ -186,6 +186,8 @@ export function deriveConnection(i: DeriveInput): { status: ConnectionStatus; me
           stop: i.config.stop ? [...i.config.stop.command] : null,
           startTimeoutSeconds: i.config.start.timeoutSeconds,
           stopTimeoutSeconds: i.config.stop?.timeoutSeconds ?? null,
+          // The owner-proof command (#388), shown as start and stop are: its configured list, never what it printed.
+          ...(i.config.credential ? { credential: [...i.config.credential.command] } : {}),
         }
       : null,
     job: i.job ? { ...i.job, steps: [...i.job.steps] } : null,

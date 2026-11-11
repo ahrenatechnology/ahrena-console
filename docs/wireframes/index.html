@@ -743,6 +743,12 @@ body.captura .palco { overflow: visible; }
 .width-col { display: flex; flex-direction: column; gap: 6px; }
 /* ?width=1100 or ?width=1440 in capture mode keeps only that column (C51 to C53). */
 body.captura[data-width="1100"] .width-col[data-w="1440"], body.captura[data-width="1440"] .width-col[data-w="1100"] { display: none; }
+/* ---------- remote owner proof (388-1 to 388-5, issue 388) ---------- */
+.oa-causes { margin: 6px 0 6px 18px; padding: 0; display: flex; flex-direction: column; gap: 3px; }
+.oa-dots, .oa-alerts { display: flex; flex-direction: column; gap: 8px; padding: 14px; width: 420px; }
+.oa-dot-row { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.oa-dot-row svg { width: 15px; height: 15px; }
+.oa-dot-row .c-muted { margin-left: auto; font-size: 12px; }
 /* ---------- session message (C51 to C53, issue #61) ---------- */
 .sm-compose { padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; border-color: color-mix(in srgb, var(--accent) 40%, var(--border)); }
 .sm-compose.sm-off { border-color: var(--border); border-style: dashed; }
@@ -4835,6 +4841,11 @@ const TELAS = [
        'No fim, e não no cabeçalho (o card do servidor): o cabeçalho é estado do núcleo, e a linha não é sobre o núcleo. No fim ela não empurra os cards.',
        'No estreito, só o botão (30 colunas); no largo, à esquerda diz que o atalho está oculto e o botão vai para a direita, como "Ver" nos outros pés.',
        'O painel está aberto quando se clica: a faixa não aparece na hora (P17, estado 3), só quando o painel fechar.']) },
+  { id: 'panel-owner-auth', cod: '388-5', nome: 'Sessão numa máquina que recusa a prova do dono', sub: 'Issue #388. A faixa do P14, numa sessão que roda na Workstation, para os três motivos: amarela para acesso bloqueado, vermelha para a prova que falhou e para a identidade diferente. Cada uma diz o motivo em uma linha e leva ao console (388-1 a 388-3) por “resolver no console ›”. Em 38 e 121 colunas.', html: () => oaPanels(),
+    n: N(['Nada.'],
+      ['O mesmo molde do P14: o painel não roda nada, só diz o motivo e leva ao console, onde está o que fazer.',
+       'No estreito, a primeira linha cabe em 32 colunas (“Bloqueada · falta a prova”, 25); o largo usa a frase inteira.',
+       'A cor da faixa segue a da faixa da tela da máquina: amarelo é configurar, vermelho é falha. O ponto da barra lateral é amarelo nos três (388-4).']) },
   { cap: 'app', titulo: 'App de bandeja (Tauri)', desc: 'O app da decisão 0005 (issues #87 e #88): bandeja, menu e notificação nativos do macOS, e a janela com a interface que o núcleo serve.' },
   { id: 'app-bandeja-0', cod: 'A1', nome: 'Bandeja sem ninguém precisando de você', sub: 'Ninguém precisa de você: só o ícone na barra de menus. As ociosas aparecem só como contagem cinza no resumo.', html: () => `<div class="fila"><div class="mac">${APP.zero()}</div></div>`,
     n: N(['O menu da bandeja (<code>desktop/src/tray.ts</code>): título, "Listening on :4820" com ponto verde, o resumo, Open Dashboard ⌘O, Open at Login, Quit ⌘Q.', 'Ícone template preto, que o macOS pinta.'], ['Sem Restart Server, Show Logs e Open in Browser: o app adota o núcleo, não é dono dele.', 'O resumo fica no que pede ação (precisam de você, com erro), sem "eventos de hoje".']) },
@@ -5044,6 +5055,19 @@ const TELAS = [
     n: N(['Nada.'], ['Quebrar mantém as três ações à vista e não pede componente novo; o menu mantém a linha curta e afasta o Remover….']) },
   { id: 'docker-stale-core', cod: '434-7', nome: 'Docker · Workstation com o núcleo antigo', sub: 'Issue #434, caso de borda. O núcleo da Workstation é anterior ao Docker com ações (de 22/10, 201 commits atrás da main): o card mostra o aviso de versão e a lista de containers só para leitura, sem nenhuma ação. Em 1100.', html: () => msStaleHtml(),
     n: N(['Nada.'], ['O aviso diz o que falta e por quê, sem botão: atualizar o núcleo remoto é operação, não é desta tela.']) },
+  // ---------- remote owner proof (issue 388, decision 0020) ----------
+  { id: 'remote-owner-auth-required', cod: '388-1', nome: 'Prova do dono · acesso bloqueado', sub: 'Issue #388, decisão 0020, motivo <code>owner-auth-required</code>. O túnel está de pé e o núcleo da Workstation recusa todo pedido sem a prova do dono, e este Mac não tem o comando de credencial. Uma faixa amarela diz o que configurar, o card logo abaixo traz o exemplo do <code>connection.credential</code> para copiar e o Tentar agora. A tela da máquina única (434-2) fica desbotada, menos a Conexão, onde o Núcleo de lá diz “Acesso bloqueado”. Em 1100 e 1440.',
+    html: () => `<div class="fila">${[1100, 1440].map(w => widthCol(w, `${w} px`, oaFrame(w, 'required', oaRequiredScreen(w, false)))).join('')}</div>`,
+    n: N(['O desbotado da última leitura e o card que ensina a configurar (C26, C65 sem connection).'], ['Hoje a tela diz “Acesso remoto bloqueado” e manda usar o app na própria máquina; agora diz o que fazer daqui: configurar o comando de credencial.', 'Amarelo, não vermelho: nada falhou, falta configurar.', 'O exemplo só tem caminhos de mentira (<span class="mono">/caminho/para/…</span>) e nenhum segredo: o comando é constante, e a credencial volta pela saída do ssh, direto para a memória do núcleo deste Mac.', 'Núcleo de lá antigo: com o comando configurado, a CLI de lá não conhece o remote-credential e o caso vira o 388-2, porque o Mac não decide pelo código de saída (decisão 0020, seção 6). Sem o comando, é este.']) },
+  { id: 'remote-owner-auth-failed', cod: '388-2', nome: 'Prova do dono · a prova falhou', sub: 'Issue #388, motivo <code>owner-auth-failed</code>. O comando de credencial está configurado, rodou e não trouxe uma prova aceita: saiu com erro, passou do tempo, respondeu algo inválido, o pid do núcleo não conferiu, ou o núcleo de lá recusou de novo depois de renovar. Faixa vermelha com as três causas mais comuns, cada uma com o que fazer, e Tentar agora. Em 1100.',
+    html: () => `<div class="fila">${widthCol(1100, '1100 px', oaFrame(1100, 'failed', oaFailedScreen(1100)))}</div>`,
+    n: N(['A faixa vermelha com o motivo e de onde ele veio (C65).'], ['A tela não sabe qual das causas foi: o Mac só guarda se veio uma credencial válida. Por isso a faixa lista as causas em ordem de probabilidade, e não finge um diagnóstico.', 'O código de saída (10, 11, 12, timeout) fica no nucleo.log deste Mac, na linha <span class="mono">credential (workstation): failed (exit 11)</span>, que nunca leva credencial; a tela só aponta para o log.', 'Nenhuma saída do comando aparece aqui: o stderr do ssh é descartado e o stdout só serve para a credencial.', 'O recuo (30 s, 1 min, até 5 min) evita um ssh por pedido; Tentar agora fura a espera uma vez.']) },
+  { id: 'remote-owner-auth-mismatch', cod: '388-3', nome: 'Prova do dono · identidade diferente', sub: 'Issue #388, motivo <code>owner-auth-mismatch</code>. A identidade da máquina ou o usuário que veio na prova de agora não é o da primeira prova desde que o núcleo deste Mac subiu. O Mac para de assinar pedidos para lá. Faixa vermelha: conferir se o túnel leva à máquina certa ou, se a troca foi de propósito, reiniciar o núcleo deste Mac. Em 1100.',
+    html: () => `<div class="fila">${widthCol(1100, '1100 px', oaFrame(1100, 'mismatch', oaMismatchScreen(1100)))}</div>`,
+    n: N(['Nada: o CCAM só conhece uma máquina.'], ['É o caso de segurança: o túnel pode apontar para outra máquina, ou outro usuário respondeu. A tela não mostra a identidade nem o uid; diz só o que mudou de categoria e o que conferir.', 'Tentar agora fica como contorno, não como ação principal: sem conferir o túnel, a próxima prova volta a divergir.', 'Não há botão para aceitar a nova identidade: a decisão 0020 guarda a identidade só na memória, e a saída é reiniciar o núcleo deste Mac. Fixar em disco e parear é da issue #315.']) },
+  { id: 'remote-owner-auth-way-back', cod: '388-4', nome: 'Prova do dono · a volta ao normal, a barra lateral e o alerta', sub: 'Issue #388. Em cima: o Tentar agora ocupado enquanto o Mac pede a prova pelo SSH, e a mesma tela já conectada, sem faixa nem desbotado. Embaixo: o ponto da Workstation na barra lateral em cada estado, com o rótulo que vai no title e no aria-label, e a linha de “O que pede atenção”, que é também a da bandeja e da notificação, para cada motivo. Em 1100.',
+    html: () => oaWayBack(),
+    n: N(['O passo a passo do Reconectar (C50) e o ponto de estado da barra (C62).'], ['O ponto hoje é cinza para todo “Sem conexão”; aqui os três motivos de prova ganham um amarelo só, separado do túnel caído, e o rótulo diz qual é.', 'O alerta é o <span class="mono">machine-unreachable</span> de hoje, com o título “sem acesso” e o detalhe por motivo; o texto é este, e a camada 2 o grava em alerts.ts.']) },
   { id: 'console-update-banner', cod: 'C77', nome: 'Aviso de versão nova no topo da /ui', sub: 'Feature Aviso de versão nova (#330). Atualização disponível: versão 0.0.10, com a linha do que mudou quando o latest.json tem notas, Atualizar e Depois. Fica no topo de todas as telas, acima do cabeçalho, e não alarga a página. Em 1100 e 1440.', html: () => updateBannerScreens(),
     n: N(['Nada: o CCAM não tem updater.'], ['Hoje (#90) a versão nova só aparece no menu da bandeja; a #330 a traz para a janela.', 'Cor da marca, não o amarelo de "precisa de você".']) },
   { id: 'console-update-banner-states', cod: 'C78', nome: 'Os estados do aviso', sub: 'Baixando (a barra, sem Atualizar), instalando e reiniciando, erro ao baixar (Tentar de novo), atualizado, sem notas, e depois de Depois: o card some até a próxima versão ou por 24 h (a aprovar). Em 1100, o topo da tela.', html: () => updateBannerStates(),
@@ -5353,6 +5377,129 @@ const msStaleHtml = () => `<div class="fila">${msEx(1100, `${msOne(8, msDocker(1
   <p class="ms-note">Sem Reiniciar o Docker, sem Limpar, sem coluna de ações: nenhum botão, nem desabilitado. O núcleo de lá é de 22/10, 201 commits atrás da main; atualizá-lo é operação e fica fora desta issue. Quando ele passar a oferecer as ações, o aviso some e o card vira o do 434-2.</p>`, 'Docker da Workstation com o núcleo antigo · 1100 px')}</div>`
 
 // =====================================================================
+// Remote owner proof (issue 388, decision 0020): 388-1 to 388-5
+// =====================================================================
+// A remote whose core answers 403 is shown by one of three reasons: no proof configured
+// (owner-auth-required), the proof failed (owner-auth-failed), another identity (owner-auth-mismatch).
+// The tunnel is up in all three: the port answers, the core over there refuses. Placeholders only:
+// no real token, key, credential id, machine identity, host or path.
+const OA = {
+  ok: { badge: ['b-completed', 'Conectada'], dot: ['completed', 'Conectada'], core: ['c-completed', 'activity', 'Respondendo', 'lido agora'] },
+  required: { badge: ['b-waiting', 'Acesso bloqueado'], dot: ['waiting', 'Acesso bloqueado'], core: ['c-waiting', 'lock', 'Acesso bloqueado', 'falta a prova do dono'] },
+  failed: { badge: ['b-error', 'Prova do dono falhou'], dot: ['waiting', 'Prova do dono falhou'], core: ['c-error', 'key-round', 'Prova falhou', 'o comando de credencial não trouxe prova'] },
+  mismatch: { badge: ['b-error', 'Identidade diferente'], dot: ['waiting', 'Identidade diferente'], core: ['c-error', 'shield-alert', 'Outra identidade', 'não é a máquina da primeira prova'] },
+}
+const OA_CREDENTIAL_EXAMPLE = `~/.ahrena-console/machines.json · na Workstation, dentro de "connection"
+"credential": {
+  "command": ["/usr/bin/ssh", "-T", "-o", "BatchMode=yes", "-o", "SessionType=default",
+    "-o", "ControlMaster=no", "-o", "ClearAllForwardings=yes", "ahrena-tunnel",
+    "/caminho/para/node", "/caminho/para/ahrena-console/packages/nucleo/src/owner/cli.ts",
+    "remote-credential", "--port", "4720"],
+  "timeoutSeconds": 20 }`
+const oaHead = kind => cab('server', 'Workstation', `ws-exemplo · Ubuntu 24.04 · 16 vCPUs · 62 GB · T4 · porta 14720 do Mac · ${kind === 'ok' ? 'lido há 6 s' : 'última leitura às 09:12'}`,
+  `<span class="badge ${OA[kind].badge[0]}"><span class="p"></span>${OA[kind].badge[1]}</span>${hourToggle}`)
+// The sidebar: the Workstation dot takes the reason's color, and says it (title and aria-label), never the color alone.
+const oaSide = kind => kind === 'ok' ? lado('machine-ws', 3, 'ok')
+  : lado('machine-ws', 3, 'off').replace('tm-dot d-abandoned"', `tm-dot d-${OA[kind].dot[0]}" title="${OA[kind].dot[1]}" aria-label="${OA[kind].dot[1]}"`)
+const oaFrame = (w, kind, body) => `<div class="cc w${w}">${oaSide(kind)}<div class="cc-main">${body}</div></div>`
+// Band 5 of the single machine screen (434-2), with the core tile saying the reason and the credential command in the commands line.
+const oaConnection = kind => {
+  const [cls, icon, value, sub] = OA[kind].core
+  const credential = kind === 'required' ? '<span class="c-waiting">prova do dono: sem connection.credential no machines.json</span>'
+    : '<span>prova do dono: /usr/bin/ssh -T … ahrena-tunnel … remote-credential --port 4720</span>'
+  return `<div class="cartao tm-card"><h5>${ic('cable')}Conexão<small>túnel SSH sobre AWS SSM</small><span class="ms-h-acts">${bt('Reconectar', { size: 'sm', icon: 'refresh-cw' })}${bt('Parar o túnel', { size: 'sm', icon: 'square' })}</span></h5>
+  <div class="ms-conn-tiles">
+    <div class="cartao ms-tile"><span class="olhinho">Túnel</span><b class="c-completed">${ic('check-circle-2')}No ar</b><small>há 3 h 12 min · 4 portas</small></div>
+    <div class="cartao ms-tile"><span class="olhinho">Sessão AWS</span><b class="c-completed">${ic('key-round')}Válida</b><small>sessao-exemplo</small></div>
+    <div class="cartao ms-tile"><span class="olhinho">Núcleo de lá</span><b class="${cls}">${ic(icon)}${value}</b><small>${sub}</small></div></div>
+  <div class="ms-cmds"><span>subir: /usr/bin/ssh -f -N -o ControlPersist=no ahrena-tunnel</span><span>parar: /usr/bin/ssh -O exit ahrena-tunnel</span>${credential}</div></div>`
+}
+// The screen under the band: bands 1 to 4 and 6 to 8 fade as in C26 (the last reading); band 5, the connection, stays live.
+const oaBody = (w, kind) => {
+  const fade = kind === 'ok' ? '' : ' class="tm-faded"'
+  return `<div class="tm-rc-clip" style="max-height:230px"><div${fade}>${msProfiles(w, true)}${msStats(w, true)}${msBand(w, 3, 'ms-23', msChart(true), msVolumes(true))}</div></div>
+  ${msBand(w, 5, 'ms-23', oaConnection(kind), msWhere())}
+  <div class="tm-rc-clip" style="max-height:120px"><div${fade}>${msOne(6, msTerminals(true))}</div></div>`
+}
+const oaBand = (tone, icon, title, text, from, actions) => `<div class="faixa${tone === 'error' ? ' erro' : ''} tm-rc-band"><span class="ic"${tone === 'waiting' ? ' style="color:var(--status-waiting-text)"' : ''}>${ic(icon)}</span>
+  <div class="tm-rc-text"><b>${title}</b> ${text}<div class="mc-from">${from}</div></div><div class="tm-rc-actions">${actions}</div></div>`
+const oaRetry = busy => bt(busy ? 'Pedindo a prova…' : 'Tentar agora', { v: 'filled', icon: 'refresh-cw', state: busy ? 'busy' : '' })
+
+// 388-1 · owner-auth-required: no credential command; the band says what to configure and shows the example.
+const oaRequiredBand = busy => `${oaBand('waiting', 'lock', 'A Workstation pede a prova do dono, e este Mac ainda não sabe pedi-la.',
+    'O núcleo de lá só responde a quem prova ser o dono, e esta máquina não tem o comando de credencial no machines.json. Configure-o abaixo: o Mac roda o comando pelo SSH que já entra lá e recebe uma credencial curta, que fica só na memória do núcleo daqui. O núcleo de lá também precisa ter a credencial remota; se for antigo, atualize-o.',
+    'do núcleo de lá, que recusou o pedido sem prova', oaRetry(busy))}
+  <div class="cartao tm-rc-setup"><h5>${ic('key-round')}Comando de credencial<span class="c-muted" style="margin-left:auto;font-weight:400;font-size:11.5px">decisão 0020</span></h5>
+    <span class="c-muted" style="font-size:12.5px">Grave em <code>connection.credential</code>, troque os dois caminhos pelos da Workstation e clique em Tentar agora. O <code>node</code> vai com o caminho inteiro: um <code>ssh</code> com comando não carrega o PATH do seu shell.</span>
+    <div class="tm-config">${OA_CREDENTIAL_EXAMPLE}</div>
+    <div class="tm-legend"><span>${ic('list')} Lista, sem shell: só roda o que está no arquivo.</span><span>${ic('lock')} Nenhum segredo no comando: a credencial volta pela saída do ssh e não vai para log nem para a tela.</span><span>${ic('shield')} O token deste Mac nunca vai para lá.</span></div>
+    <div class="tm-rc-actions" style="justify-content:flex-start">${bt('Copiar o exemplo', { icon: 'copy' })}</div></div>`
+const oaRequiredScreen = (w, busy) => `${oaHead('required')}${oaRequiredBand(busy)}${oaBody(w, 'required')}`
+
+// 388-2 · owner-auth-failed: the command ran and brought no proof the core over there accepts.
+const oaFailedBand = () => oaBand('error', 'key-round', 'A Workstation recusou o acesso: a prova do dono falhou.',
+  `O comando de credencial rodou e não trouxe uma prova que o núcleo de lá aceite. O que costuma ser, nesta ordem:
+  <ol class="oa-causes"><li><b>O núcleo de lá é antigo</b>, de antes da credencial remota. Atualize e reinicie o núcleo na Workstation.</li>
+  <li><b>O SSH não entrou</b>: a chave foi recusada, o host mudou ou a sessão pediu login.</li>
+  <li><b>O núcleo de lá reiniciou</b> e recusou a renovação de novo, ou a porta 14720 leva a outro núcleo.</li></ol>
+  Tentamos de novo sozinhos em 30 s, 1 min e depois a cada 5 min.`,
+  'do comando de credencial · o código de saída fica no nucleo.log deste Mac, nunca na tela', oaRetry(false))
+const oaFailedScreen = w => `${oaHead('failed')}${oaFailedBand()}${oaBody(w, 'failed')}`
+
+// 388-3 · owner-auth-mismatch: the machine identity or the uid differs from the first proof; nothing signed goes there.
+const oaMismatchBand = () => oaBand('error', 'shield-alert', 'Esta não parece ser a mesma Workstation.',
+  `Quem respondeu agora tem outra identidade de máquina, ou outro usuário, do que a Workstation que provou ser sua na primeira vez desde que o núcleo deste Mac subiu. Por segurança, este Mac parou de mandar pedidos assinados para lá.
+  <ol class="oa-causes"><li><b>Confira se o túnel leva à máquina certa</b>: o host <span class="mono">ahrena-tunnel</span> no ~/.ssh/config deste Mac e a porta 14720.</li>
+  <li><b>Trocou de máquina ou de usuário de propósito?</b> Reinicie o núcleo deste Mac: a identidade fica guardada só enquanto ele roda, e a próxima prova vira a nova referência.</li></ol>`,
+  'da prova de agora, comparada com a primeira', bt('Tentar agora', { icon: 'refresh-cw' }))
+const oaMismatchScreen = w => `${oaHead('mismatch')}${oaMismatchBand()}${oaBody(w, 'mismatch')}`
+
+// 388-4 · the way back: Tentar agora, the proof arrives, everything as before; the sidebar dots and the alert lines.
+const oaOkScreen = w => `${oaHead('ok')}${oaBody(w, 'ok')}`
+const oaDots = () => `<div class="cartao oa-dots"><div class="olhinho">Máquinas, na barra lateral</div>
+  ${['ok', 'required', 'failed', 'mismatch'].map(k => `<div class="oa-dot-row"><span class="ponto tm-dot d-${OA[k].dot[0]}"></span>${ic('server')}<span>Workstation</span><span class="c-muted">${OA[k].dot[1]}</span></div>`).join('')}
+  <div class="oa-dot-row"><span class="ponto tm-dot d-abandoned"></span>${ic('server')}<span>Workstation</span><span class="c-muted">Sem conexão (túnel caído, como hoje)</span></div>
+  <span class="c-muted" style="font-size:11.5px">O texto cinza é o title e o aria-label do ponto: a cor sozinha não diz o estado.</span></div>`
+const oaAlerts = () => `<div class="cartao oa-alerts"><div class="olhinho">O que pede atenção, a bandeja e a notificação</div>
+  ${tmAlerts([['waiting', 'Workstation sem acesso', 'O núcleo de lá exige a prova do dono e esta máquina não tem o comando de credencial.', 'há 2 min'],
+    ['error', 'Workstation sem acesso', 'O comando de credencial não trouxe uma prova que o núcleo de lá aceite.', 'há 2 min'],
+    ['error', 'Workstation sem acesso', 'A identidade da máquina ou o usuário de lá mudou desde a primeira prova; nada assinado vai para lá.', 'há 2 min']])}
+  <span class="c-muted" style="font-size:11.5px">Uma linha por máquina, com o motivo de agora. Quando a prova chega, a linha sai, como sai a do túnel caído.</span></div>`
+const oaWayBack = () => `<div class="tm-rc">
+  ${rcRow([['1 · salvou o machines.json e clicou em Tentar agora · 1100 px', oaFrame(1100, 'required', oaRequiredScreen(1100, true))], ['2 · a prova chegou: tudo como antes · 1100 px', oaFrame(1100, 'ok', oaOkScreen(1100))]], [
+    '<b>Tentar agora</b> pede a credencial pelo SSH e relê a Workstation na hora; o botão fica ocupado até a resposta (no máximo o timeoutSeconds, 20 s no exemplo).',
+    '<b>Voltar ao normal é silêncio</b>: a faixa sai, a tela deixa de desbotar, o ponto fica verde e o alerta sai da lista. Nenhum aviso de "voltou".',
+    'A renovação a cada ~8 min não aparece. Se ela falhar com a máquina conectada, a tela segue igual até o núcleo de lá recusar um pedido; aí vira o 388-2.',
+    'Sem a credencial e com o núcleo de lá antigo (que não exige prova), a Workstation fica conectada como hoje: nenhuma faixa.'])}
+  ${rcRow([['A barra lateral', oaDots()], ['O alerta, por motivo', oaAlerts()]], [
+    '<b>Um ponto amarelo para os três motivos de acesso</b> (decidido pelo Fernando): o túnel está de pé e só falta a permissão, então o ponto se separa do cinza do túnel caído. O motivo vai no title e no aria-label; a faixa da tela e a do painel mantêm a cor de cada motivo.',
+    'O alerta troca o título de "sem conexão" para <b>"sem acesso"</b>: o túnel está de pé e a porta responde; quem recusa é o núcleo de lá.'])}
+</div>`
+
+// 388-5 · the session panel (mod), as P14, on a session that runs on a Workstation that refuses the proof.
+const OA_PANEL = {
+  required: { cls: 'w', tone: 'c-waiting', wide: 'Workstation bloqueada · falta a prova do dono', narrow: 'Bloqueada · falta a prova', status: ['● Workstation bloqueada', '● Workstation bloqueada · falta a prova do dono'],
+    q: 'Esta sessão roda na Workstation, que agora exige a prova do dono, e o machines.json deste Mac não tem o comando de credencial. O que você vê é a última leitura, de 09:12.' },
+  failed: { cls: 'e', tone: 'c-error', wide: 'Workstation recusou o acesso · a prova do dono falhou', narrow: 'Prova do dono falhou', status: ['● Prova do dono falhou', '● Workstation recusou o acesso · a prova do dono falhou'],
+    q: 'Esta sessão roda na Workstation. O comando de credencial não trouxe uma prova que o núcleo de lá aceite; tentamos de novo sozinhos. Última leitura de 09:12.' },
+  mismatch: { cls: 'e', tone: 'c-error', wide: 'Workstation com outra identidade', narrow: 'Identidade diferente', status: ['● Identidade diferente', '● Workstation com outra identidade · nada assinado vai para lá'],
+    q: 'Quem responde pela porta da Workstation não é a máquina da primeira prova. Nada assinado vai para lá até você conferir o túnel. Última leitura de 09:12.' },
+}
+function oaPanel(kind) {
+  const p = OA_PANEL[kind]
+  const body = wide => `${pnServidor()}<div class="pn-sec">Esta sessão<span class="r">auto · 5 s</span></div>
+    <div class="pn-banner ${p.cls}"><div class="l1"><span class="${p.tone}">${ic(OA[kind].core[1])}</span> <b>${wide ? p.wide : p.narrow}</b></div>
+      <div class="q mut">${wide ? p.q : 'Roda na Workstation · última leitura 09:12'}</div>
+      <div><span class="pn-link">resolver no console ›</span></div></div>
+    <div class="pc st-abandoned" style="${wide ? 'width:106ch' : ''}"><div class="t">${ic('folder-open')}Esta sessão<span class="r c-muted">09:12</span></div>
+      <div class="ln"><span class="grande trunc">Migração do esquema de pedidos</span></div>
+      <div class="ln mut"><span class="trunc">motor-de-regras · Workstation · sem leitura nova</span></div></div>
+    <div class="pn-pe"><span class="mut">○ ${wide ? 'sem dados da Workstation desde 09:12' : 'sem dados de lá desde 09:12'}</span></div>`
+  return `<div class="fila">${pane(38, body, p.status[0])}${pane(121, body, p.status[1], 'a faixa usa a largura da grade no largo · <b>sem estouro</b>')}</div>`
+}
+const oaPanels = () => ['required', 'failed', 'mismatch'].map(k => `<div class="rotulo">${OA[k].badge[1]} · <span class="mono">owner-auth-${k}</span></div>${oaPanel(k)}`).join('')
+
+// =====================================================================
 // Montagem
 // =====================================================================
 function montar() {
@@ -5384,6 +5531,7 @@ function montar() {
     <li><b>Mural ao vivo: a que espera por mim fica, Paradas e as filhas (#333, a aprovar):</b> a sessão não arquivada que pede algo continua no mural sem o limite de 180 min, a faixa Paradas guarda as paradas sem pedido, e a líder mostra as filhas recolhidas, com a que precisa de você no topo (C85 a C87). Escolhas em aberto, cada uma com a recomendação no PR: (1) o que é "pediu algo"; (2) onde mora a faixa Paradas; (3) a filha que precisa de mim: card próprio e dentro da líder; (4) a líder aberta ocupa a linha inteira; (5) o resumo da líder conta a árvore toda; (6) mãe arquivada com filha viva; (7) Paradas pagina de 7 em 7.</li>
     <li><b>A faixa acima do prompt (#406, aprovado):</b> com o painel fechado, na superfície desktop, uma linha acima do prompt com "Ahrena Console", Abrir e Ocultar, sem borda e sem dado do núcleo; some com o painel aberto, com a pesquisa do app e depois de Ocultar, guardado no <code>$.store</code>, com um toast uma vez só no primeiro Ocultar. O caminho de volta é uma linha no fim do painel, "Mostrar atalho acima do prompt", só enquanto a faixa está oculta (P17, P18).</li>
     <li><b>Sessões de terminal (#350, a aprovar):</b> card novo em cada máquina (C96 a C99). Presa é o comando em primeiro plano acima de 15 min que não é interativo conhecido, ou um script de scratchpad do Claude. Interromper o comando sobe em escada, um clique por degrau (SIGINT no grupo, SIGTERM, SIGKILL com segunda confirmação); Encerrar a sessão é SIGHUP no sshd e fecha todos os terminais da conexão. Nunca o sshd do túnel, o núcleo, o app nem outro usuário. Na Workstation, só leitura por padrão, com o mesmo flag de ações remotas da decisão 0014. <b>Os processos claude/ccd-cli antigos do servidor remoto do Claude Desktop ficam de fora</b>: não são terminais; card próprio, em outra issue. <b>A decidir:</b> um servidor de desenvolvimento deixado em primeiro plano de propósito (npm run dev) vira Presa depois de 15 min; a proposta é a lista editável terminal.interactiveCommands.</li>
+    <li><b>Prova do dono na máquina remota (#388, decisão 0020, aprovado pelo Fernando):</b> os três motivos de uma remota que recusa o Mac, cada um com o que fazer: <b>Acesso bloqueado</b> (amarelo, configurar o <code>connection.credential</code>, 388-1), <b>Prova do dono falhou</b> (vermelho, atualizar o núcleo de lá ou conferir o SSH, 388-2) e <b>Identidade diferente</b> (vermelho, conferir o túnel ou reiniciar o núcleo deste Mac, 388-3). A volta ao normal é silenciosa (388-4); o ponto da barra lateral, o alerta e a faixa do painel (388-5) dizem o mesmo motivo; o ponto é um amarelo só para os três. Decidido: o alerta dos três motivos se chama “sem acesso” (túnel caído e núcleo parado seguem “sem conexão”); a tela não mostra o horário da próxima tentativa nem a identidade que mudou.</li>
     <li><b>Backlog:</b> Feed de atividade, Analytics completo, Workflows e o detalhe com o grafo de agentes estavam para depois da entrega. Entraram aqui a pedido do dono; o PM decide se viram itens da 0.0.1.</li></ol></section>`
   indice.innerHTML = htmlI; main.innerHTML = htmlM
   if (window.lucide) lucide.createIcons()

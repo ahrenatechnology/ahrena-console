@@ -1,6 +1,6 @@
 // Formatação do painel: tempo, modelo, tokens, custo e os glifos de status. Funções puras.
 
-import type { AwaitingReason, ConnectionReason, PanelDecision, DisplayStatus, DecisionScope, InboxState, Panel, PanelMachine, PanelMachineConnection, PanelSession, SessionAttention } from '../types'
+import type { AwaitingReason, ConnectionReason, OwnerAuthReason, PanelDecision, DisplayStatus, DecisionScope, InboxState, Panel, PanelMachine, PanelMachineConnection, PanelSession, SessionAttention } from '../types'
 
 /** "agora", "40 s", "12 min", "4 h", "2 d". */
 /**
@@ -249,16 +249,22 @@ const CONNECTION_STATE: Record<PanelMachineConnection['state'], { short: string;
   stopped: { short: 'parada por você', why: 'você parou o túnel' },
 }
 
+const OWNER_AUTH: readonly OwnerAuthReason[] = ['owner-auth-required', 'owner-auth-failed', 'owner-auth-mismatch']
+
 /**
  * The machine the session runs on, when its connection is not up (#278, P14): the band's reason
  * ("SSO expirado") and, for the wide panel, the clause that explains it. `null` for this machine,
- * a connection that is up, or a core that does not send the machine.
+ * a connection that is up, or a core that does not send the machine. `auth` (#388, 388-5): the core over
+ * there refuses the owner proof; the tunnel is up, so it wins over the connection's state, except while
+ * the person stopped the tunnel or a job runs.
  */
-export function machineDown(p: Panel | null | undefined): { machine: PanelMachine; short: string; why: string } | null {
+export function machineDown(p: Panel | null | undefined): { machine: PanelMachine; short: string; why: string; auth: OwnerAuthReason | null } | null {
   const machine = p?.machine
   const c = machine?.connection
+  const auth = machine && OWNER_AUTH.includes(machine.reason as OwnerAuthReason) ? (machine.reason as OwnerAuthReason) : null
+  if (machine && machine.id !== 'local' && auth && (!c || !['stopped', 'starting', 'stopping'].includes(c.state))) return { machine, short: '', why: '', auth }
   if (!machine || !c || machine.id === 'local' || c.state === 'up' || !CONNECTION_STATE[c.state]) return null
   // A stop the person asked for, or a job that runs, says what happens; otherwise, the reason.
   const known = c.state === 'stopped' || c.state === 'starting' || c.state === 'stopping' ? null : CONNECTION_REASON[c.lastError?.reason as ConnectionReason]
-  return { machine, ...(known ?? CONNECTION_STATE[c.state]) }
+  return { machine, ...(known ?? CONNECTION_STATE[c.state]), auth: null }
 }

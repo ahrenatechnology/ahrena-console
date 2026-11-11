@@ -680,6 +680,16 @@ const api: LocalApi = await startLocalApi({
   machineReader: new MachineReader({ get: loopbackGet({ timeoutMs: MACHINE_READ_ADAPTER_TIMEOUT_MS, proof: remoteProofs }), machines: () => remoteMachines?.list() ?? [], connectionOf: (id) => machineConnection?.status(id) ?? null }),
   reconnect: machineConnection?.legacy ?? reconnectRunner,
   machineConnection: machineConnection ? createConnectionRoute(machineConnection) : null,
+  // "Tentar agora" (#388, 388-2 and 388-4): the proof now, skipping the wait once, then a read of the machine.
+  ownerProofRetry:
+    remoteMachines && remoteProofs
+      ? async (id) => {
+          const machine = remoteMachines?.get(id);
+          if (!machine) return null;
+          await remoteProofs?.retryNow(machine.port);
+          return machine.readNow();
+        }
+      : null,
   messaging: createMessagingRoute({ messaging, sessions: storage, accounts, log }),
   transcription: transcription ? createTranscriptionRoute({ transcription, log }) : null,
   orders: createOrdersRoute({ orders: new SessionOrders(), messaging, sessions: storage }),

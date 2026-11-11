@@ -17,8 +17,9 @@
 // - The remote's panel is rebuilt with the caps of api/machine-items.ts (`boundedJson`) and at most
 //   `MAX_REMOTE_PANEL_BYTES`; one without the panel's shape, or that already carries a `machine` (a
 //   remote of the remote), is dropped, never repaired.
-// - It gains `machine: { id, label, lastReadAt, connection }`, the shape the mod's P14 band reads
-//   (plugins/ahrena-console/types, #278). `lastReadAt` is when the panel shown was read.
+// - It gains `machine: { id, label, lastReadAt, connection, reason }`, the shape the mod's P14 band reads
+//   (plugins/ahrena-console/types, #278). `lastReadAt` is when the panel shown was read; `reason` is the
+//   machine's unreachable reason (#388, 388-5), so the band tells the owner-proof refusals from a drop.
 // - Read only (AC-3): nothing in it opens or decides anything here. `api.opensSession` is false, every
 //   Desktop `local_…` id is null (no "Ir para a sessão", no "Desarquivar"), and `decisions` is null
 //   (no Confirmar, Descartar, Ajustar or Desfazer: they would write to this Mac's núcleo, which does not
@@ -39,6 +40,7 @@
 import { boundedJson, isObject, remoteAccountColor, REMOTE_ID } from './machine-items.ts';
 import { withDeadline, type MachineReader, type RemoteSessionSource } from './machine-reader.ts';
 import type { Panel, PanelMachine } from './types.ts';
+import { UNREACHABLE_REASONS } from '../telemetry/model.ts';
 import { API_VERSION } from './version.ts';
 
 /** The `api` block without this API's own (a test without the panel builder). */
@@ -211,7 +213,7 @@ export class RemotePanels {
   }
 
   private async withMachine(body: Record<string, unknown>, source: RemoteSessionSource, lastReadAt: string | null): Promise<Record<string, unknown>> {
-    const machine: PanelMachine = { id: source.id, label: source.label, lastReadAt, connection: await this.bounded(this.o.reader.connection(source)) };
+    const machine: PanelMachine = { id: source.id, label: source.label, lastReadAt, connection: await this.bounded(this.o.reader.connection(source)), reason: reasonOf(source) };
     return { ...body, api: { ...LOCAL_API_FALLBACK, ...this.o.api?.(), opensSession: false }, machine };
   }
 
@@ -219,6 +221,12 @@ export class RemotePanels {
   private async bounded<T>(v: Promise<T | null> | T | null): Promise<T | null> {
     return withDeadline(Promise.resolve(v), this.o.reader.timeoutMs);
   }
+}
+
+/** The machine's unreachable reason (#388), from the closed list only; a status that says another thing gives `null`. */
+function reasonOf(source: RemoteSessionSource): PanelMachine['reason'] {
+  const reason = source.status().reason;
+  return reason && (UNREACHABLE_REASONS as readonly string[]).includes(reason) ? reason : null;
 }
 
 /** `/api/panel/<id>` with the mod's own parameters, nothing else. */
