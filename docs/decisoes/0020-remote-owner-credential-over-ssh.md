@@ -33,7 +33,7 @@ O que já existe e qualquer solução tem de respeitar:
 
 ## Decisão
 
-**O Mac roda um comando fixo pelo SSH que já entrou na remota. Do lado de lá, a CLI do núcleo lê a trava do próprio usuário e pede ao núcleo uma credencial curta, presa a esse núcleo, a esse processo e a esse usuário. A credencial volta pelo stdout do `ssh`, fica só na memória do núcleo do Mac, e cada pedido pelo túnel leva uma assinatura de uso único feita com ela, nunca a credencial. A remota aceita a assinatura só nas rotas de uma lista fechada; as ações continuam pedindo `--accept-remote-actions` além dela.**
+**O Mac roda um comando fixo pelo SSH que já entrou na remota. Do lado de lá, a CLI do núcleo lê a trava do próprio usuário e pede ao núcleo uma credencial curta, presa a esse núcleo, a esse processo e a esse usuário. A credencial volta pelo stdout do `ssh`, fica só na memória do núcleo do Mac, e cada pedido pelo túnel leva uma assinatura feita com ela, nunca a credencial, que a remota aceita uma vez só e por 10 s. A remota aceita a assinatura só nas rotas de uma lista fechada; as ações continuam pedindo `--accept-remote-actions` além dela.**
 
 ### 1. A entrega: o comando de credencial
 
@@ -42,13 +42,13 @@ O que já existe e qualquer solução tem de respeitar:
   ```json
   "credential": { "command": ["/usr/bin/ssh", "-T", "-o", "BatchMode=yes", "-o", "SessionType=default",
       "-o", "ControlMaster=no", "-o", "ClearAllForwardings=yes", "ahrena-tunnel",
-      "node", "<checkout>/packages/nucleo/src/owner/cli.ts", "remote-credential", "--port", "4720"],
+      "<node absoluto>", "<checkout>/packages/nucleo/src/owner/cli.ts", "remote-credential", "--port", "4720"],
     "timeoutSeconds": 20 }
   ```
 
-  `ControlMaster=no` usa a conexão mestra do túnel quando ela existe e nunca vira mestra; `ClearAllForwardings=yes` impede que, sem mestra, este `ssh` tome as portas do túnel. O comando e seus argumentos são constantes: nenhum segredo passa por argv, nem do lado de cá nem do de lá.
+  `ControlMaster=no` usa a conexão mestra do túnel quando ela existe e nunca vira mestra; `ClearAllForwardings=yes` impede que, sem mestra, este `ssh` tome as portas do túnel. O `node` vai com caminho absoluto, porque um `ssh` com comando não carrega o PATH do shell interativo (nvm, por exemplo). O comando e seus argumentos são constantes: nenhum segredo passa por argv, nem do lado de cá nem do de lá.
 
-- **O pedido vai pelo stdin.** O núcleo do Mac escreve uma linha JSON, `{"version":1,"nonce":"<32 hex>"}`, e fecha o stdin. O nonce é novo a cada pedido, para que uma resposta velha (gravada, repetida por um wrapper) não sirva.
+- **O pedido vai pelo stdin.** O núcleo do Mac escreve uma linha JSON, `{"version":1,"nonce":"<32 hex>","revoke":["<credentialId>", …]}`, e fecha o stdin. O nonce é novo a cada pedido, para que uma resposta velha (gravada, repetida por um wrapper) não sirva. `revoke` lista as credenciais que o Mac já descartou (§4), até 3; o núcleo de lá as apaga antes de emitir a nova. O pedido vai pelo SSH autenticado, então revogar por ali é seguro.
 - **A resposta vem pelo stdout**, uma linha JSON de até 4 KiB:
 
   ```
@@ -56,14 +56,14 @@ O que já existe e qualquer solução tem de respeitar:
   ```
 
   `key` são 32 bytes aleatórios (base64url); `credentialId` e `generation` são 16 bytes em hex; os tempos são em ms, no relógio da remota.
-- **Um runner próprio, não o de reconexão.** O processo filho sobe sem shell; o stdout vai por pipe para a memória, com teto de 4 KiB (passou, mata o grupo e falha); o stderr é descartado (`ignore`); o timeout mata o grupo do processo. Nada da saída vai para `reconnect.log`, `nucleo.log` ou resposta HTTP. O log diz só `credential (<id>): ok`, ou `failed (exit <n> | timeout | invalid-output | nonce-mismatch)`.
+- **Um runner próprio, não o de reconexão.** O processo filho sobe sem shell; o stdout vai por pipe para a memória, com teto de 4 KiB (passou, mata o grupo e falha); o stderr é descartado (`ignore`); o timeout mata o grupo do processo. Nada da saída vai para `reconnect.log`, `nucleo.log` ou resposta HTTP. O log diz só `credential (<id da máquina>): ok`, ou `failed (exit <n> | timeout | invalid-output | nonce-mismatch)`: o id é o da máquina em `machines.json`, nunca o `credentialId`.
 - **Do lado de lá, `core remote-credential --port <n>`** (subcomando de `packages/nucleo/src/owner/cli.ts`):
   1. lê o stdin (até 1 KiB) e valida o pedido;
-  2. acha, no registro de instâncias, o núcleo deste usuário que ouve na porta pedida, confere com `verifyInstance` e lê o token da trava com `readOwnerToken` (dono do arquivo é o uid do processo, modo 0600, sem symlink);
-  3. faz `POST /api/owner/remote-credentials` em `127.0.0.1:<porta>` com `Authorization: Bearer <token de lá>` e o nonce no corpo;
+  2. acha, no registro de instâncias, o núcleo deste usuário que ouve na porta pedida, confere com `verifyInstance` e lê o token da trava. A leitura é a de `readOwnerToken` (hoje em `mcp/owner-credentials.ts`; a camada 1 a move para `owner/`, porque `mcp/` já importa `owner/registry` e o caminho inverso faria um ciclo): pasta e arquivo do uid do processo, sem bits de grupo nem de outros, sem symlink, até 64 KiB;
+  3. faz `POST /api/owner/remote-credentials` em `127.0.0.1:<porta>` com `Authorization: Bearer <token de lá>`, o nonce e o `revoke` no corpo;
   4. escreve a resposta no stdout, e mais nada.
 
-  Saídas: `0` emitida; `2` nenhum núcleo deste usuário nessa porta; `3` o núcleo não tem a rota (é anterior a esta decisão); `1` qualquer outra falha. O stderr traz só mensagens fixas em inglês, sem token nem chave.
+  Saídas: `0` emitida; `10` nenhum núcleo deste usuário nessa porta, ou trava ilegível; `11` o núcleo não tem a rota (é anterior a esta decisão); `12` qualquer outra falha. São códigos que uma CLI antiga nunca devolve (ela sai com `2` para comando desconhecido, e com `1`). O Mac não decide nada pelo código: só registra o número no log. O que vale é se veio uma resposta válida no stdout (§6). O stderr traz só mensagens fixas em inglês, sem token nem chave.
 - **A rota de emissão, `POST /api/owner/remote-credentials`**, só no núcleo de lá: pede o bearer do dono **local** (o da trava), `Host` de loopback, **nenhum** `Origin` (com `Origin` é 403: não é rota da `/ui`), `application/json`, corpo de até 1 KiB. Nunca aceita uma credencial remota: uma credencial não emite outra.
 
 ### 2. A amarração da credencial
@@ -74,7 +74,7 @@ O núcleo de lá guarda cada credencial **só na memória**, num registro `{ cre
 - **Processo e porta:** `corePid` e `corePort` são os do núcleo que emitiu. A CLI só pede a quem ouve na porta pedida e confirma o pid pelo `/api/overview`.
 - **Dono do SO:** só quem lê a trava 0600 emite, ou seja, o uid dono do núcleo. O `uid` vai na credencial; o verificador confere que é o seu.
 - **Identidade da máquina:** `machineIdentity` é o SHA-256 de `ahrena-console-machine-v1\n` mais o `/etc/machine-id` (no macOS, o `IOPlatformUUID`). Não é segredo; é estável. O Mac fixa `{ machineIdentity, uid }` de cada máquina na primeira emissão boa e guarda na memória pela vida do processo, como já faz com `SessionPortals`. Se uma emissão posterior trouxer outro valor, recusa e marca `owner-auth-mismatch`. Fixar em disco e parear de verdade é da #315.
-- **Antes de assinar o primeiro pedido**, o Mac lê o `GET /api/overview` anônimo pela porta do túnel e confere que o `pid` é o `corePid` da credencial. Se não for, a porta leva a outro núcleo: não assina nada, descarta a credencial e marca `owner-auth-failed`.
+- **Antes de assinar o primeiro pedido**, o Mac lê o `GET /api/overview` anônimo pela porta do túnel e confere que o `pid` é o `corePid` da credencial. Se não for, a porta leva a outro núcleo: não assina nada, descarta a credencial e marca `owner-auth-failed`. A conferência repete a cada emissão e depois de cada `port-closed`. Ela pega um túnel que aponta para o núcleo errado, **não** um impostor: o `/api/overview` é anônimo, e quem ocupa a porta responde o pid que quiser. Contra o impostor, o que protege é a assinatura (§3), e autenticar a resposta é da #315.
 - **Nunca o token do Mac.** O pedido pelo stdin leva só versão e nonce. A credencial é emitida lá, com material de lá.
 
 ### 3. O uso: uma assinatura por pedido, nunca a chave
@@ -83,20 +83,36 @@ Cada pedido pelo túnel leva:
 
 ```
 Authorization: AhrenaRemote id=<credentialId>, ts=<ms>, nonce=<32 hex>, sig=<64 hex>
-sig = HMAC-SHA256(key, "ahrena-remote-v1\n" + method + "\n" + rawPath + "\n" + host + "\n"
+sig = HMAC-SHA256(key, "ahrena-remote-v1\n" + method + "\n" + target + "\n" + host + "\n"
                        + generation + "\n" + ts + "\n" + nonce + "\n" + hex(SHA-256(body)))
 ```
 
-- `ts` é o relógio da remota estimado pelo Mac (`issuedAt` menos a hora do Mac quando a resposta chegou, somado à hora atual). Assim a diferença de relógio entre as máquinas não importa.
-- **A remota aceita** só se: `id` existe, não expirou e não foi despejada; `generation` e `uid` são os seus; `|ts - agora| ≤ 30 s`; o nonce não foi visto nessa credencial (a memória de nonces cobre a janela, e com mais de 10 000 o pedido é recusado); `sig` confere em `timingSafeEqual`; e método mais caminho cru estão na lista fechada (§5).
-- **A chave nunca sai do processo do Mac.** O que passa pela porta é uma assinatura presa a método, caminho, corpo, hora e nonce. Quem ocupar `14720` com o túnel caído, ou ler um pedido, leva uma assinatura que não vale para outra rota, outro corpo, de novo, ou daqui a 30 s.
+- `target` é o alvo cru do pedido, **com a query**, exatamente como sai na linha do pedido (`/api/telemetry`, `/api/connectors?refresh=1`). Mudar um byte da query invalida a assinatura. A lista fechada (§5) casa o caminho sem a query, e cada rota diz quais parâmetros de query aceita; parâmetro fora disso é 403 `credential-route`.
+- `ts` é o relógio da remota contado pelo Mac: `issuedAt` mais o tempo **monotônico** do Mac desde que a resposta chegou (`process.hrtime`). Assim nem a diferença de relógio entre as máquinas nem um ajuste do relógio do Mac importam. O erro é a latência de ida do stdout, depois da emissão: abaixo de um segundo pela conexão mestra. Depois de o Mac dormir, o tempo monotônico atrasa; a remota responde `401 credential-clock` e o Mac renova.
+- **A remota aceita** só se, nesta ordem:
+  1. `id` existe, não expirou e não foi despejada;
+  2. `generation` e `uid` são os seus;
+  3. `|ts - agora| ≤ 10 s`;
+  4. `sig` confere em `timingSafeEqual`;
+  5. o nonce não foi visto nessa credencial;
+  6. método e alvo estão na lista fechada (§5).
+
+  O nonce só entra na memória depois que a assinatura confere. Um pedido com assinatura errada não muda estado nenhum, então quem conhece o `id` (ele viaja em claro) não consegue encher a memória e trancar o Mac. A memória guarda os nonces da janela de 10 s, com teto de 10 000 por credencial, um número que só os pedidos do próprio Mac poderiam alcançar.
+- **A chave nunca sai do processo do Mac.** O que passa pela porta é uma assinatura presa a método, alvo, corpo, hora e nonce. Quem ler um pedido que chegou ao núcleo de lá leva uma assinatura já gasta, que não vale para outra rota, outro corpo nem outra vez.
+- **O resíduo: o pedido que não chegou.** Com o túnel caído, quem ocupar `14720` recebe o pedido assinado do Mac, e ele ainda não foi gasto. Se o túnel voltar dentro dos 10 s, essa pessoa pode entregá-lo uma vez, sem mudar nada nele: exatamente o pedido que o Mac quis fazer. Num `GET`, ela lê a resposta (dado privado); numa ação, dispara aquela ação uma vez, se a remota aceitar ações remotas. Três coisas limitam isso:
+  - a janela curta de 10 s;
+  - o Mac descarta a credencial depois de qualquer pedido assinado que termine em `port-closed`, `no-response` ou resposta inválida, e a revoga na próxima emissão (`revoke`, §1);
+  - o Mac só manda pedido assinado depois de uma emissão feita com a porta respondendo.
+
+  Fechar isso de vez pede autenticar quem responde na porta, que é a #315.
 - **O cabeçalho nunca vai para log.** Os erros dizem só o motivo.
 
 ### 4. Vida, renovação, reconexão e revogação
 
 - **Validade de 10 minutos.** O Mac renova quando faltam 2 min, ou quando recebe `401` (`credential-unknown`, `credential-expired`, `credential-clock`), e repete o pedido uma vez. Uma renovação por máquina por vez; quem chega no meio espera a que está em curso. Se a renovação falha, o Mac espera 30 s, 60 s, e depois até 5 min entre tentativas, para que um `ssh` quebrado não vire um `ssh` por pedido.
 - **No máximo 3 credenciais vivas por núcleo.** Emitir a quarta despeja a mais antiga.
-- **O Mac joga fora a credencial** quando a conexão da máquina reinicia ou para (start, stop, reconnect), quando a porta fecha (`port-closed`), quando a remota responde `credential-unknown` e quando a identidade muda.
+- **O Mac joga fora a credencial** quando a conexão da máquina reinicia ou para (start, stop, reconnect), quando um pedido assinado termina em `port-closed`, `no-response` ou resposta inválida, quando a remota responde `credential-unknown` e quando a identidade muda. As descartadas que ainda podem estar vivas lá vão no `revoke` da próxima emissão.
+- **Reiniciar o núcleo do Mac** perde as credenciais e as identidades fixadas, que só existem na memória. Ele emite de novo, e as antigas vivem lá até expirar ou ser despejadas pelas novas (no máximo 3 por núcleo).
 - **Reiniciar o núcleo de lá é a revogação.** A tabela some e a geração muda; o próximo pedido do Mac recebe `401 credential-unknown`, ele renova pelo SSH e segue. Nenhum estado sobrevive em disco.
 - **Streams e long polls fecham sem o último pedaço.** A guarda é a mesma da `authorizeOwner`: um timer de 100 ms e uma checagem a cada `writeHead`, `write`, `end`, `flushHeaders` e `addTrailers`. Quando a credencial que abriu a resposta expira, é despejada ou a geração muda, a resposta é destruída (`res.destroy()`), sem um evento final. O Mac reabre com uma assinatura nova. Hoje nenhuma chamada do Mac abre stream na remota; a regra vale para a primeira que abrir.
 
@@ -117,9 +133,12 @@ O lado do Mac injeta a assinatura em `loopbackGet` e `loopbackWrite` (um assinad
 
 ### 6. Sem prova, fechado
 
-- **`owner-auth-required` continua sendo o estado sem prova**: sem `connection.credential`, a CLI de lá respondeu `2` ou `3`, ou a remota respondeu 403 a um pedido sem assinatura.
-- **Dois motivos novos**, para a tela dizer o que fazer: `owner-auth-failed` (o comando falhou, estourou o tempo, respondeu fora do formato ou com o nonce errado, o pid não confere, ou a remota recusou de novo depois de renovar) e `owner-auth-mismatch` (a identidade ou o uid mudaram desde a primeira emissão).
-- **Compatível com o núcleo antigo.** Um núcleo de antes da #391 (o `81251bd` da Workstation) não exige prova: o comando de credencial sai com `3`, o Mac pede sem assinatura e recebe 200. A Workstation volta para a `main` só depois que o lado de lá desta decisão estiver lá.
+- **Sem credencial, o Mac pede sem assinatura e o estado sai da resposta.** Qualquer emissão que não termine numa resposta válida no stdout (código diferente de zero, timeout, saída inválida, nonce errado) deixa a máquina sem credencial. Daí em diante, o Mac pede como hoje, sem `Authorization`:
+  - 200 → `connected`, como hoje, porque a remota não exige prova;
+  - 403 → `owner-auth-required` se a máquina não tem `connection.credential`, ou `owner-auth-failed` se tem e a emissão falhou.
+- **`owner-auth-required` continua sendo o estado sem prova**, e nada abre sem ela.
+- **Dois motivos novos**, para a tela dizer o que fazer. `owner-auth-failed`: o comando falhou e a remota exige prova, o pid não confere, ou a remota recusou de novo depois de renovar. `owner-auth-mismatch`: a identidade ou o uid mudaram desde a primeira emissão.
+- **Compatível com o núcleo antigo.** O `81251bd` da Workstation é anterior à #391 e não exige prova. A CLI de lá não conhece `remote-credential` e sai com `2`; o Mac fica sem credencial, pede sem assinatura e recebe 200. A Workstation volta para a `main` só depois que o lado de lá desta decisão estiver lá.
 - **Nada de Origin nem de "veio pelo túnel".** Nenhuma opção aceita pedido do túnel sem assinatura, e nenhum `Origin` substitui a prova. Um pedido com `AhrenaRemote` e qualquer `Origin` é recusado (403), porque o Mac nunca manda `Origin`.
 
 ### 7. O que não vaza
@@ -138,7 +157,7 @@ O lado do Mac injeta a assinatura em `loopbackGet` e `loopbackWrite` (um assinad
 - **Mandar o token do Mac para a remota.** Proibido pela 0003: entrega o dono do Mac a outra máquina.
 - **Aceitar o túnel ou um `Origin` como prova** (uma opção `--trust-tunnel`). É o que a #302 fechou: qualquer usuário do Mac alcança `14720`.
 - **Copiar o token da trava de lá pelo SSH** (`ssh ahrena-tunnel cat …/nucleo.json`). É a menor mudança e funciona, mas põe no Mac um bearer com poder total sobre o núcleo de lá, inclusive sobre rotas que nunca deveriam ser chamadas de fora e sobre a própria emissão. Esse bearer vale até o próximo reinício, não tem escopo e, se vazar uma vez, pode ser repetido.
-- **Uma credencial curta, mas como bearer simples.** Seria mais simples do que assinar cada pedido. Só que o bearer viaja em todo pedido pela porta que qualquer usuário do Mac alcança: quem tomar `14720` com o túnel caído junta um bearer válido por 10 min e o usa quando o túnel voltar. A assinatura por pedido reduz esse vazamento a um pedido só, já gasto. O custo é um HMAC por pedido e uma memória de nonces, tudo com `node:crypto` e sem dependência.
+- **Uma credencial curta, mas como bearer simples.** Seria mais simples do que assinar cada pedido. Só que o bearer viaja em todo pedido pela porta que qualquer usuário do Mac alcança: quem tomar `14720` com o túnel caído junta um bearer válido por 10 min e o usa quando o túnel voltar. A assinatura por pedido reduz esse vazamento a, no máximo, a entrega única, em 10 s, do pedido exato que o Mac tentou fazer (o resíduo do §3). O custo é um HMAC por pedido e uma memória de nonces, tudo com `node:crypto` e sem dependência.
 - **Um socket Unix encaminhado pelo SSH** (`LocalForward <sock> <sock remoto>`, a "Unix socket" da 0003). A fronteira do SO é forte, mas: o `~/.ssh/ahrena-workstation.conf` é gerado pelo `connect.sh` de outro plugin, que teria de mudar; toda conexão no socket seria o dono com poder total, sem escopo nem validade, e sem separar leitura de ação; o Node não expõe a credencial do par (`SO_PEERCRED`); e todo o transporte do Mac (`loopbackGet`, `loopbackWrite`, `machines.json` por porta) mudaria. Fica como caminho se um dia o núcleo gerenciar o túnel.
 - **Cada pedido como um comando SSH** (`ssh ahrena-tunnel curl …`). Um processo por pedido; sem a mestra, uma sessão do SSM por pedido; e não serve para stream.
 - **TLS mútuo no núcleo.** Exige certificados, emissão e rotação, e nada disso existe no repositório.
@@ -155,10 +174,13 @@ Tudo com SSH falso e núcleo falso, sem rede e sem a Workstation. O **SSH falso*
    - Rota fora da lista com assinatura válida → 403 `credential-route`.
    - Ação remota com assinatura válida e sem `--accept-remote-actions` → 403.
    - Emissão sem o bearer de lá, ou com `Origin` → 403.
-   - O verificador recusa uma credencial emitida para outro uid (**wrong owner**).
+   - **Wrong owner, do lado de lá:** `remote-credential` rodando contra uma trava de outro uid, com bits de grupo ou de outros, ou por symlink sai com `10` e não escreve nada no stdout. O núcleo falso não recebe nenhum pedido de emissão.
+   - O mesmo alvo com a query mudada (`?refresh=1` a mais ou a menos) → 401 assinatura inválida; um parâmetro fora dos aceitos → 403 `credential-route`.
 2. **As vistas configuradas voltam depois de reinício e reconexão; a prova velha é recusada; streams revogados fecham sem o último pedaço.**
    - Reiniciar o núcleo falso (geração nova) → a credencial velha leva 401 `credential-unknown` → o Mac renova pelo SSH falso → `connected` no ciclo seguinte.
-   - Um `start` da conexão descarta a credencial e emite outra (**reconnect**).
+   - Um `start` da conexão descarta a credencial e emite outra, com a velha no `revoke`; a velha passa a levar 401 `credential-unknown` (**reconnect**).
+   - Reiniciar o núcleo do Mac: ele emite de novo, fixa a identidade outra vez e volta a `connected`; a quarta emissão despeja a mais antiga.
+   - Contra um núcleo falso que responde 200 sem exigir prova (o `81251bd`) e um SSH falso que sai com `2`: a máquina fica `connected`, sem assinatura.
    - Um SSE aberto com uma credencial que expira, é despejada ou muda de geração é destruído: o cliente de teste não recebe nenhum byte depois do instante da revogação (**expiry**).
    - Relógio além de `expiresAt` → 401 `credential-expired`, renovação e um único novo pedido.
 3. **Nenhum token aparece em GET/HTML, logs, argv, saída do registro ou texto de erro.**
@@ -174,11 +196,13 @@ Tudo com SSH falso e núcleo falso, sem rede e sem a Workstation. O **SSH falso*
      - uma emissão com outra `machineIdentity` depois da primeira → `owner-auth-mismatch`, e nada é assinado;
      - a porta do túnel apontando para outro núcleo falso → o `pid` do `/api/overview` não confere → `owner-auth-failed`, e nada é assinado;
      - o outro núcleo recusa a credencial que não emitiu.
-   - **Wrong owner:** o uid muda entre duas emissões → `owner-auth-mismatch`; o verificador recusa um uid diferente do seu.
+   - **Wrong owner, do lado do Mac:** o uid muda entre duas emissões → `owner-auth-mismatch`. O uid que a credencial declara é conferido pelo mesmo processo que a emitiu, então ele sozinho não prova nada; o que separa os donos é a leitura da trava, testada no critério 1.
    - **Replay:**
      - o mesmo nonce duas vezes → 403 `credential-replayed`;
-     - `ts` fora da janela de 30 s → 401 `credential-clock`;
-     - uma resposta do comando com outro nonce → `owner-auth-failed`.
+     - `ts` fora da janela de 10 s → 401 `credential-clock`; um relógio do Mac adiantado 1 h (sem mexer no monotônico) não muda nada;
+     - 10 001 pedidos com `id` válido e assinatura errada → todos 401, e depois disso um pedido certo do Mac passa;
+     - uma resposta do comando com outro nonce → `owner-auth-failed`;
+     - **o pedido que não chegou:** um servidor falso ocupa a porta e guarda um pedido assinado. Entregue em até 10 s, ele passa uma vez, e é o resíduo que o §3 declara. Entregue depois de 10 s, ou depois que o Mac emitiu de novo com o `revoke`, leva 401.
    - **Expiry** e **reconnect**, como no critério 2.
    - **Sem inferência real:** nada nesta decisão chama um modelo, e os gates da #377 e da #382 ficam como estão.
 
@@ -189,7 +213,7 @@ Cada arquivo de teste nomeia o critério que cobre (`AC1` a `AC4`), para a rastr
 Concern roteado pela tabela: backend para o núcleo, frontend para o texto da tela. Não há camada de dados, porque nada vai para o SQLite. Cada camada passa pelo ciclo desenvolver → Argos (no máximo três rodadas) antes de abrir, e as camadas entram em pilha, nesta ordem:
 
 1. **apollo · emissão e verificação na remota.** Geração por processo, identidade da máquina, `POST /api/owner/remote-credentials`, a tabela em memória (validade, despejo, nonces), o verificador `AhrenaRemote` na `authorizeOwner` com a lista fechada e `--accept-remote-actions` nas ações, a guarda de streams e `core remote-credential`. Testes AC1, AC2 (lado de lá) e AC4 (replay, dono errado).
-2. **apollo · o Mac obtém e usa a credencial.** `connection.credential` em `machines.json`, o runner próprio (stdout em memória, stderr descartado, sem log), a prova por máquina (renovação, recuo, fixação, diferença de relógio, conferência do pid), a assinatura injetada em `loopbackGet` e `loopbackWrite`, e os motivos `owner-auth-failed` e `owner-auth-mismatch` em `MachineStatus`. Também o exemplo no README e uma linha de emenda na 0003 e na 0018 §4 apontando para cá. Testes AC2, AC3 e AC4 de ponta a ponta.
+2. **apollo · o Mac obtém e usa a credencial.** `connection.credential` em `machines.json`, o runner próprio (stdout em memória, stderr descartado, sem log), a prova por máquina (renovação, recuo, fixação, diferença de relógio, conferência do pid), a assinatura injetada em `loopbackGet` e `loopbackWrite`, e os motivos `owner-auth-failed` e `owner-auth-mismatch` em `UNREACHABLE_REASONS` (`telemetry/model.ts`) e no detalhe de `machineUnreachableAlert` (`telemetry/alerts.ts`). Assim a camada 3 só escreve texto. Também o exemplo no README e uma linha de emenda na 0003 e na 0018 §4 apontando para cá. Testes AC2, AC3 e AC4 de ponta a ponta.
 3. **iris · o que a tela diz.** Primeiro o wireframe dos três motivos (cartão da máquina, barra lateral e a faixa P14 do mod), aprovado pelo Fernando; depois os textos em pt-BR. Cada um diz o que fazer: configurar o comando de credencial, atualizar o núcleo de lá, ou conferir se o túnel leva à máquina certa.
 
 A Workstation sai do `81251bd` só depois que a camada 1 chegar lá, por um passo do Fernando fora desta pilha.
