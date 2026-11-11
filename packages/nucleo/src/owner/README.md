@@ -118,6 +118,7 @@ npm run core -- start --port 4720                 # porta forçada (os hooks do 
 npm run core -- start --data-dir /tmp/x           # outra pasta de dados
 npm run core -- start -- --no-github              # depois de --, opções da API
 npm run core -- stop --installation app           # para só o núcleo daquela instalação
+echo '{"version":1,"nonce":"<32 hex>"}' | npm run core -- remote-credential --port 4720   # numa máquina remota, pelo SSH do Mac (0020): uma linha JSON no stdout; saídas 0, 10, 11, 12
 ```
 
 Os nomes antigos (`npm run nucleo`, `subir`, `parar`, `--porta`, `--pai`, `--substituir`, e na API `--banco`, `--sem-trava`…) saíram na fase 6 da #173: uma opção desconhecida é erro. A linha do `--json` é em inglês desde então (o app lê essas chaves desde a 0.0.5); só o texto de `reason` e `warning` é pt-BR, porque vai para a tela.
