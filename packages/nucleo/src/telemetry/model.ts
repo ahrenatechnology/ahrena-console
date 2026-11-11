@@ -26,8 +26,14 @@ export type MachineState = (typeof MACHINE_STATES)[number];
  * - `no-response`: the port accepts, but the núcleo over there does not answer HTTP in time, closes
  *   at once or answers with an HTTP error other than 404 (the tunnel is up, the núcleo is not).
  *   A 200 without a telemetry `version`, or a 404, is `incompatible-version` instead.
+ * - `owner-auth-required`: the núcleo over there asks for the owner's proof (#302) and this machine
+ *   has no `connection.credential` to obtain one (decision 0020 section 6);
+ * - `owner-auth-failed`: it has one, but no valid credential came of it, the pid on the tunnel port is
+ *   not the issuing core's, or the núcleo refused again after a renewal (decision 0020 sections 2 and 6);
+ * - `owner-auth-mismatch`: a credential named another machine identity or uid than the first good one
+ *   this process pinned (decision 0020 section 2). Nothing is signed.
  */
-export const UNREACHABLE_REASONS = ['port-closed', 'no-response', 'owner-auth-required'] as const;
+export const UNREACHABLE_REASONS = ['port-closed', 'no-response', 'owner-auth-required', 'owner-auth-failed', 'owner-auth-mismatch'] as const;
 export type UnreachableReason = (typeof UNREACHABLE_REASONS)[number];
 
 /** This machine. Remote machines use the `id` from `~/.ahrena-console/machines.json` (#176). */

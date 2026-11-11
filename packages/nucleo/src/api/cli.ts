@@ -116,6 +116,7 @@ import { publishRemoteAttentionChanges, RemoteMachine } from '../telemetry/remot
 import { RemoteMachines } from '../telemetry/remote-machines.ts';
 import { INVALID_MACHINES_FILE, publishReconnectChanges, reconnectLogFile, ReconnectRunner } from '../telemetry/reconnect.ts';
 import { loopbackGet } from '../telemetry/adapters/loopback-http.ts';
+import { overviewPidVia, RemoteProofs } from '../telemetry/remote-proof.ts';
 import { MACHINE_READ_ADAPTER_TIMEOUT_MS, MachineReader } from './machine-reader.ts';
 import type { TelemetryCollector } from '../telemetry/ports.ts';
 import { SqliteToolChecksStore } from '../tools/store.ts';
@@ -468,6 +469,7 @@ const demoEntries: MachineEntry[] = [];
 const samplers: TelemetrySampler[] = [];
 let remoteMachines: RemoteMachines<RemoteMachine> | null = null;
 let reconnectRunner: ReconnectRunner | null = null;
+let remoteProofs: RemoteProofs | null = null;
 let terminalControl: TerminalActions | null = null;
 function addSampler(machineId: string, collector: TelemetryCollector) {
   samplers.push(new TelemetrySampler({ machineId, collector, store: sampleStore, tracker: alertTracker, onAlertChange: publishAlertChanges(changes), log }));
@@ -484,7 +486,17 @@ if (demo) {
   // Decision 0013 section 5: the Mac's núcleo asks the cloud nothing about itself; only a remote one reads its placement.
   if (platformCollector) addSampler('local', process.platform === 'darwin' ? platformCollector : withPlacement(platformCollector, new PlacementProbe({ log })));
   else log(`telemetry: no collector for ${process.platform}`);
-  const get = loopbackGet();
+  // The remote owner's proof (decision 0020, #388): one per process, keyed by the tunnel port; the key never leaves it.
+  const proofs = new RemoteProofs({
+    machineFor: (port) => {
+      const m = registry.list().find((x) => x.port === port);
+      return m ? { id: m.id, credential: registry.connectionOf(m.id)?.credential ?? null } : undefined;
+    },
+    overviewPid: overviewPidVia(loopbackGet()),
+    log,
+  });
+  remoteProofs = proofs;
+  const get = loopbackGet({ proof: proofs });
   const onAlertChange = publishAlertChanges(changes);
   const registry: RemoteMachines<RemoteMachine> = new RemoteMachines<RemoteMachine>({
     source: new MachinesFileSource({ ...(o.machines ? { file: o.machines } : {}), log }),
@@ -500,6 +512,7 @@ if (demo) {
         reconnectStatus: (id) => reconnectRunner?.status(id, registry.reconnectOf(id) ?? null) ?? null,
         connectionStatus: (id) => machineConnection?.status(id) ?? Promise.resolve(null),
         suppressUnreachable: (id) => machineConnection?.suppressUnreachable(id) ?? false,
+        ownerAuthReason: (id) => proofs.reason(id, Boolean(registry.connectionOf(id)?.credential)),
         log,
       }),
     // A machine removed from the file closes its alerts, and the screen and the tray hear about it.
@@ -528,7 +541,7 @@ if (demo) {
   const localSampler = samplers.find((s) => s.machineId === 'local');
   terminalControl = new TerminalActions({
     local: new LocalTerminalActions({ read: async () => (await platformCollector?.terminals?.()) ?? null, onSignaled: () => void localSampler?.sampleOnce(), log }),
-    remote: { port: (id) => registry.get(id)?.port, write: loopbackWrite() },
+    remote: { port: (id) => registry.get(id)?.port, write: loopbackWrite({ proof: proofs }) },
     acceptRemoteActions: () => o.acceptRemoteActions,
     onRemoteSent: (id) => void registry.get(id)?.readNow(),
   });
@@ -560,8 +573,8 @@ const toolsExecutor = toolsService ? new ToolsExecutor({ service: toolsService, 
 // The cloud connectors (#277, decision 0013): this machine's ~/.aws/config, its SSO sessions and their logins (into reconnect.log); the remote machines' through their tunnel port. Not in --demo.
 const awsConnector = demo ? null : new AwsConnector({ logFile: reconnectLogFile(dataDir), wakeOnView: true, onChange: publishConnectorChanges(changes), log });
 // The connection of each remote machine (#278, decision 0013 section 4): start, stop, reconnect and login-and-start, on the reconnect runner.
-const machineConnection = remoteMachines && reconnectRunner ? new MachineConnection({ registry: remoteMachines, startRunner: reconnectRunner, logFile: reconnectLogFile(dataDir), cloud: awsConnector, localReading: () => sampleStore.latest('local'), onChange: publishConnectionChanges(changes), log }) : null;
-const clouds = awsConnector ? createCloudsRoute({ aws: awsConnector, remote: { port: (id) => remoteMachines?.get(id)?.port, get: loopbackGet(), write: loopbackWrite() } }) : null;
+const machineConnection = remoteMachines && reconnectRunner ? new MachineConnection({ registry: remoteMachines, startRunner: reconnectRunner, logFile: reconnectLogFile(dataDir), cloud: awsConnector, localReading: () => sampleStore.latest('local'), onChange: publishConnectionChanges(changes), onBegin: (id) => remoteProofs?.discard(id), log }) : null;
+const clouds = awsConnector ? createCloudsRoute({ aws: awsConnector, remote: { port: (id) => remoteMachines?.get(id)?.port, get: loopbackGet({ proof: remoteProofs }), write: loopbackWrite({ proof: remoteProofs }) } }) : null;
 // Releasing a listening port (#286, decision 0016): this machine's, and the remote machines' through their núcleo. Not in --demo.
 const ports = createPortsRoute({
   releaser: demo
@@ -569,7 +582,7 @@ const ports = createPortsRoute({
     : new PortReleaser({ listPorts: listPortsWith(systemRunner), run: systemRunner, uid: () => process.getuid?.() ?? null, selfPid: process.pid, ancestors: ancestorsWith(systemRunner, process.ppid), kill: (pid, signal) => process.kill(pid, signal) }),
   acceptNoOrigin: () => o.acceptRemoteActions,
   log,
-  remote: { port: (id) => remoteMachines?.get(id)?.port, get: loopbackGet(), write: loopbackWrite({ timeoutMs: 15_000 }) },
+  remote: { port: (id) => remoteMachines?.get(id)?.port, get: loopbackGet({ proof: remoteProofs }), write: loopbackWrite({ timeoutMs: 15_000, proof: remoteProofs }) },
 });
 // The Docker actions (#288, decision 0017): this machine's daemon, on the Tools executor's queue; the remote machines' through their tunnel port. Not in --demo.
 // A núcleo accepts a no-Origin write (the tunnel) only with --accept-remote-actions (or AHRENA_CONSOLE_ACCEPT_REMOTE_ACTIONS=1), as the port release does.
@@ -589,7 +602,7 @@ const docker =
           }),
           cancel: (id) => toolsExecutor.cancel(id),
           acceptNoOriginActions: acceptRemoteActions,
-          remote: { port: (id) => remoteMachines?.get(id)?.port, get: loopbackGet(), write: loopbackWrite() },
+          remote: { port: (id) => remoteMachines?.get(id)?.port, get: loopbackGet({ proof: remoteProofs }), write: loopbackWrite({ proof: remoteProofs }) },
         }),
         acceptNoOrigin: acceptRemoteActions,
       }
@@ -664,7 +677,7 @@ const api: LocalApi = await startLocalApi({
   devConsole: screens.devConsole,
   agentConfig,
   telemetry: telemetryService,
-  machineReader: new MachineReader({ get: loopbackGet({ timeoutMs: MACHINE_READ_ADAPTER_TIMEOUT_MS }), machines: () => remoteMachines?.list() ?? [], connectionOf: (id) => machineConnection?.status(id) ?? null }),
+  machineReader: new MachineReader({ get: loopbackGet({ timeoutMs: MACHINE_READ_ADAPTER_TIMEOUT_MS, proof: remoteProofs }), machines: () => remoteMachines?.list() ?? [], connectionOf: (id) => machineConnection?.status(id) ?? null }),
   reconnect: machineConnection?.legacy ?? reconnectRunner,
   machineConnection: machineConnection ? createConnectionRoute(machineConnection) : null,
   messaging: createMessagingRoute({ messaging, sessions: storage, accounts, log }),

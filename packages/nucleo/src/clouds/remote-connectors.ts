@@ -10,9 +10,12 @@
 //   remote takes it as a local request; the body is the fixed `{"mode":"device-code"}`. Only the
 //   session name travels, and it has matched `SAFE_CLI_NAME` here; the remote looks it up in its
 //   own ~/.aws/config.
+// - Both go through the same wire (`loopbackExchange`), so with the remote owner's proof (decision 0020,
+//   #388) each one is signed (`AhrenaRemote`) when the machine holds a credential. `SessionPortals` is
+//   unchanged: the proof authenticates this Mac to the remote, not the remote's answer (#315).
 
-import { request } from 'node:http';
-import { REMOTE_HOST_HEADER, REMOTE_TIMEOUT_MS } from '../telemetry/adapters/loopback-http.ts';
+import { loopbackExchange, REMOTE_TIMEOUT_MS } from '../telemetry/adapters/loopback-http.ts';
+import type { RemoteProof } from '../telemetry/remote-proof.ts';
 import type { RemoteGetResult } from '../telemetry/ports.ts';
 import { SAFE_CLI_NAME } from './aws-config.ts';
 import { CONNECTOR_STATES, SESSION_STATES } from './aws-connector.ts';
@@ -157,46 +160,17 @@ export function sanitizeLoginAnswer(body: unknown): { login: Record<string, unkn
 /** `POST` or `DELETE` on the remote núcleo through the tunnel port; never rejects. */
 export type RemoteWrite = (port: number, method: 'POST' | 'DELETE', path: string, body: string | null) => Promise<RemoteGetResult>;
 
-export function loopbackWrite({ timeoutMs = REMOTE_TIMEOUT_MS, maxBodyBytes = MAX_WRITE_BODY_BYTES }: { timeoutMs?: number; maxBodyBytes?: number } = {}): RemoteWrite {
-  return (port, method, path, body) =>
-    new Promise<RemoteGetResult>((resolve) => {
-      let settled = false;
-      const finish = (result: RemoteGetResult) => {
-        if (settled) return;
-        settled = true;
-        clearTimeout(deadline);
-        req.destroy();
-        resolve(result);
-      };
-      const noResponse = () => finish({ kind: 'unreachable', reason: 'no-response' });
-      const headers: Record<string, string | number> = { host: REMOTE_HOST_HEADER, accept: 'application/json' };
-      if (body !== null) {
-        headers['content-type'] = 'application/json';
-        headers['content-length'] = Buffer.byteLength(body);
-      }
-      const req = request({ host: '127.0.0.1', port, path, method, agent: false, headers }, (res) => {
-        const chunks: Buffer[] = [];
-        let size = 0;
-        res.on('data', (chunk: Buffer) => {
-          size += chunk.length;
-          if (size > maxBodyBytes) return noResponse();
-          chunks.push(chunk);
-        });
-        res.on('end', () => {
-          let parsed: unknown;
-          try {
-            parsed = JSON.parse(Buffer.concat(chunks).toString('utf8'));
-          } catch {
-            parsed = undefined;
-          }
-          finish({ kind: 'response', status: res.statusCode ?? 0, body: parsed });
-        });
-        res.on('error', noResponse);
-        res.on('aborted', noResponse);
-      });
-      const deadline = setTimeout(noResponse, timeoutMs);
-      deadline.unref?.();
-      req.on('error', (err: NodeJS.ErrnoException) => (err.code === 'ECONNREFUSED' ? finish({ kind: 'unreachable', reason: 'port-closed' }) : noResponse()));
-      req.end(body ?? undefined);
-    });
+export interface LoopbackWriteOptions {
+  timeoutMs?: number;
+  maxBodyBytes?: number;
+  /** The remote owner's proof (decision 0020); without it, no request is signed. */
+  proof?: RemoteProof | null;
+  /** The Host of an unsigned request; tests point it at a test core. */
+  host?: string;
 }
+
+export function loopbackWrite({ timeoutMs = REMOTE_TIMEOUT_MS, maxBodyBytes = MAX_WRITE_BODY_BYTES, proof = null, host }: LoopbackWriteOptions = {}): RemoteWrite {
+  const send = loopbackExchange({ timeoutMs, maxBodyBytes, proof, ...(host ? { host } : {}) });
+  return (port, method, path, body) => send(port, method, path, body);
+}
+

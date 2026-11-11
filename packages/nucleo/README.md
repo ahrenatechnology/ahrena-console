@@ -421,7 +421,8 @@ const summary = await simulate(storage, { seed: 42, chaos: true, mode: 'batch' }
 | [remote-machines.ts](src/telemetry/remote-machines.ts) | As remotas acompanhando o `machines.json` sem reiniciar (#244) |
 | [reconnect.ts](src/telemetry/reconnect.ts) | Roda o comando de reconexão: sem shell, um por máquina, com tempo limite, saída só no `reconnect.log` (#244) |
 | [remote.ts](src/telemetry/remote.ts) | A `RemoteMachine`: lê o núcleo de lá a cada 30 s, guarda a última leitura, o estado, os alertas e as sessões que precisam de você (#176) |
-| [adapters/loopback-http.ts](src/telemetry/adapters/loopback-http.ts) | O `GET` em `127.0.0.1:<porta>` com `Host: 127.0.0.1:4720` e 3 s de prazo (#176) |
+| [adapters/loopback-http.ts](src/telemetry/adapters/loopback-http.ts) | O `GET` em `127.0.0.1:<porta>` com `Host: 127.0.0.1:4720` e 3 s de prazo (#176), assinado quando a máquina tem credencial (#388) |
+| [remote-proof.ts](src/telemetry/remote-proof.ts) | A prova do dono na remota, lado do Mac: roda o `connection.credential`, guarda a credencial só na memória, fixa identidade e uid, confere o pid e assina cada pedido (#388, decisão 0020) |
 
 **De onde vem cada número.** Tudo é leitura, sem `sudo` e sem dependência nova: o `node:os` e os comandos que já vêm no sistema.
 
@@ -467,6 +468,16 @@ const summary = await simulate(storage, { seed: 42, chaos: true, mode: 'batch' }
   - A saída (stdout e stderr) vai só para `reconnect.log`, na pasta de dados da instalação, com permissão só sua (0600): o núcleo entrega o descritor do arquivo ao processo e não lê nada, então a saída fica como o comando a escreveu, entre uma linha de início (hora, `id`, quem pediu) e uma de fim (estado, código, duração) escritas pelo núcleo. Um túnel deixado em segundo plano continua escrevendo ali, mesmo depois de o núcleo reiniciar. Passou de 1 MB, o arquivo vira `reconnect.log.1` antes da próxima reconexão. Se o arquivo não abre, uma linha no log do núcleo e a saída é descartada. A API mostra o estado, os horários, o código de saída e o caminho do log, nunca a saída.
   - **Segredo fica no script, não na lista.** O `command` aparece em `GET /api/machines` e na tela ("Roda: …"): não ponha senha, token ou chave como argumento; deixe-os dentro do script (ou no que ele lê) e aponte o `command` para o script.
   - O estado vai em cada item de `GET /api/machines`, em `reconnect` (`null` para esta máquina e para a workstation da `--demo`), e cada mudança sai em `/api/changes` como `alert`, chave `<id>:reconnect`.
+- **Prova do dono na remota** (#388, [decisão 0020](../../docs/decisoes/0020-remote-owner-credential-over-ssh.md)). Um núcleo de lá posterior à #391 só responde com a prova do dono. A máquina ganha `connection.credential`, o comando que pede ao núcleo de lá uma credencial curta pelo SSH que já entrou lá (as mesmas regras de lista sem shell do `start`; `timeoutSeconds` de 5 a 60, 20 por padrão):
+
+  ```json
+  "credential": { "command": ["/usr/bin/ssh", "-T", "-o", "BatchMode=yes", "-o", "SessionType=default",
+      "-o", "ControlMaster=no", "-o", "ClearAllForwardings=yes", "ahrena-tunnel",
+      "/caminho/absoluto/do/node", "/caminho/do/checkout/packages/nucleo/src/owner/cli.ts", "remote-credential", "--port", "4720"],
+    "timeoutSeconds": 20 }
+  ```
+
+  O pedido (`{version, nonce, revoke}`) vai pelo stdin e a resposta volta pelo stdout, que fica só na memória do núcleo ([src/telemetry/remote-proof.ts](src/telemetry/remote-proof.ts)): o stderr é descartado e nada vai para o `reconnect.log`. Cada leitura e escrita pelo túnel leva então `Authorization: AhrenaRemote …`, uma assinatura por pedido, nunca a chave. Sem o campo, ou sem credencial válida, o pedido vai sem prova: um núcleo antigo (anterior à #391) responde e a máquina fica `connected`; um novo recusa e a máquina fica `unreachable` com `owner-auth-required` (sem comando), `owner-auth-failed` (o comando falhou, o pid na porta não é o do núcleo que emitiu, ou o núcleo recusou de novo depois de renovar) ou `owner-auth-mismatch` (a identidade da máquina ou o uid mudaram desde a primeira credencial). Nunca há volta para `Origin` ou "veio pelo túnel".
 - **Leitura.** A cada 30 s, e uma vez na subida: `GET http://127.0.0.1:<port>/api/telemetry` e, se respondeu, `GET /api/attention`, com `Host: 127.0.0.1:4720` (a defesa da [0003](../../docs/decisoes/0003-responder-sessao.md) recusa outro Host) e 3 s de prazo. Só `GET`: nada deste Mac escreve na remota.
 - **Estado.** `connected`; `unreachable` com `reason` `port-closed` (a porta recusa: o túnel caiu) ou `no-response` (aceita e não responde HTTP em 3 s, fecha na hora ou responde um erro HTTP que não seja 404); `incompatible-version` quando o `version` da telemetria de lá é outro, falta, ou lá não há a rota (404). Antes da primeira leitura, `unreachable` sem `reason`. `not-configured` não aparece: sem arquivo não há remota para mostrar.
 - **Última leitura.** Vai para `telemetry_samples` com o `id` da remota, só com os campos da leitura, até 256 kB e com o `takenAt` da hora em que este Mac leu (o relógio de lá não decide a poda); `/api/telemetry?machine=<id>` a devolve, com `lastReadAt`, também com a remota fora do ar.

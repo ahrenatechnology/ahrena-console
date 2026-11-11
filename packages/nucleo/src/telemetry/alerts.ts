@@ -158,6 +158,10 @@ export function machineUnreachableAlert(label: string, port: number, reason: Unr
     detail:
       reason === 'owner-auth-required'
         ? 'O núcleo remoto exige autenticação do dono; a conexão remota ainda não fornece essa prova.'
+        : reason === 'owner-auth-failed'
+        ? 'O núcleo remoto exige autenticação do dono, e o comando de credencial não trouxe uma prova aceita.'
+        : reason === 'owner-auth-mismatch'
+        ? 'A credencial veio de outra máquina ou de outro usuário que os da primeira conexão; nada foi enviado.'
         : reason === 'port-closed'
         ? `A porta ${port} deste Mac não aceita conexão: o túnel está caído`
         : `O túnel está de pé na porta ${port}, mas o núcleo de lá não respondeu`,
