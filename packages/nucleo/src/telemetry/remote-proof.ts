@@ -305,6 +305,23 @@ export class RemoteProofs implements RemoteProof {
     p.retryAt = 0;
   }
 
+  /**
+   * "Tentar agora" (wireframes 388-2 and 388-4): skips the wait once and, when no credential is held, runs one issue
+   * now. An issue already in flight is joined, so clicks at once cost one SSH. The failure count stays, so a new
+   * failure waits the next step of the backoff. A held credential is kept: the next read uses (or renews) it.
+   */
+  async retryNow(port: number): Promise<void> {
+    try {
+      const m = this.#o.machineFor(port);
+      if (!m?.credential) return;
+      const p = this.#entry(m.id);
+      p.retryAt = 0;
+      if (!p.held) await this.#issue(m, p, port);
+    } catch {
+      /* fail closed: nothing held, the read says why */
+    }
+  }
+
   /** Whether a credential is held for the machine (tests and the leak scan; never the credential itself). */
   holds(machineId: string): boolean {
     return this.#machines.get(machineId)?.held != null;

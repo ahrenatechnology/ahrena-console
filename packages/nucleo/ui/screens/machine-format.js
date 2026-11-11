@@ -586,6 +586,8 @@ export const RECONNECT_STATES = ['idle', 'running', 'succeeded', 'failed', 'time
 export const RECONNECTED_SHOWN_MS = 10 * 60_000;
 
 export const reconnectRoute = (id) => `${MACHINES_ROUTE}/${encodeURIComponent(id)}/reconnect`;
+/** "Tentar agora" on the owner-proof bands (issue 388): the core requests the remote proof now, then reads the machine. */
+export const ownerProofRetryRoute = (id) => `${MACHINES_ROUTE}/${encodeURIComponent(id)}/owner-proof/retry`;
 
 /** The `reconnect` of a machine, or `null` when the core sent none (or not an object). */
 export function normalizeReconnect(r) {

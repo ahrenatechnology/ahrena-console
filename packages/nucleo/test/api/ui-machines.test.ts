@@ -460,7 +460,8 @@ describe('#178 criterion 3: a remote without connection (C26)', () => {
     }
     const source = readFileSync(`${UI_FOLDER}screens/machine.js`, 'utf8');
     const writes = [...source.matchAll(/ctx\.write\(([^,]+),/g)].map((m) => m[1]);
-    assert.deepEqual(writes, ['reconnectRoute(id)'], 'the machine screen writes only to /api/machines/<id>/reconnect');
+    // Issue 388: "Tentar agora" asks the core for the remote owner's proof; it neither starts nor stops a tunnel.
+    assert.deepEqual(writes, ['ownerProofRetryRoute(id)', 'reconnectRoute(id)'], 'the machine screen writes only to /api/machines/<id>/owner-proof/retry and /reconnect');
     const release = readFileSync(`${UI_FOLDER}screens/port-release.js`, 'utf8');
     assert.deepEqual([...release.matchAll(/ctx\.write\(([^,]+),/g)].map((m) => m[1]), ['releaseRoute(machineId)'], 'the release dialog writes only to the release route');
   });

@@ -43,6 +43,7 @@ import {
   reconnectExample,
   reconnectResult,
   reconnectRoute,
+  ownerProofRetryRoute,
   reconnectView,
   bytes,
   chartOf,
@@ -402,7 +403,7 @@ export function reconnectParts(machine, reading, { retry = () => {}, start = () 
 
 // ---------- the owner proof (issue 388, wireframes 388-1 to 388-3) ----------
 
-/** "Tentar agora": asks the core to read the machine again, busy until the answer (the credential comes over SSH first). */
+/** "Tentar agora": asks the core for the proof now (the credential over SSH, skipping the wait once) and then reads the machine, busy until the answer. */
 function ownerAuthRetry(retry, filled) {
   const button = el('button', { type: 'button', class: `btn ${filled ? 'filled' : 'outline'}`, 'data-action': 'owner-auth-retry' }, icon('refresh'), 'Tentar agora');
   button.addEventListener('click', () => runButtonAction(button, () => retry(), { busyLabel: 'Pedindo a prova…' }));
@@ -610,13 +611,13 @@ function fadedRuns(nodes, live, attributes) {
 }
 
 /** The C26 part of a remote that is not connected: what goes above the (maybe faded) reading. */
-export function conditionParts(machine, reading, { retry = () => {}, version = null, now = Date.now() } = {}) {
+export function conditionParts(machine, reading, { retry = () => {}, ownerProofRetry = retry, version = null, now = Date.now() } = {}) {
   const condition = remoteCondition(machine);
   if (condition === 'band') {
     const b = bandText(machine, reading, now);
     return { faded: true, parts: [errorBand({ title: b.title, text: b.text, action: { label: 'Tentar agora', onClick: retry } })] };
   }
-  if (ownerAuthReason(machine)) return { faded: true, parts: ownerAuthParts(machine, { retry }) };
+  if (ownerAuthReason(machine)) return { faded: true, parts: ownerAuthParts(machine, { retry: ownerProofRetry }) };
   if (condition === 'no-response') {
     const port = machine.port ? `A porta ${machine.port} aceita a conexão` : 'O túnel aceita a conexão';
     return {
@@ -712,7 +713,7 @@ export async function mount(area, ctx) {
     const legacy = local
       ? { faded: false, parts: [] }
       : (reconnectParts(machine, data.reading, { retry: () => draw(), start: () => reconnect('POST'), cancel: () => reconnect('DELETE'), pending, problem: shownProblem, now }) ??
-        conditionParts(machine, data.reading, { retry: () => draw(), version: data.version, now }));
+        conditionParts(machine, data.reading, { retry: () => draw(), ownerProofRetry: () => retryOwnerProof(), version: data.version, now }));
     const condition = conn?.view(data, legacy, now) ?? legacy;
     const line = headerLine(data.reading, machine, { local, offline: condition.faded, now });
     if (sub) sub.textContent = (conn ? conn.headerLine(line) : line) || (local ? 'A telemetria medida pelo núcleo daqui' : 'Máquina remota');
@@ -796,6 +797,23 @@ export async function mount(area, ctx) {
   }
 
   const reconnectKey = (machine) => `${machine?.reconnect?.state ?? ''}|${machine?.reconnect?.startedAt ?? ''}`;
+
+  // "Tentar agora" on the owner-proof bands (issue 388, 388-2 and 388-4): the core requests the proof over SSH now,
+  // skipping its wait once, and reads the machine; then the screen reads it again. The answer carries only the
+  // state and the reason. A failure still redraws, then leaves the button saying it failed.
+  async function retryOwnerProof() {
+    if (ctx.signal.aborted) return;
+    let failure = null;
+    try {
+      await ctx.write(ownerProofRetryRoute(id), {});
+    } catch (e) {
+      if (e?.name === 'AbortError' || ctx.signal.aborted) return;
+      if (e?.status === 404) return notFound();
+      failure = e;
+    }
+    await draw();
+    if (failure) throw failure;
+  }
 
   // POST starts (or joins the run already going), DELETE cancels. The answer's `reconnect` repaints at
   // once; the re-read and `/api/changes` bring the rest.
