@@ -71,7 +71,9 @@ import type { ManagedRuntime } from '../runtime/service.ts';
 // The route-specific Origin/Host restrictions below are additional browser defenses, not identity.
 // Only static /ui, /api/overview and /api/hooks/health GETs are anonymous. See ADR0003.
 
-import { authorizeOwner, ownerProofRequired, type OwnerToken } from './owner-auth.ts';
+import { authorizeRequest, ownerProofRequired, type OwnerToken } from './owner-auth.ts';
+import { createRemoteVerifier, REMOTE_CREDENTIALS_ROUTE, respondIssue } from './remote-auth.ts';
+import { RemoteCredentialStore } from './remote-credentials.ts';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import type { AddressInfo, Server as NetServer } from 'node:net';
 import { allowedLocalRequest, createHookRoute, HOOKS_PATH, send, type HookRouteOptions } from '../ingest/hooks/receiver.ts';
@@ -138,6 +140,11 @@ export interface ApiOptions {
   runtime?: ManagedRuntime;
   /** Owner-only credential source; absent/unknown fails closed, including before lock claim. */
   ownerToken?: OwnerToken;
+  /**
+   * The remote owner credentials this núcleo issues and verifies (decision 0020, #388), in memory. Default: a
+   * new table (a new generation) per process; `null` turns the issue route and the `AhrenaRemote` proof off.
+   */
+  remoteCredentials?: RemoteCredentialStore | null;
   panelBuilder: MontadorDoPainel;
   hooks: HookRouteOptions;
   host?: string;
@@ -387,6 +394,18 @@ export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
     log,
   });
   const newSession = createNewSessionRoute({ storage: opts.panelBuilder.storage, openInDesktop: opts.openInDesktop, openTerminal: opts.openTerminal, isThrowaway: opts.isThrowawayFolder, log });
+  const remoteStore = opts.remoteCredentials === undefined ? new RemoteCredentialStore() : opts.remoteCredentials;
+  const remoteVerifier = remoteStore
+    ? createRemoteVerifier({
+        store: remoteStore,
+        // `--accept-remote-actions` still decides the actions, in addition to the credential (decision 0020 section 5).
+        actionsAccepted: (group) =>
+          group === 'ports' ? (opts.ports?.acceptNoOrigin() ?? false)
+          : group === 'docker' ? (opts.docker?.acceptNoOrigin() ?? false)
+          : group === 'terminals' ? (opts.terminals?.acceptNoOriginActions() ?? false)
+          : (opts.tools?.acceptNoOriginActions?.() ?? false),
+      })
+    : null;
   const counters = { requests: 0, panel: 0, panelMs: 0 };
   let port = 0;
 
@@ -461,7 +480,11 @@ export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
   async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
     counters.requests++;
     const url = new URL(req.url ?? '/', `http://127.0.0.1:${port}`);
-    if (ownerProofRequired(req.method, url.pathname) && !authorizeOwner(req, res, port, opts.ownerToken ?? (() => null))) return;
+    if (ownerProofRequired(req.method, url.pathname)) {
+      const proof = authorizeRequest(req, res, port, opts.ownerToken ?? (() => null), remoteVerifier);
+      if (!(typeof proof === 'boolean' ? proof : await proof)) return;
+    }
+    if (url.pathname === REMOTE_CREDENTIALS_ROUTE) return respondIssue(req, res, port, remoteStore);
     if (isRuntimeRoute(url.pathname)) {
       const token = opts.ownerToken?.();
       return respondRuntime(req, res, url, port, opts.runtime, () => !!token && opts.ownerToken?.() === token && !res.destroyed);

@@ -22,6 +22,10 @@ const HELP = `Usage: npm run core -- <command> [options] [-- API options]
   start               Adopts this installation's core or starts one in the background (log in
                       <data-dir>/nucleo.log) and waits for it to answer
   stop                Stops this installation's core (SIGTERM, then SIGKILL) and deletes the lock
+  remote-credential   For a remote machine, run by the Mac over SSH (decision 0020): reads one JSON line
+                      from stdin, asks this user's core on --port for a short credential and prints
+                      one JSON line. Exit 0 issued; 10 no core of this user on that port, or its lock
+                      is not readable; 11 the core has no such route; 12 anything else
   voice install       Installs the dictation engine for the compose box: builds whisper.cpp (CUDA with an
                       NVIDIA GPU and nvcc, else CPU) and downloads the ggml large-v3-turbo model into
                       ~/.ahrena-console/voice. Needs git and cmake. Runs once per machine
@@ -114,7 +118,18 @@ async function start(): Promise<never> {
   finish(s, `core up at ${s.url} · version ${s.version}${s.commit ? ` (${s.commit})` : ''}${s.pid ? ` · pid ${s.pid}` : ''} (${how})`);
 }
 
+/** Stdout is exactly one JSON line on success; stderr a fixed English message. Never the token or the key. */
+async function remoteCredential(): Promise<never> {
+  const { runRemoteCredential, readRequest } = await import('./remote-credential.ts');
+  const port = portOption !== undefined && /^\d{1,5}$/.test(portOption) ? Number(portOption) : 0;
+  const r = await runRemoteCredential({ port, input: await readRequest(process.stdin) });
+  if (r.stdout) process.stdout.write(r.stdout);
+  if (r.stderr) process.stderr.write(r.stderr);
+  process.exit(r.code);
+}
+
 if (command === 'status') await status();
+else if (command === 'remote-credential') await remoteCredential();
 else if (command === 'start') await start();
 else if (command === 'stop') await stop();
 else if (command === 'voice' && apiArgs[0] === 'install') {
