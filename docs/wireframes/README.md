@@ -8,6 +8,8 @@ Wireframes de todas as telas da 0.0.1, para aprovação antes de construir:
 
 As sessões de terminal presas (C96 a C99, issue #350, decisão [0018](../decisoes/0018-stuck-terminal-sessions.md)): o card Sessões de terminal nas telas das máquinas, a escada de sinais com a segunda confirmação, os estados e o que não se pode encerrar, e a Workstation lida do Mac com o alerta `terminal-stuck`.
 
+A prova do dono na máquina remota (388-1 a 388-5, issue #388, decisão [0020](../decisoes/0020-remote-owner-credential-over-ssh.md)): o que a tela da Workstation, a barra lateral, o alerta e a faixa do painel dizem quando o núcleo de lá recusa o Mac, para os três motivos (`owner-auth-required`, `owner-auth-failed` e `owner-auth-mismatch`), e a volta ao normal.
+
 A referência é o Claude Code Agent Monitor. Cada tela diz o que veio dele e onde diverge.
 
 É um artefato do claude.ai versionado aqui ([artifact.json](artifact.json)), no formato das skills `versioning-artifacts` e `publishing-artifacts`. O link oficial só é publicado depois do merge.
