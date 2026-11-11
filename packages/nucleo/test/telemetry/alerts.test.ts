@@ -2,7 +2,8 @@
 // on all interfaces, a busy tunnel port; and the transition (enter, exit) that goes to /api/changes.
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
-import { AlertTracker, computeAlerts, formatBytes, loadHighSince } from '../../src/telemetry/alerts.ts';
+import { AlertTracker, computeAlerts, formatBytes, loadHighSince, machineUnreachableAlert } from '../../src/telemetry/alerts.ts';
+import { UNREACHABLE_REASONS } from '../../src/telemetry/model.ts';
 import { iso, point, reading, T0 } from './reading.ts';
 
 const MIN = 60_000;
@@ -104,5 +105,25 @@ describe('#175/AC-3 alerts over the samples', () => {
     assert.equal(formatBytes(512), '512 B');
     assert.equal(formatBytes(1.85e12), '1,9 TB');
     assert.equal(formatBytes(146e9), '146 GB');
+  });
+});
+
+describe('#388 the alert of a remote that refuses the owner proof', () => {
+  test('388-4: the title says "sem acesso" for the three owner-proof reasons and "sem conexão" for the tunnel down and the core not answering', () => {
+    const titles = Object.fromEntries(UNREACHABLE_REASONS.map((r) => [r, machineUnreachableAlert('Workstation', 14720, r, iso(T0)).message]));
+    assert.deepEqual(titles, {
+      'port-closed': 'Workstation sem conexão',
+      'no-response': 'Workstation sem conexão',
+      'owner-auth-required': 'Workstation sem acesso',
+      'owner-auth-failed': 'Workstation sem acesso',
+      'owner-auth-mismatch': 'Workstation sem acesso',
+    });
+  });
+
+  test('AC3 · 388-4: the alert of each reason names no credential, key or command output', () => {
+    for (const r of UNREACHABLE_REASONS) {
+      const a = machineUnreachableAlert('Workstation', 14720, r, iso(T0));
+      assert.doesNotMatch(`${a.message} ${a.detail}`, /token|Bearer|BEGIN|secret|stderr|ssh -/i, r);
+    }
   });
 });
