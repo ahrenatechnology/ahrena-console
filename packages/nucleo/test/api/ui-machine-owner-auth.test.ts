@@ -74,6 +74,8 @@ let service: TelemetryService;
 let remote: MachineStatus;
 let connection: Obj | null | undefined;
 let extra: Obj;
+/** What a write answers; by default the connection, as the connection routes do. */
+let onWrite: ((route: string) => Promise<unknown>) | null = null;
 
 before(async () => {
   storage = openSqliteStorage({ path: ':memory:' });
@@ -91,6 +93,7 @@ beforeEach(() => {
   setRemote('connected');
   connection = connOf();
   extra = {};
+  onWrite = null;
 });
 
 const setRemote = (state: MachineState, reason: UnreachableReason | null = null) => (remote = { state, reason, version: TELEMETRY_VERSION });
@@ -112,6 +115,7 @@ async function coreRead(route: string): Promise<unknown> {
 interface Mounted {
   area: ElementoFalso;
   reads: string[];
+  writes: string[];
   ready: Promise<unknown>;
   leave: () => void;
 }
@@ -121,13 +125,14 @@ afterEach(() => open.splice(0).forEach((m) => m.leave()));
 function mount(): Mounted {
   const area = new ElementoFalso('main');
   const reads: string[] = [];
+  const writes: string[] = [];
   const signal = new AbortController();
   let cleanup: (() => void) | null = null;
   const ctx = {
     params: { id: WS.id },
     signal: signal.signal,
     read: (route: string) => (reads.push(route), coreRead(route)),
-    write: async () => ({ connection }),
+    write: async (route: string) => (writes.push(route), onWrite ? onWrite(route) : { connection }),
     onChange: () => {},
     onRestart: () => {},
     liveState: () => 'live',
@@ -136,7 +141,7 @@ function mount(): Mounted {
     navigate: () => {},
   };
   const ready = screen.mount(area, ctx).then((fn: () => void) => (cleanup = fn));
-  const m: Mounted = { area, reads, ready, leave: () => (signal.abort(), cleanup?.()) };
+  const m: Mounted = { area, reads, writes, ready, leave: () => (signal.abort(), cleanup?.()) };
   open.push(m);
   return m;
 }
@@ -258,6 +263,49 @@ describe('#388 the owner-proof bands (conditionParts)', () => {
 });
 
 // ---------- the screen with its connection ----------
+
+describe('#388 Tentar agora asks for the proof now', () => {
+  test('AC2 · 388-2 and 388-4: Tentar agora posts the owner-proof retry, stays busy as Pedindo a prova… until the answer, then reads the machine again', async () => {
+    setRemote('unreachable', 'owner-auth-failed');
+    connection = refused();
+    let release: () => void = () => {};
+    onWrite = async (route) => {
+      await new Promise<void>((r) => (release = r));
+      if (route.endsWith('/owner-proof/retry')) {
+        setRemote('connected');
+        connection = connOf();
+      }
+      return { machine: { id: WS.id, state: 'connected', reason: null } };
+    };
+    const m = mount();
+    await m.ready;
+    const button = part(m.area, 'owner-auth')!.querySelector('button')!;
+    assert.equal(button.getAttribute('data-action'), 'owner-auth-retry');
+    button.click();
+    await until(() => m.writes.length === 1);
+    assert.deepEqual(m.writes, [`/api/machines/${WS.id}/owner-proof/retry`]);
+    assert.match(texto(button), /Pedindo a prova…/, 'busy until the core answers');
+    button.click();
+    assert.equal(m.writes.length, 1, 'a click while busy is ignored');
+    release();
+    await until(() => part(m.area, 'owner-auth') === null);
+    assert.match(cell(m.area, 'core'), /^Núcleo de lá Respondendo/);
+  });
+
+  test('AC1 · 388-1 to 388-3: every owner-proof band wires Tentar agora to the retry, never only to a re-read', async () => {
+    for (const reason of OWNER_AUTH) {
+      setRemote('unreachable', reason);
+      connection = refused();
+      onWrite = async () => ({ machine: { id: WS.id, state: 'unreachable', reason } });
+      const m = mount();
+      await m.ready;
+      part(m.area, 'owner-auth')!.querySelector('button')!.click();
+      await until(() => m.writes.length === 1);
+      assert.deepEqual(m.writes, [`/api/machines/${WS.id}/owner-proof/retry`], reason);
+      m.leave();
+    }
+  });
+});
 
 describe('#388 the Workstation screen when its core refuses the proof', () => {
   const CORE = {

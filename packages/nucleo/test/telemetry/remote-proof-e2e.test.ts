@@ -328,6 +328,35 @@ describe('AC1 · without proof, nothing private and no fallback', () => {
     assert.equal(s.runs().length, 4);
   });
 
+  test('AC2 Tentar agora (388-2, 388-4): retryNow skips the wait once, two clicks at once cost one SSH, and a good answer brings the machine back', async () => {
+    const s = await setup();
+    s.script({ mode: 'exit', code: 12 });
+    await s.remote.pollOnce();
+    assert.equal(s.runs().length, 1);
+    s.tick(5_000);
+    await s.remote.pollOnce();
+    assert.equal(s.runs().length, 1, 'inside the 30 s wait');
+    await Promise.all([s.ctx.proofs.retryNow(s.port), s.ctx.proofs.retryNow(s.port)]);
+    assert.equal(s.runs().length, 2, 'the wait skipped once, and the second click joined the issue in flight');
+    await s.remote.pollOnce();
+    assert.equal(s.runs().length, 2, 'failed again: the wait is back');
+    s.script();
+    await s.ctx.proofs.retryNow(s.port);
+    assert.equal(s.runs().length, 3);
+    assert.ok(s.ctx.proofs.holds('ws'));
+    assert.equal((await s.remote.pollOnce()).state, 'connected');
+    // With a credential held, a click costs no SSH.
+    await s.ctx.proofs.retryNow(s.port);
+    assert.equal(s.runs().length, 3);
+  });
+
+  test('AC1 Tentar agora on a machine without a credential command, or on a port that is no machine, runs nothing', async () => {
+    const s = await setup({ credential: false });
+    await s.ctx.proofs.retryNow(s.port);
+    await s.ctx.proofs.retryNow(s.port + 1);
+    assert.equal(s.runs().length, 0);
+  });
+
   test('AC1 a signed request the Mac sent, replayed by someone else with a forged Origin, is refused', async () => {
     const core = await startCore();
     const capture = await startCapture(process.pid);
