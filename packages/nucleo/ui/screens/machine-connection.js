@@ -15,13 +15,14 @@
 //   the `connector` changes and every 3 s while it runs. The clocks tick here once a second.
 
 import { el, icon } from '../dom.js';
-import { LOCAL_ID, TUNNEL_PORT_STATE, remoteCondition } from './machine-format.js';
+import { LOCAL_ID, TUNNEL_PORT_STATE, ownerAuthReason, remoteCondition } from './machine-format.js';
 import { CONNECTORS_ROUTE, RUNNING_POLL_MS, loginClock, loginRoute, normalizeConnectors } from './cloud-format.js';
 import {
   actionRoute,
   cancelRoute,
   cardActions,
   commandLines,
+  credentialLine,
   connectionExample,
   connectionMode,
   connectionPill,
@@ -330,6 +331,8 @@ export function machineConnection(ctx, id, { reread = () => {}, repaint = () => 
       if (shownProblem) return band({ tone: 'error', iconName: 'error', role: 'alert', title: problem.message, actions: [button({ label: 'Fechar', action: 'dismiss', onClick: () => ((problem = null), changed()) })] });
       return null;
     }
+    // The owner proof (issue 388): the tunnel is up and the core over there refuses; the machine screen's band says it.
+    if (ownerAuthReason(machine)) return shownProblem ? band({ tone: 'error', iconName: 'error', role: 'alert', title: problem.message }) : null;
     const r = reasonBand(c, machine, reading, now) ?? (remoteCondition(machine) === 'first-read' && legacy.parts.length ? null : downBand(c, machine, reading, now));
     if (!r) return shownProblem ? band({ tone: 'error', iconName: 'error', role: 'alert', title: problem.message }) : null;
     return band({
@@ -361,13 +364,14 @@ export function machineConnection(ctx, id, { reread = () => {}, repaint = () => 
           : button({ label: 'Subir o túnel', iconName: 'resume', kind: 'filled', action: 'start', busy: busy('start'), disabled: Boolean(pending), onClick: () => act('start') }),
     );
     const cmds = commandLines(c);
+    const credential = credentialLine(machine);
     return el(
       'section',
       { class: 'card mc-card mc-conn', 'data-part': 'connection', 'data-state': c.state },
       title('cable', 'Conexão', c.cloud ? 'túnel SSH sobre AWS SSM' : 'o túnel do machines.json', actions),
       trioNode(connectionTrio(c, machine, reading, now)),
       portsNode(connectionPorts(c, machine, reading?.ports ?? null), machine),
-      cmds.length ? el('div', { class: 'mc-cmds' }, ...cmds.map((t) => el('span', {}, t))) : null,
+      cmds.length || credential ? el('div', { class: 'mc-cmds' }, ...cmds.map((t) => el('span', {}, t)), credential ? el('span', { class: 'tm-c-waiting' }, credential.text) : null) : null,
     );
   }
 
@@ -429,7 +433,10 @@ export function machineConnection(ctx, id, { reread = () => {}, repaint = () => 
       if (connection.state !== 'up' || !connection.command?.stop) dialog = false;
       const b = bandFor(machine, reading, legacy, now);
       const parts = [];
-      if (b) parts.push(b);
+      // The owner proof (issue 388) keeps the machine screen's band, with a refused write under it; a job that runs says what runs.
+      const ownerAuth = ownerAuthReason(machine) && connection.job?.state !== 'running' && connection.state !== 'stopped' && only?.login.state !== 'running';
+      if (ownerAuth) parts.push(...legacy.parts, ...(b ? [b] : []));
+      else if (b) parts.push(b);
       // Up with another telemetry version, or the green "Reconectada" of C50: the old part still says it.
       // Its "the app only shows" note is not true any more: it stays out.
       else if (connection.state === 'up' || remoteCondition(machine) === 'first-read') parts.push(...legacy.parts.filter((p) => !p.classList?.contains('tm-only-shows')));

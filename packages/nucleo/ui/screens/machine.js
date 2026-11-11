@@ -27,6 +27,8 @@ import {
   LOCAL_ID,
   MACHINES_JSON_EXAMPLE,
   MACHINES_ROUTE,
+  OWNER_AUTH_CREDENTIAL_EXAMPLE,
+  ownerAuthReason,
   PORT_FILTERS,
   REREAD_MS,
   START_CORE_COMMAND,
@@ -293,10 +295,10 @@ const rcProblem = (problem) => (problem ? el('p', { class: 'tm-rc-problem', role
 const rcCommand = (text) => (text ? el('p', { class: 'tm-rc-cmd' }, text) : null);
 
 /** The band of C50: an icon, the text column and the buttons on the right. */
-function rcBand({ tone, iconName, spin = false, role = 'status', title, text, lines = [], actions = [] }) {
+function rcBand({ tone, iconName, spin = false, role = 'status', title, text, lines = [], actions = [], part = 'reconnect', reason = null }) {
   return el(
     'div',
-    { class: `${tone === 'error' ? 'error-band ' : ''}tm-rc-band tm-rc-${tone}`, role, 'data-part': 'reconnect' },
+    { class: `${tone === 'error' ? 'error-band ' : ''}tm-rc-band tm-rc-${tone}`, role, 'data-part': part, 'data-reason': reason },
     el('span', { class: `tm-rc-ic${spin ? ' tm-rc-spin' : ''}` }, icon(iconName)),
     el('div', { class: 'tm-rc-text' }, el('p', {}, el('b', {}, title), text ? ` ${text}` : null), ...lines),
     actions.length ? el('div', { class: 'tm-rc-actions' }, ...actions) : null,
@@ -348,7 +350,7 @@ export function reconnectParts(machine, reading, { retry = () => {}, start = () 
   if (!view) return null;
   const rc = machine.reconnect;
   // The last reading fades as in C26: with the tunnel down, or up with no core answering.
-  const offline = ['band', 'no-response', 'owner-auth-required'].includes(remoteCondition(machine));
+  const offline = ['band', 'no-response', 'owner-auth-required', 'owner-auth-failed', 'owner-auth-mismatch'].includes(remoteCondition(machine));
   const again = (label, iconName) => rcButton({ label, iconName, filled: true, action: 'start', busy: pending === 'start', onClick: start });
   const tryNow = () => rcButton({ label: 'Tentar agora', action: 'retry', onClick: retry });
   if (view.kind === 'running') {
@@ -396,6 +398,119 @@ export function reconnectParts(machine, reading, { retry = () => {}, start = () 
       }),
     ],
   };
+}
+
+// ---------- the owner proof (issue 388, wireframes 388-1 to 388-3) ----------
+
+/** "Tentar agora": asks the core to read the machine again, busy until the answer (the credential comes over SSH first). */
+function ownerAuthRetry(retry, filled) {
+  const button = el('button', { type: 'button', class: `btn ${filled ? 'filled' : 'outline'}`, 'data-action': 'owner-auth-retry' }, icon('refresh'), 'Tentar agora');
+  button.addEventListener('click', () => runButtonAction(button, () => retry(), { busyLabel: 'Pedindo a prova…' }));
+  return button;
+}
+
+const fromLine = (text) => el('p', { class: 'tm-rc-note tm-muted' }, text);
+const causes = (...items) => el('ol', { class: 'tm-rc-howto' }, ...items.map(([bold, rest]) => el('li', {}, el('b', {}, bold), rest)));
+
+/** 388-1: where to write the credential command, the example and "Copiar o exemplo". */
+function ownerAuthSetup(machine) {
+  const copy = el('button', { type: 'button', class: 'btn outline', 'data-action': 'owner-auth-copy' }, icon('copy'), 'Copiar o exemplo');
+  copy.addEventListener('click', () => runButtonAction(copy, () => globalThis.navigator.clipboard.writeText(OWNER_AUTH_CREDENTIAL_EXAMPLE), { doneLabel: 'Copiado' }));
+  return el(
+    'section',
+    { class: 'card tm-card tm-rc-setup', 'data-part': 'owner-auth-setup' },
+    el('h2', { class: 'tm-title' }, icon('key-round'), el('span', {}, 'Comando de credencial'), el('small', { class: 'tm-muted' }, 'decisão 0020')),
+    el(
+      'p',
+      { class: 'tm-muted' },
+      'Grave em ',
+      el('code', {}, 'connection.credential'),
+      `, troque os dois caminhos pelos da ${machine.label} e clique em Tentar agora. O `,
+      el('code', {}, 'node'),
+      ' vai com o caminho inteiro: um ',
+      el('code', {}, 'ssh'),
+      ' com comando não carrega o PATH do seu shell.',
+    ),
+    el('pre', { class: 'tm-config' }, `~/.ahrena-console/machines.json · na ${machine.label}, dentro de "connection"\n${OWNER_AUTH_CREDENTIAL_EXAMPLE}`),
+    el(
+      'div',
+      { class: 'tm-legend' },
+      el('span', {}, icon('list'), ' Lista, sem shell: só roda o que está no arquivo.'),
+      el('span', {}, icon('lock'), ' Nenhum segredo no comando: a credencial volta pela saída do ssh e não vai para log nem para a tela.'),
+      el('span', {}, icon('shield'), ' O token deste Mac nunca vai para lá.'),
+    ),
+    el('div', { class: 'tm-rc-actions' }, copy),
+  );
+}
+
+/**
+ * The part of a remote whose core refuses this Mac for want of the owner's proof (decision 0020 section 6): one band
+ * per reason, and for `owner-auth-required` the card with the credential command. Never a credential, a key or what a
+ * command printed: only fixed sentences, the machine's label and its port.
+ */
+export function ownerAuthParts(machine, { retry = () => {} } = {}) {
+  const label = machine.label;
+  const port = machine.port ?? 'do túnel';
+  const reason = ownerAuthReason(machine);
+  if (reason === 'owner-auth-required') {
+    return [
+      rcBand({
+        tone: 'waiting',
+        iconName: 'lock',
+        part: 'owner-auth',
+        reason,
+        title: `A ${label} pede a prova do dono, e este Mac ainda não sabe pedi-la.`,
+        text: 'O núcleo de lá só responde a quem prova ser o dono, e esta máquina não tem o comando de credencial no machines.json. Configure-o abaixo: o Mac roda o comando pelo SSH que já entra lá e recebe uma credencial curta, que fica só na memória do núcleo daqui. O núcleo de lá também precisa ter a credencial remota; se for antigo, atualize-o.',
+        lines: [fromLine('do núcleo de lá, que recusou o pedido sem prova')],
+        actions: [ownerAuthRetry(retry, true)],
+      }),
+      ownerAuthSetup(machine),
+    ];
+  }
+  if (reason === 'owner-auth-failed') {
+    return [
+      rcBand({
+        tone: 'error',
+        iconName: 'key-round',
+        role: 'alert',
+        part: 'owner-auth',
+        reason,
+        title: `A ${label} recusou o acesso: a prova do dono falhou.`,
+        text: 'O comando de credencial rodou e não trouxe uma prova que o núcleo de lá aceite. O que costuma ser, nesta ordem:',
+        lines: [
+          causes(
+            ['O núcleo de lá é antigo', `, de antes da credencial remota. Atualize e reinicie o núcleo na ${label}.`],
+            ['O SSH não entrou', ': a chave foi recusada, o host mudou ou a sessão pediu login.'],
+            ['O núcleo de lá reiniciou', ` e recusou a renovação de novo, ou a porta ${port} leva a outro núcleo.`],
+          ),
+          el('p', {}, 'Tentamos de novo sozinhos em 30 s, 1 min e depois a cada 5 min.'),
+          fromLine('do comando de credencial · o código de saída fica no nucleo.log deste Mac, nunca na tela'),
+        ],
+        actions: [ownerAuthRetry(retry, true)],
+      }),
+    ];
+  }
+  return [
+    rcBand({
+      tone: 'error',
+      iconName: 'shield-alert',
+      role: 'alert',
+      part: 'owner-auth',
+      reason,
+      title: `Esta não parece ser a mesma ${label}.`,
+      text: `Quem respondeu agora tem outra identidade de máquina, ou outro usuário, do que a ${label} que provou ser sua na primeira vez desde que o núcleo deste Mac subiu. Por segurança, este Mac parou de mandar pedidos assinados para lá.`,
+      lines: [
+        el(
+          'ol',
+          { class: 'tm-rc-howto' },
+          el('li', {}, el('b', {}, 'Confira se o túnel leva à máquina certa'), ': o host ', el('span', { class: 'mono' }, 'ahrena-tunnel'), ` no ~/.ssh/config deste Mac e a porta ${port}.`),
+          el('li', {}, el('b', {}, 'Trocou de máquina ou de usuário de propósito?'), ' Reinicie o núcleo deste Mac: a identidade fica guardada só enquanto ele roda, e a próxima prova vira a nova referência.'),
+        ),
+        fromLine('da prova de agora, comparada com a primeira'),
+      ],
+      actions: [ownerAuthRetry(retry, false)],
+    }),
+  ];
 }
 
 // ---------- the body ----------
@@ -501,9 +616,7 @@ export function conditionParts(machine, reading, { retry = () => {}, version = n
     const b = bandText(machine, reading, now);
     return { faded: true, parts: [errorBand({ title: b.title, text: b.text, action: { label: 'Tentar agora', onClick: retry } })] };
   }
-  if (condition === 'owner-auth-required') {
-    return { faded: true, parts: [stateCard({ iconName: 'server-off', tone: 'waiting', title: 'Acesso remoto bloqueado', text: 'O núcleo remoto exige autenticação do dono. Use o app na própria máquina até configurar um acesso remoto autenticado.' }), showOnlyNote()] };
-  }
+  if (ownerAuthReason(machine)) return { faded: true, parts: ownerAuthParts(machine, { retry }) };
   if (condition === 'no-response') {
     const port = machine.port ? `A porta ${machine.port} aceita a conexão` : 'O túnel aceita a conexão';
     return {
@@ -603,7 +716,8 @@ export async function mount(area, ctx) {
     const condition = conn?.view(data, legacy, now) ?? legacy;
     const line = headerLine(data.reading, machine, { local, offline: condition.faded, now });
     if (sub) sub.textContent = (conn ? conn.headerLine(line) : line) || (local ? 'A telemetria medida pelo núcleo daqui' : 'Máquina remota');
-    if (!local && machine) pillSlot.replaceChildren(pill(conn?.pill() ?? statePill(machine)));
+    // The owner proof (issue 388) says its reason on the pill, over the connection's "Sem conexão": the tunnel is up.
+    if (!local && machine) pillSlot.replaceChildren(pill((ownerAuthReason(machine) && machine.reconnect?.state !== 'running' ? statePill(machine) : null) ?? conn?.pill() ?? statePill(machine)));
     const ownPort = Number(globalThis.location?.port) || null;
     terminals.take(data.reading?.terminals ?? null, data.sessions);
     const shownData = data.reading ? { ...data, reading: withoutReleased(data.reading, released) } : data;

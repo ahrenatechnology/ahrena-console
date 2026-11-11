@@ -154,7 +154,8 @@ export function machineUnreachableAlert(label: string, port: number, reason: Unr
     id: 'machine-unreachable',
     kind: 'machine-unreachable',
     level: 'error',
-    message: `${label} sem conexão`,
+    // The owner proof (#388): the tunnel is up and the port answers, so the core over there refuses: "sem acesso".
+    message: reason.startsWith('owner-auth-') ? `${label} sem acesso` : `${label} sem conexão`,
     detail:
       reason === 'owner-auth-required'
         ? 'O núcleo remoto exige autenticação do dono; a conexão remota ainda não fornece essa prova.'
