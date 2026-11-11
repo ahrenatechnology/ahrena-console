@@ -85,9 +85,10 @@ function normalizeCommand(c) {
   const start = args(c.start);
   if (!start.length) return null;
   const stop = args(c.stop);
+  const credential = args(c.credential);
   const t = int(c.startTimeoutSeconds);
   const s = int(c.stopTimeoutSeconds);
-  return { start, stop: stop.length ? stop : null, startTimeoutSeconds: t && t > 0 ? t : null, stopTimeoutSeconds: s && s > 0 ? s : null };
+  return { start, stop: stop.length ? stop : null, startTimeoutSeconds: t && t > 0 ? t : null, stopTimeoutSeconds: s && s > 0 ? s : null, ...(credential.length ? { credential } : {}) };
 }
 
 /** The `connection` of a remote in `GET /api/machines`, or `null` when the core sent none (an older core). */
@@ -244,12 +245,21 @@ export function connectionPorts(connection, machine, remotePorts = null) {
 }
 
 /**
- * The owner-proof line of the card's commands (issue 388, 388-1), `{ text, tone }` or `null`: only what the machine's
- * reason says for sure, that machines.json has no `connection.credential`. The command itself is not in the
- * connection the core sends, so a configured one has no line here.
+ * The owner-proof line of the card's commands (issue 388, 388-1 to 388-3), `{ text, tone }` or `null`: without
+ * `connection.credential` (388-1) the yellow "sem connection.credential"; with it, its configured list, as the
+ * start and stop lines show theirs. Never what the command printed: the core does not send it.
  */
-export function credentialLine(machine) {
-  return ownerAuthReason(machine) === 'owner-auth-required' ? { text: 'prova do dono: sem connection.credential no machines.json', tone: 'waiting' } : null;
+export function credentialLine(machine, connection = null) {
+  const auth = ownerAuthReason(machine);
+  if (!auth) return null;
+  if (auth === 'owner-auth-required') return { text: 'prova do dono: sem connection.credential no machines.json', tone: 'waiting' };
+  const argv = connection?.command?.credential;
+  return argv ? { text: `prova do dono: ${argv.join(' ')}`, tone: null } : null;
+}
+
+/** The core over there refuses the owner proof (issue 388) and no job runs: the port answers, so the tunnel is up. */
+export function tunnelUpForOwnerAuth(connection, machine) {
+  return Boolean(ownerAuthReason(machine)) && (connection.state === 'down' || connection.state === 'failing') && connection.job?.state !== 'running';
 }
 
 /** The mono lines at the foot of the card: what runs, and the cloud profile it depends on. */
@@ -262,9 +272,13 @@ export function commandLines(connection) {
   return out;
 }
 
-/** The buttons in the card's title: `up` has Reconectar and Parar (with a stop command), `stopped` has Subir. */
-export function cardActions(connection) {
+/**
+ * The buttons in the card's title: `up` has Reconectar and Parar (with a stop command), `stopped` has Subir. A machine
+ * whose core refuses the owner proof (issue 388) has the tunnel up though the core says `down`: the `up` buttons.
+ */
+export function cardActions(connection, machine = null) {
   const a = connection.actions;
+  if (tunnelUpForOwnerAuth(connection, machine)) return [a.reconnect ? 'reconnect' : null, connection.command?.stop ? 'stop' : null].filter(Boolean);
   if (connection.state === 'up') return [a.reconnect ? 'reconnect' : null, a.stop ? 'stop' : null].filter(Boolean);
   if (connection.state === 'stopped') return a.start ? ['start'] : [];
   return [];

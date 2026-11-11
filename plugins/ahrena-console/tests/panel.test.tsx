@@ -1529,6 +1529,55 @@ test('P14 narrow and wide: a band at the top of the current-session card with th
   }
 })
 
+// Issue 388 (388-5): the session runs on a Workstation whose core refuses the owner proof; the tunnel is up.
+const OWNER_AUTH_DOWN: NonNullable<Panel['machine']>['connection'] = { state: 'down', since: new Date(READ_AT).toISOString(), lastError: null }
+const refusing = (reason: 'owner-auth-required' | 'owner-auth-failed' | 'owner-auth-mismatch'): Panel => ({ ...onWorkstation(OWNER_AUTH_DOWN), machine: { ...onWorkstation(OWNER_AUTH_DOWN).machine!, reason } })
+
+test('AC1 · 388-5: the band of each owner-proof reason, narrow and wide, with its tone and "resolver no console ›"', async ($, on) => {
+  const f = await open($, on)
+  const at = clockTime(READ_AT)
+  const cases = [
+    ['owner-auth-required', '⊘ Bloqueada · falta a prova', '⊘ Workstation bloqueada · falta a prova do dono',
+      `Esta sessão roda na Workstation, que agora exige a prova do dono, e o machines.json deste Mac não tem o comando de credencial. O que você vê é a última leitura, de ${at}.`, paleta.yellow['500']],
+    ['owner-auth-failed', '⊘ Prova do dono falhou', '⊘ Workstation recusou o acesso · a prova do dono falhou',
+      `Esta sessão roda na Workstation. O comando de credencial não trouxe uma prova que o núcleo de lá aceite; tentamos de novo sozinhos. Última leitura de ${at}.`, paleta.red['500']],
+    ['owner-auth-mismatch', '⊘ Identidade diferente', '⊘ Workstation com outra identidade',
+      `Quem responde pela porta da Workstation não é a máquina da primeira prova. Nada assinado vai para lá até você conferir o túnel. Última leitura de ${at}.`, paleta.red['500']],
+  ] as const
+  for (const [reason, narrow, wide, q, border] of cases) {
+    f.state.panel = refusing(reason)
+    await f.timer.advance(15_000)
+    for (const [target, title, detail] of [[PANE, narrow, `Roda na Workstation · última leitura ${at}`], [WIDE, wide, q]] as const) {
+      const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...target })
+      const band = await ui.find({ key: 'machine-banner' })
+      expect(band).toBeDefined()
+      expect((band as any).props.borderColor).toBe(border)
+      expect(await ui.find({ type: 'Text', text: title })).toBeDefined()
+      expect(await ui.find({ type: 'Text', text: detail })).toBeDefined()
+      expect(await ui.find({ type: 'Text', text: 'resolver no console ›' })).toBeDefined()
+      expect((await ui.findAll({ type: 'Link' })).map((l: any) => l.props.href)).toContain('http://localhost:4720/ui/machines/workstation')
+      await ui.unmount()
+    }
+  }
+})
+
+test('AC3 · 388-5: the owner-proof band shows no credential, key or command output', async ($, on) => {
+  const f = await open($, on)
+  const SENTINEL = 'sentinela-credencial-0f1e2d3c'
+  for (const reason of ['owner-auth-required', 'owner-auth-failed', 'owner-auth-mismatch'] as const) {
+    const panel = refusing(reason)
+    f.state.panel = { ...panel, machine: { ...panel.machine!, connection: { ...OWNER_AUTH_DOWN!, lastError: { reason: SENTINEL, holder: SENTINEL } }, credential: SENTINEL, output: SENTINEL } as any }
+    await f.timer.advance(15_000)
+    for (const target of [PANE, WIDE]) {
+      const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...target })
+      expect(await ui.find({ key: 'machine-banner' })).toBeDefined()
+      const texts = (await ui.findAll({ type: 'Text' })).map((t: any) => JSON.stringify(t.props))
+      expect(texts.some((t: string) => t.includes(SENTINEL))).toBe(false)
+      await ui.unmount()
+    }
+  }
+})
+
 test('P14: the other reasons and states in plain words; no band when the connection is up, on this machine, or from an older core', async ($, on) => {
   const f = await open($, on)
   const cases: [NonNullable<Panel['machine']>['connection'], string][] = [

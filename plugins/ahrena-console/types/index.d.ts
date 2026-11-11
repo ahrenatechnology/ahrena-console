@@ -283,7 +283,15 @@ export type PanelMachine = {
   /** The newest reading of the machine: what the panel shows is from then. */
   lastReadAt: string | null
   connection: PanelMachineConnection | null
+  /**
+   * #388 (388-5): why the machine is unreachable, from its status. The three owner-proof reasons mean the tunnel
+   * is up and the core over there refuses this Mac. Absent from a core older than #388.
+   */
+  reason?: OwnerAuthReason | 'port-closed' | 'no-response' | null
 }
+
+/** #388: the core over there asks for the owner proof and refuses this Mac. */
+export type OwnerAuthReason = 'owner-auth-required' | 'owner-auth-failed' | 'owner-auth-mismatch'
 
 /** A última leitura do núcleo e como ela foi. */
 export type Reading = {

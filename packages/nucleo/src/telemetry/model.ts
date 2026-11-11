@@ -442,7 +442,7 @@ export interface ConnectionStatus {
   lastError: ConnectionError | null;
   actions: { start: boolean; stop: boolean; reconnect: boolean; loginAndStart: boolean };
   /** What runs, for the screen to show; `null` without a connection. */
-  command: { start: string[]; stop: string[] | null; startTimeoutSeconds: number; stopTimeoutSeconds: number | null } | null;
+  command: { start: string[]; stop: string[] | null; startTimeoutSeconds: number; stopTimeoutSeconds: number | null; credential?: string[] } | null;
   job: ConnectionJob | null;
   logFile: string | null;
 }

@@ -23,6 +23,7 @@ import {
   cardActions,
   commandLines,
   credentialLine,
+  tunnelUpForOwnerAuth,
   connectionExample,
   connectionMode,
   connectionPill,
@@ -356,7 +357,7 @@ export function machineConnection(ctx, id, { reread = () => {}, repaint = () => 
   function connectionCard(machine, reading, data, now) {
     const c = connection;
     const busy = (a) => pending === a;
-    const actions = cardActions(c).map((a) =>
+    const actions = cardActions(c, machine).map((a) =>
       a === 'reconnect'
         ? button({ label: 'Reconectar', iconName: 'refresh', action: 'reconnect', busy: busy('reconnect'), disabled: Boolean(pending), onClick: () => act('reconnect') })
         : a === 'stop'
@@ -364,14 +365,14 @@ export function machineConnection(ctx, id, { reread = () => {}, repaint = () => 
           : button({ label: 'Subir o túnel', iconName: 'resume', kind: 'filled', action: 'start', busy: busy('start'), disabled: Boolean(pending), onClick: () => act('start') }),
     );
     const cmds = commandLines(c);
-    const credential = credentialLine(machine);
+    const credential = credentialLine(machine, c);
     return el(
       'section',
       { class: 'card mc-card mc-conn', 'data-part': 'connection', 'data-state': c.state },
       title('cable', 'Conexão', c.cloud ? 'túnel SSH sobre AWS SSM' : 'o túnel do machines.json', actions),
       trioNode(connectionTrio(c, machine, reading, now)),
       portsNode(connectionPorts(c, machine, reading?.ports ?? null), machine),
-      cmds.length || credential ? el('div', { class: 'mc-cmds' }, ...cmds.map((t) => el('span', {}, t)), credential ? el('span', { class: 'tm-c-waiting' }, credential.text) : null) : null,
+      cmds.length || credential ? el('div', { class: 'mc-cmds' }, ...cmds.map((t) => el('span', {}, t)), credential ? el('span', { class: credential.tone === 'waiting' ? 'tm-c-waiting' : null }, credential.text) : null) : null,
     );
   }
 
@@ -430,7 +431,7 @@ export function machineConnection(ctx, id, { reread = () => {}, repaint = () => 
       const place = (wide = false) => placementCard(placement, { stale: offline, hasReading, wide });
       if (mode === 'none') return { faded: legacy.faded, parts: [...legacy.parts], row: grid(place(true)) };
       if (mode === 'start-only') return { faded: legacy.faded, parts: [...legacy.parts], row: grid(setupCard(machine), place()) };
-      if (connection.state !== 'up' || !connection.command?.stop) dialog = false;
+      if ((connection.state !== 'up' && !tunnelUpForOwnerAuth(connection, machine)) || !connection.command?.stop) dialog = false;
       const b = bandFor(machine, reading, legacy, now);
       const parts = [];
       // The owner proof (issue 388) keeps the machine screen's band, with a refused write under it; a job that runs says what runs.

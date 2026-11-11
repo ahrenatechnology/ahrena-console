@@ -15,7 +15,7 @@ import type { ConnectionStatus } from '../../src/telemetry/model.ts';
 // The mod's own band check, loaded at run time: the plugin folder is not part of this package's type
 // check (no package.json of its own), so a static import would make tsc read it as CommonJS.
 const MOD_FORMAT = '../../../../plugins/ahrena-console/hooks/format.ts';
-const { machineDown } = (await import(MOD_FORMAT)) as { machineDown: (panel: never) => { machine: { label: string; lastReadAt: string | null }; short: string } | null };
+const { machineDown } = (await import(MOD_FORMAT)) as { machineDown: (panel: never) => { machine: { label: string; lastReadAt: string | null }; short: string; auth?: string | null } | null };
 import { simulate } from '../../src/simulator/index.ts';
 import { AlertTracker } from '../../src/telemetry/alerts.ts';
 import { loopbackGet } from '../../src/telemetry/adapters/loopback-http.ts';
@@ -212,7 +212,7 @@ describe('#319 the panel of a remote session', () => {
     assert.ok(tunnel.paths.includes(`/api/panel/${id}?account=acc-1&cwd=%2Fsrv%2Fapp`), tunnel.paths.join(' '));
     assert.ok(tunnel.paths.every((p) => !p.includes('other=') && !p.includes('decisions=')));
     assert.equal(r.body.session.id, id);
-    assert.deepEqual(r.body.machine, { ...WS, lastReadAt: new Date(NOW).toISOString(), connection: UP });
+    assert.deepEqual(r.body.machine, { ...WS, lastReadAt: new Date(NOW).toISOString(), connection: UP, reason: null });
     // The same panel the remote builds, with only what this Mac must not offer taken out.
     const own = await remotePanelOf(id!, '?account=acc-1&cwd=%2Fsrv%2Fapp');
     assert.equal(r.body.session.title, own.session.title);
@@ -353,6 +353,7 @@ describe('#319 a remote session whose remote is down (AC-1)', () => {
       ...WS,
       lastReadAt: new Date(NOW).toISOString(),
       connection: FAILING,
+      reason: 'no-response',
     });
   });
 
@@ -438,5 +439,38 @@ describe("#319 the shape lights the mod's P14 band (plugins/ahrena-console/hooks
     assert.equal(minimal.body.session, null);
     assert.equal(machineDown(minimal.body as never)?.short, 'SSO expirado');
     assert.equal(machineDown((await get(local, `/api/panel/${localId}`)).body as never), null);
+  });
+});
+
+describe('#388 the owner proof on the panel of a remote session (388-5)', () => {
+  const SENTINEL = 'sentinela-credencial-0f1e2d3c';
+  test('AC1 · 388-5: the machine carries the owner-proof reason, and it lights the mod band with that reason', async () => {
+    const [id] = await remoteSessionIds();
+    await get(local, `/api/panel/${id}`);
+    for (const reason of ['owner-auth-required', 'owner-auth-failed', 'owner-auth-mismatch'] as const) {
+      status = { state: 'unreachable', reason, version: null };
+      const r = await get(local, `/api/panel/${id}`);
+      assert.equal(r.status, 200);
+      assert.equal(r.body.machine.reason, reason);
+      assert.equal(machineDown(r.body as never)?.auth, reason, reason);
+    }
+  });
+
+  test('AC1 · 388-5: the minimal panel of a session known only from a list carries the reason too', async () => {
+    const all = await get(local, '/api/sessions?machine=all&perPage=100');
+    const remoteId = all.body.items.find((i: { machine: { id: string } }) => i.machine.id === WS.id).id;
+    status = { state: 'unreachable', reason: 'owner-auth-required', version: null };
+    const r = await get(local, `/api/panel/${remoteId}`);
+    assert.equal(r.body.session, null);
+    assert.equal(r.body.machine.reason, 'owner-auth-required');
+  });
+
+  test('AC3 · 388-5: only the reason of the machine status goes out, nothing else it carries', async () => {
+    const [id] = await remoteSessionIds();
+    await get(local, `/api/panel/${id}`);
+    status = { state: 'unreachable', reason: 'owner-auth-failed', version: null, credential: SENTINEL, output: SENTINEL } as unknown as MachineStatus;
+    const r = await get(local, `/api/panel/${id}`);
+    assert.deepEqual(Object.keys(r.body.machine).sort(), ['connection', 'id', 'label', 'lastReadAt', 'reason']);
+    assert.ok(!r.text.includes(SENTINEL));
   });
 });

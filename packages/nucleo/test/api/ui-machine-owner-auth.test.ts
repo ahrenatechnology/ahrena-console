@@ -287,6 +287,32 @@ describe('#388 the Workstation screen when its core refuses the proof', () => {
     });
   }
 
+  const CREDENTIAL = ['/usr/bin/ssh', '-T', '-o', 'BatchMode=yes', 'ahrena-tunnel', '/caminho/para/node', '/caminho/para/cli.ts', 'remote-credential', '--port', '4720'];
+
+  test('AC3 · 388-2 and 388-3: a configured credential command shows in the card as its argv only, never its output', async () => {
+    for (const reason of ['owner-auth-failed', 'owner-auth-mismatch'] as const) {
+      setRemote('unreachable', reason);
+      connection = refused({ command: { start: START, stop: STOP, startTimeoutSeconds: 180, stopTimeoutSeconds: 180, credential: CREDENTIAL }, output: SENTINEL });
+      const m = mount();
+      await m.ready;
+      const cmds = part(m.area, 'connection')!.querySelectorAll('.mc-cmds span').map((s) => texto(s));
+      assert.deepEqual(cmds.filter((t) => t.startsWith('prova do dono')), [`prova do dono: ${CREDENTIAL.join(' ')}`], reason);
+      assert.ok(!everything(m.area).includes(SENTINEL));
+      m.leave();
+    }
+  });
+
+  test('AC1 · 388-1 to 388-3: the card keeps the tunnel actions, Reconectar and Parar o túnel, as drawn', async () => {
+    for (const reason of OWNER_AUTH) {
+      setRemote('unreachable', reason);
+      connection = refused();
+      const m = mount();
+      await m.ready;
+      assert.deepEqual(buttons(part(m.area, 'connection')!.querySelector('.mc-act')), ['Reconectar', 'Parar o túnel'], reason);
+      m.leave();
+    }
+  });
+
   test('AC2 · 388-4: the way back: connected again, the band goes, nothing fades and the core tile answers', async () => {
     setRemote('unreachable', 'owner-auth-required');
     connection = refused();

@@ -27,6 +27,7 @@ import type {
   PanelSubagent,
   SessionAttention,
   PanelWork,
+  OwnerAuthReason,
   View,
 } from '../types'
 import {
@@ -538,6 +539,7 @@ export function machineBannerTexts(p: Panel | null | undefined, narrow: boolean)
   if (!d) return null
   const { label, lastReadAt } = d.machine
   const read = lastReadAt && Number.isFinite(Date.parse(lastReadAt)) ? clockTime(Date.parse(lastReadAt)) : null
+  if (d.auth) return ownerAuthBannerTexts(d.auth, label, read, narrow)
   const title = `⊘ ${narrow ? 'Sem conexão' : `${label} sem conexão`} · ${d.short}`
   const detail = narrow
     ? `Roda na ${label}${read ? ` · última leitura ${read}` : ''}`
@@ -545,6 +547,39 @@ export function machineBannerTexts(p: Panel | null | undefined, narrow: boolean)
   const state = d.machine.connection!.state
   const color = state === 'stopped' ? STATUS_COLOR.abandoned : state === 'starting' || state === 'stopping' ? STATUS_COLOR.waiting : STATUS_COLOR.error
   return { title, detail, color }
+}
+
+/**
+ * #388 (388-5): the band of a machine whose core refuses the owner proof. Yellow while the proof is only
+ * missing, red when it failed or came from another identity. Fixed sentences, the label and the read time
+ * only: never a credential, a key or what a command printed.
+ */
+function ownerAuthBannerTexts(auth: OwnerAuthReason, label: string, read: string | null, narrow: boolean) {
+  const t = {
+    'owner-auth-required': {
+      narrow: 'Bloqueada · falta a prova',
+      wide: `${label} bloqueada · falta a prova do dono`,
+      q: `Esta sessão roda na ${label}, que agora exige a prova do dono, e o machines.json deste Mac não tem o comando de credencial.${read ? ` O que você vê é a última leitura, de ${read}.` : ''}`,
+      color: STATUS_COLOR.waiting,
+    },
+    'owner-auth-failed': {
+      narrow: 'Prova do dono falhou',
+      wide: `${label} recusou o acesso · a prova do dono falhou`,
+      q: `Esta sessão roda na ${label}. O comando de credencial não trouxe uma prova que o núcleo de lá aceite; tentamos de novo sozinhos.${read ? ` Última leitura de ${read}.` : ''}`,
+      color: STATUS_COLOR.error,
+    },
+    'owner-auth-mismatch': {
+      narrow: 'Identidade diferente',
+      wide: `${label} com outra identidade`,
+      q: `Quem responde pela porta da ${label} não é a máquina da primeira prova. Nada assinado vai para lá até você conferir o túnel.${read ? ` Última leitura de ${read}.` : ''}`,
+      color: STATUS_COLOR.error,
+    },
+  }[auth]
+  return {
+    title: `⊘ ${narrow ? t.narrow : t.wide}`,
+    detail: narrow ? `Roda na ${label}${read ? ` · última leitura ${read}` : ''}` : t.q,
+    color: t.color,
+  }
 }
 
 /** The machine's screen in the console, on the core the panel reads (`Link` only takes `http://localhost`). */
