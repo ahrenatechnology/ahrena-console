@@ -19,6 +19,11 @@
 //                   "stop": { "command": [...] },
 //                   "cloudProfile": { "connector": "aws", "profile": "perfil-dev" } }
 //
+// `connection.credential` (#388, decision 0020 section 1) is the command that brings the remote owner's
+// credential over the SSH that already entered there: `{ "command": [...], "timeoutSeconds": 20 }` (5 to
+// 60 s), a list, no shell, like `start`. Its request goes on stdin and its answer comes on stdout, which
+// stays in memory (telemetry/remote-proof.ts); an invalid `credential` drops only that field.
+//
 // `start` and `stop` follow the rules and limits of `reconnect`. An invalid `stop` or `cloudProfile`
 // drops only that field, and an invalid `start` drops the whole `connection`, each with a log line:
 // the machine stays. A lone `reconnect` is read as `connection.start` (`connectionOf`); with both,
@@ -58,6 +63,8 @@ export interface ConnectionConfig {
   start: ReconnectConfig;
   stop?: ReconnectConfig;
   cloudProfile?: CloudProfileLink;
+  /** The remote owner's credential command (#388, decision 0020 section 1). */
+  credential?: ReconnectConfig;
 }
 
 export interface RemoteMachineConfig {
@@ -86,7 +93,7 @@ export function connectionOf(machine: Pick<RemoteMachineConfig, 'reconnect' | 'c
  */
 export function parseConnection(v: unknown, warn?: (message: string) => void): ConnectionConfig | string {
   if (!v || typeof v !== 'object' || Array.isArray(v)) return 'expected { "start": { "command": [...] }, "stop"?: {...}, "cloudProfile"?: {...} }';
-  const { start, stop, cloudProfile } = v as Record<string, unknown>;
+  const { start, stop, cloudProfile, credential } = v as Record<string, unknown>;
   if (start === undefined) return '.start: required';
   const s = parseReconnect(start);
   if (typeof s === 'string') return `.start${s.startsWith('.') ? s : `: ${s}`}`;
@@ -101,7 +108,27 @@ export function parseConnection(v: unknown, warn?: (message: string) => void): C
     if (typeof c === 'string') warn?.(`.cloudProfile${c}; ignored`);
     else out.cloudProfile = c;
   }
+  if (credential !== undefined) {
+    const c = parseCredential(credential);
+    if (typeof c === 'string') warn?.(`.credential${c.startsWith('.') ? c : `: ${c}`}; ignored`);
+    else out.credential = c;
+  }
   return out;
+}
+
+export const DEFAULT_CREDENTIAL_TIMEOUT_SECONDS = 20;
+export const MIN_CREDENTIAL_TIMEOUT_SECONDS = 5;
+export const MAX_CREDENTIAL_TIMEOUT_SECONDS = 60;
+
+/** A machine's `connection.credential`, or the reason it is invalid: the command rules of `reconnect`, 5 to 60 s (20 by default). Pure. */
+export function parseCredential(v: unknown): ReconnectConfig | string {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return 'expected { "command": [...], "timeoutSeconds": n }';
+  const timeout = (v as Record<string, unknown>).timeoutSeconds ?? DEFAULT_CREDENTIAL_TIMEOUT_SECONDS;
+  if (typeof timeout !== 'number' || !Number.isInteger(timeout) || timeout < MIN_CREDENTIAL_TIMEOUT_SECONDS || timeout > MAX_CREDENTIAL_TIMEOUT_SECONDS) {
+    return `.timeoutSeconds: an integer from ${MIN_CREDENTIAL_TIMEOUT_SECONDS} to ${MAX_CREDENTIAL_TIMEOUT_SECONDS}`;
+  }
+  const parsed = parseReconnect({ command: (v as Record<string, unknown>).command });
+  return typeof parsed === 'string' ? parsed : { command: parsed.command, timeoutSeconds: timeout };
 }
 
 function parseCloudProfile(v: unknown): CloudProfileLink | string {

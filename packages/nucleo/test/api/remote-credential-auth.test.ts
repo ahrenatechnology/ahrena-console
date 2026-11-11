@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import { DOCKER_ACTIONS } from '../../src/docker/catalog.ts';
 import { CLOCK_WINDOW_MS, CREDENTIAL_TTL_MS } from '../../src/api/remote-credentials.ts';
+import { MAX_ISSUE_BODY_BYTES } from '../../src/api/remote-auth.ts';
 import { ISSUE, OWNER, call, echoBody, hex, remoteFixture, signHeader } from './remote-credential-fixture.ts';
 
 const passed = (status: number) => status !== 401 && status !== 403;
@@ -383,6 +384,26 @@ describe('AC4 · replay, clock, wrong core, eviction', () => {
       const ghost = { ...c, credentialId: hex(16) };
       assert.equal((await f.signed(ghost, 'GET', '/api/wall')).json?.reason, 'credential-unknown');
       assert.equal((await f.signed(c, 'GET', '/api/wall')).status, 200);
+    } finally { await f.close(); }
+  });
+});
+
+describe('AC1 · the issue route', () => {
+  test('AC1 a body over 1 KiB on the issue route is 413 with the connection closed, and no credential is issued', async () => {
+    const f = await remoteFixture();
+    try {
+      const body = JSON.stringify({ version: 1, nonce: hex(16), revoke: [], pad: 'x'.repeat(2048) });
+      assert.ok(Buffer.byteLength(body) > MAX_ISSUE_BODY_BYTES);
+      const r = await call(f.url, ISSUE, 'POST', { authorization: `Bearer ${OWNER}` }, body);
+      assert.equal(r.status, 413);
+      assert.equal(r.headers.connection, 'close');
+      assert.equal(f.store.liveCount(), 0, 'nothing was issued');
+      // Right at the cap is read and judged (here refused for the unknown field), not cut.
+      const atCap = JSON.stringify({ version: 1, nonce: hex(16), pad: '' });
+      const padded = atCap.replace('"pad":""', `"pad":"${'y'.repeat(MAX_ISSUE_BODY_BYTES - Buffer.byteLength(atCap))}"`);
+      assert.equal(Buffer.byteLength(padded), MAX_ISSUE_BODY_BYTES);
+      assert.equal((await call(f.url, ISSUE, 'POST', { authorization: `Bearer ${OWNER}` }, padded)).status, 400);
+      assert.equal(f.store.liveCount(), 0);
     } finally { await f.close(); }
   });
 });

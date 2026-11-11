@@ -2,7 +2,8 @@
 // port the user's tunnel forwards. Every 30 s (and once on start) this Mac's núcleo asks it for
 // `GET /api/telemetry` and, when that answers, `GET /api/attention`, through `RemoteGet`.
 //
-// - The state: `connected`; `unreachable` with the reason (`port-closed`, `no-response`);
+// - The state: `connected`; `unreachable` with the reason (`port-closed`, `no-response`, or one of the
+//   owner-proof reasons when the núcleo over there refuses: model.ts `UNREACHABLE_REASONS`, decision 0020);
 //   `incompatible-version` when the `version` of its telemetry is not this one's (or it has no
 //   telemetry route at all). Until the first read ends, `unreachable` with no reason.
 // - The newest reading goes into the same `TelemetryStore`, under the remote's id, projected and
@@ -22,7 +23,7 @@ import type { ChangeCursor } from '../changes/cursor.ts';
 import { sanitizeTerminals } from './terminals.ts';
 import { machineUnreachableAlert, type AlertChange, type AlertTracker } from './alerts.ts';
 import type { RemoteMachineConfig } from './machines-config.ts';
-import { RETENTION_MS, SAMPLE_INTERVAL_MS, TELEMETRY_VERSION, type Alert, type AlertKind, type ConnectionStatus, type MachineState, type ReconnectStatus, type TelemetryReading } from './model.ts';
+import { RETENTION_MS, SAMPLE_INTERVAL_MS, TELEMETRY_VERSION, type Alert, type AlertKind, type ConnectionStatus, type MachineState, type ReconnectStatus, type TelemetryReading, type UnreachableReason } from './model.ts';
 import { sanitizePlacement } from './placement.ts';
 import type { RemoteGet, TelemetryStore } from './ports.ts';
 import { systemTimers, type SamplerTimers } from './sampler.ts';
@@ -59,6 +60,12 @@ export interface RemoteMachineOptions {
    * drop that follows does not open `machine-unreachable` (nor its notification) until a start.
    */
   suppressUnreachable?: (machineId: string) => boolean;
+  /**
+   * Why the núcleo over there refused the read (401 or 403) when the owner's proof is in play (decision 0020
+   * section 6, remote-proof.ts): `owner-auth-required` without a credential command, `owner-auth-failed` or
+   * `owner-auth-mismatch` with one. Without it, always `owner-auth-required`.
+   */
+  ownerAuthReason?: (machineId: string) => UnreachableReason;
 }
 
 const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -245,8 +252,9 @@ export class RemoteMachine implements MachineEntry {
     } else if (t.status === 200 && isObject(t.body) && isNumber(t.body.version)) {
       const version = t.body.version;
       next = version === TELEMETRY_VERSION ? { state: 'connected', reason: null, version } : { state: 'incompatible-version', reason: null, version };
-    } else if (t.status === 403) {
-      next = { state: 'unreachable', reason: 'owner-auth-required', version: null };
+    } else if (t.status === 403 || t.status === 401) {
+      // Fail closed (#302, decision 0020 section 6): no proof the núcleo over there accepts.
+      next = { state: 'unreachable', reason: this.o.ownerAuthReason?.(this.id) ?? 'owner-auth-required', version: null };
     } else if (t.status === 200 || t.status === 404) {
       // A núcleo that answers but has no telemetry this one understands (an older one gives 404).
       next = { state: 'incompatible-version', reason: null, version: null };

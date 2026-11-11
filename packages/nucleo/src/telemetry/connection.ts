@@ -256,6 +256,8 @@ export interface MachineConnectionOptions {
   /** This Mac's newest reading (its tunnels and listening ports). */
   localReading?: () => Promise<TelemetryReading | null>;
   onChange?: (machineId: string) => void;
+  /** A job (start, stop, reconnect, login-and-start) began: the machine's remote credential is dropped (decision 0020 section 4). */
+  onBegin?: (machineId: string) => void;
   now?: () => number;
   /** The stop runner's knobs (tests: msPerSecond, killGraceMs). */
   runner?: Partial<Omit<ReconnectRunnerOptions, 'logFile' | 'lookup' | 'onChange' | 'onSucceeded'>>;
@@ -494,6 +496,7 @@ export class MachineConnection {
       if (kind !== 'stop') e.stoppedAt = null;
       e.failure = null;
       e.job = job;
+      this.o.onBegin?.(id);
       this.o.log?.(`connection (${id}): ${kind} started by ${by === 'ui' ? 'the /ui' : 'a local client'}`);
       job.done = this.run(id, job, config);
       await job.started;
