@@ -217,6 +217,26 @@ describe('AC4 · renewal rules', () => {
     assert.equal(await t.proofs.authorize(PORT + 1, 'GET', '/api/telemetry', ''), null);
     assert.equal(t.issued(), 0);
   });
+
+  test('AC3 a fault while signing sends without proof and logs fixed words only, never the error text', async () => {
+    const SECRET = 'k'.repeat(43);
+    const logs: string[] = [];
+    const proofs = new RemoteProofs({
+      machineFor: (p) => (p === PORT ? { id: 'ws', credential: { command: ['/x'], timeoutSeconds: 5 } } : undefined),
+      overviewPid: async () => 4242,
+      run: (_c, input) => goodRunner(_c, input),
+      monotonic: () => 0,
+      random: (bytes) => {
+        if (bytes === 16 && logs.some((l) => l.endsWith(': ok'))) throw new Error(`boom ${SECRET}`);
+        return Buffer.alloc(bytes, 1);
+      },
+      log: (m) => logs.push(m),
+    });
+    assert.equal(await proofs.authorize(PORT, 'GET', '/api/telemetry', ''), null);
+    assert.equal(logs.at(-1), 'credential (ws): failed (internal)');
+    assert.ok(!logs.join('\n').includes(SECRET));
+    assert.ok(!logs.join('\n').includes('boom'));
+  });
 });
 
 describe('the two new reasons', () => {

@@ -8,7 +8,7 @@
 //   AC4 wrong machine, wrong owner, replay, expiry and reconnect.
 import assert from 'node:assert/strict';
 import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { createServer, type IncomingMessage, type Server } from 'node:http';
+import { createServer, request, type IncomingMessage, type Server } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { inspect } from 'node:util';
@@ -138,6 +138,23 @@ async function startCapture(pid: number): Promise<{ port: number; captured: { me
   await new Promise<void>((r) => server.listen(0, '127.0.0.1', () => r()));
   cleanup.push(() => new Promise<void>((r) => { server.closeAllConnections(); server.close(() => r()); }));
   return { port: (server.address() as { port: number }).port, captured };
+}
+
+/** A tunnel port that forwards every request to the core unchanged, keeping the URL and headers the core received. */
+async function startRecordingTunnel(core: Fixture): Promise<{ port: number; received: { url: string; headers: IncomingMessage['headers'] }[] }> {
+  const received: { url: string; headers: IncomingMessage['headers'] }[] = [];
+  const server: Server = createServer((req, res) => {
+    received.push({ url: req.url!, headers: req.headers });
+    const out = request({ host: '127.0.0.1', port: core.port, method: req.method, path: req.url, headers: req.headers }, (answer) => {
+      res.writeHead(answer.statusCode!, answer.headers);
+      answer.pipe(res);
+    });
+    out.on('error', () => res.destroy());
+    req.pipe(out);
+  });
+  await new Promise<void>((r) => server.listen(0, '127.0.0.1', () => r()));
+  cleanup.push(() => new Promise<void>((r) => { server.closeAllConnections(); server.close(() => r()); }));
+  return { port: (server.address() as { port: number }).port, received };
 }
 
 describe('AC2 · configured remote views work, and come back after restart and reconnect', () => {
@@ -419,7 +436,7 @@ describe('AC4 · wrong machine, wrong owner, replay', () => {
 });
 
 describe('AC3 · no token or key leaks', () => {
-  test('AC3 with sentinel keys and token, nothing leaks into argv, stdin, logs, reconnect.log, /api/machines, the /ui, the registry projection or error text', async () => {
+  test('AC3 with sentinel keys and token, nothing leaks into argv, stdin, logs, reconnect.log, /api/machines, the /ui, the registry projection, error text or the URLs and headers the core received', async () => {
     const MAC_TOKEN = 'c0ffee00'.repeat(8);
     const keys: Buffer[] = [];
     let n = 0;
@@ -431,7 +448,8 @@ describe('AC3 · no token or key leaks', () => {
     };
     const coreLogs: string[] = [];
     const core = await startCore({ store: { random }, log: (m) => coreLogs.push(m) });
-    const s = await setup({ core });
+    const tunnel = await startRecordingTunnel(core);
+    const s = await setup({ core, port: tunnel.port });
     s.script({ stderr: `stderr with ${MAC_TOKEN}\n` });
     const bodies: string[] = [];
     const keep = (r: Awaited<ReturnType<typeof s.get>>) => r.kind === 'response' && bodies.push(JSON.stringify(r.body ?? null));
@@ -474,10 +492,15 @@ describe('AC3 · no token or key leaks', () => {
     }
     const projections = [inspect(s.ctx.proofs, { depth: 10, showHidden: true }), JSON.stringify(s.ctx.proofs), JSON.stringify(s.remote.status()), inspect(s.remote, { depth: 4 })];
     const argvAndStdin = runs.map((r) => JSON.stringify({ argv: r.argv, stdin: r.stdin })).join('\n');
-    const everything = [argvAndStdin, ...s.logs, ...coreLogs, ...macLogs, ...bodies, ...pages, ...projections, readdirSync(s.dir).join(' ')].join('\n');
+    // What the core received on the tunnel port: every URL and header, the proof header kept apart (it is the
+    // AhrenaRemote one by design, and is scanned for the key below).
+    assert.ok(tunnel.received.length > 0, 'the core was reached through the tunnel port');
+    const proofHeaders = tunnel.received.map((r) => String(r.headers.authorization ?? ''));
+    const received = tunnel.received.map((r) => JSON.stringify({ url: r.url, headers: Object.entries(r.headers).filter(([name]) => name !== 'authorization') }));
+    const everything = [argvAndStdin, ...s.logs, ...coreLogs, ...macLogs, ...bodies, ...pages, ...projections, ...received, readdirSync(s.dir).join(' ')].join('\n');
     const forms = (b: Buffer) => [b.toString('hex'), b.toString('base64'), b.toString('base64url')];
     assert.ok(keys.length >= 3);
-    for (const k of keys) for (const f of forms(k)) assert.ok(!everything.includes(f), `key leaked as ${f.slice(0, 8)}…`);
+    for (const k of keys) for (const f of forms(k)) assert.ok(!everything.includes(f) && !proofHeaders.some((h) => h.includes(f)), `key leaked as ${f.slice(0, 8)}…`);
     for (const f of [MAC_TOKEN, ...forms(Buffer.from(MAC_TOKEN)), ...forms(Buffer.from(MAC_TOKEN, 'hex'))]) assert.ok(!everything.includes(f), 'the Mac token leaked');
     assert.ok(!everything.includes('AhrenaRemote'), 'no proof header anywhere');
     assert.ok(!everything.includes('stderr with'), 'the command stderr is discarded');

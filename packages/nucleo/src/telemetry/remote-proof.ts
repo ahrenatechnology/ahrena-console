@@ -311,9 +311,11 @@ export class RemoteProofs implements RemoteProof {
   }
 
   async authorize(port: number, method: string, target: string, body: string, retried = false): Promise<SignedRequest | null> {
+    let id: string | undefined;
     try {
       const m = this.#o.machineFor(port);
       if (!m?.credential) return null;
+      id = m.id;
       const p = this.#entry(m.id);
       let held = p.held;
       if (!held || held.c.expiresAt - this.#ts(held) <= RENEW_BEFORE_MS) {
@@ -329,6 +331,8 @@ export class RemoteProofs implements RemoteProof {
       const authorization = signRequest(held.c, { method, target, host, ts: this.#ts(held), nonce, body });
       return { authorization, host, machineId: m.id, credentialId: held.c.credentialId, retried };
     } catch {
+      // Fixed words only: the error may carry the key or the command's output.
+      this.#log(id ?? `port ${port}`, 'failed (internal)');
       return null;
     }
   }

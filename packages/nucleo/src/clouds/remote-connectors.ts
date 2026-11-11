@@ -6,8 +6,8 @@
 //   only, texts capped, lists capped, a device code only when its URI is https on an AWS host and the
 //   code has the AWS shape. Whatever else the remote sends is dropped.
 // - Writing: `POST` / `DELETE /api/connectors/aws/sessions/<name>/login` on the remote núcleo
-//   (`loopbackWrite`): always 127.0.0.1, `Host: 127.0.0.1:4720` (the remote's own), no Origin, so the
-//   remote takes it as a local request; the body is the fixed `{"mode":"device-code"}`. Only the
+//   (`loopbackWrite`): always 127.0.0.1, `Host: 127.0.0.1:4720` (the remote's own; a signed write carries
+//   the credential's `127.0.0.1:<corePort>`), no Origin, so the remote takes it as a local request; the body is the fixed `{"mode":"device-code"}`. Only the
 //   session name travels, and it has matched `SAFE_CLI_NAME` here; the remote looks it up in its
 //   own ~/.aws/config.
 // - Both go through the same wire (`loopbackExchange`), so with the remote owner's proof (decision 0020,
