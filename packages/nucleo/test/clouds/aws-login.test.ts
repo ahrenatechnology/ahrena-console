@@ -6,7 +6,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, describe, test } from 'node:test';
-import { acceptVerificationUri, AwsLoginRunner, extractDeviceCode, loginArgv, type LoginLookup } from '../../src/clouds/aws-login.ts';
+import { acceptVerificationUri, AwsLoginRunner, extractDeviceCode, loginArgv, MAX_VERIFICATION_URI_CHARS, type LoginLookup } from '../../src/clouds/aws-login.ts';
 import { DEVICE_PAGE } from './fake-aws.ts';
 
 const dir = mkdtempSync(join(tmpdir(), 'ahrena-aws-login-'));
@@ -63,6 +63,21 @@ describe('#277 device-code extraction', () => {
     const out = ['Browser will not be automatically opened.', 'Please visit the following URL:', '', uri, '', 'Alternatively, you may visit the following URL which will autofill the code upon loading:', uri, '', 'Then enter the code:', '', 'ABCD-EFGH', ''];
     assert.deepEqual(extractDeviceCode(out.join('\n')), { verificationUri: uri, userCode: 'ABCD-EFGH' });
     assert.equal(acceptVerificationUri(uri), uri);
+  });
+
+  test('#446 a signin.aws link of real length (600+ chars, synthetic request_uri) is extracted with its code', () => {
+    const uri = `https://us-east-2.signin.aws/platform/authorize?request_uri=${'A1b2'.repeat(130)}&identitystore_id=d-0000000000`;
+    assert.ok(uri.length >= 600, String(uri.length));
+    const out = ['Please visit the following URL:', '', uri, '', 'Alternatively, you may visit the following URL which will autofill the code upon loading:', uri, '', 'Then enter the code:', '', 'ABCD-EFGH', ''];
+    assert.deepEqual(extractDeviceCode(out.join('\n')), { verificationUri: uri, userCode: 'ABCD-EFGH' });
+    assert.equal(acceptVerificationUri(uri), uri);
+  });
+
+  test('#446 the cap still exists: a link past MAX_VERIFICATION_URI_CHARS is refused, one at the cap is not', () => {
+    const base = 'https://us-east-2.signin.aws/platform/authorize?request_uri=';
+    assert.equal(acceptVerificationUri(base + 'a'.repeat(MAX_VERIFICATION_URI_CHARS - base.length)) !== null, true);
+    assert.equal(acceptVerificationUri(base + 'a'.repeat(MAX_VERIFICATION_URI_CHARS - base.length + 1)), null);
+    assert.deepEqual(extractDeviceCode([base + 'a'.repeat(5000), 'ABCD-EFGH'].join('\n')), { verificationUri: null, userCode: 'ABCD-EFGH' });
   });
 
   test('#431 AC-2 acceptVerificationUri keeps refusing userinfo, a port, a trailing dot and a bare signin.aws on the new host', () => {

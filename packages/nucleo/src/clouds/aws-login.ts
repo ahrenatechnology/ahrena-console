@@ -59,12 +59,23 @@ export function loginArgv(aws: string, session: Pick<AwsSsoSession, 'name' | 'ki
   return [aws, 'sso', 'login', ...target, ...(mode === 'device-code' ? ['--use-device-code', '--no-browser'] : [])];
 }
 
+/**
+ * The longest verification URI the screen may show, shared by the extraction here and by
+ * `sanitizeLogin` in remote-connectors.ts (#446). The `<region>.signin.aws/platform/authorize` link
+ * carries a long `request_uri` token and a real one measures 521 characters, so the old 512 cap
+ * refused it and the login expired with no code. 2048 leaves room for AWS to grow the token several
+ * times over and is still far under what browsers and `open` take; it exists only to refuse an
+ * absurd string, not to describe AWS. The UI repeats the value (`MAX_VERIFICATION_URI_CHARS` in
+ * ui/screens/cloud-format.js) because the browser bundle cannot import this file.
+ */
+export const MAX_VERIFICATION_URI_CHARS = 2048;
+
 const AWS_HOST = /(^|\.)(awsapps\.com|amazonaws\.com|aws)$/;
 export const USER_CODE = /^[A-Z0-9]{4}-[A-Z0-9]{4}$/;
 
 /** A verification URI the screen may show: https, an AWS host (`*.awsapps.com`, `*.amazonaws.com`, `*.aws`), no credentials, no port. */
 export function acceptVerificationUri(candidate: string): string | null {
-  if (candidate.length > 512) return null;
+  if (candidate.length > MAX_VERIFICATION_URI_CHARS) return null;
   let url: URL;
   try {
     url = new URL(candidate);

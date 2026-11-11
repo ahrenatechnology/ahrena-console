@@ -117,6 +117,9 @@ describe('issue 277: the pure formats (cloud-format.js)', () => {
     assert.equal(good.sessions[0].login.deviceCode.userCode, 'ABCD-EFGH');
     for (const uri of ['http://device.sso.regiao-exemplo-1.amazonaws.com/', 'https://amazonaws.com.evil.example/', 'https://user:pw@x.awsapps.com/', 'javascript:alert(1)', null]) assert.equal(format.verificationLink(uri), null, String(uri));
     assert.equal(format.verificationLink('https://exemplo.awsapps.com/start/#/device'), 'https://exemplo.awsapps.com/start/#/device');
+    const real = `https://us-east-2.signin.aws/platform/authorize?request_uri=${'A1b2'.repeat(130)}&identitystore_id=d-0000000000`;
+    assert.equal(format.verificationLink(real), real, '#446: a real-length signin.aws link is shown');
+    assert.equal(format.verificationLink(`https://us-east-2.signin.aws/platform/authorize?request_uri=${'a'.repeat(5000)}`), null, '#446: an absurd link is still refused');
     assert.equal(format.prefilledLink('https://device.sso.regiao-exemplo-1.amazonaws.com/', 'ABCD-EFGH'), 'https://device.sso.regiao-exemplo-1.amazonaws.com/?user_code=ABCD-EFGH');
     assert.equal(format.prefilledLink('https://exemplo.awsapps.com/start/#/device', 'ABCD-EFGH'), 'https://exemplo.awsapps.com/start/#/device?user_code=ABCD-EFGH');
     assert.equal(format.prefilledLink('https://device.sso.regiao-exemplo-1.amazonaws.com/?user_code=WXYZ-1234', 'ABCD-EFGH'), 'https://device.sso.regiao-exemplo-1.amazonaws.com/?user_code=WXYZ-1234', 'a link that already carries a code is kept');
