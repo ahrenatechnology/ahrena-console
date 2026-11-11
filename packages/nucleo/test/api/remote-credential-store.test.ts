@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { describe, test } from 'node:test';
-import { CREDENTIAL_TTL_MS, MAX_LIVE_CREDENTIALS, NONCE_RETENTION_MS, RemoteCredentialStore, machineIdentity } from '../../src/api/remote-credentials.ts';
+import { CREDENTIAL_TTL_MS, MAX_LIVE_CREDENTIALS, NONCE_RETENTION_MS, RemoteCredentialStore, machineIdentity, readMachineId } from '../../src/api/remote-credentials.ts';
 import { hex } from './remote-credential-fixture.ts';
 
 const mk = (o: ConstructorParameters<typeof RemoteCredentialStore>[0] = {}) => {
@@ -66,9 +66,19 @@ describe('AC4 · the credential table', () => {
     assert.equal(store.recordNonce(other.credentialId, 'n1'), 'recorded', 'per credential');
     assert.equal(store.recordNonce(c.credentialId, 'n2'), 'recorded');
     assert.equal(store.recordNonce(c.credentialId, 'n3'), 'full');
-    clock.now += NONCE_RETENTION_MS;
+    clock.now += NONCE_RETENTION_MS + 1;
     assert.equal(store.recordNonce(c.credentialId, 'n3'), 'recorded');
     assert.equal(store.recordNonce(c.credentialId, 'n1'), 'recorded');
+  });
+
+  test('AC4 a nonce is still remembered at exactly its retention boundary, and forgotten one millisecond later', () => {
+    const { store, clock } = mk();
+    const c = store.issue({ port: 1 });
+    assert.equal(store.recordNonce(c.credentialId, 'edge'), 'recorded');
+    clock.now += NONCE_RETENTION_MS;
+    assert.equal(store.recordNonce(c.credentialId, 'edge'), 'replayed');
+    clock.now += 1;
+    assert.equal(store.recordNonce(c.credentialId, 'edge'), 'recorded');
   });
 
   test('AC4 a table never answers for a credential another table issued', () => {
@@ -92,9 +102,37 @@ describe('AC2 · generation and identity', () => {
   });
 
   test('AC2 the machine identity is the SHA-256 of the versioned prefix and the machine id, and is injectable', () => {
-    assert.equal(machineIdentity(() => 'abc'), createHash('sha256').update('ahrena-console-machine-v1\nabc').digest('hex'));
-    assert.notEqual(machineIdentity(() => 'abc'), machineIdentity(() => 'abd'));
-    assert.match(machineIdentity(), /^[0-9a-f]{64}$/);
-    assert.equal(machineIdentity(), machineIdentity(), 'stable');
+    assert.equal(machineIdentity('abc'), createHash('sha256').update('ahrena-console-machine-v1\nabc').digest('hex'));
+    assert.notEqual(machineIdentity('abc'), machineIdentity('abd'));
+  });
+
+  test('AC2 the machine id is read asynchronously, once, through an injected reader, and stays stable', async () => {
+    let reads = 0;
+    const store = new RemoteCredentialStore({ readMachineId: async () => (++reads, 'abc') });
+    await store.ready();
+    assert.equal(store.issue({ port: 1 }).machineIdentity, machineIdentity('abc'));
+    assert.equal(store.issue({ port: 1 }).machineIdentity, machineIdentity('abc'));
+    assert.equal(reads, 1);
+    assert.match(machineIdentity(await readMachineId()), /^[0-9a-f]{64}$/);
+  });
+
+  test('AC2 without a machine id the identity falls back to host: and the host name, and a changed name changes it', async () => {
+    const none = async (): Promise<string> => { throw new Error('no such file'); };
+    const linux = { platform: 'linux', readText: none, host: () => 'box-1' };
+    assert.equal(await readMachineId(linux), 'host:box-1');
+    assert.equal(await readMachineId({ platform: 'darwin', ioreg: async () => 'no uuid here', host: () => 'mac-1' }), 'host:mac-1');
+    assert.equal(await readMachineId({ platform: 'darwin', ioreg: async () => '"IOPlatformUUID" = "ABC-1"', host: () => 'mac-1' }), 'ABC-1');
+    assert.equal(await readMachineId({ ...linux, readText: async () => 'mid-1\n' }), 'mid-1');
+    assert.notEqual(machineIdentity(await readMachineId(linux)), machineIdentity(await readMachineId({ ...linux, host: () => 'box-2' })));
+  });
+
+  test('AC2 an expired credential keeps no key: only its id is left to answer credential-expired', () => {
+    const { store, clock } = mk();
+    const c = store.issue({ port: 1 });
+    assert.notEqual(c.key, '');
+    clock.now += CREDENTIAL_TTL_MS;
+    assert.equal(store.lookup(c.credentialId).kind, 'expired');
+    store.issue({ port: 1 });
+    assert.equal(store.lookup(c.credentialId).kind, 'expired');
   });
 });

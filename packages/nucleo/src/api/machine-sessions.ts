@@ -152,6 +152,11 @@ interface Chosen {
 
 const LOCAL_LABEL = localMachine().label;
 
+/** The path a Detail tab is read at on a remote machine; the closed list of the remote core must accept it. */
+export function remoteDetailPath(id: string, tab: string | null, query: string): string {
+  return `${SESSIONS_ROUTE}/${encodeURIComponent(id)}${tab ? `/${tab}` : ''}${query ? `?${query}` : ''}`;
+}
+
 /**
  * The handler server.ts calls before its own routes: `true` when it answered (a list route or a
  * Detail with `?machine=`), `false` to let the server go on as before.
@@ -585,7 +590,7 @@ class MachineSessionsRoute {
       query.append(name, value);
     }
     const tab = match[2] ?? null;
-    const path = `${SESSIONS_ROUTE}/${encodeURIComponent(id)}${tab ? `/${tab}` : ''}${n ? `?${query}` : ''}`;
+    const path = remoteDetailPath(id, tab, n ? query.toString() : '');
     const answer = await reader.answer(c.source, path);
     if (!answer) return unreachable();
     const tag = { id: c.tag.id, label: c.tag.label };

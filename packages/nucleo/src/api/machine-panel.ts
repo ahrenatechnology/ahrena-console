@@ -222,7 +222,7 @@ export class RemotePanels {
 }
 
 /** `/api/panel/<id>` with the mod's own parameters, nothing else. */
-function panelPath(sessionId: string, params: URLSearchParams): string {
+export function panelPath(sessionId: string, params: URLSearchParams): string {
   const q = new URLSearchParams();
   for (const name of PANEL_QUERY) {
     const v = params.get(name);

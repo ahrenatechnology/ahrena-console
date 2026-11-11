@@ -12,8 +12,8 @@
 // - Everything that tells time or draws randomness is injectable, so tests never wait or guess.
 
 import { createHash, randomBytes } from 'node:crypto';
-import { execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { execFile } from 'node:child_process';
+import { readFile } from 'node:fs/promises';
 import { hostname } from 'node:os';
 
 export const CREDENTIAL_TTL_MS = 10 * 60_000;
@@ -44,21 +44,38 @@ export interface RemoteCredential {
 export type Lookup = { kind: 'live'; credential: RemoteCredential } | { kind: 'expired' } | { kind: 'unknown' };
 
 /** `machineIdentity`: the SHA-256 of `ahrena-console-machine-v1\n` and the machine's own id. Not a secret; stable. */
-export function machineIdentity(read: () => string = readMachineId): string {
-  return createHash('sha256').update(`ahrena-console-machine-v1\n${read()}`).digest('hex');
+export function machineIdentity(id: string): string {
+  return createHash('sha256').update(`ahrena-console-machine-v1\n${id}`).digest('hex');
 }
 
-/** `/etc/machine-id` (Linux), `IOPlatformUUID` (macOS). Without either, the host name: stable enough for a tag. */
-export function readMachineId(): string {
+export interface MachineIdSources {
+  platform?: string;
+  /** Runs `ioreg -rd1 -c IOPlatformExpertDevice` and resolves its output. */
+  ioreg?: () => Promise<string>;
+  readText?: (file: string) => Promise<string>;
+  host?: () => string;
+}
+
+const runIoreg = (): Promise<string> =>
+  new Promise((resolve, reject) => {
+    execFile('/usr/sbin/ioreg', ['-rd1', '-c', 'IOPlatformExpertDevice'], { encoding: 'utf8', timeout: 3000 }, (err, out) => (err ? reject(err) : resolve(out)));
+  });
+
+/**
+ * `/etc/machine-id` (Linux), `IOPlatformUUID` (macOS). Without either, `host:` and the host name: it detects a
+ * tunnel pointing at the wrong machine, it is not a secret (decision 0020 section 2). Asynchronous: it never blocks the loop.
+ */
+export async function readMachineId(src: MachineIdSources = {}): Promise<string> {
+  const platform = src.platform ?? process.platform;
   try {
-    if (process.platform === 'darwin') {
-      const out = execFileSync('/usr/sbin/ioreg', ['-rd1', '-c', 'IOPlatformExpertDevice'], { encoding: 'utf8', timeout: 3000, stdio: ['ignore', 'pipe', 'ignore'] });
+    if (platform === 'darwin') {
+      const out = await (src.ioreg ?? runIoreg)();
       const m = /"IOPlatformUUID"\s*=\s*"([^"]+)"/.exec(out);
       if (m) return m[1]!;
     } else {
       for (const file of ['/etc/machine-id', '/var/lib/dbus/machine-id']) {
         try {
-          const text = readFileSync(file, 'utf8').trim();
+          const text = (await (src.readText ?? ((f: string) => readFile(f, 'utf8')))(file)).trim();
           if (text) return text;
         } catch {
           /* try the next one */
@@ -68,7 +85,7 @@ export function readMachineId(): string {
   } catch {
     /* falls through */
   }
-  return `host:${hostname()}`;
+  return `host:${(src.host ?? hostname)()}`;
 }
 
 export interface RemoteCredentialStoreOptions {
@@ -77,6 +94,8 @@ export interface RemoteCredentialStoreOptions {
   random?: (bytes: number) => Buffer;
   generation?: string;
   machineIdentity?: string;
+  /** The machine's own id, read once at construction when `machineIdentity` is not given. Injectable. */
+  readMachineId?: () => Promise<string>;
   uid?: number;
   corePid?: number;
   ttlMs?: number;
@@ -87,6 +106,7 @@ export interface RemoteCredentialStoreOptions {
 export type NonceResult = 'recorded' | 'replayed' | 'full';
 
 interface Entry {
+  /** Past its expiry the key is dropped: the entry stays only to answer `credential-expired`. */
   credential: RemoteCredential;
   /** nonce -> when it stops mattering; insertion order is time order, so the oldest are in front. */
   nonces: Map<string, number>;
@@ -97,7 +117,7 @@ export class RemoteCredentialStore {
   readonly uid: number;
   readonly corePid: number;
   #machineIdentity: string | undefined;
-  readonly #readIdentity: () => string;
+  #identityReady: Promise<void>;
   #generation: string;
   readonly #random: (bytes: number) => Buffer;
   readonly #ttl: number;
@@ -110,7 +130,13 @@ export class RemoteCredentialStore {
     this.#random = o.random ?? randomBytes;
     this.#generation = o.generation ?? this.#random(16).toString('hex');
     this.#machineIdentity = o.machineIdentity;
-    this.#readIdentity = () => machineIdentity();
+    this.#identityReady = this.#machineIdentity
+      ? Promise.resolve()
+      : (o.readMachineId ?? readMachineId)()
+          .catch(() => `host:${hostname()}`)
+          .then((id) => {
+            this.#machineIdentity = machineIdentity(id);
+          });
     this.uid = o.uid ?? process.getuid?.() ?? -1;
     this.corePid = o.corePid ?? process.pid;
     this.#ttl = o.ttlMs ?? CREDENTIAL_TTL_MS;
@@ -118,9 +144,14 @@ export class RemoteCredentialStore {
     this.#maxNonces = o.maxNonces ?? MAX_NONCES;
   }
 
-  /** Computed on first use: reading the machine id can spawn `ioreg`. */
+  /** Resolves once the machine id was read (started at construction, off the event loop). */
+  ready(): Promise<void> {
+    return this.#identityReady;
+  }
+
   get machineIdentity(): string {
-    return (this.#machineIdentity ??= this.#readIdentity());
+    if (this.#machineIdentity === undefined) throw new Error('machine identity not ready: await store.ready()');
+    return this.#machineIdentity;
   }
 
   get generation(): string {
@@ -158,7 +189,9 @@ export class RemoteCredentialStore {
   lookup(id: string): Lookup {
     const e = this.#entries.get(id);
     if (!e || e.credential.generation !== this.#generation) return { kind: 'unknown' };
-    return e.credential.expiresAt > this.now() ? { kind: 'live', credential: e.credential } : { kind: 'expired' };
+    if (e.credential.expiresAt > this.now()) return { kind: 'live', credential: e.credential };
+    e.credential = { ...e.credential, key: '' };
+    return { kind: 'expired' };
   }
 
   /** Still good right now: what an open response asks at every output boundary. */
@@ -172,7 +205,7 @@ export class RemoteCredentialStore {
     if (!e) return 'full';
     const now = this.now();
     for (const [n, until] of e.nonces) {
-      if (until > now) break;
+      if (until >= now) break;
       e.nonces.delete(n);
     }
     if (e.nonces.has(nonce)) return 'replayed';
@@ -190,7 +223,10 @@ export class RemoteCredentialStore {
   }
 
   #prune(now: number): void {
-    for (const [id, e] of this.#entries) if (e.credential.expiresAt + this.#ttl <= now) this.#entries.delete(id);
+    for (const [id, e] of this.#entries) {
+      if (e.credential.expiresAt + this.#ttl <= now) this.#entries.delete(id);
+      else if (e.credential.expiresAt <= now && e.credential.key !== '') e.credential = { ...e.credential, key: '' };
+    }
     while (this.#entries.size >= MAX_KEPT) {
       const oldest = this.#entries.keys().next().value;
       if (oldest === undefined) break;

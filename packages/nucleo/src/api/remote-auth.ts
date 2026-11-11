@@ -23,7 +23,7 @@ import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { allowedLocalRequest, send } from '../ingest/hooks/receiver.ts';
 import { fromAnotherSite } from './same-origin.ts';
-import { guardResponse, remoteRouteFor, type RemoteActionGroup, type RemoteRoute } from './owner-auth.ts';
+import { guardResponse, openedByRemote, remoteRouteFor, type RemoteActionGroup, type RemoteRoute } from './owner-auth.ts';
 import { CLOCK_WINDOW_MS, CREDENTIAL_ID, REQUEST_NONCE, RemoteCredentialStore } from './remote-credentials.ts';
 
 export const REMOTE_CREDENTIALS_ROUTE = '/api/owner/remote-credentials';
@@ -200,14 +200,16 @@ function parseIssue(text: string): IssueRequest | null {
 function readLimited(req: IncomingMessage, max: number): Promise<string | null> {
   return new Promise((resolve) => {
     let body = '';
-    let tooLarge = false;
     req.setEncoding('utf8');
     req.on('data', (c: string) => {
-      if (tooLarge) return;
       body += c;
-      if (Buffer.byteLength(body) > max) tooLarge = true;
+      if (Buffer.byteLength(body) > max) {
+        req.removeAllListeners('data');
+        req.pause();
+        resolve(null);
+      }
     });
-    req.on('end', () => resolve(tooLarge ? null : body));
+    req.on('end', () => resolve(body));
     req.on('error', () => resolve(null));
   });
 }
@@ -221,21 +223,31 @@ export async function respondIssue(req: IncomingMessage, res: ServerResponse, po
     req.resume();
     return send(res, 403, OWNER_ONLY);
   }
+  // Defence in depth: only the local bearer opens this route, whatever the list says.
+  if (openedByRemote(req)) {
+    req.resume();
+    return send(res, 403, OWNER_ONLY);
+  }
   if (req.url !== REMOTE_CREDENTIALS_ROUTE) {
     req.resume();
     return send(res, 404, { error: 'não encontrado' });
   }
   if (req.method !== 'POST') {
     req.resume();
-    return send(res, 405, { error: 'use POST' });
+    return send(res, 405, { error: 'use o método POST' });
   }
   if (!/^application\/json\b/i.test(req.headers['content-type'] ?? '')) {
     req.resume();
-    return send(res, 415, { error: 'use application/json' });
+    return send(res, 415, { error: 'use o tipo application/json' });
   }
   const text = await readLimited(req, MAX_ISSUE_BODY_BYTES);
-  if (text === null) return send(res, 413, { error: 'corpo grande demais' });
+  if (text === null) {
+    res.once('finish', () => req.destroy());
+    res.setHeader('connection', 'close');
+    return send(res, 413, { error: 'corpo grande demais' });
+  }
   if (!store) return send(res, 404, { error: 'não encontrado' });
+  await store.ready();
   const request = parseIssue(text);
   if (!request) return send(res, 400, { error: 'JSON inválido: { "version": 1, "nonce": "<32 hex>", "revoke": [...] }' });
   const c = store.issue({ port, revoke: request.revoke });

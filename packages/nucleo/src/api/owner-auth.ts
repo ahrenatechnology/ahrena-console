@@ -58,10 +58,10 @@ export const REMOTE_ROUTES: readonly RemoteRoute[] = [
   { method: 'GET', path: /^\/api\/history$/, query: ['days', 'before', 'search'] },
   { method: 'GET', path: /^\/api\/events$/, query: eventsQuery },
   { method: 'GET', path: /^\/api\/dashboard$/, query: NO_QUERY },
-  { method: 'GET', path: /^\/api\/sessions\/[A-Za-z0-9_.:-]{1,128}(?:\/(?:agents|conversation|events|workflow|decisions))?$/, query: /^[A-Za-z][A-Za-z0-9_]{0,31}$/ },
-  { method: 'GET', path: /^\/api\/panel\/[A-Za-z0-9_.:-]{1,128}$/, query: ['local', 'account', 'org', 'model', 'cwd'] },
-  { method: 'POST', path: /^\/api\/connectors\/aws\/sessions\/[A-Za-z0-9._-]{1,64}\/login$/, query: NO_QUERY },
-  { method: 'DELETE', path: /^\/api\/connectors\/aws\/sessions\/[A-Za-z0-9._-]{1,64}\/login$/, query: NO_QUERY },
+  { method: 'GET', path: /^\/api\/sessions\/(?!\.{1,2}(?:\/|$))(?:[A-Za-z0-9_.-]|%3A){1,128}(?:\/(?:agents|conversation|events|workflow|decisions))?$/, query: /^[A-Za-z][A-Za-z0-9_]{0,31}$/ },
+  { method: 'GET', path: /^\/api\/panel\/(?!\.{1,2}$)(?:[A-Za-z0-9_.-]|%3A){1,128}$/, query: ['local', 'account', 'org', 'model', 'cwd'] },
+  { method: 'POST', path: /^\/api\/connectors\/aws\/sessions\/(?!\.{1,2}\/)[A-Za-z0-9._-]{1,64}\/login$/, query: NO_QUERY },
+  { method: 'DELETE', path: /^\/api\/connectors\/aws\/sessions\/(?!\.{1,2}\/)[A-Za-z0-9._-]{1,64}\/login$/, query: NO_QUERY },
   // The remote actions (0016, 0017, 0018 section 4): the credential alone does not open them.
   { method: 'GET', path: /^\/api\/ports\/release$/, query: NO_QUERY },
   { method: 'GET', path: /^\/api\/ports\/release\/preview$/, query: ['port', 'pid'] },
@@ -78,6 +78,12 @@ export function remoteRouteFor(method: string | undefined, rawTarget: string): R
   const cut = rawTarget.indexOf('?');
   const path = cut < 0 ? rawTarget : rawTarget.slice(0, cut);
   const search = cut < 0 ? '' : rawTarget.slice(cut + 1);
+  // The router dispatches on the canonical path: a target that changes when normalised is not what was listed.
+  try {
+    if (new URL(rawTarget, 'http://x').pathname !== path) return null;
+  } catch {
+    return null;
+  }
   const route = REMOTE_ROUTES.find((r) => r.method === method && r.path.test(path));
   if (!route) return null;
   if (search === '' && cut < 0) return route;
@@ -86,6 +92,10 @@ export function remoteRouteFor(method: string | undefined, rawTarget: string): R
   const known = (n: string) => (Array.isArray(route.query) ? (route.query as readonly string[]).includes(n) : (route.query as RegExp).test(n));
   return names.every(known) ? route : null;
 }
+
+/** The requests whose gate was tried with an `AhrenaRemote` proof (not the bearer): the issue route refuses them. */
+const remoteProofs = new WeakSet<IncomingMessage>();
+export const openedByRemote = (req: IncomingMessage): boolean => remoteProofs.has(req);
 
 /** Check before any handler, including future runtime routes. Revocation also closes pending streams. */
 export function authorizeOwner(req: IncomingMessage, res: ServerResponse, port: number, current: OwnerToken): boolean {
@@ -147,7 +157,10 @@ export function guardResponse(res: ServerResponse, valid: () => boolean): void {
  */
 export function authorizeRequest(req: IncomingMessage, res: ServerResponse, port: number, current: OwnerToken, remote?: RemoteVerifier | null): boolean | Promise<boolean> {
   const authorization = req.headers.authorization;
-  if (remote && typeof authorization === 'string' && authorization.startsWith('AhrenaRemote ')) return remote.authorize(req, res, port);
+  if (remote && typeof authorization === 'string' && authorization.startsWith('AhrenaRemote ')) {
+    remoteProofs.add(req);
+    return remote.authorize(req, res, port);
+  }
   return authorizeOwner(req, res, port, current);
 }
 
