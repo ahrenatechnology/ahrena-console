@@ -7,6 +7,7 @@
 
 import { el, icon } from '../dom.js';
 import { loading, error, errorBand, empty } from '../states.js';
+import { sessionOrigin } from '../session-origin.js';
 import { openAction } from '../open-action.js';
 import { create as workflowTab } from './session-detail-workflow.js';
 import { create as decisionsTab } from './session-detail-decisions.js';
@@ -185,6 +186,17 @@ export function remoteDetailContext(ctx, base, machineId, { onRead = () => {}, o
 export async function mount(area, ctx) {
   loadCss();
   const id = ctx.params.id;
+  if (new URLSearchParams(location.search).get('provider') === 'codex') {
+    area.replaceChildren(loading());
+    try {
+      const t = await ctx.read(`/api/codex/sessions/${encodeURIComponent(id)}`);
+      area.replaceChildren(el('div', { class: 'card' }, sessionOrigin(t.identity.provider), el('h1', {}, t.title),
+        el('p', {}, t.cwd), el('p', {}, 'Estado, duração, agentes, custo e histórico: indisponíveis nesta fonte.'),
+        el('p', {}, `Última atividade registrada: ${new Date(t.updatedAt).toLocaleString('pt-BR')}. Isso não indica um processo ativo.`),
+        openAction(t, { write: ctx.write })));
+    } catch (e) { area.replaceChildren(error({ title: 'Não foi possível ler a sessão Codex', text: e.message })); }
+    return () => {};
+  }
   const base = `/api/sessions/${encodeURIComponent(id)}`;
   // Issue 243 (C49): `?machine=<id>` opens a remote session, read through the tunnel.
   const machineChoice = machineFromQuery(location.search);
@@ -356,6 +368,7 @@ function drawTop(c, refresh, write, source = null) {
   const pills = el(
     'div',
     { class: 'sd-pills' },
+    sessionOrigin(s.identity?.provider),
     pill(null, s.id.slice(0, 12), copyButton(s.id, 'o id da sessão')),
     s.model ? pill('port', modelName(s.model)) : null,
     pill('clock', `${when(s.startedAt)} (${duration(end - Date.parse(s.startedAt))})`),

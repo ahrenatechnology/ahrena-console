@@ -291,7 +291,7 @@ class MachineSessionsRoute {
     if (chosen.length === 1 && chosen[0]!.tag.id === LOCAL_MACHINE_ID) {
       const l = await this.o.local.sessions!.listar(request);
       const tag = chosen[0]!.tag;
-      return { ...l, items: l.items.map((i) => withMachine(i, tag)), byMachine: [{ id: tag.id, registered: l.registered, total: l.total }] };
+      return { ...l, items: l.items.map((i) => withMachine(i, tag)), byMachine: [{ id: tag.id, registered: l.registered, total: l.total, ...(l.sources?.codex.error ? { sources: l.sources } : {}) }] };
     }
     const depth = Math.min(request.pagina * request.perPage, MAX_MERGE_ROWS);
     const parts = await Promise.all(
@@ -299,7 +299,7 @@ class MachineSessionsRoute {
         if (!c.source) {
           if (c.tag.id !== LOCAL_MACHINE_ID) return null;
           const l = await this.o.local.sessions!.listar({ ...request, pagina: 1, perPage: depth });
-          return { id: c.tag.id, items: l.items.map((i) => withMachine(i, c.tag)) as Record<string, unknown>[], total: l.total, registered: l.registered, directories: l.directories, counts: l.counts as Record<string, number> };
+          return { id: c.tag.id, sources: l.sources, items: l.items.map((i) => withMachine(i, c.tag)) as Record<string, unknown>[], total: l.total, registered: l.registered, directories: l.directories, counts: l.counts as Record<string, number> };
         }
         const part = await this.remote(c, (source, reader) => remoteSessions(source, reader, request, depth, c.tag));
         if (part) this.remoteSessions.noteSessions(c.tag.id, part.items.map((i) => i.id));
@@ -319,6 +319,7 @@ class MachineSessionsRoute {
     const page = Math.min(request.pagina, pages);
     const counts = Object.fromEntries(FILTROS_DE_STATUS.map((f) => [f, got.reduce((n, p) => n + (p.counts[f] ?? 0), 0)])) as Record<FiltroDeStatus, number>;
     return {
+      ...mergedSources(got, chosen),
       total,
       registered: got.reduce((n, p) => n + p.registered, 0),
       page,
@@ -327,7 +328,7 @@ class MachineSessionsRoute {
       directories: [...new Set(got.flatMap((p) => p.directories))].sort().slice(0, MAX_DIRECTORIES),
       counts,
       items: merged.slice((page - 1) * request.perPage, page * request.perPage),
-      byMachine: got.map((p) => ({ id: p.id, registered: p.registered, total: p.total })),
+      byMachine: got.map((p) => ({ id: p.id, registered: p.registered, total: p.total, ...(p.sources?.codex.error ? { sources: p.sources } : {}) })),
     };
   }
 
@@ -341,6 +342,7 @@ class MachineSessionsRoute {
           return {
             id: c.tag.id,
             generatedAt: w.generatedAt,
+            sources: w.sources,
             cards: w.cards.map((x) => withMachine(x, c.tag)) as Record<string, unknown>[],
             parked: { total: w.parked.total, items: w.parked.items.map((x) => withMachine(x, c.tag)) as Record<string, unknown>[] },
           };
@@ -350,7 +352,7 @@ class MachineSessionsRoute {
           if (!isObject(body) || !Array.isArray(body.cards)) return null;
           // An older remote core has no "Paradas": it counts as none.
           const parked = isObject(body.parked) && typeof body.parked.total === 'number' && Array.isArray(body.parked.items) ? { total: body.parked.total, items: remoteRows(body.parked.items, 'wall-card', c.tag) } : { total: 0, items: [] };
-          return { id: c.tag.id, generatedAt: null, cards: remoteRows(body.cards, 'wall-card', c.tag), parked };
+          return { id: c.tag.id, generatedAt: null, sources: remoteSources(body.sources), cards: remoteRows(body.cards, 'wall-card', c.tag), parked };
         });
         if (part) this.remoteSessions.noteSessions(c.tag.id, part.cards.map((x) => x.id));
         return part;
@@ -363,6 +365,7 @@ class MachineSessionsRoute {
     );
     return {
       version: 1,
+      ...mergedSources(got, chosen),
       generatedAt: got.find((p) => p.generatedAt)?.generatedAt ?? new Date().toISOString(),
       count: wallCount(cards),
       cards,
@@ -373,7 +376,7 @@ class MachineSessionsRoute {
           .sort(newerFirst<Record<string, unknown>>((c) => c.since))
           .slice(0, Math.min(Math.max(Math.trunc(parkedLimit ?? 7) || 7, 1), 100)),
       },
-      byMachine: got.map((p) => ({ id: p.id, count: wallCount(p.cards) })),
+      byMachine: got.map((p) => ({ id: p.id, count: wallCount(p.cards), ...(p.sources?.codex.error ? { sources: p.sources } : {}) })),
     };
   }
 
@@ -601,10 +604,33 @@ class MachineSessionsRoute {
   }
 }
 
+interface DiscoverySources { codex: { error: string | null } }
+
+/** Only source availability crosses the remote boundary; never echo a remote exception or extra metadata. */
+function remoteSources(value: unknown): DiscoverySources | undefined {
+  if (!isObject(value) || !isObject(value.codex)) return undefined;
+  if (value.codex.error === null) return { codex: { error: null } };
+  if (typeof value.codex.error === 'string' && value.codex.error) return { codex: { error: 'Índice do Codex indisponível nesta máquina.' } };
+  return undefined;
+}
+
+/** Keep machine attribution in byMachine, and a visible summary for existing list/wall readers. */
+function mergedSources(parts: readonly { id: string; sources?: DiscoverySources }[], chosen: readonly Chosen[]): { sources?: DiscoverySources } {
+  const known = parts.filter(p => p.sources);
+  if (!known.length) return {};
+  const failed = known.filter(p => p.sources!.codex.error);
+  const error = failed.map(p => {
+    const message = p.sources!.codex.error!;
+    return chosen.length === 1 ? message : `${chosen.find(c => c.tag.id === p.id)?.tag.label ?? p.id}: ${message}`;
+  }).join(' ');
+  return { sources: { codex: { error: error || null } } };
+}
+
 // ---------- Reading each route of a remote ----------
 
 interface SessionsPart {
   id: string;
+  sources?: DiscoverySources;
   items: Record<string, unknown>[];
   total: number;
   registered: number;
@@ -614,6 +640,8 @@ interface SessionsPart {
 
 function sessionsQuery(request: PedidoDeSessoes, page: number): string {
   const q = new URLSearchParams();
+  if (request.provider) q.set('provider', request.provider);
+  if (request.profileId) q.set('profileId', request.profileId);
   if (request.status !== 'all') q.set('status', request.status);
   if (request.busca) q.set('search', request.busca);
   if (request.dir) q.set('dir', request.dir);
@@ -638,6 +666,7 @@ async function remoteSessions(source: RemoteSessionSource, reader: MachineReader
   const directories = Array.isArray(first.directories) ? first.directories.filter((d): d is string => typeof d === 'string' && d.startsWith('/') && d.length <= 1024).slice(0, MAX_DIRECTORIES) : [];
   return {
     id: tag.id,
+    sources: remoteSources(first.sources),
     items: remoteRows(raw, 'session', tag, MAX_MERGE_ROWS).slice(0, depth),
     total: remoteCount(first.total),
     registered: remoteCount(first.registered),

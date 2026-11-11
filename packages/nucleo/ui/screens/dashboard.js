@@ -9,6 +9,7 @@ import { header, el, icon } from '../dom.js';
 import { loading, error, errorBand, empty } from '../states.js';
 import { lastAvailability, loadAvailability, messageAction, useMessageStyle } from './session-message.js';
 import { attentionOf, attentionOfItem, attentionPill, attentionTone, attentionDot, isBlocked, isIdle, reasonChip, statusWithoutAttention } from '../attention.js';
+import { sessionOrigin } from '../session-origin.js';
 import { openAction } from '../open-action.js';
 import { newSessionButton } from '../new-session.js';
 import { attentionForChoice, createMachineFilter, isRemote, itemHref, itemKey, machineTag, remoteParts, sessionHref, whereText } from '../machine-filter.js';
@@ -122,6 +123,7 @@ export function inboxCards(attention, agents) {
     const a = bySession.get(itemKey({ id: i.session, machine }));
     return {
       session: i.session,
+      identity: i.identity ?? a?.identity,
       attention: attentionOfItem(i),
       age: i.minutes < 1 ? 'agora' : `${i.minutes} min`,
       name: i.project ?? i.title,
@@ -209,7 +211,7 @@ function inbox(attention, agents, write, navigate = () => {}) {
       tag ? el('div', { class: 'n mf-with-tag' }, el('span', { class: 'mf-shrink' }, c.name), tag) : el('div', { class: 'n trunc' }, c.name),
       el('div', { class: 'x trunc' }, c.text),
       // C1 (issue 245): the model and the age in the foot, "Opus 5.5 · 2 min", beside "Abrir ›".
-      el('div', { class: 'foot' }, lead, c.href ? miniActions(c, write) : null),
+      el('div', { class: 'foot' }, sessionOrigin(c.identity?.provider), lead, c.href ? miniActions(c, write) : null),
     );
   });
   return el('section', { class: 'card inbox', 'aria-label': 'Precisam de você' }, title, el('div', { class: 'grid4' }, ...mini));

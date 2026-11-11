@@ -9,6 +9,7 @@ import { header, el, icon } from '../dom.js';
 import { loading, error, errorBand, empty } from '../states.js';
 import { attentionBadges, attentionOf, statusWithoutAttention } from '../attention.js';
 import { lastAvailability, loadAvailability, messageAction, useMessageStyle } from './session-message.js';
+import { sessionOrigin } from '../session-origin.js';
 import { openAction } from '../open-action.js';
 import { newSessionButton } from '../new-session.js';
 import { createMachineFilter, isRemote, itemHref, itemKey, machineTag, queryWithMachine, remoteParts, whereText } from '../machine-filter.js';
@@ -33,6 +34,7 @@ const ORDERS = {
 };
 
 export const STATUS = {
+  unknown: 'Indisponível',
   active: 'Ativa',
   completed: 'Concluída',
   error: 'Com erro',
@@ -42,7 +44,7 @@ export const STATUS = {
 /** An old bookmark's `?status=waiting` opens the ones that need you. */
 const STATUS_ALIASES = { waiting: 'blocked' };
 
-const DEFAULTS = { status: 'all', search: '', dir: '', order: 'activity', direction: 'desc', page: 1 };
+const DEFAULTS = { provider: '', status: 'all', search: '', dir: '', order: 'activity', direction: 'desc', page: 1 };
 
 /**
  * The screen state from the query (`?status=waiting&page=2`); what is not valid falls back to the
@@ -54,6 +56,7 @@ export function stateFromQuery(query) {
   const status = STATUS_ALIASES[p.get('status') ?? ''] ?? p.get('status');
   const order = p.get('order');
   return {
+    ...(['claude', 'codex'].includes(p.get('provider')) ? { provider: p.get('provider') } : {}),
     status: PILLS.some(([v]) => v === status) ? status : DEFAULTS.status,
     search: (p.get('search') ?? '').slice(0, 200),
     dir: (p.get('dir') ?? '').startsWith('/') ? p.get('dir') : '',
@@ -76,6 +79,7 @@ export function listRoute(state, perPage = null) {
   const p = new URLSearchParams({ status: state.status, order: state.order, direction: state.direction, page: String(state.page) });
   if (perPage) p.set('perPage', String(perPage));
   if (state.search.trim()) p.set('search', state.search.trim());
+  if (state.provider) p.set('provider', state.provider);
   if (state.dir) p.set('dir', state.dir);
   return `/api/sessions?${p}`;
 }
@@ -91,6 +95,7 @@ export function age(iso, now = Date.now()) {
 
 /** "< 1 min", "12 min", "3 h 10", "2 d 4 h". */
 export function duration(ms) {
+  if (ms === null) return 'Indisponível';
   const min = Math.floor(ms / 60_000);
   if (min < 1) return '< 1 min';
   if (min < 60) return `${min} min`;
@@ -150,6 +155,7 @@ export function shortId(id) {
 
 // As colunas, na ordem; a classe dá a largura de cada uma (sessions.css).
 export const COLUMNS = [
+  ['c-origin', 'Origem'],
   ['c-session', 'Sessão'],
   ['c-status', 'Status'],
   ['c-activity', 'Última atividade'],
@@ -165,11 +171,12 @@ export const COLUMNS = [
  * #61: whether a row can have a live process to message. A completed session ended its process, so
  * it is "sem processo vivo" without asking the core; the others are asked (only the rows on screen).
  */
-export const mayHaveLiveProcess = (s) => s.status !== 'completed';
+export const mayHaveLiveProcess = (s) => (s.identity?.provider ?? 'claude') === 'claude' && s.status !== 'completed';
 
 /** The Mensagem cell's content: the action, "sem processo vivo", or nothing while unknown. */
 export function messageCell(s, availability, navigate) {
   // Issue 243: a remote session's process runs over there; this core has no inbox for it.
+  if (s.identity?.provider === 'codex') return el('span', { class: 'sm-none' }, 'Indisponível');
   if (isRemote(s)) return null;
   if (!mayHaveLiveProcess(s)) return el('span', { class: 'sm-none', title: 'Sem processo vivo nesta máquina' }, 'sem processo vivo');
   return messageAction(s.id, availability, navigate);
@@ -234,6 +241,7 @@ export async function mount(area, ctx) {
   // Issue 243 (C45, C48): the machine filter, in the URL as `?machine=` beside the other filters.
   // Sessões places its own control (`placeMachineFilter`), so a choice redraws it at once, before the read.
   const machines = createMachineFilter(ctx, {
+    periodic: false,
     onChange: () => {
       placeMachineFilter();
       change({ page: 1 });
@@ -272,7 +280,9 @@ export async function mount(area, ctx) {
   // With a remote, the machine filter and the status pills share a row of their own (in 1100 they fold
   // into two); with none, the pills stay where they always were.
   const statusSlot = el('span', { class: 'sessions-status-slot' }, pills);
-  const filters = el('div', { class: 'card filters' }, searchField, dirSlot, orderSlot, invert, statusSlot);
+  const providerSelect = el('select', { 'aria-label': 'Origem', onChange: (ev) => change({ provider: ev.target.value, page: 1 }) }, ...[['', 'Todas as origens'], ['claude', 'Claude'], ['codex', 'Codex']].map(([value, label]) => el('option', { value }, label)));
+  providerSelect.value = state.provider ?? '';
+  const filters = el('div', { class: 'card filters' }, searchField, providerSelect, dirSlot, orderSlot, invert, statusSlot);
 
   function placeMachineFilter() {
     const control = machines.control();
@@ -289,6 +299,7 @@ export async function mount(area, ctx) {
   area.replaceChildren(head, machines.notices, filters, body);
 
   function drawFilters(directories, counts = null) {
+    providerSelect.value = state.provider ?? '';
     const dirs = state.dir && !directories.includes(state.dir) ? [...directories, state.dir] : directories;
     dirSlot.replaceChildren(selector('Diretório', [['', 'Todos os projetos'], ...dirs.map((d) => [d, lastPart(d)])], state.dir, (dir) => change({ dir, page: 1 })));
     orderSlot.replaceChildren(selector('Ordenar por', Object.entries(ORDERS).map(([v, r]) => [v, r[state.direction]]), state.order, (order) => change({ order: order, page: 1 })));
@@ -368,22 +379,23 @@ export async function mount(area, ctx) {
 
   function row(s) {
     // Issue 243 (C49): a remote session opens its Detail with `?machine=<id>`.
-    const target = itemHref(s);
+    const target = itemHref(s) + (s.identity?.provider === 'codex' ? '?provider=codex' : '');
     const tr = el(
       'tr',
       { class: 'session-row', 'data-key': itemKey(s) },
+      el('td', { class: 'origin' }, sessionOrigin(s.identity?.provider)),
       el('td', { class: 'nm' }, el('a', { href: target, title: s.title }, el('b', {}, s.title)), el('small', {}, el('span', { class: 'mono' }, shortId(s.id)), account(s.account), machineTag(s))),
       el('td', { class: 'st' }, ...badgeEl(s.status, s.attention)),
       el('td', { class: 'c-muted', title: new Date(s.lastActivity).toLocaleString('pt-BR') }, age(s.lastActivity)),
       // Os dois pedaços não quebram por dentro: na coluna estreita, o tempo desce para a linha de baixo.
       el('td', { class: 'mono dur' }, s.running ? el('span', { class: 'c-active' }, 'rodando ·') : null, s.running ? ' ' : null, el('span', {}, duration(s.durationMs))),
-      el('td', { class: 'mono' }, String(s.agents)),
-      el('td', { class: 'mono' }, cost(s.costUsd)),
+      el('td', { class: 'mono' }, s.agents === null ? 'Indisponível' : String(s.agents)),
+      el('td', { class: 'mono' }, s.identity?.provider === 'codex' ? 'Indisponível' : cost(s.costUsd)),
       // Corta no começo (o fim do caminho é o que distingue): o LRM mantém a barra inicial no lugar.
       el('td', { class: 'dir', title: s.cwd ?? '' }, s.cwd ? `\u200e${s.cwd}\u200e` : '—'),
       messageTd(s),
       // Empty when there is nothing to open: the column keeps its width, the others stay aligned.
-      el('td', { class: 'sessions-open' }, openAction({ id: s.id, open: s.open, machine: s.machine }, { size: 'icon', write: ctx.write, machine: s.machine?.label ?? null })),
+      el('td', { class: 'sessions-open' }, openAction({ identity: s.identity, id: s.id, open: s.open, machine: s.machine }, { size: 'icon', write: ctx.write, machine: s.machine?.label ?? null })),
     );
     tr.addEventListener('click', (ev) => {
       if (ev.target instanceof Element && ev.target.closest('a')) return;
@@ -433,7 +445,7 @@ export async function mount(area, ctx) {
     drawFilters(list.directories, list.counts);
     if (list.items.length) {
       messageCells = new Map();
-      body.replaceChildren(table(list), footer(list));
+      body.replaceChildren(...(list.sources?.codex?.error ? [errorBand({ title: 'Codex indisponível', text: list.sources.codex.error })] : []), table(list), footer(list));
       askAvailability(list.items);
       // The first table measures the real rows; a different count reads the page again, once.
       if (!fitted && refit()) read();
@@ -441,10 +453,11 @@ export async function mount(area, ctx) {
     }
     // C48: the chosen remote is down; the notice above already says why the list is empty.
     if (machines.chosenDown()) return void body.replaceChildren();
-    const filtering = state.status !== 'all' || state.search.trim() || state.dir;
+    const filtering = state.provider || state.status !== 'all' || state.search.trim() || state.dir;
     body.replaceChildren(
+      ...(list.sources?.codex?.error ? [errorBand({ title: 'Codex indisponível', text: list.sources.codex.error })] : []),
       filtering
-        ? empty({ title: 'Nenhuma sessão com esses filtros', text: 'Mude a busca, o diretório ou o status.', action: { label: 'Limpar os filtros', onClick: () => ((search.value = ''), change({ status: 'all', search: '', dir: '', page: 1 })) } })
+        ? empty({ title: 'Nenhuma sessão com esses filtros', text: 'Mude a busca, o diretório ou o status.', action: { label: 'Limpar os filtros', onClick: () => ((search.value = ''), change({ provider: '', status: 'all', search: '', dir: '', page: 1 })) } })
         : empty({ icon: 'sessions', title: 'Nenhuma sessão ainda', text: `As sessões do Claude Code ${machines.hasRemotes() ? whereText(machines.choice, machines.machines(), { form: 'of' }) : 'desta máquina'} aparecem aqui assim que o núcleo as vê.` }),
     );
   }
@@ -483,7 +496,12 @@ export async function mount(area, ctx) {
   // Before the first table, the CSS sizes give the count, so the first read already fills the window.
   perPage = rowsThatFit();
   await read();
+  // Codex changes do not emit Claude/core events. Poll metadata only while this screen is mounted.
+  const discoveryPoll = ctx.signal?.aborted ? null : setInterval(() => { if (globalThis.document?.visibilityState !== 'hidden') read(); }, 30_000);
+  discoveryPoll?.unref?.();
+  ctx.signal?.addEventListener('abort', () => clearInterval(discoveryPoll), { once: true });
   return () => {
+    clearInterval(discoveryPoll);
     resizing.disconnect();
     clearTimeout(resizeWait);
     clearTimeout(searchWait);
