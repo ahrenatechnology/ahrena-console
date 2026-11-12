@@ -513,6 +513,15 @@ if (demo) {
         connectionStatus: (id) => machineConnection?.status(id) ?? Promise.resolve(null),
         suppressUnreachable: (id) => machineConnection?.suppressUnreachable(id) ?? false,
         ownerAuthReason: (id) => proofs.reason(id, Boolean(registry.connectionOf(id)?.credential)),
+        // Issue 449 (decision 0021 section 1): the remote's version from its anonymous overview, with no proof.
+        // The commit rule applies only when this core runs from a checkout (the packaged app has no git).
+        core: {
+          get: loopbackGet(),
+          expectedVersion: API_VERSION,
+          ...(commit ? { isOlderCommit } : {}),
+          credentialCommand: (id) => Boolean(registry.connectionOf(id)?.credential),
+          checkout: (id) => registry.connectionOf(id)?.checkout ?? null,
+        },
         log,
       }),
     // A machine removed from the file closes its alerts, and the screen and the tray hear about it.

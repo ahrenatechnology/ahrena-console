@@ -361,6 +361,9 @@ export interface ReconnectStatus {
   logFile: string | null;
 }
 
+import type { MachineCore } from './core-version.ts';
+export type { MachineCore } from './core-version.ts';
+
 export interface MachineSummary {
   id: string;
   label: string;
@@ -378,6 +381,11 @@ export interface MachineSummary {
   reconnect: ReconnectStatus | null;
   /** The connection of a remote machine (#278); only on remote machines. */
   connection?: ConnectionStatus | null;
+  /**
+   * The remote núcleo's version and whether it is older than this app (issue 449, decision 0021 section 1);
+   * `null` for this machine, the demo's and a remote that was never read.
+   */
+  core: MachineCore | null;
 }
 
 // ---------------------------------------------------------------------------------------------
