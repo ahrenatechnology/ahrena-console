@@ -1,0 +1,6 @@
+{
+  "manifest": 1,
+  "telemetryVersion": 1,
+  "ownerProofRequired": true,
+  "remoteCredentialCommand": "remote-credential"
+}

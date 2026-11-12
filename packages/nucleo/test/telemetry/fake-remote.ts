@@ -27,6 +27,10 @@ export interface FakeRemoteState {
   attention: unknown;
   /** Answers 404 on `/api/telemetry` (a núcleo older than #175). */
   noTelemetry?: boolean;
+  /** Answers this status (403: the owner's proof is required) on every route but `/api/overview`. */
+  privateStatus?: number;
+  /** The anonymous `GET /api/overview` answer (issue 449); without it, 404. */
+  overview?: { status?: number; body: unknown };
 }
 
 export interface FakeRemote {
@@ -82,6 +86,8 @@ export async function startFakeRemote(state: Partial<FakeRemoteState> = {}, port
     if (header(req, 'origin') || header(req, 'host') !== '127.0.0.1:4720') return json(403, { error: 'origem não permitida' });
     if (req.method !== 'GET') return json(405, { error: 'use GET' });
     const path = new URL(req.url ?? '/', 'http://127.0.0.1:4720').pathname;
+    if (path === '/api/overview') return s.overview ? json(s.overview.status ?? 200, s.overview.body) : json(404, { error: 'rota desconhecida' });
+    if (s.privateStatus) return json(s.privateStatus, { error: 'owner-auth-required' });
     if (path === '/api/telemetry' && !s.noTelemetry) {
       const machine = { id: 'local', label: 'Esta máquina', state: 'connected', reason: null, version: s.version, port: null, lastReadAt: s.current?.takenAt ?? null, alerts: s.alerts.length };
       return json(200, { version: s.version, machine, hours: 1, current: s.current, series: emptySeries(), alerts: s.alerts });

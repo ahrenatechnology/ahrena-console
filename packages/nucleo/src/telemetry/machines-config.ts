@@ -24,6 +24,10 @@
 // 60 s), a list, no shell, like `start`. Its request goes on stdin and its answer comes on stdout, which
 // stays in memory (telemetry/remote-proof.ts); an invalid `credential` drops only that field.
 //
+// `connection.checkout` (issue 449, decision 0021 section 2) is the absolute path of the núcleo's checkout on
+// the remote machine. It is never run: it only fills the update command the screen shows. An invalid one
+// drops only that field (`parseCheckout`).
+//
 // `start` and `stop` follow the rules and limits of `reconnect`. An invalid `stop` or `cloudProfile`
 // drops only that field, and an invalid `start` drops the whole `connection`, each with a log line:
 // the machine stays. A lone `reconnect` is read as `connection.start` (`connectionOf`); with both,
@@ -65,6 +69,8 @@ export interface ConnectionConfig {
   cloudProfile?: CloudProfileLink;
   /** The remote owner's credential command (#388, decision 0020 section 1). */
   credential?: ReconnectConfig;
+  /** The núcleo's checkout on the remote machine (issue 449, decision 0021 section 2): text for the update command, never executed. */
+  checkout?: string;
 }
 
 export interface RemoteMachineConfig {
@@ -93,7 +99,7 @@ export function connectionOf(machine: Pick<RemoteMachineConfig, 'reconnect' | 'c
  */
 export function parseConnection(v: unknown, warn?: (message: string) => void): ConnectionConfig | string {
   if (!v || typeof v !== 'object' || Array.isArray(v)) return 'expected { "start": { "command": [...] }, "stop"?: {...}, "cloudProfile"?: {...} }';
-  const { start, stop, cloudProfile, credential } = v as Record<string, unknown>;
+  const { start, stop, cloudProfile, credential, checkout } = v as Record<string, unknown>;
   if (start === undefined) return '.start: required';
   const s = parseReconnect(start);
   if (typeof s === 'string') return `.start${s.startsWith('.') ? s : `: ${s}`}`;
@@ -113,7 +119,30 @@ export function parseConnection(v: unknown, warn?: (message: string) => void): C
     if (typeof c === 'string') warn?.(`.credential${c.startsWith('.') ? c : `: ${c}`}; ignored`);
     else out.credential = c;
   }
+  if (checkout !== undefined) {
+    const c = parseCheckout(checkout);
+    if (typeof c === 'string') out.checkout = c;
+    else warn?.(`.checkout: ${c.refused}; ignored`);
+  }
   return out;
+}
+
+export const MAX_CHECKOUT_LENGTH = 512;
+
+/**
+ * A machine's `connection.checkout`, or why it is refused (never the value, which may be a secret that landed
+ * in the wrong field). Absolute, at most 512 characters, no `..` segment, no `~`, NUL, control character,
+ * backslash, `$` or backtick. It is the owner's own file, and the path ends up in a command the person pastes
+ * (issue 449): consumers must single-quote it. Pure.
+ */
+export function parseCheckout(v: unknown): string | { refused: string } {
+  if (typeof v !== 'string' || !v) return { refused: 'a non-empty text' };
+  if (v.length > MAX_CHECKOUT_LENGTH) return { refused: `at most ${MAX_CHECKOUT_LENGTH} characters` };
+  if (!v.startsWith('/')) return { refused: 'an absolute path (starts with /)' };
+  if (v.split('/').includes('..')) return { refused: 'no ".." segment' };
+  // eslint-disable-next-line no-control-regex
+  if (/[\u0000-\u001f\u007f~$`\\]/.test(v)) return { refused: 'no ~, $, backtick, backslash or control character' };
+  return v;
 }
 
 export const DEFAULT_CREDENTIAL_TIMEOUT_SECONDS = 20;

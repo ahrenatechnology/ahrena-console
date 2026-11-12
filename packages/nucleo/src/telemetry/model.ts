@@ -5,6 +5,8 @@
 // the group (or the field), never a route error. Keys are in English (the repository rule for new
 // code); the text the screen shows (the alert messages) is in pt-BR.
 
+import type { MachineCore } from './core-version.ts';
+
 /** Changes when the shape of the reading changes in a way readers need to know about (#176 compares it). */
 export const TELEMETRY_VERSION = 1;
 
@@ -361,6 +363,8 @@ export interface ReconnectStatus {
   logFile: string | null;
 }
 
+export type { MachineCore } from './core-version.ts';
+
 export interface MachineSummary {
   id: string;
   label: string;
@@ -378,6 +382,11 @@ export interface MachineSummary {
   reconnect: ReconnectStatus | null;
   /** The connection of a remote machine (#278); only on remote machines. */
   connection?: ConnectionStatus | null;
+  /**
+   * The remote núcleo's version and whether it is older than this app (issue 449, decision 0021 section 1);
+   * `null` for this machine, the demo's and a remote that was never read.
+   */
+  core: MachineCore | null;
 }
 
 // ---------------------------------------------------------------------------------------------

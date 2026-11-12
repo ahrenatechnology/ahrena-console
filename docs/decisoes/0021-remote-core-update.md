@@ -38,7 +38,7 @@ core: {
 } | null                    // null enquanto nunca leu (e para a máquina local)
 ```
 
-- **Comparação:** semver numérico `major.minor.patch` (prerelease ignorado). `outdated` se a remota é menor que a do app; `current` se igual; `ahead` se maior (sem aviso: a pessoa pode estar numa `main` mais nova); `unknown` se o corpo não tem `version` ou `commit` válidos, ou o `/api/overview` falhou. O texto cru da remota nunca vai para a tela (só os dois padrões acima, com teto de 64 caracteres).
+- **Comparação:** semver numérico `major.minor.patch` (prerelease ignorado). `outdated` se a remota é menor que a do app; `current` se igual; `ahead` se maior (sem aviso: a pessoa pode estar numa `main` mais nova); `unknown` se o corpo não tem `version` válida ou o `/api/overview` falhou; um `commit` inválido ou ausente vira `null` e o status segue só pela versão. O texto cru da remota nunca vai para a tela (só os dois padrões acima, com teto de 64 caracteres).
 - **O commit informa, não decide.** `package.json` só sobe em release, então duas versões iguais podem ser códigos diferentes. A tela mostra o commit ao lado da versão. Só quando o núcleo do Mac roda de um checkout (`codeCommit()` não é `null`) e as versões são iguais, `isOlderCommit(core.commit)` (`owner/commit.ts`) promove `current` a `outdated`. O app empacotado, sem git, fica só no semver.
 - **O que isso não é:** a leitura é anônima, então um impostor na porta responde o que quiser. Serve para avisar, nunca para decidir uma atualização; quem decide é o script, lendo o git de lá (§3).
 
@@ -151,7 +151,7 @@ Roteamento pela tabela: backend para o núcleo e o script, frontend para o texto
 1. **iris · wireframe**, aprovado pelo Fernando antes do código: o cartão da máquina e a barra lateral com `outdated`/`unknown`/`ahead`, o bloco do comando com "Copiar", e o aviso da trava (`20`/`21`).
 2. **apollo · versão da remota no Mac.** `remote-contract.json` e o teste de coerência com as constantes; a leitura do `/api/overview` em `telemetry/remote.ts`, a comparação pura (arquivo próprio em `telemetry/`), `MachineSummary.core`, o que a API devolve, a leitura e a validação de `connection.checkout` em `machines-config.ts` e a `FIRST_UPDATER_VERSION`. AC1 (lado do núcleo).
 3. **apollo · script, unidade e trava.** `scripts/remote-core/update-remote-core.mjs` (`--check`, atualização, rollback, `install-unit`), o README/runbook e a unidade. AC2, AC3 (unidade gerada e comandos do systemd) e AC4.
-4. **iris · o que a tela diz.** Textos pt-BR de cada estado e da recusa, o comando com as flags da §4 e o `core.mac.checkout` (ou `<checkout>`). O aviso fica na seta amarela da barra lateral; sem alerta na lista de atenção nem linha na faixa P14 por ora. AC1 (tela).
+4. **iris · o que a tela diz.** Textos pt-BR de cada estado e da recusa, o comando com as flags da §4 e o `core.mac.checkout` (ou `<checkout>`), com o caminho colado entre aspas simples (o `checkout` é arquivo do dono, mas o comando é colado num shell). O aviso fica na seta amarela da barra lateral; sem alerta na lista de atenção nem linha na faixa P14 por ora. AC1 (tela).
 
 A Workstation só é atualizada por um passo do Fernando fora desta pilha, depois da #388 no ar lá.
 

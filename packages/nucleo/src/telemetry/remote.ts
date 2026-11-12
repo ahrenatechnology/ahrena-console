@@ -21,6 +21,7 @@
 
 import type { ChangeCursor } from '../changes/cursor.ts';
 import { sanitizeTerminals } from './terminals.ts';
+import { coreStatus, parseOverview, type MachineCore } from './core-version.ts';
 import { machineUnreachableAlert, type AlertChange, type AlertTracker } from './alerts.ts';
 import type { RemoteMachineConfig } from './machines-config.ts';
 import { RETENTION_MS, SAMPLE_INTERVAL_MS, TELEMETRY_VERSION, type Alert, type AlertKind, type ConnectionStatus, type MachineState, type ReconnectStatus, type TelemetryReading, type UnreachableReason } from './model.ts';
@@ -32,6 +33,9 @@ import type { MachineEntry, MachineStatus } from './service.ts';
 export const REMOTE_TELEMETRY_PATH = '/api/telemetry';
 /** The remote núcleo's attention route (src/api/attention-route.ts `ATTENTION_ROUTE`). */
 export const REMOTE_ATTENTION_PATH = '/api/attention';
+
+/** The remote núcleo's anonymous health route (src/api/server.ts); it carries `version` and `commit`. */
+export const REMOTE_OVERVIEW_PATH = '/api/overview';
 
 export interface RemoteSessionChange {
   machineId: string;
@@ -66,6 +70,23 @@ export interface RemoteMachineOptions {
    * `owner-auth-mismatch` with one. Without it, always `owner-auth-required`.
    */
   ownerAuthReason?: (machineId: string) => UnreachableReason;
+  /**
+   * Reads the remote núcleo's version each cycle (issue 449, decision 0021 section 1): one anonymous
+   * `GET /api/overview` after the telemetry, whatever the telemetry answered. Without it, no read and
+   * `core` stays `null`.
+   */
+  core?: {
+    /** A plain, unsigned `RemoteGet`: the route is anonymous and carries no proof. */
+    get: RemoteGet;
+    /** The version of this Mac's núcleo (`API_VERSION`). */
+    expectedVersion: string;
+    /** Only when this Mac runs from a checkout: whether the remote's commit is an older one of it. */
+    isOlderCommit?: (commit: string) => boolean;
+    /** This machine has a valid `connection.credential`. */
+    credentialCommand: (machineId: string) => boolean;
+    /** This machine's `connection.checkout`, or `null`. */
+    checkout: (machineId: string) => string | null;
+  };
 }
 
 const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -178,6 +199,12 @@ export class RemoteMachine implements MachineEntry {
   private lastAttention: unknown = null;
   private timer: unknown = null;
   private inFlight: Promise<MachineStatus> | null = null;
+  /** The last good overview read: its version, commit and when. */
+  private lastCore: { version: string | null; commit: string | null; readAt: string } | null = null;
+  /** The newest read failed (no 200 with an object). */
+  private coreFailed = false;
+  /** The núcleo over there answered at least once (even without an overview route), so `core` is not `null`. */
+  private coreAnswered = false;
   /** The connection (#278), only when the núcleo wires one. */
   readonly connection?: () => Promise<ConnectionStatus | null>;
 
@@ -196,6 +223,16 @@ export class RemoteMachine implements MachineEntry {
 
   status(): MachineStatus {
     return this.current;
+  }
+
+  /** The remote núcleo's version against this app's (issue 449); `null` until it answered once, or without the `core` option. */
+  core(): MachineCore | null {
+    const c = this.o.core;
+    if (!c || (!this.lastCore && !this.coreAnswered)) return null;
+    const mac = { telemetryVersion: TELEMETRY_VERSION, credentialCommand: c.credentialCommand(this.id), checkout: c.checkout(this.id) };
+    const base = { expectedVersion: c.expectedVersion, mac, readAt: this.lastCore?.readAt ?? null };
+    if (!this.lastCore || this.coreFailed) return { ...base, version: null, commit: null, status: 'unknown' };
+    return { ...base, version: this.lastCore.version, commit: this.lastCore.commit, status: coreStatus(this.lastCore, c.expectedVersion, c.isOlderCommit) };
   }
 
   /** The remote's last attention answer while connected; `null` otherwise. */
@@ -275,6 +312,7 @@ export class RemoteMachine implements MachineEntry {
       const a = await get(this.port, REMOTE_ATTENTION_PATH);
       attention = a.kind === 'response' && a.status === 200 && isObject(a.body) ? a.body : null;
     }
+    await this.readCore(now);
     if (next.state === 'unreachable' && next.reason && !this.o.suppressUnreachable?.(this.id)) alerts.push(machineUnreachableAlert(this.label, this.port, next.reason, new Date(now).toISOString()));
 
     const reasonChanged = this.current.reason !== null && next.reason !== null && this.current.reason !== next.reason;
@@ -290,6 +328,26 @@ export class RemoteMachine implements MachineEntry {
     }
     for (const alert of update.exited) this.o.onAlertChange?.({ machineId: this.id, alert, change: 'exited' });
     return next;
+  }
+
+  /**
+   * One anonymous overview read. A 200 with an object replaces the last read (an invalid `version` or `commit`
+   * is `null`, never the raw text). Any other answer (404, 401) is `unknown` and keeps when the last good read
+   * was; no answer at all does the same once something was read before, and otherwise leaves `core` `null`.
+   */
+  private async readCore(now: number): Promise<void> {
+    const c = this.o.core;
+    if (!c) return;
+    const r = await c.get(this.port, REMOTE_OVERVIEW_PATH);
+    const parsed = parseOverview(r);
+    if (parsed) {
+      this.coreFailed = false;
+      this.coreAnswered = true;
+      this.lastCore = { ...parsed, readAt: new Date(now).toISOString() };
+      return;
+    }
+    if (r.kind === 'response') this.coreAnswered = true;
+    this.coreFailed = true;
   }
 
   private publishAttention(next: unknown): void {
