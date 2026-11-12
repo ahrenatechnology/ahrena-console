@@ -10,6 +10,8 @@ As sessões de terminal presas (C96 a C99, issue #350, decisão [0018](../deciso
 
 A prova do dono na máquina remota (388-1 a 388-5, issue #388, decisão [0020](../decisoes/0020-remote-owner-credential-over-ssh.md)): o que a tela da Workstation, a barra lateral, o alerta e a faixa do painel dizem quando o núcleo de lá recusa o Mac, para os três motivos (`owner-auth-required`, `owner-auth-failed` e `owner-auth-mismatch`), e a volta ao normal.
 
+A versão do núcleo remoto e o comando de atualização (449-1 a 449-5, issue #449, decisão [0021](../decisoes/0021-remote-core-update.md)): a linha Versão no card Conexão da Workstation, com o núcleo de lá, o app deste Mac e a situação (em dia, defasado, defasado pelo commit, mais nova que o app e desconhecida); o aviso de defasado com o comando de atualização e as flags do Mac já preenchidas e o botão Copiar, sem nenhum botão que rode algo no Mac; a variante sem `connection.credential`, que manda configurar antes porque o script recusaria com o código 21; o defasado com a máquina em `owner-auth-required`; e a barra lateral com o Copiar. A recusa da trava (códigos 20 a 23) aparece só no terminal de lá e não tem tela. Capturas em [capturas/](capturas/) como `remote-core-*-<largura>-<tema>.png`.
+
 A referência é o Claude Code Agent Monitor. Cada tela diz o que veio dele e onde diverge.
 
 É um artefato do claude.ai versionado aqui ([artifact.json](artifact.json)), no formato das skills `versioning-artifacts` e `publishing-artifacts`. O link oficial só é publicado depois do merge.
