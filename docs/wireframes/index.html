@@ -749,6 +749,13 @@ body.captura[data-width="1100"] .width-col[data-w="1440"], body.captura[data-wid
 .oa-dot-row { display: flex; align-items: center; gap: 8px; font-size: 13px; }
 .oa-dot-row svg { width: 15px; height: 15px; }
 .oa-dot-row .c-muted { margin-left: auto; font-size: 12px; }
+/* ---------- remote core version and update (449-1 to 449-5, issue 449) ---------- */
+.cv-grid { display: grid; gap: 14px; align-items: start; }
+.cv-cell { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.cv-flag { display: inline-flex; margin-left: 6px; color: var(--status-waiting-text); } .cv-flag svg { width: 14px; height: 14px; }
+.cv-sub { margin: 2px 0 0; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.cv-steps { display: flex; flex-direction: column; gap: 14px; }
+.cv-copy { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 /* ---------- session message (C51 to C53, issue #61) ---------- */
 .sm-compose { padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; border-color: color-mix(in srgb, var(--accent) 40%, var(--border)); }
 .sm-compose.sm-off { border-color: var(--border); border-style: dashed; }
@@ -5068,6 +5075,22 @@ const TELAS = [
   { id: 'remote-owner-auth-way-back', cod: '388-4', nome: 'Prova do dono · a volta ao normal, a barra lateral e o alerta', sub: 'Issue #388. Em cima: o Tentar agora ocupado enquanto o Mac pede a prova pelo SSH, e a mesma tela já conectada, sem faixa nem desbotado. Embaixo: o ponto da Workstation na barra lateral em cada estado, com o rótulo que vai no title e no aria-label, e a linha de “O que pede atenção”, que é também a da bandeja e da notificação, para cada motivo. Em 1100.',
     html: () => oaWayBack(),
     n: N(['O passo a passo do Reconectar (C50) e o ponto de estado da barra (C62).'], ['O ponto hoje é cinza para todo “Sem conexão”; aqui os três motivos de prova ganham um amarelo só, separado do túnel caído, e o rótulo diz qual é.', 'O alerta é o <span class="mono">machine-unreachable</span> de hoje, com o título “sem acesso” e o detalhe por motivo; o texto é este, e a camada 2 o grava em alerts.ts.']) },
+  // ---------- remote core version and update (issue 449, decision 0021) ----------
+  { id: 'remote-core-version-states', cod: '449-1', nome: 'Núcleo remoto · a versão em cada estado', sub: 'Issue #449, decisão 0021. O card Conexão da Workstation (434-2) ganha a linha Versão: a do núcleo de lá com o commit ao lado, a do app deste Mac e a situação. Os estados: em dia, defasado, defasado pelo commit, mais nova que o app e desconhecida. Só o defasado tem aviso. Em 1100 e 1440.',
+    html: () => cvStatesHtml(),
+    n: N(['Nada: o CCAM não tem máquina remota.'], ['A versão vem do <span class="mono">/api/overview</span>, que já existe e responde sem a prova do dono; por isso aparece mesmo com a máquina em <span class="mono">owner-auth-required</span> (449-4). Nada de rota nova.', 'Mais nova que o app não avisa: quem roda a main pode estar à frente. Desconhecida também não: sem versão válida não há o que comparar, e o texto cru que a remota mandou nunca vai para a tela (só versão e commit no formato esperado).', 'O commit informa, não decide. Só promove “em dia” a “defasado” quando o núcleo deste Mac roda de um checkout (o app empacotado não tem commit para comparar).']) },
+  { id: 'remote-core-outdated', cod: '449-2', nome: 'Núcleo remoto · defasado, com o comando para copiar', sub: 'Issue #449, critério 1. A Workstation conectada, com o núcleo na 0.0.7 e o app na 0.0.16. Uma faixa amarela diz o que está defasado, e o card logo abaixo traz o comando de atualização com a versão do app e as flags do Mac já preenchidas (<code>--ref app-v0.0.16</code>, <code>--mac-telemetry-version</code>, <code>--mac-credential-command yes</code>) e o botão Copiar. Nenhum botão roda algo neste Mac. Em 1100 e 1440.',
+    html: () => cvOutdatedHtml(),
+    n: N(['Nada.'], ['A decisão 0021 §2 recomenda que a tela só avise e mostre o comando: o Mac não executa nada, não há <span class="mono">connection.update</span> no machines.json e a atualização automática está fora da issue.', 'O comando traz o script do alvo (<span class="mono">git show app-v0.0.16:…</span>) porque a Workstation de hoje não tem o script; depois que o checkout o tem, basta <span class="mono">node scripts/remote-core/update-remote-core.mjs …</span>. O caminho do checkout vem de <span class="mono">connection.checkout</span> (<span class="mono">core.mac.checkout</span>): preenchido quando a máquina o tem no machines.json, e o literal <span class="mono">&lt;checkout&gt;</span> quando não tem.', 'A faixa é amarela, a cor de “configure” do 388, não a vermelha de falha: a Workstation funciona, só está atrás.', 'Quando o núcleo de lá chega à versão do app, a faixa e o card saem sozinhos na próxima leitura (30 s), em silêncio, como a volta do 388-4. Mesma tela para o defasado pelo commit, com o texto do 449-1.']) },
+  { id: 'remote-core-outdated-no-credential', cod: '449-3', nome: 'Núcleo remoto · defasado e o Mac sem comando de credencial', sub: 'Issue #449, critério 4. A Workstation está conectada porque o núcleo antigo não pede prova, mas a versão nova pede e este Mac não tem <code>connection.credential</code>. A faixa diz primeiro para configurar o comando de credencial; o passo 1 é o exemplo do 388-1 e o passo 2 é o comando de atualização, com <code>--mac-credential-command no</code>. Se for colado assim, o script recusa com o código 21 antes de parar o núcleo. Em 1100 e 1440.',
+    html: () => cvNoCredentialHtml(),
+    n: N(['Nada.'], ['É a trava da decisão 0021 §4 dita antes de a pessoa tropeçar nela: a tela já sabe que o Mac não tem o comando (é a flag <span class="mono">no</span>) e põe a configuração à frente da atualização.', 'O Copiar do passo 2 fica secundário (contorno) enquanto falta a credencial; o primário é o Copiar o exemplo do passo 1. Depois de gravar o <span class="mono">connection.credential</span>, a tela troca <span class="mono">no</span> por <span class="mono">yes</span> e volta ao 449-2.', 'Colar o comando mesmo assim é seguro: o script recusa antes de parar o processo que funciona (código 21). Esse código só aparece no terminal de lá, não nesta tela.']) },
+  { id: 'remote-core-outdated-owner-auth', cod: '449-4', nome: 'Núcleo remoto · defasado com a máquina em acesso bloqueado', sub: 'Issue #449. A Workstation recusa o Mac por <span class="mono">owner-auth-required</span> (388-1) e o núcleo de lá está na 0.0.15. A leitura da versão é anônima, então a linha Versão continua na tela, com o Defasado, ao lado do “Acesso bloqueado”. A faixa é a do 388-1, sem mudar; o aviso de atualização vem depois do passo do credencial, com <code>--mac-credential-command no</code>. Em 1100 e 1440.',
+    html: () => cvProofHtml(),
+    n: N(['Nada.'], ['Uma faixa só em cima: o que bloqueia o Mac é a prova, e a faixa do 388-1 segue a principal. A atualização é o passo 2 e só passa a ser o próximo depois do 1.', 'No 388-2 (prova falhou), a primeira causa da lista é “o núcleo de lá é antigo”. Com esta linha a pessoa vê a versão e confere a causa sem abrir o log; o texto da faixa do 388-2 não precisa mudar.', 'O resto da tela segue desbotado, como no 388-1; Conexão fica viva porque é onde a versão está.']) },
+  { id: 'remote-core-sidebar', cod: '449-5', nome: 'Núcleo remoto · barra lateral e o botão Copiar', sub: 'Issue #449. A barra lateral marca só o defasado, com uma seta amarela ao lado do nome (title e aria-label “Núcleo defasado”); o ponto continua sendo o do túnel e da prova (388-4). O botão Copiar nos três estados: pronto, copiado e secundário. A faixa do painel da sessão (P14) não muda: não há versão nela. Sem largura própria.',
+    html: () => cvSideHtml(),
+    n: N(['Nada.'], ['A seta está aceita na decisão 0021 (camada 4), além da tela de Máquinas (critério 1). Sem ela, quem está em outra tela não sabe que a Workstation está atrás.', 'O ponto não muda de cor: o defasado funciona, e o amarelo do ponto é “sem acesso” (388-4). Misturar os dois diria que a Workstation está bloqueada.', 'Nenhum alerta em “O que pede atenção” e nada no P14 para o defasado: não há o que a pessoa resolva dali, e o painel da sessão trata de sessões. Fica aberto se o Fernando quer a linha no alerta.', 'A recusa da trava (códigos 20, 21, 22 e 23) aparece no terminal da Workstation, não nesta tela; a decisão 0021 não põe nada dela na tela além do aviso do 449-3. Por isso não há wireframe para elas.']) },
   { id: 'console-update-banner', cod: 'C77', nome: 'Aviso de versão nova no topo da /ui', sub: 'Feature Aviso de versão nova (#330). Atualização disponível: versão 0.0.10, com a linha do que mudou quando o latest.json tem notas, Atualizar e Depois. Fica no topo de todas as telas, acima do cabeçalho, e não alarga a página. Em 1100 e 1440.', html: () => updateBannerScreens(),
     n: N(['Nada: o CCAM não tem updater.'], ['Hoje (#90) a versão nova só aparece no menu da bandeja; a #330 a traz para a janela.', 'Cor da marca, não o amarelo de "precisa de você".']) },
   { id: 'console-update-banner-states', cod: 'C78', nome: 'Os estados do aviso', sub: 'Baixando (a barra, sem Atualizar), instalando e reiniciando, erro ao baixar (Tentar de novo), atualizado, sem notas, e depois de Depois: o card some até a próxima versão ou por 24 h (a aprovar). Em 1100, o topo da tela.', html: () => updateBannerStates(),
@@ -5500,6 +5523,111 @@ function oaPanel(kind) {
 const oaPanels = () => ['required', 'failed', 'mismatch'].map(k => `<div class="rotulo">${OA[k].badge[1]} · <span class="mono">owner-auth-${k}</span></div>${oaPanel(k)}`).join('')
 
 // =====================================================================
+// Remote core version and update (issue 449, decision 0021): 449-1 to 449-5
+// =====================================================================
+// The Mac reads version and commit of the remote core from the anonymous /api/overview, so it shows them even in
+// owner-auth-required. It warns when the version is older than the app and shows the command to paste over there.
+// The Mac runs nothing. Synthetic data only: no real path, host, token or request_uri.
+const CV_APP = '0.0.16'
+const CV = {
+  current: { core: '0.0.16', commit: '5d37501', pill: ['b-completed', 'Em dia'], sub: 'igual à do app' },
+  outdated: { core: '0.0.7', commit: '81251bd', pill: ['b-waiting', 'Defasado'], sub: 'abaixo do app' },
+  commit: { core: '0.0.16', commit: '3be19c4', pill: ['b-waiting', 'Defasado'], sub: 'commit mais antigo' },
+  ahead: { core: '0.0.17', commit: '9a3f2c1', pill: ['b-active', 'Mais nova'], sub: 'sem aviso' },
+  unknown: { core: '—', commit: '—', pill: ['b-idle', 'Sem versão'], sub: 'sem versão válida' },
+  proof: { core: '0.0.15', commit: 'd41e8a0', pill: ['b-waiting', 'Defasado'], sub: 'abaixo do app' },
+}
+const cvTiles = kind => {
+  const v = CV[kind], known = v.core !== '—'
+  return `<div class="olhinho" style="margin-top:2px">Versão</div><div class="ms-conn-tiles">
+    <div class="cartao ms-tile"><span class="olhinho">Núcleo de lá</span><b class="mono">${v.core}</b><small>${known ? `commit <span class="mono">${v.commit}</span>` : 'sem versão nem commit'}</small></div>
+    <div class="cartao ms-tile"><span class="olhinho">App deste Mac</span><b class="mono">${CV_APP}</b><small>este Mac</small></div>
+    <div class="cartao ms-tile"><span class="olhinho">Situação</span><b><span class="badge ${v.pill[0]}"><span class="p"></span>${v.pill[1]}</span></b><small>${v.sub}</small></div></div>`
+}
+// The Conexão card of the single machine screen (434-2): the three tiles, then the version row. The ports table is as in 434-2.
+const cvConnection = (kind, proof = 'ok', compact = false) => {
+  const [cls, icon, value, sub] = OA[proof].core
+  if (compact) return `<div class="cartao tm-card"><h5>${ic('cable')}Conexão<small>linha Versão</small></h5>${cvTiles(kind)}</div>`
+  return `<div class="cartao tm-card"><h5>${ic('cable')}Conexão<small>túnel SSH sobre AWS SSM</small><span class="ms-h-acts">${bt('Reconectar', { size: 'sm', icon: 'refresh-cw' })}${bt('Parar o túnel', { size: 'sm', icon: 'square' })}</span></h5>
+  <div class="ms-conn-tiles">
+    <div class="cartao ms-tile"><span class="olhinho">Túnel</span><b class="c-completed">${ic('check-circle-2')}No ar</b><small>há 3 h 12 min · 4 portas</small></div>
+    <div class="cartao ms-tile"><span class="olhinho">Sessão AWS</span><b class="c-completed">${ic('key-round')}Válida</b><small>sessao-exemplo</small></div>
+    <div class="cartao ms-tile"><span class="olhinho">Núcleo de lá</span><b class="${cls}">${ic(icon)}${value}</b><small>${sub}</small></div></div>
+  ${cvTiles(kind)}
+  <span class="ms-note">Versão e commit vêm do <span class="mono">/api/overview</span> do núcleo de lá, que responde sem a prova do dono. A tabela de portas segue como no 434-2.</span></div>`
+}
+// The command the screen shows. cred is what this Mac declares: yes when connection.credential is valid, no otherwise.
+const cvCommand = (cred, ref = `app-v${CV_APP}`) => `git -C &lt;checkout&gt; fetch origin --tags \\
+  &amp;&amp; git -C &lt;checkout&gt; show ${ref}:scripts/remote-core/update-remote-core.mjs &gt; ~/.ahrena-console/update-remote-core.mjs \\
+  &amp;&amp; node ~/.ahrena-console/update-remote-core.mjs --checkout &lt;checkout&gt; --ref ${ref} \\
+       --mac-telemetry-version 1 --mac-credential-command ${cred}`
+const cvCopy = (primary, copied) => `<div class="cv-copy">${bt(copied ? 'Copiado' : 'Copiar o comando', { v: primary ? 'filled' : 'outline', icon: copied ? 'check' : 'copy', state: copied ? 'done' : '' })}<span class="c-muted" style="font-size:12px">${copied ? 'Cole no terminal da Workstation.' : 'Nada roda neste Mac.'}</span></div>`
+const cvUpdateCard = (cred, o = {}) => `<div class="cartao tm-rc-setup"><h5>${ic('terminal')}${o.step ? '2 · ' : ''}Atualizar o núcleo da Workstation<span class="c-muted" style="margin-left:auto;font-weight:400;font-size:11.5px">decisão 0021</span></h5>
+  <span class="c-muted" style="font-size:12.5px">Cole no terminal da Workstation (por SSH, pelo VS Code ou como você entra lá) e, se o <code>&lt;checkout&gt;</code> ainda aparecer no comando, troque-o pelo caminho do repositório lá. Com <code>connection.checkout</code> no machines.json deste Mac, o caminho já vem preenchido. O comando já leva a versão do app e o que este Mac sabe da conexão: a telemetria na versão 1 e ${cred === 'yes' ? 'o comando de credencial configurado' : '<b class="c-waiting">sem comando de credencial</b>'}.</span>
+  <div class="tm-config">${cvCommand(cred)}</div>
+  <div class="tm-legend"><span>${ic('database')} Faz o backup do banco antes de parar o núcleo.</span><span>${ic('shield-check')} ${cred === 'yes' ? 'Recusa, sem parar nada, se a Workstation ficasse sem conexão com este Mac.' : 'Com <span class="mono">no</span>, recusa com o código 21 e não para nada.'}</span><span>${ic('undo-2')} Volta ao código de antes se o núcleo novo não responder.</span></div>
+  ${cvCopy(cred === 'yes' || !o.step, false)}
+  <span class="c-muted" style="font-size:11.5px">${cred === 'yes' ? 'Para só conferir, sem mudar nada, acrescente <span class="mono">--check</span> ao final. ' : ''}Esta tela relê a Workstation a cada 30 s: quando o núcleo de lá chegar à ${CV_APP}, o aviso sai sozinho.</span></div>`
+const cvCredentialCard = () => `<div class="cartao tm-rc-setup"><h5>${ic('key-round')}1 · Comando de credencial<span class="c-muted" style="margin-left:auto;font-weight:400;font-size:11.5px">decisão 0020</span></h5>
+  <span class="c-muted" style="font-size:12.5px">Grave em <code>connection.credential</code>, troque os dois caminhos pelos da Workstation e salve. É o mesmo exemplo do 388-1.</span>
+  <div class="tm-config">${OA_CREDENTIAL_EXAMPLE.replace('na Workstation, dentro de', 'no Mac, dentro de')}</div>
+  <div class="tm-rc-actions" style="justify-content:flex-start">${bt('Copiar o exemplo', { icon: 'copy' })}</div></div>`
+const cvOutdatedBand = kind => oaBand('waiting', 'arrow-up-circle', `O núcleo da Workstation está na ${CV[kind].core} e o app, na ${CV_APP}.`,
+  `O Console de lá roda um código mais antigo que o deste Mac, e as correções das versões novas não chegam até ele. Este Mac não atualiza a Workstation: a atualização é um comando que você roda lá, logo abaixo.`,
+  `lido do núcleo de lá às 09:14, sem a prova do dono · serve para avisar${CV[kind].commit === '—' ? '' : `, commit ${CV[kind].commit}`}`, '')
+const cvCommitBand = () => oaBand('waiting', 'arrow-up-circle', `O núcleo da Workstation tem a mesma versão do app (${CV_APP}), mas um commit mais antigo.`,
+  `A versão só muda no release, então o código de lá é de antes do deste Mac (commit ${CV.commit.commit}, o do app é ${CV.current.commit}). O comando abaixo leva a Workstation ao do app.`,
+  'só vale quando o núcleo deste Mac roda de um checkout; o app empacotado compara só a versão', '')
+const cvBody = (w, kind, proof = 'ok', extra = '') => {
+  const fade = proof === 'ok' ? '' : ' class="tm-faded"'
+  return `<div class="tm-rc-clip" style="max-height:230px"><div${fade}>${msProfiles(w, true)}${msStats(w, true)}${msBand(w, 3, 'ms-23', msChart(true), msVolumes(true))}</div></div>
+  ${msBand(w, 5, 'ms-23', cvConnection(kind, proof), msWhere())}
+  <div class="tm-rc-clip" style="max-height:120px"><div${fade}>${msOne(6, msTerminals(true))}</div></div>`
+}
+const cvFrame = (w, proof, body) => `<div class="cc w${w}">${oaSide(proof).replace('<span class="ponto tm-dot', `<span class="cv-flag" title="Núcleo defasado" aria-label="Núcleo defasado">${ic('arrow-up-circle')}</span><span class="ponto tm-dot`)}<div class="cc-main">${body}</div></div>`
+
+// 449-1 · the four states (and the commit case) on the Conexão card.
+const cvStates = w => {
+  const cols = w >= 1440 ? 3 : 2
+  const cells = [
+    ['current', 'Em dia', 'Igual ao app: nenhum aviso, a tela é a do 434-2 com a linha de versão.'],
+    ['outdated', 'Defasado', 'Menor que a do app: o aviso e o comando do 449-2.'],
+    ['commit', 'Defasado pelo commit', 'Mesma versão e commit mais antigo, só quando este Mac roda de um checkout. Mesmo aviso, texto do commit.'],
+    ['ahead', 'Mais nova que o app', 'Quem usa a main pode estar à frente. Mostra a versão, sem aviso.'],
+    ['unknown', 'Desconhecida', 'O corpo não trouxe versão válida, ou a leitura falhou. Sem aviso, sem comando: o texto cru nunca vai para a tela.'],
+  ]
+  return `<div class="cv-grid" style="grid-template-columns:repeat(${cols},minmax(0,1fr));width:${w - 220}px">${cells.map(([k, t, d]) => `<div class="cv-cell"><div class="rotulo">${t}</div>${cvConnection(k, 'ok', true)}<span class="ms-note">${d}</span></div>`).join('')}</div>`
+}
+const cvStatesHtml = () => `<div class="fila">${[1100, 1440].map(w => widthCol(w, `${w} px`, cvStates(w))).join('')}</div>`
+
+// 449-2 · outdated and connected.
+const cvOutdatedScreen = (w, kind = 'outdated') => `${oaHead('ok')}${kind === 'commit' ? cvCommitBand() : cvOutdatedBand(kind)}${cvUpdateCard('yes')}${cvBody(w, kind)}`
+const cvOutdatedHtml = () => `<div class="fila">${[1100, 1440].map(w => widthCol(w, `${w} px`, cvFrame(w, 'ok', cvOutdatedScreen(w)))).join('')}</div>`
+
+// 449-3 · outdated, connected, and this Mac has no connection.credential: configure it first (the guard would refuse, exit 21).
+const cvNoCredentialBand = () => oaBand('waiting', 'key-round', 'Configure o comando de credencial antes de atualizar a Workstation.',
+  `A versão ${CV_APP} só responde a quem prova ser o dono (decisão 0020), e este Mac ainda não tem o comando de credencial no machines.json. Se você atualizasse assim, a Workstation passaria a recusar este Mac e sumiria daqui. Por isso o comando do passo 2 leva <span class="mono">--mac-credential-command no</span> e, ao rodar, se recusa com o código 21 antes de parar o núcleo que funciona. Depois que você gravar o <span class="mono">connection.credential</span>, esta tela troca o <span class="mono">no</span> por <span class="mono">yes</span> e o comando passa.`,
+  `o núcleo de lá está na ${CV.outdated.core}, lido sem a prova do dono`, '')
+const cvNoCredentialScreen = w => `${oaHead('ok')}${cvNoCredentialBand()}<div class="cv-steps">${cvCredentialCard()}${cvUpdateCard('no', { step: true })}</div>${cvBody(w, 'outdated')}`
+const cvNoCredentialHtml = () => `<div class="fila">${[1100, 1440].map(w => widthCol(w, `${w} px`, cvFrame(w, 'ok', cvNoCredentialScreen(w)))).join('')}</div>`
+
+// 449-4 · outdated while the machine is in owner-auth-required (388-1): the version is read without proof, so it is still there.
+const cvProofScreen = w => `${oaHead('required')}${oaRequiredBand(false)}
+  <span class="ms-note" style="padding:0 4px">Faixa e card Comando de credencial como no 388-1: é o passo 1.</span>
+  ${cvUpdateCard('no', { step: true })}${cvBody(w, 'proof', 'required')}`
+const cvProofHtml = () => `<div class="fila">${[1100, 1440].map(w => widthCol(w, `${w} px`, cvFrame(w, 'required', cvProofScreen(w)))).join('')}</div>`
+
+// 449-5 · the sidebar and the Copy button states. The session panel strip (P14) does not change.
+const cvDots = () => `<div class="cartao oa-dots"><div class="olhinho">Máquinas, na barra lateral</div>
+  ${[['current', 'Em dia', false], ['outdated', 'Defasado', true], ['commit', 'Defasado pelo commit', true], ['ahead', 'Mais nova que o app', false], ['unknown', 'Versão desconhecida', false]].map(([k, t, flag]) => `<div class="oa-dot-row"><span class="ponto tm-dot d-completed"></span>${ic('server')}<span>Workstation</span>${flag ? `<span class="cv-flag" title="Núcleo defasado" aria-label="Núcleo defasado">${ic('arrow-up-circle')}</span>` : ''}<span class="c-muted">${t}</span></div>`).join('')}
+  <span class="c-muted" style="font-size:11.5px">O ponto segue o túnel e a prova do dono, como no 388-4: o núcleo defasado não o muda. A seta amarela só aparece no defasado, com title e aria-label “Núcleo defasado”; em dia, mais nova e desconhecida ficam sem marca.</span></div>`
+const cvCopyStates = () => `<div class="cartao oa-dots"><div class="olhinho">O botão Copiar</div>
+  <div class="oa-dot-row">${cvCopy(true, false)}</div><div class="oa-dot-row">${cvCopy(true, true)}</div>
+  <div class="oa-dot-row">${cvCopy(false, false)}</div>
+  <span class="c-muted" style="font-size:11.5px">Em cima, o comando pronto (principal); no meio, depois do clique, por alguns segundos; embaixo, o do 449-3 enquanto falta a credencial (secundário, para não parecer o próximo passo). Não existe botão que rode algo.</span></div>`
+const cvSideHtml = () => `<div class="tm-rc"><div class="width-col"><div class="rotulo">Barra lateral e Copiar</div><div class="fila" style="align-items:flex-start">${cvDots()}${cvCopyStates()}</div></div></div>`
+
+// =====================================================================
 // Montagem
 // =====================================================================
 function montar() {
@@ -5532,6 +5660,7 @@ function montar() {
     <li><b>A faixa acima do prompt (#406, aprovado):</b> com o painel fechado, na superfície desktop, uma linha acima do prompt com "Ahrena Console", Abrir e Ocultar, sem borda e sem dado do núcleo; some com o painel aberto, com a pesquisa do app e depois de Ocultar, guardado no <code>$.store</code>, com um toast uma vez só no primeiro Ocultar. O caminho de volta é uma linha no fim do painel, "Mostrar atalho acima do prompt", só enquanto a faixa está oculta (P17, P18).</li>
     <li><b>Sessões de terminal (#350, a aprovar):</b> card novo em cada máquina (C96 a C99). Presa é o comando em primeiro plano acima de 15 min que não é interativo conhecido, ou um script de scratchpad do Claude. Interromper o comando sobe em escada, um clique por degrau (SIGINT no grupo, SIGTERM, SIGKILL com segunda confirmação); Encerrar a sessão é SIGHUP no sshd e fecha todos os terminais da conexão. Nunca o sshd do túnel, o núcleo, o app nem outro usuário. Na Workstation, só leitura por padrão, com o mesmo flag de ações remotas da decisão 0014. <b>Os processos claude/ccd-cli antigos do servidor remoto do Claude Desktop ficam de fora</b>: não são terminais; card próprio, em outra issue. <b>A decidir:</b> um servidor de desenvolvimento deixado em primeiro plano de propósito (npm run dev) vira Presa depois de 15 min; a proposta é a lista editável terminal.interactiveCommands.</li>
     <li><b>Prova do dono na máquina remota (#388, decisão 0020, aprovado pelo Fernando):</b> os três motivos de uma remota que recusa o Mac, cada um com o que fazer: <b>Acesso bloqueado</b> (amarelo, configurar o <code>connection.credential</code>, 388-1), <b>Prova do dono falhou</b> (vermelho, atualizar o núcleo de lá ou conferir o SSH, 388-2) e <b>Identidade diferente</b> (vermelho, conferir o túnel ou reiniciar o núcleo deste Mac, 388-3). A volta ao normal é silenciosa (388-4); o ponto da barra lateral, o alerta e a faixa do painel (388-5) dizem o mesmo motivo; o ponto é um amarelo só para os três. Decidido: o alerta dos três motivos se chama “sem acesso” (túnel caído e núcleo parado seguem “sem conexão”); a tela não mostra o horário da próxima tentativa nem a identidade que mudou.</li>
+    <li><b>Versão do núcleo remoto e o comando de atualização (#449, decisão 0021, aceita):</b> o card Conexão da Workstation mostra a versão e o commit do núcleo de lá ao lado da versão do app, lidos do <code>/api/overview</code> anônimo (por isso aparecem também em acesso bloqueado). Defasado avisa, com o comando de atualização e as flags do Mac já preenchidas e um Copiar; o Mac não roda nada lá (449-1, 449-2). Sem <code>connection.credential</code>, a faixa manda configurar antes, porque o script recusaria com o código 21 (449-3); em acesso bloqueado, a faixa do 388-1 segue a principal (449-4). Em aberto: o alerta. A seta na barra lateral (449-5) e o caminho do checkout (<code>connection.checkout</code>) estão fechados na decisão.</li>
     <li><b>Backlog:</b> Feed de atividade, Analytics completo, Workflows e o detalhe com o grafo de agentes estavam para depois da entrega. Entraram aqui a pedido do dono; o PM decide se viram itens da 0.0.1.</li></ol></section>`
   indice.innerHTML = htmlI; main.innerHTML = htmlM
   if (window.lucide) lucide.createIcons()
