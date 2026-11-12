@@ -16,17 +16,18 @@
 // Nothing is stopped, and no signal is sent, before the guard and the process check pass.
 //
 // Environment, for tests: AHRENA_CONSOLE_PROC_ROOT (default /proc), AHRENA_CONSOLE_UPDATE_START_TIMEOUT_MS
-// (default 30000), AHRENA_CONSOLE_UPDATE_STOP_TIMEOUT_MS (default 15000).
+// (default 30000), AHRENA_CONSOLE_UPDATE_STOP_TIMEOUT_MS (default 15000), AHRENA_CONSOLE_UPDATE_PAUSE_MS
+// (a pause between the backup and the stop, so a test can change the world in that window).
 
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import {
   appendFileSync, chmodSync, closeSync, copyFileSync, existsSync, mkdirSync, openSync, readdirSync,
-  readFileSync, realpathSync, rmSync, statSync, writeFileSync,
+  readFileSync, readlinkSync, realpathSync, renameSync, rmSync, statSync, writeFileSync,
 } from 'node:fs';
 import { get } from 'node:http';
 import { homedir, userInfo } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
+import { basename, dirname, isAbsolute, join, resolve, sep } from 'node:path';
 import { DatabaseSync, backup } from 'node:sqlite';
 
 export const EXIT = {
@@ -126,8 +127,10 @@ function readOverview(port, timeout = 2000) {
           if (res.statusCode !== 200 || !body || typeof body !== 'object') return done(null);
           done({
             pid: Number.isInteger(body.pid) && body.pid > 0 ? body.pid : null,
-            version: typeof body.version === 'string' ? body.version : null,
-            commit: typeof body.commit === 'string' ? body.commit : null,
+            // What the anonymous overview says is data from whoever answers on the port: only the exact shapes of
+            // decision 0021 section 1 are used, anything else is null.
+            version: typeof body.version === 'string' && VERSION.test(body.version) ? body.version : null,
+            commit: typeof body.commit === 'string' && COMMIT.test(body.commit) ? body.commit : null,
           });
         } catch { done(null); }
       });
@@ -138,6 +141,8 @@ function readOverview(port, timeout = 2000) {
   });
 }
 
+const VERSION = /^\d+\.\d+\.\d+$/;
+const COMMIT = /^[0-9a-f]{4,40}$/;
 const sameCommit = (a, b) => typeof a === 'string' && typeof b === 'string' && a.length >= 4 && b.length >= 4 && (a.startsWith(b) || b.startsWith(a));
 
 async function waitFor(check, timeout, interval = 150) {
@@ -190,9 +195,27 @@ function dataDirOf(options) {
   return null;
 }
 
+/** The working directory of a process, or null. */
+function readCwd(pid) {
+  try { return readlinkSync(join(procRoot(), String(pid), 'cwd')); } catch { return null; }
+}
+/** Rewrites a relative --data-dir to an absolute one, against the directory the core was started in. */
+function absolutizeDataDir(options, cwd) {
+  const out = [...options];
+  for (let i = 0; i < out.length; i += 1) {
+    const inline = out[i].startsWith('--data-dir=');
+    const value = inline ? out[i].slice(11) : out[i] === '--data-dir' ? out[i + 1] : undefined;
+    if (value === undefined || isAbsolute(value)) continue;
+    if (!cwd) throw new Stop(EXIT.PROCESS, `the core was started with a relative --data-dir (${value}) and its working directory cannot be read; pass --core-options with an absolute path (nothing was stopped)`);
+    if (inline) out[i] = `--data-dir=${resolve(cwd, value)}`; else out[i + 1] = resolve(cwd, value);
+  }
+  return out;
+}
+
 /**
  * Decides whether the process the overview points at is this checkout's core on this port, owned by this
- * user. Reads only; sends no signal. Returns the options the core was started with. Throws Stop(32).
+ * user. Reads only; sends no signal. Returns the options the core was started with. Throws Stop(32). It is
+ * called again right before every signal, because the pid can be reused between the check and the kill.
  */
 function verifyProcess(info, ctx) {
   const refuse = (why) => new Stop(EXIT.PROCESS, `the process on port ${ctx.port} does not check out (${why}); nothing was stopped`);
@@ -201,13 +224,19 @@ function verifyProcess(info, ctx) {
   if (procMounted()) {
     const cmdline = readCmdline(info.pid);
     if (!cmdline) throw refuse(`cannot read the cmdline of pid ${info.pid}`);
-    const at = cmdline.findIndex((a) => a.endsWith('src/api/cli.ts') && samePath(a, cliPath));
-    if (at < 0) throw refuse(`pid ${info.pid} is not running ${cliPath}`);
+    // Exactly: node, then only flags, then this checkout's src/api/cli.ts, then the core options.
+    if (!/^node(js)?$/.test(basename(cmdline[0] ?? ''))) throw refuse(`pid ${info.pid} is not running node`);
+    let at = 1;
+    while (at < cmdline.length && cmdline[at].startsWith('-')) at += 1;
+    const cwd = readCwd(info.pid);
+    const script = cmdline[at];
+    const absolute = script === undefined ? null : isAbsolute(script) ? script : cwd ? resolve(cwd, script) : null;
+    if (!absolute || !samePath(absolute, cliPath)) throw refuse(`pid ${info.pid} is not running ${cliPath}`);
     const options = cmdline.slice(at + 1);
     if (String(portOf(options)) !== String(ctx.port)) throw refuse(`pid ${info.pid} was not started with --port ${ctx.port}`);
     const uid = readUid(info.pid);
     if (uid === null || uid !== process.getuid()) throw refuse(`pid ${info.pid} belongs to another user`);
-    return ctx.coreOptions ?? options;
+    return ctx.coreOptions ?? absolutizeDataDir(options, cwd);
   }
   // No /proc: the options are not guessed. The owner of the port comes from ss, which lists only the
   // processes of the user running it.
@@ -219,12 +248,19 @@ function verifyProcess(info, ctx) {
   return ctx.coreOptions;
 }
 
-async function terminate(pid, port) {
+/** `recheck` verifies the process again; it runs right before SIGTERM (a failure there changes nothing) and before SIGKILL. */
+async function terminate(pid, port, recheck) {
+  if (recheck) {
+    try { recheck(); } catch (e) { e.untouched = true; throw e; }
+  }
   process.kill(pid, 'SIGTERM');
   const gone = async () => !isAlive(pid) && !(await readOverview(port, 500));
   if (await waitFor(gone, timeoutMs('AHRENA_CONSOLE_UPDATE_STOP_TIMEOUT_MS', 15000))) return;
   out(`pid ${pid} ignored SIGTERM; sending SIGKILL`);
-  try { process.kill(pid, 'SIGKILL'); } catch { /* already gone */ }
+  if (isAlive(pid)) {
+    recheck?.();
+    try { process.kill(pid, 'SIGKILL'); } catch { /* already gone */ }
+  }
   if (!(await waitFor(gone, 5000))) throw new Stop(EXIT.PROCESS, `pid ${pid} did not stop, or port ${port} stayed busy`);
 }
 
@@ -238,23 +274,32 @@ function systemctl(...args) {
 }
 const unitActive = () => systemctl('is-active', '--quiet', UNIT).status === 0;
 
-const quoteUnit = (s) => (/[\s"'\\]/.test(s) || s.includes('%') ? `"${s.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/%/g, '%%')}"` : s);
+const CONTROL = /[\x00-\x1f\x7f]/;
+/** One word of ExecStart: systemd expands % and $ there, so both are doubled; whitespace and quotes need quoting. */
+const quoteUnit = (s) => {
+  const t = s.replace(/%/g, '%%').replace(/\$/g, () => '$$');
+  return /[\s"'\\]/.test(s) ? `"${t.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"` : t;
+};
 
-/** The text of the unit, with absolute paths (decision 0021 section 3). */
+/** The text of the unit, with absolute paths (decision 0021 section 3). Control characters are refused. */
 export function renderUnit({ node, checkout, options, dataDir }) {
+  for (const v of [node, checkout, dataDir, ...options]) {
+    if (CONTROL.test(v)) throw new Stop(EXIT.USAGE, 'a control character (a newline, for instance) in a path or in the core options cannot go into a systemd unit');
+  }
   const exec = [node, ...NODE_FLAGS, join(checkout, CLI_REL), ...options].map(quoteUnit).join(' ');
+  const raw = (path) => path.replace(/%/g, '%%');
   return `[Unit]
 Description=Ahrena Console core
 After=network.target
 
 [Service]
 Type=simple
-WorkingDirectory=${join(checkout, 'packages/nucleo')}
+WorkingDirectory=${raw(join(checkout, 'packages/nucleo'))}
 ExecStart=${exec}
 Restart=on-failure
 RestartSec=5
 TimeoutStopSec=20
-StandardOutput=append:${join(dataDir, 'core-stdout.log')}
+StandardOutput=append:${raw(join(dataDir, 'core-stdout.log'))}
 StandardError=inherit
 
 [Install]
@@ -270,8 +315,15 @@ function context(opts) {
   if (gitOrNull(checkout, 'rev-parse', '--git-dir') === null) throw new Stop(EXIT.PREFLIGHT, `${checkout} is not a git checkout`);
   return { checkout, port: opts.port, coreOptions: opts.coreOptions };
 }
+/** The data folder: the core's own (from its options) and --data-dir must agree when both are given. */
 function resolveDataDir(opts, options) {
-  return resolve(opts['data-dir'] ?? dataDirOf(options ?? opts.coreOptions ?? []) ?? join(homedir(), '.ahrena-console'));
+  const fromFlag = opts['data-dir'] ? resolve(opts['data-dir']) : null;
+  const own = dataDirOf(options ?? opts.coreOptions ?? []);
+  const fromCore = own ? resolve(own) : null;
+  if (fromFlag && fromCore && fromFlag !== fromCore) {
+    throw new Stop(EXIT.PROCESS, `--data-dir (${fromFlag}) is not the data folder the core was started with (${fromCore}); nothing was changed`);
+  }
+  return fromFlag ?? fromCore ?? join(homedir(), '.ahrena-console');
 }
 function logLine(dataDir, line) {
   try {
@@ -352,11 +404,27 @@ function checkDependencies(ctx, target) {
 
 // ---- steps: backup, start, confirm -------------------------------------------------------------------------
 
-async function makeBackup(dataDir, oldCommit) {
+/** Removes a directory only when it is a strict child of the backups folder (real paths), never anything else. */
+function removeBackupDir(dir, root) {
+  try {
+    const realRoot = realpathSync(root);
+    const real = join(realpathSync(dirname(dir)), basename(dir));
+    if (real.startsWith(realRoot + sep) && real !== realRoot) rmSync(real, { recursive: true, force: true });
+  } catch { /* nothing to remove */ }
+}
+
+async function makeBackup(dataDir, oldCommit, liveCore) {
   const db = join(dataDir, 'nucleo.sqlite');
-  if (!existsSync(db)) { out('no nucleo.sqlite yet: nothing to back up'); return null; }
+  if (!existsSync(db)) {
+    // A core is answering, so a missing database means the data folder is the wrong one: no backup, no rollback promise.
+    if (liveCore) throw new Stop(EXIT.BACKUP, `a core is running but ${db} does not exist; check --data-dir. Nothing was stopped.`);
+    out('no nucleo.sqlite yet: nothing to back up');
+    return null;
+  }
+  const root = join(dataDir, 'backups');
   const stamp = new Date().toISOString().replace(/[-:]/g, '').replace('.', '');
-  const dir = join(dataDir, 'backups', `update-${stamp}-${(oldCommit ?? 'unknown').slice(0, 7)}`);
+  const short = COMMIT.test(oldCommit ?? '') ? oldCommit.slice(0, 7) : 'unknown';
+  const dir = join(root, `update-${stamp}-${short}`);
   const file = join(dir, 'nucleo.sqlite');
   let source;
   try {
@@ -370,11 +438,11 @@ async function makeBackup(dataDir, oldCommit) {
       if (Object.values(row)[0] !== 'ok') throw new Error('the backup failed quick_check');
     } finally { copy.close(); }
   } catch (e) {
-    rmSync(dir, { recursive: true, force: true });
+    removeBackupDir(dir, root);
     throw new Stop(EXIT.BACKUP, `the backup failed (${e.message}); the core was left running`);
   } finally { source?.close(); }
-  const all = readdirSync(join(dataDir, 'backups')).filter((n) => n.startsWith('update-')).sort();
-  for (const old of all.slice(0, Math.max(0, all.length - KEEP_BACKUPS))) rmSync(join(dataDir, 'backups', old), { recursive: true, force: true });
+  const all = readdirSync(root).filter((n) => n.startsWith('update-')).sort();
+  for (const old of all.slice(0, Math.max(0, all.length - KEEP_BACKUPS))) removeBackupDir(join(root, old), root);
   out(`backup: ${file}`);
   return file;
 }
@@ -466,55 +534,79 @@ async function update(opts) {
   }
   run.dataDir = resolveDataDir(opts, run.options);
 
-  const backupFile = await makeBackup(run.dataDir, info?.commit ?? target.oldHead);
+  const wasRunning = Boolean(info) || (run.useUnit && active);
+  const backupFile = await makeBackup(run.dataDir, info?.commit ?? target.oldHead, wasRunning);
   logLine(run.dataDir, `update ${target.oldHead} -> ${target.sha} (${opts.ref}), backup ${backupFile ?? 'none'}`);
-
-  // Step 4: stop. The only signal is to the verified pid, or through the unit.
-  if (run.useUnit) {
-    if (active) { out(`stopping through systemctl --user stop ${UNIT}`); await stopCore(ctx, run, null); }
-  } else if (info) {
-    out(`stopping the verified core (pid ${info.pid})`);
-    await terminate(info.pid, ctx.port);
-  }
+  const pause = Number(process.env.AHRENA_CONSOLE_UPDATE_PAUSE_MS);
+  if (pause > 0) await sleep(pause);
 
   let started = null;
+  let newStarted = false;
   try {
+    // Step 4: stop. The only signal is to the verified pid (checked again right before it), or through the unit.
+    if (run.useUnit) {
+      if (active) { out(`stopping through systemctl --user stop ${UNIT}`); await stopCore(ctx, run, null); }
+    } else if (info) {
+      out(`stopping the verified core (pid ${info.pid})`);
+      await terminate(info.pid, ctx.port, () => verifyProcess(info, ctx));
+    }
     git(ctx.checkout, 'checkout', '--detach', target.sha);
     out(`code: ${target.oldHead.slice(0, 7)} -> ${target.sha.slice(0, 7)}`);
     started = await startCore(ctx, run);
+    newStarted = true;
     if (!run.useUnit) out(`started (orphan, pid ${started.pid}); \`node ${process.argv[1]} install-unit\` puts it under systemd`);
     await confirm(ctx, { commit: target.sha, version: targetVersion }, manifest, started);
   } catch (e) {
+    // The re-check before the first signal failed: nothing changed, so there is nothing to roll back.
+    if (e.untouched) { logLine(run.dataDir, `refused before the stop: ${e.message}`); throw e; }
     warn(`the update failed: ${e.message}; rolling back`);
     logLine(run.dataDir, `update failed: ${e.message}`);
-    return rollback(ctx, run, target, backupFile, started, Boolean(info) || run.useUnit && active);
+    return rollback(ctx, run, target, backupFile, started, wasRunning, newStarted);
   }
   logLine(run.dataDir, `updated to ${target.sha}`);
   out(`updated to ${target.sha.slice(0, 7)} (${targetVersion ?? 'version unknown'}); the core answered`);
   return EXIT.OK;
 }
 
-async function rollback(ctx, run, target, backupFile, started, wasRunning) {
+/** Puts the backup back through a temporary file and a rename: the live database is never removed before the copy exists. */
+function restoreDatabase(dataDir, backupFile) {
+  const live = join(dataDir, 'nucleo.sqlite');
+  const temporary = join(dataDir, 'nucleo.sqlite.restoring');
+  try {
+    copyFileSync(backupFile, temporary);
+    chmodSync(temporary, 0o600);
+  } catch (e) {
+    rmSync(temporary, { force: true });
+    throw e;
+  }
+  for (const suffix of ['-wal', '-shm']) rmSync(`${live}${suffix}`, { force: true });
+  renameSync(temporary, live);
+}
+
+// The database rule: it is restored from the backup only when the new core was started (it may have migrated
+// or written). If the new core never started, the live database is kept as it is, so the writes made between
+// the backup and the stop are not lost.
+async function rollback(ctx, run, target, backupFile, started, wasRunning, newStarted) {
   try {
     await stopCore(ctx, run, started);
     if (target.branch && gitOrNull(ctx.checkout, 'rev-parse', target.branch) === target.oldHead) git(ctx.checkout, 'checkout', target.branch);
     else git(ctx.checkout, 'checkout', '--detach', target.oldHead);
-    if (backupFile) {
-      for (const suffix of ['', '-wal', '-shm']) rmSync(join(run.dataDir, `nucleo.sqlite${suffix}`), { force: true });
-      copyFileSync(backupFile, join(run.dataDir, 'nucleo.sqlite'));
-      chmodSync(join(run.dataDir, 'nucleo.sqlite'), 0o600);
-    }
+    if (backupFile && newStarted) restoreDatabase(run.dataDir, backupFile);
     if (wasRunning) {
-      const again = await startCore(ctx, run);
-      await confirm(ctx, { commit: target.oldHead, version: null }, null, again);
+      const answering = await readOverview(ctx.port, 1000);
+      if (!(answering && sameCommit(answering.commit, target.oldHead))) {
+        const again = await startCore(ctx, run);
+        await confirm(ctx, { commit: target.oldHead, version: null }, null, again);
+      }
     }
   } catch (e) {
-    const msg = `rollback FAILED (${e.message}). Backup: ${backupFile ?? 'none'}. Old commit: ${target.oldHead}. Nothing was deleted; restore by hand.`;
+    const msg = `rollback FAILED (${e.message}). Backup: ${backupFile ?? 'none'} (kept). Old commit: ${target.oldHead}. Restore by hand.`;
     warn(msg);
     logLine(run.dataDir, msg);
     return EXIT.ROLLBACK_FAILED;
   }
-  const msg = `rolled back to ${target.oldHead.slice(0, 7)}${backupFile ? ' with the database restored from the backup' : ''}; the old core ${wasRunning ? 'answers again' : 'was not running before and stays stopped'}`;
+  const restored = backupFile && newStarted;
+  const msg = `rolled back to ${target.oldHead.slice(0, 7)}${restored ? ' with the database restored from the backup' : ' (the new core never started: the database was left as it is)'}; the old core ${wasRunning ? 'answers again' : 'was not running before and stays stopped'}`;
   out(msg);
   logLine(run.dataDir, msg);
   return EXIT.ROLLED_BACK;
@@ -532,18 +624,32 @@ async function installUnit(opts) {
   if (!options) throw new Stop(EXIT.PROCESS, 'no running core to read the options from: pass --core-options "--port ... --installation ... --data-dir ..." (nothing was changed)');
   const withPort = portOf(options) === null ? ['--port', String(ctx.port), ...options] : options;
   const dataDir = resolveDataDir(opts, withPort);
+  // Everything that can fail without touching the running core comes first: the text, the file, the reload, the enable.
+  const text = renderUnit({ node: process.execPath, checkout: ctx.checkout, options: withPort, dataDir });
   mkdirSync(dataDir, { recursive: true });
-  if (orphan) { out(`stopping the verified orphan core (pid ${info.pid})`); await terminate(info.pid, ctx.port); }
   const file = unitPath();
   mkdirSync(dirname(file), { recursive: true });
-  writeFileSync(file, renderUnit({ node: process.execPath, checkout: ctx.checkout, options: withPort, dataDir }));
+  writeFileSync(file, text);
   out(`wrote ${file}`);
-  for (const args of [['daemon-reload'], ['enable', '--now', UNIT]]) {
+  for (const args of [['daemon-reload'], ['enable', UNIT]]) {
     const r = systemctl(...args);
-    if (r.status !== 0) throw new Stop(EXIT.PROCESS, `systemctl --user ${args.join(' ')} failed: ${(r.stderr ?? '').trim()}`);
+    if (r.status !== 0) throw new Stop(EXIT.PROCESS, `systemctl --user ${args.join(' ')} failed (${(r.stderr ?? '').trim()}); the running core was not touched`);
   }
-  const answered = await waitFor(() => readOverview(ctx.port, 1000), timeoutMs('AHRENA_CONSOLE_UPDATE_START_TIMEOUT_MS', 30000));
-  if (!answered) throw new Stop(EXIT.PROCESS, `the unit started but nothing answers on port ${ctx.port}; see journalctl --user -u ${UNIT}`);
+  if (orphan) {
+    out(`stopping the verified orphan core (pid ${info.pid})`);
+    await terminate(info.pid, ctx.port, () => verifyProcess(info, ctx));
+  }
+  const started = systemctl('start', UNIT);
+  const answered = started.status === 0 ? await waitFor(() => readOverview(ctx.port, 1000), timeoutMs('AHRENA_CONSOLE_UPDATE_START_TIMEOUT_MS', 30000)) : null;
+  if (!answered) {
+    if (orphan) {
+      // The core must not stay down: start the orphan again with the options it had.
+      const again = startOrphan(ctx, withPort, dataDir);
+      const back = await waitFor(() => readOverview(ctx.port, 1000), timeoutMs('AHRENA_CONSOLE_UPDATE_START_TIMEOUT_MS', 30000));
+      throw new Stop(EXIT.PROCESS, `the unit did not bring the core up (see journalctl --user -u ${UNIT}); ${back ? `the orphan core was started again (pid ${again.pid})` : 'the orphan core could NOT be started again, start it by hand'}`);
+    }
+    throw new Stop(EXIT.PROCESS, `the unit started but nothing answers on port ${ctx.port}; see journalctl --user -u ${UNIT}`);
+  }
   out(`the core answers under ${UNIT} (version ${answered.version}, commit ${(answered.commit ?? 'unknown').slice(0, 7)})`);
 
   const linger = spawnSync('loginctl', ['show-user', userInfo().username, '-p', 'Linger'], { encoding: 'utf8' });

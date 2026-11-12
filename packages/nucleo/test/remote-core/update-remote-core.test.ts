@@ -7,7 +7,7 @@
 // core is a real process, so every refusal can check that its pid did not change and that no SIGTERM arrived.
 import assert from 'node:assert/strict';
 import { execFile, execFileSync, spawn } from 'node:child_process';
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { createServer, get, type Server } from 'node:http';
 import { createServer as createNetServer } from 'node:net';
 import { tmpdir } from 'node:os';
@@ -77,13 +77,15 @@ fs.appendFileSync(path.join(dir, 'calls.log'), args.join(' ') + '\\n');
 const pidFile = path.join(dir, 'pid');
 const alive = () => { try { const p = Number(fs.readFileSync(pidFile, 'utf8')); process.kill(p, 0); return p; } catch { return 0; } };
 const verb = args.filter((a) => a !== '--user')[0];
-if (verb === 'is-active') process.exit(alive() ? 0 : 3);
+if (process.env.FAKE_SYSTEMCTL_FAIL === verb) process.exit(1);
+if (process.env.FAKE_SYSTEMCTL_FAIL_ONCE === verb) { const m = path.join(dir, 'failed-once'); if (!fs.existsSync(m)) { fs.writeFileSync(m, '1'); process.exit(1); } }
+if (verb === 'is-active') process.exit(process.env.FAKE_ACTIVE || alive() ? 0 : 3);
 if (verb === 'stop') {
   const p = alive();
   if (p) { process.kill(p, 'SIGTERM'); for (let i = 0; i < 100 && alive(); i += 1) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 50); }
   process.exit(0);
 }
-if (verb === 'start' || verb === 'enable') {
+if (verb === 'start' || (verb === 'enable' && args.includes('--now'))) {
   if (alive()) process.exit(0);
   const unit = fs.readFileSync(path.join(process.env.HOME, '.config/systemd/user/ahrena-console-core.service'), 'utf8');
   const exec = /^ExecStart=(.*)$/m.exec(unit)[1];
@@ -231,6 +233,17 @@ function run(args: string[], env: NodeJS.ProcessEnv = {}): Promise<Result> {
     });
   });
 }
+/** Like run, but calls `watch` with the stdout so far, to change the world at a known point of the script. */
+function runWatch(args: string[], env: NodeJS.ProcessEnv, watch: (stdout: string) => void): Promise<Result> {
+  return new Promise((done) => {
+    const child = spawn(process.execPath, [SCRIPT, ...args], { env: { ...e.env, ...env } });
+    let stdout = '';
+    let stderr = '';
+    child.stdout.on('data', (d) => { stdout += d; watch(stdout); });
+    child.stderr.on('data', (d) => { stderr += d; });
+    child.on('close', (code) => done({ code: code ?? 1, stdout, stderr }));
+  });
+}
 const rows = (file: string) => {
   const db = new DatabaseSync(file, { readOnly: true });
   try { return (db.prepare('SELECT v FROM t ORDER BY rowid').all() as { v: string }[]).map((r) => r.v); } finally { db.close(); }
@@ -338,6 +351,7 @@ describe('AC2 · backup, switch, restart, confirm and roll back', () => {
     const argv = lines(join(e.data, 'argv.log')).map((l) => JSON.parse(l));
     assert.deepEqual(argv.at(-1), argv[0], 'the old core was started again with its options');
     assert.equal(backups().length, 1, 'the backup stays');
+    assert.ok(!existsSync(join(e.data, 'nucleo.sqlite.restoring')), 'no temporary file is left');
   });
 
   test('AC2 a target that answers but cannot issue the owner credential is rolled back (exit 40)', async () => {
@@ -405,6 +419,78 @@ describe('AC2 · backup, switch, restart, confirm and roll back', () => {
   });
 });
 
+describe('AC2 · review round 1: what the overview says is not trusted, and the data survives a failure', () => {
+  const writeUnitFile = () => write(join(e.home, '.config/systemd/user/ahrena-console-core.service'), '[Service]\n');
+  const impostor = async (body: object) => {
+    const server = createServer((_req, res) => { res.setHeader('content-type', 'application/json'); res.end(JSON.stringify(body)); });
+    servers.push(server);
+    await new Promise<void>((r) => server.listen(e.port, '127.0.0.1', r));
+  };
+
+  test('AC2 a forged commit in the overview never reaches a path: the failed backup removes nothing outside backups/', async () => {
+    writeUnitFile();
+    await impostor({ ok: true, version: '0.0.7', pid: 1, commit: '/../../x' });
+    // The unit is "active", so the pid is not even checked; the backup fails (not a database).
+    for (const s of ['', '-wal', '-shm']) rmSync(join(e.data, `nucleo.sqlite${s}`), { force: true });
+    writeFileSync(join(e.data, 'nucleo.sqlite'), 'this is not a sqlite file, '.repeat(200));
+    writeFileSync(join(e.data, 'nucleo.json'), '{"lock":true}');
+    const r = await run(baseArgs(), { FAKE_ACTIVE: '1' });
+    assert.equal(r.code, 31, r.stderr + r.stdout);
+    assert.ok(existsSync(join(e.data, 'nucleo.sqlite')), 'the data folder survives');
+    assert.ok(existsSync(join(e.data, 'nucleo.json')), 'the lock survives');
+    assert.deepEqual(backups(), []);
+  });
+
+  test('AC2 a forged commit and a forged version are read as unknown: the backup is named from the checkout, not from the overview', async () => {
+    writeUnitFile();
+    await impostor({ ok: true, version: '<b>9</b>', pid: 1, commit: '/../../x' });
+    const r = await run(baseArgs(), { FAKE_ACTIVE: '1' });
+    assert.notEqual(r.code, 0);
+    assert.ok(existsSync(join(e.data, 'nucleo.sqlite')));
+    for (const n of backups()) assert.match(n, new RegExp(`-${e.shaA.slice(0, 7)}$`));
+    assert.ok(!existsSync(join(e.data, '..', 'x')));
+  });
+
+  test('AC2 a running core and no nucleo.sqlite where --data-dir says: exit 31, nothing stopped', async () => {
+    const pid = await startOrphan();
+    honestProc(pid);
+    rmSync(join(e.data, 'nucleo.sqlite'), { force: true });
+    const r = await run(baseArgs());
+    assert.equal(r.code, 31, r.stderr);
+    assert.ok(alive(pid));
+    assert.deepEqual(lines(join(e.data, 'sigterm.log')), []);
+    assert.equal(head(), e.shaA);
+  });
+
+  test('AC2 --data-dir that disagrees with the data folder of the core is refused (exit 32)', async () => {
+    const pid = await startOrphan();
+    honestProc(pid);
+    const r = await run(baseArgs().map((a, i, all) => (all[i - 1] === '--data-dir' ? join(e.root, 'elsewhere') : a)));
+    assert.equal(r.code, 32, r.stderr);
+    await assertUntouched(pid);
+  });
+
+  test('AC2 a new core that never started keeps the live database, writes made after the backup included (exit 40)', async () => {
+    // Under the unit, the first `systemctl start` fails: the new code never ran, so nothing may be restored.
+    const install = await run(['install-unit', '--checkout', e.repo, '--port', String(e.port), '--data-dir', e.data, '--core-options', coreArgs().join(' ')]);
+    assert.equal(install.code, 0, install.stderr);
+    let wrote = false;
+    const r = await runWatch(baseArgs(), { AHRENA_CONSOLE_UPDATE_PAUSE_MS: '1500', FAKE_SYSTEMCTL_FAIL_ONCE: 'start' }, (stdout) => {
+      if (!wrote && stdout.includes('backup:')) {
+        wrote = true;
+        const db = new DatabaseSync(join(e.data, 'nucleo.sqlite'));
+        db.exec("INSERT INTO t VALUES ('late')");
+        db.close();
+      }
+    });
+    assert.equal(r.code, 40, r.stderr + r.stdout);
+    assert.match(r.stdout, /never started/);
+    assert.deepEqual(rows(join(e.data, 'nucleo.sqlite')), ['original', 'late']);
+    assert.equal(head(), e.shaA);
+    assert.equal((await overview(e.port))?.commit, e.shaA);
+  });
+});
+
 // ---- AC3 ---------------------------------------------------------------------------------------------------
 
 describe('AC3 · the systemd user unit', () => {
@@ -426,7 +512,7 @@ describe('AC3 · the systemd user unit', () => {
       `StandardOutput=append:${join(e.data, 'core-stdout.log')}`, 'StandardError=inherit', '',
       '[Install]', 'WantedBy=default.target', '',
     ].join('\n'));
-    assert.deepEqual(calls(), ['--user daemon-reload', '--user enable --now ahrena-console-core.service']);
+    assert.deepEqual(calls(), ['--user daemon-reload', '--user enable ahrena-console-core.service', '--user start ahrena-console-core.service']);
     const o = await overview(e.port);
     assert.equal(o?.pid, Number(readFileSync(join(e.systemd, 'pid'), 'utf8')), "the core answering is the unit's");
     assert.notEqual(o?.pid, oldPid);
@@ -480,6 +566,41 @@ describe('AC3 · the systemd user unit', () => {
     assert.notEqual(o?.pid, unitPid);
     assert.equal(o?.pid, Number(readFileSync(join(e.systemd, 'pid'), 'utf8')));
     assert.ok(!/SIGTERM|SIGKILL/.test(r.stdout + r.stderr));
+  });
+
+  test('AC3 systemctl failing before the stop leaves the running core alone (exit 32, no signal)', async () => {
+    const oldPid = await startOrphan();
+    honestProc(oldPid);
+    const r = await run(installArgs(), { FAKE_SYSTEMCTL_FAIL: 'daemon-reload' });
+    assert.equal(r.code, 32, r.stderr);
+    assert.ok(alive(oldPid));
+    assert.equal((await overview(e.port))?.pid, oldPid);
+    assert.deepEqual(lines(join(e.data, 'sigterm.log')), []);
+  });
+
+  test('AC3 a unit that fails to start does not leave the core down: the orphan is started again (exit 32)', async () => {
+    const oldPid = await startOrphan();
+    honestProc(oldPid);
+    const r = await run(installArgs(), { FAKE_SYSTEMCTL_FAIL: 'start' });
+    assert.equal(r.code, 32, r.stderr);
+    assert.match(r.stderr, /started again/);
+    const o = await overview(e.port);
+    assert.ok(o, 'the core answers');
+    assert.notEqual(o.pid, oldPid);
+  });
+
+  test('AC3 $ and % in the options are doubled in ExecStart', async () => {
+    const r = await run(installArgs('--core-options', `${coreArgs().join(' ')} --installation a$HOME%h`));
+    assert.equal(r.code, 0, r.stderr);
+    const exec = /^ExecStart=(.*)$/m.exec(readFileSync(unitFile(), 'utf8'))![1];
+    assert.ok(exec.includes('a$$HOME%%h'), exec);
+  });
+
+  test('AC3 a newline in the options is refused before anything is written (exit 2)', async () => {
+    const r = await run(installArgs('--core-options', `${coreArgs().join(' ')} --installation "a\nExecStartPost=/bin/evil"`));
+    assert.equal(r.code, 2, r.stderr);
+    assert.ok(!existsSync(unitFile()));
+    assert.deepEqual(calls(), []);
   });
 
   test('AC3 the unit text is in the README, with the linger command and the manual Workstation step', () => {
@@ -556,6 +677,41 @@ describe('AC4 · refuse before stopping the working process', () => {
     const r = await run(baseArgs(['--core-options', coreArgs().join(' ')]), { FAKE_SS_PID: String(pid) });
     assert.equal(r.code, 0, r.stderr + r.stdout);
     assert.equal((await overview(e.port))?.commit, e.shaB);
+    const argv = lines(join(e.data, 'argv.log')).map((l) => JSON.parse(l));
+    assert.deepEqual(argv.at(-1), coreArgs());
+  });
+
+  test('AC4 the pid is checked again right before the signal: a process swapped in during the backup is not killed', async () => {
+    const pid = await startOrphan();
+    honestProc(pid);
+    let swapped = false;
+    const r = await runWatch(baseArgs(), { AHRENA_CONSOLE_UPDATE_PAUSE_MS: '1500' }, (stdout) => {
+      if (!swapped && stdout.includes('backup:')) {
+        swapped = true;
+        // The pid now belongs to something else, as if the core had exited and the pid were reused.
+        writeProc(pid, ['/usr/bin/sleep', '1000']);
+      }
+    });
+    assert.equal(r.code, 32, r.stderr + r.stdout);
+    assert.ok(alive(pid), 'it was not signalled');
+    assert.deepEqual(lines(join(e.data, 'sigterm.log')), []);
+    assert.equal(head(), e.shaA);
+  });
+
+  test('AC4 argv0 must be node: the right script run by another program is refused', async () => {
+    const pid = await startOrphan();
+    writeProc(pid, ['/usr/bin/python3', NODE_FLAG, cliPath(), ...coreArgs()]);
+    const r = await run(baseArgs());
+    assert.equal(r.code, 32, r.stderr);
+    await assertUntouched(pid);
+  });
+
+  test('AC4 a core started with relative paths is resolved against its own working directory, and restarted with an absolute --data-dir', async () => {
+    const pid = await startOrphan();
+    writeProc(pid, [process.execPath, NODE_FLAG, 'checkout/packages/nucleo/src/api/cli.ts', '--port', String(e.port), '--installation', 'dev', '--data-dir', 'data', '--no-github']);
+    symlinkSync(e.root, join(e.proc, String(pid), 'cwd'));
+    const r = await run(baseArgs());
+    assert.equal(r.code, 0, r.stderr + r.stdout);
     const argv = lines(join(e.data, 'argv.log')).map((l) => JSON.parse(l));
     assert.deepEqual(argv.at(-1), coreArgs());
   });

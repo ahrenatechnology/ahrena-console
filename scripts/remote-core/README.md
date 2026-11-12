@@ -35,7 +35,7 @@ Steps, in order (nothing is stopped before step 4):
    `core remote-credential` there and requires exit 0.
 7. Any failure after the stop rolls back: the old commit (and branch), the database restored from the backup
    (`-wal` and `-shm` removed first) and the old core started again. Exit 40 if it is back, 41 if the rollback
-   failed too (the message names the backup and the old commit; nothing is deleted).
+   failed too (the message names the backup and the old commit; the backup is kept). The database is restored through a temporary file and a rename, and only when the new core was started; if it never started, the live database stays as it is.
 
 Running it twice with the same `--ref` is a no-op (exit 0). `update.log` in the data folder records each run.
 
@@ -67,9 +67,11 @@ node scripts/remote-core/update-remote-core.mjs install-unit --checkout <checkou
 loginctl enable-linger "$(id -un)"
 ```
 
-`install-unit` verifies the running core like step 3, stops it, writes
+`install-unit` verifies the running core like step 3, writes
 `~/.config/systemd/user/ahrena-console-core.service`, runs `systemctl --user daemon-reload` and
-`systemctl --user enable --now ahrena-console-core.service`, and checks the overview. With no running core, pass
+`systemctl --user enable ahrena-console-core.service` (a failure there leaves the running core alone), then stops the
+orphan, runs `systemctl --user start ahrena-console-core.service` and checks the overview (if the unit does not come up,
+the orphan is started again). With no running core, pass
 `--core-options`. If linger is off it prints the `loginctl enable-linger "$(id -un)"` line and exits 0; it never
 calls `sudo`. In an SSH session without a full login it sets `XDG_RUNTIME_DIR=/run/user/$(id -u)` when empty.
 
