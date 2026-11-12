@@ -82,6 +82,7 @@ import { cloudProfiles } from './cloud-profiles.js';
 import { dockerActions } from './docker-actions.js';
 import { openRelease } from './port-release.js';
 import { machineConnection } from './machine-connection.js';
+import { updateParts, versionNode } from './machine-core.js';
 import { machineTerminals } from './machine-terminals.js';
 
 const STYLE = '/ui/screens/machine.css';
@@ -414,19 +415,19 @@ const fromLine = (text) => el('p', { class: 'tm-rc-note tm-muted' }, text);
 const causes = (...items) => el('ol', { class: 'tm-rc-howto' }, ...items.map(([bold, rest]) => el('li', {}, el('b', {}, bold), rest)));
 
 /** 388-1: where to write the credential command, the example and "Copiar o exemplo". */
-function ownerAuthSetup(machine) {
+function ownerAuthSetup(machine, { step = null } = {}) {
   const copy = el('button', { type: 'button', class: 'btn outline', 'data-action': 'owner-auth-copy' }, icon('copy'), 'Copiar o exemplo');
   copy.addEventListener('click', () => runButtonAction(copy, () => globalThis.navigator.clipboard.writeText(OWNER_AUTH_CREDENTIAL_EXAMPLE), { doneLabel: 'Copiado' }));
   return el(
     'section',
     { class: 'card tm-card tm-rc-setup', 'data-part': 'owner-auth-setup' },
-    el('h2', { class: 'tm-title' }, icon('key-round'), el('span', {}, 'Comando de credencial'), el('small', { class: 'tm-muted' }, 'decisão 0020')),
+    el('h2', { class: 'tm-title' }, icon('key-round'), el('span', {}, `${step ? `${step} · ` : ''}Comando de credencial`), el('small', { class: 'tm-muted' }, 'decisão 0020')),
     el(
       'p',
       { class: 'tm-muted' },
       'Grave em ',
       el('code', {}, 'connection.credential'),
-      `, troque os dois caminhos pelos da ${machine.label} e clique em Tentar agora. O `,
+      `, troque os dois caminhos pelos da ${machine.label} e ${step ? 'salve' : 'clique em Tentar agora'}. O `,
       el('code', {}, 'node'),
       ' vai com o caminho inteiro: um ',
       el('code', {}, 'ssh'),
@@ -734,7 +735,9 @@ export async function mount(area, ctx) {
     const live = new Set([connection, dockerNode]);
     const fade = condition.faded ? { 'aria-label': 'Última leitura guardada' } : dialog ? {} : null;
     const shown = fade ? fadedRuns(bands, live, fade) : bands;
-    replaceKeepingFocus(head, ...condition.parts, ...(dialog ? [dialog] : []), ...(terminals.bandNode() ? [terminals.bandNode()] : []), cloud.node(label), ...shown);
+    // The remote núcleo's version and update command (issue 449): the row lives in the Conexão card when it shows, else alone.
+    const coreParts = local || !machine ? [] : [...updateParts(machine, { ownerAuth: ownerAuthReason(machine), credentialSetup: (step) => ownerAuthSetup(machine, { step }) }), ...(machine.core && !condition.versionShown ? [versionNode(machine.core, { card: true })] : [])];
+    replaceKeepingFocus(head, ...condition.parts, ...coreParts, ...(dialog ? [dialog] : []), ...(terminals.bandNode() ? [terminals.bandNode()] : []), cloud.node(label), ...shown);
   }
 
   // A repaint (a filter, the 30 s re-read) rebuilds the buttons: the focus goes back to the same one.

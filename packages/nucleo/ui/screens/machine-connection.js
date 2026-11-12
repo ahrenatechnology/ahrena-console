@@ -15,6 +15,7 @@
 //   the `connector` changes and every 3 s while it runs. The clocks tick here once a second.
 
 import { el, icon } from '../dom.js';
+import { versionNode } from './machine-core.js';
 import { LOCAL_ID, TUNNEL_PORT_STATE, ownerAuthReason, remoteCondition } from './machine-format.js';
 import { CONNECTORS_ROUTE, RUNNING_POLL_MS, loginClock, loginRoute, normalizeConnectors } from './cloud-format.js';
 import {
@@ -371,6 +372,7 @@ export function machineConnection(ctx, id, { reread = () => {}, repaint = () => 
       { class: 'card mc-card mc-conn', 'data-part': 'connection', 'data-state': c.state },
       title('cable', 'Conexão', c.cloud ? 'túnel SSH sobre AWS SSM' : 'o túnel do machines.json', actions),
       trioNode(connectionTrio(c, machine, reading, now)),
+      machine?.core ? versionNode(machine.core) : null,
       portsNode(connectionPorts(c, machine, reading?.ports ?? null), machine),
       cmds.length || credential ? el('div', { class: 'mc-cmds' }, ...cmds.map((t) => el('span', {}, t)), credential ? el('span', { class: credential.tone === 'waiting' ? 'tm-c-waiting' : null }, credential.text) : null) : null,
     );
@@ -447,7 +449,7 @@ export function machineConnection(ctx, id, { reread = () => {}, repaint = () => 
       const row = dialog ? el('div', { class: 'tm-faded' }, top) : top;
       const faded = offline && remoteCondition(machine) !== 'first-read';
       rendered = [...parts, row];
-      return { faded, parts, row };
+      return { faded, parts, row, versionShown: Boolean(machine?.core) };
     },
   };
 }

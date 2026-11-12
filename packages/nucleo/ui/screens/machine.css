@@ -179,6 +179,17 @@
 .tm-rc-setup .tm-title > small { margin-left: auto; font-size: 11.5px; font-weight: var(--weight-regular); }
 .tm-rc-setup > .tm-rc-actions { justify-content: flex-start; }
 
+/* The remote núcleo's version and the update command (449-1 to 449-5, issue 449). */
+.tm-core-version { gap: 8px; }
+.tm-core-k { font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-weight: var(--weight-semibold); }
+.tm-core-tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.tm-core-tile { border: 1px solid var(--border); border-radius: 10px; padding: 9px 11px; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.tm-core-v { font-size: 13px; font-weight: var(--weight-semibold); overflow-wrap: anywhere; }
+.tm-core-s { font-size: 11.5px; color: var(--muted); overflow-wrap: anywhere; }
+.tm-core-src { margin: 0; font-size: 11.5px; }
+.tm-core-copy { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.tm-core-note, .tm-core-foot { font-size: 12px; margin: 0; }
+
 /* Sessões de terminal (C96 a C99, issue 350) */
 .tm-term-table td { vertical-align: top; }
 .tm-term-table td small { display: block; font-size: 11.5px; margin-top: 2px; overflow-wrap: anywhere; }
