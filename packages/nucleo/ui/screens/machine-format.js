@@ -8,6 +8,7 @@
 // throws on a strange reading. The test imports this file directly.
 
 import { attentionOfItem } from '../attention.js';
+import { normalizeCore } from './machine-core-format.js';
 import { normalizeTerminals } from './machine-terminals-format.js';
 
 export const MACHINES_ROUTE = '/api/machines';
@@ -145,6 +146,7 @@ export function normalizeMachine(m) {
     lastReadAt: str(m.lastReadAt, 40),
     alerts: num(m.alerts) ?? 0,
     reconnect: normalizeReconnect(m.reconnect),
+    core: normalizeCore(m.core),
   };
 }
 

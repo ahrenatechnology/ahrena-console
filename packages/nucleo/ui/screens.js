@@ -11,6 +11,7 @@
 // The sidebar blocks: the everyday screens (no title), then Delivery, Decisions, Machines and
 // Control. A block without items does not show. Decisions holds the session decisions ("Das sessões")
 // and the architecture (ADR) and product (PDR) records of the repositories (issue 174).
+import { coreOutdated, normalizeCore } from './screens/machine-core-format.js';
 import { OWNER_AUTH } from './screens/machine-format.js';
 
 export const SECTIONS = [
@@ -304,6 +305,8 @@ export function machineItems(machines) {
       item: { label, icon: 'server', section: 'machines' },
       state: stoppedByYou(m) ? 'stopped' : auth ? 'owner-auth' : MACHINE_STATES.has(m.state) ? m.state : 'unreachable',
       ...(auth ? { stateLabel: OWNER_AUTH[auth].dot } : {}),
+      // The núcleo over there is older than the app (issue 449): a yellow arrow beside the name, nothing else of `core`.
+      ...(coreOutdated(normalizeCore(m.core)) ? { coreOutdated: true } : {}),
       title: label,
       icon: 'server',
     });

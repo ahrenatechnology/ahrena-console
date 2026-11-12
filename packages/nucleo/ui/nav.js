@@ -14,6 +14,9 @@ import { CONNECTORS_ROUTE, connectorsDot } from './screens/cloud-format.js';
 /** The state of a remote machine, said on its dot: the color alone does not say it. */
 export const MACHINE_STATE_LABELS = { connected: 'Conectada', unreachable: 'Sem conexão', 'incompatible-version': 'Versão diferente', 'not-configured': 'Sem configuração', stopped: 'Parada por você', 'owner-auth': 'Acesso bloqueado' };
 
+/** The yellow arrow of a remote whose núcleo is older than the app (issue 449): the color alone does not say it. */
+const CORE_OUTDATED_LABEL = 'Núcleo defasado';
+
 /** Draws the sidebar into `nav` at once; `read` is the shell's read layer. */
 export function createNav({ nav, read, screens = SCREENS }) {
   const items = new Map();
@@ -37,7 +40,8 @@ export function createNav({ nav, read, screens = SCREENS }) {
         const q = el('span', { class: 'q', hidden: true });
         const mark = screen.state ? { state: screen.state, label: screen.stateLabel ?? MACHINE_STATE_LABELS[screen.state] ?? screen.state } : (dots.get(screen.id) ?? null);
         const dot = mark ? el('span', { class: 'cc-nav-dot', 'data-state': mark.state, role: 'img', 'aria-label': mark.label, title: mark.label }) : null;
-        const a = el('a', { class: 'cc-nav', href: screen.route, 'data-screen': screen.id }, icon(screen.item.icon), el('span', { class: 'cc-nav-label' }, screen.item.label), dot, q);
+        const flag = screen.coreOutdated ? el('span', { class: 'cc-nav-flag', role: 'img', 'aria-label': CORE_OUTDATED_LABEL, title: CORE_OUTDATED_LABEL }, icon('arrow-up-circle')) : null;
+        const a = el('a', { class: 'cc-nav', href: screen.route, 'data-screen': screen.id }, icon(screen.item.icon), el('span', { class: 'cc-nav-label' }, screen.item.label), flag, dot, q);
         items.set(screen.id, { a, q });
         group.append(a);
       }
