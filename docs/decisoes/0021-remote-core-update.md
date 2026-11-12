@@ -32,6 +32,7 @@ core: {
   version: string | null;   // /^\d+\.\d+\.\d+$/ ou null
   commit: string | null;    // /^[0-9a-f]{4,40}$/ ou null
   expectedVersion: string;  // API_VERSION do núcleo do Mac
+  mac: { telemetryVersion: number; credentialCommand: boolean }; // o que o Mac declara à trava (§4)
   status: 'current' | 'outdated' | 'ahead' | 'unknown';
   readAt: string | null;    // ISO da última leitura boa
 } | null                    // null enquanto nunca leu (e para a máquina local)
@@ -46,6 +47,8 @@ core: {
 ### 2. Como a atualização é disparada
 
 **Recomendado: a tela só avisa e mostra o comando para copiar. O Mac não executa nada.** Sem campo novo no `machines.json`, sem processo filho, sem job. O aviso diz o que fazer ("o núcleo de lá está na 0.0.7 e o app na 0.0.16; rode isto na Workstation"), e o bloco traz o comando do §3 com o `--ref app-v<versão do app>` e as duas flags de trava já preenchidas (§4). A pessoa cola no terminal da máquina (por SSH, VS Code, o que usar).
+
+**Quando a tela mostra o comando de atualização:** só para um alvo cujo release carrega **os dois**, `scripts/remote-core/update-remote-core.mjs` e `packages/nucleo/remote-contract.json`. Para tags anteriores (a 0.0.16 e as de antes, sem script nem manifesto) o `--ref app-v<versão>` não funcionaria, então o Mac mostra, no lugar, as **instruções de bootstrap**: pegar o script da `main` (ou da primeira tag que o traz), rodar com `--check` e então com `--allow-disconnect` se a pessoa decidir. O núcleo conhece a primeira versão que carrega os dois (uma constante, `FIRST_UPDATER_VERSION`) e escolhe o texto.
 
 **Alternativa rejeitada (por ora): `connection.update` no `machines.json`**, um comando em lista que o Mac roda como `start` e `stop` (0013 §4). Ele reaproveitaria o runner, mas: para e troca um processo que funciona por um clique, o que o 0020 evita desde o início (o Mac só entra pelo SSH para ler e para uma credencial curta); exigiria job, progresso, cancelamento e log com a saída do script, e o rollback precisa de um humano olhando; e o escopo da issue é caminho "documentado e repetível", com atualização automática fora. Fica aberto como decisão própria depois que o script provar o rollback na Workstation. A trava do §4 já é feita para esse dia: o código de saída é legível por máquina.
 
@@ -71,13 +74,13 @@ Depois que o checkout o tem, `node scripts/remote-core/update-remote-core.mjs �
 1. **Preflight.** Checkout acessível; árvore sem mudança rastreada (`git status --porcelain --untracked-files=no`, senão sai `30`, sem `--force`: commits locais como o `local/workstation-link-cap` não somem, o script grava o HEAD velho e avisa que sairá de um ramo); `git rev-parse --verify <ref>^{commit}` resolve o sha. O `fetch` pode ser pulado com `--no-fetch` (testes).
 2. **Trava (§4)**, lendo o alvo com `git show <sha>:…`. Recusa aqui, ainda sem tocar em nada.
 3. **Backup com o núcleo ainda no ar.** Descobre o núcleo pela porta (`GET /api/overview`: `pid`, `version`, `commit`) e faz a cópia consistente de `<data-dir>/nucleo.sqlite` com `backup()` do `node:sqlite` para `<data-dir>/backups/update-<UTC>-<commit velho>/nucleo.sqlite` (o WAL é incorporado; copiar `nucleo.sqlite*` solto com o processo escrevendo não seria consistente). Mantém os 5 últimos. Falhou: sai `31` e o processo segue de pé.
-4. **Parar.** Se a unidade está ativa, `systemctl --user stop ahrena-console-core.service`. Senão (processo órfão), `SIGTERM` no `pid` lido do `/api/overview`, espera até 15 s e só então `SIGKILL`, e confere que a porta liberou. Antes de matar, guarda os argumentos reais de `/proc/<pid>/cmdline`, para subir "com as mesmas opções" (`--port`, `--installation`, `--data-dir`, `--no-github`, `--accept-remote-actions`…); sem `/proc`, usa o padrão abaixo.
+4. **Parar.** Se a unidade está ativa, `systemctl --user stop ahrena-console-core.service`. Senão (processo órfão), o `pid` do `/api/overview` é só uma dica: ele é anônimo e forjável (um impostor na porta responde o pid que quiser, 0020 §2), então **nenhum sinal sai antes de o script verificar o processo**: `/proc/<pid>/cmdline` tem o `src/api/cli.ts` do checkout e o `--port` pedido, e o uid dono do processo (`/proc/<pid>/status`) é o do próprio script (`process.getuid()`). Qualquer divergência sai `32` e nada é parado. Verificado, manda `SIGTERM`, espera até 15 s e só então `SIGKILL`, e confere que a porta liberou. Esse mesmo `cmdline` fornece os argumentos reais para subir "com as mesmas opções" (`--port`, `--installation`, `--data-dir`, `--no-github`, `--accept-remote-actions`…), lidos **antes** de parar. **Sem `/proc`** (ou sem permissão de ler o `cmdline`), o script não chuta opções: recusa antes de parar (`32`), a menos que a pessoa passe as opções explicitamente (`--core-options "--port 4720 --installation dev --data-dir …"`), e só então verifica o dono pela porta (`ss -ltnp`) e segue.
 5. **Trocar o código:** `git checkout --detach <sha>`. Sem `npm install`: se `git diff --name-only <velho> <novo> -- package-lock.json packages/nucleo/package.json` listar dependências de produção novas, o script para antes do passo 4 e avisa (hoje não há). Registra velho→novo em `update.log`.
 6. **Subir.** Sob a unidade: `systemctl --user start …`. Sem a unidade, o comando de referência, dentro de `packages/nucleo`:
 
    ```
    setsid nohup /usr/bin/node --disable-warning=ExperimentalWarning <checkout>/packages/nucleo/src/api/cli.ts \
-     --port 4720 --installation dev --data-dir /home/seguim/.ahrena-console --no-github \
+     --port 4720 --installation dev --data-dir $HOME/.ahrena-console --no-github \
      >> ~/.ahrena-console/core-stdout.log 2>&1 < /dev/null &
    ```
 
@@ -85,7 +88,7 @@ Depois que o checkout o tem, `node scripts/remote-core/update-remote-core.mjs �
 7. **Conferir que respondeu.** Até 30 s: `GET /api/overview` 200 com o `commit` igual ao alvo e a `version` do `package.json` do alvo. Se o manifesto do alvo diz `ownerProofRequired: true`, roda também `node <checkout>/packages/nucleo/src/owner/cli.ts remote-credential --port <porta>` com um pedido válido no stdin e exige saída `0`: é a prova de que o Mac conseguirá entrar (a credencial emitida vale 10 min e some).
 8. **Rollback se o 7 falhar** (ou o 6 não subir): para o processo novo, `git checkout --detach <commit velho>`, **restaura o `nucleo.sqlite` do backup** (apaga `-wal` e `-shm` antes; as migrações só andam para frente, então um banco já migrado não serve ao código velho) e sobe como no 6. Saída `40` se voltou e respondeu; `41` se o rollback também falhou (mensagem com os caminhos do backup e do commit velho; nada é apagado).
 
-**Códigos de saída:** `0` atualizou e conferiu; `2` uso; `20` trava: protocolo da telemetria incompatível; `21` trava: o alvo exige prova do dono e o Mac não tem o comando de credencial; `22` trava: o alvo não traz o manifesto; `23` trava: faltam as flags do Mac; `30` árvore suja ou ref inexistente; `31` backup falhou; `40` falhou e voltou; `41` falhou e o rollback falhou. `--check` roda só os passos 1 e 2 e sai com `0` ou o código da trava, sem tocar em nada: é o que a tela pode sugerir e o que os testes usam.
+**Códigos de saída:** `0` atualizou e conferiu; `2` uso; `20` trava: protocolo da telemetria incompatível; `21` trava: o alvo exige prova do dono e o Mac não tem o comando de credencial; `22` trava: o alvo não traz o manifesto; `23` trava: faltam as flags do Mac; `30` árvore suja ou ref inexistente; `31` backup falhou; `32` o processo não confere (cmdline, porta ou uid) ou não há como ler as opções; `40` falhou e voltou; `41` falhou e o rollback falhou. `--check` roda só os passos 1 e 2 e sai com `0` ou o código da trava, sem tocar em nada: é o que a tela pode sugerir e o que os testes usam.
 
 **A unidade do systemd** (`install-unit`, subcomando do mesmo script, a pessoa roda uma vez):
 
@@ -110,9 +113,9 @@ Depois que o checkout o tem, `node scripts/remote-core/update-remote-core.mjs �
   WantedBy=default.target
   ```
 
-  O `ExecStart` é o do órfão (o núcleo já roda em primeiro plano; o `setsid nohup … &` é só de quem não tem supervisor). As opções vêm do `/proc/<pid>/cmdline` do núcleo vivo, quando houver, ou dos padrões acima.
+  O `ExecStart` é o do órfão (o núcleo já roda em primeiro plano; o `setsid nohup … &` é só de quem não tem supervisor). As opções vêm do `/proc/<pid>/cmdline` do núcleo vivo, já verificado como no passo 4, ou de `--core-options`; sem nenhum dos dois, `install-unit` recusa em vez de chutar.
 - `install-unit` para o órfão (como no passo 4), grava a unidade, `systemctl --user daemon-reload && systemctl --user enable --now ahrena-console-core.service`, e confere o `/api/overview`. Em sessão SSH sem login completo ele define `XDG_RUNTIME_DIR=/run/user/$(id -u)` se estiver vazio, senão o `systemctl --user` não acha o barramento.
-- **Linger.** Unidade de usuário só sobe no boot, sem login, com `loginctl enable-linger seguim`. O script confere (`loginctl show-user seguim -p Linger`) e, se for `no`, **imprime** o comando e sai `0` com o aviso; ele não chama `sudo`. O critério 3 só se prova depois dessa linha e de um reboot (§Testes).
+- **Linger.** Unidade de usuário só sobe no boot, sem login, com `loginctl enable-linger "$(id -un)"`. O script confere (`loginctl show-user "$(id -un)" -p Linger`) e, se for `no`, **imprime** o comando e sai `0` com o aviso; ele não chama `sudo`. O critério 3 só se prova depois dessa linha e de um reboot (§Testes).
 - `Restart=on-failure` volta sozinho se o processo morrer; `systemctl --user stop` (parada limpa do §3) não é reiniciada.
 
 ### 4. A trava: recusar antes de parar (AC4)
@@ -128,7 +131,7 @@ Depois que o checkout o tem, `node scripts/remote-core/update-remote-core.mjs �
 
 - `telemetryVersion`: o `TELEMETRY_VERSION` que o alvo responde. `ownerProofRequired`: o alvo recusa rota privada sem prova (a #391 em diante). `remoteCredentialCommand`: o subcomando de `owner/cli.ts` que o Mac precisa estar configurado para rodar em `connection.credential` (ou `null` se o alvo não tem emissão).
 - **Fonte única, verificada:** o arquivo é escrito à mão (o contrato é a fonte, `contract-first`) e um teste do núcleo falha se `telemetryVersion !== TELEMETRY_VERSION`, se `ownerProofRequired` difere de `ownerProofRequired('GET', '/api/telemetry')`, ou se o subcomando não existe no `owner/cli.ts`. Quem muda um sem o outro não passa no CI.
-- **O que o Mac declara**, por flags do comando que a tela mostra: `--mac-telemetry-version <n>` (o `TELEMETRY_VERSION` do núcleo do Mac) e `--mac-credential-command yes|no` (se **esta máquina** tem `connection.credential` válido em `machines.json` **e** o núcleo do Mac sabe usá-lo). A tela calcula os dois; o script não adivinha nada do Mac. São parte do `core` do §1 (`core.mac`), então a tela só os imprime.
+- **O que o Mac declara**, por flags do comando que a tela mostra: `--mac-telemetry-version <n>` (o `TELEMETRY_VERSION` do núcleo do Mac) e `--mac-credential-command yes|no` (se **esta máquina** tem `connection.credential` válido em `machines.json` **e** o núcleo do Mac sabe usá-lo). A tela calcula os dois; o script não adivinha nada do Mac. São o `core.mac` do §1 (`telemetryVersion` e `credentialCommand`), então a tela só os imprime.
 - **Regra, em ordem, antes do passo 3 do §3:**
   1. faltam as flags (e não há `--allow-disconnect`): sai `23` (falha fechada: sem o que o Mac declara, o script não sabe);
   2. o alvo não tem o manifesto (um `main` anterior a esta proposta, a 0.0.15, o `81251bd`): sai `22` (contrato desconhecido, não aprovado por omissão);
@@ -169,6 +172,7 @@ Sem SSH, sem a Workstation, sem a suíte inteira (só o arquivo tocado, `--test-
    - Com a unidade ativa, a atualização usa `systemctl --user stop/start`, não `kill`.
    - **O reboot não se testa aqui:** a prova é do Fernando na Workstation (reiniciar e ver o núcleo voltar), registrada no PR da camada 2.
 4. **AC4 · recusa antes de parar o processo que funciona.**
+   - **Pid forjado:** um servidor falso responde o `/api/overview` com o pid de outro processo do mesmo usuário, e outro com um pid de outro uid (ou `cmdline` sem `cli.ts`/`--port`) → `32`, nenhum sinal enviado a ninguém. Sem `/proc` e sem `--core-options` → `32` antes de parar; com `--core-options` o fluxo segue.
    - O núcleo falso é o processo de verdade e o teste checa que o pid **não** mudou e nenhum `SIGTERM` chegou, em cada recusa.
    - Alvo com `ownerProofRequired: true` + `--mac-credential-command no` → `21`; `telemetryVersion` diferente → `20`; alvo sem manifesto → `22`; sem flags do Mac → `23`.
    - `--allow-disconnect` passa as quatro, e o rollback do AC2 segue valendo.
