@@ -1,6 +1,6 @@
 # 0021 · Núcleo remoto: o Mac mostra a versão de lá e avisa quando está defasada; o comando versionado atualiza com backup, trava antes de parar e supervisor do systemd
 
-- **Status:** proposta (aguarda o Fernando)
+- **Status:** aceita (o Fernando aceitou, PR #457)
 - **Data:** 2026-11-12
 - **Issue:** [#449](https://github.com/ahrenatechnology/ahrena-console/issues/449)
 - **Depende de:** [0020](0020-remote-owner-credential-over-ssh.md) / [#388](https://github.com/ahrenatechnology/ahrena-console/issues/388) (a `main` só roda na remota com a prova do dono)
@@ -32,7 +32,7 @@ core: {
   version: string | null;   // /^\d+\.\d+\.\d+$/ ou null
   commit: string | null;    // /^[0-9a-f]{4,40}$/ ou null
   expectedVersion: string;  // API_VERSION do núcleo do Mac
-  mac: { telemetryVersion: number; credentialCommand: boolean }; // o que o Mac declara à trava (§4)
+  mac: { telemetryVersion: number; credentialCommand: boolean; checkout: string | null }; // o que o Mac declara à trava (§4)
   status: 'current' | 'outdated' | 'ahead' | 'unknown';
   readAt: string | null;    // ISO da última leitura boa
 } | null                    // null enquanto nunca leu (e para a máquina local)
@@ -46,7 +46,9 @@ core: {
 
 ### 2. Como a atualização é disparada
 
-**Recomendado: a tela só avisa e mostra o comando para copiar. O Mac não executa nada.** Sem campo novo no `machines.json`, sem processo filho, sem job. O aviso diz o que fazer ("o núcleo de lá está na 0.0.7 e o app na 0.0.16; rode isto na Workstation"), e o bloco traz o comando do §3 com o `--ref app-v<versão do app>` e as duas flags de trava já preenchidas (§4). A pessoa cola no terminal da máquina (por SSH, VS Code, o que usar).
+**Recomendado: a tela só avisa e mostra o comando para copiar. O Mac não executa nada.** Sem processo filho, sem job; o único campo novo no `machines.json` é o `connection.checkout` abaixo, que só alimenta o texto da tela. O aviso diz o que fazer ("o núcleo de lá está na 0.0.7 e o app na 0.0.16; rode isto na Workstation"), e o bloco traz o comando do §3 com o `--ref app-v<versão do app>` e as duas flags de trava já preenchidas (§4). A pessoa cola no terminal da máquina (por SSH, VS Code, o que usar).
+
+**O caminho do checkout: `connection.checkout`.** Campo opcional, por máquina, no `machines.json` do Mac (ao lado de `start`, `stop` e `credential`), validado como caminho absoluto de texto (começa com `/`, sem `..`, sem NUL, sem expansão de shell nem de `~`, até 512 caracteres). Um `checkout` inválido derruba só esse campo, com uma linha de log, como o `credential`. Nunca é executado: só entra no texto do comando. O núcleo o expõe como `core.mac.checkout` (e nenhum outro dado do `machines.json`). Presente, a tela preenche o comando com ele; ausente, usa o literal `<checkout>`. A decisão de que `--ref` é sempre explícito, `app-v<versão do app>`, nunca "o mais novo", fica como está.
 
 **Quando a tela mostra o comando de atualização:** só para um alvo cujo release carrega **os dois**, `scripts/remote-core/update-remote-core.mjs` e `packages/nucleo/remote-contract.json`. Para tags anteriores (a 0.0.16 e as de antes, sem script nem manifesto) o `--ref app-v<versão>` não funcionaria, então o Mac mostra, no lugar, as **instruções de bootstrap**: pegar o script da `main` (ou da primeira tag que o traz), rodar com `--check` e então com `--allow-disconnect` se a pessoa decidir. O núcleo conhece a primeira versão que carrega os dois (uma constante, `FIRST_UPDATER_VERSION`) e escolhe o texto.
 
@@ -146,10 +148,10 @@ Depois que o checkout o tem, `node scripts/remote-core/update-remote-core.mjs �
 
 Roteamento pela tabela: backend para o núcleo e o script, frontend para o texto. Sem camada de dados. Cada camada passa pelo ciclo desenvolver → Argos (no máximo três rodadas) antes de abrir, e as camadas entram em pilha.
 
-0. **iris · wireframe**, aprovado pelo Fernando antes do código: o cartão da máquina e a barra lateral com `outdated`/`unknown`/`ahead`, o bloco do comando com "Copiar", e o aviso da trava (`20`/`21`).
-1. **apollo · versão da remota no Mac.** `remote-contract.json` e o teste de coerência com as constantes; a leitura do `/api/overview` em `telemetry/remote.ts`, a comparação pura (arquivo próprio em `telemetry/`), `MachineSummary.core` e o que a API devolve. AC1 (lado do núcleo).
-2. **apollo · script, unidade e trava.** `scripts/remote-core/update-remote-core.mjs` (`--check`, atualização, rollback, `install-unit`), o README/runbook e a unidade. AC2, AC3 (unidade gerada e comandos do systemd) e AC4.
-3. **iris · o que a tela diz.** Textos pt-BR de cada estado e da recusa, o comando com as flags da §4. AC1 (tela).
+1. **iris · wireframe**, aprovado pelo Fernando antes do código: o cartão da máquina e a barra lateral com `outdated`/`unknown`/`ahead`, o bloco do comando com "Copiar", e o aviso da trava (`20`/`21`).
+2. **apollo · versão da remota no Mac.** `remote-contract.json` e o teste de coerência com as constantes; a leitura do `/api/overview` em `telemetry/remote.ts`, a comparação pura (arquivo próprio em `telemetry/`), `MachineSummary.core`, o que a API devolve, a leitura e a validação de `connection.checkout` em `machines-config.ts` e a `FIRST_UPDATER_VERSION`. AC1 (lado do núcleo).
+3. **apollo · script, unidade e trava.** `scripts/remote-core/update-remote-core.mjs` (`--check`, atualização, rollback, `install-unit`), o README/runbook e a unidade. AC2, AC3 (unidade gerada e comandos do systemd) e AC4.
+4. **iris · o que a tela diz.** Textos pt-BR de cada estado e da recusa, o comando com as flags da §4 e o `core.mac.checkout` (ou `<checkout>`). O aviso fica na seta amarela da barra lateral; sem alerta na lista de atenção nem linha na faixa P14 por ora. AC1 (tela).
 
 A Workstation só é atualizada por um passo do Fernando fora desta pilha, depois da #388 no ar lá.
 
@@ -161,6 +163,7 @@ Sem SSH, sem a Workstation, sem a suíte inteira (só o arquivo tocado, `--test-
    - Núcleo falso com `version` 0.0.7 e commit `81251bd` → `core.status = outdated`, `version` e `commit` no `GET /api/machines`; igual → `current`; maior → `ahead`; corpo sem `version` ou lixo → `unknown`; porta fechada → `core` `null` ou `unknown`.
    - Lido também com a máquina em `owner-auth-required` (a leitura é anônima).
    - Versões iguais com commit mais antigo, só quando o Mac tem checkout → `outdated`; sem checkout, `current`.
+   - **`FIRST_UPDATER_VERSION` e `connection.checkout` (camada 2):** o comando de atualização só aparece para um app com versão `>= FIRST_UPDATER_VERSION`; abaixo dela a tela traz as instruções de bootstrap. `checkout` absoluto válido chega em `core.mac.checkout`; relativo, com `..`, `~`, NUL ou longo demais é descartado com uma linha de log, sem derrubar o resto da máquina, e `null` aparece na resposta.
    - Texto cru da remota (versão longa, HTML) nunca chega ao JSON. Texto da tela em pt-BR, com o comando e as flags corretas, na camada 3.
 2. **AC2 · caminho documentado e repetível: backup, troca, sobe, confere.**
    - Repetível: rodar duas vezes o mesmo `--ref` na segunda é no-op (`0`, nada parado).
