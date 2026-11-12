@@ -1,6 +1,6 @@
 # 0012 · Reconectar a máquina remota pelo console, com o comando que o usuário escreveu
 
-- **Status:** aceita (o Fernando aprovou os wireframes C50 e A8 em 20/10, com a saída só no log)
+- **Status:** aceita (o Fernando aprovou os wireframes C50 e A8 em 20/10, com a saída só no log) **Ver também a [0022](0022-remote-core-update-button.md):** o botão Atualizar roda um `connection.update` declarado, com uma cauda de argv fechada acrescentada pelo núcleo, um passo além do "comando constante" daqui.
 - **Data:** 2026-10-20
 - **Issue:** [#244](https://github.com/ahrenatechnology/ahrena-console/issues/244)
 - **Revê:** em [0008](0008-machine-telemetry-and-dev-console.md), "o app só mostra" para a reconexão (seção 3, a linha "Túnel caído", e seção 6, o item "Ações que mudam estado"). O resto da 0008 continua valendo.

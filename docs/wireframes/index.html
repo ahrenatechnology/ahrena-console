@@ -5118,9 +5118,9 @@ const TELAS = [
   { id: 'remote-core-update-dialog', cod: '462-2', nome: 'Atualizar o núcleo remoto · a confirmação', sub: 'Issue #462, critérios 1 e 4. O diálogo abre rodando o <span class="mono">--check</span> (só preflight e trava, nada é tocado) e então mostra o resultado: pronto para confirmar, com o que vai acontecer e que depois da troca não dá para cancelar, ou a recusa, sem botão de confirmar. Sem largura própria.',
     html: () => cuDialogHtml(),
     n: N(['Nada.'], ['O <span class="mono">--check</span> vem antes de qualquer parada e, se recusa, o diálogo só dá o motivo (o mesmo texto do 462-4). O script repete a trava ao atualizar; a confirmação não substitui isso.', 'A confirmação diz o custo: cerca de um minuto sem conexão e o backup antes. É o risco que a 0021 usava para rejeitar o clique (“parar um processo que funciona”).', 'O servidor só aceita atualizar com um <span class="mono">--check</span> bom nos últimos 5 minutos para aquela máquina.']) },
-  { id: 'remote-core-update-progress', cod: '462-3', nome: 'Atualizar o núcleo remoto · o andamento', sub: 'Issue #462, critério 2. Os cinco passos (conferindo, backup, trocando, subindo, conferindo), com a fase atual, o tempo, a faixa em “atualizando” e o Cancelar desligado depois que a troca começa. Embaixo, o card na fase do backup, em que ainda dá para cancelar. Em 1100 e 1440.',
+  { id: 'remote-core-update-progress', cod: '462-3', nome: 'Atualizar o núcleo remoto · o andamento', sub: 'Issue #462, critério 2. Os cinco passos (conferindo, backup, trocando, subindo, conferindo), com a fase atual, o tempo, a faixa em “atualizando” e o Cancelar desligado depois que a troca começa. Embaixo, o card na conferência, a única fase em que dá para cancelar. Em 1100 e 1440.',
     html: () => cuProgressHtml(),
-    n: N(['Nada.'], ['O andamento vem do stdout do SSH, em linhas de JSON do script (<span class="mono">--progress json</span>); o núcleo do Mac não consulta nada na máquina. O ponto da barra lateral vira “Atualizando” e a queda de conexão da troca não gera alerta.', 'Cancelar vale até o fim do backup. Depois, o script ignora os sinais e termina sozinho, com sucesso ou voltando ao código de antes: matar a conexão no meio da troca deixaria a máquina sem núcleo.', '“Reconectar” e “Parar o túnel” ficam desligados enquanto a atualização roda.']) },
+    n: N(['Nada.'], ['O andamento vem do stdout do SSH, em linhas de JSON do script (<span class="mono">--progress json</span>); o núcleo do Mac não consulta nada na máquina. O ponto da barra lateral vira “Atualizando” e a queda de conexão da troca não gera alerta.', 'Cancelar só vale na conferência, que não toca em nada. Do backup em diante o script termina sozinho, com sucesso ou voltando ao código de antes, e fechar a conexão não o interrompe.', '“Reconectar” e “Parar o túnel” ficam desligados enquanto a atualização roda.']) },
   { id: 'remote-core-update-refused', cod: '462-4', nome: 'Atualizar o núcleo remoto · recusas, nada foi parado', sub: 'Issue #462, critério 2. Cada saída em que o script recusa antes de parar o núcleo: a trava (20 a 23), o preflight (30, em três motivos, 31 e 32) e a atualização já em andamento (33, código novo). Todas dizem “Nada foi parado”. Em 1100 e 1440.',
     html: () => cuRefusalHtml(),
     n: N(['Nada.'], ['O texto é pt-BR, uma frase do que houve e uma do que fazer; o código só aparece pequeno, para quem for procurar. Os motivos do 30 e do 32 vêm do campo <span class="mono">reason</span> de uma lista fechada, não de texto livre da máquina.', 'Para o 22 a saída é o terminal com <span class="mono">--allow-disconnect</span> (o card de copiar da 0021): o botão não o usa nunca.', 'O 33 é o código novo da trava de execução simultânea, que vive na máquina remota e vale para dois Macs.']) },
@@ -5671,13 +5671,15 @@ const cvSideHtml = () => `<div class="tm-rc"><div class="width-col"><div class="
 // =====================================================================
 // The banner gets "Atualizar". The click opens a confirmation that already carries the result of a --check; the
 // Mac then runs the connection.update the person declared. Synthetic data only: no real path, host, token or request_uri.
-const cuBackup = '/home/ubuntu/.ahrena-console/backups/update-20261112T101500Z-81251bd'
+const cuBackup = '/home/usuario-exemplo/.ahrena-console/backups/update-20261112T101500Z-81251bd'
 const cuBand = (mode = 'ready') => oaBand('waiting', 'arrow-up-circle', `O núcleo da Workstation está na ${CV.outdated.core} e o app, na ${CV_APP}.`,
   mode === 'ready'
-    ? `O Console de lá roda um código mais antigo que o deste Mac, e as correções das versões novas não chegam até ele. O botão atualiza para a ${CV_APP}: faz o backup do banco, troca o código e sobe o núcleo de novo, e volta ao código de antes se ele não responder.`
+    ? `O Console de lá roda um código mais antigo que o deste Mac, e as correções das versões novas não chegam até ele. O botão atualiza para a ${CV_APP}: faz o backup do banco, troca o código e sobe o núcleo de novo, e tenta voltar ao código de antes se ele não responder.`
     : mode === 'busy'
       ? `A atualização para a ${CV_APP} está em andamento. A Workstation fica sem conexão por cerca de um minuto; isso é esperado e não gera alerta.`
-      : `O Console de lá roda um código mais antigo que o deste Mac. Para atualizar com um clique, falta o <span class="mono">connection.update</span> no machines.json: o bloco pronto está logo abaixo.`,
+      : mode === 'invalid'
+        ? `O Console de lá roda um código mais antigo que o deste Mac. O <span class="mono">connection.update</span> do machines.json está inválido, e o botão fica desligado até ele ser corrigido.`
+        : `O Console de lá roda um código mais antigo que o deste Mac. Para atualizar com um clique, falta o <span class="mono">connection.update</span> no machines.json: o bloco pronto está logo abaixo.`,
   `lido do núcleo de lá às 09:14, sem a prova do dono · commit ${CV.outdated.commit}`,
   mode === 'ready' ? bt('Atualizar', { v: 'filled', icon: 'arrow-up-circle' })
     : mode === 'busy' ? bt('Atualizando…', { v: 'filled', icon: 'loader-2', state: 'busy' })
@@ -5709,7 +5711,7 @@ const cuDlgChecking = () => `<div class="cartao cu-dialog"><h5>${ic('search-chec
   <div class="cu-acts">${bt('Cancelar', { icon: 'x' })}</div></div>`
 const cuDlgReady = () => `<div class="cartao cu-dialog"><h5>${ic('arrow-up-circle')}Atualizar o núcleo da Workstation para a ${CV_APP}?</h5>
   <p>A conferência passou: a Workstation continuará conectada a este Mac. Ao confirmar:</p>
-  <ul class="oa-causes"><li>faz o backup do banco de lá, antes de parar qualquer coisa;</li><li>para o núcleo e troca o código, e sobe de novo: a Workstation fica sem conexão por cerca de um minuto;</li><li>se o núcleo novo não responder, volta ao código e ao banco de antes.</li></ul>
+  <ul class="oa-causes"><li>faz o backup do banco de lá, antes de parar qualquer coisa;</li><li>para o núcleo e troca o código, e sobe de novo: a Workstation fica sem conexão por cerca de um minuto;</li><li>se o núcleo novo não responder, volta ao código de antes (e ao banco do backup, se ele chegou a subir).</li></ul>
   <p class="c-muted">Depois que a troca começa, não dá para cancelar. Nada acontece neste Mac.</p>
   <div class="cu-acts">${bt('Voltar', { icon: 'arrow-left' })}${bt('Atualizar agora', { v: 'filled', icon: 'arrow-up-circle' })}</div></div>`
 const cuDlgRefused = () => `<div class="cartao cu-dialog"><h5 class="c-waiting">${ic('shield-alert')}A Workstation não pode ser atualizada agora</h5>
@@ -5720,12 +5722,12 @@ const cuDialogHtml = () => `<div class="fila">${[['Conferindo (--check)', cuDlgC
 // 462-3 · progress.
 const cuProgressScreen = w => `${oaHead('ok')}${cuBand('busy')}
   <div class="cartao cu-result"><h5>${ic('loader-2')}Atualizando a Workstation para a ${CV_APP}<span class="cu-code">fase 3 de 5 · há 0:42</span></h5>${cuSteps('swap')}
-    <span class="c-muted" style="font-size:11.5px">A troca já começou: Cancelar fica desligado até o fim, e o script de lá termina sozinho, com sucesso ou voltando ao código de antes. A queda de conexão agora é esperada e não gera alerta.</span>
+    <span class="c-muted" style="font-size:11.5px">Depois da conferência Cancelar fica desligado, e o script de lá termina sozinho, com sucesso ou voltando ao código de antes. A queda de conexão agora é esperada e não gera alerta.</span>
     <div class="cu-acts">${bt('Cancelar', { icon: 'x', state: 'disabled', why: 'Não dá para cancelar a troca' })}</div></div>${cvBody(w, 'outdated')}`
-const cuEarlyCancel = () => `<div class="cartao cu-result"><h5>${ic('loader-2')}Atualizando a Workstation para a ${CV_APP}<span class="cu-code">fase 2 de 5 · há 0:09</span></h5>${cuSteps('backup')}
-  <span class="c-muted" style="font-size:11.5px">Até o fim do backup dá para cancelar: nada foi parado nem trocado.</span><div class="cu-acts">${bt('Cancelar', { icon: 'x' })}</div></div>`
+const cuEarlyCancel = () => `<div class="cartao cu-result"><h5>${ic('loader-2')}Atualizando a Workstation para a ${CV_APP}<span class="cu-code">fase 1 de 5 · há 0:03</span></h5>${cuSteps('check')}
+  <span class="c-muted" style="font-size:11.5px">Só a conferência pode ser cancelada: ela não muda nada.</span><div class="cu-acts">${bt('Cancelar', { icon: 'x' })}</div></div>`
 const cuProgressHtml = () => `<div class="fila">${[1100, 1440].map(w => widthCol(w, `${w} px`, cvFrame(w, 'ok', cuProgressScreen(w)))).join('')}</div>
-  <div class="fila" style="margin-top:14px">${widthCol(1100, 'Antes da troca (1100 px, só o card)', `<div style="max-width:560px">${cuEarlyCancel()}</div>`)}</div>`
+  <div class="fila" style="margin-top:14px">${widthCol(1100, 'Na conferência (1100 px, só o card)', `<div style="max-width:560px">${cuEarlyCancel()}</div>`)}</div>`
 
 // 462-4 · refusals: nothing was stopped (20 to 23 the guard, 30 to 32 the preflight, 33 the lock).
 const cuRes = (tone, icon, title, code, text, extra = '') => `<div class="cartao cu-result cu-${tone}"><h5>${ic(icon)}${title}<span class="cu-code">saída ${code}</span></h5><p>${text}</p>${extra}</div>`
@@ -5736,10 +5738,11 @@ const cuRefusalCells = () => [
   cuRes('warn', 'file-question', 'A versão não traz o contrato', 22, `A versão ${CV_APP} não traz o manifesto do contrato, então não dá para saber se a Workstation continuaria conectada.${cuNothing} Para seguir mesmo assim, rode o comando no terminal da Workstation com <span class="mono">--allow-disconnect</span>: este botão nunca o usa.`, bt('Mostrar o comando', { size: 'sm', icon: 'terminal' })),
   cuRes('bad', 'bug', 'O Console não sabe o que este Mac suporta', 23, `Este Mac não conseguiu informar à Workstation o que suporta.${cuNothing} É um defeito do app: avise o time.`),
   cuRes('warn', 'git-branch', 'O repositório de lá tem mudanças', '30 · dirty-tree', `O repositório da Workstation tem mudanças locais não commitadas.${cuNothing} Guarde ou descarte as mudanças lá e tente de novo.`),
+  cuRes('bad', 'folder-x', 'O repositório não é acessível', '30 · not-a-checkout', `O caminho do repositório na Workstation não é um checkout acessível.${cuNothing} Confira o <span class="mono">--checkout</span> do connection.update.`),
   cuRes('warn', 'tag', 'A versão não existe lá', '30 · unknown-ref', `A versão ${CV_APP} não existe no repositório da Workstation.${cuNothing} Confira se a release foi publicada e tente de novo.`),
   cuRes('warn', 'package-plus', 'Dependências novas', '30 · new-dependencies', `A versão traz dependências novas, que o script não instala.${cuNothing} Atualize pelo terminal, seguindo o runbook.`),
   cuRes('bad', 'database', 'O backup não foi feito', 31, `Não foi possível fazer o backup do banco da Workstation.${cuNothing} O núcleo segue no ar; confira o espaço em disco lá e tente de novo.`),
-  cuRes('bad', 'scan-search', 'O processo não confere', 32, `O Console não confirmou que o processo na porta 4720 é o núcleo deste repositório, ou ele não parou.${cuNothing} Nada foi trocado.`),
+  cuRes('bad', 'scan-search', 'O processo não confere', 32, `O Console não confirmou que o processo na porta 4720 é o núcleo deste repositório, ou não leu as opções dele.${cuNothing}`),
   cuRes('warn', 'lock', 'Já há uma atualização em andamento', 33, `Outra atualização está rodando nesta Workstation (outro Mac ou outro terminal).${cuNothing} Espere terminar e tente de novo.`),
 ]
 const cuRefusalHtml = () => `<div class="fila">${[1100, 1440].map(w => widthCol(w, `${w} px`, `<div class="cv-grid" style="grid-template-columns:repeat(${w >= 1440 ? 3 : 2},minmax(0,1fr));width:${w - 220}px">${cuRefusalCells().join('')}</div>`)).join('')}</div>`
@@ -5747,12 +5750,12 @@ const cuRefusalHtml = () => `<div class="fila">${[1100, 1440].map(w => widthCol(
 // 462-5 · after the stop: success, failed and rolled back, rollback failed, lost contact, SSH failure.
 const cuAfterCells = () => [
   cuRes('ok', 'check-circle-2', `Atualizado para a ${CV_APP}`, 0, `O núcleo da Workstation foi atualizado e respondeu. A conexão voltou; a faixa de defasado sai sozinha, e a próxima leitura pede uma credencial nova.`, `${cuSteps('verify').replace(/cu-now/g, 'cu-done').replace(/loader-2/g, 'check-circle-2')}<div class="cu-acts">${bt('Fechar', { v: 'filled' })}</div>`),
-  cuRes('bad', 'undo-2', 'Falhou e voltou ao código de antes', 40, `A atualização falhou e a Workstation voltou ao código de antes (<span class="mono">${CV.outdated.commit}</span>), com o banco restaurado do backup. O núcleo de lá está no ar como estava.`, `${cuSteps('start', { failedAt: 'start' })}<div class="cu-acts">${bt('Fechar')}${bt('Tentar de novo', { v: 'filled', icon: 'refresh-cw' })}</div>`),
+  cuRes('bad', 'undo-2', 'Falhou e voltou ao código de antes', 40, `A atualização falhou e a Workstation voltou ao código de antes (<span class="mono">${CV.outdated.commit}</span>), com o banco restaurado do backup, se o núcleo novo chegou a subir. O núcleo de lá está no ar como estava.`, `${cuSteps('start', { failedAt: 'start' })}<div class="cu-acts">${bt('Fechar')}${bt('Tentar de novo', { v: 'filled', icon: 'refresh-cw' })}</div>`),
   cuRes('bad', 'octagon-alert', 'Falhou e a volta também falhou', 41, `A atualização falhou e a volta também. <b>A Workstation pode estar sem núcleo.</b> O backup está em <span class="mono">${cuBackup}</span> e o commit anterior era <span class="mono">${CV.outdated.commit}</span>. Restaure pelo terminal da Workstation, seguindo o runbook.`, `<div class="cu-path">${cuBackup}</div><div class="cu-acts">${bt('Copiar o caminho do backup', { icon: 'copy' })}${bt('Abrir o runbook', { v: 'filled', icon: 'book-open' })}</div>`),
   cuRes('warn', 'wifi-off', 'Perdi o contato no meio da troca', 'timeout', `O SSH parou de responder depois de a troca começar. O script continua lá até o fim e volta sozinho se algo falhar. Confira a versão daqui a pouco: esta tela relê a Workstation a cada 30 s.`, `<div class="cu-acts">${bt('Reconectar', { icon: 'refresh-cw' })}</div>`),
   cuRes('warn', 'timer-off', 'A Workstation não respondeu a tempo', 'timeout', `A Workstation não respondeu em 300 s. Cancelei antes de trocar qualquer coisa.${cuNothing}`, `<div class="cu-acts">${bt('Tentar de novo', { v: 'filled', icon: 'refresh-cw' })}</div>`),
   cuRes('bad', 'plug-zap', 'Não consegui falar com a Workstation', 255, `O SSH não chegou à Workstation.${cuNothing} Confira o túnel (Reconectar) e tente de novo.`, `<div class="cu-acts">${bt('Reconectar', { icon: 'refresh-cw' })}</div>`),
-  cuRes('warn', 'x-circle', 'Cancelado', 130, `Cancelado antes da troca. <b>Nada foi alterado.</b>`),
+  cuRes('warn', 'x-circle', 'Cancelado', 'cancelado', `Cancelado na conferência. <b>Nada foi alterado.</b>`),
   cuRes('bad', 'circle-help', 'O comando saiu com outro código', 127, `O comando saiu com o código 127: o <span class="mono">connection.update</span> não achou o <span class="mono">node</span> ou o checkout lá. Confira os caminhos no machines.json.`),
 ]
 const cuAfterHtml = () => `<div class="fila">${[1100, 1440].map(w => widthCol(w, `${w} px`, `<div class="cv-grid" style="grid-template-columns:repeat(${w >= 1440 ? 3 : 2},minmax(0,1fr));width:${w - 220}px">${cuAfterCells().join('')}</div>`)).join('')}</div>`
