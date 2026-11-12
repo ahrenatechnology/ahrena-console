@@ -164,7 +164,7 @@ Sem SSH, sem a Workstation, sem a suíte inteira (só o arquivo tocado, `--test-
    - Lido também com a máquina em `owner-auth-required` (a leitura é anônima).
    - Versões iguais com commit mais antigo, só quando o Mac tem checkout → `outdated`; sem checkout, `current`.
    - **`FIRST_UPDATER_VERSION` e `connection.checkout` (camada 2):** o comando de atualização só aparece para um app com versão `>= FIRST_UPDATER_VERSION`; abaixo dela a tela traz as instruções de bootstrap. `checkout` absoluto válido chega em `core.mac.checkout`; relativo, com `..`, `~`, NUL ou longo demais é descartado com uma linha de log, sem derrubar o resto da máquina, e `null` aparece na resposta.
-   - Texto cru da remota (versão longa, HTML) nunca chega ao JSON. Texto da tela em pt-BR, com o comando e as flags corretas, na camada 3.
+   - Texto cru da remota (versão longa, HTML) nunca chega ao JSON. Texto da tela em pt-BR, com o comando e as flags corretas, na camada 4.
 2. **AC2 · caminho documentado e repetível: backup, troca, sobe, confere.**
    - Repetível: rodar duas vezes o mesmo `--ref` na segunda é no-op (`0`, nada parado).
    - Atualiza o checkout temporário velho→novo com o núcleo falso: backup do `nucleo.sqlite` em `backups/update-*` (idêntico ao original), HEAD no alvo, núcleo com o mesmo argv, `/api/overview` confere.
@@ -173,7 +173,7 @@ Sem SSH, sem a Workstation, sem a suíte inteira (só o arquivo tocado, `--test-
 3. **AC3 · supervisor, volta sozinho depois de reboot.**
    - `install-unit` gera exatamente a unidade do §3, com caminhos absolutos; chama `daemon-reload`, `enable --now` e confere o `overview`; órfão é parado antes; `Linger=no` imprime o `loginctl enable-linger` e não chama `sudo`.
    - Com a unidade ativa, a atualização usa `systemctl --user stop/start`, não `kill`.
-   - **O reboot não se testa aqui:** a prova é do Fernando na Workstation (reiniciar e ver o núcleo voltar), registrada no PR da camada 2.
+   - **O reboot não se testa aqui:** a prova é do Fernando na Workstation (reiniciar e ver o núcleo voltar), registrada no PR da camada 3.
 4. **AC4 · recusa antes de parar o processo que funciona.**
    - **Pid forjado:** um servidor falso responde o `/api/overview` com o pid de outro processo do mesmo usuário, e outro com um pid de outro uid (ou `cmdline` sem `cli.ts`/`--port`) → `32`, nenhum sinal enviado a ninguém. Sem `/proc` e sem `--core-options` → `32` antes de parar; com `--core-options` o fluxo segue.
    - O núcleo falso é o processo de verdade e o teste checa que o pid **não** mudou e nenhum `SIGTERM` chegou, em cada recusa.
