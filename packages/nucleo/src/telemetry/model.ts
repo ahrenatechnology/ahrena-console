@@ -5,6 +5,8 @@
 // the group (or the field), never a route error. Keys are in English (the repository rule for new
 // code); the text the screen shows (the alert messages) is in pt-BR.
 
+import type { MachineCore } from './core-version.ts';
+
 /** Changes when the shape of the reading changes in a way readers need to know about (#176 compares it). */
 export const TELEMETRY_VERSION = 1;
 
@@ -361,7 +363,6 @@ export interface ReconnectStatus {
   logFile: string | null;
 }
 
-import type { MachineCore } from './core-version.ts';
 export type { MachineCore } from './core-version.ts';
 
 export interface MachineSummary {

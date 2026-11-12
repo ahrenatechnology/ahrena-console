@@ -132,7 +132,8 @@ export const MAX_CHECKOUT_LENGTH = 512;
 /**
  * A machine's `connection.checkout`, or why it is refused (never the value, which may be a secret that landed
  * in the wrong field). Absolute, at most 512 characters, no `..` segment, no `~`, NUL, control character,
- * backslash, `$` or backtick: it ends up in a shell command the person pastes, so it cannot carry expansion. Pure.
+ * backslash, `$` or backtick. It is the owner's own file, and the path ends up in a command the person pastes
+ * (issue 449): consumers must single-quote it. Pure.
  */
 export function parseCheckout(v: unknown): string | { refused: string } {
   if (typeof v !== 'string' || !v) return { refused: 'a non-empty text' };
