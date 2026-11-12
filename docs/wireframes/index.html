@@ -756,6 +756,26 @@ body.captura[data-width="1100"] .width-col[data-w="1440"], body.captura[data-wid
 .cv-sub { margin: 2px 0 0; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
 .cv-steps { display: flex; flex-direction: column; gap: 14px; }
 .cv-copy { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+/* ---------- remote core update button (462-1 to 462-6, issue 462) ---------- */
+.cu-dialog { max-width: 560px; padding: 16px 18px; display: flex; flex-direction: column; gap: 10px; border-color: color-mix(in srgb, var(--accent) 40%, var(--border)); box-shadow: 0 10px 30px color-mix(in srgb, #000 22%, transparent); }
+.cu-dialog h5 { margin: 0; font-size: 14px; display: flex; align-items: center; gap: 8px; }
+.cu-dialog p { margin: 0; font-size: 12.5px; line-height: 1.55; }
+.cu-scrim { padding: 14px; border-radius: 12px; background: color-mix(in srgb, var(--bg) 55%, transparent); border: 1px dashed var(--border); display: flex; flex-direction: column; gap: 8px; }
+.cu-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.cu-steps li { display: flex; align-items: center; gap: 8px; font-size: 12.5px; }
+.cu-steps li svg { width: 15px; height: 15px; flex: none; }
+.cu-steps .cu-done { color: var(--status-completed-text); }
+.cu-steps .cu-now { color: var(--accent-text); font-weight: 600; }
+.cu-steps .cu-next { color: var(--muted); }
+.cu-steps .cu-fail { color: var(--status-error-text); font-weight: 600; }
+.cu-steps .cu-skip { color: var(--muted); text-decoration: line-through; }
+.cu-acts { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; align-items: center; }
+.cu-result { padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.cu-result h5 { margin: 0; font-size: 13px; display: flex; align-items: center; gap: 8px; }
+.cu-result p { margin: 0; font-size: 12.5px; line-height: 1.5; }
+.cu-code { margin-left: auto; font-family: var(--font-mono); font-size: 11px; color: var(--muted); font-weight: 400; }
+.cu-ok h5 { color: var(--status-completed-text); } .cu-warn h5 { color: var(--status-waiting-text); } .cu-bad h5 { color: var(--status-error-text); }
+.cu-path { font-family: var(--font-mono); font-size: 11.5px; padding: 6px 8px; border-radius: 7px; background: var(--bg); border: 1px solid var(--border); word-break: break-all; }
 /* ---------- session message (C51 to C53, issue #61) ---------- */
 .sm-compose { padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; border-color: color-mix(in srgb, var(--accent) 40%, var(--border)); }
 .sm-compose.sm-off { border-color: var(--border); border-style: dashed; }
@@ -5091,6 +5111,25 @@ const TELAS = [
   { id: 'remote-core-sidebar', cod: '449-5', nome: 'Núcleo remoto · barra lateral e o botão Copiar', sub: 'Issue #449. A barra lateral marca só o defasado, com uma seta amarela ao lado do nome (title e aria-label “Núcleo defasado”); o ponto continua sendo o do túnel e da prova (388-4). O botão Copiar nos três estados: pronto, copiado e secundário. A faixa do painel da sessão (P14) não muda: não há versão nela. Sem largura própria.',
     html: () => cvSideHtml(),
     n: N(['Nada.'], ['A seta está aceita na decisão 0021 (camada 4), além da tela de Máquinas (critério 1). Sem ela, quem está em outra tela não sabe que a Workstation está atrás.', 'O ponto não muda de cor: o defasado funciona, e o amarelo do ponto é “sem acesso” (388-4). Misturar os dois diria que a Workstation está bloqueada.', 'Nenhum alerta em “O que pede atenção” e nada no P14 para o defasado: não há o que a pessoa resolva dali, e o painel da sessão trata de sessões. Fica aberto se o Fernando quer a linha no alerta.', 'A recusa da trava (códigos 20, 21, 22 e 23) aparece no terminal da Workstation, não nesta tela; a decisão 0021 não põe nada dela na tela além do aviso do 449-3. Por isso não há wireframe para elas.']) },
+  // ---------- remote core update button (issue 462, decision 0022) ----------
+  { id: 'remote-core-update-button', cod: '462-1', nome: 'Atualizar o núcleo remoto · o botão na faixa', sub: 'Issue #462, decisão 0022 (proposta). A faixa de defasado ganha o botão Atualizar; o card com o comando para copiar (0021) continua logo abaixo, recolhido, para quem prefere o terminal. Em 1100 e 1440.',
+    html: () => cuBannerHtml(),
+    n: N(['Nada: o CCAM não tem máquina remota.'], ['Substitui o 449-2, em que a faixa só avisava e a pessoa colava um comando de quatro linhas. O botão só existe quando o machines.json tem <span class="mono">connection.update</span> válido (462-6); sem ele a faixa muda para “Ativar o botão Atualizar”.', 'O botão não atualiza no clique: abre a confirmação (462-2), que já traz o resultado de um <span class="mono">--check</span>. Nunca passa <span class="mono">--allow-disconnect</span>.', 'A faixa e o botão saem sozinhos quando o núcleo de lá chega à versão do app (leitura de 30 s, ou na hora depois de uma atualização que saiu 0).']) },
+  { id: 'remote-core-update-dialog', cod: '462-2', nome: 'Atualizar o núcleo remoto · a confirmação', sub: 'Issue #462, critérios 1 e 4. O diálogo abre rodando o <span class="mono">--check</span> (só preflight e trava, nada é tocado) e então mostra o resultado: pronto para confirmar, com o que vai acontecer e que depois da troca não dá para cancelar, ou a recusa, sem botão de confirmar. Sem largura própria.',
+    html: () => cuDialogHtml(),
+    n: N(['Nada.'], ['O <span class="mono">--check</span> vem antes de qualquer parada e, se recusa, o diálogo só dá o motivo (o mesmo texto do 462-4). O script repete a trava ao atualizar; a confirmação não substitui isso.', 'A confirmação diz o custo: cerca de um minuto sem conexão e o backup antes. É o risco que a 0021 usava para rejeitar o clique (“parar um processo que funciona”).', 'O servidor só aceita atualizar com um <span class="mono">--check</span> bom nos últimos 5 minutos para aquela máquina.']) },
+  { id: 'remote-core-update-progress', cod: '462-3', nome: 'Atualizar o núcleo remoto · o andamento', sub: 'Issue #462, critério 2. Os cinco passos (conferindo, backup, trocando, subindo, conferindo), com a fase atual, o tempo, a faixa em “atualizando” e o Cancelar desligado depois que a troca começa. Embaixo, o card na fase do backup, em que ainda dá para cancelar. Em 1100 e 1440.',
+    html: () => cuProgressHtml(),
+    n: N(['Nada.'], ['O andamento vem do stdout do SSH, em linhas de JSON do script (<span class="mono">--progress json</span>); o núcleo do Mac não consulta nada na máquina. O ponto da barra lateral vira “Atualizando” e a queda de conexão da troca não gera alerta.', 'Cancelar vale até o fim do backup. Depois, o script ignora os sinais e termina sozinho, com sucesso ou voltando ao código de antes: matar a conexão no meio da troca deixaria a máquina sem núcleo.', '“Reconectar” e “Parar o túnel” ficam desligados enquanto a atualização roda.']) },
+  { id: 'remote-core-update-refused', cod: '462-4', nome: 'Atualizar o núcleo remoto · recusas, nada foi parado', sub: 'Issue #462, critério 2. Cada saída em que o script recusa antes de parar o núcleo: a trava (20 a 23), o preflight (30, em três motivos, 31 e 32) e a atualização já em andamento (33, código novo). Todas dizem “Nada foi parado”. Em 1100 e 1440.',
+    html: () => cuRefusalHtml(),
+    n: N(['Nada.'], ['O texto é pt-BR, uma frase do que houve e uma do que fazer; o código só aparece pequeno, para quem for procurar. Os motivos do 30 e do 32 vêm do campo <span class="mono">reason</span> de uma lista fechada, não de texto livre da máquina.', 'Para o 22 a saída é o terminal com <span class="mono">--allow-disconnect</span> (o card de copiar da 0021): o botão não o usa nunca.', 'O 33 é o código novo da trava de execução simultânea, que vive na máquina remota e vale para dois Macs.']) },
+  { id: 'remote-core-update-after', cod: '462-5', nome: 'Atualizar o núcleo remoto · depois da troca', sub: 'Issue #462, critérios 2 e 6. O sucesso (a faixa sai sozinha), falhou e voltou (40), falhou e a volta também (41, com o caminho do backup e o commit anterior), o contato perdido no meio da troca, o tempo esgotado antes da troca, a falha do SSH, o cancelado e o código desconhecido. Em 1100 e 1440.',
+    html: () => cuAfterHtml(),
+    n: N(['Nada.'], ['O 41 não esconde nada: diz que a Workstation pode estar sem núcleo, mostra o caminho do backup (copiável) e o commit anterior, e aponta o runbook. O rollback real ainda não foi exercitado fora de teste, e a decisão 0022 diz isso.', 'Sucesso: o núcleo do Mac descarta a credencial, relê a Workstation na hora e a próxima leitura pede uma credencial nova pelo <span class="mono">connection.credential</span>; a faixa some sozinha.', 'Contato perdido depois da troca não mata o SSH: o script termina sozinho e a tela espera a versão chegar.']) },
+  { id: 'remote-core-update-setup', cod: '462-6', nome: 'Atualizar o núcleo remoto · falta configurar', sub: 'Issue #462, critério 3. Sem <span class="mono">connection.update</span>: a faixa vira “Ativar o botão Atualizar” e traz o bloco pronto (o prefixo SSH é o do <span class="mono">connection.credential</span>) para colar uma vez. Sem credencial também: o passo da credencial vem antes. Inválido: diz o motivo. Nos três, o card de copiar do 449 fica aberto como saída. Em 1100 e 1440.',
+    html: () => cuSetupHtml(),
+    n: N(['Nada.'], ['O núcleo nunca monta o SSH: quem grava o bloco no arquivo é a pessoa, uma vez. A tela só o monta a partir do que já está no arquivo e mostra o que falta; nenhum botão morto.', 'O botão “Atualizar” aparece sozinho em até 30 s depois de salvar (o machines.json é relido a cada volta, 0012 §2).', 'Um <span class="mono">update</span> com <span class="mono">--allow-disconnect</span>, <span class="mono">--force</span> ou <span class="mono">--core-options</span> no comando é recusado como inválido.']) },
   { id: 'console-update-banner', cod: 'C77', nome: 'Aviso de versão nova no topo da /ui', sub: 'Feature Aviso de versão nova (#330). Atualização disponível: versão 0.0.10, com a linha do que mudou quando o latest.json tem notas, Atualizar e Depois. Fica no topo de todas as telas, acima do cabeçalho, e não alarga a página. Em 1100 e 1440.', html: () => updateBannerScreens(),
     n: N(['Nada: o CCAM não tem updater.'], ['Hoje (#90) a versão nova só aparece no menu da bandeja; a #330 a traz para a janela.', 'Cor da marca, não o amarelo de "precisa de você".']) },
   { id: 'console-update-banner-states', cod: 'C78', nome: 'Os estados do aviso', sub: 'Baixando (a barra, sem Atualizar), instalando e reiniciando, erro ao baixar (Tentar de novo), atualizado, sem notas, e depois de Depois: o card some até a próxima versão ou por 24 h (a aprovar). Em 1100, o topo da tela.', html: () => updateBannerStates(),
@@ -5628,6 +5667,117 @@ const cvCopyStates = () => `<div class="cartao oa-dots"><div class="olhinho">O b
 const cvSideHtml = () => `<div class="tm-rc"><div class="width-col"><div class="rotulo">Barra lateral e Copiar</div><div class="fila" style="align-items:flex-start">${cvDots()}${cvCopyStates()}</div></div></div>`
 
 // =====================================================================
+// Remote core update button (issue 462, decision 0022): 462-1 to 462-6
+// =====================================================================
+// The banner gets "Atualizar". The click opens a confirmation that already carries the result of a --check; the
+// Mac then runs the connection.update the person declared. Synthetic data only: no real path, host, token or request_uri.
+const cuBackup = '/home/ubuntu/.ahrena-console/backups/update-20261112T101500Z-81251bd'
+const cuBand = (mode = 'ready') => oaBand('waiting', 'arrow-up-circle', `O núcleo da Workstation está na ${CV.outdated.core} e o app, na ${CV_APP}.`,
+  mode === 'ready'
+    ? `O Console de lá roda um código mais antigo que o deste Mac, e as correções das versões novas não chegam até ele. O botão atualiza para a ${CV_APP}: faz o backup do banco, troca o código e sobe o núcleo de novo, e volta ao código de antes se ele não responder.`
+    : mode === 'busy'
+      ? `A atualização para a ${CV_APP} está em andamento. A Workstation fica sem conexão por cerca de um minuto; isso é esperado e não gera alerta.`
+      : `O Console de lá roda um código mais antigo que o deste Mac. Para atualizar com um clique, falta o <span class="mono">connection.update</span> no machines.json: o bloco pronto está logo abaixo.`,
+  `lido do núcleo de lá às 09:14, sem a prova do dono · commit ${CV.outdated.commit}`,
+  mode === 'ready' ? bt('Atualizar', { v: 'filled', icon: 'arrow-up-circle' })
+    : mode === 'busy' ? bt('Atualizando…', { v: 'filled', icon: 'loader-2', state: 'busy' })
+      : bt('Copiar o bloco', { v: 'filled', icon: 'copy' }))
+// The fallback of decision 0021, kept: collapsed under the band when the button exists, open when it does not.
+const cuCopyFallback = open => open
+  ? cvUpdateCard('yes')
+  : `<div class="cartao tm-rc-setup" style="padding:10px 14px"><h5 style="margin:0">${ic('terminal')}Prefere rodar à mão?<span class="c-muted" style="margin-left:auto;font-weight:400;font-size:11.5px">decisão 0021</span></h5><span class="c-muted" style="font-size:12.5px">O comando para colar no terminal da Workstation continua disponível. ${bt('Mostrar o comando', { size: 'sm', icon: 'chevron-down' })}</span></div>`
+const cuBodyScreen = (w, band, extra = '', fallbackOpen = false) => `${oaHead('ok')}${band}${extra}${cuCopyFallback(fallbackOpen)}${cvBody(w, 'outdated')}`
+const cuSteps = (now, o = {}) => {
+  const names = [['check', 'Conferindo', 'search-check'], ['backup', 'Fazendo backup do banco', 'database'], ['swap', 'Trocando o código', 'repeat'], ['start', 'Subindo o núcleo', 'power'], ['verify', 'Conferindo que respondeu', 'search-check']]
+  const at = names.findIndex(n => n[0] === now)
+  const rows = names.map(([k, t, icon], i) => {
+    const cls = o.failedAt === k ? 'cu-fail' : i < at ? 'cu-done' : i === at ? (o.stuck ? 'cu-fail' : 'cu-now') : 'cu-next'
+    const mark = o.failedAt === k ? 'x-circle' : i < at ? 'check-circle-2' : i === at ? 'loader-2' : 'circle'
+    return `<li class="${cls}">${ic(mark)}<span>${t}</span></li>`
+  })
+  if (o.rollback) rows.push(`<li class="cu-now">${ic('undo-2')}<span>Voltando ao código anterior</span></li>`)
+  return `<ol class="cu-steps">${rows.join('')}</ol>`
+}
+
+// 462-1 · the banner with the button, and the same banner while it runs.
+const cuBannerScreen = w => `${cuBodyScreen(w, cuBand('ready'))}`
+const cuBannerHtml = () => `<div class="fila">${[1100, 1440].map(w => widthCol(w, `${w} px`, cvFrame(w, 'ok', cuBannerScreen(w)))).join('')}</div>`
+
+// 462-2 · the confirmation: first the --check, then the go / no-go.
+const cuDlgChecking = () => `<div class="cartao cu-dialog"><h5>${ic('search-check')}Atualizar o núcleo da Workstation</h5>
+  <p>Conferindo, sem mudar nada, se a Workstation continuaria conectada a este Mac depois de ir para a ${CV_APP}…</p>${cuSteps('check')}
+  <div class="cu-acts">${bt('Cancelar', { icon: 'x' })}</div></div>`
+const cuDlgReady = () => `<div class="cartao cu-dialog"><h5>${ic('arrow-up-circle')}Atualizar o núcleo da Workstation para a ${CV_APP}?</h5>
+  <p>A conferência passou: a Workstation continuará conectada a este Mac. Ao confirmar:</p>
+  <ul class="oa-causes"><li>faz o backup do banco de lá, antes de parar qualquer coisa;</li><li>para o núcleo e troca o código, e sobe de novo: a Workstation fica sem conexão por cerca de um minuto;</li><li>se o núcleo novo não responder, volta ao código e ao banco de antes.</li></ul>
+  <p class="c-muted">Depois que a troca começa, não dá para cancelar. Nada acontece neste Mac.</p>
+  <div class="cu-acts">${bt('Voltar', { icon: 'arrow-left' })}${bt('Atualizar agora', { v: 'filled', icon: 'arrow-up-circle' })}</div></div>`
+const cuDlgRefused = () => `<div class="cartao cu-dialog"><h5 class="c-waiting">${ic('shield-alert')}A Workstation não pode ser atualizada agora</h5>
+  <p>A versão nova só responde a quem prova ser o dono, e este Mac ainda não tem o comando de credencial. <b>Nada foi parado.</b> Configure o <span class="mono">connection.credential</span> no machines.json e tente de novo.</p>
+  <div class="cu-acts">${bt('Entendi', { v: 'filled' })}</div></div>`
+const cuDialogHtml = () => `<div class="fila">${[['Conferindo (--check)', cuDlgChecking()], ['Pronto para confirmar', cuDlgReady()], ['Recusado pela conferência', cuDlgRefused()]].map(([t, d]) => `<div class="width-col" style="min-width:0"><div class="rotulo">${t}</div><div class="cu-scrim">${d}</div></div>`).join('')}</div>`
+
+// 462-3 · progress.
+const cuProgressScreen = w => `${oaHead('ok')}${cuBand('busy')}
+  <div class="cartao cu-result"><h5>${ic('loader-2')}Atualizando a Workstation para a ${CV_APP}<span class="cu-code">fase 3 de 5 · há 0:42</span></h5>${cuSteps('swap')}
+    <span class="c-muted" style="font-size:11.5px">A troca já começou: Cancelar fica desligado até o fim, e o script de lá termina sozinho, com sucesso ou voltando ao código de antes. A queda de conexão agora é esperada e não gera alerta.</span>
+    <div class="cu-acts">${bt('Cancelar', { icon: 'x', state: 'disabled', why: 'Não dá para cancelar a troca' })}</div></div>${cvBody(w, 'outdated')}`
+const cuEarlyCancel = () => `<div class="cartao cu-result"><h5>${ic('loader-2')}Atualizando a Workstation para a ${CV_APP}<span class="cu-code">fase 2 de 5 · há 0:09</span></h5>${cuSteps('backup')}
+  <span class="c-muted" style="font-size:11.5px">Até o fim do backup dá para cancelar: nada foi parado nem trocado.</span><div class="cu-acts">${bt('Cancelar', { icon: 'x' })}</div></div>`
+const cuProgressHtml = () => `<div class="fila">${[1100, 1440].map(w => widthCol(w, `${w} px`, cvFrame(w, 'ok', cuProgressScreen(w)))).join('')}</div>
+  <div class="fila" style="margin-top:14px">${widthCol(1100, 'Antes da troca (1100 px, só o card)', `<div style="max-width:560px">${cuEarlyCancel()}</div>`)}</div>`
+
+// 462-4 · refusals: nothing was stopped (20 to 23 the guard, 30 to 32 the preflight, 33 the lock).
+const cuRes = (tone, icon, title, code, text, extra = '') => `<div class="cartao cu-result cu-${tone}"><h5>${ic(icon)}${title}<span class="cu-code">saída ${code}</span></h5><p>${text}</p>${extra}</div>`
+const cuNothing = ' <b>Nada foi parado.</b>'
+const cuRefusalCells = () => [
+  cuRes('warn', 'shield-alert', 'Telemetria em versões diferentes', 20, `A Workstation e este app falam versões diferentes da telemetria.${cuNothing} Atualize o app deste Mac e tente de novo.`),
+  cuRes('warn', 'key-round', 'Falta o comando de credencial', 21, `A versão nova só responde a quem prova ser o dono, e este Mac ainda não tem o comando de credencial.${cuNothing} Configure o <span class="mono">connection.credential</span> e tente de novo.`, bt('Ver como configurar', { size: 'sm', icon: 'book-open' })),
+  cuRes('warn', 'file-question', 'A versão não traz o contrato', 22, `A versão ${CV_APP} não traz o manifesto do contrato, então não dá para saber se a Workstation continuaria conectada.${cuNothing} Para seguir mesmo assim, rode o comando no terminal da Workstation com <span class="mono">--allow-disconnect</span>: este botão nunca o usa.`, bt('Mostrar o comando', { size: 'sm', icon: 'terminal' })),
+  cuRes('bad', 'bug', 'O Console não sabe o que este Mac suporta', 23, `Este Mac não conseguiu informar à Workstation o que suporta.${cuNothing} É um defeito do app: avise o time.`),
+  cuRes('warn', 'git-branch', 'O repositório de lá tem mudanças', '30 · dirty-tree', `O repositório da Workstation tem mudanças locais não commitadas.${cuNothing} Guarde ou descarte as mudanças lá e tente de novo.`),
+  cuRes('warn', 'tag', 'A versão não existe lá', '30 · unknown-ref', `A versão ${CV_APP} não existe no repositório da Workstation.${cuNothing} Confira se a release foi publicada e tente de novo.`),
+  cuRes('warn', 'package-plus', 'Dependências novas', '30 · new-dependencies', `A versão traz dependências novas, que o script não instala.${cuNothing} Atualize pelo terminal, seguindo o runbook.`),
+  cuRes('bad', 'database', 'O backup não foi feito', 31, `Não foi possível fazer o backup do banco da Workstation.${cuNothing} O núcleo segue no ar; confira o espaço em disco lá e tente de novo.`),
+  cuRes('bad', 'scan-search', 'O processo não confere', 32, `O Console não confirmou que o processo na porta 4720 é o núcleo deste repositório, ou ele não parou.${cuNothing} Nada foi trocado.`),
+  cuRes('warn', 'lock', 'Já há uma atualização em andamento', 33, `Outra atualização está rodando nesta Workstation (outro Mac ou outro terminal).${cuNothing} Espere terminar e tente de novo.`),
+]
+const cuRefusalHtml = () => `<div class="fila">${[1100, 1440].map(w => widthCol(w, `${w} px`, `<div class="cv-grid" style="grid-template-columns:repeat(${w >= 1440 ? 3 : 2},minmax(0,1fr));width:${w - 220}px">${cuRefusalCells().join('')}</div>`)).join('')}</div>`
+
+// 462-5 · after the stop: success, failed and rolled back, rollback failed, lost contact, SSH failure.
+const cuAfterCells = () => [
+  cuRes('ok', 'check-circle-2', `Atualizado para a ${CV_APP}`, 0, `O núcleo da Workstation foi atualizado e respondeu. A conexão voltou; a faixa de defasado sai sozinha, e a próxima leitura pede uma credencial nova.`, `${cuSteps('verify').replace(/cu-now/g, 'cu-done').replace(/loader-2/g, 'check-circle-2')}<div class="cu-acts">${bt('Fechar', { v: 'filled' })}</div>`),
+  cuRes('bad', 'undo-2', 'Falhou e voltou ao código de antes', 40, `A atualização falhou e a Workstation voltou ao código de antes (<span class="mono">${CV.outdated.commit}</span>), com o banco restaurado do backup. O núcleo de lá está no ar como estava.`, `${cuSteps('start', { failedAt: 'start' })}<div class="cu-acts">${bt('Fechar')}${bt('Tentar de novo', { v: 'filled', icon: 'refresh-cw' })}</div>`),
+  cuRes('bad', 'octagon-alert', 'Falhou e a volta também falhou', 41, `A atualização falhou e a volta também. <b>A Workstation pode estar sem núcleo.</b> O backup está em <span class="mono">${cuBackup}</span> e o commit anterior era <span class="mono">${CV.outdated.commit}</span>. Restaure pelo terminal da Workstation, seguindo o runbook.`, `<div class="cu-path">${cuBackup}</div><div class="cu-acts">${bt('Copiar o caminho do backup', { icon: 'copy' })}${bt('Abrir o runbook', { v: 'filled', icon: 'book-open' })}</div>`),
+  cuRes('warn', 'wifi-off', 'Perdi o contato no meio da troca', 'timeout', `O SSH parou de responder depois de a troca começar. O script continua lá até o fim e volta sozinho se algo falhar. Confira a versão daqui a pouco: esta tela relê a Workstation a cada 30 s.`, `<div class="cu-acts">${bt('Reconectar', { icon: 'refresh-cw' })}</div>`),
+  cuRes('warn', 'timer-off', 'A Workstation não respondeu a tempo', 'timeout', `A Workstation não respondeu em 300 s. Cancelei antes de trocar qualquer coisa.${cuNothing}`, `<div class="cu-acts">${bt('Tentar de novo', { v: 'filled', icon: 'refresh-cw' })}</div>`),
+  cuRes('bad', 'plug-zap', 'Não consegui falar com a Workstation', 255, `O SSH não chegou à Workstation.${cuNothing} Confira o túnel (Reconectar) e tente de novo.`, `<div class="cu-acts">${bt('Reconectar', { icon: 'refresh-cw' })}</div>`),
+  cuRes('warn', 'x-circle', 'Cancelado', 130, `Cancelado antes da troca. <b>Nada foi alterado.</b>`),
+  cuRes('bad', 'circle-help', 'O comando saiu com outro código', 127, `O comando saiu com o código 127: o <span class="mono">connection.update</span> não achou o <span class="mono">node</span> ou o checkout lá. Confira os caminhos no machines.json.`),
+]
+const cuAfterHtml = () => `<div class="fila">${[1100, 1440].map(w => widthCol(w, `${w} px`, `<div class="cv-grid" style="grid-template-columns:repeat(${w >= 1440 ? 3 : 2},minmax(0,1fr));width:${w - 220}px">${cuAfterCells().join('')}</div>`)).join('')}</div>`
+
+// 462-6 · "falta configurar": no connection.update (the block comes ready), no credential either, and an invalid one.
+const cuBlock = `"update": {
+  "command": ["/usr/bin/ssh", "-T", "-o", "BatchMode=yes", "-o", "SessionType=default",
+    "-o", "ControlMaster=no", "-o", "ClearAllForwardings=yes", "ahrena-tunnel",
+    "&lt;node absoluto&gt;", "--disable-warning=ExperimentalWarning", "--input-type=module", "-",
+    "--checkout", "&lt;checkout&gt;", "--port", "4720"],
+  "timeoutSeconds": 300
+}`
+const cuSetupCard = (invalid = false) => `<div class="cartao tm-rc-setup"><h5>${ic('settings-2')}${invalid ? 'O connection.update está inválido' : 'Ativar o botão Atualizar'}<span class="c-muted" style="margin-left:auto;font-weight:400;font-size:11.5px">decisão 0022</span></h5>
+  <span class="c-muted" style="font-size:12.5px">${invalid
+    ? 'O machines.json tem um <span class="mono">connection.update</span>, mas <b>o comando contém --allow-disconnect</b> (o botão nunca o usa). O botão fica desligado até o arquivo ser corrigido. Este é o bloco pronto, igual ao seu <span class="mono">connection.credential</span>.'
+    : 'Cole este bloco dentro de <code>connection</code>, ao lado do <code>credential</code>, troque os dois caminhos pelos da Workstation e salve. É uma edição só: o botão aparece sozinho em até 30 s. O prefixo SSH é o do seu <span class="mono">connection.credential</span>.'}</span>
+  <div class="tm-config">${cuBlock}</div>
+  <div class="tm-rc-actions" style="justify-content:flex-start">${bt('Copiar o bloco', { v: 'filled', icon: 'copy' })}</div></div>`
+const cuSetupScreen = (w, kind) => {
+  if (kind === 'noCredential') return `${oaHead('ok')}${oaBand('waiting', 'key-round', 'Configure o comando de credencial antes de atualizar a Workstation.', `A versão ${CV_APP} só responde a quem prova ser o dono (decisão 0020), e este Mac ainda não tem <span class="mono">connection.credential</span>. Primeiro o passo 1 (449-3); o bloco do botão vem depois, porque o <span class="mono">--check</span> recusaria com a saída 21.`, 'lido do núcleo de lá, sem a prova do dono', '')}<div class="cv-steps">${cvCredentialCard()}<span class="ms-note" style="padding:0 4px">Depois do passo 1, esta tela mostra o bloco do botão (462-6, primeiro estado) e o card de copiar abaixo.</span></div>${cuCopyFallback(true)}${cvBody(w, 'outdated')}`
+  return `${oaHead('ok')}${cuBand(kind === 'invalid' ? 'invalid' : 'setup').replace('Copiar o bloco', kind === 'invalid' ? 'Corrigir o machines.json' : 'Copiar o bloco')}${cuSetupCard(kind === 'invalid')}${cuCopyFallback(true)}${cvBody(w, 'outdated')}`
+}
+const cuSetupHtml = () => ['setup', 'noCredential', 'invalid'].map(k => `<div class="rotulo" style="margin:10px 0 4px">${{ setup: 'Sem connection.update', noCredential: 'Sem connection.update e sem connection.credential', invalid: 'connection.update inválido' }[k]}</div><div class="fila">${[1100, 1440].map(w => widthCol(w, `${w} px`, cvFrame(w, 'ok', cuSetupScreen(w, k)))).join('')}</div>`).join('')
+
+// =====================================================================
 // Montagem
 // =====================================================================
 function montar() {
@@ -5661,6 +5811,7 @@ function montar() {
     <li><b>Sessões de terminal (#350, a aprovar):</b> card novo em cada máquina (C96 a C99). Presa é o comando em primeiro plano acima de 15 min que não é interativo conhecido, ou um script de scratchpad do Claude. Interromper o comando sobe em escada, um clique por degrau (SIGINT no grupo, SIGTERM, SIGKILL com segunda confirmação); Encerrar a sessão é SIGHUP no sshd e fecha todos os terminais da conexão. Nunca o sshd do túnel, o núcleo, o app nem outro usuário. Na Workstation, só leitura por padrão, com o mesmo flag de ações remotas da decisão 0014. <b>Os processos claude/ccd-cli antigos do servidor remoto do Claude Desktop ficam de fora</b>: não são terminais; card próprio, em outra issue. <b>A decidir:</b> um servidor de desenvolvimento deixado em primeiro plano de propósito (npm run dev) vira Presa depois de 15 min; a proposta é a lista editável terminal.interactiveCommands.</li>
     <li><b>Prova do dono na máquina remota (#388, decisão 0020, aprovado pelo Fernando):</b> os três motivos de uma remota que recusa o Mac, cada um com o que fazer: <b>Acesso bloqueado</b> (amarelo, configurar o <code>connection.credential</code>, 388-1), <b>Prova do dono falhou</b> (vermelho, atualizar o núcleo de lá ou conferir o SSH, 388-2) e <b>Identidade diferente</b> (vermelho, conferir o túnel ou reiniciar o núcleo deste Mac, 388-3). A volta ao normal é silenciosa (388-4); o ponto da barra lateral, o alerta e a faixa do painel (388-5) dizem o mesmo motivo; o ponto é um amarelo só para os três. Decidido: o alerta dos três motivos se chama “sem acesso” (túnel caído e núcleo parado seguem “sem conexão”); a tela não mostra o horário da próxima tentativa nem a identidade que mudou.</li>
     <li><b>Versão do núcleo remoto e o comando de atualização (#449, decisão 0021, aceita):</b> o card Conexão da Workstation mostra a versão e o commit do núcleo de lá ao lado da versão do app, lidos do <code>/api/overview</code> anônimo (por isso aparecem também em acesso bloqueado). Defasado avisa, com o comando de atualização e as flags do Mac já preenchidas e um Copiar; o Mac não roda nada lá (449-1, 449-2). Sem <code>connection.credential</code>, a faixa manda configurar antes, porque o script recusaria com o código 21 (449-3); em acesso bloqueado, a faixa do 388-1 segue a principal (449-4). Em aberto: o alerta. A seta na barra lateral (449-5) e o caminho do checkout (<code>connection.checkout</code>) estão fechados na decisão.</li>
+    <li><b>O botão Atualizar o núcleo remoto (#462, decisão 0022, proposta):</b> a faixa de defasado ganha Atualizar, com confirmação que já traz o resultado do <code>--check</code>, o andamento em cinco passos, e cada resultado em pt-BR (recusas 20 a 23, 30 a 33, falhou e voltou, falhou e a volta falhou com o caminho do backup, contato perdido, SSH). Sem <code>connection.update</code> no machines.json a tela diz o que falta, traz o bloco pronto e mantém o card de copiar (462-1 a 462-6). Em aberto: o Fernando aceitar a decisão.</li>
     <li><b>Backlog:</b> Feed de atividade, Analytics completo, Workflows e o detalhe com o grafo de agentes estavam para depois da entrega. Entraram aqui a pedido do dono; o PM decide se viram itens da 0.0.1.</li></ol></section>`
   indice.innerHTML = htmlI; main.innerHTML = htmlM
   if (window.lucide) lucide.createIcons()
