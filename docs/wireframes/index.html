@@ -1117,6 +1117,192 @@ body.captura[data-width="1100"] .width-col[data-w="1440"], body.captura[data-wid
 .up-frag { position: absolute; left: 24px; top: 48px; display: grid; grid-template-columns: repeat(2, 300px); gap: 12px; align-items: stretch; }
 .up-frag .menu { position: static; width: auto; box-shadow: none; }
 .mi.up-small { height: 20px; font-size: 11.5px; }
+/* ---------- work board (issues 465, 466, 467, 468, 477 and 478): the agent's cycle, the queue, levels, filters and the issue detail ---------- */
+.wb-read { font-size: 11.5px; color: var(--muted); font-family: var(--font-mono); white-space: nowrap; display: inline-flex; align-items: center; gap: 6px; }
+.wb-read.wb-old { color: var(--status-waiting-text); }
+.wb-bar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.wb-note { font-size: 11.5px; }
+.wb-crumb { margin-left: auto; display: flex; gap: 6px; align-items: center; font-size: 12.5px; color: var(--muted); white-space: nowrap; }
+.wb-crumb b { color: var(--text); font-weight: 600; } .wb-crumb .wb-here { color: var(--text); }
+.wb-filters { padding: 10px; display: flex; flex-direction: column; gap: 9px; }
+.wb-filters.wb-off { opacity: .5; }
+.wb-fields { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; }
+.wb-field { display: flex; flex-direction: column; gap: 3px; min-width: 0; position: relative; }
+.wb-field small { font-size: 10.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wb-field .campo { height: 30px; padding: 0 8px 0 10px; font-size: 12px; min-width: 0; gap: 4px; }
+.wb-field .campo .trunc { flex: 1; }
+.wb-field .campo.wb-set { color: var(--text); border-color: color-mix(in srgb, var(--accent) 55%, var(--border)); }
+.wb-pop { position: absolute; top: 52px; left: 0; z-index: 3; width: 210px; padding: 6px; display: flex; flex-direction: column; gap: 1px; box-shadow: 0 12px 32px color-mix(in srgb, var(--mono-black) 35%, transparent); }
+.wb-pop span { display: flex; gap: 8px; align-items: center; padding: 6px 8px; border-radius: 7px; font-size: 12px; }
+.wb-pop span.on { background: var(--raised); }
+.wb-pop span small { margin-left: auto; color: var(--muted); font-family: var(--font-mono); }
+.wb-chips { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; font-size: 12px; }
+.wb-chip { display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 3px 0 9px; border-radius: 99px; font-size: 11.5px; color: var(--text); white-space: nowrap;
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface)); border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--border)); }
+.wb-chip b { font-weight: 600; }
+.wb-chip .wb-x { display: inline-grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; color: var(--muted); }
+.wb-and { font-size: 10px; font-weight: 700; color: var(--muted); letter-spacing: .06em; }
+.wb-chips .btn { height: 26px; margin-left: auto; color: var(--accent-text); }
+.wb-link { display: flex; gap: 8px; align-items: center; font-size: 11.5px; color: var(--muted); min-width: 0; }
+.wb-link > span:first-of-type { white-space: nowrap; }
+.wb-link code { font-family: var(--font-mono); font-size: 11.5px; background: var(--bg); border: 1px solid var(--border); border-radius: 7px; padding: 4px 8px; color: var(--text); min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wb-link .btn { height: 26px; }
+.wb-board { display: grid; gap: 10px; align-items: start; }
+.wb-col { gap: 8px; }
+.wb-col.wb-col-attn { border-color: color-mix(in srgb, var(--status-waiting-dot) 45%, var(--border)); }
+.wb-crit { font-size: 10.5px; color: var(--muted); padding: 0 4px; margin-top: -4px; line-height: 1.35; }
+.wb-none { font-size: 11.5px; color: var(--muted); text-align: center; padding: 10px 4px; border: 1px dashed var(--border); border-radius: 10px; }
+.wb-more { font-size: 11.5px; color: var(--muted); text-align: center; padding: 2px 4px 4px; }
+.wb-card { padding: 9px 10px; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.wb-card.wb-attn { box-shadow: inset 3px 0 0 var(--status-waiting-dot); }
+.wb-card.wb-fail { box-shadow: inset 3px 0 0 var(--status-error-dot); }
+.wb-card.wb-sel { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.wb-top { display: flex; gap: 6px; align-items: center; font-size: 11px; min-width: 0; }
+.wb-top b { font-weight: 600; white-space: nowrap; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.wb-repo { font-size: 10.5px; color: var(--muted); font-family: var(--font-mono); }
+.wb-age { margin-left: auto; color: var(--muted); white-space: nowrap; font-size: 10.5px; flex: none; }
+.wb-title { font-size: 12.5px; font-weight: 600; line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.wb-chain { font-family: var(--font-mono); font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wb-chain b { color: var(--text); font-weight: 600; }
+.wb-reason { display: flex; gap: 5px; align-items: flex-start; font-size: 11.5px; font-weight: 600; color: var(--status-waiting-text); line-height: 1.35; }
+.wb-reason svg { flex: none; margin-top: 1px; }
+.wb-reason.wb-fail { color: var(--status-error-text); }
+.wb-data { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.wb-prop { display: inline-flex; align-items: center; height: 20px; padding: 0 7px; border-radius: 6px; font-size: 10.5px; font-family: var(--font-mono); color: var(--muted); background: var(--raised); border: 1px solid var(--border); white-space: nowrap; }
+.wb-badges { display: flex; gap: 5px; flex-wrap: wrap; align-items: center; }
+.wb-badges .badge { height: 20px; font-size: 10.5px; padding: 0 7px; gap: 5px; }
+.wb-ref { display: inline-flex; align-items: center; gap: 3px; font-size: 11px; color: var(--muted); font-family: var(--font-mono); white-space: nowrap; }
+.wb-progress { display: flex; flex-direction: column; gap: 4px; font-size: 11px; color: var(--muted); }
+.wb-dist { display: flex; gap: 8px; flex-wrap: wrap; font-size: 11px; color: var(--muted); font-family: var(--font-mono); }
+.wb-dist > span { display: inline-flex; align-items: center; gap: 4px; }
+.wb-drill { font-size: 12px; color: var(--accent-text); font-weight: 600; display: inline-flex; align-items: center; gap: 2px; }
+.wb-stale .wb-card .pill, .wb-stale .wb-card .wb-ref, .wb-stale .wb-card .wb-prop, .wb-stale .wb-card .wb-reason.wb-gh { opacity: .5; }
+.wb-empty { padding: 26px 20px; }
+.wb-empty .btn + .btn { margin-left: 6px; }
+.wb-anatomy { display: flex; gap: 28px; align-items: flex-start; width: max-content; }
+.wb-anatomy > div { display: flex; flex-direction: column; gap: 10px; }
+.wb-zoom { zoom: 1.35; width: 250px; }
+.wb-plain { width: 250px; }
+.wb-mark { display: inline-grid; place-items: center; width: 15px; height: 15px; border-radius: 50%; background: var(--rose); color: var(--on-accent); font-size: 9px; font-weight: 700; flex: none; font-family: var(--font-sans); line-height: 1; vertical-align: middle; margin-right: 2px; }
+.wb-legend { margin: 0; padding: 0; list-style: none; width: 400px; display: flex; flex-direction: column; gap: 7px; font-size: 12.5px; color: var(--muted); }
+.wb-legend li { display: flex; gap: 8px; align-items: flex-start; line-height: 1.45; }
+.wb-legend li .wb-mark { margin-top: 2px; }
+.wb-legend b { color: var(--text); font-weight: 600; }
+/* card actions, queue position, drag handle and the concurrency limit (issues 467, 468 and 477) */
+.wb-acts { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.wb-acts-row { display: flex; align-items: center; gap: 2px; }
+.wb-acts-row .wb-acts { flex: 1; }
+.wb-act { display: inline-flex; align-items: center; justify-content: center; gap: 5px; height: 26px; padding: 0 9px; border-radius: 7px; font-size: 11.5px; font-weight: 600; white-space: nowrap; border: 1px solid var(--border); background: var(--surface); color: var(--text); font-family: var(--font-sans); }
+.wb-act.wb-primary { background: var(--accent); color: var(--on-accent); border-color: transparent; }
+.wb-links { display: flex; gap: 6px; justify-content: center; font-size: 11.5px; color: var(--accent-text); font-weight: 600; white-space: nowrap; }
+.wb-links span + span::before { content: '·'; color: var(--muted); margin-right: 6px; font-weight: 400; }
+.wb-pos { display: inline-grid; place-items: center; min-width: 24px; height: 18px; padding: 0 5px; border-radius: 6px; font-size: 10.5px; font-weight: 700; font-family: var(--font-mono); color: var(--accent-text); background: color-mix(in srgb, var(--accent) 18%, var(--surface)); flex: none; }
+.wb-grip { margin-left: auto; color: var(--muted); display: inline-flex; align-items: center; gap: 2px; flex: none; }
+.wb-note-line { display: flex; gap: 5px; align-items: flex-start; font-size: 11.5px; font-weight: 600; line-height: 1.35; color: var(--status-error-text); }
+.wb-note-line svg { flex: none; margin-top: 1px; }
+.wb-limit { display: flex; align-items: center; gap: 6px; font-size: 11.5px; padding: 5px 8px; border-radius: 8px; background: var(--raised); color: var(--text); white-space: nowrap; }
+.wb-limit b { font-weight: 600; }
+.wb-limit.wb-full b { color: var(--status-waiting-text); }
+.wb-limit.wb-paused { background: var(--status-error-badge); color: var(--status-error-text); white-space: normal; line-height: 1.35; align-items: flex-start; }
+.wb-limit.wb-paused b { color: var(--status-error-text); }
+.wb-limit svg { flex: none; }
+.wb-lock { color: var(--muted); display: inline-flex; }
+/* drag states (issue 477) */
+.wb-col.wb-target { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); background: color-mix(in srgb, var(--accent) 7%, var(--surface)); }
+.wb-col.wb-refuse { border-color: var(--status-error-dot); border-style: dashed; background: color-mix(in srgb, var(--status-error-badge) 40%, var(--surface)); }
+.wb-col.wb-fact { opacity: .5; }
+.wb-drop { border: 2px dashed var(--accent); border-radius: 10px; min-height: 34px; display: flex; align-items: center; justify-content: center; gap: 5px; font-size: 11.5px; font-weight: 600; color: var(--accent-text); }
+.wb-left { border: 1px dashed var(--border); border-radius: 10px; min-height: 52px; display: grid; place-items: center; font-size: 11px; color: var(--muted); }
+.wb-card.wb-drag { transform: rotate(-2deg) translateX(-12px); border-color: var(--accent); box-shadow: 0 16px 34px color-mix(in srgb, var(--mono-black) 45%, transparent); position: relative; z-index: 2; }
+.wb-card.wb-drag.wb-no { border-color: var(--status-error-dot); }
+.wb-refuse-msg { display: flex; gap: 5px; align-items: flex-start; font-size: 11.5px; font-weight: 600; line-height: 1.35; color: var(--status-error-text); padding: 6px 8px; border-radius: 8px; background: var(--status-error-badge); }
+.wb-refuse-msg svg { flex: none; margin-top: 1px; }
+/* confirmations anchored on the card (issues 467 and 468) */
+.wb-anchor { position: relative; }
+.wb-popover { position: absolute; left: 0; top: calc(100% + 6px); z-index: 4; width: 360px; padding: 12px; display: flex; flex-direction: column; gap: 9px; font-size: 12px; box-shadow: 0 16px 40px color-mix(in srgb, var(--mono-black) 45%, transparent); }
+.wb-popover.wb-static { position: static; box-shadow: none; }
+.wb-popover h6 { margin: 0; font-size: 13.5px; font-weight: 600; line-height: 1.35; }
+.wb-popover .faixa { padding: 8px 10px; font-size: 11.5px; gap: 8px; align-items: flex-start; }
+.wb-popover .faixa .ic { font-size: 15px; }
+.wb-kv { display: grid; grid-template-columns: 72px minmax(0, 1fr); gap: 6px 10px; align-items: center; font-size: 12px; }
+.wb-kv > span:nth-child(odd) { color: var(--muted); }
+.wb-kv .campo { height: 28px; font-size: 12px; padding: 0 8px 0 10px; color: var(--text); }
+.wb-kv .campo svg:last-child { margin-left: auto; }
+.wb-kv .seg span { padding: 3px 8px; }
+.wb-prompt { font-family: var(--font-mono); font-size: 11px; line-height: 1.5; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 7px 9px; color: var(--muted); }
+.wb-cmd { font-family: var(--font-mono); font-size: 11px; line-height: 1.5; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 7px 9px; color: var(--text); word-break: break-all; }
+.wb-pop-acts { display: flex; gap: 6px; justify-content: flex-end; flex-wrap: wrap; }
+.wb-pop-acts .btn { height: 28px; font-size: 12px; }
+.wb-strip { display: flex; gap: 22px; flex-wrap: wrap; align-items: flex-start; width: 1440px; }
+.wb-strip > div { display: flex; flex-direction: column; gap: 6px; }
+.wb-strip .wb-plain { width: 230px; }
+.wb-shell { position: relative; }
+.wb-toast { position: absolute; right: 24px; bottom: 24px; display: flex; gap: 10px; align-items: center; padding: 10px 14px; border-radius: 10px; background: var(--raised); border: 1px solid var(--border); font-size: 12.5px; box-shadow: 0 8px 24px color-mix(in srgb, var(--mono-black) 35%, transparent); z-index: 3; }
+.wb-toast svg { color: var(--status-completed-text); }
+/* the issue detail opened from the card, read and edit (issues 338, 467 and 478) */
+.wb-stage { display: grid; }
+.wb-stage > * { grid-area: 1 / 1; }
+.wb-scrim { align-self: stretch; z-index: 1; background: color-mix(in srgb, var(--bg) 60%, transparent); border-radius: 12px; }
+.wb-drawer { z-index: 2; justify-self: end; align-self: start; padding: 14px 16px; display: flex; flex-direction: column; gap: 11px; box-shadow: 0 16px 40px color-mix(in srgb, var(--mono-black) 40%, transparent); min-width: 0; }
+.wb-drawer h5 { margin: 0; font-size: 16px; font-weight: 600; line-height: 1.35; }
+.wb-drawer .wb-top { font-size: 12px; }
+.wb-dhead { display: flex; gap: 6px; align-items: center; }
+.wb-dhead .btn { height: 26px; font-size: 12px; padding: 0 9px; }
+.wb-dhead .wb-x { margin-left: 2px; color: var(--muted); display: inline-grid; place-items: center; width: 26px; height: 26px; }
+.wb-dacts { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.wb-dacts .wb-act { height: 30px; padding: 0 12px; font-size: 12.5px; }
+.wb-sec { display: flex; flex-direction: column; gap: 7px; border-top: 1px solid var(--border); padding-top: 10px; min-width: 0; }
+.wb-sec .olhinho .r { margin-left: auto; letter-spacing: 0; text-transform: none; font-weight: 500; color: var(--accent-text); display: inline-flex; gap: 4px; align-items: center; }
+.wb-md { font-size: 12.5px; line-height: 1.55; color: var(--text); }
+.wb-md p { margin: 0 0 6px; }
+.wb-md pre { margin: 0; font-family: var(--font-mono); font-size: 11px; line-height: 1.5; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 7px 9px; color: var(--muted); white-space: pre-wrap; }
+.wb-meta { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 6px 10px; font-size: 12px; align-items: center; }
+.wb-meta > span:nth-child(odd) { color: var(--muted); }
+.wb-meta .campo { height: 28px; font-size: 12px; padding: 0 8px 0 10px; color: var(--text); }
+.wb-meta .campo svg:last-child { margin-left: auto; }
+.wb-tags { display: flex; gap: 5px; flex-wrap: wrap; align-items: center; }
+.wb-tag { display: inline-flex; align-items: center; gap: 4px; height: 22px; padding: 0 8px; border-radius: 99px; font-size: 11.5px; border: 1px solid var(--border); background: var(--raised); white-space: nowrap; }
+.wb-tag.wb-add { color: var(--accent-text); background: transparent; border-style: dashed; }
+.wb-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 5px; }
+.wb-steps li { display: flex; gap: 8px; align-items: center; padding: 6px 8px; border: 1px solid var(--border); border-radius: 8px; font-size: 12px; background: var(--bg); min-width: 0; }
+.wb-steps li .wb-grip { margin-left: 0; }
+.wb-steps li .wb-sn { font-family: var(--font-mono); color: var(--muted); font-size: 11px; flex: none; }
+.wb-steps li .wb-st { margin-left: auto; flex: none; display: inline-flex; gap: 6px; align-items: center; color: var(--muted); }
+.wb-steps li.wb-done .trunc { color: var(--muted); text-decoration: line-through; }
+.wb-steps li.wb-editing { border-color: var(--accent); background: var(--surface); flex-wrap: wrap; }
+.wb-steps li.wb-new { border-style: dashed; background: transparent; color: var(--muted); }
+.wb-pr { display: flex; flex-direction: column; gap: 6px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); font-size: 12px; }
+.wb-pr .wb-row { gap: 6px; }
+.wb-checks { display: flex; flex-direction: column; gap: 3px; font-size: 11.5px; font-family: var(--font-mono); color: var(--muted); }
+.wb-checks span { display: flex; gap: 6px; align-items: center; }
+.wb-comment { display: flex; gap: 8px; font-size: 12px; line-height: 1.45; }
+.wb-av { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; background: var(--raised); border: 1px solid var(--border); font-size: 10px; font-weight: 700; color: var(--muted); flex: none; }
+.wb-comment small { color: var(--muted); }
+.wb-row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.wb-row .btn { height: 28px; font-size: 12px; }
+.wb-input { display: flex; align-items: center; min-height: 32px; padding: 6px 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg); font-size: 12.5px; color: var(--text); min-width: 0; }
+.wb-input.wb-focus { border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 30%, transparent); }
+.wb-input.wb-title { font-size: 15px; font-weight: 600; }
+.wb-input.wb-ph { color: var(--muted); }
+.wb-steps li .wb-input { flex: 1; min-height: 28px; padding: 3px 8px; }
+.wb-textarea { display: block; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg); font-family: var(--font-mono); font-size: 11.5px; line-height: 1.55; color: var(--text); white-space: pre-wrap; min-height: 64px; }
+.wb-textarea.wb-focus { border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 30%, transparent); }
+.wb-textarea.wb-ph { color: var(--muted); font-family: var(--font-sans); }
+.wb-tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--border); }
+.wb-tabs span { padding: 5px 10px; font-size: 12px; color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.wb-tabs span.on { color: var(--text); border-bottom-color: var(--accent); }
+.wb-saved { font-size: 11.5px; color: var(--muted); display: inline-flex; gap: 5px; align-items: center; }
+.wb-saved svg { color: var(--status-completed-text); }
+.wb-hint-line { font-size: 11.5px; color: var(--muted); line-height: 1.4; }
+.wb-version { display: flex; flex-direction: column; gap: 5px; }
+.wb-version .wb-textarea { min-height: 0; }
+.wb-ins { background: color-mix(in srgb, var(--status-completed-dot) 22%, transparent); border-radius: 3px; }
+.wb-del { background: color-mix(in srgb, var(--status-error-dot) 22%, transparent); border-radius: 3px; text-decoration: line-through; }
+.wb-drawer .faixa { padding: 9px 11px; font-size: 12px; gap: 9px; align-items: flex-start; }
+.wb-drawer .faixa .ic { font-size: 16px; }
+.wb-popfrag { display: flex; gap: 10px; align-items: flex-start; padding: 10px; align-self: flex-start; }
+.wb-popfrag .wb-field { width: 190px; }
+.wb-popfrag .wb-pop { position: static; }
 </style>
 
 <header class="topo">
@@ -1213,7 +1399,8 @@ const sessionChip = s => s.mot ? motChip(s.mot) : motChip('error')
 const ponto = st => `<span class="ponto d-${st}"></span>`
 const barra = (pct, cor = 'var(--accent)') => `<div class="barra-h"><i style="width:${pct}%;background:${cor}"></i></div>`
 
-function lado(ativo, q = 4, ws = 'ok') {
+// work: adds "Quadro do trabalho" under Entrega, only on the work board screens (issue 465), so the other captures do not change.
+function lado(ativo, q = 4, ws = 'ok', work = false) {
   const nav = [
     ['dashboard', 'layout-dashboard', 'Dashboard'], ['mural', 'layout-grid', 'Mural ao vivo'], ['sessoes', 'folder-open', 'Sessões'], ['feed', 'activity', 'Feed de atividade'],
     ['kanban', 'kanban', 'Kanban'], ['analytics', 'bar-chart-3', 'Analytics'], ['workflows', 'workflow', 'Workflows'], ['historico', 'history', 'Histórico'],
@@ -1222,6 +1409,7 @@ function lado(ativo, q = 4, ws = 'ok') {
     ['-', '', 'Máquinas'], ['machine-local', 'monitor', 'Esta máquina'], ['machine-ws', 'server', 'Workstation'],
     ['-', '', 'Controle'], ['config', 'bot', 'Agent Config'], ['run', 'play', 'Rodar agente'], ['tools', 'wrench', 'Ferramentas'], ['connections', 'plug', 'Conexões'],
   ]
+  if (work) nav.splice(nav.findIndex(([k]) => k === 'projeto') + 1, 0, ['work', 'columns-3', 'Quadro do trabalho'])
   return `<aside class="cc-lado">
     <div class="cc-marca"><img src="${LOGO}" alt=""><div><b>Ahrena Console</b><small>Claude Code</small></div></div>
     ${nav.map(([k, i, r]) => k === '-' ? `<div class="olhinho" style="padding:12px 10px 4px">${r}</div>` : `<div class="cc-nav${k === ativo ? ' on' : ''}">${ic(i)}${r}${k === 'dashboard' && q ? `<span class="q">${q}</span>` : ''}${k === 'machine-ws' ? `<span class="ponto tm-dot d-${ws === 'ok' ? 'completed' : 'abandoned'}"></span>` : ''}</div>`).join('')}
@@ -5169,6 +5357,53 @@ const TELAS = [
     n: N(['EmptyState, a faixa de erro e o desbotado da leitura antiga (C26, C74).'], ['O sshd por onde o túnel passa é o que o próprio núcleo reconhece pela conexão da máquina (decisão 0013): encerrá-lo cortaria a Workstation do Mac, então só aparece desligado.', 'O núcleo e o app são reconhecidos pelo pid e pelos ancestrais do próprio núcleo, e nunca ficam Presa nem alertam; um processo de outro usuário nunca recebe sinal e também não alerta.', 'Se o limite de 15 min pegar um servidor de desenvolvimento deixado em primeiro plano de propósito (npm run dev), a linha fica Presa mesmo assim: a proposta é uma lista editável de comandos interativos conhecidos no config.json (terminal.interactiveCommands), com vim, less, top, tail -f e watch de fábrica. Está em Decisões do dono e o que falta.']) },
   { id: 'console-terminals-remote', cod: 'C99', nome: 'Sessões de terminal · Workstation lida do Mac, e o alerta', sub: 'Issue #350. A Workstation lida do Mac pelo túnel: só leitura por padrão, com Copiar comando no lugar das ações; ligada na própria Workstation, o Mac repassa só os ids. Embaixo, o alerta terminal-stuck: a linha em “O que pede atenção” (C96) e a notificação da bandeja.', html: () => `<div class="tl-flow"><div class="tl-step"><div class="rotulo">1 · Só leitura, o padrão · 1100 px</div>${tsRemote(false)}</div><div class="tl-step"><div class="rotulo">2 · Ações ligadas lá · 1100 px</div>${tsRemote(true)}</div>${tsAlert()}</div>`,
     n: N(['A leitura remota de Ferramentas (C75): o mesmo desligado por padrão e o mesmo flag.'], ['Pelo túnel o pedido do Mac parece local na Workstation; por isso a regra da decisão 0014 §5: recusar, a não ser que o config de lá aceite ações remotas. A variável AHRENA_CONSOLE_ACCEPT_REMOTE_ACTIONS é a mesma da liberação de porta (#286, decisão 0016): ligada lá, vale para as duas; o config.json é só dos terminais.', 'Copiar comando mostra o sinal escolhido (kill -INT -- -41233): é o que a pessoa roda num terminal de lá, que não é o preso.', 'O alerta terminal-stuck sai uma vez por sessão presa e volta a sair se ela soltar e prender de novo; vai para a bandeja com o mesmo texto da linha. Ele não sai para um terminal que a pessoa interrompeu.']) },
+  // ---------- work board (issues 465, 466, 467, 468, 477 and 478, epic 464) ----------
+  { cap: 'work-board', titulo: 'Quadro do trabalho', desc: 'Épico #464: #465 (as colunas pelo ciclo do agente), #466 (níveis e filtros), #467 (abrir a issue e Planejar), #468 (Executar plano), #477 (a fila de execução) e #478 (editar a issue e o plano). Um quadro por projeto em que as colunas são iguais em todo projeto e vêm de sinais reais: a sessão de execução ligada à issue, o PR que a fecha com CI e review, o estado da issue, o plano e a fila do Console. Só a fila é ordem da pessoa: pôr, tirar e reordenar. O Status do GitHub Project vira dado e filtro. Fica ao lado do Kanban do projeto (C11), que continua. Na barra lateral, “Quadro do trabalho” entra em Entrega, só nestas telas. Em 1100 e 1440.' },
+  { id: 'work-board', cod: '465-1', nome: 'Quadro do trabalho · as seis colunas', sub: 'Issue #465. Planejamento, Na fila, Em execução, Em review, Bloqueado e Concluído, nesta ordem, cada uma com o critério da tabela do épico embaixo do nome. Na fila mostra a posição de cada card (1º, 2º) e, no topo, o limite de execuções (“2 de 2 rodando”). Cada card traz as ações do seu estado (465-2, 465-6). No cabeçalho, o projeto, a hora da última leitura do GitHub e Atualizar. Em 1440 as seis lado a lado; em 1100, duas linhas de três, na ordem de leitura, sem rolar na horizontal.',
+    html: () => wbBoth(wbMainScreen),
+    n: N(['Nada: o CCAM não lê GitHub. O molde é o do Kanban de sessões (C9) e do Kanban do projeto (C11): colunas com ponto, título em caixa alta e contador.'], ['<b>Critério de Planejamento (aprovado):</b> “Aberta, sem sessão de execução e fora da fila”, como a tabela do épico. Um item com plano e sem sessão fica aqui, com “plano · 5 passos” no card (a #506), até Executar plano ou Pôr na fila.', 'A coluna vem dos sinais; o arrasto só vale entre Planejamento e Na fila e dentro de Na fila, e muda a fila do Console, no banco do núcleo, não o GitHub (#477). O C11 continua o único quadro em que arrastar muda o GitHub.', 'O limite fica no topo de Na fila porque é ela que espera a vaga: “2 de 2 rodando” conta os cards em Em execução (a #505, com duas sessões, conta 1). Um card que vai para Em review ou Bloqueado libera a vaga.', 'O Status do Project aparece no card como dado (“Status: Todo”) e pode discordar da coluna: a #505 está “Todo” no Project e já tem duas sessões.', 'Duas sessões na mesma issue: o card fica na coluna da mais adiantada e mostra “2 sessões”. A sessão só de planejamento (“planejando…”, a #503) não conta: o card fica em Planejamento.', 'Bloqueado em ordem de motivo, depois do mais antigo: precisa de você, mudança pedida depois de 3 rodadas, CI falhou.', 'Concluído mostra os fechados nos últimos 14 dias, os dois mais recentes à vista e “ver todas” para o resto.', 'Em 1100 seis colunas dariam 128 px por card; dobrar em duas linhas de três segue o Dev Console (C27), que também não rola na horizontal.']) },
+  { id: 'work-board-card', cod: '465-2', nome: 'Quadro do trabalho · anatomia do card e as ações', sub: 'Issues #465, #467, #468 e #477. O card ampliado com cada parte numerada, das ações à posição na fila e à alça de arrastar. Ao lado, as ações estado por estado: sem plano, Planejar; planejando; o planejamento que falhou; na fila; Executar plano com “subindo…”; com sessão, Abrir sessão; e o épico, sem ações. Depois, os três motivos de Bloqueado, Concluído e o pai compacto e com filtro. Sem largura própria.',
+    html: () => wbAnatomy(),
+    n: N(['Nada. As pílulas de CI e review são as do C11 e do Dev Console (C27); as de sessão, as do Kanban de sessões (#245).'], ['Uma ação principal por estado, em botão cheio (Planejar, Executar plano); as secundárias em link na linha de baixo (Pôr na fila, Replanejar, Tirar da fila), para o card caber nos 167 px da coluna em 1440.', 'As ações ficam sempre à vista nos cards de Planejamento e Na fila, e Abrir sessão nos que têm sessão viva; Em review e Concluído não têm ação, e o clique no card abre o detalhe (467-1).', 'Pai compacto (<span class="mono">↑ #6</span>) por padrão, para o card caber; com qualquer filtro ativo, a cadeia inteira (<span class="mono">#1 › #6 › #500</span>). A regra é pelo filtro, não pela largura.', 'Tempo na coluna é desde a entrada na coluna atual; em Concluído, desde o merge do PR ou o fechamento da issue.', 'Sessão em amarelo só quando precisa de você, como no resto do Console (#245); o motivo de Bloqueado vem em amarelo quando depende da pessoa e em vermelho quando é o CI; a ação que falhou, em vermelho.', 'Repositório só no card de outro repositório.']) },
+  { id: 'work-board-empty', cod: '465-3', nome: 'Quadro do trabalho · projeto sem issue', sub: 'Issue #465. O Project não tem nenhuma issue: o vazio diz o que o quadro mostraria e leva ao Project no GitHub ou à troca de Project. As seis colunas ficam com zero, para a pessoa já ver o ciclo; os filtros ficam desligados. Em 1100 e 1440.',
+    html: () => wbBoth(wbEmptyScreen),
+    n: N(['O EmptyState do C19: ícone, frase, o que fazer.'], ['Sem conexão com o GitHub, a tela é o “Conectar ao GitHub” do C42, não este vazio.', 'As colunas vazias ficam sem “Nenhuma” por coluna e sem o limite: o vazio de cima já explica.']) },
+  { id: 'work-board-stale', cod: '465-4', nome: 'Quadro do trabalho · GitHub fora', sub: 'Issue #465, critério 4, decisão 0001. Em cima, o quadro já foi lido: fica o último dado, a faixa vermelha diz o motivo, de quando é o quadro e quando tentamos de novo, com Tentar agora; o que vem do GitHub (Status, PR, CI, review) fica desbotado, e a sessão e a fila, que são do núcleo, seguem vivas. Embaixo, a primeira leitura falhou e não há nada guardado. Em 1100 e 1440.',
+    html: () => wbStaleHtml(),
+    n: N(['Nada.'], ['Decisão 0001: o quadro guarda a última leitura boa e diz por quê; nunca esvazia porque o GitHub caiu. O texto é o mesmo do C19 (“GitHub indisponível. Mostrando … de 22:41. Tentamos de novo em 2 min.”).', 'No motivo de Bloqueado vale o mesmo: “CI falhou” e “Mudança pedida depois de 3 rodadas” vêm do GitHub e desbotam; “Precisa de você” vem do núcleo e fica forte.', 'A fila, a posição e o limite estão no banco do núcleo (#477) e não desbotam. As ações continuam: Planejar e Executar plano abrem a sessão neste Mac, e é a sessão que esbarra no GitHub fora (a aprovar, pergunta 11).', 'A hora do cabeçalho fica amarela enquanto o dado é velho, para quem não leu a faixa.']) },
+  { id: 'work-board-loading', cod: '465-5', nome: 'Quadro do trabalho · carregando', sub: 'Issue #465. Na primeira abertura, enquanto o GitHub é lido: as seis colunas com cards de esqueleto, os contadores em “…”, filtros desligados e Atualizar ocupado. Nas leituras seguintes o quadro fica e só o Atualizar gira. Em 1100 e 1440.',
+    html: () => wbBoth(wbLoadingScreen),
+    n: N(['O esqueleto do C19.'], ['O esqueleto tem a altura de um card curto, para o quadro não pular quando os dados chegam.']) },
+  { id: 'work-board-actions', cod: '465-6', nome: 'Quadro do trabalho · Planejar e Executar plano', sub: 'Issues #467 e #468. Em cima, Executar plano na #506: a confirmação abre no próprio card, com o repositório, a pasta, a conta, onde abrir (Claude Desktop ou terminal) e o começo do prompt; depois de confirmar, o card pula a fila e vai direto para Em execução com “subindo…”, e um aviso diz onde a sessão abriu. Embaixo, Planejar passo a passo (confirmar, “planejando…”, “plano · 3 passos”), o planejamento que falhou, Executar plano de um item na fila, o limite cheio e a pasta que falta nesta máquina. Em 1100 e 1440; a faixa de baixo sem largura própria.',
+    html: () => wbActionsHtml(),
+    n: N(['Nada.'], ['Planejar abre uma sessão da Athena só de planejamento (skill <span class="mono">planning-changes</span>), que escreve o plano como sub-issues do tipo Plan e não escreve código; Executar plano abre a sessão que executa, pelo caminho de delegação da #126.', 'A confirmação fica no card, não num diálogo no meio da tela, para a pessoa ver de qual card é; a conta e o destino vêm preenchidos com a última escolha.', 'Com o limite cheio, a confirmação avisa e o botão vira “Executar mesmo assim” (#468). Executar plano num item da fila tira da fila e executa na hora.', 'Sem a pasta do repositório, nada abre e o card fica onde estava; a confirmação vira o comando para copiar (#467, #468).', 'Se o planejamento termina sem plano, o card volta a Planejar com o motivo em vermelho, e o detalhe diz o resto (#467).']) },
+  { id: 'work-board-levels', cod: '466-1', nome: 'Quadro do trabalho · os níveis e descer para os filhos', sub: 'Issue #466, critérios 2 e 4. A troca de nível fica acima dos filtros, à esquerda: Iniciativa · Épico/Milestone · Item · Plano de execução, de <span class="mono">WORK_LEVELS</span>. Em cima, o nível Épico dentro da iniciativa #1: cada épico mostra quantas filhas fecharam, quantas há em cada coluna e “Ver filhos ›”, e não tem ação. Embaixo, depois do clique no #6: o nível vira Item, o filtro de épico entra sozinho, o caminho “Iniciativa #1 › Épico #6” fica à direita e cada card mostra a cadeia inteira. Em 1100 e 1440.',
+    html: () => wbLevelsHtml(),
+    n: N(['Nada.'], ['A coluna de um épico (ou iniciativa) vem das filhas: Concluído se fechado; Bloqueado se alguma filha aberta está bloqueada; Em execução se alguma está na fila ou em execução; Em review se as que andam estão todas em review; senão Planejamento. Assim o #6 aparece em Bloqueado: é ali que ele precisa de alguém. Um épico nunca entra na fila nem recebe card arrastado.', 'Item cobre história, tarefa técnica, spike e bug (<span class="mono">LEVEL_BY_TYPE</span>). O nível Plano mostra os planos de execução na coluna do item que cada um planeja.', 'Descer é só trocar o nível e pôr o filtro: o link reabre o mesmo recorte e voltar é tirar o chip ou clicar no caminho.']) },
+  { id: 'work-board-filters', cod: '466-2', nome: 'Quadro do trabalho · os filtros e o link', sub: 'Issue #466, critério 3. Iniciativa, Épico/Milestone, Tipo, Label, Repositório e Status do Project, todos juntos (E). Cada filtro ativo vira um chip com ×, “Limpar filtros” tira todos, e o link do recorte, com os parâmetros em inglês, tem Copiar link. Sobram os dois bugs da label ui, com a cadeia inteira. Ao lado do 1440, o Tipo aberto, com a contagem de cada tipo entre as filhas do épico #6. Em 1100 e 1440.',
+    html: () => wbFiltersHtml(),
+    n: N(['Nada.'], ['Um valor por filtro, como na URL (<span class="mono">type=bug</span>); vários valores no mesmo filtro ficam para depois, com o parâmetro repetido.', 'Os parâmetros são <span class="mono">level</span>, <span class="mono">initiative</span>, <span class="mono">epic</span>, <span class="mono">type</span>, <span class="mono">label</span>, <span class="mono">repo</span> e <span class="mono">status</span>, e os valores também em inglês (<span class="mono">in-progress</span>), decisão 0009. O que a tela mostra continua em pt-BR.', 'A contagem do Tipo aberto é das filhas do épico #6, antes dos outros filtros: são os mesmos cards do 466-1 de baixo.', 'O Status do Project é só filtro aqui: filtrar por “In Progress” não muda as colunas, mostra quais issues o Project chama assim.']) },
+  { id: 'work-board-no-result', cod: '466-3', nome: 'Quadro do trabalho · filtro sem resultado', sub: 'Issue #466, cenário “Filtro sem resultado”. Com a label design-system, que nenhuma issue do recorte tem: as seis colunas continuam, com o nome e zero, e uma linha diz “Nenhuma issue com estes filtros”, quantas sobrariam sem a label e Limpar filtros. Em 1100 e 1440.',
+    html: () => wbBoth(wbNoResultScreen),
+    n: N(['Nada.'], ['As colunas não somem: a pessoa vê que o quadro está ali e que é o recorte que está vazio, não o projeto (465-3).', 'A sugestão tira o último filtro posto, com o número de issues que voltam; se nenhum filtro sozinho resolve, fica só Limpar filtros.']) },
+  { id: 'work-board-detail', cod: '467-1', nome: 'Quadro do trabalho · o detalhe da issue aberto pelo card', sub: 'Issues #467 e #338. Clicar no card abre o detalhe num painel à direita, com o quadro atrás: tipo, número, coluna e há quanto tempo, Editar, Abrir no GitHub; o título, a cadeia de pais, as mesmas ações do card, a descrição, o plano com cada passo (sub-issue Plan), o PR com CI e review, os detalhes (tipo, labels, milestone, pai, Status do Project) e os comentários. Três estados: sem plano (Planejar), com plano (Executar plano, Pôr na fila, Replanejar) e em review (plano fechado, PR com os checks). Em 1100 e 1440.',
+    html: () => wbDetailHtml(),
+    n: N(['Nada.'], ['O conteúdo é o detalhe da #338 (épico #4); o quadro só o abre num painel, para o quadro continuar à vista atrás. Fechar devolve ao quadro no mesmo lugar.', 'O plano aparece no detalhe como uma lista numerada, um passo por sub-issue do tipo Plan, com o número e se fechou; é aqui que a pessoa lê o plano antes de Executar plano (#467).', 'As ações do detalhe são as do card, em tamanho maior; Editar leva ao modo de edição (478-1).']) },
+  { id: 'work-board-queue', cod: '477-1', nome: 'Quadro do trabalho · a fila de execução', sub: 'Issue #477. Em cima, a fila com três itens: a posição em cada card (1º, 2º, 3º), o limite no topo (“2 de 2 rodando”), Executar plano e Tirar da fila em cada um. Embaixo, a #505 abriu o PR, abriu uma vaga, o Console tentou puxar a #507 e a sessão não subiu: a #507 continua em 1º com o motivo e Tentar de novo, e o topo da coluna diz que a fila parou até resolver. Em 1100 e 1440.',
+    html: () => wbQueueHtml(),
+    n: N(['Nada.'], ['Quem puxa é o núcleo do Console: quando uma execução termina (abriu o PR, ou ficou bloqueada) e há vaga, ele abre a sessão do 1º como o Executar plano faria; o card vai para Em execução com “subindo…” e os outros sobem uma posição.', 'O limite é uma preferência da instalação (padrão 2) e aparece no topo de Na fila; a fila e a ordem ficam no banco do núcleo e sobrevivem a reiniciar o Console.', 'Uma falha ao puxar devolve o card ao topo com o motivo e para a fila até Tentar de novo ou Tirar da fila; o topo da coluna fica vermelho para quem não leu o card.']) },
+  { id: 'work-board-drag', cod: '477-2', nome: 'Quadro do trabalho · arrastar para a fila, dentro dela e o que recusa', sub: 'Issue #477. Quatro momentos de um arrasto: a #506, com plano, solta em Na fila, que se acende e mostra onde entra (3º); a #499 arrastada para cima da #507, que passa a 1º; a #509, sem plano, recusada por Na fila com “Planeje antes”; e a #507 recusada por Em review, que é fato. Enquanto um card é arrastado, Em execução, Em review, Bloqueado e Concluído ficam apagadas, com um cadeado. Em 1100 e 1440.',
+    html: () => wbDragHtml(),
+    n: N(['Nada: o CCAM não arrasta. O C11 arrasta, mas lá o arrasto muda o Status no GitHub.'], ['Só a alça e os cards de Planejamento e Na fila se arrastam; arrastar de Na fila de volta para Planejamento tira da fila, como o link Tirar da fila.', 'Onde o card entra é dito em palavras na faixa tracejada (“entra em 3º”, “passa a 1º”), e não só pela posição.', 'A recusa acontece ao passar por cima, antes de soltar: a coluna fica tracejada em vermelho e o card diz o motivo; ao soltar, o card volta para onde estava.']) },
+  { id: 'work-board-edit', cod: '478-1', nome: 'Quadro do trabalho · editar a issue e o plano', sub: 'Issue #478. Editar no detalhe troca o painel pelo modo de edição, mais largo: o título, a descrição com Escrever e Pré-visualizar e Salvar, os detalhes (labels, tipo, milestone, pai) que gravam ao escolher, os passos do plano para editar (o 2º aberto), reordenar pela alça, remover e acrescentar, e o comentário. No topo, quando a última mudança chegou ao GitHub. Em 1100 e 1440.',
+    html: () => wbEditHtml('edit'),
+    n: N(['Nada.'], ['Cada mudança grava no GitHub na hora, com a credencial da conexão do Console, e o cache do núcleo fica com o que o GitHub devolveu (decisão 0001), como o mover do C11. A escrita só aceita a origem da própria /ui (decisão 0003).', 'Título e descrição têm Salvar, porque se escreve antes de gravar; labels, tipo, milestone e pai gravam ao escolher; um passo grava ao Salvar ou Enter.', 'Remover um passo fecha a sub-issue como “not planned” no GitHub e o card passa a “plano · 4 passos”; um aviso com Desfazer reabre.']) },
+  { id: 'work-board-edit-conflict', cod: '478-2', nome: 'Quadro do trabalho · a issue mudou no GitHub enquanto você editava', sub: 'Issue #478, critério 4. Ao salvar a descrição, o Console vê que o GitHub mudou depois que a edição abriu: não grava por cima, mostra a sua versão e a do GitHub, uma embaixo da outra, com o que cada uma tem de diferente marcado, e pede para escolher. Em 1100 e 1440.',
+    html: () => wbEditHtml('conflict'),
+    n: N(['Nada.'], ['Três saídas: gravar a sua por cima, ficar com a do GitHub (a sua some) ou copiar a sua e decidir depois. Nenhuma é a padrão.', 'A comparação é do campo que se estava salvando; os outros campos não entram no conflito.', 'As duas versões ficam uma embaixo da outra porque o painel não cabe duas colunas legíveis em 1100.']) },
+  { id: 'work-board-edit-refused', cod: '478-3', nome: 'Quadro do trabalho · o GitHub recusou a edição', sub: 'Issue #478, critério 5. O GitHub respondeu 403: a faixa vermelha diz o motivo em palavras, o texto continua no editor como estava, e há Tentar de novo e Copiar texto. Em 1100 e 1440.',
+    html: () => wbEditHtml('refused'),
+    n: N(['Nada.'], ['O motivo vem da resposta do GitHub em pt-BR: sem permissão (403), não achou (404), recusou o valor (422, com o campo), ou o GitHub fora (com a hora da próxima tentativa, como no 465-4).', 'Nada se perde: o editor não fecha e o texto não volta ao que estava.']) },
 ]
 
 // =====================================================================
@@ -5781,6 +6016,449 @@ const cuSetupScreen = (w, kind) => {
 const cuSetupHtml = () => ['setup', 'noCredential', 'invalid'].map(k => `<div class="rotulo" style="margin:10px 0 4px">${{ setup: 'Sem connection.update', noCredential: 'Sem connection.update e sem connection.credential', invalid: 'connection.update inválido' }[k]}</div><div class="fila">${[1100, 1440].map(w => widthCol(w, `${w} px`, cvFrame(w, 'ok', cuSetupScreen(w, k)))).join('')}</div>`).join('')
 
 // =====================================================================
+// Work board (issues 465, 466, 467, 468, 477 and 478, epic 464): 465-1 to 465-6, 466-1 to 466-3,
+// 467-1, 477-1, 477-2 and 478-1 to 478-3.
+// The columns are the agent's cycle, the same in every project, computed from the execution session linked
+// to the issue, the PR that closes it with CI and review, the issue state, the plan and the Console's
+// execution queue. Only the queue is the person's order: a card with a plan is dragged Planejamento <-> Na fila
+// and reordered inside Na fila; Em execução, Em review, Bloqueado and Concluído refuse a drop. The GitHub
+// Project Status is a filter and a datum on the card. Levels come from WORK_LEVELS
+// (packages/nucleo/src/github/work.ts). Stale data: decision 0001.
+// =====================================================================
+const WB_TYPES = {
+  story: ['História', 'var(--accent-text)'], task: ['Tarefa técnica', 'var(--text)'], spike: ['Spike', 'var(--status-waiting-text)'], bug: ['Bug', 'var(--status-error-text)'],
+  epic: ['Épico', 'var(--rose)'], initiative: ['Iniciativa', 'var(--text)'], plan: ['Plano', 'var(--muted)'],
+}
+// [key, label, dot, criterion]: the table of epic 464, in this order.
+const WB_COLUMNS = [
+  ['planning', 'Planejamento', 'var(--muted)', 'Aberta, sem sessão de execução e fora da fila'],
+  ['queued', 'Na fila', 'var(--accent)', 'Planejada e posta na fila; espera vaga'],
+  ['running', 'Em execução', 'var(--status-active-dot)', 'Sessão da Athena trabalhando'],
+  ['review', 'Em review', 'var(--rose)', 'PR aberto esperando o Argos'],
+  ['blocked', 'Bloqueado', 'var(--status-waiting-dot)', 'Precisa de você, 3 rodadas ou CI falhou'],
+  ['done', 'Concluído', 'var(--status-completed-dot)', 'PR mergeado ou issue fechada'],
+]
+// The columns that are facts of the session and of GitHub: they refuse a dragged card (issue 477).
+const WB_FACT = ['running', 'review', 'blocked', 'done']
+const WB_CI = { ok: ['CI ✓', 'b-completed'], fail: ['CI ✕', 'b-error'], run: ['CI …', 'b-waiting'] }
+const WB_REVIEW = { approved: ['aprovado', 'b-completed'], changes: ['ajustes', 'b-error'], pending: ['review', 'b-waiting'] }
+const WB_SESSION = {
+  working: '<span class="badge b-active"><span class="p"></span>trabalhando</span>',
+  needs: '<span class="badge b-blocked"><span class="p"></span>precisa de você</span>',
+  two: '<span class="badge b-active"><span class="p"></span>2 sessões</span>',
+  planning: `<span class="badge b-active">${ic('loader-2')}planejando…</span>`,
+  boot: `<span class="badge b-waiting">${ic('loader-2')}subindo…</span>`,
+}
+// Blocked reasons: the person is needed (yellow) or CI failed (red). Ordered in that order, oldest first inside each.
+const WB_REASON = { needs: ['hand', ''], rounds: ['repeat', ''], ci: ['x-circle', ' wb-fail'] }
+// plan: number of Plan sub-issues; planning: the plan-only session is running; q: position in the queue;
+// boot: Executar plano was clicked and the session has not started; note: [icon, text] of a failed action.
+const WB_ITEMS = [
+  { col: 'planning', t: 'bug', n: 509, title: 'Contador da coluna ignora as issues fechadas', p: [1, 6], prop: 'Todo', age: 'há 5 h' },
+  { col: 'planning', t: 'story', n: 506, title: 'Abrir a issue no Console a partir do card', p: [1, 6], prop: 'Todo', age: 'há 1 d', plan: 5, label: 'ui' },
+  { col: 'planning', t: 'story', n: 503, title: 'Filtro por label no quadro', p: [1, 6], prop: 'Todo', age: 'há 2 d', planning: true },
+  { col: 'planning', t: 'spike', n: 511, title: 'Ler o Status de Projects de outra organização', p: [1, 7], prop: 'No Status', age: 'há 4 d', repo: 'ahrena-framework' },
+  { col: 'queued', t: 'story', n: 507, title: 'Pôr na fila e tirar da fila pelo card', p: [1, 6], prop: 'Todo', age: 'há 20 min', plan: 4, q: 1 },
+  { col: 'queued', t: 'task', n: 499, title: 'Limite de execuções nas preferências', p: [1, 6], prop: 'Todo', age: 'há 8 min', plan: 2, q: 2 },
+  { col: 'running', t: 'story', n: 500, title: 'Quadro do trabalho: colunas pelo ciclo do agente', p: [1, 6], prop: 'In Progress', age: 'há 3 h', sess: 'working' },
+  { col: 'running', t: 'task', n: 505, title: 'Ligar a sessão à issue pelo branch', p: [1, 6], prop: 'Todo', age: 'há 40 min', sess: 'two' },
+  { col: 'review', t: 'story', n: 497, title: 'Filtros do quadro guardados na URL', p: [1, 6], prop: 'In Progress', age: 'há 1 h', pr: 512, ci: 'run', rv: 'pending' },
+  { col: 'review', t: 'bug', n: 502, title: 'Cadeia de pais some no item fechado', p: [1, 6], prop: 'In Progress', age: 'há 25 min', pr: 513, ci: 'ok', rv: 'pending', label: 'ui' },
+  { col: 'blocked', t: 'task', n: 498, title: 'Migração da tabela de vínculos sessão–issue', p: [1, 6], prop: 'In Progress', age: 'há 12 min', sess: 'needs', reason: ['needs', 'Precisa de você · pede permissão'] },
+  { col: 'blocked', t: 'story', n: 495, title: 'Cadeia de pais no card', p: [1, 6], prop: 'In Review', age: 'há 2 h', pr: 508, ci: 'ok', rv: 'changes', reason: ['rounds', 'Mudança pedida depois de 3 rodadas'] },
+  { col: 'blocked', t: 'bug', n: 504, title: 'Quadro em branco com o GitHub fora', p: [1, 6], prop: 'In Progress', age: 'há 35 min', pr: 510, ci: 'fail', rv: 'pending', reason: ['ci', 'CI falhou · testes'], label: 'ui' },
+  { col: 'done', t: 'story', n: 490, title: 'Modelo do trabalho: da iniciativa ao plano', p: [1, 6], prop: 'Done', done: 'mergeada há 2 d', pr: 491, ci: 'ok', rv: 'approved' },
+  { col: 'done', t: 'spike', n: 488, title: 'Status do Project ou ciclo do agente?', p: [1, 6], prop: 'Done', done: 'fechada há 3 d' },
+]
+const WB_LIMIT = 2
+const wbItem = n => WB_ITEMS.find(c => c.n === n)
+const wbIn = (n, extra = {}) => ({ ...wbItem(n), ...extra })
+const wbChain = (c, full) => full
+  ? `<div class="wb-chain" title="Cadeia de pais">${c.p.map(n => `#${n}`).join(' › ')} › <b>#${c.n}</b></div>`
+  : `<div class="wb-chain" title="Pai">↑ #${c.p[c.p.length - 1]}</div>`
+const wbAct = (icon, label, primary = false) => `<span class="wb-act${primary ? ' wb-primary' : ''}">${ic(icon)}${label}</span>`
+const wbLinks = l => `<div class="wb-links">${l.map(x => `<span>${x}</span>`).join('')}</div>`
+// The actions follow the state: no plan, Planejar; planning, Abrir sessão; with a plan, Executar plano with
+// Pôr na fila and Replanejar; in the queue, Executar plano and Tirar da fila; a live session, Abrir sessão.
+// An epic, an initiative or a plan has none; Em review and Concluído have none (the card opens the detail).
+function wbActions(c) {
+  if (c.acts) return c.acts
+  if (['epic', 'initiative', 'plan'].includes(c.t)) return ''
+  if (c.col === 'planning') {
+    if (c.planning) return wbAct('external-link', 'Abrir sessão')
+    if (c.plan) return wbAct('play', 'Executar plano', true) + wbLinks(['Pôr na fila', 'Replanejar'])
+    return wbAct('sparkles', 'Planejar', true)
+  }
+  if (c.col === 'queued') return wbAct('play', 'Executar plano') + wbLinks(['Tirar da fila'])
+  if (c.boot) return ''
+  if (['working', 'two', 'needs'].includes(c.sess)) return wbAct('external-link', 'Abrir sessão')
+  return ''
+}
+// o.chain: the whole chain (any filter on); o.marks: the numbered callouts of the anatomy (465-2);
+// o.noActs: hide the actions (the dragged card); o.cls: extra classes; o.extra: html at the end of the card.
+function wbCard(c, o = {}) {
+  const m = k => o.marks?.includes(k) ? `<span class="wb-mark">${k}</span>` : ''
+  const [tl, tc] = WB_TYPES[c.t]
+  const why = c.reason && WB_REASON[c.reason[0]]
+  const draggable = c.col === 'planning' || c.col === 'queued'
+  const badges = [
+    c.planning ? m(7) + WB_SESSION.planning : '',
+    c.boot ? m(7) + WB_SESSION.boot : '',
+    c.sess ? m(7) + WB_SESSION[c.sess] : '',
+    c.pr ? `<span class="wb-ref">${m(8)}${ic('git-pull-request')}#${c.pr}</span>` : '',
+    c.ci ? `${m(9)}<span class="pill ${WB_CI[c.ci][1]}">${WB_CI[c.ci][0]}</span>` : '',
+    c.rv ? `${m(10)}<span class="pill ${WB_REVIEW[c.rv][1]}">${WB_REVIEW[c.rv][0]}</span>` : '',
+  ].join('')
+  const acts = o.noActs ? '' : wbActions(c)
+  const tone = c.reason ? (c.reason[0] === 'ci' ? ' wb-fail' : ' wb-attn') : c.note ? ' wb-fail' : ''
+  return `<div class="cartao wb-card${tone}${o.sel ? ' wb-sel' : ''}${o.cls ?? ''}">
+    <div class="wb-top">${c.q ? `${m(14)}<span class="wb-pos" title="Posição na fila">${c.q}º</span>` : ''}${m(1)}<b style="color:${tc}">${tl}</b>${m(2)}<span class="c-muted mono">#${c.n}</span>${c.repo ? `${m(12)}<span class="wb-repo trunc">${c.repo}</span>` : ''}${draggable ? `<span class="wb-grip" title="Arrastar">${m(15)}${ic('grip-vertical')}</span>` : ''}</div>
+    <div class="wb-title">${m(4)}${c.title}</div>
+    ${c.p ? m(5) ? `<div style="display:flex;align-items:center;gap:2px">${m(5)}${wbChain(c, o.chain)}</div>` : wbChain(c, o.chain) : ''}
+    ${why ? `<div class="wb-reason${why[1]}${c.reason[0] === 'needs' ? '' : ' wb-gh'}">${m(11)}${ic(why[0])}<span>${c.reason[1]}</span></div>` : ''}
+    ${c.note ? `<div class="wb-note-line">${m(11)}${ic(c.note[0])}<span>${c.note[1]}</span></div>` : ''}
+    <div class="wb-data">${m(6)}<span class="wb-prop">Status: ${c.prop}</span>${c.plan && draggable ? `<span class="wb-ref">${m(16)}${ic('list-checks')}plano · ${c.plan} passos</span>` : ''}<span class="wb-age">${m(3)}${o.age ?? c.done ?? c.age}</span></div>
+    ${badges ? `<div class="wb-badges">${badges}</div>` : ''}
+    ${acts ? m(13) ? `<div class="wb-acts-row">${m(13)}<div class="wb-acts">${acts}</div></div>` : `<div class="wb-acts">${acts}</div>` : ''}${o.extra ?? ''}</div>`
+}
+// The concurrency limit, at the top of Na fila: how many of the limit are running (issue 477).
+const wbLimit = (o = {}) => `<div class="wb-limit${o.cls ?? ' wb-full'}" title="Limite de execuções simultâneas: preferência da instalação">${ic(o.icon ?? 'gauge')}<span><b>${o.text ?? `${WB_LIMIT} de ${WB_LIMIT} rodando`}</b>${o.sub ? ` · ${o.sub}` : ''}</span></div>`
+// cols: { columnKey: [html] }. At 1100 the six columns fold into two rows of three, in reading order; at 1440, one row.
+// o.limit: the html of the limit (false hides it); o.drag: { target, refuse } while a card is dragged.
+function wbBoard(w, cols, o = {}) {
+  return `<div class="wb-board" style="grid-template-columns:repeat(${w >= 1440 ? 6 : 3},minmax(0,1fr))">${WB_COLUMNS.map(([k, label, dot, crit]) => {
+    const list = cols[k] ?? []
+    const body = list.length ? list.join('') : o.blank ? '' : `<div class="wb-none">Nenhuma</div>`
+    const more = o.more?.[k] ? `<div class="wb-more">${o.more[k]}</div>` : ''
+    const d = o.drag
+    const cls = (k === 'blocked' && list.length && !d ? ' wb-col-attn' : '') + (d?.target === k ? ' wb-target' : '') + (d?.refuse === k ? ' wb-refuse' : '') + (d && WB_FACT.includes(k) && d.refuse !== k ? ' wb-fact' : '')
+    const lock = d && WB_FACT.includes(k) ? `<span class="wb-lock" title="Não recebe card arrastado">${ic('lock')}</span>` : ''
+    const limit = k === 'queued' && o.limit !== false && !o.blank ? (o.limit ?? wbLimit()) : ''
+    return `<div class="col wb-col${cls}"><div class="cab"><span class="ponto" style="background:${dot}"></span><span>${label}</span>${lock}<span class="n">${o.count?.[k] ?? list.length}</span></div><div class="wb-crit">${crit}</div>${limit}${body}${more}</div>`
+  }).join('')}</div>`
+}
+// Under issue 477 the queue column reads in queue order: cards with a position sort by it, the rest keep their order.
+const wbByQueue = (a, b) => (a.q ?? Infinity) - (b.q ?? Infinity) || 0
+const wbCols = (filter = () => true, o = {}, items = WB_ITEMS) => WB_COLUMNS.reduce((acc, [k]) => ({ ...acc, [k]: items.filter(c => c.col === k && filter(c)).sort(wbByQueue).map(c => wbCard(c, o)) }), {})
+const WB_READ = `<span class="wb-read">${ic('github')}lido às 23:12 · há 40 s</span>`
+const wbHead = (o = {}) => `<div class="cc-cab"><div class="ico">${ic('columns-3')}</div><div style="min-width:0"><h4>Quadro do trabalho</h4><div class="sub"><span class="mono">ahrenatechnology/ahrena-console</span> · GitHub Project “Ahrena Console” · a coluna vem dos sinais; só a fila é sua</div></div><div class="acoes">${o.read ?? WB_READ}${o.refresh ?? atualizar}</div></div>`
+const WB_LEVELS = [['initiative', 'Iniciativa'], ['epic', 'Épico/Milestone'], ['item', 'Item'], ['plan', 'Plano de execução']]
+const wbLevels = (on, crumb = '') => `<div class="wb-bar"><span class="filter-label">Nível</span><div class="seg">${WB_LEVELS.map(([k, l]) => `<span${k === on ? ' class="on"' : ''}>${l}</span>`).join('')}</div>${on === 'item' ? '<span class="c-muted wb-note">história, tarefa técnica, spike e bug</span>' : ''}${crumb ? `<div class="wb-crumb">${crumb}</div>` : ''}</div>`
+const WB_FIELDS = [['initiative', 'Iniciativa', 'Todas'], ['epic', 'Épico/Milestone', 'Todos'], ['type', 'Tipo', 'Todos'], ['label', 'Label', 'Todas'], ['repo', 'Repositório', 'Todos'], ['status', 'Status do Project', 'Todos']]
+// set: { field: [value shown in the field, value shown in the chip] }; o.url: the link line.
+function wbFilters(set = {}, o = {}) {
+  const fields = WB_FIELDS.map(([k, l, all]) => `<div class="wb-field"><small>${l}</small><span class="campo${set[k] ? ' wb-set' : ''}"><span class="trunc">${set[k]?.[0] ?? all}</span>${ic('chevron-down')}</span></div>`).join('')
+  const active = WB_FIELDS.filter(([k]) => set[k])
+  const chips = active.length ? `<div class="wb-chips"><span class="filter-label">Todos os filtros juntos:</span>${active.map(([k, l], i) => `${i ? '<span class="wb-and">E</span>' : ''}<span class="wb-chip">${l}: <b>${set[k][1] ?? set[k][0]}</b><span class="wb-x" title="Tirar este filtro">${ic('x')}</span></span>`).join('')}<span class="btn">${ic('filter-x')}Limpar filtros</span></div>` : ''
+  const link = o.url ? `<div class="wb-link">${ic('link')}<span>Link deste recorte</span><code>${o.url}</code><span class="btn contorno">${ic('copy')}Copiar link</span></div>` : ''
+  return `<div class="cartao wb-filters${o.off ? ' wb-off' : ''}"><div class="wb-fields">${fields}</div>${chips}${link}</div>`
+}
+const wbFrame = (w, body) => `<div class="cc w${w}">${lado('work', 3, 'ok', true)}<div class="cc-main">${body}</div></div>`
+const wbBoth = (fn, label = w => `${w} px`) => `<div class="fila">${[1100, 1440].map(w => widthCol(w, label(w), wbFrame(w, fn(w)))).join('')}</div>`
+const wbRows = rows => rows.map(([title, fn], i) => `<div class="rotulo" style="margin:${i ? 18 : 0}px 0 4px">${title}</div>${wbBoth(fn)}`).join('')
+const WB_DONE_MORE = { done: '+ 9 fechadas nos últimos 14 dias · ver todas' }
+const WB_MAIN = { more: WB_DONE_MORE, count: { done: 11 } }
+
+// 465-1 · the board.
+const wbMainScreen = w => `${wbHead()}${wbLevels('item')}${wbFilters()}${wbBoard(w, wbCols(), WB_MAIN)}`
+
+// 465-2 · card anatomy, with the actions of each state.
+const WB_EPIC6 = (() => {
+  const kids = WB_ITEMS.filter(c => c.p[1] === 6)
+  return { total: kids.length, done: kids.filter(c => c.col === 'done').length, dist: kids.reduce((d, c) => ({ ...d, [c.col]: (d[c.col] ?? 0) + 1 }), {}) }
+})()
+function wbAnatomy() {
+  const legend = [
+    [1, 'Tipo', 'na cor do tipo. No nível Item: História, Tarefa técnica, Spike ou Bug; nos outros níveis: Iniciativa, Épico ou Plano.'],
+    [2, 'Número', 'da issue. Clicar no card, fora dos botões, abre o detalhe da issue ao lado (467-1).'],
+    [3, 'Há quanto tempo na coluna', '(“há 40 min”). Em Concluído, há quanto tempo mergeou ou fechou: “mergeada há 2 d”, “fechada há 3 d”.'],
+    [4, 'Título', 'em até duas linhas; o resto corta com reticências.'],
+    [5, 'O pai', '<span class="mono">↑ #6</span> por padrão. Com qualquer filtro ativo, a cadeia inteira <span class="mono">#1 › #6 › #500</span>.'],
+    [6, 'Status do GitHub Project', 'como dado, não como coluna. Pode discordar da coluna: a #505 está “Todo” no Project e já tem duas sessões trabalhando.'],
+    [7, 'Sessão', 'ligada pelo branch <span class="mono">&lt;tipo&gt;/&lt;n&gt;-…</span> ou pela issue no prompt: <b>trabalhando</b>, <b>precisa de você</b> (amarelo), <b>2 sessões</b> (o card fica na coluna da mais adiantada), <b>planejando…</b> (a sessão só de planejamento, que não tira o card de Planejamento) ou <b>subindo…</b> (Executar plano pedido, a sessão ainda não começou).'],
+    [8, 'PR', 'que fecha a issue.'],
+    [9, 'CI', 'do último commit do PR: CI ✓, CI ✕ ou CI ….'],
+    [10, 'Review', 'do PR: aprovado, ajustes ou review (esperando o Argos).'],
+    [11, 'Motivo', 'em Bloqueado: precisa de você, mudança pedida depois de 3 rodadas, ou CI falhou. Fora de Bloqueado, o motivo de uma ação que falhou (o plano não saiu, a sessão não subiu).'],
+    [12, 'Repositório', 'só quando o card é de outro repositório que não o do projeto.'],
+    [13, 'Ações', 'pelo estado: sem plano, <b>Planejar</b>; planejando, <b>Abrir sessão</b>; com plano, <b>Executar plano</b>, com <b>Pôr na fila</b> e <b>Replanejar</b>; na fila, <b>Executar plano</b> e <b>Tirar da fila</b>; com sessão viva, <b>Abrir sessão</b>. Épico e iniciativa não têm ação; Em review e Concluído também não.'],
+    [14, 'Posição na fila', 'só em Na fila: <span class="mono">1º</span> é o próximo que o Console puxa.'],
+    [15, 'Alça de arrastar', 'só em Planejamento e Na fila: arrastar põe na fila, tira da fila e reordena (477-2). As outras quatro colunas são fatos e não recebem card.'],
+    [16, 'Plano', '<span class="mono">plano · N passos</span>: o número de sub-issues do tipo Plan. Item com plano e sem sessão fica em Planejamento (aprovado).'],
+  ]
+  const zoom = (title, c, marks) => `<div class="rotulo">${title}</div><div class="wb-zoom">${wbCard(c, { marks })}</div>`
+  const plain = (title, c, o) => `<div class="rotulo">${title}</div><div class="wb-plain">${wbCard(c, o)}</div>`
+  return `<div class="wb-anatomy">
+    <div>${zoom('Planejamento, com plano · ampliado', wbItem(506), [1, 2, 3, 4, 5, 6, 13, 15, 16])}
+      ${zoom('Na fila · ampliado', wbItem(507), [14])}
+      ${zoom('Bloqueado por CI · ampliado', wbIn(504, { sess: 'working' }), [7, 8, 9, 10, 11])}
+      ${plain('De outro repositório', wbItem(511), { marks: [12] })}</div>
+    <div><div class="rotulo" style="color:var(--text)">As ações, estado por estado</div>
+      ${plain('Sem plano · Planejar', wbItem(509))}
+      ${plain('Planejando · a sessão só de planejamento roda', wbItem(503))}
+      ${plain('O planejamento falhou · volta a Planejar com o motivo', wbIn(509, { note: ['alert-circle', 'O planejamento terminou sem plano · ver o motivo'] }))}
+      ${plain('Na fila · 2º', wbItem(499))}
+      ${plain('Executar plano · direto para Em execução', wbIn(506, { col: 'running', boot: true, age: 'há 5 s' }))}
+      ${plain('Com sessão viva · Abrir sessão', wbItem(500))}
+      <div class="rotulo">Épico ou iniciativa · sem ações</div><div class="wb-plain">${wbEpicCard(WB_EPICS.find(e => e.n === 6))}</div></div>
+    <div><div class="rotulo">Os três motivos de Bloqueado · na ordem da coluna</div>${[498, 495, 504].map(n => `<div class="wb-plain">${wbCard(wbItem(n))}</div>`).join('')}
+      <div class="rotulo">Concluído</div>${[490, 488].map(n => `<div class="wb-plain">${wbCard(wbItem(n))}</div>`).join('')}
+      <div class="rotulo">O pai: compacto e com filtro</div><div class="wb-plain">${wbCard(wbItem(500))}</div><div class="wb-plain">${wbCard(wbItem(500), { chain: true })}</div></div>
+    <div><div class="rotulo">As partes</div><ol class="wb-legend">${legend.map(([k, t, d]) => `<li><span class="wb-mark">${k}</span><span><b>${t}</b> ${d}</span></li>`).join('')}</ol></div>
+  </div>`
+}
+
+// 465-3 · empty project.
+const wbEmptyScreen = w => `${wbHead()}${wbLevels('item')}${wbFilters({}, { off: true })}
+  <div class="cartao vazio wb-empty"><span class="ic">${ic('inbox')}</span><b>Nenhuma issue neste projeto ainda</b><span>O GitHub Project “Ahrena Console” não tem nenhuma issue. Quando tiver, cada uma entra em Planejamento e anda pelas colunas conforme o agente trabalha.</span><span><span class="btn contorno">${ic('external-link')}Abrir o Project no GitHub</span><span class="btn contorno">${ic('repeat')}Trocar de Project</span></span></div>
+  ${wbBoard(w, {}, { blank: true })}`
+
+// 465-4 · GitHub down (decision 0001): the last data read, the band, and the variant without any data saved.
+const wbStaleBand = `<div class="faixa erro"><span class="ic">${ic('cloud-off')}</span><div><b>GitHub indisponível.</b> Mostrando o quadro de 22:41 (há 31 min). Tentamos de novo em 2 min. As sessões e a fila continuam ao vivo.</div><span class="btn contorno">${ic('refresh-cw')}Tentar agora</span></div>`
+const WB_READ_OLD = `<span class="wb-read wb-old">${ic('github')}lido às 22:41 · há 31 min</span>`
+const wbStaleScreen = w => `${wbHead({ read: WB_READ_OLD })}${wbStaleBand}${wbLevels('item')}${wbFilters()}<div class="wb-stale">${wbBoard(w, wbCols(), WB_MAIN)}</div>`
+const wbNoCacheScreen = w => `${wbHead({ read: `<span class="wb-read wb-old">${ic('github')}nunca lido</span>` })}
+  <div class="cartao vazio wb-empty"><span class="ic" style="color:var(--status-error-text)">${ic('cloud-off')}</span><b>Ainda não conseguimos ler o GitHub</b><span>A primeira leitura falhou (o GitHub respondeu 502) e não há quadro guardado para mostrar. Tentamos de novo em 2 min.</span><span><span class="btn cheio">${ic('refresh-cw')}Tentar agora</span></span></div>
+  ${wbBoard(w, {}, { blank: true, count: Object.fromEntries(WB_COLUMNS.map(([k]) => [k, '–'])) })}`
+const wbStaleHtml = () => wbRows([['Com o último quadro lido', wbStaleScreen], ['Sem nada guardado: a primeira leitura falhou', wbNoCacheScreen]])
+
+// 465-5 · loading (first open; later reads keep the board and only spin Atualizar).
+const wbSkel = () => `<div class="cartao wb-card"><div class="esq" style="height:10px;width:45%"></div><div class="esq" style="height:12px;width:92%"></div><div class="esq" style="height:12px;width:60%"></div><div class="esq" style="height:18px;width:52%"></div></div>`
+const wbLoadingScreen = w => `${wbHead({ read: `<span class="wb-read">${ic('loader-2')}lendo o GitHub…</span>`, refresh: `<span class="btn" style="opacity:.5">${ic('refresh-cw')}Atualizar</span>` })}${wbLevels('item')}${wbFilters({}, { off: true })}
+  ${wbBoard(w, Object.fromEntries(WB_COLUMNS.map(([k], i) => [k, Array.from({ length: [3, 1, 2, 2, 2, 2][i] }, wbSkel)])), { limit: false, count: Object.fromEntries(WB_COLUMNS.map(([k]) => [k, '…'])) })}`
+
+// 465-6 · the actions (issues 467 and 468): the confirmations anchored on the card, and what each one leads to.
+const wbChoice = () => `<span>Conta</span><span class="campo">${ic('user')}Ahrena · Team${ic('chevron-down')}</span>
+  <span>Abrir em</span><div class="seg"><span class="on">${ic('monitor')}Claude Desktop</span><span>${ic('terminal')}Terminal</span></div>`
+const wbRepoRows = () => `<span>Repositório</span><span class="mono trunc">ahrenatechnology/ahrena-console</span><span>Pasta</span><span class="mono trunc">~/Workspace/ahrena-console</span>`
+// kind: run (Executar plano), full (the limit is full), plan (Planejar), folder (the repository is not on this machine).
+function wbConfirm(kind, o = {}) {
+  const cls = `cartao wb-popover${o.static ? ' wb-static' : ''}`
+  if (kind === 'folder') return `<div class="${cls}"><h6>Falta a pasta do repositório nesta máquina</h6>
+    <span class="c-muted">O Console não achou <span class="mono">ahrenatechnology/ahrena-console</span> em nenhuma pasta deste Mac. Clone e tente de novo; o card fica onde estava.</span>
+    <div class="wb-cmd">git clone https://github.com/ahrenatechnology/ahrena-console ~/Workspace/ahrena-console</div>
+    <div class="wb-pop-acts"><span class="btn">Fechar</span><span class="btn cheio">${ic('copy')}Copiar comando</span></div></div>`
+  if (kind === 'plan') return `<div class="${cls}"><h6>Planejar a #509 com a Athena</h6>
+    <div class="wb-kv">${wbRepoRows()}${wbChoice()}</div>
+    <div class="wb-prompt">Athena, só planejamento: leia a #509 e o código e escreva o plano de execução como sub-issues do tipo Plan (skill planning-changes). Não escreva código nem abra PR.</div>
+    <span class="c-muted">O card fica em Planejamento com “planejando…” até o plano sair. Não conta no limite de execuções.</span>
+    <div class="wb-pop-acts"><span class="btn">Cancelar</span><span class="btn cheio">${ic('sparkles')}Planejar</span></div></div>`
+  const full = kind === 'full'
+  return `<div class="${cls}"><h6>Executar o plano da #506</h6>
+    ${full ? `<div class="faixa"><span class="ic">${ic('gauge')}</span><div><b>Passa do limite.</b> Já há 2 de 2 rodando; esta seria a 3ª execução. A fila não puxa ninguém até voltar a ter vaga.</div></div>` : ''}
+    <div class="wb-kv">${wbRepoRows()}${wbChoice()}</div>
+    <div class="wb-prompt">Athena, execute o plano da #506 (5 passos, #520 a #524) em ahrenatechnology/ahrena-console…</div>
+    <span class="c-muted">${full ? 'Executar mesmo assim abre a sessão agora.' : 'Abre a sessão agora e o card vai direto para Em execução. Conta como 1 das 2 execuções; hoje há 1 rodando.'}</span>
+    <div class="wb-pop-acts"><span class="btn">Cancelar</span><span class="btn cheio">${ic('play')}${full ? 'Executar mesmo assim' : 'Executar plano'}</span></div></div>`
+}
+// Before: issue 505 opened its PR, so there is one free slot; the Executar plano confirmation is open on issue 506.
+const WB_ONE_FREE = WB_ITEMS.map(c => c.n === 505 ? { ...c, col: 'review', sess: undefined, pr: 514, ci: 'run', rv: 'pending', age: 'há 2 min' } : c)
+const wbConfirmScreen = w => {
+  const cols = wbCols(() => true, {}, WB_ONE_FREE)
+  cols.planning = WB_ONE_FREE.filter(c => c.col === 'planning').map(c => c.n === 506 ? `<div class="wb-anchor">${wbCard(c, { sel: true })}${wbConfirm('run')}</div>` : wbCard(c))
+  return `${wbHead()}${wbLevels('item')}${wbFilters()}${wbBoard(w, cols, { ...WB_MAIN, limit: wbLimit({ text: '1 de 2 rodando', cls: '' }) })}`
+}
+// After: the card jumped straight to Em execução with "subindo…", without going through the queue.
+const wbBootScreen = w => {
+  const items = [...WB_ONE_FREE.filter(c => c.n !== 506), { ...wbItem(506), col: 'running', boot: true, age: 'há 5 s' }]
+  const cols = wbCols(() => true, {}, items)
+  cols.running = [cols.running.pop(), ...cols.running]
+  return `<div class="wb-shell">${wbHead()}${wbLevels('item')}${wbFilters()}${wbBoard(w, cols, WB_MAIN)}<div class="wb-toast">${ic('check-circle-2')}<span>Sessão da Athena abrindo no Claude Desktop para a <b>#506</b></span><span class="c-accent">Abrir</span></div></div>`
+}
+const wbStrip = () => `<div class="wb-strip">
+  <div><div class="rotulo">1 · Planejar: confirmar</div>${wbConfirm('plan', { static: true })}</div>
+  <div><div class="rotulo">2 · Planejando</div><div class="wb-plain">${wbCard(wbIn(509, { planning: true, age: 'há 3 min' }))}</div>
+    <div class="rotulo" style="margin-top:8px">3 · O plano saiu</div><div class="wb-plain">${wbCard(wbIn(509, { plan: 3, age: 'há 1 min' }))}</div></div>
+  <div><div class="rotulo">O planejamento falhou</div><div class="wb-plain">${wbCard(wbIn(509, { note: ['alert-circle', 'O planejamento terminou sem plano · a sessão parou com erro de API'], age: 'há 1 min' }))}</div>
+    <div class="rotulo" style="margin-top:8px">Na fila · Executar plano tira da fila</div><div class="wb-plain">${wbCard(wbItem(499))}</div></div>
+  <div><div class="rotulo">Executar plano com o limite cheio</div>${wbConfirm('full', { static: true })}</div>
+  <div><div class="rotulo">Falta a pasta do repositório</div>${wbConfirm('folder', { static: true })}</div>
+</div>`
+const wbActionsHtml = () => `${wbRows([['Executar plano: a confirmação no card, com uma vaga livre', wbConfirmScreen], ['Depois de confirmar: direto para Em execução, com “subindo…”', wbBootScreen]])}
+  <div class="rotulo" style="margin:18px 0 4px">Planejar, as falhas e o limite · sem largura própria</div>${wbStrip()}`
+
+// 466-1 · levels: the epic level inside initiative 1, and the drill into epic 6 at item level.
+const WB_EPICS = [
+  { col: 'planning', n: 9, title: 'Notificações do quadro', age: 'há 6 d', total: 4, done: 0, dist: { planning: 4 } },
+  { col: 'running', n: 7, title: 'Máquinas remotas no quadro', age: 'há 1 d', total: 5, done: 1, dist: { planning: 2, running: 1, review: 1, done: 1 } },
+  { col: 'review', n: 10, title: 'Kanban de sessões ao vivo', age: 'há 3 h', total: 3, done: 1, dist: { review: 2, done: 1 } },
+  { col: 'blocked', n: 6, title: 'Quadro do trabalho pelo ciclo do agente', age: 'há 12 min', ...WB_EPIC6, reason: '3 filhas bloqueadas · 1 precisa de você' },
+  { col: 'done', n: 8, title: 'Painel da sessão', age: 'fechado há 5 d', total: 9, done: 9, dist: { done: 9 } },
+]
+const wbEpicCard = e => `<div class="cartao wb-card${e.reason ? ' wb-attn' : ''}">
+  <div class="wb-top"><b style="color:var(--rose)">Épico</b><span class="c-muted mono">#${e.n}</span><span class="wb-age">${e.age}</span></div>
+  <div class="wb-title">${e.title}</div><div class="wb-chain">↑ #1</div>
+  ${e.reason ? `<div class="wb-reason">${ic('hand')}<span>${e.reason}</span></div>` : ''}
+  <div class="wb-progress"><span>${e.done}/${e.total} filhas concluídas</span>${barra(e.done / e.total * 100, 'var(--status-completed-dot)')}</div>
+  <div class="wb-dist">${WB_COLUMNS.filter(([k]) => e.dist[k]).map(([k, l, dot]) => `<span title="${l}"><span class="ponto" style="background:${dot}"></span>${e.dist[k]}</span>`).join('')}</div>
+  <span class="wb-drill">Ver filhos (${e.total}) ${ic('chevron-right')}</span></div>`
+const wbEpicScreen = w => `${wbHead()}${wbLevels('epic', `<b>Iniciativa #1</b> Console como cockpit do agente`)}
+  ${wbFilters({ initiative: ['#1 Console como cockpit', '#1'] }, { url: '/ui/work?level=epic&amp;initiative=1' })}
+  ${wbBoard(w, WB_COLUMNS.reduce((acc, [k]) => ({ ...acc, [k]: WB_EPICS.filter(e => e.col === k).map(wbEpicCard) }), {}), { limit: false })}`
+const wbDrillScreen = w => `${wbHead()}${wbLevels('item', `<span>Iniciativa #1</span>${ic('chevron-right')}<b>Épico #6</b><span class="wb-here">Quadro do trabalho</span>`)}
+  ${wbFilters({ initiative: ['#1 Console como cockpit', '#1'], epic: ['#6 Quadro do trabalho', '#6'] }, { url: '/ui/work?level=item&amp;initiative=1&amp;epic=6' })}
+  ${wbBoard(w, wbCols(c => c.p[1] === 6, { chain: true }))}`
+const wbLevelsHtml = () => wbRows([['Nível Épico/Milestone, dentro da iniciativa #1', wbEpicScreen], [`Ver filhos (${WB_EPIC6.total}) do #6: o nível vira Item e o filtro de épico entra sozinho`, wbDrillScreen]])
+
+// 466-2 · filters, combined by AND, in the URL. The Tipo counts are the children of epic 6 in WB_ITEMS.
+const WB_URL = '/ui/work?level=item&amp;initiative=1&amp;epic=6&amp;type=bug&amp;label=ui&amp;repo=ahrena-console&amp;status=in-progress'
+const WB_SET = { initiative: ['#1 Console como cockpit', '#1'], epic: ['#6 Quadro do trabalho', '#6'], type: ['Bug'], label: ['ui'], repo: ['ahrena-console'], status: ['In Progress'] }
+const wbTypePop = () => {
+  const kids = WB_ITEMS.filter(c => c.p[1] === 6)
+  const rows = [['Todos', kids.length], ...['story', 'task', 'spike', 'bug'].map(t => [WB_TYPES[t][0], kids.filter(c => c.t === t).length, t === 'bug'])]
+  return `<div class="cartao wb-pop">${rows.map(([t, n, on]) => `<span${on ? ' class="on"' : ''}>${ic(on ? 'check' : 'circle')}${t}<small>${n}</small></span>`).join('')}</div>`
+}
+const wbFiltersScreen = w => `${wbHead()}${wbLevels('item', `<span>Iniciativa #1</span>${ic('chevron-right')}<b>Épico #6</b>`)}
+  ${wbFilters(WB_SET, { url: WB_URL })}
+  ${wbBoard(w, wbCols(c => c.t === 'bug' && c.label === 'ui' && c.prop === 'In Progress', { chain: true }))}`
+// The open Tipo menu is drawn beside the frame, so it covers neither the chips nor the link.
+const wbTypeOpen = () => `<div class="rotulo" style="margin-top:10px">Tipo aberto · a contagem é do épico #6, antes dos outros filtros</div><div class="cartao wb-popfrag"><div class="wb-field"><small>Tipo</small><span class="campo wb-set"><span class="trunc">Bug</span>${ic('chevron-up')}</span></div>${wbTypePop()}</div>`
+const wbFiltersHtml = () => `<div class="fila">${[1100, 1440].map(w => widthCol(w, `${w} px`, wbFrame(w, wbFiltersScreen(w)) + (w >= 1440 ? wbTypeOpen() : ''))).join('')}</div>`
+
+// 466-3 · no result for the filters: the six columns stay, empty, and a line says how to clear.
+const wbNoResultScreen = w => `${wbHead()}${wbLevels('item', `<span>Iniciativa #1</span>${ic('chevron-right')}<b>Épico #6</b>`)}
+  ${wbFilters({ ...WB_SET, label: ['design-system'] }, { url: WB_URL.replace('label=ui', 'label=design-system') })}
+  <div class="cartao vazio wb-empty" style="padding:16px 20px"><span class="ic">${ic('filter-x')}</span><b>Nenhuma issue com estes filtros.</b><span>Os seis filtros valem juntos. Sem a label <span class="mono">design-system</span>, há 2 issues neste recorte.</span><span><span class="btn cheio">${ic('filter-x')}Limpar filtros</span><span class="btn contorno">${ic('x')}Tirar a label</span></span></div>
+  ${wbBoard(w, {}, { blank: true })}`
+
+// 467-1 · the issue detail opened from the card (the detail of issue 338), in read mode.
+const WB_STEPS_506 = [[520, 'Rota do detalhe: corpo, pais e plano'], [521, 'Painel lateral do detalhe no quadro'], [522, 'Plano, PR com CI e review no painel'], [523, 'Comentários com paginação'], [524, 'Teste de ponta a ponta: abrir pelo card']]
+const WB_STEPS_497 = [[515, 'Ler e escrever os filtros na URL'], [516, 'Parâmetros e valores em inglês'], [517, 'Teste: reabrir o link mostra o mesmo recorte']]
+const wbMeta = (c, edit) => {
+  const sel = v => `<span class="campo">${v}${ic('chevron-down')}</span>`
+  const labels = c.n === 506 ? ['ui', 'work-board'] : ['work-board']
+  const tags = `<span class="wb-tags">${labels.map(l => `<span class="wb-tag">${l}${edit ? ic('x') : ''}</span>`).join('')}${edit ? `<span class="wb-tag wb-add">${ic('plus')}label</span>` : ''}</span>`
+  const rows = [['Tipo', WB_TYPES[c.t][0]], ['Labels', tags], ['Milestone', 'M3 · Quadro do trabalho'], ['Pai', '#6 Quadro do trabalho pelo ciclo do agente']]
+  return `<div class="wb-meta">${rows.map(([k, v]) => `<span>${k}</span>${edit && k !== 'Labels' ? sel(v) : `<span class="trunc">${v}</span>`}`).join('')}${edit ? '' : `<span>Status do Project</span><span>${c.prop}</span><span>Repositório</span><span class="mono">ahrena-console</span>`}</div>`
+}
+const wbBody506 = () => `<div class="wb-md"><p><b>Como</b> Fernando, antes de mandar um agente construir, <b>quero</b> abrir a issue a partir do card e ler tudo dentro do Console, <b>para</b> não sair para o GitHub.</p>
+  <pre>Cenário: Abrir pelo card
+  Dado o card #506 em "Planejamento"
+  Quando clico no card
+  Então o detalhe abre ao lado do quadro</pre></div>`
+const WB_BODY_RAW = `**Como** Fernando, antes de mandar um agente construir,
+**quero** abrir a issue a partir do card e ler tudo
+dentro do Console, **para** não sair para o GitHub.
+
+\`\`\`gherkin
+Cenário: Abrir pelo card
+  Dado o card #506 em "Planejamento"
+  Quando clico no card
+  Então o detalhe abre ao lado do quadro
+\`\`\``
+const wbPr497 = () => `<div class="wb-pr"><div class="wb-row"><span class="wb-ref">${ic('git-pull-request')}#512</span><b class="trunc" style="font-weight:500;flex:1">feat(ui): os filtros do quadro na URL</b></div>
+  <div class="wb-row"><span class="pill b-waiting">CI …</span><span class="c-muted">3 de 5 checks</span><span class="pill b-waiting">review</span><span class="c-muted">esperando o Argos · rodada 1 de 3</span></div>
+  <div class="wb-checks"><span>${ic('check')}repo-tests (1/6 a 4/6)</span><span>${ic('loader-2')}repo-tests (5/6, 6/6)</span><span>${ic('check')}english-internals</span></div></div>`
+const wbComments = edit => `<div class="wb-comment"><span class="wb-av">VC</span><span><b>você</b> <small>· há 1 d</small><br>Começar pelo painel ao lado, não por uma página nova.</span></div>
+  <div class="wb-comment"><span class="wb-av">AE</span><span><b>ana-exemplo</b> <small>· há 20 h</small><br>O passo 4 pode ficar para depois do primeiro PR.</span></div>
+  ${edit ? `<div class="wb-textarea wb-ph">Escreva um comentário (Markdown)…</div><div class="wb-row" style="justify-content:flex-end"><span class="btn contorno">${ic('message-square')}Comentar</span></div>` : `<div class="wb-input wb-ph">Comentar…</div>`}`
+const wbStepsRead = (steps, done = false) => `<ol class="wb-steps">${steps.map(([n, t], i) => `<li${done ? ' class="wb-done"' : ''}><span class="wb-sn">${i + 1}</span><span class="trunc">${t}</span><span class="wb-st"><span class="mono">#${n}</span>${ic(done ? 'check-circle-2' : 'circle')}</span></li>`).join('')}</ol>`
+function wbDetailRead(c) {
+  const col = WB_COLUMNS.find(([k]) => k === c.col)
+  const acts = c.n === 506 ? `<div class="wb-dacts">${wbAct('play', 'Executar plano', true)}${wbAct('list-plus', 'Pôr na fila')}${wbAct('sparkles', 'Replanejar')}</div>`
+    : c.n === 509 ? `<div class="wb-dacts">${wbAct('sparkles', 'Planejar', true)}</div>` : ''
+  const body = {
+    506: wbBody506(),
+    509: `<div class="wb-md"><p>O contador de cada coluna soma as issues fechadas há mais de 14 dias, que a coluna Concluído não mostra.</p><pre>Esperado: Concluído · 11
+Visto:    Concluído · 38</pre></div>`,
+    497: `<div class="wb-md"><p><b>Como</b> Fernando, <b>quero</b> que os filtros do quadro fiquem na URL, <b>para</b> reabrir o mesmo recorte por um link.</p></div>`,
+  }[c.n]
+  const plan = c.n === 506 ? ['Plano · 5 passos', wbStepsRead(WB_STEPS_506)]
+    : c.n === 497 ? ['Plano · 3 passos, todos fechados', wbStepsRead(WB_STEPS_497, true)]
+    : ['Plano', `<div class="wb-pr"><span class="c-muted">Sem plano ainda. Planejar abre uma sessão da Athena só de planejamento, que lê a issue e o código e escreve os passos aqui como sub-issues do tipo Plan. Ela não escreve código.</span></div>`]
+  return `<div class="wb-dhead"><b style="color:${WB_TYPES[c.t][1]};font-size:12px">${WB_TYPES[c.t][0]}</b><span class="c-muted mono" style="font-size:12px">#${c.n}</span><span class="badge b-abandoned"><span class="p"></span>${col[1]} · ${c.age}</span><span style="margin-left:auto"></span><span class="btn contorno">${ic('pencil')}Editar</span><span class="btn contorno" title="Abrir no GitHub">${ic('external-link')}</span><span class="wb-x">${ic('x')}</span></div>
+    <h5>${c.title}</h5>
+    <div class="wb-chain">#1 Console como cockpit › #6 Quadro do trabalho › <b>#${c.n}</b></div>
+    ${acts}
+    <div class="wb-sec"><div class="olhinho">Descrição</div>${body}</div>
+    <div class="wb-sec"><div class="olhinho">${plan[0]}<span class="r">${ic('list-checks')}sub-issues Plan</span></div>${plan[1]}</div>
+    <div class="wb-sec"><div class="olhinho">PR</div>${c.n === 497 ? wbPr497() : `<div class="wb-pr"><span class="c-muted">Nenhum PR ainda. Aparece aqui quando a sessão abrir o PR que fecha a #${c.n}.</span></div>`}</div>
+    <div class="wb-sec"><div class="olhinho">Detalhes</div>${wbMeta(c, false)}</div>
+    <div class="wb-sec"><div class="olhinho">Comentários · ${c.n === 509 ? 0 : 2}</div>${c.n === 509 ? '<div class="wb-input wb-ph">Comentar…</div>' : wbComments(false)}</div>`
+}
+// mode: edit (478-1), conflict (478-2) or refused (478-3). The body is the field being saved in each one.
+function wbDetailEdit(c, mode) {
+  const body = mode === 'conflict'
+    ? `<div class="faixa"><span class="ic">${ic('git-compare')}</span><div><b>A #506 mudou no GitHub enquanto você editava.</b> Nada foi gravado por cima. Escolha a versão que fica.</div></div>
+      <div class="wb-version"><span class="olhinho">A sua versão · não gravada</span><div class="wb-textarea">**Como** Fernando, antes de mandar um agente construir,
+**quero** abrir a issue a partir do card e ler tudo
+dentro do Console, **para** não sair para o GitHub.
+<span class="wb-ins">O detalhe abre num painel ao lado, com o quadro atrás.</span></div></div>
+      <div class="wb-version"><span class="olhinho">No GitHub · ana-exemplo, há 2 min</span><div class="wb-textarea">**Como** Fernando, antes de mandar um agente construir,
+**quero** abrir a issue a partir do card e ler tudo
+dentro do Console, **para** não sair para o GitHub.
+<span class="wb-ins">Fora do escopo: editar a issue (é a #478).</span></div></div>
+      <div class="wb-row"><span class="btn contorno">${ic('upload')}Gravar a minha por cima</span><span class="btn contorno">${ic('download')}Ficar com a do GitHub</span><span class="btn">${ic('copy')}Copiar a minha</span></div>`
+    : `${mode === 'refused' ? `<div class="faixa erro"><span class="ic">${ic('shield-alert')}</span><div><b>O GitHub recusou a edição.</b> Sem permissão para editar issues em <span class="mono">ahrenatechnology/ahrena-console</span> (403). O texto continua aqui; nada se perdeu.</div></div>` : ''}
+      <div class="wb-tabs"><span class="on">Escrever</span><span>Pré-visualizar</span></div>
+      <div class="wb-textarea wb-focus">${WB_BODY_RAW}${mode === 'refused' ? '\nO detalhe abre num painel ao lado, com o quadro atrás.' : ''}</div>
+      <div class="wb-row"><span class="btn cheio">${ic(mode === 'refused' ? 'refresh-cw' : 'check')}${mode === 'refused' ? 'Tentar de novo' : 'Salvar descrição'}</span>${mode === 'refused' ? `<span class="btn contorno">${ic('copy')}Copiar texto</span>` : ''}<span class="btn">Cancelar</span><span class="wb-hint-line" style="margin-left:auto">Markdown</span></div>`
+  const steps = WB_STEPS_506.map(([n, t], i) => i === 1
+    ? `<li class="wb-editing"><span class="wb-grip">${ic('grip-vertical')}</span><span class="wb-sn">${i + 1}</span><span class="wb-input wb-focus">Painel lateral do detalhe no quadro, com Editar</span><span class="btn cheio" style="height:26px;font-size:11.5px">Salvar</span></li>`
+    : `<li><span class="wb-grip">${ic('grip-vertical')}</span><span class="wb-sn">${i + 1}</span><span class="trunc">${t}</span><span class="wb-st"><span class="mono">#${n}</span>${ic('pencil')}${ic('trash-2')}</span></li>`).join('')
+  return `<div class="wb-dhead"><b style="color:var(--accent-text);font-size:12px">História</b><span class="c-muted mono" style="font-size:12px">#506</span><span class="badge b-active">${ic('pencil')}editando</span><span style="margin-left:auto"></span><span class="wb-saved">${ic('check')}gravado no GitHub às 23:14</span><span class="btn contorno">Concluir</span><span class="wb-x">${ic('x')}</span></div>
+    <div class="wb-input wb-title">Abrir a issue no Console a partir do card</div>
+    <div class="wb-sec"><div class="olhinho">Descrição</div>${body}</div>
+    <div class="wb-sec"><div class="olhinho">Detalhes<span class="r" style="color:var(--muted)">grava ao escolher</span></div>${wbMeta(wbItem(506), true)}</div>
+    <div class="wb-sec"><div class="olhinho">Plano · 5 passos<span class="r">${ic('list-checks')}sub-issues Plan</span></div><ol class="wb-steps">${steps}<li class="wb-new">${ic('plus')}<span>Acrescentar passo</span></li></ol>
+      <span class="wb-hint-line">Arraste para reordenar. Remover fecha a sub-issue como “not planned” no GitHub, com Desfazer.</span></div>
+    <div class="wb-sec"><div class="olhinho">Comentários · 2</div>${wbComments(true)}</div>`
+}
+// The detail is a panel at the right of the board, which stays behind under a scrim.
+const wbDetailScreen = (c, mode = 'read') => w => {
+  const width = mode === 'read' ? (w >= 1440 ? 480 : 440) : (w >= 1440 ? 580 : 520)
+  const cols = WB_COLUMNS.reduce((acc, [k]) => ({ ...acc, [k]: WB_ITEMS.filter(x => x.col === k).map(x => wbCard(x, { sel: x.n === c.n })) }), {})
+  return `${wbHead()}${wbLevels('item')}${wbFilters()}<div class="wb-stage">${wbBoard(w, cols, WB_MAIN)}<div class="wb-scrim"></div><aside class="cartao wb-drawer" style="width:${width}px">${mode === 'read' ? wbDetailRead(c) : wbDetailEdit(c, mode)}</aside></div>`
+}
+const wbDetailHtml = () => wbRows([['#509 em Planejamento, sem plano: Planejar', wbDetailScreen(wbItem(509))], ['#506 em Planejamento, com plano: Executar plano, Pôr na fila e Replanejar', wbDetailScreen(wbItem(506))], ['#497 em Em review: o plano fechado e o PR com CI e review', wbDetailScreen(wbItem(497))]])
+
+// 477-1 · the queue: positions, the limit, and the queue stopped by a pull that failed.
+const WB_THREE = WB_ITEMS.map(c => c.n === 506 ? { ...c, col: 'queued', q: 3, age: 'há 1 min' } : c)
+const wbQueueScreen = w => `${wbHead()}${wbLevels('item')}${wbFilters()}${wbBoard(w, wbCols(() => true, {}, WB_THREE), WB_MAIN)}`
+// Issue 505 opened its PR, the Console tried to pull issue 507 and the session did not start: issue 507 stays first, with the reason.
+const WB_STOPPED = WB_THREE.map(c => c.n === 505 ? { ...c, col: 'review', sess: undefined, pr: 514, ci: 'run', rv: 'pending', age: 'há 3 min' }
+  : c.n === 507 ? { ...c, note: ['alert-circle', 'A sessão não subiu: o Claude Desktop não respondeu'], acts: wbAct('refresh-cw', 'Tentar de novo', true) + wbLinks(['Tirar da fila']) } : c)
+const wbStoppedScreen = w => `${wbHead()}${wbLevels('item')}${wbFilters()}${wbBoard(w, wbCols(() => true, {}, WB_STOPPED), { ...WB_MAIN, limit: wbLimit({ cls: ' wb-paused', icon: 'pause-circle', text: 'Fila parada', sub: '1 de 2 rodando; não puxa até resolver a #507' }) })}`
+const wbQueueHtml = () => wbRows([['A fila com três itens, na ordem em que o Console puxa', wbQueueScreen], ['A fila parada: a sessão do 1º não subiu', wbStoppedScreen]])
+
+// 477-2 · dragging: into the queue, inside it, refused without a plan and refused by a column of facts.
+const WB_LEFT = '<div class="wb-left">saiu daqui</div>'
+const wbDragged = (c, msg) => wbCard(c, { noActs: true, cls: ` wb-drag${msg ? ' wb-no' : ''}`, extra: msg ? `<div class="wb-refuse-msg">${ic('ban')}<span>${msg}</span></div>` : '' })
+const wbDragScreen = kind => w => {
+  const cols = wbCols()
+  const card = n => wbCard(wbItem(n))
+  let drag = { target: 'queued' }, count = {}
+  if (kind === 'in') {
+    cols.planning = [card(509), WB_LEFT, card(503), card(511)]
+    cols.queued = [card(507), card(499), `<div class="wb-drop">${ic('arrow-down-to-line')}Solta aqui · entra em 3º</div>`, wbDragged(wbItem(506))]
+    count = { planning: 3, queued: 2 }
+  } else if (kind === 'reorder') {
+    cols.queued = [`<div class="wb-drop">${ic('arrow-up-to-line')}Solta aqui · passa a 1º</div>`, wbDragged(wbItem(499)), wbCard(wbIn(507, { q: 2 })), WB_LEFT]
+    count = { queued: 2 }
+  } else if (kind === 'noplan') {
+    drag = { refuse: 'queued' }
+    cols.planning = [WB_LEFT, card(506), card(503), card(511)]
+    cols.queued = [card(507), card(499), wbDragged(wbItem(509), 'Planeje antes: item sem plano não entra na fila')]
+    count = { planning: 3, queued: 2 }
+  } else {
+    drag = { refuse: 'review' }
+    cols.queued = [WB_LEFT, card(499)]
+    cols.review = [card(497), card(502), wbDragged(wbItem(507), 'Em review vem do PR: não recebe card. Solte em Planejamento ou Na fila.')]
+    count = { queued: 1, review: 2 }
+  }
+  return `${wbHead()}${wbLevels('item')}${wbFilters()}${wbBoard(w, cols, { ...WB_MAIN, drag, count: { ...WB_MAIN.count, ...count } })}`
+}
+const wbDragHtml = () => wbRows([
+  ['Pôr na fila: arrastar de Planejamento para Na fila (só com plano)', wbDragScreen('in')],
+  ['Reordenar: arrastar dentro de Na fila muda a prioridade', wbDragScreen('reorder')],
+  ['Recusado: item sem plano', wbDragScreen('noplan')],
+  ['Recusado: Em execução, Em review, Bloqueado e Concluído são fatos', wbDragScreen('fact')],
+])
+
+// 478-1 to 478-3 · editing in the detail, saved to GitHub at once (decision 0001 keeps the cache from GitHub's answer).
+const wbEditHtml = mode => wbBoth(wbDetailScreen(wbItem(506), mode))
+
+// =====================================================================
 // Montagem
 // =====================================================================
 function montar() {
@@ -5815,6 +6493,7 @@ function montar() {
     <li><b>Prova do dono na máquina remota (#388, decisão 0020, aprovado pelo Fernando):</b> os três motivos de uma remota que recusa o Mac, cada um com o que fazer: <b>Acesso bloqueado</b> (amarelo, configurar o <code>connection.credential</code>, 388-1), <b>Prova do dono falhou</b> (vermelho, atualizar o núcleo de lá ou conferir o SSH, 388-2) e <b>Identidade diferente</b> (vermelho, conferir o túnel ou reiniciar o núcleo deste Mac, 388-3). A volta ao normal é silenciosa (388-4); o ponto da barra lateral, o alerta e a faixa do painel (388-5) dizem o mesmo motivo; o ponto é um amarelo só para os três. Decidido: o alerta dos três motivos se chama “sem acesso” (túnel caído e núcleo parado seguem “sem conexão”); a tela não mostra o horário da próxima tentativa nem a identidade que mudou.</li>
     <li><b>Versão do núcleo remoto e o comando de atualização (#449, decisão 0021, aceita):</b> o card Conexão da Workstation mostra a versão e o commit do núcleo de lá ao lado da versão do app, lidos do <code>/api/overview</code> anônimo (por isso aparecem também em acesso bloqueado). Defasado avisa, com o comando de atualização e as flags do Mac já preenchidas e um Copiar; o Mac não roda nada lá (449-1, 449-2). Sem <code>connection.credential</code>, a faixa manda configurar antes, porque o script recusaria com o código 21 (449-3); em acesso bloqueado, a faixa do 388-1 segue a principal (449-4). Em aberto: o alerta. A seta na barra lateral (449-5) e o caminho do checkout (<code>connection.checkout</code>) estão fechados na decisão.</li>
     <li><b>O botão Atualizar o núcleo remoto (#462, decisão 0022, proposta):</b> a faixa de defasado ganha Atualizar, com confirmação que já traz o resultado do <code>--check</code>, o andamento em cinco passos, e cada resultado em pt-BR (recusas 20 a 23, 30 a 33, falhou e voltou, falhou e a volta falhou com o caminho do backup, contato perdido, SSH). Sem <code>connection.update</code> no machines.json a tela diz o que falta, traz o bloco pronto e mantém o card de copiar (462-1 a 462-6). Em aberto: o Fernando aceitar a decisão.</li>
+    <li><b>Quadro do trabalho (#465, #466, #467, #468, #477, #478, a aprovar):</b> um quadro por projeto com as colunas do ciclo do agente (Planejamento, Na fila, Em execução, Em review, Bloqueado, Concluído), calculadas de sessão, PR, CI, review, estado, plano e fila; o Status do Project vira dado e filtro (465-1 a 465-5). Cada card traz as ações do seu estado: Planejar, “planejando…”, “plano · N passos” com Executar plano, Pôr na fila e Replanejar, Abrir sessão; épico e iniciativa sem ações (465-2, 465-6). Na fila é a fila de verdade: posição, limite (“2 de 2 rodando”), arrastar de Planejamento para Na fila só com plano, de volta para tirar, dentro dela para reordenar, e as quatro colunas de fato recusam (477-1, 477-2). O detalhe da issue abre num painel pelo card, para ler e editar, com o conflito e a recusa do GitHub (467-1, 478-1 a 478-3). Acima, a troca de nível e os seis filtros, juntos por E e guardados na URL em inglês (466-1 a 466-3). <b>Aprovado:</b> item com plano e sem sessão fica em Planejamento com “plano · N passos”. Escolhas desenhadas, cada uma a aprovar: (1) o Kanban do projeto (C11) <b>fica ao lado</b>, e o quadro entra em Entrega na barra lateral, logo abaixo dele; (2) a troca de nível fica <b>acima dos filtros, à esquerda</b>, com o caminho “Iniciativa #1 › Épico #6” à direita; (3) em Concluído o tempo é <b>desde o merge ou o fechamento</b>, e a coluna mostra os últimos 14 dias; (4) o pai é <b>compacto (↑ #6) por padrão e a cadeia inteira com qualquer filtro ativo</b>, nunca pela largura; (5) Bloqueado em ordem de motivo (precisa de você, 3 rodadas, CI falhou) e, dentro do motivo, quem espera há mais tempo; (6) em 1100 as seis colunas dobram em duas linhas de três, sem rolar na horizontal; (7) a coluna de um épico vem das filhas, e qualquer filha bloqueada põe o épico em Bloqueado; (8) um valor por filtro; (9) o repositório só aparece no card de outro repositório; (10) as ações ficam <b>sempre à vista</b> nos cards de Planejamento e Na fila, uma principal em botão e as secundárias em link; (11) com o GitHub fora, <b>as ações continuam</b>: a sessão abre neste Mac e é ela que esbarra no GitHub; (12) o limite conta <b>os cards em Em execução</b>, não as sessões, e a sessão só de planejamento não conta; (13) a confirmação de Planejar e de Executar plano abre <b>no próprio card</b>, com a conta e o destino da última escolha; (14) o detalhe é <b>um painel à direita, com o quadro atrás</b>, e a edição é o mesmo painel, mais largo, com Escrever e Pré-visualizar em abas; (15) título e descrição gravam no <b>Salvar</b>, labels, tipo, milestone e pai <b>ao escolher</b>, e remover um passo tem <b>Desfazer</b> em vez de confirmação; (16) no conflito, <b>três saídas e nenhuma padrão</b>, com as versões uma embaixo da outra; (17) a fila que falhou ao puxar <b>para até Tentar de novo ou Tirar da fila</b>.</li>
     <li><b>Backlog:</b> Feed de atividade, Analytics completo, Workflows e o detalhe com o grafo de agentes estavam para depois da entrega. Entraram aqui a pedido do dono; o PM decide se viram itens da 0.0.1.</li></ol></section>`
   indice.innerHTML = htmlI; main.innerHTML = htmlM
   if (window.lucide) lucide.createIcons()
