@@ -13,7 +13,9 @@
 //   refuses them in the declared and the derived command alike, machines-config.ts `parseUpdate`).
 // - The automatic run (decision 0024 section 2): `considerAuto`, called after each good read of the remote's
 //   overview, starts the `--check` by itself when the remote answers a version strictly older than the app's, the
-//   app's version has a tag, the machine has a credential and a command, and nothing of the machine runs; a check
+//   app's version has a tag, the machine has a credential and a command, nothing of the machine runs, and no good
+//   check waits for the person's confirmation (an open "Atualizar agora" is theirs: the automatic run neither takes
+//   its check nor spends the attempt, and may fire once that check has expired unused); a check
 //   that ends `ready` chains the update at once (it pays for it like the route's, with no confirm window). Once per
 //   (machine, target): the attempt is spent the instant it starts, in `AutoAttempts` (`core-update-auto.json` in
 //   production, `fileAutoAttempts`), and a refused or failed attempt is never repeated by itself; the routes
@@ -421,7 +423,8 @@ export class CoreUpdater {
   /**
    * After a good read of the remote's overview (decision 0024 section 2): starts the automatic `--check` when the
    * remote answers a version strictly older than the app's, the app's version has a tag, the machine has a
-   * credential and a command, the file is valid, nothing of the machine runs or is starting, and the attempt for
+   * credential and a command, the file is valid, nothing of the machine runs or is starting, no good check waits
+   * for the person's confirmation, and the attempt for
    * this target was not spent. `null` when it does not fire. The attempt is spent before anything runs.
    */
   async considerAuto(machineId: string): Promise<UpdateResult | null> {
@@ -434,7 +437,10 @@ export class CoreUpdater {
     const ctx = this.o.context(machineId);
     const conn = ctx.connection;
     if (!conn || ctx.fileInvalid || !conn.credential || !resolveUpdateCommand(conn)) return null;
-    if (this.entries.get(machineId)?.job?.alive || this.starting.has(machineId)) return null;
+    const e = this.entries.get(machineId);
+    if (e?.job?.alive || this.starting.has(machineId)) return null;
+    // A good check waiting for the person's confirmation is theirs: running another would cost them check-required.
+    if (e?.check && this.now() - e.check.okMs <= CHECK_VALID_MS) return null;
     if (this.attempts.spent(machineId) === target) return null;
     this.attempts.spend(machineId, target);
     this.setAuto(machineId, 'running');

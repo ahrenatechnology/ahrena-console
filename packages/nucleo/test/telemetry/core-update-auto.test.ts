@@ -11,7 +11,7 @@ import { CoreUpdater, fileAutoAttempts, type AutoAttempts, type MachineUpdate, t
 import type { ConnectionConfig } from '../../src/telemetry/machines-config.ts';
 import { phase, result, Scenario, SCRIPT_TEXT, until, type Step } from './core-update-fixture.ts';
 
-const ID = 'ws-exemplo';
+const ID = 'ws-example';
 const scenarios: Scenario[] = [];
 const dirs: string[] = [];
 afterEach(() => {
@@ -39,6 +39,7 @@ function setup(over: SetupOptions = {}) {
   let connection: ConnectionConfig | null | undefined = over.connection ? over.connection(s) : s.derivedConnection();
   let fileInvalid = false;
   let observed: string | null = over.observed === undefined ? '0.0.16' : over.observed;
+  let skew = 0;
   const events = { updated: [] as string[], logs: [] as string[] };
   const u = new CoreUpdater({
     lookup: async (): Promise<UpdateLookup> => (connection === undefined ? { kind: 'unknown' } : fileInvalid ? { kind: 'invalid-file' } : { kind: 'ok', connection }),
@@ -50,6 +51,7 @@ function setup(over: SetupOptions = {}) {
     script: async () => SCRIPT_TEXT,
     msPerSecond: 20,
     killGraceMs: 100,
+    now: () => Date.now() + skew,
     log: (m) => void events.logs.push(m),
     ...(over.autoAttempts ? { autoAttempts: over.autoAttempts } : {}),
   });
@@ -60,6 +62,7 @@ function setup(over: SetupOptions = {}) {
     setConnection: (c: ConnectionConfig | null | undefined) => (connection = c),
     setInvalid: (v: boolean) => (fileInvalid = v),
     setObserved: (v: string | null) => (observed = v),
+    skew: (ms: number) => (skew += ms),
     view: () => u.status(ID) as MachineUpdate,
   };
 }
@@ -220,6 +223,34 @@ describe('issue 484 the automatic run, once per machine and target', () => {
     assert.equal(t.view().automatic, false);
   });
 
+  test('#484/AC-2 an open confirmation (a good manual check) holds the automatic run, which does not spend', async () => {
+    const attempts = fileAutoAttempts(join(tempDir(), 'core-update-auto.json'));
+    const t = setup({ autoAttempts: attempts });
+    t.s.set({ steps: UPDATE_OK, exit: 0, check: { steps: CHECK_OK, exit: 0 } });
+    await t.u.check(ID);
+    await t.u.settled(ID);
+    assert.equal(t.view().state, 'ready');
+    assert.equal(await t.u.considerAuto(ID), null);
+    assert.equal(attempts.spent(ID), null, 'not spent');
+    assert.equal(t.view().auto, null);
+    assert.equal(t.s.runs().length, 1);
+    assert.equal((await t.u.update(ID)).kind, 'started', 'the person\'s update is not check-required');
+    await t.u.settled(ID);
+    assert.equal(t.view().state, 'succeeded');
+
+    // A good check left unused past its window no longer holds the automatic run.
+    const idle = setup({ scenario: t.s });
+    await idle.u.check(ID);
+    await idle.u.settled(ID);
+    assert.equal(await idle.u.considerAuto(ID), null);
+    idle.skew(5 * 60_000 + 1000);
+    assert.equal((await idle.u.considerAuto(ID))?.kind, 'started');
+    await until(() => t.s.runs().length === 5);
+    await idle.u.settled(ID);
+    await idle.u.settled(ID);
+    assert.deepEqual(idle.view().auto, { target: '0.0.17', state: 'succeeded' });
+  });
+
   test('#484/AC-2 two reads at once start one attempt', async () => {
     const t = setup();
     t.s.set({ steps: [], exit: 21 });
@@ -307,13 +338,13 @@ describe('issue 484 the file of spent attempts', () => {
     const a = fileAutoAttempts(file);
     assert.equal(a.spent(ID), null);
     a.spend(ID, '0.0.17');
-    a.spend('ws-outra', '0.0.16');
+    a.spend('ws-other', '0.0.16');
     assert.equal(a.spent(ID), '0.0.17');
     const b = fileAutoAttempts(file);
     assert.equal(b.spent(ID), '0.0.17');
-    assert.equal(b.spent('ws-outra'), '0.0.16');
+    assert.equal(b.spent('ws-other'), '0.0.16');
     b.spend(ID, '0.0.18');
-    assert.deepEqual(JSON.parse(readFileSync(file, 'utf8')), { [ID]: '0.0.18', 'ws-outra': '0.0.16' });
+    assert.deepEqual(JSON.parse(readFileSync(file, 'utf8')), { [ID]: '0.0.18', 'ws-other': '0.0.16' });
   });
 
   test('#484/AC-2 an absent file is empty with no log; a malformed one is empty with one log line; bad entries are dropped', () => {
