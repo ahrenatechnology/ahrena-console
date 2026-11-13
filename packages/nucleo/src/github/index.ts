@@ -14,6 +14,8 @@ export * from './github-source.ts';
 export * from './sqlite-cache.ts';
 export * from './work-service.ts';
 export * from './project.ts';
+export * from './work-board.ts';
+export * from './work-board-service.ts';
 
 export interface CreateGithubWorkOptions extends Partial<GithubGraphqlSourceOptions> {
   /** Busca do GitHub, ex.: `repo:dono/repo is:issue is:open`. */

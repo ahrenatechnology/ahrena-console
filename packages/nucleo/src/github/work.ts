@@ -72,6 +72,10 @@ export interface LinkedPullRequest {
   ci: CiState | null;
   /** `null` quando não há checagens (ou a resposta veio sem a contagem). */
   checks?: CiCounts | null;
+  /** When the PR merged; `null` while it has not. Optional: filled by the Project read of the work board (#465). */
+  mergedAt?: string | null;
+  /** How many reviews requested changes (the review rounds of #465); `null` when unknown. */
+  changesRequested?: number | null;
 }
 
 export const WORK_STAGES = [

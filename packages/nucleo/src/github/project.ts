@@ -63,6 +63,10 @@ export interface ProjectCard {
   subIssues?: { total: number; completed: number } | null;
   /** O PR que fecha a issue (ou o próprio PR, num item que é PR), com CI e review; `null` sem PR. */
   pullRequest?: LinkedPullRequest | null;
+  /** Label names of the issue (the work board filter, #466). Optional: the cache from before has none. */
+  labels?: string[];
+  /** When the issue closed; `null` while open. Optional: the cache from before has none. */
+  closedAt?: string | null;
 }
 
 export interface ProjectBoardValue {
