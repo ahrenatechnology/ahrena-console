@@ -1,6 +1,6 @@
 # 0023 · O ciclo de desenvolvimento no Console: o Dev Console liga cada PR à sessão que o segura e mostra a etapa de cada issue; executar continua fora
 
-- **Status:** proposta, a confirmar pelo Fernando
+- **Status:** aceita (o Fernando aceitou em 12/11, depois do PR #471)
 - **Data:** 2026-11-12
 - **Issue:** [#470](https://github.com/ahrenatechnology/ahrena-console/issues/470)
 - **Estende:** [0008](0008-machine-telemetry-and-dev-console.md) §4 (o Dev Console é derivado do GitHub e das sessões, sem anotação manual)
@@ -69,7 +69,7 @@ Os dois param no botão de merge e começam todo laço num clique. Nenhum deles 
 - **O que muda na leitura:** a consulta `DevConsolePullRequests` passa a trazer os últimos comentários de cada PR, e o núcleo procura neles o marcador do Argos.
   - `PullRequestFact` ganha `argos: { verdict: 'approve' | 'request-changes' | 'comment' | 'unknown'; headSha: string; current: boolean } | null`.
   - `current` é verdadeiro quando o head de agora começa pelo SHA do marcador (prefixo, porque o marcador pode ter de 7 a 40 caracteres). Um veredito sobre um head antigo vale como "revisão desatualizada", nunca como aprovado.
-- **Fila de merge:** ganha o motivo `argos-pending` (sem veredito atual) e `argos-changes` (mudanças pedidas). Um PR só fica "pronto" com veredito `approve` atual, CI verde e sem conflito, que é a política de merge do AGENTS.md.
+- **Fila de merge:** ganha o motivo `argos-pending` (sem veredito atual, ou com veredito atual `unknown`) e `argos-changes` (mudanças pedidas). Um PR só fica "pronto" com veredito `approve` atual, CI verde e sem conflito, que é a política de merge do AGENTS.md.
 - **Custo:** a consulta continua sendo uma por repositório, um pouco mais funda. O orçamento da [0001](0001-github-consulta-cache.md) é medido na fatia, antes do merge.
 - **O que isso não é:** prova de que o Argos revisou.
   - A leitura aceita só comentários dos autores que o contexto declara (hoje `fernandoseguim`) e mostra o autor na tela. Isso barra pessoas de fora, mas não separa o Argos de qualquer outra sessão: todas comentam pela mesma conta, e qualquer uma pode escrever o marcador.
@@ -120,11 +120,11 @@ O card da issue ganha uma linha de etapas, derivada sem anotação:
 
 ## Fatias
 
-1. **PR ligado à sessão e veredito do Argos** (§1, §2): núcleo e telas do Dev Console e do painel da sessão. Wireframe primeiro.
-2. **A etapa de cada issue** (§3): o card do quadro, com a leitura da Round issue.
-3. **Sessão concluída e Arquivar** (§4): começa pela prova do mod; depende do #403.
+1. **PR ligado à sessão e veredito do Argos** (§1, §2), [#472](https://github.com/ahrenatechnology/ahrena-console/issues/472): núcleo e telas do Dev Console e do painel da sessão. Wireframe primeiro. Depende da [ahrena-framework#274](https://github.com/ahrenatechnology/ahrena-framework/issues/274).
+2. **A etapa de cada issue** (§3), [#473](https://github.com/ahrenatechnology/ahrena-console/issues/473): o card do quadro, com a leitura da Round issue. Depende da fatia 1.
+3. **Sessão concluída e Arquivar** (§4), [#474](https://github.com/ahrenatechnology/ahrena-console/issues/474): começa pela prova do mod. Depende da fatia 1 e do #403.
 
-Cada fatia vira a sua issue depois da aceitação desta decisão e entra pela Athena.
+Cada fatia entra pela Athena. O que foi para o ahrena-framework: a orquestração sem polling, como referência na [ahrena-framework#246](https://github.com/ahrenatechnology/ahrena-framework/issues/246), e os comentários de review como dado não confiável no Erodos, na [ahrena-framework#279](https://github.com/ahrenatechnology/ahrena-framework/issues/279).
 
 ## Consequências
 
