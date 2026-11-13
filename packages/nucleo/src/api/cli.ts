@@ -114,6 +114,9 @@ import { localMachine, TelemetryService, type MachineEntry } from '../telemetry/
 import { MachinesFileSource } from '../telemetry/machines-config.ts';
 import { publishRemoteAttentionChanges, RemoteMachine } from '../telemetry/remote.ts';
 import { RemoteMachines } from '../telemetry/remote-machines.ts';
+import { TELEMETRY_VERSION } from '../telemetry/model.ts';
+import { CoreUpdater } from '../telemetry/core-update.ts';
+import { createCoreUpdateRoute } from './core-update.ts';
 import { INVALID_MACHINES_FILE, publishReconnectChanges, reconnectLogFile, ReconnectRunner } from '../telemetry/reconnect.ts';
 import { loopbackGet } from '../telemetry/adapters/loopback-http.ts';
 import { overviewPidVia, RemoteProofs } from '../telemetry/remote-proof.ts';
@@ -470,6 +473,7 @@ const samplers: TelemetrySampler[] = [];
 let remoteMachines: RemoteMachines<RemoteMachine> | null = null;
 let reconnectRunner: ReconnectRunner | null = null;
 let remoteProofs: RemoteProofs | null = null;
+let coreUpdater: CoreUpdater | null = null;
 let terminalControl: TerminalActions | null = null;
 function addSampler(machineId: string, collector: TelemetryCollector) {
   samplers.push(new TelemetrySampler({ machineId, collector, store: sampleStore, tracker: alertTracker, onAlertChange: publishAlertChanges(changes), log }));
@@ -511,7 +515,9 @@ if (demo) {
         onAttentionChange: publishRemoteAttentionChanges(changes),
         reconnectStatus: (id) => reconnectRunner?.status(id, registry.reconnectOf(id) ?? null) ?? null,
         connectionStatus: (id) => machineConnection?.status(id) ?? Promise.resolve(null),
-        suppressUnreachable: (id) => machineConnection?.suppressUnreachable(id) ?? false,
+        // The remote núcleo goes down on its own during the swap: that drop is not an alert (decision 0022 section 4).
+        suppressUnreachable: (id) => (machineConnection?.suppressUnreachable(id) ?? false) || (coreUpdater?.updating(id) ?? false),
+        updateStatus: (id) => coreUpdater?.status(id) ?? null,
         ownerAuthReason: (id) => proofs.reason(id, Boolean(registry.connectionOf(id)?.credential)),
         // Issue 449 (decision 0021 section 1): the remote's version from its anonymous overview, with no proof.
         // The commit rule applies only when this core runs from a checkout (the packaged app has no git).
@@ -542,6 +548,26 @@ if (demo) {
       return config !== undefined && registry.fileInvalid() ? INVALID_MACHINES_FILE : config;
     },
     onSucceeded: (id) => void registry.get(id)?.readNow(),
+    onChange: publishReconnectChanges(changes),
+    log,
+  });
+  // The Update button (issue 462, decision 0022): the command of `connection.update` from the freshest reading of the file;
+  // after a clean exit the machine's credential goes and the machine is read at once.
+  coreUpdater = new CoreUpdater({
+    lookup: async (id) => {
+      await registry.refresh();
+      const connection = registry.connectionOf(id);
+      if (connection === undefined) return { kind: 'unknown' };
+      return registry.fileInvalid() ? { kind: 'invalid-file' } : { kind: 'ok', connection };
+    },
+    context: (id) => ({ connection: registry.connectionOf(id), fileInvalid: registry.fileInvalid() }),
+    appVersion: API_VERSION,
+    telemetryVersion: TELEMETRY_VERSION,
+    observedVersion: (id) => registry.get(id)?.core()?.version ?? null,
+    onUpdated: async (id) => {
+      proofs.discard(id);
+      await registry.get(id)?.readNow();
+    },
     onChange: publishReconnectChanges(changes),
     log,
   });
@@ -582,7 +608,7 @@ const toolsExecutor = toolsService ? new ToolsExecutor({ service: toolsService, 
 // The cloud connectors (#277, decision 0013): this machine's ~/.aws/config, its SSO sessions and their logins (into reconnect.log); the remote machines' through their tunnel port. Not in --demo.
 const awsConnector = demo ? null : new AwsConnector({ logFile: reconnectLogFile(dataDir), wakeOnView: true, onChange: publishConnectorChanges(changes), log });
 // The connection of each remote machine (#278, decision 0013 section 4): start, stop, reconnect and login-and-start, on the reconnect runner.
-const machineConnection = remoteMachines && reconnectRunner ? new MachineConnection({ registry: remoteMachines, startRunner: reconnectRunner, logFile: reconnectLogFile(dataDir), cloud: awsConnector, localReading: () => sampleStore.latest('local'), onChange: publishConnectionChanges(changes), onBegin: (id) => remoteProofs?.discard(id), log }) : null;
+const machineConnection = remoteMachines && reconnectRunner ? new MachineConnection({ registry: remoteMachines, startRunner: reconnectRunner, logFile: reconnectLogFile(dataDir), cloud: awsConnector, localReading: () => sampleStore.latest('local'), onChange: publishConnectionChanges(changes), onBegin: (id) => remoteProofs?.discard(id), updating: (id) => coreUpdater?.updating(id) ?? false, log }) : null;
 const clouds = awsConnector ? createCloudsRoute({ aws: awsConnector, remote: { port: (id) => remoteMachines?.get(id)?.port, get: loopbackGet({ proof: remoteProofs }), write: loopbackWrite({ proof: remoteProofs }) } }) : null;
 // Releasing a listening port (#286, decision 0016): this machine's, and the remote machines' through their núcleo. Not in --demo.
 const ports = createPortsRoute({
@@ -689,6 +715,7 @@ const api: LocalApi = await startLocalApi({
   machineReader: new MachineReader({ get: loopbackGet({ timeoutMs: MACHINE_READ_ADAPTER_TIMEOUT_MS, proof: remoteProofs }), machines: () => remoteMachines?.list() ?? [], connectionOf: (id) => machineConnection?.status(id) ?? null }),
   reconnect: machineConnection?.legacy ?? reconnectRunner,
   machineConnection: machineConnection ? createConnectionRoute(machineConnection) : null,
+  coreUpdate: coreUpdater ? createCoreUpdateRoute(coreUpdater) : null,
   // "Tentar agora" (#388, 388-2 and 388-4): the proof now, skipping the wait once, then a read of the machine.
   ownerProofRetry:
     remoteMachines && remoteProofs

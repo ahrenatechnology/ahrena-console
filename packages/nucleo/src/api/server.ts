@@ -50,6 +50,7 @@ import type { ManagedRuntime } from '../runtime/service.ts';
 // | `GET /api/connectors`, `POST`/`DELETE /api/connectors/aws/sessions/<name>/login`, and the same under `/api/machines/<id>/` | The cloud connectors and their logins (api/clouds.ts, #277) |
 // | `GET /api/github/sync` | The GitHub background sync's steps: last run, next run, last error (decision 0015, #356) |
 // | `GET /api/app-update`, `PUT /api/app-update/state` and `POST /api/app-update/actions/check|install|dismiss|ack` | The desktop app's update notice: the app reports, the /ui reads and clicks (api/app-update.ts, #330) |
+// | `POST /api/machines/<id>/update/check`, `POST` and `DELETE /api/machines/<id>/update` | The Update button of a remote machine's núcleo, /ui only (api/core-update.ts, issue 462) |
 // | `GET /api/connections`        | The console's own GitHub connection: `{ github: <status> }` (api/connections-route.ts, #241) |
 // | `POST /api/connections/github/start`, `/cancel`, `/disconnect`, `/source` | Device flow, Cancel, Disconnect and the credential source (#241, decision 0011) |
 // | `GET /api/project/options`    | The Projects the account sees, to choose the kanban's (`?refresh=1`; api/project.ts, #241) |
@@ -131,6 +132,7 @@ import type { GithubBackgroundSync } from '../github/background-sync.ts';
 import { cloudsWriteFromSameOrigin, isCloudsRoute, type CloudsRoute } from './clouds.ts';
 import { isPortsRoute, isPortsWrite, portsWriteAllowed, type PortsRoute } from './ports.ts';
 import { connectionWriteFromSameOrigin, isConnectionRoute, type ConnectionRoute } from './connection.ts';
+import { coreUpdateWriteFromSameOrigin, isCoreUpdateRoute, type CoreUpdateRoute } from './core-update.ts';
 import { isOwnerProofRetryRoute, ownerProofRetryFromSameOrigin, respondOwnerProofRetry, type OwnerProofRetry } from './owner-proof-retry.ts';
 import { CONNECTIONS_ROUTE, PROJECT_SELECTION_ROUTE, respondConnections, respondProjectSelection, STRICT_WRITE_ROUTES, strictWriteRefusal, type ProjectSelectionTarget } from './connections-route.ts';
 import type { GithubConnection } from '../github/connection/connection.ts';
@@ -245,6 +247,8 @@ export interface ApiOptions {
   githubSync?: Pick<GithubBackgroundSync, 'status'> | null;
   /** The connection of the remote machines (#278, api/connection.ts): start, stop, reconnect, login-and-start, cancel; without it, 404. */
   machineConnection?: ConnectionRoute | null;
+  /** The Update button of the remote machines (issue 462, api/core-update.ts): check, update, cancel; without it, 404. */
+  coreUpdate?: CoreUpdateRoute | null;
   /** "Tentar agora" on the owner-proof bands (#388, api/owner-proof-retry.ts): requests the remote proof now; without it, 404. */
   ownerProofRetry?: OwnerProofRetry | null;
   /** The console's own GitHub connection (#241); turns on `/api/connections` and its writes. */
@@ -537,7 +541,7 @@ export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
       if (!opts.connection) return send(res, 404, { error: 'not-found' });
       return respondConnections(req, res, url.pathname, opts.connection);
     }
-    if (!allowedLocalRequest(req, port) && !sameOriginRead(req, port) && !sameOriginOpen(req, port) && !sameOriginSessionOpen(req, port) && !sameOriginNewSession(req, port) && !mesmaOrigemMovendo(req, port) && !sameOriginDecision(req, port) && !agentConfigWriteFromSameOrigin(req, port) && !frameworkInstallWriteFromSameOrigin(req, port) && !reconnectFromSameOrigin(req, port) && !messagesWriteFromSameOrigin(req, port) && !transcriptionWriteFromSameOrigin(req, port) && !cloudsWriteFromSameOrigin(req, port) && !connectionWriteFromSameOrigin(req, port) && !ownerProofRetryFromSameOrigin(req, port) && !ordersWriteFromSameOrigin(req, port) && !appUpdateWriteFromSameOrigin(req, port)) return send(res, 403, { error: 'origem não permitida' });
+    if (!allowedLocalRequest(req, port) && !sameOriginRead(req, port) && !sameOriginOpen(req, port) && !sameOriginSessionOpen(req, port) && !sameOriginNewSession(req, port) && !mesmaOrigemMovendo(req, port) && !sameOriginDecision(req, port) && !agentConfigWriteFromSameOrigin(req, port) && !frameworkInstallWriteFromSameOrigin(req, port) && !reconnectFromSameOrigin(req, port) && !messagesWriteFromSameOrigin(req, port) && !transcriptionWriteFromSameOrigin(req, port) && !cloudsWriteFromSameOrigin(req, port) && !connectionWriteFromSameOrigin(req, port) && !coreUpdateWriteFromSameOrigin(req, port) && !ownerProofRetryFromSameOrigin(req, port) && !ordersWriteFromSameOrigin(req, port) && !appUpdateWriteFromSameOrigin(req, port)) return send(res, 403, { error: 'origem não permitida' });
     // The Project list spends GitHub quota and the connection status is the /ui's: another site's page
     // never gets either, connected or not (#241 review 2).
     if ((url.pathname === PROJECT_OPTIONS_ROUTE || url.pathname === CONNECTIONS_ROUTE) && fromAnotherSite(req)) return send(res, 403, { error: 'forbidden' });
@@ -561,6 +565,7 @@ export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
     if (opts.agentConfig && (url.pathname === AGENT_CONFIG_ROUTE || url.pathname.startsWith(`${AGENT_CONFIG_ROUTE}/`))) return opts.agentConfig(req, res, url);
     if (opts.frameworkInstall && url.pathname.startsWith(`${FRAMEWORK_INSTALL_ROUTE}/`)) return opts.frameworkInstall(req, res, url);
     if (opts.machineConnection && isConnectionRoute(url.pathname)) return opts.machineConnection(req, res, url);
+    if (isCoreUpdateRoute(url.pathname)) return opts.coreUpdate ? opts.coreUpdate(req, res, url) : send(res, 404, { error: 'not-found' });
     if (opts.ownerProofRetry && isOwnerProofRetryRoute(url.pathname)) return respondOwnerProofRetry(req, res, url, opts.ownerProofRetry);
     const reconnectMatch = RECONNECT_ROUTE.exec(url.pathname);
     if (reconnectMatch) return respondReconnect(req, res, reconnectMatch[1]!, opts.reconnect, opts.telemetry);

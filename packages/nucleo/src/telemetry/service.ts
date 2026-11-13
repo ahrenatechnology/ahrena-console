@@ -12,6 +12,7 @@ import {
   type Alert,
   type ConnectionStatus,
   type MachineCore,
+  type MachineUpdate,
   type MachineState,
   type MachineSummary,
   type ReconnectStatus,
@@ -45,6 +46,8 @@ export interface MachineEntry {
   connection?: () => Promise<ConnectionStatus | null>;
   /** A remote machine's núcleo version (issue 449); without it, the summary has `core: null`. */
   core?(): MachineCore | null;
+  /** A remote machine's Update button state (issue 462); without it, the summary has no `update`. */
+  update?(): MachineUpdate | null;
 }
 
 /** This machine: the núcleo answering is its own, so it is always connected. */
@@ -99,6 +102,7 @@ export class TelemetryService {
       reconnect: m.reconnect?.() ?? null,
       core: m.core?.() ?? null,
       ...(m.connection ? { connection: await m.connection().catch(() => null) } : {}),
+      ...(m.update ? { update: m.update() } : {}),
     };
   }
 

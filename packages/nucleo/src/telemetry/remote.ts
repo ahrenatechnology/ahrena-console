@@ -22,6 +22,7 @@
 import type { ChangeCursor } from '../changes/cursor.ts';
 import { sanitizeTerminals } from './terminals.ts';
 import { coreStatus, parseOverview, type MachineCore } from './core-version.ts';
+import type { MachineUpdate } from './core-update.ts';
 import { machineUnreachableAlert, type AlertChange, type AlertTracker } from './alerts.ts';
 import type { RemoteMachineConfig } from './machines-config.ts';
 import { RETENTION_MS, SAMPLE_INTERVAL_MS, TELEMETRY_VERSION, type Alert, type AlertKind, type ConnectionStatus, type MachineState, type ReconnectStatus, type TelemetryReading, type UnreachableReason } from './model.ts';
@@ -64,6 +65,8 @@ export interface RemoteMachineOptions {
    * drop that follows does not open `machine-unreachable` (nor its notification) until a start.
    */
   suppressUnreachable?: (machineId: string) => boolean;
+  /** The machine's Update button state (issue 462, telemetry/core-update.ts); without it, the summary has no `update`. */
+  updateStatus?: (machineId: string) => MachineUpdate | null;
   /**
    * Why the núcleo over there refused the read (401 or 403) when the owner's proof is in play (decision 0020
    * section 6, remote-proof.ts): `owner-auth-required` without a credential command, `owner-auth-failed` or
@@ -207,6 +210,8 @@ export class RemoteMachine implements MachineEntry {
   private coreAnswered = false;
   /** The connection (#278), only when the núcleo wires one. */
   readonly connection?: () => Promise<ConnectionStatus | null>;
+  /** The Update button's state (issue 462), only when the núcleo wires one. */
+  readonly update?: () => MachineUpdate | null;
 
   constructor(options: RemoteMachineOptions) {
     this.o = options;
@@ -215,6 +220,8 @@ export class RemoteMachine implements MachineEntry {
     this.port = options.config.port;
     const connectionStatus = options.connectionStatus;
     if (connectionStatus) this.connection = () => connectionStatus(this.id);
+    const updateStatus = options.updateStatus;
+    if (updateStatus) this.update = () => updateStatus(this.id);
   }
 
   state(): MachineState {
