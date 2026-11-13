@@ -5,22 +5,22 @@
 //
 //   node update-remote-core.mjs --checkout <path> --ref <ref> [--port 4720] [--data-dir <dir>]
 //        [--mac-telemetry-version <n>] [--mac-credential-command yes|no] [--allow-disconnect]
-//        [--core-options "<options of src/api/cli.ts>"] [--check] [--no-fetch] [--progress json]
-//   node --input-type=module - <args> < update-remote-core.mjs     (the script read from stdin, decision 0022 section 2)
+//        [--core-options "<options of src/api/cli.ts>"] [--check] [--no-fetch] [--progress json] (#462)
+//   node --input-type=module - <args> < update-remote-core.mjs     (the script read from stdin, ADR-0022 section 2)
 //   node update-remote-core.mjs install-unit --checkout <path> [--port 4720] [--data-dir <dir>] [--core-options "..."]
 //
 // Exit codes: 0 updated and confirmed (or --check passed); 2 usage; 20 guard: telemetry protocol differs;
 // 21 guard: the target needs the owner's proof and the Mac has no credential command; 22 guard: the target
 // has no manifest; 23 guard: the Mac's flags are missing; 30 dirty tree, unknown ref, or the target adds
 // production dependencies; 31 backup failed; 32 the process does not check out (cmdline, port, uid) or its
-// options cannot be read, or it did not stop; 33 another update holds <data-dir>/update.lock; 40 failed and
-// rolled back; 41 failed and the rollback failed; 130 canceled by a signal during the check.
+// options cannot be read, or it did not stop; 33 another update holds <data-dir>/update.lock; 40 failed and (#462)
+// rolled back; 41 failed and the rollback failed; 130 canceled by a signal during the check. (#462)
 // Nothing is stopped, and no signal is sent, before the guard and the process check pass.
 //
-// --progress json (decision 0022 section 4): stdout carries only NDJSON, one phase event per phase (check,
-// backup, swap, start, verify, rollback) and one final result event; the human messages go to stderr.
-// Signals: until the backup phase SIGINT, SIGTERM and SIGHUP cancel (exit 130, lock released); from the backup
-// phase on SIGHUP, SIGPIPE, SIGINT and SIGTERM are ignored, so the script finishes alone.
+// --progress json (decision 0022 section 4): stdout carries only NDJSON, one phase event per phase (check, (#462)
+// backup, swap, start, verify, rollback) and one final result event; the human messages go to stderr. (#462)
+// Signals: until the backup phase SIGINT, SIGTERM and SIGHUP cancel (exit 130, lock released); from the backup (#462)
+// phase on SIGHUP, SIGPIPE, SIGINT and SIGTERM are ignored, so the script finishes alone. (#462)
 //
 // Environment, for tests: AHRENA_CONSOLE_PROC_ROOT (default /proc), AHRENA_CONSOLE_UPDATE_START_TIMEOUT_MS
 // (default 30000), AHRENA_CONSOLE_UPDATE_STOP_TIMEOUT_MS (default 15000), AHRENA_CONSOLE_UPDATE_PAUSE_MS
@@ -50,11 +50,11 @@ const CLI_REL = 'packages/nucleo/src/api/cli.ts';
 const OWNER_CLI_REL = 'packages/nucleo/src/owner/cli.ts';
 
 class Stop extends Error {
-  /** `reason` is the closed word of decision 0022 section 4 that tells apart the causes of one exit code. */
+  /** `reason` is the closed word of decision 0022 section 4 that tells apart the causes of one exit code. (#462) */
   constructor(code, message, reason = null) { super(message); this.code = code; this.reason = reason; }
 }
 
-// ---- progress: NDJSON on stdout under --progress json, human text on stderr ---------------------------------
+// ---- progress: NDJSON on stdout under --progress json, human text on stderr --------------------------------- (#462)
 
 let progress = false;
 const report = { reason: null, backup: null, oldCommit: null, newCommit: null };
@@ -64,7 +64,7 @@ const out = (line) => (progress ? console.error(line) : console.log(line));
 const warn = (line) => console.error(line);
 function emit(event) {
   if (!progress) return;
-  try { writeSync(1, `${JSON.stringify({ v: 1, ...event })}\n`); } catch { /* the reader is gone: the script goes on alone */ }
+  try { writeSync(1, `${JSON.stringify({ v: 1, ...event })}\n`); } catch { /* the reader is gone: the script goes on alone (#462) */ }
 }
 const phase = (name) => emit({ event: 'phase', phase: name });
 function emitResult(exit) {
@@ -286,7 +286,7 @@ async function terminate(pid, port, recheck) {
   out(`pid ${pid} ignored SIGTERM; sending SIGKILL`);
   if (isAlive(pid)) {
     recheck?.();
-    try { process.kill(pid, 'SIGKILL'); } catch { /* already gone */ }
+    try { process.kill(pid, 'SIGKILL'); } catch { /* already gone (#462) */ }
   }
   if (!(await waitFor(gone, 5000))) throw new Stop(EXIT.PROCESS, `pid ${pid} did not stop, or port ${port} stayed busy`);
 }
@@ -334,30 +334,30 @@ WantedBy=default.target
 `;
 }
 
-// ---- the lock: one update at a time on the machine ----------------------------------------------------------
+// ---- the lock: one update at a time on the machine ---------------------------------------------------------- (#462)
 
 const LOCK_FILE = 'update.lock';
 const LOCK_STALE_MS = 30 * 60 * 1000;
 const heldLocks = [];
 
-/** Why a lock file no longer holds anything ('missing', 'dead-pid', 'older-than-30-minutes'), or null when it is live. */
+/** Why a lock file no longer holds anything ('missing', 'dead-pid', 'older-than-30-minutes'), or null when it is live. (#462) */
 function staleReason(file) {
   let text;
   try { text = readFileSync(file, 'utf8'); } catch { return 'missing'; }
   let held = null;
-  try { held = JSON.parse(text); } catch { /* unreadable content: judged by the file age below */ }
+  try { held = JSON.parse(text); } catch { /* unreadable content: judged by the file age below (#462) */ }
   const startedAt = Date.parse(held?.startedAt);
   if (Number.isInteger(held?.pid) && Number.isFinite(startedAt)) {
     if (Date.now() - startedAt > LOCK_STALE_MS) return 'older-than-30-minutes';
     return isAlive(held.pid) ? null : 'dead-pid';
   }
-  // Half-written or foreign content fails closed: live until the file itself is old.
+  // Half-written or foreign content fails closed: live until the file itself is old. (#462)
   try { return Date.now() - statSync(file).mtimeMs > LOCK_STALE_MS ? 'older-than-30-minutes' : null; } catch { return 'missing'; }
 }
 
 const lockBusy = () => new Stop(EXIT.LOCKED, 'another update is running on this machine (update.lock is held); nothing was touched');
 
-/** --check never creates the lock; it only refuses to run beside a live one. */
+/** --check never creates the lock; it only refuses to run beside a live one. (#462) */
 function refuseLiveLock(dataDir) {
   const file = join(dataDir, LOCK_FILE);
   if (existsSync(file) && staleReason(file) === null) throw lockBusy();
@@ -370,7 +370,7 @@ function acquireLock(dataDir) {
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
       const fd = openSync(file, 'wx', 0o600);
-      // Tracked before the write: a failed write must not leave an empty lock that nobody releases.
+      // Tracked before the write: a failed write must not leave an empty lock that nobody releases. (#462)
       heldLocks.push({ file, text });
       try { writeSync(fd, text); } catch (e) { heldLocks.pop(); rmSync(file, { force: true }); throw e; } finally { closeSync(fd); }
       return;
@@ -385,14 +385,14 @@ function acquireLock(dataDir) {
 }
 
 /**
- * Moves the stale file aside under a unique name before judging it again, so two scripts that both read
+ * (#462) Moves the stale file aside under a unique name before judging it again, so two scripts that both read
  * "stale" cannot delete the fresh lock the other just created: whoever moved a live lock puts it back.
  */
 function takeOverStale(dataDir, file, stale) {
   const aside = `${file}.stale-${process.pid}`;
   try { renameSync(file, aside); } catch { return; }
   if (staleReason(aside) === null) {
-    try { linkSync(aside, file); } catch { /* another lock is already there */ }
+    try { linkSync(aside, file); } catch { /* another lock is already there (#462) */ }
     rmSync(aside, { force: true });
     throw lockBusy();
   }
@@ -400,14 +400,14 @@ function takeOverStale(dataDir, file, stale) {
   rmSync(aside, { force: true });
 }
 
-/** Removes only the locks this process wrote and that still hold its own content. */
+/** Removes only the locks this process wrote and that still hold its own content. (#462) */
 function releaseLocks() {
   for (const { file, text } of heldLocks.splice(0)) {
-    try { if (readFileSync(file, 'utf8') === text) rmSync(file, { force: true }); } catch { /* already gone */ }
+    try { if (readFileSync(file, 'utf8') === text) rmSync(file, { force: true }); } catch { /* already gone (#462) */ }
   }
 }
 
-// ---- signals: cancel while nothing was touched, ignore once the backup starts ----------------------------------
+// ---- signals: cancel while nothing was touched, ignore once the backup starts ---------------------------------- (#462)
 
 const noop = () => {};
 function cancelOnSignals() {
@@ -418,7 +418,7 @@ function cancelOnSignals() {
   };
   for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) process.on(signal, cancel);
 }
-/** From the backup on the script finishes alone: a closed ssh must not leave the machine half-updated. */
+/** From the backup on the script finishes alone: a closed ssh must not leave the machine half-updated. (#462) */
 function ignoreSignals() {
   for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP', 'SIGPIPE']) {
     process.removeAllListeners(signal);
@@ -629,7 +629,7 @@ async function update(opts) {
   phase('check');
   cancelOnSignals();
   const lockDir = resolveDataDir(opts);
-  if (opts.check) refuseLiveLock(lockDir); else acquireLock(lockDir);
+  refuseLiveLock(lockDir);
   try {
     return await runUpdate(opts, lockDir);
   } finally {
@@ -651,6 +651,8 @@ async function runUpdate(opts, lockDir) {
     out(`check ok: ${target.oldHead.slice(0, 7)} -> ${target.sha.slice(0, 7)} (${opts.ref}); nothing was touched`);
     return EXIT.OK;
   }
+  // (#462) Taken only once the run is accepted: a refused checkout or guard creates no data folder and no lock.
+  acquireLock(lockDir);
 
   const info = await readOverview(ctx.port);
   const unitExists = existsSync(unitPath());
@@ -686,7 +688,7 @@ async function runUpdate(opts, lockDir) {
     if (!swapAnnounced) { swapAnnounced = true; phase('swap'); }
   };
   try {
-    // Step 4: stop. The only signal is to the verified pid (checked again right before it), or through the unit.
+    // Step 4: stop. The only signal is to the verified pid (checked again right before it), or through the unit. (#462)
     if (run.useUnit) {
       if (active) { announceSwap(); out(`stopping through systemctl --user stop ${UNIT}`); await stopCore(ctx, run, null); }
     } else if (info) {
@@ -731,7 +733,7 @@ function restoreDatabase(dataDir, backupFile) {
 
 // The database rule: it is restored from the backup only when the new core was started (it may have migrated
 // or written). If the new core never started, the live database is kept as it is, so the writes made between
-// the backup and the stop are not lost.
+// the backup and the stop are not lost. (#462)
 async function rollback(ctx, run, target, backupFile, started, wasRunning, newStarted) {
   phase('rollback');
   report.reason = 'started-failed';
@@ -808,7 +810,7 @@ async function installUnit(opts) {
   return EXIT.OK;
 }
 
-// ---- main ---------------------------------------------------------------------------------------------------
+// ---- main --------------------------------------------------------------------------------------------------- (#462)
 
 async function execute(argv) {
   try {
@@ -826,7 +828,7 @@ async function execute(argv) {
   }
 }
 
-/** Asked for before the arguments are parsed, so that even a usage error ends with a result line. */
+/** Asked for before the arguments are parsed, so that even a usage error ends with a result line. (#462) */
 const asksForJson = (argv) => argv.includes('--progress=json') || argv.some((a, i) => a === '--progress' && argv[i + 1] === 'json');
 
 export async function main(argv) {
@@ -836,7 +838,7 @@ export async function main(argv) {
   return code;
 }
 
-/** Run as a file, or read from stdin (`node --input-type=module -`, where argv[1] is "-"). */
+/** (#462) Run as a file, or read from stdin (`node --input-type=module -`, where argv[1] is "-"). */
 function isEntryPoint() {
   const entry = process.argv[1];
   if (!entry) return false;

@@ -783,10 +783,10 @@ describe('AC4 · refuse before stopping the working process', () => {
   });
 });
 
-// ---- issue 462 layer 2: the lock, the NDJSON progress, the stdin run, the signals (decision 0022) ----------------
+// ---- issue 462 layer 2: the lock, the NDJSON progress, the stdin run, the signals (ADR-0022) ----------------
 
 type Event = { v: number; event: string; phase?: string; exit?: number; reason?: string | null; backup?: string | null; oldCommit?: string | null; newCommit?: string | null };
-/** Every line of stdout must be a JSON object: a line that is not one fails the parse and so the test. */
+/** (#462) Every line of stdout must be a JSON object: a line that is not one fails the parse and so the test. */
 const events = (stdout: string): Event[] => stdout.split('\n').filter(Boolean).map((l) => JSON.parse(l) as Event);
 const phases = (stdout: string) => events(stdout).filter((v) => v.event === 'phase').map((v) => v.phase);
 const resultOf = (stdout: string) => {
@@ -801,7 +801,7 @@ const JSON_FLAGS = ['--progress', 'json'];
 const lockFile = () => join(e.data, 'update.lock');
 const writeLock = (pid: number, startedAt = new Date().toISOString()) => writeFileSync(lockFile(), JSON.stringify({ pid, startedAt }));
 
-/** Runs the script as a child that can be watched and signalled; `viaStdin` feeds it to `node --input-type=module -`. */
+/** (#462) Runs the script as a child that can be watched and signalled; `viaStdin` feeds it to `node --input-type=module -`. */
 function spawnScript(args: string[], env: NodeJS.ProcessEnv = {}, viaStdin = false) {
   const argv = viaStdin ? [NODE_FLAG, '--input-type=module', '-', ...args] : [SCRIPT, ...args];
   const child = spawn(process.execPath, argv, { env: { ...e.env, ...env }, stdio: ['pipe', 'pipe', 'pipe'] });
@@ -1107,7 +1107,7 @@ process.exit(r.status ?? 1);
     executable(join(e.bin, 'git'), FAKE_GIT(execFileSync('which', ['git'], { encoding: 'utf8' }).trim()));
     const args = baseArgs(JSON_FLAGS).filter((a) => a !== '--no-fetch');
     const slow = spawnScript(args);
-    await until(async () => existsSync(lockFile()));
+    await until(async () => slow.seen.stdout.includes('"phase":"check"'));
     await new Promise((r) => setTimeout(r, 300));
     slow.child.kill('SIGTERM');
     const r = await slow.done;
@@ -1123,7 +1123,7 @@ process.exit(r.status ?? 1);
     honestProc(pid);
     executable(join(e.bin, 'git'), FAKE_GIT(execFileSync('which', ['git'], { encoding: 'utf8' }).trim()));
     const slow = spawnScript(baseArgs(JSON_FLAGS).filter((a) => a !== '--no-fetch'));
-    await until(async () => existsSync(lockFile()));
+    await until(async () => slow.seen.stdout.includes('"phase":"check"'));
     await new Promise((r) => setTimeout(r, 300));
     slow.child.kill('SIGHUP');
     const r = await slow.done;
