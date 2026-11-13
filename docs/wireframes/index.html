@@ -6137,7 +6137,9 @@ function wbBoard(w, cols, o = {}) {
     return `<div class="col wb-col${cls}"><div class="cab"><span class="ponto" style="background:${dot}"></span><span>${label}</span>${lock}<span class="n">${o.count?.[k] ?? list.length}</span></div><div class="wb-crit">${crit}</div>${limit}${body}${more}</div>`
   }).join('')}</div>`
 }
-const wbCols = (filter = () => true, o = {}, items = WB_ITEMS) => WB_COLUMNS.reduce((acc, [k]) => ({ ...acc, [k]: items.filter(c => c.col === k && filter(c)).map(c => wbCard(c, o)) }), {})
+// Under issue 477 the queue column reads in queue order: cards with a position sort by it, the rest keep their order.
+const wbByQueue = (a, b) => (a.q ?? Infinity) - (b.q ?? Infinity) || 0
+const wbCols = (filter = () => true, o = {}, items = WB_ITEMS) => WB_COLUMNS.reduce((acc, [k]) => ({ ...acc, [k]: items.filter(c => c.col === k && filter(c)).sort(wbByQueue).map(c => wbCard(c, o)) }), {})
 const WB_READ = `<span class="wb-read">${ic('github')}lido às 23:12 · há 40 s</span>`
 const wbHead = (o = {}) => `<div class="cc-cab"><div class="ico">${ic('columns-3')}</div><div style="min-width:0"><h4>Quadro do trabalho</h4><div class="sub"><span class="mono">ahrenatechnology/ahrena-console</span> · GitHub Project “Ahrena Console” · a coluna vem dos sinais; só a fila é sua</div></div><div class="acoes">${o.read ?? WB_READ}${o.refresh ?? atualizar}</div></div>`
 const WB_LEVELS = [['initiative', 'Iniciativa'], ['epic', 'Épico/Milestone'], ['item', 'Item'], ['plan', 'Plano de execução']]
