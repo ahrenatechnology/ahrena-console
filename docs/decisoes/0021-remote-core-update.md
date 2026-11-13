@@ -1,6 +1,6 @@
 # 0021 · Núcleo remoto: o Mac mostra a versão de lá e avisa quando está defasada; o comando versionado atualiza com backup, trava antes de parar e supervisor do systemd
 
-- **Status:** aceita (o Fernando aceitou, PR #457)
+- **Status:** aceita (o Fernando aceitou, PR #457). O §2 foi alterado pela [0022](0022-remote-core-update-button.md) (issue #462): o script provou o caminho feliz na Workstation em 2026-11-12 e o dono não quis o copiar-e-colar, então o `connection.update` do §2 passou a valer; o card de copiar continua como saída. O resto desta decisão segue em vigor.
 - **Data:** 2026-11-12
 - **Issue:** [#449](https://github.com/ahrenatechnology/ahrena-console/issues/449)
 - **Depende de:** [0020](0020-remote-owner-credential-over-ssh.md) / [#388](https://github.com/ahrenatechnology/ahrena-console/issues/388) (a `main` só roda na remota com a prova do dono)
@@ -52,7 +52,7 @@ core: {
 
 **Quando a tela mostra o comando de atualização:** só para um alvo cujo release carrega **os dois**, `scripts/remote-core/update-remote-core.mjs` e `packages/nucleo/remote-contract.json`. Para tags anteriores (a 0.0.16 e as de antes, sem script nem manifesto) o `--ref app-v<versão>` não funcionaria, então o Mac mostra, no lugar, as **instruções de bootstrap**: pegar o script da `main` (ou da primeira tag que o traz), rodar com `--check` e então com `--allow-disconnect` se a pessoa decidir. O núcleo conhece a primeira versão que carrega os dois (uma constante, `FIRST_UPDATER_VERSION`) e escolhe o texto.
 
-**Alternativa rejeitada (por ora): `connection.update` no `machines.json`**, um comando em lista que o Mac roda como `start` e `stop` (0013 §4). Ele reaproveitaria o runner, mas: para e troca um processo que funciona por um clique, o que o 0020 evita desde o início (o Mac só entra pelo SSH para ler e para uma credencial curta); exigiria job, progresso, cancelamento e log com a saída do script, e o rollback precisa de um humano olhando; e o escopo da issue é caminho "documentado e repetível", com atualização automática fora. Fica aberto como decisão própria depois que o script provar o rollback na Workstation. A trava do §4 já é feita para esse dia: o código de saída é legível por máquina.
+**Alternativa rejeitada (por ora; passou a valer na [0022](0022-remote-core-update-button.md)): `connection.update` no `machines.json`**, um comando em lista que o Mac roda como `start` e `stop` (0013 §4). Ele reaproveitaria o runner, mas: para e troca um processo que funciona por um clique, o que o 0020 evita desde o início (o Mac só entra pelo SSH para ler e para uma credencial curta); exigiria job, progresso, cancelamento e log com a saída do script, e o rollback precisa de um humano olhando; e o escopo da issue é caminho "documentado e repetível", com atualização automática fora. Fica aberto como decisão própria depois que o script provar o rollback na Workstation. A trava do §4 já é feita para esse dia: o código de saída é legível por máquina.
 
 **Fora do escopo, de novo:** qualquer atualização sem a pessoa pedir (agendada, ao detectar `outdated`, no `Reconectar`).
 

@@ -1,6 +1,6 @@
 # 0013 · Conectores de nuvem e a conexão da máquina remota: o console entra pelas CLIs das nuvens, sem guardar credencial
 
-- **Status:** aceita com as quatro respostas recomendadas, confirmadas pelo Fernando em 22/10, com o Mac multiusuário fora do escopo da fase 1 e o pareamento na #315 (wireframes C57 a C67, A9, A10 e P14 aprovados no #283, em 22/10)
+- **Status:** aceita com as quatro respostas recomendadas, confirmadas pelo Fernando em 22/10, com o Mac multiusuário fora do escopo da fase 1 e o pareamento na #315 (wireframes C57 a C67, A9, A10 e P14 aprovados no #283, em 22/10) **Ver também a [0022](0022-remote-core-update-button.md):** o botão Atualizar roda um `connection.update` declarado, com uma cauda de argv fechada acrescentada pelo núcleo, um passo além do "comando constante" daqui.
 - **Data:** 2026-10-21
 - **Issues:** [#277](https://github.com/ahrenatechnology/ahrena-console/issues/277) (contas de nuvem) e [#278](https://github.com/ahrenatechnology/ahrena-console/issues/278) (a conexão da máquina remota)
 - **Revê:** em [0008](0008-machine-telemetry-and-dev-console.md), seção 6, "abrir login de nuvem" (passa a ser do console, só pela CLI da nuvem) e "subir, parar o túnel" (passa a ser do console, só pelo comando do usuário); em [0012](0012-remote-reconnect.md), seção 3, "o núcleo não lê a saída" (passa a procurar uma lista fechada de padrões no trecho do log da execução, sem mostrar nada dele)
