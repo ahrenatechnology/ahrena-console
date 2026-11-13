@@ -64,7 +64,7 @@ Os dois param no botão de merge e começam todo laço num clique. Nenhum deles 
 
 ### 2. O veredito do Argos (fatia 1)
 
-- **O contrato é o marcador, e ele precisa levar o veredito.** Ler o título em prosa quebraria a cada variação. Antes da fatia 1, uma issue no ahrena-framework fixa o marcador como `<!-- ahrena-review:<pr>:<sha> verdict=<approve|request-changes|comment> -->`, com o SHA de 7 a 40 caracteres. A skill `publishing-review-verdicts` passa a escrevê-lo assim.
+- **O contrato é o marcador, e ele precisa levar o veredito.** Ler o título em prosa quebraria a cada variação. Antes da fatia 1, a [ahrena-framework#274](https://github.com/ahrenatechnology/ahrena-framework/issues/274) fixa o marcador como `<!-- ahrena-review:<pr>:<sha> verdict=<approve|request-changes|comment> -->`, com o SHA de 7 a 40 caracteres. A skill `publishing-review-verdicts` passa a escrevê-lo assim.
 - **Os comentários antigos:** um marcador sem `verdict=` vira `verdict: 'unknown'`, e a tela mostra "veredito sem formato". Não há heurística sobre o título.
 - **O que muda na leitura:** a consulta `DevConsolePullRequests` passa a trazer os últimos comentários de cada PR, e o núcleo procura neles o marcador do Argos.
   - `PullRequestFact` ganha `argos: { verdict: 'approve' | 'request-changes' | 'comment' | 'unknown'; headSha: string; current: boolean } | null`.
@@ -130,5 +130,5 @@ Cada fatia vira a sua issue depois da aceitação desta decisão e entra pela At
 
 - O Console passa a ser a tela do ciclo da agência, que é o que o T3 e o Orca não têm, sem competir com eles na execução.
 - A política de merge ganha uma leitura no núcleo (veredito atual + CI + conflito). Se ela mudar no AGENTS.md, muda também aqui.
-- O marcador do Argos vira contrato entre o ahrena-framework e o Console. A fatia 1 depende da issue no framework que o fixa e registra o formato num teste; mudar o marcador depois exige mudar os dois.
+- O marcador do Argos vira contrato entre o ahrena-framework e o Console. A fatia 1 depende da [ahrena-framework#274](https://github.com/ahrenatechnology/ahrena-framework/issues/274) e registra o formato num teste; mudar o marcador depois exige mudar os dois.
 - Nada desta decisão executa modelo, então a admissão não bloqueia nenhuma das três fatias.
