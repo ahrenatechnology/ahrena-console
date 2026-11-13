@@ -875,7 +875,7 @@ fn open_window(app: &AppHandle, path: Option<&str>) {
         let _ = w.set_focus();
         return;
     }
-    let (nav_state, new_window_state) = (shared.clone(), shared.clone());
+    let (nav_state, new_window_state, permission_state) = (shared.clone(), shared.clone(), shared.clone());
     let window = WebviewWindowBuilder::new(app, "console", WebviewUrl::External(url))
         .title("Ahrena Console")
         .inner_size(1100.0, 760.0)
@@ -891,6 +891,16 @@ fn open_window(app: &AppHandle, path: Option<&str>) {
             }
             LinkTarget::Refused => false,
         })
+        // Voice dictation (decision 0019): the page records, so the WKWebView asks for the microphone.
+        // Only the microphone, only for this app's own core page; everything else is refused.
+        .on_permission_request(move |webview, kind| {
+            let url = webview.url().ok();
+            if grants_permission(kind, url.as_ref(), core_port(&permission_state)) {
+                tauri::webview::PermissionResponse::Allow
+            } else {
+                tauri::webview::PermissionResponse::Deny
+            }
+        })
         .on_new_window(move |url, _| {
             if link_target(&url, core_port(&new_window_state)) == LinkTarget::Browser {
                 open_in_browser(&url);
@@ -901,6 +911,14 @@ fn open_window(app: &AppHandle, path: Option<&str>) {
     if let Ok(w) = window {
         let _ = w.set_focus();
     }
+}
+
+/// Whether the console window may be granted a browser permission (decision 0019): the microphone,
+/// and only while the page is this app's core on loopback http. Camera, geolocation, notifications and
+/// the rest are never granted, nor is the microphone to any other host or port.
+fn grants_permission(kind: tauri::webview::PermissionKind, page: Option<&tauri::Url>, core_port: Option<u16>) -> bool {
+    kind == tauri::webview::PermissionKind::Microphone
+        && page.is_some_and(|u| u.scheme() == "http" && u.host_str() == Some("127.0.0.1") && link_target(u, core_port) == LinkTarget::Core)
 }
 
 /// Where a URL the console window wants to show goes (#241).
@@ -1003,7 +1021,8 @@ fn notify(app: &AppHandle, notices: &[Notice]) {
 
 #[cfg(test)]
 mod tests {
-    use super::{count_machine_misses, link_target, LinkTarget};
+    use super::{count_machine_misses, grants_permission, link_target, LinkTarget};
+    use tauri::webview::PermissionKind;
 
     #[test]
     fn links_out_of_the_ui_go_to_the_system_browser() {
@@ -1027,6 +1046,22 @@ mod tests {
         assert_eq!(t("javascript:alert(1)"), LinkTarget::Refused);
         assert_eq!(link_target(&"http://127.0.0.1:53817/ui".parse().unwrap(), None), LinkTarget::Refused, "no core up");
         assert_eq!(t("https://:secret@github.com/"), LinkTarget::Refused, "a password is userinfo too");
+    }
+
+    #[test]
+    fn the_microphone_is_granted_to_the_core_page_only() {
+        let page = |u: &str| Some(u.parse::<tauri::Url>().unwrap());
+        let core = Some(53817);
+        assert!(grants_permission(PermissionKind::Microphone, page("http://127.0.0.1:53817/ui").as_ref(), core));
+        assert!(!grants_permission(PermissionKind::Camera, page("http://127.0.0.1:53817/ui").as_ref(), core));
+        assert!(!grants_permission(PermissionKind::Geolocation, page("http://127.0.0.1:53817/ui").as_ref(), core));
+        assert!(!grants_permission(PermissionKind::Notifications, page("http://127.0.0.1:53817/ui").as_ref(), core));
+        assert!(!grants_permission(PermissionKind::Microphone, page("http://127.0.0.1:9999/ui").as_ref(), core), "another port");
+        assert!(!grants_permission(PermissionKind::Microphone, page("https://github.com/ui").as_ref(), core), "another host");
+        assert!(!grants_permission(PermissionKind::Microphone, page("http://localhost:53817/ui").as_ref(), core), "not the loopback address");
+        assert!(!grants_permission(PermissionKind::Microphone, page("about:blank").as_ref(), core));
+        assert!(!grants_permission(PermissionKind::Microphone, None, core), "no page url");
+        assert!(!grants_permission(PermissionKind::Microphone, page("http://127.0.0.1:53817/ui").as_ref(), None), "no core up");
     }
 
     #[test]
