@@ -5,7 +5,7 @@
 - **Issue:** [#470](https://github.com/ahrenatechnology/ahrena-console/issues/470)
 - **Estende:** [0008](0008-machine-telemetry-and-dev-console.md) §4 (o Dev Console é derivado do GitHub e das sessões, sem anotação manual)
 - **Depende de:** [0003](0003-responder-sessao.md) (a ordem chega pelo mod de dentro da sessão) e da admissão "somente franquia" ([billing-admission](../billing-admission.md), #382, #387), que segura toda execução gerenciada
-- **Estudo:** benchmark interno, estudos 07 (T3 Code) e 08 (Orca)
+- **Estudo:** benchmark interno, estudos 07 (T3 Code) e 08 (Orca), [ahrena-benchmark#1](https://github.com/ahrenatechnology/ahrena-benchmark/pull/1) (privado)
 
 ## Contexto
 
@@ -43,7 +43,12 @@ Os dois param no botão de merge e começam todo laço num clique. Nenhum deles 
 **O que o núcleo ainda não sabe:**
 
 - **Qual PR é de qual sessão.** Os dois lados estão lidos, mas não ligados.
-- **O veredito do Argos.** Ele não é uma review do GitHub (`reviewDecision` vem vazio, porque o Fernando não aprova no GitHub). É um comentário com o marcador `<!-- ahrena-review:<pr>:<sha> -->` e o título `## Argos: <veredito>`, sempre sobre um head exato. Visto no PR #460.
+- **O veredito do Argos.** Ele não é uma review do GitHub (`reviewDecision` vem vazio, porque o Fernando não aprova no GitHub). É um comentário com o marcador `<!-- ahrena-review:<pr>:<sha> -->`, mas o formato não é estável:
+  - o #459 usa `## Argos review of <sha8>: REQUEST CHANGES`;
+  - o #460 usa `## Argos: approve (...)`;
+  - a skill `publishing-review-verdicts` prescreve `**Verdict:** ...` com um SHA de 7 caracteres no marcador, enquanto o #459 e o #460 gravaram o SHA de 40.
+
+  Os comentários são todos da mesma conta (`fernandoseguim`), a mesma que todas as sessões usam.
 - **Staging.** O `ahrena-console` não publica deployments no GitHub (`GET /repos/.../deployments` devolve 0).
 
 ## Decisão
@@ -59,26 +64,31 @@ Os dois param no botão de merge e começam todo laço num clique. Nenhum deles 
 
 ### 2. O veredito do Argos (fatia 1)
 
+- **O contrato é o marcador, e ele precisa levar o veredito.** Ler o título em prosa quebraria a cada variação. Antes da fatia 1, uma issue no ahrena-framework fixa o marcador como `<!-- ahrena-review:<pr>:<sha> verdict=<approve|request-changes|comment> -->`, com o SHA de 7 a 40 caracteres. A skill `publishing-review-verdicts` passa a escrevê-lo assim.
+- **Os comentários antigos:** um marcador sem `verdict=` vira `verdict: 'unknown'`, e a tela mostra "veredito sem formato". Não há heurística sobre o título.
 - **O que muda na leitura:** a consulta `DevConsolePullRequests` passa a trazer os últimos comentários de cada PR, e o núcleo procura neles o marcador do Argos.
-  - `PullRequestFact` ganha `argos: { verdict: 'approve' | 'request-changes' | 'comment'; headSha: string; current: boolean } | null`.
-  - `current` diz se o veredito foi dado sobre o head de agora. Um veredito sobre um head antigo vale como "revisão desatualizada", nunca como aprovado.
+  - `PullRequestFact` ganha `argos: { verdict: 'approve' | 'request-changes' | 'comment' | 'unknown'; headSha: string; current: boolean } | null`.
+  - `current` é verdadeiro quando o head de agora começa pelo SHA do marcador (prefixo, porque o marcador pode ter de 7 a 40 caracteres). Um veredito sobre um head antigo vale como "revisão desatualizada", nunca como aprovado.
 - **Fila de merge:** ganha o motivo `argos-pending` (sem veredito atual) e `argos-changes` (mudanças pedidas). Um PR só fica "pronto" com veredito `approve` atual, CI verde e sem conflito, que é a política de merge do AGENTS.md.
 - **Custo:** a consulta continua sendo uma por repositório, um pouco mais funda. O orçamento da [0001](0001-github-consulta-cache.md) é medido na fatia, antes do merge.
-- **O que isso não é:** um comentário qualquer com o marcador falsificaria o veredito. A leitura aceita só comentários do autor que o contexto declara como revisor (a conta da agência), e a tela mostra o autor. Serve para mostrar, nunca para mergear.
+- **O que isso não é:** prova de que o Argos revisou.
+  - A leitura aceita só comentários dos autores que o contexto declara (hoje `fernandoseguim`) e mostra o autor na tela. Isso barra pessoas de fora, mas não separa o Argos de qualquer outra sessão: todas comentam pela mesma conta, e qualquer uma pode escrever o marcador.
+  - Aceitamos esse risco porque a leitura só mostra. O Console nunca mergeia nem libera merge por ela; quem mergeia continua conferindo o veredito no PR.
+  - Uma conta própria para a agência fecharia a brecha, mas fica fora desta decisão.
 
 ### 3. A etapa de cada issue (fatia 2)
 
 O card da issue ganha uma linha de etapas, derivada sem anotação:
 
-| Etapa | De onde vem |
+| Etapa (id) | De onde vem |
 | --- | --- |
-| Na rodada | a issue está na Round issue aberta do repositório (a lista de issues dela) |
-| Em plano | uma sessão viva tem branch da issue e ainda não há PR que a feche |
-| Em construção | há PR aberto que fecha a issue; as camadas empilhadas vêm da cadeia `baseRefName` → `headRefName` |
-| Em revisão | o PR do topo está sem veredito atual do Argos, ou com `request-changes` |
-| Pronta para merge | veredito `approve` atual, CI verde, sem conflito |
-| Mergeada | todos os PRs que fecham a issue foram mergeados |
-| Em staging | só em repositório que publica deployments num ambiente chamado `staging`; nos outros a etapa não aparece |
+| Na rodada (`in-round`) | a issue está na Round issue aberta do repositório (a lista de issues dela) |
+| Em plano (`planning`) | uma sessão viva tem branch da issue e ainda não há PR que a feche |
+| Em construção (`building`) | há PR aberto que fecha a issue; as camadas empilhadas vêm da cadeia `baseRefName` → `headRefName` |
+| Em revisão (`in-review`) | o PR do topo está sem veredito atual do Argos, ou com `request-changes` |
+| Pronta para merge (`ready`) | veredito `approve` atual, CI verde, sem conflito |
+| Mergeada (`merged`) | todos os PRs que fecham a issue foram mergeados |
+| Em staging (`staging`) | só em repositório que publica deployments num ambiente chamado `staging`; nos outros a etapa não aparece |
 
 - **A confirmar na fatia:** como a Round issue lista as issues dela (corpo ou sub-issues). A fatia lê o formato do `opening-the-round` e escolhe um. Sem Round issue aberta, a etapa "Na rodada" não aparece.
 
@@ -120,5 +130,5 @@ Cada fatia vira a sua issue depois da aceitação desta decisão e entra pela At
 
 - O Console passa a ser a tela do ciclo da agência, que é o que o T3 e o Orca não têm, sem competir com eles na execução.
 - A política de merge ganha uma leitura no núcleo (veredito atual + CI + conflito). Se ela mudar no AGENTS.md, muda também aqui.
-- O marcador do Argos vira contrato. Mudar o formato do comentário no ahrena-framework quebra esta leitura; a fatia 1 registra o formato num teste.
+- O marcador do Argos vira contrato entre o ahrena-framework e o Console. A fatia 1 depende da issue no framework que o fixa e registra o formato num teste; mudar o marcador depois exige mudar os dois.
 - Nada desta decisão executa modelo, então a admissão não bloqueia nenhuma das três fatias.
