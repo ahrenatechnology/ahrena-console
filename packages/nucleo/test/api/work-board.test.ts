@@ -546,3 +546,31 @@ describe('GET /api/work errors', () => {
       { extra: { githubConnected: async () => false } },
     ));
 });
+
+describe('#501/AC-1 GET /api/work: counts without each active filter', () => {
+  const OTHER = 'ahrenatechnology/outro';
+  const elsewhere = (n: number, over: Partial<ProjectCard> = {}) => issue(n, { repo: OTHER, key: `${OTHER}#${n}`, ...over });
+  const items = () => [
+    issue(700),
+    issue(701),
+    issue(702, { state: 'CLOSED', closedAt: '2026-10-17T12:00:00Z', statusId: 'opt-done' }),
+    issue(703, { state: 'CLOSED', closedAt: '2026-09-01T12:00:00Z', statusId: 'opt-done' }),
+    elsewhere(710, { type: 'Bug' }),
+    elsewhere(711, { type: 'Bug', state: 'CLOSED', closedAt: '2026-08-01T12:00:00Z', statusId: 'opt-done' }),
+  ];
+
+  test('#501/AC-1 Given type=bug and repo=x and no card matching both, Then each count is what the other filter alone shows, trimmed by the done window', () =>
+    withBoard(async (b) => {
+      b.source.items = items();
+      const r = await get(b, `?type=bug&repo=${encodeURIComponent(REPO)}`);
+      assert.equal(r.json.matched, 0);
+      assert.deepEqual(r.json.countsWithoutFilter, { type: 3, repo: 1 });
+    }));
+
+  test('#501/AC-2 Given no filter, Then countsWithoutFilter is present and empty', () =>
+    withBoard(async (b) => {
+      b.source.items = items();
+      const r = await get(b);
+      assert.deepEqual(r.json.countsWithoutFilter, {});
+    }));
+});
