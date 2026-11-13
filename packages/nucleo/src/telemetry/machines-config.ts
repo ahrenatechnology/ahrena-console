@@ -162,7 +162,8 @@ export const FORBIDDEN_UPDATE_ITEMS = ['--allow-disconnect', '--force', '--core-
 
 /** Whether an item of the command is (or is `--flag=value` of) a forbidden one. */
 export function isForbiddenUpdateItem(item: string): boolean {
-  return FORBIDDEN_UPDATE_ITEMS.some((f) => item === f || item.startsWith(`${f}=`));
+  // ssh joins the argv and the remote shell reads it again: an item with spaces is several words there.
+  return item.split(/\s+/).some((w) => FORBIDDEN_UPDATE_ITEMS.some((f) => w === f || w.startsWith(`${f}=`)));
 }
 
 /** A machine's `connection.update`, or its fixed problem: the command rules of `reconnect`, 60 to 900 s (300 by default), no forbidden item. Pure. */

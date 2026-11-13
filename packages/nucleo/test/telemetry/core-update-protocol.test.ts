@@ -88,6 +88,15 @@ describe('issue 462 the NDJSON parser', () => {
     assert.equal(seen.length, 1);
   });
 
+  test('a multi-byte character split between chunks is read whole', () => {
+    const seen: ProgressEvent[] = [];
+    const p = new ProgressParser((e) => seen.push(e));
+    const line = Buffer.from(result(41, { backup: '/srv/backups/atualização' }));
+    p.push(line.subarray(0, line.indexOf('ç') + 1));
+    p.push(line.subarray(line.indexOf('ç') + 1));
+    assert.equal((seen[0] as { backup: string }).backup, '/srv/backups/atualização');
+  });
+
   test('a phase never moves back', () => {
     assert.equal(phaseAdvances(null, 'check'), true);
     assert.equal(phaseAdvances('swap', 'check'), false);

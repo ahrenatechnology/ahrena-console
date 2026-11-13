@@ -1,3 +1,5 @@
+import { StringDecoder } from 'node:string_decoder';
+
 // What the Mac's núcleo knows of the update script's contract, as pure functions (issue 462, decision 0022
 // sections 1, 4, 6 and 7); the job that runs it is telemetry/core-update.ts.
 //
@@ -118,6 +120,7 @@ export type ProgressSink = (event: ProgressEvent) => void;
  */
 export class ProgressParser {
   private buffer = '';
+  private readonly decoder = new StringDecoder('utf8');
   private total = 0;
   overflow = false;
   private readonly sink: ProgressSink;
@@ -132,7 +135,7 @@ export class ProgressParser {
     const room = MAX_UPDATE_OUTPUT_BYTES - this.total;
     const take = chunk.length > room ? chunk.subarray(0, room) : chunk;
     this.total += take.length;
-    this.buffer += take.toString('utf8');
+    this.buffer += this.decoder.write(take);
     let at: number;
     while ((at = this.buffer.indexOf('\n')) >= 0) {
       const line = this.buffer.slice(0, at).replace(/\r$/, '');

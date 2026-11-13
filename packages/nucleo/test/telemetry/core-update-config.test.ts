@@ -36,6 +36,7 @@ describe('issue 462 connection.update in machines.json', () => {
       assert.deepEqual(parseUpdate({ command: [...SSH, `${item}=x`] }), { problem: 'forbidden-flag' }, `${item}=`);
     }
     assert.deepEqual(parseUpdate({ command: [...SSH, '--core-options', '--port 4720 --data-dir /x'] }), { problem: 'forbidden-flag' });
+    assert.deepEqual(parseUpdate({ command: [...SSH, '--allow-disconnect --force'] }), { problem: 'forbidden-flag' });
     // --no-fetch and --data-dir are the user's to declare.
     assert.notEqual('problem' in parseUpdate({ command: [...SSH, '--no-fetch', '--data-dir', '/srv/data'] }), true);
   });

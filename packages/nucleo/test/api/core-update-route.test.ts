@@ -140,9 +140,10 @@ describe('issue 462 the Update routes', () => {
     b.s.set(CHECK_OK);
     await call(b.api.url, 'POST', CHECK, b.own);
     await b.updater.settled('ws-exemplo');
-    b.s.set({ steps: [{ out: phase('backup') }, { sleep: 500 }, { out: result(0) }], exit: 0 });
+    b.s.set({ steps: [{ out: phase('check') }, { out: phase('backup') }, { sleep: 500 }, { out: result(0) }], exit: 0 });
     await call(b.api.url, 'POST', UPDATE, b.own);
-    await new Promise((r) => setTimeout(r, 150));
+    const { until } = await import('../telemetry/core-update-fixture.ts');
+    await until(() => b.updater.status('ws-exemplo')!.phase === 'backup');
     const no = await call(b.api.url, 'DELETE', UPDATE, b.own);
     assert.equal(no.status, 409);
     assert.equal(no.body.reason, 'not-cancelable');

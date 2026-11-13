@@ -53,6 +53,8 @@ export const CHECK_VALID_MS = 5 * 60_000;
 /** After an exit 0, the remote's own version has this long to show the target before the screen says it diverged. */
 export const CONFIRM_WINDOW_MS = 2 * 60_000;
 export const UPDATE_KILL_GRACE_MS = 5_000;
+/** A hung ssh past the timeout of an update is ended after this many more timeouts (the script ignores signals and runs on alone). */
+const HARD_CAP_FACTOR = 2;
 
 export type UpdateRefusal = 'invalid-file' | 'not-configured' | 'invalid' | 'invalid-version' | 'check-required' | 'not-cancelable' | 'not-running';
 
@@ -226,7 +228,7 @@ export class CoreUpdater {
     const observed = this.o.observedVersion?.(machineId) ?? null;
     if (job && !job.alive && job.kind === 'check' && job.state === 'ready') {
       const until = (job.endedMs ?? 0) + CHECK_VALID_MS;
-      if (this.now() <= until && e?.check) readyUntil = new Date(until).toISOString();
+      if (this.now() <= until && e?.check && update && e.check.commandKey === commandKeyOf(update, conn)) readyUntil = new Date(until).toISOString();
       else state = 'idle';
     }
     if (job && job.kind === 'update' && job.state === 'succeeded') {
@@ -269,7 +271,7 @@ export class CoreUpdater {
       backupPath: live?.backup ?? null,
       oldCommit: live?.oldCommit ?? null,
       newCommit: live?.newCommit ?? null,
-      canCancel: job?.alive === true && !job.stopped && job.phase === 'check',
+      canCancel: job?.alive === true && !job.stopped && job.kind === 'check' && job.phase === 'check',
       timeoutSeconds: update?.timeoutSeconds ?? job?.timeoutSeconds ?? DEFAULT_UPDATE_TIMEOUT_SECONDS,
       command: [...command],
       confirmation,
@@ -310,7 +312,8 @@ export class CoreUpdater {
     if (looked.kind === 'unknown') return { kind: 'unknown' };
     const job = this.entries.get(machineId)?.job;
     if (!job?.alive || job.stopped) return { kind: 'refused', reason: 'not-running' };
-    if (job.phase !== 'check') return { kind: 'refused', reason: 'not-cancelable' };
+    // Only the --check touches nothing; an update's own check phase is the script's first step of a run that goes on to the backup.
+    if (job.kind !== 'check' || job.phase !== 'check') return { kind: 'refused', reason: 'not-cancelable' };
     this.stop(machineId, job, 'canceled', 'canceled');
     return { kind: 'canceled', update: this.status(machineId)! };
   }
@@ -327,7 +330,7 @@ export class CoreUpdater {
       if (kind === 'update' && e.job.kind === 'check') return { kind: 'refused', reason: 'check-required' };
       return this.again(machineId);
     }
-    const commandKey = JSON.stringify(config.command);
+    const commandKey = commandKeyOf(config, conn);
     if (kind === 'update') {
       const c = e.check;
       if (!c || c.commandKey !== commandKey || this.now() - c.okMs > CHECK_VALID_MS) return { kind: 'refused', reason: 'check-required' };
@@ -427,12 +430,18 @@ export class CoreUpdater {
     const ms = job.timeoutSeconds * (this.o.msPerSecond ?? 1000);
     job.timer = setTimeout(() => {
       if (!job.alive || job.stopped) return;
-      if (pastCheck(job.phase)) {
-        // The script runs on alone: ssh is left alone, and the exit code still decides.
-        job.state = 'timed-out';
-        job.key = 'timeout-after-swap';
-        this.changed(machineId);
-      } else this.stop(machineId, job, 'timed-out', 'timeout-before-swap');
+      // Killing ssh is safe only for the --check, or before the script ever started (no phase yet).
+      if (job.kind === 'check' || job.phase === null) return this.stop(machineId, job, 'timed-out', 'timeout-before-swap');
+      // The update's script runs on alone: ssh is left alone and the exit code still decides. A hard cap below ends a hung ssh.
+      job.state = 'timed-out';
+      job.key = 'timeout-after-swap';
+      this.changed(machineId);
+      job.timer = setTimeout(() => {
+        if (!job.alive) return;
+        const pid = job.child?.pid;
+        if (pid) signalGroup(pid, 'SIGKILL', job.child);
+      }, ms * HARD_CAP_FACTOR);
+      job.timer.unref?.();
     }, ms);
     job.timer.unref?.();
     this.changed(machineId);
@@ -466,7 +475,7 @@ export class CoreUpdater {
     job.oldCommit = r?.oldCommit ?? null;
     job.newCommit = r?.newCommit ?? null;
     job.backup = code === 40 || code === 41 ? (r?.backup ?? null) : null;
-    if (job.stopped) {
+    if (job.stopped && code !== 0 && code !== 40 && code !== 41) {
       // Canceled, timed out in the check phase or cut for its output: the state we set stands; a clean 130 changes nothing.
       this.end(machineId, e, job, { state: job.state, key: job.key ?? 'unknown-exit' }, code);
       return;
@@ -508,3 +517,8 @@ function portOf(command: readonly string[]): string | null {
   return v !== undefined && PORT_ARG.test(v) ? v : null;
 }
 
+
+/** What a check is good for: the declared command and whether the Mac declares a credential command to the script. */
+function commandKeyOf(config: ReconnectConfig, conn: ConnectionConfig | null | undefined): string {
+  return JSON.stringify([config.command, Boolean(conn?.credential)]);
+}

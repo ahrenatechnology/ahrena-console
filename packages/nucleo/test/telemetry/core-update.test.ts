@@ -404,6 +404,38 @@ describe('issue 462 Cancel, timeout, and what happens after the swap', () => {
   });
 });
 
+describe('issue 462 review round 1', () => {
+  test('Cancel never applies to an update, even in its own check phase', async () => {
+    const t = setup();
+    await check(t);
+    t.s.set({ steps: [{ out: phase('check') }, { sleep: 400 }, { out: result(0) }], exit: 0 });
+    await t.u.update('ws-exemplo');
+    await until(() => t.view().phase === 'check');
+    assert.equal(t.view().canCancel, false);
+    assert.deepEqual(await t.u.cancel('ws-exemplo'), { kind: 'refused', reason: 'not-cancelable' });
+    await t.u.settled('ws-exemplo');
+    assert.equal(t.view().state, 'succeeded');
+  });
+
+  test('a canceled check that still exits 0 is classified by the code', async () => {
+    const t = setup();
+    t.s.set({ steps: [{ out: phase('check') }, { sleep: 100 }], exit: 0 });
+    await t.u.check('ws-exemplo');
+    await until(() => t.s.runs().length === 1);
+    await t.u.cancel('ws-exemplo');
+    await t.u.settled('ws-exemplo');
+    assert.ok(['canceled', 'ready'].includes(t.view().state));
+  });
+
+  test('a check made with the credential command does not pay for an update without it', async () => {
+    const t = setup();
+    await check(t);
+    t.setConnection(t.s.connection({ credential: undefined as never }));
+    assert.deepEqual(await t.u.update('ws-exemplo'), { kind: 'refused', reason: 'check-required' });
+    assert.equal(t.view().state, 'idle');
+  });
+});
+
 describe('issue 462 after exit 0: the credential goes, the machine is read, the banner clears by itself', () => {
   test('confirming while the remote still answers the old version, confirmed once it answers the target', async () => {
     const t = setup();
