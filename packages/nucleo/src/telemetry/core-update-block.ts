@@ -7,8 +7,13 @@
 // `<node> --disable-warning=ExperimentalWarning --input-type=module - --checkout <checkout> --port <n>`. The
 // checkout is `connection.checkout` or the one the credential's `cli.ts` path implies. A block that the validator
 // (`parseUpdate`) would refuse is not offered.
+//
+// Since decision 0024 (issue 484) the same command is also what runs when no `connection.update` is declared
+// (`resolveUpdateCommand`): a valid declared update wins; an invalid declared one runs nothing and never falls back
+// to the derived command (the text the person wrote explicitly wins, and hiding its error would run what they did
+// not want); otherwise the command derived from the credential, or nothing.
 
-import { DEFAULT_UPDATE_TIMEOUT_SECONDS, parseCheckout, parseUpdate, type ReconnectConfig } from './machines-config.ts';
+import { DEFAULT_UPDATE_TIMEOUT_SECONDS, parseCheckout, parseUpdate, type ConnectionConfig, type ReconnectConfig } from './machines-config.ts';
 
 const OWNER_CLI_SUFFIX = '/packages/nucleo/src/owner/cli.ts';
 const PORT = /^\d{1,5}$/;
@@ -39,4 +44,19 @@ export function buildUpdateBlock(credential: ReconnectConfig | null | undefined,
   if ('problem' in parsed) return null;
   const lines = JSON.stringify({ update: { command, timeoutSeconds: DEFAULT_UPDATE_TIMEOUT_SECONDS } }, null, 2).split('\n');
   return { text: lines.slice(1, -1).map((l) => l.slice(2)).join('\n'), command, timeoutSeconds: DEFAULT_UPDATE_TIMEOUT_SECONDS };
+}
+
+/** Where the update command came from (decision 0024 section 1). */
+export type UpdateSource = 'declared' | 'derived';
+
+/**
+ * The update command of a machine: the valid declared `connection.update`; nothing when the declared one is invalid
+ * (never the derived one); else the command derived from `connection.credential`; else nothing. Pure.
+ */
+export function resolveUpdateCommand(conn: ConnectionConfig | null | undefined): { config: ReconnectConfig; source: UpdateSource } | null {
+  if (!conn) return null;
+  if (conn.update) return { config: conn.update, source: 'declared' };
+  if (conn.updateProblem) return null;
+  const block = buildUpdateBlock(conn.credential, conn.checkout);
+  return block ? { config: { command: block.command, timeoutSeconds: block.timeoutSeconds }, source: 'derived' } : null;
 }

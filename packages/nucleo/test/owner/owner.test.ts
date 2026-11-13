@@ -337,7 +337,7 @@ describe('start or adopt', { timeout: 60_000 }, () => {
 });
 
 describe('version', { timeout: 60_000 }, () => {
-  test('older version: replaced without --replace (#220)', async () => {
+  test('#484/AC-7 older version: replaced without --replace (#220)', async () => {
     const port = await freePort();
     const old = api(port);
     const t = await liveLock();
@@ -351,7 +351,7 @@ describe('version', { timeout: 60_000 }, () => {
     assert.ok(!isPidAlive(t.pid));
   });
 
-  test('older version kept up by a registered client: `start` replaces it and the client stays registered (#220)', async () => {
+  test('#484/AC-7 older version kept up by a registered client: `start` replaces it and the client stays registered (#220)', async () => {
     const parent = idle();
     const bridge = idle();
     api(await freePort(), '--parent', String(parent.pid));

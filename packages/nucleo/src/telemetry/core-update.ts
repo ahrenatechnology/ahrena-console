@@ -1,11 +1,25 @@
-// The Update button's job, Mac side (issue 462, decision 0022). What this module guarantees:
+// The remote core's update job, Mac side (issue 462, decision 0022; issue 484, decision 0024). What this module
+// guarantees:
 //
-// - Only what the user declared runs. The command is `connection.update.command` of the FRESHEST reading of
-//   machines.json (`lookup`, which refreshes it); while the file is invalid nothing runs. The núcleo appends the
-//   closed tail of core-update-protocol.ts (`--ref`, `--mac-telemetry-version`, `--mac-credential-command`,
-//   `--progress json`, and `--check` for the check step) and nothing else: no text of the request reaches the argv
-//   (the routes pass the machine id only), and `--allow-disconnect` never appears (the validator refuses it in the
-//   declared command too, machines-config.ts `parseUpdate`).
+// - The command comes from the FRESHEST reading of machines.json (`lookup`, which refreshes it); while the file is
+//   invalid nothing runs. It is the declared `connection.update.command` when valid (`source: 'declared'`); with
+//   none declared, the one `buildUpdateBlock` derives from `connection.credential`: the user's own SSH prefix as
+//   written, the remote program swapped for `node --input-type=module -` on the same checkout (`source:
+//   'derived'`, decision 0024 section 1). An INVALID declared update runs nothing and never falls back to the
+//   derived one (core-update-block.ts `resolveUpdateCommand`). The núcleo appends the closed tail of
+//   core-update-protocol.ts (`--ref`, `--mac-telemetry-version`, `--mac-credential-command`, `--progress json`,
+//   and `--check` for the check step) and nothing else: no text of the request reaches the argv (the routes pass
+//   the machine id only), and `--allow-disconnect`, `--force` and `--core-options` never appear (the validator
+//   refuses them in the declared and the derived command alike, machines-config.ts `parseUpdate`).
+// - The automatic run (decision 0024 section 2): `considerAuto`, called after each good read of the remote's
+//   overview, starts the `--check` by itself when the remote answers a version strictly older than the app's, the
+//   app's version has a tag, the machine has a credential and a command, nothing of the machine runs, and no good
+//   check waits for the person's confirmation (an open "Atualizar agora" is theirs: the automatic run neither takes
+//   its check nor spends the attempt, and may fire once that check has expired unused); a check
+//   that ends `ready` chains the update at once (it pays for it like the route's, with no confirm window). Once per
+//   (machine, target): the attempt is spent the instant it starts, in `AutoAttempts` (`core-update-auto.json` in
+//   production, `fileAutoAttempts`), and a refused or failed attempt is never repeated by itself; the routes
+//   ("Tentar de novo") still work. A manual update, and any run that exits 21 or 22, spend it too.
 // - `spawn(command[0], rest, { shell: false, detached: true })`: no shell, its own process group, stdout to a pipe
 //   read in memory (64 KiB), stderr discarded, and the app's own update script written to stdin, which the remote
 //   `node --input-type=module -` runs (decision 0022 section 2). The script is the file packaged with the app.
@@ -22,12 +36,15 @@
 // - On exit 0 of the update the machine's credential is dropped and the machine is read at once (`onUpdated`); the
 //   state stays `succeeded` and reads `confirming` until the remote's own version equals the target, `diverged` if
 //   2 minutes pass without it.
-// - The log gets one line per end, `update (<id>): <kind> <state> exit <n>`; never the output nor the script.
+// - The log gets one line per start (`update (<id>): <kind> started`, plus `automatic` for the Mac's own run) and
+//   one per end, `update (<id>): <kind> <state> exit <n>`; never the output nor the script.
 
 import { spawn as nodeSpawn, type ChildProcess, type SpawnOptions } from 'node:child_process';
+import { chmodSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
-import { buildUpdateBlock } from './core-update-block.ts';
+import { dirname, join } from 'node:path';
+import { buildUpdateBlock, resolveUpdateCommand, type UpdateSource } from './core-update-block.ts';
 import {
   buildTail,
   classify,
@@ -39,6 +56,7 @@ import {
   type UpdatePhase,
   type UpdateState,
 } from './core-update-protocol.ts';
+import { compareSemver } from './core-version.ts';
 import { renderUpdateText, textKeyOrFallback, type UpdateTextKey, type UpdateTextParams } from './core-update-texts.ts';
 import { DEFAULT_UPDATE_TIMEOUT_SECONDS, type ConnectionConfig, type ReconnectConfig, type UpdateProblem } from './machines-config.ts';
 import { reconnectEnv, signalGroup } from './reconnect.ts';
@@ -60,9 +78,96 @@ export type UpdateRefusal = 'invalid-file' | 'not-configured' | 'invalid' | 'inv
 
 export type UpdateProblemKind = 'missing' | 'invalid' | 'credential-missing' | 'invalid-file';
 
+/** The automatic attempt for the app's version (decision 0024 section 3). */
+export interface AutoAttempt {
+  target: string;
+  state: 'running' | 'succeeded' | 'failed';
+}
+
+/** Which target each machine's automatic attempt was spent on: only the last one per machine (decision 0024 section 2). */
+export interface AutoAttempts {
+  spent(machineId: string): string | null;
+  spend(machineId: string, target: string): void;
+}
+
+/** The file of spent attempts, in the data folder. */
+export const AUTO_ATTEMPTS_FILE = 'core-update-auto.json';
+
+export function autoAttemptsFile(dataDir: string): string {
+  return join(dataDir, AUTO_ATTEMPTS_FILE);
+}
+
+const TARGET = /^\d+\.\d+\.\d+$/;
+
+/** In memory only: the default, and what tests use when the file is not the point. */
+export function memoryAutoAttempts(): AutoAttempts {
+  const spent = new Map<string, string>();
+  return { spent: (id) => spent.get(id) ?? null, spend: (id, target) => void spent.set(id, target) };
+}
+
+/**
+ * The spent attempts in a JSON file, `{ "<machineId>": "<target>" }`, read once, lazily. An absent file is empty; an
+ * unreadable or malformed one is empty with one log line (the worst case is one more attempt per target). Entries
+ * that are not a version are dropped. The ids come from machines.json, so the map has no prototype (`__proto__` is
+ * a plain key). Written atomically (temp file and rename, mode 0600); a failed write logs one line and keeps the
+ * value in memory.
+ */
+export function fileAutoAttempts(file: string, log?: (message: string) => void): AutoAttempts {
+  let map: Record<string, string> | null = null;
+  const load = (): Record<string, string> => {
+    if (map) return map;
+    const m: Record<string, string> = Object.create(null);
+    map = m;
+    let text: string;
+    try {
+      text = readFileSync(file, 'utf8');
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== 'ENOENT') log?.(`update: ${AUTO_ATTEMPTS_FILE} unreadable, counted as empty`);
+      return m;
+    }
+    let raw: unknown;
+    try {
+      raw = JSON.parse(text);
+    } catch {
+      raw = null;
+    }
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+      log?.(`update: ${AUTO_ATTEMPTS_FILE} malformed, counted as empty`);
+      return m;
+    }
+    for (const [id, target] of Object.entries(raw)) if (typeof target === 'string' && TARGET.test(target)) m[id] = target;
+    return m;
+  };
+  return {
+    spent: (id) => {
+      const m = load();
+      return Object.hasOwn(m, id) ? m[id]! : null;
+    },
+    spend: (id, target) => {
+      const m = load();
+      m[id] = target;
+      const temp = `${file}.${process.pid}.tmp`;
+      try {
+        mkdirSync(dirname(file), { recursive: true });
+        writeFileSync(temp, `${JSON.stringify(m)}\n`, { mode: 0o600 });
+        chmodSync(temp, 0o600);
+        renameSync(temp, file);
+      } catch {
+        log?.(`update: could not write ${AUTO_ATTEMPTS_FILE}; the attempt is kept in memory`);
+      }
+    },
+  };
+}
+
 export interface MachineUpdate {
-  /** There is a valid `connection.update` and machines.json parses. */
+  /** There is a valid command, declared or derived, and machines.json parses. (decision 0024 section 3) */
   configured: boolean;
+  /** Where the command came from; `null` when there is none (decision 0024 section 3). */
+  source: UpdateSource | null;
+  /** The run `state` talks about was started by the Mac, not by a click; `false` when there is none. (decision 0024 section 3) */
+  automatic: boolean;
+  /** The automatic attempt for the app's version; `null` while there was none for this target. (decision 0024 section 3) */
+  auto: AutoAttempt | null;
   problem: UpdateProblemKind | null;
   /** Why the `connection.update` is invalid (a fixed word), when `problem` is `invalid`. */
   invalidReason: UpdateProblem | null;
@@ -91,7 +196,7 @@ export interface MachineUpdate {
   readyUntil: string | null;
   /** The pt-BR text of the state, rendered (`core-update-texts.ts`); `null` while there is nothing to say. */
   message: { key: string; text: string } | null;
-  /** When `problem` is `missing` or `invalid` and the credential allows it: the block to paste (the núcleo never writes the file). */
+  /** When `problem` is `invalid` and the credential allows it: the block to compare with what was written (the núcleo never writes the file). (decision 0024 section 3) */
   setup: { block: string | null };
 }
 
@@ -134,10 +239,14 @@ export interface CoreUpdaterOptions {
   msPerSecond?: number;
   killGraceMs?: number;
   log?: (message: string) => void;
+  /** Where the spent automatic attempts are kept; default in memory (production: `fileAutoAttempts`). (decision 0024 section 2) */
+  autoAttempts?: AutoAttempts;
 }
 
 interface Job {
   kind: 'check' | 'update';
+  /** Started by the Mac (`considerAuto` or the update it chains), not by a click. (decision 0024 section 2) */
+  automatic: boolean;
   state: UpdateState;
   key: string | null;
   phase: UpdatePhase | null;
@@ -166,6 +275,8 @@ interface Entry {
   job: Job | null;
   /** A good check, kept until an update uses it or it expires. */
   check: { okMs: number; commandKey: string } | null;
+  /** The automatic attempt of this process, for the target it ran (the spent store survives a restart, this does not). (decision 0024 section 2) */
+  auto: AutoAttempt | null;
 }
 
 const PORT_ARG = /^\d{1,5}$/;
@@ -180,9 +291,11 @@ export class CoreUpdater {
   private readonly o: CoreUpdaterOptions;
   private readonly entries = new Map<string, Entry>();
   private readonly starting = new Map<string, Promise<UpdateResult | null>>();
+  private readonly attempts: AutoAttempts;
 
   constructor(options: CoreUpdaterOptions) {
     this.o = options;
+    this.attempts = options.autoAttempts ?? memoryAutoAttempts();
   }
 
   private now(): number {
@@ -191,7 +304,7 @@ export class CoreUpdater {
 
   private entry(id: string): Entry {
     let e = this.entries.get(id);
-    if (!e) this.entries.set(id, (e = { job: null, check: null }));
+    if (!e) this.entries.set(id, (e = { job: null, check: null, auto: null }));
     return e;
   }
 
@@ -214,11 +327,12 @@ export class CoreUpdater {
     const e = this.entries.get(machineId);
     const job = e?.job ?? null;
     const conn = ctx.connection;
-    const update = conn?.update ?? null;
+    const resolved = resolveUpdateCommand(conn);
+    const update = resolved?.config ?? null;
     const target = this.o.appVersion;
     let problem: UpdateProblemKind | null = null;
     if (ctx.fileInvalid) problem = 'invalid-file';
-    else if (!update) problem = conn?.updateProblem ? 'invalid' : conn?.credential ? 'missing' : 'credential-missing';
+    else if (!resolved) problem = conn?.updateProblem ? 'invalid' : conn?.credential ? 'missing' : 'credential-missing';
     const configured = problem === null;
     const command = update?.command ?? (job?.command ?? []);
 
@@ -255,9 +369,12 @@ export class CoreUpdater {
       problem: conn?.updateProblem ? renderUpdateText(`invalid-${conn.updateProblem}` as UpdateTextKey) : '?',
     };
     const message = key ? { key, text: renderUpdateText(textKeyOrFallback(key), params) } : null;
-    const block = problem === 'missing' || problem === 'invalid' ? buildUpdateBlock(conn?.credential, conn?.checkout) : null;
+    const block = problem === 'invalid' ? buildUpdateBlock(conn?.credential, conn?.checkout) : null;
     return {
       configured,
+      source: configured ? resolved!.source : null,
+      automatic: live?.automatic ?? false,
+      auto: this.autoOf(machineId),
       problem,
       invalidReason: problem === 'invalid' ? (conn?.updateProblem ?? null) : null,
       state,
@@ -282,6 +399,68 @@ export class CoreUpdater {
     };
   }
 
+  /** The automatic attempt for the app's version: this process's own, else a spent one from the store reads `failed`. (decision 0024 section 2) */
+  private autoOf(machineId: string): AutoAttempt | null {
+    const target = this.o.appVersion;
+    const a = this.entries.get(machineId)?.auto;
+    if (a && a.target === target) return { ...a };
+    return this.attempts.spent(machineId) === target ? { target, state: 'failed' } : null;
+  }
+
+  private setAuto(machineId: string, state: AutoAttempt['state']): void {
+    this.entry(machineId).auto = { target: this.o.appVersion, state };
+    this.changed(machineId);
+  }
+
+  /** Spends the attempt for the app's version; marks it failed unless this process already has one for it (kept as is). (decision 0024 section 2) */
+  private spendAttempt(machineId: string): void {
+    const target = this.o.appVersion;
+    this.attempts.spend(machineId, target);
+    const e = this.entry(machineId);
+    if (e.auto?.target !== target) this.setAuto(machineId, 'failed');
+  }
+
+  /**
+   * After a good read of the remote's overview (decision 0024 section 2): starts the automatic `--check` when the
+   * remote answers a version strictly older than the app's, the app's version has a tag, the machine has a
+   * credential and a command, the file is valid, nothing of the machine runs or is starting, no good check waits
+   * for the person's confirmation, and the attempt for
+   * this target was not spent. `null` when it does not fire. The attempt is spent before anything runs.
+   */
+  async considerAuto(machineId: string): Promise<UpdateResult | null> {
+    const target = this.o.appVersion;
+    const observed = this.o.observedVersion?.(machineId) ?? null;
+    if (observed === null) return null;
+    const order = compareSemver(observed, target);
+    if (order === null || order >= 0) return null;
+    if (!refOf(target)) return null;
+    const ctx = this.o.context(machineId);
+    const conn = ctx.connection;
+    if (!conn || ctx.fileInvalid || !conn.credential || !resolveUpdateCommand(conn)) return null;
+    const e = this.entries.get(machineId);
+    if (e?.job?.alive || this.starting.has(machineId)) return null;
+    // A good check waiting for the person's confirmation is theirs: running another would cost them check-required. (decision 0024 section 2)
+    if (e?.check && this.now() - e.check.okMs <= CHECK_VALID_MS) return null;
+    if (this.attempts.spent(machineId) === target) return null;
+    this.attempts.spend(machineId, target);
+    this.setAuto(machineId, 'running');
+    try {
+      const r = await this.start(machineId, 'check', true);
+      if (r.kind !== 'started') this.autoNotStarted(machineId, 'check', r);
+      return r;
+    } catch {
+      this.o.log?.(`update (${machineId}): automatic check could not start`);
+      this.setAuto(machineId, 'failed');
+      return null;
+    }
+  }
+
+  /** An automatic start the machine refused: no one is waiting on it, so the log says why it failed (decision 0024 section 2). */
+  private autoNotStarted(machineId: string, kind: 'check' | 'update', r: UpdateResult): void {
+    this.o.log?.(`update (${machineId}): automatic ${kind} not started: ${r.kind}${r.kind === 'refused' ? ` ${r.reason}` : ''}`);
+    this.setAuto(machineId, 'failed');
+  }
+
   check(machineId: string): Promise<UpdateResult> {
     return this.start(machineId, 'check');
   }
@@ -291,9 +470,9 @@ export class CoreUpdater {
   }
 
   /** Starts are chained per machine, so two clicks at once reach `begin` one after the other and the second finds the first's job alive. */
-  private start(machineId: string, kind: 'check' | 'update'): Promise<UpdateResult> {
+  private start(machineId: string, kind: 'check' | 'update', automatic = false): Promise<UpdateResult> {
     const previous = this.starting.get(machineId) ?? Promise.resolve(null);
-    const p = previous.catch(() => null).then(() => this.begin(machineId, kind));
+    const p = previous.catch(() => null).then(() => this.begin(machineId, kind, automatic));
     this.starting.set(machineId, p);
     const clear = () => {
       if (this.starting.get(machineId) === p) this.starting.delete(machineId);
@@ -318,12 +497,12 @@ export class CoreUpdater {
     return { kind: 'canceled', update: this.status(machineId)! };
   }
 
-  private async begin(machineId: string, kind: 'check' | 'update'): Promise<UpdateResult> {
+  private async begin(machineId: string, kind: 'check' | 'update', automatic: boolean): Promise<UpdateResult> {
     const looked = await this.o.lookup(machineId);
     if (looked.kind === 'unknown') return { kind: 'unknown' };
     if (looked.kind === 'invalid-file') return { kind: 'refused', reason: 'invalid-file' };
     const conn = looked.connection;
-    const config = conn?.update;
+    const config = resolveUpdateCommand(conn)?.config;
     if (!config) return { kind: 'refused', reason: conn?.updateProblem ? 'invalid' : 'not-configured' };
     const e = this.entry(machineId);
     if (e.job?.alive) {
@@ -339,10 +518,12 @@ export class CoreUpdater {
     const tail = ref ? buildTail({ ref, telemetryVersion: this.o.telemetryVersion, credentialCommand: Boolean(conn?.credential), check: kind === 'check' }) : null;
     if (!tail) return { kind: 'refused', reason: 'invalid-version' };
     if (kind === 'update') e.check = null;
+    // A manual update spends the automatic attempt for this target (decision 0024 section 2).
+    if (kind === 'update' && !automatic) this.spendAttempt(machineId);
 
-    const job = this.newJob(kind, config, commandKey);
+    const job = this.newJob(kind, config, commandKey, automatic);
     e.job = job;
-    this.o.log?.(`update (${machineId}): ${kind} started`);
+    this.o.log?.(`update (${machineId}): ${kind} started${automatic ? ' automatic' : ''}`);
     let script: string;
     try {
       script = await (this.o.script ?? readPackagedScript)();
@@ -354,10 +535,11 @@ export class CoreUpdater {
     return { kind: 'started', update: this.status(machineId)! };
   }
 
-  private newJob(kind: 'check' | 'update', config: ReconnectConfig, commandKey: string): Job {
+  private newJob(kind: 'check' | 'update', config: ReconnectConfig, commandKey: string, automatic: boolean): Job {
     const now = this.now();
     return {
       kind,
+      automatic,
       state: kind === 'check' ? 'checking' : 'running',
       key: null,
       // The check is one phase long: it is cancelable from the first instant.
@@ -497,6 +679,22 @@ export class CoreUpdater {
     else if (job.kind === 'check') e.check = null;
     this.o.log?.(`update (${machineId}): ${job.kind} ${job.state}${job.phase ? ` at ${job.phase}` : ''}${code === null ? '' : ` exit ${code}`}`);
     this.changed(machineId);
+    // 21 (no credential command) and 22 (needs --allow-disconnect) never lead to an update: they spend the attempt. (decision 0024 section 2)
+    if (code === 21 || code === 22) this.spendAttempt(machineId);
+    if (job.automatic) {
+      if (job.kind === 'check' && c.state === 'ready') {
+        // The good check pays for the update at once; no confirm window, which exists for the person. (decision 0024 section 2)
+        this.start(machineId, 'update', true).then(
+          (r) => {
+            if (r.kind !== 'started') this.autoNotStarted(machineId, 'update', r);
+          },
+          () => {
+            this.o.log?.(`update (${machineId}): automatic update could not start`);
+            this.setAuto(machineId, 'failed');
+          },
+        );
+      } else this.setAuto(machineId, job.kind === 'update' && c.state === 'succeeded' ? 'succeeded' : 'failed');
+    }
     if (job.kind === 'update' && c.state === 'succeeded') {
       // The remote core restarted: its credentials are gone. Drop ours and read it now, not in 30 s (decision 0022 section 5).
       void Promise.resolve(this.o.onUpdated?.(machineId))

@@ -2,7 +2,7 @@
 // `connection.credential`, and always a block the validator accepts. Placeholders only.
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
-import { buildUpdateBlock } from '../../src/telemetry/core-update-block.ts';
+import { buildUpdateBlock, resolveUpdateCommand } from '../../src/telemetry/core-update-block.ts';
 import { parseConnection, parseUpdate } from '../../src/telemetry/machines-config.ts';
 
 const PREFIX = ['/usr/bin/ssh', '-T', '-o', 'BatchMode=yes', '-o', 'SessionType=default', '-o', 'ControlMaster=no', '-o', 'ClearAllForwardings=yes', 'ahrena-tunnel'];
@@ -48,5 +48,19 @@ describe('issue 462 the ready-made block', () => {
     const c = credential();
     c.command.splice(1, 0, '--force');
     assert.equal(buildUpdateBlock(c, null), null);
+  });
+
+  test('#484/AC-1 resolveUpdateCommand: declared wins, an invalid declared one gives nothing, else derived, else nothing', () => {
+    const declared = { command: ['/usr/bin/ssh', 'host', 'node', '-'], timeoutSeconds: 120 };
+    const start = { command: ['/bin/true'], timeoutSeconds: 60 };
+    assert.deepEqual(resolveUpdateCommand({ start, credential: credential(), update: declared }), { config: declared, source: 'declared' });
+    assert.equal(resolveUpdateCommand({ start, credential: credential(), updateProblem: 'forbidden-flag' }), null);
+    const derived = resolveUpdateCommand({ start, credential: credential() })!;
+    assert.equal(derived.source, 'derived');
+    assert.deepEqual(derived.config, { command: buildUpdateBlock(credential(), null)!.command, timeoutSeconds: 300 });
+    assert.equal(resolveUpdateCommand({ start, credential: { command: ['/bin/true'], timeoutSeconds: 20 } }), null);
+    assert.equal(resolveUpdateCommand({ start }), null);
+    assert.equal(resolveUpdateCommand(null), null);
+    assert.equal(resolveUpdateCommand(undefined), null);
   });
 });
