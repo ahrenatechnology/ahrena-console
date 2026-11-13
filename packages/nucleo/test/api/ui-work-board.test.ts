@@ -53,6 +53,8 @@ import { CONNECT_TEXT } from '../../ui/github-connect.js';
 import { findScreen, sidebarSections, SCREENS } from '../../ui/screens.js';
 // @ts-expect-error: idem
 import { errorMessage, mount } from '../../ui/screens/work-board.js';
+// @ts-expect-error: idem
+import { firstReadFailure, GITHUB_DOWN_REASONS, githubDownReason, staleBand } from '../../ui/screens/work-board-parts.js';
 
 const NOW = Date.parse('2026-10-20T15:00:00Z');
 const EPIC = 6;
@@ -401,7 +403,8 @@ describe('#465/AC-4 Atualizar and GitHub down (ADR-0001)', () => {
     const band = s.area.querySelector('.wb-stale-band')!;
     assert.equal(band.getAttribute('role'), 'status');
     assert.match(texto(band), /GitHub indisponível\./);
-    assert.match(texto(band), /Motivo: .*GitHub fora do ar/);
+    assert.match(texto(band), /Motivo: o GitHub respondeu com erro\./);
+    assert.doesNotMatch(texto(band), /github-error|GitHub fora do ar/);
     assert.deepEqual(s.numbers(), before, 'the last data stays');
     assert.ok(s.area.querySelector('.wb-board')!.classList.contains('wb-board-stale'));
     assert.ok(s.area.querySelector('.wb-read-old'), 'the header hour is marked old');
@@ -421,7 +424,8 @@ describe('#465/AC-4 Atualizar and GitHub down (ADR-0001)', () => {
       assert.ok(alert, 'the first-read failure is on screen');
       assert.equal(alert.getAttribute('role'), 'alert');
       assert.match(texto(alert), /Ainda não conseguimos ler o GitHub/);
-      assert.match(texto(alert), /GitHub fora do ar/);
+      assert.match(texto(alert), /\(o GitHub respondeu com erro\)/);
+      assert.doesNotMatch(s.text(), /github-error|GitHub fora do ar/);
       assert.deepEqual(s.area.querySelectorAll('.wb-count').map((c) => texto(c)), ['–', '–', '–', '–', '–', '–']);
       assert.doesNotMatch(s.text(), /github-unavailable/);
       fresh.source.fail = null;
@@ -613,10 +617,10 @@ describe('#465 each error code of GET /api/work in pt-BR', () => {
   });
 
   test('#465 github-unavailable carries its reason in pt-BR; a failed Atualizar with it keeps the board', async () => {
-    assert.deepEqual(errorMessage({ error: 'github-unavailable', reason: 'sem dados: timeout.', status: 502 }), { title: 'O GitHub não respondeu.', text: 'Motivo: sem dados: timeout.' });
+    assert.deepEqual(errorMessage({ error: 'github-unavailable', reason: 'network', status: 502 }), { title: 'O GitHub não respondeu.', text: 'Motivo: falha de rede ao falar com o GitHub.' });
     assert.deepEqual(errorMessage({ error: 'github-unavailable', status: 502 }), { title: 'O GitHub não respondeu.', text: null });
     const s = await open(core, '/ui/work', async (route, http) => {
-      if (route.includes('refresh=1')) throw Object.assign(new Error('x'), { name: 'ReadError', status: 502, body: { error: 'github-unavailable', reason: 'timeout' } });
+      if (route.includes('refresh=1')) throw Object.assign(new Error('x'), { name: 'ReadError', status: 502, body: { error: 'github-unavailable', reason: 'network' } });
       return http(route);
     });
     const before = s.numbers();
@@ -625,6 +629,39 @@ describe('#465 each error code of GET /api/work in pt-BR', () => {
     assert.match(texto(s.area.querySelector('.error-band')), /Não deu para reler o quadro\. O GitHub não respondeu\. Mostrando a última leitura\./);
     assert.deepEqual(s.numbers(), before);
     noCode(s);
+  });
+
+  test('#495/AC-2 each reason code reads in pt-BR in the stale strip and the raw code never shows', () => {
+    const texts: Record<string, string> = {
+      network: 'falha de rede ao falar com o GitHub',
+      'rate-limited': 'o GitHub limitou as chamadas',
+      'no-scope': 'o token do GitHub não tem a permissão necessária',
+      'github-error': 'o GitHub respondeu com erro',
+    };
+    assert.deepEqual(Object.keys(GITHUB_DOWN_REASONS), Object.keys(texts));
+    for (const [code, text] of Object.entries(texts)) {
+      assert.equal(githubDownReason(code), text);
+      const strip = texto(staleBand({ fetchedAt: 0, now: 1000, reason: code }));
+      assert.ok(strip.includes(`Motivo: ${text}.`), `${code}: ${strip}`);
+      assert.ok(!strip.includes(code) || text.includes(code), `${code} must not show raw`);
+    }
+    assert.doesNotMatch(texto(staleBand({ fetchedAt: 0, now: 1000, reason: null })), /Motivo/);
+  });
+
+  test('#495/AC-2 an unknown code, even an inherited name, shows the neutral fallback and not the raw value', () => {
+    for (const code of ['proxy-timeout', 'constructor', 'toString']) {
+      assert.equal(githubDownReason(code), 'motivo não identificado');
+      assert.ok(texto(staleBand({ fetchedAt: 0, now: 1000, reason: code })).includes('Motivo: motivo não identificado.'));
+      assert.ok(!texto(firstReadFailure({ reason: code })).includes(code));
+    }
+    assert.equal(githubDownReason(null), null);
+  });
+
+  test('#495/AC-2 errorMessage and the first-read failure say the code in pt-BR', () => {
+    assert.deepEqual(errorMessage({ error: 'github-unavailable', reason: 'rate-limited', status: 502 }), { title: 'O GitHub não respondeu.', text: 'Motivo: o GitHub limitou as chamadas.' });
+    assert.deepEqual(errorMessage({ error: 'github-unavailable', reason: 'weird', status: 502 }), { title: 'O GitHub não respondeu.', text: 'Motivo: motivo não identificado.' });
+    assert.match(texto(firstReadFailure({ reason: 'no-scope' })), /\(o token do GitHub não tem a permissão necessária\)/);
+    assert.doesNotMatch(texto(firstReadFailure({ reason: 'no-scope' })), /no-scope/);
   });
 
   test('#465 any other status says what the core answered, in pt-BR, with Tentar de novo', async () => {

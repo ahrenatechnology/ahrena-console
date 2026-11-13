@@ -470,11 +470,26 @@ export function boardColumns({
   );
 }
 
+/** The pt-BR of each stable reason code the core sends when GitHub is down (issue 495); the raw code never shows. */
+export const GITHUB_DOWN_REASONS = Object.freeze({
+  network: 'falha de rede ao falar com o GitHub',
+  'rate-limited': 'o GitHub limitou as chamadas',
+  'no-scope': 'o token do GitHub não tem a permissão necessária',
+  'github-error': 'o GitHub respondeu com erro',
+});
+const UNKNOWN_GITHUB_DOWN_REASON = 'motivo não identificado';
+
+/** The pt-BR text of a reason code; `null` without a code, a neutral text for a code not in the map. */
+export function githubDownReason(code) {
+  if (!code) return null;
+  return Object.hasOwn(GITHUB_DOWN_REASONS, code) ? GITHUB_DOWN_REASONS[code] : UNKNOWN_GITHUB_DOWN_REASON;
+}
+
 /** The stale band (issue 465, ADR-0001): the board is from `fetchedAt`, why, and Tentar agora (`onRetry`). */
 export function staleBand({ fetchedAt = null, now = Date.now(), reason = null, busy = false, onRetry = null } = {}) {
   const when = formatClock(fetchedAt);
   const from = when ? `Mostrando o quadro de ${when} (${formatAgo(fetchedAt, now)}).` : 'Mostrando o último quadro lido.';
-  const why = reason ? ` Motivo: ${String(reason).replace(/\.+$/, '')}.` : '';
+  const why = reason ? ` Motivo: ${githubDownReason(reason)}.` : '';
   return el(
     'div',
     { class: 'error-band wb-stale-band', role: 'status' },
@@ -491,7 +506,7 @@ export function firstReadFailure({ reason = null, busy = false, onRetry = null }
     { class: 'card state center wb-first-failure', role: 'alert' },
     el('div', { class: 'seal error' }, icon('offline')),
     el('h2', {}, 'Ainda não conseguimos ler o GitHub'),
-    el('p', {}, `A primeira leitura falhou${reason ? ` (${reason})` : ''} e não há quadro guardado para mostrar.`),
+    el('p', {}, `A primeira leitura falhou${reason ? ` (${githubDownReason(reason)})` : ''} e não há quadro guardado para mostrar.`),
     el('button', { type: 'button', class: 'btn filled', 'data-action': 'retry', 'aria-busy': busy ? 'true' : null, disabled: busy, onClick: () => onRetry?.() }, icon('refresh'), 'Tentar agora'),
   );
 }
