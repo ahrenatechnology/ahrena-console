@@ -1,6 +1,6 @@
 # 0021 · Núcleo remoto: o Mac mostra a versão de lá e avisa quando está defasada; o comando versionado atualiza com backup, trava antes de parar e supervisor do systemd
 
-- **Status:** aceita (o Fernando aceitou, PR #457). **O §2 foi substituído pela [0022](0022-remote-core-update-button.md)** (issue #462): o script provou o caminho feliz na Workstation em 2026-11-12 e o dono recusou o copiar-e-colar, então a alternativa rejeitada abaixo (`connection.update`) passou a valer; o card de copiar continua como saída. O resto desta decisão segue em vigor.
+- **Status:** aceita (o Fernando aceitou, PR #457). O §2 foi alterado pela [0022](0022-remote-core-update-button.md) (issue #462): o script provou o caminho feliz na Workstation em 2026-11-12 e o dono não quis o copiar-e-colar, então o `connection.update` do §2 passou a valer; o card de copiar continua como saída. O resto desta decisão segue em vigor.
 - **Data:** 2026-11-12
 - **Issue:** [#449](https://github.com/ahrenatechnology/ahrena-console/issues/449)
 - **Depende de:** [0020](0020-remote-owner-credential-over-ssh.md) / [#388](https://github.com/ahrenatechnology/ahrena-console/issues/388) (a `main` só roda na remota com a prova do dono)

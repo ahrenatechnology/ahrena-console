@@ -5742,7 +5742,7 @@ const cuRefusalCells = () => [
   cuRes('warn', 'tag', 'A versão não existe lá', '30 · unknown-ref', `A versão ${CV_APP} não existe no repositório da Workstation.${cuNothing} Confira se a release foi publicada e tente de novo.`),
   cuRes('warn', 'package-plus', 'Dependências novas', '30 · new-dependencies', `A versão traz dependências novas, que o script não instala.${cuNothing} Atualize pelo terminal, seguindo o runbook.`),
   cuRes('bad', 'database', 'O backup não foi feito', 31, `Não foi possível fazer o backup do banco da Workstation.${cuNothing} O núcleo segue no ar; confira o espaço em disco lá e tente de novo.`),
-  cuRes('bad', 'scan-search', 'O processo não confere', 32, `O Console não confirmou que o processo na porta 4720 é o núcleo deste repositório, ou não leu as opções dele.${cuNothing}`),
+  cuRes('bad', 'scan-search', 'O processo não confere', '32 · process-mismatch', `O Console não confirmou que o processo na porta 4720 é o núcleo deste repositório, ou não leu as opções dele.${cuNothing}`),
   cuRes('warn', 'lock', 'Já há uma atualização em andamento', 33, `Outra atualização está rodando nesta Workstation (outro Mac ou outro terminal).${cuNothing} Espere terminar e tente de novo.`),
 ]
 const cuRefusalHtml = () => `<div class="fila">${[1100, 1440].map(w => widthCol(w, `${w} px`, `<div class="cv-grid" style="grid-template-columns:repeat(${w >= 1440 ? 3 : 2},minmax(0,1fr));width:${w - 220}px">${cuRefusalCells().join('')}</div>`)).join('')}</div>`

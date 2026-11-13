@@ -1,6 +1,6 @@
 # 0022 · Núcleo remoto: o botão Atualizar roda, pelo SSH que o usuário declarou, o script do próprio app, com `--check` antes, trava na máquina e andamento por fase
 
-- **Status:** proposta (a aceitar pelo Fernando antes de qualquer código; o PR da decisão não é mergeado até lá)
+- **Status:** aceita (o Fernando aceitou em 2026-11-12, PR #463, com as seis respostas recomendadas)
 - **Data:** 2026-11-12
 - **Issue:** [#462](https://github.com/ahrenatechnology/ahrena-console/issues/462)
 - **Substitui:** [0021](0021-remote-core-update.md) §2 (a alternativa "`connection.update` no `machines.json`", rejeitada "por ora"). O resto da 0021 (a versão lida do `/api/overview`, o script, a trava do §4, a unidade do systemd) continua valendo e é o que esta decisão usa.
@@ -18,7 +18,7 @@ O que mudou, dito sem exagero:
 - **O dono recusou o fluxo de copiar e colar** ao usá-lo: "Não faz sentido eu ter que rodar um git command". A razão que sobra da 0021 (o clique para um processo que funciona) é justo o que a confirmação, o `--check` antes e o backup cobrem; as outras duas (job, progresso) são trabalho, não risco.
 - **O Mac já roda um comando por SSH escrito pelo usuário**: `connection.credential.command` (0020), com runner próprio, teto de saída, timeout e log sem segredo. O molde existe.
 
-Fatos do código que a proposta usa: `update-remote-core.mjs` sai `0` (ok), `2` (uso), `20`–`23` (trava), `30`–`32` (preflight, backup, processo), `40`/`41` (rollback); `--check` roda só preflight e trava; `--allow-disconnect` pula só `20`–`23`; o script imprime texto livre em stdout e stderr e **não tem trava de execução simultânea nem protocolo de andamento**. Nada disso existe ainda e é trabalho da camada 2 (§3 e §4).
+Fatos do código que a proposta usa: `update-remote-core.mjs` sai `0` (ok), `2` (uso), `20`–`23` (trava), `30`–`32` (preflight, backup, processo), `40`/`41` (rollback); `--check` roda o preflight (30), a checagem de dependências e a trava (20–23), e não prevê o backup (31) nem a verificação do processo (32); `--allow-disconnect` pula só `20`–`23`; o script imprime texto livre em stdout e stderr e **não tem trava de execução simultânea nem protocolo de andamento**. Nada disso existe ainda e é trabalho da camada 2 (§3 e §4).
 
 ## Decisão
 
@@ -145,14 +145,14 @@ Texto pt-BR, uma frase do que houve e uma do que fazer; a lista é a do script (
 | `23` | "Este Mac não conseguiu informar à Workstation o que suporta. Nada foi parado. É um defeito do app: avise o time." |
 | `30` | por `reason`: `not-a-checkout` "O caminho do repositório não é um checkout acessível"; `dirty-tree` "O repositório da Workstation tem mudanças locais não commitadas"; `unknown-ref` "A versão 0.0.17 não existe no repositório de lá"; `new-dependencies` "A versão traz dependências novas, que o script não instala". Sempre: "Nada foi parado." |
 | `31` | "Não foi possível fazer o backup do banco. Nada foi parado; o núcleo segue no ar." |
-| `32` | "O Console não confirmou que o processo na porta 4720 é o núcleo deste repositório, ou não conseguiu ler as opções dele (ou o `--data-dir` não bate). Nada foi parado." |
-| `33` | "Já há uma atualização em andamento nesta Workstation (outro Mac ou outro terminal). Espere terminar." |
-| `40` | "A atualização falhou e a Workstation voltou ao código de antes (<oldCommit>), com o banco restaurado do backup quando o núcleo novo chegou a subir. O núcleo de lá está no ar como estava, se estava no ar antes." |
+| `32` | por `reason`: `data-dir-mismatch` "O `--data-dir` não bate com o do núcleo que está rodando"; `process-mismatch` e `no-options` "O Console não confirmou que o processo na porta 4720 é o núcleo deste repositório, ou não conseguiu ler as opções dele". Sempre: "Nada foi parado." |
+| `33` | "Outra atualização está rodando nesta Workstation (outro Mac ou outro terminal). Nada foi parado. Espere terminar e tente de novo." |
+| `40` | "A atualização falhou e a Workstation voltou ao código de antes (<oldCommit>), com o banco restaurado do backup, se o núcleo novo chegou a subir. O núcleo de lá está no ar como estava, se estava no ar antes." |
 | `41` | "A atualização falhou e a volta também. A Workstation pode estar sem núcleo. O backup está em <backupPath> e o commit anterior era <oldCommit>. Restaure pelo terminal da Workstation, seguindo o runbook." Com "Copiar o caminho do backup". |
 | cancelado (só na conferência) | "Cancelado. Nada foi alterado." |
-| SSH `255` / sem fase | "Não consegui falar com a Workstation pelo SSH. Nada foi alterado. Confira o túnel (Reconectar) e tente de novo." |
+| SSH `255` / sem fase | "O SSH não chegou à Workstation. Nada foi parado. Confira o túnel (Reconectar) e tente de novo." |
 | tempo antes do `swap` | "A Workstation não respondeu em <n> s. Cancelei antes de trocar qualquer coisa." |
-| tempo depois do `swap` | "Perdi o contato no meio da troca. O script continua lá até o fim e volta sozinho se algo falhar. Confira a versão daqui a pouco." |
+| tempo depois do `swap` | "O SSH parou de responder depois de a troca começar. O script continua lá até o fim e volta sozinho se algo falhar. Confira a versão daqui a pouco: a tela relê a Workstation a cada 30 s." |
 | código desconhecido | "O comando saiu com o código <n>. Nada na tela é lido da saída." |
 | falta configurar | §1: o que falta, o bloco pronto e o card de copiar. |
 
