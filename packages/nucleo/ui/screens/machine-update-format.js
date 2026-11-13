@@ -1,15 +1,25 @@
-// The Atualizar button of the remote núcleo, as the screen reads it (issue 462, decision 0022, wireframes 462-1 to
-// 462-6). Pure: no DOM. The core sends `update` on every remote machine of `GET /api/machines`
-// (`telemetry/core-update.ts`); here it is read again with the exact shapes, so nothing the remote or the file said
-// reaches the screen but the closed words below. The screen writes NO text of its own for a result: the words of an
-// exit, a refusal or a "falta configurar" come from `update.message.text` (rendered by the core from
-// `core-update-texts.ts`, the table of decision 0022 section 7). What is written here is only static labels: the
-// phase names, the titles and the buttons.
+/*
+ * The Atualizar button of the remote núcleo, as the screen reads it (issue 462, decision 0022, wireframes 462-1 to
+ * 462-6). Pure: no DOM. The core sends `update` on every remote machine of `GET /api/machines`
+ * (`telemetry/core-update.ts`); here it is read again with the exact shapes, so nothing the remote or the file said
+ * reaches the screen but the closed words below. The screen writes NO text of its own for a result: the words of an
+ * exit, a refusal or a "falta configurar" come from `update.message.text` (rendered by the core from
+ * `core-update-texts.ts`, the table of decision 0022 section 7). What is written here is only static labels: the
+ * phase names, the titles and the buttons.
+ *
+ * Decision 0024 (issue 484): the core derives the command from `connection.credential` and the Mac updates the remote
+ * núcleo by itself once per app version. Three fields come with it: `source` (where the command came from),
+ * `automatic` (the run `state` speaks of was started by the Mac, not by a click) and `auto` (the automatic attempt
+ * for the app's version). `setup.block` now comes only with `problem: "invalid"`, to compare.
+ * (ADR-0024)
+ */
 
 const STATES = new Set(['idle', 'checking', 'ready', 'refused', 'running', 'succeeded', 'rolled-back', 'rollback-failed', 'failed', 'timed-out', 'canceled']);
 const PHASES = new Set(['check', 'backup', 'swap', 'start', 'verify', 'rollback']);
 const PROBLEMS = new Set(['missing', 'invalid', 'credential-missing', 'invalid-file']);
 const CONFIRMATIONS = new Set(['confirming', 'confirmed', 'diverged']);
+const SOURCES = new Set(['declared', 'derived']);
+const AUTO_STATES = new Set(['running', 'succeeded', 'failed']);
 const VERSION = /^\d+\.\d+\.\d+$/;
 const COMMIT = /^[0-9a-f]{4,40}$/;
 const KEY = /^[a-z0-9-]{1,48}$/;
@@ -28,6 +38,9 @@ export function normalizeUpdate(raw) {
   return {
     configured: raw.configured,
     problem: PROBLEMS.has(raw.problem) ? raw.problem : null,
+    source: SOURCES.has(raw.source) ? raw.source : null,
+    automatic: raw.automatic === true,
+    auto: isObject(raw.auto) && typeof raw.auto.target === 'string' && VERSION.test(raw.auto.target) && AUTO_STATES.has(raw.auto.state) ? { target: raw.auto.target, state: raw.auto.state } : null,
     state: raw.state,
     kind: raw.kind === 'check' || raw.kind === 'update' ? raw.kind : null,
     phase: PHASES.has(raw.phase) ? raw.phase : null,
@@ -50,8 +63,16 @@ export function normalizeUpdate(raw) {
 export const updateRoute = (id) => `/api/machines/${encodeURIComponent(id)}/update`;
 export const checkRoute = (id) => `${updateRoute(id)}/check`;
 
-/** A run is going on (the check, the update, or the wait for the remote to answer the new version): poll fast, the button is busy. */
-export const isBusy = (u) => u.state === 'checking' || u.state === 'running' || (u.kind === 'update' && u.state === 'succeeded' && u.confirmation === 'confirming');
+/**
+ * A run is going on (the check, the update, or the wait for the remote to answer the new version): poll fast, the
+ * button is busy. An automatic check that passed reads `ready` for an instant before the chained update starts: busy
+ * too, but only while the automatic attempt runs; a chained update refused at start leaves that `ready` with `auto`
+ * failed, and it is not a run.
+ */
+export const isBusy = (u) => u.state === 'checking' || u.state === 'running' || (u.state === 'ready' && u.automatic === true && u.auto?.state === 'running') || (u.kind === 'update' && u.state === 'succeeded' && u.confirmation === 'confirming');
+
+/** The run the sidebar calls "Atualizando": the update itself, or anything the Mac started by itself (decision 0024 section 4). */
+export const updatingNow = (u) => isBusy(u) && (u.kind === 'update' || u.automatic === true);
 
 /** The phases, in order, as the person reads them (decision 0022 section 4). `rollback` is an extra row, only when it happens. */
 export const PHASE_ROWS = [
@@ -69,6 +90,12 @@ export function stepRows(u, { allDone = false } = {}) {
   const rows = PHASE_ROWS.map((r, i) => ({ ...r, tone: allDone || i < at ? 'done' : i === at ? 'now' : 'next' }));
   if (!allDone && u.phase === 'rollback') rows.push({ ...ROLLBACK_ROW, tone: 'now' });
   return rows;
+}
+
+/** The name of the phase going on, as the rows say it ("Trocando o código"); an unknown phase reads as the first. */
+export function phaseName(u) {
+  if (u.phase === 'rollback') return ROLLBACK_ROW.label;
+  return (PHASE_ROWS.find((r) => r.key === u.phase) ?? PHASE_ROWS[0]).label;
 }
 
 /** "fase 3 de 5" for the progress title; the rollback has no number of its own. */
@@ -118,10 +145,13 @@ export function showsResult(u, now) {
 /** A key that identifies one run, so closing its result does not hide the next one. */
 export const runKey = (u) => `${u.kind}|${u.startedAt ?? ''}|${u.endedAt ?? ''}`;
 
-/** The states after which trying again makes sense (never the lost contact after the swap: the script is still running there). */
+/**
+ * The states after which trying again makes sense (decision 0024 section 3): read from the last job, never from `auto`.
+ * Never the lost contact after the swap: the script is still running there.
+ */
 export function canRetry(u) {
   if (u.message?.key === 'timeout-after-swap') return false;
-  return ['rolled-back', 'failed', 'refused', 'timed-out', 'canceled'].includes(u.state);
+  return ['refused', 'failed', 'rolled-back', 'rollback-failed', 'timed-out', 'canceled'].includes(u.state);
 }
 
 /** The keys that point at the command to paste: the guard that only a person can lift, and a version that did not arrive. */

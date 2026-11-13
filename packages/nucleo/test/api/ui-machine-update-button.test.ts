@@ -1,9 +1,14 @@
-// The Atualizar button of the remote núcleo on /ui (issue 462, decision 0022, layer 4, wireframes 462-1 to 462-6): the
-// button on the band, the confirmation that runs the --check first, the progress by phase, every ending, the
-// "falta configurar" states with the block to paste, and the band that goes away by itself. Mounted on the fake DOM
-// with the simulator's telemetry; the core is faked: `GET /api/machines` carries the `update` the test sets, and the
-// writes are recorded and answered by a function the test gives. Nothing here runs a command, reads machines.json or
-// touches a real machine.
+/*
+ * The Atualizar button of the remote núcleo on /ui (issue 462, decision 0022, layer 4, wireframes 462-1 to 462-6): the
+ * button on the band, the confirmation that runs the --check first, the progress by phase, every ending, the
+ * "falta configurar" states with the block to paste, and the band that goes away by itself. Mounted on the fake DOM
+ * with the simulator's telemetry; the core is faked: `GET /api/machines` carries the `update` the test sets, and the
+ * writes are recorded and answered by a function the test gives. Nothing here runs a command, reads machines.json or
+ * touches a real machine. Issue 484 (decision 0024, wireframes 484-1 and 484-2): the Mac updates the núcleo over there
+ * by itself, the band reads Atualizar agora, Tentar de novo or the phase of the automatic run, and the sidebar dot says
+ * Atualizando.
+ * (ADR-0024)
+ */
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { after, afterEach, before, beforeEach, describe, test } from 'node:test';
@@ -25,6 +30,10 @@ Object.assign(globalThis, { location: here, history: { state: null, replaceState
 import * as updateFormat from '../../ui/screens/machine-update-format.js';
 // @ts-expect-error: idem
 import { ICON_NAMES } from '../../ui/dom.js';
+// @ts-expect-error: idem
+import { machineItems, SCREENS } from '../../ui/screens.js';
+// @ts-expect-error: idem
+import { createNav } from '../../ui/nav.js';
 const screen = await import(
   // @ts-expect-error: idem
   '../../ui/screens/machine.js'
@@ -66,6 +75,9 @@ const coreOf = (over: Obj = {}, mac: Obj = {}): Obj => ({
 const updateOf = (over: Obj = {}): Obj => ({
   configured: true,
   problem: null,
+  source: 'derived',
+  automatic: false,
+  auto: null,
   invalidReason: null,
   state: 'idle',
   kind: null,
@@ -225,27 +237,31 @@ describe('issue 462 machine-update-format', () => {
   });
 });
 
-// ---------- the band and the button (462-1) ----------
+// ---------- the band and the button (462-1) ---------- (ADR-0024)
 
 describe('issue 462 the band with the button (462-1)', () => {
-  test('AC1 · 462-1: outdated and configured, the band has the Atualizar button and the command card waits, collapsed', async () => {
+  test('issue 484 AC5 · 462-1: outdated and configured, the band has Atualizar agora and no command card, no setup card', async () => {
     const m = mount();
     await m.ready;
     const band = part(m.area, 'core-outdated')!;
     assert.equal(band.getAttribute('data-mode'), 'ready');
     assert.match(texto(band), /^O núcleo da Workstation está na 0\.0\.7 e o app, na 0\.0\.17\./);
-    assert.deepEqual(buttons(band), ['Atualizar']);
+    assert.match(texto(band), /Atualizar agora atualiza para a 0\.0\.17: faz o backup do banco, troca o código e sobe o núcleo de novo/);
+    assert.deepEqual(buttons(band), ['Atualizar agora']);
     assert.ok(action(m.area, 'open')!.classList.contains('filled'));
-    assert.equal(part(m.area, 'core-update'), null, 'the command is not open');
-    const fallback = part(m.area, 'update-fallback')!;
-    assert.match(texto(fallback), /^Prefere rodar à mão\? decisão 0021/);
-    assert.deepEqual(buttons(fallback), ['Mostrar o comando']);
+    assert.equal(part(m.area, 'core-update'), null, 'the command is not shown');
+    assert.equal(part(m.area, 'update-fallback'), null, 'the copy card shows only after a failure');
+    assert.equal(part(m.area, 'update-setup'), null);
     assert.deepEqual(written, [], 'nothing is written before the click');
   });
 
-  test('AC3 · 462-1: Mostrar o comando opens the 449 card with the command to paste, and it can be folded back', async () => {
+  test('issue 484 AC3 · 484-2: after a failure Mostrar o comando opens the 449 card with the command to paste, and it can be folded back', async () => {
+    update = updateOf({ state: 'refused', kind: 'check', exitCode: 30, reason: 'dirty-tree', automatic: true, endedAt: iso(M), message: msg('exit-30-dirty-tree') });
     const m = mount();
     await m.ready;
+    const fallback = part(m.area, 'update-fallback')!;
+    assert.match(texto(fallback), /^Prefere rodar à mão\? decisão 0021/);
+    assert.deepEqual(buttons(fallback), ['Mostrar o comando']);
     action(m.area, 'show-command')!.click();
     const card = part(m.area, 'core-update')!;
     assert.ok(card.querySelector('pre'));
@@ -411,7 +427,9 @@ describe('issue 462 every ending shows the core\'s sentence', () => {
       assert.equal(action(m.area, 'confirm'), null);
       action(m.area, 'dismiss')!.click();
       assert.equal(part(m.area, 'update-dialog'), null);
-      assert.ok(action(m.area, 'open'), 'the button is back');
+      assert.equal(part(m.area, 'core-outdated')!.getAttribute('data-mode'), 'retry');
+      assert.ok(action(m.area, 'retry'), 'Tentar de novo is on the band');
+      assert.equal(action(m.area, 'open'), null, 'in place of Atualizar agora');
     });
   }
 
@@ -454,29 +472,42 @@ describe('issue 462 every ending shows the core\'s sentence', () => {
     assert.ok(texto(result).includes(CORE_SAYS));
     assert.ok(buttons(result).includes('Mostrar o comando'));
     assert.ok(part(m.area, 'core-outdated'), 'the band stays: the version is still old');
+    assert.equal(part(m.area, 'update-fallback'), null);
+    action(result, 'show-command')!.click();
+    assert.ok(part(m.area, 'core-update')!.querySelector('pre'), 'Mostrar o comando still opens the command');
   });
 
-  test('AC2 · 462-5: exit 40 (failed and rolled back) is red, has the sentence, and Tentar de novo checks again', async () => {
+  test('issue 484 AC3 · 484-2: exit 40 (failed and rolled back) puts its title and sentence on the band, and Tentar de novo checks again', async () => {
     update = updateOf({ state: 'rolled-back', kind: 'update', phase: 'rollback', exitCode: 40, oldCommit: '81251bd', endedAt: iso(M), message: msg('exit-40') });
     onWrite = () => ({ update: updateOf({ state: 'checking', kind: 'check', phase: 'check', startedAt: iso(0), canCancel: true }) });
     const m = mount();
     await m.ready;
-    const result = part(m.area, 'update-result')!;
-    assert.ok(result.classList.contains('tm-up-bad'));
-    assert.match(texto(result), /^Falhou e voltou ao código de antes saída 40 frase-do-nucleo-0f1e2d3c/);
+    const band = part(m.area, 'core-outdated')!;
+    assert.equal(band.getAttribute('data-mode'), 'retry');
+    assert.match(texto(band), /^Falhou e voltou ao código de antes\. frase-do-nucleo-0f1e2d3c/);
+    assert.deepEqual(buttons(band), ['Tentar de novo']);
+    assert.equal(part(m.area, 'update-result'), null, 'the band owns the reason: no second card');
+    assert.ok(part(m.area, 'update-fallback'), 'the copy card waits, collapsed');
+    assert.equal(part(m.area, 'core-update'), null);
     action(m.area, 'retry')!.click();
     await until(() => written.length === 1);
     assert.deepEqual(written, ['POST /api/machines/ws-exemplo/update/check']);
     assert.equal(part(m.area, 'update-result'), null);
   });
 
-  test('AC2 · 462-5: exit 41 shows the backup path, copies it, and stays on the screen even long after', async () => {
+  test('issue 484 AC3 · 462-5: exit 41 shows the backup path, copies it, and stays on the screen even long after', async () => {
     update = updateOf({ state: 'rollback-failed', kind: 'update', phase: 'rollback', exitCode: 41, oldCommit: '81251bd', backupPath: '/home/exemplo/.ahrena-console/backups/update-20261112', startedAt: iso(5 * 60 * M), endedAt: iso(4 * 60 * M), message: msg('exit-41') });
     const m = mount();
     await m.ready;
+    const band = part(m.area, 'core-outdated')!;
+    assert.equal(band.getAttribute('data-mode'), 'retry');
+    assert.match(texto(band), /^Falhou e a volta também falhou\. frase-do-nucleo-0f1e2d3c/);
+    assert.deepEqual(buttons(band), ['Tentar de novo']);
     const result = part(m.area, 'update-result')!;
     assert.ok(result.classList.contains('tm-up-bad'));
     assert.equal(result.getAttribute('role'), 'alert');
+    assert.ok(!texto(result).includes(CORE_SAYS), 'the sentence is on the band, not repeated');
+    assert.ok(!buttons(result).includes('Tentar de novo'));
     assert.equal(texto(result.querySelector('[data-field="backup-path"]')), '/home/exemplo/.ahrena-console/backups/update-20261112');
     const copied: string[] = [];
     stubClipboard(copied);
@@ -485,7 +516,7 @@ describe('issue 462 every ending shows the core\'s sentence', () => {
     assert.deepEqual(copied, ['/home/exemplo/.ahrena-console/backups/update-20261112']);
   });
 
-  test('AC2 · 462-5: an old failure goes away by itself after a while; the lost contact after the swap has no Tentar de novo', async () => {
+  test('issue 484 AC3 · 462-5: an old failure leaves no result card; the lost contact after the swap (timeout-after-swap) has no Tentar de novo', async () => {
     update = updateOf({ state: 'failed', kind: 'update', exitCode: 255, endedAt: iso(2 * 60 * M), message: msg('ssh-unreachable') });
     const old = mount();
     await old.ready;
@@ -496,13 +527,15 @@ describe('issue 462 every ending shows the core\'s sentence', () => {
     await lost.ready;
     assert.ok(texto(part(lost.area, 'update-result')).includes(CORE_SAYS));
     assert.equal(action(lost.area, 'retry'), null, 'the script is still running over there');
+    assert.notEqual(part(lost.area, 'core-outdated')!.getAttribute('data-mode'), 'retry');
   });
 
   test('AC2 · 462-5: unknown exit and the cancelled check show the core\'s sentence too', async () => {
     update = updateOf({ state: 'failed', kind: 'update', exitCode: 77, endedAt: iso(M), message: msg('unknown-exit') });
     const m = mount();
     await m.ready;
-    assert.match(texto(part(m.area, 'update-result')), /^A atualização não aconteceu saída 77 frase-do-nucleo-0f1e2d3c/);
+    assert.match(texto(part(m.area, 'core-outdated')), /^A atualização não aconteceu\. frase-do-nucleo-0f1e2d3c/);
+    assert.equal(part(m.area, 'update-result'), null);
   });
 
   test('AC2 · the screen writes no sentence of a result: the source has none of the core\'s exit texts', () => {
@@ -511,59 +544,61 @@ describe('issue 462 every ending shows the core\'s sentence', () => {
   });
 });
 
-// ---------- falta configurar (462-6) ----------
+// ---------- falta configurar (462-6) ---------- (ADR-0024)
 
-describe('issue 462 falta configurar (462-6)', () => {
-  test('AC3 · no connection.update: the band says what is missing, the block comes ready with a copy button, and the command card is open', async () => {
-    update = updateOf({ configured: false, problem: 'missing', message: msg('problem-missing', 'falta-0f1e'), setup: { block: BLOCK } });
+describe('issue 484 falta configurar (462-6 as decision 0024 left it)', () => {
+  test('issue 484 AC5 · a credential that gives no command (missing): the band says the core\'s sentence, no button, no setup card, the copy card collapsed', async () => {
+    update = updateOf({ configured: false, source: null, problem: 'missing', message: msg('problem-missing', 'falta-0f1e') });
     const m = mount();
     await m.ready;
     const band = part(m.area, 'core-outdated')!;
     assert.equal(band.getAttribute('data-mode'), 'setup');
     assert.match(texto(band), /O Console de lá roda um código mais antigo que o deste Mac\. falta-0f1e/);
-    assert.equal(action(m.area, 'open'), null, 'no dead button');
+    assert.deepEqual(buttons(band), [], 'no dead button and no block to copy');
+    assert.equal(part(m.area, 'update-setup'), null);
+    assert.ok(part(m.area, 'update-fallback'));
+    assert.equal(part(m.area, 'core-update'), null, 'collapsed first');
+    action(m.area, 'show-command')!.click();
+    assert.ok(part(m.area, 'core-update')!.querySelector('pre'));
+    assert.deepEqual(written, []);
+  });
+
+  test('issue 484 AC5 · an invalid connection.update says the core\'s reason and shows the derived command to compare, with its copy', async () => {
+    update = updateOf({ configured: false, source: null, problem: 'invalid', invalidReason: 'forbidden-flag', message: msg('problem-invalid', 'invalido-0f1e'), setup: { block: BLOCK } });
+    const m = mount();
+    await m.ready;
+    const band = part(m.area, 'core-outdated')!;
+    assert.equal(band.getAttribute('data-mode'), 'setup');
+    assert.deepEqual(buttons(band), []);
     const setup = part(m.area, 'update-setup')!;
-    assert.match(texto(setup), /^Ativar o botão Atualizar decisão 0022 falta-0f1e/);
+    assert.match(texto(setup), /^O connection\.update está inválido decisão 0024 invalido-0f1e Um connection\.update inválido não cai no comando derivado: o que você escreveu vence\./);
     assert.equal(texto(setup.querySelector('[data-field="update-block"]')), BLOCK.replace(/\s+/g, ' ').trim());
-    assert.ok(part(m.area, 'core-update')!.querySelector('pre'), 'the 0021 command stays open as the way out');
-    assert.equal(part(m.area, 'update-fallback'), null);
+    assert.deepEqual(buttons(setup), ['Copiar o bloco']);
+    assert.ok(action(setup, 'copy-block')!.classList.contains('outline'));
+    assert.ok(part(m.area, 'update-fallback'));
+    assert.equal(part(m.area, 'core-update'), null);
+    assert.equal(action(m.area, 'open'), null);
     const copied: string[] = [];
     stubClipboard(copied);
     action(setup, 'copy-block')!.click();
     await until(() => copied.length === 1);
     assert.equal(copied[0], BLOCK);
-    action(band, 'copy-block-band')!.click();
-    await until(() => copied.length === 2);
-    assert.deepEqual(written, [], 'nothing is written to the core: the person pastes the block');
+    assert.deepEqual(written, [], 'nothing is written to the core');
   });
 
-  test('AC3 · an invalid connection.update says the core\'s reason and brings the block and the card', async () => {
-    update = updateOf({ configured: false, problem: 'invalid', invalidReason: 'forbidden-flag', message: msg('problem-invalid', 'invalido-0f1e'), setup: { block: BLOCK } });
-    const m = mount();
-    await m.ready;
-    assert.match(texto(part(m.area, 'update-setup')), /^O connection\.update está inválido decisão 0022 invalido-0f1e/);
-    assert.ok(part(m.area, 'core-update'));
-    assert.equal(action(m.area, 'open'), null);
-  });
-
-  test('AC3 · no block (the credential has no known shape): the band says it and the card of the command stays, with no setup card', async () => {
-    update = updateOf({ configured: false, problem: 'missing', message: msg('problem-missing', 'falta-0f1e'), setup: { block: null } });
-    const m = mount();
-    await m.ready;
-    assert.equal(part(m.area, 'update-setup'), null);
-    assert.ok(texto(part(m.area, 'core-outdated')).includes('falta-0f1e'));
-    assert.deepEqual(buttons(part(m.area, 'core-outdated')), []);
-    assert.ok(part(m.area, 'core-update'));
-  });
-
-  test('AC3 · an invalid machines.json shows no button, only what the core says, and the command card', async () => {
-    update = updateOf({ configured: false, problem: 'invalid-file', message: msg('problem-invalid-file', 'arquivo-0f1e') });
+  test('issue 484 AC5 · an invalid machines.json shows no button, only what the core says, and the copy card collapsed', async () => {
+    update = updateOf({ configured: false, source: null, problem: 'invalid-file', message: msg('problem-invalid-file', 'arquivo-0f1e') });
     const m = mount();
     await m.ready;
     assert.ok(texto(part(m.area, 'core-outdated')).includes('arquivo-0f1e'));
     assert.equal(action(m.area, 'open'), null);
     assert.equal(part(m.area, 'update-setup'), null);
-    assert.ok(part(m.area, 'core-update'));
+    assert.ok(part(m.area, 'update-fallback'));
+  });
+
+  test('issue 484 AC5 · the card "Ativar o botão Atualizar" is gone from the screen', () => {
+    const source = readFileSync(new URL('../../ui/screens/machine-update.js', import.meta.url), 'utf8');
+    assert.ok(!source.includes('Ativar o botão Atualizar'));
   });
 
   test('AC3 · 462-6: without connection.credential the 449 flow draws (step 1 is the credential), with no block and no button', async () => {
@@ -615,5 +650,189 @@ describe('issue 462 review fixes', () => {
     await m.ready;
     assert.equal(action(m.area, 'open'), null);
     assert.ok(part(m.area, 'update-result'));
+  });
+});
+
+// ---------- the remote core updates itself (issue 484, decision 0024, wireframes 484-1 and 484-2) ---------- (ADR-0024)
+
+describe('issue 484 the automatic update (484-1)', () => {
+  test('issue 484 AC6 · the automatic update on the swap: the band says the Mac started it and names the phase, the progress has the five steps, no dialog, nothing written', async () => {
+    update = updateOf({ state: 'running', kind: 'update', phase: 'swap', automatic: true, auto: { target: '0.0.17', state: 'running' }, startedAt: iso(42_000) });
+    const m = mount();
+    await m.ready;
+    const band = part(m.area, 'core-outdated')!;
+    assert.equal(band.getAttribute('data-mode'), 'busy');
+    assert.match(texto(band), /^O núcleo da Workstation está na 0\.0\.7 e o app, na 0\.0\.17\. Este Mac começou sozinho a atualização para a 0\.0\.17, porque o app foi atualizado\. Agora: Trocando o código \(fase 3 de 5\)\. A Workstation fica sem conexão por cerca de um minuto; isso é esperado e não gera alerta\./);
+    assert.deepEqual(buttons(band), ['Atualizando…']);
+    const progress = part(m.area, 'update-progress')!;
+    assert.deepEqual(progress.querySelectorAll('li').map((li) => li.getAttribute('data-phase')), ['check', 'backup', 'swap', 'start', 'verify']);
+    assert.equal(part(m.area, 'update-dialog'), null);
+    assert.equal(part(m.area, 'update-fallback'), null);
+    assert.equal(part(m.area, 'core-update'), null);
+    assert.deepEqual(written, []);
+  });
+
+  test('issue 484 AC6 · the automatic check, then its instant of ready: never the confirmation, the band stays busy, nothing written', async () => {
+    update = updateOf({ state: 'checking', kind: 'check', phase: 'check', automatic: true, auto: { target: '0.0.17', state: 'running' }, startedAt: iso(3000), canCancel: true });
+    const m = mount();
+    await m.ready;
+    assert.equal(part(m.area, 'core-outdated')!.getAttribute('data-mode'), 'busy');
+    assert.match(texto(part(m.area, 'core-outdated')), /Agora: Conferindo \(fase 1 de 5\)\./);
+    assert.equal(part(m.area, 'update-dialog'), null);
+    const before = reads;
+    update = updateOf({ state: 'ready', kind: 'check', phase: 'check', automatic: true, auto: { target: '0.0.17', state: 'running' }, readyUntil: new Date(Date.now() + 4 * M).toISOString(), message: msg('check-ready') });
+    // The screen keeps re-reading fast through the automatic ready: two more reads are the ready one painted. (ADR-0024)
+    await until(() => reads >= before + 2, 6000);
+    assert.equal(part(m.area, 'update-dialog'), null, 'the Mac\'s ready is not the person\'s question');
+    assert.equal(part(m.area, 'core-outdated')!.getAttribute('data-mode'), 'busy');
+    assert.equal(action(m.area, 'confirm'), null);
+    assert.deepEqual(written, []);
+  });
+
+  test('issue 484 AC6 · busy covers the automatic ready, and updatingNow is the update itself or anything the Mac started', () => {
+    const u = (over: Obj) => updateFormat.normalizeUpdate(updateOf(over));
+    assert.equal(updateFormat.isBusy(u({ state: 'ready', kind: 'check', automatic: true, auto: { target: '0.0.17', state: 'running' } })), true);
+    assert.equal(updateFormat.isBusy(u({ state: 'ready', kind: 'check' })), false);
+    assert.equal(updateFormat.updatingNow(u({ state: 'running', kind: 'update' })), true);
+    assert.equal(updateFormat.updatingNow(u({ state: 'checking', kind: 'check', automatic: true })), true);
+    assert.equal(updateFormat.updatingNow(u({ state: 'checking', kind: 'check' })), false, 'a manual --check is not "Atualizando"');
+    assert.equal(updateFormat.updatingNow(u({ state: 'failed', kind: 'update', automatic: true })), false);
+  });
+
+  test('issue 484 AC1 · source, automatic and auto keep only their closed shapes', () => {
+    const good = updateFormat.normalizeUpdate(updateOf({ source: 'declared', automatic: true, auto: { target: '0.0.17', state: 'failed', extra: CORE_SAYS } }));
+    assert.equal(good.source, 'declared');
+    assert.equal(good.automatic, true);
+    assert.deepEqual(good.auto, { target: '0.0.17', state: 'failed' });
+    const bad = updateFormat.normalizeUpdate(updateOf({ source: 'guessed', automatic: 'yes', auto: { target: 'latest', state: 'running' } }));
+    assert.equal(bad.source, null);
+    assert.equal(bad.automatic, false);
+    assert.equal(bad.auto, null);
+    assert.equal(updateFormat.normalizeUpdate(updateOf({ auto: { target: '0.0.17', state: 'exploded' } })).auto, null);
+  });
+
+  test('issue 484 AC6 · the sidebar: machineItems says updating for the update and for the automatic check, and the dot says Atualizando', async () => {
+    const base = { label: 'W', state: 'connected', reason: null, core: coreOf() };
+    const list = [
+      { ...base, id: 'ws-a', update: updateOf({ state: 'running', kind: 'update', phase: 'backup' }) },
+      { ...base, id: 'ws-b', update: updateOf({ state: 'checking', kind: 'check', phase: 'check', automatic: true }) },
+      { ...base, id: 'ws-c', update: updateOf({ state: 'checking', kind: 'check', phase: 'check' }) },
+      { ...base, id: 'ws-d', update: updateOf({ state: 'running', kind: 'update', phase: 'swap' }), connection: { state: 'stopped' } },
+      { ...base, id: 'ws-e', state: 'unreachable', reason: 'owner-auth-required', update: updateOf({ state: 'running', kind: 'update', phase: 'swap' }) },
+      { ...base, id: 'ws-f', update: updateOf() },
+    ];
+    assert.deepEqual(machineItems(list).map((i: Obj) => i.state), ['updating', 'updating', 'connected', 'stopped', 'updating', 'connected']);
+    const nav = new ElementoFalso('nav');
+    let navReads = 0;
+    const { readMachines } = createNav({ nav, read: async () => (navReads++, list), screens: SCREENS });
+    await readMachines();
+    const dot = nav.querySelector('[data-screen="machine-ws-a"] .cc-nav-dot')!;
+    assert.equal(dot.getAttribute('data-state'), 'updating');
+    assert.equal(dot.getAttribute('aria-label'), 'Atualizando');
+    assert.equal(dot.getAttribute('title'), 'Atualizando');
+    await readMachines();
+    assert.equal(navReads, 2, 'the 5 s re-read is one pending timer, not one per read');
+  });
+
+  test('issue 484 AC6 · the dot of updating has its own color, from a variable', () => {
+    const css = readFileSync(new URL('../../ui/shell.css', import.meta.url), 'utf8');
+    assert.match(css, /\.cc-nav-dot\[data-state="updating"\] \{ background: var\(--status-active-dot\); \}/);
+  });
+});
+
+describe('issue 484 Tentar de novo (484-2)', () => {
+  test('issue 484 AC3 · the automatic check refused (exit 30): the band has the core\'s sentence and only Tentar de novo, which writes the --check; the copy card waits collapsed', async () => {
+    update = updateOf({ state: 'refused', kind: 'check', exitCode: 30, reason: 'dirty-tree', automatic: true, auto: { target: '0.0.17', state: 'failed' }, endedAt: iso(M), message: msg('exit-30-dirty-tree') });
+    onWrite = () => ({ update: updateOf({ state: 'checking', kind: 'check', phase: 'check', startedAt: iso(0), canCancel: true }) });
+    const m = mount();
+    await m.ready;
+    const band = part(m.area, 'core-outdated')!;
+    assert.equal(band.getAttribute('data-mode'), 'retry');
+    assert.match(texto(band), /^A Workstation recusou, nada foi parado\. frase-do-nucleo-0f1e2d3c/);
+    assert.deepEqual(buttons(band), ['Tentar de novo']);
+    assert.equal(action(m.area, 'open'), null);
+    assert.equal(part(m.area, 'update-dialog'), null);
+    const fallback = part(m.area, 'update-fallback')!;
+    assert.deepEqual(buttons(fallback), ['Mostrar o comando']);
+    assert.equal(part(m.area, 'core-update'), null, 'collapsed until Mostrar o comando');
+    action(band, 'retry')!.click();
+    await until(() => written.length === 1);
+    assert.deepEqual(written, ['POST /api/machines/ws-exemplo/update/check']);
+    await until(() => part(m.area, 'update-dialog')?.getAttribute('data-mode') === 'checking');
+  });
+
+  test('issue 484 AC3 · rolled back (exit 40) puts the band in retry; rollback failed (exit 41) too, with the card of the backup path', async () => {
+    update = updateOf({ state: 'rolled-back', kind: 'update', phase: 'rollback', exitCode: 40, automatic: true, endedAt: iso(M), message: msg('exit-40') });
+    const back = mount();
+    await back.ready;
+    assert.equal(part(back.area, 'core-outdated')!.getAttribute('data-mode'), 'retry');
+    assert.equal(part(back.area, 'update-result'), null);
+    back.leave();
+    update = updateOf({ state: 'rollback-failed', kind: 'update', phase: 'rollback', exitCode: 41, automatic: true, backupPath: '/home/exemplo/backups/update-1', endedAt: iso(M), message: msg('exit-41') });
+    const failed = mount();
+    await failed.ready;
+    assert.equal(part(failed.area, 'core-outdated')!.getAttribute('data-mode'), 'retry');
+    assert.equal(texto(part(failed.area, 'update-result')!.querySelector('[data-field="backup-path"]')), '/home/exemplo/backups/update-1');
+    assert.ok(updateFormat.canRetry({ state: 'rollback-failed' }), 'decision 0024 section 3 adds rollback-failed');
+  });
+
+  test('issue 484 AC3 · the lost contact after the swap (timeout-after-swap) has no Tentar de novo', async () => {
+    update = updateOf({ state: 'timed-out', kind: 'update', phase: 'swap', automatic: true, endedAt: iso(M), message: msg('timeout-after-swap') });
+    const m = mount();
+    await m.ready;
+    assert.equal(action(m.area, 'retry'), null);
+    assert.notEqual(part(m.area, 'core-outdated')!.getAttribute('data-mode'), 'retry');
+  });
+
+  test('issue 484 AC3 · a person who cancels their own --check and closes the dialog finds the band ready: Atualizar agora, no Tentar de novo, no failure card', async () => {
+    onWrite = (call) => ({ update: call.startsWith('DELETE') ? updateOf({ state: 'canceled', kind: 'check', endedAt: iso(0), message: msg('canceled') }) : updateOf({ state: 'checking', kind: 'check', phase: 'check', startedAt: iso(1000), canCancel: true }) });
+    const m = mount();
+    await m.ready;
+    action(m.area, 'open')!.click();
+    await until(() => part(m.area, 'update-dialog')?.getAttribute('data-mode') === 'checking' && action(m.area, 'cancel')?.getAttribute('aria-disabled') === null);
+    action(m.area, 'cancel')!.click();
+    await until(() => written.includes('DELETE /api/machines/ws-exemplo/update'));
+    await until(() => part(m.area, 'update-dialog')?.getAttribute('data-mode') === 'result');
+    action(m.area, 'dismiss')!.click();
+    await until(() => part(m.area, 'update-dialog') === null);
+    const band = part(m.area, 'core-outdated')!;
+    assert.equal(band.getAttribute('data-mode'), 'ready');
+    assert.deepEqual(buttons(band), ['Atualizar agora']);
+    assert.equal(action(m.area, 'retry'), null);
+    assert.equal(part(m.area, 'update-result'), null);
+    assert.ok(!texto(m.area).includes('Cancelado'), 'no failure copy card for the person\'s own cancel');
+  });
+
+  test('issue 484 AC4 · an attempt spent before a restart (auto failed, no job): the band is ready with Atualizar agora, and its click writes only the --check', async () => {
+    update = updateOf({ auto: { target: '0.0.17', state: 'failed' } });
+    onWrite = () => ({ update: updateOf({ state: 'checking', kind: 'check', phase: 'check', startedAt: iso(0), canCancel: true, auto: { target: '0.0.17', state: 'failed' } }) });
+    const m = mount();
+    await m.ready;
+    const band = part(m.area, 'core-outdated')!;
+    assert.equal(band.getAttribute('data-mode'), 'ready');
+    assert.deepEqual(buttons(band), ['Atualizar agora']);
+    action(band, 'open')!.click();
+    await until(() => written.length === 1);
+    assert.deepEqual(written, ['POST /api/machines/ws-exemplo/update/check']);
+  });
+
+  test('issue 484 AC4 · an automatic ready whose chained update was refused (auto failed) is not busy: Atualizar agora, no Atualizando on the sidebar', async () => {
+    const stuck = { state: 'ready', kind: 'check', phase: 'check', automatic: true, auto: { target: '0.0.17', state: 'failed' }, readyUntil: new Date(Date.now() + 4 * M).toISOString(), message: msg('check-ready') };
+    const u = updateFormat.normalizeUpdate(updateOf(stuck));
+    assert.equal(updateFormat.isBusy(u), false);
+    assert.equal(updateFormat.updatingNow(u), false);
+    assert.notEqual(machineItems([{ id: 'ws-a', label: 'A', state: 'connected', reason: null, core: coreOf(), update: updateOf(stuck) }])[0].state, 'updating');
+    update = updateOf(stuck);
+    onWrite = () => ({ update: updateOf({ state: 'ready', kind: 'check', phase: 'check', readyUntil: new Date(Date.now() + 4 * M).toISOString(), message: msg('check-ready') }) });
+    const m = mount();
+    await m.ready;
+    const band = part(m.area, 'core-outdated')!;
+    assert.equal(band.getAttribute('data-mode'), 'ready');
+    assert.deepEqual(buttons(band), ['Atualizar agora']);
+    assert.equal(part(m.area, 'update-dialog'), null);
+    action(band, 'open')!.click();
+    await until(() => part(m.area, 'update-dialog')?.getAttribute('data-mode') === 'ready');
+    assert.deepEqual(written, ['POST /api/machines/ws-exemplo/update/check'], 'the Mac\'s check is not the person\'s: it runs again');
+    assert.ok(action(m.area, 'confirm'));
   });
 });
