@@ -5,8 +5,9 @@
 //
 // - Nothing here runs a command: the writes take only the machine id (`POST …/update/check`, `POST …/update`,
 //   `DELETE …/update`) and the core runs the `connection.update` the person declared.
-// - The screen writes no text of its own for a result: the sentence is `update.message.text`, rendered by the core
-//   from the table of decision 0022 section 7. Only static labels (the button, the titles, the phase names) are here.
+// - The screen writes no sentence of a result or of a state: it is `update.message.text`, rendered by the core from the
+//   table of decision 0022 section 7. What is here is static: labels (button, titles, phase names) and the explanatory
+//   copy the approved wireframes 462-1 to 462-3 carry (what the click will do, that the swap cannot be cancelled).
 // - machine.js mounts it once (`machineUpdate(ctx, id, …)`), calls `parts(machine, …)` in every paint (`null` means
 //   "not mine": an older core without `update`, the owner proof pending, or no credential command, and the 449 flow
 //   draws), `tick(area)` once a second and `active(machine)` to re-read fast while a run goes on.
@@ -43,6 +44,9 @@ const problemNote = (text) => (text ? el('p', { class: 'tm-up-problem', role: 'a
 export function machineUpdate(ctx, id, { area, repaint, reread, patch }) {
   let dialogOpen = false;
   let focusDialog = false;
+  let dialogMode = null;
+  let focusProgress = false;
+  let problemAt = null;
   let focusBand = false;
   let pending = null;
   let problem = null;
@@ -63,6 +67,7 @@ export function machineUpdate(ctx, id, { area, repaint, reread, patch }) {
       ok = false;
       if (e?.name === 'AbortError' || ctx.signal.aborted) return false;
       problem = e?.message || 'o núcleo não respondeu';
+      problemAt = 'now';
       // A check that did not even start has no dialog to show: the band says why.
       if (what === 'check') dialogOpen = false;
     } finally {
@@ -93,6 +98,7 @@ export function machineUpdate(ctx, id, { area, repaint, reread, patch }) {
   async function confirm() {
     if (await call('update', updateRoute(id))) {
       dialogOpen = false;
+      focusProgress = true;
       repaint();
     }
   }
@@ -176,7 +182,11 @@ export function machineUpdate(ctx, id, { area, repaint, reread, patch }) {
     }
     const node = el('section', attrs, ...body);
     node.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape' && !pending) close();
+      if (e.key !== 'Escape' || pending) return;
+      // Closing the dialog must not leave a --check running unseen: while it runs, Escape is the Cancelar.
+      if (mode === 'checking') {
+        if (u.canCancel) call('cancel', updateRoute(id), 'DELETE');
+      } else close();
     });
     return node;
   }
@@ -201,11 +211,11 @@ export function machineUpdate(ctx, id, { area, repaint, reread, patch }) {
     const confirming = u.kind === 'update' && u.state === 'succeeded';
     const rows = confirming ? stepRows(u, { allDone: true }) : stepRows(u);
     const since = u.startedAt ?? '';
-    const title = confirming ? 'Conferindo a versão' : `Atualizando a ${label} para a ${target}`;
+    const title = confirming ? 'Conferindo a versão' : u.kind === 'check' ? `Conferindo a ${label}` : `Atualizando a ${label} para a ${target}`;
     const head = el('h2', { class: 'tm-up-title' }, icon('wall-loader'), title, confirming ? null : el('span', { class: 'tm-up-code' }, `${phaseLabel(u)} · há `, el('span', { 'data-up-elapsed': '', 'data-since': since }, elapsed(since, Date.now()))));
     return el(
       'section',
-      { class: 'card tm-up-result tm-up-progress', 'data-part': 'update-progress', 'data-phase': u.phase ?? '', role: 'status' },
+      { class: 'card tm-up-result tm-up-progress', tabindex: '-1', 'data-part': 'update-progress', 'data-phase': u.phase ?? '', role: 'status' },
       head,
       stepsNode(rows),
       u.message && confirming ? el('p', {}, u.message.text) : null,
@@ -289,7 +299,10 @@ export function machineUpdate(ctx, id, { area, repaint, reread, patch }) {
       const u = machine?.update;
       if (!u || ownerAuth || u.problem === 'credential-missing') return null;
       const core = machine.core;
-      const outdated = coreOutdated(core);
+      // A confirmed update is the end of the banner, even if this read of the núcleo still carries the old version.
+      const outdated = coreOutdated(core) && !(u.kind === 'update' && u.state === 'succeeded' && u.confirmation === 'confirmed');
+      if (problemAt && problemAt !== 'now' && problemAt !== `${u.state}|${u.endedAt}`) problem = null;
+      if (problemAt === 'now') problemAt = `${u.state}|${u.endedAt}`;
       const busy = isBusy(u);
       if (u.kind === 'update' && u.state === 'running') dialogOpen = false;
       const dialog = dialogOpen ? dialogNode(machine, u, core) : null;
@@ -306,9 +319,18 @@ export function machineUpdate(ctx, id, { area, repaint, reread, patch }) {
       if (result) out.push(result);
       if (outdated && (u.problem === 'missing' || u.problem === 'invalid') && u.block) out.push(setupNode(machine, u));
       if (outdated && !busy && !dialog) out.push(fallbackNode(machine, core, Boolean(u.problem)));
+      const modeNow = dialog?.getAttribute('data-mode') ?? null;
+      if (modeNow !== dialogMode) {
+        dialogMode = modeNow;
+        focusDialog = false;
+      }
       if (dialog && focusDialog === false) {
         focusDialog = true;
         setTimeout(() => area.querySelector('[data-part="update-dialog"] [data-up-action]')?.focus?.(), 0);
+      }
+      if (!dialog && focusProgress && busy) {
+        focusProgress = false;
+        setTimeout(() => area.querySelector('[data-part="update-progress"]')?.focus?.(), 0);
       }
       if (!dialog && focusBand) {
         focusBand = false;

@@ -116,7 +116,7 @@ export function showsResult(u, now) {
 }
 
 /** A key that identifies one run, so closing its result does not hide the next one. */
-export const runKey = (u) => `${u.kind}|${u.startedAt ?? ''}`;
+export const runKey = (u) => `${u.kind}|${u.startedAt ?? ''}|${u.endedAt ?? ''}`;
 
 /** The states after which trying again makes sense (never the lost contact after the swap: the script is still running there). */
 export function canRetry(u) {

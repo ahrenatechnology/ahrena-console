@@ -186,7 +186,7 @@ const buttons = (node: ElementoFalso | null) => (node ? node.querySelectorAll('b
 const stubClipboard = (copied: string[]) => Object.defineProperty(globalThis, 'navigator', { value: { clipboard: { writeText: async (t: string) => void copied.push(t) } }, configurable: true });
 // ---------- the pure parts ----------
 
-describe('#462 machine-update-format', () => {
+describe('issue 462 machine-update-format', () => {
   test('AC1 · the update keeps only the closed shapes, and nothing else the core or the remote said', () => {
     const u = updateFormat.normalizeUpdate({ ...updateOf({ state: 'rolled-back', kind: 'update', phase: 'rollback', oldCommit: '81251bd', backupPath: '/home/exemplo/backups/update-1', exitCode: 40, message: msg('exit-40') }), token: CORE_SAYS, command: ['--allow-disconnect'] });
     assert.equal(u.state, 'rolled-back');
@@ -227,7 +227,7 @@ describe('#462 machine-update-format', () => {
 
 // ---------- the band and the button (462-1) ----------
 
-describe('#462 the band with the button (462-1)', () => {
+describe('issue 462 the band with the button (462-1)', () => {
   test('AC1 · 462-1: outdated and configured, the band has the Atualizar button and the command card waits, collapsed', async () => {
     const m = mount();
     await m.ready;
@@ -276,7 +276,7 @@ describe('#462 the band with the button (462-1)', () => {
 
 // ---------- the confirmation (462-2) and the run (462-3) ----------
 
-describe('#462 the confirmation and the run', () => {
+describe('issue 462 the confirmation and the run', () => {
   test('AC1 AC4 · 462-2: the click opens the dialog and writes only the --check (POST …/update/check), nothing that updates', async () => {
     onWrite = () => ({ update: updateOf({ state: 'checking', kind: 'check', phase: 'check', startedAt: iso(1000), canCancel: true }) });
     const m = mount();
@@ -385,7 +385,7 @@ describe('#462 the confirmation and the run', () => {
 
 // ---------- the endings (462-4, 462-5) ----------
 
-describe('#462 every ending shows the core\'s sentence', () => {
+describe('issue 462 every ending shows the core\'s sentence', () => {
   const REFUSALS: [string, Obj][] = [
     ['exit-20', { state: 'refused', exitCode: 20 }],
     ['exit-21', { state: 'refused', exitCode: 21 }],
@@ -513,7 +513,7 @@ describe('#462 every ending shows the core\'s sentence', () => {
 
 // ---------- falta configurar (462-6) ----------
 
-describe('#462 falta configurar (462-6)', () => {
+describe('issue 462 falta configurar (462-6)', () => {
   test('AC3 · no connection.update: the band says what is missing, the block comes ready with a copy button, and the command card is open', async () => {
     update = updateOf({ configured: false, problem: 'missing', message: msg('problem-missing', 'falta-0f1e'), setup: { block: BLOCK } });
     const m = mount();
@@ -588,11 +588,32 @@ describe('#462 falta configurar (462-6)', () => {
 
 // ---------- the wireframe carry-in fix ----------
 
-describe('#462 the wireframe', () => {
+describe('issue 462 the wireframe', () => {
   test('AC2 · 462-5 exit 40 says "se estava no ar antes", as the table of decision 0022 section 7 does', () => {
     const html = readFileSync(new URL('../../../../docs/wireframes/index.html', import.meta.url), 'utf8');
     const line = html.split('\n').find((l) => l.includes("cuRes('bad', 'undo-2'"));
     assert.ok(line, 'the exit 40 cell');
     assert.ok(line.includes('O núcleo de lá está no ar como estava, se estava no ar antes.'), line);
+  });
+});
+
+describe('issue 462 review fixes', () => {
+  test('Escape in the checking dialog cancels the --check instead of hiding a run', async () => {
+    onWrite = (call) => ({ update: call.startsWith('DELETE') ? updateOf({ state: 'canceled', kind: 'check', endedAt: iso(0), message: msg('canceled') }) : updateOf({ state: 'checking', kind: 'check', phase: 'check', startedAt: iso(1000), canCancel: true }) });
+    const m = mount();
+    await m.ready;
+    action(m.area, 'open')!.click();
+    await until(() => part(m.area, 'update-dialog')?.getAttribute('data-mode') === 'checking' && action(m.area, 'cancel')?.getAttribute('aria-disabled') === null);
+    const dialog = part(m.area, 'update-dialog')!;
+    dialog.ouvintes.get('keydown')?.forEach((fn) => fn({ type: 'keydown', key: 'Escape' }));
+    await until(() => written.includes('DELETE /api/machines/ws-exemplo/update'));
+  });
+
+  test('a confirmed update ends the band even if the núcleo read is still old', async () => {
+    update = updateOf({ state: 'succeeded', kind: 'update', exitCode: 0, endedAt: iso(M), confirmation: 'confirmed', message: msg('exit-0') });
+    const m = mount();
+    await m.ready;
+    assert.equal(action(m.area, 'open'), null);
+    assert.ok(part(m.area, 'update-result'));
   });
 });
