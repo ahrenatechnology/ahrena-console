@@ -123,6 +123,8 @@ export interface DeriveInput {
   job: ConnectionJob | null;
   /** The job's processes are still alive (a canceled one may still be dying). */
   jobAlive: boolean;
+  /** The núcleo over there is being updated by `connection.update` (issue 462): no action of the connection runs meanwhile. */
+  updating?: boolean;
   stoppedAt: string | null;
   failure: Failure | null;
   reading: TelemetryReading | null;
@@ -165,7 +167,7 @@ export function deriveConnection(i: DeriveInput): { status: ConnectionStatus; me
   }
 
   const configured = i.config !== null;
-  const idle = configured && !i.jobAlive;
+  const idle = configured && !i.jobAlive && !i.updating;
   const actions = {
     start: idle && state !== 'up',
     stop: idle && !!i.config?.stop && state === 'up',
@@ -260,6 +262,8 @@ export interface MachineConnectionOptions {
   onChange?: (machineId: string) => void;
   /** A job (start, stop, reconnect, login-and-start) began: the machine's remote credential is dropped (decision 0020 section 4). */
   onBegin?: (machineId: string) => void;
+  /** A `connection.update` runs on the machine (issue 462, decision 0022 section 4): start, stop and reconnect are refused as `busy`. */
+  updating?: (machineId: string) => boolean;
   now?: () => number;
   /** The stop runner's knobs (tests: msPerSecond, killGraceMs). */
   runner?: Partial<Omit<ReconnectRunnerOptions, 'logFile' | 'lookup' | 'onChange' | 'onSucceeded'>>;
@@ -388,6 +392,7 @@ export class MachineConnection {
       machine: machine.status(),
       job: e.job?.view ?? null,
       jobAlive: e.job?.alive === true,
+      updating: this.o.updating?.(id) === true,
       stoppedAt: e.stoppedAt,
       failure: e.failure,
       reading,
@@ -446,7 +451,7 @@ export class MachineConnection {
 
   private async begin(id: string, kind: ConnectionJobKind, by: ReconnectStarter): Promise<ConnectionResult> {
     const e = this.entry(id);
-    if (this.claiming.has(id) || e.job?.alive) {
+    if (this.claiming.has(id) || e.job?.alive || this.o.updating?.(id)) {
       if (e.job?.alive && e.job.view.kind === kind && e.job.view.state === 'running') {
         await e.job.started;
         return { kind: 'already-running', status: (await this.status(id))! };

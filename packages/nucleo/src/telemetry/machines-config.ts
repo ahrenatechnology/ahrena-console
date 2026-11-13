@@ -28,6 +28,14 @@
 // the remote machine. It is never run: it only fills the update command the screen shows. An invalid one
 // drops only that field (`parseCheckout`).
 //
+// `connection.update` (issue 462, decision 0022 section 1) is the command the Update button runs: `{ "command": [...],
+// "timeoutSeconds": 300 }` (60 to 900 s), a list, no shell, like `credential`. It is the SSH to the remote machine plus
+// `node --input-type=module -` and the script's own flags (`--checkout`, `--port`); the núcleo appends a closed tail
+// after it (telemetry/core-update-protocol.ts) and sends the script on stdin. A command that already carries a flag of
+// the tail, or one that would loosen the update (`--allow-disconnect`, `--force`, `--core-options`) or run another
+// command (`install-unit`), is invalid: only that field is dropped, with a log line, and `updateProblem` keeps a fixed
+// reason the screen can show (never the value).
+//
 // `start` and `stop` follow the rules and limits of `reconnect`. An invalid `stop` or `cloudProfile`
 // drops only that field, and an invalid `start` drops the whole `connection`, each with a log line:
 // the machine stays. A lone `reconnect` is read as `connection.start` (`connectionOf`); with both,
@@ -71,6 +79,10 @@ export interface ConnectionConfig {
   credential?: ReconnectConfig;
   /** The núcleo's checkout on the remote machine (issue 449, decision 0021 section 2): text for the update command, never executed. */
   checkout?: string;
+  /** The Update button's command (issue 462, decision 0022 section 1). */
+  update?: ReconnectConfig;
+  /** Why `update` was in the file but invalid: a fixed word, never the value. Absent when `update` is valid or not there. */
+  updateProblem?: UpdateProblem;
 }
 
 export interface RemoteMachineConfig {
@@ -99,7 +111,7 @@ export function connectionOf(machine: Pick<RemoteMachineConfig, 'reconnect' | 'c
  */
 export function parseConnection(v: unknown, warn?: (message: string) => void): ConnectionConfig | string {
   if (!v || typeof v !== 'object' || Array.isArray(v)) return 'expected { "start": { "command": [...] }, "stop"?: {...}, "cloudProfile"?: {...} }';
-  const { start, stop, cloudProfile, credential, checkout } = v as Record<string, unknown>;
+  const { start, stop, cloudProfile, credential, checkout, update } = v as Record<string, unknown>;
   if (start === undefined) return '.start: required';
   const s = parseReconnect(start);
   if (typeof s === 'string') return `.start${s.startsWith('.') ? s : `: ${s}`}`;
@@ -124,7 +136,45 @@ export function parseConnection(v: unknown, warn?: (message: string) => void): C
     if (typeof c === 'string') out.checkout = c;
     else warn?.(`.checkout: ${c.refused}; ignored`);
   }
+  if (update !== undefined) {
+    const u = parseUpdate(update);
+    if ('problem' in u) {
+      out.updateProblem = u.problem;
+      warn?.(`.update: ${u.problem}; ignored`);
+    } else out.update = u;
+  }
   return out;
+}
+
+export const DEFAULT_UPDATE_TIMEOUT_SECONDS = 300;
+export const MIN_UPDATE_TIMEOUT_SECONDS = 60;
+export const MAX_UPDATE_TIMEOUT_SECONDS = 900;
+
+/** Why a `connection.update` is invalid: a CLOSED list, so the screen can say it without echoing the file. */
+export const UPDATE_PROBLEMS = ['not-an-object', 'bad-command', 'bad-timeout', 'forbidden-flag'] as const;
+export type UpdateProblem = (typeof UPDATE_PROBLEMS)[number];
+
+/**
+ * The flags and words a declared update command may not carry: the ones that loosen the update, the one that runs
+ * another command, and the ones of the closed tail the núcleo appends itself (decision 0022 sections 1 and 3).
+ */
+export const FORBIDDEN_UPDATE_ITEMS = ['--allow-disconnect', '--force', '--core-options', 'install-unit', '--ref', '--check', '--progress', '--mac-telemetry-version', '--mac-credential-command'] as const;
+
+/** Whether an item of the command is (or is `--flag=value` of) a forbidden one. */
+export function isForbiddenUpdateItem(item: string): boolean {
+  return FORBIDDEN_UPDATE_ITEMS.some((f) => item === f || item.startsWith(`${f}=`));
+}
+
+/** A machine's `connection.update`, or its fixed problem: the command rules of `reconnect`, 60 to 900 s (300 by default), no forbidden item. Pure. */
+export function parseUpdate(v: unknown): ReconnectConfig | { problem: UpdateProblem } {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return { problem: 'not-an-object' };
+  const declared = (v as Record<string, unknown>).timeoutSeconds;
+  const timeout = declared === undefined ? DEFAULT_UPDATE_TIMEOUT_SECONDS : declared;
+  const command = parseReconnect({ command: (v as Record<string, unknown>).command });
+  if (typeof command === 'string') return { problem: 'bad-command' };
+  if (typeof timeout !== 'number' || !Number.isInteger(timeout) || timeout < MIN_UPDATE_TIMEOUT_SECONDS || timeout > MAX_UPDATE_TIMEOUT_SECONDS) return { problem: 'bad-timeout' };
+  if (command.command.some(isForbiddenUpdateItem)) return { problem: 'forbidden-flag' };
+  return { command: command.command, timeoutSeconds: timeout };
 }
 
 export const MAX_CHECKOUT_LENGTH = 512;

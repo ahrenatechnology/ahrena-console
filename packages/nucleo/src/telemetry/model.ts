@@ -6,6 +6,7 @@
 // code); the text the screen shows (the alert messages) is in pt-BR.
 
 import type { MachineCore } from './core-version.ts';
+import type { MachineUpdate } from './core-update.ts';
 
 /** Changes when the shape of the reading changes in a way readers need to know about (#176 compares it). */
 export const TELEMETRY_VERSION = 1;
@@ -364,6 +365,7 @@ export interface ReconnectStatus {
 }
 
 export type { MachineCore } from './core-version.ts';
+export type { MachineUpdate } from './core-update.ts';
 
 export interface MachineSummary {
   id: string;
@@ -387,6 +389,8 @@ export interface MachineSummary {
    * `null` for this machine, the demo's and a remote that was never read.
    */
   core: MachineCore | null;
+  /** The Update button's state (issue 462, decision 0022 section 6); only on remote machines. */
+  update?: MachineUpdate | null;
 }
 
 // ---------------------------------------------------------------------------------------------
