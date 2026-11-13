@@ -619,7 +619,7 @@ describe('counts without each active filter (#501)', () => {
   const OTHER = 'ahrenatechnology/framework-x';
   const other = (n: number, over: Partial<WorkBoardNode> = {}) => ({ ...boardNode(n, over), key: `${OTHER}#${n}`, repo: OTHER });
   const closed = (days: number) => ({ state: 'CLOSED' as const, closedAt: daysAgo(days) });
-  // type=bug and repo=ahrena-console match no card together: the bugs live in OTHER, the tasks in REPO.
+  // #501 type=bug and repo=ahrena-console match no card together: the bugs live in OTHER, the tasks in REPO.
   const nodes = [
     boardNode(1),
     boardNode(2),
