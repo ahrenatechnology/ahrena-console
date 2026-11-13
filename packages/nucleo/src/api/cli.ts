@@ -122,7 +122,7 @@ import { MachinesFileSource } from '../telemetry/machines-config.ts';
 import { publishRemoteAttentionChanges, RemoteMachine } from '../telemetry/remote.ts';
 import { RemoteMachines } from '../telemetry/remote-machines.ts';
 import { TELEMETRY_VERSION } from '../telemetry/model.ts';
-import { CoreUpdater } from '../telemetry/core-update.ts';
+import { autoAttemptsFile, CoreUpdater, fileAutoAttempts } from '../telemetry/core-update.ts';
 import { createCoreUpdateRoute } from './core-update.ts';
 import { INVALID_MACHINES_FILE, publishReconnectChanges, reconnectLogFile, ReconnectRunner } from '../telemetry/reconnect.ts';
 import { loopbackGet } from '../telemetry/adapters/loopback-http.ts';
@@ -551,6 +551,12 @@ if (demo) {
           ...(commit ? { isOlderCommit } : {}),
           credentialCommand: (id) => Boolean(registry.connectionOf(id)?.credential),
           checkout: (id) => registry.connectionOf(id)?.checkout ?? null,
+          // Decision 0024 section 2: each good read may start the automatic update, once per (machine, target).
+          onRead: (id) =>
+            void coreUpdater?.considerAuto(id).catch(() => {
+              log(`update (${id}): automatic check could not be considered`);
+              return null;
+            }),
         },
         log,
       }),
@@ -575,8 +581,10 @@ if (demo) {
     onChange: publishReconnectChanges(changes),
     log,
   });
-  // The Update button (issue 462, decision 0022): the command of `connection.update` from the freshest reading of the file;
-  // after a clean exit the machine's credential goes and the machine is read at once.
+  // The remote core's update (issue 462, decision 0022; issue 484, decision 0024): the command of `connection.update`
+  // from the freshest reading of the file, or the one derived from `connection.credential` when none is declared; after
+  // a clean exit the machine's credential goes and the machine is read at once. An older remote is updated by itself,
+  // once per (machine, target), with the spent attempts kept in `<data-dir>/core-update-auto.json`.
   coreUpdater = new CoreUpdater({
     lookup: async (id) => {
       await registry.refresh();
@@ -593,6 +601,7 @@ if (demo) {
       await registry.get(id)?.readNow();
     },
     onChange: publishReconnectChanges(changes),
+    autoAttempts: fileAutoAttempts(autoAttemptsFile(dataDir), log),
     log,
   });
   await registry.refresh();

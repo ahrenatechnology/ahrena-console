@@ -82,3 +82,19 @@ describe('issue 462 the texts of the Update button', () => {
     assert.equal(renderUpdateText('unknown-exit', { n: 77 }), 'O comando saiu com o código 77. Nada na tela é lido da saída.');
   });
 });
+
+// Decision 0024 section 4 is the SOURCE of the two texts of what is missing before the core updates itself.
+const DOC_0024 = readFileSync(new URL('../../../../docs/decisoes/0024-automatic-remote-core-update.md', import.meta.url), 'utf8');
+const SECTION_0024 = DOC_0024.slice(DOC_0024.indexOf('### 4. A tela'), DOC_0024.indexOf('### 5.'));
+const ROWS_0024 = new Map<string, string>();
+for (const line of SECTION_0024.split('\n')) {
+  const m = /^\| `(.+?)` \| "(.+)" \|$/.exec(line);
+  if (m) ROWS_0024.set(m[1]!, m[2]!);
+}
+
+describe('issue 484 the texts of what is missing, from decision 0024', () => {
+  test('#484/AC-1 the table of 0024 section 4 has both keys, and the texts are the table\'s, word for word', () => {
+    assert.deepEqual([...ROWS_0024.keys()].sort(), ['problem-credential-missing', 'problem-missing']);
+    for (const key of ['problem-missing', 'problem-credential-missing'] as const) assert.equal(UPDATE_TEXTS[key], ROWS_0024.get(key), key);
+  });
+});

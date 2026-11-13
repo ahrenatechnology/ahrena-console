@@ -24,7 +24,7 @@ export class Scenario {
   readonly file = join(this.dir, 'scenario.json');
   readonly record = join(this.dir, 'record.ndjson');
 
-  set(s: { steps?: Step[]; exit?: number; noRead?: boolean; real?: boolean }): void {
+  set(s: { steps?: Step[]; exit?: number; noRead?: boolean; real?: boolean; check?: { steps?: Step[]; exit?: number } }): void {
     writeFileSync(this.file, JSON.stringify({ record: this.record, ...s }));
   }
 
@@ -44,6 +44,20 @@ export class Scenario {
       update: { command: [process.execPath, FAKE_SSH, this.file, '--checkout', '/srv/ahrena-console', '--port', '4720'], timeoutSeconds: 60 },
       ...over,
     };
+  }
+
+  /**
+   * The `credential` of a machine whose SSH prefix runs the fake ssh (issue 484, decision 0024 section 1): with no
+   * `connection.update`, the núcleo derives `[node, FAKE_SSH, file, '/opt/node/bin/node',
+   * '--disable-warning=ExperimentalWarning', '--input-type=module', '-', '--checkout', '/srv/ahrena-console', '--port', '4720']`.
+   */
+  derivableCredential(): { command: string[]; timeoutSeconds: number } {
+    return { command: [process.execPath, FAKE_SSH, this.file, '/opt/node/bin/node', '/srv/ahrena-console/packages/nucleo/src/owner/cli.ts', 'remote-credential', '--port', '4720'], timeoutSeconds: 20 };
+  }
+
+  /** The `connection` of a machine with only a derivable credential: no `connection.update`. (issue 484) */
+  derivedConnection(over: Partial<ConnectionConfig> = {}): ConnectionConfig {
+    return this.connection({ update: undefined, credential: this.derivableCredential(), ...over });
   }
 
   close(): void {

@@ -46,9 +46,10 @@ export const UPDATE_TEXTS = {
   'output-too-large': 'O comando devolveu mais texto do que o limite e foi encerrado. Nada foi alterado.',
   'script-unavailable': 'O app não achou o script de atualização que vem empacotado com ele. Nada foi parado. Reinstale o app.',
 
-  // What is missing before the button can show (decision 0022 section 1).
-  'problem-missing': 'Falta o connection.update no machines.json. Ative o botão Atualizar com o bloco pronto.',
-  'problem-credential-missing': 'Falta o connection.credential no machines.json. Configure-o primeiro; depois o bloco do connection.update.',
+  // What is missing before the core can update itself: decision 0024 section 4 is the SOURCE of these two, and
+  // test/telemetry/core-update-texts.test.ts compares them with its table.
+  'problem-missing': 'Não deu para montar o comando de atualização a partir do connection.credential. Declare um connection.update no machines.json.',
+  'problem-credential-missing': 'Falta o connection.credential no machines.json. Configure-o e o Console passa a atualizar o núcleo de lá sozinho.',
   'problem-invalid': 'O connection.update do machines.json está inválido (<problem>); corrija o arquivo.',
   'problem-invalid-file': 'O machines.json está inválido; corrija o arquivo para atualizar o núcleo.',
 

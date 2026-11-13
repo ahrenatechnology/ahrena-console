@@ -12,7 +12,10 @@ import { machineItems, MACHINES_ROUTE, SCREENS, sidebarSections } from './screen
 import { CONNECTORS_ROUTE, connectorsDot } from './screens/cloud-format.js';
 
 /** The state of a remote machine, said on its dot: the color alone does not say it. */
-export const MACHINE_STATE_LABELS = { connected: 'Conectada', unreachable: 'Sem conexão', 'incompatible-version': 'Versão diferente', 'not-configured': 'Sem configuração', stopped: 'Parada por você', 'owner-auth': 'Acesso bloqueado' };
+export const MACHINE_STATE_LABELS = { connected: 'Conectada', unreachable: 'Sem conexão', 'incompatible-version': 'Versão diferente', 'not-configured': 'Sem configuração', stopped: 'Parada por você', 'owner-auth': 'Acesso bloqueado', updating: 'Atualizando' };
+
+/** How soon the sidebar reads the machines again while one is being updated (issue 484): the dot must not lag. (ADR-0024) */
+const UPDATING_REREAD_MS = 5000;
 
 /** The yellow arrow of a remote whose núcleo is older than the app (issue 449): the color alone does not say it. */
 const CORE_OUTDATED_LABEL = 'Núcleo defasado';
@@ -25,6 +28,8 @@ export function createNav({ nav, read, screens = SCREENS }) {
   let remoteItems = [];
   // The dots that are not a machine's: `id → { state, label }` (Conexões, issue 277).
   const dots = new Map();
+  // The one re-read pending while a machine is being updated; never two at once. (ADR-0024)
+  let updatingTimer = null;
 
   function draw() {
     items.clear();
@@ -81,6 +86,14 @@ export function createNav({ nav, read, screens = SCREENS }) {
       return;
     }
     const next = machineItems(list);
+    if (!updatingTimer && next.some((item) => item.state === 'updating')) {
+      updatingTimer = setTimeout(() => {
+        updatingTimer = null;
+        readMachines();
+      }, UPDATING_REREAD_MS);
+      // In Node (the tests) the pending re-read does not keep the process alive; a browser timer has no unref. (ADR-0024)
+      updatingTimer?.unref?.();
+    }
     if (JSON.stringify(next) === JSON.stringify(remoteItems)) return;
     remoteItems = next;
     draw();

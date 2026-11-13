@@ -1,22 +1,30 @@
-// The Atualizar button of the remote núcleo on the machine screen (issue 462, decision 0022, wireframes 462-1 to
-// 462-6): the button on the yellow band, the confirmation that runs the --check first, the progress by phase, every
-// ending, and the "falta configurar" card with the block to paste. The card with the command to paste (449) stays,
-// collapsed under the band when the button exists and open when it does not.
-//
-// - Nothing here runs a command: the writes take only the machine id (`POST …/update/check`, `POST …/update`,
-//   `DELETE …/update`) and the core runs the `connection.update` the person declared.
-// - The screen writes no sentence of a result or of a state: it is `update.message.text`, rendered by the core from the
-//   table of decision 0022 section 7. What is here is static: labels (button, titles, phase names) and the explanatory
-//   copy the approved wireframes 462-1 to 462-3 carry (what the click will do, that the swap cannot be cancelled).
-// - machine.js mounts it once (`machineUpdate(ctx, id, …)`), calls `parts(machine, …)` in every paint (`null` means
-//   "not mine": an older core without `update`, the owner proof pending, or no credential command, and the 449 flow
-//   draws), `tick(area)` once a second and `active(machine)` to re-read fast while a run goes on.
+/*
+ * The Atualizar button of the remote núcleo on the machine screen (issue 462, decision 0022, wireframes 462-1 to
+ * 462-6): the button on the yellow band, the confirmation that runs the --check first, the progress by phase and every
+ * ending. Decision 0024 (issue 484, wireframes 484-1 and 484-2): the Mac updates the remote núcleo by itself, so the
+ * band has four modes: `busy` (a run goes on, the automatic one says so and names the phase), `retry` (the last job
+ * failed or was refused: its reason and Tentar de novo), `ready` (Atualizar agora) and `setup` (no command can be
+ * built: only what is missing, no button). The card with the block to paste is gone; an invalid `connection.update`
+ * shows the derived command to compare. The card with the command to paste (449) shows only in `retry` and `setup`,
+ * collapsed. The confirmation never opens for a run the Mac started (`automatic`).
+ *
+ * - Nothing here runs a command: the writes take only the machine id (`POST …/update/check`, `POST …/update`,
+ *   `DELETE …/update`) and the core runs the declared `connection.update`, or the command derived from
+ *   `connection.credential` (decision 0024).
+ * - The screen writes no sentence of a result or of a state: it is `update.message.text`, rendered by the core from the
+ *   table of decision 0022 section 7. What is here is static: labels (button, titles, phase names) and the explanatory
+ *   copy the approved wireframes 462-1 to 462-3 carry (what the click will do, that the swap cannot be cancelled).
+ * - machine.js mounts it once (`machineUpdate(ctx, id, …)`), calls `parts(machine, …)` in every paint (`null` means
+ *   "not mine": an older core without `update`, the owner proof pending, or no credential command, and the 449 flow
+ *   draws), `tick(area)` once a second and `active(machine)` to re-read fast while a run goes on.
+ * (ADR-0024)
+ */
 
 import { el, icon } from '../dom.js';
 import { runButtonAction, setDisabled } from '../button-action.js';
 import { band, updateCard } from './machine-core.js';
 import { coreOutdated, outdatedBand } from './machine-core-format.js';
-import { canRetry, checkRoute, elapsed, isBusy, normalizeUpdate, phaseLabel, pointsToCommand, resultLook, runKey, showsResult, stepRows, updateRoute } from './machine-update-format.js';
+import { canRetry, checkRoute, elapsed, isBusy, normalizeUpdate, phaseLabel, phaseName, pointsToCommand, resultLook, runKey, showsResult, stepRows, updateRoute, updatingNow } from './machine-update-format.js';
 
 /** One button: `data-up-action` names it for the focus and the tests; busy keeps the focus (never `disabled`). */
 function button({ label, iconName = null, filled = false, action, busy = false, why = null, onClick = null }) {
@@ -33,6 +41,9 @@ function stepsNode(rows) {
   const marks = { done: 'check-circle-2', now: 'wall-loader', next: 'circle' };
   return el('ol', { class: 'tm-up-steps', 'aria-label': 'Andamento da atualização' }, ...rows.map((r) => el('li', { class: `tm-up-${r.tone}`, 'data-phase': r.key, 'aria-current': r.tone === 'now' ? 'step' : null }, icon(marks[r.tone]), el('span', {}, r.label))));
 }
+
+/* The problems with which no command can be built: the band says what is missing and has no button. (ADR-0024) */
+const SETUP_PROBLEMS = new Set(['missing', 'invalid', 'invalid-file']);
 
 const note = (text) => el('p', { class: 'tm-muted tm-up-note' }, text);
 const problemNote = (text) => (text ? el('p', { class: 'tm-up-problem', role: 'alert' }, `Não deu certo: ${text}`) : null);
@@ -90,8 +101,9 @@ export function machineUpdate(ctx, id, { area, repaint, reread, patch }) {
   function open(u) {
     dialogOpen = true;
     focusDialog = false;
-    // A good check of the last 5 minutes is not repeated: the dialog goes straight to the question.
-    if (u.state === 'ready' && Date.parse(u.readyUntil ?? '') > Date.now()) return repaint();
+    /* A good check of the last 5 minutes is not repeated: the dialog goes straight to the question. Not the Mac's own
+       check: the confirmation is only for a --check the person asked for. (ADR-0024) */
+    if (u.state === 'ready' && !u.automatic && Date.parse(u.readyUntil ?? '') > Date.now()) return repaint();
     return call('check', checkRoute(id));
   }
 
@@ -108,30 +120,40 @@ export function machineUpdate(ctx, id, { area, repaint, reread, patch }) {
     repaint();
   };
 
-  // ---------- the pieces ----------
+  // ---------- the pieces ---------- (ADR-0024)
+
+  function retry(u) {
+    if (u.kind === 'update') dismiss(u);
+    open({ ...u, state: 'idle' });
+  }
 
   function bandNode(machine, u, core, mode) {
     const label = machine.label;
     const target = core?.expectedVersion ?? u.targetVersion ?? '?';
     const view = core ? outdatedBand(core, label) : null;
     const lead = 'O Console de lá roda um código mais antigo que o deste Mac';
-    const text =
-      mode === 'busy'
-        ? `A atualização para a ${target} está em andamento. A ${label} fica sem conexão por cerca de um minuto; isso é esperado e não gera alerta.`
-        : mode === 'setup'
-          ? `${lead}. ${u.message?.text ?? ''}`.trim()
-          : `${lead}, e as correções das versões novas não chegam até ele. O botão atualiza para a ${target}: faz o backup do banco, troca o código e sobe o núcleo de novo, e tenta voltar ao código de antes se ele não responder.`;
-    const action =
-      mode === 'busy'
-        ? button({ label: 'Atualizando…', iconName: 'wall-loader', filled: true, action: 'busy', busy: true })
-        : mode === 'setup'
-          ? u.block
-            ? copyButton(u.block, 'Copiar o bloco', 'copy-block-band', true)
-            : null
-          : button({ label: 'Atualizar', iconName: 'arrow-up-circle', filled: true, action: 'open', busy: u.state === 'checking', onClick: () => open(u) });
-    const node = band({ icon: mode === 'busy' ? 'wall-loader' : 'arrow-up-circle', title: view?.title ?? `O núcleo da ${label} precisa da versão ${target}.`, text, from: view?.from ?? '' });
+    const now = u.phase === 'rollback' ? phaseName(u) : `${phaseName(u)} (${phaseLabel(u)})`;
+    const look = mode === 'retry' ? resultLook(u) : null;
+    const texts = {
+      busy: u.automatic
+        ? `Este Mac começou sozinho a atualização para a ${target}, porque o app foi atualizado. Agora: ${now}. A ${label} fica sem conexão por cerca de um minuto; isso é esperado e não gera alerta.`
+        : `A atualização para a ${target} está em andamento. A ${label} fica sem conexão por cerca de um minuto; isso é esperado e não gera alerta.`,
+      retry: u.message?.text ?? '',
+      setup: `${lead}. ${u.message?.text ?? ''}`.trim(),
+      ready: `${lead}, e as correções das versões novas não chegam até ele. Atualizar agora atualiza para a ${target}: faz o backup do banco, troca o código e sobe o núcleo de novo, e tenta voltar ao código de antes se ele não responder.`,
+    };
+    const actions = {
+      busy: () => button({ label: 'Atualizando…', iconName: 'wall-loader', filled: true, action: 'busy', busy: true }),
+      retry: () => button({ label: 'Tentar de novo', iconName: 'rotate-cw', filled: true, action: 'retry', onClick: () => retry(u) }),
+      setup: () => null,
+      ready: () => button({ label: 'Atualizar agora', iconName: 'arrow-up-circle', filled: true, action: 'open', busy: u.state === 'checking', onClick: () => open(u) }),
+    };
+    const icons = { busy: 'wall-loader', retry: 'alert', setup: 'arrow-up-circle', ready: 'arrow-up-circle' };
+    const title = look ? `${look.title}.` : (view?.title ?? `O núcleo da ${label} precisa da versão ${target}.`);
+    const node = band({ icon: icons[mode], title, text: texts[mode], from: view?.from ?? '' });
     node.setAttribute('data-mode', mode);
     if (mode === 'busy') node.querySelector('.tm-rc-ic')?.classList.add('tm-rc-spin');
+    const action = actions[mode]();
     if (action) node.append(el('div', { class: 'tm-rc-actions' }, action));
     return node;
   }
@@ -142,8 +164,11 @@ export function machineUpdate(ctx, id, { area, repaint, reread, patch }) {
     return node;
   }
 
-  // The confirmation: first the --check, then the go / no-go (462-2). It sits under the band like the Parar one.
+  // The confirmation: first the --check, then the go / no-go (462-2). It sits under the band like the Parar one. (ADR-0024)
   function dialogNode(machine, u, core) {
+    /* A run the Mac started is never confirmed by the person (decision 0024 section 3). While the person's own click
+       is on its way the last read may still be the Mac's run: the answer replaces it. (ADR-0024) */
+    if (u.automatic && !pending) return null;
     const label = machine.label;
     const target = core?.expectedVersion ?? u.targetVersion ?? '?';
     let mode = null;
@@ -225,55 +250,42 @@ export function machineUpdate(ctx, id, { area, repaint, reread, patch }) {
     );
   }
 
-  // How a finished update ended (462-4, 462-5): the title is a label, the sentence is the core's.
-  function resultNode(machine, u, outdated) {
+  /* How a finished update ended (462-4, 462-5): the title is a label, the sentence is the core's. Tentar de novo lives
+     on the band (484-2); a rollback that failed keeps its card for the backup path, its sentence already on the band. (ADR-0024) */
+  function resultNode(u, onBand) {
     const look = resultLook(u);
     const acts = [button({ label: 'Fechar', filled: u.state === 'succeeded', action: 'close-result', onClick: () => dismiss(u) })];
     if (u.state === 'rollback-failed' && u.backupPath) acts.unshift(copyButton(u.backupPath, 'Copiar o caminho do backup', 'copy-backup', false));
     if (pointsToCommand(u)) acts.push(commandButton());
-    if (outdated && canRetry(u)) {
-      acts.push(
-        button({
-          label: 'Tentar de novo',
-          iconName: 'rotate-cw',
-          filled: true,
-          action: 'retry',
-          onClick: () => {
-            dismiss(u);
-            open({ ...u, state: 'idle' });
-          },
-        }),
-      );
-    }
     return el(
       'section',
       { class: `card tm-up-result tm-up-${look.tone}`, role: look.tone === 'bad' ? 'alert' : 'status', 'data-part': 'update-result', 'data-state': u.state },
       el('h2', { class: 'tm-up-title' }, icon(look.icon), look.title, u.exitCode === null ? null : el('span', { class: 'tm-up-code' }, `saída ${u.exitCode}`)),
-      u.message ? el('p', {}, u.message.text) : null,
+      u.message && !onBand ? el('p', {}, u.message.text) : null,
       u.state === 'succeeded' && u.confirmation === 'confirmed' ? stepsNode(stepRows(u, { allDone: true })) : null,
       u.state === 'rollback-failed' && u.backupPath ? el('div', { class: 'tm-up-path mono', 'data-field': 'backup-path' }, u.backupPath) : null,
       el('div', { class: 'tm-up-acts' }, ...acts),
     );
   }
 
-  // 462-6: the block to paste once, with the person's own SSH prefix.
-  function setupNode(machine, u) {
-    const invalid = u.problem === 'invalid';
+  /* 462-6 as decision 0024 left it: an invalid connection.update does not fall back to the derived command, which is
+     shown here only to compare with what the person wrote. (ADR-0024) */
+  function setupNode(u) {
     return el(
       'section',
       { class: 'card tm-card tm-rc-setup', 'data-part': 'update-setup', 'data-problem': u.problem },
-      el('h2', { class: 'tm-title' }, icon('settings'), el('span', {}, invalid ? 'O connection.update está inválido' : 'Ativar o botão Atualizar'), el('small', { class: 'tm-muted' }, 'decisão 0022')),
+      el('h2', { class: 'tm-title' }, icon('settings'), el('span', {}, 'O connection.update está inválido'), el('small', { class: 'tm-muted' }, 'decisão 0024')),
       u.message ? el('p', {}, u.message.text) : null,
-      el('p', { class: 'tm-muted' }, 'Cole este bloco dentro de ', el('code', {}, 'connection'), ', ao lado do ', el('code', {}, 'credential'), ', e salve. É uma edição só: o botão aparece sozinho em até 30 s. Os caminhos e o prefixo SSH vêm do seu ', el('code', {}, 'connection.credential'), '.'),
+      el('p', { class: 'tm-muted' }, 'Um ', el('code', {}, 'connection.update'), ' inválido não cai no comando derivado: o que você escreveu vence. Para comparar, este é o comando que o Console montaria a partir do seu ', el('code', {}, 'connection.credential'), '.'),
       el('pre', { class: 'tm-config', 'data-field': 'update-block' }, u.block),
-      el('div', { class: 'tm-rc-actions' }, copyButton(u.block, 'Copiar o bloco', 'copy-block', true)),
+      el('div', { class: 'tm-rc-actions' }, copyButton(u.block, 'Copiar o bloco', 'copy-block', false)),
     );
   }
 
-  function fallbackNode(machine, core, forced) {
-    if (forced || fallbackOpen) {
+  function fallbackNode(machine, core) {
+    if (fallbackOpen) {
       const card = updateCard(core, machine.label, { step: false });
-      if (!forced) card.append(el('div', { class: 'tm-rc-actions' }, button({ label: 'Recolher o comando', iconName: 'chevron-down', action: 'hide-command', onClick: () => ((fallbackOpen = false), repaint()) })));
+      card.append(el('div', { class: 'tm-rc-actions' }, button({ label: 'Recolher o comando', iconName: 'chevron-down', action: 'hide-command', onClick: () => ((fallbackOpen = false), repaint()) })));
       return card;
     }
     return el(
@@ -304,21 +316,27 @@ export function machineUpdate(ctx, id, { area, repaint, reread, patch }) {
       if (problemAt && problemAt !== 'now' && problemAt !== `${u.state}|${u.endedAt}`) problem = null;
       if (problemAt === 'now') problemAt = `${u.state}|${u.endedAt}`;
       const busy = isBusy(u);
-      if (u.kind === 'update' && u.state === 'running') dialogOpen = false;
+      // The confirmation is the person's: never for a run the Mac started, and gone once the swap runs. (ADR-0024)
+      if ((u.automatic && !pending) || (u.kind === 'update' && u.state === 'running')) dialogOpen = false;
       const dialog = dialogOpen ? dialogNode(machine, u, core) : null;
       if (dialogOpen && !dialog) dialogOpen = false;
-      const result = !dialog && !busy && showsResult(u, now) && !closed.has(runKey(u)) ? resultNode(machine, u, outdated) : null;
+      // The band's mode (decision 0024 section 4). A manual --check changes nothing: its band stays `ready`, the button waits. (ADR-0024)
+      const mode = SETUP_PROBLEMS.has(u.problem) ? 'setup' : busy && updatingNow(u) ? 'busy' : outdated && !busy && !dialog && u.kind && u.state !== 'canceled' && canRetry(u) ? 'retry' : 'ready';
+      /* Each failure shows the command card collapsed first. (ADR-0024) */
+      if (mode === 'busy') fallbackOpen = false;
+      const keepResult = mode !== 'retry' || u.state === 'rollback-failed';
+      const result = !dialog && !busy && keepResult && showsResult(u, now) && !closed.has(runKey(u)) ? resultNode(u, mode === 'retry') : null;
       if (!outdated && !busy && !dialog && !result) return [];
-      // The band says "em andamento" only for the update itself: the --check changes nothing, and its button just waits.
-      const mode = u.problem ? 'setup' : busy && u.kind === 'update' ? 'busy' : 'ready';
       const out = [];
       if (outdated || busy) out.push(bandNode(machine, u, core, mode));
       if (!dialog && problem) out.push(problemNote(problem));
       if (dialog) out.push(dialog);
       else if (busy) out.push(progressNode(machine, u, core));
       if (result) out.push(result);
-      if (outdated && (u.problem === 'missing' || u.problem === 'invalid') && u.block) out.push(setupNode(machine, u));
-      if (outdated && !busy && !dialog) out.push(fallbackNode(machine, core, Boolean(u.problem)));
+      if (outdated && u.problem === 'invalid' && u.block) out.push(setupNode(u));
+      /* The command to paste is the way out after a failure or when no command can be built; a click on Mostrar o
+         comando (exit 22, a version that did not arrive) opens it too. (ADR-0024) */
+      if (outdated && !busy && !dialog && (mode === 'retry' || mode === 'setup' || (fallbackOpen && pointsToCommand(u)))) out.push(fallbackNode(machine, core));
       const modeNow = dialog?.getAttribute('data-mode') ?? null;
       if (modeNow !== dialogMode) {
         dialogMode = modeNow;
@@ -334,7 +352,7 @@ export function machineUpdate(ctx, id, { area, repaint, reread, patch }) {
       }
       if (!dialog && focusBand) {
         focusBand = false;
-        setTimeout(() => area.querySelector('[data-up-action="open"]')?.focus?.(), 0);
+        setTimeout(() => (area.querySelector('[data-up-action="open"]') ?? area.querySelector('[data-up-action="retry"]'))?.focus?.(), 0);
       }
       return out;
     },

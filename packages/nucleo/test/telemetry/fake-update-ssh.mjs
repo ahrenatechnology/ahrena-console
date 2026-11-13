@@ -3,7 +3,11 @@
 // The scenario (rewritten by the test between steps) says what to do:
 //
 //   { "record": "<file>", "steps": [ { "out": "<text to stdout>" } | { "sleep": ms } | { "big": bytes } ], "exit": n,
-//     "noRead": true, "real": true }
+//     "noRead": true, "real": true, "check": { "steps": [ … ], "exit": n } }
+//
+// With `check`, a run whose argv carries `--check` follows it instead of the top-level `steps` and `exit`, so one
+// scenario can say "the check passes, the update fails" for a check and an update the núcleo chains by itself
+// (issue 484, decision 0024 section 2).
 //
 // Every run appends `{ argv, script, pid }` to `record`: the argv after the scenario path and the stdin it read
 // (the app's script), so a test proves exactly what crossed argv and stdin. With `real`, the stdin is run as the
@@ -22,12 +26,13 @@ const finish = async () => {
     child.on('close', (code) => process.exit(code ?? 255));
     return;
   }
-  for (const step of scenario.steps ?? []) {
+  const plan = scenario.check && argv.includes('--check') ? scenario.check : scenario;
+  for (const step of plan.steps ?? []) {
     if (step.out !== undefined) process.stdout.write(step.out);
     else if (step.big) process.stdout.write('x'.repeat(step.big));
     else if (step.sleep) await new Promise((r) => setTimeout(r, step.sleep));
   }
-  process.exit(scenario.exit ?? 0);
+  process.exit(plan.exit ?? 0);
 };
 if (scenario.noRead) void finish();
 else {

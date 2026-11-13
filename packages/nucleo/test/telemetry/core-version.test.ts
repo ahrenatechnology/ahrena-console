@@ -204,6 +204,19 @@ describe('AC1 the Mac reads the remote overview each cycle and puts it in GET /a
     assert.equal((await coreOf(without.service))?.status, 'current');
   });
 
+  test('#484/AC-2 onRead is called after each good overview read, with core already carrying the version; not after a failed read', async () => {
+    const f = await fake({ overview: { body: { version: '0.0.7', commit: OLD_COMMIT } } });
+    const seen: (string | null)[] = [];
+    const holder: { remote?: RemoteMachine } = {};
+    const { remote } = setup(f.port, { onRead: (id) => void seen.push(`${id} ${holder.remote?.core()?.version}`) });
+    holder.remote = remote;
+    await remote.pollOnce();
+    assert.deepEqual(seen, ['ws-exemplo 0.0.7']);
+    f.state.overview = undefined;
+    await remote.pollOnce();
+    assert.equal(seen.length, 1);
+  });
+
   test('AC1 without a core option (this machine, the demo) the summary has core null and no overview request is made', async () => {
     const f = await fake({ overview: { body: { version: '0.0.7', commit: OLD_COMMIT } } });
     const { remote, service } = setup(f.port, {}, { core: undefined });

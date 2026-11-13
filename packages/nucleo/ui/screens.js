@@ -13,6 +13,7 @@
 // and the architecture (ADR) and product (PDR) records of the repositories (issue 174).
 import { coreOutdated, normalizeCore } from './screens/machine-core-format.js';
 import { OWNER_AUTH } from './screens/machine-format.js';
+import { normalizeUpdate, updatingNow } from './screens/machine-update-format.js';
 
 export const SECTIONS = [
   { id: 'main', label: null },
@@ -297,6 +298,15 @@ const stoppedByYou = (m) => m.connection && typeof m.connection === 'object' && 
 // reasons, its own yellow dot, and the reason on the dot's label (the color alone does not say it).
 // The labels come from machine-format.js's OWNER_AUTH, so the pill and the dot cannot drift apart.
 const ownerAuthOf = (m) => (m.state === 'unreachable' && Object.hasOwn(OWNER_AUTH, m.reason ?? '') ? m.reason : null);
+/*
+ * The núcleo over there is being updated, by a click or by the Mac itself (issue 484, decision 0024 section 4): its own
+ * dot, "Atualizando", from the --check until the new version answers. Only a connection the person stopped wins over it.
+ * (ADR-0024)
+ */
+const updatingOf = (m) => {
+  const u = normalizeUpdate(m.update);
+  return Boolean(u && updatingNow(u));
+};
 
 /** The sidebar entries of the remote machines in `GET /api/machines` (this machine is in SCREENS). */
 export function machineItems(machines) {
@@ -307,12 +317,13 @@ export function machineItems(machines) {
     if (!m || typeof m !== 'object' || typeof m.id !== 'string' || !MACHINE_ID.test(m.id) || m.id === 'local' || seen.has(m.id)) continue;
     seen.add(m.id);
     const label = typeof m.label === 'string' && m.label.trim() ? m.label.slice(0, 40) : m.id;
-    const auth = stoppedByYou(m) ? null : ownerAuthOf(m);
+    const updating = !stoppedByYou(m) && updatingOf(m);
+    const auth = stoppedByYou(m) || updating ? null : ownerAuthOf(m);
     out.push({
       id: machineItemId(m.id),
       route: `/ui/machines/${m.id}`,
       item: { label, icon: 'server', section: 'machines' },
-      state: stoppedByYou(m) ? 'stopped' : auth ? 'owner-auth' : MACHINE_STATES.has(m.state) ? m.state : 'unreachable',
+      state: stoppedByYou(m) ? 'stopped' : updating ? 'updating' : auth ? 'owner-auth' : MACHINE_STATES.has(m.state) ? m.state : 'unreachable',
       ...(auth ? { stateLabel: OWNER_AUTH[auth].dot } : {}),
       // The núcleo over there is older than the app (issue 449): a yellow arrow beside the name, nothing else of `core`.
       ...(coreOutdated(normalizeCore(m.core)) ? { coreOutdated: true } : {}),

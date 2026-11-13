@@ -320,7 +320,7 @@ describe('issue 462 the Update button job', () => {
     assert.equal(t.s.runs().length, 0);
   });
 
-  test('the status carries the setup block when only the credential is declared, and none once the update is', () => {
+  test('#484/AC-1 only the credential declared: the command is derived, with no setup block; a declared update is the declared source', () => {
     const t = setup({
       connection: (s) =>
         s.connection({
@@ -329,10 +329,13 @@ describe('issue 462 the Update button job', () => {
         }),
     });
     const v = t.view();
-    assert.equal(v.problem, 'missing');
-    assert.match(v.setup.block!, /^"update": \{/);
-    assert.match(v.setup.block!, /"--input-type=module"/);
+    assert.equal(v.problem, null);
+    assert.equal(v.configured, true);
+    assert.equal(v.source, 'derived');
+    assert.equal(v.setup.block, null);
+    assert.deepEqual(v.command, ['/usr/bin/ssh', '-T', 'ahrena-tunnel', '/opt/node/bin/node', '--disable-warning=ExperimentalWarning', '--input-type=module', '-', '--checkout', '/srv/ahrena-console', '--port', '4720']);
     t.setConnection(t.s.connection());
+    assert.equal(t.view().source, 'declared');
     assert.equal(t.view().setup.block, null);
   });
 });
