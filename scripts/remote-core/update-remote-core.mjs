@@ -5,15 +5,22 @@
 //
 //   node update-remote-core.mjs --checkout <path> --ref <ref> [--port 4720] [--data-dir <dir>]
 //        [--mac-telemetry-version <n>] [--mac-credential-command yes|no] [--allow-disconnect]
-//        [--core-options "<options of src/api/cli.ts>"] [--check] [--no-fetch]
+//        [--core-options "<options of src/api/cli.ts>"] [--check] [--no-fetch] [--progress json]
+//   node --input-type=module - <args> < update-remote-core.mjs     (the script read from stdin, decision 0022 section 2)
 //   node update-remote-core.mjs install-unit --checkout <path> [--port 4720] [--data-dir <dir>] [--core-options "..."]
 //
 // Exit codes: 0 updated and confirmed (or --check passed); 2 usage; 20 guard: telemetry protocol differs;
 // 21 guard: the target needs the owner's proof and the Mac has no credential command; 22 guard: the target
 // has no manifest; 23 guard: the Mac's flags are missing; 30 dirty tree, unknown ref, or the target adds
 // production dependencies; 31 backup failed; 32 the process does not check out (cmdline, port, uid) or its
-// options cannot be read, or it did not stop; 40 failed and rolled back; 41 failed and the rollback failed.
+// options cannot be read, or it did not stop; 33 another update holds <data-dir>/update.lock; 40 failed and
+// rolled back; 41 failed and the rollback failed; 130 canceled by a signal during the check.
 // Nothing is stopped, and no signal is sent, before the guard and the process check pass.
+//
+// --progress json (decision 0022 section 4): stdout carries only NDJSON, one phase event per phase (check,
+// backup, swap, start, verify, rollback) and one final result event; the human messages go to stderr.
+// Signals: until the backup phase SIGINT, SIGTERM and SIGHUP cancel (exit 130, lock released); from the backup
+// phase on SIGHUP, SIGPIPE, SIGINT and SIGTERM are ignored, so the script finishes alone.
 //
 // Environment, for tests: AHRENA_CONSOLE_PROC_ROOT (default /proc), AHRENA_CONSOLE_UPDATE_START_TIMEOUT_MS
 // (default 30000), AHRENA_CONSOLE_UPDATE_STOP_TIMEOUT_MS (default 15000), AHRENA_CONSOLE_UPDATE_PAUSE_MS
@@ -23,16 +30,17 @@ import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import {
   appendFileSync, chmodSync, closeSync, copyFileSync, existsSync, mkdirSync, openSync, readdirSync,
-  readFileSync, readlinkSync, realpathSync, renameSync, rmSync, statSync, writeFileSync,
+  readFileSync, readlinkSync, realpathSync, renameSync, rmSync, statSync, writeFileSync, writeSync,
 } from 'node:fs';
 import { get } from 'node:http';
 import { homedir, userInfo } from 'node:os';
 import { basename, dirname, isAbsolute, join, resolve, sep } from 'node:path';
 import { DatabaseSync, backup } from 'node:sqlite';
+import { fileURLToPath } from 'node:url';
 
 export const EXIT = {
   OK: 0, USAGE: 2, TELEMETRY: 20, OWNER_PROOF: 21, NO_MANIFEST: 22, NO_MAC_FLAGS: 23,
-  PREFLIGHT: 30, BACKUP: 31, PROCESS: 32, ROLLED_BACK: 40, ROLLBACK_FAILED: 41,
+  PREFLIGHT: 30, BACKUP: 31, PROCESS: 32, LOCKED: 33, ROLLED_BACK: 40, ROLLBACK_FAILED: 41, CANCELED: 130,
 };
 const UNIT = 'ahrena-console-core.service';
 const NODE_FLAGS = ['--disable-warning=ExperimentalWarning'];
@@ -42,10 +50,28 @@ const CLI_REL = 'packages/nucleo/src/api/cli.ts';
 const OWNER_CLI_REL = 'packages/nucleo/src/owner/cli.ts';
 
 class Stop extends Error {
-  constructor(code, message) { super(message); this.code = code; }
+  /** `reason` is the closed word of decision 0022 section 4 that tells apart the causes of one exit code. */
+  constructor(code, message, reason = null) { super(message); this.code = code; this.reason = reason; }
 }
-const out = (line) => console.log(line);
+
+// ---- progress: NDJSON on stdout under --progress json, human text on stderr ---------------------------------
+
+let progress = false;
+const report = { reason: null, backup: null, oldCommit: null, newCommit: null };
+let resultSent = false;
+
+const out = (line) => (progress ? console.error(line) : console.log(line));
 const warn = (line) => console.error(line);
+function emit(event) {
+  if (!progress) return;
+  try { writeSync(1, `${JSON.stringify({ v: 1, ...event })}\n`); } catch { /* the reader is gone: the script goes on alone */ }
+}
+const phase = (name) => emit({ event: 'phase', phase: name });
+function emitResult(exit) {
+  if (resultSent) return;
+  resultSent = true;
+  emit({ event: 'result', exit, reason: report.reason, backup: report.backup, oldCommit: report.oldCommit, newCommit: report.newCommit });
+}
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const timeoutMs = (name, fallback) => {
   const n = Number(process.env[name]);
@@ -54,7 +80,7 @@ const timeoutMs = (name, fallback) => {
 
 // ---- arguments -----------------------------------------------------------------------------------------
 
-const VALUE_FLAGS = new Set(['checkout', 'ref', 'port', 'data-dir', 'core-options', 'mac-telemetry-version', 'mac-credential-command']);
+const VALUE_FLAGS = new Set(['checkout', 'ref', 'port', 'data-dir', 'core-options', 'mac-telemetry-version', 'mac-credential-command', 'progress']);
 const BOOL_FLAGS = new Set(['allow-disconnect', 'check', 'no-fetch', 'help']);
 
 export function parseArguments(argv) {
@@ -74,6 +100,7 @@ export function parseArguments(argv) {
     opts[name] = value;
   }
   if (opts.help) return opts;
+  if (opts.progress !== undefined && opts.progress !== 'json') throw new Stop(EXIT.USAGE, '--progress must be json');
   if (!opts.checkout) throw new Stop(EXIT.USAGE, '--checkout is required');
   if (opts.command === 'update' && !opts.ref) throw new Stop(EXIT.USAGE, '--ref is required (an app-vX.Y.Z tag, origin/main or a sha): the script never picks "the newest" by itself');
   opts.port = opts.port === undefined ? 4720 : Number(opts.port);
@@ -92,9 +119,9 @@ export function parseArguments(argv) {
 const USAGE = `Usage:
   update-remote-core.mjs --checkout <path> --ref <ref> [--port 4720] [--data-dir <dir>]
       --mac-telemetry-version <n> --mac-credential-command yes|no
-      [--allow-disconnect] [--core-options "<options>"] [--check] [--no-fetch]
+      [--allow-disconnect] [--core-options "<options>"] [--check] [--no-fetch] [--progress json]
   update-remote-core.mjs install-unit --checkout <path> [--port 4720] [--data-dir <dir>] [--core-options "<options>"]
-See scripts/remote-core/README.md and docs/decisoes/0021-remote-core-update.md.`;
+See scripts/remote-core/README.md and docs/decisoes/0021-remote-core-update.md, 0022-remote-core-update-button.md.`;
 
 /** Whitespace-separated words; double quotes group a word with spaces. */
 export function splitOptions(text) {
@@ -206,7 +233,7 @@ function absolutizeDataDir(options, cwd) {
     const inline = out[i].startsWith('--data-dir=');
     const value = inline ? out[i].slice(11) : out[i] === '--data-dir' ? out[i + 1] : undefined;
     if (value === undefined || isAbsolute(value)) continue;
-    if (!cwd) throw new Stop(EXIT.PROCESS, `the core was started with a relative --data-dir (${value}) and its working directory cannot be read; pass --core-options with an absolute path (nothing was stopped)`);
+    if (!cwd) throw new Stop(EXIT.PROCESS, `the core was started with a relative --data-dir (${value}) and its working directory cannot be read; pass --core-options with an absolute path (nothing was stopped)`, 'no-options');
     if (inline) out[i] = `--data-dir=${resolve(cwd, value)}`; else out[i + 1] = resolve(cwd, value);
   }
   return out;
@@ -218,7 +245,7 @@ function absolutizeDataDir(options, cwd) {
  * called again right before every signal, because the pid can be reused between the check and the kill.
  */
 function verifyProcess(info, ctx) {
-  const refuse = (why) => new Stop(EXIT.PROCESS, `the process on port ${ctx.port} does not check out (${why}); nothing was stopped`);
+  const refuse = (why) => new Stop(EXIT.PROCESS, `the process on port ${ctx.port} does not check out (${why}); nothing was stopped`, 'process-mismatch');
   if (!info.pid) throw refuse('its overview has no valid pid');
   const cliPath = join(ctx.checkout, CLI_REL);
   if (procMounted()) {
@@ -240,7 +267,7 @@ function verifyProcess(info, ctx) {
   }
   // No /proc: the options are not guessed. The owner of the port comes from ss, which lists only the
   // processes of the user running it.
-  if (!ctx.coreOptions) throw new Stop(EXIT.PROCESS, 'there is no /proc to read the core options from; pass them with --core-options "--port ... --installation ... --data-dir ..." (nothing was stopped)');
+  if (!ctx.coreOptions) throw new Stop(EXIT.PROCESS, 'there is no /proc to read the core options from; pass them with --core-options "--port ... --installation ... --data-dir ..." (nothing was stopped)', 'no-options');
   let listing = '';
   try { listing = execFileSync('ss', ['-ltnp'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }); } catch { /* handled below */ }
   const owns = listing.split('\n').some((l) => new RegExp(`[:.]${ctx.port}\\s`).test(l) && new RegExp(`pid=${info.pid}[,)]`).test(l));
@@ -307,12 +334,92 @@ WantedBy=default.target
 `;
 }
 
+// ---- the lock: one update at a time on the machine ----------------------------------------------------------
+
+const LOCK_FILE = 'update.lock';
+const LOCK_STALE_MS = 30 * 60 * 1000;
+const heldLocks = [];
+
+/** Why a lock file no longer holds anything ('missing', 'dead-pid', 'older-than-30-minutes'), or null when it is live. */
+function staleReason(file) {
+  let text;
+  try { text = readFileSync(file, 'utf8'); } catch { return 'missing'; }
+  let held = null;
+  try { held = JSON.parse(text); } catch { /* unreadable content: judged by the file age below */ }
+  const startedAt = Date.parse(held?.startedAt);
+  if (Number.isInteger(held?.pid) && Number.isFinite(startedAt)) {
+    if (Date.now() - startedAt > LOCK_STALE_MS) return 'older-than-30-minutes';
+    return isAlive(held.pid) ? null : 'dead-pid';
+  }
+  // Half-written or foreign content fails closed: live until the file itself is old.
+  try { return Date.now() - statSync(file).mtimeMs > LOCK_STALE_MS ? 'older-than-30-minutes' : null; } catch { return 'missing'; }
+}
+
+const lockBusy = () => new Stop(EXIT.LOCKED, 'another update is running on this machine (update.lock is held); nothing was touched');
+
+/** --check never creates the lock; it only refuses to run beside a live one. */
+function refuseLiveLock(dataDir) {
+  const file = join(dataDir, LOCK_FILE);
+  if (existsSync(file) && staleReason(file) === null) throw lockBusy();
+}
+
+function acquireLock(dataDir) {
+  mkdirSync(dataDir, { recursive: true });
+  const file = join(dataDir, LOCK_FILE);
+  const text = JSON.stringify({ pid: process.pid, startedAt: new Date().toISOString() });
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      const fd = openSync(file, 'wx', 0o600);
+      try { writeSync(fd, text); } finally { closeSync(fd); }
+      heldLocks.push({ file, text });
+      return;
+    } catch (e) {
+      if (e.code !== 'EEXIST') throw e;
+    }
+    const stale = staleReason(file);
+    if (stale === null) throw lockBusy();
+    if (stale !== 'missing') {
+      logLine(dataDir, `took over a stale update.lock (${stale})`);
+      rmSync(file, { force: true });
+    }
+  }
+  throw lockBusy();
+}
+
+/** Removes only the locks this process wrote and that still hold its own content. */
+function releaseLocks() {
+  for (const { file, text } of heldLocks.splice(0)) {
+    try { if (readFileSync(file, 'utf8') === text) rmSync(file, { force: true }); } catch { /* already gone */ }
+  }
+}
+
+// ---- signals: cancel while nothing was touched, ignore once the backup starts ----------------------------------
+
+const noop = () => {};
+function cancelOnSignals() {
+  const cancel = () => {
+    releaseLocks();
+    emitResult(EXIT.CANCELED);
+    process.exit(EXIT.CANCELED);
+  };
+  for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) process.on(signal, cancel);
+}
+/** From the backup on the script finishes alone: a closed ssh must not leave the machine half-updated. */
+function ignoreSignals() {
+  for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP', 'SIGPIPE']) {
+    process.removeAllListeners(signal);
+    process.on(signal, noop);
+  }
+  process.stdout.on('error', noop);
+  process.stderr.on('error', noop);
+}
+
 // ---- the context -----------------------------------------------------------------------------------------
 
 function context(opts) {
   let checkout;
-  try { checkout = realpathSync(resolve(opts.checkout)); } catch { throw new Stop(EXIT.PREFLIGHT, `the checkout ${opts.checkout} is not accessible`); }
-  if (gitOrNull(checkout, 'rev-parse', '--git-dir') === null) throw new Stop(EXIT.PREFLIGHT, `${checkout} is not a git checkout`);
+  try { checkout = realpathSync(resolve(opts.checkout)); } catch { throw new Stop(EXIT.PREFLIGHT, `the checkout ${opts.checkout} is not accessible`, 'not-a-checkout'); }
+  if (gitOrNull(checkout, 'rev-parse', '--git-dir') === null) throw new Stop(EXIT.PREFLIGHT, `${checkout} is not a git checkout`, 'not-a-checkout');
   return { checkout, port: opts.port, coreOptions: opts.coreOptions };
 }
 /** The data folder: the core's own (from its options) and --data-dir must agree when both are given. */
@@ -321,7 +428,7 @@ function resolveDataDir(opts, options) {
   const own = dataDirOf(options ?? opts.coreOptions ?? []);
   const fromCore = own ? resolve(own) : null;
   if (fromFlag && fromCore && fromFlag !== fromCore) {
-    throw new Stop(EXIT.PROCESS, `--data-dir (${fromFlag}) is not the data folder the core was started with (${fromCore}); nothing was changed`);
+    throw new Stop(EXIT.PROCESS, `--data-dir (${fromFlag}) is not the data folder the core was started with (${fromCore}); nothing was changed`, 'data-dir-mismatch');
   }
   return fromFlag ?? fromCore ?? join(homedir(), '.ahrena-console');
 }
@@ -337,13 +444,13 @@ function logLine(dataDir, line) {
 function preflight(opts, ctx) {
   const { checkout } = ctx;
   if (git(checkout, 'status', '--porcelain', '--untracked-files=no') !== '') {
-    throw new Stop(EXIT.PREFLIGHT, 'the checkout has tracked changes; commit or discard them first (no --force: nothing is overwritten)');
+    throw new Stop(EXIT.PREFLIGHT, 'the checkout has tracked changes; commit or discard them first (no --force: nothing is overwritten)', 'dirty-tree');
   }
   if (!opts['no-fetch']) {
     try { git(checkout, 'fetch', 'origin', '--tags'); } catch (e) { warn(`fetch failed (continuing with what the checkout has): ${String(e.stderr ?? e.message).trim()}`); }
   }
   const sha = gitOrNull(checkout, 'rev-parse', '--verify', `${opts.ref}^{commit}`);
-  if (!sha) throw new Stop(EXIT.PREFLIGHT, `the ref ${opts.ref} does not resolve to a commit in ${checkout}`);
+  if (!sha) throw new Stop(EXIT.PREFLIGHT, `the ref ${opts.ref} does not resolve to a commit in ${checkout}`, 'unknown-ref');
   const oldHead = git(checkout, 'rev-parse', 'HEAD');
   const branch = gitOrNull(checkout, 'symbolic-ref', '--quiet', '--short', 'HEAD');
   if (branch) warn(`warning: the checkout is on the branch ${branch}; the update leaves it on a detached HEAD (to go back: git switch ${branch}). Local commits stay on the branch.`);
@@ -398,7 +505,7 @@ function checkDependencies(ctx, target) {
   const after = read(target.sha).dependencies ?? {};
   const added = Object.keys(after).filter((k) => before[k] !== after[k]);
   if (added.length) {
-    throw new Stop(EXIT.PREFLIGHT, `the target adds or changes production dependencies (${added.join(', ')}) and this script does not run npm install; nothing was stopped`);
+    throw new Stop(EXIT.PREFLIGHT, `the target adds or changes production dependencies (${added.join(', ')}) and this script does not run npm install; nothing was stopped`, 'new-dependencies');
   }
 }
 
@@ -505,8 +612,22 @@ async function confirm(ctx, expectation, manifest, started) {
 // ---- the update ---------------------------------------------------------------------------------------------
 
 async function update(opts) {
+  phase('check');
+  cancelOnSignals();
+  const lockDir = resolveDataDir(opts);
+  if (opts.check) refuseLiveLock(lockDir); else acquireLock(lockDir);
+  try {
+    return await runUpdate(opts, lockDir);
+  } finally {
+    releaseLocks();
+  }
+}
+
+async function runUpdate(opts, lockDir) {
   const ctx = context(opts);
   const target = preflight(opts, ctx);
+  report.oldCommit = target.oldHead;
+  report.newCommit = target.sha;
   const manifest = runGuard(opts, ctx, target);
   checkDependencies(ctx, target);
   const targetVersion = (() => {
@@ -530,31 +651,42 @@ async function update(opts) {
   if (!run.useUnit) {
     if (info) run.options = verifyProcess(info, ctx);
     else if (ctx.coreOptions) run.options = ctx.coreOptions;
-    else throw new Stop(EXIT.PROCESS, `nothing answers on port ${ctx.port} and there is no unit: pass --core-options to say how to start the core (nothing was changed)`);
+    else throw new Stop(EXIT.PROCESS, `nothing answers on port ${ctx.port} and there is no unit: pass --core-options to say how to start the core (nothing was changed)`, 'no-options');
   }
   run.dataDir = resolveDataDir(opts, run.options);
+  if (run.dataDir !== lockDir) acquireLock(run.dataDir);
 
   const wasRunning = Boolean(info) || (run.useUnit && active);
+  phase('backup');
+  ignoreSignals();
   const backupFile = await makeBackup(run.dataDir, info?.commit ?? target.oldHead, wasRunning);
+  report.backup = backupFile;
   logLine(run.dataDir, `update ${target.oldHead} -> ${target.sha} (${opts.ref}), backup ${backupFile ?? 'none'}`);
   const pause = Number(process.env.AHRENA_CONSOLE_UPDATE_PAUSE_MS);
   if (pause > 0) await sleep(pause);
 
   let started = null;
   let newStarted = false;
+  let swapAnnounced = false;
+  const announceSwap = () => {
+    if (!swapAnnounced) { swapAnnounced = true; phase('swap'); }
+  };
   try {
     // Step 4: stop. The only signal is to the verified pid (checked again right before it), or through the unit.
     if (run.useUnit) {
-      if (active) { out(`stopping through systemctl --user stop ${UNIT}`); await stopCore(ctx, run, null); }
+      if (active) { announceSwap(); out(`stopping through systemctl --user stop ${UNIT}`); await stopCore(ctx, run, null); }
     } else if (info) {
       out(`stopping the verified core (pid ${info.pid})`);
-      await terminate(info.pid, ctx.port, () => verifyProcess(info, ctx));
+      await terminate(info.pid, ctx.port, () => { verifyProcess(info, ctx); announceSwap(); });
     }
+    announceSwap();
     git(ctx.checkout, 'checkout', '--detach', target.sha);
     out(`code: ${target.oldHead.slice(0, 7)} -> ${target.sha.slice(0, 7)}`);
+    phase('start');
     started = await startCore(ctx, run);
     newStarted = true;
-    if (!run.useUnit) out(`started (orphan, pid ${started.pid}); \`node ${process.argv[1]} install-unit\` puts it under systemd`);
+    if (!run.useUnit) out(`started (orphan, pid ${started.pid}); run the script again with install-unit (see scripts/remote-core/README.md) to put it under systemd`);
+    phase('verify');
     await confirm(ctx, { commit: target.sha, version: targetVersion }, manifest, started);
   } catch (e) {
     // The re-check before the first signal failed: nothing changed, so there is nothing to roll back.
@@ -587,6 +719,8 @@ function restoreDatabase(dataDir, backupFile) {
 // or written). If the new core never started, the live database is kept as it is, so the writes made between
 // the backup and the stop are not lost.
 async function rollback(ctx, run, target, backupFile, started, wasRunning, newStarted) {
+  phase('rollback');
+  report.reason = 'started-failed';
   try {
     await stopCore(ctx, run, started);
     if (target.branch && gitOrNull(ctx.checkout, 'rev-parse', target.branch) === target.oldHead) git(ctx.checkout, 'checkout', target.branch);
@@ -621,7 +755,7 @@ async function installUnit(opts) {
   let options = ctx.coreOptions ?? null;
   const orphan = info && !active;
   if (orphan) options = verifyProcess(info, ctx);
-  if (!options) throw new Stop(EXIT.PROCESS, 'no running core to read the options from: pass --core-options "--port ... --installation ... --data-dir ..." (nothing was changed)');
+  if (!options) throw new Stop(EXIT.PROCESS, 'no running core to read the options from: pass --core-options "--port ... --installation ... --data-dir ..." (nothing was changed)', 'no-options');
   const withPort = portOf(options) === null ? ['--port', String(ctx.port), ...options] : options;
   const dataDir = resolveDataDir(opts, withPort);
   // Everything that can fail without touching the running core comes first: the text, the file, the reload, the enable.
@@ -662,13 +796,14 @@ async function installUnit(opts) {
 
 // ---- main ---------------------------------------------------------------------------------------------------
 
-export async function main(argv) {
+async function execute(argv) {
   try {
     const opts = parseArguments(argv);
     if (opts.help) { out(USAGE); return EXIT.OK; }
     return opts.command === 'install-unit' ? await installUnit(opts) : await update(opts);
   } catch (e) {
     if (e instanceof Stop) {
+      report.reason = e.reason;
       warn(e.code === EXIT.USAGE ? `${e.message}\n${USAGE}` : e.message);
       return e.code;
     }
@@ -677,6 +812,24 @@ export async function main(argv) {
   }
 }
 
-if (process.argv[1] && samePath(process.argv[1], new URL(import.meta.url).pathname)) {
+/** Asked for before the arguments are parsed, so that even a usage error ends with a result line. */
+const asksForJson = (argv) => argv.includes('--progress=json') || argv.some((a, i) => a === '--progress' && argv[i + 1] === 'json');
+
+export async function main(argv) {
+  progress = asksForJson(argv);
+  const code = await execute(argv);
+  emitResult(code);
+  return code;
+}
+
+/** Run as a file, or read from stdin (`node --input-type=module -`, where argv[1] is "-"). */
+function isEntryPoint() {
+  const entry = process.argv[1];
+  if (!entry) return false;
+  if (entry === '-') return true;
+  try { return samePath(entry, fileURLToPath(import.meta.url)); } catch { return false; }
+}
+
+if (isEntryPoint()) {
   main(process.argv.slice(2)).then((code) => process.exit(code));
 }
