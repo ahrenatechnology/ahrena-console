@@ -67,8 +67,11 @@ export class RateLimitedError extends Error {
   }
 }
 
-/** #495 why a GitHub read failed, as a stable English code: the screen translates it, the raw message stays in the log; 'sync-pending' is the snapshot's code when the stored board is old with no failure recorded. */
-export type GithubFailure = 'network' | 'rate-limited' | 'no-scope' | 'github-error' | 'sync-pending';
+/** #495 why a GitHub read failed, as a stable English code: the screen translates it, the raw message stays in the log. */
+export type GithubFailure = 'network' | 'rate-limited' | 'no-scope' | 'github-error';
+
+/** #495 why a snapshot is stale: a `GithubFailure`, or 'sync-pending' when the stored board is old with no failure recorded. Never a failure's code. */
+export type StaleCode = GithubFailure | 'sync-pending';
 
 /** Nada no cache e o GitHub falhou; `cause` é o erro da fonte, quando houve um (permissão, limite, rede). */
 export class NoDataError extends Error {
@@ -122,7 +125,7 @@ export interface CacheResult<T> {
   stale: boolean;
   staleReason: string | null;
   /** #495 the stable code of `staleReason`; `null` when not stale. */
-  staleCode: GithubFailure | null;
+  staleCode: StaleCode | null;
 }
 
 export interface GetOptions {

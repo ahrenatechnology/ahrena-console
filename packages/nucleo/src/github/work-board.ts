@@ -7,7 +7,7 @@
  * Pure domain: the ports at the end are what the use case (work-board-service.ts) reads.
  */
 
-import type { GithubFailure } from './cache.ts';
+import type { StaleCode } from './cache.ts';
 import type { ProjectBoard } from './project.ts';
 import {
   levelOf,
@@ -290,8 +290,8 @@ export interface WorkBoardInput {
   now: number;
   fetchedAt: number;
   stale: boolean;
-  /** #495 a stable English code (`GithubFailure`), never GitHub's raw message; the screen translates it. */
-  staleReason: GithubFailure | null;
+  /** #495 a stable English code (`StaleCode`), never GitHub's raw message; the screen translates it. */
+  staleReason: StaleCode | null;
 }
 
 export interface WorkChainLink {
@@ -385,8 +385,8 @@ export interface WorkBoardView {
   matched: number;
   fetchedAt: number;
   stale: boolean;
-  /** #495 a stable English code (`GithubFailure`), never GitHub's raw message; the screen translates it. */
-  staleReason: GithubFailure | null;
+  /** #495 a stable English code (`StaleCode`), never GitHub's raw message; the screen translates it. */
+  staleReason: StaleCode | null;
 }
 
 /** A node with everything derived from the graph: level, ancestors, column, sessions and children. */

@@ -19,7 +19,7 @@
  * (30 reads an hour) that is 90 points per hour per page, the `project` line of ADR-0015's budget.
  */
 
-import { GITHUB_TTL, RateLimitedError, type GithubCache, type GithubFailure } from './cache.ts';
+import { GITHUB_TTL, RateLimitedError, type GithubCache, type StaleCode } from './cache.ts';
 import { githubGraphql, GithubScopeError, requireGithubToken, resolveGithubToken, type GithubGraphqlSourceOptions } from './github-source.ts';
 import { workKey, type CiState, type LinkedPullRequest, type PullRequestState, type ReviewDecision } from './work.ts';
 
@@ -108,7 +108,7 @@ export interface ProjectBoard {
   stale: boolean;
   staleReason: string | null;
   /** #495 the stable code of `staleReason` (the work board shows it, not the raw text); `null` when not stale. */
-  staleCode: GithubFailure | null;
+  staleCode: StaleCode | null;
 }
 
 /** Porta da fonte do Project: o adaptador local chama o GitHub; o do hub (7.9) lerá de lá. */
@@ -419,7 +419,7 @@ export class GithubProject {
     return this.cache.pauseLeftMs();
   }
 
-  private view(value: ProjectBoardValue, fetchedAt: number, stale: boolean, staleReason: string | null, staleCode: GithubFailure | null): ProjectBoard {
+  private view(value: ProjectBoardValue, fetchedAt: number, stale: boolean, staleReason: string | null, staleCode: StaleCode | null): ProjectBoard {
     return {
       owner: this.project.owner,
       number: this.project.number,
