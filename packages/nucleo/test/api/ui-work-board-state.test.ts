@@ -374,15 +374,11 @@ describe('#466/AC-4 the parent chain mode', () => {
 describe('#466/AC-3 the filter with no result (466-3)', () => {
   const noCards = { cards: [], matched: 0 };
 
-  test('#466/AC-3 filters on and no card: no-result; the suggestion drops the last filter set, with the issues that come back', () => {
+  test('#502/AC-1 filters on and no card: the suggestion drops the last filter set, with the exact count from /api/work', () => {
     let s = loaded('level=item');
     s = setFilter(s, 'repo', 'ahrena-console');
     s = setFilter(s, 'status', 'in-progress');
-    const body = payload({
-      ...noCards,
-      total: 9,
-      options: { ...NO_OPTIONS, repos: [{ name: REPO, count: 2 }, { name: OTHER, count: 1 }], statuses: [{ id: 'todo', name: 'Todo', count: 3 }, { id: 'no-status', name: 'Sem status', count: 1 }] },
-    });
+    const body = payload({ ...noCards, total: 9, countsWithoutFilter: { repo: 2, status: 4 } });
     s = loadSucceeded(s, body, s.request);
     assert.equal(s.phase, 'no-result');
     assert.equal(s.view, 'no-result');
@@ -390,51 +386,55 @@ describe('#466/AC-3 the filter with no result (466-3)', () => {
     assert.equal(suggestionText(s.suggestion, s.filters, body.options), 'Sem o Status in-progress, há 4 issues neste recorte.');
   });
 
-  test('#466/AC-3 when the last filter alone does not bring any issue back, the one before it is suggested', () => {
+  test('#502/AC-1 when the last filter alone brings nothing back, the one before it is suggested', () => {
     let s = loaded('level=item');
     s = setFilter(s, 'status', 'in-progress');
     s = setFilter(s, 'repo', 'ahrena-console');
-    const body = payload({ ...noCards, total: 9, options: { ...NO_OPTIONS, statuses: [{ id: 'todo', name: 'Todo', count: 3 }], repos: [] } });
-    s = loadSucceeded(s, body, s.request);
+    s = loadSucceeded(s, payload({ ...noCards, total: 9, countsWithoutFilter: { status: 3, repo: 0 } }), s.request);
     assert.deepEqual(s.suggestion, { param: 'status', value: 'in-progress', count: 3 });
   });
 
-  test('#466/AC-3 with other filters on, the type count cannot be told from the options, which leave untyped items out', () => {
-    let s = loaded('level=item');
-    s = setFilter(s, 'repo', 'ahrena-console');
-    s = setFilter(s, 'type', 'bug');
-    const body = payload({ ...noCards, total: 9, options: { ...NO_OPTIONS, types: [{ id: 'story', count: 1 }], repos: [] } });
-    s = loadSucceeded(s, body, s.request);
-    assert.equal(s.phase, 'no-result');
-    assert.equal(s.suggestion, null, 'one story and one untyped item would come back, but types counts only the story');
-    const single = loaded('level=item&type=bug', payload({ ...noCards, total: 2, options: { ...NO_OPTIONS, types: [{ id: 'story', count: 1 }] } }));
-    assert.deepEqual(single.suggestion, { param: 'type', value: 'bug', count: 2 }, 'alone, the type counts every node of the level');
+  test('#502/AC-1 each of the six filters is suggested with its exact count, combined with another filter', () => {
+    const values = { initiative: `${REPO}#1`, epic: `${REPO}#6`, type: 'bug', label: 'ui', repo: 'ahrena-console', status: 'in-progress' };
+    for (const param of FILTER_PARAMS) {
+      const other = FILTER_PARAMS.find((p) => p !== param) as string;
+      let s = loaded('level=item');
+      s = setFilter(s, other, values[other as keyof typeof values]);
+      s = setFilter(s, param, values[param as keyof typeof values]);
+      s = loadSucceeded(s, payload({ ...noCards, total: 50, countsWithoutFilter: { [other]: 0, [param]: 7 } }), s.request);
+      assert.equal(s.phase, 'no-result', param);
+      assert.deepEqual(s.suggestion, { param, value: values[param as keyof typeof values], count: 7 }, param);
+    }
   });
 
-  test('#466/AC-3 a filtered board whose matches all left the done window still says no issue with these filters', () => {
-    const s = loaded('level=item&label=ui', payload({ cards: [], matched: 3, total: 5 }));
+  test('#502/AC-1 type, label, initiative and epic with other filters on use the count from /api/work, not the options', () => {
+    const s = loaded(
+      'level=item&epic=6&label=design-system',
+      payload({ ...noCards, total: 9, countsWithoutFilter: { epic: 0, label: 3 }, options: { ...NO_OPTIONS, labels: [{ name: 'ui', count: 2 }] } }),
+    );
+    assert.deepEqual(s.suggestion, { param: 'label', value: 'design-system', count: 3 });
+  });
+
+  test('#502/AC-1 a filtered board whose matches all left the done window still suggests the filter, with the count of the window', () => {
+    const s = loaded('level=item&label=ui', payload({ cards: [], matched: 3, total: 5, countsWithoutFilter: { label: 5 } }));
     assert.equal(s.phase, 'no-result');
-    assert.equal(s.view, 'no-result');
     assert.deepEqual(s.suggestion, { param: 'label', value: 'ui', count: 5 });
     assert.equal(loaded('level=item', payload({ cards: [], matched: 3, total: 3 })).phase, 'loaded', 'unfiltered, it is the board with Concluído trimmed');
   });
 
-  test('#466/AC-3 a single filter: the count is every node of the level, so a label suggests itself', () => {
-    const s = loaded('level=item&label=design-system', payload({ ...noCards, total: 2, filters: { ...DEFAULT_WORK_BOARD_FILTERS, label: 'design-system' } }));
+  test('#502/AC-1 a single filter: the suggestion names it with the count of the level', () => {
+    const s = loaded('level=item&label=design-system', payload({ ...noCards, total: 2, countsWithoutFilter: { label: 2 } }));
     assert.deepEqual(s.suggestion, { param: 'label', value: 'design-system', count: 2 });
     assert.equal(suggestionText(s.suggestion, s.filters, NO_OPTIONS), 'Sem a label design-system, há 2 issues neste recorte.');
   });
 
-  test('#466/AC-3 with other filters on, label, initiative and epic counts cannot be told from the options: no suggestion, only Limpar filtros', () => {
-    const s = loaded(
-      'level=item&epic=6&label=design-system',
-      payload({ ...noCards, total: 9, options: { ...NO_OPTIONS, epics: [{ key: `${REPO}#6`, repo: REPO, number: 6, title: null, count: 2 }], labels: [{ name: 'ui', count: 2 }] } }),
-    );
+  test('#502/AC-2 no positive count for any active filter: no suggestion, only Limpar filtros', () => {
+    const s = loaded('level=item&type=bug&repo=x', payload({ ...noCards, total: 9, countsWithoutFilter: { type: 0, repo: 0 } }));
     assert.equal(s.phase, 'no-result');
     assert.equal(s.suggestion, null);
   });
 
-  test('#466/AC-3 no suggestion when no single filter brings anything back', () => {
+  test('#502/AC-2 a core that sends no countsWithoutFilter gives no suggestion', () => {
     const s = loaded('level=item&type=bug&repo=x', payload({ ...noCards, total: 9 }));
     assert.equal(s.phase, 'no-result');
     assert.equal(s.suggestion, null);

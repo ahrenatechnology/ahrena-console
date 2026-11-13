@@ -9,7 +9,6 @@ export const FILTER_PARAMS = FILTER_FIELDS.map((f) => f.param);
 const API_PATH = '/api/work';
 const DEFAULT_LEVEL = 'item';
 const CHILD_LEVEL = { initiative: 'epic', epic: 'item' };
-const SUMMED_OPTIONS = { repo: 'repos', status: 'statuses' };
 
 const isSet = (v) => v !== null && v !== undefined && v !== '';
 const clean = (v) => (isSet(v) ? String(v).trim() || null : null);
@@ -58,18 +57,14 @@ function dataPhase(filters, data) {
   return data.stale ? 'stale' : 'loaded';
 }
 
-function countWithout(param, filters, data) {
-  const active = FILTER_PARAMS.filter((p) => isSet(filters[p]));
-  if (active.length === 1 && active[0] === param) return data.total ?? 0;
-  const list = SUMMED_OPTIONS[param] ? data.options?.[SUMMED_OPTIONS[param]] : null;
-  return list ? list.reduce((sum, o) => sum + (o.count ?? 0), 0) : null;
-}
+// The exact count comes from GET /api/work (issue 502); a core that does not send it suggests nothing.
+const countWithout = (param, data) => data.countsWithoutFilter?.[param] ?? 0;
 
 function suggestionFor(filters, placed, data) {
   const active = FILTER_PARAMS.filter((p) => isSet(filters[p]));
   const order = [...placed.filter((p) => active.includes(p)), ...active.filter((p) => !placed.includes(p))].reverse();
   for (const param of order) {
-    const count = countWithout(param, filters, data);
+    const count = countWithout(param, data);
     if (count) return { param, value: filters[param], count };
   }
   return null;
