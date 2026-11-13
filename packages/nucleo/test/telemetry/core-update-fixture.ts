@@ -55,7 +55,7 @@ export class Scenario {
     return { command: [process.execPath, FAKE_SSH, this.file, '/opt/node/bin/node', '/srv/ahrena-console/packages/nucleo/src/owner/cli.ts', 'remote-credential', '--port', '4720'], timeoutSeconds: 20 };
   }
 
-  /** The `connection` of a machine with only a derivable credential: no `connection.update`. */
+  /** The `connection` of a machine with only a derivable credential: no `connection.update`. (issue 484) */
   derivedConnection(over: Partial<ConnectionConfig> = {}): ConnectionConfig {
     return this.connection({ update: undefined, credential: this.derivableCredential(), ...over });
   }

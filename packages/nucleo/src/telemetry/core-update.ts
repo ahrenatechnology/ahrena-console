@@ -160,13 +160,13 @@ export function fileAutoAttempts(file: string, log?: (message: string) => void):
 }
 
 export interface MachineUpdate {
-  /** There is a valid command, declared or derived, and machines.json parses. */
+  /** There is a valid command, declared or derived, and machines.json parses. (decision 0024 section 3) */
   configured: boolean;
   /** Where the command came from; `null` when there is none (decision 0024 section 3). */
   source: UpdateSource | null;
-  /** The run `state` talks about was started by the Mac, not by a click; `false` when there is none. */
+  /** The run `state` talks about was started by the Mac, not by a click; `false` when there is none. (decision 0024 section 3) */
   automatic: boolean;
-  /** The automatic attempt for the app's version; `null` while there was none for this target. */
+  /** The automatic attempt for the app's version; `null` while there was none for this target. (decision 0024 section 3) */
   auto: AutoAttempt | null;
   problem: UpdateProblemKind | null;
   /** Why the `connection.update` is invalid (a fixed word), when `problem` is `invalid`. */
@@ -196,7 +196,7 @@ export interface MachineUpdate {
   readyUntil: string | null;
   /** The pt-BR text of the state, rendered (`core-update-texts.ts`); `null` while there is nothing to say. */
   message: { key: string; text: string } | null;
-  /** When `problem` is `invalid` and the credential allows it: the block to compare with what was written (the núcleo never writes the file). */
+  /** When `problem` is `invalid` and the credential allows it: the block to compare with what was written (the núcleo never writes the file). (decision 0024 section 3) */
   setup: { block: string | null };
 }
 
@@ -239,13 +239,13 @@ export interface CoreUpdaterOptions {
   msPerSecond?: number;
   killGraceMs?: number;
   log?: (message: string) => void;
-  /** Where the spent automatic attempts are kept; default in memory (production: `fileAutoAttempts`). */
+  /** Where the spent automatic attempts are kept; default in memory (production: `fileAutoAttempts`). (decision 0024 section 2) */
   autoAttempts?: AutoAttempts;
 }
 
 interface Job {
   kind: 'check' | 'update';
-  /** Started by the Mac (`considerAuto` or the update it chains), not by a click. */
+  /** Started by the Mac (`considerAuto` or the update it chains), not by a click. (decision 0024 section 2) */
   automatic: boolean;
   state: UpdateState;
   key: string | null;
@@ -275,7 +275,7 @@ interface Entry {
   job: Job | null;
   /** A good check, kept until an update uses it or it expires. */
   check: { okMs: number; commandKey: string } | null;
-  /** The automatic attempt of this process, for the target it ran (the spent store survives a restart, this does not). */
+  /** The automatic attempt of this process, for the target it ran (the spent store survives a restart, this does not). (decision 0024 section 2) */
   auto: AutoAttempt | null;
 }
 
@@ -399,7 +399,7 @@ export class CoreUpdater {
     };
   }
 
-  /** The automatic attempt for the app's version: this process's own, else a spent one from the store reads `failed`. */
+  /** The automatic attempt for the app's version: this process's own, else a spent one from the store reads `failed`. (decision 0024 section 2) */
   private autoOf(machineId: string): AutoAttempt | null {
     const target = this.o.appVersion;
     const a = this.entries.get(machineId)?.auto;
@@ -412,7 +412,7 @@ export class CoreUpdater {
     this.changed(machineId);
   }
 
-  /** Spends the attempt for the app's version; marks it failed unless this process already has one for it (kept as is). */
+  /** Spends the attempt for the app's version; marks it failed unless this process already has one for it (kept as is). (decision 0024 section 2) */
   private spendAttempt(machineId: string): void {
     const target = this.o.appVersion;
     this.attempts.spend(machineId, target);
@@ -439,19 +439,26 @@ export class CoreUpdater {
     if (!conn || ctx.fileInvalid || !conn.credential || !resolveUpdateCommand(conn)) return null;
     const e = this.entries.get(machineId);
     if (e?.job?.alive || this.starting.has(machineId)) return null;
-    // A good check waiting for the person's confirmation is theirs: running another would cost them check-required.
+    // A good check waiting for the person's confirmation is theirs: running another would cost them check-required. (decision 0024 section 2)
     if (e?.check && this.now() - e.check.okMs <= CHECK_VALID_MS) return null;
     if (this.attempts.spent(machineId) === target) return null;
     this.attempts.spend(machineId, target);
     this.setAuto(machineId, 'running');
     try {
       const r = await this.start(machineId, 'check', true);
-      if (r.kind !== 'started') this.setAuto(machineId, 'failed');
+      if (r.kind !== 'started') this.autoNotStarted(machineId, 'check', r);
       return r;
     } catch {
+      this.o.log?.(`update (${machineId}): automatic check could not start`);
       this.setAuto(machineId, 'failed');
       return null;
     }
+  }
+
+  /** An automatic start the machine refused: no one is waiting on it, so the log says why it failed (decision 0024 section 2). */
+  private autoNotStarted(machineId: string, kind: 'check' | 'update', r: UpdateResult): void {
+    this.o.log?.(`update (${machineId}): automatic ${kind} not started: ${r.kind}${r.kind === 'refused' ? ` ${r.reason}` : ''}`);
+    this.setAuto(machineId, 'failed');
   }
 
   check(machineId: string): Promise<UpdateResult> {
@@ -672,16 +679,19 @@ export class CoreUpdater {
     else if (job.kind === 'check') e.check = null;
     this.o.log?.(`update (${machineId}): ${job.kind} ${job.state}${job.phase ? ` at ${job.phase}` : ''}${code === null ? '' : ` exit ${code}`}`);
     this.changed(machineId);
-    // 21 (no credential command) and 22 (needs --allow-disconnect) never lead to an update: they spend the attempt.
+    // 21 (no credential command) and 22 (needs --allow-disconnect) never lead to an update: they spend the attempt. (decision 0024 section 2)
     if (code === 21 || code === 22) this.spendAttempt(machineId);
     if (job.automatic) {
       if (job.kind === 'check' && c.state === 'ready') {
-        // The good check pays for the update at once; no confirm window, which exists for the person.
+        // The good check pays for the update at once; no confirm window, which exists for the person. (decision 0024 section 2)
         this.start(machineId, 'update', true).then(
           (r) => {
-            if (r.kind !== 'started') this.setAuto(machineId, 'failed');
+            if (r.kind !== 'started') this.autoNotStarted(machineId, 'update', r);
           },
-          () => this.setAuto(machineId, 'failed'),
+          () => {
+            this.o.log?.(`update (${machineId}): automatic update could not start`);
+            this.setAuto(machineId, 'failed');
+          },
         );
       } else this.setAuto(machineId, job.kind === 'update' && c.state === 'succeeded' ? 'succeeded' : 'failed');
     }

@@ -31,6 +31,7 @@ interface SetupOptions {
   appVersion?: string;
   autoAttempts?: AutoAttempts;
   scenario?: Scenario;
+  lookup?: () => Promise<UpdateLookup>;
 }
 
 function setup(over: SetupOptions = {}) {
@@ -42,7 +43,7 @@ function setup(over: SetupOptions = {}) {
   let skew = 0;
   const events = { updated: [] as string[], logs: [] as string[] };
   const u = new CoreUpdater({
-    lookup: async (): Promise<UpdateLookup> => (connection === undefined ? { kind: 'unknown' } : fileInvalid ? { kind: 'invalid-file' } : { kind: 'ok', connection }),
+    lookup: over.lookup ?? (async (): Promise<UpdateLookup> => (connection === undefined ? { kind: 'unknown' } : fileInvalid ? { kind: 'invalid-file' } : { kind: 'ok', connection })),
     context: () => ({ connection, fileInvalid }),
     appVersion: over.appVersion ?? '0.0.17',
     telemetryVersion: 1,
@@ -73,7 +74,7 @@ const DERIVED = ['/opt/node/bin/node', '--disable-warning=ExperimentalWarning', 
 const TAIL = ['--ref', 'app-v0.0.17', '--mac-telemetry-version', '1', '--mac-credential-command', 'yes', '--progress', 'json'];
 const FORBIDDEN = ['--allow-disconnect', '--force', '--core-options'];
 
-/** One automatic attempt that goes to its end: the check, and the update when the check passes. */
+/** One automatic attempt that goes to its end: the check, and the update when the check passes. (issue 484) */
 async function auto(t: ReturnType<typeof setup>, runs: number) {
   const r = await t.u.considerAuto(ID);
   assert.equal(r?.kind, 'started');
@@ -82,7 +83,7 @@ async function auto(t: ReturnType<typeof setup>, runs: number) {
   await t.u.settled(ID);
 }
 
-/** A manual check then update through the route path (Tentar de novo). */
+/** A manual check then update through the route path (Tentar de novo). (issue 484) */
 async function manual(t: ReturnType<typeof setup>) {
   t.s.set({ steps: UPDATE_OK, exit: 0, check: { steps: CHECK_OK, exit: 0 } });
   assert.equal((await t.u.check(ID)).kind, 'started');
@@ -137,6 +138,17 @@ describe('issue 484 the update command derived from the credential', () => {
     assert.equal(t.view().auto, null);
   });
 
+  test('#484/OBS-1 an automatic start the machine refuses or that rejects leaves one log line and a failed attempt', async () => {
+    const refused = setup({ lookup: async () => ({ kind: 'invalid-file' }) });
+    assert.equal((await refused.u.considerAuto(ID))?.kind, 'refused');
+    assert.ok(refused.events.logs.includes(`update (${ID}): automatic check not started: refused invalid-file`), refused.events.logs.join('\n'));
+    assert.equal(refused.view().auto?.state, 'failed');
+    const rejected = setup({ lookup: async () => Promise.reject(new Error('secret-looking detail')) });
+    assert.equal(await rejected.u.considerAuto(ID), null);
+    assert.deepEqual(rejected.events.logs, [`update (${ID}): automatic check could not start`]);
+    assert.equal(rejected.view().auto?.state, 'failed');
+  });
+
   test('#484/AC-1 a credential that does not have the known shape is missing, with the 0024 text', () => {
     const t = setup({ connection: (s) => s.connection({ update: undefined }) });
     const v = t.view();
@@ -172,7 +184,7 @@ describe('issue 484 the automatic run, once per machine and target', () => {
     assert.deepEqual(t.s.runs()[1]!.argv, [...DERIVED, ...TAIL]);
     assert.deepEqual(JSON.parse(readFileSync(file, 'utf8')), { [ID]: '0.0.17' });
 
-    // The remote still answers the old version: no second attempt, from this núcleo or a new one reading the file.
+    // The remote still answers the old version: no second attempt, from this núcleo or a new one reading the file. (issue 484)
     assert.equal(await t.u.considerAuto(ID), null);
     assert.equal(await t.u.considerAuto(ID), null);
     const again = setup({ scenario: t.s, autoAttempts: fileAutoAttempts(file) });
@@ -180,7 +192,7 @@ describe('issue 484 the automatic run, once per machine and target', () => {
     assert.deepEqual(again.view().auto, { target: '0.0.17', state: 'failed' }, 'after a restart a spent attempt reads failed, without the job');
     assert.equal(t.s.runs().length, 2);
 
-    // A new target arms it again.
+    // A new target arms it again. (issue 484)
     const next = setup({ scenario: t.s, appVersion: '0.0.18', autoAttempts: fileAutoAttempts(file) });
     assert.equal(next.view().auto, null);
     await auto(next, 4);
@@ -238,7 +250,7 @@ describe('issue 484 the automatic run, once per machine and target', () => {
     await t.u.settled(ID);
     assert.equal(t.view().state, 'succeeded');
 
-    // A good check left unused past its window no longer holds the automatic run.
+    // A good check left unused past its window no longer holds the automatic run. (issue 484)
     const idle = setup({ scenario: t.s });
     await idle.u.check(ID);
     await idle.u.settled(ID);
@@ -386,7 +398,7 @@ describe('issue 484 the file of spent attempts', () => {
     const file = join(dir, 'core-update-auto.json');
     fileAutoAttempts(file).spend(ID, '0.0.17');
     assert.equal(statSync(file).mode & 0o777, 0o600);
-    // A plain file where the folder should be: neither read nor write can reach the path.
+    // A plain file where the folder should be: neither read nor write can reach the path. (issue 484)
     const blocker = join(dir, 'blocker');
     writeFileSync(blocker, '');
     const logs: string[] = [];

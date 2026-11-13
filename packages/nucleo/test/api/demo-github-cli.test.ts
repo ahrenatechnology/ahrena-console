@@ -51,12 +51,17 @@ describe('#241 --demo-github through the command line', () => {
     const board = await get(base, '/api/project');
     assert.equal(board.status, 200);
     assert.deepEqual(board.json.selection, { owner: 'exemplo', number: 3, field: 'Status', from: 'demo' });
+    // #465 the work board reads the same demo Project: not empty.
+    const work = await get(base, '/api/work');
+    assert.equal(work.status, 200);
+    assert.equal(work.json.project.owner, 'exemplo');
+    assert.ok(work.json.columns.reduce((n: number, c: any) => n + c.count, 0) > 0, 'the demo work board has cards');
   });
 
   test('disconnected: 409 github-not-connected on the screens; --demo-project none', async () => {
     const base = await demo('--demo-github', 'disconnected', '--demo-project', 'none');
     assert.equal((await get(base, '/api/connections')).json.github.state, 'disconnected');
-    for (const path of ['/api/repos', '/api/project', '/api/dev-console', '/api/adrs']) {
+    for (const path of ['/api/repos', '/api/project', '/api/work', '/api/dev-console', '/api/adrs']) {
       assert.deepEqual(await get(base, path), { status: 409, json: { error: 'github-not-connected' } }, path);
     }
   });

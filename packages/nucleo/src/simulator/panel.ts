@@ -15,6 +15,7 @@ import { linkSession, markPromoted, registerDecision, type DecisionDraft } from 
 import type { ChildrenResult, WorkSource } from '../github/source.ts';
 import type { CiCounts, LinkedPullRequest, WorkDetail, WorkNode } from '../github/work.ts';
 import { stageOf } from '../github/work.ts';
+import type { LocateFolder } from '../dev-console/sessions.ts';
 import { ROOT } from './vocabulary.ts';
 
 /** The CI checks as in P1: "CI ✓ 6/6", "CI … 3/7", "CI ✕ 2 falhas". */
@@ -457,6 +458,13 @@ export class SimulatorWorkSource implements WorkSource {
     return { key, state: 'OPEN', pullRequests: prs, stage: stageOf('OPEN', prs) };
   }
 }
+
+/**
+ * #465 the demo's folder → repository and branch for the work board: every demo folder is in the
+ * simulator's repository, and only "this session"'s folder is on an issue branch, so the scenario's
+ * session links to its issue and the others link to none.
+ */
+export const simulatorWorkBoardLocate: LocateFolder = async (cwd) => ({ repo: SIMULATOR_REPO, branch: cwd === current.cwd ? (current.session?.branch ?? null) : null });
 
 /** P9's parent session: yesterday's, before /clear. It only exists in the decisions port. */
 export const P9_PARENT = 'sim-panel-kanban-yesterday';
