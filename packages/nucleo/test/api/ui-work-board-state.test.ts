@@ -249,8 +249,9 @@ describe('#466/AC-2 levels and drill-down (466-1)', () => {
     const epic = card(6, { level: 'epic', type: 'epic', column: 'blocked' });
     const before = loaded('level=epic&initiative=1&label=ui', payload({ cards: [epic], filters: { ...DEFAULT_WORK_BOARD_FILTERS, level: 'epic' } }));
     const s = drill(before, epic);
-    assert.deepEqual(s.filters, { level: 'item', initiative: '1', epic: '6', type: null, label: 'ui', repo: null, status: null });
-    assert.equal(s.url, '/ui/work?level=item&initiative=1&epic=6&label=ui');
+    assert.deepEqual(s.filters, { level: 'item', initiative: '1', epic: `${REPO}#6`, type: null, label: 'ui', repo: null, status: null }, 'with another filter on, the options may hide a same-numbered epic: the key');
+    assert.equal(s.url, `/ui/work?level=item&initiative=1&epic=${encodeURIComponent(`${REPO}#6`)}&label=ui`);
+    assert.equal(parseWorkBoardFilters(new URL(s.api, 'http://127.0.0.1').searchParams).epic, `${REPO}#6`);
     assert.equal(s.navigation, 'push');
     assert.equal(s.busy, true);
   });
@@ -271,9 +272,17 @@ describe('#466/AC-2 levels and drill-down (466-1)', () => {
     assert.equal(parseWorkBoardFilters(new URL(s.api, 'http://127.0.0.1').searchParams).epic, `${OTHER}#6`);
   });
 
-  test('#466/AC-2 an item card has no children to drill into', () => {
-    const before = loaded('level=item');
+  test('#466/AC-2 Ver filhos with no other filter on and no same-numbered parent uses the bare number', () => {
+    const epic = card(6, { level: 'epic', type: 'epic' });
+    const s = drill(loaded('level=epic', payload({ cards: [epic], filters: { ...DEFAULT_WORK_BOARD_FILTERS, level: 'epic' } })), epic);
+    assert.equal(s.url, '/ui/work?level=item&epic=6');
+  });
+
+  test('#466/AC-2 an item card, or no card, has no children to drill into', () => {
+    const before = loaded('level=epic');
     assert.equal(drill(before, card(500)), before);
+    assert.equal(drill(before, null), before);
+    assert.equal(drill(before, undefined), before);
   });
 
   test('#466/AC-2 the path goes back up: the initiative step drops the epic and shows the epics', () => {
@@ -283,6 +292,32 @@ describe('#466/AC-2 levels and drill-down (466-1)', () => {
     assert.equal(up.navigation, 'push');
     const epic = selectPath(loaded('level=plan&initiative=1&epic=6'), { param: 'epic' });
     assert.equal(epic.url, '/ui/work?level=item&initiative=1&epic=6');
+  });
+
+  test('#466/AC-2 while a new slice is read, the board shown is still judged by the filters it was read for', () => {
+    const before = loaded('level=item');
+    const s = setFilter(before, 'type', 'bug');
+    assert.equal(s.url, '/ui/work?level=item&type=bug', 'the chips and the URL show the new filter');
+    assert.equal(s.phase, 'refreshing');
+    assert.equal(s.view, 'board');
+    assert.equal(s.chainMode, 'compact', 'the cards on screen were read with no filter');
+    assert.deepEqual(s.dataFilters, before.filters);
+    const empty = loaded('level=item&label=ui', payload({ cards: [], matched: 0, total: 1 }));
+    const widened = setFilter(empty, 'label', null);
+    assert.equal(widened.view, 'no-result', 'the old slice keeps its own view until the new one arrives');
+  });
+
+  test('#466/AC-2 a failed read of a new slice does not keep the old slice under the new chips', () => {
+    const before = loaded('level=item');
+    const s = setLevel(before, 'epic');
+    const failed = loadFailed(s, { error: 'github-unavailable', reason: 'timeout' }, s.request);
+    assert.equal(failed.phase, 'error');
+    assert.equal(failed.view, 'failure');
+    assert.equal(failed.data, null);
+    assert.deepEqual(failed.error, { error: 'github-unavailable', reason: 'timeout' });
+    const retry = startLoad(failed, { refresh: true });
+    assert.equal(retry.phase, 'loading');
+    assert.equal(retry.api, '/api/work?level=epic&refresh=1', 'Tentar agora reads the current filters');
   });
 
   test('#466/AC-2 back and forward in the browser follow the URL without pushing it again', () => {
@@ -342,7 +377,8 @@ describe('#466/AC-4 the parent chain mode', () => {
   test('#466/AC-4 full when any of the six filters is on, as after a drill', () => {
     for (const param of FILTER_PARAMS) assert.equal(initialState(`level=item&${param}=x`).chainMode, 'full', param);
     const epic = card(6, { level: 'epic', type: 'epic' });
-    assert.equal(drill(loaded('level=epic', payload({ cards: [epic] })), epic).chainMode, 'full');
+    const drilled = drill(loaded('level=epic', payload({ cards: [epic] })), epic);
+    assert.equal(loadSucceeded(drilled, payload(), drilled.request).chainMode, 'full');
   });
 });
 
@@ -367,11 +403,31 @@ describe('#466/AC-3 the filter with no result (466-3)', () => {
 
   test('#466/AC-3 when the last filter alone does not bring any issue back, the one before it is suggested', () => {
     let s = loaded('level=item');
-    s = setFilter(s, 'type', 'bug');
+    s = setFilter(s, 'status', 'in-progress');
     s = setFilter(s, 'repo', 'ahrena-console');
-    const body = payload({ ...noCards, total: 9, options: { ...NO_OPTIONS, types: [{ id: 'story', count: 3 }], repos: [] } });
+    const body = payload({ ...noCards, total: 9, options: { ...NO_OPTIONS, statuses: [{ id: 'todo', name: 'Todo', count: 3 }], repos: [] } });
     s = loadSucceeded(s, body, s.request);
-    assert.deepEqual(s.suggestion, { param: 'type', value: 'bug', count: 3 });
+    assert.deepEqual(s.suggestion, { param: 'status', value: 'in-progress', count: 3 });
+  });
+
+  test('#466/AC-3 with other filters on, the type count cannot be told from the options, which leave untyped items out', () => {
+    let s = loaded('level=item');
+    s = setFilter(s, 'repo', 'ahrena-console');
+    s = setFilter(s, 'type', 'bug');
+    const body = payload({ ...noCards, total: 9, options: { ...NO_OPTIONS, types: [{ id: 'story', count: 1 }], repos: [] } });
+    s = loadSucceeded(s, body, s.request);
+    assert.equal(s.phase, 'no-result');
+    assert.equal(s.suggestion, null, 'one story and one untyped item would come back, but types counts only the story');
+    const single = loaded('level=item&type=bug', payload({ ...noCards, total: 2, options: { ...NO_OPTIONS, types: [{ id: 'story', count: 1 }] } }));
+    assert.deepEqual(single.suggestion, { param: 'type', value: 'bug', count: 2 }, 'alone, the type counts every node of the level');
+  });
+
+  test('#466/AC-3 a filtered board whose matches all left the done window still says no issue with these filters', () => {
+    const s = loaded('level=item&label=ui', payload({ cards: [], matched: 3, total: 5 }));
+    assert.equal(s.phase, 'no-result');
+    assert.equal(s.view, 'no-result');
+    assert.deepEqual(s.suggestion, { param: 'label', value: 'ui', count: 5 });
+    assert.equal(loaded('level=item', payload({ cards: [], matched: 3, total: 3 })).phase, 'loaded', 'unfiltered, it is the board with Concluído trimmed');
   });
 
   test('#466/AC-3 a single filter: the count is every node of the level, so a label suggests itself', () => {
@@ -409,7 +465,7 @@ describe('#465/AC-5 the state module is pure and English (ADR-0009)', () => {
 
   test('#465/AC-5 every key and value of the state is English', () => {
     const s = loaded('level=item&label=ui');
-    assert.deepEqual(Object.keys(s).sort(), ['api', 'busy', 'chainMode', 'data', 'error', 'filters', 'navigation', 'phase', 'placed', 'request', 'refresh', 'stale', 'staleReason', 'suggestion', 'url', 'view'].sort());
+    assert.deepEqual(Object.keys(s).sort(), ['api', 'busy', 'chainMode', 'data', 'dataFilters', 'error', 'filters', 'navigation', 'phase', 'placed', 'request', 'refresh', 'stale', 'staleReason', 'suggestion', 'url', 'view'].sort());
     for (const value of [s.phase, s.view, s.chainMode]) assert.match(value, /^[a-z-]+$/);
   });
 });

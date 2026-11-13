@@ -9,12 +9,13 @@ export const FILTER_PARAMS = FILTER_FIELDS.map((f) => f.param);
 const API_PATH = '/api/work';
 const DEFAULT_LEVEL = 'item';
 const CHILD_LEVEL = { initiative: 'epic', epic: 'item' };
-const PARENT_PARAMS = new Set(['initiative', 'epic']);
-const SUMMED_OPTIONS = { type: 'types', repo: 'repos', status: 'statuses' };
+const SUMMED_OPTIONS = { repo: 'repos', status: 'statuses' };
 
 const isSet = (v) => v !== null && v !== undefined && v !== '';
 const clean = (v) => (isSet(v) ? String(v).trim() || null : null);
 const anyFilter = (filters) => FILTER_PARAMS.some((p) => isSet(filters[p]));
+const sameFilters = (a, b) => Boolean(a && b) && ['level', ...FILTER_PARAMS].every((p) => a[p] === b[p]);
+const noCards = (data) => (data.columns ?? []).every((c) => !(c.cards ?? []).length);
 
 function readSearch(search) {
   const query = new URLSearchParams(search ?? '');
@@ -51,9 +52,8 @@ export function apiPath(filters, { refresh = false } = {}) {
 }
 
 function dataPhase(filters, data) {
-  const matched = data.matched ?? 0;
   const filtered = anyFilter(filters);
-  if (matched === 0 && filtered) return 'no-result';
+  if (filtered && noCards(data)) return 'no-result';
   if ((data.total ?? 0) === 0 && !filtered && filters.level === DEFAULT_LEVEL) return 'empty';
   return data.stale ? 'stale' : 'loaded';
 }
@@ -83,18 +83,19 @@ function viewOf(phase, data, filters) {
 }
 
 function derive(state) {
-  const { filters, phase, data, placed } = state;
-  const shown = data ? dataPhase(filters, data) : null;
+  const { filters, phase, data, dataFilters, placed } = state;
+  const shownFor = data ? dataFilters : filters;
+  const shown = data ? dataPhase(dataFilters, data) : null;
   return {
     ...state,
     url: boardUrl(filters),
     api: apiPath(filters, { refresh: state.refresh }),
-    chainMode: anyFilter(filters) ? 'full' : 'compact',
+    chainMode: anyFilter(shownFor) ? 'full' : 'compact',
     busy: phase === 'loading' || phase === 'refreshing',
-    view: viewOf(phase, data, filters),
+    view: viewOf(phase, data, shownFor),
     stale: Boolean(data?.stale),
     staleReason: data?.staleReason ?? null,
-    suggestion: data && shown === 'no-result' ? suggestionFor(filters, placed, data) : null,
+    suggestion: data && shown === 'no-result' ? suggestionFor(dataFilters, placed, data) : null,
   };
 }
 
@@ -116,7 +117,7 @@ export function initialState(search) {
   const { filters, placed } = readSearch(search);
   const given = String(search ?? '').replace(/^\?/, '');
   const navigation = given === searchFromFilters(filters) ? null : 'replace';
-  return derive({ filters, placed, phase: 'loading', data: null, error: null, refresh: false, request: 1, navigation });
+  return derive({ filters, placed, phase: 'loading', data: null, dataFilters: null, error: null, refresh: false, request: 1, navigation });
 }
 
 /** The browser went back or forward (issue 466): follow the URL, without pushing it again. */
@@ -128,18 +129,20 @@ export function locationChanged(state, search) {
 /** GET /api/work answered 200 for `request` (issues 465 and 466); an answer to an older request is ignored. */
 export function loadSucceeded(state, payload, request) {
   if (request !== state.request) return state;
-  return derive({ ...state, data: payload, error: null, refresh: false, navigation: null, phase: dataPhase(state.filters, payload) });
+  return derive({ ...state, data: payload, dataFilters: state.filters, error: null, refresh: false, navigation: null, phase: dataPhase(state.filters, payload) });
 }
 
 /**
- * GET /api/work failed for `request` with the error body (`{ error, param?, reason? }`, issue 465). With
- * nothing on screen the phase is `error`; with a board, the board stays in its phase and `error` is reported
- * beside it (ADR-0001). An answer to an older request is ignored.
+ * GET /api/work failed for `request` with the error body (`{ error, param?, reason? }`, issue 465). A failed
+ * Atualizar of the slice on screen keeps the board in its phase with `error` beside it (ADR-0001); a failed
+ * read of a new slice, or with nothing on screen, is the phase `error` with no board. An answer to an older
+ * request is ignored.
  */
 export function loadFailed(state, error, request) {
   if (request !== state.request) return state;
-  const phase = state.data ? dataPhase(state.filters, state.data) : 'error';
-  return derive({ ...state, error, refresh: false, navigation: null, phase });
+  const base = { ...state, error, refresh: false, navigation: null };
+  if (state.data && sameFilters(state.filters, state.dataFilters)) return derive({ ...base, phase: dataPhase(state.dataFilters, state.data) });
+  return derive({ ...base, data: null, dataFilters: null, phase: 'error' });
 }
 
 /** Set one of the six filters (issue 466); `null` or empty removes it. The new URL is pushed and loaded. */
@@ -171,14 +174,17 @@ function parentsOnBoard(state, param) {
 }
 
 /**
- * Ver filhos on an initiative or epic card (issue 466): one level down, filtered by that parent, by its
- * number or, when two repos share it, by its key; the other filters stay. An item has no children here.
+ * Ver filhos on an initiative or epic card (issue 466): one level down, filtered by that parent; the other
+ * filters stay. The filter is the parent's number only when no other filter is on and no parent on the board
+ * shares it, else its key. An item has no children here.
  */
 export function drill(state, card) {
-  const param = card?.level ?? state.filters.level;
+  if (!card) return state;
+  const param = card.level ?? state.filters.level;
   const level = CHILD_LEVEL[param];
-  if (!level || !PARENT_PARAMS.has(param)) return state;
-  const value = ancestorValue({ key: card.key, number: card.number }, parentsOnBoard(state, param));
+  if (!level) return state;
+  const otherFilter = FILTER_PARAMS.some((p) => p !== param && isSet(state.filters[p]));
+  const value = otherFilter ? card.key : ancestorValue({ key: card.key, number: card.number }, parentsOnBoard(state, param));
   const placed = [...state.placed.filter((p) => p !== param), param];
   return navigate(state, { ...state.filters, level, [param]: value }, placed);
 }
