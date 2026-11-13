@@ -238,7 +238,8 @@ export async function mount(area, ctx) {
     if (shown === drawn) return;
     drawn = shown;
     const active = globalThis.document?.activeElement;
-    const key = active && area.contains(active) ? focusKey(active) : pendingFocus;
+    const nowhere = !active || active === globalThis.document?.body;
+    const key = active && area.contains(active) ? focusKey(active) : nowhere ? pendingFocus : null;
     area.replaceChildren(...nodes());
     restoreFocus(key);
   }

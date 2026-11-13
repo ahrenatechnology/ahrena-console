@@ -214,6 +214,8 @@ async function apiNumbers(core: Core, query = '') {
   return view.columns.flatMap((c) => c.cards.map((card) => card.number));
 }
 
+const showing = (s: Screen, expected: number[]) => JSON.stringify(s.numbers()) === JSON.stringify(expected);
+
 function choose(area: ElementoFalso, param: string, value: string) {
   const select = area.querySelector(`select[data-param="${param}"]`);
   assert.ok(select, `the ${param} select is on screen`);
@@ -313,8 +315,9 @@ describe('#466/AC-3 the filters live in the URL, in English, and combine by AND'
 
   test('#466/AC-3 choosing a filter pushes the new URL and reads the API with it; only its cards stay', async () => {
     const s = await open(core);
+    const bugs = await apiNumbers(core, '?level=item&type=bug');
     choose(s.area, 'type', 'bug');
-    await until(() => s.reads.length === 2 && s.area.querySelector('.wb-chip[data-param="type"]') !== null && s.numbers().length === 1);
+    await until(() => showing(s, bugs));
     assert.deepEqual(pushed, ['/ui/work?level=item&type=bug']);
     assert.equal(s.reads[1], '/api/work?level=item&type=bug');
     assert.deepEqual(s.numbers(), [64], 'the demo has one bug');
@@ -325,24 +328,29 @@ describe('#466/AC-3 the filters live in the URL, in English, and combine by AND'
   test('#466/AC-3 two filters combine by AND, the chip × takes one out and Limpar filtros takes them all, each pushed', async () => {
     const s = await open(core, '/ui/work?level=item&type=story&status=ready');
     assert.deepEqual(s.numbers().sort(), [35, 36], 'stories in Ready');
+    const stories = await apiNumbers(core, '?level=item&type=story');
+    assert.ok(stories.length > 2);
     s.area.querySelector('.wb-chip[data-param="status"] .wb-chip-remove')!.click();
-    await until(() => s.reads.length === 2 && !s.area.querySelector('.wb-chip[data-param="status"]') && s.numbers().length > 2);
+    await until(() => showing(s, stories));
+    assert.equal(s.area.querySelector('.wb-chip[data-param="status"]'), null);
     assert.deepEqual(pushed, ['/ui/work?level=item&type=story']);
-    s.button('Limpar filtros').click();
     const all = await apiNumbers(core, '?level=item');
-    await until(() => s.reads.length === 3 && !s.area.querySelector('.wb-chip') && s.numbers().length === all.length);
+    s.button('Limpar filtros').click();
+    await until(() => showing(s, all));
+    assert.equal(s.area.querySelector('.wb-chip'), null);
     assert.deepEqual(pushed, ['/ui/work?level=item&type=story', '/ui/work?level=item']);
     assert.deepEqual(s.numbers(), all);
   });
 
   test('#466/AC-3 the link reopens the same slice: mounting the pushed URL again reads the same filters', async () => {
     const first = await open(core);
+    const stories = await apiNumbers(core, '?level=item&type=story');
     choose(first.area, 'type', 'story');
-    await until(() => first.reads.length === 2 && first.area.querySelector('.wb-chip') !== null);
+    await until(() => showing(first, stories));
     const link = pushed.at(-1)!;
     const again = await open(core, link);
     assert.deepEqual(again.reads, ['/api/work?level=item&type=story']);
-    assert.deepEqual(again.numbers(), first.numbers());
+    assert.deepEqual(again.numbers(), stories);
   });
 
   test('#466/AC-3 Copiar link puts the absolute link of the slice in the clipboard and says so', async () => {
@@ -448,12 +456,13 @@ describe('#465 the empty project and #466 the slice with no result', () => {
     const box = s.area.querySelector('.wb-no-result');
     assert.ok(box, 'the no-result line is on screen');
     assert.match(texto(box), /Nenhuma issue com estes filtros\./);
-    const total = (await apiNumbers(core, '?level=item')).length;
+    const everything = await apiNumbers(core, '?level=item');
+    const total = everything.length;
     assert.match(texto(box), new RegExp(`Sem a label nenhuma, há ${total} issues neste recorte\\.`));
     assert.deepEqual(s.columns(), WORK_BOARD_COLUMNS.map((c) => c.id));
     assert.equal(s.numbers().length, 0);
     s.button('Limpar filtros').click();
-    await until(() => s.numbers().length === total);
+    await until(() => showing(s, everything));
     assert.deepEqual(pushed, ['/ui/work?level=item']);
   });
 
@@ -707,6 +716,22 @@ describe('#465 the keyboard focus survives the redraws', () => {
     hold.release();
     await until(() => s.refresh().getAttribute('aria-busy') === null);
     assert.equal(active(), s.refresh(), 'the new Atualizar has the focus');
+  });
+
+  test('#465 a click outside the screen during a read keeps its focus: Atualizar does not take it back', async () => {
+    const hold = held();
+    const s = await open(core, '/ui/work', async (route, http) => {
+      if (route.includes('refresh=1')) await hold.gate;
+      return http(route);
+    });
+    s.refresh().focus();
+    s.refresh().click();
+    await until(() => s.reads.length === 2);
+    const outside = new ElementoFalso('button');
+    outside.focus();
+    hold.release();
+    await until(() => s.refresh().getAttribute('aria-busy') === null);
+    assert.equal(active(), outside, 'the focus stays where the person put it');
   });
 
   test('#465 a quiet re-read keeps the focus on the card link that had it', async () => {
