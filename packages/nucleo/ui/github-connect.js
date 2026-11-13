@@ -45,6 +45,7 @@ export const CONNECT_TEXT = {
   repos: 'Repositórios lê as organizações e os repositórios da sua conta: atividade, issues, PRs, CI e as sessões que mexem em cada um.',
   repo: 'O repositório mostra as métricas do GitHub: commits, issues, PRs, CI, linguagens e contribuidores, num período que você escolhe.',
   project: 'O Kanban do projeto mostra um GitHub Project por Status, e arrastar um card muda o Status lá. Depois de conectar, você escolhe o Project.',
+  work: 'O Quadro do trabalho mostra as issues de um GitHub Project pelo ciclo do agente, do planejamento ao concluído. Depois de conectar, você escolhe o Project no Kanban do projeto.',
   'dev-console': 'O Dev Console junta PRs, CI e issues dos repositórios do contexto com as sessões que trabalham neles.',
   instructions: 'As instruções dos agentes, as ADRs e as PDRs são lidas do repositório no GitHub. As sessões deste repositório continuam aqui, sem GitHub.',
   adrs: 'ADR lê as decisões de arquitetura das pastas de decisão dos repositórios da sua conta no GitHub.',

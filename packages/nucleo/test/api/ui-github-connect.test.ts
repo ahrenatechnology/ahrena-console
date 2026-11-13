@@ -181,6 +181,7 @@ const SCREENS: [string, string, string, Record<string, string>, string][] = [
   ['Repositório · Instruções', 'repo.js', '/ui/repos/exemplo-labs/motor-de-regras/instructions', { owner: 'exemplo-labs', repo: 'motor-de-regras', tab: 'instructions' }, 'instructions'],
   ['Repositório · ADRs', 'repo.js', '/ui/repos/exemplo-labs/motor-de-regras/adrs', { owner: 'exemplo-labs', repo: 'motor-de-regras', tab: 'adrs' }, 'instructions'],
   ['Kanban do projeto', 'project.js', '/ui/project', {}, 'project'],
+  ['Quadro do trabalho', 'work-board.js', '/ui/work', {}, 'work'],
   ['Dev Console', 'dev-console.js', '/ui/dev-console', {}, 'dev-console'],
   ['ADR', 'adrs.js', '/ui/adrs', {}, 'adrs'],
   ['PDR', 'adrs.js', '/ui/pdrs', {}, 'pdrs'],
