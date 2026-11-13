@@ -233,3 +233,30 @@
 .tm-rp-actions { display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
 .btn.tm-rp-danger { background: var(--status-error-dot); color: var(--on-accent); font-weight: var(--weight-semibold); }
 .btn.tm-rp-danger:focus-visible { outline: 2px solid var(--status-error-text); outline-offset: 2px; }
+
+/* The Atualizar button of the remote núcleo (462-1 to 462-6, issue 462): the confirmation under the band, the progress
+   by phase, every ending, and the block to paste. Only brand.css variables. */
+.tm-up-dialog { max-width: 560px; width: 100%; box-sizing: border-box; padding: 16px 18px; display: flex; flex-direction: column; gap: 10px; border-color: color-mix(in srgb, var(--accent) 40%, var(--border)); box-shadow: 0 10px 30px color-mix(in srgb, var(--mono-black) 22%, transparent); }
+.tm-up-dialog h2, .tm-up-result h2 { margin: 0; font-size: 14px; font-weight: var(--weight-semibold); display: flex; align-items: center; gap: 8px; min-width: 0; overflow-wrap: anywhere; }
+.tm-up-dialog p, .tm-up-result p { margin: 0; font-size: 12.5px; line-height: 1.55; overflow-wrap: anywhere; }
+.tm-up-causes { margin: 0; padding-left: 20px; font-size: 12.5px; display: flex; flex-direction: column; gap: 4px; }
+.tm-up-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.tm-up-steps li { display: flex; align-items: center; gap: 8px; font-size: 12.5px; }
+.tm-up-steps li .icon { width: 15px; height: 15px; flex: none; }
+.tm-up-steps .tm-up-done { color: var(--status-completed-text); }
+.tm-up-steps .tm-up-now { color: var(--text); font-weight: var(--weight-semibold); }
+.tm-up-steps .tm-up-now .icon { animation: tm-rc-turn 1s linear infinite; }
+.tm-up-steps .tm-up-next { color: var(--muted); }
+@media (prefers-reduced-motion: reduce) { .tm-up-steps .tm-up-now .icon { animation: none; } }
+.tm-up-acts { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; align-items: center; }
+.tm-up-result { padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.tm-up-code { margin-left: auto; font-family: var(--font-mono); font-size: 11px; color: var(--muted); font-weight: var(--weight-regular); white-space: nowrap; }
+.tm-up-note { font-size: 11.5px; }
+.tm-up-result p.tm-up-note, .tm-up-dialog p.tm-up-note { font-size: 11.5px; }
+.tm-up-problem { color: var(--status-error-text); }
+.tm-up-ok h2 { color: var(--status-completed-text); }
+.tm-up-warn h2, .tm-up-progress h2 { color: var(--status-waiting-text); }
+.tm-up-bad h2 { color: var(--status-error-text); }
+.tm-up-progress h2 .icon { animation: tm-rc-turn 1s linear infinite; }
+@media (prefers-reduced-motion: reduce) { .tm-up-progress h2 .icon { animation: none; } }
+.tm-up-path { font-size: 11.5px; padding: 6px 8px; border-radius: 7px; background: var(--bg); border: 1px solid var(--border); word-break: break-all; }

@@ -31,6 +31,7 @@ import {
   ownerAuthReason,
   PORT_FILTERS,
   REREAD_MS,
+  UPDATE_REREAD_MS,
   START_CORE_COMMAND,
   TUNNEL_PORT_STATE,
   WINDOWS,
@@ -83,6 +84,7 @@ import { dockerActions } from './docker-actions.js';
 import { openRelease } from './port-release.js';
 import { machineConnection } from './machine-connection.js';
 import { updateParts, versionNode } from './machine-core.js';
+import { machineUpdate } from './machine-update.js';
 import { machineTerminals } from './machine-terminals.js';
 
 const STYLE = '/ui/screens/machine.css';
@@ -670,6 +672,17 @@ export async function mount(area, ctx) {
   const docker = dockerActions(ctx, id, { readOnlyStacks: () => last?.reading?.docker?.stacks ?? null, spaceNote: () => dockerSpaceNote(last?.reading?.docker?.space) });
   // The remote's connection (issue 278, C62 to C65): its own module; `null` keeps the screen as it was.
   const conn = local ? null : machineConnection(ctx, id, { reread: () => draw(), repaint: () => last && paint(last) });
+  // The Atualizar button of the remote núcleo (issue 462): the answer of a write goes into the last read and repaints at once.
+  const updater = local
+    ? null
+    : machineUpdate(ctx, id, {
+        area,
+        repaint: () => last && paint(last),
+        reread: () => draw(),
+        patch: (update) => {
+          if (last?.machine) last = { ...last, machine: { ...last.machine, update } };
+        },
+      });
   // The terminal sessions card (issue 350, C96 to C99): the actions and their confirmations are its own.
   const terminals = machineTerminals(ctx, { id, local, label: () => (local ? 'Esta máquina' : (last?.machine?.label ?? id)), repaint: () => last && paint(last), reread: () => draw() });
 
@@ -736,7 +749,9 @@ export async function mount(area, ctx) {
     const fade = condition.faded ? { 'aria-label': 'Última leitura guardada' } : dialog ? {} : null;
     const shown = fade ? fadedRuns(bands, live, fade) : bands;
     // The remote núcleo's version and update command (issue 449): the row lives in the Conexão card when it shows, else alone.
-    const coreParts = local || !machine ? [] : [...updateParts(machine, { ownerAuth: ownerAuthReason(machine), credentialSetup: (step) => ownerAuthSetup(machine, { step }) }), ...(machine.core && !condition.versionShown ? [versionNode(machine.core, { card: true })] : [])];
+    const ownerAuth = ownerAuthReason(machine);
+    const updateButton = local || !machine ? null : updater.parts(machine, { ownerAuth, now });
+    const coreParts = local || !machine ? [] : [...(updateButton ?? updateParts(machine, { ownerAuth, credentialSetup: (step) => ownerAuthSetup(machine, { step }) })), ...(machine.core && !condition.versionShown ? [versionNode(machine.core, { card: true })] : [])];
     replaceKeepingFocus(head, ...condition.parts, ...coreParts, ...(dialog ? [dialog] : []), ...(terminals.bandNode() ? [terminals.bandNode()] : []), cloud.node(label), ...shown);
   }
 
@@ -750,6 +765,7 @@ export async function mount(area, ctx) {
       else if (active.getAttribute?.('data-rc-action')) key = `[data-rc-action="${active.getAttribute('data-rc-action')}"]`;
       else if (active.getAttribute?.('data-retry-for')) key = `[data-retry-for="${active.getAttribute('data-retry-for')}"]`;
       else if (active.getAttribute?.('data-mc-action')) key = `[data-mc-action="${active.getAttribute('data-mc-action')}"]`;
+      else if (active.getAttribute?.('data-up-action')) key = `[data-up-action="${active.getAttribute('data-up-action')}"]`;
     }
     area.replaceChildren(...nodes);
     if (!key) return;
@@ -847,6 +863,7 @@ export async function mount(area, ctx) {
 
   // While a reconnect runs, the elapsed time ticks here, once a second, without repainting.
   function tick() {
+    updater?.tick(area);
     const rc = last?.machine?.reconnect;
     if (rc?.state !== 'running') return;
     const c = reconnectClock(rc, Date.now());
@@ -914,6 +931,10 @@ export async function mount(area, ctx) {
   });
   ctx.onRestart(() => draw());
   const background = setInterval(() => draw(), REREAD_MS);
+  // While the núcleo over there is being updated (or the update waits for it to answer the new version) the phase moves in seconds.
+  const running = setInterval(() => {
+    if (updater?.active(last?.machine)) draw();
+  }, UPDATE_REREAD_MS);
   const ticker = local ? null : setInterval(tick, 1000);
   // The teardown hangs on the signal, not only on the returned function: leaving before the first
   // read comes back aborts the signal before the shell could register that function.
@@ -921,6 +942,7 @@ export async function mount(area, ctx) {
     clearTimeout(wait);
     clearTimeout(noteTimer);
     clearInterval(background);
+    clearInterval(running);
     clearInterval(ticker);
   };
   if (ctx.signal.aborted) stop();

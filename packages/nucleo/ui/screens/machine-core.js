@@ -32,7 +32,8 @@ export function versionNode(core, { card = false } = {}) {
   return row;
 }
 
-function band(b) {
+/** The yellow band of the 449 (also the base of the 462 one, which adds its own text and the button). */
+export function band(b) {
   return el(
     'div',
     { class: 'tm-rc-band tm-rc-waiting', role: 'status', 'data-part': 'core-outdated' },
@@ -57,7 +58,8 @@ function copyRow(command, label, primary) {
   return el('div', { class: 'tm-core-copy' }, button, note);
 }
 
-function updateCard(core, label, { step }) {
+/** The card with the command to paste on the remote (decision 0021); with the 462 button it is the fallback, collapsed until asked for. */
+export function updateCard(core, label, { step }) {
   const kind = updateKind(core);
   const yes = core.mac.credentialCommand;
   const command = kind === 'update' ? updateCommand(core) : bootstrapCommand(core);
