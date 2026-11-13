@@ -381,6 +381,8 @@ export interface WorkBoardView {
   total: number;
   /** #466 nodes of the level after the filters (the done window only trims the columns). */
   matched: number;
+  /** #501 for each active filter, the cards the board would show without that filter (the done window still applies). */
+  countsWithoutFilter: Partial<Record<FilterKey, number>>;
   fetchedAt: number;
   stale: boolean;
   staleReason: string | null;
@@ -566,7 +568,13 @@ export function buildWorkBoard(input: WorkBoardInput): WorkBoardView {
   const sinceOf = (a: AnalyzedWorkNode) => input.since.get(a.node.key) ?? null;
   // #465 a done card with no `doneAt` (an epic done by rollup, an old cache row) ages out by its column time.
   const doneTime = (a: AnalyzedWorkNode) => a.doneAt ?? sinceOf(a);
-  const shown = matched.filter((a) => a.column.column !== 'done' || !doneTime(a) || Date.parse(doneTime(a)!) >= windowStart);
+  const inDoneWindow = (a: AnalyzedWorkNode) => a.column.column !== 'done' || !doneTime(a) || Date.parse(doneTime(a)!) >= windowStart;
+  const shown = matched.filter(inDoneWindow);
+  const countsWithoutFilter: Partial<Record<FilterKey, number>> = {};
+  for (const key of FILTER_KEYS) {
+    if (filters[key] === null) continue;
+    countsWithoutFilter[key] = ofLevel.filter((a) => matchesWorkBoardFilters(a, filters, statuses, key) && inDoneWindow(a)).length;
+  }
   const cards = shown.map((a) => toCard(a, sinceOf(a), statuses));
 
   return {
@@ -583,6 +591,7 @@ export function buildWorkBoard(input: WorkBoardInput): WorkBoardView {
     options: optionsOf(ofLevel, filters, statuses),
     total: ofLevel.length,
     matched: matched.length,
+    countsWithoutFilter,
     fetchedAt: input.fetchedAt,
     stale: input.stale,
     staleReason: input.staleReason,

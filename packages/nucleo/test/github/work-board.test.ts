@@ -615,6 +615,47 @@ describe('filters (#466)', () => {
   });
 });
 
+describe('counts without each active filter (#501)', () => {
+  const OTHER = 'ahrenatechnology/framework-x';
+  const other = (n: number, over: Partial<WorkBoardNode> = {}) => ({ ...boardNode(n, over), key: `${OTHER}#${n}`, repo: OTHER });
+  const closed = (days: number) => ({ state: 'CLOSED' as const, closedAt: daysAgo(days) });
+  // type=bug and repo=ahrena-console match no card together: the bugs live in OTHER, the tasks in REPO.
+  const nodes = [
+    boardNode(1),
+    boardNode(2),
+    boardNode(3, closed(2)),
+    boardNode(4, closed(30)),
+    other(20, { type: 'Bug' }),
+    other(21, { type: 'Bug' }),
+    other(22, { type: 'Bug', ...closed(40) }),
+  ];
+
+  test('#501/AC-1 two filters with no result: each count is the cards that appear without that filter', () => {
+    const view = board(nodes, { filters: filters({ type: 'bug', repo: 'ahrena-console' }) });
+    assert.equal(view.matched, 0);
+    assert.equal(allCards(view).length, 0);
+    assert.deepEqual(view.countsWithoutFilter, { type: 3, repo: 2 });
+  });
+
+  test('#501/AC-1 a done card older than the 14-day window is not counted', () => {
+    const view = board(nodes, { filters: filters({ type: 'bug', repo: 'ahrena-console' }) });
+    // repo alone: #1, #2 open and #3 done 2 days ago; #4 done 30 days ago is out.
+    assert.equal(view.countsWithoutFilter.type, 3);
+    // type alone: #20, #21; #22 done 40 days ago is out.
+    assert.equal(view.countsWithoutFilter.repo, 2);
+  });
+
+  test('#501/AC-2 an inactive filter has no entry', () => {
+    const view = board(nodes, { filters: filters({ type: 'bug', repo: 'ahrena-console' }) });
+    assert.deepEqual(Object.keys(view.countsWithoutFilter).sort(), ['repo', 'type']);
+    for (const key of ['initiative', 'epic', 'label', 'status']) assert.ok(!(key in view.countsWithoutFilter), key);
+  });
+
+  test('#501/AC-2 with no filter active the field is present and empty', () => {
+    assert.deepEqual(board(nodes).countsWithoutFilter, {});
+  });
+});
+
 describe('issue of a session prompt', () => {
   test('a full reference owner/name#n', () => {
     assert.equal(issueOfPrompt('trabalhe na ahrenatechnology/ahrena-framework#12 agora', REPO), 'ahrenatechnology/ahrena-framework#12');
