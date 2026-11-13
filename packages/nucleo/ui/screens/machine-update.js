@@ -42,7 +42,7 @@ function stepsNode(rows) {
   return el('ol', { class: 'tm-up-steps', 'aria-label': 'Andamento da atualização' }, ...rows.map((r) => el('li', { class: `tm-up-${r.tone}`, 'data-phase': r.key, 'aria-current': r.tone === 'now' ? 'step' : null }, icon(marks[r.tone]), el('span', {}, r.label))));
 }
 
-// The problems with which no command can be built: the band says what is missing and has no button.
+/* The problems with which no command can be built: the band says what is missing and has no button. (ADR-0024) */
 const SETUP_PROBLEMS = new Set(['missing', 'invalid', 'invalid-file']);
 
 const note = (text) => el('p', { class: 'tm-muted tm-up-note' }, text);
@@ -101,8 +101,8 @@ export function machineUpdate(ctx, id, { area, repaint, reread, patch }) {
   function open(u) {
     dialogOpen = true;
     focusDialog = false;
-    // A good check of the last 5 minutes is not repeated: the dialog goes straight to the question. Not the Mac's own
-    // check: the confirmation is only for a --check the person asked for.
+    /* A good check of the last 5 minutes is not repeated: the dialog goes straight to the question. Not the Mac's own
+       check: the confirmation is only for a --check the person asked for. (ADR-0024) */
     if (u.state === 'ready' && !u.automatic && Date.parse(u.readyUntil ?? '') > Date.now()) return repaint();
     return call('check', checkRoute(id));
   }
@@ -166,8 +166,8 @@ export function machineUpdate(ctx, id, { area, repaint, reread, patch }) {
 
   // The confirmation: first the --check, then the go / no-go (462-2). It sits under the band like the Parar one. (ADR-0024)
   function dialogNode(machine, u, core) {
-    // A run the Mac started is never confirmed by the person (decision 0024 section 3). While the person's own click
-    // is on its way the last read may still be the Mac's run: the answer replaces it.
+    /* A run the Mac started is never confirmed by the person (decision 0024 section 3). While the person's own click
+       is on its way the last read may still be the Mac's run: the answer replaces it. (ADR-0024) */
     if (u.automatic && !pending) return null;
     const label = machine.label;
     const target = core?.expectedVersion ?? u.targetVersion ?? '?';
@@ -250,8 +250,8 @@ export function machineUpdate(ctx, id, { area, repaint, reread, patch }) {
     );
   }
 
-  // How a finished update ended (462-4, 462-5): the title is a label, the sentence is the core's. Tentar de novo lives
-  // on the band (484-2); a rollback that failed keeps its card for the backup path, its sentence already on the band.
+  /* How a finished update ended (462-4, 462-5): the title is a label, the sentence is the core's. Tentar de novo lives
+     on the band (484-2); a rollback that failed keeps its card for the backup path, its sentence already on the band. (ADR-0024) */
   function resultNode(u, onBand) {
     const look = resultLook(u);
     const acts = [button({ label: 'Fechar', filled: u.state === 'succeeded', action: 'close-result', onClick: () => dismiss(u) })];
@@ -268,8 +268,8 @@ export function machineUpdate(ctx, id, { area, repaint, reread, patch }) {
     );
   }
 
-  // 462-6 as decision 0024 left it: an invalid connection.update does not fall back to the derived command, which is
-  // shown here only to compare with what the person wrote.
+  /* 462-6 as decision 0024 left it: an invalid connection.update does not fall back to the derived command, which is
+     shown here only to compare with what the person wrote. (ADR-0024) */
   function setupNode(u) {
     return el(
       'section',
@@ -322,7 +322,7 @@ export function machineUpdate(ctx, id, { area, repaint, reread, patch }) {
       if (dialogOpen && !dialog) dialogOpen = false;
       // The band's mode (decision 0024 section 4). A manual --check changes nothing: its band stays `ready`, the button waits. (ADR-0024)
       const mode = SETUP_PROBLEMS.has(u.problem) ? 'setup' : busy && updatingNow(u) ? 'busy' : outdated && !busy && !dialog && u.kind && u.state !== 'canceled' && canRetry(u) ? 'retry' : 'ready';
-      // Each failure shows the command card collapsed first.
+      /* Each failure shows the command card collapsed first. (ADR-0024) */
       if (mode === 'busy') fallbackOpen = false;
       const keepResult = mode !== 'retry' || u.state === 'rollback-failed';
       const result = !dialog && !busy && keepResult && showsResult(u, now) && !closed.has(runKey(u)) ? resultNode(u, mode === 'retry') : null;
@@ -334,8 +334,8 @@ export function machineUpdate(ctx, id, { area, repaint, reread, patch }) {
       else if (busy) out.push(progressNode(machine, u, core));
       if (result) out.push(result);
       if (outdated && u.problem === 'invalid' && u.block) out.push(setupNode(u));
-      // The command to paste is the way out after a failure or when no command can be built; a click on Mostrar o
-      // comando (exit 22, a version that did not arrive) opens it too.
+      /* The command to paste is the way out after a failure or when no command can be built; a click on Mostrar o
+         comando (exit 22, a version that did not arrive) opens it too. (ADR-0024) */
       if (outdated && !busy && !dialog && (mode === 'retry' || mode === 'setup' || (fallbackOpen && pointsToCommand(u)))) out.push(fallbackNode(machine, core));
       const modeNow = dialog?.getAttribute('data-mode') ?? null;
       if (modeNow !== dialogMode) {
