@@ -198,7 +198,7 @@ export function workBoardHeader({ project = null, fetchedAt = null, now = Date.n
   const read = el('span', { class: `wb-read${old ? ' wb-read-old' : ''}` }, icon('github'), el('span', {}, readLabel({ fetchedAt, now, reading })));
   const refresh = el(
     'button',
-    { type: 'button', class: 'btn outline', 'aria-busy': busy ? 'true' : null, disabled: busy, onClick: () => onRefresh?.() },
+    { type: 'button', class: 'btn outline', 'data-action': 'refresh', 'aria-busy': busy ? 'true' : null, disabled: busy, onClick: () => onRefresh?.() },
     icon('refresh'),
     'Atualizar',
   );
@@ -220,7 +220,7 @@ export function levelSwitch({ levels = Object.keys(LEVEL_LABELS), level = 'item'
     const sep = i ? el('span', { class: 'wb-path-sep', 'aria-hidden': 'true' }, icon('chevron-right')) : null;
     if (last) return [sep, el('span', { class: 'wb-path-here', 'aria-current': 'location' }, el('b', {}, p.text), p.title ? el('span', { class: 'wb-path-title' }, p.title) : null)];
     const step = onPathSelect
-      ? el('button', { type: 'button', class: 'wb-path-step', disabled, onClick: () => onPathSelect(p) }, p.text)
+      ? el('button', { type: 'button', class: 'wb-path-step', 'data-action': 'path', 'data-param': p.param, disabled, onClick: () => onPathSelect(p) }, p.text)
       : el('span', { class: 'wb-path-step' }, p.text);
     return [sep, step];
   });
@@ -261,10 +261,10 @@ export function filterBar({ filters = {}, options = {}, link = null, disabled = 
             { class: 'wb-chip', 'data-param': c.param },
             `${c.label}: `,
             el('b', {}, c.value),
-            el('button', { type: 'button', class: 'wb-chip-remove', 'aria-label': `Tirar o filtro ${c.label}`, disabled, onClick: () => onFilterChange?.(c.param, null) }, icon('x')),
+            el('button', { type: 'button', class: 'wb-chip-remove', 'data-action': 'remove-filter', 'data-param': c.param, 'aria-label': `Tirar o filtro ${c.label}`, disabled, onClick: () => onFilterChange?.(c.param, null) }, icon('x')),
           ),
         ]),
-        el('button', { type: 'button', class: 'btn ghost wb-clear', disabled, onClick: () => onClear?.() }, icon('filter'), 'Limpar filtros'),
+        el('button', { type: 'button', class: 'btn ghost wb-clear', 'data-action': 'clear', disabled, onClick: () => onClear?.() }, icon('filter'), 'Limpar filtros'),
       )
     : null;
   const linkRow = link
@@ -273,7 +273,7 @@ export function filterBar({ filters = {}, options = {}, link = null, disabled = 
         { class: 'wb-link' },
         el('span', { class: 'wb-link-label' }, 'Link deste recorte'),
         el('code', {}, link),
-        el('button', { type: 'button', class: 'btn outline', disabled, onClick: () => onCopyLink?.() }, icon('copy'), 'Copiar link'),
+        el('button', { type: 'button', class: 'btn outline', 'data-action': 'copy-link', disabled, onClick: () => onCopyLink?.() }, icon('copy'), 'Copiar link'),
       )
     : null;
   return el('section', { class: `card wb-filters${disabled ? ' wb-off' : ''}`, 'aria-label': 'Filtros' }, el('div', { class: 'wb-fields' }, ...fields), chipRow, linkRow);
@@ -387,7 +387,7 @@ export function parentCard(card, { primaryRepo = null, now = Date.now(), onDrill
         el('li', { 'data-column': c.id, title: c.label, 'aria-label': `${c.label}: ${byColumn[c.id]}` }, el('span', { class: `wb-dot wb-dot-${c.id}`, 'aria-hidden': 'true' }), String(byColumn[c.id])),
       ),
     ),
-    el('button', { type: 'button', class: 'wb-drill', 'aria-label': `Ver filhos (${kids.total}) de ${ref(card.number)}`, onClick: () => onDrill?.(card) }, `Ver filhos (${kids.total})`, icon('chevron-right')),
+    el('button', { type: 'button', class: 'wb-drill', 'data-action': 'drill', 'data-key': card.key, 'aria-label': `Ver filhos (${kids.total}) de ${ref(card.number)}`, onClick: () => onDrill?.(card) }, `Ver filhos (${kids.total})`, icon('chevron-right')),
   );
 }
 
@@ -480,7 +480,7 @@ export function staleBand({ fetchedAt = null, now = Date.now(), reason = null, b
     { class: 'error-band wb-stale-band', role: 'status' },
     icon('offline'),
     el('p', {}, el('b', {}, 'GitHub indisponível.'), ` ${from} As sessões e a fila continuam ao vivo.${why}`),
-    el('button', { type: 'button', class: 'btn outline', 'aria-busy': busy ? 'true' : null, disabled: busy, onClick: () => onRetry?.() }, icon('refresh'), 'Tentar agora'),
+    el('button', { type: 'button', class: 'btn outline', 'data-action': 'retry', 'aria-busy': busy ? 'true' : null, disabled: busy, onClick: () => onRetry?.() }, icon('refresh'), 'Tentar agora'),
   );
 }
 
@@ -492,7 +492,7 @@ export function firstReadFailure({ reason = null, busy = false, onRetry = null }
     el('div', { class: 'seal error' }, icon('offline')),
     el('h2', {}, 'Ainda não conseguimos ler o GitHub'),
     el('p', {}, `A primeira leitura falhou${reason ? ` (${reason})` : ''} e não há quadro guardado para mostrar.`),
-    el('button', { type: 'button', class: 'btn filled', 'aria-busy': busy ? 'true' : null, disabled: busy, onClick: () => onRetry?.() }, icon('refresh'), 'Tentar agora'),
+    el('button', { type: 'button', class: 'btn filled', 'data-action': 'retry', 'aria-busy': busy ? 'true' : null, disabled: busy, onClick: () => onRetry?.() }, icon('refresh'), 'Tentar agora'),
   );
 }
 
@@ -536,8 +536,8 @@ export function noResult({ suggestion = null, filters = {}, options = {}, onClea
       el(
         'div',
         { class: 'wb-no-result-actions' },
-        el('button', { type: 'button', class: 'btn filled', onClick: () => onClear?.() }, icon('filter'), 'Limpar filtros'),
-        field ? el('button', { type: 'button', class: 'btn outline', onClick: () => onFilterChange?.(field.param, null) }, icon('x'), `Tirar ${field.article}`) : null,
+        el('button', { type: 'button', class: 'btn filled', 'data-action': 'clear', onClick: () => onClear?.() }, icon('filter'), 'Limpar filtros'),
+        field ? el('button', { type: 'button', class: 'btn outline', 'data-action': 'remove-filter', 'data-param': field.param, onClick: () => onFilterChange?.(field.param, null) }, icon('x'), `Tirar ${field.article}`) : null,
       ),
     ),
   );

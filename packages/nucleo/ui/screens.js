@@ -116,6 +116,15 @@ export const SCREENS = [
     file: '/ui/screens/project.js', // #80 (C11)
   },
   {
+    id: 'work',
+    route: '/ui/work',
+    item: { label: 'Quadro do trabalho', icon: 'columns-3', section: 'delivery' },
+    title: 'Quadro do trabalho',
+    sub: 'As issues de um GitHub Project pelo ciclo do agente',
+    icon: 'columns-3',
+    file: '/ui/screens/work-board.js',
+  },
+  {
     id: 'dev-console',
     route: '/ui/dev-console',
     item: { label: 'Dev Console', icon: 'gauge', section: 'delivery' },
