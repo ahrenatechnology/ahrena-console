@@ -688,7 +688,7 @@ describe('issue 484 the automatic update (484-1)', () => {
 
   test('issue 484 AC6 · busy covers the automatic ready, and updatingNow is the update itself or anything the Mac started', () => {
     const u = (over: Obj) => updateFormat.normalizeUpdate(updateOf(over));
-    assert.equal(updateFormat.isBusy(u({ state: 'ready', kind: 'check', automatic: true })), true);
+    assert.equal(updateFormat.isBusy(u({ state: 'ready', kind: 'check', automatic: true, auto: { target: '0.0.17', state: 'running' } })), true);
     assert.equal(updateFormat.isBusy(u({ state: 'ready', kind: 'check' })), false);
     assert.equal(updateFormat.updatingNow(u({ state: 'running', kind: 'update' })), true);
     assert.equal(updateFormat.updatingNow(u({ state: 'checking', kind: 'check', automatic: true })), true);
@@ -792,5 +792,25 @@ describe('issue 484 Tentar de novo (484-2)', () => {
     action(band, 'open')!.click();
     await until(() => written.length === 1);
     assert.deepEqual(written, ['POST /api/machines/ws-exemplo/update/check']);
+  });
+
+  test('issue 484 AC4 · an automatic ready whose chained update was refused (auto failed) is not busy: Atualizar agora, no Atualizando on the sidebar', async () => {
+    const stuck = { state: 'ready', kind: 'check', phase: 'check', automatic: true, auto: { target: '0.0.17', state: 'failed' }, readyUntil: new Date(Date.now() + 4 * M).toISOString(), message: msg('check-ready') };
+    const u = updateFormat.normalizeUpdate(updateOf(stuck));
+    assert.equal(updateFormat.isBusy(u), false);
+    assert.equal(updateFormat.updatingNow(u), false);
+    assert.notEqual(machineItems([{ id: 'ws-a', label: 'A', state: 'connected', reason: null, core: coreOf(), update: updateOf(stuck) }])[0].state, 'updating');
+    update = updateOf(stuck);
+    onWrite = () => ({ update: updateOf({ state: 'ready', kind: 'check', phase: 'check', readyUntil: new Date(Date.now() + 4 * M).toISOString(), message: msg('check-ready') }) });
+    const m = mount();
+    await m.ready;
+    const band = part(m.area, 'core-outdated')!;
+    assert.equal(band.getAttribute('data-mode'), 'ready');
+    assert.deepEqual(buttons(band), ['Atualizar agora']);
+    assert.equal(part(m.area, 'update-dialog'), null);
+    action(band, 'open')!.click();
+    await until(() => part(m.area, 'update-dialog')?.getAttribute('data-mode') === 'ready');
+    assert.deepEqual(written, ['POST /api/machines/ws-exemplo/update/check'], 'the Mac\'s check is not the person\'s: it runs again');
+    assert.ok(action(m.area, 'confirm'));
   });
 });

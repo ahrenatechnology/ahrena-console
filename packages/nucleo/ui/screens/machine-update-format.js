@@ -62,9 +62,11 @@ export const checkRoute = (id) => `${updateRoute(id)}/check`;
 
 /**
  * A run is going on (the check, the update, or the wait for the remote to answer the new version): poll fast, the
- * button is busy. An automatic check that passed reads `ready` for an instant before the chained update starts: busy too.
+ * button is busy. An automatic check that passed reads `ready` for an instant before the chained update starts: busy
+ * too, but only while the automatic attempt runs; a chained update refused at start leaves that `ready` with `auto`
+ * failed, and it is not a run.
  */
-export const isBusy = (u) => u.state === 'checking' || u.state === 'running' || (u.state === 'ready' && u.automatic === true) || (u.kind === 'update' && u.state === 'succeeded' && u.confirmation === 'confirming');
+export const isBusy = (u) => u.state === 'checking' || u.state === 'running' || (u.state === 'ready' && u.automatic === true && u.auto?.state === 'running') || (u.kind === 'update' && u.state === 'succeeded' && u.confirmation === 'confirming');
 
 /** The run the sidebar calls "Atualizando": the update itself, or anything the Mac started by itself (decision 0024 section 4). */
 export const updatingNow = (u) => isBusy(u) && (u.kind === 'update' || u.automatic === true);

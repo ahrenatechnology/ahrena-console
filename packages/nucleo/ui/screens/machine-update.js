@@ -97,8 +97,9 @@ export function machineUpdate(ctx, id, { area, repaint, reread, patch }) {
   function open(u) {
     dialogOpen = true;
     focusDialog = false;
-    // A good check of the last 5 minutes is not repeated: the dialog goes straight to the question.
-    if (u.state === 'ready' && Date.parse(u.readyUntil ?? '') > Date.now()) return repaint();
+    // A good check of the last 5 minutes is not repeated: the dialog goes straight to the question. Not the Mac's own
+    // check: the confirmation is only for a --check the person asked for.
+    if (u.state === 'ready' && !u.automatic && Date.parse(u.readyUntil ?? '') > Date.now()) return repaint();
     return call('check', checkRoute(id));
   }
 
