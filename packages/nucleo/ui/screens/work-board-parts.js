@@ -203,7 +203,7 @@ export function workBoardHeader({ project = null, fetchedAt = null, now = Date.n
     'Atualizar',
   );
   const where = project ? [project.primaryRepo, `GitHub Project “${project.title}”`].filter(Boolean).join(' · ') : null;
-  return header({ icon: 'kanban', title: 'Quadro do trabalho', sub: where ? `${where} · a coluna vem dos sinais` : null, actions: [read, refresh] });
+  return header({ icon: 'columns-3', title: 'Quadro do trabalho', sub: where ? `${where} · a coluna vem dos sinais` : null, actions: [read, refresh] });
 }
 
 /** The level switch above the filters and the path on the right (issue 466). */
@@ -292,18 +292,25 @@ function reasonNode(blocked) {
   return el('div', { class: `wb-reason wb-reason-${blocked.reason}${fromGithub ? ' wb-gh' : ''}` }, icon(REASON_ICONS[blocked.reason] ?? 'alert'), el('span', {}, blocked.label));
 }
 
-function cardTop(card, { primaryRepo, now }) {
-  const otherRepo = primaryRepo && card.repo && card.repo.toLowerCase() !== primaryRepo.toLowerCase();
+const srOnly = (text) => el('span', { class: 'wb-sr-only' }, text);
+
+function ageNode(card, now) {
   const age = cardAge(card, now);
+  return age ? el('span', { class: 'wb-age' }, age) : null;
+}
+
+function cardTop(card, { primaryRepo, now, withAge }) {
+  const otherRepo = primaryRepo && card.repo && card.repo.toLowerCase() !== primaryRepo.toLowerCase();
   const position = card.queuePosition;
   return el(
     'div',
     { class: 'wb-card-top' },
-    isSet(position) ? el('span', { class: 'wb-queue-pos', title: 'Posição na fila', 'aria-label': `${position}º na fila` }, `${position}º`) : null,
+    isSet(position) ? el('span', { class: 'wb-queue-pos', title: 'Posição na fila', 'aria-hidden': 'true' }, `${position}º`) : null,
+    isSet(position) ? srOnly(`${position}º na fila`) : null,
     el('span', { class: `wb-type wb-type-${TYPE_CLASSES.has(card.type) ? card.type : 'other'}` }, typeLabel(card)),
     el('span', { class: 'wb-number mono' }, ref(card.number)),
     otherRepo ? el('span', { class: 'wb-repo mono', title: card.repo }, shortRepo(card.repo)) : null,
-    age ? el('span', { class: 'wb-age' }, age) : null,
+    withAge ? ageNode(card, now) : null,
   );
 }
 
@@ -331,7 +338,7 @@ export function workCard(card, { chainMode = 'compact', primaryRepo = null, now 
   return el(
     'article',
     { class: `card wb-card${toneOf(card)}`, 'data-key': card.key, 'data-column': card.column },
-    cardTop(card, { primaryRepo, now }),
+    cardTop(card, { primaryRepo, now, withAge: false }),
     cardTitle(card),
     chainNode(card, chainMode),
     reasonNode(card.blocked),
@@ -339,7 +346,8 @@ export function workCard(card, { chainMode = 'compact', primaryRepo = null, now 
       'div',
       { class: 'wb-data' },
       el('span', { class: 'wb-status wb-gh', title: 'Status do GitHub Project' }, `Status: ${card.projectStatus?.name ?? 'Sem status'}`),
-      card.plan && PLAN_COLUMNS.has(card.column) ? el('span', { class: 'wb-plan' }, icon('list-checks'), planText(card.plan)) : null,
+      card.plan && PLAN_COLUMNS.has(card.column) ? el('span', { class: 'wb-plan wb-gh' }, icon('list-checks'), planText(card.plan)) : null,
+      ageNode(card, now),
     ),
     cardBadges(card),
   );
@@ -362,7 +370,7 @@ export function parentCard(card, { primaryRepo = null, now = Date.now(), onDrill
   return el(
     'article',
     { class: `card wb-card wb-parent-card${toneOf(card)}`, 'data-key': card.key, 'data-column': card.column },
-    cardTop(card, { primaryRepo, now }),
+    cardTop(card, { primaryRepo, now, withAge: true }),
     cardTitle(card),
     chainNode(card, 'compact'),
     reason ? el('div', { class: `wb-reason wb-reason-${card.blocked?.reason ?? 'needs-you'}` }, icon('hand'), el('span', {}, reason)) : null,
@@ -392,9 +400,10 @@ function countLabel(count) {
 const skeletonCard = () => el('div', { class: 'card wb-card wb-skeleton', 'aria-hidden': 'true' }, el('div', { class: 'bone short' }), el('div', { class: 'bone' }), el('div', { class: 'bone medium' }));
 
 function doneMore(hidden, doneWindowDays) {
-  const more = el('button', { type: 'button', class: 'wb-done-more', 'aria-expanded': 'false' }, `+ ${plural(hidden.length, 'fechada', 'fechadas')} nos últimos ${doneWindowDays} dias · ver todas`);
+  const more = el('button', { type: 'button', class: 'wb-done-more' }, `+ ${plural(hidden.length, 'fechada', 'fechadas')} nos últimos ${doneWindowDays} dias · ver todas`);
   more.addEventListener('click', () => {
     for (const li of hidden) li.hidden = false;
+    hidden[0]?.querySelector('a')?.focus();
     more.remove();
   });
   return more;
@@ -431,7 +440,7 @@ export function boardColumns({
     let body = null;
     if (mode === 'skeleton') body = el('div', { class: 'wb-cards' }, ...Array.from({ length: SKELETON_CARDS[i] ?? 1 }, skeletonCard));
     else if (mode === 'cards') body = items.length ? el('ul', { class: 'wb-cards' }, ...items) : el('p', { class: 'wb-none' }, 'Nenhuma');
-    const windowNote = mode === 'cards' && c.id === 'done' && !hidden.length ? el('p', { class: 'wb-window' }, `Fechados nos últimos ${doneWindowDays} dias`) : null;
+    const windowNote = mode === 'cards' && c.id === 'done' && !hidden.length ? el('p', { class: 'wb-window' }, `Fechadas nos últimos ${doneWindowDays} dias`) : null;
     return el(
       'section',
       {
@@ -445,7 +454,8 @@ export function boardColumns({
         { class: 'wb-col-head', id: headingId },
         el('span', { class: `wb-dot wb-dot-${c.id}`, 'aria-hidden': 'true' }),
         el('span', { class: 'wb-col-name' }, c.label),
-        el('span', { class: 'wb-count', 'aria-label': countLabel(count) }, count),
+        el('span', { class: 'wb-count', 'aria-hidden': 'true' }, count),
+        srOnly(`: ${countLabel(count)}`),
       ),
       el('p', { class: 'wb-criterion' }, c.criterion),
       windowNote,

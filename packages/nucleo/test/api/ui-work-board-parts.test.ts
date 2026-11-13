@@ -6,7 +6,7 @@ import { describe, test } from 'node:test';
 import { UI_FOLDER, respondUi } from '../../src/api/ui.ts';
 import { WORK_BLOCKED_REASONS, WORK_BOARD_COLUMNS } from '../../src/github/work-board.ts';
 import { WORK_LEVELS } from '../../src/github/work.ts';
-import { ElementoFalso, instalarDomFalso, texto } from './fake-dom.ts';
+import { documentoFalso, ElementoFalso, instalarDomFalso, texto } from './fake-dom.ts';
 import {
   BLOCKED_LABELS,
   COLUMNS,
@@ -117,8 +117,8 @@ const OUT_OF_SCOPE = /Planejar|Executar plano|Pôr na fila|Replanejar|Abrir sess
 const buttons = (root: ElementoFalso) => root.querySelectorAll('button');
 const buttonNamed = (root: ElementoFalso, name: RegExp) => buttons(root).find((b) => name.test(texto(b)) || name.test(b.getAttribute('aria-label') ?? ''));
 
-describe('#465/AC-5 the work board files: served, English internals, no colour by hand', () => {
-  test('#465/AC-5 the core serves screens/work-board-parts.js and work-board.css with the right type', async () => {
+describe('the work board files: served, and the /ui file rules', () => {
+  test('the core serves screens/work-board-parts.js and work-board.css with the right type', async () => {
     for (const [file, type] of [['screens/work-board-parts.js', /^text\/javascript/], ['work-board.css', /^text\/css/]] as const) {
       let status = 0;
       let headers: Record<string, string | number> = {};
@@ -141,7 +141,7 @@ describe('#465/AC-5 the work board files: served, English internals, no colour b
     }
   });
 
-  test('#465/AC-5 the files call nothing outside, write no colour, no inline style, no innerHTML, no fetch, no URL access', () => {
+  test('the files call nothing outside, write no colour, no inline style, no innerHTML, no fetch, no URL access', () => {
     for (const file of FILES) {
       const text = readFileSync(`${UI_FOLDER}${file}`, 'utf8');
       const urls = (text.match(/https?:\/\/[^\s"'`)]+/g) ?? []).filter((u) => u !== 'http://www.w3.org/2000/svg');
@@ -153,7 +153,7 @@ describe('#465/AC-5 the work board files: served, English internals, no colour b
     assert.doesNotMatch(js, /\blocation\.|\bhistory\.|URLSearchParams|ctx\.read/, 'the components neither read nor write the URL, nor read the API');
   });
 
-  test('#465/AC-5 the CSS styles only wb- classes or the frame ones, none of another screen, and the JS uses only classes that exist', () => {
+  test('the CSS styles only wb- classes or the frame ones, none of another screen, and the JS uses only classes that exist', () => {
     const classes = (file: string) => new Set([...readFileSync(`${UI_FOLDER}${file}`, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/\.([a-z][a-z0-9-]*)/g)].map((m) => m[1]!));
     const frame = classes('shell.css');
     const mine = [...classes('work-board.css')].filter((c) => !frame.has(c));
@@ -171,7 +171,7 @@ describe('#465/AC-5 the work board files: served, English internals, no colour b
     for (const r of WORK_BLOCKED_REASONS.map((x) => x.id)) assert.ok(mine.includes(`wb-reason-${r}`), `wb-reason-${r}`);
   });
 
-  test('#465/AC-5 the CSS lays the six columns side by side at 1440 and two rows of three at 1100, never scrolling sideways', () => {
+  test('#465/AC-2 the CSS lays the six columns side by side at 1440 and two rows of three at 1100, never scrolling sideways', () => {
     const css = readFileSync(`${UI_FOLDER}work-board.css`, 'utf8');
     assert.match(css, /\.wb-board\s*\{[^}]*grid-template-columns:\s*repeat\(6,\s*minmax\(0,\s*1fr\)\)/);
     const narrow = /@media \(max-width: (\d+)px\)\s*\{[^@]*\.wb-board\s*\{[^}]*repeat\(3,\s*minmax\(0,\s*1fr\)\)/.exec(css);
@@ -180,7 +180,7 @@ describe('#465/AC-5 the work board files: served, English internals, no colour b
     assert.doesNotMatch(css.replace(/\/\*[\s\S]*?\*\//g, ''), /overflow-x:\s*(auto|scroll)/);
   });
 
-  test('#465/AC-5 the on-screen copy mirrors the domain: the six columns, the reasons and the four levels', () => {
+  test('the on-screen copy mirrors the domain: the six columns, the reasons and the four levels', () => {
     assert.deepEqual(COLUMNS, WORK_BOARD_COLUMNS.map(({ id, label, criterion }) => ({ id, label, criterion })));
     assert.deepEqual(Object.keys(BLOCKED_LABELS), WORK_BLOCKED_REASONS.map((r) => r.id));
     assert.deepEqual(Object.keys(LEVEL_LABELS), [...WORK_LEVELS]);
@@ -208,6 +208,7 @@ describe('#465/AC-2 the header and the time of the last GitHub read', () => {
     const project = { owner: 'ahrenatechnology', number: 3, title: 'Ahrena Console', url: 'https://github.com/orgs/ahrenatechnology/projects/3', primaryRepo: REPO };
     const head = workBoardHeader({ project, fetchedAt: NOW - 40_000, now: NOW, onRefresh: () => refreshed++ });
     assert.equal(texto(head.querySelector('h1')).replace(' Ao vivo', ''), 'Quadro do trabalho');
+    assert.ok(head.querySelector('.ico svg')!.innerHTMLFalso.includes('M9 3v18'), 'the header draws the columns-3 icon, not the sessions Kanban one');
     assert.match(texto(head), new RegExp(`${REPO} · GitHub Project “Ahrena Console”`));
     assert.match(texto(head.querySelector('.wb-read')), /lido às 23:12 · há 40 s/);
     assert.ok(!head.querySelector('.wb-read')!.classList.contains('wb-read-old'));
@@ -330,6 +331,8 @@ describe('#465/AC-2 the card (465-2), data only', () => {
     assert.equal(texto(node.querySelector('.wb-chain')), '↑ #6');
     assert.equal(texto(node.querySelector('.wb-status')), 'Status: Todo');
     assert.equal(texto(node.querySelector('.wb-age')), 'há 5 h');
+    assert.ok(node.querySelector('.wb-data .wb-age'), 'the time in the column ends the data row');
+    assert.equal(node.querySelector('.wb-card-top .wb-age'), null);
     assert.equal(texto(node.querySelector('.wb-plan')), 'plano · 5 passos');
     assert.equal(node.querySelector('.wb-repo'), null, 'no repository on a card of the primary repo');
     assert.equal(node.querySelector('.wb-queue-pos'), null);
@@ -344,7 +347,8 @@ describe('#465/AC-2 the card (465-2), data only', () => {
     const queued = workCard(CARDS.queued[0], { primaryRepo: REPO, now: NOW });
     const pos = queued.querySelector('.wb-queue-pos')!;
     assert.equal(texto(pos), '1º');
-    assert.equal(pos.getAttribute('aria-label'), '1º na fila');
+    assert.equal(pos.getAttribute('aria-hidden'), 'true');
+    assert.equal(texto(queued.querySelector('.wb-card-top .wb-sr-only')), '1º na fila');
     assert.equal(texto(queued.querySelector('.wb-plan')), 'plano · 4 passos');
 
     const running = workCard(CARDS.running[0], { primaryRepo: REPO, now: NOW });
@@ -426,7 +430,8 @@ describe('#465/AC-2 the six columns', () => {
       const h2 = c.querySelector('h2')!;
       assert.equal(c.getAttribute('aria-labelledby'), h2.getAttribute('id'));
     }
-    assert.equal(cols[4]!.querySelector('.wb-count')!.getAttribute('aria-label'), '3 issues');
+    assert.equal(cols[4]!.querySelector('.wb-count')!.getAttribute('aria-hidden'), 'true');
+    assert.equal(texto(cols[4]!.querySelector('h2 .wb-sr-only')), ': 3 issues');
     assert.equal(buttons(board).filter((b) => !/ver todas/.test(texto(b))).length, 0, 'no action button on the board');
     assert.doesNotMatch(texto(board), OUT_OF_SCOPE);
   });
@@ -448,12 +453,13 @@ describe('#465/AC-2 the six columns', () => {
     assert.deepEqual(items.map((i) => i.hidden), [false, false, true]);
     const more = buttonNamed(done, /ver todas/)!;
     assert.equal(texto(more), '+ 1 fechada nos últimos 14 dias · ver todas');
-    assert.equal(more.getAttribute('aria-expanded'), 'false');
+    assert.equal(more.hasAttribute('aria-expanded'), false);
     more.click();
     assert.deepEqual(items.map((i) => i.hidden), [false, false, false]);
+    assert.equal(documentoFalso.activeElement, items[2]!.querySelector('a'), 'focus moves to the first revealed card');
     assert.equal(done.querySelector('.wb-done-more'), null);
     const few = boardColumns({ columns: PAYLOAD_COLUMNS.map((c) => (c.id === 'done' ? { ...c, count: 2, cards: c.cards.slice(0, 2) } : c)), level: 'item', now: NOW, queueAvailable: true, doneWindowDays: 14 });
-    assert.match(texto(few.querySelector('[data-column="done"] .wb-window')), /últimos 14 dias/);
+    assert.equal(texto(few.querySelector('[data-column="done"] .wb-window')), 'Fechadas nos últimos 14 dias');
   });
 });
 
@@ -531,7 +537,7 @@ describe('#465/AC-4 GitHub down (465-4, ADR-0001)', () => {
   test('#465/AC-4 the stale board fades what comes from GitHub (Status, PR, CI, review); sessions and queue stay live', () => {
     const board = boardColumns({ columns: PAYLOAD_COLUMNS, level: 'item', primaryRepo: REPO, now: NOW, queueAvailable: true, doneWindowDays: 14, stale: true });
     assert.ok(board.classList.contains('wb-board-stale'));
-    for (const sel of ['.wb-status', '.wb-pr', '.wb-ci', '.wb-review']) assert.ok(board.querySelectorAll(sel).every((n) => n.classList.contains('wb-gh')), sel);
+    for (const sel of ['.wb-status', '.wb-pr', '.wb-ci', '.wb-review', '.wb-plan']) assert.ok(board.querySelectorAll(sel).every((n) => n.classList.contains('wb-gh')), sel);
     for (const sel of ['.wb-session', '.wb-queue-pos']) assert.ok(board.querySelectorAll(sel).every((n) => !n.classList.contains('wb-gh')), sel);
     const css = readFileSync(`${UI_FOLDER}work-board.css`, 'utf8');
     assert.match(css, /\.wb-board-stale \.wb-gh\s*\{[^}]*opacity/);
@@ -582,7 +588,7 @@ describe('#465/AC-2 the empty project (465-3) and the loading board (465-5)', ()
     assert.equal(board.getAttribute('aria-busy'), 'true');
     assert.deepEqual(board.querySelectorAll('section.wb-col').map((c) => c.querySelectorAll('.wb-skeleton').length), [3, 1, 2, 2, 2, 2]);
     assert.deepEqual(board.querySelectorAll('.wb-count').map(texto), ['…', '…', '…', '…', '…', '…']);
-    assert.equal(board.querySelectorAll('.wb-count')[0]!.getAttribute('aria-label'), 'carregando');
+    assert.equal(texto(board.querySelector('h2 .wb-sr-only')), ': carregando');
     assert.ok(board.querySelectorAll('.wb-skeleton').every((s) => s.getAttribute('aria-hidden') === 'true'));
   });
 });
@@ -608,5 +614,51 @@ describe('#466/AC-3 the filter with no result (466-3)', () => {
     const board = boardColumns({ mode: 'blank', counts: '0', now: NOW });
     assert.equal(board.querySelectorAll('section.wb-col').length, 6);
     assert.deepEqual(board.querySelectorAll('.wb-col-name').map(texto), ['Planejamento', 'Na fila', 'Em execução', 'Em review', 'Bloqueado', 'Concluído']);
+  });
+});
+
+describe('#465/AC-5 English internals, pt-BR on screen (ADR-0009)', () => {
+  const PORTUGUESE = /[à-ú]|coluna|fila|bloquead|conclu|planej|filtro|nivel|cartao|card[oa]s?-|projeto|sessao|sessoes|quadro|filh|caminho|motivo|rotulo|cabecalho|vazio|carregando|erro\b|limpar|copiar|atualizar|repositorio|etiqueta|tipo\b|iniciativa|epico|plano\b|passos?\b/i;
+
+  test('#465/AC-5 every class token and every data-* name and value the components render is English; the copy is pt-BR', () => {
+    const filters = { ...NO_FILTERS, initiative: 1, epic: 6, type: 'bug', label: 'ui', repo: REPO, status: 'in-progress' };
+    const project = { owner: 'ahrenatechnology', number: 3, title: 'Ahrena Console', url: 'https://github.com/orgs/ahrenatechnology/projects/3', primaryRepo: REPO };
+    const epic = card(6, { level: 'epic', type: 'epic', column: 'blocked', blocked: blocked('needs-you'), children: { total: 2, done: 1, byColumn: { blocked: 1, done: 1 }, blocked: { 'needs-you': 1 } } });
+    const roots = [
+      workBoardHeader({ project, fetchedAt: NOW - MIN, now: NOW, stale: true, busy: true, onRefresh: () => {} }),
+      levelSwitch({ levels: [...WORK_LEVELS], level: 'item', path: boardPath(filters, OPTIONS), onLevelChange: () => {}, onPathSelect: () => {} }),
+      filterBar({ filters, options: OPTIONS, link: '/ui/work?level=item', onFilterChange: () => {}, onClear: () => {}, onCopyLink: () => {} }),
+      boardColumns({ columns: PAYLOAD_COLUMNS, level: 'item', chainMode: 'full', primaryRepo: REPO, now: NOW, queueAvailable: false, doneWindowDays: 14, stale: true }),
+      boardColumns({ mode: 'skeleton', counts: '…', now: NOW }),
+      parentCard(epic, { now: NOW, onDrill: () => {} }),
+      staleBand({ fetchedAt: NOW - MIN, now: NOW, reason: 'x', onRetry: () => {} }),
+      firstReadFailure({ reason: 'x', onRetry: () => {} }),
+      emptyProject({ project }),
+      noResult({ suggestion: { param: 'label', count: 2 }, filters, options: OPTIONS, onClear: () => {}, onFilterChange: () => {} }),
+      workBoardError({ title: 'Falhou.', onRetry: () => {} }),
+    ];
+    const classes = new Set<string>();
+    const data = new Set<string>();
+    for (const root of roots) {
+      for (const node of [root, ...root.querySelectorAll('*')]) {
+        for (const c of (node.getAttribute('class') ?? '').split(/\s+/).filter(Boolean)) classes.add(c);
+        for (const [name, value] of node.atributos) {
+          if (!name.startsWith('data-')) continue;
+          data.add(name);
+          if (name !== 'data-key') data.add(value);
+        }
+      }
+    }
+    const wb = [...classes].filter((c) => c.startsWith('wb-'));
+    assert.ok(wb.length > 40, 'the walk saw the board');
+    for (const name of [...wb, ...data].filter(Boolean)) {
+      assert.match(name, /^[a-z0-9-]+$/, `${name} is not a plain English token`);
+      assert.doesNotMatch(name, PORTUGUESE, `${name} reads Portuguese`);
+    }
+    assert.ok(data.has('data-column') && data.has('data-param') && data.has('data-level') && data.has('data-queue'));
+    const copy = roots.map(texto).join(' ');
+    for (const words of ['Quadro do trabalho', 'Atualizar', 'Nível', 'Iniciativa', 'Limpar filtros', 'Copiar link', 'Planejamento', 'Na fila', 'Em execução', 'Em review', 'Bloqueado', 'Concluído', 'Ver filhos', 'Tentar agora', 'Trocar de Project', 'Nenhuma issue com estes filtros.']) {
+      assert.ok(copy.includes(words), `the screen says "${words}"`);
+    }
   });
 });
