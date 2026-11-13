@@ -89,6 +89,8 @@ export interface RemoteMachineOptions {
     credentialCommand: (machineId: string) => boolean;
     /** This machine's `connection.checkout`, or `null`. */
     checkout: (machineId: string) => string | null;
+    /** After each good overview read, once `core()` has it (decision 0024 section 2: the automatic update looks then). */
+    onRead?: (machineId: string) => void;
   };
 }
 
@@ -351,6 +353,7 @@ export class RemoteMachine implements MachineEntry {
       this.coreFailed = false;
       this.coreAnswered = true;
       this.lastCore = { ...parsed, readAt: new Date(now).toISOString() };
+      c.onRead?.(this.id);
       return;
     }
     if (r.kind === 'response') this.coreAnswered = true;

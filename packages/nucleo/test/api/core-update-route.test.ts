@@ -79,7 +79,7 @@ describe('issue 462 the Update routes', () => {
     const u = list[1]!.update!;
     assert.deepEqual(
       Object.keys(u).sort(),
-      ['backupPath', 'canCancel', 'command', 'configured', 'confirmation', 'endedAt', 'exitCode', 'invalidReason', 'kind', 'message', 'newCommit', 'observedVersion', 'oldCommit', 'phase', 'problem', 'readyUntil', 'reason', 'setup', 'startedAt', 'state', 'targetVersion', 'timeoutSeconds'],
+      ['auto', 'automatic', 'backupPath', 'canCancel', 'command', 'configured', 'confirmation', 'endedAt', 'exitCode', 'invalidReason', 'kind', 'message', 'newCommit', 'observedVersion', 'oldCommit', 'phase', 'problem', 'readyUntil', 'reason', 'setup', 'source', 'startedAt', 'state', 'targetVersion', 'timeoutSeconds'],
     );
     assert.equal(u.configured, true);
     assert.equal(u.state, 'idle');
