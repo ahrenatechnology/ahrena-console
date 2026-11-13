@@ -39,6 +39,8 @@ button { font: inherit; cursor: pointer; }
 .cc-nav-dot[data-state="incompatible-version"] { background: var(--status-waiting-dot); }
 /* The tunnel is up and the core over there asks for the owner proof (issue 388): one yellow dot for the three reasons. */
 .cc-nav-dot[data-state="owner-auth"] { background: var(--status-waiting-dot); }
+/* The núcleo over there is being updated (issue 484, decision 0024 section 4): the orange of something running. */
+.cc-nav-dot[data-state="updating"] { background: var(--status-active-dot); }
 /* Conexões: the worst cloud connector (issue 277); cloud-none keeps the neutral dot. */
 .cc-nav-dot[data-state="cloud-ok"] { background: var(--status-completed-dot); }
 .cc-nav-dot[data-state="cloud-warn"] { background: var(--status-waiting-dot); }
