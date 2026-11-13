@@ -9,6 +9,7 @@
 
 import { attentionOfItem } from '../attention.js';
 import { normalizeCore } from './machine-core-format.js';
+import { normalizeUpdate } from './machine-update-format.js';
 import { normalizeTerminals } from './machine-terminals-format.js';
 
 export const MACHINES_ROUTE = '/api/machines';
@@ -18,6 +19,9 @@ export const LOCAL_ID = 'local';
 export const WINDOWS = [1, 12];
 /** The core samples every 30 s; the screen re-reads at the same pace (a new sample publishes nothing). */
 export const REREAD_MS = 30_000;
+
+/** While an update of the remote núcleo runs (issue 462): the phase moves in seconds. */
+export const UPDATE_REREAD_MS = 2000;
 /** A volume at or above this is yellow; at or above `VOLUME_FULL_PCT` + 5, red (the core alerts at 85). */
 export const VOLUME_FULL_PCT = 85;
 export const DASH = '—';
@@ -147,6 +151,7 @@ export function normalizeMachine(m) {
     alerts: num(m.alerts) ?? 0,
     reconnect: normalizeReconnect(m.reconnect),
     core: normalizeCore(m.core),
+    update: normalizeUpdate(m.update),
   };
 }
 
