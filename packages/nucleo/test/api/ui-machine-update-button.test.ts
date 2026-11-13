@@ -1,11 +1,14 @@
-// The Atualizar button of the remote núcleo on /ui (issue 462, decision 0022, layer 4, wireframes 462-1 to 462-6): the
-// button on the band, the confirmation that runs the --check first, the progress by phase, every ending, the
-// "falta configurar" states with the block to paste, and the band that goes away by itself. Mounted on the fake DOM
-// with the simulator's telemetry; the core is faked: `GET /api/machines` carries the `update` the test sets, and the
-// writes are recorded and answered by a function the test gives. Nothing here runs a command, reads machines.json or
-// touches a real machine. Issue 484 (decision 0024, wireframes 484-1 and 484-2): the Mac updates the núcleo over there
-// by itself, the band reads Atualizar agora, Tentar de novo or the phase of the automatic run, and the sidebar dot says
-// Atualizando.
+/*
+ * The Atualizar button of the remote núcleo on /ui (issue 462, decision 0022, layer 4, wireframes 462-1 to 462-6): the
+ * button on the band, the confirmation that runs the --check first, the progress by phase, every ending, the
+ * "falta configurar" states with the block to paste, and the band that goes away by itself. Mounted on the fake DOM
+ * with the simulator's telemetry; the core is faked: `GET /api/machines` carries the `update` the test sets, and the
+ * writes are recorded and answered by a function the test gives. Nothing here runs a command, reads machines.json or
+ * touches a real machine. Issue 484 (decision 0024, wireframes 484-1 and 484-2): the Mac updates the núcleo over there
+ * by itself, the band reads Atualizar agora, Tentar de novo or the phase of the automatic run, and the sidebar dot says
+ * Atualizando.
+ * (ADR-0024)
+ */
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { after, afterEach, before, beforeEach, describe, test } from 'node:test';
@@ -234,7 +237,7 @@ describe('issue 462 machine-update-format', () => {
   });
 });
 
-// ---------- the band and the button (462-1) ----------
+// ---------- the band and the button (462-1) ---------- (ADR-0024)
 
 describe('issue 462 the band with the button (462-1)', () => {
   test('issue 484 AC5 · 462-1: outdated and configured, the band has Atualizar agora and no command card, no setup card', async () => {
@@ -541,7 +544,7 @@ describe('issue 462 every ending shows the core\'s sentence', () => {
   });
 });
 
-// ---------- falta configurar (462-6) ----------
+// ---------- falta configurar (462-6) ---------- (ADR-0024)
 
 describe('issue 484 falta configurar (462-6 as decision 0024 left it)', () => {
   test('issue 484 AC5 · a credential that gives no command (missing): the band says the core\'s sentence, no button, no setup card, the copy card collapsed', async () => {
@@ -650,7 +653,7 @@ describe('issue 462 review fixes', () => {
   });
 });
 
-// ---------- the remote core updates itself (issue 484, decision 0024, wireframes 484-1 and 484-2) ----------
+// ---------- the remote core updates itself (issue 484, decision 0024, wireframes 484-1 and 484-2) ---------- (ADR-0024)
 
 describe('issue 484 the automatic update (484-1)', () => {
   test('issue 484 AC6 · the automatic update on the swap: the band says the Mac started it and names the phase, the progress has the five steps, no dialog, nothing written', async () => {
@@ -678,7 +681,7 @@ describe('issue 484 the automatic update (484-1)', () => {
     assert.equal(part(m.area, 'update-dialog'), null);
     const before = reads;
     update = updateOf({ state: 'ready', kind: 'check', phase: 'check', automatic: true, auto: { target: '0.0.17', state: 'running' }, readyUntil: new Date(Date.now() + 4 * M).toISOString(), message: msg('check-ready') });
-    // The screen keeps re-reading fast through the automatic ready: two more reads are the ready one painted.
+    // The screen keeps re-reading fast through the automatic ready: two more reads are the ready one painted. (ADR-0024)
     await until(() => reads >= before + 2, 6000);
     assert.equal(part(m.area, 'update-dialog'), null, 'the Mac\'s ready is not the person\'s question');
     assert.equal(part(m.area, 'core-outdated')!.getAttribute('data-mode'), 'busy');
@@ -779,6 +782,25 @@ describe('issue 484 Tentar de novo (484-2)', () => {
     await m.ready;
     assert.equal(action(m.area, 'retry'), null);
     assert.notEqual(part(m.area, 'core-outdated')!.getAttribute('data-mode'), 'retry');
+  });
+
+  test('issue 484 AC3 · a person who cancels their own --check and closes the dialog finds the band ready: Atualizar agora, no Tentar de novo, no failure card', async () => {
+    onWrite = (call) => ({ update: call.startsWith('DELETE') ? updateOf({ state: 'canceled', kind: 'check', endedAt: iso(0), message: msg('canceled') }) : updateOf({ state: 'checking', kind: 'check', phase: 'check', startedAt: iso(1000), canCancel: true }) });
+    const m = mount();
+    await m.ready;
+    action(m.area, 'open')!.click();
+    await until(() => part(m.area, 'update-dialog')?.getAttribute('data-mode') === 'checking' && action(m.area, 'cancel')?.getAttribute('aria-disabled') === null);
+    action(m.area, 'cancel')!.click();
+    await until(() => written.includes('DELETE /api/machines/ws-exemplo/update'));
+    await until(() => part(m.area, 'update-dialog')?.getAttribute('data-mode') === 'result');
+    action(m.area, 'dismiss')!.click();
+    await until(() => part(m.area, 'update-dialog') === null);
+    const band = part(m.area, 'core-outdated')!;
+    assert.equal(band.getAttribute('data-mode'), 'ready');
+    assert.deepEqual(buttons(band), ['Atualizar agora']);
+    assert.equal(action(m.area, 'retry'), null);
+    assert.equal(part(m.area, 'update-result'), null);
+    assert.ok(!texto(m.area).includes('Cancelado'), 'no failure copy card for the person\'s own cancel');
   });
 
   test('issue 484 AC4 · an attempt spent before a restart (auto failed, no job): the band is ready with Atualizar agora, and its click writes only the --check', async () => {

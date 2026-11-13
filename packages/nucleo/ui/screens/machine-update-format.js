@@ -1,15 +1,18 @@
-// The Atualizar button of the remote núcleo, as the screen reads it (issue 462, decision 0022, wireframes 462-1 to
-// 462-6). Pure: no DOM. The core sends `update` on every remote machine of `GET /api/machines`
-// (`telemetry/core-update.ts`); here it is read again with the exact shapes, so nothing the remote or the file said
-// reaches the screen but the closed words below. The screen writes NO text of its own for a result: the words of an
-// exit, a refusal or a "falta configurar" come from `update.message.text` (rendered by the core from
-// `core-update-texts.ts`, the table of decision 0022 section 7). What is written here is only static labels: the
-// phase names, the titles and the buttons.
-//
-// Decision 0024 (issue 484): the core derives the command from `connection.credential` and the Mac updates the remote
-// núcleo by itself once per app version. Three fields come with it: `source` (where the command came from),
-// `automatic` (the run `state` speaks of was started by the Mac, not by a click) and `auto` (the automatic attempt
-// for the app's version). `setup.block` now comes only with `problem: "invalid"`, to compare.
+/*
+ * The Atualizar button of the remote núcleo, as the screen reads it (issue 462, decision 0022, wireframes 462-1 to
+ * 462-6). Pure: no DOM. The core sends `update` on every remote machine of `GET /api/machines`
+ * (`telemetry/core-update.ts`); here it is read again with the exact shapes, so nothing the remote or the file said
+ * reaches the screen but the closed words below. The screen writes NO text of its own for a result: the words of an
+ * exit, a refusal or a "falta configurar" come from `update.message.text` (rendered by the core from
+ * `core-update-texts.ts`, the table of decision 0022 section 7). What is written here is only static labels: the
+ * phase names, the titles and the buttons.
+ *
+ * Decision 0024 (issue 484): the core derives the command from `connection.credential` and the Mac updates the remote
+ * núcleo by itself once per app version. Three fields come with it: `source` (where the command came from),
+ * `automatic` (the run `state` speaks of was started by the Mac, not by a click) and `auto` (the automatic attempt
+ * for the app's version). `setup.block` now comes only with `problem: "invalid"`, to compare.
+ * (ADR-0024)
+ */
 
 const STATES = new Set(['idle', 'checking', 'ready', 'refused', 'running', 'succeeded', 'rolled-back', 'rollback-failed', 'failed', 'timed-out', 'canceled']);
 const PHASES = new Set(['check', 'backup', 'swap', 'start', 'verify', 'rollback']);

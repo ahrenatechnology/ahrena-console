@@ -1,20 +1,24 @@
-// The Atualizar button of the remote núcleo on the machine screen (issue 462, decision 0022, wireframes 462-1 to
-// 462-6): the button on the yellow band, the confirmation that runs the --check first, the progress by phase and every
-// ending. Decision 0024 (issue 484, wireframes 484-1 and 484-2): the Mac updates the remote núcleo by itself, so the
-// band has four modes: `busy` (a run goes on, the automatic one says so and names the phase), `retry` (the last job
-// failed or was refused: its reason and Tentar de novo), `ready` (Atualizar agora) and `setup` (no command can be
-// built: only what is missing, no button). The card with the block to paste is gone; an invalid `connection.update`
-// shows the derived command to compare. The card with the command to paste (449) shows only in `retry` and `setup`,
-// collapsed. The confirmation never opens for a run the Mac started (`automatic`).
-//
-// - Nothing here runs a command: the writes take only the machine id (`POST …/update/check`, `POST …/update`,
-//   `DELETE …/update`) and the core runs the `connection.update` the person declared.
-// - The screen writes no sentence of a result or of a state: it is `update.message.text`, rendered by the core from the
-//   table of decision 0022 section 7. What is here is static: labels (button, titles, phase names) and the explanatory
-//   copy the approved wireframes 462-1 to 462-3 carry (what the click will do, that the swap cannot be cancelled).
-// - machine.js mounts it once (`machineUpdate(ctx, id, …)`), calls `parts(machine, …)` in every paint (`null` means
-//   "not mine": an older core without `update`, the owner proof pending, or no credential command, and the 449 flow
-//   draws), `tick(area)` once a second and `active(machine)` to re-read fast while a run goes on.
+/*
+ * The Atualizar button of the remote núcleo on the machine screen (issue 462, decision 0022, wireframes 462-1 to
+ * 462-6): the button on the yellow band, the confirmation that runs the --check first, the progress by phase and every
+ * ending. Decision 0024 (issue 484, wireframes 484-1 and 484-2): the Mac updates the remote núcleo by itself, so the
+ * band has four modes: `busy` (a run goes on, the automatic one says so and names the phase), `retry` (the last job
+ * failed or was refused: its reason and Tentar de novo), `ready` (Atualizar agora) and `setup` (no command can be
+ * built: only what is missing, no button). The card with the block to paste is gone; an invalid `connection.update`
+ * shows the derived command to compare. The card with the command to paste (449) shows only in `retry` and `setup`,
+ * collapsed. The confirmation never opens for a run the Mac started (`automatic`).
+ *
+ * - Nothing here runs a command: the writes take only the machine id (`POST …/update/check`, `POST …/update`,
+ *   `DELETE …/update`) and the core runs the declared `connection.update`, or the command derived from
+ *   `connection.credential` (decision 0024).
+ * - The screen writes no sentence of a result or of a state: it is `update.message.text`, rendered by the core from the
+ *   table of decision 0022 section 7. What is here is static: labels (button, titles, phase names) and the explanatory
+ *   copy the approved wireframes 462-1 to 462-3 carry (what the click will do, that the swap cannot be cancelled).
+ * - machine.js mounts it once (`machineUpdate(ctx, id, …)`), calls `parts(machine, …)` in every paint (`null` means
+ *   "not mine": an older core without `update`, the owner proof pending, or no credential command, and the 449 flow
+ *   draws), `tick(area)` once a second and `active(machine)` to re-read fast while a run goes on.
+ * (ADR-0024)
+ */
 
 import { el, icon } from '../dom.js';
 import { runButtonAction, setDisabled } from '../button-action.js';
@@ -116,7 +120,7 @@ export function machineUpdate(ctx, id, { area, repaint, reread, patch }) {
     repaint();
   };
 
-  // ---------- the pieces ----------
+  // ---------- the pieces ---------- (ADR-0024)
 
   function retry(u) {
     if (u.kind === 'update') dismiss(u);
@@ -160,7 +164,7 @@ export function machineUpdate(ctx, id, { area, repaint, reread, patch }) {
     return node;
   }
 
-  // The confirmation: first the --check, then the go / no-go (462-2). It sits under the band like the Parar one.
+  // The confirmation: first the --check, then the go / no-go (462-2). It sits under the band like the Parar one. (ADR-0024)
   function dialogNode(machine, u, core) {
     // A run the Mac started is never confirmed by the person (decision 0024 section 3). While the person's own click
     // is on its way the last read may still be the Mac's run: the answer replaces it.
@@ -312,12 +316,12 @@ export function machineUpdate(ctx, id, { area, repaint, reread, patch }) {
       if (problemAt && problemAt !== 'now' && problemAt !== `${u.state}|${u.endedAt}`) problem = null;
       if (problemAt === 'now') problemAt = `${u.state}|${u.endedAt}`;
       const busy = isBusy(u);
-      // The confirmation is the person's: never for a run the Mac started, and gone once the swap runs.
+      // The confirmation is the person's: never for a run the Mac started, and gone once the swap runs. (ADR-0024)
       if ((u.automatic && !pending) || (u.kind === 'update' && u.state === 'running')) dialogOpen = false;
       const dialog = dialogOpen ? dialogNode(machine, u, core) : null;
       if (dialogOpen && !dialog) dialogOpen = false;
-      // The band's mode (decision 0024 section 4). A manual --check changes nothing: its band stays `ready`, the button waits.
-      const mode = SETUP_PROBLEMS.has(u.problem) ? 'setup' : busy && updatingNow(u) ? 'busy' : outdated && !busy && !dialog && u.kind && canRetry(u) ? 'retry' : 'ready';
+      // The band's mode (decision 0024 section 4). A manual --check changes nothing: its band stays `ready`, the button waits. (ADR-0024)
+      const mode = SETUP_PROBLEMS.has(u.problem) ? 'setup' : busy && updatingNow(u) ? 'busy' : outdated && !busy && !dialog && u.kind && u.state !== 'canceled' && canRetry(u) ? 'retry' : 'ready';
       // Each failure shows the command card collapsed first.
       if (mode === 'busy') fallbackOpen = false;
       const keepResult = mode !== 'retry' || u.state === 'rollback-failed';

@@ -289,8 +289,11 @@ const stoppedByYou = (m) => m.connection && typeof m.connection === 'object' && 
 // reasons, its own yellow dot, and the reason on the dot's label (the color alone does not say it).
 // The labels come from machine-format.js's OWNER_AUTH, so the pill and the dot cannot drift apart.
 const ownerAuthOf = (m) => (m.state === 'unreachable' && Object.hasOwn(OWNER_AUTH, m.reason ?? '') ? m.reason : null);
-// The núcleo over there is being updated, by a click or by the Mac itself (issue 484, decision 0024 section 4): its own
-// dot, "Atualizando", from the --check until the new version answers. Only a connection the person stopped wins over it.
+/*
+ * The núcleo over there is being updated, by a click or by the Mac itself (issue 484, decision 0024 section 4): its own
+ * dot, "Atualizando", from the --check until the new version answers. Only a connection the person stopped wins over it.
+ * (ADR-0024)
+ */
 const updatingOf = (m) => {
   const u = normalizeUpdate(m.update);
   return Boolean(u && updatingNow(u));

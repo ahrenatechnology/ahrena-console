@@ -68,7 +68,7 @@ update: {
 
 - `auto.state` é `running` enquanto o `--check` ou a atualização automática roda, `succeeded` se a atualização automática saiu `0`, e `failed` se o `--check` recusou, se a atualização falhou, ou se a tentativa foi gasta por outro motivo (§2). `failed` diz "o automático já tentou este alvo e não volta a tentar".
 - Depois de um reinício do núcleo do Mac, uma tentativa gasta aparece como `{ target, state: "failed" }` sem o job (que vive em memória): a faixa mostra "Atualizar agora" sem o motivo da última vez. Ver o motivo de novo custa um "Atualizar agora", que roda o `--check` primeiro.
-- `auto` só diz se o automático ainda vai disparar para este alvo. `failed` também cobre a tentativa gasta por uma atualização manual, mesmo bem-sucedida. A tela escolhe "Tentar de novo" pelo `state` do último job (`refused`, `failed`, `rolled-back`, `rollback-failed`, `timed-out`, `canceled`), não por `auto`.
+- `auto` só diz se o automático ainda vai disparar para este alvo. `failed` também cobre a tentativa gasta por uma atualização manual, mesmo bem-sucedida. A tela escolhe "Tentar de novo" pelo `state` do último job (`refused`, `failed`, `rolled-back`, `rollback-failed`, `timed-out`), não por `auto`; um `--check` que a própria pessoa cancelou (`canceled`) volta a faixa a "Atualizar agora", sem "Tentar de novo".
 - `command` (0022 §6, "o do arquivo") é o comando derivado quando `source: "derived"`.
 - Entre o fim do `--check` automático e o começo da atualização encadeada, o estado pode aparecer por um instante como `ready` com `automatic: true`: a tela não abre a confirmação quando `automatic` é `true`.
 - `setup.block` (o bloco pronto) só vem com `problem: "invalid"`, para a pessoa comparar com o que escreveu.
