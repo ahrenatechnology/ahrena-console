@@ -104,10 +104,12 @@ ssh <host> node --disable-warning=ExperimentalWarning --input-type=module - \
 `--checkout` gives the repository, since the script cannot find its own file. The hint printed after an orphan
 start does not name a script path for the same reason.
 
+Notes: the lock is first taken in `--data-dir` (or the data folder of `--core-options`, or `~/.ahrena-console`), and, when the running core's own data folder is another one, also there; a stale lock is moved aside under a unique name and judged again before it is deleted, so two scripts cannot both take it over. `reason: started-failed` covers every failure after the swap (stop, checkout, start or confirm), for both 40 and 41. A process killed between creating the lock and writing it leaves an empty file that counts as live for 30 minutes.
+
 ## Signals
 
 Until the `backup` phase begins, SIGINT, SIGTERM and SIGHUP cancel: the lock is released, the result is
-`exit 130` and nothing was touched (a signal that arrives while a git command runs is handled when it returns).
+`exit 130` and nothing was touched (a signal that arrives while a git command runs is handled when it returns; the `git fetch` has a 120 s timeout).
 From the `backup` phase on SIGHUP, SIGPIPE, SIGINT and SIGTERM are ignored and a closed stdout is tolerated, so
 a dropped connection never leaves the machine half-updated: the script finishes alone, with success or rollback.
 Only SIGKILL stops it, and then the dead `pid` makes the lock stale. `--check` keeps the cancel handlers for its

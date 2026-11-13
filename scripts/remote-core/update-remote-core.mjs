@@ -30,7 +30,7 @@ import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import {
   appendFileSync, chmodSync, closeSync, copyFileSync, existsSync, mkdirSync, openSync, readdirSync,
-  readFileSync, readlinkSync, realpathSync, renameSync, rmSync, statSync, writeFileSync, writeSync,
+  linkSync, readFileSync, readlinkSync, realpathSync, renameSync, rmSync, statSync, writeFileSync, writeSync,
 } from 'node:fs';
 import { get } from 'node:http';
 import { homedir, userInfo } from 'node:os';
@@ -370,20 +370,34 @@ function acquireLock(dataDir) {
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
       const fd = openSync(file, 'wx', 0o600);
-      try { writeSync(fd, text); } finally { closeSync(fd); }
+      // Tracked before the write: a failed write must not leave an empty lock that nobody releases.
       heldLocks.push({ file, text });
+      try { writeSync(fd, text); } catch (e) { heldLocks.pop(); rmSync(file, { force: true }); throw e; } finally { closeSync(fd); }
       return;
     } catch (e) {
       if (e.code !== 'EEXIST') throw e;
     }
     const stale = staleReason(file);
     if (stale === null) throw lockBusy();
-    if (stale !== 'missing') {
-      logLine(dataDir, `took over a stale update.lock (${stale})`);
-      rmSync(file, { force: true });
-    }
+    if (stale !== 'missing') takeOverStale(dataDir, file, stale);
   }
   throw lockBusy();
+}
+
+/**
+ * Moves the stale file aside under a unique name before judging it again, so two scripts that both read
+ * "stale" cannot delete the fresh lock the other just created: whoever moved a live lock puts it back.
+ */
+function takeOverStale(dataDir, file, stale) {
+  const aside = `${file}.stale-${process.pid}`;
+  try { renameSync(file, aside); } catch { return; }
+  if (staleReason(aside) === null) {
+    try { linkSync(aside, file); } catch { /* another lock is already there */ }
+    rmSync(aside, { force: true });
+    throw lockBusy();
+  }
+  logLine(dataDir, `took over a stale update.lock (${stale})`);
+  rmSync(aside, { force: true });
 }
 
 /** Removes only the locks this process wrote and that still hold its own content. */
@@ -447,7 +461,7 @@ function preflight(opts, ctx) {
     throw new Stop(EXIT.PREFLIGHT, 'the checkout has tracked changes; commit or discard them first (no --force: nothing is overwritten)', 'dirty-tree');
   }
   if (!opts['no-fetch']) {
-    try { git(checkout, 'fetch', 'origin', '--tags'); } catch (e) { warn(`fetch failed (continuing with what the checkout has): ${String(e.stderr ?? e.message).trim()}`); }
+    try { execFileSync('git', ['-C', checkout, 'fetch', 'origin', '--tags'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 120000 }); } catch (e) { warn(`fetch failed (continuing with what the checkout has): ${String(e.stderr ?? e.message).trim()}`); }
   }
   const sha = gitOrNull(checkout, 'rev-parse', '--verify', `${opts.ref}^{commit}`);
   if (!sha) throw new Stop(EXIT.PREFLIGHT, `the ref ${opts.ref} does not resolve to a commit in ${checkout}`, 'unknown-ref');

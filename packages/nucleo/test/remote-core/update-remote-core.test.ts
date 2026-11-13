@@ -841,6 +841,22 @@ describe('AC5 · one update at a time on the machine: update.lock', () => {
     assert.ok(!existsSync(join(e.data, 'update.log')));
   });
 
+  test('AC5 the 33 result carries reason null and no commits', async () => {
+    writeLock(process.pid);
+    const r = await run(baseArgs(JSON_FLAGS));
+    assert.equal(r.code, 33, r.stderr);
+    assert.deepEqual(resultOf(r.stdout), { v: 1, event: 'result', exit: 33, reason: null, backup: null, oldCommit: null, newCommit: null });
+  });
+
+  test('AC5 a live lock is left byte for byte as it was and no file is left aside (exit 33)', async () => {
+    writeFileSync(lockFile(), JSON.stringify({ pid: process.pid, startedAt: new Date().toISOString() }));
+    const before = readFileSync(lockFile(), 'utf8');
+    const r = await run(baseArgs());
+    assert.equal(r.code, 33, r.stderr);
+    assert.equal(readFileSync(lockFile(), 'utf8'), before);
+    assert.deepEqual(readdirSync(e.data).filter((n) => n.includes('.stale-')), [], 'no file is left aside');
+  });
+
   test('AC5 two scripts at once on the same data folder: one updates, the other exits 33', async () => {
     const pid = await startOrphan();
     honestProc(pid);
@@ -1098,6 +1114,20 @@ process.exit(r.status ?? 1);
     assert.equal(r.code, 130, r.stderr);
     assert.equal(resultOf(r.stdout).exit, 130);
     assert.deepEqual(phases(r.stdout), ['check']);
+    assert.ok(!existsSync(lockFile()));
+    await assertUntouched(pid);
+  });
+
+  test('AC8 SIGHUP during the check cancels too: exit 130, lock released', async () => {
+    const pid = await startOrphan();
+    honestProc(pid);
+    executable(join(e.bin, 'git'), FAKE_GIT(execFileSync('which', ['git'], { encoding: 'utf8' }).trim()));
+    const slow = spawnScript(baseArgs(JSON_FLAGS).filter((a) => a !== '--no-fetch'));
+    await until(async () => existsSync(lockFile()));
+    await new Promise((r) => setTimeout(r, 300));
+    slow.child.kill('SIGHUP');
+    const r = await slow.done;
+    assert.equal(r.code, 130, r.stderr);
     assert.ok(!existsSync(lockFile()));
     await assertUntouched(pid);
   });
