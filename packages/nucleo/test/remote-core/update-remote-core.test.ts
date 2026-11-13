@@ -7,7 +7,7 @@
 // core is a real process, so every refusal can check that its pid did not change and that no SIGTERM arrived.
 import assert from 'node:assert/strict';
 import { execFile, execFileSync, spawn } from 'node:child_process';
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { createServer, get, type Server } from 'node:http';
 import { createServer as createNetServer } from 'node:net';
 import { tmpdir } from 'node:os';
@@ -780,5 +780,380 @@ describe('AC4 · refuse before stopping the working process', () => {
     const r = await run(['--checkout', e.repo]);
     assert.equal(r.code, 2);
     assert.match(r.stderr, /--ref is required/);
+  });
+});
+
+// ---- issue 462 layer 2: the lock, the NDJSON progress, the stdin run, the signals (ADR-0022) ----------------
+
+type Event = { v: number; event: string; phase?: string; exit?: number; reason?: string | null; backup?: string | null; oldCommit?: string | null; newCommit?: string | null };
+/** (#462) Every line of stdout must be a JSON object: a line that is not one fails the parse and so the test. */
+const events = (stdout: string): Event[] => stdout.split('\n').filter(Boolean).map((l) => JSON.parse(l) as Event);
+const phases = (stdout: string) => events(stdout).filter((v) => v.event === 'phase').map((v) => v.phase);
+const resultOf = (stdout: string) => {
+  const all = events(stdout);
+  const results = all.filter((v) => v.event === 'result');
+  assert.equal(results.length, 1, 'exactly one result event');
+  assert.equal(all.at(-1), results[0], 'the result is the last line');
+  return results[0]!;
+};
+const RESULT_KEYS = ['v', 'event', 'exit', 'reason', 'backup', 'oldCommit', 'newCommit'];
+const JSON_FLAGS = ['--progress', 'json'];
+const lockFile = () => join(e.data, 'update.lock');
+const writeLock = (pid: number, startedAt = new Date().toISOString()) => writeFileSync(lockFile(), JSON.stringify({ pid, startedAt }));
+
+/** (#462) Runs the script as a child that can be watched and signalled; `viaStdin` feeds it to `node --input-type=module -`. */
+function spawnScript(args: string[], env: NodeJS.ProcessEnv = {}, viaStdin = false) {
+  const argv = viaStdin ? [NODE_FLAG, '--input-type=module', '-', ...args] : [SCRIPT, ...args];
+  const child = spawn(process.execPath, argv, { env: { ...e.env, ...env }, stdio: ['pipe', 'pipe', 'pipe'] });
+  const seen = { stdout: '', stderr: '' };
+  child.stdout.on('data', (d) => { seen.stdout += d; });
+  child.stderr.on('data', (d) => { seen.stderr += d; });
+  if (viaStdin) child.stdin.end(readFileSync(SCRIPT)); else child.stdin.end();
+  const done = new Promise<Result>((resolve) => { child.on('close', (code) => resolve({ code: code ?? 1, stdout: seen.stdout, stderr: seen.stderr })); });
+  return { child, done, seen };
+}
+const PAUSE = { AHRENA_CONSOLE_UPDATE_PAUSE_MS: '1500' };
+
+describe('AC5 · one update at a time on the machine: update.lock', () => {
+  test('AC5 the lock exists while the update runs: {pid, startedAt}, mode 0600, removed after success', async () => {
+    const pid = await startOrphan();
+    honestProc(pid);
+    const run1 = spawnScript(baseArgs(), PAUSE);
+    await until(async () => existsSync(lockFile()));
+    const held = JSON.parse(readFileSync(lockFile(), 'utf8'));
+    assert.deepEqual(Object.keys(held), ['pid', 'startedAt']);
+    assert.equal(held.pid, run1.child.pid);
+    assert.ok(Math.abs(Date.now() - Date.parse(held.startedAt)) < 30_000);
+    assert.equal(statSync(lockFile()).mode & 0o777, 0o600);
+    const r = await run1.done;
+    assert.equal(r.code, 0, r.stderr);
+    assert.ok(!existsSync(lockFile()));
+  });
+
+  test('AC5 a live lock: exit 33 and nothing is touched, before any git or backup work', async () => {
+    const pid = await startOrphan();
+    honestProc(pid);
+    writeLock(process.pid);
+    const r = await run(baseArgs());
+    assert.equal(r.code, 33, r.stderr);
+    await assertUntouched(pid);
+    assert.ok(existsSync(lockFile()), "someone else's lock is not removed");
+    assert.ok(!existsSync(join(e.data, 'update.log')));
+  });
+
+  test('AC5 the 33 result carries reason null and no commits', async () => {
+    writeLock(process.pid);
+    const r = await run(baseArgs(JSON_FLAGS));
+    assert.equal(r.code, 33, r.stderr);
+    assert.deepEqual(resultOf(r.stdout), { v: 1, event: 'result', exit: 33, reason: null, backup: null, oldCommit: null, newCommit: null });
+  });
+
+  test('AC5 a live lock is left byte for byte as it was and no file is left aside (exit 33)', async () => {
+    writeFileSync(lockFile(), JSON.stringify({ pid: process.pid, startedAt: new Date().toISOString() }));
+    const before = readFileSync(lockFile(), 'utf8');
+    const r = await run(baseArgs());
+    assert.equal(r.code, 33, r.stderr);
+    assert.equal(readFileSync(lockFile(), 'utf8'), before);
+    assert.deepEqual(readdirSync(e.data).filter((n) => n.includes('.stale-')), [], 'no file is left aside');
+  });
+
+  test('AC5 two scripts at once on the same data folder: one updates, the other exits 33', async () => {
+    const pid = await startOrphan();
+    honestProc(pid);
+    const first = spawnScript(baseArgs(), PAUSE);
+    await until(async () => existsSync(lockFile()));
+    const second = await run(baseArgs());
+    assert.equal(second.code, 33, second.stderr);
+    const r = await first.done;
+    assert.equal(r.code, 0, r.stderr);
+    assert.equal(head(), e.shaB);
+    assert.ok(!existsSync(lockFile()));
+  });
+
+  test('AC5 a lock of a dead pid is taken over, with a line in update.log', async () => {
+    const pid = await startOrphan();
+    honestProc(pid);
+    const dead = spawn(process.execPath, ['-e', '']);
+    await new Promise((done) => dead.on('close', done));
+    writeLock(dead.pid!);
+    const r = await run(baseArgs());
+    assert.equal(r.code, 0, r.stderr);
+    assert.match(readFileSync(join(e.data, 'update.log'), 'utf8'), /took over a stale update\.lock \(dead-pid\)/);
+    assert.ok(!existsSync(lockFile()));
+  });
+
+  test('AC5 a lock started more than 30 minutes ago is taken over even if the pid is alive', async () => {
+    const pid = await startOrphan();
+    honestProc(pid);
+    writeLock(process.pid, new Date(Date.now() - 31 * 60_000).toISOString());
+    const r = await run(baseArgs());
+    assert.equal(r.code, 0, r.stderr);
+    assert.match(readFileSync(join(e.data, 'update.log'), 'utf8'), /older-than-30-minutes/);
+    assert.equal(head(), e.shaB);
+  });
+
+  test('AC5 a lock with unreadable content is live while recent (fail closed)', async () => {
+    const pid = await startOrphan();
+    honestProc(pid);
+    writeFileSync(lockFile(), 'half written');
+    const r = await run(baseArgs());
+    assert.equal(r.code, 33, r.stderr);
+    await assertUntouched(pid);
+  });
+
+  test('AC5 the lock is removed after a failure that rolled back (40) and after a refusal (30)', async () => {
+    await makeEnvReplace({ variantB: 'fails' });
+    const pid = await startOrphan();
+    honestProc(pid);
+    assert.equal((await run(baseArgs())).code, 40);
+    assert.ok(!existsSync(lockFile()));
+    writeFileSync(join(e.repo, 'packages/nucleo/package.json'), '{"dirty":true}\n');
+    assert.equal((await run(baseArgs())).code, 30);
+    assert.ok(!existsSync(lockFile()));
+  });
+
+  test('AC5 --check with a live lock exits 33 and touches nothing', async () => {
+    const pid = await startOrphan();
+    honestProc(pid);
+    writeLock(process.pid);
+    const r = await run(baseArgs(['--check']));
+    assert.equal(r.code, 33, r.stderr);
+    await assertUntouched(pid);
+    assert.ok(!existsSync(join(e.data, 'update.log')));
+  });
+
+  test('AC5 --check never creates the lock, and leaves a stale one alone', async () => {
+    const pid = await startOrphan();
+    honestProc(pid);
+    const clean = await run(baseArgs(['--check']));
+    assert.equal(clean.code, 0, clean.stderr);
+    assert.ok(!existsSync(lockFile()));
+    writeLock(process.pid, new Date(Date.now() - 31 * 60_000).toISOString());
+    const stale = await run(baseArgs(['--check']));
+    assert.equal(stale.code, 0, stale.stderr);
+    assert.ok(existsSync(lockFile()), 'a --check removes nothing');
+    assert.ok(!existsSync(join(e.data, 'update.log')));
+  });
+});
+
+describe('AC1 · --progress json: NDJSON on stdout, human text on stderr', () => {
+  test('AC1 a successful update announces check, backup, swap, start, verify and then the result', async () => {
+    const pid = await startOrphan();
+    honestProc(pid);
+    const r = await run(baseArgs(JSON_FLAGS));
+    assert.equal(r.code, 0, r.stderr);
+    assert.deepEqual(phases(r.stdout), ['check', 'backup', 'swap', 'start', 'verify']);
+    for (const line of events(r.stdout)) assert.equal(line.v, 1);
+    const result = resultOf(r.stdout);
+    assert.deepEqual(Object.keys(result), RESULT_KEYS);
+    assert.equal(result.exit, 0);
+    assert.equal(result.reason, null);
+    assert.equal(result.oldCommit, e.shaA);
+    assert.equal(result.newCommit, e.shaB);
+    const [dir] = backups();
+    assert.equal(result.backup, join(e.data, 'backups', dir!, 'nucleo.sqlite'));
+    assert.match(r.stderr, /updated to/, 'the human message went to stderr');
+    assert.ok(!r.stdout.includes('updated to'));
+  });
+
+  test('AC1 a phase event has exactly the keys v, event and phase', async () => {
+    const pid = await startOrphan();
+    honestProc(pid);
+    const r = await run(baseArgs([...JSON_FLAGS, '--check']));
+    assert.equal(r.code, 0, r.stderr);
+    assert.deepEqual(events(r.stdout).map((v) => Object.keys(v)), [['v', 'event', 'phase'], RESULT_KEYS]);
+    assert.deepEqual(phases(r.stdout), ['check']);
+    assert.equal(resultOf(r.stdout).newCommit, e.shaB);
+    assert.equal(resultOf(r.stdout).backup, null);
+  });
+
+  test('AC1 a rollback adds the rollback phase and exits 40 with reason started-failed and the backup', async () => {
+    await makeEnvReplace({ variantB: 'fails' });
+    const pid = await startOrphan();
+    honestProc(pid);
+    const r = await run(baseArgs(JSON_FLAGS));
+    assert.equal(r.code, 40, r.stderr);
+    assert.deepEqual(phases(r.stdout), ['check', 'backup', 'swap', 'start', 'verify', 'rollback']);
+    const result = resultOf(r.stdout);
+    assert.deepEqual([result.exit, result.reason, result.oldCommit, result.newCommit], [40, 'started-failed', e.shaA, e.shaB]);
+    assert.ok(result.backup && existsSync(result.backup));
+  });
+
+  test('AC1 a rollback that fails exits 41 and still carries the backup and the old commit', async () => {
+    await makeEnvReplace({ variantB: 'fails-and-breaks' });
+    const pid = await startOrphan();
+    honestProc(pid);
+    const r = await run(baseArgs(JSON_FLAGS));
+    assert.equal(r.code, 41, r.stderr);
+    const result = resultOf(r.stdout);
+    assert.deepEqual([result.exit, result.reason, result.oldCommit], [41, 'started-failed', e.shaA]);
+    assert.ok(result.backup && existsSync(result.backup));
+  });
+
+  const refusals: { name: string; code: number; reason: string | null; args: () => string[]; setup?: () => Promise<void> | void }[] = [
+    { name: 'not-a-checkout', code: 30, reason: 'not-a-checkout', args: () => baseArgs().map((a, i, all) => (all[i - 1] === '--checkout' ? join(e.root, 'nowhere') : a)).concat(JSON_FLAGS) },
+    { name: 'dirty-tree', code: 30, reason: 'dirty-tree', args: () => baseArgs(JSON_FLAGS), setup: () => write(join(e.repo, 'packages/nucleo/src/owner/cli.ts'), '// local change\n') },
+    { name: 'unknown-ref', code: 30, reason: 'unknown-ref', args: () => baseArgs(JSON_FLAGS, 'app-v9.9.9') },
+    { name: 'new-dependencies', code: 30, reason: 'new-dependencies', args: () => baseArgs(JSON_FLAGS), setup: () => makeEnvReplace({ deps: true }) },
+    { name: 'telemetry', code: 20, reason: null, args: () => baseArgs([...JSON_FLAGS, '--mac-telemetry-version', '2']) },
+    { name: 'owner-proof', code: 21, reason: null, args: () => baseArgs([...JSON_FLAGS, '--mac-credential-command', 'no']) },
+    { name: 'no-manifest', code: 22, reason: null, args: () => baseArgs(JSON_FLAGS), setup: () => makeEnvReplace({ manifest: false }) },
+    { name: 'no-mac-flags', code: 23, reason: null, args: () => ['--checkout', e.repo, '--ref', 'app-v0.0.17', '--no-fetch', '--port', String(e.port), '--data-dir', e.data, ...JSON_FLAGS] },
+    { name: 'live-lock', code: 33, reason: null, args: () => baseArgs(JSON_FLAGS), setup: () => writeLock(process.pid) },
+  ];
+  for (const c of refusals) {
+    test(`AC1 refusal ${c.name}: exit ${c.code}, reason ${c.reason}, a closed result and no signal`, async () => {
+      await c.setup?.();
+      const pid = await startOrphan();
+      honestProc(pid);
+      const r = await run(c.args());
+      assert.equal(r.code, c.code, r.stderr);
+      const result = resultOf(r.stdout);
+      assert.deepEqual(Object.keys(result), RESULT_KEYS);
+      assert.deepEqual([result.exit, result.reason], [c.code, c.reason]);
+      assert.deepEqual(lines(join(e.data, 'sigterm.log')), [], 'no SIGTERM reached the core');
+      assert.ok(!phases(r.stdout).includes('swap'));
+    });
+  }
+
+  test('AC1 31: a backup that cannot be made ends after the backup phase with no backup path', async () => {
+    const pid = await startOrphan();
+    honestProc(pid);
+    for (const s of ['', '-wal', '-shm']) rmSync(join(e.data, `nucleo.sqlite${s}`), { force: true });
+    writeFileSync(join(e.data, 'nucleo.sqlite'), 'this is not a sqlite file, '.repeat(200));
+    const r = await run(baseArgs(JSON_FLAGS));
+    assert.equal(r.code, 31, r.stderr);
+    assert.deepEqual(phases(r.stdout), ['check', 'backup']);
+    assert.deepEqual([resultOf(r.stdout).reason, resultOf(r.stdout).backup], [null, null]);
+  });
+
+  test('AC1 32 reasons: process-mismatch, no-options and data-dir-mismatch', async () => {
+    const pid = await startOrphan();
+    writeProc(pid, ['/usr/bin/python3', 'server.py']);
+    const mismatch = await run(baseArgs(JSON_FLAGS));
+    assert.equal(mismatch.code, 32, mismatch.stderr);
+    assert.equal(resultOf(mismatch.stdout).reason, 'process-mismatch');
+    e.env.AHRENA_CONSOLE_PROC_ROOT = join(e.root, 'no-proc');
+    const noOptions = await run(baseArgs(JSON_FLAGS));
+    assert.equal(noOptions.code, 32, noOptions.stderr);
+    assert.equal(resultOf(noOptions.stdout).reason, 'no-options');
+    honestProc(pid);
+    const wrongDir = await run(baseArgs(JSON_FLAGS).map((a, i, all) => (all[i - 1] === '--data-dir' ? join(e.root, 'elsewhere') : a)));
+    assert.equal(wrongDir.code, 32, wrongDir.stderr);
+    assert.equal(resultOf(wrongDir.stdout).reason, 'data-dir-mismatch');
+    await assertUntouched(pid);
+  });
+
+  test('AC1 a usage error and a bad --progress value still end with a result (or exit 2)', async () => {
+    const usage = await run(['--checkout', e.repo, ...JSON_FLAGS]);
+    assert.equal(usage.code, 2);
+    assert.equal(resultOf(usage.stdout).exit, 2);
+    const bad = await run(baseArgs(['--progress', 'text']));
+    assert.equal(bad.code, 2);
+    assert.match(bad.stderr, /--progress must be json/);
+  });
+
+  test('AC1 without --progress the output stays free text on stdout', async () => {
+    const pid = await startOrphan();
+    honestProc(pid);
+    const r = await run(baseArgs(['--check']));
+    assert.match(r.stdout, /nothing was touched/);
+    assert.throws(() => events(r.stdout));
+  });
+});
+
+describe('AC7 · the script read from stdin: node --input-type=module -', () => {
+  test('AC7 --check from stdin works and reports through NDJSON', async () => {
+    const pid = await startOrphan();
+    honestProc(pid);
+    const r = await spawnScript(baseArgs([...JSON_FLAGS, '--check']), {}, true).done;
+    assert.equal(r.code, 0, r.stderr);
+    assert.equal(resultOf(r.stdout).newCommit, e.shaB);
+    await assertUntouched(pid);
+  });
+
+  test('AC7 a full update from stdin works; the hint does not name a script path', async () => {
+    const pid = await startOrphan();
+    honestProc(pid);
+    const r = await spawnScript(baseArgs(JSON_FLAGS), {}, true).done;
+    assert.equal(r.code, 0, r.stderr);
+    assert.equal(head(), e.shaB);
+    assert.equal(resultOf(r.stdout).exit, 0);
+    assert.match(r.stderr, /run the script again with install-unit/);
+    assert.ok(!/node \S+ install-unit/.test(r.stderr + r.stdout));
+    assert.ok(!/\$\{process\.argv\[1\]\}/.test(readFileSync(SCRIPT, 'utf8')), 'no message is built from argv[1]');
+  });
+
+  test('AC7 install-unit works from stdin too', async () => {
+    const pid = await startOrphan();
+    honestProc(pid);
+    const r = await spawnScript(['install-unit', '--checkout', e.repo, '--port', String(e.port), '--data-dir', e.data, '--core-options', coreArgs().join(' ')], {}, true).done;
+    assert.equal(r.code, 0, r.stderr + r.stdout);
+    assert.ok(existsSync(join(e.home, '.config/systemd/user/ahrena-console-core.service')));
+  });
+});
+
+describe('AC8 · signals', () => {
+  const FAKE_GIT = (real: string) => `
+const a = process.argv.slice(2);
+if (a.includes('fetch')) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 2500);
+const r = require('child_process').spawnSync(${JSON.stringify(real)}, a, { stdio: 'inherit' });
+process.exit(r.status ?? 1);
+`;
+
+  test('AC8 SIGTERM during the check cancels: exit 130, result 130, lock released, nothing touched', async () => {
+    const pid = await startOrphan();
+    honestProc(pid);
+    executable(join(e.bin, 'git'), FAKE_GIT(execFileSync('which', ['git'], { encoding: 'utf8' }).trim()));
+    const args = baseArgs(JSON_FLAGS).filter((a) => a !== '--no-fetch');
+    const slow = spawnScript(args);
+    await until(async () => slow.seen.stdout.includes('"phase":"check"'));
+    await new Promise((r) => setTimeout(r, 300));
+    slow.child.kill('SIGTERM');
+    const r = await slow.done;
+    assert.equal(r.code, 130, r.stderr);
+    assert.equal(resultOf(r.stdout).exit, 130);
+    assert.deepEqual(phases(r.stdout), ['check']);
+    assert.ok(!existsSync(lockFile()));
+    await assertUntouched(pid);
+  });
+
+  test('AC8 SIGHUP during the check cancels too: exit 130, lock released', async () => {
+    const pid = await startOrphan();
+    honestProc(pid);
+    executable(join(e.bin, 'git'), FAKE_GIT(execFileSync('which', ['git'], { encoding: 'utf8' }).trim()));
+    const slow = spawnScript(baseArgs(JSON_FLAGS).filter((a) => a !== '--no-fetch'));
+    await until(async () => slow.seen.stdout.includes('"phase":"check"'));
+    await new Promise((r) => setTimeout(r, 300));
+    slow.child.kill('SIGHUP');
+    const r = await slow.done;
+    assert.equal(r.code, 130, r.stderr);
+    assert.ok(!existsSync(lockFile()));
+    await assertUntouched(pid);
+  });
+
+  test('AC8 after the backup phase SIGTERM, SIGINT and SIGHUP are ignored: the update finishes alone', async () => {
+    const pid = await startOrphan();
+    honestProc(pid);
+    const running = spawnScript(baseArgs(JSON_FLAGS), PAUSE);
+    await until(async () => running.seen.stdout.includes('"phase":"backup"'));
+    for (const signal of ['SIGTERM', 'SIGINT', 'SIGHUP'] as const) running.child.kill(signal);
+    const r = await running.done;
+    assert.equal(r.code, 0, r.stderr);
+    assert.equal(head(), e.shaB);
+    assert.ok(!existsSync(lockFile()));
+  });
+
+  test('AC8 a stdout closed after the backup phase (EPIPE) does not stop the update', async () => {
+    const pid = await startOrphan();
+    honestProc(pid);
+    const running = spawnScript(baseArgs(JSON_FLAGS), PAUSE);
+    await until(async () => running.seen.stdout.includes('"phase":"backup"'));
+    running.child.stdout.destroy();
+    const r = await running.done;
+    assert.equal(r.code, 0, r.stderr);
+    assert.equal(head(), e.shaB);
+    assert.equal((await overview(e.port))?.commit, e.shaB);
+    assert.ok(!existsSync(lockFile()));
   });
 });

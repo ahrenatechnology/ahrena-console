@@ -1,7 +1,9 @@
 # Updating the core of a remote machine
 
 Issue 449, decision [0021](../../docs/decisoes/0021-remote-core-update.md) (the contract: read it before
-changing a step or an exit code). `update-remote-core.mjs` is one ESM file that needs only Node 24 and git. A
+changing a step or an exit code), extended by issue 462, decision
+[0022](../../docs/decisoes/0022-remote-core-update-button.md) (the lock, exit 33, `--progress json`, the run from
+stdin, the signals). `update-remote-core.mjs` is one ESM file that needs only Node 24 and git. A
 person runs it on the machine that holds the checkout (the Workstation); the Mac never runs it and never
 updates anything by itself.
 
@@ -50,13 +52,68 @@ Running it twice with the same `--ref` is a no-op (exit 0). `update.log` in the 
 | 30 | tracked changes, unknown ref, or the target adds production dependencies |
 | 31 | the backup failed |
 | 32 | the process does not check out (cmdline, port, uid), its options cannot be read, or it did not stop |
+| 33 | another update holds `<data-dir>/update.lock`; nothing was touched |
 | 40 | failed and rolled back |
 | 41 | failed and the rollback failed |
+| 130 | canceled by SIGINT, SIGTERM or SIGHUP during the check, before the backup; nothing was touched |
 
 `--check` runs only the preflight and the guard and touches nothing. `--allow-disconnect` skips only 20 to 23
 (it prints in capital letters that the machine may be left without a connection); the preflight, the backup,
 the confirmation and the rollback still apply. `--core-options "--port 4720 --installation dev --data-dir <dir> --no-github"`
 gives the options explicitly when `/proc` cannot be read; the options are never guessed.
+
+## The lock (exit 33)
+
+`<data-dir>/update.lock` is created with `O_EXCL` (`wx`), mode `0600`, with `{"pid": <n>, "startedAt": "<ISO>"}`,
+before any git work, so it holds for two Macs, a window and a terminal at once. A live lock makes the script
+exit 33 without touching anything. A lock is taken over, with a line in `update.log`, when its `pid` does not exist
+(`kill(pid, 0)` fails with `ESRCH`) or its `startedAt` is more than 30 minutes old (content that cannot be read
+counts as live until the file itself is 30 minutes old). It is removed at the end, on success or failure, and when
+a signal cancels the run; only a lock still holding the script's own content is removed. `--check` never creates the
+lock, but reads it: a live lock gives 33, a stale one is ignored and left alone. When the core's own data folder
+differs from `--data-dir`/`--core-options`, the lock is taken there too.
+
+## Progress for a program: `--progress json`
+
+With `--progress json`, stdout carries only NDJSON (one object per line) and the human messages go to stderr.
+Phases, in this order: `check` (preflight, guard, dependencies, process check), `backup`, `swap` (just before the
+core is stopped: no clean way back from here), `start`, `verify`, and `rollback` (only after a failure past `swap`).
+Exactly one `result` closes every run, whatever the exit code:
+
+```
+{"v":1,"event":"phase","phase":"check"}
+{"v":1,"event":"result","exit":40,"reason":"started-failed","backup":"/…/backups/update-…/nucleo.sqlite","oldCommit":"<sha>","newCommit":"<sha>"}
+```
+
+The keys are exactly those, in that order; `backup`, `oldCommit`, `newCommit` are `null` until known. `reason` is
+`null` except: for exit 30, `not-a-checkout`, `dirty-tree`, `unknown-ref`, `new-dependencies`; for exit 32,
+`process-mismatch`, `no-options`, `data-dir-mismatch`; for 40 and 41, `started-failed`. The exit code of the
+process, not the JSON, is the verdict.
+
+## Run from stdin
+
+The script is one file with no relative imports, so a program can send it over the connection instead of
+having a copy there:
+
+```
+ssh <host> node --disable-warning=ExperimentalWarning --input-type=module - \
+  --checkout <checkout> --ref app-v0.0.17 --mac-telemetry-version 1 --mac-credential-command yes --progress json \
+  < scripts/remote-core/update-remote-core.mjs
+```
+
+`--checkout` gives the repository, since the script cannot find its own file. The hint printed after an orphan
+start does not name a script path for the same reason.
+
+Notes: the lock is first taken in `--data-dir` (or the data folder of `--core-options`, or `~/.ahrena-console`), and, when the running core's own data folder is another one, also there; a stale lock is moved aside under a unique name and judged again before it is deleted, so two scripts cannot both take it over. `reason: started-failed` covers every failure after the swap (stop, checkout, start or confirm), for both 40 and 41. A process killed between creating the lock and writing it leaves an empty file that counts as live for 30 minutes.
+
+## Signals
+
+Until the `backup` phase begins, SIGINT, SIGTERM and SIGHUP cancel: the lock is released, the result is
+`exit 130` and nothing was touched (a signal that arrives while a git command runs is handled when it returns; the `git fetch` has a 120 s timeout).
+From the `backup` phase on SIGHUP, SIGPIPE, SIGINT and SIGTERM are ignored and a closed stdout is tolerated, so
+a dropped connection never leaves the machine half-updated: the script finishes alone, with success or rollback.
+Only SIGKILL stops it, and then the dead `pid` makes the lock stale. `--check` keeps the cancel handlers for its
+whole run.
 
 ## The systemd user unit
 
