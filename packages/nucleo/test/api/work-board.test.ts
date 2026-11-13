@@ -9,8 +9,9 @@ import { describe, test } from 'node:test';
 import { openSqliteStorage, type SqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
 import { Accounts, MontadorDoPainel, startLocalApi, type ApiOptions, type LocalApi } from '../../src/api/index.ts';
 import { selectedProjectBoard, WORK_BOARD_ROUTE } from '../../src/api/work-board.ts';
-import { GithubCache, MemoryCacheStore } from '../../src/github/cache.ts';
-import { GithubProject, type ProjectBoardValue, type ProjectCard, type ProjectRef, type ProjectSource } from '../../src/github/project.ts';
+import { GithubCache, MemoryCacheStore, NoDataError, RateLimitedError } from '../../src/github/cache.ts';
+import { GithubGatewayError, GithubScopeError } from '../../src/github/github-source.ts';
+import { GithubProject, ProjectPermissionError, type ProjectBoardValue, type ProjectCard, type ProjectRef, type ProjectSource } from '../../src/github/project.ts';
 import { WORK_LEVELS, type LinkedPullRequest } from '../../src/github/work.ts';
 import { EMPTY_WORK_QUEUE, WORK_BLOCKED_REASONS, WORK_BOARD_COLUMNS, type WorkQueue, type WorkSessionLink, type WorkSessions } from '../../src/github/work-board.ts';
 import { SqliteWorkColumnHistory } from '../../src/github/work-board-history.ts';
@@ -98,6 +99,8 @@ interface Board {
   source: FakeProjectSource;
   sessions: FakeSessions;
   queue: FakeQueue;
+  /** #495 what the use case sent to the core log. */
+  logs: string[];
   /** #465 turns the chosen Project off (no-project) or back on. */
   choose(project: boolean): void;
   close(): Promise<void>;
@@ -112,12 +115,14 @@ async function boot({ extra = {}, withWork = true, fromStore = false }: { extra?
   let chosen = true;
   const sessions = new FakeSessions();
   const queue = new FakeQueue();
+  const logs: string[] = [];
   const service = new WorkBoardService({
     project: selectedProjectBoard({ kanban: () => (chosen ? kanban : null) }),
     sessions,
     queue,
     history: new SqliteWorkColumnHistory(storage.db),
     now,
+    log: (m) => logs.push(m),
   });
   const panelBuilder = new MontadorDoPainel({ storage, contas: new Accounts({ storage, file: null }), desktop: null, trabalho: null });
   const api = await startLocalApi({
@@ -136,6 +141,7 @@ async function boot({ extra = {}, withWork = true, fromStore = false }: { extra?
     source,
     sessions,
     queue,
+    logs,
     choose: (project) => void (chosen = project),
     async close() {
       await api.close();
@@ -282,7 +288,7 @@ describe('#465/AC-4 GET /api/work with GitHub down (ADR-0001)', () => {
       const r = await refresh(b);
       assert.equal(r.status, 200);
       assert.equal(r.json.stale, true);
-      assert.match(r.json.staleReason, /GitHub fora do ar/);
+      assert.equal(r.json.staleReason, 'github-error');
       assert.equal(cardOf(r.json, 520).title, 'last data');
       assert.equal(r.json.fetchedAt, first.json.fetchedAt, 'fetchedAt stays the last good read (ms)');
       assert.equal(typeof r.json.fetchedAt, 'number');
@@ -294,7 +300,7 @@ describe('#465/AC-4 GET /api/work with GitHub down (ADR-0001)', () => {
       const r = await get(b);
       assert.equal(r.status, 502);
       assert.equal(r.json.error, 'github-unavailable');
-      assert.match(r.json.reason, /GitHub fora do ar/);
+      assert.equal(r.json.reason, 'github-error');
     }));
 
   test('#465/AC-4 ?refresh=1 re-reads GitHub; without it the cache answers inside its TTL', () =>
@@ -318,6 +324,79 @@ describe('#465/AC-4 GET /api/work with GitHub down (ADR-0001)', () => {
         assert.equal(r.status, 200);
         assert.equal(b.source.reads, 1, 'answered from the store');
         assert.equal(columnOf(r.json, 522), 'planning');
+      },
+      { fromStore: true },
+    ));
+});
+
+describe('#495/AC-1 GET /api/work with GitHub down: a stable English reason code, never the raw message', () => {
+  const FAILURES: [string, () => Error, string][] = [
+    ['a network failure', () => new TypeError('fetch failed'), 'network'],
+    ['the rate limit', () => new RateLimitedError('GitHub limitou', 60_000), 'rate-limited'],
+    ['a missing token scope', () => new GithubScopeError('token sem escopo project'), 'no-scope'],
+    ['a Project permission failure', () => new ProjectPermissionError('detail'), 'no-scope'],
+    ['any other error', () => new Error('GitHub fora do ar'), 'github-error'],
+    ['a gateway error', () => new GithubGatewayError('bad gateway', 502), 'github-error'],
+  ];
+
+  for (const [name, make, code] of FAILURES) {
+    test(`#495/AC-1 Given the board was read once, When GitHub fails with ${name}, Then 200 stale with staleReason "${code}" and no raw message`, () =>
+      withBoard(async (b) => {
+        b.source.items = [issue(540, { title: 'last data' })];
+        await get(b);
+        const error = make();
+        b.source.fail = error;
+        const r = await refresh(b);
+        assert.equal(r.status, 200);
+        assert.deepEqual([r.json.stale, r.json.staleReason], [true, code]);
+        assert.equal(cardOf(r.json, 540).title, 'last data');
+        assert.ok(!JSON.stringify(r.json).includes(error.message), 'the raw message is not in the body');
+        assert.ok(b.logs.some((l) => l.includes(error.message)), 'the raw message went to the core log');
+      }));
+
+    test(`#495/AC-1 Given nothing was ever read, When GitHub fails with ${name}, Then 502 github-unavailable with reason "${code}"`, () =>
+      withBoard(async (b) => {
+        const error = make();
+        b.source.fail = error;
+        const r = await get(b);
+        assert.equal(r.status, 502);
+        assert.deepEqual(r.json, { error: 'github-unavailable', reason: code });
+        assert.ok(b.logs.some((l) => l.includes(error.message)), 'the raw message went to the core log');
+      }));
+  }
+
+  test('#495/AC-1 Given the cache is paused by the rate limit, When the board is read again, Then stale with "rate-limited"', () =>
+    withBoard(async (b) => {
+      b.source.items = [issue(541)];
+      await get(b);
+      b.source.fail = new RateLimitedError('GitHub limitou', 600_000);
+      await refresh(b);
+      b.source.fail = null;
+      const r = await refresh(b);
+      assert.deepEqual([r.status, r.json.stale, r.json.staleReason], [200, true, 'rate-limited']);
+    }));
+
+  test('#495/AC-1 Given the identity changed under the read, Then 502 with "github-error"', () =>
+    withBoard(async (b) => {
+      b.source.fail = new NoDataError('sem dados: a conexão com o GitHub mudou');
+      const r = await get(b);
+      assert.deepEqual([r.status, r.json], [502, { error: 'github-unavailable', reason: 'github-error' }]);
+    }));
+
+  test('#495/AC-1 Given the background sync, When the stored board is too old, Then stale carries the code of the last failure, else "github-error"', () =>
+    withBoard(
+      async (b) => {
+        b.source.items = [issue(542)];
+        await get(b);
+        b.now.add(10 * 60_000);
+        const noFailure = await get(b);
+        assert.deepEqual([noFailure.json.stale, noFailure.json.staleReason], [true, 'github-error'], 'no failure recorded');
+        b.source.fail = new TypeError('fetch failed');
+        await refresh(b, '');
+        b.now.add(10 * 60_000);
+        const r = await get(b);
+        assert.deepEqual([r.status, r.json.stale, r.json.staleReason], [200, true, 'network']);
+        assert.ok(!JSON.stringify(r.json).includes('fetch failed'));
       },
       { fromStore: true },
     ));
