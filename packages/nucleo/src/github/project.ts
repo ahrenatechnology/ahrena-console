@@ -382,7 +382,7 @@ export class GithubProject {
     const hit = await this.cache.peek<ProjectBoardValue>(this.key);
     if (!hit) return null;
     const old = this.now() - hit.fetchedAt > 2 * GITHUB_TTL.project;
-    const code = old ? (this.cache.failure(this.key) ?? 'github-error') : null;
+    const code = old ? (this.cache.failure(this.key) ?? 'sync-pending') : null;
     return this.view(hit.value, hit.fetchedAt, old, old ? 'o sincronismo em segundo plano ainda não releu o quadro' : null, code);
   }
 

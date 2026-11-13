@@ -383,14 +383,14 @@ describe('#495/AC-1 GET /api/work with GitHub down: a stable English reason code
       assert.deepEqual([r.status, r.json], [502, { error: 'github-unavailable', reason: 'github-error' }]);
     }));
 
-  test('#495/AC-1 Given the background sync, When the stored board is too old, Then stale carries the code of the last failure, else "github-error"', () =>
+  test('#495/AC-1 Given the background sync, When the stored board is too old, Then stale carries the code of the last failure, else "sync-pending"', () =>
     withBoard(
       async (b) => {
         b.source.items = [issue(542)];
         await get(b);
         b.now.add(10 * 60_000);
         const noFailure = await get(b);
-        assert.deepEqual([noFailure.json.stale, noFailure.json.staleReason], [true, 'github-error'], 'no failure recorded');
+        assert.deepEqual([noFailure.json.stale, noFailure.json.staleReason], [true, 'sync-pending'], 'no failure recorded');
         b.source.fail = new TypeError('fetch failed');
         await refresh(b, '');
         b.now.add(10 * 60_000);

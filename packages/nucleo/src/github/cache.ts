@@ -67,8 +67,8 @@ export class RateLimitedError extends Error {
   }
 }
 
-/** #495 why a GitHub read failed, as a stable English code: the screen translates it, the raw message stays in the log. */
-export type GithubFailure = 'network' | 'rate-limited' | 'no-scope' | 'github-error';
+/** #495 why a GitHub read failed, as a stable English code: the screen translates it, the raw message stays in the log; 'sync-pending' is the snapshot's code when the stored board is old with no failure recorded. */
+export type GithubFailure = 'network' | 'rate-limited' | 'no-scope' | 'github-error' | 'sync-pending';
 
 /** Nada no cache e o GitHub falhou; `cause` é o erro da fonte, quando houve um (permissão, limite, rede). */
 export class NoDataError extends Error {
