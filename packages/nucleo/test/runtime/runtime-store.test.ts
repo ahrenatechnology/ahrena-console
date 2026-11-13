@@ -57,8 +57,9 @@ test('migration 15 preserves records and concurrent worker claims survive reopen
     const db = new DatabaseSync(path);
     migrate(db, MIGRATIONS.filter(m => m.version < 15));
     db.prepare("INSERT INTO sessions (id,status,started_at,updated_at) VALUES ('legacy','active','2026-01-01','2026-01-01')").run();
-    assert.deepEqual(migrate(db), [15]);
-    assert.deepEqual(migrate(db), []);
+    const upTo15 = MIGRATIONS.filter(m => m.version <= 15);
+    assert.deepEqual(migrate(db, upTo15), [15]);
+    assert.deepEqual(migrate(db, upTo15), []);
     assert.equal(db.prepare("SELECT id FROM sessions WHERE id = 'legacy'").get()!.id, 'legacy');
     db.close();
     const f = await fixture('codex', path);

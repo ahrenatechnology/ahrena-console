@@ -10,6 +10,8 @@ import {
   ProjectPermissionError,
   projectCacheKey,
   RateLimitedError,
+  PROJECT_QUERIES,
+  toProjectCard,
   type ProjectBoardValue,
   type QueryCost,
   type RawProjectItem,
@@ -19,7 +21,7 @@ import { clock, replayFetch, REPO, type Recorded } from './helpers.ts';
 /** Leitura real do Project 3, gravada por `record-project.ts`. */
 const recordedBoard: Recorded[] = JSON.parse(readFileSync(new URL('./fixtures/project.json', import.meta.url), 'utf8'));
 const PROJECT = { owner: 'ahrenatechnology', number: 3 };
-const raw = recordedBoard[0].body.data!.repositoryOwner as { projectV2: { id: string; field: { id: string } } };
+const raw = recordedBoard[0].body.data!.repositoryOwner as { projectV2: { id: string; field: { id: string }; items: { nodes: RawProjectItem[] } } };
 const PROJECT_ID = raw.projectV2.id;
 const FIELD_ID = raw.projectV2.field.id;
 const TODO = 'f75ad846';
@@ -249,5 +251,62 @@ describe('kanban do Project: formas dos itens e paginação', () => {
     const fetch = replayFetch([{ operation: 'ProjectBoard', variables: { o: 'acme', n: 1, f: 'Status', after: null }, status: 200, body: { data: { repositoryOwner: { projectV2: null } } } }]);
     const project = createGithubProject({ project: ref, cache: new GithubCache({ store: new MemoryCacheStore() }), token: 't', fetch });
     await assert.rejects(project.board(), /Project não encontrado: acme\/1/);
+  });
+});
+
+describe('#465 #466 work board signals in the Project read', () => {
+  test('#465 the query asks for labels, closedAt, the closing PR mergedAt and its changes-requested reviews, and the PR item mergedAt only', () => {
+    const q = PROJECT_QUERIES.board;
+    const issue = /\.\.\. on Issue \{([\s\S]*?)\.\.\. on PullRequest/.exec(q)![1];
+    const prItem = /\.\.\. on PullRequest \{([^\n]*)/.exec(q)![1];
+    assert.match(issue, /closedAt/);
+    assert.match(issue, /labels\(first: 10\) \{ nodes \{ name \} \}/);
+    assert.match(issue, /closedByPullRequestsReferences\([^)]*\) \{ nodes \{[^}]*mergedAt[^}]*reviews\(states: CHANGES_REQUESTED\) \{ totalCount \}/);
+    assert.match(prItem, /mergedAt/);
+    assert.doesNotMatch(prItem, /reviews/, 'the PR item carries no review connection: review rounds are read only on the closing PR of an issue');
+  });
+
+  test('#465 a raw issue maps labels, closedAt and the closing PR mergedAt and changesRequested', () => {
+    const base = structuredClone(raw.projectV2.items.nodes[0]);
+    const card = toProjectCard({
+      ...base,
+      content: {
+        ...base.content!,
+        state: 'CLOSED',
+        closedAt: '2026-11-10T09:00:00Z',
+        labels: { nodes: [{ name: 'bug' }, { name: 'ui' }] },
+        closedByPullRequestsReferences: {
+          nodes: [{ number: 78, url: 'https://github.com/acme/app/pull/78', state: 'MERGED', isDraft: false, reviewDecision: 'APPROVED', mergedAt: '2026-11-10T08:59:00Z', reviews: { totalCount: 2 } }],
+        },
+      } as RawProjectItem['content'],
+    })!;
+    assert.deepEqual(card.labels, ['bug', 'ui']);
+    assert.equal(card.closedAt, '2026-11-10T09:00:00Z');
+    assert.deepEqual([card.pullRequest?.mergedAt, card.pullRequest?.changesRequested], ['2026-11-10T08:59:00Z', 2]);
+  });
+
+  test('#465 a PR item maps its own mergedAt; its review rounds stay unknown', () => {
+    const card = toProjectCard({
+      id: 'PVTI_pr',
+      isArchived: false,
+      fieldValueByName: null,
+      content: { __typename: 'PullRequest', number: 9, title: 'pr', url: 'u9', state: 'MERGED', updatedAt: '', repository: { nameWithOwner: 'acme/app' }, isDraft: false, reviewDecision: null, mergedAt: '2026-11-10T08:00:00Z' } as RawProjectItem['content'],
+    })!;
+    assert.deepEqual([card.pullRequest?.mergedAt, card.pullRequest?.changesRequested, card.labels], ['2026-11-10T08:00:00Z', null, undefined]);
+  });
+
+  test('#465 the recorded read, without the new fields, maps to no labels, closedAt null and an unknown PR', () => {
+    const cards = raw.projectV2.items.nodes.map((n) => toProjectCard(n)).filter((c) => c !== null);
+    const issues = cards.filter((c) => c.kind === 'Issue');
+    assert.ok(issues.length > 0);
+    for (const c of issues) assert.deepEqual([c.labels, c.closedAt], [[], null]);
+    const pr = toProjectCard({
+      ...structuredClone(raw.projectV2.items.nodes[0]),
+      content: {
+        ...structuredClone(raw.projectV2.items.nodes[0]).content!,
+        closedByPullRequestsReferences: { nodes: [{ number: 1, url: 'u', state: 'OPEN', isDraft: false, reviewDecision: null }] },
+      } as RawProjectItem['content'],
+    })!;
+    assert.deepEqual([pr.pullRequest?.mergedAt, pr.pullRequest?.changesRequested], [null, null]);
   });
 });

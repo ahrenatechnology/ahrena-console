@@ -409,8 +409,10 @@ export function analyzeWorkNodes(nodes: readonly WorkBoardNode[], sessions: read
   const byKey = new Map(nodes.map((n) => [n.key, n]));
   const childrenOf = new Map<string, WorkBoardNode[]>();
   for (const n of nodes) if (n.parent && byKey.has(n.parent) && !closesCycle(byKey, n)) childrenOf.set(n.parent, [...(childrenOf.get(n.parent) ?? []), n]);
+  // #465 #477 session and queue keys may differ in case from GitHub's `nameWithOwner`: compare lower case.
   const sessionsOf = new Map<string, WorkSessionLink[]>();
-  for (const s of sessions) sessionsOf.set(s.key, [...(sessionsOf.get(s.key) ?? []), s]);
+  for (const s of sessions) sessionsOf.set(s.key.toLowerCase(), [...(sessionsOf.get(s.key.toLowerCase()) ?? []), s]);
+  const queueOf = new Map([...queue].map(([key, position]) => [key.toLowerCase(), position]));
 
   const levels = new Map<string, WorkLevel>();
   const levelFor = (n: WorkBoardNode): WorkLevel => {
@@ -428,8 +430,8 @@ export function analyzeWorkNodes(nodes: readonly WorkBoardNode[], sessions: read
     const hit = out.get(n.key);
     if (hit) return hit;
     const level = levelFor(n);
-    const linked = sessionsOf.get(n.key) ?? [];
-    const queuePosition = queue.get(n.key) ?? null;
+    const linked = sessionsOf.get(n.key.toLowerCase()) ?? [];
+    const queuePosition = queueOf.get(n.key.toLowerCase()) ?? null;
     const kids = (childrenOf.get(n.key) ?? []).map(analyze);
     const rollsUp = kids.length > 0 && (level === 'initiative' || level === 'epic');
     const column = rollsUp
@@ -731,7 +733,7 @@ export interface WorkSessions {
   links(): Promise<WorkSessionLink[]>;
 }
 
-/** The execution queue (#477); until it exists, `EMPTY_WORK_QUEUE`. */
+/** The execution queue (#477); until it exists, `EMPTY_WORK_QUEUE`. Its keys are compared in lower case. */
 export interface WorkQueue {
   readonly available: boolean;
   positions(): Promise<ReadonlyMap<string, number>>;
