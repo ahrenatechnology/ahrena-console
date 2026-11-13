@@ -260,6 +260,7 @@ describe('#241/AC-2 409 github-not-connected on every GitHub screen, with no out
         '/api/dev-console',
         '/api/project',
         '/api/project/options',
+        '/api/work',
         '/api/framework-install/exemplo-labs/vitrine-demo/plan',
         '/api/analytics/delivery',
       ];
