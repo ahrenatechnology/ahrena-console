@@ -528,7 +528,11 @@ if (demo) {
           credentialCommand: (id) => Boolean(registry.connectionOf(id)?.credential),
           checkout: (id) => registry.connectionOf(id)?.checkout ?? null,
           // Decision 0024 section 2: each good read may start the automatic update, once per (machine, target).
-          onRead: (id) => void coreUpdater?.considerAuto(id).catch(() => null),
+          onRead: (id) =>
+            void coreUpdater?.considerAuto(id).catch(() => {
+              log(`update (${id}): automatic check could not be considered`);
+              return null;
+            }),
         },
         log,
       }),
