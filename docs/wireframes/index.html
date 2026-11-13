@@ -5916,7 +5916,7 @@ const cvSideHtml = () => `<div class="tm-rc"><div class="width-col"><div class="
 const cuBackup = '/home/usuario-exemplo/.ahrena-console/backups/update-20261112T101500Z-81251bd'
 const cuBand = (mode = 'ready') => oaBand('waiting', 'arrow-up-circle', `O núcleo da Workstation está na ${CV.outdated.core} e o app, na ${CV_APP}.`,
   mode === 'ready'
-    ? `O Console de lá roda um código mais antigo que o deste Mac, e as correções das versões novas não chegam até ele. O botão atualiza para a ${CV_APP}: faz o backup do banco, troca o código e sobe o núcleo de novo, e tenta voltar ao código de antes se ele não responder.`
+    ? `O Console de lá roda um código mais antigo que o deste Mac, e as correções das versões novas não chegam até ele. Atualizar agora atualiza para a ${CV_APP}: faz o backup do banco, troca o código e sobe o núcleo de novo, e tenta voltar ao código de antes se ele não responder.`
     : mode === 'busy'
       ? `A atualização para a ${CV_APP} está em andamento. A Workstation fica sem conexão por cerca de um minuto; isso é esperado e não gera alerta.`
       : mode === 'invalid'
@@ -6036,7 +6036,7 @@ const cuAutoHtml = () => `<div class="rotulo" style="margin:10px 0 4px">Na troca
 
 // 484-2 · the attempt failed or was refused: the reason on the band, Tentar de novo in place of Atualizar agora, and
 // the copy card collapsed under it. The reason is the text of decision 0022 section 7, as the core sends it.
-const cuRetryBand = (title, code, text) => oaBand('waiting', 'alert-triangle', `${title}.`, text, `saída ${code} · lido do núcleo de lá às 09:14, sem a prova do dono · commit ${CV.outdated.commit}`, bt('Tentar de novo', { v: 'filled', icon: 'refresh-cw' }))
+const cuRetryBand = (title, code, text) => oaBand('waiting', 'alert-triangle', `${title}.`, text, `lido do núcleo de lá às 09:14, sem a prova do dono · commit ${CV.outdated.commit}`, bt('Tentar de novo', { v: 'filled', icon: 'refresh-cw' }))
 const cuRetryScreen = (w, kind) => kind === 'refused'
   ? cuBodyScreen(w, cuRetryBand('A Workstation recusou, nada foi parado', '30 · dirty-tree', 'O repositório da Workstation tem mudanças locais não commitadas. Nada foi parado.'), '', true)
   : cuBodyScreen(w, cuRetryBand('Falhou e voltou ao código de antes', 40, `A atualização falhou e a Workstation voltou ao código de antes (<span class="mono">${CV.outdated.commit}</span>), com o banco restaurado do backup, se o núcleo novo chegou a subir. O núcleo de lá está no ar como estava, se estava no ar antes.`), '', true)
