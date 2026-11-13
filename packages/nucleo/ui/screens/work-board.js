@@ -55,13 +55,19 @@ function attachSheet() {
   return link;
 }
 
-function focusSelector(active) {
-  if (!active?.getAttribute) return null;
-  const param = active.getAttribute('data-param');
-  if (param && active.tagName === 'SELECT') return `select[data-param="${param}"]`;
-  const level = active.getAttribute('data-level');
-  return level ? `button[data-level="${level}"]` : null;
+function focusKey(node) {
+  if (!node?.getAttribute) return null;
+  const action = node.getAttribute('data-action');
+  if (action) return `action:${action}:${node.getAttribute('data-key') ?? node.getAttribute('data-param') ?? ''}`;
+  const level = node.getAttribute('data-level');
+  if (level) return `level:${level}`;
+  const param = node.getAttribute('data-param');
+  if (param && node.tagName === 'SELECT') return `select:${param}`;
+  const card = node.tagName === 'A' ? node.closest?.('article') : null;
+  return card ? `link:${card.getAttribute('data-key')}:${node.getAttribute('class') ?? ''}` : null;
 }
+
+const retryAction = (band) => (band.querySelector('button')?.setAttribute('data-action', 'retry'), band);
 
 /** The work board (issues 465 and 466): GET /api/work on the agent lifecycle columns, its slice kept in the URL. */
 export async function mount(area, ctx) {
@@ -71,6 +77,7 @@ export async function mount(area, ctx) {
   let drawn = null;
   let liveTimer = null;
   let quiet = 0;
+  let pendingFocus = null;
 
   function follow(s) {
     const target = s.url;
@@ -161,7 +168,7 @@ export async function mount(area, ctx) {
   function band(now) {
     if (state.data && state.error) {
       const { title } = errorMessage(state.error);
-      return workBoardError({ title: 'Não deu para reler o quadro.', text: `${title} Mostrando a última leitura.`, retryLabel: 'Tentar agora', onRetry: refresh });
+      return retryAction(workBoardError({ title: 'Não deu para reler o quadro.', text: `${title} Mostrando a última leitura.`, retryLabel: 'Tentar agora', onRetry: refresh }));
     }
     if (state.stale) return staleBand({ fetchedAt: state.data.fetchedAt, now, reason: state.staleReason, busy: state.busy, onRetry: refresh });
     return null;
@@ -201,7 +208,7 @@ export async function mount(area, ctx) {
     const { title, text } = errorMessage(state.error);
     const param = code === 'bad-filter' ? state.error.param : null;
     const fix = param === 'level' ? ['Voltar ao nível Item', () => run(setLevel(state, 'item'))] : param ? [`Tirar o filtro ${fieldLabel(param)}`, () => filterTo(param, null)] : ['Tentar de novo', () => run(startLoad(state))];
-    return [boardHeader(now), levels(false), filters(false), workBoardError({ title, text, retryLabel: fix[0], onRetry: fix[1] }), blank];
+    return [boardHeader(now), levels(false), filters(false), retryAction(workBoardError({ title, text, retryLabel: fix[0], onRetry: fix[1] })), blank];
   }
 
   function nodes() {
@@ -227,12 +234,23 @@ export async function mount(area, ctx) {
 
   function draw() {
     if (!alive) return;
-    const key = JSON.stringify([state.view, state.phase, state.busy, state.error, state.filters, state.dataFilters, state.suggestion, state.data]);
-    if (key === drawn) return;
-    drawn = key;
-    const focus = focusSelector(globalThis.document?.activeElement);
+    const shown = JSON.stringify([state.view, state.phase, state.busy, state.error, state.filters, state.dataFilters, state.suggestion, state.data]);
+    if (shown === drawn) return;
+    drawn = shown;
+    const active = globalThis.document?.activeElement;
+    const key = active && area.contains(active) ? focusKey(active) : pendingFocus;
     area.replaceChildren(...nodes());
-    if (focus) area.querySelector(focus)?.focus();
+    restoreFocus(key);
+  }
+
+  function restoreFocus(key) {
+    pendingFocus = null;
+    if (!key) return;
+    const focusable = [...area.querySelectorAll('button'), ...area.querySelectorAll('a'), ...area.querySelectorAll('select')];
+    const hit = focusable.find((n) => focusKey(n) === key);
+    if (hit?.hasAttribute('disabled')) pendingFocus = key;
+    else if (hit) hit.focus();
+    else area.querySelector('button.wb-level[aria-pressed="true"]')?.focus();
   }
 
   ctx.onRestart(() => run(startLoad(state)));

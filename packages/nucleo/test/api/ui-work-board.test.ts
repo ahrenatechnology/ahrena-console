@@ -52,7 +52,7 @@ import { CONNECT_TEXT } from '../../ui/github-connect.js';
 // @ts-expect-error: idem
 import { findScreen, sidebarSections, SCREENS } from '../../ui/screens.js';
 // @ts-expect-error: idem
-import { mount } from '../../ui/screens/work-board.js';
+import { errorMessage, mount } from '../../ui/screens/work-board.js';
 
 const NOW = Date.parse('2026-10-20T15:00:00Z');
 const EPIC = 6;
@@ -63,9 +63,11 @@ class DemoSource implements ProjectSource {
   fail: Error | null = null;
   empty = false;
   epic = false;
+  titles = new Map<number, string>();
   async board(): Promise<ProjectBoardValue> {
     if (this.fail) throw this.fail;
-    const value = await this.demo.board();
+    const demo = await this.demo.board();
+    const value = { ...demo, items: demo.items.map((i) => (this.titles.has(i.number!) ? { ...i, title: this.titles.get(i.number!)! } : i)) };
     if (this.empty) return { ...value, items: [] };
     if (!this.epic) return value;
     const parent = workKey(SIMULATOR_REPO, EPIC);
@@ -508,6 +510,18 @@ describe('#466/AC-2 the levels and #466/AC-4 the chain of parents', () => {
     assert.equal(texto(s.area.querySelector('.wb-chip[data-param="epic"]')), 'Épico/Milestone: #6');
   });
 
+  test('#466/AC-2 after Ver filhos the focus lands on the level switch, not on the page', async () => {
+    const s = await open(core, '/ui/work?level=epic');
+    const drillButton = s.area.querySelector('.wb-drill')!;
+    drillButton.focus();
+    drillButton.click();
+    await until(() => s.area.querySelector('.wb-parent-card') === null && s.numbers().length > 0);
+    const focused = documentoFalso.activeElement;
+    assert.ok(focused && s.area.contains(focused), 'the focus stays inside the screen');
+    assert.equal(focused.getAttribute('data-level'), 'item');
+    assert.equal(focused.getAttribute('aria-pressed'), 'true');
+  });
+
   test('#466/AC-4 without a filter the chain is the compact parent', async () => {
     const s = await open(core);
     const chains = s.area.querySelectorAll('.wb-chain').map((c) => texto(c));
@@ -576,7 +590,7 @@ describe('#465 each error code of GET /api/work in pt-BR', () => {
     }
   });
 
-  test('#465 github-unavailable with nothing stored gives the reason (see the first-read test) and a failed Atualizar keeps the board with a band', async () => {
+  test('#465 a failed Atualizar (no-project) keeps the board with a band that says why', async () => {
     const s = await open(core);
     const before = s.numbers();
     core.choose(false);
@@ -587,6 +601,31 @@ describe('#465 each error code of GET /api/work in pt-BR', () => {
     assert.match(texto(band), /Não deu para reler o quadro\..*Nenhum GitHub Project escolhido.*Mostrando a última leitura\./);
     assert.deepEqual(s.numbers(), before, 'the board stays');
     noCode(s);
+  });
+
+  test('#465 github-unavailable carries its reason in pt-BR; a failed Atualizar with it keeps the board', async () => {
+    assert.deepEqual(errorMessage({ error: 'github-unavailable', reason: 'sem dados: timeout.', status: 502 }), { title: 'O GitHub não respondeu.', text: 'Motivo: sem dados: timeout.' });
+    assert.deepEqual(errorMessage({ error: 'github-unavailable', status: 502 }), { title: 'O GitHub não respondeu.', text: null });
+    const s = await open(core, '/ui/work', async (route, http) => {
+      if (route.includes('refresh=1')) throw Object.assign(new Error('x'), { name: 'ReadError', status: 502, body: { error: 'github-unavailable', reason: 'timeout' } });
+      return http(route);
+    });
+    const before = s.numbers();
+    s.refresh().click();
+    await until(() => s.area.querySelector('.error-band') !== null);
+    assert.match(texto(s.area.querySelector('.error-band')), /Não deu para reler o quadro\. O GitHub não respondeu\. Mostrando a última leitura\./);
+    assert.deepEqual(s.numbers(), before);
+    noCode(s);
+  });
+
+  test('#465 any other status says what the core answered, in pt-BR, with Tentar de novo', async () => {
+    assert.deepEqual(errorMessage({ error: 'forbidden', status: 403 }), { title: 'Não deu para ler o quadro.', text: 'O núcleo respondeu 403.' });
+    const s = await open(core, '/ui/work', async () => {
+      throw Object.assign(new Error('forbidden'), { name: 'ReadError', status: 403, body: { error: 'forbidden' } });
+    });
+    assert.match(s.text(), /Não deu para ler o quadro\. O núcleo respondeu 403\./);
+    assert.doesNotMatch(s.text(), /forbidden/);
+    s.button('Tentar de novo');
   });
 
   test('#465 the core not answering says so in pt-BR', async () => {
@@ -600,23 +639,30 @@ describe('#465 each error code of GET /api/work in pt-BR', () => {
 
 describe('#465 the screen lives with the core', () => {
   test('#465 a live change re-reads quietly: Atualizar never spins and the board follows', async () => {
-    const s = await open(core);
-    const hold = held();
-    let busyDuring: string | null = 'unset';
-    let quiet: Screen | null = null;
-    quiet = await open(core, '/ui/work', async (route, http) => {
-      if (quiet && quiet.reads.length > 1) {
-        busyDuring = quiet.refresh().getAttribute('aria-busy');
-        await hold.gate;
-      }
-      return http(route);
-    });
-    void s;
-    quiet.change([{ type: 'session' }]);
-    await until(() => quiet.reads.length === 2, 3000);
-    assert.equal(quiet.reads[1], '/api/work?level=item', 'no refresh=1: the core cache answers');
-    assert.equal(busyDuring, null);
-    hold.release();
+    const fresh = await boot();
+    try {
+      const hold = held();
+      let busyDuring: string | null = 'unset';
+      let quiet: Screen | null = null;
+      quiet = await open(fresh, '/ui/work', async (route, http) => {
+        if (quiet && quiet.reads.length > 1) {
+          busyDuring = quiet.refresh().getAttribute('aria-busy');
+          await hold.gate;
+        }
+        return http(route);
+      });
+      fresh.source.titles.set(42, 'Kanban de sessões, renomeado');
+      fresh.now.add(2 * 60_000 + 1);
+      quiet.change([{ type: 'session' }]);
+      await until(() => quiet.reads.length === 2, 3000);
+      assert.equal(quiet.reads[1], '/api/work?level=item', 'no refresh=1: the core cache answers');
+      assert.equal(busyDuring, null);
+      assert.doesNotMatch(quiet.text(), /renomeado/);
+      hold.release();
+      await until(() => /Kanban de sessões, renomeado/.test(quiet.text()));
+    } finally {
+      await fresh.close();
+    }
   });
 
   test('#465 a GitHub connection change re-reads the board', async () => {
@@ -643,6 +689,49 @@ describe('#465 the screen lives with the core', () => {
     await tick(50);
     assert.equal(late.text(), before, 'nothing drawn after leaving');
     assert.equal(documentoFalso.head.querySelector('link[data-screen="work"]'), null);
+  });
+});
+
+describe('#465 the keyboard focus survives the redraws', () => {
+  const active = () => documentoFalso.activeElement;
+
+  test('#465 Atualizar keeps the focus: disabled while it reads, focused again when it comes back', async () => {
+    const hold = held();
+    const s = await open(core, '/ui/work', async (route, http) => {
+      if (route.includes('refresh=1')) await hold.gate;
+      return http(route);
+    });
+    s.refresh().focus();
+    s.refresh().click();
+    await until(() => s.reads.length === 2);
+    hold.release();
+    await until(() => s.refresh().getAttribute('aria-busy') === null);
+    assert.equal(active(), s.refresh(), 'the new Atualizar has the focus');
+  });
+
+  test('#465 a quiet re-read keeps the focus on the card link that had it', async () => {
+    const fresh = await boot();
+    try {
+      const s = await open(fresh);
+      const link = () => s.area.querySelectorAll('article.wb-card').find((c) => /#42/.test(texto(c.querySelector('.wb-number'))))!.querySelector('.wb-card-title a')!;
+      link().focus();
+      fresh.source.titles.set(42, 'Kanban de sessões, outra vez');
+      fresh.now.add(2 * 60_000 + 1);
+      s.change([{ type: 'session' }]);
+      await until(() => /outra vez/.test(s.text()));
+      assert.equal(active(), link(), 'the redrawn link of #42 has the focus');
+    } finally {
+      await fresh.close();
+    }
+  });
+
+  test('#465 a filter select keeps the focus after the read it started', async () => {
+    const s = await open(core);
+    const select = () => s.area.querySelector('select[data-param="type"]')!;
+    select().focus();
+    choose(s.area, 'type', 'bug');
+    await until(() => s.numbers().length === 1);
+    assert.equal(active(), select());
   });
 });
 

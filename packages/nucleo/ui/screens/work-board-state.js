@@ -108,8 +108,8 @@ export function startLoad(state, { refresh = false } = {}) {
   return derive({ ...state, phase: state.data ? 'refreshing' : 'loading', error: state.data ? state.error : null, refresh, request: state.request + 1 });
 }
 
-function navigate(state, filters, placed, navigation = 'push') {
-  return startLoad({ ...state, filters, placed, navigation });
+function navigate(state, filters, placed) {
+  return startLoad({ ...state, filters, placed, navigation: 'push' });
 }
 
 /** The state of a fresh screen from the page query string (issue 465): loading; a non-canonical URL is to be replaced. */
@@ -118,12 +118,6 @@ export function initialState(search) {
   const given = String(search ?? '').replace(/^\?/, '');
   const navigation = given === searchFromFilters(filters) ? null : 'replace';
   return derive({ filters, placed, phase: 'loading', data: null, dataFilters: null, error: null, refresh: false, request: 1, navigation });
-}
-
-/** The browser went back or forward (issue 466): follow the URL, without pushing it again. */
-export function locationChanged(state, search) {
-  const { filters, placed } = readSearch(search);
-  return navigate(state, filters, placed, null);
 }
 
 /** GET /api/work answered 200 for `request` (issues 465 and 466); an answer to an older request is ignored. */

@@ -16,7 +16,6 @@ import {
   initialState,
   loadFailed,
   loadSucceeded,
-  locationChanged,
   searchFromFilters,
   selectPath,
   setFilter,
@@ -319,15 +318,6 @@ describe('#466/AC-2 levels and drill-down (466-1)', () => {
     assert.equal(retry.phase, 'loading');
     assert.equal(retry.api, '/api/work?level=epic&refresh=1', 'Tentar agora reads the current filters');
   });
-
-  test('#466/AC-2 back and forward in the browser follow the URL without pushing it again', () => {
-    const before = loaded('level=item&label=ui');
-    const s = locationChanged(before, '?level=epic');
-    assert.equal(s.filters.level, 'epic');
-    assert.equal(s.filters.label, null);
-    assert.equal(s.navigation, null);
-    assert.equal(s.busy, true);
-  });
 });
 
 describe('#466/AC-3 setting and clearing the filters', () => {
@@ -360,7 +350,6 @@ describe('#466/AC-3 setting and clearing the filters', () => {
       clearFilters(before);
       drill(before, before.data.columns[0].cards[0]);
       selectPath(before, { param: 'initiative' });
-      locationChanged(before, 'level=plan');
       const busy = startLoad(before, { refresh: true });
       loadSucceeded(busy, payload(), busy.request);
       loadFailed(busy, { error: 'off' }, busy.request);
