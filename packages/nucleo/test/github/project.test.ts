@@ -263,7 +263,7 @@ describe('#465 #466 work board signals in the Project read', () => {
     assert.match(issue, /labels\(first: 10\) \{ nodes \{ name \} \}/);
     assert.match(issue, /closedByPullRequestsReferences\([^)]*\) \{ nodes \{[^}]*mergedAt[^}]*reviews\(states: CHANGES_REQUESTED\) \{ totalCount \}/);
     assert.match(prItem, /mergedAt/);
-    assert.doesNotMatch(prItem, /reviews/, 'GitHub counts both fragments: the PR item carries no review connection');
+    assert.doesNotMatch(prItem, /reviews/, 'the PR item carries no review connection: review rounds are read only on the closing PR of an issue');
   });
 
   test('#465 a raw issue maps labels, closedAt and the closing PR mergedAt and changesRequested', () => {

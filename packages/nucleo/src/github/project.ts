@@ -7,19 +7,16 @@
 //
 // | Operação       | O que faz                                              | Custo |
 // | -------------- | ------------------------------------------------------ | ----: |
-// | ProjectBoard   | projeto, opções do Status e 100 itens com o Status, o marco, o resumo das sub-issues, as labels, o fechamento e o PR que fecha a issue (CI, review, merge; #465) | ≈ 5 |
+// | ProjectBoard   | projeto, opções do Status e 100 itens com o Status, o marco, o resumo das sub-issues, as labels, o fechamento e o PR que fecha a issue (CI, review, merge; #465) | 3 |
 // | ProjectMove    | `updateProjectV2ItemFieldValue`, devolve o item         | 1     |
 
 /*
- * ADR-0001 #465 the ProjectBoard cost is estimated by GitHub's rule (one request per connection node
- * asked), not measured on the API. Each page asks 1 (items) + 100 (`closedByPullRequestsReferences(first: 1)`,
- * one per item) + 100 (`commits(last: 1)` of the closing PR) + 100 (`commits(last: 1)` of the PR item;
- * GitHub counts both fragments without knowing each item's type) + 100 (`labels(first: 10)`, one per item)
- * + 100 (`reviews(states: CHANGES_REQUESTED)` of the closing PR) = 501 requests, / 100 rounded = 5 points
- * per 100-item page. `closedAt` and `mergedAt` are scalars and cost nothing; the PR item
- * carries no `reviews`, which would add another 100. Still one read per page with the 2-min TTL (30 reads an hour):
- * ≈ 150 points per hour with the board open, under ADR-0001's 10 points per query and a few % of the 5,000/h
- * primary limit. The recorded read, without the PR, cost 1.
+ * ADR-0001 ADR-0015 #465 the ProjectBoard cost is measured, not estimated: `rateLimit(dryRun: true)` and a
+ * real read on a 133-item Project on 2026-11-13 both gave 3 points per 100-item page, against 2 for the
+ * query before #465 (labels, closedAt, mergedAt and the CHANGES_REQUESTED count add 1). The earlier hand
+ * count (501 requests, 5 points) over-counted; GitHub's own calculation, which ADR-0001 found to match the
+ * real charge, gives 3. With the 2-min job of ADR-0015
+ * (30 reads an hour) that is 90 points per hour per page, the `project` line of ADR-0015's budget.
  */
 
 import { GITHUB_TTL, RateLimitedError, type GithubCache } from './cache.ts';
@@ -127,6 +124,7 @@ export const NO_STATUS_LANE = 'Sem status';
 
 // Só o estado do CI do último commit: a contagem dos checks fica para o detalhe do card.
 const LAST_CI = 'commits(last: 1) { nodes { commit { statusCheckRollup { state } } } }';
+// #466 labels(first: 10): an issue past 10 labels loses the rest for the label filter; the repo's issues carry far fewer.
 const CONTENT = `content { __typename
   ... on Issue { number title url state updatedAt repository { nameWithOwner } issueType { name } parent { number repository { nameWithOwner } }
     milestone { title } subIssuesSummary { total completed }
