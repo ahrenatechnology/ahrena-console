@@ -1157,7 +1157,6 @@ body.captura[data-width="1100"] .width-col[data-w="1440"], body.captura[data-wid
 .wb-card.wb-attn { box-shadow: inset 3px 0 0 var(--status-waiting-dot); }
 .wb-card.wb-fail { box-shadow: inset 3px 0 0 var(--status-error-dot); }
 .wb-card.wb-sel { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
-.wb-card.wb-future { border-style: dashed; background: transparent; }
 .wb-top { display: flex; gap: 6px; align-items: center; font-size: 11px; min-width: 0; }
 .wb-top b { font-weight: 600; white-space: nowrap; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .wb-repo { font-size: 10.5px; color: var(--muted); font-family: var(--font-mono); }
@@ -6250,7 +6249,7 @@ function wbConfirm(kind, o = {}) {
     <span class="c-muted">${full ? 'Executar mesmo assim abre a sessão agora.' : 'Abre a sessão agora e o card vai direto para Em execução. Conta como 1 das 2 execuções; hoje há 1 rodando.'}</span>
     <div class="wb-pop-acts"><span class="btn">Cancelar</span><span class="btn cheio">${ic('play')}${full ? 'Executar mesmo assim' : 'Executar plano'}</span></div></div>`
 }
-// Before: #505 opened its PR, so there is one free slot; the Executar plano confirmation is open on #506.
+// Before: issue 505 opened its PR, so there is one free slot; the Executar plano confirmation is open on issue 506.
 const WB_ONE_FREE = WB_ITEMS.map(c => c.n === 505 ? { ...c, col: 'review', sess: undefined, pr: 514, ci: 'run', rv: 'pending', age: 'há 2 min' } : c)
 const wbConfirmScreen = w => {
   const cols = wbCols(() => true, {}, WB_ONE_FREE)
@@ -6414,7 +6413,7 @@ const wbDetailHtml = () => wbRows([['#509 em Planejamento, sem plano: Planejar',
 // 477-1 · the queue: positions, the limit, and the queue stopped by a pull that failed.
 const WB_THREE = WB_ITEMS.map(c => c.n === 506 ? { ...c, col: 'queued', q: 3, age: 'há 1 min' } : c)
 const wbQueueScreen = w => `${wbHead()}${wbLevels('item')}${wbFilters()}${wbBoard(w, wbCols(() => true, {}, WB_THREE), WB_MAIN)}`
-// #505 opened its PR, the Console tried to pull #507 and the session did not start: #507 stays first, with the reason.
+// Issue 505 opened its PR, the Console tried to pull issue 507 and the session did not start: issue 507 stays first, with the reason.
 const WB_STOPPED = WB_THREE.map(c => c.n === 505 ? { ...c, col: 'review', sess: undefined, pr: 514, ci: 'run', rv: 'pending', age: 'há 3 min' }
   : c.n === 507 ? { ...c, note: ['alert-circle', 'A sessão não subiu: o Claude Desktop não respondeu'], acts: wbAct('refresh-cw', 'Tentar de novo', true) + wbLinks(['Tirar da fila']) } : c)
 const wbStoppedScreen = w => `${wbHead()}${wbLevels('item')}${wbFilters()}${wbBoard(w, wbCols(() => true, {}, WB_STOPPED), { ...WB_MAIN, limit: wbLimit({ cls: ' wb-paused', icon: 'pause-circle', text: 'Fila parada', sub: '1 de 2 rodando; não puxa até resolver a #507' }) })}`
