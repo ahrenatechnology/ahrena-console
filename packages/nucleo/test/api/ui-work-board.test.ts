@@ -637,6 +637,7 @@ describe('#465 each error code of GET /api/work in pt-BR', () => {
       'rate-limited': 'o GitHub limitou as chamadas',
       'no-scope': 'o token do GitHub não tem a permissão necessária',
       'github-error': 'o GitHub respondeu com erro',
+      'sync-pending': 'o sincronismo em segundo plano ainda não releu o quadro',
     };
     assert.deepEqual(Object.keys(GITHUB_DOWN_REASONS), Object.keys(texts));
     for (const [code, text] of Object.entries(texts)) {

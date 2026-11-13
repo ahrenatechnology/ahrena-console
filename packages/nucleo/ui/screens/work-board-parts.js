@@ -476,6 +476,7 @@ export const GITHUB_DOWN_REASONS = Object.freeze({
   'rate-limited': 'o GitHub limitou as chamadas',
   'no-scope': 'o token do GitHub não tem a permissão necessária',
   'github-error': 'o GitHub respondeu com erro',
+  'sync-pending': 'o sincronismo em segundo plano ainda não releu o quadro',
 });
 const UNKNOWN_GITHUB_DOWN_REASON = 'motivo não identificado';
 
