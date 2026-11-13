@@ -11,6 +11,7 @@ import {
   rekeyDecisions,
 } from '../../decisions/migration.ts';
 import { renameLegacyGithubCacheKeys } from '../../github/sqlite-cache.ts';
+import { WORK_BOARD_MIGRATION_DESCRIPTION, WORK_BOARD_MIGRATION_SQL } from '../../github/work-board-history.ts';
 import { migrateJsonToEnglish } from './english-json.ts';
 import { TELEMETRY_MIGRATION_DESCRIPTION, TELEMETRY_MIGRATION_SQL } from '../../telemetry/migration.ts';
 import { TOOLS_MIGRATION_DESCRIPTION, TOOLS_MIGRATION_SQL } from '../../tools/migration.ts';
@@ -293,6 +294,7 @@ export const MIGRATIONS: readonly Migration[] = [
     `,
   },
   { version: 15, description: 'Durable managed runtime runs and requests (#383)', sql: RUNTIME_MIGRATION_SQL },
+  { version: 16, description: WORK_BOARD_MIGRATION_DESCRIPTION, sql: WORK_BOARD_MIGRATION_SQL },
 ];
 
 export function schemaVersion(db: DatabaseSync): number {

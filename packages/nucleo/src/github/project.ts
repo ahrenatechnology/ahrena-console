@@ -7,14 +7,20 @@
 //
 // | Operação       | O que faz                                              | Custo |
 // | -------------- | ------------------------------------------------------ | ----: |
-// | ProjectBoard   | projeto, opções do Status e 100 itens com o Status, o marco, o resumo das sub-issues e o PR que fecha a issue (CI e review) | ≈ 3 |
+// | ProjectBoard   | projeto, opções do Status e 100 itens com o Status, o marco, o resumo das sub-issues, as labels, o fechamento e o PR que fecha a issue (CI, review, merge; #465) | ≈ 5 |
 // | ProjectMove    | `updateProjectV2ItemFieldValue`, devolve o item         | 1     |
-//
-// O custo da ProjectBoard é estimado pela regra do GitHub, sem medir na API: cada página pede
-// 1 (itens) + 100 (`closedByPullRequestsReferences(first: 1)`, um por item) + 100 (`commits(last: 1)`
-// do PR que fecha cada issue) + 100 (`commits(last: 1)` do item que é PR; o GitHub conta os dois
-// fragmentos, sem saber o tipo de cada item) = 301 nós, ÷ 100 ≈ 3 pontos por página de 100 itens. Sem o PR, a leitura gravada custou 1. Ainda é uma
-// leitura só por página, e o TTL de 2 min não muda: com o quadro aberto, ~90 pontos por hora.
+
+/*
+ * ADR-0001 #465 the ProjectBoard cost is estimated by GitHub's rule (one request per connection node
+ * asked), not measured on the API. Each page asks 1 (items) + 100 (`closedByPullRequestsReferences(first: 1)`,
+ * one per item) + 100 (`commits(last: 1)` of the closing PR) + 100 (`commits(last: 1)` of the PR item;
+ * GitHub counts both fragments without knowing each item's type) + 100 (`labels(first: 10)`, one per item)
+ * + 100 (`reviews(states: CHANGES_REQUESTED)` of the closing PR) = 501 requests, / 100 rounded = 5 points
+ * per 100-item page. `closedAt` and `mergedAt` are scalars and cost nothing; the PR item
+ * carries no `reviews`, which would add another 100. Still one read per page with the 2-min TTL (30 reads an hour):
+ * ≈ 150 points per hour with the board open, under ADR-0001's 10 points per query and a few % of the 5,000/h
+ * primary limit. The recorded read, without the PR, cost 1.
+ */
 
 import { GITHUB_TTL, RateLimitedError, type GithubCache } from './cache.ts';
 import { githubGraphql, GithubScopeError, requireGithubToken, resolveGithubToken, type GithubGraphqlSourceOptions } from './github-source.ts';
@@ -124,8 +130,10 @@ const LAST_CI = 'commits(last: 1) { nodes { commit { statusCheckRollup { state }
 const CONTENT = `content { __typename
   ... on Issue { number title url state updatedAt repository { nameWithOwner } issueType { name } parent { number repository { nameWithOwner } }
     milestone { title } subIssuesSummary { total completed }
-    closedByPullRequestsReferences(first: 1, includeClosedPrs: true) { nodes { number url state isDraft reviewDecision ${LAST_CI} } } }
-  ... on PullRequest { number title url state updatedAt repository { nameWithOwner } milestone { title } isDraft reviewDecision ${LAST_CI} }
+    closedAt labels(first: 10) { nodes { name } }
+    closedByPullRequestsReferences(first: 1, includeClosedPrs: true) { nodes { number url state isDraft reviewDecision mergedAt
+      reviews(states: CHANGES_REQUESTED) { totalCount } ${LAST_CI} } } }
+  ... on PullRequest { number title url state updatedAt repository { nameWithOwner } milestone { title } isDraft reviewDecision mergedAt ${LAST_CI} }
   ... on DraftIssue { title updatedAt } }`;
 const STATUS_VALUE = '... on ProjectV2ItemFieldSingleSelectValue { optionId }';
 
@@ -179,6 +187,9 @@ interface RawLinkedPr extends RawLastCi {
   state: PullRequestState;
   isDraft: boolean;
   reviewDecision: ReviewDecision | null;
+  /** #465 absent in a cache written before it. */
+  mergedAt?: string | null;
+  reviews?: { totalCount: number } | null;
 }
 interface RawContent extends RawLastCi {
   __typename: string;
@@ -195,6 +206,9 @@ interface RawContent extends RawLastCi {
   closedByPullRequestsReferences?: { nodes: RawLinkedPr[] } | null;
   isDraft?: boolean;
   reviewDecision?: ReviewDecision | null;
+  closedAt?: string | null;
+  labels?: { nodes: { name: string }[] } | null;
+  mergedAt?: string | null;
 }
 export interface RawProjectItem {
   id: string;
@@ -218,6 +232,8 @@ const linkedPr = (p: RawLinkedPr): LinkedPullRequest => ({
   review: p.reviewDecision ?? null,
   ci: p.commits?.nodes[0]?.commit.statusCheckRollup?.state ?? null,
   checks: null,
+  mergedAt: p.mergedAt ?? null,
+  changesRequested: p.reviews?.totalCount ?? null,
 });
 
 /** O PR do card: o que fecha a issue; num item que é PR, ele mesmo. */
@@ -227,7 +243,7 @@ function pullRequestOf(c: RawContent): LinkedPullRequest | null {
     return p ? linkedPr(p) : null;
   }
   if (c.__typename === 'PullRequest' && c.number !== undefined && c.url && c.isDraft !== undefined)
-    return linkedPr({ number: c.number, url: c.url, state: (c.state ?? 'OPEN') as PullRequestState, isDraft: c.isDraft, reviewDecision: c.reviewDecision ?? null, commits: c.commits });
+    return linkedPr({ number: c.number, url: c.url, state: (c.state ?? 'OPEN') as PullRequestState, isDraft: c.isDraft, reviewDecision: c.reviewDecision ?? null, mergedAt: c.mergedAt, commits: c.commits });
   return null;
 }
 
@@ -252,6 +268,8 @@ export function toProjectCard(raw: RawProjectItem): ProjectCard | null {
     milestone: c.milestone?.title ?? null,
     subIssues: c.subIssuesSummary && c.subIssuesSummary.total > 0 ? { total: c.subIssuesSummary.total, completed: c.subIssuesSummary.completed } : null,
     pullRequest: pullRequestOf(c),
+    ...(c.__typename === 'Issue' ? { labels: c.labels?.nodes.map((l) => l.name) ?? [] } : {}),
+    closedAt: c.closedAt ?? null,
   };
 }
 

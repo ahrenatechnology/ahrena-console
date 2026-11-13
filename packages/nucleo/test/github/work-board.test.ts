@@ -195,6 +195,11 @@ describe('column of one issue (epic #464 table)', () => {
     assert.deepEqual([card(view, 500).column, card(view, 500).queuePosition], ['queued', 2]);
   });
 
+  test('#477 queue keys are compared in lower case, like session keys', () => {
+    const view = board([boardNode(502, { key: 'Acme/App#502', repo: 'Acme/App' })], { queue: new Map([['acme/app#502', 1]]) });
+    assert.deepEqual([card(view, 502).column, card(view, 502).queuePosition], ['queued', 1]);
+  });
+
   test('#465/AC-2 running: a working session moves the issue to running, even when queued', () => {
     assert.equal(columnOfIssue({ ...open, sessions: ['working'], queuePosition: 1 }).column, 'running');
   });
@@ -248,6 +253,13 @@ describe('blocked reasons', () => {
   test('#465/AC-3 needs-you: a session waiting for the person, with the reason label on the card', () => {
     const view = board([boardNode(500)], { sessions: [session('a', 500, 'needs-you')] });
     assert.deepEqual(card(view, 500).blocked, { reason: 'needs-you', label: 'Precisa de você' });
+  });
+
+  test('#465 a session links to its issue whatever the case of the repo: sessions carry the lower-cased git remote', () => {
+    const mixed = boardNode(501, { key: 'Acme/App#501', repo: 'Acme/App' });
+    const view = board([mixed], { sessions: [{ sessionId: 'a', key: 'acme/app#501', state: 'needs-you', since: daysAgo(0) }] });
+    assert.equal(card(view, 501).column, 'blocked');
+    assert.deepEqual(card(view, 501).sessions.ids, ['a']);
   });
 
   test('#465/AC-3 review-rounds: changes requested after the third round, not before', () => {
