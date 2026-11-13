@@ -35,6 +35,12 @@ import { GITHUB_CALL_LIMIT, GithubCallQueue } from '../github/call-queue.ts';
 import { chooseVault, GithubConnection, GithubNotConnectedError } from '../github/connection/index.ts';
 import { parseProjectEnv, PROJECT_ENV } from '../github/project-selection.ts';
 import { SqliteInstallationSettings } from '../settings/installation-settings.ts';
+import { EMPTY_WORK_QUEUE } from '../github/work-board.ts';
+import { WorkBoardService } from '../github/work-board-service.ts';
+import { FleetWorkSessions } from '../github/work-board-sessions.ts';
+import { SqliteWorkColumnHistory } from '../github/work-board-history.ts';
+import { CachedParentLookup } from '../github/work-board-parents.ts';
+import { selectedProjectBoard } from './work-board.ts';
 import { createDemoGithubConnection, parseDemoGithubState } from '../simulator/demo-github-connection.ts';
 import { defaultProjectsRoot } from '../ingest/history/files.ts';
 import { followTranscripts } from '../ingest/history/follower.ts';
@@ -54,6 +60,7 @@ import {
   demoAlias,
   PANEL_SCENARIOS,
   SimulatorWorkSource,
+  simulatorWorkBoardLocate,
   demoRecordFolders,
   seedPanelScenario,
   seedPanelDecisions,
@@ -453,6 +460,23 @@ coreGithub = await createCoreGithub({
   log,
 });
 const { connection, screens } = coreGithub;
+/*
+ * #465 #466 the work board (`GET /api/work`): the kanban's Project (the same resolver as /api/project),
+ * the live sessions of the fleet, the parents outside the Project through the GitHub cache, the time in
+ * column in this database, and no queue until #477. Under --demo, the simulator's Project and its folders
+ * (only the scenario's session is on an issue branch). Under --no-github, no board (503 off).
+ */
+const workBoard =
+  screens.project && workSource
+    ? new WorkBoardService({
+        project: selectedProjectBoard(screens.project),
+        sessions: new FleetWorkSessions({ fleet: mcp.fleet, ...(demo ? { locate: simulatorWorkBoardLocate } : {}) }),
+        queue: EMPTY_WORK_QUEUE,
+        history: new SqliteWorkColumnHistory(sqlite.db),
+        parents: new CachedParentLookup({ source: workSource, cache: githubCache }),
+        log,
+      })
+    : null;
 // Decision 0015 (#356): the core reads GitHub on a timer and the GitHub screens answer from the database.
 // Under --no-github there is no connection and no sync.
 githubSync = coreGithub.connected
@@ -694,6 +718,7 @@ const api: LocalApi = await startLocalApi({
   decisionsUi,
   project: { kanban: null, fonte: demo ? 'demo' : 'github', resolver: screens.project, options: screens.projectOptions, credentialSource: () => connection.credentialSource(), fromStore: githubSync !== null, log },
   projectSelection: screens.project,
+  work: { service: workBoard, fromStore: githubSync !== null },
   connection,
   // --no-github keeps its own off / no-github answers; otherwise 409 github-not-connected before any call.
   githubConnected: coreGithub.connected,

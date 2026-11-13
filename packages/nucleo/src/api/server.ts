@@ -27,6 +27,7 @@ import type { ManagedRuntime } from '../runtime/service.ts';
 // | `GET /api/workflows` and `/api/sessions/<id>/workflow` | Workflows and the Workflow tab (api/workflows.ts, #96 and #97) |
 // | `GET /api/project`            | The GitHub Project kanban (api/project.ts, #80); `?refresh=1` re-reads |
 // | `POST /api/project/move`      | Changes a card's Status: `{ itemId, optionId }` (api/project.ts) |
+// | `GET /api/work`               | The work board: the Project's issues in the agent lifecycle columns (`?level=`, `?initiative=`, `?epic=`, `?type=`, `?label=`, `?repo=`, `?status=`, `?refresh=1`; api/work-board.ts, #465 #466) |
 // | `GET /api/sessions/<id>` and `/agents`, `/conversation`, `/events` | The session Detail in the /ui (api/session-detail.ts, #29 and #30) |
 // | `GET /api/new-session/folders` and `POST /api/new-session` | "Nova sessão": the folders it can start in, and a new session in one of them, in the Claude Desktop or a terminal (api/new-session.ts) |
 // | `POST /api/sessions/<id>/open` | Opens the session where it runs: Claude Desktop, a terminal resuming it, or its live terminal brought forward; the núcleo picks the target (api/session-open-route.ts, #285) |
@@ -99,6 +100,7 @@ import { EVENTS_ROUTE, responderEventos, type FeedDeEventos } from './events.ts'
 import { agentConfigWriteFromSameOrigin, AGENT_CONFIG_ROUTE, type AgentConfigRoute } from './agent-config.ts';
 import type { McpServer } from '../mcp/protocol.ts';
 import { criarRotaDoProjeto, ehDoProjeto, mesmaOrigemMovendo, PROJECT_OPTIONS_ROUTE, type OpcoesDoProjeto } from './project.ts';
+import { createWorkBoardRoute, WORK_BOARD_ROUTE, type WorkBoardRouteOptions } from './work-board.ts';
 import { DETAIL_ROUTE, type LeiturasDoDetalhe } from './session-detail.ts';
 import type { FleetReader } from '../mcp/fleet.ts';
 import { montarAtencao, remoteAttentionItems, ATTENTION_ROUTE, type RemoteAttentionSource } from './attention-route.ts';
@@ -189,6 +191,8 @@ export interface ApiOptions {
   changes?: ChangeCursor;
   /** The GitHub Project kanban (#80). Without it, `/api/project` answers 503. */
   project?: OpcoesDoProjeto;
+  /** #465 #466 the work board; without it, `/api/work` answers 503 `off` (--no-github). */
+  work?: WorkBoardRouteOptions;
   /** The session Detail reads (`/api/sessions/<id>…`); without them, 404. */
   detail?: LeiturasDoDetalhe;
   /** The activity feed; turns on `GET /api/events` (#94). */
@@ -273,6 +277,7 @@ export function isGithubScreenRoute(pathname: string): boolean {
     under(PDRS_ROUTE) ||
     pathname === DEV_CONSOLE_ROUTE ||
     (ehDoProjeto(pathname)) ||
+    pathname === WORK_BOARD_ROUTE ||
     pathname.startsWith(`${FRAMEWORK_INSTALL_ROUTE}/`) ||
     pathname === '/api/analytics/delivery'
   );
@@ -382,6 +387,7 @@ export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
   const hooks = createHookRoute(opts.hooks);
   const mcp = opts.mcp ? createMcpRoute(opts.mcp) : null;
   const projectRoute = criarRotaDoProjeto(opts.project ?? { kanban: null, fonte: 'github', log });
+  const workBoardRoute = createWorkBoardRoute(opts.work ?? { service: null });
   const openDescriber = opts.openDescriber ?? new SessionOpenDescriber();
   const wall = muralDoPainel(opts.panelBuilder, { open: openDescriber });
   const machineSessions = createMachineSessionsRoute({ reader: opts.machineReader, telemetry: opts.telemetry, local: { sessions: opts.sessions, wall, kanban: opts.kanban, history: opts.history, events: opts.events, dashboard: opts.fleet ? () => montarDashboard(opts.fleet!) : null, panel: opts.panelBuilder } });
@@ -544,7 +550,8 @@ export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
     if (!allowedLocalRequest(req, port) && !sameOriginRead(req, port) && !sameOriginOpen(req, port) && !sameOriginSessionOpen(req, port) && !sameOriginNewSession(req, port) && !mesmaOrigemMovendo(req, port) && !sameOriginDecision(req, port) && !agentConfigWriteFromSameOrigin(req, port) && !frameworkInstallWriteFromSameOrigin(req, port) && !reconnectFromSameOrigin(req, port) && !messagesWriteFromSameOrigin(req, port) && !transcriptionWriteFromSameOrigin(req, port) && !cloudsWriteFromSameOrigin(req, port) && !connectionWriteFromSameOrigin(req, port) && !coreUpdateWriteFromSameOrigin(req, port) && !ownerProofRetryFromSameOrigin(req, port) && !ordersWriteFromSameOrigin(req, port) && !appUpdateWriteFromSameOrigin(req, port)) return send(res, 403, { error: 'origem não permitida' });
     // The Project list spends GitHub quota and the connection status is the /ui's: another site's page
     // never gets either, connected or not (#241 review 2).
-    if ((url.pathname === PROJECT_OPTIONS_ROUTE || url.pathname === CONNECTIONS_ROUTE) && fromAnotherSite(req)) return send(res, 403, { error: 'forbidden' });
+    // #465 the work board reads the Project the same way.
+    if ((url.pathname === PROJECT_OPTIONS_ROUTE || url.pathname === CONNECTIONS_ROUTE || url.pathname === WORK_BOARD_ROUTE) && fromAnotherSite(req)) return send(res, 403, { error: 'forbidden' });
     if (opts.githubConnected && isGithubScreenRoute(url.pathname) && !(await opts.githubConnected())) return send(res, 409, { error: 'github-not-connected' });
     if (url.pathname.startsWith(HOOKS_PATH)) return hooks(req, res);
     if (req.method === 'GET' && (await machineSessions(res, url))) return;
@@ -562,6 +569,7 @@ export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
     if (mcp && url.pathname === MCP_PATH) return mcp(req, res);
     if (url.pathname === CONNECTIONS_ROUTE && opts.connection) return respondConnections(req, res, url.pathname, opts.connection);
     if (ehDoProjeto(url.pathname)) return projectRoute(req, res, url);
+    if (url.pathname === WORK_BOARD_ROUTE) return workBoardRoute(req, res, url);
     if (opts.agentConfig && (url.pathname === AGENT_CONFIG_ROUTE || url.pathname.startsWith(`${AGENT_CONFIG_ROUTE}/`))) return opts.agentConfig(req, res, url);
     if (opts.frameworkInstall && url.pathname.startsWith(`${FRAMEWORK_INSTALL_ROUTE}/`)) return opts.frameworkInstall(req, res, url);
     if (opts.machineConnection && isConnectionRoute(url.pathname)) return opts.machineConnection(req, res, url);
