@@ -61,7 +61,7 @@ function projectBoard(items: ProjectCard[], over: Partial<ProjectBoard> = {}): P
   };
 }
 
-/** The Project double: `current` is what GitHub answers; `stored` what the snapshot has. */
+/** ADR-0015 `current` is what GitHub answers; `stored` what the snapshot has. */
 class FakeProject implements WorkProjectBoard {
   calls: string[] = [];
   current: ProjectBoard = projectBoard([]);
@@ -95,7 +95,6 @@ class FakeQueue implements WorkQueue {
   }
 }
 
-/** In-memory column history with the port's semantics: same column keeps its since, another restarts it. */
 class MemoryHistory implements WorkColumnHistory {
   rows = new Map<string, { column: string; since: string }>();
   observed: WorkColumnObservation[][] = [];
@@ -119,7 +118,6 @@ class FakeParents implements ParentLookup {
   async nodes(keys: readonly string[]): Promise<WorkNode[]> {
     this.calls.push(keys);
     if (this.fail) throw this.fail;
-    // As the GitHub adapter: each key comes with the parents above it.
     const out = new Map<string, WorkNode>();
     for (let key of keys) {
       for (let n = this.known.get(key); n && !out.has(key); n = n.parent ? this.known.get(n.parent) : undefined) {

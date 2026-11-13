@@ -65,7 +65,7 @@ export interface ProjectCard {
   pullRequest?: LinkedPullRequest | null;
   /** Label names of the issue (the work board filter, #466). Optional: the cache from before has none. */
   labels?: string[];
-  /** When the issue closed; `null` while open. Optional: the cache from before has none. */
+  /** #465 when the issue closed; `null` while open. Optional: the cache from before has none. */
   closedAt?: string | null;
 }
 

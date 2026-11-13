@@ -1,10 +1,10 @@
-// The work board use case (#465, #466): loads the Project, the parents outside it, the linked sessions
-// and the queue, records each node's column in the history, and hands everything to the pure
-// `buildWorkBoard`. The column rules live in work-board.ts; this file only loads and saves.
-//
-// GitHub down keeps the last data (decision 0001): `stale`, `staleReason` and `fetchedAt` come from the
-// Project read. Sessions and the queue are local and read live on every call, so a card still moves while
-// GitHub is out.
+/*
+ * #465 #466 the work board use case: loads the Project, the parents outside it, the linked sessions and
+ * the queue, records each node's column in the history, and hands everything to the pure `buildWorkBoard`.
+ * ADR-0001 GitHub down keeps the last data: `stale`, `staleReason` and `fetchedAt` come from the Project
+ * read. Sessions and the queue are local and read live on every call, so a card still moves while GitHub
+ * is out.
+ */
 
 import type { ProjectBoard, ProjectCard } from './project.ts';
 import {
@@ -28,10 +28,10 @@ export interface WorkBoardServiceOptions {
   sessions: WorkSessions;
   queue: WorkQueue;
   history: WorkColumnHistory;
-  /** Parents cited by Project issues but not in the Project; without it they stay chain links with no title. */
+  /** #465 without it, parents outside the Project stay chain links with no title. */
   parents?: ParentLookup;
   now?: () => number;
-  /** Where the raw error of a failed parent lookup goes; the board itself only says it could not read them. */
+  /** #465 the raw error of a failed parent lookup goes here; the board only says it could not read them. */
   log?: (message: string) => void;
 }
 
@@ -39,9 +39,9 @@ export interface WorkBoardServiceOptions {
 export const PARENTS_UNAVAILABLE_REASON = 'não deu para ler os pais fora do Project';
 
 export interface WorkBoardReadOptions {
-  /** The refresh button: re-reads GitHub (the cache keeps its 30 s floor). */
+  /** #465 the refresh button: re-reads GitHub (ADR-0001, the cache keeps its 30 s floor). */
   force?: boolean;
-  /** Answer the stored board (decision 0015) and wait for GitHub only when nothing is stored. */
+  /** ADR-0015 answer the stored board and wait for GitHub only when nothing is stored. */
   fromStore?: boolean;
 }
 
@@ -97,9 +97,8 @@ export class WorkBoardService {
   }
 
   /**
-   * One batched lookup for the parents the Project cites but does not hold (it brings their ancestors
-   * too). Its failure never fails the board: the chain keeps those links without a title and the board
-   * says why it is stale.
+   * #465 one batched lookup for the parents the Project cites but does not hold, ancestors included. Its
+   * failure never fails the board: the chain keeps those links without a title and the board says why.
    */
   private async resolveParents(nodes: readonly WorkBoardNode[]): Promise<{ nodes: WorkBoardNode[]; reason: string | null }> {
     const known = new Set(nodes.map((n) => n.key));
@@ -115,11 +114,11 @@ export class WorkBoardService {
   }
 }
 
-/** The Project's issues: pull requests and draft issues are not work items on this board. */
+/** #465 pull requests and draft issues are not work items on this board. */
 const issueCards = (board: ProjectBoard): ProjectCard[] =>
   board.lanes.flatMap((l) => l.items).filter((c) => c.kind === 'Issue' && c.key !== null && c.repo !== null && c.number !== null);
 
-/** The Status options in Project order; the no-Status lane is not an option. */
+/** #466 the Status options in Project order; the no-Status lane is not an option. */
 const statusOptions = (board: ProjectBoard): WorkBoardStatusOption[] =>
   board.lanes.flatMap((l) => (l.id === null ? [] : [{ id: l.id, name: l.name }]));
 

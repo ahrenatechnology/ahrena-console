@@ -9,6 +9,7 @@ import {
   issueOfPrompt,
   parseWorkBoardFilters,
   REVIEW_ROUNDS_LIMIT,
+  statusIndex,
   statusSlug,
   typeSlugOf,
   WORK_BLOCKED_REASONS,
@@ -116,10 +117,47 @@ describe('work board vocabulary', () => {
     assert.equal(DONE_WINDOW_DAYS, 14);
   });
 
-  test('status slug: lower case, runs of non-alphanumerics become one dash, trimmed', () => {
+  test('#466/AC-3 status slug: diacritics stripped, lower case, runs of other characters become one dash, trimmed', () => {
     assert.equal(statusSlug('In Progress'), 'in-progress');
     assert.equal(statusSlug('  Todo  '), 'todo');
-    assert.equal(statusSlug('Em revisão / QA!'), 'em-revis-o-qa');
+    assert.equal(statusSlug('Em revisão / QA!'), 'em-revisao-qa');
+    assert.equal(statusSlug('Concluído'), 'concluido');
+    assert.equal(statusSlug('✅ Done'), 'done');
+    assert.equal(statusSlug('✅'), '');
+  });
+
+  test('#466/AC-3 a status with no ASCII left falls back to a stable slug from its option id', () => {
+    const index = statusIndex([{ id: 'F75AD846', name: '✅' }, { id: '+', name: '🚧' }, { id: '~', name: '' }]);
+    assert.deepEqual([...index.values()], [
+      { id: 'status-f75ad846', name: '✅' },
+      { id: 'status-1f6a7', name: '🚧' },
+      { id: 'status-option', name: '' },
+    ]);
+  });
+
+  test('#466/AC-3 colliding status slugs are told apart by option id, then by number, in Project order', () => {
+    const options = [
+      { id: 'a1', name: 'Done' },
+      { id: 'b2', name: '✅ Done' },
+      { id: 'c3', name: 'No status' },
+      { id: '+', name: 'done' },
+      { id: '~', name: 'Dône' },
+    ];
+    const slugs = [...statusIndex(options).values()].map((s) => s.id);
+    assert.deepEqual(slugs, ['done', 'done-b2', 'no-status-c3', 'done-2', 'done-3']);
+    assert.deepEqual([...statusIndex(options).values()].map((s) => s.id), slugs);
+  });
+
+  test('#466/AC-3 an emoji-only status can be listed and selected', () => {
+    const statuses = [...STATUSES, { id: 'opt-ship', name: '🚀' }];
+    const nodes = [boardNode(1, { statusId: 'opt-ship' }), boardNode(2, { statusId: 'opt-todo' })];
+    const view = board(nodes, { statuses });
+    assert.deepEqual(view.options.statuses.at(-1), { id: 'status-opt-ship', name: '🚀', count: 1 });
+    const parsed = parseWorkBoardFilters(new URLSearchParams('status=status-opt-ship'));
+    assert.ok(!('error' in parsed));
+    const chosen = board(nodes, { statuses, filters: parsed });
+    assert.deepEqual(allCards(chosen).map((c) => c.number), [1]);
+    assert.deepEqual(card(chosen, 1).projectStatus, { id: 'status-opt-ship', name: '🚀' });
   });
 
   test('type slugs group the GitHub issue types; an unknown type has no slug', () => {
@@ -341,6 +379,32 @@ describe('ordering, time in column and the done window', () => {
     assert.deepEqual(numbersIn(view, 'done'), [2, 3]);
     assert.equal(view.columns.find((c) => c.id === 'done')!.count, 2);
     assert.equal(view.doneWindowDays, DONE_WINDOW_DAYS);
+  });
+
+  test('a done card with no doneAt ages out of the window by its column time', () => {
+    const children = (parent: number, first: number) => [
+      boardNode(first, { parent: k(parent), state: 'CLOSED', closedAt: daysAgo(DONE_WINDOW_DAYS + 5) }),
+      boardNode(first + 1, { parent: k(parent), state: 'CLOSED', closedAt: daysAgo(DONE_WINDOW_DAYS + 5) }),
+    ];
+    const view = board(
+      [
+        boardNode(1, { type: 'Epic' }),
+        ...children(1, 10),
+        boardNode(2, { type: 'Epic' }),
+        ...children(2, 20),
+        boardNode(3, { type: 'Epic' }),
+        ...children(3, 30),
+      ],
+      {
+        filters: filters({ level: 'epic' }),
+        since: new Map([
+          [k(1), daysAgo(DONE_WINDOW_DAYS + 1)],
+          [k(2), daysAgo(DONE_WINDOW_DAYS - 1)],
+        ]),
+      },
+    );
+    assert.equal(card(view, 2).doneAt, null);
+    assert.deepEqual(numbersIn(view, 'done'), [2, 3]);
   });
 
   test('the view always carries the six columns in order, the reasons and the queue availability', () => {

@@ -1,13 +1,11 @@
-// The work board ("Quadro do trabalho", issues #465 and #466, epic #464): the issues of the chosen
-// GitHub Project laid out by the agent lifecycle (planning → queued → running → review → blocked → done),
-// with the column computed from real signals: the issue state, the PR that closes it (CI and review),
-// the Console sessions linked to it and the execution queue.
-//
-// The lifecycle column sits beside `stageOf`/`WORK_STAGES` (work.ts) and does not replace them: `stageOf`
-// answers "where is the PR" from GitHub alone for the panel, the MCP and Delivery; the column also needs
-// sessions and the queue, which a GitHub-only model does not see.
-//
-// Pure domain: no I/O, no mechanism. The ports at the end are what the use case (work-board-service.ts) reads.
+/*
+ * #465 #466 the work board ("Quadro do trabalho", epic #464): the issues of the chosen GitHub Project laid
+ * out by the agent lifecycle (planning, queued, running, review, blocked, done), with the column computed
+ * from the issue state, the PR that closes it (CI and review), the Console sessions linked to it and the
+ * execution queue. The column sits beside `stageOf`/`WORK_STAGES` (work.ts) and does not replace them:
+ * `stageOf` answers "where is the PR" from GitHub alone; the column also needs sessions and the queue.
+ * Pure domain: the ports at the end are what the use case (work-board-service.ts) reads.
+ */
 
 import type { ProjectBoard } from './project.ts';
 import {
@@ -21,7 +19,7 @@ import {
   type WorkNode,
 } from './work.ts';
 
-// ---------- vocabulary ----------
+// ----------
 
 /** The six columns, in lifecycle order; label and criterion are on-screen text (pt-BR), carried as data. */
 export const WORK_BOARD_COLUMNS = [
@@ -76,38 +74,61 @@ export const NO_STATUS_SLUG = 'no-status';
 /** On-screen name of that option, the same as the Project kanban lane. */
 export const NO_STATUS_NAME = 'Sem status';
 
-/** Project Status option → URL slug: lower case, each run of non-alphanumerics is one dash, trimmed ("In Progress" → `in-progress`). */
+/** #466 Status option name → URL slug: diacritics stripped, lower case, each run of other characters one dash, trimmed. */
 export function statusSlug(name: string): string {
-  return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  return name.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
 }
 
-// ---------- signals and the column of one issue ----------
+/** #466 Status option id → its slug and name. */
+export type WorkStatusIndex = ReadonlyMap<string, { id: string; name: string }>;
 
+/**
+ * #466 the slug of every Status option, unique and never empty, so each option can be kept in the URL. A name
+ * with no ASCII left falls back to `status-<id>`; a slug already taken, `no-status` included, gets the
+ * option id appended, then a number, in Project order.
+ */
+export function statusIndex(options: readonly WorkBoardStatusOption[]): WorkStatusIndex {
+  const taken = new Set<string>([NO_STATUS_SLUG]);
+  const out = new Map<string, { id: string; name: string }>();
+  for (const { id, name } of options) {
+    const idSlug = statusSlug(id);
+    const base = statusSlug(name) || `status-${idSlug || codePoints(name) || 'option'}`;
+    let slug = taken.has(base) && idSlug ? `${base}-${idSlug}` : base;
+    for (let n = 2; taken.has(slug); n++) slug = `${base}-${n}`;
+    taken.add(slug);
+    out.set(id, { id: slug, name });
+  }
+  return out;
+}
+
+const codePoints = (text: string): string => [...text].map((c) => c.codePointAt(0)!.toString(16)).join('-');
+
+// ----------
+
+// #467 a plan-only session ("planejando…") plugs in here as its own state that leaves the card in Planejamento.
 /** What a linked session is doing: needs the person, an agent acting, or nothing. */
 export type WorkSessionState = 'working' | 'needs-you' | 'idle';
 
 /** A live Console session linked to an issue (by branch, or by the first reference in its first prompt). */
 export interface WorkSessionLink {
   sessionId: string;
-  /** `owner/name#n`. */
   key: string;
   state: WorkSessionState;
-  /** ISO time the session started. */
   since: string;
 }
 
 export interface IssueSignals {
   state: IssueState;
-  /** The PR that closes the issue, with `mergedAt` and `changesRequested` when known. */
+  /** #465 the PR that closes the issue, with `mergedAt` and `changesRequested` when known. */
   pullRequest: LinkedPullRequest | null;
   sessions: readonly WorkSessionState[];
-  /** 1-based position in the execution queue; `null` out of it. */
+  /** #477 1-based position in the execution queue; `null` out of it. */
   queuePosition: number | null;
 }
 
 export interface ColumnResult {
   column: WorkBoardColumn;
-  /** Set exactly when `column` is `blocked`. */
+  /** #465 set exactly when `column` is `blocked`. */
   blocked: WorkBlockedReason | null;
 }
 
@@ -157,17 +178,17 @@ export function columnOfParent(state: IssueState, children: readonly ColumnResul
   return at('planning');
 }
 
-// ---------- ci and review on the card (the panel's value sets, `ciDoPr`/`reviewDoPr` in src/api/work.ts) ----------
+// ----------
 
 export type WorkCardCi = 'ok' | 'failed' | 'running';
 export type WorkCardReview = 'approved' | 'changes-requested' | 'pending';
 
-// A copy of the panel's tiny mapping: the domain must not import src/api.
+// #465 a copy of the panel's `ciDoPr`/`reviewDoPr` value sets (src/api/work.ts): the domain must not import src/api.
 const cardCi = (ci: CiState | null): WorkCardCi | null => (!ci ? null : ci === 'SUCCESS' ? 'ok' : failedCi(ci) ? 'failed' : 'running');
 const cardReview = (p: LinkedPullRequest): WorkCardReview | null =>
   p.review === 'APPROVED' ? 'approved' : p.review === 'CHANGES_REQUESTED' ? 'changes-requested' : p.state === 'OPEN' ? 'pending' : null;
 
-// ---------- filters ----------
+// ----------
 
 /**
  * An initiative or epic filter value: a bare number (the wireframe's URL form, matching that number in any
@@ -219,7 +240,7 @@ export function parseWorkBoardFilters(query: URLSearchParams): WorkBoardFilters 
   return { level: level as WorkLevel, ...ancestors, type: type as WorkTypeSlug | null, label: text('label'), repo: text('repo'), status: text('status') };
 }
 
-/** `<n>` → n; `owner/name#<n>` → the key, normalised; anything else → `null`. */
+/** #466 `<n>` → n; `owner/name#<n>` → the key, normalised; anything else → `null`. */
 function parseAncestorFilter(v: string): WorkAncestorFilter | null {
   if (/^[1-9]\d*$/.test(v)) return Number(v);
   const m = /^([^/#\s]+\/[^/#\s]+)#([1-9]\d*)$/.exec(v);
@@ -228,7 +249,7 @@ function parseAncestorFilter(v: string): WorkAncestorFilter | null {
 
 export const isWorkBoardFilterError = (f: WorkBoardFilters | WorkBoardFilterError): f is WorkBoardFilterError => 'error' in f;
 
-// ---------- the board ----------
+// ----------
 
 /** One issue as the board reads it: a Project card, or a parent resolved outside the Project. */
 export interface WorkBoardNode {
@@ -238,39 +259,32 @@ export interface WorkBoardNode {
   title: string;
   url: string;
   state: IssueState;
-  /** GitHub issue type name; `null` without one. */
   type: string | null;
   parent: string | null;
   labels: readonly string[];
   milestone: string | null;
   closedAt: string | null;
-  /** Project Status option id; `null` without Status. */
   statusId: string | null;
   subIssues: { total: number; completed: number } | null;
   pullRequest: LinkedPullRequest | null;
-  /** `false` for a parent resolved outside the Project: it gives the chain, the level and the filters, never a card. */
+  /** #465 `false` for a parent resolved outside the Project: it gives the chain, the level and the filters, never a card. */
   inProject: boolean;
 }
 
 export interface WorkBoardStatusOption {
-  /** Project option id. */
   id: string;
   name: string;
 }
 
 export interface WorkBoardInput {
   project: { owner: string; number: number; title: string; url: string };
-  /** The Project Status options, in Project order. */
   statuses: readonly WorkBoardStatusOption[];
   nodes: readonly WorkBoardNode[];
   sessions: readonly WorkSessionLink[];
-  /** Issue key → 1-based queue position. */
   queue: ReadonlyMap<string, number>;
   queueAvailable: boolean;
-  /** Issue key → ISO time it entered its current column (`WorkColumnHistory.observe`). */
   since: ReadonlyMap<string, string>;
   filters: WorkBoardFilters;
-  /** `analyzeWorkNodes` of these same nodes, sessions and queue, when the caller already ran it. */
   analyzed?: ReadonlyMap<string, AnalyzedWorkNode>;
   now: number;
   fetchedAt: number;
@@ -281,7 +295,7 @@ export interface WorkBoardInput {
 export interface WorkChainLink {
   key: string;
   number: number;
-  /** `null` when the parent never arrived from GitHub. */
+  /** #465 `null` when the parent never arrived from GitHub. */
   title: string | null;
   level: WorkLevel;
 }
@@ -310,7 +324,7 @@ export interface WorkBoardCard {
   projectStatus: { id: string; name: string } | null;
   labels: string[];
   milestone: string | null;
-  /** An item with sub-issues: its children are plan steps. */
+  /** #465 an item with sub-issues: its children are plan steps. */
   plan: { steps: number } | null;
   sessions: { count: number; state: WorkSessionState | null; ids: string[] };
   pullRequest: {
@@ -363,9 +377,9 @@ export interface WorkBoardView {
   doneWindowDays: number;
   queue: { available: boolean };
   options: WorkBoardOptions;
-  /** Nodes of the level before the filters. */
+  /** #466 nodes of the level before the filters. */
   total: number;
-  /** Nodes of the level after the filters (the done window only trims the columns). */
+  /** #466 nodes of the level after the filters (the done window only trims the columns). */
   matched: number;
   fetchedAt: number;
   stale: boolean;
@@ -439,17 +453,16 @@ function closesCycle(byKey: ReadonlyMap<string, WorkBoardNode>, start: WorkBoard
   return false;
 }
 
-/** When and how the work landed: the PR merge when it merged, else the issue close. */
 function doneOf(n: WorkBoardNode): Pick<AnalyzedWorkNode, 'doneAt' | 'doneBy'> {
   if (n.pullRequest?.state === 'MERGED') return { doneAt: n.pullRequest.mergedAt ?? n.closedAt, doneBy: 'merged' };
   if (n.state === 'CLOSED') return { doneAt: n.closedAt, doneBy: 'closed' };
-  // Done by the rollup of its children while the epic itself is still open.
+  // #465 done by the rollup of its children while the epic itself is still open.
   return { doneAt: null, doneBy: null };
 }
 
 /**
- * Ancestors, root first. A parent that never arrived stays as a link with no title; its level is taken
- * as one above the child's, the only thing known about it.
+ * #465 ancestors, root first. A parent that never arrived stays as a link with no title; its level is
+ * taken as one above the child's, the only thing known about it.
  */
 function chainOf(byKey: ReadonlyMap<string, WorkBoardNode>, n: WorkBoardNode, level: WorkLevel, levelFor: (n: WorkBoardNode) => WorkLevel): WorkChainLink[] {
   const chain: WorkChainLink[] = [];
@@ -489,18 +502,17 @@ export function columnObservations(analyzed: ReadonlyMap<string, AnalyzedWorkNod
   return [...analyzed.values()].filter((a) => a.node.inProject).map((a) => ({ key: a.node.key, column: a.column.column, at: a.doneAt ?? nowIso }));
 }
 
-// ---------- filter matching ----------
+// ----------
 
 type FilterKey = Exclude<WorkBoardFilterParam, 'level'>;
 const FILTER_KEYS: readonly FilterKey[] = ['initiative', 'epic', 'type', 'label', 'repo', 'status'];
 
-/** Status slug of a node; an option that left the Project counts as no Status, as in the kanban lanes. */
-function statusOf(n: WorkBoardNode, statuses: ReadonlyMap<string, WorkBoardStatusOption>): { id: string; name: string } | null {
-  const option = n.statusId ? statuses.get(n.statusId) : undefined;
-  return option ? { id: statusSlug(option.name), name: option.name } : null;
+/** #466 an option that left the Project counts as no Status, as in the kanban lanes. */
+function statusOf(n: WorkBoardNode, statuses: WorkStatusIndex): { id: string; name: string } | null {
+  return (n.statusId && statuses.get(n.statusId)) || null;
 }
 
-/** The node itself and its ancestors at `level` (the initiative and epic filters match either). */
+/** #466 the node itself and its ancestors at `level`: the initiative and epic filters match either. */
 const lineageAt = (a: AnalyzedWorkNode, level: WorkLevel): WorkChainLink[] => [
   ...a.chain.filter((c) => c.level === level),
   ...(a.level === level ? [{ key: a.node.key, number: a.node.number, title: a.node.title, level }] : []),
@@ -513,7 +525,7 @@ function matchesAncestor(a: AnalyzedWorkNode, level: 'initiative' | 'epic', want
   return lineage.some((c) => c.key.toLowerCase() === want.toLowerCase());
 }
 
-function matchesFilter(a: AnalyzedWorkNode, key: FilterKey, f: WorkBoardFilters, statuses: ReadonlyMap<string, WorkBoardStatusOption>): boolean {
+function matchesFilter(a: AnalyzedWorkNode, key: FilterKey, f: WorkBoardFilters, statuses: WorkStatusIndex): boolean {
   const n = a.node;
   switch (key) {
     case 'initiative':
@@ -535,22 +547,25 @@ function matchesFilter(a: AnalyzedWorkNode, key: FilterKey, f: WorkBoardFilters,
 }
 
 /** Whether the node passes every filter, or every filter but `except` (for the dropdown counts). */
-export function matchesWorkBoardFilters(a: AnalyzedWorkNode, f: WorkBoardFilters, statuses: ReadonlyMap<string, WorkBoardStatusOption>, except?: FilterKey): boolean {
+export function matchesWorkBoardFilters(a: AnalyzedWorkNode, f: WorkBoardFilters, statuses: WorkStatusIndex, except?: FilterKey): boolean {
   return FILTER_KEYS.every((key) => key === except || matchesFilter(a, key, f, statuses));
 }
 
-// ---------- assembling the view ----------
+// ----------
 
 /** The whole board from plain inputs: the use case only loads them. */
 export function buildWorkBoard(input: WorkBoardInput): WorkBoardView {
   const { nodes, filters, now } = input;
-  const statuses = new Map(input.statuses.map((s) => [s.id, s]));
+  const statuses = statusIndex(input.statuses);
   const analyzed = input.analyzed ?? analyzeWorkNodes(nodes, input.sessions, input.queue);
   const ofLevel = [...analyzed.values()].filter((a) => a.node.inProject && a.level === filters.level);
   const matched = ofLevel.filter((a) => matchesWorkBoardFilters(a, filters, statuses));
   const windowStart = now - DONE_WINDOW_DAYS * DAY_MS;
-  const shown = matched.filter((a) => a.column.column !== 'done' || !a.doneAt || Date.parse(a.doneAt) >= windowStart);
-  const cards = shown.map((a) => toCard(a, input.since.get(a.node.key) ?? null, statuses));
+  const sinceOf = (a: AnalyzedWorkNode) => input.since.get(a.node.key) ?? null;
+  // #465 a done card with no `doneAt` (an epic done by rollup, an old cache row) ages out by its column time.
+  const doneTime = (a: AnalyzedWorkNode) => a.doneAt ?? sinceOf(a);
+  const shown = matched.filter((a) => a.column.column !== 'done' || !doneTime(a) || Date.parse(doneTime(a)!) >= windowStart);
+  const cards = shown.map((a) => toCard(a, sinceOf(a), statuses));
 
   return {
     project: { ...input.project, primaryRepo: mostFrequent(nodes.filter((n) => n.inProject).map((n) => n.repo)) },
@@ -563,7 +578,7 @@ export function buildWorkBoard(input: WorkBoardInput): WorkBoardView {
     blockedReasons: WORK_BLOCKED_REASONS.map(({ id, label }) => ({ id, label })),
     doneWindowDays: DONE_WINDOW_DAYS,
     queue: { available: input.queueAvailable },
-    options: optionsOf(ofLevel, filters, input.statuses, statuses),
+    options: optionsOf(ofLevel, filters, statuses),
     total: ofLevel.length,
     matched: matched.length,
     fetchedAt: input.fetchedAt,
@@ -572,7 +587,7 @@ export function buildWorkBoard(input: WorkBoardInput): WorkBoardView {
   };
 }
 
-function toCard(a: AnalyzedWorkNode, columnSince: string | null, statuses: ReadonlyMap<string, WorkBoardStatusOption>): WorkBoardCard {
+function toCard(a: AnalyzedWorkNode, columnSince: string | null, statuses: WorkStatusIndex): WorkBoardCard {
   const n = a.node;
   const parent = a.chain.at(-1);
   const best = [...a.sessions].sort((x, y) => sessionRank[x.state] - sessionRank[y.state])[0];
@@ -610,7 +625,7 @@ function cardPullRequest(p: LinkedPullRequest): NonNullable<WorkBoardCard['pullR
   return { number: p.number, url: p.url, state, ci: cardCi(p.ci), review: cardReview(p), changesRequested: p.changesRequested ?? 0 };
 }
 
-// Order inside each column. Unknown times go last; ties by number.
+// #465 order inside each column, as the wireframe: unknown times go last; ties by number.
 type CardOrder = (a: WorkBoardCard, b: WorkBoardCard) => number;
 const time = (iso: string | null): number | null => (iso ? Date.parse(iso) : null);
 const nullsLast = (x: number | null, y: number | null, cmp: (x: number, y: number) => number): number =>
@@ -634,15 +649,10 @@ function mostFrequent(values: readonly string[]): string | null {
 }
 
 /**
- * The dropdown values, each counted over the nodes of the level that match all the OTHER filters, so a
+ * #466 each dropdown value is counted over the nodes of the level that match all the OTHER filters, so a
  * dropdown says how many would remain if it changed (and "no result" can say how to clear it).
  */
-function optionsOf(
-  ofLevel: readonly AnalyzedWorkNode[],
-  filters: WorkBoardFilters,
-  statusList: readonly WorkBoardStatusOption[],
-  statuses: ReadonlyMap<string, WorkBoardStatusOption>,
-): WorkBoardOptions {
+function optionsOf(ofLevel: readonly AnalyzedWorkNode[], filters: WorkBoardFilters, statuses: WorkStatusIndex): WorkBoardOptions {
   const pool = (except: FilterKey) => ofLevel.filter((a) => matchesWorkBoardFilters(a, filters, statuses, except));
   const lineage = (level: 'initiative' | 'epic'): WorkAncestorOption[] => {
     const found = tally(pool(level).flatMap((a) => lineageAt(a, level).map((c) => [c.key, c.title] as const)));
@@ -657,7 +667,7 @@ function optionsOf(
     const slug = typeSlugOf(a.node.type);
     return slug ? [[slug, null] as const] : [];
   }));
-  // Labels are matched case-insensitively, so their spellings count together under the first one seen.
+  // #466 labels match case-insensitively, so their spellings count together under the first one seen.
   const labels = tally(pool('label').flatMap((a) => uniqueBy(a.node.labels, (l) => l.toLowerCase()).map((l) => [l.toLowerCase(), l] as const)));
   const statusPool = pool('status');
   const statusCount = (slug: string) => statusPool.filter((a) => (statusOf(a.node, statuses)?.id ?? NO_STATUS_SLUG) === slug).length;
@@ -669,13 +679,12 @@ function optionsOf(
     labels: labels.map(([, name, count]) => ({ name: name!, count })).sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })),
     repos: tally(pool('repo').map((a) => [a.node.repo, null] as const)).map(([name, , count]) => ({ name, count })).sort((a, b) => a.name.localeCompare(b.name)),
     statuses: [
-      ...statusList.map((s) => ({ id: statusSlug(s.name), name: s.name, count: statusCount(statusSlug(s.name)) })),
+      ...[...statuses.values()].map(({ id, name }) => ({ id, name, count: statusCount(id) })),
       ...(noStatus ? [{ id: NO_STATUS_SLUG, name: NO_STATUS_NAME, count: noStatus }] : []),
     ],
   };
 }
 
-/** Counts `[id, display]` pairs by id, keeping the first display seen; in first-seen order. */
 function tally(pairs: readonly (readonly [string, string | null])[]): [string, string | null, number][] {
   const out = new Map<string, [string, string | null, number]>();
   for (const [id, display] of pairs) {
@@ -691,10 +700,12 @@ function uniqueBy<T>(list: readonly T[], keyOf: (t: T) => string): T[] {
   return list.filter((t) => !seen.has(keyOf(t)) && seen.add(keyOf(t)));
 }
 
-// ---------- the session → issue link ----------
+// ----------
 
-// Leftmost match wins, so the first reference in the prompt is the one that counts: a github.com issue
-// or pull URL, `owner/name#n`, or a bare `#n` (not inside a word, a path or an HTML entity like `&#123;`).
+/*
+ * #465 leftmost match wins, so the first reference in the prompt is the one that counts: a github.com issue
+ * or pull URL, `owner/name#n`, or a bare `#n` (not inside a word, a path or an HTML entity like `&#123;`).
+ */
 const ISSUE_REFERENCE =
   /(?:https?:\/\/)?github\.com\/([\w.-]+)\/([\w.-]+)\/(?:issues|pull)\/(\d+)|(?<![\w/.-])([\w.-]+)\/([\w.-]+)#(\d+)(?!\w)|(?<![\w&#/])#(\d+)(?!\w)/;
 
@@ -707,9 +718,9 @@ export function issueOfPrompt(text: string, sessionRepo: string | null): string 
   return sessionRepo ? `${sessionRepo}#${Number(m[7])}` : null;
 }
 
-// ---------- ports the use case reads ----------
+// ----------
 
-/** The chosen Project's board: what `GithubProject` already is (decision 0001 cache, decision 0015 snapshot). */
+/** The chosen Project's board: what `GithubProject` already is (ADR-0001 cache, ADR-0015 snapshot). */
 export interface WorkProjectBoard {
   board(options?: { force?: boolean }): Promise<ProjectBoard>;
   snapshot?(): Promise<ProjectBoard | null>;
@@ -723,7 +734,6 @@ export interface WorkSessions {
 /** The execution queue (#477); until it exists, `EMPTY_WORK_QUEUE`. */
 export interface WorkQueue {
   readonly available: boolean;
-  /** Issue key → 1-based position. */
   positions(): Promise<ReadonlyMap<string, number>>;
 }
 
