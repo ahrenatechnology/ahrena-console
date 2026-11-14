@@ -36,12 +36,12 @@ export const PLAN_FAILURE_TEXT: Readonly<Record<PlanFailure, string>> = {
 export const PLAN_SESSION_WINDOW_MS = 10 * 60_000;
 
 export interface PlanRun {
-  /** The issue key, lower case. */
+  /** #507 The issue key, lower case. */
   key: string;
   target: PlanTarget;
   startedAt: string;
   replan: boolean;
-  /** The planning session, once the board has seen it live. */
+  /** #507 The planning session, once the board has seen it live. */
   sessionId: string | null;
   outcome: PlanRunOutcome;
   failure: PlanFailure | null;
@@ -52,7 +52,7 @@ export interface PlanRun {
 export interface WorkPlanRuns {
   get(key: string): Promise<PlanRun | null>;
   all(): Promise<PlanRun[]>;
-  /** Inserts the issue's run or replaces its last one. */
+  /** #507 Inserts the issue's run or replaces its last one. */
   save(run: PlanRun): Promise<void>;
 }
 
@@ -63,7 +63,7 @@ export const PLAN_PROMPT_MARKER = 'Ahrena Console planning run: ';
 
 const REPO = /^[A-Za-z0-9-]+\/[A-Za-z0-9._-]+$/;
 const MAX_NUMBER = 2147483647;
-/** The Desktop cuts a prompt past ~14k characters; this stays far below. */
+/** #507 The Desktop cuts a prompt past ~14k characters; this stays far below. */
 const MAX_LISTED_STEPS = 50;
 
 export const isPlanRepo = (repo: string): boolean => REPO.test(repo) && !/\/\.+$/.test(repo);
@@ -72,7 +72,7 @@ export const isPlanNumber = (n: unknown): n is number => typeof n === 'number' &
 export interface PlanningPromptInput {
   repo: string;
   number: number;
-  /** The numbers of the Plan steps a replan replaces. */
+  /** #507 The numbers of the Plan steps a replan replaces. */
   replaceSteps?: readonly number[];
 }
 
@@ -116,9 +116,9 @@ export interface LivePlanningSession {
 }
 
 export interface SettleInput {
-  /** The live planning sessions of the run's issue. */
+  /** #507 The live planning sessions of the run's issue. */
   live: readonly LivePlanningSession[];
-  /** The Plan sub-issues the issue has now. */
+  /** #507 The Plan sub-issues the issue has now. */
   steps: number;
   now: number;
 }

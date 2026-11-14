@@ -16,7 +16,7 @@
  *   address (the Desktop pre-fills the composer, the person sends the prompt); `terminal` through the
  *   terminal opener with the prompt as its own file (terminal-launch.ts). Without the launcher: 501 with
  *   `command`, `cd '<folder>' && claude '<prompt>'`, each part single-quoted.
- * - The prompt (work-plan.ts) holds the issue's `owner/repo#N` and, on `replan`, the numbers of its current
+ * - The prompt (work-plan.ts) holds the issue's `owner/repo#N` and, when it replans (`replan`, or the issue already has Plan steps: the server decides), the numbers of its current
  *   Plan steps; no title, body or comment ever enters it, a command or an address (AC-6). `repo` and `number`
  *   are validated before anything is read or run.
  * - The run is recorded (work-plan-runs.ts) once the session opened, with the start taken before opening so
@@ -46,7 +46,7 @@ export interface WorkPlanRouteOptions {
   /** #506 the issue detail use case; `null` under --no-github: the route answers 503. */
   issues: Pick<WorkIssueService, 'issue'> | null;
   runs: WorkPlanRuns;
-  /** Where a folder's remote is read; injected so the tests need no git. */
+  /** #507 Where a folder's remote is read; injected so the tests need no git. */
   git?: Git;
   now?: () => number;
 }
@@ -61,7 +61,7 @@ export interface WorkPlanRouteDeps extends WorkPlanRouteOptions {
 
 export type WorkPlanRoute = (req: IncomingMessage, res: ServerResponse) => Promise<void>;
 
-/** The first listed folder (most recent first) whose `origin` is `repo`; `null` when none. */
+/** #507 The first listed folder (most recent first) whose `origin` is `repo`; `null` when none. */
 async function folderOfRepo(repo: string, folders: readonly { path: string }[], git: Git): Promise<string | null> {
   const want = repo.toLowerCase();
   for (const { path } of folders) {
@@ -72,7 +72,7 @@ async function folderOfRepo(repo: string, folders: readonly { path: string }[], 
   return null;
 }
 
-/** `cd '<folder>' && claude '<prompt>'` for "Copiar comando"; `claude '<prompt>'` when there is no folder. */
+/** #507 `cd '<folder>' && claude '<prompt>'` for "Copiar comando"; `claude '<prompt>'` when there is no folder. */
 const planCommand = (folder: string | null, prompt: string): string => `${folder === null ? '' : `cd ${shellQuote(folder)} && `}claude ${shellQuote(prompt)}`;
 
 export function createWorkPlanRoute(o: WorkPlanRouteDeps | null): WorkPlanRoute {
@@ -112,7 +112,8 @@ export function createWorkPlanRoute(o: WorkPlanRouteDeps | null): WorkPlanRoute 
     const previous = await o.runs.get(key);
     if (previous && isPlanRunActive(previous, now())) return send(res, 409, { error: 'Já há um planejamento em andamento para esta issue' });
 
-    const replacing = replan === true;
+    // #507 the issue's current Plan steps decide a replan; the client flag can ask for one, never hide the steps.
+    const replacing = replan === true || issue.plan.count > 0;
     const prompt = planningPrompt({ repo, number, ...(replacing ? { replaceSteps: issue.plan.steps.map((s) => s.number) } : {}) });
     const folders = await knownFolders(o.storage, undefined, o.isThrowaway ?? isThrowawayFolder);
     const folder = await folderOfRepo(repo, folders, o.git ?? gitDoSistema);

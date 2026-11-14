@@ -10,12 +10,12 @@
 //   then `open <file>`, which runs it in whatever terminal the person has for `.command` files. The
 //   file removes itself when it runs, and each call removes the leftovers older than an hour.
 // - macOS, a new session with a first prompt (#507 "Planejar"): the prompt is its own file next to the
-//   `.command` (0600, unique name) and the `.command` reads it back with `cat` into a variable and runs
-//   `exec claude "$prompt"`: the text never passes through shell parsing and is in no shell-read file.
-//   Both files remove themselves when they run.
+//   #507 `.command` (0600, unique name) and the `.command` reads it back with `cat` into a variable and runs
+//   #507 `exec claude "$prompt"`: the text never passes through shell parsing and is in no shell-read file.
+//   #507 Both files remove themselves when they run.
 // - Linux, open: `x-terminal-emulator -e claude [--resume <id>]` in the folder, when it is on the PATH.
-//   With a first prompt: `unsupported`, because some emulators (gnome-terminal's `-e`) re-parse their
-//   arguments through a shell, and the route answers 501 with the command to copy.
+//   #507 With a first prompt: `unsupported`, because some emulators (gnome-terminal's `-e`) re-parse their
+//   #507 arguments through a shell, and the route answers 501 with the command to copy.
 // - Anything else (Windows included: its folders are not POSIX paths): `unsupported`, and the route
 //   answers 501 with the command to copy.
 // - macOS, focus: `ps -o tty= -o lstart= -p <pid>` (in UTC, to compare with the `procStart` Claude Code
@@ -44,7 +44,7 @@ export interface TerminalRequest {
 
 const MAX_PROMPT = 20_000;
 
-/** The prompt a terminal can carry as one argument; throws otherwise. */
+/** #507 The prompt a terminal can carry as one argument; throws otherwise. */
 function checkPrompt(prompt: string): string {
   if (prompt.length === 0 || prompt.length > MAX_PROMPT || prompt.includes('\0') || prompt.startsWith('-')) throw new Error('unusable prompt');
   return prompt;

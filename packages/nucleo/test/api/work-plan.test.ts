@@ -17,7 +17,7 @@ import { WORK_PLAN_ROUTE } from '../../src/api/work-plan.ts';
 import { NoDataError } from '../../src/github/cache.ts';
 import { WorkIssueNotFoundError } from '../../src/github/work-issue-service.ts';
 import type { WorkIssueResult } from '../../src/github/work-issue-service.ts';
-import { planningPrompt } from '../../src/github/work-plan.ts';
+import { planningPrompt, settlePlanRun } from '../../src/github/work-plan.ts';
 import { SqliteWorkPlanRuns } from '../../src/github/work-plan-runs.ts';
 import { session } from '../fixtures.ts';
 
@@ -115,7 +115,7 @@ describe('#507 POST /api/work/plan', () => {
     storage = openSqliteStorage({ path: ':memory:' });
     runs = new SqliteWorkPlanRuns(storage.db);
     const at = (min: number) => new Date(Date.now() - min * 60_000).toISOString();
-    // Most recent first: other, the app's worktree (folds into app), the older checkout, norepo.
+    // #507 Most recent first: other, the app's worktree (folds into app), the older checkout, norepo.
     await storage.putSession(session({ id: '11111111-1111-4111-8111-111111111111', cwd: other, updatedAt: at(1) }));
     await storage.putSession(session({ id: '22222222-2222-4222-8222-222222222222', cwd: join(app, '.claude', 'worktrees', 'feat'), updatedAt: at(2) }));
     await storage.putSession(session({ id: '33333333-3333-4333-8333-333333333333', cwd: app2, updatedAt: at(3) }));
@@ -232,12 +232,41 @@ describe('#507 POST /api/work/plan', () => {
       assert.equal((await runs.get('acme/app#412'))?.replan, true);
     });
 
-    test('#507/AC-2 without replan the steps are not listed, and replan must be a boolean', async () => {
+    test('#507/AC-2 Given an issue with Plan sub-issues, When the body has no replan, Then the prompt lists the current steps and the run is a replan', async () => {
+      fresh();
+      current = issue({ stepNumbers: [601, 602] });
+      assert.equal((await post({ repo: 'acme/app', number: 412, target: 'terminal' })).status, 200);
+      assert.equal(terminal[0]!.prompt, planningPrompt({ repo: 'acme/app', number: 412, replaceSteps: [601, 602] }));
+      assert.equal((await runs.get('acme/app#412'))?.replan, true, 'the issue\'s steps decide, not the client');
+    });
+
+    test('#507/AC-2 Given an issue with Plan sub-issues, When replan is false, Then the steps are still listed', async () => {
       fresh();
       current = issue({ stepNumbers: [601] });
-      await post({ repo: 'acme/app', number: 412, target: 'terminal' });
-      assert.doesNotMatch(terminal[0]!.prompt!, /#601/);
+      await post({ repo: 'acme/app', number: 412, target: 'terminal', replan: false });
+      assert.match(terminal[0]!.prompt!, /#601/);
+      assert.equal((await runs.get('acme/app#412'))?.replan, true);
+    });
+
+    test('#507/AC-2 Given an issue with no Plan sub-issues, When replan is true, Then the run is a replan with no steps listed', async () => {
+      fresh();
+      current = issue({ stepNumbers: [] });
+      await post({ repo: 'acme/app', number: 412, target: 'terminal', replan: true });
+      assert.equal((await runs.get('acme/app#412'))?.replan, true);
+    });
+
+    test('#507/AC-2 replan must be a boolean', async () => {
+      fresh();
       assert.equal((await post({ repo: 'acme/app', number: 412, target: 'terminal', replan: 'yes' })).status, 400);
+    });
+
+    test('#507/AC-3 Given an issue with Plan sub-issues, When POST has no replan, Then the run stays running while its session runs', async () => {
+      fresh();
+      current = issue({ stepNumbers: [601, 602] });
+      await post({ repo: 'acme/app', number: 412, target: 'terminal' });
+      const run = (await runs.get('acme/app#412'))!;
+      const settled = settlePlanRun(run, { live: [{ sessionId: 'sess-1', since: new Date(T0 + 1000).toISOString() }], steps: 2, now: T0 + 2000 });
+      assert.equal(settled.outcome, 'running', 'the old steps do not finish a replan');
     });
 
     test('#507/AC-2 a plan already running is not started twice: 409, then allowed once it is not active', async () => {
