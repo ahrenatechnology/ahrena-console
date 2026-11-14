@@ -27,7 +27,7 @@ import type { ManagedRuntime } from '../runtime/service.ts';
 // | `GET /api/workflows` and `/api/sessions/<id>/workflow` | Workflows and the Workflow tab (api/workflows.ts, #96 and #97) |
 // | `GET /api/project`            | The GitHub Project kanban (api/project.ts, #80); `?refresh=1` re-reads |
 // | `POST /api/project/move`      | Changes a card's Status: `{ itemId, optionId }` (api/project.ts) |
-// | `GET /api/work/issue`         | The work board's issue detail: body, comments, parents, sub-issues, Plan steps and the linked pull request (`?repo=owner/name`, `?number=`, `?refresh=1`; api/work-issue.ts, issue 506) |
+// | `GET /api/work/issue`         | The work board's issue detail: body, comments, parents, sub-issues, Plan steps and the linked pull request (`?repo=owner/name`, `?number=`, `?refresh=1`; api/work-issue.ts, #506) |
 // | `GET /api/work`               | The work board: the Project's issues in the agent lifecycle columns (`?level=`, `?initiative=`, `?epic=`, `?type=`, `?label=`, `?repo=`, `?status=`, `?refresh=1`; api/work-board.ts, #465 #466) |
 // | `GET /api/sessions/<id>` and `/agents`, `/conversation`, `/events` | The session Detail in the /ui (api/session-detail.ts, #29 and #30) |
 // | `GET /api/new-session/folders` and `POST /api/new-session` | "Nova sessão": the folders it can start in, and a new session in one of them, in the Claude Desktop or a terminal (api/new-session.ts) |
@@ -195,7 +195,7 @@ export interface ApiOptions {
   project?: OpcoesDoProjeto;
   /** #465 #466 the work board; without it, `/api/work` answers 503 `off` (--no-github). */
   work?: WorkBoardRouteOptions;
-  /** issue 506 the work board's issue detail; without it, `/api/work/issue` answers 503 `off`. */
+  /** #506 the work board's issue detail; without it, `/api/work/issue` answers 503 `off`. */
   workIssue?: WorkIssueRouteOptions;
   /** The session Detail reads (`/api/sessions/<id>…`); without them, 404. */
   detail?: LeiturasDoDetalhe;

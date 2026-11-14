@@ -1,5 +1,5 @@
 /*
- * issue 506 the issue detail of the work board in the API: `GET /api/work/issue`, one issue with its body,
+ * #506 the issue detail of the work board in the API: `GET /api/work/issue`, one issue with its body,
  * comments, parent chain, sub-issues, Plan steps and linked pull request (wireframe 467-1).
  *
  * | Param     | Values                                                         | Required |
@@ -25,23 +25,25 @@ import { fromAnotherSite } from './same-origin.ts';
 export const WORK_ISSUE_ROUTE = '/api/work/issue';
 
 export interface WorkIssueRouteOptions {
-  /** `null` under --no-github: the route answers 503 `off`. */
+  /** #506 `null` under --no-github: the route answers 503 `off`. */
   service: Pick<WorkIssueService, 'issue'> | null;
 }
 
 const REPO = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
 const NUMBER = /^[1-9]\d{0,9}$/;
+/** #506 GitHub's GraphQL `Int` is 32-bit: a larger number would fail upstream as a 502, so it is the caller's 400. */
+const MAX_NUMBER = 2147483647;
 
 export function createWorkIssueRoute({ service }: WorkIssueRouteOptions) {
   return async function workIssueRoute(req: IncomingMessage, res: ServerResponse, url: URL): Promise<void> {
     if (req.method !== 'GET') return send(res, 405, { error: 'method-not-allowed' });
-    // Reading the issue calls GitHub and spends the credential's quota: never for another site's page.
+    // #506 reading the issue calls GitHub and spends the credential's quota: never for another site's page.
     if (fromAnotherSite(req)) return send(res, 403, { error: 'forbidden' });
     if (!service) return send(res, 503, { error: 'off' });
     const repo = url.searchParams.get('repo') ?? '';
     const number = url.searchParams.get('number') ?? '';
     if (!REPO.test(repo)) return send(res, 400, { error: 'bad-param', param: 'repo' });
-    if (!NUMBER.test(number)) return send(res, 400, { error: 'bad-param', param: 'number' });
+    if (!NUMBER.test(number) || Number(number) > MAX_NUMBER) return send(res, 400, { error: 'bad-param', param: 'number' });
     try {
       send(res, 200, await service.issue(workKey(repo, Number(number)), { force: url.searchParams.get('refresh') === '1' }));
     } catch (err) {

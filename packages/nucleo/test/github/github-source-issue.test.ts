@@ -1,5 +1,5 @@
 /*
- * issue 506 the GraphQL adapter of the issue detail: one query per issue, mapped to `WorkIssueRead`.
+ * #506 the GraphQL adapter of the issue detail: one query per issue, mapped to `WorkIssueRead`.
  * GitHub is a fake `fetch` that records the request.
  */
 import assert from 'node:assert/strict';

@@ -1,5 +1,5 @@
 /*
- * issue 506 the issue detail the work board's panel reads (wireframe 467-1): the pure view built from one
+ * #506 the issue detail the work board's panel reads (wireframe 467-1): the pure view built from one
  * GitHub read, with no IO. Each scenario names the acceptance criterion it covers.
  */
 import assert from 'node:assert/strict';

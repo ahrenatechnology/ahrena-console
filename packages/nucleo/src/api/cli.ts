@@ -478,7 +478,7 @@ const workBoard =
         log,
       })
     : null;
-// issue 506 the work board's issue detail (`GET /api/work/issue`): one GraphQL query per issue through the
+// #506 the work board's issue detail (`GET /api/work/issue`): one GraphQL query per issue through the
 // same GitHub cache, the Project Status from the same resolver. Under --demo the simulator has no issue
 // detail and under --no-github no GitHub: 503 off.
 const workIssue =

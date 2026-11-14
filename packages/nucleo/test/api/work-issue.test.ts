@@ -1,6 +1,6 @@
 import { OWNER_TOKEN, ownerFetch as fetch } from '../owner-http.ts';
 /*
- * issue 506 GET /api/work/issue, the issue detail of the work board, through the HTTP route: the core's real
+ * #506 GET /api/work/issue, the issue detail of the work board, through the HTTP route: the core's real
  * server, the use case, the ADR-0001 cache and the GraphQL adapter; GitHub is a fake `fetch`.
  * Each scenario names the acceptance criterion it covers.
  */
@@ -215,6 +215,9 @@ describe('#506/AC-3 GET /api/work/issue: GitHub off or down, an unknown issue', 
         [`?repo=${REPO}&number=abc`, 'number'],
         [`?repo=${REPO}&number=0`, 'number'],
         [`?repo=${REPO}&number=5.5`, 'number'],
+        // GitHub's GraphQL Int is 32-bit: above it the read would fail as a 502, so it is the caller's 400
+        [`?repo=${REPO}&number=2147483648`, 'number'],
+        [`?repo=${REPO}&number=9999999999`, 'number'],
       ] as const) {
         assert.deepEqual(await get(b, query), { status: 400, json: { error: 'bad-param', param } }, query);
       }

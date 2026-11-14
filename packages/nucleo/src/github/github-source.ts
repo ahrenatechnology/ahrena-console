@@ -7,7 +7,7 @@
 // | WorkNodes      | issues por chave, com 2 níveis de pai (só campos rasos) | 1  |
 // | WorkChildren   | até 50 filhas, cada uma com PR, CI e review         | ≤ 4   |
 // | WorkDetail     | PR, CI e review de um card                          | 1     |
-// | WorkIssue      | one issue's detail: body, comments, parents, sub-issues, PR (issue 506) | 1 |
+// | WorkIssue      | one issue's detail: body, comments, parents, sub-issues, PR (#506) | 1 |
 
 import { execFile } from 'node:child_process';
 import { backoffMs, RateLimitedError } from './cache.ts';
@@ -36,7 +36,7 @@ const LEAN = `number title url state updatedAt repository { nameWithOwner } issu
 const CHECKS = 'contexts(first: 1) { totalCount checkRunCountsByState { state count } statusContextCountsByState { state count } }';
 const PRS = `closedByPullRequestsReferences(first: 3, includeClosedPrs: true) { nodes { number url state isDraft reviewDecision
   commits(last: 1) { nodes { commit { statusCheckRollup { state ${CHECKS} } } } } } }`;
-// issue 506 the issue detail: the same PR read with its title, up to 3 parents (initiative > epic > item) and the first 50 sub-issues and comments.
+// #506 the issue detail: the same PR read with its title, up to 3 parents (initiative > epic > item) and the first 50 sub-issues and comments.
 const REF = 'number title url state repository { nameWithOwner } issueType { name }';
 const DETAIL_PRS = `closedByPullRequestsReferences(first: 3, includeClosedPrs: true) { nodes { number title url state isDraft reviewDecision
   commits(last: 1) { nodes { commit { statusCheckRollup { state ${CHECKS} } } } } } }`;
@@ -177,7 +177,7 @@ const toIssueRef = (r: RawRef): WorkIssueRef => ({
   type: r.issueType?.name ?? null,
 });
 
-/** issue 506 the raw detail of one issue as the port's read; the parents come nearest first. */
+/** #506 the raw detail of one issue as the port's read; the parents come nearest first. */
 export function toWorkIssueRead(raw: RawIssueDetail): WorkIssueRead {
   const parentChain: WorkIssueRef[] = [];
   for (let p = raw.parent; p; p = p.parent) parentChain.push(toIssueRef(p));
@@ -317,7 +317,7 @@ export class GithubGraphqlSource implements WorkSource, WorkIssueSource {
     return toWorkDetail(issue);
   }
 
-  /** issue 506 one issue's detail in one query; `null` when GitHub has no such issue. */
+  /** #506 one issue's detail in one query; `null` when GitHub has no such issue. */
   async issue(key: string): Promise<WorkIssueRead | null> {
     const k = parseWorkKey(key);
     type Data = { repository: { issue: RawIssueDetail | null } | null };

@@ -1,5 +1,5 @@
 /*
- * issue 506 the issue detail use case: one read of the issue through the ADR-0001 cache, with the issue's
+ * #506 the issue detail use case: one read of the issue through the ADR-0001 cache, with the issue's
  * Project Status from the chosen Project. The source and the Project are test doubles.
  */
 import assert from 'node:assert/strict';
@@ -122,10 +122,11 @@ describe('#506/AC-3 GitHub down and an unknown issue', () => {
     assert.ok(!JSON.stringify(r).includes('secret raw text'));
   });
 
-  test('#506/AC-3 Given GitHub down and nothing stored, Then it throws NoDataError', async () => {
-    const { source, service } = setup();
+  test('#506/AC-3 Given GitHub down and nothing stored, Then it throws NoDataError and the raw message goes to the log', async () => {
+    const { source, service, logs } = setup();
     source.fail = new TypeError('fetch failed');
     await assert.rejects(service.issue(k(506)), (e) => e instanceof NoDataError);
+    assert.ok(logs.some((l) => l.includes('no data') && l.includes('fetch failed')), 'the raw message is logged');
   });
 
   test('#506/AC-3 Given GitHub has no such issue, Then it throws WorkIssueNotFoundError and stores nothing', async () => {
@@ -133,7 +134,7 @@ describe('#506/AC-3 GitHub down and an unknown issue', () => {
     source.missing.add(k(999));
     await assert.rejects(service.issue(k(999)), (e) => e instanceof WorkIssueNotFoundError);
     assert.equal(await cache.peek(`github:work-issue:${k(999).toLowerCase()}`), null);
-    // an issue created meanwhile is read on the next call
+    // #506 an issue created meanwhile is read on the next call
     source.missing.clear();
     assert.equal((await service.issue(k(999))).number, 999);
   });

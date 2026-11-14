@@ -1,5 +1,5 @@
 /*
- * issue 506 the issue detail the work board's panel reads (wireframe 467-1): the header, the body, the
+ * #506 the issue detail the work board's panel reads (wireframe 467-1): the header, the body, the
  * comments, the parent chain, the sub-issues, the Plan steps and the linked pull request. `WorkIssueRead` is
  * what the source port returns for one issue; `buildWorkIssue` turns it into the route's body, with no IO.
  */
@@ -19,7 +19,7 @@ export interface WorkIssueRef {
 }
 
 export interface WorkIssueComment {
-  /** `null` for a deleted account. */
+  /** #506 `null` for a deleted account. */
   author: string | null;
   createdAt: string;
   body: string;
@@ -35,11 +35,11 @@ export interface WorkIssueRead extends WorkIssueRef {
   milestone: string | null;
   body: string;
   comments: WorkIssueComment[];
-  /** How many comments the issue has; `comments` may hold only the first ones. */
+  /** #506 how many comments the issue has; `comments` may hold only the first ones. */
   commentsTotal: number;
-  /** The parents, nearest first (the issue's parent, then its parent's parent...). */
+  /** #506 the parents, nearest first (the issue's parent, then its parent's parent...). */
   parentChain: WorkIssueRef[];
-  /** In GitHub's order. */
+  /** #506 in GitHub's order. */
   subIssues: WorkIssueRef[];
   pullRequests: WorkIssuePullRequest[];
 }
@@ -85,12 +85,12 @@ export interface WorkIssueView {
   url: string;
   labels: string[];
   milestone: string | null;
-  /** The issue's Status in the chosen Project; `null` when it is not in it. */
+  /** #506 the issue's Status in the chosen Project; `null` when it is not in it. */
   projectStatus: string | null;
   body: string;
   comments: WorkIssueComment[];
   commentsTotal: number;
-  /** Root first. */
+  /** #506 root first. */
   parents: WorkIssueRef[];
   subIssues: WorkIssueRef[];
   plan: { count: number; steps: WorkPlanStep[] };
@@ -99,7 +99,7 @@ export interface WorkIssueView {
 
 const isPlan = (type: string | null): boolean => type !== null && LEVEL_BY_TYPE[type] === 'plan';
 
-/** The pull request the panel shows: the open one, else a merged one, else the first closed one. */
+/** #506 the pull request the panel shows: the open one, else a merged one, else the first closed one. */
 function linkedPullRequest(prs: readonly WorkIssuePullRequest[]): WorkIssuePullRequestView | null {
   const pr = prs.find((p) => p.state === 'OPEN') ?? prs.find((p) => p.state === 'MERGED') ?? prs[0];
   if (!pr) return null;
