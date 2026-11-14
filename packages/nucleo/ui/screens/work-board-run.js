@@ -7,7 +7,7 @@ open, calls POST /api/work/run and hands the answer back (the limit full as `ful
 of work-board-plan.js). The styles are in `work-board-issue-panel.css` (classes `wb-run-`, and `wb-plan-` where shared). */
 
 import { el, icon } from '../dom.js';
-import { PLANNABLE_TYPES, cardPlanParts, planState, targetChoice } from './work-board-plan.js';
+import { PLANNABLE_TYPES, cardPlanParts, planState, targetChoice, untrustedLine } from './work-board-plan.js';
 
 const ref = (n) => `#${n}`;
 /** Where the session opened, by the core's `opened` (the words of open-action.js; issue 532). */
@@ -40,7 +40,7 @@ export function runState(card) {
  * sessão with a live session). `onRun` and `onOpenSession` get the card and the button pressed; `openStatus(card, button)`
  * returns the node that says how that open went, drawn beside the button (issue 532).
  */
-export function cardRunParts(card, { onRun = null, onReplan = null, onPlan = null, onOpenSession = null, openStatus = null } = {}) {
+export function cardRunParts(card, { onRun = null, onReplan = null, onPlan = null, onOpenSession = null, openStatus = null, place = 'card' } = {}) {
   const state = runState(card);
   const number = ref(card?.number);
   if (state === 'booting') {
@@ -52,6 +52,7 @@ export function cardRunParts(card, { onRun = null, onReplan = null, onPlan = nul
     const badge = state === 'planningLive' ? cardPlanParts(card).badge : null;
     return { badge, note: null, actions: el('div', { class: 'wb-plan-acts' }, open, openStatus?.(card, open) ?? null) };
   }
+  if (state === 'queued' && card.trusted === false) return { badge: null, note: null, actions: untrustedLine(card, place) };
   if (state === 'queued') {
     const run = el('button', { type: 'button', class: 'btn outline sm wb-plan-act', 'data-action': 'run', 'aria-label': `Executar o plano da ${number}`, onClick: (ev) => onRun?.(card, ev.currentTarget) }, icon('play'), 'Executar plano');
     // issue 532: a run that failed on this card shows the core's reason as the red note (465-2, legend 11; 477-1).
@@ -62,7 +63,7 @@ export function cardRunParts(card, { onRun = null, onReplan = null, onPlan = nul
     state === 'planned'
       ? el('button', { type: 'button', class: 'btn filled sm wb-plan-act', 'data-action': 'run', 'aria-label': `Executar o plano da ${number}`, onClick: (ev) => onRun?.(card, ev.currentTarget) }, icon('play'), 'Executar plano')
       : null;
-  return cardPlanParts(card, { onPlan, onReplan, lead });
+  return cardPlanParts(card, { onPlan, onReplan, lead, place });
 }
 
 /**
