@@ -451,10 +451,11 @@ export function boardColumns({
   mode = 'cards',
   counts = null,
   onDrill = null,
+  renderCard = workCard,
 } = {}) {
   const source = columns ?? COLUMNS.map((c) => ({ ...c, count: 0, cards: [] }));
   const parents = level === 'initiative' || level === 'epic';
-  const render = (c) => (parents ? parentCard(c, { primaryRepo, now, onDrill }) : workCard(c, { chainMode, primaryRepo, now }));
+  const render = (c) => (parents ? parentCard(c, { primaryRepo, now, onDrill }) : renderCard(c, { chainMode, primaryRepo, now }));
   const column = (c, i) => {
     const cards = mode === 'cards' ? (c.cards ?? []) : [];
     const count = counts !== null ? String(counts) : String(c.count ?? cards.length);

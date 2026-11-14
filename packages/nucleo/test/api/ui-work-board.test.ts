@@ -255,7 +255,8 @@ describe('#465/AC-2 the six columns over GET /api/work', () => {
     assert.equal(s.area.querySelector('.wb-board')!.getAttribute('data-mode'), 'cards');
     assert.deepEqual(replaced, ['/ui/work?level=item'], 'the sidebar link is replaced by its canonical slice, not pushed');
     assert.deepEqual(pushed, []);
-    assert.doesNotMatch(s.text(), /Planejar|Executar plano|Pôr na fila|Replanejar|Abrir sessão|Tirar da fila/, 'the actions of other issues are not drawn');
+    // #508 Planejar and Replanejar are drawn now (issue 508); the actions of the other issues still are not.
+    assert.doesNotMatch(s.text(), /Executar plano|Pôr na fila|Abrir sessão|Tirar da fila/, 'the actions of other issues are not drawn');
     assert.equal(s.area.querySelectorAll('[draggable="true"]').length, 0, 'no drag');
   });
 
