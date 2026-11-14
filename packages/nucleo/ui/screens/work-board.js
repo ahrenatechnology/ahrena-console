@@ -82,8 +82,8 @@ export async function mount(area, ctx) {
   let quiet = 0;
   let pendingFocus = null;
   const boardCards = () => (state?.data?.columns ?? []).flatMap((c) => c.cards ?? []);
-  const execution = createRunLayer({ ctx, area, cards: boardCards, redraw: () => draw(), reread: () => quietRead() });
-  const layer = createIssueLayer({ ctx, area, cards: boardCards, redraw: () => draw(), reread: () => quietRead(), run: execution.seam });
+  const execution = createRunLayer({ ctx, area, cards: boardCards, redraw: () => draw(), reread: () => quietRead(), onAsk: () => layer.closeConfirmation() });
+  const layer = createIssueLayer({ ctx, area, cards: boardCards, redraw: () => draw(), reread: () => quietRead(), run: execution.seam, onAsk: () => execution.closeConfirmation() });
 
   function follow(s) {
     const target = s.url;

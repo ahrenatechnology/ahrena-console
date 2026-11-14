@@ -37,9 +37,10 @@ export function runState(card) {
 /**
  * The execution parts of a card (and of the panel), the superset of `cardPlanParts`: `badge` ("subindo…" while a run
  * boots), `note`, and `actions` (Executar plano as the one primary action over Replanejar, Planejar without a plan, Abrir
- * sessão with a live session). `onRun` and `onOpenSession` get the card and the button pressed.
+ * sessão with a live session). `onRun` and `onOpenSession` get the card and the button pressed; `openStatus(card, button)`
+ * returns the node that says how that open went, drawn beside the button (issue 532).
  */
-export function cardRunParts(card, { onRun = null, onReplan = null, onPlan = null, onOpenSession = null } = {}) {
+export function cardRunParts(card, { onRun = null, onReplan = null, onPlan = null, onOpenSession = null, openStatus = null } = {}) {
   const state = runState(card);
   const number = ref(card?.number);
   if (state === 'booting') {
@@ -49,7 +50,7 @@ export function cardRunParts(card, { onRun = null, onReplan = null, onPlan = nul
   if (state === 'live' || state === 'planningLive') {
     const open = el('button', { type: 'button', class: 'btn outline sm wb-plan-act', 'data-action': 'open-session', 'aria-label': `Abrir a sessão da ${number}`, onClick: (ev) => onOpenSession?.(card, ev.currentTarget) }, icon('external'), 'Abrir sessão');
     const badge = state === 'planningLive' ? cardPlanParts(card).badge : null;
-    return { badge, note: null, actions: el('div', { class: 'wb-plan-acts' }, open) };
+    return { badge, note: null, actions: el('div', { class: 'wb-plan-acts' }, open, openStatus?.(card, open) ?? null) };
   }
   if (state === 'queued') {
     const run = el('button', { type: 'button', class: 'btn outline sm wb-plan-act', 'data-action': 'run', 'aria-label': `Executar o plano da ${number}`, onClick: (ev) => onRun?.(card, ev.currentTarget) }, icon('play'), 'Executar plano');
@@ -109,16 +110,21 @@ export function runConfirm({ repo, number, folder = null, target = 'desktop', pr
   return root;
 }
 
-/** The notice after confirming (465-6): where the session opened, with "Abrir" when the screen can open it. */
-export function runNotice({ number, opened = 'desktop', onOpen = null, onClose = null }) {
+/**
+ * The notice after confirming (465-6): where the session opened, with "Abrir" when the screen can open it and, beside it,
+ * the node `openStatus(button)` returns for how that open went (issue 532).
+ */
+export function runNotice({ number, opened = 'desktop', onOpen = null, onClose = null, openStatus = null }) {
   const where = WHERE[opened] ?? WHERE.desktop;
   const text = opened === 'focused' ? `${WHERE.focused} para a ${ref(number)}` : `Sessão da Athena ${where} para a ${ref(number)}`;
+  const open = onOpen ? el('button', { type: 'button', class: 'wb-plan-link', 'data-action': 'open', onClick: () => onOpen() }, 'Abrir') : null;
   return el(
     'div',
     { class: 'wb-run-notice', role: 'status', 'data-field': 'notice' },
     icon('check-circle-2'),
     el('span', { 'data-field': 'text' }, text),
-    onOpen ? el('button', { type: 'button', class: 'wb-plan-link', 'data-action': 'open', onClick: () => onOpen() }, 'Abrir') : null,
+    open,
+    open ? (openStatus?.(open) ?? null) : null,
     el('button', { type: 'button', class: 'btn ghost sm icon-only', 'data-action': 'close', 'aria-label': 'Fechar o aviso', onClick: () => onClose?.() }, icon('x')),
   );
 }

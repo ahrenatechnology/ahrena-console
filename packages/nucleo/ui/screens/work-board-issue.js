@@ -65,7 +65,7 @@ function keyed(parts, key) {
  * confirmation. It reads the layer's state through `state()` and changes it only through `apply(next, intent)`; `retry` and
  * `confirm` are the layer's own, because they touch what the layer keeps (the forced re-read, the failure it saw before).
  */
-function createIssueView({ area, state, apply, cardFor, retry, confirm, run }) {
+function createIssueView({ area, state, apply, cardFor, retry, confirm, run, onAsk }) {
   let focus = null;
   let anchorInPanel = false;
 
@@ -84,6 +84,7 @@ function createIssueView({ area, state, apply, cardFor, retry, confirm, run }) {
   };
   const close = () => apply(closePanel(state()), { kind: 'card', key: state().panel.key });
   const ask = (replan) => (card, button) => {
+    onAsk?.();
     anchorInPanel = Boolean(button?.closest?.('.wb-panel'));
     const base = cardFor(card.key) ?? card;
     apply(askPlan(state(), base, { replan }), { kind: 'popup' });
@@ -182,7 +183,7 @@ function createIssueView({ area, state, apply, cardFor, retry, confirm, run }) {
  * GET /api/work quietly; `ctx` is the screen's (read, write, signal). It keeps the state and its effects; the view half is
  * createIssueView's.
  */
-export function createIssueLayer({ ctx, area, cards, redraw, reread, run = null }) {
+export function createIssueLayer({ ctx, area, cards, redraw, reread, run = null, onAsk = null }) {
   let s = initialIssueState();
   let alive = true;
   let learning = false;
@@ -305,7 +306,10 @@ export function createIssueLayer({ ctx, area, cards, redraw, reread, run = null 
     link.remove();
   }
 
-  const view = createIssueView({ area, state: () => s, apply, cardFor, retry, confirm, run });
+  const view = createIssueView({ area, state: () => s, apply, cardFor, retry, confirm, run, onAsk });
 
-  return { renderCard: view.renderCard, wrap: view.wrap, signature: view.signature, learn, afterDraw: view.afterDraw, stop };
+  // issue 532: the screen closes this layer's open confirmation when the run layer opens its own (one at a time, 465-6).
+  const closeConfirmation = () => Object.keys(s.plans).forEach((key) => apply(cancelPlan(s, { key })));
+
+  return { renderCard: view.renderCard, wrap: view.wrap, signature: view.signature, learn, afterDraw: view.afterDraw, closeConfirmation, stop };
 }
