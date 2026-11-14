@@ -120,16 +120,26 @@ export interface WorkSessionLink {
    * out of Planejamento; the board turns it into the card's `planning` state instead. Absent otherwise.
    */
   planning?: true;
+  /**
+   * #531 the session of an execution run ("Executar plano", work-execution.ts): the board settles the run
+   * against it, which clears the card's boot state. It is a normal session for the column. Absent otherwise.
+   */
+  execution?: true;
 }
 
 /** #507 the planning state of a card: its planning session runs, or the last one ended without a plan (`reason` is pt-BR on-screen text). */
 export type WorkCardPlanning = { state: 'running' } | { state: 'failed'; reason: string };
+
+/** #531 the execution state of a card: its run opened a session that has not started yet (the screen says "subindo…"). */
+export type WorkCardExecution = { state: 'booting' };
 
 export interface IssueSignals {
   state: IssueState;
   /** #465 the PR that closes the issue, with `mergedAt` and `changesRequested` when known. */
   pullRequest: LinkedPullRequest | null;
   sessions: readonly WorkSessionState[];
+  /** #531 a run of "Executar plano" whose session is still booting: it counts as an agent working. */
+  executing?: boolean;
   /** #477 1-based position in the execution queue; `null` out of it. */
   queuePosition: number | null;
 }
@@ -148,7 +158,7 @@ const failedCi = (ci: CiState | null): boolean => ci === 'FAILURE' || ci === 'ER
  * precedence of the epic #464 table, first match wins:
  * 1. done — issue closed or PR merged: nothing else matters once the work landed;
  * 2. blocked/needs-you — a session waits for the person, the most urgent thing on the board;
- * 3. running — an agent is working; it may be fixing the CI or the review, so that is not blocked yet;
+ * 3. running — an agent is working, or its session is still booting (#531); it may be fixing the CI or the review, so that is not blocked yet;
  * 4. blocked/review-rounds — changes requested after `REVIEW_ROUNDS_LIMIT` rounds: the loop is exhausted;
  * 5. blocked/ci-failed — the open PR's last commit failed;
  * 6. review — an open PR, draft or not;
@@ -156,10 +166,10 @@ const failedCi = (ci: CiState | null): boolean => ci === 'FAILURE' || ci === 'ER
  * 8. planning.
  * Two sessions resolve to the most advanced one through 2 and 3; an idle session never moves the card.
  */
-export function columnOfIssue({ state, pullRequest: pr, sessions, queuePosition }: IssueSignals): ColumnResult {
+export function columnOfIssue({ state, pullRequest: pr, sessions, executing = false, queuePosition }: IssueSignals): ColumnResult {
   if (state === 'CLOSED' || pr?.state === 'MERGED') return at('done');
   if (sessions.includes('needs-you')) return at('blocked', 'needs-you');
-  if (sessions.includes('working')) return at('running');
+  if (sessions.includes('working') || executing) return at('running');
   const open = pr?.state === 'OPEN' ? pr : null;
   if (open?.review === 'CHANGES_REQUESTED' && (open.changesRequested ?? 0) >= REVIEW_ROUNDS_LIMIT) return at('blocked', 'review-rounds');
   if (open && failedCi(open.ci)) return at('blocked', 'ci-failed');
@@ -296,6 +306,8 @@ export interface WorkBoardInput {
   analyzed?: ReadonlyMap<string, AnalyzedWorkNode>;
   /** #507 the planning state per issue key, lower case; a key without one is `null` on its card. */
   planning?: ReadonlyMap<string, WorkCardPlanning>;
+  /** #531 the execution state per issue key, lower case: the keys with a booting run; a key without one is `null` on its card. */
+  execution?: ReadonlyMap<string, WorkCardExecution>;
   now: number;
   fetchedAt: number;
   stale: boolean;
@@ -344,6 +356,8 @@ export interface WorkBoardCard {
   plan: { steps: number } | null;
   /** #507 `running` while the planning session runs (the screen says "planejando…"), `failed` with its reason once it ended without a plan; `null` otherwise. */
   planning: WorkCardPlanning | null;
+  /** #531 `booting` while the run's session has not started (the screen says "subindo…"), in Em execução; `null` otherwise. */
+  execution: WorkCardExecution | null;
   sessions: { count: number; state: WorkSessionState | null; ids: string[] };
   pullRequest: {
     number: number;
@@ -431,7 +445,13 @@ const sessionRank: Record<WorkSessionState, number> = { 'needs-you': 0, working:
  * Levels top-down (as `buildTree`), columns bottom-up. A parent that did not arrive makes its child a root
  * for the level, as in the tree; a cycle (should not exist on GitHub) is cut where it closes.
  */
-export function analyzeWorkNodes(nodes: readonly WorkBoardNode[], sessions: readonly WorkSessionLink[], queue: ReadonlyMap<string, number>): Map<string, AnalyzedWorkNode> {
+export function analyzeWorkNodes(
+  nodes: readonly WorkBoardNode[],
+  sessions: readonly WorkSessionLink[],
+  queue: ReadonlyMap<string, number>,
+  /** #531 the issue keys, lower case, whose execution run is still booting. */
+  executing: ReadonlySet<string> = new Set(),
+): Map<string, AnalyzedWorkNode> {
   const byKey = new Map(nodes.map((n) => [n.key, n]));
   const childrenOf = new Map<string, WorkBoardNode[]>();
   for (const n of nodes) if (n.parent && byKey.has(n.parent) && !closesCycle(byKey, n)) childrenOf.set(n.parent, [...(childrenOf.get(n.parent) ?? []), n]);
@@ -462,7 +482,7 @@ export function analyzeWorkNodes(nodes: readonly WorkBoardNode[], sessions: read
     const rollsUp = kids.length > 0 && (level === 'initiative' || level === 'epic');
     const column = rollsUp
       ? columnOfParent(n.state, kids.map((c) => c.column))
-      : columnOfIssue({ state: n.state, pullRequest: n.pullRequest, sessions: linked.map((s) => s.state), queuePosition });
+      : columnOfIssue({ state: n.state, pullRequest: n.pullRequest, sessions: linked.map((s) => s.state), executing: executing.has(n.key.toLowerCase()), queuePosition });
     const done = column.column === 'done' ? doneOf(n) : { doneAt: null, doneBy: null };
     const a: AnalyzedWorkNode = { node: n, level, chain: chainOf(byKey, n, level, levelFor), column, sessions: linked, queuePosition, ...done, children: kids.length ? summarize(kids) : null };
     out.set(n.key, a);
@@ -585,7 +605,7 @@ export function matchesWorkBoardFilters(a: AnalyzedWorkNode, f: WorkBoardFilters
 export function buildWorkBoard(input: WorkBoardInput): WorkBoardView {
   const { nodes, filters, now } = input;
   const statuses = statusIndex(input.statuses);
-  const analyzed = input.analyzed ?? analyzeWorkNodes(nodes, input.sessions, input.queue);
+  const analyzed = input.analyzed ?? analyzeWorkNodes(nodes, input.sessions, input.queue, new Set(input.execution?.keys() ?? []));
   const ofLevel = [...analyzed.values()].filter((a) => a.node.inProject && a.level === filters.level);
   const matched = ofLevel.filter((a) => matchesWorkBoardFilters(a, filters, statuses));
   const windowStart = now - DONE_WINDOW_DAYS * DAY_MS;
@@ -599,7 +619,7 @@ export function buildWorkBoard(input: WorkBoardInput): WorkBoardView {
     if (filters[key] === null) continue;
     countsWithoutFilter[key] = ofLevel.filter((a) => matchesWorkBoardFilters(a, filters, statuses, key) && inDoneWindow(a)).length;
   }
-  const cards = shown.map((a) => toCard(a, sinceOf(a), statuses, input.planning?.get(a.node.key.toLowerCase()) ?? null));
+  const cards = shown.map((a) => toCard(a, sinceOf(a), statuses, input.planning?.get(a.node.key.toLowerCase()) ?? null, input.execution?.get(a.node.key.toLowerCase()) ?? null));
 
   return {
     project: { ...input.project, primaryRepo: mostFrequent(nodes.filter((n) => n.inProject).map((n) => n.repo)) },
@@ -623,7 +643,7 @@ export function buildWorkBoard(input: WorkBoardInput): WorkBoardView {
   };
 }
 
-function toCard(a: AnalyzedWorkNode, columnSince: string | null, statuses: WorkStatusIndex, planning: WorkCardPlanning | null): WorkBoardCard {
+function toCard(a: AnalyzedWorkNode, columnSince: string | null, statuses: WorkStatusIndex, planning: WorkCardPlanning | null, execution: WorkCardExecution | null): WorkBoardCard {
   const n = a.node;
   const parent = a.chain.at(-1);
   const best = [...a.sessions].sort((x, y) => sessionRank[x.state] - sessionRank[y.state])[0];
@@ -647,6 +667,7 @@ function toCard(a: AnalyzedWorkNode, columnSince: string | null, statuses: WorkS
     milestone: n.milestone,
     plan: a.level === 'item' && n.subIssues ? { steps: n.subIssues.total } : null,
     planning,
+    execution,
     sessions: { count: a.sessions.length, state: best?.state ?? null, ids: a.sessions.map((s) => s.sessionId) },
     pullRequest: n.pullRequest ? cardPullRequest(n.pullRequest) : null,
     blocked: reason ? { reason: reason.id, label: reason.label } : null,
