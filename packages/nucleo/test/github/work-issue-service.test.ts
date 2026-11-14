@@ -174,6 +174,7 @@ class FakeWriter implements WorkIssueWriter {
   async editStep(): Promise<WorkIssueRead | null> { return null; }
   async addStep(): Promise<WorkIssueRead | null> { return null; }
   async removeStep(): Promise<WorkIssueRead | null> { return null; }
+  async restoreStep(): Promise<WorkIssueRead | null> { return null; }
   async moveStep(): Promise<WorkIssueRead | null> { return null; }
 }
 

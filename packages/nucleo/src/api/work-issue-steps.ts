@@ -10,11 +10,15 @@
  * | `PATCH /api/work/issue/steps`      | `{ repo, number, step, updatedAt, title?, body? }`         | 200 the `GET` body |
  * | `DELETE /api/work/issue/steps`     | `{ repo, number, step }`                                   | 200 the `GET` body |
  * | `POST /api/work/issue/steps/order` | `{ repo, number, step, after }`                            | 200 the `GET` body |
+ * | `POST /api/work/issue/steps/restore` | `{ repo, number, step }`                                 | 200 the `GET` body |
  *
  * - `repo` and `number` name the issue (as in #533); `step` and `after` are issue keys `owner/name#N`. `after` is the
  *   sub-issue the step goes behind, or `null` for the top; it is required (an absent one is 400 `bad-param` `after`).
  * - A new step is a sub-issue of the Plan type, created last. A removed step is closed as not planned and leaves the
  *   plan (its sub-issue stays in `subIssues`).
+ * - A restore reopens a removed step (a Plan sub-issue closed as not planned), which returns to the plan; one that is a Plan
+ *   sub-issue of the issue but not closed as not planned (open, or closed as completed) is 409 `not-removed`, and a
+ *   non-member 422 `unknown-value` `step`; nothing is written either way.
  * - Before any write the step is checked against a fresh read of the issue's sub-issues: one that is not a Plan
  *   sub-issue of it, or is already removed, is 422 `unknown-value` with `param` `step`. `after` may be any sub-issue of
  *   the issue, Plan or not (GitHub orders them all together); one that is not a sub-issue of it is 422 `unknown-value`
@@ -36,19 +40,21 @@ import { send } from '../ingest/hooks/receiver.ts';
 import { isIssueKey, isText, MAX_TEXT, MAX_TITLE, readWriteRequest, sendWriteFailure } from './work-issue-write.ts';
 
 export const WORK_ISSUE_STEPS_ROUTE = '/api/work/issue/steps';
+/** `POST`: restores a removed step (reopens its sub-issue). */
+export const WORK_ISSUE_STEPS_RESTORE_ROUTE = '/api/work/issue/steps/restore';
 /** `POST`: moves a step (`WORK_ISSUE_STEPS_ROUTE` takes `POST` to add, `PATCH` to edit and `DELETE` to remove). */
 export const WORK_ISSUE_STEPS_ORDER_ROUTE = '/api/work/issue/steps/order';
 
 export interface WorkIssueStepsRouteOptions {
   /** #534 `null` under --no-github or --demo: the routes answer 503 `off`. */
-  service: Pick<WorkIssueService, 'editStep' | 'addStep' | 'removeStep' | 'moveStep'> | null;
+  service: Pick<WorkIssueService, 'editStep' | 'addStep' | 'removeStep' | 'restoreStep' | 'moveStep'> | null;
 }
 
 export type WorkIssueStepsRoute = (req: IncomingMessage, res: ServerResponse) => Promise<void>;
 
 /** The methods a step route takes at a path: none for a path that is not one. */
 export const stepsRouteMethods = (path: string): readonly string[] =>
-  path === WORK_ISSUE_STEPS_ROUTE ? ['POST', 'PATCH', 'DELETE'] : path === WORK_ISSUE_STEPS_ORDER_ROUTE ? ['POST'] : [];
+  path === WORK_ISSUE_STEPS_ROUTE ? ['POST', 'PATCH', 'DELETE'] : path === WORK_ISSUE_STEPS_ORDER_ROUTE || path === WORK_ISSUE_STEPS_RESTORE_ROUTE ? ['POST'] : [];
 
 type Fail = { ok: false; param: string };
 
@@ -71,7 +77,7 @@ function parseStepAdd(b: Record<string, unknown>): { ok: true; step: { title: st
   return { ok: true, step: { title: b.title, body: typeof b.body === 'string' ? b.body : '' } };
 }
 
-/** #534 the body of a remove: the step. */
+/** #534 the body of a remove or a restore: the step. */
 function parseStepKey(b: Record<string, unknown>): { ok: true; step: string } | Fail {
   return isIssueKey(b.step) ? { ok: true, step: b.step } : { ok: false, param: 'step' };
 }
@@ -108,6 +114,10 @@ export function createWorkIssueStepsRoute({ service }: WorkIssueStepsRouteOption
       if (path === WORK_ISSUE_STEPS_ORDER_ROUTE) {
         const p = parseStepMove(b);
         return p.ok ? send(res, 200, await service.moveStep(key, p.step, p.after)) : badParam(res, p.param);
+      }
+      if (path === WORK_ISSUE_STEPS_RESTORE_ROUTE) {
+        const p = parseStepKey(b);
+        return p.ok ? send(res, 200, await service.restoreStep(key, p.step)) : badParam(res, p.param);
       }
       if (method === 'POST') {
         const p = parseStepAdd(b);

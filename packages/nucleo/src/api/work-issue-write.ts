@@ -32,7 +32,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { githubFailureOf, type GithubFailure } from '../github/cache.ts';
 import { GithubHttpError, GraphqlResponseError } from '../github/github-source.ts';
-import { WorkIssueForbiddenError, WorkIssueRefusedError, WorkIssueWrittenUnreadError, type WorkIssueEdit } from '../github/work-issue.ts';
+import { WorkIssueForbiddenError, WorkIssueNotRemovedError, WorkIssueRefusedError, WorkIssueWrittenUnreadError, type WorkIssueEdit } from '../github/work-issue.ts';
 import { WorkIssueConflictError, WorkIssueNotFoundError, WorkIssueWriteOffError, type WorkIssueService } from '../github/work-issue-service.ts';
 import { isPlanNumber, isPlanRepo } from '../github/work-plan.ts';
 import { workKey } from '../github/work.ts';
@@ -186,6 +186,7 @@ export function sendWriteFailure(res: ServerResponse, err: unknown): void {
   if (err instanceof WorkIssueNotFoundError) return send(res, 404, { error: 'not-found' });
   if (err instanceof WorkIssueConflictError) return send(res, 409, { error: 'conflict', ...err.current });
   if (err instanceof WorkIssueRefusedError) return send(res, 422, { error: 'unknown-value', param: err.param });
+  if (err instanceof WorkIssueNotRemovedError) return send(res, 409, { error: 'not-removed' });
   if (err instanceof WorkIssueWriteOffError) return send(res, 503, { error: 'off' });
   if (err instanceof WorkIssueWrittenUnreadError) return send(res, 502, { error: 'written-unread', reason: githubFailureOf(err.cause) });
   const reason = reasonOf(err);

@@ -13,6 +13,7 @@ import { execFile } from 'node:child_process';
 import { backoffMs, RateLimitedError } from './cache.ts';
 import type { ChildrenResult, WorkSource } from './source.ts';
 import {
+  isPlan,
   isPlanStep,
   WorkIssueForbiddenError,
   WorkIssueRefusedError,
@@ -25,6 +26,7 @@ import {
   type WorkIssueRef,
   type WorkIssueSource,
   type WorkIssueWriter,
+  WorkIssueNotRemovedError,
 } from './work-issue.ts';
 import {
   parseWorkKey,
@@ -68,7 +70,7 @@ export const QUERIES = {
   repository(owner: $o, name: $r) { issue(number: $n) { ${REF} updatedAt body labels(first: 50) { nodes { name } } milestone { title }
     comments(first: 50) { totalCount nodes { author { login } createdAt body } }
     parent { ${REF} parent { ${REF} parent { ${REF} } } }
-    subIssues(first: 50) { nodes { ${REF} } } ${DETAIL_PRS} } } }`,
+    subIssues(first: 50) { nodes { ${REF} updatedAt } } ${DETAIL_PRS} } } }`,
 } as const;
 
 /**
@@ -89,6 +91,7 @@ export const WRITE_QUERIES = {
     issue(number: $n) { id subIssues(first: 50) { nodes { id ${REF} body updatedAt } } } } }`,
   createStep: `mutation CreateWorkPlanStep($input: CreateIssueInput!) { createIssue(input: $input) { issue { id } } }`,
   closeStep: `mutation CloseWorkPlanStep($input: CloseIssueInput!) { closeIssue(input: $input) { issue { id } } }`,
+  reopenStep: `mutation ReopenWorkPlanStep($input: ReopenIssueInput!) { reopenIssue(input: $input) { issue { id } } }`,
   moveStep: `mutation MoveWorkPlanStep($input: ReprioritizeSubIssueInput!) { reprioritizeSubIssue(input: $input) { issue { id } } }`,
   comment: `mutation AddWorkIssueComment($input: AddCommentInput!) { addComment(input: $input) { commentEdge { node { id } } } }`,
 } as const;
@@ -205,6 +208,7 @@ export function toWorkDetail(raw: Pick<RawIssue, 'number' | 'state' | 'repositor
 }
 
 interface RawRef {
+  updatedAt?: string;
   number: number;
   title: string;
   url: string;
@@ -233,6 +237,7 @@ const toIssueRef = (r: RawRef): WorkIssueRef => ({
   state: r.state,
   type: r.issueType?.name ?? null,
   stateReason: r.stateReason ?? null,
+  ...(r.updatedAt !== undefined ? { updatedAt: r.updatedAt } : {}),
 });
 
 /** #506 the raw detail of one issue as the port's read; the parents come nearest first. */
@@ -467,7 +472,7 @@ export class GithubGraphqlSource implements WorkSource, WorkIssueSource, WorkIss
    * #534 the issue's sub-issues as GitHub holds them now, one fresh read, and the step among them: it must be a Plan
    * sub-issue not closed as not planned, else `WorkIssueRefusedError` `step` and nothing is written. `null`: no such issue.
    */
-  private async loadSteps(parent: string, step?: string, after?: string | null) {
+  private async loadSteps(parent: string, step?: string, after?: string | null, removed = false) {
     const k = parseWorkKey(parent);
     type Node = RawRef & { id: string; body: string; updatedAt: string };
     type Data = { repository: { id: string; issueTypes: { nodes: { id: string; name: string }[] }; issue: { id: string; subIssues: { nodes: Node[] } } | null } | null };
@@ -479,7 +484,11 @@ export class GithubGraphqlSource implements WorkSource, WorkIssueSource, WorkIss
     let found: Node | undefined;
     if (step !== undefined) {
       found = find(step);
-      if (!found || !isPlanStep(toIssueRef(found))) throw new WorkIssueRefusedError('step', step);
+      if (removed) {
+        // #534 a restore acts on a Plan sub-issue closed as not planned: a Plan one that is not, is not removed.
+        if (!found || !isPlan(toIssueRef(found).type)) throw new WorkIssueRefusedError('step', step);
+        if (isPlanStep(toIssueRef(found))) throw new WorkIssueNotRemovedError(step);
+      } else if (!found || !isPlanStep(toIssueRef(found))) throw new WorkIssueRefusedError('step', step);
     }
     let afterNode: Node | undefined;
     if (typeof after === 'string') {
@@ -518,6 +527,14 @@ export class GithubGraphqlSource implements WorkSource, WorkIssueSource, WorkIss
     const loaded = await this.loadSteps(parent, step);
     if (!loaded) return null;
     await this.mutate('CloseWorkPlanStep', WRITE_QUERIES.closeStep, { input: { issueId: loaded.step!.id, stateReason: 'NOT_PLANNED' } });
+    return this.readBack(parent);
+  }
+
+  /** #534 reopens the step closed as not planned: the read then puts it back in the plan. */
+  async restoreStep(parent: string, step: string): Promise<WorkIssueRead | null> {
+    const loaded = await this.loadSteps(parent, step, undefined, true);
+    if (!loaded) return null;
+    await this.mutate('ReopenWorkPlanStep', WRITE_QUERIES.reopenStep, { input: { issueId: loaded.step!.id } });
     return this.readBack(parent);
   }
 
