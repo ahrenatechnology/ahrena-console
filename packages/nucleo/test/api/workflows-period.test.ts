@@ -118,7 +118,7 @@ describe('GET /api/workflows with a period, pages and the tree', () => {
     assert.equal(pm.sessions, 3);
     const work = pm.root.children[0].children[0];
     assert.deepEqual([pm.root.children[0].sessionId, work.sessionId, work.kind], ['tl', 'work', 'child']);
-    assert.deepEqual(work.loop, { prs: 0, rounds: 0, changeRequests: 0, subagents: 0, stopped: 0 });
+    assert.deepEqual(work.loop, { prs: 0, rounds: 0, changeRequests: 0, subagents: 0, stopped: 0, layers: 0 });
     assert.equal(body.loopKpis.prs, 0);
   });
 

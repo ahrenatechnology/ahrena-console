@@ -69,7 +69,7 @@ describe('the orchestrator as parent of the per-PR loops (issue 509)', () => {
   });
 
   test('the counts: Subagentes 6, Rodadas 2, Pedidos de mudança 1, PRs 1; the orchestrator is not a round', TODO, () => {
-    const loop = loopOf(tree, treeEvents) as unknown as { totals: Record<string, number>; orchestrators: Array<{ agentId: string }> };
+    const loop = loopOf(tree, treeEvents);
     assert.deepEqual(loop.orchestrators.map((o) => o.agentId), [athena.id]);
     assert.equal(loop.totals.layers, 2);
     const text = panelText(loop);
@@ -81,7 +81,7 @@ describe('the orchestrator as parent of the per-PR loops (issue 509)', () => {
 
   test('the Athena still planning takes no group from the PR her brief cites', TODO, () => {
     const planning = sub('athena', ATHENA_TYPE, 1, null, 'Plan the story; see PR #690 for reference', main.id);
-    const loop = loopOf([main, planning]) as unknown as { groups: unknown[]; orchestrators: Array<{ agentId: string }> };
+    const loop = loopOf([main, planning]);
     assert.deepEqual(loop.orchestrators.map((o) => o.agentId), [planning.id]);
     assert.equal(loop.groups.length, 0);
     const text = panelText(loop);
@@ -91,9 +91,9 @@ describe('the orchestrator as parent of the per-PR loops (issue 509)', () => {
   });
 
   test('a delegating dev stays in its PR group and is not an orchestrator', TODO, () => {
-    const dev = sub('dev', 'ahrena-engineering-backend:apollo', 2, 9, 'Build layer for PR #710', main.id);
+    const dev = sub('dev', 'ahrena-engineering-backend:apollo', 2, 9, 'Build layer for PR #710', main.id, { metadata: { workflow: { role: 'dev' } } });
     const helper = sub('helper', 'Explore', 3, 4, 'Read the files of PR #710', dev.id);
-    const loop = loopOf([main, dev, helper]) as unknown as { groups: Array<{ id: string; steps: Array<{ agentId: string }> }>; orchestrators: unknown[] };
+    const loop = loopOf([main, dev, helper]);
     assert.deepEqual(loop.orchestrators, []);
     assert.deepEqual(loop.groups.find((g) => g.id === 'pr:710')?.steps.map((s) => s.agentId), [dev.id, helper.id]);
     assert.doesNotMatch(panelText(loop), /abriu \d+ camadas?/);
@@ -102,7 +102,7 @@ describe('the orchestrator as parent of the per-PR loops (issue 509)', () => {
   test('a workflow with no orchestrator renders as before', TODO, () => {
     const dev = sub('dev', 'ahrena-engineering-backend:apollo', 2, 9, 'Build layer for PR #710', main.id);
     const argos = sub('argos', 'ahrena-engineering-code-review:argos', 10, 14, 'Review PR #710', main.id);
-    const loop = loopOf([main, dev, argos], [said(argos, 'Verdict: approve', 14)]) as unknown as { orchestrators: unknown[] };
+    const loop = loopOf([main, dev, argos], [said(argos, 'Verdict: approve', 14)]);
     assert.deepEqual(loop.orchestrators, [], 'the field exists and is empty');
     const text = panelText(loop);
     assert.match(text, /PR #710/);
