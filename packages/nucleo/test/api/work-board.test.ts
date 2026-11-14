@@ -99,6 +99,9 @@ interface Board {
   source: FakeProjectSource;
   sessions: FakeSessions;
   queue: FakeQueue;
+  /** #496 the cache the board reads through, and what the background sync would answer as its next read of the Project. */
+  cache: GithubCache;
+  schedule: { nextRead: number | null };
   /** #495 what the use case sent to the core log. */
   logs: string[];
   /** #465 turns the chosen Project off (no-project) or back on. */
@@ -116,12 +119,15 @@ async function boot({ extra = {}, withWork = true, fromStore = false }: { extra?
   const sessions = new FakeSessions();
   const queue = new FakeQueue();
   const logs: string[] = [];
+  const schedule: { nextRead: number | null } = { nextRead: null };
   const service = new WorkBoardService({
     project: selectedProjectBoard({ kanban: () => (chosen ? kanban : null) }),
     sessions,
     queue,
     history: new SqliteWorkColumnHistory(storage.db),
     now,
+    pausedUntil: () => cache.pausedUntil,
+    nextScheduledRead: () => schedule.nextRead,
     log: (m) => logs.push(m),
   });
   const panelBuilder = new MontadorDoPainel({ storage, contas: new Accounts({ storage, file: null }), desktop: null, trabalho: null });
@@ -141,6 +147,8 @@ async function boot({ extra = {}, withWork = true, fromStore = false }: { extra?
     source,
     sessions,
     queue,
+    cache,
+    schedule,
     logs,
     choose: (project) => void (chosen = project),
     async close() {
@@ -402,6 +410,41 @@ describe('#495/AC-1 GET /api/work with GitHub down: a stable English reason code
     ));
 });
 
+describe('#496/AC-1 GET /api/work with GitHub down: retryAt, when the core tries again', () => {
+  test('#496/AC-1 Given the rate limit paused the cache, When GET /api/work is stale, Then retryAt is the end of the pause', () =>
+    withBoard(async (b) => {
+      b.source.items = [issue(560)];
+      await get(b);
+      b.source.fail = new RateLimitedError('GitHub limitou', 600_000);
+      await refresh(b);
+      b.schedule.nextRead = b.now() + 120_000;
+      const r = await refresh(b);
+      assert.deepEqual([r.json.stale, r.json.staleReason], [true, 'rate-limited']);
+      assert.equal(r.json.retryAt, b.cache.pausedUntil);
+      assert.ok(r.json.retryAt > b.now());
+    }));
+
+  test('#496/AC-1 Given GitHub is down with no pause, When GET /api/work is stale, Then retryAt is the next scheduled read', () =>
+    withBoard(async (b) => {
+      b.source.items = [issue(561)];
+      await get(b);
+      b.source.fail = new TypeError('fetch failed');
+      b.schedule.nextRead = b.now() + 31_000 + 90_000;
+      const r = await refresh(b);
+      assert.deepEqual([r.json.stale, r.json.staleReason, r.json.retryAt], [true, 'network', b.schedule.nextRead]);
+    }));
+
+  test('#496/AC-1 Given stale and no read scheduled, Then retryAt is null; and a fresh board has retryAt null', () =>
+    withBoard(async (b) => {
+      b.source.items = [issue(562)];
+      const fresh = await get(b);
+      assert.deepEqual([fresh.json.stale, fresh.json.retryAt], [false, null]);
+      b.source.fail = new TypeError('fetch failed');
+      const r = await refresh(b);
+      assert.deepEqual([r.json.stale, r.json.retryAt], [true, null]);
+    }));
+});
+
 /** #465/AC-5 every key of a JSON value, recursively, with the object keys above it (array indices skipped); values are not looked at. */
 function keysOf(value: unknown, path: readonly string[] = [], out: { key: string; path: readonly string[] }[] = []): { key: string; path: readonly string[] }[] {
   if (Array.isArray(value)) for (const v of value) keysOf(v, path, out);
@@ -456,7 +499,7 @@ describe('#465/AC-5 GET /api/work: English internals, pt-BR on screen (decision 
       assert.ok(Object.keys(epic.children.byColumn).length > 0, 'the epic\'s children are counted by column');
       assertEnglishKeys(epics.json);
 
-      for (const key of ['project', 'filters', 'levels', 'columns', 'blockedReasons', 'doneWindowDays', 'queue', 'options', 'total', 'matched', 'fetchedAt', 'stale', 'staleReason']) {
+      for (const key of ['project', 'filters', 'levels', 'columns', 'blockedReasons', 'doneWindowDays', 'queue', 'options', 'total', 'matched', 'fetchedAt', 'stale', 'staleReason', 'retryAt']) {
         assert.ok(key in r.json, `top-level key ${key}`);
       }
     }));

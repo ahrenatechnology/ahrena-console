@@ -474,6 +474,9 @@ const workBoard =
         queue: EMPTY_WORK_QUEUE,
         history: new SqliteWorkColumnHistory(sqlite.db),
         parents: new CachedParentLookup({ source: workSource, cache: githubCache }),
+        // #496 lazy: the sync is built after this service.
+        pausedUntil: () => githubCache.pausedUntil,
+        nextScheduledRead: () => githubSync?.nextRunAt('project') ?? null,
         log,
       })
     : null;

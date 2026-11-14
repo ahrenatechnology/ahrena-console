@@ -132,14 +132,16 @@ class FakeParents implements ParentLookup {
 }
 
 function setup({ queue = EMPTY_WORK_QUEUE as WorkQueue, withParents = true } = {}) {
+  /** #496 the lazy time sources: the cache's pause end and the sync's next read of the Project. */
+  const retry = { pausedUntil: 0, nextRead: null as number | null };
   const now = clock();
   const logged: string[] = [];
   const project = new FakeProject();
   const sessions = new FakeSessions();
   const history = new MemoryHistory();
   const parents = new FakeParents();
-  const service = new WorkBoardService({ project, sessions, queue, history, parents: withParents ? parents : undefined, now, log: (m) => logged.push(m) });
-  return { now, project, sessions, history, parents, service, logged };
+  const service = new WorkBoardService({ project, sessions, queue, history, parents: withParents ? parents : undefined, now, pausedUntil: () => retry.pausedUntil, nextScheduledRead: () => retry.nextRead, log: (m) => logged.push(m) });
+  return { now, project, sessions, history, parents, service, logged, retry };
 }
 
 const filters = (over: Partial<WorkBoardFilters> = {}): WorkBoardFilters => ({ ...DEFAULT_WORK_BOARD_FILTERS, ...over });
@@ -308,5 +310,46 @@ describe('parents outside the Project', () => {
     project.current = projectBoard([projectCard(500, { parent: k(6) })]);
     const view = await service.board(filters());
     assert.deepEqual([cardOf(view, 500).chain[0].title, view.stale], [null, false]);
+  });
+});
+
+describe('#496/AC-1 the work board says when the core tries GitHub again', () => {
+  const stale = (project: FakeProject) => (project.current = projectBoard([projectCard(500)], { stale: true, staleReason: 'x', staleCode: 'network' }));
+
+  test('#496/AC-1 Given the rate limit paused the cache, When the board is stale, Then retryAt is the end of the pause', async () => {
+    const { now, project, service, retry } = setup();
+    stale(project);
+    retry.pausedUntil = now() + 600_000;
+    retry.nextRead = now() + 120_000;
+    assert.equal((await service.board(filters())).retryAt, now() + 600_000);
+  });
+
+  test('#496/AC-1 Given GitHub is down with no pause, When the board is stale, Then retryAt is the next scheduled read', async () => {
+    const { now, project, service, retry } = setup();
+    stale(project);
+    retry.pausedUntil = now() - 1;
+    retry.nextRead = now() + 90_000;
+    assert.equal((await service.board(filters())).retryAt, now() + 90_000);
+  });
+
+  test('#496/AC-1 Given the next read is overdue, When the board is stale, Then retryAt is now, never in the past', async () => {
+    const { now, project, service, retry } = setup();
+    stale(project);
+    retry.nextRead = now() - 30_000;
+    assert.equal((await service.board(filters())).retryAt, now());
+  });
+
+  test('#496/AC-1 Given no read is scheduled, When the board is stale, Then retryAt is null', async () => {
+    const { project, service } = setup();
+    stale(project);
+    assert.equal((await service.board(filters())).retryAt, null);
+  });
+
+  test('#496/AC-1 Given the board is not stale, Then retryAt is null even with a pause and a schedule', async () => {
+    const { now, project, service, retry } = setup();
+    project.current = projectBoard([projectCard(500)]);
+    retry.pausedUntil = now() + 600_000;
+    retry.nextRead = now() + 120_000;
+    assert.equal((await service.board(filters())).retryAt, null);
   });
 });
