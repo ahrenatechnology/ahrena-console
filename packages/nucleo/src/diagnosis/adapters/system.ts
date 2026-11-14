@@ -12,9 +12,10 @@
 import { execFile } from 'node:child_process';
 import { readdir, readFile, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
+import { join } from 'node:path';
 import type { SectionCollector } from '../diagnose.ts';
 import type { HostInfo } from '../../telemetry/model.ts';
-import { defaultWorktreeRoots, type DiagnosisDeps, type DiagnosisFs, type DiagnosisRunner, type RunResult } from './common.ts';
+import { type DiagnosisDeps, type DiagnosisFs, type DiagnosisRunner, type RunResult } from './common.ts';
 import { DarwinDiagnosisCollector } from './darwin.ts';
 import { LinuxDiagnosisCollector } from './linux.ts';
 
@@ -51,21 +52,26 @@ export const systemFs: DiagnosisFs = {
       () => [],
     ),
   modifiedAtMs: (path) => stat(path).then((s) => s.mtimeMs, () => null),
+  exists: (path) => stat(path).then(() => true, () => false),
 };
 
-export function systemDiagnosisDeps(home: string = homedir()): DiagnosisDeps {
+/** `<repo>/.claude/worktrees` for each repository folder the core already knows from the sessions that ran there (`knownFolders`). */
+export const worktreeRootsOf = (repositoryFolders: readonly string[]): string[] => repositoryFolders.map((folder) => join(folder, '.claude', 'worktrees'));
+
+export function systemDiagnosisDeps(worktreeRoots: () => Promise<string[]>, log: (message: string) => void, home: string = homedir()): DiagnosisDeps {
   return {
     run: systemRunner,
     readFile: (path) => readFile(path, 'utf8').catch(() => null),
     fs: systemFs,
     home,
-    worktreeRoots: () => defaultWorktreeRoots(systemFs, home),
+    worktreeRoots,
     nowMs: () => Date.now(),
+    log,
   };
 }
 
 /** The platform's collector as the use case's port; `null` where there is none (Windows). */
-export function diagnosisCollectorFor(platform: HostInfo['platform'] | NodeJS.Platform = process.platform, deps: DiagnosisDeps = systemDiagnosisDeps()): SectionCollector | null {
+export function diagnosisCollectorFor(platform: HostInfo['platform'] | NodeJS.Platform = process.platform, deps: DiagnosisDeps): SectionCollector | null {
   if (platform === 'darwin') return new DarwinDiagnosisCollector(deps).collect;
   if (platform === 'linux') return new LinuxDiagnosisCollector(deps).collect;
   return null;

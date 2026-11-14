@@ -5,17 +5,16 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import { CATALOG } from '../src/diagnosis/adapters/catalog.ts';
-import { DiagnosisCollector, defaultWorktreeRoots, type DiagnosisDeps, type DiagnosisFs, type RunOptions, type RunResult } from '../src/diagnosis/adapters/common.ts';
+import { DiagnosisCollector, LARGEST_FOLDERS_BUDGET_MS, LARGEST_FOLDERS_CONCURRENCY, type DiagnosisDeps, type DiagnosisFs, type RunOptions, type RunResult } from '../src/diagnosis/adapters/common.ts';
 import { DarwinDiagnosisCollector } from '../src/diagnosis/adapters/darwin.ts';
 import { LinuxDiagnosisCollector } from '../src/diagnosis/adapters/linux.ts';
-import { parseDockerDf, parseDuSize, parseDuTree, parseJournalUsage, parsePsProcesses } from '../src/diagnosis/adapters/parsers.ts';
+import { parseDockerDf, parseDuSize, parseJournalUsage, parsePsProcesses } from '../src/diagnosis/adapters/parsers.ts';
 import type { SectionId } from '../src/diagnosis/model.ts';
+import { worktreeRootsOf } from '../src/diagnosis/adapters/system.ts';
 
 const HOME = '/home/dev';
 const NOW_MS = Date.parse('2026-11-14T12:00:00.000Z');
 const DAY = 86_400_000;
-
-// ---- captured outputs -----------------------------------------------------------------------------
 
 const PS_DARWIN = [
   '  412  56.2 1048576 Sat Nov 14 08:15:02 2026 /Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
@@ -43,8 +42,6 @@ const DOCKER_DF = [
 ].join('\n');
 const JOURNAL = 'Archived and active journals take up 1.2G in the file system.\n';
 
-// ---- the recording runner ----------------------------------------------------------------------------
-
 interface Call {
   command: string;
   args: readonly string[];
@@ -54,13 +51,15 @@ type Answer = RunResult | ((call: Call) => RunResult);
 const ok = (stdout: string): RunResult => ({ ok: true, stdout });
 const fail = (why: Extract<RunResult, { ok: false }>['why']): RunResult => ({ ok: false, why });
 
-function setup(answers: Record<string, Answer>, over: { files?: Record<string, string>; dirs?: Record<string, string[]>; mtimes?: Record<string, number> } = {}) {
+function setup(answers: Record<string, Answer>, over: { files?: Record<string, string>; dirs?: Record<string, string[]>; mtimes?: Record<string, number>; exists?: string[] } = {}) {
   const calls: Call[] = [];
+  const logs: string[] = [];
   const dirs = over.dirs ?? {};
   const fs: DiagnosisFs = {
     isDirectory: async (p) => p in dirs || Object.values(dirs).some((l) => l.includes(p)),
     listDirs: async (p) => dirs[p] ?? [],
     modifiedAtMs: async (p) => over.mtimes?.[p] ?? null,
+    exists: async (p) => (over.exists ?? []).includes(p) || p in dirs,
   };
   const deps: DiagnosisDeps = {
     run: async (command, args, options) => {
@@ -76,13 +75,12 @@ function setup(answers: Record<string, Answer>, over: { files?: Record<string, s
     home: HOME,
     worktreeRoots: async () => Object.keys(dirs).filter((d) => d.endsWith('/.claude/worktrees')),
     nowMs: () => NOW_MS,
+    log: (message) => logs.push(message),
   };
-  return { calls, deps };
+  return { calls, deps, logs };
 }
 const ctx = (mount: string | null = null, signal = new AbortController().signal) => ({ mount, signal });
 const collect = <K extends SectionId>(c: DiagnosisCollector, id: K, mount: string | null = null) => c.collect(id, ctx(mount));
-
-// ---- parsers ------------------------------------------------------------------------------------------
 
 describe('diagnosis parsers', () => {
   test('ps rows become processes with basename, bytes and the start as ISO', () => {
@@ -107,23 +105,11 @@ describe('diagnosis parsers', () => {
     assert.equal(parseJournalUsage('nothing here'), null);
   });
 
-  test('du tree keeps the deepest folders under the mount, as absolute paths', () => {
-    assert.deepEqual(parseDuTree(DU_TREE, '/'), [
-      { path: '/usr/lib', bytes: 4096 * 1024 },
-      { path: '/usr/share', bytes: 20480 * 1024 },
-      { path: '/var', bytes: 8192 * 1024 },
-      { path: '/empty', bytes: 1024 * 1024 },
-    ]);
-    assert.equal(parseDuTree('100\t./a/b\n', '/data')[0].path, '/data/a/b');
-  });
-
   test('du size reads the total of the working directory', () => {
     assert.equal(parseDuSize('57344\t.\n'), 57344 * 1024);
     assert.equal(parseDuSize(''), null);
   });
 });
-
-// ---- processes and swap -----------------------------------------------------------------------------
 
 describe('process and swap sections', () => {
   const psKey = ['ps', ...CATALOG.ps.args].join(' ');
@@ -168,19 +154,79 @@ describe('process and swap sections', () => {
   });
 });
 
-// ---- volume sections --------------------------------------------------------------------------------
-
 describe('volume sections', () => {
   const dfKey = ['df', ...CATALOG.df.args].join(' ');
-  const duKey = (cwd: string) => `du ${CATALOG['du-tree'].args.join(' ')} @${cwd}`;
+  const folderKey = (cwd: string) => `du ${CATALOG['du-folder'].args.join(' ')} @${cwd}`;
+  const byPath = (items: unknown) => [...(items as { path: string; bytes: number }[])].sort((x, y) => x.path.localeCompare(y.path));
 
-  test('#565/AC-3 the largest folders come from the mount the core itself read, as the working directory', async () => {
-    const { calls, deps } = setup({ [dfKey]: ok(DF), [duKey('/data')]: ok('100\t./a\n50\t.\n') });
+  test('#565/AC-3 the largest folders are measured one by one under the mount, each as the working directory, and the big ones are opened', async () => {
+    const { calls, deps } = setup(
+      { [dfKey]: ok(DF), [folderKey('/data/a')]: ok('1000\t.\n'), [folderKey('/data/b')]: ok('500\t.\n'), [folderKey('/data/a/x')]: ok('600\t.\n'), [folderKey('/data/a/y')]: ok('300\t.\n') },
+      { dirs: { '/data': ['a', 'b'], '/data/a': ['x', 'y'], '/data/b': [] } },
+    );
     const r = await collect(new LinuxDiagnosisCollector(deps), 'largest-folders', '/data');
-    assert.deepEqual(r, [{ path: '/data/a', bytes: 100 * 1024 }]);
-    const du = calls.find((x) => x.command === 'du');
-    assert.equal(du?.options.cwd, '/data');
-    assert.deepEqual(du?.args, CATALOG['du-tree'].args);
+    assert.deepEqual(byPath(r), [
+      { path: '/data/a/x', bytes: 600 * 1024 },
+      { path: '/data/a/y', bytes: 300 * 1024 },
+      { path: '/data/b', bytes: 500 * 1024 },
+    ]);
+    const du = calls.filter((x) => x.command === 'du');
+    assert.ok(du.length > 0 && du.every((x) => x.args.join(' ') === CATALOG['du-folder'].args.join(' ') && x.options.cwd?.startsWith('/data/')));
+  });
+
+  test('#565/AC-3 a folder that does not finish is left out and logged, the others still answer', async () => {
+    const { deps, logs } = setup(
+      { [dfKey]: ok(DF), [folderKey('/data/a')]: ok('1000\t.\n'), [folderKey('/data/b')]: fail('timeout') },
+      { dirs: { '/data': ['a', 'b'], '/data/a': [], '/data/b': [] } },
+    );
+    const r = await collect(new LinuxDiagnosisCollector(deps), 'largest-folders', '/data');
+    assert.deepEqual(r, [{ path: '/data/a', bytes: 1000 * 1024 }]);
+    assert.ok(logs.some((l) => l.includes('/data/b') && l.includes('du') && l.includes('timed out')));
+  });
+
+  test('#565/AC-3 when no folder could be measured the section is unavailable', async () => {
+    const { deps } = setup({ [dfKey]: ok(DF) }, { dirs: { '/data': ['a'] } });
+    const r = await collect(new LinuxDiagnosisCollector(deps), 'largest-folders', '/data');
+    assert.ok(!Array.isArray(r) && r.unavailable);
+  });
+
+  test('#565/AC-3 another mount under the volume is not scanned as part of it', async () => {
+    const { calls, deps } = setup({ [dfKey]: ok(DF), [folderKey('/usr')]: ok('10\t.\n') }, { dirs: { '/': ['usr', 'data'], '/usr': [] } });
+    const r = await collect(new LinuxDiagnosisCollector(deps), 'largest-folders', '/');
+    assert.deepEqual(r, [{ path: '/usr', bytes: 10 * 1024 }]);
+    assert.ok(calls.every((x) => x.options.cwd !== '/data'));
+  });
+
+  test('#565/AC-3 at most the bounded number of measurements run at once', async () => {
+    const names = Array.from({ length: 20 }, (_, i) => `d${i}`);
+    const { deps } = setup({ [dfKey]: ok(DF) }, { dirs: { '/data': names } });
+    let inFlight = 0;
+    let peak = 0;
+    const inner = deps.run;
+    deps.run = async (command, args, options) => {
+      if (command !== 'du') return inner(command, args, options);
+      inFlight++;
+      peak = Math.max(peak, inFlight);
+      await new Promise((resolve) => setImmediate(resolve));
+      inFlight--;
+      return ok('1\t.\n');
+    };
+    const r = await collect(new LinuxDiagnosisCollector(deps), 'largest-folders', '/data');
+    assert.ok(Array.isArray(r) && r.length === 20);
+    assert.ok(peak > 1 && peak <= LARGEST_FOLDERS_CONCURRENCY, String(peak));
+  });
+
+  test('#565/AC-3 the scan stops at its own budget, which stays inside the section timeout the route uses', async () => {
+    assert.ok(LARGEST_FOLDERS_BUDGET_MS <= 15_000);
+    const { deps } = setup({ [dfKey]: ok(DF) }, { dirs: { '/data': ['a', 'b'] } });
+    deps.largestFoldersBudgetMs = 40;
+    const inner = deps.run;
+    deps.run = (command, args, options) =>
+      command !== 'du' ? inner(command, args, options) : new Promise((resolve) => options.signal.addEventListener('abort', () => resolve(fail('aborted'))));
+    const started = Date.now();
+    const r = await collect(new LinuxDiagnosisCollector(deps), 'largest-folders', '/data');
+    assert.ok(!Array.isArray(r) && r.unavailable);
+    assert.ok(Date.now() - started < 2_000);
   });
 
   test('#565/AC-7 a mount the core did not enumerate is unavailable and never reaches a command', async () => {
@@ -193,7 +239,7 @@ describe('volume sections', () => {
   });
 
   test('#565/AC-6 docker missing or journalctl missing is unavailable while others still answer', async () => {
-    const { deps } = setup({ [['du', ...CATALOG['du-tree'].args].join(' ') + ' @/']: ok('1\t./x\n'), [dfKey]: ok(DF) });
+    const { deps } = setup({ [['du', ...CATALOG['du-folder'].args].join(' ') + ' @/x']: ok('1\t.\n'), [dfKey]: ok(DF) }, { dirs: { '/': ['x'] } });
     const c = new LinuxDiagnosisCollector(deps);
     assert.deepEqual(await collect(c, 'docker-df'), { unavailable: true, reason: 'docker not found' });
     assert.deepEqual(await collect(c, 'journal'), { unavailable: true, reason: 'journalctl not found' });
@@ -214,8 +260,6 @@ describe('volume sections', () => {
     assert.ok(!Array.isArray(r) && r.unavailable);
   });
 });
-
-// ---- known caches and old worktrees ---------------------------------------------------------------------
 
 describe('known-caches section', () => {
   const sizeKey = (cwd: string) => `du ${CATALOG['du-size'].args.join(' ')} @${cwd}`;
@@ -260,6 +304,7 @@ describe('known-caches section', () => {
       {
         dirs: { [ROOT]: ['old-one', 'fresh-one', 'old-dirty'], [old]: [], [fresh]: [], [dirty]: [] },
         mtimes: { [old]: NOW_MS - 30 * DAY, [fresh]: NOW_MS - 1 * DAY, [dirty]: NOW_MS - 20 * DAY },
+        exists: [`${old}/.git`, `${fresh}/.git`, `${dirty}/.git`],
       },
     );
     const r = await collect(new LinuxDiagnosisCollector(deps), 'known-caches');
@@ -275,22 +320,35 @@ describe('known-caches section', () => {
 
   test('#565/AC-6 a missing git does not drop the worktree: the unknown state counts as not safe to remove', async () => {
     const old = `${ROOT}/old-one`;
-    const { deps } = setup({ [sizeKey(old)]: ok('300\t.\n') }, { dirs: { [ROOT]: ['old-one'], [old]: [] }, mtimes: { [old]: NOW_MS - 30 * DAY } });
+    const { deps } = setup({ [sizeKey(old)]: ok('300\t.\n') }, { dirs: { [ROOT]: ['old-one'], [old]: [] }, mtimes: { [old]: NOW_MS - 30 * DAY }, exists: [`${old}/.git`] });
     const r = (await collect(new LinuxDiagnosisCollector(deps), 'known-caches')) as { hasUncommitted: boolean; hasUnpushed: boolean }[];
     assert.deepEqual([r[0].hasUncommitted, r[0].hasUnpushed], [true, true]);
   });
 
-  test('worktree roots are found by the core under each repository of the workspace', async () => {
-    const fs: DiagnosisFs = {
-      isDirectory: async (p) => p.endsWith('/.claude/worktrees') && p.includes('/repo-a/'),
-      listDirs: async (p) => ({ [`${HOME}/Workspace`]: ['org'], [`${HOME}/Workspace/org`]: ['repo-a', 'repo-b'] })[p] ?? [],
-      modifiedAtMs: async () => null,
-    };
-    assert.deepEqual(await defaultWorktreeRoots(fs, HOME), [`${HOME}/Workspace/org/repo-a/.claude/worktrees`]);
+  test('#565/AC-9 a folder under worktrees without its own .git is not a worktree and is never run in', async () => {
+    const stray = `${ROOT}/stray`;
+    const { calls, deps } = setup({ [sizeKey(stray)]: ok('300\t.\n') }, { dirs: { [ROOT]: ['stray'], [stray]: [] }, mtimes: { [stray]: NOW_MS - 30 * DAY } });
+    assert.deepEqual(await collect(new LinuxDiagnosisCollector(deps), 'known-caches'), []);
+    assert.ok(calls.every((x) => x.options.cwd !== stray));
+  });
+
+  test('#565/AC-11 a cache whose size cannot be read is dropped and logged with its tool and reason', async () => {
+    const { deps, logs } = setup({ [sizeKey(`${HOME}/.npm`)]: fail('timeout') }, { dirs: { [`${HOME}/.npm`]: [] } });
+    assert.deepEqual(await collect(new LinuxDiagnosisCollector(deps), 'known-caches'), []);
+    assert.ok(logs.some((l) => l.includes(`${HOME}/.npm`) && l.includes('du') && l.includes('timed out')));
+  });
+
+  test('#565/AC-9 a worktree whose size cannot be read is dropped and logged with its tool and reason', async () => {
+    const old = `${ROOT}/old-one`;
+    const { deps, logs } = setup({ [sizeKey(old)]: fail('failed') }, { dirs: { [ROOT]: ['old-one'], [old]: [] }, mtimes: { [old]: NOW_MS - 30 * DAY }, exists: [`${old}/.git`] });
+    assert.deepEqual(await collect(new LinuxDiagnosisCollector(deps), 'known-caches'), []);
+    assert.ok(logs.some((l) => l.includes(old) && l.includes('du') && l.includes('did not answer')));
+  });
+
+  test('#565/AC-9 the worktree roots come from the repository folders the caller passes', () => {
+    assert.deepEqual(worktreeRootsOf(['/w/org/repo-a', '/w/org/repo-b']), ['/w/org/repo-a/.claude/worktrees', '/w/org/repo-b/.claude/worktrees']);
   });
 });
-
-// ---- the catalog ----------------------------------------------------------------------------------------
 
 describe('diagnosis catalog', () => {
   test('#565/AC-7 only read-only commands, fixed argv, every entry with a timeout and an output bound', () => {

@@ -16,7 +16,7 @@ export class DarwinDiagnosisCollector extends DiagnosisCollector {
     return swap ? [{ usedBytes: swap.usedBytes, totalBytes: swap.totalBytes }] : { unavailable: true, reason: 'sysctl output not understood' };
   }
 
-  /** The journal is systemd's: there is none on the Mac. */
+  /** The journal is systemd's: there is none on the Mac (#565). */
   protected async journal(): Promise<CollectResult<'journal'>> {
     return { unavailable: true, reason: 'no journal on this OS' };
   }

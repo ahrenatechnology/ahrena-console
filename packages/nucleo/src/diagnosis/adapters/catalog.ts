@@ -14,26 +14,26 @@ export interface CatalogEntry {
   command: string;
   args: readonly string[];
   timeoutMs: number;
-  /** The most bytes of stdout read; more than that is a failure, never a silent cut. */
+  /** The most bytes of stdout read; more than that is a failure, never a silent cut (#565). */
   maxBytes: number;
 }
 
 const MB = 1024 * 1024;
 
 export const CATALOG = {
-  /** Every process once: pid, CPU%, RSS in KiB, start time, executable. The use case ranks them. */
+  /** Every process once: pid, CPU%, RSS in KiB, start time, executable; the use case ranks them (#565). */
   ps: { command: 'ps', args: ['-axo', 'pid=,pcpu=,rss=,lstart=,comm='], timeoutMs: 8_000, maxBytes: 4 * MB },
   'swap-usage': { command: 'sysctl', args: ['vm.swapusage'], timeoutMs: 3_000, maxBytes: 64 * 1024 },
-  /** The core's own list of mounts: the only source of the mount a folder scan may use. */
+  /** The core's own list of mounts: the only source of the mount a folder scan may use (#565). */
   df: { command: 'df', args: ['-P', '-k'], timeoutMs: 5_000, maxBytes: MB },
-  /** Two levels under the working directory, staying on its file system. */
-  'du-tree': { command: 'du', args: ['-x', '-k', '-d', '2', '.'], timeoutMs: 12_000, maxBytes: 4 * MB },
-  /** The total of the working directory. */
+  /** One top-level folder of a volume, staying on its file system: a whole-volume `du -d 2` never finished on a Mac (#565). */
+  'du-folder': { command: 'du', args: ['-x', '-s', '-k', '.'], timeoutMs: 6_000, maxBytes: 64 * 1024 },
+  /** The total of the working directory (#565). */
   'du-size': { command: 'du', args: ['-s', '-k', '.'], timeoutMs: 10_000, maxBytes: 64 * 1024 },
   'docker-df': { command: 'docker', args: ['system', 'df', '--format', '{{json .}}'], timeoutMs: 10_000, maxBytes: 256 * 1024 },
   journal: { command: 'journalctl', args: ['--disk-usage'], timeoutMs: 5_000, maxBytes: 64 * 1024 },
   'git-status': { command: 'git', args: ['status', '--porcelain'], timeoutMs: 8_000, maxBytes: 64 * 1024 },
-  /** Commits that no remote branch has: what would be lost with the worktree. */
+  /** Commits that no remote branch has: what would be lost with the worktree (#565). */
   'git-unpushed': { command: 'git', args: ['rev-list', '--count', 'HEAD', '--not', '--remotes'], timeoutMs: 8_000, maxBytes: 4 * 1024 },
 } as const satisfies Record<string, CatalogEntry>;
 
