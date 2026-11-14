@@ -107,7 +107,7 @@ describe('migrações', () => {
     migrate(db, MIGRATIONS);
     const endsItsOwnTransaction: Migration[] = [
       ...MIGRATIONS,
-      { version: ultima + 1, description: 'ends its own transaction', sql: 'COMMIT; SELECT * FROM tabela_que_nao_existe;' },
+      { version: ultima + 1, description: 'ends its own transaction', sql: 'COMMIT; SELECT * FROM missing_table;' },
     ];
     assert.throws(
       () => migrate(db, endsItsOwnTransaction),
