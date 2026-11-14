@@ -5,6 +5,8 @@
 // - `port-exposed`: a port listening on all interfaces;
 // - `tunnel-busy`: a tunnel port that another process on this Mac holds;
 // - `terminal-stuck` (#350): a terminal whose foreground command is "presa" (src/telemetry/terminals.ts);
+// - `memory-high` (#564): the macOS memory pressure `warning`/`critical`, or, with no pressure reported, memory used at 90% / 95%;
+// - `swap-high` (#564): swap used at 80% (warning) / 90% (error) of a known, non-zero total;
 // - `machine-unreachable` (#176): a remote machine this Mac cannot read (`machineUnreachableAlert`).
 //
 // `computeAlerts` is pure: the current reading and the recent samples give the alerts that hold now.
@@ -13,7 +15,11 @@
 
 import {
   LOAD_HIGH_FOR_MS,
+  MEMORY_HIGH_ERROR_PCT,
+  MEMORY_HIGH_WARNING_PCT,
   samplePointOf,
+  SWAP_HIGH_ERROR_PCT,
+  SWAP_HIGH_WARNING_PCT,
   VOLUME_FULL_PCT,
   type Alert,
   type SamplePoint,
@@ -84,6 +90,11 @@ export function computeAlerts(reading: TelemetryReading, points: readonly Sample
     });
   }
 
+  const memoryAlert = memoryHighAlert(reading, nowIso);
+  if (memoryAlert) alerts.push(memoryAlert);
+  const swapAlert = swapHighAlert(reading, nowIso);
+  if (swapAlert) alerts.push(swapAlert);
+
   const exposedPorts = new Map<number, string | null>();
   for (const p of reading.ports ?? []) {
     if (p.interface === 'all' && !exposedPorts.has(p.port)) exposedPorts.set(p.port, p.process);
@@ -128,6 +139,42 @@ export function computeAlerts(reading: TelemetryReading, points: readonly Sample
     });
   }
   return alerts;
+}
+
+/** Memory under pressure: the macOS level when there is one (`normal` means none), else the used share of the total. */
+function memoryHighAlert(reading: TelemetryReading, since: string): Alert | null {
+  const { totalBytes, usedBytes, pressure } = reading.memory;
+  const usedPct = totalBytes > 0 ? (usedBytes / totalBytes) * 100 : 0;
+  let level: Alert['level'] | null;
+  if (pressure !== null) level = pressure === 'critical' ? 'error' : pressure === 'warning' ? 'warning' : null;
+  else level = usedPct >= MEMORY_HIGH_ERROR_PCT ? 'error' : usedPct >= MEMORY_HIGH_WARNING_PCT ? 'warning' : null;
+  if (level === null) return null;
+  const used = `${formatBytes(usedBytes)} de ${formatBytes(totalBytes)} usados (${Math.round(usedPct)}%)`;
+  return {
+    id: 'memory-high',
+    kind: 'memory-high',
+    level,
+    message: level === 'error' ? 'Memória sob pressão crítica' : 'Memória sob pressão',
+    detail: pressure !== null ? `${used} · pressão ${pressure === 'critical' ? 'crítica' : 'de aviso'} no macOS` : used,
+    since,
+  };
+}
+
+/** Swap nearly full: only when the total is known and above zero. */
+function swapHighAlert(reading: TelemetryReading, since: string): Alert | null {
+  const { swapTotalBytes, swapUsedBytes } = reading.memory;
+  if (swapTotalBytes === null || swapUsedBytes === null || !(swapTotalBytes > 0)) return null;
+  const usedPct = (swapUsedBytes / swapTotalBytes) * 100;
+  const level: Alert['level'] | null = usedPct >= SWAP_HIGH_ERROR_PCT ? 'error' : usedPct >= SWAP_HIGH_WARNING_PCT ? 'warning' : null;
+  if (level === null) return null;
+  return {
+    id: 'swap-high',
+    kind: 'swap-high',
+    level,
+    message: `O swap está ${Math.round(usedPct)}% ocupado`,
+    detail: `${formatBytes(swapUsedBytes)} de ${formatBytes(swapTotalBytes)} usados (${Math.round(usedPct)}%)`,
+    since,
+  };
 }
 
 /** `bash /tmp/claude-…/scratchpad/destrava-pedro.sh` → `bash …/destrava-pedro.sh`: long paths keep only their last name. */

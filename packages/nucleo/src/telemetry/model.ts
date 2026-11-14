@@ -273,7 +273,7 @@ export interface Placement {
 // Alerts
 
 /** `machine-unreachable` (#176): a remote machine the núcleo cannot read; computed on this Mac, not over there. */
-export type AlertKind = 'load-high' | 'volume-full' | 'port-exposed' | 'tunnel-busy' | 'machine-unreachable' | 'terminal-stuck';
+export type AlertKind = 'load-high' | 'volume-full' | 'port-exposed' | 'tunnel-busy' | 'machine-unreachable' | 'terminal-stuck' | 'memory-high' | 'swap-high';
 export type AlertLevel = 'error' | 'warning';
 
 export interface Alert {
@@ -292,6 +292,12 @@ export interface Alert {
 export const LOAD_HIGH_FOR_MS = 5 * 60 * 1000;
 /** A volume above this becomes an alert. */
 export const VOLUME_FULL_PCT = 85;
+/** `memory-high` without a reported pressure (Linux): used memory at or above these shares of the total. */
+export const MEMORY_HIGH_WARNING_PCT = 90;
+export const MEMORY_HIGH_ERROR_PCT = 95;
+/** `swap-high`: used swap at or above these shares of the total. */
+export const SWAP_HIGH_WARNING_PCT = 80;
+export const SWAP_HIGH_ERROR_PCT = 90;
 
 // ---------------------------------------------------------------------------------------------
 // Samples and series

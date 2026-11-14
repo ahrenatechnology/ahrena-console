@@ -264,6 +264,17 @@ describe('#176/AC-5 a remote going down and coming back', () => {
   });
 });
 
+describe('#564/AC-5 the remote memory and swap alerts', () => {
+  test('#564/AC-5 memory-high and swap-high from the remote are accepted, an unknown kind is still dropped', async () => {
+    const memoryAlert: Alert = { ...volumeAlert, id: 'memory-high', kind: 'memory-high', level: 'warning', message: 'Memória alta' };
+    const swapAlert: Alert = { ...volumeAlert, id: 'swap-high', kind: 'swap-high', level: 'error', message: 'Swap quase cheio', detail: '26 GB de 27 GB usados (96%)' };
+    const f = await fake({ current: remoteReading(), alerts: [memoryAlert, swapAlert, { ...volumeAlert, id: 'disk-weird', kind: 'disk-weird' as Alert['kind'] }] });
+    const { remote, tracker } = setup(f.port);
+    await remote.pollOnce();
+    assert.deepEqual(tracker.active('ws-exemplo').map((a) => a.id), ['memory-high', 'swap-high']);
+  });
+});
+
 describe('#176/AC-5 the remote alerts are untrusted', () => {
   test('#176/AC-5 unknown kinds and a remote machine-unreachable are dropped, texts capped, at most 50', async () => {
     const many: Alert[] = Array.from({ length: 80 }, (_, i) => ({ ...volumeAlert, id: `volume-full:/v${i}`, message: 'm'.repeat(500) }));
