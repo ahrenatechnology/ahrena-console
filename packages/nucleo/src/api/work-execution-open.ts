@@ -8,7 +8,8 @@
  *   callers cannot launch the same issue at once, whatever their order. The guard is in this process, where
  *   every opener lives.
  * - No folder: 501 with the command to copy, and no run is recorded.
- * - The run is recorded once the session opened, with the start taken before opening so the session is never
+ * - The run is recorded once the session opened (the write is tried twice; if both fail, `RunNotRecordedError`: the session is
+ *   open and no run points to it), with the start taken before opening so the session is never
  *   older than its run. `origin` says who asked: the person (`manual`) or the queue (`queue`).
  */
 
@@ -34,6 +35,14 @@ export type ExecutionOpenOutcome = { opened: true; key: string } | { opened: fal
 
 /** The issue keys whose session is being opened right now. */
 const opening = new Set<string>();
+
+/** The session opened but its run could not be recorded (twice): there is a session no run points to, so nothing may open it again. */
+export class RunNotRecordedError extends Error {
+  constructor(options?: { cause?: unknown }) {
+    super('the execution session opened but its run was not recorded', options);
+    this.name = 'RunNotRecordedError';
+  }
+}
 
 export const ALREADY_BOOTING = { error: 'Já há uma execução subindo para esta issue' } as const;
 
@@ -64,7 +73,17 @@ export async function openExecution(o: ExecutionOpenDeps, { repo, number, target
     const startedAt = new Date(now()).toISOString();
     const outcome = await openWorkSession(o, { target, folder, prompt, key, failureText: 'Não deu para abrir a sessão de execução', logLabel: 'work run' });
     if (!outcome.opened) return { opened: false, status: outcome.status, body: outcome.body };
-    await o.runs.save({ key: lower, target, startedAt, state: 'booting', sessionId: null, finishedAt: null, origin });
+    const run = { key: lower, target, startedAt, state: 'booting' as const, sessionId: null, finishedAt: null, origin };
+    try {
+      await o.runs.save(run);
+    } catch {
+      // a lock or a full disk for one write: the session is open, so try once more before giving up
+      try {
+        await o.runs.save(run);
+      } catch (err) {
+        throw new RunNotRecordedError({ cause: err });
+      }
+    }
     return { opened: true, key };
   } finally {
     opening.delete(lower);

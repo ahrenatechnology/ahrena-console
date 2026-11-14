@@ -383,6 +383,38 @@ describe('#477 the queue puller', () => {
       assert.equal(terminal.length, 0);
     });
 
+    test('#477/AC-6 Given the session opened but its run cannot be recorded (twice), Then the item leaves the line instead of failing, so a retry cannot open a second session', async () => {
+      await enqueue(A);
+      let saves = 0;
+      const broken = { get: runs.get.bind(runs), all: runs.all.bind(runs), save: async () => { saves += 1; throw new Error('database is locked'); } };
+      puller = build({ runs: broken, running: { runningCount: async () => 0 } });
+      await puller.trigger();
+      assert.equal(terminal.length, 1);
+      assert.equal(saves, 2);
+      assert.equal(await queue.stopped(), null);
+      assert.ok(!(await order()).includes(A));
+    });
+
+    test('#477/AC-6 Given the first save fails and the second works, Then the run is recorded and the item is pulled normally', async () => {
+      await enqueue(A);
+      let saves = 0;
+      const flaky = { get: runs.get.bind(runs), all: runs.all.bind(runs), save: async (r: ExecutionRun) => { saves += 1; if (saves === 1) throw new Error('busy'); await runs.save(r); } };
+      puller = build({ runs: flaky });
+      await puller.trigger();
+      assert.equal((await runs.get(A))!.origin, 'queue');
+      assert.deepEqual(await order(), []);
+    });
+
+    test('#477/AC-6 Given two entries carry a failure, When the stop is cleared, Then only the one that stops the queue (the first) is cleared', async () => {
+      await enqueue(A, B);
+      await queue.markFailed(B, 'segundo', '2026-11-14T09:30:00.000Z');
+      await queue.markFailed(A, 'primeiro', '2026-11-14T09:31:00.000Z');
+      assert.equal(await queue.clearStop(), true);
+      const [first, second] = await queue.list();
+      assert.equal(first!.failedReason, null);
+      assert.equal(second!.failedReason, 'segundo');
+    });
+
     test('#477/AC-6 Given the first item fails and sat in 2nd place after a reorder, Then the failure puts it back on top', async () => {
       terminalAnswer = 'unsupported';
       await enqueue(B, A);

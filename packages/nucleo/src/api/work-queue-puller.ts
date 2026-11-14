@@ -14,8 +14,8 @@
  * 5. the prompt is the execution prompt: the key and the Plan step numbers, never a title, body or comment.
  * A dropped item lets the next one be considered in the same pull.
  *
- * Failure: when the session does not open (no folder, no launcher, the launcher threw, or the run could not
- * be recorded), the item returns to the top with the reason and the queue stops (`markFailed`); it resumes
+ * Failure: when the session does not open (no folder, no launcher, the launcher threw; a run that could not
+ * be recorded twice is the exception: the session is open, so the item just leaves the line), the item returns to the top with the reason and the queue stops (`markFailed`); it resumes
  * when the person removes the item or retries (`POST /api/work/queue/retry`, `clearStop`). A run the queue
  * started that expires (no session showed up in time) does the same (`runExpired`): the item that left
  * the line at pull time comes back to the top, failed.
@@ -34,7 +34,7 @@ import { WorkIssueNotFoundError, type WorkIssueResult, type WorkIssueService } f
 import { isPlanNumber, isPlanRepo, type PlanTarget } from '../github/work-plan.ts';
 import { isQueueColumn, type CardColumns, type QueueEntry, type WorkQueueStore } from '../github/work-queue.ts';
 import { NEW_SESSION_TARGETS } from './new-session.ts';
-import { openExecution, unrunnableReason } from './work-execution-open.ts';
+import { openExecution, RunNotRecordedError, unrunnableReason } from './work-execution-open.ts';
 import type { WorkSessionOpeners } from './work-session-open.ts';
 
 export interface WorkQueuePullerDeps extends WorkSessionOpeners {
@@ -60,6 +60,9 @@ const MAX_STEPS = 200;
 
 export const OPEN_FAILED_REASON = 'Não deu para abrir a sessão desta issue; confira o console antes de tentar de novo';
 export const EXPIRED_REASON = 'A sessão de execução não apareceu a tempo: o Claude Desktop ou o terminal não respondeu';
+
+/** A key from the database in a log line: quoted and cut, so a row that was not written through the route cannot forge a line. */
+const safe = (key: string): string => JSON.stringify(key.slice(0, 80));
 
 const KEY = /^([A-Za-z0-9-]+\/[A-Za-z0-9._-]+)#([1-9]\d{0,9})$/;
 
@@ -131,13 +134,13 @@ export class WorkQueuePuller {
   }
 
   private async drop(head: QueueEntry, code: string): Promise<Step> {
-    this.log(`${head.key} left the line (${code})`);
+    this.log(`${safe(head.key)} left the line (${code})`);
     await this.o.queue.remove(head.key);
     return 'dropped';
   }
 
   private async fail(head: QueueEntry, reason: string, code: string): Promise<Step> {
-    this.log(`${head.key} failed to open (${code}); the queue stops`);
+    this.log(`${safe(head.key)} failed to open (${code}); the queue stops`);
     await this.o.queue.markFailed(head.key, reason, this.nowIso());
     return 'failed';
   }
@@ -178,12 +181,14 @@ export class WorkQueuePuller {
         return this.fail(head, typeof error === 'string' ? error : OPEN_FAILED_REASON, `status-${opened.status}`);
       }
     } catch (err) {
+      // the session is open: failing the item would let a retry open a second one, so it leaves the line
+      if (err instanceof RunNotRecordedError) return this.drop(head, 'opened-but-not-recorded');
       return this.fail(head, OPEN_FAILED_REASON, err instanceof Error ? err.name : typeof err);
     }
     try {
       await this.o.queue.remove(head.key);
     } catch {
-      this.log(`${head.key} opened but could not leave the line; the next pull drops it`);
+      this.log(`${safe(head.key)} opened but could not leave the line; the next pull drops it`);
     }
     return 'pulled';
   }

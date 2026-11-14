@@ -42,7 +42,7 @@ export interface WorkQueueStore extends WorkQueue {
   reorder(key: string, after: string | null): Promise<boolean>;
   /** Returns the entry to the top with the reason; `false` when it is not queued. */
   markFailed(key: string, reason: string, at: string): Promise<boolean>;
-  /** Clears the recorded failure, which ends the queue's stop (the retry of #477 L2); `false` when no entry had one. */
+  /** Clears the failure that stops the queue (the first entry's, in queue order), which ends the stop (the retry of #477 L2); `false` when no entry had one. */
   clearStop(): Promise<boolean>;
 }
 

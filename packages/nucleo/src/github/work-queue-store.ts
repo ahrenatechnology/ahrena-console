@@ -62,7 +62,7 @@ export class SqliteWorkQueue implements WorkQueueStore {
     this.delete = db.prepare('DELETE FROM work_queue WHERE item_key = ?');
     this.place = db.prepare('UPDATE work_queue SET position = ? WHERE item_key = ?');
     this.fail = db.prepare('UPDATE work_queue SET failed_reason = ?, failed_at = ? WHERE item_key = ?');
-    this.clear = db.prepare('UPDATE work_queue SET failed_reason = NULL, failed_at = NULL WHERE failed_reason IS NOT NULL');
+    this.clear = db.prepare('UPDATE work_queue SET failed_reason = NULL, failed_at = NULL WHERE item_key = (SELECT item_key FROM work_queue WHERE failed_reason IS NOT NULL ORDER BY position LIMIT 1)');
   }
 
   private rows(): Row[] {
