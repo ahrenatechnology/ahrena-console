@@ -349,7 +349,7 @@ describe('#495/AC-1 GET /api/work with GitHub down: a stable English reason code
     ['a missing token scope', () => new GithubScopeError('token sem escopo project'), 'no-scope'],
     ['a Project permission failure', () => new ProjectPermissionError('detail'), 'no-scope'],
     ['any other error', () => new Error('GitHub fora do ar'), 'github-error'],
-    ['a gateway error', () => new GithubGatewayError('bad gateway', 502), 'github-error'],
+    ['a gateway error', () => new GithubGatewayError('bad gateway', 502), 'github-unavailable'], // #613
   ];
 
   for (const [name, make, code] of FAILURES) {
@@ -408,7 +408,7 @@ describe('#495/AC-1 GET /api/work with GitHub down: a stable English reason code
         await refresh(b, '');
         b.now.add(10 * 60_000);
         const r = await get(b);
-        assert.deepEqual([r.status, r.json.stale, r.json.staleReason], [200, true, 'network']);
+        assert.deepEqual([r.status, r.json.stale, r.json.staleReason], [200, true, 'github-unavailable']); // #613 a stored snapshot folds network into github-unavailable
         assert.ok(!JSON.stringify(r.json).includes('fetch failed'));
       },
       { fromStore: true },
