@@ -81,9 +81,13 @@ describe('the orchestrator as parent of the per-PR loops (issue 509)', () => {
     const loop = loopOf([main, planning]);
     assert.deepEqual(loop.orchestrators.map((o) => o.agentId), [planning.id]);
     assert.equal(loop.groups.length, 0);
-    const text = panelText(loop);
+    const panel = loopPanel({ sessionId: 's1', loop: JSON.parse(JSON.stringify(loop)) }, null);
+    const text = texto(panel);
     assert.match(text, /ainda não abriu nenhuma camada/);
-    assert.doesNotMatch(text, /PR #690/);
+    assert.match(text, /Plan the story; see PR #690 for reference/, 'the task line sits under the orchestrator');
+    assert.match(text, /Nenhum grupo “PR #690”/, 'the note says the cited PR takes no group');
+    assert.equal(panel.querySelectorAll('.wfl-group').length, 0, 'no group is drawn');
+    assert.doesNotMatch(panel.querySelectorAll('.wfl-head').map((h) => texto(h)).join('\n'), /PR #690/, 'no group is titled with the cited PR');
     assert.match(text, /Subagentes 1/);
   });
 
