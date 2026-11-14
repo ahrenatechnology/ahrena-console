@@ -541,7 +541,7 @@ describe('#465/AC-4 GitHub down (465-4, ADR-0001)', () => {
   describe('#614 one band per reason code', () => {
     const band = (reason: string | null, extra = {}) => staleBand({ fetchedAt: NOW - 31 * MIN, now: NOW, reason, ...extra });
     const SPEC: [string | null, string, string, string | null, string | null][] = [
-      // code, tone, title, button label, data-action
+      // #614: code, tone, title, button label, data-action
       ['rate-limited', 'warn', 'O GitHub limitou as chamadas.', 'Tentar agora', 'retry'],
       ['credential-refused', 'error', 'O GitHub recusou a credencial do console.', 'Reconectar', 'reconnect'],
       ['no-scope', 'error', 'A credencial do GitHub não tem a permissão necessária.', 'Reconectar', 'reconnect'],
@@ -582,6 +582,35 @@ describe('#465/AC-4 GitHub down (465-4, ADR-0001)', () => {
         assert.doesNotMatch(texto(node), /Volta às/);
         assert.equal(node.querySelector('button')!.getAttribute('data-action'), 'retry');
       }
+    });
+
+    describe('#614 the band of the issue panel (subject issue) says nothing about the board', () => {
+      const issueBand = (reason: string | null, extra = {}) => staleBand({ fetchedAt: NOW - 31 * MIN, now: NOW, reason, subject: 'issue', ...extra });
+      test('rate-limited without a running pause: the title, the issue time and the live note; no time sentence, no button', () => {
+        for (const retryAt of [null, NOW - MIN]) {
+          const node = issueBand('rate-limited', { retryAt });
+          assert.equal(texto(node), 'O GitHub limitou as chamadas. Mostrando a issue de 22:41 (há 31 min). As sessões e a fila continuam ao vivo.');
+          assert.equal(node.querySelector('button'), null);
+        }
+      });
+      test('rate-limited with a running pause keeps "Volta às" and no button', () => {
+        const node = issueBand('rate-limited', { retryAt: NOW + 4 * MIN });
+        assert.ok(texto(node).includes(`Volta às ${formatClock(NOW + 4 * MIN)} (em 4 min).`));
+        assert.equal(node.querySelector('button'), null);
+      });
+      test('credential-refused and no-scope omit the board sentences and still offer Reconectar', () => {
+        for (const code of ['credential-refused', 'no-scope']) {
+          const node = issueBand(code);
+          assert.doesNotMatch(texto(node), /O quadro só volta|permissão do quadro/);
+          assert.ok(texto(node).includes('Mostrando a issue de 22:41 (há 31 min). As sessões e a fila continuam ao vivo.'), texto(node));
+          assert.equal(node.querySelector('button')!.getAttribute('data-action'), 'reconnect');
+        }
+      });
+      test('no band under subject issue talks about the board in its detail', () => {
+        for (const code of ['rate-limited', 'credential-refused', 'no-scope', 'github-unavailable', 'network', 'github-error', 'sync-pending', null]) {
+          assert.doesNotMatch(texto(issueBand(code).querySelector('p')!).replace(/^O quadro ainda não foi relido\. /, ''), /quadro/, String(code));
+        }
+      });
     });
 
     test('Reconectar is the filled button and runs onReconnect; Tentar agora and Atualizar agora run onRetry', () => {

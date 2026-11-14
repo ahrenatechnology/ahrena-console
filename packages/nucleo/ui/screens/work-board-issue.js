@@ -67,7 +67,7 @@ function keyed(parts, key) {
  * confirmation. It reads the layer's state through `state()` and changes it only through `apply(next, intent)`; `retry` and
  * `confirm` are the layer's own, because they touch what the layer keeps (the forced re-read, the failure it saw before).
  */
-function createIssueView({ area, state, apply, cardFor, retry, confirm, run, queue, onAsk, edit }) {
+function createIssueView({ area, state, apply, cardFor, retry, reconnect, confirm, run, queue, onAsk, edit }) {
   let focus = null;
   let anchorInPanel = false;
 
@@ -150,7 +150,7 @@ function createIssueView({ area, state, apply, cardFor, retry, confirm, run, que
     else if (edit.isOpen(key)) node = edit.render({ card, now, onClose: close });
     else {
       const parts = keyed(partsOf(card, 'panel'), `panel:${key}`);
-      node = issuePanel({ card, issue: { ...issue, stale: stale || issue.stale }, now, parts, onRetry: retrying ? null : retry, onReconnect: () => ctx.navigate(CONNECT_UI, CONNECT_STATE), onEdit: () => edit.open(issue), onClose: close });
+      node = issuePanel({ card, issue: { ...issue, stale: stale || issue.stale }, now, parts, onRetry: retrying ? null : retry, onReconnect: reconnect, onEdit: () => edit.open(issue), onClose: close });
       const pop = (hostedInPanel(card) ? popupFor(card) : null) ?? run?.popup(card, 'panel', true) ?? null;
       if (pop) (node.querySelector('.wb-panel-acts') ?? node).append(pop);
     }
@@ -335,7 +335,7 @@ export function createIssueLayer({ ctx, area, cards, options = () => ({}), redra
     onFinished: (issue) => apply(panelLoaded(s, issue, s.panel.request)),
   });
 
-  const view = createIssueView({ area, state: () => s, apply, cardFor, retry, confirm, run, queue, onAsk, edit });
+  const view = createIssueView({ area, state: () => s, apply, cardFor, retry, reconnect: () => ctx.navigate(CONNECT_UI, CONNECT_STATE), confirm, run, queue, onAsk, edit });
 
   // issue 532: the screen closes this layer's open confirmation when the run layer opens its own (one at a time, 465-6).
   const closeConfirmation = () => Object.keys(s.plans).forEach((key) => apply(cancelPlan(s, { key })));

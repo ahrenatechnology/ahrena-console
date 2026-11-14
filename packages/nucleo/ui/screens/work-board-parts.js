@@ -531,7 +531,7 @@ export function githubDownReason(code) {
 
 const minutesUntil = (at, now) => Math.max(1, Math.round((at - now) / 60_000));
 
-/** The title, tone and icon of the two codes where GitHub did not answer: the only ones that say "GitHub indisponível.". */
+/** The title, tone and icon of the two codes where GitHub did not answer: the only ones that say "GitHub indisponível." (issue 614). */
 const GITHUB_DID_NOT_ANSWER = { tone: 'error', icon: 'cloud-off', title: 'GitHub indisponível.' };
 const waitingOn = (retryAt, now, lead) => (Number.isFinite(retryAt) ? `${lead} ${minutesUntil(retryAt, now)} min.` : '');
 /*
@@ -544,12 +544,12 @@ const STALE_BANDS = Object.freeze({
     tone: 'warn',
     icon: 'clock',
     title: 'O GitHub limitou as chamadas.',
-    // The core does not call GitHub before `retryAt` (the end of the pause): no button while it still runs.
+    // The core does not call GitHub before `retryAt` (the end of the pause): no button while it still runs (issue 614).
     paused: (retryAt, now) => Number.isFinite(retryAt) && retryAt > now,
     detail: (retryAt, now) => (Number.isFinite(retryAt) && retryAt > now ? `Volta às ${formatClock(retryAt)} (em ${minutesUntil(retryAt, now)} min).` : 'O limite já passou; relemos na próxima sincronização.'),
   },
-  'credential-refused': { tone: 'error', icon: 'key-round', title: 'O GitHub recusou a credencial do console.', detail: () => 'O quadro só volta a se atualizar depois de reconectar.', action: 'reconnect' },
-  'no-scope': { tone: 'error', icon: 'key-round', title: 'A credencial do GitHub não tem a permissão necessária.', detail: () => 'Reconecte para conceder a permissão do quadro.', action: 'reconnect' },
+  'credential-refused': { tone: 'error', icon: 'key-round', title: 'O GitHub recusou a credencial do console.', detail: () => 'O quadro só volta a se atualizar depois de reconectar.', boardOnly: true, action: 'reconnect' },
+  'no-scope': { tone: 'error', icon: 'key-round', title: 'A credencial do GitHub não tem a permissão necessária.', detail: () => 'Reconecte para conceder a permissão do quadro.', boardOnly: true, action: 'reconnect' },
   'github-unavailable': { ...GITHUB_DID_NOT_ANSWER, detail: (retryAt, now) => `O GitHub não respondeu.${waitingOn(retryAt, now, ' Tentamos de novo em')}`, action: 'retry' },
   network: { ...GITHUB_DID_NOT_ANSWER, detail: (retryAt, now) => `O GitHub não respondeu.${waitingOn(retryAt, now, ' Tentamos de novo em')}`, action: 'retry' },
   'github-error': { tone: 'error', icon: 'cloud-off', title: 'O GitHub respondeu com erro.', detail: () => '', action: 'retry' },
@@ -558,14 +558,15 @@ const STALE_BANDS = Object.freeze({
     icon: 'history',
     title: 'O quadro ainda não foi relido.',
     detail: (retryAt, now) => `A sincronização em segundo plano ainda não passou por ele${Number.isFinite(retryAt) ? `; relemos em ${minutesUntil(retryAt, now)} min` : ''}.`,
+    boardOnly: true,
     action: 'retry',
     actionLabel: 'Atualizar agora',
   },
 });
-/** No code, or a code this build does not know: neutral, no claim about GitHub, and Tentar agora (the raw code never shows). */
+/** No code, or a code this build does not know: neutral, no claim about GitHub, and Tentar agora (the raw code never shows; issue 614). */
 const UNKNOWN_STALE_BAND = { tone: 'neutral', icon: 'history', title: 'A leitura está desatualizada.', detail: (retryAt, now) => waitingOn(retryAt, now, 'Tentamos de novo em'), action: 'retry' };
 
-/** The band of a stale read: its own title, tone and action per reason code (`data-stale-code`), same place and shape for the board and the issue panel. */
+/** The band of a stale read: its own title, tone and action per reason code (`data-stale-code`), same place and shape for the board and the issue panel (issue 614). */
 function staleBandOf(reason) {
   return typeof reason === 'string' && Object.hasOwn(STALE_BANDS, reason) ? STALE_BANDS[reason] : UNKNOWN_STALE_BAND;
 }
@@ -580,8 +581,11 @@ export function staleBand({ fetchedAt = null, now = Date.now(), reason = null, r
   const when = formatClock(fetchedAt);
   const issue = subject === 'issue';
   const from = when ? `Mostrando ${issue ? 'a issue' : 'o quadro'} de ${when} (${formatAgo(fetchedAt, now)}).` : `Mostrando ${issue ? 'a última issue lida' : 'o último quadro lido'}.`;
-  const action = spec.paused?.(retryAt, now) ? null : (spec.action ?? 'retry');
-  const detail = spec.detail(retryAt, now);
+  // The issue service reports rate-limited only while the pause runs and sends no `retryAt` (issue 614): without a future
+  // one the panel has no time to give and nothing to retry, so it keeps the title and the lines of the first band.
+  const noPauseTime = issue && reason === 'rate-limited' && !spec.paused(retryAt, now);
+  const action = spec.paused?.(retryAt, now) || noPauseTime ? null : (spec.action ?? 'retry');
+  const detail = noPauseTime || (issue && spec.boardOnly) ? '' : spec.detail(retryAt, now);
   const text = [from, detail, 'As sessões e a fila continuam ao vivo.'].filter(Boolean).join(' ');
   let button = null;
   if (action === 'reconnect') button = el('button', { type: 'button', class: 'btn filled', 'data-action': 'reconnect', onClick: () => onReconnect?.() }, icon('github'), 'Reconectar');

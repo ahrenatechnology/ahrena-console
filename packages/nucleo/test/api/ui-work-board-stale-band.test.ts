@@ -37,7 +37,7 @@ const card = {
   plan: null, sessions: { count: 0, state: null, ids: [] }, pullRequest: null, blocked: null, queuePosition: null, doneAt: null, doneBy: null, children: null,
 };
 
-/** GET /api/work for a stored (stale) board: what the core sends is `staleReason` (the code) and `retryAt` (epoch ms), never `resumeAt`. */
+/** #614 GET /api/work for a stored (stale) board: what the core sends is `staleReason` (the code) and `retryAt` (epoch ms), never `resumeAt`. */
 function staleBoard(staleReason: string, retryAt: number | null) {
   return {
     project: { title: 'Ahrena Console', url: 'https://github.com/orgs/ahrenatechnology/projects/1', primaryRepo: REPO },
