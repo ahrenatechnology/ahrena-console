@@ -118,11 +118,13 @@ function stepEl(s, sessionId) {
 
 function groupEl(g, sessionId, led = false) {
   const [label, tone] = GROUP_STATE[g.state] ?? GROUP_STATE.open;
-  const pill = led && g.kind === 'issue' && g.state === 'open' ? ['Sem PR ainda', 'completed'] : [label, tone];
+  const pending = led && g.kind === 'issue' && g.state === 'open';
+  const pill = pending ? ['Sem PR ainda', 'completed'] : [label, tone];
   const head = el(
     'div',
     { class: 'wfl-head' },
     el('span', { class: 'wfl-chip mono' }, groupTitle(g)),
+    pending ? el('b', { class: 'wfl-trunc' }, 'a camada ainda não tem PR') : null,
     g.kind === 'none' ? el('b', { class: 'wfl-trunc' }, 'subagentes sem PR nem issue na tarefa') : null,
     g.kind !== 'none' ? el('span', { class: `wfl-pill wfl-pill-${pill[1]}` }, pill[0]) : el('span', { class: 'wfl-pill wfl-pill-muted' }, `${num(g.steps.length)} ${g.steps.length === 1 ? 'subagente' : 'subagentes'}`),
     g.issue ? el('span', { class: 'wfl-chip mono' }, `issue #${g.issue}`) : null,
@@ -138,9 +140,12 @@ function groupEl(g, sessionId, led = false) {
       if (link) row.append(el('div', { class: `wfl-link wfl-link-${link.kind}`, 'aria-hidden': 'true' }, el('span', { class: 'wfl-lab' }, link.label), el('i', {})));
       row.append(stepEl(step, sessionId));
     }
+    if (pending) row.append(el('div', { class: 'wfl-link wfl-link-plain', 'aria-hidden': 'true' }, el('i', {})), el('div', { class: 'wfl-step wfl-ghost' }, el('span', { class: 'wfl-mute' }, icon('git-pull-request'), 'PR ainda não aberto')));
   }
   const foot =
-    g.kind === 'none'
+    pending
+      ? el('div', { class: 'wfl-foot' }, 'O vínculo veio da issue da tarefa. Quando o PR da camada aparecer, o grupo vira o do PR no mesmo lugar, debaixo do mesmo orquestrador.')
+      : g.kind === 'none'
       ? el('div', { class: 'wfl-foot' }, 'Sem seta entre eles: o que não cita PR não ganha vínculo inventado, só fica ligado ao Principal.')
       : g.state === 'stopped'
         ? el('div', { class: 'wfl-foot' }, 'A sessão terminou com um pedido de mudança sem resposta: é onde o laço travou.')
@@ -196,6 +201,7 @@ export function loopPanel(w, viewToggle) {
       'div',
       { class: 'wfd-legend' },
       el('span', {}, el('i', { class: 'wfl-dash' }), 'o Argos pediu mudanças: o Erodos corrige'),
+      loop.orchestrators?.length ? el('span', {}, icon('workflows'), 'o orquestrador: abre as camadas, cada uma com o seu laço') : null,
       el('span', {}, icon('external'), 'abre a conversa do subagente'),
     ),
   );

@@ -15,6 +15,7 @@
 .wfl-trunc { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .wfl-row { display: flex; align-items: stretch; overflow-x: auto; padding-top: 14px; }
 .wfl-step { flex: 1 1 0; min-width: 130px; max-width: 230px; padding: 7px 9px; display: flex; flex-direction: column; gap: 2px; background: var(--surface); border: 1px solid var(--border); border-left: 3px solid var(--status-completed-dot); border-radius: 10px; }
+.wfl-step.wfl-ghost { background: transparent; border-style: dashed; border-left: 1px dashed var(--border); }
 .wfl-step.wfl-run { border-left-color: var(--status-active-dot); }
 .wfl-step.wfl-changes, .wfl-step.wfl-error { border-left-color: var(--status-error-dot); }
 .wfl-step-top { display: flex; align-items: center; gap: 6px; font-size: 11.5px; }
