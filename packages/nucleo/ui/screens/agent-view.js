@@ -6,9 +6,10 @@
 
 import { el, icon } from '../dom.js';
 import { error } from '../states.js';
+import { routeWithMachine } from '../machine-filter.js';
 import { shortAgentName } from './workflow-format.js';
 import {
-  agentViewHref, clock, costNoteText, costText, durationText, elide, foldText, num, offsetText, stateLabel, stepDurationText,
+  agentViewHref, clock, machineQuery, remoteMachine, costNoteText, costText, durationText, elide, foldText, num, offsetText, stateLabel, stepDurationText,
 } from './agent-view-format.js';
 import { agentReadRoute, createAgentReader, isRunning } from './agent-view-state.js';
 
@@ -17,7 +18,8 @@ function ensureStyle() {
   document.head.append(el('link', { rel: 'stylesheet', href: '/ui/screens/agent-view.css', 'data-screen': 'agent-view' }));
 }
 
-const sessionHref = (sessionId) => `/ui/sessions/${encodeURIComponent(sessionId)}`;
+// A remote session's links keep its `?machine=<id>`, so Back and the crumb return to the same machine (issue 540).
+const sessionHref = (sessionId) => `/ui/sessions/${encodeURIComponent(sessionId)}${machineQuery()}`;
 const agentsTabHref = (sessionId) => `${sessionHref(sessionId)}#agents`;
 
 /** The name the agent goes by: the short type, else "Agente principal" for the main one, else what it was asked. (issue 521) */
@@ -86,7 +88,7 @@ function header(data, { sessionId, now }) {
       el('h2', { class: 'av-kind', title: data.agentType ?? '' }, label),
       data.agentType?.includes(':') ? el('span', { class: 'av-kind-full mono' }, data.agentType) : null,
       stateBadge(data.state),
-      el('a', { class: 'btn outline av-conversation', href: `${sessionHref(sessionId)}?agent=${encodeURIComponent(`${sessionId}:${data.agentId}`)}#conversation`, title: 'A aba Conversa, já com este agente escolhido' }, icon('conversation'), 'Abrir a conversa'),
+      el('a', { class: 'btn outline av-conversation', href: `${sessionHref(sessionId)}${machineQuery() ? '&' : '?'}agent=${encodeURIComponent(`${sessionId}:${data.agentId}`)}#conversation`, title: 'A aba Conversa, já com este agente escolhido' }, icon('conversation'), 'Abrir a conversa'),
     ),
     data.description ? el('p', { class: 'av-description' }, data.description) : null,
     data.state === 'error' ? failedBand(data) : null,
@@ -340,7 +342,10 @@ export function agentViewMissing({ sessionId, sessionTitle = null, agentId = nul
  */
 export async function mount(area, ctx) {
   const { id: sessionId, agentId } = ctx.params;
-  const reader = createAgentReader({ read: () => ctx.read(agentReadRoute(sessionId, agentId)) });
+  // A remote session's agent lives on its machine: the reads carry `machine=<id>`; a local one reads as before (issue 540).
+  const machine = remoteMachine();
+  const readAgent = (id) => ctx.read(machine ? routeWithMachine(agentReadRoute(sessionId, id), machine) : agentReadRoute(sessionId, id));
+  const reader = createAgentReader({ read: () => readAgent(agentId) });
   const children = new Set(); // the children read or being read: opened once, read once (issue 539)
   const here = { sessionId, agentId };
   let view = null;
@@ -351,7 +356,7 @@ export async function mount(area, ctx) {
     children.add(childId);
     view?.setChildLoading(childId); // a stale error from the read before must not show while this one runs (issue 539)
     const read = () =>
-      ctx.read(agentReadRoute(sessionId, childId)).then(
+      readAgent(childId).then(
         (data) => live && view?.setChild(childId, data),
         () => {
           children.delete(childId); // read again the next time it opens (issue 539)
