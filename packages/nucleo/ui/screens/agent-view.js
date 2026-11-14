@@ -139,7 +139,8 @@ function detail(step) {
  *
  * `opts`: `sessionId`; `sessionTitle` and `trail` (`[{ label, href }]`, the agents above) for the crumb; `now`
  * for a running agent's duration; `onOpenChild(agentId)` when the person opens a child in line, so the state
- * layer reads it and answers with `setChild(agentId, data)`. The node has `update(next)`, for a running
+ * layer reads it and answers with `setChild(agentId, data)`, or with `setChildError(agentId, retry)` when that
+ * read fails: the child's slot says so and "Tentar de novo" calls `retry()` and goes back to reading (issue 539). The node has `update(next)`, for a running
  * agent that grew: the header and the result follow, the steps wait behind "N passos novos" and the view
  * never scrolls by itself.
  */
@@ -154,6 +155,7 @@ export function agentView(initial, opts = {}) {
   let data = initial;
   let shown = initial.steps.length; // steps the person has accepted; the rest wait behind the pill (issue 521)
   const children = new Map();
+  const childErrors = new Map(); // agentId -> retry, for an open child whose read failed (issue 539)
   const open = new Set(); // details, folds, elided runs and open children, by key (issue 521)
   const flip = (key) => () => {
     if (!open.delete(key)) open.add(key);
@@ -178,7 +180,7 @@ export function agentView(initial, opts = {}) {
         el('span', { class: 'av-time mono' }, meta),
         step.childAgentId ? el('a', { class: 'av-open-view', href: agentViewHref(sessionId, step.childAgentId), 'aria-label': `Abrir a vista de ${label}` }, 'Abrir a vista', icon('external')) : null,
       );
-      const inner = !isOpen ? null : child ? el('ol', { class: 'av-seq' }, ...sequence(child.steps, depth + 1, child.start)) : el('p', { class: 'av-child-loading' }, 'Lendo o agente…');
+      const inner = !isOpen ? null : child ? el('ol', { class: 'av-seq' }, ...sequence(child.steps, depth + 1, child.start)) : childErrors.has(step.childAgentId) ? childError(step.childAgentId) : el('p', { class: 'av-child-loading' }, 'Lendo o agente…');
       return el('li', { class: 'av-step av-child', 'data-depth': String(depth), 'data-kind': 'agent', 'data-state': step.state }, line, inner);
     }
     return el(
@@ -194,6 +196,17 @@ export function agentView(initial, opts = {}) {
         el('span', { class: `av-step-state av-st-${info.tone}` }, icon(info.icon), info.label),
       ),
       isOpen ? detail(step) : null,
+    );
+  }
+
+  // The slot of a child whose read failed: one line, and a retry that repeats only that child's read (issue 539).
+  function childError(agentId) {
+    const retry = childErrors.get(agentId);
+    return el(
+      'div',
+      { class: 'av-none av-child-error', role: 'alert' },
+      el('span', { class: 'ic c-error' }, icon('wifi-off')),
+      el('div', {}, el('b', {}, 'Não deu para ler o agente.'), ' ', el('button', { type: 'button', class: 'btn outline sm av-child-retry', onClick: () => (childErrors.delete(agentId), retry(), draw()) }, icon('refresh'), 'Tentar de novo')),
     );
   }
 
@@ -260,6 +273,11 @@ export function agentView(initial, opts = {}) {
   };
   root.setChild = (agentId, child) => {
     children.set(agentId, child);
+    childErrors.delete(agentId);
+    draw();
+  };
+  root.setChildError = (agentId, retry) => {
+    childErrors.set(agentId, retry);
     draw();
   };
 
