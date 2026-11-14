@@ -351,6 +351,15 @@ describe('#613 the stale snapshot says why the stored board is old', () => {
     assert.equal(snap?.resumeAt, null);
   });
 
+  test('#613/AC-1 a recorded rate-limited whose pause is over is sync-pending, with no instant', async () => {
+    const { now, project } = await oldBoard(new RateLimitedError('limit', 60_000));
+    assert.equal((await project.snapshot())?.staleCode, 'rate-limited');
+    now.add(60_001);
+    const snap = await project.snapshot();
+    assert.equal(snap?.staleCode, 'sync-pending');
+    assert.equal(snap?.resumeAt, null);
+  });
+
   test('#613/AC-1 the pause wins over a failure recorded before it', async () => {
     const { cache, project } = await oldBoard(new TypeError('fetch failed'));
     cache.pause(60_000);
