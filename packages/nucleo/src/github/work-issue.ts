@@ -16,6 +16,8 @@ export interface WorkIssueRef {
   url: string;
   state: IssueState;
   type: string | null;
+  /** #534 why a closed issue was closed (`COMPLETED`, `NOT_PLANNED`...); absent or `null` for an open one. */
+  stateReason?: string | null;
 }
 
 export interface WorkIssueComment {
@@ -80,6 +82,18 @@ export interface WorkIssueWriter {
   current(key: string): Promise<WorkIssueCurrent | null>;
   update(key: string, edit: WorkIssueEdit): Promise<WorkIssueRead | null>;
   comment(key: string, body: string): Promise<WorkIssueRead | null>;
+  /**
+   * #534 the Plan steps of `parent`. Each checks, in a fresh read of the parent's sub-issues, that the step is a Plan
+   * sub-issue of it before it writes (`WorkIssueRefusedError` `step` or `after` when not, `type` when the repository has
+   * no Plan type), and answers the parent as GitHub holds it afterwards, or `null` when GitHub has no such parent.
+   * `stepCurrent` answers the step's title, body and `updatedAt` for the conflict check.
+   */
+  stepCurrent(parent: string, step: string): Promise<WorkIssueCurrent | null>;
+  editStep(parent: string, step: string, edit: { title?: string; body?: string }): Promise<WorkIssueRead | null>;
+  addStep(parent: string, step: { title: string; body: string }): Promise<WorkIssueRead | null>;
+  removeStep(parent: string, step: string): Promise<WorkIssueRead | null>;
+  /** `after`: the key of the sub-issue it goes behind, or `null` for the top. */
+  moveStep(parent: string, step: string, after: string | null): Promise<WorkIssueRead | null>;
 }
 
 /** #533 the credential cannot write this issue. */
@@ -101,9 +115,9 @@ export class WorkIssueWrittenUnreadError extends Error {
   }
 }
 
-/** #533 the edit names a label, type, milestone or parent GitHub does not know; raised before anything is written. */
+/** #533 the edit names a label, type, milestone or parent GitHub does not know (#534 or a step or an after that is no sub-issue of the issue); raised before anything is written. */
 export class WorkIssueRefusedError extends Error {
-  readonly param: 'labels' | 'type' | 'milestone' | 'parent';
+  readonly param: 'labels' | 'type' | 'milestone' | 'parent' | 'step' | 'after';
   constructor(param: WorkIssueRefusedError['param'], detail: string) {
     super(`unknown ${param}: ${detail}`);
     this.name = 'WorkIssueRefusedError';
@@ -163,6 +177,9 @@ export interface WorkIssueView {
 
 const isPlan = (type: string | null): boolean => type !== null && LEVEL_BY_TYPE[type] === 'plan';
 
+/** #534 a removed step: a Plan sub-issue closed as not planned is no longer one of the plan's steps. */
+export const isPlanStep = (s: Pick<WorkIssueRef, 'type' | 'stateReason'>): boolean => isPlan(s.type) && s.stateReason !== 'NOT_PLANNED';
+
 /** #506 the pull request the panel shows: the open one, else a merged one, else the first closed one. */
 function linkedPullRequest(prs: readonly WorkIssuePullRequest[]): WorkIssuePullRequestView | null {
   const pr = prs.find((p) => p.state === 'OPEN') ?? prs.find((p) => p.state === 'MERGED') ?? prs[0];
@@ -180,7 +197,7 @@ function linkedPullRequest(prs: readonly WorkIssuePullRequest[]): WorkIssuePullR
 }
 
 export function buildWorkIssue(read: WorkIssueRead, projectStatus: string | null): WorkIssueView {
-  const steps = read.subIssues.filter((s) => isPlan(s.type)).map((s) => ({ number: s.number, title: s.title, url: s.url, state: s.state }));
+  const steps = read.subIssues.filter(isPlanStep).map((s) => ({ number: s.number, title: s.title, url: s.url, state: s.state }));
   return {
     key: read.key,
     repo: read.repo,
