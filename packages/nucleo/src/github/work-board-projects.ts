@@ -23,9 +23,9 @@
  * Project's organization never drops off the board nor out of the default trusted owners. The chosen Project (`selected`) is read even
  * when no list holds its owner, unless that owner already has an entry: a warning (including the person's own blocked account) or a read.
  *
- * Closed Projects and Projects with no Status field are skipped. The owners the board read (`readOwners`) are the default of
+ * Closed Projects and Projects with no Status field are skipped, except the chosen Project (`selected`), which is always read. The owners the board read (`readOwners`) are the default of
  * the trusted owners (github/trusted-owners.ts): the owners with a Project read, and `warnedOwners` the ones with a warning, which are never trusted by default
- * (an owner is in one list or the other, never both).
+ * (no owner is in both lists; an owner read with no Project is in neither).
  */
 
 import { githubFailureOf, NoDataError, type GithubCache, type GithubFailure, type StaleCode } from './cache.ts';
