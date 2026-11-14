@@ -6,12 +6,15 @@
 // | ----------- | ------ | ------------------------------------------------------------------------- |
 // | `project`   | 2 min  | the chosen Project's board (decision 0001's key and query)                |
 // | `decisions` | 15 min | the account's repositories and the ADR/PDR index; content only on a push  |
+// | `work-queue`| 2 min  | no read: wakes the execution queue's puller after the Project read (#477) |
 //
 // One step at a time, in the order given, on the core's single GitHub queue (the steps' own services
 // enqueue their calls). A step is due at start and then `everyMs` after it last ran, ok or not. While
 // GitHub has paused the core (403/429), no step runs: the tick after the pause picks them up. A step
-// answers `skipped` when there is nothing to read (no Project chosen), and `pending` when what it needs
-// is not ready yet (GitHub not connected, or revoked: #612, no call is made): it runs again on the next tick.
+// answers `pending` when what it needs is not ready yet: every step does while GitHub is not connected or
+// is revoked (#612, no call is made), `work-queue` included, and it runs again on the next tick, so a
+// reconnect resumes the sync within one cycle. `skipped` means there is nothing to read (no Project
+// chosen): the step is next due `everyMs` later.
 
 /** One step of the sync. `run` reads GitHub and stores; it answers whether there was anything to read. */
 export interface SyncStep {

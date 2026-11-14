@@ -230,6 +230,26 @@ export function createGithubScreens(o: GithubScreensOptions): GithubScreens {
 }
 
 /**
+ * The queue's step of the background sync (#477): after the Project read it wakes the puller. `connected` is the
+ * core's GitHub connection; while it is not connected the step answers `pending` (#612), so it runs on the next tick
+ * after a reconnect, as the steps below do.
+ */
+export function workQueueSyncSteps(puller: { trigger(): Promise<unknown> } | null, connected: () => Promise<boolean>): SyncStep[] {
+  if (!puller) return [];
+  return [
+    {
+      name: 'work-queue',
+      everyMs: SYNC_PROJECT_EVERY_MS,
+      async run() {
+        if (!(await connected().catch(() => false))) return 'pending';
+        await puller.trigger();
+        return 'done';
+      },
+    },
+  ];
+}
+
+/**
  * The background sync's steps over these screens (decision 0015): the chosen Project's board every
  * 2 min and the ADR/PDR index every 15 min. `connected` is the core's GitHub connection; without it
  * both steps are skipped.

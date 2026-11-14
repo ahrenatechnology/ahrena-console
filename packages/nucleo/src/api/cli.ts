@@ -27,8 +27,8 @@ import { SqliteDecisionStore } from '../decisions/sqlite.ts';
 import { SessionStateMachine } from '../states/machine.ts';
 import { createMcpServer } from '../mcp/index.ts';
 import { GithubCache } from '../github/cache.ts';
-import { GithubBackgroundSync, SYNC_PROJECT_EVERY_MS, type SyncStep } from '../github/background-sync.ts';
-import { githubSyncSteps } from './github-screens.ts';
+import { GithubBackgroundSync } from '../github/background-sync.ts';
+import { githubSyncSteps, workQueueSyncSteps } from './github-screens.ts';
 import { GithubGraphqlSource } from '../github/github-source.ts';
 import { SqliteCacheStore } from '../github/sqlite-cache.ts';
 import { GITHUB_CALL_LIMIT, GithubCallQueue } from '../github/call-queue.ts';
@@ -541,25 +541,10 @@ if (workBoard && workIssue) {
     log,
   });
 }
-const workQueueSyncSteps = (connected: () => Promise<boolean>): SyncStep[] => {
-  const puller = workQueuePuller;
-  if (!puller) return [];
-  return [
-    {
-      name: 'work-queue',
-      everyMs: SYNC_PROJECT_EVERY_MS,
-      async run() {
-        if (!(await connected().catch(() => false))) return 'skipped';
-        await puller.trigger();
-        return 'done';
-      },
-    },
-  ];
-};
 // Decision 0015 (#356): the core reads GitHub on a timer and the GitHub screens answer from the database.
 // Under --no-github there is no connection and no sync.
 githubSync = coreGithub.connected
-  ? new GithubBackgroundSync({ steps: [...githubSyncSteps(screens, coreGithub.connected), ...workQueueSyncSteps(coreGithub.connected)], pauseLeftMs: () => githubCache.pauseLeftMs(), log })
+  ? new GithubBackgroundSync({ steps: [...githubSyncSteps(screens, coreGithub.connected), ...workQueueSyncSteps(workQueuePuller, coreGithub.connected)], pauseLeftMs: () => githubCache.pauseLeftMs(), log })
   : null;
 
 // Machine telemetry (#175, decision 0008): one sample every 30 s, 12 h in the database, and each

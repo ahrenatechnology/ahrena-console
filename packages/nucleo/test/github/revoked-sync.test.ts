@@ -3,7 +3,7 @@
 // Real connection over the fake GitHub (which refuses any bearer but the issued one), the sync's own steps.
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
-import { githubSyncSteps } from '../../src/api/github-screens.ts';
+import { githubSyncSteps, workQueueSyncSteps } from '../../src/api/github-screens.ts';
 import { GithubBackgroundSync } from '../../src/github/background-sync.ts';
 import { GithubHttpError } from '../../src/github/github-source.ts';
 import { GithubConnection, MemoryVault } from '../../src/github/connection/index.ts';
@@ -56,6 +56,7 @@ function setup(stored: string) {
     logs,
     sync,
     dataCalls,
+    now: () => t,
     /** #612 One cycle: the clock moves by one tick and the sync looks for due steps. */
     async cycle() {
       t += 15_000;
@@ -108,5 +109,29 @@ describe('#612 the background sync while the credential is revoked', () => {
     await s.cycle();
     assert.ok(s.dataCalls() > stopped, 'the due steps called GitHub again');
     assert.deepEqual(s.sync.status().steps.map((x) => x.lastOutcome), ['done', 'done']);
+  });
+
+  test('#612/AC-3 the work-queue step answers pending while revoked and runs on the next cycle after reconnect', async () => {
+    const s = setup(TOKEN);
+    let pulls = 0;
+    const queueSync = new GithubBackgroundSync({
+      steps: workQueueSyncSteps({ trigger: async () => void pulls++ }, () => s.conn.connected()),
+      now: () => s.now(),
+      tickMs: 15_000,
+      log: () => undefined,
+    });
+    await s.conn.status();
+    s.auth.token = NEW_TOKEN;
+    await s.cycle(); // #612 a 401 revokes the connection
+    for (let i = 0; i < 3; i++) {
+      await s.cycle();
+      await queueSync.tick();
+    }
+    assert.equal(pulls, 0, 'no pull while revoked');
+    assert.equal(queueSync.status().steps[0]!.lastOutcome, 'pending');
+    await s.reconnect();
+    await s.cycle();
+    await queueSync.tick();
+    assert.equal(pulls, 1, 'the step ran on the very next tick, not everyMs later');
   });
 });
