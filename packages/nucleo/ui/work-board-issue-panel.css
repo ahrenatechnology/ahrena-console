@@ -1,0 +1,76 @@
+/* Quadro do trabalho: the issue panel and Planejar (issues 467 and 508, wireframes 467-1, 465-2 and 465-6). Every colour comes from brand.css. */
+
+/* ---------- the card: opens the detail, and the one that is open ---------- */
+article[data-openable] { cursor: pointer; }
+article[data-openable]:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+article[data-selected] { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+
+/* ---------- the planning parts of a card ---------- */
+.wb-plan-acts { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.wb-plan-act { --btn-h: 26px; width: 100%; font-size: 11.5px; font-weight: var(--weight-semibold); }
+.wb-plan-links { display: flex; gap: 6px; justify-content: center; font-size: 11.5px; white-space: nowrap; }
+.wb-plan-link { font: inherit; font-weight: var(--weight-semibold); color: var(--accent-text); background: none; border: 0; padding: 2px 4px; border-radius: 4px; cursor: pointer; }
+.wb-plan-link:hover { text-decoration: underline; }
+.wb-plan-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.wb-plan-note { display: flex; gap: 5px; align-items: flex-start; font-size: 11.5px; font-weight: var(--weight-semibold); line-height: 1.35; color: var(--status-error-text); }
+.wb-plan-note .icon { flex: none; margin-top: 1px; }
+
+/* ---------- the confirmation and the missing folder, anchored on the card ---------- */
+.wb-plan-pop { width: 360px; max-width: 100%; padding: 12px; display: flex; flex-direction: column; gap: 9px; font-size: 12px; box-shadow: 0 16px 40px color-mix(in srgb, var(--mono-black) 45%, transparent); }
+.wb-plan-pop h3 { margin: 0; font-size: 13.5px; font-weight: var(--weight-semibold); line-height: 1.35; }
+.wb-plan-kv { display: grid; grid-template-columns: 72px minmax(0, 1fr); gap: 6px 10px; align-items: center; margin: 0; font-size: 12px; }
+.wb-plan-kv dt { color: var(--muted); }
+.wb-plan-kv dd { margin: 0; min-width: 0; }
+.wb-plan-trunc { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wb-plan-choice { display: inline-flex; padding: 2px; gap: 2px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; }
+.wb-plan-radio { display: inline-flex; align-items: center; gap: 5px; font: inherit; font-size: 12px; color: var(--muted); background: none; border: 0; border-radius: 6px; padding: 3px 8px; cursor: pointer; white-space: nowrap; }
+.wb-plan-radio[aria-checked="true"] { background: var(--raised); color: var(--text); }
+.wb-plan-radio:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.wb-plan-cmd { margin: 0; font-family: var(--font-mono); font-size: 11px; line-height: 1.5; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 7px 9px; }
+.wb-plan-cmd { color: var(--text); white-space: pre-wrap; word-break: break-all; }
+.wb-plan-hint { margin: 0; color: var(--muted); line-height: 1.4; }
+.wb-plan-pop-acts { display: flex; gap: 6px; justify-content: flex-end; flex-wrap: wrap; }
+
+/* ---------- the panel, with the board behind ---------- */
+.wb-panel-stage { display: grid; align-items: start; min-width: 0; }
+.wb-panel-stage > * { grid-area: 1 / 1; }
+.wb-panel-scrim { align-self: stretch; z-index: 1; background: color-mix(in srgb, var(--bg) 60%, transparent); border-radius: 12px; }
+.wb-panel { z-index: 2; justify-self: end; width: 440px; max-width: 100%; padding: 14px 16px; display: flex; flex-direction: column; gap: 11px; min-width: 0; box-shadow: 0 16px 40px color-mix(in srgb, var(--mono-black) 40%, transparent); }
+@media (min-width: 1280px) { .wb-panel { width: 480px; } }
+.wb-panel-head { display: flex; gap: 6px; align-items: center; font-size: 12px; min-width: 0; }
+.wb-panel-github { margin-left: auto; }
+.wb-panel-title { margin: 0; font-size: 16px; font-weight: var(--weight-semibold); line-height: 1.35; overflow-wrap: anywhere; }
+.wb-panel-chain { margin: 0; font-size: 11.5px; color: var(--muted); line-height: 1.4; overflow-wrap: anywhere; }
+.wb-panel-chain b { color: var(--text); font-weight: var(--weight-semibold); }
+.wb-panel-acts { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.wb-panel-acts .wb-plan-acts { flex-direction: row; align-items: center; }
+.wb-panel-acts .wb-plan-act { --btn-h: 30px; width: auto; padding: 0 12px; font-size: 12.5px; }
+.wb-panel-acts .wb-plan-note { flex-basis: 100%; }
+.wb-panel-sec { display: flex; flex-direction: column; gap: 7px; border-top: 1px solid var(--border); padding-top: 10px; min-width: 0; }
+.wb-panel-sec-head { display: flex; align-items: center; gap: 8px; }
+.wb-panel-sec-title { margin: 0; font-size: 10.5px; font-weight: var(--weight-semibold); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.wb-panel-sec-note { margin-left: auto; display: inline-flex; gap: 4px; align-items: center; font-size: 11.5px; color: var(--accent-text); }
+.wb-panel-muted { color: var(--muted); }
+.wb-panel-md { font-size: 12.5px; line-height: 1.55; color: var(--text); overflow-wrap: anywhere; }
+.wb-panel-md p { margin: 0 0 6px; white-space: pre-line; }
+.wb-panel-code { margin: 0 0 6px; font-family: var(--font-mono); font-size: 11px; line-height: 1.5; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 7px 9px; color: var(--muted); white-space: pre-wrap; }
+.wb-panel-box { display: flex; flex-direction: column; gap: 6px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); font-size: 12px; min-width: 0; }
+.wb-panel-row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; min-width: 0; }
+.wb-panel-pr-title { flex: 1; min-width: 0; font-weight: var(--weight-medium); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wb-panel-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 5px; }
+.wb-panel-steps li { display: flex; gap: 8px; align-items: center; padding: 6px 8px; border: 1px solid var(--border); border-radius: 8px; font-size: 12px; background: var(--bg); min-width: 0; }
+.wb-panel-steps li[data-state="closed"] .wb-panel-step-title { color: var(--muted); text-decoration: line-through; }
+.wb-panel-step-n { flex: none; font-family: var(--font-mono); font-size: 11px; color: var(--muted); }
+.wb-panel-step-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wb-panel-step-ref { margin-left: auto; flex: none; display: inline-flex; gap: 6px; align-items: center; color: var(--muted); }
+.wb-panel-meta { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 6px 10px; margin: 0; font-size: 12px; align-items: center; }
+.wb-panel-meta dt { color: var(--muted); }
+.wb-panel-meta dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.wb-panel-tags { display: flex; gap: 5px; flex-wrap: wrap; align-items: center; }
+.wb-panel-tag { display: inline-flex; align-items: center; height: 22px; padding: 0 8px; border-radius: 99px; font-size: 11.5px; border: 1px solid var(--border); background: var(--raised); white-space: nowrap; }
+.wb-panel-comment { display: flex; gap: 8px; font-size: 12px; line-height: 1.45; min-width: 0; }
+.wb-panel-comment small { color: var(--muted); }
+.wb-panel-comment-text { display: block; overflow-wrap: anywhere; white-space: pre-line; }
+.wb-panel-avatar { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; background: var(--raised); border: 1px solid var(--border); font-size: 10px; font-weight: var(--weight-semibold); color: var(--muted); flex: none; }
+.wb-panel-more { font-size: 12px; color: var(--accent-text); }
+.wb-panel-more:focus-visible, .wb-panel-github:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
