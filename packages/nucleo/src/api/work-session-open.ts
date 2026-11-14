@@ -6,7 +6,8 @@
 import type { StoragePort } from '../storage-port.ts';
 import { desktopNewSessionUrl, isThrowawayFolder, knownFolders } from './new-session.ts';
 import { isUsableCwd, shellQuote } from './session-open.ts';
-import type { TerminalOpener } from './terminal-launch.ts';
+import { planningKeyOfPrompt } from '../github/work-plan.ts';
+import { PLANNING_TOOL_FLAGS, type TerminalOpener } from './terminal-launch.ts';
 import { gitDoSistema, repoDoRemote, type Git } from './work.ts';
 
 /** The first listed folder (most recent first) whose `origin` is `repo`; `null` when none. */
@@ -20,8 +21,15 @@ export async function folderOfRepo(repo: string, folders: readonly { path: strin
   return null;
 }
 
-/** `cd '<folder>' && claude '<prompt>'` for "Copiar comando"; `claude '<prompt>'` when there is no folder. Each part single-quoted. */
-export const sessionCommand = (folder: string | null, prompt: string): string => `${folder === null ? '' : `cd ${shellQuote(folder)} && `}claude ${shellQuote(prompt)}`;
+/**
+ * `cd '<folder>' && claude '<prompt>'` for "Copiar comando"; `claude '<prompt>'` when there is no folder. Each part
+ * single-quoted. #515 A planning prompt goes after the tool restriction of the terminal (PLANNING_TOOL_FLAGS),
+ * then a bare `--`: the tool lists are variadic and would take the prompt as one more rule.
+ */
+export const sessionCommand = (folder: string | null, prompt: string): string => {
+  const flags = planningKeyOfPrompt(prompt) !== null ? [...PLANNING_TOOL_FLAGS.map(shellQuote), '--'] : [];
+  return `${folder === null ? '' : `cd ${shellQuote(folder)} && `}claude ${[...flags, shellQuote(prompt)].join(' ')}`;
+};
 
 export interface WorkSessionOpeners {
   storage: Pick<StoragePort, 'listSessions'>;

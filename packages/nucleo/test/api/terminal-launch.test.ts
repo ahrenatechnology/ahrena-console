@@ -3,6 +3,7 @@
 // or a tty reaches a shell).
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import { mkdtempSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, utimesSync, writeFileSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -13,10 +14,13 @@ import {
   createTerminalOpener,
   ITERM_FOCUS_SCRIPT,
   parsePsLine,
+  PLANNING_TOOL_FLAGS,
   TERMINAL_FOCUS_SCRIPT,
   ttyDevice,
   type ProcessRunner,
 } from '../../src/api/terminal-launch.ts';
+import { executionPrompt } from '../../src/github/work-execution.ts';
+import { planningPrompt } from '../../src/github/work-plan.ts';
 
 const ID = '0f8c1a52-3c4d-4e5f-8a9b-0c1d2e3f4a5b';
 
@@ -216,6 +220,132 @@ describe('#507/AC-6 a terminal that starts claude with a first prompt', () => {
     utimesSync(old, new Date(0), new Date(0));
     await createTerminalOpener({ dir, platform: 'darwin', runner: fakeRunner() })({ sessionId: null, cwd: '/w/app', prompt: 'plan it' });
     assert.ok(!readdirSync(dir).includes('new-00000000-0000-4000-8000-000000000000.prompt'));
+  });
+});
+
+describe('#515 a planning session started from the terminal runs with a tool restriction', () => {
+  const root = mkdtempSync(join(tmpdir(), 'ahrena-open-515-'));
+  after(() => rmSync(root, { recursive: true, force: true }));
+  const PLAN = planningPrompt({ repo: 'acme/app', number: 1 });
+  const ALLOWED = 'Read,Grep,Glob,Skill,Agent,Bash(gh issue view:*),Bash(gh issue list:*),Bash(gh issue create:*),Bash(gh issue edit:*),Bash(gh api:*)';
+  const DENIED_FAMILIES = [
+    'Edit', 'Write', 'NotebookEdit', 'mcp__*',
+    'Bash(git:*)', 'Bash(gh pr:*)', 'Bash(gh stack:*)', 'Bash(gh secret:*)', 'Bash(gh repo:*)', 'Bash(gh release:*)', 'Bash(gh workflow:*)',
+    'Bash(gh issue delete:*)', 'Bash(gh issue transfer:*)', 'Bash(gh issue close:*)', 'Bash(gh issue reopen:*)', 'Bash(gh issue lock:*)', 'Bash(gh issue pin:*)', 'Bash(gh issue develop:*)',
+    'Bash(gh run:*)', 'Bash(gh variable:*)', 'Bash(gh gist:*)', 'Bash(gh label:*)', 'Bash(gh auth:*)', 'Bash(gh ssh-key:*)', 'Bash(gh extension:*)', 'Bash(gh alias:*)', 'Bash(gh ruleset:*)', 'Bash(gh cache:*)', 'Bash(gh codespace:*)',
+  ];
+  const DENIED = DENIED_FAMILIES.join(',');
+
+  test('#515/AC-1 the flags are exactly the approved ones, in order', () => {
+    assert.deepEqual([...PLANNING_TOOL_FLAGS], ['--permission-mode', 'dontAsk', '--allowedTools', ALLOWED, '--disallowedTools', DENIED]);
+  });
+
+  test('#515/AC-1 every denied family is in the deny value, and no MCP server is reachable (mcp__* deny)', () => {
+    const denied = PLANNING_TOOL_FLAGS[PLANNING_TOOL_FLAGS.indexOf('--disallowedTools') + 1]!.split(',');
+    for (const t of DENIED_FAMILIES) assert.ok(denied.includes(t), t);
+    assert.ok(!denied.some((t) => t.startsWith('Bash(git ')), 'all git is one entry, Bash(git:*), not a list of verbs');
+    assert.ok(!PLANNING_TOOL_FLAGS.includes('--strict-mcp-config'), 'the documented mcp__* deny is the choice');
+  });
+
+  test('#515/AC-1 commandFileContent with the restriction: exact string, each flag single-quoted before the prompt', () => {
+    const quoted = PLANNING_TOOL_FLAGS.map((f) => `'${f}'`).join(' ');
+    assert.equal(
+      commandFileContent('/w/app', null, '/d/new-x.prompt', PLANNING_TOOL_FLAGS),
+      `#!/bin/sh\nrm -f -- "$0"\ncd -- '/w/app' || exit 1\nprompt=$(cat -- '/d/new-x.prompt') || exit 1\nrm -f -- '/d/new-x.prompt'\nexec claude ${quoted} -- "$prompt"\n`,
+    );
+    assert.match(quoted, /^'--permission-mode' 'dontAsk' '--allowedTools' 'Read,/);
+  });
+
+  test('without the restriction the .command is byte-identical to before', () => {
+    assert.equal(commandFileContent('/w/app', null, '/d/new-x.prompt'), `#!/bin/sh\nrm -f -- "$0"\ncd -- '/w/app' || exit 1\nprompt=$(cat -- '/d/new-x.prompt') || exit 1\nrm -f -- '/d/new-x.prompt'\nexec claude "$prompt"\n`);
+    assert.ok(!commandFileContent('/w/app', null, '/d/new-x.prompt').includes(' -- "$prompt"'));
+    assert.equal(commandFileContent('/w/app', null, '/d/new-x.prompt', []), commandFileContent('/w/app', null, '/d/new-x.prompt'));
+  });
+
+  test('#515/AC-1 the opener, given a planning prompt, writes a .command with the permission mode and the denied list', async () => {
+    const dir = join(root, 'plan');
+    const runner = fakeRunner();
+    assert.equal(await createTerminalOpener({ dir, platform: 'darwin', runner })({ sessionId: null, cwd: '/w/app', prompt: PLAN }), 'opened');
+    const content = readFileSync(runner.calls[0]!.args[0]!, 'utf8');
+    assert.ok(content.includes("'--permission-mode' 'dontAsk'"));
+    assert.ok(content.includes(`'--disallowedTools' '${DENIED}'`));
+    assert.match(content, /'--disallowedTools' '[^']*' -- "\$prompt"\n$/);
+  });
+
+  test('another prompt (execution, plain) gets no restriction', async () => {
+    for (const prompt of [executionPrompt({ repo: 'acme/app', number: 1, steps: [2, 3] }), 'just a prompt']) {
+      const dir = join(root, `other-${randomUUID()}`);
+      const runner = fakeRunner();
+      await createTerminalOpener({ dir, platform: 'darwin', runner })({ sessionId: null, cwd: '/w/app', prompt });
+      const content = readFileSync(runner.calls[0]!.args[0]!, 'utf8');
+      assert.ok(!content.includes('--permission-mode') && !content.includes('--allowedTools') && !content.includes('--disallowedTools'));
+      assert.match(content, /\nexec claude "\$prompt"\n$/);
+    }
+  });
+
+  test('#515/AC-2 the allowed list keeps reading the issue and creating Plan sub-issues; the denied list blocks edits', () => {
+    const allowed = PLANNING_TOOL_FLAGS[PLANNING_TOOL_FLAGS.indexOf('--allowedTools') + 1]!.split(',');
+    const denied = PLANNING_TOOL_FLAGS[PLANNING_TOOL_FLAGS.indexOf('--disallowedTools') + 1]!.split(',');
+    for (const t of ['Read', 'Skill', 'Agent', 'Bash(gh issue view:*)', 'Bash(gh issue list:*)', 'Bash(gh issue create:*)', 'Bash(gh issue edit:*)', 'Bash(gh api:*)']) assert.ok(allowed.includes(t), t);
+    for (const t of ['Edit', 'Write', 'NotebookEdit']) assert.ok(denied.includes(t), t);
+    assert.ok(!allowed.some((t) => denied.includes(t)), 'no tool is both allowed and denied');
+  });
+
+  test('#515/AC-1 run for real: claude gets the flags in order, then the planning prompt as the last single argument', async () => {
+    const dir = join(root, 'real');
+    const bin = join(root, 'bin');
+    const out = join(root, 'argv.txt');
+    mkdirSync(bin);
+    writeFileSync(join(bin, 'claude'), `#!/bin/sh\nprintf '%s' "$#" > '${out}.count'\nfor a in "$@"; do printf '%s\\0' "$a"; done > '${out}'\n`, { mode: 0o755 });
+    const work = join(root, 'work');
+    mkdirSync(work);
+    const hostile = `${PLAN}\n$(touch ${join(root, 'hit')}) \`touch ${join(root, 'hit2')}\` it's`;
+    const runner = fakeRunner();
+    await createTerminalOpener({ dir, platform: 'darwin', runner })({ sessionId: null, cwd: work, prompt: hostile });
+    execFileSync('/bin/sh', [runner.calls[0]!.args[0]!], { env: { ...process.env, PATH: `${bin}:${process.env.PATH}` } });
+    assert.equal(readFileSync(`${out}.count`, 'utf8'), '8');
+    const argv = readFileSync(out, 'utf8').split('\0').slice(0, -1);
+    assert.deepEqual(argv.slice(0, 6), [...PLANNING_TOOL_FLAGS]);
+    assert.equal(argv[6], '--');
+    assert.equal(argv[7], hostile.replace(/\n+$/, ''));
+    assert.deepEqual(readdirSync(root).filter((n) => n.startsWith('hit')), [], 'nothing from the prompt ran');
+  });
+});
+
+describe('#515 a planning session resumed in the terminal keeps the restriction', () => {
+  const root = mkdtempSync(join(tmpdir(), 'ahrena-resume-515-'));
+  after(() => rmSync(root, { recursive: true, force: true }));
+  const quoted = PLANNING_TOOL_FLAGS.map((f) => `'${f}'`).join(' ');
+
+  test('#515/AC-1 commandFileContent resuming with the restriction: --resume first, then the quoted flags, nothing after', () => {
+    assert.equal(commandFileContent('/w/app', ID, undefined, PLANNING_TOOL_FLAGS), `#!/bin/sh\nrm -f -- "$0"\ncd -- '/w/app' || exit 1\nexec claude --resume ${ID} ${quoted}\n`);
+  });
+
+  test('#515/AC-1 macOS: the opener, given planning, writes the flags into the resume .command', async () => {
+    const dir = join(root, 'mac');
+    const runner = fakeRunner();
+    assert.equal(await createTerminalOpener({ dir, platform: 'darwin', runner })({ sessionId: ID, cwd: '/w/app', planning: true }), 'opened');
+    assert.equal(readFileSync(runner.calls[0]!.args[0]!, 'utf8'), `#!/bin/sh\nrm -f -- "$0"\ncd -- '/w/app' || exit 1\nexec claude --resume ${ID} ${quoted}\n`);
+  });
+
+  test('#515/AC-1 Linux: a planning resume is unsupported and spawns nothing (the emulator may re-parse the flags through a shell, as in #507)', async () => {
+    const runner = fakeRunner();
+    const open = createTerminalOpener({ dir: join(root, 'lin'), platform: 'linux', runner, findExecutable: async () => '/usr/bin/x-terminal-emulator' });
+    assert.equal(await open({ sessionId: ID, cwd: '/w/app', planning: true }), 'unsupported');
+    assert.deepEqual(runner.calls, []);
+  });
+
+  test('resuming any other session is byte-identical to before', async () => {
+    const runner = fakeRunner();
+    await createTerminalOpener({ dir: join(root, 'plain'), platform: 'darwin', runner })({ sessionId: ID, cwd: '/w/app' });
+    assert.equal(readFileSync(runner.calls[0]!.args[0]!, 'utf8'), `#!/bin/sh\nrm -f -- "$0"\ncd -- '/w/app' || exit 1\nexec claude --resume ${ID}\n`);
+    const lin = fakeRunner();
+    await createTerminalOpener({ dir: join(root, 'plain2'), platform: 'linux', runner: lin, findExecutable: async () => '/usr/bin/x' })({ sessionId: ID, cwd: '/w/app', planning: false });
+    assert.deepEqual(lin.calls[0]!.args, ['-e', 'claude', '--resume', ID]);
+  });
+
+  test('planning on a new session without a prompt is refused to carry flags: no flags without a resume or a planning prompt', () => {
+    assert.equal(commandFileContent('/w/app', null), `#!/bin/sh\nrm -f -- "$0"\ncd -- '/w/app' || exit 1\nexec claude\n`);
   });
 });
 

@@ -11,6 +11,7 @@ import { repoKey } from '../dev-console/model.ts';
 import { gitLocator, type LocateFolder } from '../dev-console/sessions.ts';
 import { LIVE_STATES, type FleetReader, type FleetSession } from '../mcp/fleet.ts';
 import type { SessionEvent } from '../model.ts';
+import type { StoragePort } from '../storage-port.ts';
 import { issueOfPrompt, type WorkSessionLink, type WorkSessionState, type WorkSessions } from './work-board.ts';
 import { executionKeyOfPrompt } from './work-execution.ts';
 import { planningKeyOfPrompt } from './work-plan.ts';
@@ -96,18 +97,23 @@ export class FleetWorkSessions implements WorkSessions {
   private async firstPrompt(sessionId: string): Promise<string | null> {
     const hit = this.firstPrompts.get(sessionId);
     if (hit !== undefined) return hit;
-    let cursor: string | null = null;
-    for (let page = 0; page < PROMPT_SCAN_PAGES; page++) {
-      const events = await this.fleet.storage.listEvents(sessionId, { limit: PROMPT_SCAN_PAGE_SIZE, cursor });
-      for (const e of events.items) {
-        const text = PROMPT_TYPES.has(e.type) ? promptText(e) : null;
-        if (text === null) continue;
-        this.firstPrompts.set(sessionId, text);
-        return text;
-      }
-      cursor = events.nextCursor;
-      if (!cursor) break;
-    }
-    return null;
+    const text = await firstPromptOfSession(this.fleet.storage, sessionId);
+    if (text !== null) this.firstPrompts.set(sessionId, text);
+    return text;
   }
+}
+
+/** #465 #515 the text of a session's first prompt, scanning its first events; `null` when none is found. */
+export async function firstPromptOfSession(storage: Pick<StoragePort, 'listEvents'>, sessionId: string): Promise<string | null> {
+  let cursor: string | null = null;
+  for (let page = 0; page < PROMPT_SCAN_PAGES; page++) {
+    const events = await storage.listEvents(sessionId, { limit: PROMPT_SCAN_PAGE_SIZE, cursor });
+    for (const e of events.items) {
+      const text = PROMPT_TYPES.has(e.type) ? promptText(e) : null;
+      if (text !== null) return text;
+    }
+    cursor = events.nextCursor;
+    if (!cursor) break;
+  }
+  return null;
 }
