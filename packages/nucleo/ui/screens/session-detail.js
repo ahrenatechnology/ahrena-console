@@ -560,8 +560,8 @@ function tokenFlow(k) {
  */
 function node(g, sessionAttention = null, sessionId = null, depth = g.type === 'main' ? 0 : 1) {
   const end = g.end ? Date.parse(g.end) : Date.now();
-  // A subagent is named by its `agentType` and described by its `description` (issue 540, the list of issue 529); a
-  // list that predates them gives `name` and `task`, which is what the row showed before.
+  // A subagent is named by its `agentType` and described by its `description` (issue 540, the list of issue 529).
+  // A list that predates them gives `name` and `task`, which is what the row showed before (issue 540).
   const { short, full } = g.type === 'main' ? { short: g.name, full: null } : subagentNodeName(g.agentType ?? g.description ?? g.name);
   const sub =
     g.type === 'main'

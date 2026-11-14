@@ -1,7 +1,7 @@
 // End-to-end skeleton of the agent view (#521, parent #518); data from #529.
 // The components layer (#538) turned the Agents tab row and loop node tests green; the state layer (#539) turned every scenario that
 // mounts the screen over a fake read in the shape of #529 green; the contract layer (#540) registers the route, reads the core's
-// own route and turns the last scenario and the page-level accessibility check green: no `todo` is left.
+// own route and turns the last scenario and the page-level accessibility check green: no `todo` is left (#540).
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import { documentoFalso, ElementoFalso, instalarDomFalso, texto } from './fake-dom.ts';
