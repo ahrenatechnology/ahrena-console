@@ -112,7 +112,6 @@ export class WorkBoardService {
     });
   }
 
-<<<<<<< HEAD
   /**
    * #507 settles every planning run whose issue is on the board against its live planning sessions and its
    * sub-issue total (work-plan.ts), records the change, and returns the card states. The record failing
@@ -145,7 +144,6 @@ export class WorkBoardService {
     if (paused > now) return paused;
     const next = this.nextScheduledRead();
     return next === null ? null : Math.max(next, now);
->>>>>>> origin/main
   }
 
   private async readProject(force: boolean, fromStore: boolean): Promise<ProjectBoard> {
