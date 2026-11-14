@@ -319,10 +319,11 @@ const cardTitle = (card) =>
 
 const pill = (kind, tone, text, extra = '') => el('span', { class: `wb-pill wb-pill-${tone} ${kind}${extra}` }, text);
 
-function cardBadges(card) {
+function cardBadges(card, planning = null) {
   const session = sessionText(card.sessions);
   const p = card.pullRequest;
   const parts = [
+    planning,
     session ? pill('wb-session', card.sessions.state === 'needs-you' ? 'waiting' : card.sessions.state === 'idle' ? 'idle' : 'active', session, ` wb-session-${card.sessions.state ?? 'working'}`) : null,
     p ? el('a', { class: 'wb-pr wb-gh', href: p.url, target: '_blank', rel: 'noopener noreferrer', 'aria-label': `PR ${ref(p.number)} no GitHub` }, icon('git-pull-request'), ref(p.number)) : null,
     p?.ci && CI[p.ci] ? pill('wb-ci', CI[p.ci][1], CI[p.ci][0], ' wb-gh') : null,
@@ -331,17 +332,33 @@ function cardBadges(card) {
   return parts.length ? el('div', { class: 'wb-badges' }, ...parts) : null;
 }
 
-const toneOf = (card) => (!card.blocked ? '' : card.blocked.reason === 'ci-failed' ? ' wb-card-fail' : ' wb-card-attn');
+const toneOf = (card) => (card.planning?.state === 'failed' ? ' wb-card-fail' : !card.blocked ? '' : card.blocked.reason === 'ci-failed' ? ' wb-card-fail' : ' wb-card-attn');
 
-/** A card at the item and plan levels (issue 465, 465-2): data only, no action and no drag handle. */
-export function workCard(card, { chainMode = 'compact', primaryRepo = null, now = Date.now() } = {}) {
-  return el(
+const INTERACTIVE = new Set(['A', 'BUTTON', 'INPUT', 'SELECT', 'TEXTAREA']);
+
+/** A click on the card outside its buttons and links, or Enter on the card itself, opens the detail (issue 467). */
+function opensDetail(node, card, onOpen) {
+  const onControl = (target) => {
+    for (let n = target; n && n !== node; n = n.parentNode) if (INTERACTIVE.has(n.tagName)) return true;
+    return false;
+  };
+  node.addEventListener('click', (ev) => !onControl(ev.target) && onOpen(card));
+  node.addEventListener('keydown', (ev) => ev.key === 'Enter' && ev.target === node && onOpen(card));
+}
+
+/**
+ * A card at the item and plan levels (issue 465, 465-2). `parts` is the planning of the card (`cardPlanParts`, issue 467):
+ * its note, badge and actions; `onOpen` opens the detail and `selected` marks the open one.
+ */
+export function workCard(card, { chainMode = 'compact', primaryRepo = null, now = Date.now(), parts = null, onOpen = null, selected = false } = {}) {
+  const node = el(
     'article',
     { class: `card wb-card${toneOf(card)}`, 'data-key': card.key, 'data-column': card.column },
     cardTop(card, { primaryRepo, now, withAge: false }),
     cardTitle(card),
     chainNode(card, chainMode),
     reasonNode(card.blocked),
+    parts?.note ?? null,
     el(
       'div',
       { class: 'wb-data' },
@@ -349,8 +366,16 @@ export function workCard(card, { chainMode = 'compact', primaryRepo = null, now 
       card.plan && PLAN_COLUMNS.has(card.column) ? el('span', { class: 'wb-plan wb-gh' }, icon('list-checks'), planText(card.plan)) : null,
       ageNode(card, now),
     ),
-    cardBadges(card),
+    cardBadges(card, parts?.badge ?? null),
+    parts?.actions ?? null,
   );
+  if (selected) node.setAttribute('data-selected', '');
+  if (onOpen) {
+    node.setAttribute('tabindex', '0');
+    node.setAttribute('data-openable', '');
+    opensDetail(node, card, onOpen);
+  }
+  return node;
 }
 
 function childrenReason(blocked = {}) {
