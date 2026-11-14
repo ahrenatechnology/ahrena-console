@@ -5,7 +5,8 @@
 // The styles are in `work-board-issue-panel.css` (classes `wb-panel-`).
 
 import { el, icon } from '../dom.js';
-import { COLUMNS, TYPE_LABELS, cardAge, formatAgo, typeLabel } from './work-board-parts.js';
+import { loading, errorBand } from '../states.js';
+import { COLUMNS, TYPE_LABELS, cardAge, formatAgo, staleBand, typeLabel } from './work-board-parts.js';
 
 const ref = (n) => `#${n}`;
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
@@ -131,29 +132,51 @@ function commentsSection(issue, now) {
   return section('comments', 'Comentários', heading(`Comentários · ${total}`), ...items, more);
 }
 
+/** The header every state of the panel keeps (type, number, column and age, "Abrir no GitHub", close). */
+function panelHead({ card, number, url, now, onClose }) {
+  const column = COLUMNS.find((c) => c.id === card?.column)?.label ?? null;
+  const age = cardAge(card, now);
+  return el(
+    'div',
+    { class: 'wb-panel-head' },
+    el('span', { class: `wb-type wb-type-${TYPE_LABELS[card?.type] ? card.type : 'other'}` }, typeLabel(card)),
+    el('span', { class: 'wb-number mono' }, ref(number)),
+    column ? pill('idle', age ? `${column} · ${age}` : column) : null,
+    url ? el('a', { class: 'btn outline sm icon-only wb-panel-github', href: url, target: '_blank', rel: 'noopener noreferrer', 'aria-label': 'Abrir no GitHub', title: 'Abrir no GitHub' }, icon('external')) : null,
+    el('button', { type: 'button', class: `btn ghost sm icon-only${url ? '' : ' wb-panel-github'}`, 'data-action': 'close', 'aria-label': 'Fechar o detalhe', title: 'Fechar o detalhe', onClick: () => onClose?.() }, icon('x')),
+  );
+}
+
+function panelShell({ card, number, url, now, onClose, busy = false }, ...body) {
+  const root = el('aside', { class: 'card wb-panel', role: 'dialog', 'aria-label': `Detalhe da issue ${ref(number)}`, 'aria-busy': busy ? 'true' : null }, panelHead({ card, number, url, now, onClose }), ...body);
+  root.addEventListener('keydown', (ev) => ev.key === 'Escape' && onClose?.());
+  return root;
+}
+
+/** The panel while the issue is read: header and close kept, a skeleton body (467-1). */
+export function issuePanelLoading({ card, now = Date.now(), onClose = null }) {
+  return panelShell({ card, number: card?.number, url: card?.url, now, onClose, busy: true }, loading({ label: 'Carregando a issue', blocks: 2 }));
+}
+
+/** The read failed: header and close kept, the reason in a red band with "Tentar de novo" (467-1). */
+export function issuePanelFailure({ card, reason = null, now = Date.now(), onRetry = null, onClose = null }) {
+  const band = errorBand({ title: 'Não deu para abrir a issue.', text: reason, action: { label: 'Tentar de novo', onClick: () => onRetry?.() } });
+  return panelShell({ card, number: card?.number, url: card?.url, now, onClose }, band);
+}
+
 /**
  * The panel (467-1): header (type, number, column and age, "Abrir no GitHub", close), title, parent chain, the planning
  * parts, description, plan, PR with CI and review, details and comments. `parts` is `cardPlanParts(card, handlers)`.
+ * A stale read (`issue.stale`) shows the stale band, with "Tentar agora" calling `onRetry`.
  */
-export function issuePanel({ card, issue, now = Date.now(), parts = null, onClose = null }) {
-  const column = COLUMNS.find((c) => c.id === card?.column)?.label ?? null;
-  const age = cardAge(card, now);
+export function issuePanel({ card, issue, now = Date.now(), parts = null, onRetry = null, onClose = null }) {
   const acts = [parts?.badge, parts?.note, parts?.actions].filter(Boolean);
   const chain = issue.parents?.length
     ? el('p', { class: 'wb-panel-chain' }, `${issue.parents.map((p) => `${ref(p.number)} ${p.title}`).join(' › ')} › `, el('b', {}, ref(issue.number)))
     : null;
-  const root = el(
-    'aside',
-    { class: 'card wb-panel', role: 'dialog', 'aria-label': `Detalhe da issue ${ref(issue.number)}`, 'data-key': issue.key },
-    el(
-      'div',
-      { class: 'wb-panel-head' },
-      el('span', { class: `wb-type wb-type-${TYPE_LABELS[card?.type] ? card.type : 'other'}` }, typeLabel(card)),
-      el('span', { class: 'wb-number mono' }, ref(issue.number)),
-      column ? pill('idle', age ? `${column} · ${age}` : column) : null,
-      el('a', { class: 'btn outline sm icon-only wb-panel-github', href: issue.url, target: '_blank', rel: 'noopener noreferrer', 'aria-label': 'Abrir no GitHub', title: 'Abrir no GitHub' }, icon('external')),
-      el('button', { type: 'button', class: 'btn ghost sm icon-only', 'data-action': 'close', 'aria-label': 'Fechar o detalhe', title: 'Fechar o detalhe', onClick: () => onClose?.() }, icon('x')),
-    ),
+  const root = panelShell(
+    { card, number: issue.number, url: issue.url, now, onClose },
+    issue.stale ? staleBand({ fetchedAt: issue.fetchedAt, now, reason: issue.staleReason, subject: 'issue', onRetry }) : null,
     el('h2', { class: 'wb-panel-title' }, issue.title),
     chain,
     acts.length ? el('div', { class: 'wb-panel-acts' }, ...acts) : null,
@@ -163,7 +186,7 @@ export function issuePanel({ card, issue, now = Date.now(), parts = null, onClos
     detailsSection(card, issue),
     commentsSection(issue, now),
   );
-  root.addEventListener('keydown', (ev) => ev.key === 'Escape' && onClose?.());
+  root.setAttribute('data-key', issue.key);
   return root;
 }
 

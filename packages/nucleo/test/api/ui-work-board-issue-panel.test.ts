@@ -16,6 +16,8 @@ import {
 } from '../../ui/screens/work-board-plan.js';
 import {
   issuePanel,
+  issuePanelFailure,
+  issuePanelLoading,
   issuePanelStage,
   // @ts-expect-error: browser module, plain JavaScript
 } from '../../ui/screens/work-board-issue-panel.js';
@@ -547,6 +549,57 @@ describe('the issue panel (467-1)', () => {
     assert.equal(first, board);
     assert.equal(scrim!.getAttribute('aria-hidden'), 'true');
     assert.equal(last, panel);
+  });
+});
+
+describe('the panel while it loads, when it fails and when it is stale (467-1, decisions 1 and 2)', () => {
+  test('loading keeps the header and the close button and shows a skeleton body', () => {
+    let closed = 0;
+    const root = issuePanelLoading({ card: card(509), now: NOW, onClose: () => (closed += 1) });
+    assert.equal(root.tagName, 'ASIDE');
+    assert.equal(root.getAttribute('role'), 'dialog');
+    assert.equal(root.getAttribute('aria-label'), 'Detalhe da issue #509');
+    assert.equal(root.getAttribute('aria-busy'), 'true');
+    const head = texto(one(root, '.wb-panel-head'));
+    for (const part of ['História', '#509', 'Planejamento · há 3 h']) assert.ok(head.includes(part), part);
+    assert.ok(all(root, '.bone').length > 0, 'a skeleton body');
+    assert.equal(all(root, '[data-action="plan"]').length, 0, 'no action before the issue is read');
+    click(one(root, '[data-action="close"]'));
+    key(root, 'Escape');
+    assert.equal(closed, 2);
+  });
+
+  test('a failed read shows the reason in a red band with Tentar de novo, header and close kept', () => {
+    let retried = 0;
+    let closed = 0;
+    const root = issuePanelFailure({ card: card(509), now: NOW, reason: 'O GitHub não respondeu', onRetry: () => (retried += 1), onClose: () => (closed += 1) });
+    assert.equal(root.getAttribute('aria-label'), 'Detalhe da issue #509');
+    const band = one(root, '.error-band');
+    assert.equal(band.getAttribute('role'), 'alert');
+    assert.ok(texto(band).includes('O GitHub não respondeu'));
+    const retry = one(root, '.error-band button');
+    assert.equal(texto(retry), 'Tentar de novo');
+    click(retry);
+    click(one(root, '[data-action="close"]'));
+    assert.deepEqual([retried, closed], [1, 1]);
+    assert.equal(all(root, '.bone').length, 0);
+  });
+
+  test('a failed read with no reason still names the failure', () => {
+    const root = issuePanelFailure({ card: card(509), now: NOW });
+    assert.ok(texto(one(root, '.error-band')).length > 'Tentar de novo'.length);
+  });
+
+  test('a stale issue shows the stale band "Mostrando a issue de HH:MM" under the header, with Tentar agora', () => {
+    let retried = 0;
+    const fetchedAt = new Date(2026, 10, 13, 22, 5).getTime();
+    const root = issuePanel({ card: card(509), issue: issue(509, { stale: true, staleReason: 'rate-limit', fetchedAt }), now: NOW, onRetry: () => (retried += 1) });
+    const band = one(root, '.wb-stale-band');
+    assert.ok(texto(band).includes('Mostrando a issue de 22:05'), texto(band));
+    assert.ok(!texto(band).includes('quadro'), 'it is the issue, not the board');
+    click(one(band, '[data-action="retry"]'));
+    assert.equal(retried, 1);
+    assert.equal(all(issuePanel({ card: card(509), issue: issue(509), now: NOW }), '.wb-stale-band').length, 0);
   });
 });
 

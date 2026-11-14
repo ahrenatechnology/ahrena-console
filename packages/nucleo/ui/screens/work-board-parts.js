@@ -512,9 +512,10 @@ export function githubDownReason(code) {
 }
 
 /** The stale band (issue 465, ADR-0001): the board is from `fetchedAt`, why, when the core tries again (`retryAt`, epoch ms, issue 496), and Tentar agora (`onRetry`). */
-export function staleBand({ fetchedAt = null, now = Date.now(), reason = null, retryAt = null, busy = false, onRetry = null } = {}) {
+export function staleBand({ fetchedAt = null, now = Date.now(), reason = null, retryAt = null, busy = false, subject = 'board', onRetry = null } = {}) {
   const when = formatClock(fetchedAt);
-  const from = when ? `Mostrando o quadro de ${when} (${formatAgo(fetchedAt, now)}).` : 'Mostrando o último quadro lido.';
+  const issue = subject === 'issue';
+  const from = when ? `Mostrando ${issue ? 'a issue' : 'o quadro'} de ${when} (${formatAgo(fetchedAt, now)}).` : `Mostrando ${issue ? 'a última issue lida' : 'o último quadro lido'}.`;
   const retry = Number.isFinite(retryAt) ? ` Tentamos de novo em ${Math.max(1, Math.round((retryAt - now) / 60_000))} min.` : '';
   const why = reason ? ` Motivo: ${githubDownReason(reason)}.` : '';
   return el(
