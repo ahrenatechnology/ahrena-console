@@ -19,7 +19,7 @@
  * (30 reads an hour) that is 90 points per hour per page, the `project` line of ADR-0015's budget.
  */
 
-import { GITHUB_TTL, RateLimitedError, type GithubCache } from './cache.ts';
+import { GITHUB_TTL, RateLimitedError, type GithubCache, type StaleCode } from './cache.ts';
 import { githubGraphql, GithubScopeError, requireGithubToken, resolveGithubToken, type GithubGraphqlSourceOptions } from './github-source.ts';
 import { workKey, type CiState, type LinkedPullRequest, type PullRequestState, type ReviewDecision } from './work.ts';
 
@@ -107,6 +107,8 @@ export interface ProjectBoard {
   fetchedAt: number;
   stale: boolean;
   staleReason: string | null;
+  /** #495 the stable code of `staleReason` (the work board shows it, not the raw text); `null` when not stale. */
+  staleCode: StaleCode | null;
 }
 
 /** Porta da fonte do Project: o adaptador local chama o GitHub; o do hub (7.9) lerá de lá. */
@@ -367,7 +369,7 @@ export class GithubProject {
   /** O quadro, pelo cache (TTL de 2 min). `force` é o botão de atualizar (mínimo de 30 s). */
   async board({ force = false }: { force?: boolean } = {}): Promise<ProjectBoard> {
     const r = await this.cache.get<ProjectBoardValue>(this.key, GITHUB_TTL.project, async () => ({ value: await this.source.board(this.project) }), { force });
-    return this.view(r.value, r.fetchedAt, r.stale, r.staleReason);
+    return this.view(r.value, r.fetchedAt, r.stale, r.staleReason, r.staleCode);
   }
 
   /**
@@ -380,7 +382,8 @@ export class GithubProject {
     const hit = await this.cache.peek<ProjectBoardValue>(this.key);
     if (!hit) return null;
     const old = this.now() - hit.fetchedAt > 2 * GITHUB_TTL.project;
-    return this.view(hit.value, hit.fetchedAt, old, old ? 'o sincronismo em segundo plano ainda não releu o quadro' : null);
+    const code = old ? (this.cache.failure(this.key) ?? 'sync-pending') : null;
+    return this.view(hit.value, hit.fetchedAt, old, old ? 'o sincronismo em segundo plano ainda não releu o quadro' : null, code);
   }
 
   /**
@@ -408,7 +411,7 @@ export class GithubProject {
       items: v.items.map((i) => (i.itemId === moved.itemId ? { ...i, statusId: moved.statusId } : i)),
     }));
     const after = (await this.cache.peek<ProjectBoardValue>(this.key))!;
-    return { ...this.view(after.value, after.fetchedAt, false, null), moved: { itemId: moved.itemId, from, to: moved.statusId } };
+    return { ...this.view(after.value, after.fetchedAt, false, null, null), moved: { itemId: moved.itemId, from, to: moved.statusId } };
   }
 
   /** Quanto falta da pausa por limite do GitHub (0 se não há): o `Retry-After` da API. */
@@ -416,7 +419,7 @@ export class GithubProject {
     return this.cache.pauseLeftMs();
   }
 
-  private view(value: ProjectBoardValue, fetchedAt: number, stale: boolean, staleReason: string | null): ProjectBoard {
+  private view(value: ProjectBoardValue, fetchedAt: number, stale: boolean, staleReason: string | null, staleCode: StaleCode | null): ProjectBoard {
     return {
       owner: this.project.owner,
       number: this.project.number,
@@ -428,6 +431,7 @@ export class GithubProject {
       fetchedAt,
       stale,
       staleReason,
+      staleCode,
     };
   }
 }

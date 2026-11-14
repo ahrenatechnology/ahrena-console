@@ -524,9 +524,9 @@ describe('#466/AC-2 the epic and initiative card (466-1)', () => {
 describe('#465/AC-4 GitHub down (465-4, ADR-0001)', () => {
   test('#465/AC-4 the stale band: reason, when the board is from, Tentar agora calls back', () => {
     let retried = 0;
-    const band = staleBand({ fetchedAt: NOW - 31 * MIN, now: NOW, reason: 'GitHub fora do ar', onRetry: () => retried++ });
+    const band = staleBand({ fetchedAt: NOW - 31 * MIN, now: NOW, reason: 'network', onRetry: () => retried++ });
     assert.equal(band.getAttribute('role'), 'status');
-    assert.match(texto(band), /^GitHub indisponível\. Mostrando o quadro de 22:41 \(há 31 min\)\. As sessões e a fila continuam ao vivo\. Motivo: GitHub fora do ar\./);
+    assert.match(texto(band), /^GitHub indisponível\. Mostrando o quadro de 22:41 \(há 31 min\)\. As sessões e a fila continuam ao vivo\. Motivo: falha de rede ao falar com o GitHub\./);
     buttonNamed(band, /Tentar agora/)!.click();
     assert.equal(retried, 1);
     const busy = staleBand({ fetchedAt: NOW - MIN, now: NOW, reason: null, busy: true, onRetry: () => {} });
@@ -545,10 +545,10 @@ describe('#465/AC-4 GitHub down (465-4, ADR-0001)', () => {
 
   test('#465/AC-4 the first read failed with nothing stored: an alert with the reason and Tentar agora; the columns show "–"', () => {
     let retried = 0;
-    const node = firstReadFailure({ reason: 'o GitHub respondeu 502', onRetry: () => retried++ });
+    const node = firstReadFailure({ reason: 'github-error', onRetry: () => retried++ });
     assert.equal(node.getAttribute('role'), 'alert');
     assert.equal(texto(node.querySelector('h2')), 'Ainda não conseguimos ler o GitHub');
-    assert.match(texto(node), /A primeira leitura falhou \(o GitHub respondeu 502\) e não há quadro guardado para mostrar\./);
+    assert.match(texto(node), /A primeira leitura falhou \(o GitHub respondeu com erro\) e não há quadro guardado para mostrar\./);
     buttonNamed(node, /Tentar agora/)!.click();
     assert.equal(retried, 1);
     const board = boardColumns({ mode: 'blank', counts: '–', now: NOW });

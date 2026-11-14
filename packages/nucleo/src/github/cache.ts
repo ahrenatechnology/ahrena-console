@@ -67,12 +67,34 @@ export class RateLimitedError extends Error {
   }
 }
 
+/** #495 why a GitHub read failed, as a stable English code: the screen translates it, the raw message stays in the log. */
+export type GithubFailure = 'network' | 'rate-limited' | 'no-scope' | 'github-error';
+
+/** #495 why a snapshot is stale: a `GithubFailure`, or 'sync-pending' when the stored board is old with no failure recorded. Never a failure's code. */
+export type StaleCode = GithubFailure | 'sync-pending';
+
 /** Nada no cache e o GitHub falhou; `cause` é o erro da fonte, quando houve um (permissão, limite, rede). */
 export class NoDataError extends Error {
-  constructor(message: string, options?: { cause?: unknown }) {
-    super(message, options);
+  /** #495 the failure code, when the cache knows it. */
+  readonly failure?: GithubFailure;
+  constructor(message: string, options?: { cause?: unknown; failure?: GithubFailure }) {
+    super(message, options?.cause === undefined ? undefined : { cause: options.cause });
     this.name = 'NoDataError';
+    if (options?.failure) this.failure = options.failure;
   }
+}
+
+/**
+ * #495 the failure code of an error, by class and never by message text. The scope errors are matched by
+ * `name`: importing their classes here would be a cycle (github-source.ts and project.ts import this file).
+ */
+export function githubFailureOf(err: unknown): GithubFailure {
+  if (err instanceof RateLimitedError) return 'rate-limited';
+  if (err instanceof NoDataError) return err.failure ?? (err.cause === undefined ? 'github-error' : githubFailureOf(err.cause));
+  const name = err instanceof Error ? err.name : '';
+  if (name === 'GithubScopeError' || name === 'ProjectPermissionError') return 'no-scope';
+  if (err instanceof TypeError || name === 'AbortError' || name === 'TimeoutError') return 'network';
+  return 'github-error';
 }
 
 type HeaderBag = Headers | Record<string, string | undefined>;
@@ -102,6 +124,8 @@ export interface CacheResult<T> {
   fetchedAt: number;
   stale: boolean;
   staleReason: string | null;
+  /** #495 the stable code of `staleReason`; `null` when not stale. */
+  staleCode: StaleCode | null;
 }
 
 export interface GetOptions {
@@ -126,6 +150,8 @@ export class GithubCache {
   private readonly minForcedRefreshMs: number;
   private readonly inflight = new Map<string, Promise<CacheResult<unknown>>>();
   private blockedUntil = 0;
+  /** #495 the code of the last failed read per key; a good read drops it, `clear()` drops all. */
+  private readonly failures = new Map<string, GithubFailure>();
   /** Bumped by `clear()`: a read started before it is neither stored nor served. */
   private generation = 0;
 
@@ -164,7 +190,7 @@ export class GithubCache {
     const hit = (await this.store.get(key)) as CacheEntry<T> | null;
     const age = hit ? this.now() - hit.fetchedAt : Infinity;
     if (hit && age < (force ? Math.min(ttlMs, this.minForcedRefreshMs) : ttlMs)) return fresh(hit);
-    if (this.now() < this.blockedUntil) return this.fallback(hit, 'GitHub limitou as chamadas');
+    if (this.now() < this.blockedUntil) return this.fallback(key, hit, 'GitHub limitou as chamadas', undefined, 'rate-limited');
 
     const generation = this.generation;
     let p = this.inflight.get(key) as Promise<CacheResult<T>> | undefined;
@@ -181,7 +207,7 @@ export class GithubCache {
       return r;
     } catch (err) {
       if (generation !== this.generation) throw err instanceof NoDataError ? err : new NoDataError(IDENTITY_CHANGED, { cause: err });
-      return this.fallback(hit, err instanceof Error ? err.message : String(err), err);
+      return this.fallback(key, hit, err instanceof Error ? err.message : String(err), err);
     }
   }
 
@@ -194,7 +220,13 @@ export class GithubCache {
     this.generation++;
     this.inflight.clear();
     this.blockedUntil = 0;
+    this.failures.clear();
     await this.store.clear();
+  }
+
+  /** #495 the code of the last failed read of `key`, `null` if none since the last good read. */
+  failure(key: string): GithubFailure | null {
+    return this.failures.get(key) ?? null;
   }
 
   /** Lê o que está guardado, sem chamar o GitHub. `null` se não há ou passou de 24 h. */
@@ -228,6 +260,7 @@ export class GithubCache {
       const value = r.notModified ? hit!.value : (r.value as T);
       const entry: CacheEntry<T> = { value, fetchedAt: this.now(), etag: r.etag ?? hit?.etag ?? null };
       await this.store.set(key, entry);
+      if (generation === this.generation) this.failures.delete(key);
       return fresh(entry);
     } catch (err) {
       if (err instanceof RateLimitedError && generation === this.generation) this.blockedUntil = this.now() + err.retryAfterMs;
@@ -235,10 +268,12 @@ export class GithubCache {
     }
   }
 
-  private fallback<T>(hit: CacheEntry<T> | null, reason: string, cause?: unknown): CacheResult<T> {
-    if (!hit || this.now() - hit.fetchedAt > this.maxStaleMs) throw new NoDataError(`sem dados: ${reason}`, cause === undefined ? undefined : { cause });
-    return { value: hit.value, fetchedAt: hit.fetchedAt, stale: true, staleReason: reason };
+  private fallback<T>(key: string, hit: CacheEntry<T> | null, reason: string, cause?: unknown, code?: GithubFailure): CacheResult<T> {
+    const failure = code ?? githubFailureOf(cause);
+    this.failures.set(key, failure);
+    if (!hit || this.now() - hit.fetchedAt > this.maxStaleMs) throw new NoDataError(`sem dados: ${reason}`, { ...(cause === undefined ? {} : { cause }), failure });
+    return { value: hit.value, fetchedAt: hit.fetchedAt, stale: true, staleReason: reason, staleCode: failure };
   }
 }
 
-const fresh = <T>(e: CacheEntry<T>): CacheResult<T> => ({ value: e.value, fetchedAt: e.fetchedAt, stale: false, staleReason: null });
+const fresh = <T>(e: CacheEntry<T>): CacheResult<T> => ({ value: e.value, fetchedAt: e.fetchedAt, stale: false, staleReason: null, staleCode: null });

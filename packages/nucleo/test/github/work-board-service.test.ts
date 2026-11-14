@@ -57,6 +57,7 @@ function projectBoard(items: ProjectCard[], over: Partial<ProjectBoard> = {}): P
     fetchedAt: Date.parse('2026-10-18T11:59:00Z'),
     stale: false,
     staleReason: null,
+    staleCode: null,
     ...over,
   };
 }
@@ -242,9 +243,9 @@ describe('reading the Project (decisions 0001 and 0015)', () => {
   test('#465/AC-4 GitHub down: the board keeps the last data with stale and the reason, while sessions still move the column', async () => {
     const { project, sessions, service } = setup();
     const fetchedAt = Date.parse('2026-10-18T11:00:00Z');
-    project.current = projectBoard([projectCard(500)], { stale: true, staleReason: 'GitHub indisponível', fetchedAt });
+    project.current = projectBoard([projectCard(500)], { stale: true, staleReason: 'GitHub indisponível', staleCode: 'network', fetchedAt });
     const before = await service.board(filters());
-    assert.deepEqual([before.stale, before.staleReason, before.fetchedAt, cardOf(before, 500).column], [true, 'GitHub indisponível', fetchedAt, 'planning']);
+    assert.deepEqual([before.stale, before.staleReason, before.fetchedAt, cardOf(before, 500).column], [true, 'network', fetchedAt, 'planning']);
     sessions.list = [link('s1', 500, 'needs-you')];
     const after = await service.board(filters());
     assert.deepEqual([after.stale, cardOf(after, 500).column, cardOf(after, 500).blocked?.reason], [true, 'blocked', 'needs-you']);
@@ -283,13 +284,23 @@ describe('parents outside the Project', () => {
   test('a failed lookup only makes the board stale, with the reason, and keeps the cards', async () => {
     const { project, parents, service, logged } = setup();
     parents.fail = new Error('rate limited');
-    project.current = projectBoard([projectCard(500, { parent: k(6) })], { stale: true, staleReason: 'dado velho' });
+    project.current = projectBoard([projectCard(500, { parent: k(6) })], { stale: true, staleReason: 'dado velho', staleCode: 'rate-limited' });
     const view = await service.board(filters());
     assert.equal(view.stale, true);
-    assert.equal(view.staleReason, 'dado velho; não deu para ler os pais fora do Project');
-    assert.equal(logged.length, 1);
-    assert.match(logged[0], /rate limited/);
+    assert.equal(view.staleReason, 'rate-limited', 'the Project code wins; the raw text stays in the log');
+    assert.equal(logged.length, 2);
+    assert.ok(logged.some((l) => /dado velho/.test(l)), 'the raw stale reason is logged');
+    assert.ok(logged.some((l) => /rate limited/.test(l)));
     assert.deepEqual(cardOf(view, 500).chain, [{ key: k(6), number: 6, title: null, level: 'epic' }]);
+  });
+
+  test('#495/AC-1 a failed lookup on a fresh Project reports the code of its error, not its text', async () => {
+    const { project, parents, service, logged } = setup();
+    parents.fail = new TypeError('fetch failed');
+    project.current = projectBoard([projectCard(500, { parent: k(6) })]);
+    const view = await service.board(filters());
+    assert.deepEqual([view.stale, view.staleReason], [true, 'network']);
+    assert.match(logged[0], /fetch failed/);
   });
 
   test('without a lookup, a missing parent stays a chain link with no title', async () => {

@@ -9,6 +9,7 @@ import {
   emptyProject,
   filterBar,
   firstReadFailure,
+  githubDownReason,
   levelSwitch,
   noResult,
   staleBand,
@@ -37,7 +38,7 @@ export function errorMessage(error) {
   if (code === 'no-project') return { title: 'Nenhum GitHub Project escolhido.', text: 'O quadro mostra o mesmo Project do Kanban do projeto: escolha um lá e volte aqui.' };
   if (code === 'off') return { title: 'O núcleo subiu sem GitHub.', text: 'Ele foi iniciado com --no-github, então não há quadro para mostrar. Reinicie o núcleo sem essa opção para ver o Quadro do trabalho.' };
   if (code === GITHUB_NOT_CONNECTED) return { title: 'O console não está conectado ao GitHub.', text: 'Conecte em Conexões para ver o quadro.' };
-  if (code === 'github-unavailable') return { title: 'O GitHub não respondeu.', text: error.reason ? `Motivo: ${String(error.reason).replace(/\.+$/, '')}.` : null };
+  if (code === 'github-unavailable') return { title: 'O GitHub não respondeu.', text: error.reason ? `Motivo: ${githubDownReason(error.reason)}.` : null };
   if (!error?.status) return { title: 'Sem conexão com o núcleo.', text: 'O núcleo não respondeu. Veja se ele está rodando e tente de novo.' };
   return { title: 'Não deu para ler o quadro.', text: `O núcleo respondeu ${error.status}.` };
 }

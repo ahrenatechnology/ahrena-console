@@ -13,6 +13,9 @@ import {
   type CachePort,
   type Fetcher,
 } from '../../src/index.ts';
+import { GithubGatewayError, GithubScopeError } from '../../src/github/github-source.ts';
+import { githubFailureOf } from '../../src/github/cache.ts';
+import { ProjectPermissionError } from '../../src/github/project.ts';
 import { clock } from './helpers.ts';
 
 const counter = <T>(value: T) => {
@@ -206,4 +209,73 @@ describe('pausa depois do limite', () => {
   test('x-ratelimit-reset quando acabou o limite', () =>
     assert.equal(backoffMs(new Headers({ 'x-ratelimit-remaining': '0', 'x-ratelimit-reset': String(now / 1000 + 300) }), now), 300_000));
   test('sem nada, 2 min', () => assert.equal(backoffMs({}, now), 120_000));
+});
+
+describe('#495/AC-1 the failure code of a GitHub read', () => {
+  test('#495/AC-1 githubFailureOf classifies by class, never by message text', () => {
+    const net = new TypeError('fetch failed');
+    assert.equal(githubFailureOf(net), 'network');
+    assert.equal(githubFailureOf(Object.assign(new Error('x'), { name: 'AbortError' })), 'network');
+    assert.equal(githubFailureOf(Object.assign(new Error('x'), { name: 'TimeoutError' })), 'network');
+    assert.equal(githubFailureOf(new RateLimitedError('limite', 1000)), 'rate-limited');
+    assert.equal(githubFailureOf(new GithubScopeError('sem escopo')), 'no-scope');
+    assert.equal(githubFailureOf(new ProjectPermissionError('detail')), 'no-scope');
+    assert.equal(githubFailureOf(new GithubGatewayError('502', 502)), 'github-error');
+    assert.equal(githubFailureOf(new Error('fetch failed')), 'github-error', 'a plain Error with network-like text is not a network failure');
+    assert.equal(githubFailureOf('texto'), 'github-error');
+  });
+
+  test('#495/AC-1 a NoDataError carries its failure, else the code of its cause', () => {
+    assert.equal(githubFailureOf(new NoDataError('x', { cause: new TypeError('fetch failed') })), 'network');
+    assert.equal(githubFailureOf(new NoDataError('x', { failure: 'rate-limited' })), 'rate-limited');
+    assert.equal(githubFailureOf(new NoDataError('x')), 'github-error');
+  });
+
+  test('#495/AC-1 the stale result carries staleCode and keeps the raw staleReason', async () => {
+    const now = clock();
+    const cache = new GithubCache({ store: new MemoryCacheStore(), now });
+    await cache.get('k', 1000, counter('bom'));
+    now.add(5000);
+    const r = await cache.get('k', 1000, failing(new TypeError('fetch failed')));
+    assert.deepEqual([r.stale, r.staleCode, r.staleReason], [true, 'network', 'fetch failed']);
+    assert.equal(cache.failure('k'), 'network');
+  });
+
+  test('#495/AC-1 the rate-limit pause answers rate-limited, and a fresh read has no code', async () => {
+    const now = clock();
+    const cache = new GithubCache({ store: new MemoryCacheStore(), now });
+    assert.equal((await cache.get('k', 1000, counter('bom'))).staleCode, null);
+    now.add(2000);
+    await cache.get('k', 1000, failing(new RateLimitedError('limite', 90_000)));
+    now.add(5000);
+    const paused = await cache.get('k', 1000, counter('novo'));
+    assert.deepEqual([paused.stale, paused.staleCode], [true, 'rate-limited']);
+  });
+
+  test('#495/AC-1 no data: the NoDataError carries the code, the cause stays the source error', async () => {
+    const cache = new GithubCache({ store: new MemoryCacheStore() });
+    const cause = new TypeError('fetch failed');
+    await assert.rejects(cache.get('k', 1000, failing(cause)), (e) => e instanceof NoDataError && e.failure === 'network' && e.cause === cause);
+    await assert.rejects(cache.get('p', 1000, failing(new RateLimitedError('l', 60_000))), (e) => e instanceof NoDataError && e.failure === 'rate-limited');
+    await assert.rejects(cache.get('q', 1000, counter('x')), (e) => e instanceof NoDataError && e.failure === 'rate-limited', 'the pause path');
+  });
+
+  test('#495/AC-1 failure(key) is recorded per key, dropped by a good read and by clear()', async () => {
+    const now = clock();
+    const cache = new GithubCache({ store: new MemoryCacheStore(), now });
+    assert.equal(cache.failure('k'), null);
+    await cache.get('k', 1000, counter('bom'));
+    now.add(5000);
+    await cache.get('k', 1000, failing(new GithubScopeError('x')));
+    assert.equal(cache.failure('k'), 'no-scope');
+    assert.equal(cache.failure('other'), null);
+    now.add(5000);
+    await cache.get('k', 1000, counter('novo'));
+    assert.equal(cache.failure('k'), null);
+    now.add(5000);
+    await cache.get('k', 1000, failing(new Error('caiu')));
+    assert.equal(cache.failure('k'), 'github-error');
+    await cache.clear();
+    assert.equal(cache.failure('k'), null);
+  });
 });

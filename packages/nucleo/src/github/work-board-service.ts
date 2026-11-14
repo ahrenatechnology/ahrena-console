@@ -1,11 +1,12 @@
 /*
  * #465 #466 the work board use case: loads the Project, the parents outside it, the linked sessions and
  * the queue, records each node's column in the history, and hands everything to the pure `buildWorkBoard`.
- * ADR-0001 GitHub down keeps the last data: `stale`, `staleReason` and `fetchedAt` come from the Project
+ * ADR-0001 GitHub down keeps the last data: `stale`, `staleReason` (a code, #495) and `fetchedAt` come from the Project
  * read. Sessions and the queue are local and read live on every call, so a card still moves while GitHub
  * is out.
  */
 
+import { githubFailureOf, NoDataError, type GithubFailure } from './cache.ts';
 import type { ProjectBoard, ProjectCard } from './project.ts';
 import {
   analyzeWorkNodes,
@@ -34,9 +35,6 @@ export interface WorkBoardServiceOptions {
   /** #465 the raw error of a failed parent lookup goes here; the board only says it could not read them. */
   log?: (message: string) => void;
 }
-
-/** On-screen reason (pt-BR) when the parents outside the Project could not be read. */
-export const PARENTS_UNAVAILABLE_REASON = 'não deu para ler os pais fora do Project';
 
 export interface WorkBoardReadOptions {
   /** #465 the refresh button: re-reads GitHub (ADR-0001, the cache keeps its 30 s floor). */
@@ -73,7 +71,9 @@ export class WorkBoardService {
     const now = this.now();
     const analyzed = analyzeWorkNodes(nodes, sessions, queue);
     const since = await this.history.observe(columnObservations(analyzed, now));
-    const reasons = [read.stale ? (read.staleReason ?? 'dado velho') : null, reason].filter((r): r is string => r !== null);
+    // #495 the screen gets a code; the raw text of the stale read goes to the log.
+    if (read.stale && read.staleReason) this.log(`work board: stale read: ${read.staleReason}`);
+    const staleReason = read.stale ? (read.staleCode ?? 'github-error') : reason;
     return buildWorkBoard({
       project: { owner: read.owner, number: read.number, title: read.title, url: read.url },
       statuses: statusOptions(read),
@@ -86,21 +86,27 @@ export class WorkBoardService {
       analyzed,
       now,
       fetchedAt: read.fetchedAt,
-      stale: reasons.length > 0,
-      staleReason: reasons.length ? reasons.join('; ') : null,
+      stale: staleReason !== null,
+      staleReason,
     });
   }
 
   private async readProject(force: boolean, fromStore: boolean): Promise<ProjectBoard> {
     const stored = fromStore && !force ? await this.project.snapshot?.() : null;
-    return stored ?? this.project.board({ force });
+    try {
+      return stored ?? (await this.project.board({ force }));
+    } catch (err) {
+      // #495 the route answers the code; the raw message stays here.
+      if (err instanceof NoDataError) this.log(`work board: no data: ${err.message}`);
+      throw err;
+    }
   }
 
   /**
    * #465 one batched lookup for the parents the Project cites but does not hold, ancestors included. Its
    * failure never fails the board: the chain keeps those links without a title and the board says why.
    */
-  private async resolveParents(nodes: readonly WorkBoardNode[]): Promise<{ nodes: WorkBoardNode[]; reason: string | null }> {
+  private async resolveParents(nodes: readonly WorkBoardNode[]): Promise<{ nodes: WorkBoardNode[]; reason: GithubFailure | null }> {
     const known = new Set(nodes.map((n) => n.key));
     const missing = [...new Set(nodes.flatMap((n) => (n.parent && !known.has(n.parent) ? [n.parent] : [])))];
     if (!missing.length || !this.parents) return { nodes: [], reason: null };
@@ -109,7 +115,7 @@ export class WorkBoardService {
       return { nodes: found.filter((n) => !known.has(n.key)).map(nodeOutsideProject), reason: null };
     } catch (err) {
       this.log(`work board: parent lookup failed: ${err instanceof Error ? err.message : String(err)}`);
-      return { nodes: [], reason: PARENTS_UNAVAILABLE_REASON };
+      return { nodes: [], reason: githubFailureOf(err) };
     }
   }
 }
