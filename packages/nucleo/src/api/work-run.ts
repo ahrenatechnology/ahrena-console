@@ -176,7 +176,12 @@ export function createWorkRunRoute(o: WorkRunRouteDeps | null): WorkRunRoute {
     if (!opening.opened) return send(res, opening.status, opening.body);
     await o.runs.save({ key: key.toLowerCase(), target, startedAt, state: 'booting', sessionId: null, finishedAt: null });
     // #477 an item that was queued leaves the queue once its session opened: it is running now, the queue must not pull it again.
-    await o.queue?.remove(key);
+    try {
+      await o.queue?.remove(key);
+    } catch (err) {
+      // the session is open and the run recorded: the answer stays 200, the entry stays, so a puller must skip an issue that already runs (#477 L2)
+      log(`work run: could not take ${key} out of the queue: ${err instanceof Error ? err.message : String(err)}`);
+    }
     log(`work run: execution session opened in ${target} for ${key}`);
     return send(res, 200, { ok: true, opened: target, key });
   };

@@ -323,6 +323,17 @@ describe('#531 POST /api/work/run', () => {
       }
     });
 
+    test('#477/AC-2 when the queue cannot be written after the session opened, the answer is still 200 and the run is recorded', async () => {
+      fresh();
+      const live = await startApi({ workRun: { trust: trustOf('acme'), issues: { issue: async () => current as WorkIssueResult }, runs, running: { runningCount: async () => running }, queue: { remove: async () => { throw new Error('database is locked'); } }, git, now: () => clock } });
+      try {
+        assert.equal((await post(body, {}, live)).status, 200);
+        assert.equal((await runs.get('acme/app#412'))?.state, 'booting');
+      } finally {
+        await live.close();
+      }
+    });
+
     test('#477/AC-2 a card that is not queued runs as before', async () => {
       fresh();
       const queue = new SqliteWorkQueue(storage.db);
