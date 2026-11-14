@@ -249,7 +249,6 @@ export function staleOrganizations(organizations = []) {
   return organizations.filter((o) => o.state === 'failed' && isSet(o.readAt)).map((o) => o.login);
 }
 
-/** "a, b e c". */
 const joinNames = (names) => (names.length < 2 ? names.join('') : `${names.slice(0, -1).join(', ')} e ${names.at(-1)}`);
 
 // issue 610: the line under the title when the board spans organizations: the count, the names, "N com aviso".
@@ -811,19 +810,24 @@ function warningBand(org, { now, busy, onAction }) {
 
 /**
  * The warnings of the organizations that restrict the app, ask for SSO or failed to read (issue 610, 598-3): one band each,
- * the first three, then "Mais N organizações com aviso". `null` with none, and with GitHub down (`githubDown`), whose one band
- * is `staleBand`. `onAction(action, organization)`: `approve`, `request`, `sso` or `retry`.
+ * the first three, then the toggle "Mais N organizações com aviso" (a button, `aria-expanded`); `expanded` renders every band
+ * and the toggle reads "Mostrar menos". `null` with none, and with GitHub down (`githubDown`), whose one band is `staleBand`.
+ * `onAction(action, organization)`: `approve`, `request`, `sso`, `retry`, and `more` (no organization) for the toggle.
  */
-export function orgWarnings({ organizations = [], githubDown = false, now = Date.now(), busy = false, onAction = null } = {}) {
+export function orgWarnings({ organizations = [], githubDown = false, now = Date.now(), busy = false, expanded = false, onAction = null } = {}) {
   const list = githubDown ? [] : organizations.filter((o) => !isRead(o));
   if (!list.length) return null;
   const more = list.length - MAX_WARNING_BANDS;
-  return el(
-    'div',
-    { class: 'wb-warns' },
-    ...list.slice(0, MAX_WARNING_BANDS).map((o) => warningBand(o, { now, busy, onAction })),
-    more > 0 ? el('span', { class: 'wb-warns-more' }, icon('chevron-down'), `Mais ${plural(more, 'organização', 'organizações')} com aviso`) : null,
-  );
+  const toggle =
+    more > 0
+      ? el(
+          'button',
+          { type: 'button', class: 'wb-warns-more', 'data-action': 'more', 'aria-expanded': expanded ? 'true' : 'false', onClick: () => onAction?.('more') },
+          icon('chevron-down'),
+          expanded ? 'Mostrar menos' : `Mais ${plural(more, 'organização', 'organizações')} com aviso`,
+        )
+      : null;
+  return el('div', { class: 'wb-warns' }, ...(expanded ? list : list.slice(0, MAX_WARNING_BANDS)).map((o) => warningBand(o, { now, busy, onAction })), toggle);
 }
 
 /**

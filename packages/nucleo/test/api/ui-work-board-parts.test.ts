@@ -692,7 +692,7 @@ describe('#465/AC-5 English internals, pt-BR on screen (ADR-0009)', () => {
   });
 });
 
-// issue 610 (598-1 to 598-4): the components of the work board over every organization, in the fake DOM.
+// #610 (598-1 to 598-4): the components of the work board over every organization, in the fake DOM.
 const proj = (owner: string, number: number, title: string) => ({ owner, number, title });
 const PLATFORM = proj('acme-labs', 3, 'Plataforma');
 const MOBILE = proj('acme-labs', 4, 'Mobile');
@@ -951,6 +951,41 @@ describe('#610/AC-3 the organization warnings (598-3)', () => {
     assert.equal(texto(root!.querySelector('.wb-warns-more')), 'Mais 2 organizações com aviso');
     assert.equal(bands([...ORGS, ...FIVE.slice(0, 3)])!.querySelector('.wb-warns-more'), null, 'exactly three show no "Mais"');
     assert.equal(texto(bands([...ORGS, ...FIVE.slice(0, 4)])!.querySelector('.wb-warns-more')), 'Mais 1 organização com aviso');
+  });
+
+  test('#610/AC-3 "Mais N" is a button that asks to expand, collapsed it is not pressed', () => {
+    const asked: unknown[][] = [];
+    const root = bands([...ORGS, ...FIVE], { onAction: (...args: unknown[]) => asked.push(args) });
+    const more = root!.querySelector('.wb-warns-more')!;
+    assert.equal(more.tagName.toLowerCase(), 'button');
+    assert.equal(more.getAttribute('type'), 'button');
+    assert.equal(more.getAttribute('data-action'), 'more');
+    assert.equal(more.getAttribute('aria-expanded'), 'false');
+    more.click();
+    assert.deepEqual(asked, [['more']]);
+  });
+
+  test('#610/AC-3 expanded: every band renders and the toggle offers "Mostrar menos"', () => {
+    const asked: unknown[][] = [];
+    const root = bands([...ORGS, ...FIVE], { expanded: true, onAction: (...args: unknown[]) => asked.push(args) });
+    assert.equal(root!.children.filter((c) => c.classList.contains('wb-warn-band')).length, 5);
+    const toggle = root!.querySelector('.wb-warns-more')!;
+    assert.equal(toggle.getAttribute('aria-expanded'), 'true');
+    assert.equal(toggle.getAttribute('data-action'), 'more');
+    assert.equal(texto(toggle), 'Mostrar menos');
+    toggle.click();
+    assert.deepEqual(asked, [['more']]);
+    assert.equal(bands([...ORGS, ...FIVE.slice(0, 3)], { expanded: true })!.querySelector('.wb-warns-more'), null, 'three or fewer have no toggle even expanded');
+  });
+
+  test('#610/AC-3 the toggle is a named, keyboard-reachable control', () => {
+    for (const expanded of [false, true]) {
+      const toggle = bands([...ORGS, ...FIVE], { expanded })!.querySelector('.wb-warns-more')!;
+      assert.ok(texto(toggle).trim().length > 0, 'it has an accessible name');
+      assert.equal(toggle.hasAttribute('disabled'), false);
+      assert.equal(toggle.hasAttribute('tabindex'), false, 'a native button needs no tabindex');
+      assert.match(toggle.getAttribute('aria-expanded') ?? '', /^(true|false)$/);
+    }
   });
 
   test('#610/AC-3 no warning, no component; GitHub down shows none per organization', () => {
