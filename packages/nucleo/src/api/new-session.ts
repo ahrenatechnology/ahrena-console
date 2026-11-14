@@ -67,9 +67,13 @@ export function newSessionCommand(folder: string): string | null {
   return isUsableCwd(folder) ? `cd ${shellQuote(folder)} && claude` : null;
 }
 
-/** The Claude Desktop's address for a new Code session in the folder. */
-export function desktopNewSessionUrl(folder: string): string {
-  return `claude://code/new?folder=${encodeURIComponent(folder)}`;
+/**
+ * The Claude Desktop's address for a new Code session in the folder. With `prompt` (#507) the Desktop
+ * pre-fills the new session's composer with it (`q`, cut at about 14k characters by the Desktop); it does
+ * not send it, the person does. The address goes to `open` as one argument, never through a shell.
+ */
+export function desktopNewSessionUrl(folder: string, prompt?: string): string {
+  return `claude://code/new?folder=${encodeURIComponent(folder)}${prompt === undefined ? '' : `&q=${encodeURIComponent(prompt)}`}`;
 }
 
 async function isDirectoryOnDisk(path: string): Promise<boolean> {

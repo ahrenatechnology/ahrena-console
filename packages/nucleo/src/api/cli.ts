@@ -41,6 +41,7 @@ import { FleetWorkSessions } from '../github/work-board-sessions.ts';
 import { SqliteWorkColumnHistory } from '../github/work-board-history.ts';
 import { CachedParentLookup } from '../github/work-board-parents.ts';
 import { WorkIssueService } from '../github/work-issue-service.ts';
+import { SqliteWorkPlanRuns } from '../github/work-plan-runs.ts';
 import { selectedProjectBoard } from './work-board.ts';
 import { createDemoGithubConnection, parseDemoGithubState } from '../simulator/demo-github-connection.ts';
 import { defaultProjectsRoot } from '../ingest/history/files.ts';
@@ -464,9 +465,10 @@ const { connection, screens } = coreGithub;
 /*
  * #465 #466 the work board (`GET /api/work`): the kanban's Project (the same resolver as /api/project),
  * the live sessions of the fleet, the parents outside the Project through the GitHub cache, the time in
- * column in this database, and no queue until #477. Under --demo, the simulator's Project and its folders
+ * column in this database, #507 the planning runs, and no queue until #477. Under --demo, the simulator's Project and its folders
  * (only the scenario's session is on an issue branch). Under --no-github, no board (503 off).
  */
+const planRuns = new SqliteWorkPlanRuns(sqlite.db);
 const workBoard =
   screens.project && workSource
     ? new WorkBoardService({
@@ -474,6 +476,7 @@ const workBoard =
         sessions: new FleetWorkSessions({ fleet: mcp.fleet, ...(demo ? { locate: simulatorWorkBoardLocate } : {}) }),
         queue: EMPTY_WORK_QUEUE,
         history: new SqliteWorkColumnHistory(sqlite.db),
+        planRuns,
         parents: new CachedParentLookup({ source: workSource, cache: githubCache }),
         log,
       })
@@ -737,6 +740,7 @@ const api: LocalApi = await startLocalApi({
   projectSelection: screens.project,
   work: { service: workBoard, fromStore: githubSync !== null },
   workIssue: { service: workIssue },
+  workPlan: { issues: workIssue, runs: planRuns },
   connection,
   // --no-github keeps its own off / no-github answers; otherwise 409 github-not-connected before any call.
   githubConnected: coreGithub.connected,

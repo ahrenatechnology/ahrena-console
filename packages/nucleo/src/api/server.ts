@@ -28,6 +28,7 @@ import type { ManagedRuntime } from '../runtime/service.ts';
 // | `GET /api/project`            | The GitHub Project kanban (api/project.ts, #80); `?refresh=1` re-reads |
 // | `POST /api/project/move`      | Changes a card's Status: `{ itemId, optionId }` (api/project.ts) |
 // | `GET /api/work/issue`         | The work board's issue detail: body, comments, parents, sub-issues, Plan steps and the linked pull request (`?repo=owner/name`, `?number=`, `?refresh=1`; api/work-issue.ts, #506) |
+// | `POST /api/work/plan`         | "Planejar": a planning-only Athena session for an issue, in its repository's folder, in the Claude Desktop or a terminal (`{ repo, number, target, replan? }`; api/work-plan.ts, #507) |
 // | `GET /api/work`               | The work board: the Project's issues in the agent lifecycle columns (`?level=`, `?initiative=`, `?epic=`, `?type=`, `?label=`, `?repo=`, `?status=`, `?refresh=1`; api/work-board.ts, #465 #466) |
 // | `GET /api/sessions/<id>` and `/agents`, `/conversation`, `/events` | The session Detail in the /ui (api/session-detail.ts, #29 and #30) |
 // | `GET /api/new-session/folders` and `POST /api/new-session` | "Nova sessão": the folders it can start in, and a new session in one of them, in the Claude Desktop or a terminal (api/new-session.ts) |
@@ -103,6 +104,7 @@ import type { McpServer } from '../mcp/protocol.ts';
 import { criarRotaDoProjeto, ehDoProjeto, mesmaOrigemMovendo, PROJECT_OPTIONS_ROUTE, type OpcoesDoProjeto } from './project.ts';
 import { createWorkBoardRoute, WORK_BOARD_ROUTE, type WorkBoardRouteOptions } from './work-board.ts';
 import { createWorkIssueRoute, WORK_ISSUE_ROUTE, type WorkIssueRouteOptions } from './work-issue.ts';
+import { createWorkPlanRoute, WORK_PLAN_ROUTE, type WorkPlanRouteOptions } from './work-plan.ts';
 import { DETAIL_ROUTE, type LeiturasDoDetalhe } from './session-detail.ts';
 import type { FleetReader } from '../mcp/fleet.ts';
 import { montarAtencao, remoteAttentionItems, ATTENTION_ROUTE, type RemoteAttentionSource } from './attention-route.ts';
@@ -197,6 +199,8 @@ export interface ApiOptions {
   work?: WorkBoardRouteOptions;
   /** #506 the work board's issue detail; without it, `/api/work/issue` answers 503 `off`. */
   workIssue?: WorkIssueRouteOptions;
+  /** #507 "Planejar" (`POST /api/work/plan`); without it the route answers 503. */
+  workPlan?: WorkPlanRouteOptions;
   /** The session Detail reads (`/api/sessions/<id>…`); without them, 404. */
   detail?: LeiturasDoDetalhe;
   /** The activity feed; turns on `GET /api/events` (#94). */
@@ -334,6 +338,9 @@ const sameOriginSessionOpen = (req: IncomingMessage, port: number): boolean =>
 /** "Nova sessão": only `POST /api/new-session`, the exact raw path, from the same origin. */
 const sameOriginNewSession = (req: IncomingMessage, port: number): boolean => req.method === 'POST' && req.url === NEW_SESSION_ROUTE && fromOwnUi(req, port);
 
+/** #507 "Planejar": only `POST /api/work/plan`, the exact raw path, from the same origin. */
+const sameOriginWorkPlan = (req: IncomingMessage, port: number): boolean => req.method === 'POST' && req.url === WORK_PLAN_ROUTE && fromOwnUi(req, port);
+
 /** `decodeURIComponent`, or the raw text when it is malformed (the id check then refuses it). */
 function decodeSegment(s: string): string {
   try {
@@ -414,6 +421,9 @@ export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
     log,
   });
   const newSession = createNewSessionRoute({ storage: opts.panelBuilder.storage, openInDesktop: opts.openInDesktop, openTerminal: opts.openTerminal, isThrowaway: opts.isThrowawayFolder, log });
+  const workPlan = createWorkPlanRoute(
+    opts.workPlan ? { ...opts.workPlan, storage: opts.panelBuilder.storage, openInDesktop: opts.openInDesktop, openTerminal: opts.openTerminal, isThrowaway: opts.isThrowawayFolder, log } : null,
+  );
   const remoteStore = opts.remoteCredentials === undefined ? new RemoteCredentialStore() : opts.remoteCredentials;
   const remoteVerifier = remoteStore
     ? createRemoteVerifier({
@@ -553,7 +563,7 @@ export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
       if (!opts.connection) return send(res, 404, { error: 'not-found' });
       return respondConnections(req, res, url.pathname, opts.connection);
     }
-    if (!allowedLocalRequest(req, port) && !sameOriginRead(req, port) && !sameOriginOpen(req, port) && !sameOriginSessionOpen(req, port) && !sameOriginNewSession(req, port) && !mesmaOrigemMovendo(req, port) && !sameOriginDecision(req, port) && !agentConfigWriteFromSameOrigin(req, port) && !frameworkInstallWriteFromSameOrigin(req, port) && !reconnectFromSameOrigin(req, port) && !messagesWriteFromSameOrigin(req, port) && !transcriptionWriteFromSameOrigin(req, port) && !cloudsWriteFromSameOrigin(req, port) && !connectionWriteFromSameOrigin(req, port) && !coreUpdateWriteFromSameOrigin(req, port) && !ownerProofRetryFromSameOrigin(req, port) && !ordersWriteFromSameOrigin(req, port) && !appUpdateWriteFromSameOrigin(req, port)) return send(res, 403, { error: 'origem não permitida' });
+    if (!allowedLocalRequest(req, port) && !sameOriginRead(req, port) && !sameOriginOpen(req, port) && !sameOriginSessionOpen(req, port) && !sameOriginNewSession(req, port) && !sameOriginWorkPlan(req, port) && !mesmaOrigemMovendo(req, port) && !sameOriginDecision(req, port) && !agentConfigWriteFromSameOrigin(req, port) && !frameworkInstallWriteFromSameOrigin(req, port) && !reconnectFromSameOrigin(req, port) && !messagesWriteFromSameOrigin(req, port) && !transcriptionWriteFromSameOrigin(req, port) && !cloudsWriteFromSameOrigin(req, port) && !connectionWriteFromSameOrigin(req, port) && !coreUpdateWriteFromSameOrigin(req, port) && !ownerProofRetryFromSameOrigin(req, port) && !ordersWriteFromSameOrigin(req, port) && !appUpdateWriteFromSameOrigin(req, port)) return send(res, 403, { error: 'origem não permitida' });
     // The Project list spends GitHub quota and the connection status is the /ui's: another site's page
     // never gets either, connected or not (#241 review 2).
     // #465 the work board reads the Project the same way.
@@ -577,6 +587,7 @@ export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
     if (ehDoProjeto(url.pathname)) return projectRoute(req, res, url);
     if (url.pathname === WORK_BOARD_ROUTE) return workBoardRoute(req, res, url);
     if (url.pathname === WORK_ISSUE_ROUTE) return workIssueRoute(req, res, url);
+    if (url.pathname === WORK_PLAN_ROUTE) return workPlan(req, res);
     if (opts.agentConfig && (url.pathname === AGENT_CONFIG_ROUTE || url.pathname.startsWith(`${AGENT_CONFIG_ROUTE}/`))) return opts.agentConfig(req, res, url);
     if (opts.frameworkInstall && url.pathname.startsWith(`${FRAMEWORK_INSTALL_ROUTE}/`)) return opts.frameworkInstall(req, res, url);
     if (opts.machineConnection && isConnectionRoute(url.pathname)) return opts.machineConnection(req, res, url);

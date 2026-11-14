@@ -106,7 +106,6 @@ const codePoints = (text: string): string => [...text].map((c) => c.codePointAt(
 
 // ----------
 
-// #467 a plan-only session ("planejando…") plugs in here as its own state that leaves the card in Planejamento.
 /** What a linked session is doing: needs the person, an agent acting, or nothing. */
 export type WorkSessionState = 'working' | 'needs-you' | 'idle';
 
@@ -116,7 +115,15 @@ export interface WorkSessionLink {
   key: string;
   state: WorkSessionState;
   since: string;
+  /**
+   * #507 a planning-only session ("Planejar", work-plan.ts): it is no execution, so it never moves the card
+   * out of Planejamento; the board turns it into the card's `planning` state instead. Absent otherwise.
+   */
+  planning?: true;
 }
+
+/** #507 the planning state of a card: its planning session runs, or the last one ended without a plan (`reason` is pt-BR on-screen text). */
+export type WorkCardPlanning = { state: 'running' } | { state: 'failed'; reason: string };
 
 export interface IssueSignals {
   state: IssueState;
@@ -287,6 +294,8 @@ export interface WorkBoardInput {
   since: ReadonlyMap<string, string>;
   filters: WorkBoardFilters;
   analyzed?: ReadonlyMap<string, AnalyzedWorkNode>;
+  /** #507 the planning state per issue key, lower case; a key without one is `null` on its card. */
+  planning?: ReadonlyMap<string, WorkCardPlanning>;
   now: number;
   fetchedAt: number;
   stale: boolean;
@@ -328,6 +337,8 @@ export interface WorkBoardCard {
   milestone: string | null;
   /** #465 an item with sub-issues: its children are plan steps. */
   plan: { steps: number } | null;
+  /** #507 `running` while the planning session runs (the screen says "planejando…"), `failed` with its reason once it ended without a plan; `null` otherwise. */
+  planning: WorkCardPlanning | null;
   sessions: { count: number; state: WorkSessionState | null; ids: string[] };
   pullRequest: {
     number: number;
@@ -578,7 +589,7 @@ export function buildWorkBoard(input: WorkBoardInput): WorkBoardView {
     if (filters[key] === null) continue;
     countsWithoutFilter[key] = ofLevel.filter((a) => matchesWorkBoardFilters(a, filters, statuses, key) && inDoneWindow(a)).length;
   }
-  const cards = shown.map((a) => toCard(a, sinceOf(a), statuses));
+  const cards = shown.map((a) => toCard(a, sinceOf(a), statuses, input.planning?.get(a.node.key.toLowerCase()) ?? null));
 
   return {
     project: { ...input.project, primaryRepo: mostFrequent(nodes.filter((n) => n.inProject).map((n) => n.repo)) },
@@ -601,7 +612,7 @@ export function buildWorkBoard(input: WorkBoardInput): WorkBoardView {
   };
 }
 
-function toCard(a: AnalyzedWorkNode, columnSince: string | null, statuses: WorkStatusIndex): WorkBoardCard {
+function toCard(a: AnalyzedWorkNode, columnSince: string | null, statuses: WorkStatusIndex, planning: WorkCardPlanning | null): WorkBoardCard {
   const n = a.node;
   const parent = a.chain.at(-1);
   const best = [...a.sessions].sort((x, y) => sessionRank[x.state] - sessionRank[y.state])[0];
@@ -624,6 +635,7 @@ function toCard(a: AnalyzedWorkNode, columnSince: string | null, statuses: WorkS
     labels: [...n.labels],
     milestone: n.milestone,
     plan: a.level === 'item' && n.subIssues ? { steps: n.subIssues.total } : null,
+    planning,
     sessions: { count: a.sessions.length, state: best?.state ?? null, ids: a.sessions.map((s) => s.sessionId) },
     pullRequest: n.pullRequest ? cardPullRequest(n.pullRequest) : null,
     blocked: reason ? { reason: reason.id, label: reason.label } : null,

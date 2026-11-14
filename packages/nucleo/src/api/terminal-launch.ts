@@ -9,7 +9,13 @@
 //   (`exec claude` for a new session);
 //   then `open <file>`, which runs it in whatever terminal the person has for `.command` files. The
 //   file removes itself when it runs, and each call removes the leftovers older than an hour.
+// - macOS, a new session with a first prompt (#507 "Planejar"): the prompt is its own file next to the
+//   `.command` (0600, unique name) and the `.command` reads it back with `cat` into a variable and runs
+//   `exec claude "$prompt"`: the text never passes through shell parsing and is in no shell-read file.
+//   Both files remove themselves when they run.
 // - Linux, open: `x-terminal-emulator -e claude [--resume <id>]` in the folder, when it is on the PATH.
+//   With a first prompt: `unsupported`, because some emulators (gnome-terminal's `-e`) re-parse their
+//   arguments through a shell, and the route answers 501 with the command to copy.
 // - Anything else (Windows included: its folders are not POSIX paths): `unsupported`, and the route
 //   answers 501 with the command to copy.
 // - macOS, focus: `ps -o tty= -o lstart= -p <pid>` (in UTC, to compare with the `procStart` Claude Code
@@ -29,6 +35,19 @@ export interface TerminalRequest {
   sessionId: string | null;
   /** An absolute folder that exists; the route checks it. */
   cwd: string;
+  /**
+   * #507 the first prompt of a new session (`sessionId` `null`). Never interpolated into a shell: see the
+   * header. It must not start with `-` (it would read as an option of `claude`).
+   */
+  prompt?: string;
+}
+
+const MAX_PROMPT = 20_000;
+
+/** The prompt a terminal can carry as one argument; throws otherwise. */
+function checkPrompt(prompt: string): string {
+  if (prompt.length === 0 || prompt.length > MAX_PROMPT || prompt.includes('\0') || prompt.startsWith('-')) throw new Error('unusable prompt');
+  return prompt;
 }
 
 export type TerminalOpenResult = 'opened' | 'unsupported';
@@ -87,13 +106,21 @@ function claudeArgs(sessionId: string | null): string[] {
   return ['--resume', sessionId];
 }
 
-/** The `.command` file that resumes a session (or starts one); throws when the folder or the id cannot be carried. */
-export function commandFileContent(cwd: string, sessionId: string | null): string {
+/**
+ * The `.command` file that resumes a session (or starts one); throws when the folder or the id cannot be
+ * carried. With `promptFile` (a new session only), `claude` gets the file's text as its one argument.
+ */
+export function commandFileContent(cwd: string, sessionId: string | null, promptFile?: string): string {
   if (!isUsableCwd(cwd)) throw new Error('unusable folder');
-  return ['#!/bin/sh', 'rm -f -- "$0"', `cd -- ${shellQuote(cwd)} || exit 1`, ['exec claude', ...claudeArgs(sessionId)].join(' '), ''].join('\n');
+  if (promptFile !== undefined && sessionId !== null) throw new Error('a prompt starts a new session');
+  const start =
+    promptFile === undefined
+      ? [['exec claude', ...claudeArgs(sessionId)].join(' ')]
+      : [`prompt=$(cat -- ${shellQuote(promptFile)}) || exit 1`, `rm -f -- ${shellQuote(promptFile)}`, 'exec claude "$prompt"'];
+  return ['#!/bin/sh', 'rm -f -- "$0"', `cd -- ${shellQuote(cwd)} || exit 1`, ...start, ''].join('\n');
 }
 
-const COMMAND_FILE = /^(resume|new)-[0-9a-f-]{36}\.command$/;
+const COMMAND_FILE = /^(resume|new)-[0-9a-f-]{36}\.(command|prompt)$/;
 const HOUR = 3_600_000;
 
 export interface TerminalOpenerOptions {
@@ -128,17 +155,29 @@ async function removeOld(dir: string, now: number, maxAgeMs: number): Promise<vo
 }
 
 export function createTerminalOpener({ dir, platform = process.platform, runner = systemRunner, findExecutable = findOnPath, now = Date.now, maxAgeMs = HOUR }: TerminalOpenerOptions): TerminalOpener {
-  return async ({ sessionId, cwd }) => {
+  return async ({ sessionId, cwd, prompt }) => {
+    if (prompt !== undefined && sessionId !== null) throw new Error('a prompt starts a new session');
+    const text = prompt === undefined ? undefined : checkPrompt(prompt);
     if (platform === 'darwin') {
-      const content = commandFileContent(cwd, sessionId);
+      const id = randomUUID();
+      const name = sessionId === null ? 'new' : 'resume';
+      const promptFile = text === undefined ? undefined : join(dir, `${name}-${id}.prompt`);
+      const content = commandFileContent(cwd, sessionId, promptFile);
       await privateDir(dir);
       await removeOld(dir, now(), maxAgeMs);
-      const file = join(dir, `${sessionId === null ? 'new' : 'resume'}-${randomUUID()}.command`);
-      await writeFile(file, content, { mode: 0o700, flag: 'wx' });
-      await chmod(file, 0o700);
+      const file = join(dir, `${name}-${id}.command`);
+      if (promptFile !== undefined) await writeFile(promptFile, text!, { mode: 0o600, flag: 'wx' });
+      try {
+        await writeFile(file, content, { mode: 0o700, flag: 'wx' });
+        await chmod(file, 0o700);
+      } catch (err) {
+        if (promptFile !== undefined) await rm(promptFile, { force: true });
+        throw err;
+      }
       await runner.run('open', [file]);
       return 'opened';
     }
+    if (text !== undefined) return 'unsupported';
     const args = claudeArgs(sessionId);
     if (platform === 'linux') {
       const exe = await findExecutable('x-terminal-emulator');

@@ -21,6 +21,8 @@ export * from './work-board-parents.ts';
 export * from './work-board-sessions.ts';
 export * from './work-issue.ts';
 export * from './work-issue-service.ts';
+export * from './work-plan.ts';
+export * from './work-plan-runs.ts';
 
 export interface CreateGithubWorkOptions extends Partial<GithubGraphqlSourceOptions> {
   /** Busca do GitHub, ex.: `repo:dono/repo is:issue is:open`. */

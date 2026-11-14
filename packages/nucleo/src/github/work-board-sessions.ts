@@ -2,7 +2,8 @@
  * #465 the live Console sessions linked to work board issues (`WorkSessions`), read from the fleet. A
  * session links to `<repo>#<n>`: n from a `<type>/<n>-…` branch (Desktop's, else git's), else the first
  * reference in its first prompt; the repo is the folder's git remote, lower case, as the Dev Console
- * reads it. Any live session counts, whatever agent runs it.
+ * reads it. Any live session counts, whatever agent runs it. #507 a session whose first prompt is the
+ * planning run's (work-plan.ts) links to the issue it names and is marked `planning`, on any branch.
  */
 
 import { repoKey } from '../dev-console/model.ts';
@@ -10,6 +11,7 @@ import { gitLocator, type LocateFolder } from '../dev-console/sessions.ts';
 import { LIVE_STATES, type FleetReader, type FleetSession } from '../mcp/fleet.ts';
 import type { SessionEvent } from '../model.ts';
 import { issueOfPrompt, type WorkSessionLink, type WorkSessionState, type WorkSessions } from './work-board.ts';
+import { planningKeyOfPrompt } from './work-plan.ts';
 import { workKey } from './work.ts';
 
 export interface FleetWorkSessionsOptions {
@@ -59,22 +61,24 @@ export class FleetWorkSessions implements WorkSessions {
     const ids = new Set(live.map((s) => s.session.id));
     for (const id of this.firstPrompts.keys()) if (!ids.has(id)) this.firstPrompts.delete(id);
     for (const s of live) {
-      const key = await this.keyOf(s);
+      // #507 a planning run names its issue in its first prompt, whatever branch the folder is on.
+      const prompt = await this.firstPrompt(s.session.id);
+      const planningKey = prompt ? planningKeyOfPrompt(prompt) : null;
+      const key = planningKey ?? (await this.keyOf(s, prompt));
       if (!key) continue;
       const state = await this.stateOf(s);
       const since = state === 'needs-you' ? (s.session.awaitingInputSince ?? s.session.updatedAt) : s.session.startedAt;
-      out.push({ sessionId: s.session.id, key, state, since });
+      out.push({ sessionId: s.session.id, key, state, since, ...(planningKey ? { planning: true as const } : {}) });
     }
     return out;
   }
 
-  private async keyOf(s: FleetSession): Promise<string | null> {
+  private async keyOf(s: FleetSession, prompt: string | null): Promise<string | null> {
     const location = s.session.cwd ? await this.locate(s.session.cwd) : { repo: null, branch: null };
     const repo = location.repo ? repoKey(location.repo) : null;
     // #465 the Desktop branch first, then git's, each only in the issue shape; then the first prompt.
     const fromBranch = issueOfBranch(s.desktop?.branch ?? null) ?? issueOfBranch(location.branch);
     if (fromBranch !== null && repo) return workKey(repo, fromBranch);
-    const prompt = await this.firstPrompt(s.session.id);
     return prompt ? issueOfPrompt(prompt, repo) : null;
   }
 
