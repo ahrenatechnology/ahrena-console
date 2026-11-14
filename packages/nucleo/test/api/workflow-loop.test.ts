@@ -161,3 +161,63 @@ describe('review verdicts as the ingest keeps them (#332, review round 1)', () =
     assert.deepEqual([loop.groups.find((g) => g.id === 'pr:1')!.state, loop.groups.find((g) => g.id === 'pr:1')!.issue], ['approved', 333]);
   });
 });
+
+describe('an orchestrator names no PR group (#586)', () => {
+  const live = session({ id: 's1', status: 'completed' });
+  const athena = (task: string, over: Partial<Agent> = {}) =>
+    sub('ath', 'ahrena-engineering-development:athena', 0, 30, task, over);
+
+  test('#586/AC-1: an Athena subagent that cites a PR as a reference falls to the issue it cites', () => {
+    const a = athena('Athena runs issue #467 (see PR #475 as a reference)');
+    const loop = buildPrLoop(live, [main, a], [], papelDe);
+    assert.deepEqual(loop.groups.map((g) => g.id), ['issue:467']);
+  });
+
+  test('#586/AC-1: a parent of another subagent whose loop role is other is an orchestrator, whatever its type', () => {
+    const boss = sub('boss', 'tech-lead', 0, 30, 'Coordinate issue #467, PR #475 is the model');
+    const child = sub('kid', 'general-purpose', 1, 5, 'Build the page', { parentAgentId: 's1:boss' });
+    const loop = buildPrLoop(live, [main, boss, child], [], papelDe);
+    assert.deepEqual(loop.groups.map((g) => g.id), ['issue:467', 'none']);
+  });
+
+  test('#586/AC-1: a review agent that delegates to a fix agent keeps its PR group and its round', () => {
+    const dev = sub('dev', 'general-purpose', 0, 10, 'Build PR #320');
+    const argos = sub('argos', 'ahrena-engineering-quality:argos', 10, 20, 'Review PR #320');
+    const erodos = sub('erodos', 'ahrena-engineering-quality:erodos', 12, 18, 'Fix the findings', { parentAgentId: 's1:argos' });
+    const loop = buildPrLoop(live, [main, dev, argos, erodos], [], papelDe);
+    const group = loop.groups.find((g) => g.id === 'pr:320');
+    assert.ok(group, 'the group pr:320 exists');
+    assert.ok(group.steps.some((s) => s.agentId === 's1:argos'), 'argos stays in pr:320');
+    assert.equal(group.rounds, 1);
+  });
+
+  test('#586/AC-1: an orchestrator that cites no issue goes to none', () => {
+    const a = athena('Athena coordinates, PR #475 is the model');
+    const loop = buildPrLoop(live, [main, a], [], papelDe);
+    assert.deepEqual(loop.groups.map((g) => g.id), ['none']);
+  });
+
+  test('#586/AC-2: a PR cited by an orchestrator does not turn another subagent\'s bare #N into a PR', () => {
+    const boss = athena('Athena runs issue #467, PR #12 is the model');
+    const dev = sub('dev', 'general-purpose', 1, 5, 'Build #12', { parentAgentId: 's1:ath' });
+    const loop = buildPrLoop(live, [main, boss, dev], [], papelDe);
+    assert.deepEqual(loop.groups.map((g) => g.id).sort(), ['issue:12', 'issue:467']);
+    assert.equal(loop.groups.some((g) => g.kind === 'pr'), false);
+  });
+
+  test('#586/AC-2: a PR a non-orchestrator wrote still turns a bare #N into a PR', () => {
+    const boss = athena('Athena runs issue #467');
+    const dev = sub('dev', 'general-purpose', 1, 5, 'Build #12', { parentAgentId: 's1:ath' });
+    const rev = sub('rev', 'argos', 5, 8, 'Review PR #12', { parentAgentId: 's1:ath' });
+    const loop = buildPrLoop(live, [main, boss, dev, rev], [], papelDe);
+    assert.deepEqual(loop.groups.map((g) => g.id).sort(), ['issue:467', 'pr:12']);
+  });
+
+  test('#586/AC-3: the response shape is unchanged in the orchestrator case', () => {
+    const boss = athena('Athena runs issue #467, PR #475 is the model');
+    const loop = buildPrLoop(live, [main, boss], [], papelDe);
+    assert.deepEqual(Object.keys(loop).sort(), ['groups', 'totals']);
+    assert.deepEqual(Object.keys(loop.totals).sort(), ['changeRequests', 'prs', 'rounds', 'stopped', 'subagents']);
+    assert.deepEqual(Object.keys(loop.groups[0]).sort(), ['changeRequests', 'id', 'issue', 'kind', 'lastActivityAt', 'number', 'otherRefs', 'rounds', 'state', 'steps']);
+  });
+});
