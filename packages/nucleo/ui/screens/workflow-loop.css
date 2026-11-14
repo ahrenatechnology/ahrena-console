@@ -36,6 +36,18 @@
 .wfl-gap { flex: 0 0 14px; }
 .wfl-foot { font-size: 11px; color: var(--muted); }
 .wfl-empty { font-size: 12.5px; color: var(--muted); margin: 0; }
+.wfl-orchestrator { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.wfl-orch { padding: 10px 12px; display: flex; flex-direction: column; gap: 4px; border-left: 3px solid var(--status-completed-dot); min-width: 0; }
+.wfl-orch-run { border-left-color: var(--status-active-dot); }
+.wfl-orch-error { border-left-color: var(--status-error-dot); }
+.wfl-orch-top { display: flex; align-items: center; gap: 8px; font-size: 12.5px; flex-wrap: wrap; min-width: 0; }
+.wfl-accent { color: var(--accent); display: inline-flex; }
+.wfl-layers { margin-left: 18px; padding-left: 16px; border-left: 2px solid var(--border); display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.wfl-layer { position: relative; display: flex; flex-direction: column; gap: 6px; align-items: stretch; min-width: 0; }
+.wfl-layer::before { content: ''; position: absolute; left: -16px; top: 24px; width: 14px; border-top: 2px solid var(--border); }
+.wfl-none-yet { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border-radius: 8px; border: 1px dashed var(--border); font-size: 12.5px; color: var(--muted); }
+.wfl-none-yet b { color: var(--text); }
+.wfl-none-yet svg { width: 16px; height: 16px; flex: none; margin-top: 1px; }
 .wfl-dash { display: inline-block; width: 18px; border-top: 2px dashed var(--status-error-dot); }
 .wfl-lineage { padding: 9px 12px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 12px; }
 .wfl-after { margin-left: 14px; }

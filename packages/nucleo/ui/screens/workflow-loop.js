@@ -80,10 +80,22 @@ export function stepsWithLinks(steps) {
   });
 }
 
-/** The totals line under the title of the panel. */
+/** The totals line under the title of the panel; "Camadas" only when an orchestrator opened some. */
 export function loopSummary(loop, subagents) {
   const t = loop.totals;
-  return [['PRs', t.prs], ['Rodadas de revisão', t.rounds], ['Pedidos de mudança', t.changeRequests], ['Subagentes', subagents ?? t.subagents]];
+  const rows = [['PRs', t.prs], ['Rodadas de revisão', t.rounds], ['Pedidos de mudança', t.changeRequests], ['Subagentes', subagents ?? t.subagents]];
+  if (loop.orchestrators?.length) rows.push(['Camadas', t.layers ?? 0]);
+  return rows;
+}
+
+/** The orchestrator's state: the label on the screen and the tones it takes. */
+const ORCHESTRATOR_STATE = { running: ['Rodando', 'active', 'run'], completed: ['Concluída', 'completed', 'ok'], error: ['Com erro', 'error', 'error'] };
+
+/** "abriu 2 camadas · 1 PR": the layers an orchestrator opened and how many of them already have a PR. */
+export function layersText(orchestrator, groupsById) {
+  const led = orchestrator.groups.map((id) => groupsById.get(id)).filter(Boolean);
+  if (!led.length) return 'ainda não abriu nenhuma camada';
+  return `abriu ${num(led.length)} ${led.length === 1 ? 'camada' : 'camadas'} · ${num(led.filter((g) => g.kind === 'pr').length)} PR`;
 }
 
 // ---------- DOM ----------
@@ -105,14 +117,16 @@ function stepEl(s, sessionId) {
   );
 }
 
-function groupEl(g, sessionId) {
+function groupEl(g, sessionId, led = false) {
   const [label, tone] = GROUP_STATE[g.state] ?? GROUP_STATE.open;
+  // A layer that has no PR yet says so; it becomes "PR #N" in the same place when the PR shows up.
+  const pill = led && g.kind === 'issue' && g.state === 'open' ? ['Sem PR ainda', 'completed'] : [label, tone];
   const head = el(
     'div',
     { class: 'wfl-head' },
     el('span', { class: 'wfl-chip mono' }, groupTitle(g)),
     g.kind === 'none' ? el('b', { class: 'wfl-trunc' }, 'subagentes sem PR nem issue na tarefa') : null,
-    g.kind !== 'none' ? el('span', { class: `wfl-pill wfl-pill-${tone}` }, label) : el('span', { class: 'wfl-pill wfl-pill-muted' }, `${num(g.steps.length)} ${g.steps.length === 1 ? 'subagente' : 'subagentes'}`),
+    g.kind !== 'none' ? el('span', { class: `wfl-pill wfl-pill-${pill[1]}` }, pill[0]) : el('span', { class: 'wfl-pill wfl-pill-muted' }, `${num(g.steps.length)} ${g.steps.length === 1 ? 'subagente' : 'subagentes'}`),
     g.issue ? el('span', { class: 'wfl-chip mono' }, `issue #${g.issue}`) : null,
     ...(g.otherRefs ?? []).map((n) => el('span', { class: 'wfl-chip mono', title: 'A tarefa também cita este PR' }, `também PR #${n}`)),
     el('span', { class: 'wfl-mute wfl-count' }, roundsText(g)),
@@ -138,6 +152,40 @@ function groupEl(g, sessionId) {
   return el('div', { class: 'card wfl-group', 'data-group': g.id }, head, row, foot);
 }
 
+/** The orchestrator as the parent: its card, and the groups it opened beneath it, most recent first. */
+function orchestratorEl(o, groupsById, sessionId) {
+  const [label, pillTone, tone] = ORCHESTRATOR_STATE[o.state] ?? ORCHESTRATOR_STATE.completed;
+  const name = shortAgentName(o.agentType) ?? 'Orquestrador';
+  const led = o.groups.map((id) => groupsById.get(id)).filter(Boolean);
+  const card = el(
+    'div',
+    { class: `card wfl-orch wfl-orch-${tone}` },
+    el(
+      'div',
+      { class: 'wfl-orch-top' },
+      el('span', { class: 'wfl-accent' }, icon('workflows')),
+      el('a', { class: 'wfl-name wfl-trunc', href: agentViewHref(sessionId, agentRouteId(sessionId, o.agentId)), title: o.task ?? '', 'aria-label': `Abrir a vista de ${name}` }, name),
+      o.agentType ? el('span', { class: 'wfl-chip' }, o.agentType) : null,
+      el('span', { class: `wfl-pill wfl-pill-${pillTone}` }, label),
+      el('span', { class: 'wfl-mute wfl-count' }, layersText(o, groupsById)),
+      el('a', { class: 'wfl-open', href: `/ui/sessions/${encodeURIComponent(sessionId)}?agent=${encodeURIComponent(o.agentId)}#conversation`, title: 'Abrir a conversa deste subagente', 'aria-label': `Abrir a conversa de ${name}` }, icon('external')),
+    ),
+  );
+  const beneath = led.length
+    ? led.map((g) => el('div', { class: 'wfl-layer' }, groupEl(g, sessionId, true)))
+    : [el('div', { class: 'wfl-layer' }, el('div', { class: 'wfl-none-yet' }, icon('hourglass'), el('div', {}, el('b', {}, 'Nenhuma camada ainda. '), 'Os grupos aparecem aqui quando a Athena abrir o primeiro subagente: um por PR, ou por issue enquanto a camada não tem PR.')))];
+  return el('div', { class: 'wfl-orchestrator' }, card, el('div', { class: 'wfl-layers' }, ...beneath));
+}
+
+/** The groups of the panel: each orchestrator with its layers, then the groups nobody opened, as before. */
+function groupsEl(loop, sessionId) {
+  const groupsById = new Map(loop.groups.map((g) => [g.id, g]));
+  const orchestrators = loop.orchestrators ?? [];
+  const led = new Set(orchestrators.flatMap((o) => o.groups));
+  const rest = loop.groups.filter((g) => !led.has(g.id));
+  return el('div', { class: 'wfl-groups' }, ...orchestrators.map((o) => orchestratorEl(o, groupsById, sessionId)), ...rest.map((g) => groupEl(g, sessionId)));
+}
+
 /** The panel "O laço da sessão, por PR". */
 export function loopPanel(w, viewToggle) {
   const loop = w.loop;
@@ -147,7 +195,7 @@ export function loopPanel(w, viewToggle) {
     { class: 'card wfd-panel' },
     el('div', { class: 'wfd-ttl' }, icon('workflows'), 'O laço da sessão, por PR', el('span', { class: 'wfd-ttl-r' }, 'dev → Argos → Erodos → Argos, até aprovar'), viewToggle),
     el('div', { class: 'wfd-legend' }, ...summary.map(([k, v]) => el('span', {}, `${k} `, el('b', { class: 'mono' }, num(v))))),
-    loop.groups.length ? el('div', { class: 'wfl-groups' }, ...loop.groups.map((g) => groupEl(g, w.sessionId))) : el('p', { class: 'wfl-empty' }, 'Esta sessão não chamou subagentes.'),
+    loop.groups.length || loop.orchestrators?.length ? groupsEl(loop, w.sessionId) : el('p', { class: 'wfl-empty' }, 'Esta sessão não chamou subagentes.'),
     el(
       'div',
       { class: 'wfd-legend' },
