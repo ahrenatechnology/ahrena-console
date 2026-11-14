@@ -471,11 +471,11 @@ export class GithubConnection {
     }
   }
 
-  /** GitHub answered 401 for the credential in use: it is not served any more, once, with one log line. */
+  /** #612 GitHub answered 401 for the credential in use: it is not served any more, once, with one log line. */
   private dropRejectedCredential(source: GithubCredentialSource): void {
     this.credential = null;
     if (source === 'gh') this.ghFailed = true;
-    else this.lastError = 'revoked'; // the login stays: Reconnect replaces the vault entry
+    else this.lastError = 'revoked'; // #372 the login stays: Reconnect replaces the vault entry
     this.log('github: GitHub rejected the credential (401)');
     this.onChange();
   }

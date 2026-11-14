@@ -1008,7 +1008,7 @@ describe('#612 a data call GitHub answers 401 reaches the connection', () => {
     const s = setup();
     await connect(s);
     s.auth.requireToken = true;
-    s.auth.token = OTHER_TOKEN; // GitHub revoked the credential the connection holds
+    s.auth.token = OTHER_TOKEN; // #612 GitHub revoked the credential the connection holds
     const watched = s.conn.watchRejections(s.gh.fetch);
     const changes = s.events.change;
     const logs = s.logs.length;

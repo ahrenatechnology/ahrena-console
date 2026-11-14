@@ -239,7 +239,7 @@ export function githubSyncSteps(screens: Pick<GithubScreens, 'project' | 'curren
   // #612 Not connected (revoked, disconnected) is `pending`, not `skipped`: no GitHub call, and the step
   // runs on the next tick, so a reconnect resumes the sync within one cycle instead of one interval.
   const waiting = (): 'skipped' | 'pending' => (connected ? 'pending' : 'skipped');
-  // A call that dropped the connection (GitHub answered 401) is not a step failure: the connection logged
+  // #612 A call that dropped the connection (GitHub answered 401) is not a step failure: the connection logged
   // the transition once, and the next ticks wait.
   const unlessDropped = async (read: () => Promise<'done' | 'skipped' | 'pending'>) => {
     try {

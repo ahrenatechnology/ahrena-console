@@ -37,7 +37,7 @@ function setup(stored: string) {
     clearTimer: () => undefined,
     log: (line) => void logs.push(line),
   });
-  // What the screens' sources do: a data call with the connection's credential, through the watched fetch.
+  // #612 What the screens' sources do: a data call with the connection's credential, through the watched fetch.
   const watched = conn.watchRejections(gh.fetch);
   const dataCall = async () => {
     const res = await watched('http://fake-api.test/user', { headers: { authorization: `bearer ${await conn.token()}` } });
@@ -56,7 +56,7 @@ function setup(stored: string) {
     logs,
     sync,
     dataCalls,
-    /** One cycle: the clock moves by one tick and the sync looks for due steps. */
+    /** #612 One cycle: the clock moves by one tick and the sync looks for due steps. */
     async cycle() {
       t += 15_000;
       await sync.tick();
@@ -75,7 +75,7 @@ function setup(stored: string) {
 describe('#612 the background sync while the credential is revoked', () => {
   test('#612/AC-1 with the connection revoked at start, no cycle calls GitHub', async () => {
     const s = setup('gho_FAKEalreadyrevoked000000000000000000');
-    await s.conn.status(); // the credential is loaded and refused: revoked
+    await s.conn.status(); // #612 the credential is loaded and refused: revoked
     const before = s.gh.calls.length;
     for (let i = 0; i < 4; i++) await s.cycle();
     assert.equal(s.gh.calls.length, before, 'nothing reached the fake GitHub');
@@ -85,9 +85,9 @@ describe('#612 the background sync while the credential is revoked', () => {
   test('#612/AC-2 #612/AC-4 a 401 in a sync call revokes the connection; the next cycles call nothing and the log has one line', async () => {
     const s = setup(TOKEN);
     await s.conn.status();
-    s.auth.token = NEW_TOKEN; // GitHub revokes the credential the core holds
+    s.auth.token = NEW_TOKEN; // #612 GitHub revokes the credential the core holds
     const logsBefore = s.logs.length;
-    await s.cycle(); // project: 401
+    await s.cycle(); // #612 project: 401
     const first = s.dataCalls();
     for (let i = 0; i < 4; i++) await s.cycle();
     assert.equal(s.dataCalls(), first, 'no call after the 401');
