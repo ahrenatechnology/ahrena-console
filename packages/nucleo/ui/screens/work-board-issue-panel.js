@@ -1,8 +1,8 @@
-// The issue detail of the work board (issue 467, issue 508, wireframe 467-1): a panel on the right with the board behind,
-// in read mode. Pure render functions over `GET /api/work/issue` (`issue`) and the board's card (`card`: its column,
-// its age and its planning state); the planning parts come from `cardPlanParts` (work-board-plan.js) as `parts`.
-// No fetch, no state: the screen loads the issue, keeps the panel open and wires `onClose`.
-// The styles are in `work-board-issue-panel.css` (classes `wb-panel-`).
+/* The issue detail of the work board (issue 467, issue 508, wireframe 467-1): a panel on the right with the board behind,
+in read mode. Pure render functions over `GET /api/work/issue` (`issue`) and the board's card (`card`: its column,
+its age and its planning state); the planning parts come from `cardPlanParts` (work-board-plan.js) as `parts`.
+No fetch, no state: the screen loads the issue, keeps the panel open and wires `onClose`.
+The styles are in `work-board-issue-panel.css` (classes `wb-panel-`). */
 
 import { el, icon } from '../dom.js';
 import { loading, errorBand } from '../states.js';

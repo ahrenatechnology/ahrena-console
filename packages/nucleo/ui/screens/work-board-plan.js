@@ -1,9 +1,9 @@
-// "Planejar" on the work board (issue 467, issue 508, wireframes 465-2, 465-6 and 467-1): the planning parts of a
-// card and of the issue panel, the confirmation anchored on the card and the missing-folder popover.
-//
-// Pure render functions: data and handlers in, nodes out. No fetch, no state: the screen decides when the
-// confirmation is open, calls POST /api/work/plan and hands the answer back. The styles are in
-// `work-board-issue-panel.css` (classes `wb-plan-`).
+/* "Planejar" on the work board (issue 467, issue 508, wireframes 465-2, 465-6 and 467-1): the planning parts of a
+card and of the issue panel, the confirmation anchored on the card and the missing-folder popover.
+
+Pure render functions: data and handlers in, nodes out. No fetch, no state: the screen decides when the
+confirmation is open, calls POST /api/work/plan and hands the answer back. The styles are in
+`work-board-issue-panel.css` (classes `wb-plan-`). */
 
 import { el, icon } from '../dom.js';
 
