@@ -103,7 +103,13 @@
 .sd-tree { display: flex; flex-direction: column; gap: 10px; }
 .sd-tree > .eyebrow { margin: 4px 0 2px; }
 .sd-node { display: flex; align-items: center; gap: 12px; padding: 12px 16px; }
-.sd-node.sd-sub { margin-left: 40px; }
+.sd-node.sd-sub { margin-left: calc(var(--sd-depth, 1) * 28px + 12px); }
+/* issue 521: a subagent row is a link to the agent view; the main agent's row is not. */
+.sd-agent-link { color: inherit; text-decoration: none; }
+.sd-agent-link .sd-text b { text-decoration: underline; text-decoration-color: var(--border); text-underline-offset: 3px; }
+.sd-agent-link:hover { background: var(--raised); }
+.sd-agent-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.sd-node .sd-go { color: var(--muted); display: inline-flex; }
 .sd-node .sd-ico { width: 30px; height: 30px; font-size: 15px; color: var(--muted); }
 .sd-node .sd-text { display: flex; flex-direction: column; min-width: 0; flex: 1; }
 .sd-node .sd-text b { font-weight: var(--weight-semibold); }
@@ -239,7 +245,7 @@ select.sd-chip.on { color: var(--accent-text); border-color: var(--accent); }
   .sd-select { min-width: 0; flex: 1; }
   .sd-event-head { grid-template-columns: 16px 52px minmax(0, 1fr); }
   .sd-event-head .sd-status, .sd-event-head .attention-pill, .sd-event-head .sd-chip, .sd-event-head .sd-type { display: none; }
-  .sd-node.sd-sub { margin-left: 16px; }
+  .sd-node.sd-sub { margin-left: calc(var(--sd-depth, 1) * 12px + 4px); }
 }
 
 /* ---------- Issue 243 (C49): a remote session ---------- */

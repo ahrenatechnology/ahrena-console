@@ -1,0 +1,98 @@
+/* The agent view (issue 521). Every colour is a brand variable; every own class has the prefix av-,
+   because the sheet stays loaded after the screen leaves. */
+
+.av-root, .av-body { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+/* The loading state wears `.state` for the shell's name for it; the skeleton has its own shape. */
+.av-loading.state { min-height: 0; padding: 0; }
+
+.av-crumb { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; font-size: 12.5px; color: var(--muted); }
+.av-crumb .icon { font-size: 14px; }
+.av-crumb-link { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); text-decoration: none; border-radius: 4px; }
+.av-crumb-link:hover { color: var(--text); text-decoration: underline; }
+.av-crumb-link:focus-visible, .av-open-view:focus-visible, .av-toggle:focus-visible, .av-fold:focus-visible, .av-new-steps:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.av-crumb-current { color: var(--text); font-weight: var(--weight-semibold); }
+
+.av-head { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+.av-head > .av-conversation { margin-left: auto; }
+.av-ico { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 8px; background: var(--raised); color: var(--muted); font-size: 16px; }
+.av-kind { margin: 0; font-size: var(--text-xl); font-weight: var(--weight-semibold); min-width: 0; overflow-wrap: anywhere; }
+.av-kind-full { display: inline-flex; align-items: center; height: 22px; padding: 0 8px; border-radius: 7px; border: 1px solid var(--border); background: var(--raised); color: var(--muted); font-size: 11.5px; }
+.av-description { margin: 0; color: var(--muted); font-size: 13.5px; line-height: 1.55; overflow-wrap: anywhere; }
+
+.av-state, .av-child-state { display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 9px; border-radius: 99px; font-size: 12px; font-weight: var(--weight-medium); white-space: nowrap; background: var(--raised); color: var(--muted); }
+.av-child-state { height: 18px; padding: 0 7px; font-size: 10.5px; }
+.av-state::before, .av-child-state::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.av-s-working { background: var(--status-active-badge); color: var(--status-active-text); }
+.av-s-waiting { background: var(--status-waiting-badge); color: var(--status-waiting-text); }
+.av-s-completed { background: var(--status-completed-badge); color: var(--status-completed-text); }
+.av-s-error { background: var(--status-error-badge); color: var(--status-error-text); }
+
+.av-failed { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-radius: 12px; border: 1px solid var(--status-error-dot); background: var(--status-error-badge); font-size: 13.5px; line-height: 1.55; }
+.av-failed > .icon { font-size: 20px; color: var(--status-error-text); flex: none; }
+.av-failed p { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.av-failed b { color: var(--status-error-text); font-weight: var(--weight-semibold); }
+
+.av-facts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.av-fact { padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.av-fact .eyebrow { display: flex; align-items: center; gap: 6px; }
+.av-fact-value { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 8px; }
+.av-fact-value b { font-size: 21px; font-weight: var(--weight-semibold); color: var(--text); }
+.av-fact-value small { color: var(--muted); font-size: 12px; }
+
+.av-sec { padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.av-sec > .eyebrow { display: flex; align-items: center; gap: 6px; }
+.av-count { margin-left: auto; text-transform: none; letter-spacing: 0; font-weight: var(--weight-regular); }
+.av-sequence > .eyebrow { flex-wrap: wrap; }
+.av-text { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13px; line-height: 1.6; }
+/* A folded text keeps its 6 lines even when one of them wraps. */
+.av-sec[data-folded="true"] .av-text { max-height: calc(6 * 1.6em); overflow: hidden; }
+.av-cut { color: var(--muted); font-size: 12px; }
+.av-fold { align-self: flex-start; }
+.av-none { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 12.5px; }
+.av-none p { margin: 0; line-height: 1.55; }
+.av-none b { color: var(--text); font-weight: var(--weight-medium); }
+
+.av-new-steps { align-self: center; }
+.av-new-steps[hidden] { display: none; }
+
+.av-seq { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.av-seq .av-seq { margin: 4px 0 4px 14px; padding-left: 12px; border-left: 1px dashed var(--border); }
+.av-step { min-width: 0; }
+.av-line { display: flex; align-items: center; gap: 8px; min-height: 30px; padding: 4px 8px; border-radius: 8px; background: var(--bg); border: 1px solid var(--border); font-size: 12.5px; min-width: 0; }
+.av-toggle { display: inline-grid; place-items: center; width: 22px; height: 22px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--muted); flex: none; cursor: pointer; }
+.av-toggle:hover { color: var(--text); background: var(--raised); }
+.av-toggle-gap { width: 22px; flex: none; }
+.av-name { font-weight: var(--weight-semibold); flex: none; }
+.av-target { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; flex: 1; }
+.av-time { color: var(--muted); font-size: 11.5px; white-space: nowrap; margin-left: auto; }
+.av-target + .av-time { margin-left: 0; }
+.av-step-state { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; white-space: nowrap; }
+.av-st-ok { color: var(--status-completed-text); }
+.av-st-err { color: var(--status-error-text); }
+.av-st-run { color: var(--status-active-text); }
+.av-st-unknown { color: var(--muted); }
+.av-step[data-state="error"] > .av-line { border-color: var(--status-error-dot); }
+.av-detail { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 12px; margin: 4px 0 4px 30px; padding: 8px 12px; border-radius: 8px; background: var(--raised); font-size: 12px; }
+.av-detail dt { color: var(--muted); }
+.av-detail dd { margin: 0; overflow-wrap: anywhere; }
+
+.av-child-line { background: var(--surface); }
+.av-ag { color: var(--muted); display: inline-flex; }
+.av-child-name { font-weight: var(--weight-semibold); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.av-open-view { display: inline-flex; align-items: center; gap: 5px; margin-left: 8px; color: var(--accent-text); font-size: 12px; white-space: nowrap; border-radius: 4px; }
+.av-open-view:hover { text-decoration: underline; }
+.av-child-loading { margin: 4px 0 4px 36px; color: var(--muted); font-size: 12px; }
+
+.av-elided { display: flex; align-items: center; gap: 10px; padding: 4px 8px; border: 1px dashed var(--border); border-radius: 8px; color: var(--muted); font-size: 12px; }
+.av-elided .av-fold { margin-left: auto; }
+
+.av-nodata { align-self: stretch; }
+
+.av-reading { color: var(--muted); font-size: 12px; }
+.av-skeleton-title { width: 180px; height: 16px; }
+.av-skeleton-fact, .av-skeleton-section { display: flex; flex-direction: column; gap: 10px; padding: 12px 14px; }
+
+@media (max-width: 760px) {
+  .av-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .av-target { display: none; }
+}
