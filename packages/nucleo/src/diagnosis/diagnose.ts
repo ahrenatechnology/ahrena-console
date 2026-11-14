@@ -1,10 +1,12 @@
-// The diagnosis use case (#565): reads the machine's open alert, asks the collector port for each
-// section of that alert's kind, in parallel, and assembles the `Diagnosis`. It does not decide whether
-// there is an alert (the tracker does) and it runs no command (the collector adapters do).
-//
-// - The timeout is enforced once, here, at the boundary: a race with a timer that is always cleared.
-// - A collector that reports unavailable or throws fails its own section only.
-// - The mount of a `volume-full` comes from the open alert the tracker holds, never from the request.
+/*
+ * The diagnosis use case (#565): reads the machine's open alert, asks the collector port for each
+ * section of that alert's kind, in parallel, and assembles the `Diagnosis`. It does not decide whether
+ * there is an alert (the tracker does) and it runs no command (the collector adapters do).
+ *
+ * - The timeout is enforced once, here, at the boundary: a race with a timer that is always cleared.
+ * - A collector that reports unavailable or throws fails its own section only.
+ * - The mount of a `volume-full` comes from the open alert the tracker holds, never from the request.
+ */
 
 import type { Alert, HostInfo } from '../telemetry/model.ts';
 import { LIST_CAP, capReason, isDiagnosable, sectionsFor, type Diagnosis, type SectionId, type SectionItems, type SectionOf } from './model.ts';

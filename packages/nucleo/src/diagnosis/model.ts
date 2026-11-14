@@ -1,11 +1,13 @@
-// The read-only diagnosis of a saturation alert (#565, epic #563): what the núcleo of the saturated
-// machine reports about who consumes the resource that saturated. Pure vocabulary: no command, no file,
-// no network lives here; the collectors that read the machine are the next layer's.
-//
-// - The section ids are fixed (AC-8); the screen and the delegation key on them.
-// - Old worktrees have no section of their own (AC-8 lists none): each one is an item of `known-caches`,
-//   with `id: 'worktree'` and `actionId: null` (no cleanup action removes a worktree).
-// - A section that did not come carries `status` and a short `reason`, never an empty list pretending to be data.
+/*
+ * The read-only diagnosis of a saturation alert (#565, epic #563): what the núcleo of the saturated
+ * machine reports about who consumes the resource that saturated. Pure vocabulary: no command, no file,
+ * no network lives here; the collectors that read the machine are the next layer's.
+ *
+ * - The section ids are fixed (AC-8); the screen and the delegation key on them.
+ * - Old worktrees have no section of their own (AC-8 lists none): each one is an item of `known-caches`,
+ *   with `id: 'worktree'` and `actionId: null` (no cleanup action removes a worktree).
+ * - A section that did not come carries `status` and a short `reason`, never an empty list pretending to be data.
+ */
 
 import type { AlertKind, HostInfo } from '../telemetry/model.ts';
 
