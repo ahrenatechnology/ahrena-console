@@ -68,9 +68,15 @@ describe('#534/AC-1 stepCurrent and editStep', () => {
   test('#534/AC-1 editStep sends one updateIssue with the step id and the values as variables, then reads the issue back', async () => {
     const { source, calls } = fake();
     await source.editStep(k(534), k(601), { title: 'T', body: 'B' });
-    assert.deepEqual(calls.map((c) => c.operation), ['WorkIssueId', 'UpdateWorkIssue', 'WorkIssue']);
+    assert.deepEqual(calls.map((c) => c.operation), ['WorkPlanSteps', 'UpdateWorkIssue', 'WorkIssue']);
     assert.deepEqual(calls[1]!.variables.input, { id: 'I_601', title: 'T', body: 'B' });
     assert.ok(!calls[1]!.query.includes('"T"'));
+  });
+
+  test('#534/AC-1 editStep on a step that is not a Plan sub-issue (another type, removed, absent) is WorkIssueRefusedError step and sends no mutation', async () => {
+    const { source, calls } = fake({ subs: [node(601, { issueType: { name: 'Tech Task' } }), node(602, { state: 'CLOSED', stateReason: 'NOT_PLANNED' })] });
+    for (const step of [k(601), k(602), k(999)]) await assert.rejects(source.editStep(k(534), step, { title: 'T' }), (e: any) => e instanceof WorkIssueRefusedError && e.param === 'step');
+    assert.ok(calls.every((c) => c.operation === 'WorkPlanSteps'));
   });
 });
 

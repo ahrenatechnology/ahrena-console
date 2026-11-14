@@ -497,9 +497,9 @@ export class GithubGraphqlSource implements WorkSource, WorkIssueSource, WorkIss
 
   /** #534 one `updateIssue` on the step, then the parent read back. */
   async editStep(parent: string, step: string, edit: { title?: string; body?: string }): Promise<WorkIssueRead | null> {
-    const id = await this.issueId(step);
-    if (id === null) throw new WorkIssueRefusedError('step', step);
-    await this.mutate('UpdateWorkIssue', WRITE_QUERIES.update, { input: { id, ...(edit.title !== undefined ? { title: edit.title } : {}), ...(edit.body !== undefined ? { body: edit.body } : {}) } });
+    const loaded = await this.loadSteps(parent, step);
+    if (!loaded) return null;
+    await this.mutate('UpdateWorkIssue', WRITE_QUERIES.update, { input: { id: loaded.step!.id,...(edit.title !== undefined ? { title: edit.title } : {}), ...(edit.body !== undefined ? { body: edit.body } : {}) } });
     return this.readBack(parent);
   }
 
