@@ -91,7 +91,8 @@ const answer = (status: number, body: unknown) => new Response(JSON.stringify(bo
 class Core {
   cards: Obj[] = [planned(506)];
   runAnswers: (() => Response)[] = [];
-  runAnswer: () => Response = () => answer(200, { ok: true, opened: 'desktop', key: `${REPO}#506` });
+  runAnswer: () => Response | Promise<Response> = () => answer(200, { ok: true, opened: 'desktop', key: `${REPO}#506` });
+  runSignals: (AbortSignal | null | undefined)[] = [];
   openAnswer: () => Response | Promise<Response> = () => answer(200, { ok: true, opened: 'desktop' });
   calls: string[] = [];
   runs: Obj[] = [];
@@ -124,6 +125,7 @@ class Core {
     if (url.pathname === '/api/work/issue' && method === 'GET') return answer(200, issue(Number(url.searchParams.get('number'))));
     if (url.pathname === '/api/work/run' && method === 'POST') {
       this.runs.push(JSON.parse(String(init.body)));
+      this.runSignals.push(init.signal);
       return (this.runAnswers.shift() ?? this.runAnswer)();
     }
     const open = /^\/api\/sessions\/([^/]+)\/open$/.exec(url.pathname);
@@ -161,12 +163,12 @@ afterEach(() => {
   copied.length = 0;
 });
 
-async function open(core: Core, path = '/ui/work?level=item'): Promise<Screen> {
+async function open(core: Core, path = '/ui/work?level=item', transport: { timeoutMs?: number } = {}): Promise<Screen> {
   const u = new URL(path, here.origin);
   here.pathname = u.pathname;
   here.search = u.search;
-  const reader = httpReader({ base: here.origin, fetch: core.fetch });
-  const writer = httpWriter({ base: here.origin, fetch: core.fetch });
+  const reader = httpReader({ base: here.origin, fetch: core.fetch, ...transport });
+  const writer = httpWriter({ base: here.origin, fetch: core.fetch, ...transport });
   const area = new ElementoFalso('main');
   const changes: (() => void)[] = [];
   const leave = new AbortController();
@@ -531,6 +533,23 @@ describe('#532 the run confirmation does not depend on where the last plan confi
     assert.match(popup(s)!.getAttribute('aria-label') ?? '', /Executar o plano da/);
     await confirmRun(s, core);
     assert.deepEqual(core.runs, [{ repo: REPO, number: 506, target: 'desktop' }]);
+  });
+});
+
+describe('#525 #557 a core that stalls on the POST ends as the failure the card already shows, and the card leaves its posting state', () => {
+  test('#525 AC-2 #557 AC-1 Executar plano posts through the real httpWriter, the core never answers: the deadline aborts the request and the card shows the red note, back on its action', async () => {
+    const core = new Core();
+    core.runAnswer = () => new Promise<Response>(() => {});
+    const s = await open(core, '/ui/work?level=item', { timeoutMs: 60 });
+    press(buttonIn(articleOf(s, 506), 'run'), 'Executar plano');
+    await confirmRun(s, core);
+    assert.equal(articleOf(s, 506).querySelector('.wb-plan-note'), null, 'still waiting for the core before the deadline');
+    await until(() => articleOf(s, 506).querySelector('.wb-plan-note') !== null, 'the red note after the deadline');
+    assert.match(texto(articleOf(s, 506).querySelector('.wb-plan-note')), /O núcleo em 127\.0\.0\.1:4317 não respondeu/);
+    assert.equal(core.runSignals[0]?.aborted, true, 'the request was aborted');
+    assert.equal(articleOf(s, 506).querySelectorAll('button[data-action="run"]').length, 1, 'Executar plano is back');
+    assert.ok(inColumn(s, 'planning', 506), 'the card did not move to Em execução');
+    assert.equal(core.runs.length, 1, 'one POST, no loop');
   });
 });
 

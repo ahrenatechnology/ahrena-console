@@ -15,6 +15,7 @@ import { loading } from '../states.js';
 import { ago } from '../repos-format.js';
 import { connectEmptyFor, isGithubNotConnected } from '../github-connect.js';
 
+const INSTALL_TIMEOUT_MS = 120_000;
 const REREAD_MS = 5000;
 const OTHERS_SHOWN = 4;
 
@@ -581,7 +582,8 @@ export function mountInstallFlow(area, ctx, { owner, name, plan: first, step: fi
     draw();
     const body = { platforms: choice.platforms, plugins: choice.plugins, planHash: plan.planHash, title: title.trim() || undefined, issue: issue.value ?? undefined };
     try {
-      const r = await ctx.write(base, body);
+      // Opening the installation PR makes several GitHub calls in a row; give it twice the default.
+      const r = await ctx.write(base, body, { timeoutMs: INSTALL_TIMEOUT_MS });
       if (!alive) return;
       const t = planTotals(plan);
       submitted = { ...t, plugins: choice.plugins.length };
