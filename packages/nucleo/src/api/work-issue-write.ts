@@ -41,8 +41,8 @@ import { readJsonBody } from './connections-route.ts';
 import { WORK_ISSUE_COMMENTS_ROUTE, WORK_ISSUE_ROUTE } from './work-issue.ts';
 
 /** #533 GitHub's limits: a title is 256 characters, a body or a comment 65536; UTF-8 takes up to 4 bytes of each. */
-const MAX_TITLE = 256;
-const MAX_TEXT = 65_536;
+export const MAX_TITLE = 256;
+export const MAX_TEXT = 65_536;
 export const MAX_WRITE_BYTES = 4 * MAX_TEXT + 16_384;
 const MAX_LABELS = 100;
 const MAX_LABEL = 50;
@@ -64,10 +64,10 @@ function reasonOf(err: unknown): WorkIssueWriteReason {
   return githubFailureOf(err);
 }
 
-const isText = (v: unknown, max: number): v is string => typeof v === 'string' && v.trim().length > 0 && v.length <= max;
+export const isText = (v: unknown, max: number): v is string => typeof v === 'string' && v.trim().length > 0 && v.length <= max;
 const isName = (v: unknown, max: number): v is string => typeof v === 'string' && v.length > 0 && v.length <= max;
 
-function isIssueKey(v: unknown): v is string {
+export function isIssueKey(v: unknown): v is string {
   const m = typeof v === 'string' ? KEY.exec(v) : null;
   return m !== null && isPlanRepo(m[1]!) && isPlanNumber(Number(m[2]));
 }
@@ -112,57 +112,92 @@ function parseEdit(b: Record<string, unknown>): Parsed {
 
 export type WorkIssueWriteRoute = (req: IncomingMessage, res: ServerResponse) => Promise<void>;
 
+/** #533 a write request that passed the shared checks: the JSON body, and the issue it names. */
+export interface WriteRequest {
+  body: Record<string, unknown>;
+  key: string;
+}
+
+/**
+ * The checks every issue write route shares, in order (#534 reuses them): the method (405), the exact raw path (403),
+ * JSON only (415), the bounded body (413), malformed JSON (400), `--no-github` (503 `off`), then `repo` and `number`
+ * (400 `bad-param`). It answers on failure and returns `null`; the route goes on with the body only when it returns one.
+ */
+export async function readWriteRequest(req: IncomingMessage, res: ServerResponse, { method, route, enabled }: { method: string; route: string; enabled: boolean }): Promise<WriteRequest | null> {
+  if (req.method !== method) {
+    req.resume();
+    send(res, 405, { error: 'method-not-allowed' });
+    return null;
+  }
+  // #533 the exact raw path: a query, a trailing slash or an encoded variant is never this route.
+  if (req.url !== route) {
+    req.resume();
+    send(res, 403, { error: 'forbidden' });
+    return null;
+  }
+  if (!/^application\/json\b/i.test(req.headers['content-type'] ?? '')) {
+    req.resume();
+    send(res, 415, { error: 'unsupported-media-type' });
+    return null;
+  }
+  const read = await readJsonBody(req, MAX_WRITE_BYTES);
+  if (!read.ok) {
+    if (read.error === 'too-large') {
+      // #533 the rest of the body is read and dropped (only the /ui reaches here), so the client sees the 413 and not a broken pipe.
+      req.resume();
+      res.setHeader('connection', 'close');
+      send(res, 413, { error: 'too-large' });
+    } else send(res, 400, { error: 'invalid' });
+    return null;
+  }
+  if (!enabled) {
+    send(res, 503, { error: 'off' });
+    return null;
+  }
+  const b = read.value;
+  if (typeof b !== 'object' || b === null || Array.isArray(b)) {
+    send(res, 400, { error: 'bad-param', param: 'edit' });
+    return null;
+  }
+  const { repo, number } = b as Record<string, unknown>;
+  if (typeof repo !== 'string' || !isPlanRepo(repo)) {
+    send(res, 400, { error: 'bad-param', param: 'repo' });
+    return null;
+  }
+  if (!isPlanNumber(number)) {
+    send(res, 400, { error: 'bad-param', param: 'number' });
+    return null;
+  }
+  return { body: b as Record<string, unknown>, key: workKey(repo, number) };
+}
+
+/** #533 a failed write as the /ui sees it: a status and a stable code, never GitHub's text (that went to the core log). */
+export function sendWriteFailure(res: ServerResponse, err: unknown): void {
+  if (err instanceof WorkIssueNotFoundError) return send(res, 404, { error: 'not-found' });
+  if (err instanceof WorkIssueConflictError) return send(res, 409, { error: 'conflict', ...err.current });
+  if (err instanceof WorkIssueRefusedError) return send(res, 422, { error: 'unknown-value', param: err.param });
+  if (err instanceof WorkIssueWriteOffError) return send(res, 503, { error: 'off' });
+  if (err instanceof WorkIssueWrittenUnreadError) return send(res, 502, { error: 'written-unread', reason: githubFailureOf(err.cause) });
+  const reason = reasonOf(err);
+  return send(res, 502, { error: reason === 'no-permission' || reason === 'no-scope' ? 'github-refused' : 'github-unavailable', reason });
+}
+
 export function createWorkIssueWriteRoute({ service }: WorkIssueWriteRouteOptions): WorkIssueWriteRoute {
   return async function workIssueWriteRoute(req, res) {
-    const path = (req.url ?? '').split('?')[0];
-    const comments = path === WORK_ISSUE_COMMENTS_ROUTE;
-    if (req.method !== (comments ? 'POST' : 'PATCH')) {
-      req.resume();
-      return send(res, 405, { error: 'method-not-allowed' });
-    }
-    // #533 the exact raw path: a query, a trailing slash or an encoded variant is never this route.
-    if (req.url !== (comments ? WORK_ISSUE_COMMENTS_ROUTE : WORK_ISSUE_ROUTE)) {
-      req.resume();
-      return send(res, 403, { error: 'forbidden' });
-    }
-    if (!/^application\/json\b/i.test(req.headers['content-type'] ?? '')) {
-      req.resume();
-      return send(res, 415, { error: 'unsupported-media-type' });
-    }
-    const read = await readJsonBody(req, MAX_WRITE_BYTES);
-    if (!read.ok) {
-      if (read.error === 'too-large') {
-        // #533 the rest of the body is read and dropped (only the /ui reaches here), so the client sees the 413 and not a broken pipe.
-        req.resume();
-        res.setHeader('connection', 'close');
-        return send(res, 413, { error: 'too-large' });
-      }
-      return send(res, 400, { error: 'invalid' });
-    }
-    if (!service) return send(res, 503, { error: 'off' });
-    const b = read.value;
-    if (typeof b !== 'object' || b === null || Array.isArray(b)) return send(res, 400, { error: 'bad-param', param: 'edit' });
-    const { repo, number } = b as Record<string, unknown>;
-    if (typeof repo !== 'string' || !isPlanRepo(repo)) return send(res, 400, { error: 'bad-param', param: 'repo' });
-    if (!isPlanNumber(number)) return send(res, 400, { error: 'bad-param', param: 'number' });
-    const key = workKey(repo, number);
+    const comments = (req.url ?? '').split('?')[0] === WORK_ISSUE_COMMENTS_ROUTE;
+    const request = await readWriteRequest(req, res, { method: comments ? 'POST' : 'PATCH', route: comments ? WORK_ISSUE_COMMENTS_ROUTE : WORK_ISSUE_ROUTE, enabled: service !== null });
+    if (!request || !service) return;
+    const { body: b, key } = request;
     try {
       if (comments) {
-        const text = (b as Record<string, unknown>).body;
-        if (!isText(text, MAX_TEXT)) return send(res, 400, { error: 'bad-param', param: 'body' });
-        return send(res, 200, await service.comment(key, text));
+        if (!isText(b.body, MAX_TEXT)) return send(res, 400, { error: 'bad-param', param: 'body' });
+        return send(res, 200, await service.comment(key, b.body));
       }
-      const parsed = parseEdit(b as Record<string, unknown>);
+      const parsed = parseEdit(b);
       if (!parsed.ok) return send(res, 400, { error: 'bad-param', param: parsed.param });
       return send(res, 200, await service.update(key, parsed.edit, parsed.seenAt));
     } catch (err) {
-      if (err instanceof WorkIssueNotFoundError) return send(res, 404, { error: 'not-found' });
-      if (err instanceof WorkIssueConflictError) return send(res, 409, { error: 'conflict', ...err.current });
-      if (err instanceof WorkIssueRefusedError) return send(res, 422, { error: 'unknown-value', param: err.param });
-      if (err instanceof WorkIssueWriteOffError) return send(res, 503, { error: 'off' });
-      if (err instanceof WorkIssueWrittenUnreadError) return send(res, 502, { error: 'written-unread', reason: githubFailureOf(err.cause) });
-      const reason = reasonOf(err);
-      return send(res, 502, { error: reason === 'no-permission' || reason === 'no-scope' ? 'github-refused' : 'github-unavailable', reason });
+      sendWriteFailure(res, err);
     }
   };
 }

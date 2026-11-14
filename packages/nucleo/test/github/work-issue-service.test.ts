@@ -169,6 +169,12 @@ class FakeWriter implements WorkIssueWriter {
     if (this.unread) throw new WorkIssueWrittenUnreadError(key, this.unread);
     return issueRead(Number(key.split('#')[1]), { ...this.github, updatedAt: '2026-11-12T13:00:00Z', comments: [{ author: 'me', createdAt: '2026-11-12T13:00:00Z', body }], commentsTotal: 1 });
   }
+  // #534 the Plan steps have their own tests (work-plan-steps-service.test.ts).
+  async stepCurrent(): Promise<WorkIssueCurrent | null> { return null; }
+  async editStep(): Promise<WorkIssueRead | null> { return null; }
+  async addStep(): Promise<WorkIssueRead | null> { return null; }
+  async removeStep(): Promise<WorkIssueRead | null> { return null; }
+  async moveStep(): Promise<WorkIssueRead | null> { return null; }
 }
 
 function setupWrite() {

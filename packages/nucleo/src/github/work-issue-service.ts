@@ -127,13 +127,47 @@ export class WorkIssueService {
   }
 
   /**
+   * #534 edits a Plan step's title and body. `seenAt` is the step's `updatedAt` the /ui read, checked as a title or
+   * body save of an issue is: GitHub's newer is `WorkIssueConflictError` and nothing is written. The step's own cached
+   * detail is dropped, the parent's holds the answer.
+   */
+  async editStep(key: string, step: string, edit: { title?: string; body?: string }, seenAt: string): Promise<WorkIssueResult> {
+    return this.write(
+      key,
+      async (writer) => {
+        const current = await writer.stepCurrent(key, step);
+        if (!current) return null;
+        if (Date.parse(current.updatedAt) > Date.parse(seenAt)) throw new WorkIssueConflictError(step, current);
+        return writer.editStep(key, step, edit);
+      },
+      [step],
+    );
+  }
+
+  /** #534 adds a Plan sub-issue at the end of the plan. */
+  async addStep(key: string, step: { title: string; body: string }): Promise<WorkIssueResult> {
+    return this.write(key, (writer) => writer.addStep(key, step));
+  }
+
+  /** #534 removes a step: its sub-issue is closed as not planned. */
+  async removeStep(key: string, step: string): Promise<WorkIssueResult> {
+    return this.write(key, (writer) => writer.removeStep(key, step), [step]);
+  }
+
+  /** #534 moves a step behind `after`, or to the top with `null`. */
+  async moveStep(key: string, step: string, after: string | null): Promise<WorkIssueResult> {
+    return this.write(key, (writer) => writer.moveStep(key, step, after));
+  }
+
+  /**
    * #533 the write seam: run one GitHub write, then store what GitHub returned (the cache keeps no earlier
    * version of its own: ADR-0001) and answer it. A failure stores nothing, so the cache stays as it was (except a
    * write applied whose read-back failed, which drops the entry: the stored version is older than GitHub's); the
    * raw text goes to the log and the error goes up for the route to turn into a code. A rate limit also
-   * pauses the cache's GitHub calls, as the Kanban mover does.
+   * pauses the cache's GitHub calls, as the Kanban mover does. `drop` (#534) are other issues whose own cached detail
+   * the write makes stale (a step's), dropped when the write was applied.
    */
-  private async write(key: string, run: (writer: WorkIssueWriter) => Promise<WorkIssueRead | null>): Promise<WorkIssueResult> {
+  private async write(key: string, run: (writer: WorkIssueWriter) => Promise<WorkIssueRead | null>, drop: readonly string[] = []): Promise<WorkIssueResult> {
     if (!this.writer) throw new WorkIssueWriteOffError();
     const wait = this.cache.pauseLeftMs();
     if (wait > 0) throw new RateLimitedError('GitHub limitou as chamadas; tente de novo em instantes', wait);
@@ -143,13 +177,14 @@ export class WorkIssueService {
     } catch (err) {
       if (err instanceof RateLimitedError) this.cache.pause(err.retryAfterMs);
       // #533 GitHub holds the write: the cached version is stale, so the next read asks GitHub.
-      if (err instanceof WorkIssueWrittenUnreadError) await this.cache.invalidate(workIssueCacheKey(key));
+      if (err instanceof WorkIssueWrittenUnreadError) for (const k of [key, ...drop]) await this.cache.invalidate(workIssueCacheKey(k));
       if (!(err instanceof WorkIssueConflictError)) this.log(`work issue ${key}: write failed: ${rawTextOf(err)}`);
       throw err;
     }
     if (read === null) throw new WorkIssueNotFoundError(key);
     const cacheKey = workIssueCacheKey(key);
     await this.cache.put<WorkIssueRead | null>(cacheKey, read);
+    for (const k of drop) await this.cache.invalidate(workIssueCacheKey(k));
     const stored = (await this.cache.peek(cacheKey))!;
     const view = buildWorkIssue(read, await this.projectStatus(read.key));
     return { ...view, fetchedAt: stored.fetchedAt, stale: false, staleReason: null };
