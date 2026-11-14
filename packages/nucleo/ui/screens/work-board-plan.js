@@ -32,9 +32,10 @@ export function planState(card) {
 /**
  * The planning parts of a card (and of the panel): `badge` ("planejando…"), `note` (the failure and its reason, in red)
  * and `actions` (Planejar as the one primary action, Replanejar as a link in the line below). `onPlan` and `onReplan`
- * get the card and the button pressed, to anchor the confirmation on it. While planning there is no action.
+ * get the card and the button pressed, to anchor the confirmation on it. While planning there is no action. `lead` is a node
+ * placed before the links of a card with a plan: the primary action of that state (Executar plano, issue 532).
  */
-export function cardPlanParts(card, { onPlan = null, onReplan = null } = {}) {
+export function cardPlanParts(card, { onPlan = null, onReplan = null, lead = null } = {}) {
   const state = planState(card);
   const none = { badge: null, note: null, actions: null };
   if (state === 'hidden') return none;
@@ -48,12 +49,12 @@ export function cardPlanParts(card, { onPlan = null, onReplan = null } = {}) {
   const note = state === 'failed' ? el('div', { class: 'wb-plan-note', role: 'alert' }, icon('alert'), el('span', {}, card.planning.reason || FAILED_FALLBACK)) : null;
   const hasPlan = card.plan?.steps > 0;
   const actions = hasPlan
-    ? el('div', { class: 'wb-plan-acts' }, el('div', { class: 'wb-plan-links' }, act('wb-plan-link', 'replan', 'Replanejar', `Replanejar a ${number}`, onReplan)))
+    ? el('div', { class: 'wb-plan-acts' }, lead, el('div', { class: 'wb-plan-links' }, act('wb-plan-link', 'replan', 'Replanejar', `Replanejar a ${number}`, onReplan)))
     : el('div', { class: 'wb-plan-acts' }, act('btn filled sm wb-plan-act', 'plan', 'Planejar', `Planejar a ${number}`, onPlan, 'bot'));
   return { ...none, note, actions };
 }
 
-function targetChoice(target, onTarget) {
+export function targetChoice(target, onTarget) {
   const group = el(
     'div',
     { class: 'wb-plan-choice', role: 'radiogroup', 'aria-label': 'Abrir em' },

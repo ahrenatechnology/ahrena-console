@@ -65,11 +65,14 @@ function keyed(parts, key) {
  * confirmation. It reads the layer's state through `state()` and changes it only through `apply(next, intent)`; `retry` and
  * `confirm` are the layer's own, because they touch what the layer keeps (the forced re-read, the failure it saw before).
  */
-function createIssueView({ area, state, apply, cardFor, retry, confirm }) {
+function createIssueView({ area, state, apply, cardFor, retry, confirm, run, onAsk }) {
   let focus = null;
   let anchorInPanel = false;
 
-  const shownCard = (card) => (state().plans[card.key] ? cardWithPlanning(state(), card) : card);
+  const shownCard = (card) => {
+    const planned = state().plans[card.key] ? cardWithPlanning(state(), card) : card;
+    return run ? run.card(planned) : planned;
+  };
   const focusOn = (intent) => {
     focus = intent;
   };
@@ -81,6 +84,7 @@ function createIssueView({ area, state, apply, cardFor, retry, confirm }) {
   };
   const close = () => apply(closePanel(state()), { kind: 'card', key: state().panel.key });
   const ask = (replan) => (card, button) => {
+    onAsk?.();
     anchorInPanel = Boolean(button?.closest?.('.wb-panel'));
     const base = cardFor(card.key) ?? card;
     apply(askPlan(state(), base, { replan }), { kind: 'popup' });
@@ -112,14 +116,16 @@ function createIssueView({ area, state, apply, cardFor, retry, confirm }) {
     return node;
   }
 
-  const hostedInPanel = (card) => anchorInPanel && state().panel.open && state().panel.key === card.key;
+  const panelHolds = (card) => state().panel.open && state().panel.key === card.key;
+  const partsOf = (card) => (run ? run.parts(card, handlers) : cardPlanParts(card, handlers));
+  const hostedInPanel = (card) => anchorInPanel && panelHolds(card);
 
   /** issue 508: the card of the board with its planning parts, the open one marked and the confirmation anchored on it. */
   function renderCard(card, options) {
     const shown = shownCard(card);
-    const parts = keyed(cardPlanParts(shown, handlers), card.key);
+    const parts = keyed(partsOf(shown), card.key);
     const node = workCard(shown, { ...options, parts, onOpen: open, selected: state().panel.open && state().panel.key === card.key });
-    const pop = hostedInPanel(card) ? null : popupFor(shown);
+    const pop = (hostedInPanel(card) ? null : popupFor(shown)) ?? run?.popup(shown, 'card', panelHolds(card)) ?? null;
     return pop ? el('div', { class: 'wb-anchor' }, node, pop) : node;
   }
 
@@ -134,9 +140,9 @@ function createIssueView({ area, state, apply, cardFor, retry, confirm }) {
     if (view === 'skeleton') node = issuePanelLoading({ card, now, onClose: close });
     else if (view === 'failure') node = issuePanelFailure({ card, reason, now, onRetry: retry, onClose: close });
     else {
-      const parts = keyed(cardPlanParts(card, handlers), `panel:${key}`);
+      const parts = keyed(partsOf(card), `panel:${key}`);
       node = issuePanel({ card, issue: { ...issue, stale: stale || issue.stale }, now, parts, onRetry: retrying ? null : retry, onClose: close });
-      const pop = hostedInPanel(card) ? popupFor(card) : null;
+      const pop = (hostedInPanel(card) ? popupFor(card) : null) ?? run?.popup(card, 'panel', true) ?? null;
       if (pop) (node.querySelector('.wb-panel-acts') ?? node).append(pop);
     }
     node.setAttribute('tabindex', '-1');
@@ -177,7 +183,7 @@ function createIssueView({ area, state, apply, cardFor, retry, confirm }) {
  * GET /api/work quietly; `ctx` is the screen's (read, write, signal). It keeps the state and its effects; the view half is
  * createIssueView's.
  */
-export function createIssueLayer({ ctx, area, cards, redraw, reread }) {
+export function createIssueLayer({ ctx, area, cards, redraw, reread, run = null, onAsk = null }) {
   let s = initialIssueState();
   let alive = true;
   let learning = false;
@@ -300,7 +306,10 @@ export function createIssueLayer({ ctx, area, cards, redraw, reread }) {
     link.remove();
   }
 
-  const view = createIssueView({ area, state: () => s, apply, cardFor, retry, confirm });
+  const view = createIssueView({ area, state: () => s, apply, cardFor, retry, confirm, run, onAsk });
 
-  return { renderCard: view.renderCard, wrap: view.wrap, signature: view.signature, learn, afterDraw: view.afterDraw, stop };
+  // issue 532: the screen closes this layer's open confirmation when the run layer opens its own (one at a time, 465-6).
+  const closeConfirmation = () => Object.keys(s.plans).forEach((key) => apply(cancelPlan(s, { key })));
+
+  return { renderCard: view.renderCard, wrap: view.wrap, signature: view.signature, learn, afterDraw: view.afterDraw, closeConfirmation, stop };
 }

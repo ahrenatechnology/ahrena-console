@@ -134,3 +134,13 @@ article[data-selected] { border-color: var(--accent); box-shadow: 0 0 0 1px var(
 .wb-edit-add-label { height: 22px; padding: 0 8px; border-radius: 99px; font-size: 11.5px; color: var(--accent-text); }
 .wb-edit-exits { gap: 8px; }
 .wb-edit-steps li.wb-edit-new-step { border-color: var(--accent); color: var(--accent-text); }
+
+/* ---------- Executar plano (issue 532, wireframes 465-2 and 465-6): "subindo…", the limit warning, the prompt, the notice ---------- */
+.wb-run-boot .icon { animation: wb-run-spin 1.2s linear infinite; }
+@keyframes wb-run-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .wb-run-boot .icon { animation: none; } }
+.wb-run-warn { display: flex; gap: 7px; align-items: flex-start; padding: 8px 9px; border-radius: 8px; font-size: 12px; line-height: 1.4; background: var(--status-waiting-badge); color: var(--status-waiting-text); }
+.wb-run-warn .icon { flex: none; margin-top: 1px; }
+.wb-run-prompt { font-size: 11.5px; line-height: 1.45; color: var(--muted); background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 7px 9px; overflow-wrap: anywhere; }
+.wb-run-notice { display: flex; gap: 8px; align-items: center; padding: 10px 14px; border-radius: 10px; font-size: 12.5px; background: var(--raised); border: 1px solid var(--border); box-shadow: 0 8px 24px color-mix(in srgb, var(--mono-black) 40%, transparent); }
+.wb-run-notice > .icon { flex: none; color: var(--status-completed-text); }
