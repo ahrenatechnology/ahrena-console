@@ -17,6 +17,7 @@ import {
   workBoardHeader,
 } from './work-board-parts.js';
 import { createIssueLayer } from './work-board-issue.js';
+import { createRunLayer } from './work-board-run-layer.js';
 import { boardUrl, clearFilters, drill, initialState, loadFailed, loadSucceeded, selectPath, setFilter, setLevel, startLoad } from './work-board-state.js';
 
 const STYLE = '/ui/work-board.css';
@@ -80,7 +81,9 @@ export async function mount(area, ctx) {
   let liveTimer = null;
   let quiet = 0;
   let pendingFocus = null;
-  const layer = createIssueLayer({ ctx, area, cards: () => (state?.data?.columns ?? []).flatMap((c) => c.cards ?? []), redraw: () => draw(), reread: () => quietRead() });
+  const boardCards = () => (state?.data?.columns ?? []).flatMap((c) => c.cards ?? []);
+  const execution = createRunLayer({ ctx, area, cards: boardCards, redraw: () => draw(), reread: () => quietRead() });
+  const layer = createIssueLayer({ ctx, area, cards: boardCards, redraw: () => draw(), reread: () => quietRead(), run: execution.seam });
 
   function follow(s) {
     const target = s.url;
@@ -180,7 +183,7 @@ export async function mount(area, ctx) {
   function columns(mode, extra = {}) {
     const data = state.data;
     return boardColumns({
-      columns: data?.columns ?? null,
+      columns: execution.columns(data?.columns ?? null),
       level: state.dataFilters?.level ?? state.filters.level,
       chainMode: state.chainMode,
       primaryRepo: data?.project?.primaryRepo ?? null,
@@ -239,15 +242,17 @@ export async function mount(area, ctx) {
   function draw() {
     if (!alive) return;
     layer.learn();
-    const shown = JSON.stringify([state.view, state.phase, state.busy, state.error, state.filters, state.dataFilters, state.suggestion, state.data, layer.signature()]);
+    execution.learn();
+    const shown = JSON.stringify([state.view, state.phase, state.busy, state.error, state.filters, state.dataFilters, state.suggestion, state.data, layer.signature(), execution.signature()]);
     if (shown === drawn) return;
     drawn = shown;
     const active = globalThis.document?.activeElement;
     const nowhere = !active || active === globalThis.document?.body;
     const key = active && area.contains(active) ? focusKey(active) : nowhere ? pendingFocus : null;
-    area.replaceChildren(...layer.wrap(nodes()));
+    area.replaceChildren(...layer.wrap([...execution.notices(), ...nodes()]));
     restoreFocus(key);
     layer.afterDraw();
+    execution.afterDraw();
   }
 
   function restoreFocus(key) {
@@ -270,6 +275,7 @@ export async function mount(area, ctx) {
   const cleanup = () => {
     alive = false;
     layer.stop();
+    execution.stop();
     clearTimeout(liveTimer);
     sheet?.remove();
   };
