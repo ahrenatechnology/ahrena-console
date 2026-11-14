@@ -40,7 +40,7 @@ function issue(over: Partial<WorkIssueResult> & { stepNumbers?: number[] } = {})
     comments: [],
     commentsTotal: 0,
     parents: [],
-    subIssues: [],
+    subIssues: stepNumbers.map((n) => ({ key: `acme/app#${n}`, repo: 'acme/app', number: n, title: `step ${n}`, url: `https://github.com/acme/app/issues/${n}`, state: 'OPEN' as const, type: 'Plan' })),
     plan: { count: stepNumbers.length, steps: stepNumbers.map((n) => ({ number: n, title: `step $(touch /tmp/${n})`, url: `https://github.com/acme/app/issues/${n}`, state: 'OPEN' as const })) },
     pullRequest: null,
     fetchedAt: T0,
@@ -253,6 +253,16 @@ describe('#507 POST /api/work/plan', () => {
       current = issue({ stepNumbers: [] });
       await post({ repo: 'acme/app', number: 412, target: 'terminal', replan: true });
       assert.equal((await runs.get('acme/app#412'))?.replan, true);
+    });
+
+    test('#507/AC-2 Given an issue whose only sub-issue is not a Plan, When POST has no replan, Then the run is a replan and the prompt lists no step', async () => {
+      fresh();
+      const task = { key: 'acme/app#700', repo: 'acme/app', number: 700, title: 'A task', url: 'https://github.com/acme/app/issues/700', state: 'OPEN' as const, type: 'Task' };
+      current = issue({ subIssues: [task], stepNumbers: [] });
+      assert.equal((await post({ repo: 'acme/app', number: 412, target: 'terminal' })).status, 200);
+      assert.equal((await runs.get('acme/app#412'))?.replan, true, 'the sub-issue total decides, as on the card');
+      assert.equal(terminal[0]!.prompt, planningPrompt({ repo: 'acme/app', number: 412, replaceSteps: [] }));
+      assert.doesNotMatch(terminal[0]!.prompt!, /#700/);
     });
 
     test('#507/AC-2 replan must be a boolean', async () => {

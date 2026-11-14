@@ -105,7 +105,7 @@ export class WorkBoardService {
 
   /**
    * #507 settles every planning run whose issue is on the board against its live planning sessions and its
-   * Plan sub-issues (work-plan.ts), records the change, and returns the card states. The record failing
+   * sub-issue total (work-plan.ts), records the change, and returns the card states. The record failing
    * never fails the board: the cards just carry no planning state.
    */
   private async settlePlanning(analyzed: ReadonlyMap<string, AnalyzedWorkNode>, planningLinks: readonly WorkSessionLink[], now: number): Promise<Map<string, WorkCardPlanning>> {

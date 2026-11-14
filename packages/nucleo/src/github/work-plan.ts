@@ -11,7 +11,8 @@
  * How a run ends (`settlePlanRun`, evaluated on every board read):
  * - the run stays `running` while its planning session is live; the session is the live one whose first
  *   prompt carries `PLAN_PROMPT_MARKER` for the issue and which started after the run did;
- * - Plan sub-issues exist (a fresh plan) -> `done`; a replan already has steps, so it is `done` only when
+ * - sub-issues exist (a fresh plan; "has a plan" is the total sub-issue count, as on the card) -> `done`; a replan
+ *   already has them, so it is `done` only when
  *   its session ended with steps still there;
  * - the session was seen and is gone with no plan -> `failed`, `session-ended`;
  * - no session appeared within `PLAN_SESSION_WINDOW_MS` (the person did not send the Desktop's pre-filled
@@ -118,7 +119,7 @@ export interface LivePlanningSession {
 export interface SettleInput {
   /** #507 The live planning sessions of the run's issue. */
   live: readonly LivePlanningSession[];
-  /** #507 The Plan sub-issues the issue has now. */
+  /** #507 The total sub-issues the issue has now (any type, the card's `plan: { steps }`). */
   steps: number;
   now: number;
 }

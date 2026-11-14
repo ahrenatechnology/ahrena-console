@@ -16,8 +16,8 @@
  *   address (the Desktop pre-fills the composer, the person sends the prompt); `terminal` through the
  *   terminal opener with the prompt as its own file (terminal-launch.ts). Without the launcher: 501 with
  *   `command`, `cd '<folder>' && claude '<prompt>'`, each part single-quoted.
- * - The prompt (work-plan.ts) holds the issue's `owner/repo#N` and, when it replans (`replan`, or the issue already has Plan steps: the server decides), the numbers of its current
- *   Plan steps; no title, body or comment ever enters it, a command or an address (AC-6). `repo` and `number`
+ * - The prompt (work-plan.ts) holds the issue's `owner/repo#N` and, when it replans (`replan`, or the issue already has sub-issues of any type: the server decides), the numbers of its
+ *   Plan-typed steps; no title, body or comment ever enters it, a command or an address (AC-6). `repo` and `number`
  *   are validated before anything is read or run.
  * - The run is recorded (work-plan-runs.ts) once the session opened, with the start taken before opening so
  *   the session is never older than its run. A second request while a run is active is 409 (isPlanRunActive).
@@ -112,8 +112,9 @@ export function createWorkPlanRoute(o: WorkPlanRouteDeps | null): WorkPlanRoute 
     const previous = await o.runs.get(key);
     if (previous && isPlanRunActive(previous, now())) return send(res, 409, { error: 'Já há um planejamento em andamento para esta issue' });
 
-    // #507 the issue's current Plan steps decide a replan; the client flag can ask for one, never hide the steps.
-    const replacing = replan === true || issue.plan.count > 0;
+    // #507 "has a plan" is the TOTAL sub-issue count, the card's meaning (#465 `plan: { steps }`): it decides a replan, the
+    // client flag can only ask for one. The prompt lists the Plan-typed steps only.
+    const replacing = replan === true || issue.subIssues.length > 0;
     const prompt = planningPrompt({ repo, number, ...(replacing ? { replaceSteps: issue.plan.steps.map((s) => s.number) } : {}) });
     const folders = await knownFolders(o.storage, undefined, o.isThrowaway ?? isThrowawayFolder);
     const folder = await folderOfRepo(repo, folders, o.git ?? gitDoSistema);
