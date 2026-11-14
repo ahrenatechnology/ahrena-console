@@ -123,7 +123,7 @@ describe('#531/AC-2 work_execution_runs', () => {
     assert.ok(MIGRATIONS.some((m) => m.version === 18));
     const storage = openSqliteStorage({ path: ':memory:' });
     const cols = (storage.db.prepare('PRAGMA table_info(work_execution_runs)').all() as { name: string; pk: number }[]).map((c) => [c.name, c.pk]);
-    assert.deepEqual(cols, [['item_key', 1], ['target', 0], ['started_at', 0], ['state', 0], ['session_id', 0], ['finished_at', 0]]);
+    assert.deepEqual(cols, [['item_key', 1], ['target', 0], ['started_at', 0], ['state', 0], ['session_id', 0], ['finished_at', 0], ['origin', 0]]); // #477 migration 20 adds `origin`
     storage.close();
   });
 
