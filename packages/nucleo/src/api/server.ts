@@ -28,6 +28,7 @@ import type { ManagedRuntime } from '../runtime/service.ts';
 // | `GET /api/project`            | The GitHub Project kanban (api/project.ts, #80); `?refresh=1` re-reads |
 // | `POST /api/project/move`      | Changes a card's Status: `{ itemId, optionId }` (api/project.ts) |
 // | `GET /api/work/issue`         | The work board's issue detail: body, comments, parents, sub-issues, Plan steps and the linked pull request (`?repo=owner/name`, `?number=`, `?refresh=1`; api/work-issue.ts, #506) |
+// | `GET /api/work/issue/options` | A repository's issue options for the edit mode's selectors: labels, issue types, open milestones and open issues as parent candidates (`?repo=owner/name`, `?refresh=1`; api/work-issue-options.ts, #590) |
 // | `PATCH /api/work/issue`       | Saves fields of one issue on GitHub (title, body, labels, type, milestone, parent) and answers the issue as GitHub returned it; a title or body save older than GitHub's is 409 (`{ repo, number, updatedAt?, ... }`; api/work-issue-write.ts, #533) |
 // | `POST /api/work/issue/comments` | Adds a comment to an issue on GitHub (`{ repo, number, body }`; api/work-issue-write.ts, #533) |
 // | `POST`, `PATCH` and `DELETE /api/work/issue/steps`, `POST /api/work/issue/steps/order` and `POST /api/work/issue/steps/restore` | The issue's Plan steps, as Plan sub-issues on GitHub: add one, edit its title and body (409 when older than GitHub's), remove it (closed as not planned), restore it (reopened; 409 `not-removed` when it is not removed) and move it (`{ repo, number, step, ... }`, `after` a key or `null` for the top); each answers the issue as GitHub returned it (api/work-issue-steps.ts, #534) |
@@ -109,6 +110,7 @@ import type { McpServer } from '../mcp/protocol.ts';
 import { criarRotaDoProjeto, ehDoProjeto, mesmaOrigemMovendo, PROJECT_OPTIONS_ROUTE, type OpcoesDoProjeto } from './project.ts';
 import { createWorkBoardRoute, WORK_BOARD_ROUTE, type WorkBoardRouteOptions } from './work-board.ts';
 import { createWorkIssueStepsRoute, WORK_ISSUE_STEPS_ORDER_ROUTE, WORK_ISSUE_STEPS_RESTORE_ROUTE, WORK_ISSUE_STEPS_ROUTE, type WorkIssueStepsRouteOptions } from './work-issue-steps.ts';
+import { createWorkIssueOptionsRoute, WORK_ISSUE_OPTIONS_ROUTE, type WorkIssueOptionsRouteOptions } from './work-issue-options.ts';
 import { createWorkIssueRoute, WORK_ISSUE_COMMENTS_ROUTE, WORK_ISSUE_ROUTE, type WorkIssueRouteOptions } from './work-issue.ts';
 import { createWorkIssueWriteRoute, type WorkIssueWriteRouteOptions } from './work-issue-write.ts';
 import { createWorkPlanRoute, WORK_PLAN_ROUTE, type WorkPlanRouteOptions } from './work-plan.ts';
@@ -207,6 +209,8 @@ export interface ApiOptions {
   work?: WorkBoardRouteOptions;
   /** #506 the work board's issue detail; without it, `/api/work/issue` answers 503 `off`. */
   workIssue?: WorkIssueRouteOptions & WorkIssueWriteRouteOptions & WorkIssueStepsRouteOptions;
+  /** #590 the issue options of a repository; without it, `/api/work/issue/options` answers 503 `off`. */
+  workIssueOptions?: WorkIssueOptionsRouteOptions;
   /** #507 "Planejar" (`POST /api/work/plan`); without it the route answers 503. */
   workPlan?: WorkPlanRouteOptions;
   /** #531 "Executar plano" (`POST /api/work/run`); without it the route answers 503. */
@@ -298,6 +302,7 @@ export function isGithubScreenRoute(pathname: string): boolean {
     pathname === WORK_BOARD_ROUTE ||
     pathname === WORK_ISSUE_ROUTE ||
     pathname === WORK_ISSUE_COMMENTS_ROUTE ||
+    pathname === WORK_ISSUE_OPTIONS_ROUTE ||
     pathname === WORK_ISSUE_STEPS_ROUTE ||
     pathname === WORK_ISSUE_STEPS_ORDER_ROUTE ||
     pathname === WORK_ISSUE_STEPS_RESTORE_ROUTE ||
@@ -428,6 +433,7 @@ export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
   const projectRoute = criarRotaDoProjeto(opts.project ?? { kanban: null, fonte: 'github', log });
   const workBoardRoute = createWorkBoardRoute(opts.work ?? { service: null });
   const workIssueRoute = createWorkIssueRoute(opts.workIssue ?? { service: null });
+  const workIssueOptions = createWorkIssueOptionsRoute(opts.workIssueOptions ?? { service: null });
   const workIssueWrite = createWorkIssueWriteRoute(opts.workIssue ?? { service: null });
   const workIssueSteps = createWorkIssueStepsRoute(opts.workIssue ?? { service: null });
   const openDescriber = opts.openDescriber ?? new SessionOpenDescriber();
@@ -625,6 +631,7 @@ export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
     if (url.pathname === WORK_BOARD_ROUTE) return workBoardRoute(req, res, url);
     if (url.pathname === WORK_ISSUE_COMMENTS_ROUTE || (url.pathname === WORK_ISSUE_ROUTE && req.method === 'PATCH')) return workIssueWrite(req, res);
     if (url.pathname === WORK_ISSUE_STEPS_ROUTE || url.pathname === WORK_ISSUE_STEPS_ORDER_ROUTE || url.pathname === WORK_ISSUE_STEPS_RESTORE_ROUTE) return workIssueSteps(req, res);
+    if (url.pathname === WORK_ISSUE_OPTIONS_ROUTE) return workIssueOptions(req, res, url);
     if (url.pathname === WORK_ISSUE_ROUTE) return workIssueRoute(req, res, url);
     if (url.pathname === WORK_PLAN_ROUTE) return workPlan(req, res);
     if (url.pathname === WORK_RUN_ROUTE) return workRun(req, res);
