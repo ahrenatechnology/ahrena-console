@@ -1,9 +1,9 @@
-// The state behind the issue panel and "Planejar" on the work board (issue 467, issue 508, layer 3).
-//
-// Pure transitions: state and inputs in, new state out; no DOM, no fetch. The screen reads `state.panel.request` and
-// `state.post` to know what to fetch (GET /api/work/issue, POST /api/work/plan) and hands the answers back to the
-// transitions; the render parts of work-board-issue-panel.js and work-board-plan.js take what `panelView`,
-// `planOf` and `cardWithPlanning` give them.
+/* issue 467, issue 508: the state behind the issue panel and "Planejar" on the work board (layer 3).
+
+ Pure transitions: state and inputs in, new state out; no DOM, no fetch. The screen reads `state.panel.request` and
+ `state.post` to know what to fetch (GET /api/work/issue, POST /api/work/plan) and hands the answers back to the
+ transitions; the render parts of work-board-issue-panel.js and work-board-plan.js take what `panelView`,
+ `planOf` and `cardWithPlanning` give them. */
 
 import { PLANNABLE_TYPES } from './work-board-plan.js';
 
@@ -92,8 +92,7 @@ function put(state, key, entry) {
   return { ...state, plans };
 }
 
-// Closes any other open confirmation.
-// issue 508: only one confirmation is anchored at a time.
+// issue 508: closes any other open confirmation; only one is anchored at a time.
 function withoutOtherConfirmation(state, key) {
   return Object.entries(state.plans).reduce((s, [k, e]) => (k !== key && e.phase === 'confirming' ? put(s, k, e.prior ?? null) : s), state);
 }

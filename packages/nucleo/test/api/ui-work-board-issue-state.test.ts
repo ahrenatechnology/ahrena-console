@@ -1,6 +1,4 @@
-// issue 467, issue 508: the state behind the issue panel and Planejar (layer 3). Unit tests on the transitions and
-// interaction tests that drive the components of layer 2 from that state in the fake DOM. The fetches (GET /api/work/issue,
-// POST /api/work/plan) and the 501 are the contract layer's: here their answers are inputs.
+// #467, #508: the state behind the issue panel and Planejar (layer 3).
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { describe, test } from 'node:test';
