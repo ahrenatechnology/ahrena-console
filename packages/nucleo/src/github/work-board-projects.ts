@@ -17,6 +17,10 @@
  * warning per owner: the stored cards stay with `stale` (ADR-0001), and with nothing stored the read is `NoDataError` (the
  * route's 502).
  *
+ * The organizations are the connection's granted ones when its `/user/orgs` check finished; when it has not (the `gh` source, a console
+ * connection before the check ends, a first run that failed) they are the organizations of the Projects list, so the chosen
+ * Project's organization never drops off the board nor out of the default trusted owners.
+ *
  * Closed Projects and Projects with no Status field are skipped. The owners the board read (`readOwners`) are the default of
  * the trusted owners (github/trusted-owners.ts): the owners with a Project read, never one with a warning.
  */
@@ -50,7 +54,7 @@ export interface WorkProjectsRead {
 export interface WorkBoardProjectsOptions {
   options: { list(): Promise<ProjectOptionsList>; snapshot(): Promise<ProjectOptionsList | null> };
   /** #609 The organizations the connection granted and the ones that restrict the app (`GithubConnection.status().orgs`). */
-  orgs: () => Promise<readonly GithubOrg[]>;
+  orgs: () => Promise<readonly GithubOrg[] | OrgCheck>;
   /** #609 The board of one Project, through its own cache entry. */
   project: (ref: ProjectRef) => WorkProjectBoard;
   now?: () => number;
@@ -63,6 +67,17 @@ export interface WorkProjectsReadOptions {
   force?: boolean;
   /** ADR-0015 answer the stored boards and call GitHub only for what is not stored. */
   fromStore?: boolean;
+}
+
+/** #609 What the connection knows of the organizations: the list, and whether the `/user/orgs` check produced it. */
+export interface OrgCheck {
+  orgs: readonly GithubOrg[];
+  checked: boolean;
+}
+
+/** #609 The organization check of a connection status: a list only when the check ran and did not fail (the `gh` source never runs it). */
+export function orgCheckOf(status: { orgs?: readonly GithubOrg[]; orgsChecked?: boolean; orgsFailed?: boolean }): OrgCheck {
+  return { orgs: status.orgs ?? [], checked: status.orgsChecked === true && status.orgsFailed !== true };
 }
 
 const OWNER_REASON = { 'oauth-restricted': 'restricted', saml: 'saml', forbidden: 'failed' } as const;
@@ -90,8 +105,9 @@ export class WorkBoardProjects {
 
   async read({ force = false, fromStore = false }: WorkProjectsReadOptions = {}): Promise<WorkProjectsRead> {
     const listed = await this.list(fromStore && !force);
-    const connection = await this.orgs();
-    const { entries, seen, toRead } = this.warningEntries(listed, connection);
+    const check = await this.orgs();
+    const { orgs: connection, checked } = 'orgs' in check ? check : { orgs: check, checked: true };
+    const { entries, seen, toRead } = this.warningEntries(listed, connection, checked);
     const byOwner = new Map<string, ProjectOwner>(listed.owners.map((o) => [o.login.toLowerCase(), o]));
     const boards: WorkProjectRead[] = [];
     const failures = new Map<string, GithubFailure>();
@@ -115,7 +131,7 @@ export class WorkBoardProjects {
   }
 
   /** #609 The entries in order: the organizations that restrict the app, then the ones GitHub refused, the account last; and what is left to read. */
-  private warningEntries(listed: ProjectOptionsList, connection: readonly GithubOrg[]): { entries: WorkBoardOrganization[]; seen: Set<string>; toRead: { login: string; own: boolean }[] } {
+  private warningEntries(listed: ProjectOptionsList, connection: readonly GithubOrg[], checked: boolean): { entries: WorkBoardOrganization[]; seen: Set<string>; toRead: { login: string; own: boolean }[] } {
     const entries: WorkBoardOrganization[] = [];
     const seen = new Set<string>();
     for (const o of connection) {
@@ -127,7 +143,9 @@ export class WorkBoardProjects {
       addEntry(entries, seen, warning(o.login, OWNER_REASON[o.blocked.reason], o.blocked.reason));
     }
     const granted = connection.flatMap((o) => (o.access === 'granted' && !seen.has(o.login.toLowerCase()) ? [o.login] : []));
-    const toRead = granted.map((login) => ({ login, own: false }));
+    // #609 Without a finished `/user/orgs` check (the gh source, before it ends, or a failed first run) the organizations come from the Projects list.
+    const listedOrgs = checked ? [] : listed.owners.flatMap((o) => (o.ownerType === 'organization' && !o.blocked && !seen.has(o.login.toLowerCase()) && !granted.some((g) => g.toLowerCase() === o.login.toLowerCase()) ? [o.login] : []));
+    const toRead = [...granted, ...listedOrgs].map((login) => ({ login, own: false }));
     const account = listed.owners.find((o) => o.ownerType === 'user') ?? null;
     if (account && account.blocked === null) toRead.push({ login: account.login, own: true });
     else if (account?.blocked) {
@@ -252,7 +270,7 @@ export function createWorkBoardProjects(o: {
   demo: boolean;
   projectOptions: WorkBoardProjectsOptions['options'] | null | undefined;
   access: GithubAccess | null;
-  connection: { status(): Promise<{ orgs?: readonly GithubOrg[] }> };
+  connection: { status(): Promise<{ orgs?: readonly GithubOrg[]; orgsChecked?: boolean; orgsFailed?: boolean }> };
   cache: GithubCache;
   log?: (message: string) => void;
 }): WorkBoardProjects | null {
@@ -260,7 +278,7 @@ export function createWorkBoardProjects(o: {
   if (o.demo || !projectOptions || !access) return null;
   return new WorkBoardProjects({
     options: projectOptions,
-    orgs: async () => (await o.connection.status()).orgs ?? [],
+    orgs: async () => orgCheckOf(await o.connection.status()),
     project: (ref) => createGithubProject({ project: ref, cache: o.cache, token: access.token, ...(access.fetch ? { fetch: access.fetch } : {}), ...(access.url ? { url: access.url } : {}) }),
     ...(o.log ? { log: o.log } : {}),
   });

@@ -8,7 +8,8 @@ import { SYNC_WORK_PROJECTS_EVERY_MS } from '../../src/github/background-sync.ts
 import { GithubCache, MemoryCacheStore, NoDataError } from '../../src/github/cache.ts';
 import type { ProjectBoard } from '../../src/github/project.ts';
 import type { ProjectOptionsList } from '../../src/github/project-options.ts';
-import { createWorkBoardProjects, WorkBoardProjects, workProjectsSyncStep, workProjectsSyncSteps } from '../../src/github/work-board-projects.ts';
+import { trustedOwnersOf } from '../../src/github/trusted-owners.ts';
+import { createWorkBoardProjects, orgCheckOf, WorkBoardProjects, workProjectsSyncStep, workProjectsSyncSteps } from '../../src/github/work-board-projects.ts';
 
 const NOW = Date.parse('2026-11-14T12:00:00Z');
 const list = (): ProjectOptionsList => ({
@@ -146,3 +147,42 @@ describe('#609/AC-4 the core builds the reader and its sync step only where GitH
     assert.deepEqual(reader.readOwners(), []);
   });
 });
+
+describe('#609/AC-2 the chosen Project\'s organization stays on the board whatever the state of the organization check', () => {
+  const account = { login: 'maria', ownerType: 'user' as const, projects: 0, blocked: null };
+  const accountList = (): ProjectOptionsList => ({ ...list(), owners: [...list().owners, account] });
+  const readerFor = (check: Awaited<ReturnType<WorkBoardProjectsOptionsOrgs>>) =>
+    new WorkBoardProjects({ options: { list: async () => accountList(), snapshot: async () => null }, orgs: async () => check, project: () => ({ board: async () => board() }), now: () => NOW });
+
+  const keeps = async (check: Awaited<ReturnType<WorkBoardProjectsOptionsOrgs>>) => {
+    const reader = readerFor(check);
+    const read = await reader.read();
+    assert.deepEqual(read.organizations.map((o) => [o.login, o.state, o.projects.length]), [['acme-labs', 'read', 1], ['maria', 'read', 0]]);
+    assert.deepEqual(read.boards.map((b) => b.organization), ['acme-labs']);
+    assert.deepEqual(trustedOwnersOf({ stored: null, selectedOwner: 'acme-labs', readOwners: reader.readOwners() }), ['acme-labs']);
+  };
+
+  test('#609/AC-2 a gh credential source (no organization list) keeps the chosen Project\'s organization on the board and trusted', async () => {
+    await keeps(orgCheckOf({ orgs: [], orgsChecked: false, orgsFailed: false }));
+  });
+
+  test('#609/AC-2 a console connection before the organization check finishes does the same', async () => {
+    await keeps(orgCheckOf({ orgs: [], orgsChecked: false, orgsFailed: false }));
+  });
+
+  test('#609/AC-2 a first organization check that failed does the same', async () => {
+    await keeps(orgCheckOf({ orgs: [], orgsChecked: true, orgsFailed: true }));
+  });
+
+  test('#609/AC-2 organizations still pending approval stay warnings while the check has no list', async () => {
+    const pending = { login: 'locked-co', access: 'pending' as const, approvalUrl: 'a', requestUrl: 'r' };
+    const read = await readerFor({ orgs: [pending], checked: false }).read();
+    assert.deepEqual(read.organizations.map((o) => [o.login, o.state]), [['acme-labs', 'read'], ['locked-co', 'restricted'], ['maria', 'read']]);
+  });
+
+  test('#609/AC-2 a finished check is the list: an organization it did not grant is not read from the Projects list', async () => {
+    const read = await readerFor(orgCheckOf({ orgs: [], orgsChecked: true, orgsFailed: false })).read();
+    assert.deepEqual(read.organizations.map((o) => o.login), ['maria']);
+  });
+});
+type WorkBoardProjectsOptionsOrgs = ConstructorParameters<typeof WorkBoardProjects>[0]['orgs'];
