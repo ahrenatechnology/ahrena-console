@@ -1,15 +1,4 @@
-// The red end-to-end skeleton of the agent view (issue 521, parent issue 518), written against the wireframe
-// approved on 2026-11-14 (docs/wireframes/index.html, captures 521-1 to 521-10).
-//
-// Every scenario is a `todo` naming the issue: it runs, it fails now because the behaviour does not exist, and CI stays
-// green. The layers above (components, state, contract) take each one to green and drop its `todo`; issue 529 serves the data.
-// The bodies assert the finished behaviour of the drawn screens, never the placeholders.
-//
-// The contract this skeleton fixes for the layers above (the wireframe's structure, in the project's DOM style):
-// - screen: `/ui/screens/agent-view.js` at the route `/ui/sessions/:id/agents/:agentId`, `mount(area, ctx)`;
-// - Agents tab row: `.sd-node`, an `a[href]` for a subagent, a plain element for the main agent, `data-depth` by parent;
-// - view: `.av-kind`, `.av-description`, `.av-brief`, `.av-step` (`data-depth`), `.av-duration`, `.av-cost`, `.av-state`, `.av-result`;
-// - folds: `data-folded="true"` with a `.av-fold` button; the elided steps are `.av-elided`; new steps are `.av-new-steps`.
+// Red end-to-end skeleton of the agent view (#521, parent #518); data from #529.
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import { documentoFalso, ElementoFalso, instalarDomFalso, texto } from './fake-dom.ts';
@@ -20,7 +9,7 @@ const SID = 'c3f09b52-4e10';
 const BASE = `/api/sessions/${SID}`;
 const ORIGIN = 'http://127.0.0.1:8787';
 const ATHENA = 'agent-athena';
-const IRIS = 'agent-iris:abc1'; // an agent id has ":" in it: the route carries it encoded
+const IRIS = 'agent-iris:abc1'; // an agent id has ":" in it: the route carries it encoded (#521)
 const TODO = (what: string) => ({ todo: `#521 ${what}` });
 
 const page = { pathname: `/ui/sessions/${SID}`, search: '', hash: '#agents', origin: ORIGIN, href: `${ORIGIN}/ui/sessions/${SID}#agents` };
@@ -70,7 +59,7 @@ const settle = () => new Promise((r) => setTimeout(r, 0));
 const registry = await import('../../ui/screens.js');
 
 async function mountAgentView(served: Served, calls: string[] = []) {
-  // The module does not exist yet: the import fails inside the body, so the scenario is red, not the whole file.
+  // The module does not exist yet: the import fails inside the body, so the scenario is red, not the whole file. (#521)
   const mod = await import('../../ui/screens/agent-view.js' as string);
   const c = ctxFor(served, { id: SID, agentId: ATHENA }, calls);
   const area = new ElementoFalso('main');
