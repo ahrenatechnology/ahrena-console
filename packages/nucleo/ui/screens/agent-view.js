@@ -84,7 +84,7 @@ function header(data, { sessionId, now }) {
       el('h2', { class: 'av-kind', title: data.agentType ?? '' }, label),
       data.agentType?.includes(':') ? el('span', { class: 'av-kind-full mono' }, data.agentType) : null,
       stateBadge(data.state),
-      el('a', { class: 'btn outline av-conversation', href: `${sessionHref(sessionId)}?agent=${encodeURIComponent(data.agentId)}#conversation`, title: 'A aba Conversa, já com este agente escolhido' }, icon('conversation'), 'Abrir a conversa'),
+      el('a', { class: 'btn outline av-conversation', href: `${sessionHref(sessionId)}?agent=${encodeURIComponent(`${sessionId}:${data.agentId}`)}#conversation`, title: 'A aba Conversa, já com este agente escolhido' }, icon('conversation'), 'Abrir a conversa'),
     ),
     data.description ? el('p', { class: 'av-description' }, data.description) : null,
     data.state === 'error' ? failedBand(data) : null,

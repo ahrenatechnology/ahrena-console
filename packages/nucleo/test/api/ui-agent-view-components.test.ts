@@ -124,7 +124,12 @@ describe('the header (AC-2)', () => {
 
   test('offers the Conversa of this agent', () => {
     const open = draw(agent()).querySelector('a.av-conversation')!;
-    assert.equal(open.getAttribute('href'), `/ui/sessions/${SID}?agent=${encodeURIComponent('a1b2')}#conversation`);
+    assert.equal(open.getAttribute('href'), `/ui/sessions/${SID}?agent=${encodeURIComponent(`${SID}:a1b2`)}#conversation`);
+  });
+
+  test('the Conversa of the main agent asks for its full id, <sessionId>:main', () => {
+    const open = draw(agent({ agentId: 'main', agentType: null })).querySelector('a.av-conversation')!;
+    assert.equal(open.getAttribute('href'), `/ui/sessions/${SID}?agent=${encodeURIComponent(`${SID}:main`)}#conversation`);
   });
 });
 
