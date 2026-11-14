@@ -177,7 +177,6 @@ function orchestratorEl(o, groupsById, sessionId) {
   const beneath = led.length
     ? led.map((g) => el('div', { class: 'wfl-layer' }, groupEl(g, sessionId, true)))
     : [el('div', { class: 'wfl-layer' }, el('div', { class: 'wfl-none-yet' }, icon('hourglass'), el('div', {}, el('b', {}, 'Nenhuma camada ainda. '), 'Os grupos aparecem aqui quando a Athena abrir o primeiro subagente: um por PR, ou por issue enquanto a camada não tem PR.')))];
-  // The numbers the task cites as `PR n` are a reference, not a group (issue 589).
   const cited = led.length ? [] : [...new Set([...(o.task ?? '').matchAll(/\bPRs?\s*#(\d{1,7})\b/gi)].map((m) => m[1]))];
   const notes = cited.map((n) => el('div', { class: 'wfl-none-yet' }, icon('info'), el('div', {}, el('b', {}, `Nenhum grupo “PR #${n}”. `), 'O número citado na tarefa de um orquestrador é só referência: não vira o PR de um grupo.')));
   return el('div', { class: 'wfl-orchestrator' }, card, el('div', { class: 'wfl-layers' }, ...beneath), ...notes);
