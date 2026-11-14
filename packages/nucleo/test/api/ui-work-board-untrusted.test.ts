@@ -1,4 +1,4 @@
-/* issue 595 (layer 2 of issue 584): an untrusted repository's card and panel offer no Planejar, Executar plano or queue
+/* #595 (layer 2 of #584): an untrusted repository's card and panel offer no Planejar, Executar plano or queue
 action, and say why in one line with a lock icon. The trusted ones are unchanged. Pure render functions in the fake DOM. */
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
