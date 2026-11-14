@@ -52,7 +52,31 @@ describe('#594 the trusted owners', () => {
   });
 
   test('#609/AC-4 with nothing stored the default is the owners of the Projects the board read, any letter case', () => {
-    assert.deepEqual(trustedOwnersOf({ stored: null, selectedOwner: 'acme', readOwners: ['Acme-Labs', 'Mira-Dev'] }), ['acme-labs', 'mira-dev']);
+    assert.deepEqual(trustedOwnersOf({ stored: null, selectedOwner: 'Acme', readOwners: ['Acme-Labs', 'Mira-Dev'] }), ['acme-labs', 'mira-dev', 'acme']);
+  });
+
+  test('#609/AC-4 the chosen Project\'s owner stays trusted next to the owners read, once', () => {
+    assert.deepEqual(trustedOwnersOf({ stored: null, selectedOwner: 'solo-co', readOwners: ['acme-labs'] }), ['acme-labs', 'solo-co']);
+    assert.deepEqual(trustedOwnersOf({ stored: null, selectedOwner: 'Acme-Labs', readOwners: ['acme-labs'] }), ['acme-labs']);
+  });
+
+  test('#609/AC-4 the chosen Project\'s owner is not trusted when the read reported it with a warning', () => {
+    assert.deepEqual(trustedOwnersOf({ stored: null, selectedOwner: 'Locked-Co', readOwners: ['acme-labs'], warnedOwners: ['locked-co'] }), ['acme-labs']);
+    assert.deepEqual(trustedOwnersOf({ stored: null, selectedOwner: 'locked-co', readOwners: [], warnedOwners: ['locked-co'] }), []);
+  });
+
+  test('#609/AC-4 a stored list wins over the chosen Project\'s owner too', () => {
+    assert.deepEqual(trustedOwnersOf({ stored: ['beta'], selectedOwner: 'acme-labs', readOwners: ['acme-labs'] }), ['beta']);
+  });
+
+  test('#609/AC-4 the installation asks the owners with a warning at each question', () => {
+    const settings = new MemoryInstallationSettings();
+    let warned: string[] = [];
+    const trust = new InstallationRepositoryTrust(settings, () => ({ owner: 'locked-co' }), () => ['acme-labs'], () => warned);
+    assert.equal(trust.isTrusted('locked-co/app'), true);
+    warned = ['locked-co'];
+    assert.equal(trust.isTrusted('locked-co/app'), false);
+    assert.equal(trust.isTrusted('acme-labs/app'), true);
   });
 
   test('#609/AC-4 a stored list still wins over the owners read, an empty one included', () => {

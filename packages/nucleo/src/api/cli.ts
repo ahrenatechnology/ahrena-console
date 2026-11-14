@@ -472,12 +472,12 @@ const { connection, screens } = coreGithub;
  * #598 #609 the Projects of every granted organization and of the account, read for the work board and kept fresh by the
  * `work-projects` sync step. Not under --demo (the simulator has one Project) nor --no-github (no connection).
  */
-const workProjects = createWorkBoardProjects({ demo, projectOptions: screens.projectOptions, access: coreGithub.access, connection, cache: githubCache, log });
+const workProjects = createWorkBoardProjects({ demo, projectOptions: screens.projectOptions, access: coreGithub.access, connection, cache: githubCache, selection: () => screens.project?.selection() ?? null, log });
 /*
  * #594 one trust source for the board's cards, the issue detail and the Planejar / Executar plano routes: the stored
  * `work.trustedOwners`, else the owner of the Project the board reads (none chosen: nobody is trusted).
  */
-const repositoryTrust = new InstallationRepositoryTrust(settings, () => screens.project?.selection() ?? null, () => workProjects?.readOwners() ?? []);
+const repositoryTrust = new InstallationRepositoryTrust(settings, () => screens.project?.selection() ?? null, () => workProjects?.readOwners() ?? [], () => workProjects?.warnedOwners() ?? []);
 /*
  * #465 #466 the work board (`GET /api/work`): the kanban's Project (the same resolver as /api/project),
  * the live sessions of the fleet, the parents outside the Project through the GitHub cache, the time in

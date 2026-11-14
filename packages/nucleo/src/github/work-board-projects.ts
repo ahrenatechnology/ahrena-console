@@ -17,16 +17,17 @@
  * warning per owner: the stored cards stay with `stale` (ADR-0001), and with nothing stored the read is `NoDataError` (the
  * route's 502).
  *
- * The organizations are the connection's granted ones when its `/user/orgs` check finished; when it has not (the `gh` source, a console
- * connection before the check ends, a first run that failed) they are the organizations of the Projects list, so the chosen
- * Project's organization never drops off the board nor out of the default trusted owners.
+ * The organizations are the connection's granted ones when its `/user/orgs` check finished below its cap (`MAX_CHECKED_ORGS`); when it has not
+ * (the `gh` source, a console connection before the check ends, a first run that failed) or it hit the cap, they are also the organizations of the
+ * Projects list, so the chosen Project's organization never drops off the board nor out of the default trusted owners. The chosen Project
+ * (`selected`) is read even when no list holds its owner, unless that owner is already an entry (a warning).
  *
  * Closed Projects and Projects with no Status field are skipped. The owners the board read (`readOwners`) are the default of
- * the trusted owners (github/trusted-owners.ts): the owners with a Project read, never one with a warning.
+ * the trusted owners (github/trusted-owners.ts): the owners with a Project read, and `warnedOwners` the ones with a warning, which are never trusted by default.
  */
 
 import { githubFailureOf, NoDataError, type GithubCache, type GithubFailure, type StaleCode } from './cache.ts';
-import type { GithubOrg } from './connection/connection.ts';
+import { MAX_CHECKED_ORGS, type GithubOrg } from './connection/connection.ts';
 import type { SyncStep } from './background-sync.ts';
 import { SYNC_WORK_PROJECTS_EVERY_MS } from './background-sync.ts';
 import type { GithubAccess } from './github-source.ts';
@@ -57,6 +58,8 @@ export interface WorkBoardProjectsOptions {
   orgs: () => Promise<readonly GithubOrg[] | OrgCheck>;
   /** #609 The board of one Project, through its own cache entry. */
   project: (ref: ProjectRef) => WorkProjectBoard;
+  /** #609 The chosen Project (`AHRENA_CONSOLE_PROJECT` or `project.selection`): it is read even when the Projects list does not hold it. */
+  selected?: () => { owner: string; number: number } | null;
   now?: () => number;
   /** #609 The raw error of a failed read goes here; the response only gets a code. */
   log?: (message: string) => void;
@@ -89,11 +92,14 @@ export class WorkBoardProjects {
   private readonly now: () => number;
   private readonly log: (message: string) => void;
   private owners: string[] = [];
+  private warned: string[] = [];
+  private readonly selected: () => { owner: string; number: number } | null;
 
-  constructor({ options, orgs, project, now = Date.now, log = () => {} }: WorkBoardProjectsOptions) {
+  constructor({ options, orgs, project, selected = () => null, now = Date.now, log = () => {} }: WorkBoardProjectsOptions) {
     this.options = options;
     this.orgs = orgs;
     this.project = project;
+    this.selected = selected;
     this.now = now;
     this.log = log;
   }
@@ -101,6 +107,11 @@ export class WorkBoardProjects {
   /** #609 The owners (lower case) with a Project read by the last read: the default of the trusted owners. */
   readOwners(): string[] {
     return [...this.owners];
+  }
+
+  /** #609 The owners (lower case) the last read reported with a warning: never a trusted owner by default. */
+  warnedOwners(): string[] {
+    return [...this.warned];
   }
 
   async read({ force = false, fromStore = false }: WorkProjectsReadOptions = {}): Promise<WorkProjectsRead> {
@@ -113,8 +124,20 @@ export class WorkBoardProjects {
     const failures = new Map<string, GithubFailure>();
     let tried = 0;
     let failedProjects = 0;
+    const chosen = this.selected();
     for (const { login, own } of toRead) {
-      const owner = await this.readOwner({ login: byOwner.get(login.toLowerCase())?.login ?? login, own }, readableProjects(listed.projects, login), { force, fromStore });
+      const projects = readableProjects(listed.projects, login);
+      if (chosen && chosen.owner.toLowerCase() === login.toLowerCase() && !projects.some((p) => p.number === chosen.number)) projects.push(chosenProject(chosen));
+      const owner = await this.readOwner({ login: byOwner.get(login.toLowerCase())?.login ?? login, own }, projects, { force, fromStore });
+      boards.push(...owner.boards);
+      tried += owner.tried;
+      failedProjects += owner.failed;
+      if (owner.failure) failures.set(owner.entry.login, owner.failure);
+      addEntry(entries, seen, owner.entry);
+    }
+    // #609 The chosen Project's owner is read even when no list holds it, unless it already has an entry (read or warning).
+    if (chosen && !seen.has(chosen.owner.toLowerCase()) && !toRead.some((t) => t.login.toLowerCase() === chosen.owner.toLowerCase())) {
+      const owner = await this.readOwner({ login: chosen.owner, own: false }, [chosenProject(chosen)], { force, fromStore });
       boards.push(...owner.boards);
       tried += owner.tried;
       failedProjects += owner.failed;
@@ -126,6 +149,7 @@ export class WorkBoardProjects {
     const ordered = [...entries].sort((a, b) => rank(a) - rank(b));
     const { stale, staleCode } = settle(ordered, { boards, failures, tried, failedProjects });
     this.owners = ordered.filter((e) => e.state === 'read' && e.projects.length > 0).map((e) => e.login.toLowerCase());
+    this.warned = ordered.filter((e) => e.state !== 'read').map((e) => e.login.toLowerCase());
     const stored = boards.map((b) => b.board.fetchedAt);
     return { organizations: ordered, boards, fetchedAt: stored.length ? Math.min(...stored) : this.now(), stale, staleCode };
   }
@@ -144,7 +168,8 @@ export class WorkBoardProjects {
     }
     const granted = connection.flatMap((o) => (o.access === 'granted' && !seen.has(o.login.toLowerCase()) ? [o.login] : []));
     // #609 Without a finished `/user/orgs` check (the gh source, before it ends, or a failed first run) the organizations come from the Projects list.
-    const listedOrgs = checked ? [] : listed.owners.flatMap((o) => (o.ownerType === 'organization' && !o.blocked && !seen.has(o.login.toLowerCase()) && !granted.some((g) => g.toLowerCase() === o.login.toLowerCase()) ? [o.login] : []));
+    // #609 A check that hit the cap (`MAX_CHECKED_ORGS` granted) may have left organizations out, so it does not close the list either.
+    const listedOrgs = checked && granted.length < MAX_CHECKED_ORGS ? [] : listed.owners.flatMap((o) => (o.ownerType === 'organization' && !o.blocked && !seen.has(o.login.toLowerCase()) && !granted.some((g) => g.toLowerCase() === o.login.toLowerCase()) ? [o.login] : []));
     const toRead = [...granted, ...listedOrgs].map((login) => ({ login, own: false }));
     const account = listed.owners.find((o) => o.ownerType === 'user') ?? null;
     if (account && account.blocked === null) toRead.push({ login: account.login, own: true });
@@ -231,6 +256,11 @@ function settle(ordered: WorkBoardOrganization[], r: { boards: readonly WorkProj
   return { stale: false, staleCode: null };
 }
 
+/** #609 The chosen Project as a Project to read: the list does not hold it, so its title comes from the read. */
+function chosenProject(c: { owner: string; number: number }): ProjectOption {
+  return { owner: c.owner, ownerType: 'organization', number: c.number, title: '', url: '', items: 0, hasStatusField: true, closed: false };
+}
+
 /** #609 The open Projects of an owner that have a Status field, by number. */
 function readableProjects(projects: readonly ProjectOption[], login: string): ProjectOption[] {
   return projects.filter((p) => p.owner.toLowerCase() === login.toLowerCase() && !p.closed && p.hasStatusField).sort((a, b) => a.number - b.number);
@@ -270,6 +300,7 @@ export function createWorkBoardProjects(o: {
   demo: boolean;
   projectOptions: WorkBoardProjectsOptions['options'] | null | undefined;
   access: GithubAccess | null;
+  selection?: () => { owner: string; number: number } | null;
   connection: { status(): Promise<{ orgs?: readonly GithubOrg[]; orgsChecked?: boolean; orgsFailed?: boolean }> };
   cache: GithubCache;
   log?: (message: string) => void;
@@ -279,6 +310,7 @@ export function createWorkBoardProjects(o: {
   return new WorkBoardProjects({
     options: projectOptions,
     orgs: async () => orgCheckOf(await o.connection.status()),
+    ...(o.selection ? { selected: o.selection } : {}),
     project: (ref) => createGithubProject({ project: ref, cache: o.cache, token: access.token, ...(access.fetch ? { fetch: access.fetch } : {}), ...(access.url ? { url: access.url } : {}) }),
     ...(o.log ? { log: o.log } : {}),
   });

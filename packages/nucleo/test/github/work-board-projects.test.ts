@@ -9,6 +9,7 @@ import { GithubCache, MemoryCacheStore, NoDataError } from '../../src/github/cac
 import type { ProjectBoard } from '../../src/github/project.ts';
 import type { ProjectOptionsList } from '../../src/github/project-options.ts';
 import { trustedOwnersOf } from '../../src/github/trusted-owners.ts';
+import { MAX_CHECKED_ORGS } from '../../src/github/connection/connection.ts';
 import { createWorkBoardProjects, orgCheckOf, WorkBoardProjects, workProjectsSyncStep, workProjectsSyncSteps } from '../../src/github/work-board-projects.ts';
 
 const NOW = Date.parse('2026-11-14T12:00:00Z');
@@ -185,4 +186,64 @@ describe('#609/AC-2 the chosen Project\'s organization stays on the board whatev
     assert.deepEqual(read.organizations.map((o) => o.login), ['maria']);
   });
 });
+describe('#609/AC-4 the board reads the owners the default trust needs', () => {
+  test('#609/AC-4 when the organization check hit the cap, the listed organizations that are neither blocked nor pending are read too', async () => {
+    const granted = Array.from({ length: MAX_CHECKED_ORGS }, (_, i) => ({ login: `org-${i}`, access: 'granted' as const }));
+    const base = list();
+    const withBlocked: ProjectOptionsList = { ...base, owners: [...base.owners, { login: 'refused-co', ownerType: 'organization', projects: 0, blocked: { reason: 'saml', message: 'raw' } }] };
+    const reader = new WorkBoardProjects({
+      options: { list: async () => withBlocked, snapshot: async () => null },
+      orgs: async () => ({ orgs: granted, checked: true }),
+      project: () => ({ board: async () => board() }),
+      now: () => NOW,
+    });
+    const read = await reader.read();
+    assert.ok(read.boards.some((b) => b.organization === 'acme-labs'), 'the listed organization past the cap was read');
+    assert.deepEqual(reader.readOwners(), ['acme-labs']);
+    assert.equal(read.organizations.find((o) => o.login === 'refused-co')?.state, 'saml');
+  });
+
+  test('#609/AC-4 below the cap a finished check is still the list', async () => {
+    const reader = new WorkBoardProjects({
+      options: { list: async () => list(), snapshot: async () => null },
+      orgs: async () => ({ orgs: [{ login: 'org-0', access: 'granted' }], checked: true }),
+      project: () => ({ board: async () => board() }),
+      now: () => NOW,
+    });
+    const read = await reader.read();
+    assert.deepEqual(read.boards, []);
+  });
+
+  const solo = (over: Partial<ProjectBoard> = {}) => board({ owner: 'solo-co', number: 7, title: 'Solo', ...over });
+  const selectedReader = (selected: { owner: string; number: number } | null, check: Awaited<ReturnType<WorkBoardProjectsOptionsOrgs>> = [{ login: 'acme-labs', access: 'granted' }]) =>
+    new WorkBoardProjects({
+      options: { list: async () => list(), snapshot: async () => null },
+      orgs: async () => check,
+      project: (ref) => ({ board: async () => (ref.owner === 'solo-co' ? solo() : board()) }),
+      selected: () => selected,
+      now: () => NOW,
+    });
+
+  test('#609/AC-4 a chosen Project whose owner is not in the Projects list is still read, and its owner is read', async () => {
+    const reader = selectedReader({ owner: 'solo-co', number: 7 });
+    const read = await reader.read();
+    assert.deepEqual(read.boards.map((b) => [b.organization, b.board.number]).sort(), [['acme-labs', 3], ['solo-co', 7]]);
+    assert.deepEqual(reader.readOwners().sort(), ['acme-labs', 'solo-co']);
+  });
+
+  test('#609/AC-4 a chosen Project already read through the list is read once', async () => {
+    const read = await selectedReader({ owner: 'ACME-labs', number: 3 }).read();
+    assert.deepEqual(read.boards.map((b) => b.board.number), [3]);
+  });
+
+  test('#609/AC-4 the owner of a chosen Project that came back with a warning is reported, not read', async () => {
+    const pending = { login: 'locked-co', access: 'pending' as const, approvalUrl: 'a', requestUrl: 'r' };
+    const reader = selectedReader({ owner: 'locked-co', number: 2 }, [pending]);
+    const read = await reader.read();
+    assert.deepEqual(read.boards.map((b) => b.organization), []);
+    assert.deepEqual(reader.warnedOwners(), ['locked-co']);
+    assert.ok(!reader.readOwners().includes('locked-co'));
+  });
+});
+
 type WorkBoardProjectsOptionsOrgs = ConstructorParameters<typeof WorkBoardProjects>[0]['orgs'];
