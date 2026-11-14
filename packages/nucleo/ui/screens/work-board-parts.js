@@ -234,12 +234,15 @@ function choicesFor(param, options, current) {
 }
 
 /**
- * What the header counts (issue 610): the organizations read and their Projects. An organization with a warning is
- * not counted; with GitHub down (`githubDown`) every organization is, as the last read held them. With no Project
- * the count is zero organizations too.
+ * What the header counts (issue 610): the organizations on the board and their Projects. An organization with a
+ * warning and no earlier read is not counted; one that failed now but was read before (`failed` with `readAt`) keeps
+ * its dimmed cards, so it stays in the count and the names and is also counted as warned. With GitHub down
+ * (`githubDown`) every organization is counted, as the last read held them, and none is warned. With no Project the
+ * count is zero organizations too.
  */
 export function originSummary(organizations = [], { githubDown = false } = {}) {
-  const read = githubDown ? organizations : organizations.filter(isRead);
+  const onBoard = (o) => isRead(o) || (o.state === 'failed' && isSet(o.readAt));
+  const read = githubDown ? organizations : organizations.filter(onBoard);
   const projects = projectsOf(read).length;
   return { read, warned: githubDown ? [] : organizations.filter((o) => !isRead(o)), projects, orgs: projects ? read.length : 0 };
 }

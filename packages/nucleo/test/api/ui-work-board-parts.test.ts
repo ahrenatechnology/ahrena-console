@@ -739,6 +739,14 @@ describe('#610/AC-1 the header counts organizations and Projects (598-1)', () =>
     assert.doesNotMatch(texto(head), /globex/);
   });
 
+  test('#610/AC-1 an organization read before that fails now stays in the count and the names, and is also "1 com aviso"', () => {
+    const stale = org('northwind', [ROADMAP, SUPPORT], { state: 'failed', readAt: NOW - 31 * MIN });
+    const head = workBoardHeader({ organizations: [ORGS[0], stale, ORGS[2]], fetchedAt: NOW, now: NOW });
+    assert.match(texto(head.querySelector('.wb-orgs-count')), /^3 organizações · 5 Projects$/);
+    assert.match(texto(head), /acme-labs, northwind e mira-dev \(você\)/);
+    assert.match(texto(head.querySelector('.wb-warn-count')), /^1 com aviso$/);
+  });
+
   test('#610/AC-1 singular and zero: "1 organização · 2 Projects", and "0 organizações · 0 Projects" with no Project', () => {
     const one = workBoardHeader({ organizations: [org('acme-labs', [PLATFORM, MOBILE])], now: NOW });
     assert.match(texto(one.querySelector('.wb-orgs-count')), /^1 organização · 2 Projects$/);
