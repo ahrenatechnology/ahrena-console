@@ -145,6 +145,10 @@
   --status-abandoned-badge: #f3f3f3;
 }
 /* marca:fim */
+.faixa.wb-stale-neutral { background: var(--raised); border-color: var(--border); }
+.faixa.wb-stale-neutral .ic, .faixa.wb-stale-neutral b { color: var(--text); }
+.faixa .wb-band-acts { margin-left: auto; display: flex; gap: 8px; flex: none; }
+.faixa .wb-band-acts .btn { margin-left: 0; }
 </style>
 <style>
 /* Layout: índice fixo à esquerda e, à direita, cada tela num quadro do tamanho real, com o que veio do CCAM embaixo. */
@@ -5475,9 +5479,15 @@ const TELAS = [
   { id: 'work-board-empty', cod: '465-3', nome: 'Quadro do trabalho · projeto sem issue', sub: 'Issue #465. O Project não tem nenhuma issue: o vazio diz o que o quadro mostraria e leva ao Project no GitHub ou à troca de Project. As seis colunas ficam com zero, para a pessoa já ver o ciclo; os filtros ficam desligados. Em 1100 e 1440.',
     html: () => wbBoth(wbEmptyScreen),
     n: N(['O EmptyState do C19: ícone, frase, o que fazer.'], ['Sem conexão com o GitHub, a tela é o “Conectar ao GitHub” do C42, não este vazio.', 'As colunas vazias ficam sem “Nenhuma” por coluna e sem o limite: o vazio de cima já explica.']) },
-  { id: 'work-board-stale', cod: '465-4', nome: 'Quadro do trabalho · GitHub fora', sub: 'Issue #465, critério 4, decisão 0001. Em cima, o quadro já foi lido: fica o último dado, a faixa vermelha diz o motivo, de quando é o quadro e quando tentamos de novo, com Tentar agora; o que vem do GitHub (Status, PR, CI, review) fica desbotado, e a sessão e a fila, que são do núcleo, seguem vivas. Embaixo, a primeira leitura falhou e não há nada guardado. Em 1100 e 1440.',
+  { id: 'work-board-stale', cod: '465-4', nome: 'Quadro do trabalho · GitHub fora', sub: 'Issue #465, critério 4, decisão 0001. Em cima, o quadro já foi lido: fica o último dado, a faixa vermelha diz que o GitHub não respondeu, de quando é o quadro e quando tentamos de novo, com Tentar agora; o que vem do GitHub (Status, PR, CI, review) fica desbotado, e a sessão e a fila, que são do núcleo, seguem vivas. Embaixo, a primeira leitura falhou e não há nada guardado. Em 1100 e 1440.',
     html: () => wbStaleHtml(),
     n: N(['Nada.'], ['Decisão 0001: o quadro guarda a última leitura boa e diz por quê; nunca esvazia porque o GitHub caiu. O texto é o mesmo do C19 (“GitHub indisponível. Mostrando … de 22:41. Tentamos de novo em 2 min.”).', 'No motivo de Bloqueado vale o mesmo: “CI falhou” e “Mudança pedida depois de 3 rodadas” vêm do GitHub e desbotam; “Precisa de você” vem do núcleo e fica forte.', 'A fila, a posição e o limite estão no banco do núcleo (#477) e não desbotam. As ações continuam: Planejar e Executar plano abrem a sessão neste Mac, e é a sessão que esbarra no GitHub fora (a aprovar, pergunta 11).', 'A hora do cabeçalho fica amarela enquanto o dado é velho, para quem não leu a faixa.']) },
+  { id: 'work-board-stale-bands', cod: '614-1', nome: 'Quadro do trabalho · a faixa por motivo', sub: 'Issue 614 (de 578), proposta. A faixa de leitura velha diz o motivo real que o núcleo entrega (staleReason, com retryAt): limite de taxa com a hora em que volta, credencial recusada com Reconectar, GitHub que não respondeu e sincronização pendente. Mesmo lugar e mesma forma da 465-4; muda título, tom e ação.',
+    html: () => wbReasonBandsHtml(),
+    n: N(['A faixa do C31 (âmbar, relógio) para o limite; a vermelha só quando algo precisa de você ou o GitHub caiu.'], ['“GitHub indisponível” passa a ser só o caso 4 (critério 4 da 614).', 'O “Motivo: …” no fim sai: o título já é o motivo.']) },
+  { id: 'work-board-stale-reasons', cod: '614-2', nome: 'Quadro do trabalho · faixa por motivo na tela', sub: 'Issue 614, proposta. A credencial recusada e o limite de taxa na tela inteira, em 1100 e 1440; o que vem do GitHub segue desbotado.',
+    html: () => wbReasonsHtml(),
+    n: N(['Nada.'], ['Decisão 0001 segue: o quadro guarda a última leitura boa.']) },
   { id: 'work-board-loading', cod: '465-5', nome: 'Quadro do trabalho · carregando', sub: 'Issue #465. Na primeira abertura, enquanto o GitHub é lido: as seis colunas com cards de esqueleto, os contadores em “…”, filtros desligados e Atualizar ocupado. Nas leituras seguintes o quadro fica e só o Atualizar gira. Em 1100 e 1440.',
     html: () => wbBoth(wbLoadingScreen),
     n: N(['O esqueleto do C19.'], ['O esqueleto tem a altura de um card curto, para o quadro não pular quando os dados chegam.']) },
@@ -6471,13 +6481,31 @@ const wbEmptyScreen = w => `${wbHead()}${wbLevels('item')}${wbFilters({}, { off:
   ${wbBoard(w, {}, { blank: true })}`
 
 // 465-4 · GitHub down (decision 0001): the last data read, the band, and the variant without any data saved.
-const wbStaleBand = `<div class="faixa erro"><span class="ic">${ic('cloud-off')}</span><div><b>GitHub indisponível.</b> Mostrando o quadro de 22:41 (há 31 min). Tentamos de novo em 2 min. As sessões e a fila continuam ao vivo.</div><span class="btn contorno">${ic('refresh-cw')}Tentar agora</span></div>`
+const wbStaleBand = `<div class="faixa erro wb-stale-band wb-stale-error"><span class="ic">${ic('cloud-off')}</span><div><b>GitHub indisponível.</b> Mostrando o quadro de 22:41 (há 31 min). O GitHub não respondeu. Tentamos de novo em 2 min. As sessões e a fila continuam ao vivo.</div><span class="btn contorno">${ic('refresh-cw')}Tentar agora</span></div>`
 const WB_READ_OLD = `<span class="wb-read wb-old">${ic('github')}lido às 22:41 · há 31 min</span>`
 const wbStaleScreen = w => `${wbHead({ read: WB_READ_OLD })}${wbStaleBand}${wbLevels('item')}${wbFilters()}<div class="wb-stale">${wbBoard(w, wbCols(), WB_MAIN)}</div>`
 const wbNoCacheScreen = w => `${wbHead({ read: `<span class="wb-read wb-old">${ic('github')}nunca lido</span>` })}
   <div class="cartao vazio wb-empty"><span class="ic" style="color:var(--status-error-text)">${ic('cloud-off')}</span><b>Ainda não conseguimos ler o GitHub</b><span>A primeira leitura falhou (o GitHub respondeu 502) e não há quadro guardado para mostrar. Tentamos de novo em 2 min.</span><span><span class="btn cheio">${ic('refresh-cw')}Tentar agora</span></span></div>
   ${wbBoard(w, {}, { blank: true, count: Object.fromEntries(WB_COLUMNS.map(([k]) => [k, '–'])) })}`
 const wbStaleHtml = () => wbRows([['Com o último quadro lido', wbStaleScreen], ['Sem nada guardado: a primeira leitura falhou', wbNoCacheScreen]])
+
+// 614-1 · the stale band per reason (issue 614, parent 578): one band per staleCode, same place and shape, its own title, tone and action.
+const WB_FROM = 'Mostrando o quadro de 22:41 (há 31 min).'
+const WB_LIVE = 'As sessões e a fila continuam ao vivo.'
+const wbBand = (tone, icon, title, body, acts = '') => `<div class="faixa wb-stale-band wb-stale-${tone}${tone === 'error' ? ' erro' : ''}"><span class="ic">${ic(icon)}</span><div><b>${title}</b> ${body}</div>${acts ? `<span class="wb-band-acts">${acts}</span>` : ''}</div>`
+const WB_RETRY = `<span class="btn contorno">${ic('refresh-cw')}Tentar agora</span>`
+const WB_REASON_BANDS = [
+  ['1 · Limite de taxa, com retryAt no futuro · âmbar, sem botão (o núcleo não chama o GitHub antes da hora)', wbBand('warn', 'clock', 'O GitHub limitou as chamadas.', `${WB_FROM} Volta às 23:16 (em 4 min). ${WB_LIVE}`)],
+  ['2 · Limite de taxa, retryAt nulo ou passado (a pausa já acabou) · âmbar, com Tentar agora', wbBand('warn', 'clock', 'O GitHub limitou as chamadas.', `${WB_FROM} O limite já passou; relemos na próxima sincronização. ${WB_LIVE}`, WB_RETRY)],
+  ['3 · Credencial recusada · vermelho, Reconectar (abre Conexões e já inicia o device flow)', wbBand('error', 'key-round', 'O GitHub recusou a credencial do console.', `${WB_FROM} O quadro só volta a se atualizar depois de reconectar. ${WB_LIVE}`, `<span class="btn cheio">${ic('github')}Reconectar</span>`)],
+  ['4 · GitHub não respondeu · vermelho, Tentar agora (o único com “GitHub indisponível”)', wbBand('error', 'cloud-off', 'GitHub indisponível.', `${WB_FROM} O GitHub não respondeu. Tentamos de novo em 2 min. ${WB_LIVE}`, WB_RETRY)],
+  ['5 · Sincronização pendente · neutro, Atualizar agora', wbBand('neutral', 'history', 'O quadro ainda não foi relido.', `${WB_FROM} A sincronização em segundo plano ainda não passou por ele; relemos em 2 min. ${WB_LIVE}`, `<span class="btn contorno">${ic('refresh-cw')}Atualizar agora</span>`)],
+  ['6 · Leitura ao vivo: credencial sem a permissão (no-scope) · vermelho, Reconectar', wbBand('error', 'key-round', 'A credencial do GitHub não tem a permissão necessária.', `${WB_FROM} Reconecte para conceder a permissão do quadro. ${WB_LIVE}`, `<span class="btn cheio">${ic('github')}Reconectar</span>`)],
+  ['7 · Leitura ao vivo: o GitHub respondeu com erro (github-error) · vermelho, Tentar agora', wbBand('error', 'cloud-off', 'O GitHub respondeu com erro.', `${WB_FROM} ${WB_LIVE}`, WB_RETRY)],
+]
+const wbReasonScreen = band => w => `${wbHead({ read: WB_READ_OLD })}${band}${wbLevels('item')}${wbFilters()}<div class="wb-stale">${wbBoard(w, wbCols(), WB_MAIN)}</div>`
+const wbReasonBandsHtml = () => `<div style="display:flex;flex-direction:column;gap:10px">${WB_REASON_BANDS.map(([t, b]) => `<div class="rotulo">${t}</div>${b}`).join('')}</div>`
+const wbReasonsHtml = () => wbRows([['Credencial recusada, na tela inteira', wbReasonScreen(WB_REASON_BANDS[2][1])], ['Limite de taxa, na tela inteira', wbReasonScreen(WB_REASON_BANDS[0][1])]])
 
 // 465-5 · loading (first open; later reads keep the board and only spin Atualizar).
 const wbSkel = () => `<div class="cartao wb-card"><div class="esq" style="height:10px;width:45%"></div><div class="esq" style="height:12px;width:92%"></div><div class="esq" style="height:12px;width:60%"></div><div class="esq" style="height:18px;width:52%"></div></div>`
