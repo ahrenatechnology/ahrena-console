@@ -7,7 +7,7 @@
 //   with `id: 'worktree'` and `actionId: null` (no cleanup action removes a worktree).
 // - A section that did not come carries `status` and a short `reason`, never an empty list pretending to be data.
 
-import type { AlertKind } from '../telemetry/model.ts';
+import type { AlertKind, HostInfo } from '../telemetry/model.ts';
 
 export const SECTION_IDS = ['processes-by-rss', 'processes-by-cpu', 'swap', 'largest-folders', 'docker-df', 'known-caches', 'journal'] as const;
 export type SectionId = (typeof SECTION_IDS)[number];
@@ -92,7 +92,7 @@ export function isDiagnosable(kind: AlertKind): boolean {
 }
 
 /** The sections an alert kind gets, in the fixed order; the journal only exists on Linux. */
-export function sectionsFor(kind: AlertKind, platform: string): SectionId[] {
+export function sectionsFor(kind: AlertKind, platform: HostInfo['platform']): SectionId[] {
   const sections = [...(SECTIONS_BY_KIND[kind] ?? [])];
   if (kind === 'volume-full' && platform === 'linux') sections.push('journal');
   return sections;

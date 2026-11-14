@@ -1,19 +1,24 @@
 // The diagnosis use case (#565): ports are doubles (tracker, collector, clock); no IO.
 import assert from 'node:assert/strict';
-import { describe, test } from 'node:test';
+import { beforeEach, describe, test } from 'node:test';
 import { diagnose, type CollectContext, type DiagnoseDeps, type SectionCollector } from '../src/diagnosis/diagnose.ts';
-import type { ProcessItem } from '../src/diagnosis/model.ts';
+import type { ProcessItem, SectionId } from '../src/diagnosis/model.ts';
 import type { Alert, AlertKind } from '../src/telemetry/model.ts';
 
 const NOW = '2026-11-14T12:00:00.000Z';
 const alert = (id: string, kind: AlertKind): Alert => ({ id, kind, level: 'warning', message: 'm', detail: null, since: NOW });
 const proc = (pid: number, rssBytes: number, cpuPct: number): ProcessItem => ({ pid, name: `p${pid}`, rssBytes, cpuPct, startedAt: NOW });
 
-function deps(open: Alert[], collector: SectionCollector, over: Partial<DiagnoseDeps> = {}): DiagnoseDeps {
+// Tests answer loosely; the port itself is typed per section, so the cast lives here, once.
+type LooseCollector = (id: SectionId, context: CollectContext) => Promise<unknown>;
+const logged: string[] = [];
+
+function deps(open: Alert[], collector: LooseCollector, over: Partial<DiagnoseDeps> = {}): DiagnoseDeps {
   return {
     alerts: { active: (m) => (m === 'local' ? open : []) },
     isKnownMachine: (m) => m === 'local',
-    collect: collector,
+    collect: collector as SectionCollector,
+    log: (message) => logged.push(message),
     platform: 'darwin',
     now: () => NOW,
     sectionTimeoutMs: 50,
@@ -23,8 +28,12 @@ function deps(open: Alert[], collector: SectionCollector, over: Partial<Diagnose
 const many = (n: number) => Array.from({ length: n }, (_, i) => proc(i + 1, (i + 1) * 100, (i + 1) % 7));
 
 describe('diagnose', () => {
+  beforeEach(() => {
+    logged.length = 0;
+  });
+
   test('#565/AC-1 swap-high returns rss and cpu top 10 sorted, swap, and takenAt', async () => {
-    const collector: SectionCollector = async (id) => {
+    const collector: LooseCollector = async (id) => {
       if (id === 'swap') return [{ usedBytes: 5, totalBytes: 10 }];
       return many(15);
     };
@@ -88,7 +97,7 @@ describe('diagnose', () => {
   });
 
   test('#565/AC-6 an unavailable or throwing collector fails only its section', async () => {
-    const collector: SectionCollector = async (id) => {
+    const collector: LooseCollector = async (id) => {
       if (id === 'processes-by-rss') return { unavailable: true, reason: 'ps missing' };
       if (id === 'processes-by-cpu') throw new Error('boom'.repeat(100));
       return [{ usedBytes: 1, totalBytes: 2 }];
@@ -105,7 +114,7 @@ describe('diagnose', () => {
   });
 
   test('#565/AC-6 a slow collector becomes timeout, the others come, and the timer is cleared', async () => {
-    const collector: SectionCollector = (id) => (id === 'processes-by-cpu' ? new Promise(() => {}) : Promise.resolve(many(2)));
+    const collector: LooseCollector = (id) => (id === 'processes-by-cpu' ? new Promise(() => {}) : Promise.resolve(many(2)));
     const started = Date.now();
     const r = await diagnose({ machine: 'local', alertId: 'load-high' }, deps([alert('load-high', 'load-high')], collector, { sectionTimeoutMs: 20 }));
     assert.ok(Date.now() - started < 1000);
@@ -119,5 +128,30 @@ describe('diagnose', () => {
     const started = Date.now();
     await diagnose({ machine: 'local', alertId: 'memory-high' }, deps([alert('memory-high', 'memory-high')], async () => (await delay(40), []), { sectionTimeoutMs: 500 }));
     assert.ok(Date.now() - started < 110);
+  });
+
+  test('#565/AC-6 a throwing collector is logged with section, machine and error; unavailable and timeout are not', async () => {
+    const collector: LooseCollector = async (id) => {
+      if (id === 'processes-by-rss') throw new Error('ps exploded');
+      if (id === 'processes-by-cpu') return { unavailable: true, reason: 'no ps' };
+      return new Promise(() => {});
+    };
+    await diagnose({ machine: 'local', alertId: 'memory-high' }, deps([alert('memory-high', 'memory-high')], collector, { sectionTimeoutMs: 20 }));
+    assert.equal(logged.length, 1);
+    assert.match(logged[0], /processes-by-rss/);
+    assert.match(logged[0], /local/);
+    assert.match(logged[0], /ps exploded/);
+  });
+
+  test('#565/AC-6 the signal of a timed-out section is aborted, and the signal of a finished one too', async () => {
+    const signals = new Map<string, AbortSignal>();
+    const collector: LooseCollector = (id, ctx) => {
+      signals.set(id, ctx.signal);
+      assert.equal(ctx.signal.aborted, false);
+      return id === 'processes-by-cpu' ? new Promise(() => {}) : Promise.resolve(many(2));
+    };
+    await diagnose({ machine: 'local', alertId: 'memory-high' }, deps([alert('memory-high', 'memory-high')], collector, { sectionTimeoutMs: 20 }));
+    assert.equal(signals.get('processes-by-cpu')?.aborted, true);
+    assert.equal(signals.get('processes-by-rss')?.aborted, true);
   });
 });
