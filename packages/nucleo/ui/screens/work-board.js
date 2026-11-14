@@ -18,6 +18,7 @@ import {
 } from './work-board-parts.js';
 import { createIssueLayer } from './work-board-issue.js';
 import { createRunLayer } from './work-board-run-layer.js';
+import { createQueueLayer } from './work-board-queue-layer.js';
 import { boardUrl, clearFilters, drill, initialState, loadFailed, loadSucceeded, selectPath, setFilter, setLevel, startLoad } from './work-board-state.js';
 
 const STYLE = '/ui/work-board.css';
@@ -83,7 +84,8 @@ export async function mount(area, ctx) {
   let pendingFocus = null;
   const boardCards = () => (state?.data?.columns ?? []).flatMap((c) => c.cards ?? []);
   const execution = createRunLayer({ ctx, area, cards: boardCards, redraw: () => draw(), reread: () => quietRead(), onAsk: () => layer.closeConfirmation() });
-  const layer = createIssueLayer({ ctx, area, cards: boardCards, options: () => state?.data?.options ?? {}, redraw: () => draw(), reread: () => quietRead(), run: execution.seam, onAsk: () => execution.closeConfirmation() });
+  const queueLayer = createQueueLayer({ ctx, area, cards: boardCards, queue: () => state?.data?.queue ?? null, target: () => execution.target(), redraw: () => draw(), reread: () => quietRead() });
+  const layer = createIssueLayer({ ctx, area, cards: boardCards, options: () => state?.data?.options ?? {}, redraw: () => draw(), reread: () => quietRead(), run: execution.seam, queue: queueLayer, onAsk: () => execution.closeConfirmation() });
 
   function follow(s) {
     const target = s.url;
@@ -182,7 +184,8 @@ export async function mount(area, ctx) {
 
   function columns(mode, extra = {}) {
     const data = state.data;
-    return boardColumns({
+    const board = boardColumns({
+      queue: data?.queue ?? null,
       columns: execution.columns(data?.columns ?? null),
       level: state.dataFilters?.level ?? state.filters.level,
       chainMode: state.chainMode,
@@ -196,6 +199,7 @@ export async function mount(area, ctx) {
       renderCard: layer.renderCard,
       ...extra,
     });
+    return mode === 'cards' ? queueLayer.wire(board) : board;
   }
 
   function plainView(code) {
@@ -243,7 +247,10 @@ export async function mount(area, ctx) {
     if (!alive) return;
     layer.learn();
     execution.learn();
-    const shown = JSON.stringify([state.view, state.phase, state.busy, state.error, state.filters, state.dataFilters, state.suggestion, state.data, layer.signature(), execution.signature()]);
+    queueLayer.learn();
+    // issue 477: a redraw in the middle of a drag would cancel it; the layer draws again when the card is dropped.
+    if (queueLayer.dragging()) return;
+    const shown = JSON.stringify([state.view, state.phase, state.busy, state.error, state.filters, state.dataFilters, state.suggestion, state.data, layer.signature(), execution.signature(), queueLayer.signature()]);
     if (shown === drawn) return;
     drawn = shown;
     const active = globalThis.document?.activeElement;
@@ -253,6 +260,7 @@ export async function mount(area, ctx) {
     restoreFocus(key);
     layer.afterDraw();
     execution.afterDraw();
+    queueLayer.afterDraw();
   }
 
   function restoreFocus(key) {
@@ -276,6 +284,7 @@ export async function mount(area, ctx) {
     alive = false;
     layer.stop();
     execution.stop();
+    queueLayer.stop();
     clearTimeout(liveTimer);
     sheet?.remove();
   };

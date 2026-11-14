@@ -19,7 +19,10 @@ import { WorkIssueNotFoundError } from '../../src/github/work-issue-service.ts';
 import type { WorkIssueResult } from '../../src/github/work-issue-service.ts';
 import { executionPrompt, EXECUTION_SESSION_WINDOW_MS } from '../../src/github/work-execution.ts';
 import { SqliteWorkExecutionRuns } from '../../src/github/work-execution-runs.ts';
-import { session } from '../fixtures.ts';
+import { SqliteWorkQueue } from '../../src/github/work-queue-store.ts';
+import { session, trustOf } from '../fixtures.ts';
+import { InstallationRepositoryTrust, type RepositoryTrust } from '../../src/github/trusted-owners.ts';
+import { MemoryInstallationSettings } from '../../src/settings/installation-settings.ts';
 
 const T0 = Date.parse('2026-11-14T10:00:00.000Z');
 
@@ -46,6 +49,7 @@ function issue(over: Partial<WorkIssueResult> & { stepNumbers?: number[] } = {})
     fetchedAt: T0,
     stale: false,
     staleReason: null,
+    trusted: true,
     ...rest,
   };
 }
@@ -80,6 +84,7 @@ describe('#531 POST /api/work/run', () => {
       openTerminal: async (r) => (terminal.push(r), terminalAnswer),
       isThrowawayFolder: () => false,
       workRun: {
+        trust: trustOf('acme'),
         issues: { issue: async () => { if (current instanceof Error) throw current; return current; } },
         runs,
         running: { runningCount: async () => running },
@@ -240,13 +245,104 @@ describe('#531 POST /api/work/run', () => {
 
     test('#531/AC-3 when the count cannot be read the route answers 502 and opens nothing, unless forced', async () => {
       fresh();
-      const blind = await startApi({ workRun: { issues: { issue: async () => current as WorkIssueResult }, runs, running: { runningCount: async () => { throw new NoDataError('raw', { failure: 'rate-limited' }); } }, git, now: () => clock } });
+      const blind = await startApi({ workRun: { trust: trustOf('acme'), issues: { issue: async () => current as WorkIssueResult }, runs, running: { runningCount: async () => { throw new NoDataError('raw', { failure: 'rate-limited' }); } }, git, now: () => clock } });
       try {
         assert.equal((await post(body, {}, blind)).status, 502);
         assert.deepEqual(terminal, []);
         assert.equal((await post({ ...body, force: true }, {}, blind)).status, 200);
       } finally {
         await blind.close();
+      }
+    });
+  });
+
+  describe('#477/AC-4 the limit is the installation preference', () => {
+    test('#477/AC-4 Given the limit is 3, When 2 cards run, Then the session opens; at 3 it is 409 naming limit 3', async () => {
+      fresh();
+      const three = await startApi({ workRun: { trust: trustOf('acme'), issues: { issue: async () => current as WorkIssueResult }, runs, running: { runningCount: async () => running }, limit: () => 3, git, now: () => clock } });
+      try {
+        running = 2;
+        assert.equal((await post(body, {}, three)).status, 200);
+        storage.db.exec('DELETE FROM work_execution_runs');
+        running = 3;
+        const r = await post(body, {}, three);
+        assert.equal(r.status, 409);
+        const out = await json(r);
+        assert.deepEqual([out.running, out.limit], [3, 3]);
+        assert.match(out.error, /limite é 3/);
+      } finally {
+        await three.close();
+      }
+    });
+
+    test('#477/AC-4 the limit is read at each request: a change applies at once', async () => {
+      fresh();
+      let limit = 2;
+      const live = await startApi({ workRun: { trust: trustOf('acme'), issues: { issue: async () => current as WorkIssueResult }, runs, running: { runningCount: async () => running }, limit: () => limit, git, now: () => clock } });
+      try {
+        running = 2;
+        assert.equal((await post(body, {}, live)).status, 409);
+        limit = 4;
+        assert.equal((await post(body, {}, live)).status, 200);
+      } finally {
+        await live.close();
+      }
+    });
+  });
+
+  describe('#477/AC-2 "Executar plano" on a queued card takes it out of the queue and runs it', () => {
+    const withQueue = (queue: SqliteWorkQueue) => startApi({ workRun: { trust: trustOf('acme'), issues: { issue: async () => current as WorkIssueResult }, runs, running: { runningCount: async () => running }, queue, git, now: () => clock } });
+
+    test('#477/AC-2 Given #412 is 2nd in the queue, When its plan runs, Then the session opens, a run is recorded and the queue is left with the others, renumbered', async () => {
+      fresh();
+      const queue = new SqliteWorkQueue(storage.db);
+      for (const n of [500, 412, 501]) await queue.enqueue(`acme/app#${n}`, 'terminal', new Date(T0).toISOString());
+      const live = await withQueue(queue);
+      try {
+        assert.equal((await post(body, {}, live)).status, 200);
+        assert.equal((await runs.get('acme/app#412'))?.state, 'booting');
+        assert.deepEqual([...(await queue.positions())], [['acme/app#500', 1], ['acme/app#501', 2]]);
+      } finally {
+        await live.close();
+        storage.db.exec('DELETE FROM work_queue');
+      }
+    });
+
+    test('#477/AC-2 when the run is refused (the limit), the item stays in the queue', async () => {
+      fresh();
+      running = 2;
+      const queue = new SqliteWorkQueue(storage.db);
+      await queue.enqueue('acme/app#412', 'terminal', new Date(T0).toISOString());
+      const live = await withQueue(queue);
+      try {
+        assert.equal((await post(body, {}, live)).status, 409);
+        assert.deepEqual([...(await queue.positions())], [['acme/app#412', 1]]);
+      } finally {
+        await live.close();
+        storage.db.exec('DELETE FROM work_queue');
+      }
+    });
+
+    test('#477/AC-2 when the queue cannot be written after the session opened, the answer is still 200 and the run is recorded', async () => {
+      fresh();
+      const live = await startApi({ workRun: { trust: trustOf('acme'), issues: { issue: async () => current as WorkIssueResult }, runs, running: { runningCount: async () => running }, queue: { remove: async () => { throw new Error('database is locked'); } }, git, now: () => clock } });
+      try {
+        assert.equal((await post(body, {}, live)).status, 200);
+        assert.equal((await runs.get('acme/app#412'))?.state, 'booting');
+      } finally {
+        await live.close();
+      }
+    });
+
+    test('#477/AC-2 a card that is not queued runs as before', async () => {
+      fresh();
+      const queue = new SqliteWorkQueue(storage.db);
+      const live = await withQueue(queue);
+      try {
+        assert.equal((await post(body, {}, live)).status, 200);
+        assert.deepEqual(await queue.list(), []);
+      } finally {
+        await live.close();
       }
     });
   });
@@ -305,7 +401,7 @@ describe('#531 POST /api/work/run', () => {
     test('#531/AC-5 a repo, number or target that is not plain is a 400 before anything is read, counted or run', async () => {
       fresh();
       let reads = 0;
-      const guarded = await startApi({ workRun: { issues: { issue: async () => (reads++, issue()) }, runs, running: { runningCount: async () => (reads++, 0) }, git, now: () => clock } });
+      const guarded = await startApi({ workRun: { trust: trustOf('acme'), issues: { issue: async () => (reads++, issue()) }, runs, running: { runningCount: async () => (reads++, 0) }, git, now: () => clock } });
       try {
         const bad = [
           { repo: 'acme/app; touch x', number: 1, target: 'terminal' },
@@ -358,6 +454,78 @@ describe('#531 POST /api/work/run', () => {
         await off.close();
       }
       assert.deepEqual(terminal, []);
+    });
+  });
+
+  describe('#594/AC-1 Executar plano refuses a repository of an owner that is not trusted', () => {
+    const refusal = { code: 'untrusted-repository', error: 'Este repositório não é de um dono confiável nesta instalação; o console não abre sessão para ele' };
+    const startWith = (trust: RepositoryTrust, reads: { n: number; c: number }) => startApi({ workRun: { trust, issues: { issue: async () => (reads.n++, current as WorkIssueResult) }, runs, running: { runningCount: async () => (reads.c++, 0) }, git, now: () => clock } });
+    const installation = (stored: string[] | null, selectedOwner: string | null) =>
+      new InstallationRepositoryTrust(new MemoryInstallationSettings(stored ? { 'work.trustedOwners': stored } : {}), () => (selectedOwner ? { owner: selectedOwner } : null));
+    const recorded = () => (storage.db.prepare('SELECT COUNT(*) AS n FROM work_execution_runs').get() as { n: number }).n;
+
+    test('#594/AC-1 Given the board reads the Project of "acme" and nothing is stored, When Executar plano is asked for other-org/repo#7, Then 403 untrusted-repository, no issue read, no session opened, no run recorded', async () => {
+      fresh();
+      const reads = { n: 0, c: 0 };
+      const guarded = await startWith(installation(null, 'acme'), reads);
+      try {
+        for (const target of ['desktop', 'terminal']) {
+          const r = await post({ repo: 'other-org/repo', number: 7, target }, {}, guarded);
+          assert.equal(r.status, 403, target);
+          assert.deepEqual(await json(r), refusal);
+        }
+        assert.equal(reads.n, 0);
+        assert.deepEqual(desktop, []);
+        assert.deepEqual(terminal, []);
+        assert.equal(recorded(), 0);
+        assert.equal(reads.c, 0, 'no running cards are counted');
+      } finally {
+        await guarded.close();
+      }
+    });
+
+    test('#594/AC-2 Given the default list (the Project owner "acme"), When the repo is written as ACME/App in any letter case, Then the trust check passes and the route proceeds', async () => {
+      fresh();
+      const reads = { n: 0, c: 0 };
+      const open = await startWith(installation(null, 'acme'), reads);
+      try {
+        const r = await post({ ...body, repo: 'ACME/App' }, {}, open);
+        assert.equal(r.status, 200);
+        assert.equal(reads.n, 1);
+      } finally {
+        await open.close();
+      }
+    });
+
+    test('#594/AC-2 Given a stored list ["beta"], When acme/app is asked, Then 403 untrusted-repository: the stored list replaces the default; and beta/app passes the check', async () => {
+      fresh();
+      const reads = { n: 0, c: 0 };
+      const stored = await startWith(installation(['beta'], 'acme'), reads);
+      try {
+        const r = await post(body, {}, stored);
+        assert.equal(r.status, 403);
+        assert.equal((await json(r)).code, 'untrusted-repository');
+        assert.equal(reads.n, 0);
+        assert.equal(recorded(), 0);
+        await post({ ...body, repo: 'BETA/app' }, {}, stored);
+        assert.equal(reads.n, 1, 'a trusted owner reaches the issue read');
+      } finally {
+        await stored.close();
+      }
+    });
+
+    test('#594/AC-2 Given nothing stored and no Project chosen, or a stored empty list, Then nobody is trusted', async () => {
+      fresh();
+      const reads = { n: 0, c: 0 };
+      for (const trust of [installation(null, null), installation([], 'acme')]) {
+        const closed = await startWith(trust, reads);
+        try {
+          assert.equal((await post(body, {}, closed)).status, 403);
+        } finally {
+          await closed.close();
+        }
+      }
+      assert.equal(reads.n, 0);
     });
   });
 });

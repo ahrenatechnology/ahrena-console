@@ -10,6 +10,7 @@ import type { WorkProjectBoard } from '../../src/github/work-board.ts';
 import { WorkIssueWrittenUnreadError, type WorkIssueCurrent, type WorkIssueEdit, type WorkIssueRead, type WorkIssueSource, type WorkIssueWriter } from '../../src/github/work-issue.ts';
 import { workIssueCacheKey, WorkIssueConflictError, WorkIssueNotFoundError, WorkIssueService } from '../../src/github/work-issue-service.ts';
 import { clock, k, REPO } from './helpers.ts';
+import { trustOf } from '../fixtures.ts';
 
 const issueRead = (n: number, over: Partial<WorkIssueRead> = {}): WorkIssueRead => ({
   key: k(n),
@@ -59,7 +60,7 @@ function setup(project?: WorkProjectBoard) {
   const source = new FakeSource();
   const logs: string[] = [];
   const cache = new GithubCache({ store: new MemoryCacheStore(), now });
-  const service = new WorkIssueService({ source, cache, log: (m) => logs.push(m), ...(project ? { project } : {}) });
+  const service = new WorkIssueService({ trust: trustOf('ahrenatechnology'), source, cache, log: (m) => logs.push(m), ...(project ? { project } : {}) });
   return { now, source, logs, cache, service };
 }
 
@@ -182,7 +183,7 @@ function setupWrite() {
   const base = setup();
   const writer = new FakeWriter();
   const logs: string[] = [];
-  const service = new WorkIssueService({ source: base.source, writer, cache: base.cache, log: (m) => logs.push(m) });
+  const service = new WorkIssueService({ trust: trustOf('ahrenatechnology'), source: base.source, writer, cache: base.cache, log: (m) => logs.push(m) });
   return { ...base, writer, service, logs };
 }
 

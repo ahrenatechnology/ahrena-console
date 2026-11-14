@@ -42,6 +42,38 @@ function contract(name: string, make: () => InstallationSettings) {
       assert.equal(s.has('github.login'), false);
     });
 
+    test('#594/AC-2 work.trustedOwners round trips a list of owners; an empty list is valid and is not absent', () => {
+      const s = make();
+      assert.equal(s.get('work.trustedOwners'), null);
+      s.set('work.trustedOwners', ['acme', 'Beta-Org']);
+      assert.deepEqual(s.get('work.trustedOwners'), ['acme', 'Beta-Org']);
+      s.set('work.trustedOwners', []);
+      assert.equal(s.has('work.trustedOwners'), true);
+      assert.deepEqual(s.get('work.trustedOwners'), []);
+    });
+
+    test('#594/AC-2 work.trustedOwners refuses what is not a list of GitHub owners', () => {
+      const s = make();
+      const bad = [['acme/app'], ['-acme'], ['a b'], [''], [42], 'acme', null, { 0: 'acme' }, Array.from({ length: 101 }, (_, i) => `o${i}`)];
+      for (const value of bad) assert.throws(() => s.set('work.trustedOwners', value as never), /invalid value for work.trustedOwners/, JSON.stringify(value).slice(0, 40));
+      assert.equal(s.has('work.trustedOwners'), false);
+    });
+
+    test('#477/AC-4 work.executionLimit stores a whole number from 1 to 50 and reads it back; nothing stored reads null', () => {
+      const s = make();
+      assert.equal(s.get('work.executionLimit'), null);
+      s.set('work.executionLimit', 4);
+      assert.equal(s.get('work.executionLimit'), 4);
+      s.set('work.executionLimit', 50);
+      assert.equal(s.get('work.executionLimit'), 50);
+    });
+
+    test('#477/AC-4 work.executionLimit refuses zero, negatives, fractions, over 50 and what is not a number', () => {
+      const s = make();
+      for (const value of [0, -1, 1.5, 51, '2', null, NaN, [2]]) assert.throws(() => s.set('work.executionLimit', value as never), /invalid value for work.executionLimit/, JSON.stringify(value));
+      assert.equal(s.has('work.executionLimit'), false);
+    });
+
     test('delete removes the key; deleting a missing key is fine', () => {
       const s = make();
       s.set('github.login', 'octo-cat');
@@ -52,7 +84,7 @@ function contract(name: string, make: () => InstallationSettings) {
 
     test('only the known keys exist: anything else is refused', () => {
       const s = make();
-      assert.deepEqual([...INSTALLATION_SETTING_KEYS], ['github.login', 'github.source', 'project.selection']);
+      assert.deepEqual([...INSTALLATION_SETTING_KEYS], ['github.login', 'github.source', 'project.selection', 'work.trustedOwners', 'work.executionLimit']);
       assert.throws(() => s.set('github.token' as never, 'x' as never));
       assert.throws(() => s.get('github.credential' as never));
       assert.throws(() => s.set('github.source', 'keychain' as never));

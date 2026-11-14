@@ -8,6 +8,7 @@ import { GithubCache, MemoryCacheStore } from '../../src/github/cache.ts';
 import { WorkIssueWrittenUnreadError, type WorkIssueRead, type WorkIssueSource, type WorkIssueWriter } from '../../src/github/work-issue.ts';
 import { WorkIssueConflictError, WorkIssueNotFoundError, WorkIssueService, workIssueCacheKey } from '../../src/github/work-issue-service.ts';
 import { clock, k, REPO } from './helpers.ts';
+import { trustOf } from '../fixtures.ts';
 
 const issueRead = (n: number, over: Partial<WorkIssueRead> = {}): WorkIssueRead => ({
   key: k(n), repo: REPO, number: n, title: `read of ${n}`, updatedAt: '2026-11-10T10:00:00Z', url: `https://github.com/${REPO}/issues/${n}`, state: 'OPEN', type: 'Plan',
@@ -59,7 +60,7 @@ function setup() {
   const writer = new FakeWriter();
   const cache = new GithubCache({ store: new MemoryCacheStore(), now: clock() });
   const source: WorkIssueSource = { issue: async (key) => issueRead(Number(key.split('#')[1])) };
-  const service = new WorkIssueService({ source, writer, cache });
+  const service = new WorkIssueService({ trust: trustOf('ahrenatechnology'), source, writer, cache });
   return { writer, cache, service };
 }
 
@@ -138,7 +139,7 @@ describe('#534/AC-5 failures leave the cache as it was', () => {
     const logs: string[] = [];
     const writer = new FakeWriter();
     const cache = new GithubCache({ store: new MemoryCacheStore(), now: clock() });
-    const service = new WorkIssueService({ source: { issue: async (key) => issueRead(Number(key.split('#')[1])) }, writer, cache, log: (m) => logs.push(m) });
+    const service = new WorkIssueService({ trust: trustOf('ahrenatechnology'), source: { issue: async (key) => issueRead(Number(key.split('#')[1])) }, writer, cache, log: (m) => logs.push(m) });
     await service.issue(k(534));
     await service.issue(k(601));
     writer.unread = new Error('raw read-back text');

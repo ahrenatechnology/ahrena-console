@@ -19,6 +19,7 @@ import { SqliteWorkColumnHistory } from '../../src/github/work-board-history.ts'
 import { WorkBoardService } from '../../src/github/work-board-service.ts';
 import { WorkIssueService } from '../../src/github/work-issue-service.ts';
 import { clock, REPO, type Recorded } from '../github/helpers.ts';
+import { trustOf } from '../fixtures.ts';
 import { OWNER_TOKEN, ownerFetch as fetch } from '../owner-http.ts';
 
 const TIMEOUT_MS = 50;
@@ -95,8 +96,9 @@ async function boot(kind: 'board' | 'issue-with-hanging-project'): Promise<Boot>
     const service = new WorkBoardService({
       project: selectedProjectBoard({ kanban: () => kanban }),
       sessions: { links: async () => [] },
-      queue: { available: true, positions: async () => new Map() },
+      queue: { available: true, positions: async () => new Map(), stopped: async () => null },
       history: new SqliteWorkColumnHistory(storage.db),
+      trust: trustOf(PROJECT.owner),
       now,
       log: (m) => logs.push(m),
     });
@@ -110,6 +112,7 @@ async function boot(kind: 'board' | 'issue-with-hanging-project'): Promise<Boot>
       source: new GithubGraphqlSource({ token: 'test-token', fetch: gh.fetch, timeoutMs: TIMEOUT_MS }),
       cache,
       project: kanban,
+      trust: trustOf(PROJECT.owner),
       log: (m) => logs.push(m),
     });
     workIssue = { service };

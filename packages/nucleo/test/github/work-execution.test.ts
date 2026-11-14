@@ -8,7 +8,8 @@ import { MIGRATIONS } from '../../src/adapters/sqlite/migrations.ts';
 import { openSqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
 import { planningKeyOfPrompt } from '../../src/github/work-plan.ts';
 import {
-  EXECUTION_LIMIT,
+  DEFAULT_EXECUTION_LIMIT,
+  executionLimitOf,
   EXECUTION_SESSION_WINDOW_MS,
   executionKeyOfPrompt,
   executionOfRun,
@@ -62,11 +63,23 @@ describe('#531/AC-5 only validated identifiers enter the prompt', () => {
 
 describe('#531/AC-3 the limit', () => {
   test('#531/AC-3 the default is 2 and the route is over it at 2 running cards unless forced', () => {
-    assert.equal(EXECUTION_LIMIT, 2);
-    assert.equal(isOverExecutionLimit(1, false), false);
-    assert.equal(isOverExecutionLimit(2, false), true);
-    assert.equal(isOverExecutionLimit(5, false), true);
-    assert.equal(isOverExecutionLimit(5, true), false);
+    assert.equal(DEFAULT_EXECUTION_LIMIT, 2);
+    assert.equal(isOverExecutionLimit(1, false, DEFAULT_EXECUTION_LIMIT), false);
+    assert.equal(isOverExecutionLimit(2, false, DEFAULT_EXECUTION_LIMIT), true);
+    assert.equal(isOverExecutionLimit(5, false, DEFAULT_EXECUTION_LIMIT), true);
+    assert.equal(isOverExecutionLimit(5, true, DEFAULT_EXECUTION_LIMIT), false);
+  });
+
+  test('#477/AC-4 the limit is the installation preference, the default only when none is stored', () => {
+    assert.equal(executionLimitOf(null), 2);
+    assert.equal(executionLimitOf(5), 5);
+    assert.equal(isOverExecutionLimit(2, false, 3), false);
+    assert.equal(isOverExecutionLimit(3, false, 3), true);
+  });
+
+  test('#477/AC-4 a limit lowered under the running count stops nothing and only blocks the next start', () => {
+    assert.equal(isOverExecutionLimit(3, false, 1), true);
+    assert.equal(isOverExecutionLimit(3, true, 1), false);
   });
 });
 
@@ -110,7 +123,7 @@ describe('#531/AC-2 work_execution_runs', () => {
     assert.ok(MIGRATIONS.some((m) => m.version === 18));
     const storage = openSqliteStorage({ path: ':memory:' });
     const cols = (storage.db.prepare('PRAGMA table_info(work_execution_runs)').all() as { name: string; pk: number }[]).map((c) => [c.name, c.pk]);
-    assert.deepEqual(cols, [['item_key', 1], ['target', 0], ['started_at', 0], ['state', 0], ['session_id', 0], ['finished_at', 0]]);
+    assert.deepEqual(cols, [['item_key', 1], ['target', 0], ['started_at', 0], ['state', 0], ['session_id', 0], ['finished_at', 0], ['origin', 0]]); // #477 migration 20 adds `origin`
     storage.close();
   });
 

@@ -24,6 +24,7 @@ import {
   type WorkBoardView,
 } from '../../src/index.ts';
 import { k, REPO } from './helpers.ts';
+import { trustOf } from '../fixtures.ts';
 
 const NOW = Date.parse('2026-11-13T12:00:00Z');
 const DAY = 86_400_000;
@@ -89,6 +90,7 @@ function board(nodes: WorkBoardNode[], over: Partial<WorkBoardInput> = {}): Work
     stale: false,
     staleReason: null,
     retryAt: null,
+    trust: trustOf('ahrenatechnology'),
     ...over,
   });
 }
@@ -170,9 +172,15 @@ describe('work board vocabulary', () => {
     assert.equal(typeSlugOf(null), null);
   });
 
-  test('the empty queue has no positions and says it is not available', async () => {
+  test('the empty queue has no positions, is not stopped and says it is not available', async () => {
     assert.equal(EMPTY_WORK_QUEUE.available, false);
     assert.equal((await EMPTY_WORK_QUEUE.positions()).size, 0);
+    assert.equal(await EMPTY_WORK_QUEUE.stopped(), null);
+  });
+
+  test('#477/AC-4 the queue block carries the limit and the stop it is given, and counts the running cards of the level', () => {
+    const view = board([boardNode(1), boardNode(2)], { sessions: [session('s1', 1, 'working')], queueLimit: 3, queueStopped: { key: k(2), reason: 'boom' } });
+    assert.deepEqual(view.queue, { available: false, running: 1, limit: 3, stopped: { key: k(2), reason: 'boom' } });
   });
 });
 
@@ -424,7 +432,7 @@ describe('ordering, time in column and the done window', () => {
     const view = board([]);
     assert.deepEqual(view.columns.map((c) => [c.id, c.count]), WORK_BOARD_COLUMNS.map((c) => [c.id, 0]));
     assert.deepEqual(view.blockedReasons, WORK_BLOCKED_REASONS.map(({ id, label }) => ({ id, label })));
-    assert.deepEqual(view.queue, { available: false });
+    assert.deepEqual(view.queue, { available: false, running: 0, limit: 2, stopped: null });
     assert.deepEqual(view.levels, [...WORK_LEVELS]);
   });
 });
@@ -680,5 +688,18 @@ describe('issue of a session prompt', () => {
   test('no reference, or something that only looks like one', () => {
     assert.equal(issueOfPrompt('sem issue aqui', REPO), null);
     assert.equal(issueOfPrompt('a cor &#123; e abc#4', REPO), null);
+  });
+});
+
+describe('#594/AC-3 the card says whether its repository is trusted', () => {
+  test('#594/AC-3 Given the trusted owner "acme", When the board is built, Then a card of Acme/App carries trusted true and a card of other-org/app trusted false', () => {
+    const view = board([boardNode(501, { key: 'Acme/App#501', repo: 'Acme/App' }), boardNode(502, { key: 'other-org/app#502', repo: 'other-org/app' })], { trust: trustOf('acme') });
+    assert.equal(card(view, 501).trusted, true);
+    assert.equal(card(view, 502).trusted, false);
+  });
+
+  test('#594/AC-3 Given nobody is trusted, Then every card carries trusted false, a boolean', () => {
+    const view = board([boardNode(501)], { trust: trustOf() });
+    assert.strictEqual(card(view, 501).trusted, false);
   });
 });

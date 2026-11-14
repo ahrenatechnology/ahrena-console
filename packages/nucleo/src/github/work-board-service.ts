@@ -16,6 +16,7 @@ import {
   type WorkSessionLink,
   buildWorkBoard,
   DEFAULT_WORK_BOARD_FILTERS,
+  type WorkBoardColumn,
   columnObservations,
   type ParentLookup,
   type WorkBoardFilters,
@@ -27,15 +28,23 @@ import {
   type WorkQueue,
   type WorkSessions,
 } from './work-board.ts';
-import { executionOfRun, settleExecutionRun, type RunningCards, type WorkExecutionRuns } from './work-execution.ts';
+import { DEFAULT_EXECUTION_LIMIT, executionOfRun, settleExecutionRun, type ExecutionRun, type RunningCards, type WorkExecutionRuns } from './work-execution.ts';
 import { planningOfRun, settlePlanRun, type WorkPlanRuns } from './work-plan.ts';
+import { isWritableQueue, type CardColumns } from './work-queue.ts';
+import type { RepositoryTrust } from './trusted-owners.ts';
+import type { QueueStop } from './work-queue.ts';
 import type { WorkNode } from './work.ts';
 
 export interface WorkBoardServiceOptions {
   project: WorkProjectBoard;
   sessions: WorkSessions;
+  /** #477 the execution queue; when it can also be written (`WorkQueueStore`) the board drops the entries whose issue closed or lost its plan. */
   queue: WorkQueue;
+  /** #477 the concurrent-execution limit the board shows on Na fila (the installation's `work.executionLimit`). Lazy: a change applies at the next read. Default `DEFAULT_EXECUTION_LIMIT`. */
+  limit?: () => number;
   history: WorkColumnHistory;
+  /** #594 whose repositories are trusted: each card carries `trusted`. Required: no board trusts by default. */
+  trust: RepositoryTrust;
   /** #507 the planning runs; without it no card has a planning state. */
   planRuns?: WorkPlanRuns;
   /** #531 the execution runs; without it no card has a boot state. */
@@ -47,6 +56,10 @@ export interface WorkBoardServiceOptions {
   pausedUntil?: () => number;
   /** #496 when the background sync next reads the Project (epoch ms), `null` when nothing is scheduled. Lazy: the sync is built after this service. */
   nextScheduledRead?: () => number | null;
+  /** #477 a booting run just settled to `expired` (once per run, awaited): the queue's puller puts the item it pulled back at the top. A throw is logged and never fails the board. */
+  onRunExpired?: (run: ExecutionRun) => Promise<void>;
+  /** #477 each board read hands its view here when it is done (the puller looks at the queue and the limit). A throw is logged and never fails the board. */
+  onRead?: (view: WorkBoardView) => void;
   /** #465 the raw error of a failed parent lookup goes here; the board only says it could not read them. */
   log?: (message: string) => void;
 }
@@ -58,30 +71,38 @@ export interface WorkBoardReadOptions {
   fromStore?: boolean;
 }
 
-export class WorkBoardService implements RunningCards {
+export class WorkBoardService implements RunningCards, CardColumns {
   private readonly project: WorkProjectBoard;
   private readonly sessions: WorkSessions;
   private readonly queue: WorkQueue;
+  private readonly limit: () => number;
   private readonly history: WorkColumnHistory;
+  private readonly trust: RepositoryTrust;
   private readonly planRuns: WorkPlanRuns | undefined;
   private readonly executionRuns: WorkExecutionRuns | undefined;
   private readonly parents: ParentLookup | undefined;
   private readonly now: () => number;
   private readonly pausedUntil: () => number;
   private readonly nextScheduledRead: () => number | null;
+  private readonly onRunExpired: ((run: ExecutionRun) => Promise<void>) | undefined;
+  private readonly onRead: ((view: WorkBoardView) => void) | undefined;
   private readonly log: (message: string) => void;
 
-  constructor({ project, sessions, queue, history, planRuns, executionRuns, parents, now = Date.now, pausedUntil = () => 0, nextScheduledRead = () => null, log = () => {} }: WorkBoardServiceOptions) {
+  constructor({ project, sessions, queue, limit = () => DEFAULT_EXECUTION_LIMIT, history, trust, planRuns, executionRuns, parents, now = Date.now, pausedUntil = () => 0, nextScheduledRead = () => null, onRunExpired, onRead, log = () => {} }: WorkBoardServiceOptions) {
     this.project = project;
     this.sessions = sessions;
     this.queue = queue;
+    this.limit = limit;
     this.history = history;
+    this.trust = trust;
     this.planRuns = planRuns;
     this.executionRuns = executionRuns;
     this.parents = parents;
     this.now = now;
     this.pausedUntil = pausedUntil;
     this.nextScheduledRead = nextScheduledRead;
+    this.onRunExpired = onRunExpired;
+    this.onRead = onRead;
     this.log = log;
   }
 
@@ -90,7 +111,8 @@ export class WorkBoardService implements RunningCards {
     const fromProject = issueCards(read).map(nodeOfCard);
     const { nodes: outside, reason } = await this.resolveParents(fromProject);
     const nodes = [...fromProject, ...outside];
-    const [links, queue] = await Promise.all([this.sessions.links(), this.queue.positions()]);
+    const links = await this.sessions.links();
+    const { positions: queue, stopped: queueStopped } = await this.readQueue(nodes);
     // #507 a planning session is not an execution: it never moves the card, it gives it its planning state.
     const sessions = links.filter((l) => !l.planning);
     const now = this.now();
@@ -101,24 +123,33 @@ export class WorkBoardService implements RunningCards {
     // #495 the screen gets a code; the raw text of the stale read goes to the log.
     if (read.stale && read.staleReason) this.log(`work board: stale read: ${read.staleReason}`);
     const staleReason = read.stale ? (read.staleCode ?? 'github-error') : reason;
-    return buildWorkBoard({
+    const view = buildWorkBoard({
       project: { owner: read.owner, number: read.number, title: read.title, url: read.url },
       statuses: statusOptions(read),
       nodes,
       sessions,
       queue,
       queueAvailable: this.queue.available,
+      queueLimit: this.limit(),
+      queueStopped,
       since,
       filters,
       analyzed,
       planning,
       execution,
+      trust: this.trust,
       now,
       fetchedAt: read.fetchedAt,
       stale: staleReason !== null,
       staleReason,
       retryAt: staleReason === null ? null : this.retryAt(now),
     });
+    try {
+      this.onRead?.(view);
+    } catch (err) {
+      this.log(`work board: onRead failed: ${err instanceof Error ? err.name : typeof err}`);
+    }
+    return view;
   }
 
   /**
@@ -126,8 +157,40 @@ export class WorkBoardService implements RunningCards {
    * the limit. It reads the board the way the screen does (the store first, level item).
    */
   async runningCount(): Promise<number> {
+    return (await this.board({ ...DEFAULT_WORK_BOARD_FILTERS }, { fromStore: true })).queue.running;
+  }
+
+  /**
+   * #477 the column of an issue's card, for the queue route to refuse the fact columns; `null` when the
+   * board does not hold the card at the default level (a card of an older done window included).
+   */
+  async columnOf(key: string): Promise<WorkBoardColumn | null> {
     const view = await this.board({ ...DEFAULT_WORK_BOARD_FILTERS }, { fromStore: true });
-    return view.columns.find((c) => c.id === 'running')?.count ?? 0;
+    const wanted = key.toLowerCase();
+    return view.columns.find((c) => c.cards.some((card) => card.key.toLowerCase() === wanted))?.id ?? null;
+  }
+
+  /**
+   * #477 the queue's positions and its stop, after dropping the entries whose issue is closed or has no
+   * plan any more (a card that lost its plan goes back to Planejamento). An entry whose issue the board
+   * does not hold stays. Dropping failing never fails the board: the entry just stays until the next read.
+   */
+  private async readQueue(nodes: readonly WorkBoardNode[]): Promise<{ positions: ReadonlyMap<string, number>; stopped: QueueStop | null }> {
+    let positions = await this.queue.positions();
+    if (isWritableQueue(this.queue) && positions.size) {
+      try {
+        const onBoard = new Map(nodes.filter((n) => n.inProject).map((n) => [n.key.toLowerCase(), n]));
+        const gone = [...positions.keys()].filter((key) => {
+          const n = onBoard.get(key.toLowerCase());
+          return n !== undefined && (n.state === 'CLOSED' || !n.subIssues || n.subIssues.total === 0);
+        });
+        for (const key of gone) await this.queue.remove(key);
+        if (gone.length) positions = await this.queue.positions();
+      } catch (err) {
+        this.log(`work board: queue not updated: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+    return { positions, stopped: await this.queue.stopped() };
   }
 
   /**
@@ -142,7 +205,10 @@ export class WorkBoardService implements RunningCards {
       for (const run of await this.executionRuns.all()) {
         const live = executionLinks.filter((l) => l.key.toLowerCase() === run.key.toLowerCase()).map((l) => ({ sessionId: l.sessionId, since: l.since }));
         const settled = settleExecutionRun(run, { live, now });
-        if (settled !== run) await this.executionRuns.save(settled);
+        if (settled !== run) {
+          await this.executionRuns.save(settled);
+          if (settled.state === 'expired') await this.runExpired(settled);
+        }
         const state = executionOfRun(settled);
         if (state) out.set(run.key.toLowerCase(), state);
       }
@@ -151,6 +217,15 @@ export class WorkBoardService implements RunningCards {
       out.clear();
     }
     return out;
+  }
+
+  /** #477 tells the queue a run expired; its failure is the queue's, never the board's. */
+  private async runExpired(run: ExecutionRun): Promise<void> {
+    try {
+      await this.onRunExpired?.(run);
+    } catch (err) {
+      this.log(`work board: onRunExpired failed: ${err instanceof Error ? err.name : typeof err}`);
+    }
   }
 
   /**

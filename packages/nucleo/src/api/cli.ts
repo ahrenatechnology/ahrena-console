@@ -27,15 +27,18 @@ import { SqliteDecisionStore } from '../decisions/sqlite.ts';
 import { SessionStateMachine } from '../states/machine.ts';
 import { createMcpServer } from '../mcp/index.ts';
 import { GithubCache } from '../github/cache.ts';
-import { GithubBackgroundSync } from '../github/background-sync.ts';
+import { GithubBackgroundSync, SYNC_PROJECT_EVERY_MS, type SyncStep } from '../github/background-sync.ts';
 import { githubSyncSteps } from './github-screens.ts';
 import { GithubGraphqlSource } from '../github/github-source.ts';
 import { SqliteCacheStore } from '../github/sqlite-cache.ts';
 import { GITHUB_CALL_LIMIT, GithubCallQueue } from '../github/call-queue.ts';
+import { InstallationRepositoryTrust } from '../github/trusted-owners.ts';
 import { chooseVault, GithubConnection, GithubNotConnectedError } from '../github/connection/index.ts';
 import { parseProjectEnv, PROJECT_ENV } from '../github/project-selection.ts';
 import { SqliteInstallationSettings } from '../settings/installation-settings.ts';
-import { EMPTY_WORK_QUEUE } from '../github/work-board.ts';
+import { executionLimitOf } from '../github/work-execution.ts';
+import { SqliteWorkQueue } from '../github/work-queue-store.ts';
+import { WorkQueuePuller } from './work-queue-puller.ts';
 import { WorkBoardService } from '../github/work-board-service.ts';
 import { FleetWorkSessions } from '../github/work-board-sessions.ts';
 import { SqliteWorkColumnHistory } from '../github/work-board-history.ts';
@@ -465,19 +468,33 @@ coreGithub = await createCoreGithub({
 });
 const { connection, screens } = coreGithub;
 /*
+ * #594 one trust source for the board's cards, the issue detail and the Planejar / Executar plano routes: the stored
+ * `work.trustedOwners`, else the owner of the Project the board reads (none chosen: nobody is trusted).
+ */
+const repositoryTrust = new InstallationRepositoryTrust(settings, () => screens.project?.selection() ?? null);
+/*
  * #465 #466 the work board (`GET /api/work`): the kanban's Project (the same resolver as /api/project),
  * the live sessions of the fleet, the parents outside the Project through the GitHub cache, the time in
- * column in this database, #507 the planning runs, #531 the execution runs, and no queue until #477. Under --demo, the simulator's Project and its folders
+ * column in this database, #507 the planning runs, #531 the execution runs and #477 the execution queue. Under --demo, the simulator's Project and its folders
  * (only the scenario's session is on an issue branch). Under --no-github, no board (503 off).
  */
 const planRuns = new SqliteWorkPlanRuns(sqlite.db);
 const executionRuns = new SqliteWorkExecutionRuns(sqlite.db);
+/*
+ * #477 the execution queue: one per installation, in this database, so it survives a restart. The concurrent-execution
+ * limit is the installation setting `work.executionLimit` (default 2), read at each use so a change applies at once.
+ */
+const workQueue = new SqliteWorkQueue(sqlite.db);
+let workQueuePuller: WorkQueuePuller | null = null;
+const executionLimit = () => executionLimitOf(settings.get('work.executionLimit'));
 const workBoard =
   screens.project && workSource
     ? new WorkBoardService({
+        trust: repositoryTrust,
         project: selectedProjectBoard(screens.project),
         sessions: new FleetWorkSessions({ fleet: mcp.fleet, ...(demo ? { locate: simulatorWorkBoardLocate } : {}) }),
-        queue: EMPTY_WORK_QUEUE,
+        queue: workQueue,
+        limit: executionLimit,
         history: new SqliteWorkColumnHistory(sqlite.db),
         planRuns,
         executionRuns,
@@ -485,6 +502,12 @@ const workBoard =
         // #496 lazy: the sync is built after this service.
         pausedUntil: () => githubCache.pausedUntil,
         nextScheduledRead: () => githubSync?.nextRunAt('project') ?? null,
+        // #477 lazy: the puller is built after this service. A run it started that expired puts its item back at the top, stopped;
+        // a read that finds room and a queue wakes it (a trigger while a pull runs is that pull).
+        onRunExpired: (run) => workQueuePuller?.runExpired(run) ?? Promise.resolve(),
+        onRead: ({ queue, columns }) => {
+          if (queue.stopped === null && queue.running < queue.limit && columns.some((c) => c.id === 'queued' && c.cards.length > 0)) void workQueuePuller?.trigger();
+        },
         log,
       })
     : null;
@@ -493,14 +516,50 @@ const workBoard =
  * detail and under --no-github no GitHub: 503 off. */
 const workIssue =
   workSource instanceof GithubGraphqlSource
-    ? new WorkIssueService({ source: workSource, writer: workSource, cache: githubCache, ...(screens.project ? { project: selectedProjectBoard(screens.project) } : {}), log })
+    ? new WorkIssueService({ source: workSource, writer: workSource, cache: githubCache, trust: repositoryTrust, ...(screens.project ? { project: selectedProjectBoard(screens.project) } : {}), log })
     : null;
 /* #590 the issue options of a repository (`GET /api/work/issue/options`), through the same GitHub cache; off as the issue detail is. */
 const workIssueOptions = workSource instanceof GithubGraphqlSource ? new WorkIssueOptionsService({ source: workSource, cache: githubCache, log }) : null;
+/*
+ * #477 the queue's puller: opens the session of the first item when the queue is not stopped and the running cards are under
+ * the limit, re-checking trust and the plan at every pull. It needs the board (the count and the columns) and the issue reads,
+ * so it does not exist under --demo or --no-github: no session is opened unattended there. It wakes on a sync step (after the
+ * Project read, and at core start, where the step is due at once), on a board read that finds room, and when "Tentar de novo" is pressed.
+ */
+if (workBoard && workIssue) {
+  workQueuePuller = new WorkQueuePuller({
+    queue: workQueue,
+    issues: workIssue,
+    runs: executionRuns,
+    trust: repositoryTrust,
+    running: workBoard,
+    columns: workBoard,
+    limit: executionLimit,
+    storage,
+    openInDesktop,
+    openTerminal,
+    log,
+  });
+}
+const workQueueSyncSteps = (connected: () => Promise<boolean>): SyncStep[] => {
+  const puller = workQueuePuller;
+  if (!puller) return [];
+  return [
+    {
+      name: 'work-queue',
+      everyMs: SYNC_PROJECT_EVERY_MS,
+      async run() {
+        if (!(await connected().catch(() => false))) return 'skipped';
+        await puller.trigger();
+        return 'done';
+      },
+    },
+  ];
+};
 // Decision 0015 (#356): the core reads GitHub on a timer and the GitHub screens answer from the database.
 // Under --no-github there is no connection and no sync.
 githubSync = coreGithub.connected
-  ? new GithubBackgroundSync({ steps: githubSyncSteps(screens, coreGithub.connected), pauseLeftMs: () => githubCache.pauseLeftMs(), log })
+  ? new GithubBackgroundSync({ steps: [...githubSyncSteps(screens, coreGithub.connected), ...workQueueSyncSteps(coreGithub.connected)], pauseLeftMs: () => githubCache.pauseLeftMs(), log })
   : null;
 
 // Machine telemetry (#175, decision 0008): one sample every 30 s, 12 h in the database, and each
@@ -750,9 +809,11 @@ const api: LocalApi = await startLocalApi({
   work: { service: workBoard, fromStore: githubSync !== null },
   workIssue: { service: workIssue },
   workIssueOptions: { service: workIssueOptions },
-  workPlan: { issues: workIssue, runs: planRuns },
+  workPlan: { issues: workIssue, runs: planRuns, trust: repositoryTrust },
   // #531 without the board there is nothing to count the limit against: the route answers 503.
-  ...(workBoard ? { workRun: { issues: workIssue, runs: executionRuns, running: workBoard } } : {}),
+  ...(workBoard ? { workRun: { issues: workIssue, runs: executionRuns, running: workBoard, trust: repositoryTrust, limit: executionLimit, queue: workQueue } } : {}),
+  // #477 without the board there is no column to refuse the fact columns against: the routes answer 503.
+  ...(workBoard ? { workQueue: { issues: workIssue, queue: workQueue, columns: workBoard, trust: repositoryTrust, ...(workQueuePuller ? { puller: workQueuePuller } : {}) } } : {}),
   connection,
   // --no-github keeps its own off / no-github answers; otherwise 409 github-not-connected before any call.
   githubConnected: coreGithub.connected,

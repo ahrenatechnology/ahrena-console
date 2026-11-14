@@ -14,6 +14,10 @@ article[data-selected] { border-color: var(--accent); box-shadow: 0 0 0 1px var(
 .wb-plan-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .wb-plan-note { display: flex; gap: 5px; align-items: flex-start; font-size: 11.5px; font-weight: var(--weight-semibold); line-height: 1.35; color: var(--status-error-text); }
 .wb-plan-note .icon { flex: none; margin-top: 1px; }
+/* issue 595: the line that replaces the actions on a repository that is not trusted */
+.wb-untrusted { display: flex; gap: 5px; align-items: flex-start; font-size: 11.5px; line-height: 1.35; color: var(--muted); }
+.wb-untrusted .icon { flex: none; margin-top: 1px; }
+.wb-panel-acts .wb-untrusted { flex-basis: 100%; }
 
 /* ---------- the confirmation and the missing folder, anchored on the card ---------- */
 .wb-plan-pop { width: 360px; max-width: 100%; padding: 12px; display: flex; flex-direction: column; gap: 9px; font-size: 12px; box-shadow: 0 16px 40px color-mix(in srgb, var(--mono-black) 45%, transparent); }

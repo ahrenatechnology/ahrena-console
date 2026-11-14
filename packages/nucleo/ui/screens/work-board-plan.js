@@ -30,12 +30,22 @@ export function planState(card) {
 }
 
 /**
+ * issue 595: the one line that takes the place of the plan and run actions on a repository the owner has not trusted.
+ * `place` is `card` (the short form, where space is tight) or `panel` (the full form, naming the owner of the repository).
+ */
+export function untrustedLine(card, place = 'card') {
+  const owner = String(card?.repo ?? '').split('/')[0] || 'Este dono';
+  const text = place === 'panel' ? `Repositório fora da lista de confiança: ${owner} não pode Planejar nem Executar plano aqui` : 'Fora da lista de confiança: só leitura';
+  return el('div', { class: 'wb-untrusted', role: 'note', 'data-state': 'untrusted' }, icon('lock'), el('span', {}, text));
+}
+
+/**
  * The planning parts of a card (and of the panel): `badge` ("planejando…"), `note` (the failure and its reason, in red)
  * and `actions` (Planejar as the one primary action, Replanejar as a link in the line below). `onPlan` and `onReplan`
  * get the card and the button pressed, to anchor the confirmation on it. While planning there is no action. `lead` is a node
  * placed before the links of a card with a plan: the primary action of that state (Executar plano, issue 532).
  */
-export function cardPlanParts(card, { onPlan = null, onReplan = null, lead = null } = {}) {
+export function cardPlanParts(card, { onPlan = null, onReplan = null, lead = null, place = 'card' } = {}) {
   const state = planState(card);
   const none = { badge: null, note: null, actions: null };
   if (state === 'hidden') return none;
@@ -46,6 +56,8 @@ export function cardPlanParts(card, { onPlan = null, onReplan = null, lead = nul
     const badge = el('span', { class: 'wb-pill wb-pill-active wb-session', role: 'status', 'data-state': 'planning' }, 'planejando…');
     return { ...none, badge };
   }
+  // issue 595: on a repository that is not trusted the core refuses Planejar and Executar plano, so none is offered.
+  if (card.trusted === false) return { ...none, actions: untrustedLine(card, place) };
   const note = state === 'failed' ? el('div', { class: 'wb-plan-note', role: 'alert' }, icon('alert'), el('span', {}, card.planning.reason || FAILED_FALLBACK)) : null;
   const hasPlan = card.plan?.steps > 0;
   const actions = hasPlan

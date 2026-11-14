@@ -55,6 +55,7 @@ import { findScreen, sidebarSections, SCREENS } from '../../ui/screens.js';
 import { errorMessage, mount } from '../../ui/screens/work-board.js';
 // @ts-expect-error: idem
 import { firstReadFailure, GITHUB_DOWN_REASONS, githubDownReason, staleBand } from '../../ui/screens/work-board-parts.js';
+import { trustOf } from '../fixtures.ts';
 
 const NOW = Date.parse('2026-10-20T15:00:00Z');
 const EPIC = 6;
@@ -100,6 +101,7 @@ async function boot({ work = true, connected = true }: { work?: boolean; connect
   const kanban = new GithubProject({ source, cache: new GithubCache({ store: new MemoryCacheStore(), now }), project: SIMULATOR_PROJECT, now });
   let chosen = true;
   const service = new WorkBoardService({
+    trust: trustOf('ahrenatechnology'),
     project: selectedProjectBoard({ kanban: () => (chosen ? kanban : null) }),
     sessions: noSessions,
     queue: EMPTY_WORK_QUEUE,

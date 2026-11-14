@@ -1,5 +1,6 @@
 import { el, header, icon } from '../dom.js';
 import { errorBand } from '../states.js';
+import { queueLimit } from './work-board-queue.js';
 
 /** The six columns of the work board (issue 465), the same copy as WORK_BOARD_COLUMNS, for the states with no payload. */
 export const COLUMNS = [
@@ -43,6 +44,8 @@ const CI = { ok: ['CI ✓', 'completed'], failed: ['CI ✕', 'error'], running: 
 const REVIEW = { approved: ['aprovado', 'completed'], 'changes-requested': ['ajustes', 'error'], pending: ['review', 'waiting'] };
 const SESSIONS = { working: 'trabalhando', 'needs-you': 'precisa de você', idle: 'ociosa' };
 const TYPE_CLASSES = new Set(Object.keys(TYPE_LABELS));
+/** issue 477: the columns that are facts of the session and of GitHub and refuse a dragged card (a lock shows while one is dragged). */
+const FACT_COLUMNS = new Set(['running', 'review', 'blocked', 'done']);
 const PLAN_COLUMNS = new Set(['planning', 'queued']);
 const SKELETON_CARDS = [3, 1, 2, 2, 2, 2];
 const DONE_AT_SIGHT = 2;
@@ -455,6 +458,7 @@ export function boardColumns({
   primaryRepo = null,
   now = Date.now(),
   queueAvailable = true,
+  queue = null,
   doneWindowDays = 14,
   stale = false,
   mode = 'cards',
@@ -466,7 +470,9 @@ export function boardColumns({
   const parents = level === 'initiative' || level === 'epic';
   const render = (c) => (parents ? parentCard(c, { primaryRepo, now, onDrill }) : renderCard(c, { chainMode, primaryRepo, now }));
   const column = (c, i) => {
-    const cards = mode === 'cards' ? (c.cards ?? []) : [];
+    const raw = mode === 'cards' ? (c.cards ?? []) : [];
+    // issue 477: Na fila reads in queue order.
+    const cards = c.id === 'queued' ? [...raw].sort((a, b) => (a.queuePosition ?? Infinity) - (b.queuePosition ?? Infinity)) : raw;
     const count = counts !== null ? String(counts) : String(c.count ?? cards.length);
     const headingId = `wb-col-${c.id}`;
     const items = cards.map((card) => el('li', { class: 'wb-card-item' }, render(card)));
@@ -489,10 +495,12 @@ export function boardColumns({
         { class: 'wb-col-head', id: headingId },
         el('span', { class: `wb-dot wb-dot-${c.id}`, 'aria-hidden': 'true' }),
         el('span', { class: 'wb-col-name' }, c.label),
+        FACT_COLUMNS.has(c.id) ? el('span', { class: 'wb-lock', title: 'Não recebe card arrastado', 'aria-hidden': 'true' }, icon('lock')) : null,
         el('span', { class: 'wb-count', 'aria-hidden': 'true' }, count),
         srOnly(`: ${countLabel(count)}`),
       ),
       el('p', { class: 'wb-criterion' }, c.criterion),
+      mode === 'cards' && !parents && c.id === 'queued' && queueAvailable ? queueLimit(queue) : null,
       windowNote,
       body,
       hidden.length ? doneMore(hidden, doneWindowDays) : null,

@@ -14,6 +14,8 @@ import { GithubGraphqlSource } from '../../src/github/github-source.ts';
 import type { ProjectBoard, ProjectCard } from '../../src/github/project.ts';
 import { WorkIssueService } from '../../src/github/work-issue-service.ts';
 import { clock, REPO } from '../github/helpers.ts';
+import { trustOf } from '../fixtures.ts';
+import type { RepositoryTrust } from '../../src/github/trusted-owners.ts';
 
 const raw = (n: number, over: Record<string, unknown> = {}) => ({
   number: n,
@@ -72,7 +74,7 @@ interface Boot {
   close(): Promise<void>;
 }
 
-async function boot({ withService = true }: { withService?: boolean } = {}): Promise<Boot> {
+async function boot({ withService = true, trust = trustOf('ahrenatechnology') }: { withService?: boolean; trust?: RepositoryTrust } = {}): Promise<Boot> {
   const storage = openSqliteStorage({ path: ':memory:' });
   const now = clock();
   const github: Boot['github'] = { calls: 0, mode: 'ok', secret: 'raw-github-text-never-on-screen' };
@@ -85,6 +87,7 @@ async function boot({ withService = true }: { withService?: boolean } = {}): Pro
   }) as unknown as typeof globalThis.fetch;
   const logs: string[] = [];
   const service = new WorkIssueService({
+    trust,
     source: new GithubGraphqlSource({ token: 'test-token', fetch: fakeFetch, sleep: async () => {} }),
     cache: new GithubCache({ store: new MemoryCacheStore(), now }),
     project: { board: async () => PROJECT_BOARD },
@@ -238,4 +241,19 @@ describe('#506/AC-3 GET /api/work/issue: GitHub off or down, an unknown issue', 
       assert.equal((await get(b, QUERY, { 'sec-fetch-site': 'cross-site' })).status, 403);
       assert.equal(b.github.calls, 0);
     }));
+});
+
+describe('#594/AC-3 GET /api/work/issue: the issue says whether its repository is trusted', () => {
+  test('#594/AC-3 Given the owner of the repository is trusted, Then the detail carries trusted true', () =>
+    withApi(async (b) => {
+      assert.strictEqual((await get(b)).json.trusted, true);
+    }));
+
+  test('#594/AC-3 Given the owner is not in the trusted list, Then the detail carries trusted false', () =>
+    withApi(
+      async (b) => {
+        assert.strictEqual((await get(b)).json.trusted, false);
+      },
+      { trust: trustOf('beta') },
+    ));
 });

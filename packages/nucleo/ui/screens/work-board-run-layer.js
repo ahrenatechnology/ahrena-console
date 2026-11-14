@@ -65,6 +65,7 @@ export function createRunLayer({ ctx, area, cards, redraw, reread, onAsk = null 
   let poll = null;
   let focus = null;
   let anchorInPanel = false;
+  let lastTarget = 'desktop';
 
   const find = (key) => cards().find((c) => c.key === key) ?? null;
   const byPost = (post) => cards().find((c) => c.repo === post.repo && c.number === post.number) ?? null;
@@ -153,7 +154,10 @@ export function createRunLayer({ ctx, area, cards, redraw, reread, onAsk = null 
             target: entry.target,
             full: entry.full,
             busy: entry.phase === 'posting',
-            onTarget: (target) => apply(chooseRunTarget(s, base, target), { kind: 'popup' }),
+            onTarget: (target) => {
+              lastTarget = target;
+              apply(chooseRunTarget(s, base, target), { kind: 'popup' });
+            },
             onCancel: () => apply(cancelRun(s, base), back),
             onConfirm: () => apply(confirmRun(s, base)),
           });
@@ -213,5 +217,8 @@ export function createRunLayer({ ctx, area, cards, redraw, reread, onAsk = null 
     popup,
   };
 
-  return { seam, learn, columns, notices, afterDraw, signature, closeConfirmation, stop };
+  /** issue 477: the last place the person chose to open a session, which the queue stores when it takes an item in. */
+  const target = () => lastTarget;
+
+  return { seam, learn, columns, notices, afterDraw, signature, closeConfirmation, target, stop };
 }

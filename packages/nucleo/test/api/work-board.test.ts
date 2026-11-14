@@ -17,6 +17,7 @@ import { EMPTY_WORK_QUEUE, WORK_BLOCKED_REASONS, WORK_BOARD_COLUMNS, type WorkQu
 import { SqliteWorkColumnHistory } from '../../src/github/work-board-history.ts';
 import { WorkBoardService } from '../../src/github/work-board-service.ts';
 import { clock, k, REPO } from '../github/helpers.ts';
+import { trustOf } from '../fixtures.ts';
 
 const PROJECT: Required<ProjectRef> = { owner: 'ahrenatechnology', number: 3, field: 'Status' };
 const LANES = [
@@ -88,6 +89,9 @@ class FakeQueue implements WorkQueue {
   async positions(): Promise<ReadonlyMap<string, number>> {
     return this.map;
   }
+  async stopped(): Promise<null> {
+    return null;
+  }
 }
 
 const session = (id: string, n: number, state: WorkSessionLink['state']): WorkSessionLink => ({ sessionId: id, key: k(n), state, since: '2026-10-18T11:00:00Z' });
@@ -121,6 +125,7 @@ async function boot({ extra = {}, withWork = true, fromStore = false }: { extra?
   const logs: string[] = [];
   const schedule: { nextRead: number | null } = { nextRead: null };
   const service = new WorkBoardService({
+    trust: trustOf('ahrenatechnology'),
     project: selectedProjectBoard({ kanban: () => (chosen ? kanban : null) }),
     sessions,
     queue,
@@ -221,7 +226,7 @@ describe('#465/AC-2 GET /api/work: each column comes from the real signals', () 
       const r = await get(b);
       const c = cardOf(r.json, 502);
       assert.deepEqual([c.column, c.queuePosition], ['queued', 2]);
-      assert.deepEqual(r.json.queue, { available: true });
+      assert.deepEqual(r.json.queue, { available: true, running: 0, limit: 2, stopped: null });
     }));
 
   test('#465/AC-2 Given two sessions linked to #503, Then the card is in the most advanced column and counts 2 sessions', () =>
@@ -694,5 +699,16 @@ describe('#501/AC-1 GET /api/work: counts without each active filter', () => {
       b.source.items = items();
       const r = await get(b);
       assert.deepEqual(r.json.countsWithoutFilter, {});
+    }));
+});
+
+describe('#594/AC-3 GET /api/work: each card says whether its repository is trusted', () => {
+  test('#594/AC-3 Given a card of the trusted owner and one of another owner, Then trusted is true on the first and false on the second', () =>
+    withBoard(async (b) => {
+      b.source.items = [issue(500), issue(501, { repo: 'evil-org/app', key: 'evil-org/app#501' })];
+      const r = await get(b);
+      assert.equal(r.status, 200);
+      assert.strictEqual(cardOf(r.json, 500).trusted, true);
+      assert.strictEqual(cardOf(r.json, 501).trusted, false);
     }));
 });
