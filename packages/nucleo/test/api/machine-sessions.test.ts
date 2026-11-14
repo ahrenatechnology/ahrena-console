@@ -502,6 +502,21 @@ describe('#243 the Detail of a remote session', () => {
     assert.deepEqual(missing.body.machine, WS);
   });
 
+  test('#529 the agent view is read from the remote, marked, and its error code goes through', async () => {
+    const id = (await remoteGet('/api/sessions')).items[0].id as string;
+    const tail = 'main';
+    tunnel.paths.length = 0;
+    const ok = await get(`/api/sessions/${id}/agents/${encodeURIComponent(tail)}?machine=ws-test`);
+    assert.equal(ok.status, 200);
+    assert.deepEqual(ok.body.machine, WS);
+    assert.equal(typeof ok.body.agentId, 'string');
+    assert.ok(tunnel.paths.includes(`/api/sessions/${id}/agents/${encodeURIComponent(tail)}`));
+    const missing = await get(`/api/sessions/${id}/agents/nope?machine=ws-test`);
+    assert.equal(missing.status, 404);
+    assert.equal(missing.body.code, 'agent_not_found');
+    assert.deepEqual(missing.body.machine, WS);
+  });
+
   test('only the known Detail paths and a valid id go to the remote', async () => {
     const id = (await remoteGet('/api/sessions')).items[0].id as string;
     tunnel.paths.length = 0;

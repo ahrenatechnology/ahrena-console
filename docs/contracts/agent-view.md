@@ -1,6 +1,6 @@
 # Agent view contract (#529)
 
-The read behind the agent view of #521 (wireframe screen 521-10, gaps G1 to G5, G7 and G8). Read-only, from the database: no migration, no storage change, and the importer is untouched. The reason an agent failed (G6) is #530 and is not here. The projection is `packages/nucleo/src/api/agent-view.ts`; the route and its HTTP statuses belong to the next layer of #529.
+The read behind the agent view of #521 (wireframe screen 521-10, gaps G1 to G5, G7 and G8). Read-only, from the database: no migration, no storage change, and the importer is untouched. The reason an agent failed (G6) is #530 and is not here. The projection is `packages/nucleo/src/api/agent-view.ts`; the route is served by `LeiturasDoDetalhe` (`session-detail.ts`) and answers `200`, `400` or `404` (see Errors).
 
 ## Operation
 
@@ -8,6 +8,8 @@ The read behind the agent view of #521 (wireframe screen 521-10, gaps G1 to G5, 
 
 - `:id` is the session id, with the same pattern as the other detail routes.
 - `:agentId` is the part of `Agent.id` after the `<sessionId>:` prefix (the id has a `:`, the route carries only the tail). `main` is the main agent. A raw id the hooks send (no prefix) resolves to the same agent.
+- `?machine=<id>` reads the agent view from a remote machine, as the other detail routes do (`machine-sessions.ts`): the answer carries `machine`, and the remote's error `code` goes through.
+- Statuses: `200` with the view, `400` for a bad session id, `404` for an unknown session or an unknown agent. A `:agentId` that does not decode is an unknown agent.
 - Only the agent's own events are read: an event belongs to an agent by `SessionEvent.agentId`, resolved as the Detail does (`main`, a prefixed id, or a raw id).
 
 ## Response `200`
@@ -40,12 +42,12 @@ The read behind the agent view of #521 (wireframe screen 521-10, gaps G1 to G5, 
 | `agentId` | string | The id as the route takes it (after the session prefix). |
 | `agentType` | string or null | `Agent.subagentType` (`meta.agentType`, for example `Explore` or `plugin:agent`). `null` for the main agent and when the transcript gave none. Kept apart from the description (G1). |
 | `description` | string or null | The short description the parent gave the agent (`meta.description`). See "Description". |
-| `brief` | string or null | The text of the agent's first prompt (`UserPrompt`, or `UserPromptSubmit`), line breaks kept, outer whitespace trimmed, at most 32,000 characters (G2). `null` when the agent has no prompt event. |
-| `briefTruncated` | boolean | `true` when the prompt had more than 32,000 characters and `brief` holds the first 32,000. |
+| `brief` | string or null | The text of the agent's first prompt (`UserPrompt`, or `UserPromptSubmit`), line breaks kept, outer whitespace trimmed, at most 32,000 characters (G2). `null` when the agent has no prompt event. An old event that kept no full text serves its summary instead (cut at ingest, so `briefTruncated` is `true`); see "Old events". |
+| `briefTruncated` | boolean | `true` when the prompt had more than 32,000 characters and `brief` holds the first 32,000, or when `brief` is an event summary (see "Old events"). |
 | `spawnedByToolUseId` | string or null | `metadata.toolUseId` of the agent: the id of the `Agent` call, in the parent's conversation, that created it (G3). `null` for the main agent and when the transcript did not say. |
 | `steps` | array | The agent's tool calls in the order they were made (G4). See "Steps". |
-| `result` | string or null | The text of the agent's last `AssistantMessage`, at most 32,000 characters (G5). `null` while the agent runs (`state` `working` or `waiting`) and when it has no assistant text. |
-| `resultTruncated` | boolean | `true` when the last message had more than 32,000 characters. |
+| `result` | string or null | The text of the agent's last `AssistantMessage`, at most 32,000 characters (G5). `null` while the agent runs (`state` `working` or `waiting`) and when it has no assistant text. An old event that kept no full text serves its summary instead (`resultTruncated` is `true`); see "Old events". |
+| `resultTruncated` | boolean | `true` when the last message had more than 32,000 characters, or when `result` is an event summary (see "Old events"). |
 | `costUsd` | number or null | The agent's own cost. For the main agent it includes the usage with no agent (the compaction floor), as the Agents tab does. |
 | `costNote` | `"no_usage"`, `"unpriced"` or null | Why `costUsd` is `null`. `null` when `costUsd` is a number. |
 | `totalCostUsd` | number or null | `costUsd` plus the cost of every descendant (the agents whose `parent` chain reaches this one). `null` when neither the agent nor any descendant has a priced cost. |
@@ -78,6 +80,10 @@ One step per tool call (`ToolUse` or `PreToolUse` with a tool name), counted onc
 
 The stored `Agent.name` of a subagent is `meta.description`, or the task cut at 80 characters when the transcript had no description (`importer.ts`). The two cannot always be told apart, so the rule is: `description` is `Agent.name`, except when it equals the task cut at 80 characters the way the importer does it, which is the fallback and not a description, and then it is `null`. A short description that equals its own task is read as the fallback: an accepted loss. The main agent has no description.
 
+### Old events
+
+A message's text is read from `data.text` (the transcript), or `data.prompt` on a `UserPromptSubmit` (the hook). An event stored before the full text was kept has only its `summary`, which the ingest cut. For those the view falls back to the summary rather than serve nothing, and because the summary is never the whole text it sets `briefTruncated` or `resultTruncated` to `true` whenever the summary is what is served (owner decision on #529).
+
 ## Errors
 
 | Status | `code` | When |
@@ -86,7 +92,7 @@ The stored `Agent.name` of a subagent is `meta.description`, or the task cut at 
 | 404 | `agent_not_found` | The session has no agent with that `agentId`. |
 | 400 | `invalid_session_id` | The session id does not match the route pattern. |
 
-The body is `{ "error": "<message>", "code": "<code>" }`; `code` is the contract, `error` is a message for a person. The projection returns `null` for an unknown agent and the route maps it.
+The body is `{ "error": "<message>", "code": "<code>" }`; `code` is the contract, `error` is a message for a person (in the person's language, so it is not matched). The other detail routes keep their bodies with no `code`. The projection returns `null` for an unknown agent and the route maps it.
 
 ## Caps
 

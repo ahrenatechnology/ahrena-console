@@ -6,6 +6,7 @@
 // | ------------------------------------- | --------------------------------------------------------- |
 // | `GET /api/sessions/<id>`              | The header: title, status, reason, pills, lane and counts |
 // | `GET /api/sessions/<id>/agents`       | Numbers, tools, tasks, tokens and the agent tree          |
+// | `GET /api/sessions/<id>/agents/<agent>` | One agent's view: brief, steps, result and cost (api/agent-view.ts, #529) |
 // | `GET /api/sessions/<id>/conversation` | An agent's messages (`?agent=`, `?limit=`)                |
 // | `GET /api/sessions/<id>/events`       | The timeline, filtered and paginated (see `filtroDe`)     |
 //
@@ -21,10 +22,11 @@ import type { StoragePort } from '../storage-port.ts';
 import type { MontadorDoPainel } from './panel.ts';
 import type { PanelCost, PanelPlan, PanelSession } from './types.ts';
 import { eventAttention, type SessionAttention } from './attention.ts';
+import { agentFacts, buildAgentView, type AgentView } from './agent-view.ts';
 import { SessionOpenDescriber, type SessionOpen } from './session-open.ts';
 
 /** `/api/sessions/<id>` e as três abas; o id passa pelo mesmo padrão das outras rotas. */
-export const DETAIL_ROUTE = /^\/api\/sessions\/([^/]+)(?:\/(agents|conversation|events))?$/;
+export const DETAIL_ROUTE = /^\/api\/sessions\/([^/]+)(?:\/(agents|conversation|events)|\/agents\/([^/]+))?$/;
 
 const ID = /^[A-Za-z0-9_.:-]{1,128}$/;
 const LOCAL = /^local_[0-9a-f-]{36}$/;
@@ -77,6 +79,10 @@ export interface AgenteDoDetalhe {
   /** `null`: há uso sem preço, ou nenhum uso medido. */
   costUsd: number | null;
   parent: string | null;
+  /** The subagent's type apart from its description (`Explore`); `null` for the main agent (#529). */
+  agentType: string | null;
+  /** The short description the parent gave the subagent; `null` for the main agent and when none was given (#529). */
+  description: string | null;
 }
 
 export interface AgentesDoDetalhe {
@@ -298,7 +304,8 @@ export class LeiturasDoDetalhe {
   }
 
   /** Responde uma rota do Detalhe; o servidor só a registra. */
-  async responder(res: ServerResponse, id: string, aba: string | null, url: URL): Promise<void> {
+  async responder(res: ServerResponse, id: string, aba: string | null, url: URL, agentId: string | null = null): Promise<void> {
+    if (agentId !== null) return this.responderAgente(res, id, agentId);
     if (!ID.test(id)) return send(res, 400, { error: 'id de sessão inválido' });
     const session = await this.storage.getSession(id);
     if (!session) return send(res, 404, { error: 'o núcleo não conhece esta sessão' });
@@ -306,6 +313,22 @@ export class LeiturasDoDetalhe {
     if (aba === 'conversation') return send(res, 200, await this.conversation(session, url.searchParams.get('agent'), url.searchParams.get('limit'), url.searchParams.get('after')));
     if (aba === 'events') return send(res, 200, await this.eventos(session, url.searchParams));
     send(res, 200, await this.cabeca(session));
+  }
+
+  /** The agent view route; its errors carry a `code`, the contract (docs/contracts/agent-view.md, #529). */
+  private async responderAgente(res: ServerResponse, id: string, agentId: string): Promise<void> {
+    if (!ID.test(id)) return send(res, 400, { error: 'id de sessão inválido', code: 'invalid_session_id' });
+    const session = await this.storage.getSession(id);
+    if (!session) return send(res, 404, { error: 'o núcleo não conhece esta sessão', code: 'session_not_found' });
+    const view = await this.agente(session, agentId);
+    if (!view) return send(res, 404, { error: 'a sessão não tem este agente', code: 'agent_not_found' });
+    send(res, 200, view);
+  }
+
+  async agente(session: Session, agentId: string): Promise<AgentView | null> {
+    const [agents, events, precos] = await Promise.all([this.storage.listAgents(session.id), this.todosOsEventos(session.id), currentPrices(this.storage)]);
+    const costLines = costReport(await sessionCostSlices(this.storage, session.id, precos)).byAgent;
+    return buildAgentView({ session, agents, events, costLines, agentId });
   }
 
   private async todosOsEventos(sessionId: string): Promise<SessionEvent[]> {
@@ -409,6 +432,8 @@ export class LeiturasDoDetalhe {
         end: main?.endedAt ?? session.endedAt,
         costUsd: custoDe.get(quem.principal) ?? null,
         parent: null,
+        agentType: null,
+        description: null,
       },
       ...lista
         .filter((a) => a.type !== 'main')
@@ -424,6 +449,7 @@ export class LeiturasDoDetalhe {
           end: a.endedAt,
           costUsd: custoDe.get(a.id) ?? null,
           parent: a.parentAgentId ?? quem.principal,
+          ...agentFacts(a),
         })),
     ];
 
