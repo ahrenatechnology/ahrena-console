@@ -328,11 +328,11 @@ describe('#515 a planning session resumed in the terminal keeps the restriction'
     assert.equal(readFileSync(runner.calls[0]!.args[0]!, 'utf8'), `#!/bin/sh\nrm -f -- "$0"\ncd -- '/w/app' || exit 1\nexec claude --resume ${ID} ${quoted}\n`);
   });
 
-  test('#515/AC-1 Linux: the flags are separate argv entries after --resume <id>', async () => {
+  test('#515/AC-1 Linux: a planning resume is unsupported and spawns nothing (the emulator may re-parse the flags through a shell, as in #507)', async () => {
     const runner = fakeRunner();
     const open = createTerminalOpener({ dir: join(root, 'lin'), platform: 'linux', runner, findExecutable: async () => '/usr/bin/x-terminal-emulator' });
-    assert.equal(await open({ sessionId: ID, cwd: '/w/app', planning: true }), 'opened');
-    assert.deepEqual(runner.calls, [{ kind: 'spawn', file: '/usr/bin/x-terminal-emulator', args: ['-e', 'claude', '--resume', ID, ...PLANNING_TOOL_FLAGS], cwd: '/w/app' }]);
+    assert.equal(await open({ sessionId: ID, cwd: '/w/app', planning: true }), 'unsupported');
+    assert.deepEqual(runner.calls, []);
   });
 
   test('resuming any other session is byte-identical to before', async () => {

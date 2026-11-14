@@ -30,7 +30,10 @@
 //   #515 A resume of a planning session (the route says so with `planning`, from the session's first prompt)
 //   #515 gets the same flags after `--resume <id>`, with nothing after them (the lists are variadic, so the
 //   #515 flags come last and no positional follows); the session still holds the issue's untrusted text.
-// - Linux, open: `x-terminal-emulator -e claude [--resume <id> [PLANNING_TOOL_FLAGS]]` in the folder, when it is on the PATH.
+// - Linux, open: `x-terminal-emulator -e claude [--resume <id>]` in the folder, when it is on the PATH.
+//   #515 A planning resume is `unsupported` there, for the #507 reason below: the flag values hold spaces and
+//   #515 parentheses, and an emulator that re-parses through a shell would split the deny list or fail; the
+//   #515 route answers 501 with the command to copy, which already carries the quoted flags.
 //   #507 With a first prompt: `unsupported`, because some emulators (gnome-terminal's `-e`) re-parse their
 //   #507 arguments through a shell, and the route answers 501 with the command to copy.
 // - Anything else (Windows included: its folders are not POSIX paths): `unsupported`, and the route
@@ -229,11 +232,12 @@ export function createTerminalOpener({ dir, platform = process.platform, runner 
       return 'opened';
     }
     if (text !== undefined) return 'unsupported';
+    if (platform === 'linux' && planning === true) return 'unsupported';
     const args = claudeArgs(sessionId);
     if (platform === 'linux') {
       const exe = await findExecutable('x-terminal-emulator');
       if (!exe) return 'unsupported';
-      await runner.spawnDetached(exe, ['-e', 'claude', ...args, ...(planning === true ? PLANNING_TOOL_FLAGS : [])], { cwd });
+      await runner.spawnDetached(exe, ['-e', 'claude', ...args], { cwd });
       return 'opened';
     }
     return 'unsupported';
