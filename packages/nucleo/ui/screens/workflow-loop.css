@@ -10,6 +10,7 @@
 .wfl-pill-active { background: var(--status-active-badge); color: var(--status-active-text); }
 .wfl-pill-waiting { background: var(--status-waiting-badge); color: var(--status-waiting-text); }
 .wfl-pill-muted { background: var(--raised); color: var(--muted); }
+.wfl-pill-error { background: var(--status-error-badge); color: var(--status-error-text); }
 .wfl-mute { color: var(--muted); }
 .wfl-trunc { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .wfl-row { display: flex; align-items: stretch; overflow-x: auto; padding-top: 14px; }
