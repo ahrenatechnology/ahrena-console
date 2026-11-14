@@ -282,6 +282,11 @@ export function agentView(initial, opts = {}) {
     childErrors.set(agentId, retry);
     draw();
   };
+  // A read of the child starts again: the slot goes back to "Lendo o agente…" and offers no retry (issue 539).
+  root.setChildLoading = (agentId) => {
+    childErrors.delete(agentId);
+    draw();
+  };
 
   draw();
   return root;
@@ -344,6 +349,7 @@ export async function mount(area, ctx) {
   function openChild(childId) {
     if (children.has(childId)) return;
     children.add(childId);
+    view?.setChildLoading(childId); // a stale error from the read before must not show while this one runs (issue 539)
     const read = () =>
       ctx.read(agentReadRoute(sessionId, childId)).then(
         (data) => live && view?.setChild(childId, data),
