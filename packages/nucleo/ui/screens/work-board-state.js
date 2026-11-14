@@ -268,10 +268,11 @@ export function toggleWarnings(state) {
 }
 
 const NO_TARGET = Object.freeze({ kind: 'none' });
+const hasLogin = (login) => typeof login === 'string' && LOGIN.test(login);
 const link = (href) => (href ? { kind: 'link', href } : NO_TARGET);
 
 function projectsPage(organizations) {
-  const named = originSummary(organizations ?? []).read.find((o) => LOGIN.test(String(o.login)));
+  const named = originSummary(organizations ?? []).read.find((o) => hasLogin(o?.login));
   if (!named) return GITHUB;
   return named.own ? `${GITHUB}/${named.login}?tab=projects` : `${GITHUB}/orgs/${named.login}/projects`;
 }
@@ -283,12 +284,13 @@ function projectsPage(organizations) {
  * action, or a link the core did not send). Pass `organization` for `approve`, `request`, `sso` and `retry`, and
  * `organizations` (the board's) for `open-projects`.
  */
-export function warningTarget(action, { organization = null, organizations = [] } = {}) {
+export function warningTarget(action, options) {
+  const { organization, organizations } = options ?? {};
   if (action === 'more') return { kind: 'toggle' };
   if (action === 'retry') return { kind: 'read' };
   if (action === 'approve') return link(githubHttpsUrl(organization?.approvalUrl));
   if (action === 'request') return link(githubHttpsUrl(organization?.requestUrl));
-  if (action === 'sso') return LOGIN.test(String(organization?.login)) ? link(`${GITHUB}/orgs/${organization.login}/sso`) : NO_TARGET;
+  if (action === 'sso') return hasLogin(organization?.login) ? link(`${GITHUB}/orgs/${organization.login}/sso`) : NO_TARGET;
   if (action === 'open-projects') return link(projectsPage(organizations));
   if (action === 'open-github') return link(GITHUB);
   if (action === 'connect') return { kind: 'screen', to: CONNECTIONS_UI };

@@ -665,6 +665,26 @@ describe('#610/AC-3 the targets of the warning and empty-state actions', () => {
     assert.deepEqual(warningTarget('sso', { organization: { login: 'not a login' } }), { kind: 'none' });
   });
 
+  test('#610/AC-3 a link the core did not send is none: a missing login or organization never becomes "undefined" or "null" and never throws', () => {
+    const none = { kind: 'none' };
+    assert.deepEqual(warningTarget('sso'), none);
+    assert.deepEqual(warningTarget('sso', {}), none);
+    assert.deepEqual(warningTarget('sso', { organization: null }), none);
+    assert.deepEqual(warningTarget('sso', { organization: {} }), none);
+    assert.deepEqual(warningTarget('sso', { organization: { login: null } }), none);
+    assert.deepEqual(warningTarget('sso', { organization: { login: 42 } }), none);
+    for (const action of ['approve', 'request', 'retry', 'open-projects']) assert.doesNotThrow(() => warningTarget(action, { organization: null, organizations: undefined }));
+    assert.deepEqual(warningTarget('approve', { organization: null }), none);
+    assert.deepEqual(warningTarget('request'), none);
+  });
+
+  test('#610/AC-4 open-projects skips an organization with no login and falls back to GitHub', () => {
+    const GH = { kind: 'link', href: 'https://github.com' };
+    assert.deepEqual(warningTarget('open-projects', { organizations: [org('x', { login: undefined })] }), GH);
+    assert.deepEqual(warningTarget('open-projects', { organizations: [org('x', { login: null })] }), GH);
+    assert.deepEqual(warningTarget('open-projects', { organizations: [org('x', { login: undefined }), org('acme-labs')] }), { kind: 'link', href: 'https://github.com/orgs/acme-labs/projects' });
+  });
+
   test('#610/AC-4 open-projects, open-github and connect: the Projects of the first organization read, GitHub, and the connections screen', () => {
     const organizations = [org('acme-labs'), org('mira-dev', { own: true })];
     assert.deepEqual(warningTarget('open-projects', { organizations }), { kind: 'link', href: 'https://github.com/orgs/acme-labs/projects' });
