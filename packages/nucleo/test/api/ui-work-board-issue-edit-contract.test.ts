@@ -367,9 +367,9 @@ describe('issue 535/AC-1 Editar opens the edit mode and each field is saved thro
     const s = await open(core);
     articleOf(s, 506).dispatchEvent({ type: 'click' });
     await until(() => readPanel(s) !== null && texto(readPanel(s)).includes('Abrir a issue pelo card'), 'the panel');
-    const editar = need(readPanel(s), 'button[data-action="edit"]');
-    assert.match(texto(editar), /Editar/);
-    press(editar, 'Editar');
+    const editButton = need(readPanel(s), 'button[data-action="edit"]');
+    assert.match(texto(editButton), /Editar/);
+    press(editButton, 'Editar');
     const panel = editPanel(s)!;
     assert.ok(panel, 'the edit mode');
     assert.equal(readPanel(s), null, 'the read panel is gone');
