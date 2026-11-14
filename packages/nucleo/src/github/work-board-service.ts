@@ -8,6 +8,7 @@
 
 import { githubFailureOf, NoDataError, type GithubFailure } from './cache.ts';
 import type { ProjectBoard, ProjectCard } from './project.ts';
+import type { WorkBoardProjects } from './work-board-projects.ts';
 import {
   analyzeWorkNodes,
   type AnalyzedWorkNode,
@@ -16,11 +17,15 @@ import {
   type WorkSessionLink,
   buildWorkBoard,
   DEFAULT_WORK_BOARD_FILTERS,
+  statusSlug,
   type WorkBoardColumn,
   columnObservations,
   type ParentLookup,
   type WorkBoardFilters,
+  type WorkBoardInput,
   type WorkBoardNode,
+  type WorkBoardOrganization,
+  type WorkBoardOrigin,
   type WorkBoardStatusOption,
   type WorkBoardView,
   type WorkColumnHistory,
@@ -37,6 +42,11 @@ import type { WorkNode } from './work.ts';
 
 export interface WorkBoardServiceOptions {
   project: WorkProjectBoard;
+  /**
+   * #609 the Projects of every granted organization and of the person's account. Without it the board reads the one chosen
+   * Project (`project`), as before; with it the chosen Project is not read here (the kanban of one Project keeps using it).
+   */
+  projects?: Pick<WorkBoardProjects, 'read'>;
   sessions: WorkSessions;
   /** #477 the execution queue; when it can also be written (`WorkQueueStore`) the board drops the entries whose issue closed or lost its plan. */
   queue: WorkQueue;
@@ -73,6 +83,7 @@ export interface WorkBoardReadOptions {
 
 export class WorkBoardService implements RunningCards, CardColumns {
   private readonly project: WorkProjectBoard;
+  private readonly projects: Pick<WorkBoardProjects, 'read'> | undefined;
   private readonly sessions: WorkSessions;
   private readonly queue: WorkQueue;
   private readonly limit: () => number;
@@ -88,8 +99,9 @@ export class WorkBoardService implements RunningCards, CardColumns {
   private readonly onRead: ((view: WorkBoardView) => void) | undefined;
   private readonly log: (message: string) => void;
 
-  constructor({ project, sessions, queue, limit = () => DEFAULT_EXECUTION_LIMIT, history, trust, planRuns, executionRuns, parents, now = Date.now, pausedUntil = () => 0, nextScheduledRead = () => null, onRunExpired, onRead, log = () => {} }: WorkBoardServiceOptions) {
+  constructor({ project, projects, sessions, queue, limit = () => DEFAULT_EXECUTION_LIMIT, history, trust, planRuns, executionRuns, parents, now = Date.now, pausedUntil = () => 0, nextScheduledRead = () => null, onRunExpired, onRead, log = () => {} }: WorkBoardServiceOptions) {
     this.project = project;
+    this.projects = projects;
     this.sessions = sessions;
     this.queue = queue;
     this.limit = limit;
@@ -107,8 +119,8 @@ export class WorkBoardService implements RunningCards, CardColumns {
   }
 
   async board(filters: WorkBoardFilters, { force = false, fromStore = false }: WorkBoardReadOptions = {}): Promise<WorkBoardView> {
-    const read = await this.readProject(force, fromStore);
-    const fromProject = issueCards(read).map(nodeOfCard);
+    const read = await this.readBoards(force, fromStore);
+    const fromProject = read.cards;
     const { nodes: outside, reason } = await this.resolveParents(fromProject);
     const nodes = [...fromProject, ...outside];
     const links = await this.sessions.links();
@@ -124,8 +136,9 @@ export class WorkBoardService implements RunningCards, CardColumns {
     if (read.stale && read.staleReason) this.log(`work board: stale read: ${read.staleReason}`);
     const staleReason = read.stale ? (read.staleCode ?? 'github-error') : reason;
     const view = buildWorkBoard({
-      project: { owner: read.owner, number: read.number, title: read.title, url: read.url },
-      statuses: statusOptions(read),
+      project: projectOf(read.projects, filters),
+      organizations: read.organizations,
+      statuses: read.statuses,
       nodes,
       sessions,
       queue,
@@ -262,6 +275,67 @@ export class WorkBoardService implements RunningCards, CardColumns {
     return next === null ? null : Math.max(next, now);
   }
 
+  /**
+   * #609 the cards, the Status options and the owners of what the board is about: the Projects of every granted organization
+   * and of the account, or, without that source, the one chosen Project as an owner of its own. A card that two Projects hold
+   * is shown once, under the first (its card, the origin and the Status of that Project).
+   */
+  private async readBoards(force: boolean, fromStore: boolean): Promise<BoardsRead> {
+    if (!this.projects) {
+      const read = await this.readProject(force, fromStore);
+      const origin = { organization: read.owner, project: { owner: read.owner, number: read.number, title: read.title } };
+      return {
+        cards: issueCards(read).map((c) => nodeOfCard(c, origin)),
+        statuses: statusOptions(read),
+        organizations: [{ login: read.owner, own: false, state: 'read', readAt: read.fetchedAt, projects: [origin.project] }],
+        projects: [{ owner: read.owner, number: read.number, title: read.title, url: read.url }],
+        fetchedAt: read.fetchedAt,
+        stale: read.stale,
+        staleReason: read.staleReason,
+        staleCode: read.staleCode,
+      };
+    }
+    let read;
+    try {
+      read = await this.projects.read({ force, fromStore });
+    } catch (err) {
+      if (err instanceof NoDataError) this.log(`work board: no data: ${err.message}`);
+      throw err;
+    }
+    const cards: WorkBoardNode[] = [];
+    const seen = new Set<string>();
+    const statuses = new Map<string, string>();
+    const canonical = new Map<string, string>();
+    const projects: BoardsRead['projects'] = [];
+    for (const { organization, board } of read.boards) {
+      const origin = { organization, project: { owner: board.owner, number: board.number, title: board.title } };
+      projects.push({ ...origin.project, url: board.url });
+      for (const o of statusOptions(board)) {
+        // The same Status name in two Projects is one option: GitHub gives each Project its own option ids.
+        const slug = statusSlug(o.name);
+        const first = statuses.get(slug) ?? (statuses.set(slug, o.id), o.id);
+        canonical.set(o.id, first);
+      }
+      for (const card of issueCards(board)) {
+        const key = (card.key ?? '').toLowerCase();
+        if (seen.has(key)) continue;
+        seen.add(key);
+        cards.push({ ...nodeOfCard(card, origin), statusId: card.statusId === null ? null : (canonical.get(card.statusId) ?? card.statusId) });
+      }
+    }
+    const names = new Map(read.boards.flatMap(({ board }) => statusOptions(board)).map((o) => [o.id, o.name]));
+    return {
+      cards,
+      statuses: [...statuses.values()].map((id) => ({ id, name: names.get(id) ?? id })),
+      organizations: read.organizations,
+      projects,
+      fetchedAt: read.fetchedAt,
+      stale: read.stale,
+      staleReason: read.stale ? 'the stored boards were not refreshed' : null,
+      staleCode: read.staleCode,
+    };
+  }
+
   private async readProject(force: boolean, fromStore: boolean): Promise<ProjectBoard> {
     const stored = fromStore && !force ? await this.project.snapshot?.() : null;
     try {
@@ -291,6 +365,25 @@ export class WorkBoardService implements RunningCards, CardColumns {
   }
 }
 
+/** #609 what a board read hands to the view: the cards, the Status options (by Project order), the owners and the Projects. */
+interface BoardsRead {
+  cards: WorkBoardNode[];
+  statuses: WorkBoardStatusOption[];
+  organizations: WorkBoardOrganization[];
+  projects: { owner: string; number: number; title: string; url: string }[];
+  fetchedAt: number;
+  stale: boolean;
+  staleReason: string | null;
+  staleCode: GithubFailure | 'sync-pending' | null;
+}
+
+/** #609 the Project the board is about: the one `?project=` names, else the only one read, else none. */
+function projectOf(projects: BoardsRead['projects'], filters: WorkBoardFilters): WorkBoardInput['project'] {
+  const asked = filters.project?.toLowerCase();
+  const hit = projects.find((p) => `${p.owner}/${p.number}`.toLowerCase() === asked) ?? (projects.length === 1 ? projects[0] : undefined);
+  return hit ?? null;
+}
+
 /** #465 pull requests and draft issues are not work items on this board. */
 const issueCards = (board: ProjectBoard): ProjectCard[] =>
   board.lanes.flatMap((l) => l.items).filter((c) => c.kind === 'Issue' && c.key !== null && c.repo !== null && c.number !== null);
@@ -299,8 +392,9 @@ const issueCards = (board: ProjectBoard): ProjectCard[] =>
 const statusOptions = (board: ProjectBoard): WorkBoardStatusOption[] =>
   board.lanes.flatMap((l) => (l.id === null ? [] : [{ id: l.id, name: l.name }]));
 
-function nodeOfCard(c: ProjectCard): WorkBoardNode {
+function nodeOfCard(c: ProjectCard, origin: WorkBoardOrigin): WorkBoardNode {
   return {
+    origin,
     key: c.key!,
     repo: c.repo!,
     number: c.number!,

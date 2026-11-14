@@ -30,6 +30,7 @@ import { GithubCache } from '../github/cache.ts';
 import { GithubBackgroundSync, SYNC_PROJECT_EVERY_MS, type SyncStep } from '../github/background-sync.ts';
 import { githubSyncSteps } from './github-screens.ts';
 import { GithubGraphqlSource } from '../github/github-source.ts';
+import { createGithubProject } from '../github/project.ts';
 import { SqliteCacheStore } from '../github/sqlite-cache.ts';
 import { GITHUB_CALL_LIMIT, GithubCallQueue } from '../github/call-queue.ts';
 import { InstallationRepositoryTrust } from '../github/trusted-owners.ts';
@@ -40,6 +41,7 @@ import { executionLimitOf } from '../github/work-execution.ts';
 import { SqliteWorkQueue } from '../github/work-queue-store.ts';
 import { WorkQueuePuller } from './work-queue-puller.ts';
 import { WorkBoardService } from '../github/work-board-service.ts';
+import { WorkBoardProjects, workProjectsSyncStep } from '../github/work-board-projects.ts';
 import { FleetWorkSessions } from '../github/work-board-sessions.ts';
 import { SqliteWorkColumnHistory } from '../github/work-board-history.ts';
 import { CachedParentLookup } from '../github/work-board-parents.ts';
@@ -468,10 +470,26 @@ coreGithub = await createCoreGithub({
 });
 const { connection, screens } = coreGithub;
 /*
+ * #598 #609 the Projects of every granted organization and of the account, read for the work board and kept fresh by the
+ * `work-projects` sync step. Not under --demo (the simulator has one Project) nor --no-github (no connection).
+ */
+const workProjects =
+  !demo && screens.projectOptions && coreGithub.access
+    ? new WorkBoardProjects({
+        options: screens.projectOptions,
+        orgs: async () => (await connection.status()).orgs ?? [],
+        project: (ref) => {
+          const access = coreGithub.access!;
+          return createGithubProject({ project: ref, cache: githubCache, token: access.token, ...(access.fetch ? { fetch: access.fetch } : {}), ...(access.url ? { url: access.url } : {}) });
+        },
+        log,
+      })
+    : null;
+/*
  * #594 one trust source for the board's cards, the issue detail and the Planejar / Executar plano routes: the stored
  * `work.trustedOwners`, else the owner of the Project the board reads (none chosen: nobody is trusted).
  */
-const repositoryTrust = new InstallationRepositoryTrust(settings, () => screens.project?.selection() ?? null);
+const repositoryTrust = new InstallationRepositoryTrust(settings, () => screens.project?.selection() ?? null, () => workProjects?.readOwners() ?? []);
 /*
  * #465 #466 the work board (`GET /api/work`): the kanban's Project (the same resolver as /api/project),
  * the live sessions of the fleet, the parents outside the Project through the GitHub cache, the time in
@@ -492,6 +510,7 @@ const workBoard =
     ? new WorkBoardService({
         trust: repositoryTrust,
         project: selectedProjectBoard(screens.project),
+        ...(workProjects ? { projects: workProjects } : {}),
         sessions: new FleetWorkSessions({ fleet: mcp.fleet, ...(demo ? { locate: simulatorWorkBoardLocate } : {}) }),
         queue: workQueue,
         limit: executionLimit,
@@ -541,6 +560,7 @@ if (workBoard && workIssue) {
     log,
   });
 }
+const workProjectsSyncSteps = (connected: () => Promise<boolean>): SyncStep[] => (workProjects ? [workProjectsSyncStep(workProjects, connected)] : []);
 const workQueueSyncSteps = (connected: () => Promise<boolean>): SyncStep[] => {
   const puller = workQueuePuller;
   if (!puller) return [];
@@ -559,7 +579,7 @@ const workQueueSyncSteps = (connected: () => Promise<boolean>): SyncStep[] => {
 // Decision 0015 (#356): the core reads GitHub on a timer and the GitHub screens answer from the database.
 // Under --no-github there is no connection and no sync.
 githubSync = coreGithub.connected
-  ? new GithubBackgroundSync({ steps: [...githubSyncSteps(screens, coreGithub.connected), ...workQueueSyncSteps(coreGithub.connected)], pauseLeftMs: () => githubCache.pauseLeftMs(), log })
+  ? new GithubBackgroundSync({ steps: [...githubSyncSteps(screens, coreGithub.connected), ...workProjectsSyncSteps(coreGithub.connected), ...workQueueSyncSteps(coreGithub.connected)], pauseLeftMs: () => githubCache.pauseLeftMs(), log })
   : null;
 
 // Machine telemetry (#175, decision 0008): one sample every 30 s, 12 h in the database, and each

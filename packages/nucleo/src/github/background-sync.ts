@@ -5,6 +5,7 @@
 // | Step        | Every  | What it reads                                                             |
 // | ----------- | ------ | ------------------------------------------------------------------------- |
 // | `project`   | 2 min  | the chosen Project's board (decision 0001's key and query)                |
+// | `work-projects` | 2 min | #609 the Projects of every granted organization and of the account (outside --demo) |
 // | `decisions` | 15 min | the account's repositories and the ADR/PDR index; content only on a push  |
 //
 // One step at a time, in the order given, on the core's single GitHub queue (the steps' own services
@@ -51,6 +52,8 @@ export interface GithubBackgroundSyncOptions {
 }
 
 export const SYNC_PROJECT_EVERY_MS = 2 * 60_000;
+/** #609 the Projects of every granted organization, read as often as the chosen Project. */
+export const SYNC_WORK_PROJECTS_EVERY_MS = SYNC_PROJECT_EVERY_MS;
 export const SYNC_DECISIONS_EVERY_MS = 15 * 60_000;
 export const SYNC_TICK_MS = 15_000;
 /** How long `stop` waits for the running step before the core goes on with its shutdown. */

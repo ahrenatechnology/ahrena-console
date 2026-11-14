@@ -66,6 +66,8 @@ const session = (id: string, n: number, state: WorkSessionLink['state']): WorkSe
 
 const filters = (over: Partial<WorkBoardFilters> = {}): WorkBoardFilters => ({
   level: 'item',
+  org: null,
+  project: null,
   initiative: null,
   epic: null,
   type: null,
@@ -78,6 +80,7 @@ const filters = (over: Partial<WorkBoardFilters> = {}): WorkBoardFilters => ({
 function board(nodes: WorkBoardNode[], over: Partial<WorkBoardInput> = {}): WorkBoardView {
   return buildWorkBoard({
     project: { owner: 'ahrenatechnology', number: 3, title: 'Ahrena Console', url: 'https://github.com/orgs/ahrenatechnology/projects/3' },
+    organizations: [],
     statuses: STATUSES,
     nodes,
     sessions: [],
@@ -520,7 +523,7 @@ describe('filters (#466)', () => {
     assert.deepEqual(parseWorkBoardFilters(new URLSearchParams('')), filters());
     assert.deepEqual(
       parseWorkBoardFilters(new URLSearchParams('level=plan&initiative=1&epic=6&type=bug&label=UI&repo=ahrena-console&status=in-progress')),
-      { level: 'plan', initiative: 1, epic: 6, type: 'bug', label: 'UI', repo: 'ahrena-console', status: 'in-progress' },
+      { level: 'plan', org: null, project: null, initiative: 1, epic: 6, type: 'bug', label: 'UI', repo: 'ahrena-console', status: 'in-progress' },
     );
     assert.deepEqual(parseWorkBoardFilters(new URLSearchParams('label=&repo=')), filters());
   });

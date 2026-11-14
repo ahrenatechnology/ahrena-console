@@ -148,3 +148,16 @@ describe('#241/AC-5 the Projects the account sees', () => {
     await assert.rejects(answering({ message: 'bad gateway' }, 502).list(), GithubGatewayError);
   });
 });
+
+describe('#609/AC-1 the stored list of Projects', () => {
+  test('#609/AC-1 snapshot answers what was stored without calling GitHub, and null before anything was', async () => {
+    const { options, gh } = setup();
+    assert.equal(await options.snapshot(), null);
+    const listed = await options.list();
+    const calls = gh.calls?.length;
+    const stored = await options.snapshot();
+    assert.deepEqual(stored?.projects, listed.projects);
+    assert.deepEqual(stored?.owners, listed.owners);
+    assert.equal(gh.calls?.length, calls, 'no call to GitHub');
+  });
+});

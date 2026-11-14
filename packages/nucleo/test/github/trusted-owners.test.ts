@@ -50,4 +50,27 @@ describe('#594 the trusted owners', () => {
     selected = null;
     assert.equal(trust.isTrusted('acme/app'), false);
   });
+
+  test('#609/AC-4 with nothing stored the default is the owners of the Projects the board read, any letter case', () => {
+    assert.deepEqual(trustedOwnersOf({ stored: null, selectedOwner: 'acme', readOwners: ['Acme-Labs', 'Mira-Dev'] }), ['acme-labs', 'mira-dev']);
+  });
+
+  test('#609/AC-4 a stored list still wins over the owners read, an empty one included', () => {
+    assert.deepEqual(trustedOwnersOf({ stored: ['beta'], selectedOwner: null, readOwners: ['acme-labs'] }), ['beta']);
+    assert.deepEqual(trustedOwnersOf({ stored: [], selectedOwner: null, readOwners: ['acme-labs'] }), []);
+  });
+
+  test('#609/AC-4 before any Project was read the default falls back to the owner of the chosen Project', () => {
+    assert.deepEqual(trustedOwnersOf({ stored: null, selectedOwner: 'acme', readOwners: [] }), ['acme']);
+  });
+
+  test('#609/AC-4 the installation asks the owners read at each question', () => {
+    const settings = new MemoryInstallationSettings();
+    let read: string[] = [];
+    const trust = new InstallationRepositoryTrust(settings, () => null, () => read);
+    assert.equal(trust.isTrusted('acme-labs/app'), false);
+    read = ['acme-labs'];
+    assert.equal(trust.isTrusted('Acme-Labs/app'), true);
+    assert.equal(trust.isTrusted('globex/app'), false);
+  });
 });

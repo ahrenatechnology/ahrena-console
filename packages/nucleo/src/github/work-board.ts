@@ -219,6 +219,10 @@ export type WorkAncestorFilter = number | string;
 
 export interface WorkBoardFilters {
   level: WorkLevel;
+  /** #609 an organization (or the account) login, matched in any letter case. */
+  org: string | null;
+  /** #609 `owner/number` of a Project, normalised (the number without leading zeros); matched in any letter case. */
+  project: string | null;
   initiative: WorkAncestorFilter | null;
   epic: WorkAncestorFilter | null;
   type: WorkTypeSlug | null;
@@ -234,6 +238,8 @@ export interface WorkBoardFilterError {
 
 export const DEFAULT_WORK_BOARD_FILTERS: Readonly<WorkBoardFilters> = {
   level: 'item',
+  org: null,
+  project: null,
   initiative: null,
   epic: null,
   type: null,
@@ -258,7 +264,21 @@ export function parseWorkBoardFilters(query: URLSearchParams): WorkBoardFilters 
   }
   const type = text('type');
   if (type !== null && !WORK_TYPE_SLUG_ORDER.includes(type as WorkTypeSlug)) return bad('type');
-  return { level: level as WorkLevel, ...ancestors, type: type as WorkTypeSlug | null, label: text('label'), repo: text('repo'), status: text('status') };
+  const org = text('org');
+  if (org !== null && !LOGIN.test(org)) return bad('org');
+  const projectText = text('project');
+  const project = projectText === null ? null : parseProjectFilter(projectText);
+  if (projectText !== null && project === null) return bad('project');
+  return { level: level as WorkLevel, org, project, ...ancestors, type: type as WorkTypeSlug | null, label: text('label'), repo: text('repo'), status: text('status') };
+}
+
+/** #609 a GitHub login: letters, digits and single dashes, up to 39 characters. */
+const LOGIN = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$/;
+
+/** #609 `owner/<n>` → `owner/n`; anything else → `null`. */
+function parseProjectFilter(v: string): string | null {
+  const m = /^([^/#\s]+)\/([1-9]\d*)$/.exec(v);
+  return m && LOGIN.test(m[1]!) ? `${m[1]}/${Number(m[2])}` : null;
 }
 
 /** #466 `<n>` → n; `owner/name#<n>` → the key, normalised; anything else → `null`. */
@@ -288,8 +308,35 @@ export interface WorkBoardNode {
   statusId: string | null;
   subIssues: { total: number; completed: number } | null;
   pullRequest: LinkedPullRequest | null;
+  /** #609 the Project the card was read from; absent for a parent resolved outside the Projects. */
+  origin?: WorkBoardOrigin;
   /** #465 `false` for a parent resolved outside the Project: it gives the chain, the level and the filters, never a card. */
   inProject: boolean;
+}
+
+/** #609 where a card comes from: the organization (or the account) and the Project that holds it. */
+export interface WorkBoardOrigin {
+  organization: string;
+  project: { owner: string; number: number; title: string };
+}
+
+/** Why an organization is not on the board: stable English codes, never GitHub's message. */
+export type WorkBoardOrganizationState = 'read' | 'restricted' | 'saml' | 'failed';
+
+/** #609 one owner of Projects as the board read it. `readAt` is epoch ms, `null` when no Project of it was read. */
+export interface WorkBoardOrganization {
+  login: string;
+  /** The person's own account. */
+  own: boolean;
+  state: WorkBoardOrganizationState;
+  readAt: number | null;
+  projects: { owner: string; number: number; title: string }[];
+  /** A code, only on a warning: `oauth-restricted`, `saml`, `forbidden` or a failure code (`network`, `rate-limited`, `no-scope`, `github-error`). */
+  reason?: string;
+  /** `restricted` only: where an owner of the organization approves the app. */
+  approvalUrl?: string;
+  /** `restricted` only: where anyone grants or requests the app. */
+  requestUrl?: string;
 }
 
 export interface WorkBoardStatusOption {
@@ -298,7 +345,10 @@ export interface WorkBoardStatusOption {
 }
 
 export interface WorkBoardInput {
-  project: { owner: string; number: number; title: string; url: string };
+  /** #609 the Project the board is about: `null` when several Projects are read and none was asked for. */
+  project: { owner: string; number: number; title: string; url: string } | null;
+  /** #609 every owner read, with its warning when it has one. */
+  organizations: readonly WorkBoardOrganization[];
   statuses: readonly WorkBoardStatusOption[];
   nodes: readonly WorkBoardNode[];
   sessions: readonly WorkSessionLink[];
@@ -356,6 +406,8 @@ export interface WorkBoardCard {
   state: 'open' | 'closed';
   /** #594 the owner of the repository is trusted: the core opens Planejar and Executar plano sessions for it. */
   trusted: boolean;
+  /** #609 the organization and Project the card was read from. */
+  origin: WorkBoardOrigin | null;
   column: WorkBoardColumn;
   columnSince: string | null;
   parent: { key: string; number: number } | null;
@@ -403,6 +455,10 @@ export interface WorkAncestorOption {
 }
 
 export interface WorkBoardOptions {
+  /** #609 the organizations that have a Project read, with the cards each would show. */
+  orgs: { login: string; own: boolean; count: number }[];
+  /** #609 the Projects read, with the cards each would show. */
+  projects: { owner: string; number: number; title: string; count: number }[];
   initiatives: WorkAncestorOption[];
   epics: WorkAncestorOption[];
   types: { id: WorkTypeSlug; count: number }[];
@@ -412,7 +468,10 @@ export interface WorkBoardOptions {
 }
 
 export interface WorkBoardView {
-  project: WorkBoardInput['project'] & { primaryRepo: string | null };
+  /** #609 `null` when the board spans several Projects. */
+  project: (NonNullable<WorkBoardInput['project']> & { primaryRepo: string | null }) | null;
+  /** #609 every owner read, the person's account last; the ones with a warning say why. */
+  organizations: WorkBoardOrganization[];
   filters: WorkBoardFilters;
   levels: WorkLevel[];
   columns: WorkBoardColumnView[];
@@ -569,7 +628,7 @@ export function columnObservations(analyzed: ReadonlyMap<string, AnalyzedWorkNod
 // ----------
 
 type FilterKey = Exclude<WorkBoardFilterParam, 'level'>;
-const FILTER_KEYS: readonly FilterKey[] = ['initiative', 'epic', 'type', 'label', 'repo', 'status'];
+const FILTER_KEYS: readonly FilterKey[] = ['org', 'project', 'initiative', 'epic', 'type', 'label', 'repo', 'status'];
 
 /** #466 an option that left the Project counts as no Status, as in the kanban lanes. */
 function statusOf(n: WorkBoardNode, statuses: WorkStatusIndex): { id: string; name: string } | null {
@@ -592,6 +651,10 @@ function matchesAncestor(a: AnalyzedWorkNode, level: 'initiative' | 'epic', want
 function matchesFilter(a: AnalyzedWorkNode, key: FilterKey, f: WorkBoardFilters, statuses: WorkStatusIndex): boolean {
   const n = a.node;
   switch (key) {
+    case 'org':
+      return f.org === null || n.origin?.organization.toLowerCase() === f.org.toLowerCase();
+    case 'project':
+      return f.project === null || (n.origin !== undefined && `${n.origin.project.owner}/${n.origin.project.number}`.toLowerCase() === f.project.toLowerCase());
     case 'initiative':
       return matchesAncestor(a, 'initiative', f.initiative);
     case 'epic':
@@ -643,7 +706,8 @@ export function buildWorkBoard(input: WorkBoardInput): WorkBoardView {
   const cards = shown.map((a) => toCard(a, sinceOf(a), statuses, input.planning?.get(a.node.key.toLowerCase()) ?? null, input.execution?.get(a.node.key.toLowerCase()) ?? null, input.trust.isTrusted(a.node.repo)));
 
   return {
-    project: { ...input.project, primaryRepo: mostFrequent(nodes.filter((n) => n.inProject).map((n) => n.repo)) },
+    project: input.project && { ...input.project, primaryRepo: mostFrequent(nodes.filter((n) => n.inProject).map((n) => n.repo)) },
+    organizations: input.organizations.map((o) => ({ ...o, projects: o.projects.map((p) => ({ ...p })) })),
     filters: { ...filters },
     levels: [...WORK_LEVELS],
     columns: WORK_BOARD_COLUMNS.map(({ id, label, criterion }) => {
@@ -653,7 +717,7 @@ export function buildWorkBoard(input: WorkBoardInput): WorkBoardView {
     blockedReasons: WORK_BLOCKED_REASONS.map(({ id, label }) => ({ id, label })),
     doneWindowDays: DONE_WINDOW_DAYS,
     queue: { available: input.queueAvailable, running: runningCardCount(analyzed), limit: input.queueLimit ?? DEFAULT_EXECUTION_LIMIT, stopped: input.queueStopped ?? null },
-    options: optionsOf(ofLevel, filters, statuses),
+    options: optionsOf(ofLevel, filters, statuses, input.organizations),
     total: ofLevel.length,
     matched: matched.length,
     countsWithoutFilter,
@@ -676,6 +740,7 @@ function toCard(a: AnalyzedWorkNode, columnSince: string | null, statuses: WorkS
     title: n.title,
     url: n.url,
     level: a.level,
+    origin: n.origin ?? null,
     type: typeSlugOf(n.type),
     typeName: n.type,
     state: n.state === 'CLOSED' ? 'closed' : 'open',
@@ -732,7 +797,7 @@ function mostFrequent(values: readonly string[]): string | null {
  * #466 each dropdown value is counted over the nodes of the level that match all the OTHER filters, so a
  * dropdown says how many would remain if it changed (and "no result" can say how to clear it).
  */
-function optionsOf(ofLevel: readonly AnalyzedWorkNode[], filters: WorkBoardFilters, statuses: WorkStatusIndex): WorkBoardOptions {
+function optionsOf(ofLevel: readonly AnalyzedWorkNode[], filters: WorkBoardFilters, statuses: WorkStatusIndex, organizations: readonly WorkBoardOrganization[]): WorkBoardOptions {
   const pool = (except: FilterKey) => ofLevel.filter((a) => matchesWorkBoardFilters(a, filters, statuses, except));
   const lineage = (level: 'initiative' | 'epic'): WorkAncestorOption[] => {
     const found = tally(pool(level).flatMap((a) => lineageAt(a, level).map((c) => [c.key, c.title] as const)));
@@ -752,7 +817,12 @@ function optionsOf(ofLevel: readonly AnalyzedWorkNode[], filters: WorkBoardFilte
   const statusPool = pool('status');
   const statusCount = (slug: string) => statusPool.filter((a) => (statusOf(a.node, statuses)?.id ?? NO_STATUS_SLUG) === slug).length;
   const noStatus = statusCount(NO_STATUS_SLUG);
+  const orgPool = pool('org');
+  const projectPool = pool('project');
+  const withProjects = organizations.filter((o) => o.projects.length > 0);
   return {
+    orgs: withProjects.map((o) => ({ login: o.login, own: o.own, count: orgPool.filter((a) => a.node.origin?.organization === o.login).length })),
+    projects: withProjects.flatMap((o) => o.projects.map((p) => ({ ...p, count: projectPool.filter((a) => a.node.origin?.project.owner === p.owner && a.node.origin.project.number === p.number).length }))),
     initiatives: lineage('initiative'),
     epics: lineage('epic'),
     types: types.map(([id, , count]) => ({ id: id as WorkTypeSlug, count })).sort((a, b) => WORK_TYPE_SLUG_ORDER.indexOf(a.id) - WORK_TYPE_SLUG_ORDER.indexOf(b.id)),

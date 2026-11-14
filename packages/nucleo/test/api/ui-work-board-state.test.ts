@@ -114,7 +114,7 @@ describe('#466/AC-3 the filters live in the URL, in English', () => {
     assert.ok(path.startsWith('/api/work?'), path);
     assert.doesNotMatch(path, /refresh/);
     const parsed = parseWorkBoardFilters(new URL(path, 'http://127.0.0.1').searchParams);
-    assert.deepEqual(parsed, { level: 'item', initiative: 1, epic: 6, type: 'bug', label: 'ui', repo: 'ahrena-console', status: 'in-progress' });
+    assert.deepEqual(parsed, { level: 'item', org: null, project: null, initiative: 1, epic: 6, type: 'bug', label: 'ui', repo: 'ahrena-console', status: 'in-progress' });
     assert.match(apiPath(filters, { refresh: true }), /&refresh=1$/);
   });
 });

@@ -514,7 +514,7 @@ describe('#465/AC-5 GET /api/work: English internals, pt-BR on screen (decision 
       b.source.items = [issue(1, { type: 'Initiative' }), issue(6, { type: 'Epic', parent: k(1) }), issue(540, { type: 'Bug', parent: k(6), labels: ['UI'], statusId: 'opt-progress' })];
       const r = await get(b, '?level=item&initiative=1&epic=6&type=bug&label=ui&repo=ahrena-console&status=in-progress');
       assert.equal(r.status, 200);
-      assert.deepEqual(r.json.filters, { level: 'item', initiative: 1, epic: 6, type: 'bug', label: 'ui', repo: 'ahrena-console', status: 'in-progress' });
+      assert.deepEqual(r.json.filters, { level: 'item', org: null, project: null, initiative: 1, epic: 6, type: 'bug', label: 'ui', repo: 'ahrena-console', status: 'in-progress' });
       assert.deepEqual(cardsOf(r.json).map((c) => c.number), [540]);
     }));
 
