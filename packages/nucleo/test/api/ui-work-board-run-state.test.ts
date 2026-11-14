@@ -179,11 +179,34 @@ describe('confirming and the answers of POST /api/work/run (AC-2 to AC-4)', () =
     assert.equal(runOf(again, card(506)).reason, null);
   });
 
-  test('a failure on a queued card goes back to Executar plano with the reason kept in the state', () => {
+  test('a failure on a queued card goes back to Executar plano and shows the core reason as the red note', () => {
     const queued = card(7, { column: 'queued' });
-    const s = runFailed(confirmRun(askRun(initialRunState(), queued), queued), queued, null);
-    assert.equal(runState(cardWithRun(s, queued)), 'queued');
-    assert.equal(runOf(s, queued).reason, null);
+    const s = runFailed(confirmRun(askRun(initialRunState(), queued), queued), queued, 'GitHub não respondeu');
+    const shown = cardWithRun(s, queued);
+    assert.equal(runState(shown), 'queued');
+    assert.equal(runOf(s, queued).reason, 'GitHub não respondeu');
+    const parts = cardRunParts(shown, {});
+    assert.equal(texto(parts.note as never), 'GitHub não respondeu');
+    assert.equal((parts.note as never as ElementoFalso).getAttribute('role'), 'alert');
+    assert.ok(one(parts.actions, '[data-action="run"]'), 'Executar plano is offered again');
+    assert.equal(cardRunParts(queued, {}).note, null, 'no failure, no note');
+  });
+
+  test('a 409 without running and limit (a run already booting) settles as failed with the core error, never as a limit', () => {
+    const queued = card(8, { column: 'queued' });
+    const s0 = confirmRun(askRun(initialRunState(), queued), queued);
+    const s1 = runLimitFull(s0, queued, { error: 'Já há uma execução subindo para esta issue' });
+    const now = runOf(s1, queued);
+    assert.equal(now.phase, 'failed');
+    assert.equal(now.full, null);
+    assert.equal(now.reason, 'Já há uma execução subindo para esta issue');
+    assert.equal(s1.post, null);
+    assert.equal(texto(cardRunParts(cardWithRun(s1, queued), {}).note as never), 'Já há uma execução subindo para esta issue');
+    const planned = card(506);
+    const p1 = runLimitFull(confirmRun(askRun(initialRunState(), planned), planned), planned, { running: 'x', limit: 2 });
+    assert.equal(runOf(p1, planned).phase, 'failed');
+    assert.equal(runOf(p1, planned).reason, null);
+    assert.equal(runOf(runLimitFull(initialRunState(), planned, { error: 'x' }), planned).phase, 'idle');
   });
 });
 
@@ -236,7 +259,7 @@ describe('the session of a live card (AC-5)', () => {
 describe('the components driven through the state (scenario)', () => {
   const REGISTER = { repo: REPO, number: 506 };
 
-  // The screen in miniature: state in a variable, render parts read from it, handlers call the transitions.
+  // #532: the screen in miniature: state in a variable, render parts read from it, handlers call the transitions.
   function screen(subject: Obj) {
     let state = initialRunState();
     const set = (next: Obj) => (state = next);
