@@ -47,6 +47,9 @@ export const GITHUB_GRAPHQL_URL = 'https://api.github.com/graphql';
 /** #533 the deadline of one GitHub call; a call that outlives it fails as a timeout (`network` for the reason codes). */
 export const GITHUB_TIMEOUT_MS = 30_000;
 
+/** #512 a fresh deadline for one GitHub request, declared once for every adapter of the work board: it aborts the headers and the body alike. */
+export const githubDeadline = (timeoutMs: number = GITHUB_TIMEOUT_MS): AbortSignal => AbortSignal.timeout(timeoutMs);
+
 const LEAN = `number title url state updatedAt repository { nameWithOwner } issueType { name }
   subIssuesSummary { total completed percentCompleted } parent { number repository { nameWithOwner } }`;
 // A contagem por estado custa o mesmo que o estado: nenhuma checagem é listada.
@@ -577,17 +580,13 @@ export class GithubGraphqlSource implements WorkSource, WorkIssueSource, WorkIss
   private async query<T>(operation: string, query: string, variables: Record<string, unknown>, { tolerateNotFound = false } = {}): Promise<T> {
     const token = await resolveGithubToken(this.opts.token);
     // #533 a fresh deadline per try: a timeout is not a gateway error and is not retried.
-    return retryOnGateway(() => githubGraphql<T>({ ...this.opts, token }, operation, query, variables, { tolerateNotFound, signal: this.deadline() }), { sleep: this.opts.sleep });
+    return retryOnGateway(() => githubGraphql<T>({ ...this.opts, token }, operation, query, variables, { tolerateNotFound, signal: githubDeadline(this.opts.timeoutMs) }), { sleep: this.opts.sleep });
   }
 
   /** #533 a mutation is never retried: a 502 may have been applied on GitHub's side (see `retryOnGateway`). */
   private async mutate<T>(operation: string, query: string, variables: Record<string, unknown>): Promise<T> {
     const token = await resolveGithubToken(this.opts.token);
-    return githubGraphql<T>({ ...this.opts, token }, operation, query, variables, { signal: this.deadline() });
-  }
-
-  private deadline(): AbortSignal {
-    return AbortSignal.timeout(this.opts.timeoutMs ?? GITHUB_TIMEOUT_MS);
+    return githubGraphql<T>({ ...this.opts, token }, operation, query, variables, { signal: githubDeadline(this.opts.timeoutMs) });
   }
 }
 

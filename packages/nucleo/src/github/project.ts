@@ -20,7 +20,7 @@
  */
 
 import { GITHUB_TTL, RateLimitedError, type GithubCache, type StaleCode } from './cache.ts';
-import { githubGraphql, GithubScopeError, requireGithubToken, resolveGithubToken, type GithubGraphqlSourceOptions } from './github-source.ts';
+import { githubDeadline, githubGraphql, GithubScopeError, requireGithubToken, resolveGithubToken, type GithubGraphqlSourceOptions } from './github-source.ts';
 import { workKey, type CiState, type LinkedPullRequest, type PullRequestState, type ReviewDecision } from './work.ts';
 
 /** Qual Project: dono (organização ou pessoa) e número, como na URL `.../projects/3`. */
@@ -335,7 +335,7 @@ export class GithubProjectSource implements ProjectSource {
 
   private async call<T>(operation: string, query: string, variables: Record<string, unknown>): Promise<T> {
     const token = await resolveGithubToken(this.opts.token);
-    return githubGraphql<T>({ ...this.opts, token }, operation, query, variables).catch(permission);
+    return githubGraphql<T>({ ...this.opts, token }, operation, query, variables, { signal: githubDeadline(this.opts.timeoutMs) }).catch(permission);
   }
 }
 
