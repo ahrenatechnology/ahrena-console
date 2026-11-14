@@ -13,6 +13,8 @@ import { execFile } from 'node:child_process';
 import { backoffMs, RateLimitedError } from './cache.ts';
 import type { ChildrenResult, WorkSource } from './source.ts';
 import {
+  isPlan,
+  isPlanStep,
   WorkIssueForbiddenError,
   WorkIssueRefusedError,
   WorkIssueWrittenUnreadError,
@@ -24,6 +26,7 @@ import {
   type WorkIssueRef,
   type WorkIssueSource,
   type WorkIssueWriter,
+  WorkIssueNotRemovedError,
 } from './work-issue.ts';
 import {
   parseWorkKey,
@@ -51,7 +54,7 @@ const CHECKS = 'contexts(first: 1) { totalCount checkRunCountsByState { state co
 const PRS = `closedByPullRequestsReferences(first: 3, includeClosedPrs: true) { nodes { number url state isDraft reviewDecision
   commits(last: 1) { nodes { commit { statusCheckRollup { state ${CHECKS} } } } } } }`;
 // #506 the issue detail: the same PR read with its title, up to 3 parents (initiative > epic > item) and the first 50 sub-issues and comments.
-const REF = 'number title url state repository { nameWithOwner } issueType { name }';
+const REF = 'number title url state stateReason repository { nameWithOwner } issueType { name }';
 const DETAIL_PRS = `closedByPullRequestsReferences(first: 3, includeClosedPrs: true) { nodes { number title url state isDraft reviewDecision
   commits(last: 1) { nodes { commit { statusCheckRollup { state ${CHECKS} } } } } } }`;
 const RATE = 'rateLimit { cost remaining resetAt }';
@@ -67,7 +70,7 @@ export const QUERIES = {
   repository(owner: $o, name: $r) { issue(number: $n) { ${REF} updatedAt body labels(first: 50) { nodes { name } } milestone { title }
     comments(first: 50) { totalCount nodes { author { login } createdAt body } }
     parent { ${REF} parent { ${REF} parent { ${REF} } } }
-    subIssues(first: 50) { nodes { ${REF} } } ${DETAIL_PRS} } } }`,
+    subIssues(first: 50) { nodes { ${REF} updatedAt } } ${DETAIL_PRS} } } }`,
 } as const;
 
 /**
@@ -82,6 +85,14 @@ export const WRITE_QUERIES = {
   update: `mutation UpdateWorkIssue($input: UpdateIssueInput!) { updateIssue(input: $input) { issue { id } } }`,
   addParent: `mutation AddWorkIssueParent($input: AddSubIssueInput!) { addSubIssue(input: $input) { issue { id } } }`,
   removeParent: `mutation RemoveWorkIssueParent($input: RemoveSubIssueInput!) { removeSubIssue(input: $input) { issue { id } } }`,
+  // #534 the issue's sub-issues in GitHub's order, with what a step's checks need: ids, version, type and why it is closed.
+  steps: `query WorkPlanSteps($o: String!, $r: String!, $n: Int!) {
+  repository(owner: $o, name: $r) { id issueTypes(first: 100) { nodes { id name } }
+    issue(number: $n) { id subIssues(first: 50) { nodes { id ${REF} body updatedAt } } } } }`,
+  createStep: `mutation CreateWorkPlanStep($input: CreateIssueInput!) { createIssue(input: $input) { issue { id } } }`,
+  closeStep: `mutation CloseWorkPlanStep($input: CloseIssueInput!) { closeIssue(input: $input) { issue { id } } }`,
+  reopenStep: `mutation ReopenWorkPlanStep($input: ReopenIssueInput!) { reopenIssue(input: $input) { issue { id } } }`,
+  moveStep: `mutation MoveWorkPlanStep($input: ReprioritizeSubIssueInput!) { reprioritizeSubIssue(input: $input) { issue { id } } }`,
   comment: `mutation AddWorkIssueComment($input: AddCommentInput!) { addComment(input: $input) { commentEdge { node { id } } } }`,
 } as const;
 
@@ -197,10 +208,12 @@ export function toWorkDetail(raw: Pick<RawIssue, 'number' | 'state' | 'repositor
 }
 
 interface RawRef {
+  updatedAt?: string;
   number: number;
   title: string;
   url: string;
   state: IssueState;
+  stateReason?: string | null;
   repository: RawRepoRef;
   issueType?: { name: string } | null;
   parent?: RawRef | null;
@@ -223,6 +236,8 @@ const toIssueRef = (r: RawRef): WorkIssueRef => ({
   url: r.url,
   state: r.state,
   type: r.issueType?.name ?? null,
+  stateReason: r.stateReason ?? null,
+  ...(r.updatedAt !== undefined ? { updatedAt: r.updatedAt } : {}),
 });
 
 /** #506 the raw detail of one issue as the port's read; the parents come nearest first. */
@@ -451,6 +466,96 @@ export class GithubGraphqlSource implements WorkSource, WorkIssueSource, WorkIss
     if (id === null) return null;
     await this.mutate('AddWorkIssueComment', WRITE_QUERIES.comment, { input: { subjectId: id, body } });
     return this.readBack(key);
+  }
+
+  /**
+   * #534 the issue's sub-issues as GitHub holds them now, one fresh read, and the step among them when `step` is given,
+   * found with no state check: absent, `WorkIssueRefusedError` `step` and nothing is written. Each caller applies its own
+   * check on the step (`requirePlanStep`, `requireRemovedStep`). `null`: no such issue.
+   */
+  private async loadSteps(parent: string, step?: string) {
+    const k = parseWorkKey(parent);
+    type Node = RawRef & { id: string; body: string; updatedAt: string };
+    type Data = { repository: { id: string; issueTypes: { nodes: { id: string; name: string }[] }; issue: { id: string; subIssues: { nodes: Node[] } } | null } | null };
+    const data = await this.query<Data>('WorkPlanSteps', WRITE_QUERIES.steps, { o: k.owner, r: k.name, n: k.number }, { tolerateNotFound: true });
+    const repo = data.repository;
+    if (!repo?.issue) return null;
+    const subs = repo.issue.subIssues.nodes;
+    const find = (key: string) => subs.find((node) => toIssueRef(node).key.toLowerCase() === key.toLowerCase());
+    const found = step === undefined ? undefined : find(step);
+    if (step !== undefined && !found) throw new WorkIssueRefusedError('step', step);
+    return { repoId: repo.id, parentId: repo.issue.id, types: repo.issueTypes.nodes, subs, step: found, find };
+  }
+
+  /** #534 the step of an edit, a removal, a move or a read: a Plan sub-issue not closed as not planned, else `WorkIssueRefusedError` `step`. */
+  private requirePlanStep<T extends RawRef>(found: T | undefined, step: string): T {
+    if (!found || !isPlanStep(toIssueRef(found))) throw new WorkIssueRefusedError('step', step);
+    return found;
+  }
+
+  /** #534 the step of a restore: a Plan sub-issue closed as not planned; a Plan one that is not, is `WorkIssueNotRemovedError`. */
+  private requireRemovedStep<T extends RawRef>(found: T | undefined, step: string): T {
+    if (!found || !isPlan(toIssueRef(found).type)) throw new WorkIssueRefusedError('step', step);
+    if (isPlanStep(toIssueRef(found))) throw new WorkIssueNotRemovedError(step);
+    return found;
+  }
+
+  /** #534 the title, body and `updatedAt` of the step GitHub holds now. */
+  async stepCurrent(parent: string, step: string): Promise<WorkIssueCurrent | null> {
+    const loaded = await this.loadSteps(parent, step);
+    if (!loaded) return null;
+    const found = this.requirePlanStep(loaded.step, step);
+    return { title: found.title, body: found.body, updatedAt: found.updatedAt };
+  }
+
+  /** #534 one `updateIssue` on the step, then the parent read back. */
+  async editStep(parent: string, step: string, edit: { title?: string; body?: string }): Promise<WorkIssueRead | null> {
+    const loaded = await this.loadSteps(parent, step);
+    if (!loaded) return null;
+    const found = this.requirePlanStep(loaded.step, step);
+    await this.mutate('UpdateWorkIssue', WRITE_QUERIES.update, { input: { id: found.id,...(edit.title !== undefined ? { title: edit.title } : {}), ...(edit.body !== undefined ? { body: edit.body } : {}) } });
+    return this.readBack(parent);
+  }
+
+  /** #534 one `createIssue` of the Plan type with the parent: the new step is the last sub-issue. */
+  async addStep(parent: string, step: { title: string; body: string }): Promise<WorkIssueRead | null> {
+    const loaded = await this.loadSteps(parent);
+    if (!loaded) return null;
+    const plan = loaded.types.find((t) => t.name === 'Plan');
+    if (!plan) throw new WorkIssueRefusedError('type', 'Plan');
+    await this.mutate('CreateWorkPlanStep', WRITE_QUERIES.createStep, { input: { repositoryId: loaded.repoId, title: step.title, body: step.body, issueTypeId: plan.id, parentIssueId: loaded.parentId } });
+    return this.readBack(parent);
+  }
+
+  /** #534 closes the step as not planned: the read then leaves it out of the plan. */
+  async removeStep(parent: string, step: string): Promise<WorkIssueRead | null> {
+    const loaded = await this.loadSteps(parent, step);
+    if (!loaded) return null;
+    const found = this.requirePlanStep(loaded.step, step);
+    await this.mutate('CloseWorkPlanStep', WRITE_QUERIES.closeStep, { input: { issueId: found.id, stateReason: 'NOT_PLANNED' } });
+    return this.readBack(parent);
+  }
+
+  /** #534 reopens the step closed as not planned: the read then puts it back in the plan. */
+  async restoreStep(parent: string, step: string): Promise<WorkIssueRead | null> {
+    const loaded = await this.loadSteps(parent, step);
+    if (!loaded) return null;
+    const found = this.requireRemovedStep(loaded.step, step);
+    await this.mutate('ReopenWorkPlanStep', WRITE_QUERIES.reopenStep, { input: { issueId: found.id } });
+    return this.readBack(parent);
+  }
+
+  /** #534 `reprioritizeSubIssue` behind `after`, or before the first sub-issue for the top; a step already on top is left alone. */
+  async moveStep(parent: string, step: string, after: string | null): Promise<WorkIssueRead | null> {
+    const loaded = await this.loadSteps(parent, step);
+    if (!loaded) return null;
+    const found = this.requirePlanStep(loaded.step, step);
+    const afterNode = typeof after === 'string' ? loaded.find(after) : undefined;
+    if (typeof after === 'string' && !afterNode) throw new WorkIssueRefusedError('after', after);
+    const first = loaded.subs[0]!;
+    const input = { issueId: loaded.parentId, subIssueId: found.id, ...(afterNode ? { afterId: afterNode.id } : { beforeId: first.id }) };
+    if (afterNode || first.id !== found.id) await this.mutate('MoveWorkPlanStep', WRITE_QUERIES.moveStep, { input });
+    return this.readBack(parent);
   }
 
   /** #533 the write is applied: a failure of this read is `WorkIssueWrittenUnreadError`, never "not written". */
