@@ -1,7 +1,7 @@
-// issue 467, issue 508: the components of the issue panel and of Planejar (layer 2), pure render functions in the fake DOM.
-// One test per wireframe state: 467-1 (sem plano, com plano, em review), 465-6 (confirmation, planejando…, plano · N passos,
-// the failed planning, the missing folder) and 465-2 (the card's actions). There is no workbench, visual or axe tool in this
-// project (component map: node:test with the fake DOM), so the accessibility checks are assertions on roles and names.
+/* #467 #508 the components of the issue panel and of Planejar (layer 2), pure render functions in the fake DOM.
+One test per wireframe state: 467-1 (sem plano, com plano, em review), 465-6 (confirmation, planejando…, plano · N passos,
+the failed planning, the missing folder) and 465-2 (the card's actions). There is no workbench, visual or axe tool in this
+project (component map: node:test with the fake DOM), so the accessibility checks are assertions on roles and names. */
 import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
 import { describe, test } from 'node:test';
@@ -399,7 +399,7 @@ describe('the issue panel (467-1)', () => {
     { author: 'ana-exemplo', createdAt: ago(20 * HOUR), body: 'O passo 4 pode ficar para depois.' },
   ];
 
-  test('sem plano: header, title, parent chain, Planejar, description, empty plan, empty PR, details, no comments', () => {
+  test('no plan ("sem plano", 467-1): header, title, parent chain, Planejar, description, empty plan, empty PR, details, no comments', () => {
     const subject = card(509);
     const root = issuePanel({ card: subject, issue: issue(509), now: NOW, parts: cardPlanParts(subject, {}) });
     assert.equal(root.tagName, 'ASIDE');
@@ -422,7 +422,7 @@ describe('the issue panel (467-1)', () => {
     noDeadAction(root);
   });
 
-  test('com plano: lists the steps in order with their numbers, and Replanejar is the secondary action', () => {
+  test('with a plan ("com plano", 467-1): lists the steps in order with their numbers, and Replanejar is the secondary action', () => {
     const subject = card(506, { plan: { steps: 5 } });
     const root = issuePanel({ card: subject, issue: issue(506, withPlan([520, 521, 522, 523, 524])), now: NOW, parts: cardPlanParts(subject, {}) });
     assert.ok(texto(one(root, '[data-section="plan"] h3')).startsWith('Plano · 5 passos'));
@@ -438,7 +438,7 @@ describe('the issue panel (467-1)', () => {
     noDeadAction(root);
   });
 
-  test('em review: the plan is closed and the PR shows CI, the checks and the review', () => {
+  test('in review ("em review", 467-1): the plan is closed and the PR shows CI, the checks and the review', () => {
     const subject = card(497, { column: 'review', plan: { steps: 3 } });
     const pr = { number: 512, title: 'feat(ui): os filtros do quadro na URL', url: `https://github.com/${REPO}/pull/512`, state: 'OPEN', isDraft: false, ci: 'PENDING', checks: { total: 5, passed: 3, failed: 0, running: 2 }, review: 'REVIEW_REQUIRED' };
     const root = issuePanel({ card: subject, issue: issue(497, { ...withPlan([515, 516, 517], 'CLOSED'), pullRequest: pr }), now: NOW, parts: cardPlanParts(subject, {}) });
