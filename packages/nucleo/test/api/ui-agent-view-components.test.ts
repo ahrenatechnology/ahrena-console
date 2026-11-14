@@ -280,6 +280,48 @@ describe('the sequence of steps (AC-2)', () => {
   });
 });
 
+describe('a child whose read failed, in its own slot (#539 AC-5)', () => {
+  const openChild = (opts: Record<string, unknown> = {}) => {
+    const root = draw(agent({ steps: [step(0), childStep({ id: 'toolu_A' }), childStep({ id: 'toolu_B', childAgentId: 'z9' })] }), opts);
+    root.querySelectorAll('.av-step')[1]!.querySelector('button.av-toggle')!.click();
+    root.querySelectorAll('.av-step')[2]!.querySelector('button.av-toggle')!.click();
+    return root;
+  };
+  const slot = (root: ElementoFalso, i: number) => root.querySelectorAll('.av-step')[i]!;
+
+  test('the slot says the agent could not be read and offers "Tentar de novo", the rest stays', () => {
+    const root = openChild();
+    root.setChildError(IRIS, () => {});
+    const failed = slot(root, 1);
+    assert.ok(failed.querySelector('[role="alert"]'), 'the line is an alert');
+    assert.match(texto(failed.querySelector('[role="alert"]')!), /Não deu para ler o agente/);
+    assert.match(texto(failed.querySelector('.av-child-retry')!), /Tentar de novo/);
+    assert.equal(failed.querySelector('.av-child-loading'), null);
+    assert.ok(slot(root, 2).querySelector('.av-child-loading'), 'the other open child is untouched');
+    assert.equal(stepsOf(root).length, 3, 'the sequence around it is kept');
+  });
+
+  test('"Tentar de novo" calls only that child\'s retry and puts the slot back to reading', () => {
+    const root = openChild();
+    const calls: string[] = [];
+    root.setChildError(IRIS, () => calls.push('iris'));
+    root.setChildError('z9', () => calls.push('z9'));
+    slot(root, 1).querySelector('.av-child-retry')!.click();
+    assert.deepEqual(calls, ['iris']);
+    assert.equal(slot(root, 1).querySelector('[role="alert"]'), null);
+    assert.match(texto(slot(root, 1).querySelector('.av-child-loading')!), /Lendo o agente/);
+    assert.ok(slot(root, 2).querySelector('[role="alert"]'), 'the other failed child keeps its error');
+  });
+
+  test('a later setChild replaces the error with the sequence', () => {
+    const root = openChild();
+    root.setChildError(IRIS, () => {});
+    root.setChild(IRIS, agent({ agentId: IRIS, steps: [step(1)] }));
+    assert.equal(slot(root, 1).querySelector('[role="alert"]'), null);
+    assert.equal(slot(root, 1).querySelectorAll('.av-step').length, 1);
+  });
+});
+
 describe('the states of the view (AC-4)', () => {
   test('loading: the shape of the view as skeleton, busy, with no invented brief', () => {
     const root = view.agentViewLoading({ sessionId: SID, sessionTitle: 'Separar pagamentos' }) as ElementoFalso;
