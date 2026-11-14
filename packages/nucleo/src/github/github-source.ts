@@ -7,10 +7,12 @@
 // | WorkNodes      | issues por chave, com 2 níveis de pai (só campos rasos) | 1  |
 // | WorkChildren   | até 50 filhas, cada uma com PR, CI e review         | ≤ 4   |
 // | WorkDetail     | PR, CI e review de um card                          | 1     |
+// | WorkIssue      | one issue's detail: body, comments, parents, sub-issues, PR (issue 506) | 1 |
 
 import { execFile } from 'node:child_process';
 import { backoffMs, RateLimitedError } from './cache.ts';
 import type { ChildrenResult, WorkSource } from './source.ts';
+import type { WorkIssueComment, WorkIssuePullRequest, WorkIssueRead, WorkIssueRef, WorkIssueSource } from './work-issue.ts';
 import {
   parseWorkKey,
   stageOf,
@@ -34,6 +36,10 @@ const LEAN = `number title url state updatedAt repository { nameWithOwner } issu
 const CHECKS = 'contexts(first: 1) { totalCount checkRunCountsByState { state count } statusContextCountsByState { state count } }';
 const PRS = `closedByPullRequestsReferences(first: 3, includeClosedPrs: true) { nodes { number url state isDraft reviewDecision
   commits(last: 1) { nodes { commit { statusCheckRollup { state ${CHECKS} } } } } } }`;
+// issue 506 the issue detail: the same PR read with its title, up to 3 parents (initiative > epic > item) and the first 50 sub-issues and comments.
+const REF = 'number title url state repository { nameWithOwner } issueType { name }';
+const DETAIL_PRS = `closedByPullRequestsReferences(first: 3, includeClosedPrs: true) { nodes { number title url state isDraft reviewDecision
+  commits(last: 1) { nodes { commit { statusCheckRollup { state ${CHECKS} } } } } } }`;
 const RATE = 'rateLimit { cost remaining resetAt }';
 
 export const QUERIES = {
@@ -43,6 +49,11 @@ export const QUERIES = {
   repository(owner: $o, name: $r) { issue(number: $n) { subIssues(first: 50) { totalCount nodes { ${LEAN} ${PRS} } } } } }`,
   detail: `query WorkDetail($o: String!, $r: String!, $n: Int!) { ${RATE}
   repository(owner: $o, name: $r) { issue(number: $n) { number state repository { nameWithOwner } ${PRS} } } }`,
+  issue: `query WorkIssue($o: String!, $r: String!, $n: Int!) { ${RATE}
+  repository(owner: $o, name: $r) { issue(number: $n) { ${REF} body labels(first: 50) { nodes { name } } milestone { title }
+    comments(first: 50) { totalCount nodes { author { login } createdAt body } }
+    parent { ${REF} parent { ${REF} parent { ${REF} } } }
+    subIssues(first: 50) { nodes { ${REF} } } ${DETAIL_PRS} } } }`,
 } as const;
 
 /** Até quantas chaves cabem numa consulta de lote. */
@@ -138,6 +149,53 @@ export function toWorkDetail(raw: Pick<RawIssue, 'number' | 'state' | 'repositor
   return { key: workKey(raw.repository.nameWithOwner, raw.number), state: raw.state, pullRequests, stage: stageOf(raw.state, pullRequests) };
 }
 
+interface RawRef {
+  number: number;
+  title: string;
+  url: string;
+  state: IssueState;
+  repository: RawRepoRef;
+  issueType?: { name: string } | null;
+  parent?: RawRef | null;
+}
+interface RawIssueDetail extends RawRef {
+  body: string;
+  labels: { nodes: { name: string }[] };
+  milestone: { title: string } | null;
+  comments: { totalCount: number; nodes: { author: { login: string } | null; createdAt: string; body: string }[] };
+  subIssues: { nodes: RawRef[] };
+  closedByPullRequestsReferences?: { nodes: (RawPr & { title: string })[] };
+}
+
+const toIssueRef = (r: RawRef): WorkIssueRef => ({
+  key: workKey(r.repository.nameWithOwner, r.number),
+  repo: r.repository.nameWithOwner,
+  number: r.number,
+  title: r.title,
+  url: r.url,
+  state: r.state,
+  type: r.issueType?.name ?? null,
+});
+
+/** issue 506 the raw detail of one issue as the port's read; the parents come nearest first. */
+export function toWorkIssueRead(raw: RawIssueDetail): WorkIssueRead {
+  const parentChain: WorkIssueRef[] = [];
+  for (let p = raw.parent; p; p = p.parent) parentChain.push(toIssueRef(p));
+  const pullRequests: WorkIssuePullRequest[] = toPullRequests(raw).map((p, i) => ({ ...p, title: raw.closedByPullRequestsReferences!.nodes[i].title }));
+  const comments: WorkIssueComment[] = raw.comments.nodes.map((c) => ({ author: c.author?.login ?? null, createdAt: c.createdAt, body: c.body }));
+  return {
+    ...toIssueRef(raw),
+    labels: raw.labels.nodes.map((l) => l.name),
+    milestone: raw.milestone?.title ?? null,
+    body: raw.body,
+    comments,
+    commentsTotal: raw.comments.totalCount,
+    parentChain,
+    subIssues: raw.subIssues.nodes.map(toIssueRef),
+    pullRequests,
+  };
+}
+
 export interface QueryCost {
   operation: string;
   cost: number;
@@ -189,7 +247,7 @@ export interface GraphqlError {
   path?: unknown[];
 }
 
-export class GithubGraphqlSource implements WorkSource {
+export class GithubGraphqlSource implements WorkSource, WorkIssueSource {
   private readonly opts: GithubGraphqlSourceOptions;
 
   constructor(opts: GithubGraphqlSourceOptions) {
@@ -256,6 +314,15 @@ export class GithubGraphqlSource implements WorkSource {
     const issue = data.repository?.issue;
     if (!issue) throw new Error(`issue não encontrada: ${key}`);
     return toWorkDetail(issue);
+  }
+
+  /** issue 506 one issue's detail in one query; `null` when GitHub has no such issue. */
+  async issue(key: string): Promise<WorkIssueRead | null> {
+    const k = parseWorkKey(key);
+    type Data = { repository: { issue: RawIssueDetail | null } | null };
+    const data = await this.query<Data>('WorkIssue', QUERIES.issue, { o: k.owner, r: k.name, n: k.number }, { tolerateNotFound: true });
+    const issue = data.repository?.issue;
+    return issue ? toWorkIssueRead(issue) : null;
   }
 
   private async query<T>(operation: string, query: string, variables: Record<string, unknown>, { tolerateNotFound = false } = {}): Promise<T> {
