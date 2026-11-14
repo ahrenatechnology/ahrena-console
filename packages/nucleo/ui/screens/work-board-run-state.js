@@ -85,10 +85,16 @@ export function runAccepted(state, card, { opened = DEFAULT_TARGET } = {}) {
   return { ...settle(state, card, { phase: 'booting', target: entry.target, opened }), notice: { key: card.key, number: card.number, opened } };
 }
 
-/** 409 `{ error, running, limit }`: the confirmation stays open with the count; the next confirm sends `force: true`. */
-export function runLimitFull(state, card, { running, limit }) {
+/**
+ * 409 `{ error, running, limit }`: the confirmation stays open with the count; the next confirm sends `force: true`.
+ * The core's other 409 (a run already booting for the issue, `{ error }` alone) has no count and "Executar mesmo assim"
+ * would only meet it again: it settles as a failure with the core's `error` as the reason (issue 532).
+ */
+export function runLimitFull(state, card, { running, limit, error = null } = {}) {
   const entry = posting(state, card);
-  return entry ? settle(state, card, { ...entry, phase: 'confirming', full: { running, limit } }) : state;
+  if (!entry) return state;
+  if (!Number.isFinite(running) || !Number.isFinite(limit)) return runFailed(state, card, error);
+  return settle(state, card, { ...entry, phase: 'confirming', full: { running, limit } });
 }
 
 /** 501 `{ error, command }`: the core's message and command; the card stays where it was. */
@@ -139,12 +145,13 @@ export function sessionIdOf(card) {
 
 /**
  * The card as the render parts of work-board-run.js read it: booting shows it in Em execução with "subindo…"; a failure
- * in Planejamento is `planning` failed with its reason, as Planejar's. The core's own `execution` always wins.
+ * in Planejamento is `planning` failed with its reason, as Planejar's, and in Na fila `runFailure` with it. The core's own `execution` always wins.
  */
 export function cardWithRun(state, card) {
   if (card.execution) return card;
   const { phase, reason } = runOf(state, card);
   if (phase === 'booting') return { ...card, column: 'running', execution: { state: 'booting' } };
   if (phase === 'failed' && card.column === 'planning') return { ...card, planning: { state: 'failed', reason } };
+  if (phase === 'failed' && card.column === 'queued') return { ...card, runFailure: { reason } };
   return card;
 }
