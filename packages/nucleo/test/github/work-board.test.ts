@@ -172,9 +172,15 @@ describe('work board vocabulary', () => {
     assert.equal(typeSlugOf(null), null);
   });
 
-  test('the empty queue has no positions and says it is not available', async () => {
+  test('the empty queue has no positions, is not stopped and says it is not available', async () => {
     assert.equal(EMPTY_WORK_QUEUE.available, false);
     assert.equal((await EMPTY_WORK_QUEUE.positions()).size, 0);
+    assert.equal(await EMPTY_WORK_QUEUE.stopped(), null);
+  });
+
+  test('#477/AC-4 the queue block carries the limit and the stop it is given, and counts the running cards of the level', () => {
+    const view = board([boardNode(1), boardNode(2)], { sessions: [session('s1', 1, 'working')], queueLimit: 3, queueStopped: { key: k(2), reason: 'boom' } });
+    assert.deepEqual(view.queue, { available: false, running: 1, limit: 3, stopped: { key: k(2), reason: 'boom' } });
   });
 });
 
@@ -426,7 +432,7 @@ describe('ordering, time in column and the done window', () => {
     const view = board([]);
     assert.deepEqual(view.columns.map((c) => [c.id, c.count]), WORK_BOARD_COLUMNS.map((c) => [c.id, 0]));
     assert.deepEqual(view.blockedReasons, WORK_BLOCKED_REASONS.map(({ id, label }) => ({ id, label })));
-    assert.deepEqual(view.queue, { available: false });
+    assert.deepEqual(view.queue, { available: false, running: 0, limit: 2, stopped: null });
     assert.deepEqual(view.levels, [...WORK_LEVELS]);
   });
 });

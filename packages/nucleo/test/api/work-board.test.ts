@@ -89,6 +89,9 @@ class FakeQueue implements WorkQueue {
   async positions(): Promise<ReadonlyMap<string, number>> {
     return this.map;
   }
+  async stopped(): Promise<null> {
+    return null;
+  }
 }
 
 const session = (id: string, n: number, state: WorkSessionLink['state']): WorkSessionLink => ({ sessionId: id, key: k(n), state, since: '2026-10-18T11:00:00Z' });
@@ -223,7 +226,7 @@ describe('#465/AC-2 GET /api/work: each column comes from the real signals', () 
       const r = await get(b);
       const c = cardOf(r.json, 502);
       assert.deepEqual([c.column, c.queuePosition], ['queued', 2]);
-      assert.deepEqual(r.json.queue, { available: true });
+      assert.deepEqual(r.json.queue, { available: true, running: 0, limit: 2, stopped: null });
     }));
 
   test('#465/AC-2 Given two sessions linked to #503, Then the card is in the most advanced column and counts 2 sessions', () =>

@@ -36,7 +36,8 @@ import { InstallationRepositoryTrust } from '../github/trusted-owners.ts';
 import { chooseVault, GithubConnection, GithubNotConnectedError } from '../github/connection/index.ts';
 import { parseProjectEnv, PROJECT_ENV } from '../github/project-selection.ts';
 import { SqliteInstallationSettings } from '../settings/installation-settings.ts';
-import { EMPTY_WORK_QUEUE } from '../github/work-board.ts';
+import { executionLimitOf } from '../github/work-execution.ts';
+import { SqliteWorkQueue } from '../github/work-queue-store.ts';
 import { WorkBoardService } from '../github/work-board-service.ts';
 import { FleetWorkSessions } from '../github/work-board-sessions.ts';
 import { SqliteWorkColumnHistory } from '../github/work-board-history.ts';
@@ -473,18 +474,25 @@ const repositoryTrust = new InstallationRepositoryTrust(settings, () => screens.
 /*
  * #465 #466 the work board (`GET /api/work`): the kanban's Project (the same resolver as /api/project),
  * the live sessions of the fleet, the parents outside the Project through the GitHub cache, the time in
- * column in this database, #507 the planning runs, #531 the execution runs, and no queue until #477. Under --demo, the simulator's Project and its folders
+ * column in this database, #507 the planning runs, #531 the execution runs and #477 the execution queue. Under --demo, the simulator's Project and its folders
  * (only the scenario's session is on an issue branch). Under --no-github, no board (503 off).
  */
 const planRuns = new SqliteWorkPlanRuns(sqlite.db);
 const executionRuns = new SqliteWorkExecutionRuns(sqlite.db);
+/*
+ * #477 the execution queue: one per installation, in this database, so it survives a restart. The concurrent-execution
+ * limit is the installation setting `work.executionLimit` (default 2), read at each use so a change applies at once.
+ */
+const workQueue = new SqliteWorkQueue(sqlite.db);
+const executionLimit = () => executionLimitOf(settings.get('work.executionLimit'));
 const workBoard =
   screens.project && workSource
     ? new WorkBoardService({
         trust: repositoryTrust,
         project: selectedProjectBoard(screens.project),
         sessions: new FleetWorkSessions({ fleet: mcp.fleet, ...(demo ? { locate: simulatorWorkBoardLocate } : {}) }),
-        queue: EMPTY_WORK_QUEUE,
+        queue: workQueue,
+        limit: executionLimit,
         history: new SqliteWorkColumnHistory(sqlite.db),
         planRuns,
         executionRuns,
@@ -759,7 +767,9 @@ const api: LocalApi = await startLocalApi({
   workIssueOptions: { service: workIssueOptions },
   workPlan: { issues: workIssue, runs: planRuns, trust: repositoryTrust },
   // #531 without the board there is nothing to count the limit against: the route answers 503.
-  ...(workBoard ? { workRun: { issues: workIssue, runs: executionRuns, running: workBoard, trust: repositoryTrust } } : {}),
+  ...(workBoard ? { workRun: { issues: workIssue, runs: executionRuns, running: workBoard, trust: repositoryTrust, limit: executionLimit, queue: workQueue } } : {}),
+  // #477 without the board there is no column to refuse the fact columns against: the routes answer 503.
+  ...(workBoard ? { workQueue: { issues: workIssue, queue: workQueue, columns: workBoard, trust: repositoryTrust } } : {}),
   connection,
   // --no-github keeps its own off / no-github answers; otherwise 409 github-not-connected before any call.
   githubConnected: coreGithub.connected,

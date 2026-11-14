@@ -10,6 +10,8 @@
 import type { StaleCode } from './cache.ts';
 import type { ProjectBoard } from './project.ts';
 import type { RepositoryTrust } from './trusted-owners.ts';
+import type { QueueStop } from './work-queue.ts';
+import { DEFAULT_EXECUTION_LIMIT } from './work-execution.ts';
 import {
   levelOf,
   parseWorkKey,
@@ -302,6 +304,10 @@ export interface WorkBoardInput {
   sessions: readonly WorkSessionLink[];
   queue: ReadonlyMap<string, number>;
   queueAvailable: boolean;
+  /** #477 the concurrent-execution limit shown on Na fila; the installation's `work.executionLimit`. Default: `DEFAULT_EXECUTION_LIMIT`. */
+  queueLimit?: number;
+  /** #477 the entry whose pull failed, which stopped the queue. Default: not stopped. */
+  queueStopped?: QueueStop | null;
   since: ReadonlyMap<string, string>;
   filters: WorkBoardFilters;
   analyzed?: ReadonlyMap<string, AnalyzedWorkNode>;
@@ -412,7 +418,12 @@ export interface WorkBoardView {
   columns: WorkBoardColumnView[];
   blockedReasons: { id: WorkBlockedReason; label: string }[];
   doneWindowDays: number;
-  queue: { available: boolean };
+  /**
+   * #477 the one queue of the installation (the filters do not touch it): `running` is the cards in Em
+   * execução at the default level, booting runs included, the number the limit is counted against; `stopped`
+   * is the entry whose pull failed, with its reason.
+   */
+  queue: { available: boolean; running: number; limit: number; stopped: QueueStop | null };
   options: WorkBoardOptions;
   /** #466 nodes of the level before the filters. */
   total: number;
@@ -606,6 +617,11 @@ export function matchesWorkBoardFilters(a: AnalyzedWorkNode, f: WorkBoardFilters
 
 // ----------
 
+/** #477 the cards in Em execução at the default level: what the concurrent-execution limit is counted against. */
+export function runningCardCount(analyzed: ReadonlyMap<string, AnalyzedWorkNode>): number {
+  return [...analyzed.values()].filter((a) => a.node.inProject && a.level === DEFAULT_WORK_BOARD_FILTERS.level && a.column.column === 'running').length;
+}
+
 /** The whole board from plain inputs: the use case only loads them. */
 export function buildWorkBoard(input: WorkBoardInput): WorkBoardView {
   const { nodes, filters, now } = input;
@@ -636,7 +652,7 @@ export function buildWorkBoard(input: WorkBoardInput): WorkBoardView {
     }),
     blockedReasons: WORK_BLOCKED_REASONS.map(({ id, label }) => ({ id, label })),
     doneWindowDays: DONE_WINDOW_DAYS,
-    queue: { available: input.queueAvailable },
+    queue: { available: input.queueAvailable, running: runningCardCount(analyzed), limit: input.queueLimit ?? DEFAULT_EXECUTION_LIMIT, stopped: input.queueStopped ?? null },
     options: optionsOf(ofLevel, filters, statuses),
     total: ofLevel.length,
     matched: matched.length,
@@ -795,13 +811,17 @@ export interface WorkSessions {
   links(): Promise<WorkSessionLink[]>;
 }
 
-/** The execution queue (#477); until it exists, `EMPTY_WORK_QUEUE`. Its keys are compared in lower case. */
+/** The execution queue (#477), as the board reads it; the store with the writes is `WorkQueueStore` (work-queue.ts). Its keys are compared in lower case. */
 export interface WorkQueue {
   readonly available: boolean;
+  /** Issue key (lower case) → 1-based position. */
   positions(): Promise<ReadonlyMap<string, number>>;
+  /** The entry whose pull failed and so stopped the queue; `null` when the queue is not stopped. */
+  stopped(): Promise<QueueStop | null>;
 }
 
-export const EMPTY_WORK_QUEUE: WorkQueue = Object.freeze({ available: false, positions: async () => new Map<string, number>() });
+/** No queue: nothing is queued and nothing can be (the board of a core without the queue store). */
+export const EMPTY_WORK_QUEUE: WorkQueue = Object.freeze({ available: false, positions: async () => new Map<string, number>(), stopped: async () => null });
 
 /**
  * Keeps, per issue key, the current column and since when: the same column keeps its time, a different

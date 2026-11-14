@@ -25,8 +25,8 @@ export type ExecutionRunState = 'booting' | 'linked' | 'expired';
 /** How long a run waits for its session to show up before it expires. */
 export const EXECUTION_SESSION_WINDOW_MS = 10 * 60_000;
 
-/** The concurrent-execution limit: a fixed default of the core (#477 makes it a preference). */
-export const EXECUTION_LIMIT = 2;
+/** The concurrent-execution limit when the installation chose none: the setting `work.executionLimit` (#477) replaces it. */
+export const DEFAULT_EXECUTION_LIMIT = 2;
 
 export interface ExecutionRun {
   /** #531 the issue key, lower case. */
@@ -52,8 +52,11 @@ export interface RunningCards {
   runningCount(): Promise<number>;
 }
 
-/** At or over the limit and not forced. */
-export const isOverExecutionLimit = (running: number, force: boolean): boolean => !force && running >= EXECUTION_LIMIT;
+/** The installation's limit: the stored `work.executionLimit`, else `DEFAULT_EXECUTION_LIMIT`. */
+export const executionLimitOf = (stored: number | null): number => stored ?? DEFAULT_EXECUTION_LIMIT;
+
+/** At or over `limit` and not forced. A limit lowered under the running count stops nothing: it only keeps the next from starting. */
+export const isOverExecutionLimit = (running: number, force: boolean, limit: number): boolean => !force && running >= limit;
 
 // ----------
 

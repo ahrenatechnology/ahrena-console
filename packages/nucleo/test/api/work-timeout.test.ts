@@ -96,7 +96,7 @@ async function boot(kind: 'board' | 'issue-with-hanging-project'): Promise<Boot>
     const service = new WorkBoardService({
       project: selectedProjectBoard({ kanban: () => kanban }),
       sessions: { links: async () => [] },
-      queue: { available: true, positions: async () => new Map() },
+      queue: { available: true, positions: async () => new Map(), stopped: async () => null },
       history: new SqliteWorkColumnHistory(storage.db),
       trust: trustOf(PROJECT.owner),
       now,
