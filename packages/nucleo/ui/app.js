@@ -7,6 +7,7 @@ import { header, el, icon } from './dom.js';
 import { error, empty } from './states.js';
 import { findScreen, litItem } from './screens.js';
 import { createNav } from './nav.js';
+import { internalRoute } from './internal-link.js';
 import { createGithubFooter, connectionChanged } from './github-connect.js';
 import { createAppUpdate, appUpdateChanged, hasUpdate } from './app-update.js';
 
@@ -126,7 +127,7 @@ let screenFailed = false;
 // `state` goes into the history entry: a screen can tell a navigation from this page apart from a link
 // another site opened (Conexões starts the device flow only on the C42 button's state).
 function navigate(route, state = null) {
-  if (state || route !== location.pathname + location.search) history.pushState(state, '', route);
+  if (state || route !== location.pathname + location.search + location.hash) history.pushState(state, '', route);
   open();
 }
 
@@ -183,10 +184,10 @@ async function open() {
 document.addEventListener('click', (ev) => {
   const a = ev.target instanceof Element ? ev.target.closest('a[href]') : null;
   if (!a || ev.defaultPrevented || ev.button !== 0 || ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.altKey) return;
-  const url = new URL(a.href, location.href);
-  if (url.origin !== location.origin || !(url.pathname === '/ui' || url.pathname.startsWith('/ui/'))) return;
+  const route = internalRoute(a.href, location.href);
+  if (route === null) return;
   ev.preventDefault();
-  navigate(url.pathname + url.search);
+  navigate(route);
 });
 addEventListener('popstate', open);
 
