@@ -17,13 +17,15 @@
  * warning per owner: the stored cards stay with `stale` (ADR-0001), and with nothing stored the read is `NoDataError` (the
  * route's 502).
  *
- * The organizations are the connection's granted ones when its `/user/orgs` check finished below its cap (`MAX_CHECKED_ORGS`); when it has not
- * (the `gh` source, a console connection before the check ends, a first run that failed) or it hit the cap, they are also the organizations of the
- * Projects list, so the chosen Project's organization never drops off the board nor out of the default trusted owners. The chosen Project
- * (`selected`) is read even when no list holds its owner, unless that owner is already an entry (a warning).
+ * The organizations are the connection's granted ones when its `/user/orgs` check finished below its cap (`MAX_CHECKED_ORGS` granted
+ * organizations, blocked ones counted); when it has not (the `gh` source, a console connection before the check ends, a first run that
+ * failed) or it hit the cap, they are also the organizations of the Projects list that are neither blocked nor pending, so the chosen
+ * Project's organization never drops off the board nor out of the default trusted owners. The chosen Project (`selected`) is read even
+ * when no list holds its owner, unless that owner already has an entry: a warning (including the person's own blocked account) or a read.
  *
  * Closed Projects and Projects with no Status field are skipped. The owners the board read (`readOwners`) are the default of
- * the trusted owners (github/trusted-owners.ts): the owners with a Project read, and `warnedOwners` the ones with a warning, which are never trusted by default.
+ * the trusted owners (github/trusted-owners.ts): the owners with a Project read, and `warnedOwners` the ones with a warning, which are never trusted by default
+ * (an owner is in one list or the other, never both).
  */
 
 import { githubFailureOf, NoDataError, type GithubCache, type GithubFailure, type StaleCode } from './cache.ts';
@@ -166,16 +168,18 @@ export class WorkBoardProjects {
       this.log(`work board: ${o.login} refused its Projects: ${o.blocked.message}`);
       addEntry(entries, seen, warning(o.login, OWNER_REASON[o.blocked.reason], o.blocked.reason));
     }
+    // #609 The cap counts every granted organization, blocked ones included: the check stopped at it whatever the Projects list says.
+    const atCap = connection.filter((o) => o.access === 'granted').length >= MAX_CHECKED_ORGS;
     const granted = connection.flatMap((o) => (o.access === 'granted' && !seen.has(o.login.toLowerCase()) ? [o.login] : []));
     // #609 Without a finished `/user/orgs` check (the gh source, before it ends, or a failed first run) the organizations come from the Projects list.
     // #609 A check that hit the cap (`MAX_CHECKED_ORGS` granted) may have left organizations out, so it does not close the list either.
-    const listedOrgs = checked && granted.length < MAX_CHECKED_ORGS ? [] : listed.owners.flatMap((o) => (o.ownerType === 'organization' && !o.blocked && !seen.has(o.login.toLowerCase()) && !granted.some((g) => g.toLowerCase() === o.login.toLowerCase()) ? [o.login] : []));
+    const listedOrgs = checked && !atCap ? [] : listed.owners.flatMap((o) => (o.ownerType === 'organization' && !o.blocked && !seen.has(o.login.toLowerCase()) && !granted.some((g) => g.toLowerCase() === o.login.toLowerCase()) ? [o.login] : []));
     const toRead = [...granted, ...listedOrgs].map((login) => ({ login, own: false }));
     const account = listed.owners.find((o) => o.ownerType === 'user') ?? null;
     if (account && account.blocked === null) toRead.push({ login: account.login, own: true });
     else if (account?.blocked) {
       this.log(`work board: ${account.login} refused its Projects: ${account.blocked.message}`);
-      entries.push({ ...warning(account.login, OWNER_REASON[account.blocked.reason], account.blocked.reason), own: true });
+      addEntry(entries, seen, { ...warning(account.login, OWNER_REASON[account.blocked.reason], account.blocked.reason), own: true });
     }
     return { entries, seen, toRead };
   }

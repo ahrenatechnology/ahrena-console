@@ -203,6 +203,39 @@ describe('#609/AC-4 the board reads the owners the default trust needs', () => {
     assert.equal(read.organizations.find((o) => o.login === 'refused-co')?.state, 'saml');
   });
 
+  test('#609/AC-1 a blocked granted organization still counts toward the cap: the other listed organizations are read', async () => {
+    const granted = Array.from({ length: MAX_CHECKED_ORGS }, (_, i) => ({ login: `org-${i}`, access: 'granted' as const }));
+    const base = list();
+    const blockedGranted: ProjectOptionsList = { ...base, owners: [...base.owners, { login: 'org-0', ownerType: 'organization', projects: 0, blocked: { reason: 'saml', message: 'raw' } }] };
+    const reader = new WorkBoardProjects({
+      options: { list: async () => blockedGranted, snapshot: async () => null },
+      orgs: async () => ({ orgs: granted, checked: true }),
+      project: () => ({ board: async () => board() }),
+      now: () => NOW,
+    });
+    const read = await reader.read();
+    assert.ok(read.boards.some((b) => b.organization === 'acme-labs'), 'the listed organization past the cap was read');
+    assert.equal(read.organizations.find((o) => o.login === 'org-0')?.state, 'saml');
+  });
+
+  test('#609/AC-4 a blocked own account that owns the chosen Project has one entry and is not trusted', async () => {
+    const blockedAccount = { login: 'maria', ownerType: 'user' as const, projects: 0, blocked: { reason: 'forbidden' as const, message: 'raw' } };
+    let reads = 0;
+    const reader = new WorkBoardProjects({
+      options: { list: async () => ({ ...list(), owners: [...list().owners, blockedAccount] }), snapshot: async () => null },
+      orgs: async () => [{ login: 'acme-labs', access: 'granted' }],
+      project: () => ({ board: async () => { reads += 1; return board({ owner: 'maria' }); } }),
+      selected: () => ({ owner: 'maria', number: 7 }),
+      now: () => NOW,
+    });
+    const read = await reader.read();
+    assert.deepEqual(read.organizations.filter((o) => o.login === 'maria').map((o) => [o.state, o.own]), [['failed', true]]);
+    assert.equal(reads, 1, 'only acme-labs was read');
+    assert.deepEqual(reader.readOwners(), ['acme-labs']);
+    assert.deepEqual(reader.warnedOwners(), ['maria']);
+    assert.deepEqual(trustedOwnersOf({ stored: null, selectedOwner: 'maria', readOwners: reader.readOwners(), warnedOwners: reader.warnedOwners() }), ['acme-labs']);
+  });
+
   test('#609/AC-4 below the cap a finished check is still the list', async () => {
     const reader = new WorkBoardProjects({
       options: { list: async () => list(), snapshot: async () => null },

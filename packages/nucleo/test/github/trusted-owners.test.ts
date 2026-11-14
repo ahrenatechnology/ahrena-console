@@ -65,6 +65,10 @@ describe('#594 the trusted owners', () => {
     assert.deepEqual(trustedOwnersOf({ stored: null, selectedOwner: 'locked-co', readOwners: [], warnedOwners: ['locked-co'] }), []);
   });
 
+  test('#609/AC-4 a warned owner is never trusted, even when it is also among the owners read', () => {
+    assert.deepEqual(trustedOwnersOf({ stored: null, selectedOwner: 'maria', readOwners: ['acme-labs', 'Maria'], warnedOwners: ['maria'] }), ['acme-labs']);
+  });
+
   test('#609/AC-4 a stored list wins over the chosen Project\'s owner too', () => {
     assert.deepEqual(trustedOwnersOf({ stored: ['beta'], selectedOwner: 'acme-labs', readOwners: ['acme-labs'] }), ['beta']);
   });

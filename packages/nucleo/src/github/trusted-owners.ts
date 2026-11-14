@@ -21,7 +21,7 @@ export function trustedOwnersOf({ stored, selectedOwner, readOwners = [], warned
   if (stored) return stored.map((o) => o.toLowerCase());
   const warned = new Set(warnedOwners.map((o) => o.toLowerCase()));
   const chosen = selectedOwner && !warned.has(selectedOwner.toLowerCase()) ? [selectedOwner] : [];
-  return [...new Set([...readOwners, ...chosen].map((o) => o.toLowerCase()))];
+  return [...new Set([...readOwners, ...chosen].map((o) => o.toLowerCase()))].filter((o) => !warned.has(o));
 }
 
 /** Whether `repo` (`owner/name`) belongs to one of `owners`; a value that is not `owner/name` never does. */
