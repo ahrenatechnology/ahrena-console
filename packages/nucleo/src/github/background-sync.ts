@@ -129,6 +129,16 @@ export class GithubBackgroundSync {
     if (s.running) s.requested = true;
   }
 
+  /**
+   * #496 epoch ms of the next run of a step: `null` when the sync is not active (before `start`, after
+   * `stop`) or the step is unknown. A step due already answers now.
+   */
+  nextRunAt(name: string): number | null {
+    const s = this.states.find((x) => x.step.name === name);
+    if (!s || this.timer === null) return null;
+    return s.nextAt === 0 ? this.now() : s.nextAt;
+  }
+
   status(): SyncStatus {
     const pause = this.pauseLeftMs();
     return {

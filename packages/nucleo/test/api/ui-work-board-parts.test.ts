@@ -534,6 +534,30 @@ describe('#465/AC-4 GitHub down (465-4, ADR-0001)', () => {
     assert.equal(buttonNamed(busy, /Tentar agora/)!.getAttribute('aria-busy'), 'true');
   });
 
+  test('#496/AC-2 the stale band says when it tries again, between the board time and the live note', () => {
+    const band = staleBand({ fetchedAt: NOW - 31 * MIN, now: NOW, retryAt: NOW + 2 * MIN });
+    assert.match(texto(band), /^GitHub indisponível\. Mostrando o quadro de 22:41 \(há 31 min\)\. Tentamos de novo em 2 min\. As sessões e a fila continuam ao vivo\./);
+    const withReason = texto(staleBand({ fetchedAt: NOW - 31 * MIN, now: NOW, reason: 'network', retryAt: NOW + 2 * MIN }));
+    assert.match(withReason, /Tentamos de novo em 2 min\. As sessões e a fila continuam ao vivo\. Motivo: falha de rede/);
+  });
+
+  test('#496/AC-2 without a retry time the band has no "Tentamos de novo" line', () => {
+    for (const retryAt of [null, undefined, Number.NaN, Number.POSITIVE_INFINITY, '5' as unknown as number]) {
+      assert.doesNotMatch(texto(staleBand({ fetchedAt: NOW - MIN, now: NOW, retryAt })), /Tentamos de novo/);
+    }
+  });
+
+  test('#496/AC-2 overdue or under one minute shows 1 min, never zero or negative', () => {
+    for (const retryAt of [NOW + 10_000, NOW, NOW - 5 * MIN]) {
+      assert.match(texto(staleBand({ fetchedAt: NOW - MIN, now: NOW, retryAt })), /Tentamos de novo em 1 min\./);
+    }
+  });
+
+  test('#496/AC-2 the wait rounds to whole minutes', () => {
+    assert.match(texto(staleBand({ fetchedAt: NOW - MIN, now: NOW, retryAt: NOW + 2 * MIN + 20_000 })), /em 2 min\./);
+    assert.match(texto(staleBand({ fetchedAt: NOW - MIN, now: NOW, retryAt: NOW + 2 * MIN + 40_000 })), /em 3 min\./);
+  });
+
   test('#465/AC-4 the stale board fades what comes from GitHub (Status, PR, CI, review); sessions and queue stay live', () => {
     const board = boardColumns({ columns: PAYLOAD_COLUMNS, level: 'item', primaryRepo: REPO, now: NOW, queueAvailable: true, doneWindowDays: 14, stale: true });
     assert.ok(board.classList.contains('wb-board-stale'));
