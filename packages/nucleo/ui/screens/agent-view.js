@@ -349,7 +349,9 @@ export async function mount(area, ctx) {
         (data) => live && view?.setChild(childId, data),
         () => {
           children.delete(childId); // read again the next time it opens (issue 539)
-          if (live) view?.setChildError(childId, read); // the retry repeats only this child's read (issue 539)
+          // The retry repeats only this child's read and puts the child back in the read-once set, so a reopen
+          // while it runs, or after it succeeds, does not read it again (issue 539).
+          if (live) view?.setChildError(childId, () => { children.add(childId); read(); });
         },
       );
     read();
