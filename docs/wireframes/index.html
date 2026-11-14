@@ -1160,6 +1160,26 @@ body.captura[data-width="1100"] .width-col[data-w="1440"], body.captura[data-wid
 .wb-top { display: flex; gap: 6px; align-items: center; font-size: 11px; min-width: 0; }
 .wb-top b { font-weight: 600; white-space: nowrap; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .wb-repo { font-size: 10.5px; color: var(--muted); font-family: var(--font-mono); }
+/* all organizations on the board: header count, origin line on the card, eight filters, org warnings (issue 598) */
+.wb-count { color: var(--text); font-weight: 600; }
+.wb-warn-count { display: inline-flex; align-items: center; gap: 4px; color: var(--status-waiting-text); font-weight: 600; }
+.wb-origin { display: flex; align-items: center; gap: 5px; font-size: 10.5px; color: var(--muted); min-width: 0; white-space: nowrap; }
+.wb-origin .mono { color: var(--text); font-size: 10.5px; }
+.wb-origin .trunc { min-width: 0; }
+.wb-fields.wb-eight { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.wb-field.wb-new small::after { content: ' · novo'; color: var(--accent-text); }
+.wb-pop .wb-group { padding: 7px 8px 3px; font-size: 10.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.wb-pop .wb-group + span { margin-top: 0; }
+.wb-pops > div { min-width: 0; }
+.cc.wb-part { grid-template-columns: minmax(0, 1fr); }
+.wb-warns { display: flex; flex-direction: column; gap: 8px; }
+.wb-warns .faixa { align-items: flex-start; }
+.wb-warns .faixa .ic { margin-top: 1px; }
+.wb-warns .faixa .tm-rc-actions { align-self: center; }
+.wb-warns .faixa .why { color: var(--muted); font-size: 11.5px; display: block; margin-top: 2px; }
+.wb-warns .faixa code { font-family: var(--font-mono); font-size: 11px; color: var(--text); }
+.wb-warns-more { font-size: 12px; color: var(--accent-text); font-weight: 600; display: inline-flex; align-items: center; gap: 4px; }
+.wb-reset-note { display: flex; gap: 6px; align-items: center; font-size: 11.5px; color: var(--status-waiting-text); }
 .wb-age { margin-left: auto; color: var(--muted); white-space: nowrap; font-size: 10.5px; flex: none; }
 .wb-title { font-size: 12.5px; font-weight: 600; line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .wb-chain { font-family: var(--font-mono); font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -5434,7 +5454,7 @@ const TELAS = [
   { id: 'console-terminals-remote', cod: 'C99', nome: 'Sessões de terminal · Workstation lida do Mac, e o alerta', sub: 'Issue #350. A Workstation lida do Mac pelo túnel: só leitura por padrão, com Copiar comando no lugar das ações; ligada na própria Workstation, o Mac repassa só os ids. Embaixo, o alerta terminal-stuck: a linha em “O que pede atenção” (C96) e a notificação da bandeja.', html: () => `<div class="tl-flow"><div class="tl-step"><div class="rotulo">1 · Só leitura, o padrão · 1100 px</div>${tsRemote(false)}</div><div class="tl-step"><div class="rotulo">2 · Ações ligadas lá · 1100 px</div>${tsRemote(true)}</div>${tsAlert()}</div>`,
     n: N(['A leitura remota de Ferramentas (C75): o mesmo desligado por padrão e o mesmo flag.'], ['Pelo túnel o pedido do Mac parece local na Workstation; por isso a regra da decisão 0014 §5: recusar, a não ser que o config de lá aceite ações remotas. A variável AHRENA_CONSOLE_ACCEPT_REMOTE_ACTIONS é a mesma da liberação de porta (#286, decisão 0016): ligada lá, vale para as duas; o config.json é só dos terminais.', 'Copiar comando mostra o sinal escolhido (kill -INT -- -41233): é o que a pessoa roda num terminal de lá, que não é o preso.', 'O alerta terminal-stuck sai uma vez por sessão presa e volta a sair se ela soltar e prender de novo; vai para a bandeja com o mesmo texto da linha. Ele não sai para um terminal que a pessoa interrompeu.']) },
   // ---------- work board (issues 465, 466, 467, 468, 477 and 478, epic 464) ----------
-  { cap: 'work-board', titulo: 'Quadro do trabalho', desc: 'Épico #464: #465 (as colunas pelo ciclo do agente), #466 (níveis e filtros), #467 (abrir a issue e Planejar), #468 (Executar plano), #477 (a fila de execução) e #478 (editar a issue e o plano). Um quadro por projeto em que as colunas são iguais em todo projeto e vêm de sinais reais: a sessão de execução ligada à issue, o PR que a fecha com CI e review, o estado da issue, o plano e a fila do Console. Só a fila é ordem da pessoa: pôr, tirar e reordenar. O Status do GitHub Project vira dado e filtro. Fica ao lado do Kanban do projeto (C11), que continua. Na barra lateral, “Quadro do trabalho” entra em Entrega, só nestas telas. Em 1100 e 1440.' },
+  { cap: 'work-board', titulo: 'Quadro do trabalho', desc: 'Épico #464: #598 (os Projects de todas as organizações concedidas, 598-1 a 598-4), #465 (as colunas pelo ciclo do agente), #466 (níveis e filtros), #467 (abrir a issue e Planejar), #468 (Executar plano), #477 (a fila de execução) e #478 (editar a issue e o plano). Um quadro por projeto em que as colunas são iguais em todo projeto e vêm de sinais reais: a sessão de execução ligada à issue, o PR que a fecha com CI e review, o estado da issue, o plano e a fila do Console. Só a fila é ordem da pessoa: pôr, tirar e reordenar. O Status do GitHub Project vira dado e filtro. Fica ao lado do Kanban do projeto (C11), que continua. Na barra lateral, “Quadro do trabalho” entra em Entrega, só nestas telas. Em 1100 e 1440.' },
   { id: 'work-board', cod: '465-1', nome: 'Quadro do trabalho · as seis colunas', sub: 'Issue #465. Planejamento, Na fila, Em execução, Em review, Bloqueado e Concluído, nesta ordem, cada uma com o critério da tabela do épico embaixo do nome. Na fila mostra a posição de cada card (1º, 2º) e, no topo, o limite de execuções (“2 de 2 rodando”). Cada card traz as ações do seu estado (465-2, 465-6). No cabeçalho, o projeto, a hora da última leitura do GitHub e Atualizar. Em 1440 as seis lado a lado; em 1100, duas linhas de três, na ordem de leitura, sem rolar na horizontal.',
     html: () => wbBoth(wbMainScreen),
     n: N(['Nada: o CCAM não lê GitHub. O molde é o do Kanban de sessões (C9) e do Kanban do projeto (C11): colunas com ponto, título em caixa alta e contador.'], ['<b>Critério de Planejamento (aprovado):</b> “Aberta, sem sessão de execução e fora da fila”, como a tabela do épico. Um item com plano e sem sessão fica aqui, com “plano · 5 passos” no card (a #506), até Executar plano ou Pôr na fila.', 'A coluna vem dos sinais; o arrasto só vale entre Planejamento e Na fila e dentro de Na fila, e muda a fila do Console, no banco do núcleo, não o GitHub (#477). O C11 continua o único quadro em que arrastar muda o GitHub.', 'O limite fica no topo de Na fila porque é ela que espera a vaga: “2 de 2 rodando” conta os cards em Em execução (a #505, com duas sessões, conta 1). Um card que vai para Em review ou Bloqueado libera a vaga.', 'O Status do Project aparece no card como dado (“Status: Todo”) e pode discordar da coluna: a #505 está “Todo” no Project e já tem duas sessões.', 'Duas sessões na mesma issue: o card fica na coluna da mais adiantada e mostra “2 sessões”. A sessão só de planejamento (“planejando…”, a #503) não conta: o card fica em Planejamento.', 'Bloqueado em ordem de motivo, depois do mais antigo: precisa de você, mudança pedida depois de 3 rodadas, CI falhou.', 'Concluído mostra os fechados nos últimos 14 dias, os dois mais recentes à vista e “ver todas” para o resto.', 'Em 1100 seis colunas dariam 128 px por card; dobrar em duas linhas de três segue o Dev Console (C27), que também não rola na horizontal.']) },
@@ -5480,6 +5500,18 @@ const TELAS = [
   { id: 'work-board-edit-refused', cod: '478-3', nome: 'Quadro do trabalho · o GitHub recusou a edição', sub: 'Issue #478, critério 5. O GitHub respondeu 403: a faixa vermelha diz o motivo em palavras, o texto continua no editor como estava, e há Tentar de novo e Copiar texto. Em 1100 e 1440.',
     html: () => wbEditHtml('refused'),
     n: N(['Nada.'], ['O motivo vem da resposta do GitHub em pt-BR: sem permissão (403), não achou (404), recusou o valor (422, com o campo), ou o GitHub fora (com a hora da próxima tentativa, como no 465-4).', 'Nada se perde: o editor não fecha e o texto não volta ao que estava.']) },
+  { id: 'work-board-orgs-header', cod: '598-1', nome: 'Quadro do trabalho · o cabeçalho de todas as organizações', sub: 'Issue #598, critério 1. O cabeçalho deixa de nomear um Project e conta: “3 organizações · 5 Projects”, com os nomes e, quando há, “N com aviso”. Atualizar e a hora da leitura ficam como no 465-1. Cada card ganha uma linha com a organização e o Project de origem. Embaixo, o cabeçalho com avisos e as duas formas de dizer uma organização e um Project só (a escolha é uma pergunta de produto). Em 1100 e 1440.',
+    html: () => wbOrgsHeaderHtml(),
+    n: N(['O cabeçalho, a troca de nível, as seis colunas e os cards do 465-1; Atualizar e a hora da leitura (465-4 quando o GitHub cai).'], ['Pergunta de produto 1: com uma organização e um Project só, o cabeçalho <b>nomeia</b> (“acme-labs · GitHub Project “Plataforma””, como hoje) e os filtros novos e a linha de origem somem, ou <b>conta</b> (“1 organização · 1 Project”) e tudo fica? Recomendado: nomear; não há o que escolher.', 'Pergunta de produto 2: a conta da própria pessoa (<span class="mono">mira-dev</span>) <b>conta como organização</b> no cabeçalho? Desenhado: sim, “3 organizações” inclui a conta, e ela aparece nos filtros como “mira-dev (você)”. Alternativa: “2 organizações e a sua conta”.', 'A linha de origem do card é organização · Project, em mono e discreta; o repositório continua só no card de outro repositório. Com vários Projects, “outro repositório” perde a referência do Project único: pergunta de produto 3, o repositório passa a aparecer sempre?', 'O número que o cabeçalho conta é só o que foi lido: uma organização com aviso (598-3) não entra na conta, e a marca “N com aviso” leva até ela.']) },
+  { id: 'work-board-org-filters', cod: '598-2', nome: 'Quadro do trabalho · os filtros Organização e Project', sub: 'Issue #598, critério 2. Organização e Project entram antes dos seis (“Todas” e “Todos” por padrão), em duas linhas de quatro. Valem juntos por E com os outros, cada filtro ativo vira um chip, “Limpar filtros” tira todos e o link do recorte começa por org e project. Sobram as histórias do Project Plataforma de acme-labs. Ao lado do 1440, a Organização aberta e o Project aberto de duas formas. Embaixo, o que acontece ao trocar a organização com um Project já escolhido. Em 1100 e 1440.',
+    html: () => wbOrgFiltersHtml(),
+    n: N(['Os seis filtros, os chips com ×, Limpar filtros, o link com Copiar link e o filtro sem resultado do 466-2 e do 466-3.'], ['Os parâmetros novos são <span class="mono">org</span> e <span class="mono">project</span>, em inglês (decisão 0009); <span class="mono">project</span> leva dono e número (<span class="mono">acme-labs/3</span>) porque o número sozinho se repete entre organizações. O contrato confirma o formato.', 'Pergunta de produto 4: as opções do Project <b>dependem da organização escolhida</b>? Desenhado que sim: com acme-labs, só os dois Projects dela; com Todas, os cinco agrupados por organização (o nome “Roadmap” pode se repetir). Trocar a organização com um Project de outra devolve o Project a Todos e diz por quê. Alternativa: lista plana de Projects, sem depender.', 'A lista da Organização traz só as lidas. A que tem aviso (598-3) não é opção: não há card dela para filtrar.', 'A contagem de cada opção é de cards, antes dos outros filtros, como o Tipo aberto do 466-2.', 'O filtro sem resultado (466-3) vale igual: a sugestão pode tirar a organização ou o Project, o último posto.']) },
+  { id: 'work-board-org-warning', cod: '598-3', nome: 'Quadro do trabalho · a organização com aviso', sub: 'Issue #598, critério 3, lição da #340. Uma organização que restringe o app (orgs.pending) ou cuja leitura falhou vira uma faixa sob o cabeçalho com o motivo e o que fazer, e as outras seguem no quadro. Restringe: amarela, com Aprovar (dono) e Pedir acesso, os links que a conexão já monta (approvalUrl e requestUrl). Leitura falhou: vermelha, com Tentar de novo. Vários avisos empilham, um por organização. Em 1100 e 1440.',
+    html: () => wbOrgWarningHtml(),
+    n: N(['A faixa do 465-4 (amarela e vermelha, ícone, texto e botão) e as palavras do aviso de dono bloqueado da escolha de Project (issue 340): “restringe apps OAuth”, “exige login pelo SSO”.'], ['Um aviso por organização, não um para todas: cada uma diz o seu motivo e o seu botão. A ordem é a da conexão (restringe, SSO, falhou).', 'Pergunta de produto 5: com mais de três avisos, mostrar três e “Mais N” (desenhado) ou todos sempre.', 'Pergunta de produto 6: uma organização que já foi lida e falhou agora mantém o último dado (decisão 0001), com o card desbotado e a faixa dizendo de quando é, ou some do quadro até a leitura voltar? Recomendado: mantém, como o quadro inteiro do 465-4. Sem dado guardado, só a faixa.', 'Quando todas as organizações falham porque o GitHub está fora, vale uma faixa só, a do 465-4, e não N avisos iguais.', 'Aprovar (dono) e Pedir acesso abrem o GitHub fora do Console; depois, Atualizar lê de novo.']) },
+  { id: 'work-board-orgs-states', cod: '598-4', nome: 'Quadro do trabalho · carregando, vazio e todas com aviso', sub: 'Issue #598, critérios 1 e 3. Carregando: contadores em “…” e filtros desligados, como no 465-5. Sem issue nenhuma nos Projects lidos, e sem Project nenhum: o vazio diz o que o quadro mostraria e leva ao GitHub ou à conexão; “Trocar de Project” sai do quadro, porque o filtro Project o substitui. Todas as organizações com aviso: cada aviso diz o que fazer e “Tentar agora” lê de novo. Em 1100 e 1440.',
+    html: () => wbOrgsStatesHtml(),
+    n: N(['O carregando do 465-5, o vazio do 465-3 e o erro sem nada guardado do 465-4.'], ['Pergunta de produto 7: “Trocar de Project” (hoje só no vazio, work-board-parts.js) <b>sai do quadro</b>. Com os Projects de todas as organizações, não há um Project para trocar: o filtro Project escolhe, e “Conceder acesso a outra organização” leva à conexão do GitHub. A troca continua no Kanban do projeto (C11), que segue por Project.', 'O vazio por filtro sem resultado continua sendo o 466-3, e o vazio do quadro todo é este: dois estados, duas mensagens.', 'Carregando: a primeira leitura espera todas as organizações. Alternativa para decidir: mostrar os cards de quem já respondeu e uma linha “lendo northwind…”, para uma organização lenta não segurar o quadro.', 'Todas com aviso é diferente de “GitHub fora” (465-4): aqui o GitHub respondeu, cada organização tem o seu motivo.']) },
   { cap: 'agent-view', titulo: 'Vista do agente', desc: 'Issue 521, da issue 518 (aprovado por Fernando em 14/11/2026, “Aprovo como está”, com a resposta desenhada a cada pergunta; dados na issue 529, G6 na issue 530): cada linha de subagente da aba Agentes vira link e leva a uma vista do agente por dentro: o brief que recebeu, a sequência do que fez (ferramentas e subagentes filhos, aninhados como na aba), duração, custo, estado e o resultado final. Primeira camada da construção de fora para dentro: só estrutura, estados e fluxo; nenhum componente antes da aprovação. Onde a vista mora (521-1), a aba Agentes com as linhas links (521-2), o agente concluído (521-3), o aninhamento fundo e as dobras (521-4), o agente rodando (521-5), carregando (521-6), sem brief e sem custo (521-7), os erros (521-8), o nó do laço (521-9) e o que a vista pede ao núcleo e ele ainda não serve (521-10). Em 1100 e, onde pesa, 1440. Dados sintéticos; o que depende de dado novo traz a marca tracejada “dado novo · G”.' },
   { id: 'agent-view-flow', cod: '521-1', nome: 'Vista do agente · onde mora e o fluxo', sub: 'Issue 521. A recomendação: uma tela com rota própria, <code>/ui/sessions/&lt;id&gt;/agents/&lt;agent&gt;</code>, em vez de um painel dentro da aba Agentes. O fluxo: linha da aba Agentes → vista do agente → vista do filho → voltar, um passo de cada vez, e o caminho que vem do laço da aba Workflow (521-9).', html: () => avFlowHtml(),
     n: avNotes(['A aba Agentes e a Conversa são abas da mesma tela e trocam por <code>history.replaceState</code>: nenhuma cria entrada no histórico (<code>session-detail.js</code>).', 'O <code>?agent=&lt;id&gt;</code> da Conversa (issue 332) e do nó do laço continua como está.', 'Rotas com parâmetros e destaque da barra lateral já existem (<code>screens.js</code>: <code>/ui/repos/:owner/:repo</code> destaca Repositórios).'], ['<b>Onde a vista mora.</b> Recomendo a <b>rota própria</b>: o voltar funciona sem tocar nas abas, o endereço se copia, e a tela serve às três entradas (aba Agentes, filho na sequência, nó do laço).', '<b>O id na rota.</b> O id do agente tem “:” (<code>&lt;sessão&gt;:&lt;agente&gt;</code>); recomendo só a parte depois da sessão (o id do transcript), que é curta e sem “:”.', '<b>Voltar devolve o foco</b> à linha de onde se saiu. Recomendo, porque quem navega por teclado perde o lugar na lista, com os seis agentes de uma árvore funda.']) },
@@ -6133,8 +6165,8 @@ const cuRetryScreen = (w, kind) => kind === 'refused'
 const cuRetryHtml = () => ['refused', 'rolledBack'].map(k => `<div class="rotulo" style="margin:10px 0 4px">${{ refused: 'A conferência recusou (saída 30)', rolledBack: 'A troca falhou e voltou (saída 40)' }[k]}</div><div class="fila">${[1100, 1440].map(w => widthCol(w, `${w} px`, cvFrame(w, 'ok', cuRetryScreen(w, k)))).join('')}</div>`).join('')
 
 // =====================================================================
-// Work board (issues 465, 466, 467, 468, 477 and 478, epic 464): 465-1 to 465-6, 466-1 to 466-3,
-// 467-1, 477-1, 477-2 and 478-1 to 478-3.
+// Work board (issues 465, 466, 467, 468, 477, 478 and 598, epic 464): 465-1 to 465-6, 466-1 to 466-3,
+// 467-1, 477-1, 477-2, 478-1 to 478-3 and 598-1 to 598-4 (every organization, further down).
 // The columns are the agent's cycle, the same in every project, computed from the execution session linked
 // to the issue, the PR that closes it with CI and review, the issue state, the plan and the Console's
 // execution queue. Only the queue is the person's order: a card with a plan is dragged Planejamento <-> Na fila
@@ -6231,6 +6263,7 @@ function wbCard(c, o = {}) {
   return `<div class="cartao wb-card${tone}${o.sel ? ' wb-sel' : ''}${o.cls ?? ''}">
     <div class="wb-top">${c.q ? `${m(14)}<span class="wb-pos" title="Posição na fila">${c.q}º</span>` : ''}${m(1)}<b style="color:${tc}">${tl}</b>${m(2)}<span class="c-muted mono">#${c.n}</span>${c.repo ? `${m(12)}<span class="wb-repo trunc">${c.repo}</span>` : ''}${draggable ? `<span class="wb-grip" title="Arrastar">${m(15)}${ic('grip-vertical')}</span>` : ''}</div>
     <div class="wb-title">${m(4)}${c.title}</div>
+    ${o.origin && WB_ORIGIN[c.n] ? `<div class="wb-origin" title="Organização e Project de origem">${ic('building-2')}<span class="mono">${WB_ORIGIN[c.n][0]}</span><span>·</span>${ic('kanban')}<span class="trunc">${WB_ORIGIN[c.n][1]}</span></div>` : ''}
     ${c.p ? m(5) ? `<div style="display:flex;align-items:center;gap:2px">${m(5)}${wbChain(c, o.chain)}</div>` : wbChain(c, o.chain) : ''}
     ${why ? `<div class="wb-reason${why[1]}${c.reason[0] === 'needs' ? '' : ' wb-gh'}">${m(11)}${ic(why[0])}<span>${c.reason[1]}</span></div>` : ''}
     ${c.note ? `<div class="wb-note-line">${m(11)}${ic(c.note[0])}<span>${c.note[1]}</span></div>` : ''}
@@ -6261,14 +6294,16 @@ const WB_READ = `<span class="wb-read">${ic('github')}lido às 23:12 · há 40 s
 const wbHead = (o = {}) => `<div class="cc-cab"><div class="ico">${ic('columns-3')}</div><div style="min-width:0"><h4>Quadro do trabalho</h4><div class="sub"><span class="mono">ahrenatechnology/ahrena-console</span> · GitHub Project “Ahrena Console” · a coluna vem dos sinais; só a fila é sua</div></div><div class="acoes">${o.read ?? WB_READ}${o.refresh ?? atualizar}</div></div>`
 const WB_LEVELS = [['initiative', 'Iniciativa'], ['epic', 'Épico/Milestone'], ['item', 'Item'], ['plan', 'Plano de execução']]
 const wbLevels = (on, crumb = '') => `<div class="wb-bar"><span class="filter-label">Nível</span><div class="seg">${WB_LEVELS.map(([k, l]) => `<span${k === on ? ' class="on"' : ''}>${l}</span>`).join('')}</div>${on === 'item' ? '<span class="c-muted wb-note">história, tarefa técnica, spike e bug</span>' : ''}${crumb ? `<div class="wb-crumb">${crumb}</div>` : ''}</div>`
+const WB_FIELDS_ORG = [['org', 'Organização', 'Todas'], ['project', 'Project', 'Todos'], ['initiative', 'Iniciativa', 'Todas'], ['epic', 'Épico/Milestone', 'Todos'], ['type', 'Tipo', 'Todos'], ['label', 'Label', 'Todas'], ['repo', 'Repositório', 'Todos'], ['status', 'Status do Project', 'Todos']]
 const WB_FIELDS = [['initiative', 'Iniciativa', 'Todas'], ['epic', 'Épico/Milestone', 'Todos'], ['type', 'Tipo', 'Todos'], ['label', 'Label', 'Todas'], ['repo', 'Repositório', 'Todos'], ['status', 'Status do Project', 'Todos']]
 // set: { field: [value shown in the field, value shown in the chip] }; o.url: the link line.
 function wbFilters(set = {}, o = {}) {
-  const fields = WB_FIELDS.map(([k, l, all]) => `<div class="wb-field"><small>${l}</small><span class="campo${set[k] ? ' wb-set' : ''}"><span class="trunc">${set[k]?.[0] ?? all}</span>${ic('chevron-down')}</span></div>`).join('')
-  const active = WB_FIELDS.filter(([k]) => set[k])
+  const FIELDS = o.origin ? WB_FIELDS_ORG : WB_FIELDS
+  const fields = FIELDS.map(([k, l, all]) => `<div class="wb-field${o.origin && (k === 'org' || k === 'project') ? ' wb-new' : ''}"><small>${l}</small><span class="campo${set[k] ? ' wb-set' : ''}"><span class="trunc">${set[k]?.[0] ?? all}</span>${ic('chevron-down')}</span></div>`).join('')
+  const active = FIELDS.filter(([k]) => set[k])
   const chips = active.length ? `<div class="wb-chips"><span class="filter-label">Todos os filtros juntos:</span>${active.map(([k, l], i) => `${i ? '<span class="wb-and">E</span>' : ''}<span class="wb-chip">${l}: <b>${set[k][1] ?? set[k][0]}</b><span class="wb-x" title="Tirar este filtro">${ic('x')}</span></span>`).join('')}<span class="btn">${ic('filter-x')}Limpar filtros</span></div>` : ''
   const link = o.url ? `<div class="wb-link">${ic('link')}<span>Link deste recorte</span><code>${o.url}</code><span class="btn contorno">${ic('copy')}Copiar link</span></div>` : ''
-  return `<div class="cartao wb-filters${o.off ? ' wb-off' : ''}"><div class="wb-fields">${fields}</div>${chips}${link}</div>`
+  return `<div class="cartao wb-filters${o.off ? ' wb-off' : ''}"><div class="wb-fields${o.origin ? ' wb-eight' : ''}">${fields}</div>${chips}${link}</div>`
 }
 const wbFrame = (w, body) => `<div class="cc w${w}">${lado('work', 3, 'ok', true)}<div class="cc-main">${body}</div></div>`
 const wbBoth = (fn, label = w => `${w} px`) => `<div class="fila">${[1100, 1440].map(w => widthCol(w, label(w), wbFrame(w, fn(w)))).join('')}</div>`
@@ -6574,6 +6609,90 @@ const wbDragHtml = () => wbRows([
 
 // 478-1 to 478-3 · editing in the detail, saved to GitHub at once (decision 0001 keeps the cache from GitHub's answer).
 const wbEditHtml = mode => wbBoth(wbDetailScreen(wbItem(506), mode))
+
+// =====================================================================
+// 598-1 to 598-4 · the work board over every organization the person granted (issue 598, epic 464).
+// The header counts organizations and Projects, two filters join the six (Organização and Project, AND),
+// each card names its origin, an organization that restricts the app or fails to read is a warning and
+// the others stay (lesson of issue 340). Synthetic organizations: acme-labs, northwind, mira-dev (the
+// person's own account), globex, initech and umbrella-corp. Origin of each item of WB_ITEMS: [org, Project].
+// =====================================================================
+const WB_ORIGIN = {
+  509: ['acme-labs', 'Plataforma'], 506: ['acme-labs', 'Plataforma'], 503: ['northwind', 'Roadmap'], 511: ['mira-dev', 'Experimentos'],
+  507: ['acme-labs', 'Plataforma'], 499: ['acme-labs', 'Mobile'], 500: ['acme-labs', 'Plataforma'], 505: ['northwind', 'Suporte'],
+  497: ['acme-labs', 'Mobile'], 502: ['northwind', 'Roadmap'], 498: ['acme-labs', 'Plataforma'], 495: ['northwind', 'Suporte'],
+  504: ['mira-dev', 'Experimentos'], 490: ['acme-labs', 'Mobile'], 488: ['northwind', 'Roadmap'],
+}
+const WB_ORG_LIST = [['acme-labs', 'acme-labs', ['Plataforma', 'Mobile']], ['northwind', 'northwind', ['Roadmap', 'Suporte']], ['mira-dev', 'mira-dev (você)', ['Experimentos']]]
+const wbOrgN = (org, project) => WB_ITEMS.filter(c => WB_ORIGIN[c.n][0] === org && (!project || WB_ORIGIN[c.n][1] === project)).length
+// A row with a third item true draws only the main part (no sidebar), for a header or a band on its own.
+const wbPartBoth = fn => `<div class="fila">${[1100, 1440].map(w => widthCol(w, `${w} px`, `<div class="cc w${w} wb-part"><div class="cc-main">${fn(w)}</div></div>`)).join('')}</div>`
+const wbOrgRows = rows => rows.map(([title, fn, part], i) => `<div class="rotulo" style="margin:${i ? 18 : 0}px 0 4px">${title}</div>${part ? wbPartBoth(fn) : wbBoth(fn)}`).join('')
+const WB_ORG_NAMES = `<span class="mono">acme-labs</span>, <span class="mono">northwind</span> e <span class="mono">mira-dev</span> (você)`
+// o.sub replaces the whole sub line; o.warn: the "N com aviso" mark next to the count.
+const wbOrgHead = (o = {}) => `<div class="cc-cab"><div class="ico">${ic('columns-3')}</div><div style="min-width:0"><h4>Quadro do trabalho</h4><div class="sub">${o.sub ?? `<span class="wb-count">3 organizações · 5 Projects</span> · ${WB_ORG_NAMES}${o.warn ? ` · <span class="wb-warn-count">${ic('alert-triangle')}${o.warn}</span>` : ''} · a coluna vem dos sinais; só a fila é sua`}</div></div><div class="acoes">${o.read ?? WB_READ}${o.refresh ?? atualizar}</div></div>`
+const wbOneHead = `<span class="mono">acme-labs</span> · GitHub Project “Plataforma” · a coluna vem dos sinais; só a fila é sua`
+
+// 598-1 · header and cards. Several origins, no filter; then the header with warnings, with one organization and one Project.
+const wbOrgsMain = w => `${wbOrgHead()}${wbLevels('item')}${wbFilters({}, { origin: true })}${wbBoard(w, wbCols(() => true, { origin: true }), WB_MAIN)}`
+const wbOrgsHeaderHtml = () => wbOrgRows([
+  ['Várias organizações, sem filtro: o cabeçalho conta, cada card diz de onde vem', wbOrgsMain],
+  ['O mesmo cabeçalho com duas organizações com aviso: a contagem é só do que foi lido (598-3)', () => wbOrgHead({ warn: '2 com aviso' }), true],
+  ['Uma só organização e um só Project, o desenho recomendado: o cabeçalho nomeia, como hoje; os dois filtros novos e a origem no card somem (nada a escolher)', () => `${wbOrgHead({ sub: wbOneHead })}${wbLevels('item')}${wbFilters()}<div class="c-muted wb-note">As seis colunas, como no 465-1, com os cards sem a linha de origem.</div>`, true],
+  ['A alternativa, para decidir: contar mesmo com uma só (os filtros ficam, com uma opção só)', () => `${wbOrgHead({ sub: `<span class="wb-count">1 organização · 1 Project</span> · <span class="mono">acme-labs</span> · a coluna vem dos sinais; só a fila é sua` })}${wbLevels('item')}${wbFilters({}, { origin: true })}`, true],
+])
+
+// 598-2 · the two filters with the six, chips, the link, and the menus open beside the frame.
+const WB_ORG_URL = '/ui/work?org=acme-labs&amp;project=acme-labs/3&amp;level=item&amp;type=story'
+const WB_ORG_SET = { org: ['acme-labs'], project: ['Plataforma'], type: ['História'] }
+const wbAcmePlat = c => WB_ORIGIN[c.n][0] === 'acme-labs' && WB_ORIGIN[c.n][1] === 'Plataforma' && c.t === 'story'
+const wbOrgFiltersScreen = w => `${wbOrgHead()}${wbLevels('item')}${wbFilters(WB_ORG_SET, { origin: true, url: WB_ORG_URL })}${wbBoard(w, wbCols(wbAcmePlat, { chain: true, origin: true }), {})}`
+const wbPopRows = rows => `<div class="cartao wb-pop">${rows.map(([t, n, on, group]) => group ? `<div class="wb-group">${t}</div>` : `<span${on ? ' class="on"' : ''}>${ic(on ? 'check' : 'circle')}${t}<small>${n}</small></span>`).join('')}</div>`
+const wbOpenField = (label, value, pop, note) => `<div><div class="rotulo" style="margin-top:10px">${note}</div><div class="cartao wb-popfrag"><div class="wb-field"><small>${label}</small><span class="campo wb-set"><span class="trunc">${value}</span>${ic('chevron-up')}</span></div>${pop}</div></div>`
+const wbOrgOpen = () => wbOpenField('Organização', 'acme-labs', wbPopRows([['Todas', WB_ITEMS.length], ...WB_ORG_LIST.map(([k, l]) => [l, wbOrgN(k), k === 'acme-labs'])]), 'Organização aberta · só as lidas')
+const wbProjectNarrow = () => wbOpenField('Project', 'Plataforma', wbPopRows([['Todos', wbOrgN('acme-labs')], ['Plataforma', wbOrgN('acme-labs', 'Plataforma'), true], ['Mobile', wbOrgN('acme-labs', 'Mobile')]]), 'Project, com acme-labs: só os dois dela (recomendado)')
+const wbProjectAll = () => wbOpenField('Project', 'Todos', wbPopRows([['Todos', WB_ITEMS.length, true], ...WB_ORG_LIST.flatMap(([k, l, ps]) => [[l, 0, false, true], ...ps.map(p => [p, wbOrgN(k, p)])])]), 'Project, com Todas: agrupado por organização')
+const wbOrgFiltersHtml = () => `<div class="fila">${[1100, 1440].map(w => widthCol(w, `${w} px`, wbFrame(w, wbOrgFiltersScreen(w)) + (w >= 1440 ? `<div class="wb-pops" style="display:flex;gap:10px;flex-wrap:wrap">${wbOrgOpen()}${wbProjectNarrow()}${wbProjectAll()}</div>` : ''))).join('')}</div>
+  <div class="rotulo" style="margin:18px 0 4px">Trocar a organização com um Project já escolhido: o Project volta para Todos e a tela diz por quê</div>
+  ${wbPartBoth(() => `${wbFilters({ org: ['northwind'], type: ['História'] }, { origin: true, url: '/ui/work?org=northwind&amp;level=item&amp;type=story' })}<div class="wb-reset-note">${ic('info')}O Project “Plataforma” é de acme-labs, não de northwind: voltou para Todos.</div>`)}`
+
+// 598-3 · an organization that restricts the app or fails to read is a warning; the others stay on the board.
+const wbWarnBand = (kind, org) => {
+  const mono = `<span class="mono">${org}</span>`
+  const A = (icon, t, cls = 'contorno') => `<span class="btn ${cls}">${ic(icon)}${t}</span>`
+  const K = {
+    restricted: ['faixa', 'shield-alert', `<b>${mono} restringe apps OAuth.</b> Ainda não aprovou o Ahrena Console: os Projects dela ficam fora do quadro até lá.<span class="why">Um dono da organização aprova; quem não é dono pede a aprovação.</span>`, A('external-link', 'Aprovar (dono)') + A('send', 'Pedir acesso')],
+    saml: ['faixa', 'lock', `<b>${mono} exige login pelo SSO (SAML).</b> Os Projects dela ficam fora do quadro até você entrar pelo SSO no GitHub.<span class="why">Depois de entrar, Atualizar lê de novo.</span>`, A('external-link', 'Entrar pelo SSO')],
+    failed: ['faixa erro', 'cloud-off', `<b>Não conseguimos ler os Projects de ${mono}.</b> O GitHub respondeu 502 e não há nada guardado dela. Tentamos de novo em 2 min.<span class="why">As outras organizações não dependem desta.</span>`, A('refresh-cw', 'Tentar de novo')],
+  }[kind]
+  return `<div class="${K[0]}"><span class="ic">${ic(K[1])}</span><div>${K[2]}</div><div class="tm-rc-actions">${K[3]}</div></div>`
+}
+const wbWarns = (list, more = 0) => `<div class="wb-warns">${list.map(([k, o]) => wbWarnBand(k, o)).join('')}${more ? `<span class="wb-warns-more">${ic('chevron-down')}Mais ${more} organizações com aviso</span>` : ''}</div>`
+const WB_WARN2 = [['restricted', 'globex'], ['failed', 'initech']]
+const wbWarnScreen = w => `${wbOrgHead({ warn: '2 com aviso' })}${wbWarns(WB_WARN2)}${wbLevels('item')}${wbFilters({}, { origin: true })}${wbBoard(w, wbCols(() => true, { origin: true }), WB_MAIN)}`
+const wbOrgWarningHtml = () => wbOrgRows([
+  ['Duas organizações com aviso, empilhadas sob o cabeçalho: o motivo de cada uma e o que a pessoa faz; as três lidas seguem no quadro', wbWarnScreen],
+  ['Os três motivos e o corte: com mais de três avisos, aparecem três e “Mais N” abre o resto', () => `${wbOrgHead({ warn: '5 com aviso' })}${wbWarns([['restricted', 'globex'], ['failed', 'initech'], ['saml', 'umbrella-corp']], 2)}`, true],
+])
+
+// 598-4 · loading, no issue at all, no Project at all, and every organization failing.
+const wbOrgsLoadingScreen = w => `${wbOrgHead({ sub: '<span class="wb-count">… organizações · … Projects</span> · lendo cada organização no GitHub', read: `<span class="wb-read">${ic('loader-2')}lendo o GitHub…</span>`, refresh: `<span class="btn" style="opacity:.5">${ic('refresh-cw')}Atualizar</span>` })}${wbLevels('item')}${wbFilters({}, { origin: true, off: true })}
+  ${wbBoard(w, Object.fromEntries(WB_COLUMNS.map(([k], i) => [k, Array.from({ length: [3, 1, 2, 2, 2, 2][i] }, wbSkel)])), { limit: false, count: Object.fromEntries(WB_COLUMNS.map(([k]) => [k, '…'])) })}`
+const wbOrgsEmptyScreen = w => `${wbOrgHead()}${wbLevels('item')}${wbFilters({}, { origin: true, off: true })}
+  <div class="cartao vazio wb-empty"><span class="ic">${ic('inbox')}</span><b>Nenhuma issue nos Projects das suas organizações</b><span>Os 5 Projects de ${WB_ORG_NAMES} não têm nenhuma issue. Quando tiverem, cada uma entra em Planejamento e anda pelas colunas conforme o agente trabalha.</span><span><span class="btn contorno">${ic('external-link')}Abrir os Projects no GitHub</span><span class="btn contorno">${ic('plug')}Conceder acesso a outra organização</span></span></div>
+  ${wbBoard(w, {}, { blank: true })}`
+const wbOrgsNoProjectScreen = w => `${wbOrgHead({ sub: '<span class="wb-count">0 organizações · 0 Projects</span> · a coluna vem dos sinais; só a fila é sua' })}${wbLevels('item')}${wbFilters({}, { origin: true, off: true })}
+  <div class="cartao vazio wb-empty"><span class="ic">${ic('kanban')}</span><b>Nenhum Project para mostrar</b><span>As organizações que você concedeu ao Console e a sua conta não têm nenhum GitHub Project. Crie um no GitHub ou conceda acesso a outra organização.</span><span><span class="btn contorno">${ic('external-link')}Abrir o GitHub</span><span class="btn contorno">${ic('plug')}Conceder acesso a outra organização</span></span></div>
+  ${wbBoard(w, {}, { blank: true })}`
+const wbOrgsAllFailedScreen = w => `${wbOrgHead({ sub: '<span class="wb-count">Nenhuma organização lida</span> · <span class="wb-warn-count">' + ic('alert-triangle') + '3 com aviso</span>', read: `<span class="wb-read wb-old">${ic('github')}nunca lido</span>` })}${wbWarns([['restricted', 'globex'], ['failed', 'initech'], ['saml', 'umbrella-corp']])}
+  <div class="cartao vazio wb-empty"><span class="ic" style="color:var(--status-error-text)">${ic('cloud-off')}</span><b>Não conseguimos ler nenhuma organização</b><span>Cada aviso acima diz o motivo e o que fazer. Quando uma for resolvida, o quadro aparece com ela.</span><span><span class="btn cheio">${ic('refresh-cw')}Tentar agora</span></span></div>
+  ${wbBoard(w, {}, { blank: true, count: Object.fromEntries(WB_COLUMNS.map(([k]) => [k, '–'])) })}`
+const wbOrgsStatesHtml = () => wbRows([
+  ['Carregando, na primeira abertura: contadores em “…”, filtros desligados', wbOrgsLoadingScreen],
+  ['Nenhuma issue em nenhum dos Projects lidos', wbOrgsEmptyScreen],
+  ['Nenhum Project nas organizações lidas nem na conta da pessoa', wbOrgsNoProjectScreen],
+  ['Todas as organizações com aviso: nada para mostrar, e cada aviso diz o que fazer', wbOrgsAllFailedScreen],
+])
 
 // =====================================================================
 // Agent view (issue 521, under issue 518): the cycle of one subagent from the inside, opened from a
