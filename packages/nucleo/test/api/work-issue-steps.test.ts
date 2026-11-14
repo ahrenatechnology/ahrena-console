@@ -30,7 +30,7 @@ interface Sub {
 
 interface Github {
   calls: number;
-  /** The mutations the fake applied, in order, with their input. */
+  /** #534 the mutations the fake applied, in order, with their input. */
   writes: { op: string; input: any }[];
   mode: 'ok' | 'down' | 'forbidden' | 'unread' | 'missing';
   types: { id: string; name: string }[];

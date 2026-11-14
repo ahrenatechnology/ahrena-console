@@ -15,9 +15,10 @@
  *   sub-issue the step goes behind, or `null` for the top; it is required (an absent one is 400 `bad-param` `after`).
  * - A new step is a sub-issue of the Plan type, created last. A removed step is closed as not planned and leaves the
  *   plan (its sub-issue stays in `subIssues`).
- * - Before any write the step (and `after`) is checked against a fresh read of the issue's sub-issues: one that is
- *   not a Plan sub-issue of it, or is already removed, is 422 `unknown-value` with `param` `step` (or `after`), and
- *   a repository with no Plan type 422 `type`; nothing is written. No such issue is 404 `not-found`.
+ * - Before any write the step is checked against a fresh read of the issue's sub-issues: one that is not a Plan
+ *   sub-issue of it, or is already removed, is 422 `unknown-value` with `param` `step`. `after` may be any sub-issue of
+ *   the issue, Plan or not (GitHub orders them all together); one that is not a sub-issue of it is 422 `unknown-value`
+ *   with `param` `after`. A repository with no Plan type is 422 `type`; nothing is written. No such issue is 404 `not-found`.
  * - An edit carries `updatedAt`, the step's version the /ui read; when GitHub's is newer nothing is written and the
  *   answer is 409 `{ error: 'conflict', title, body, updatedAt }`, the step as GitHub holds it.
  * - Failures as #533: 502 `github-refused` (`no-permission`, `no-scope`) or `github-unavailable` with a stable
