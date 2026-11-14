@@ -195,18 +195,21 @@ export function createEditLayer({ ctx, area, redraw, choices, onSaved = null, on
   async function readRepoOptions(repo) {
     if (!repo || repoOptions.has(repo) || reading.has(repo)) return;
     reading.add(repo);
+    let body;
     try {
-      const options = repoOptionsOf(await ctx.read(`/api/work/issue/options?repo=${encodeURIComponent(repo)}`));
-      if (!alive || !options) return;
-      repoOptions.set(repo, options);
-      if (e.open && e.repo === repo) {
-        rev += 1;
-        redraw();
-      }
+      body = await ctx.read(`/api/work/issue/options?repo=${encodeURIComponent(repo)}`);
     } catch {
       // a failed or aborted read keeps the board level's options (issue 591)
+      return;
     } finally {
       reading.delete(repo);
+    }
+    const options = repoOptionsOf(body);
+    if (!alive || !options) return;
+    repoOptions.set(repo, options);
+    if (e.open && e.repo === repo) {
+      rev += 1;
+      redraw();
     }
   }
 

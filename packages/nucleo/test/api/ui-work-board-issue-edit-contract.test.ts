@@ -1188,7 +1188,7 @@ const optionTexts = (panel: ElementoFalso, name: string) =>
   named(panel, name)
     .querySelectorAll('option')
     .map((o) => texto(o));
-/** The options a selector offers today, from the board level alone (the stub's cards and options). */
+/** The options a selector offers today, from the board level alone (the stub's cards and options). (issue 591) */
 const TODAY = { type: ['User Story', 'Bug'], milestone: ['', 'M3', 'M4'].filter((v) => v !== ''), label: ['ui', 'docs'] };
 
 describe('issue 591 the edit mode reads the options of the issue repository', () => {
@@ -1280,7 +1280,7 @@ describe('issue 591 the edit mode reads the options of the issue repository', ()
     });
   }
 
-  test('#591/AC-1 an answer that arrives after the person left the issue is not applied to another one', async () => {
+  test('#591/AC-1 an answer that arrives after the person left the issue does not reopen the edit mode', async () => {
     const core = new Core();
     let release: (r: Response) => void = () => {};
     core.optionsByRepo[REPO] = () => new Promise<Response>((r) => (release = r));
