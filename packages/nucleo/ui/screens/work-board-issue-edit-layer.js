@@ -85,6 +85,17 @@ function failureOf(err, timedOut) {
   return { status, ...body };
 }
 
+const isText = (v) => typeof v === 'string';
+
+/** The answer of GET /api/work/issue/options, when it has the shape the core promises; anything else is a failed read. (issue 591) */
+function repoOptionsOf(answer) {
+  if (!answer || typeof answer !== 'object') return null;
+  const { labels, types, milestones, parents } = answer;
+  if (![labels, types, milestones].every((list) => Array.isArray(list) && list.every(isText))) return null;
+  if (!Array.isArray(parents) || !parents.every((p) => p && isText(p.key) && /#\d+$/.test(p.key) && (p.title === undefined || isText(p.title)))) return null;
+  return { labels, types, milestones, parents };
+}
+
 const isIssue = (answer) => answer && typeof answer === 'object' && typeof answer.title === 'string' && typeof answer.number === 'number';
 
 /**
@@ -104,6 +115,9 @@ export function createEditLayer({ ctx, area, redraw, choices, onSaved = null, on
   let captured = null;
   /** The step count the card shows for an issue GitHub answered, until the board's own read says the same. (issue 535) */
   const counts = new Map();
+  /** The options of each repository the core answered, and the repositories being read, so a repository is read once. (issue 591) */
+  const repoOptions = new Map();
+  const reading = new Set();
 
   const keyOf = () => (e.open ? `${e.repo}#${e.number}` : null);
 
@@ -177,11 +191,31 @@ export function createEditLayer({ ctx, area, redraw, choices, onSaved = null, on
     }
   }
 
+  /** Reads the options of the issue's repository; on any failure the selectors stay as they are. (issue 591) */
+  async function readRepoOptions(repo) {
+    if (!repo || repoOptions.has(repo) || reading.has(repo)) return;
+    reading.add(repo);
+    try {
+      const options = repoOptionsOf(await ctx.read(`/api/work/issue/options?repo=${encodeURIComponent(repo)}`));
+      if (!alive || !options) return;
+      repoOptions.set(repo, options);
+      if (e.open && e.repo === repo) {
+        rev += 1;
+        redraw();
+      }
+    } catch {
+      // a failed or aborted read keeps the board level's options (issue 591)
+    } finally {
+      reading.delete(repo);
+    }
+  }
+
   // ---------- opening and leaving (issue 535) ----------
 
   /** Editar: the panel turns into the edit mode on the issue the read answered. (issue 535) */
   function open(issue) {
     apply(startEdit(issue), { kind: 'title' });
+    void readRepoOptions(e.repo);
   }
 
   /** Concluir: back to reading, with the issue as GitHub last answered. A write in flight or a conflict keeps the person here. (issue 535) */
@@ -230,15 +264,21 @@ export function createEditLayer({ ctx, area, redraw, choices, onSaved = null, on
   function details() {
     const { cards = [], options = {} } = choices();
     const issue = e.issue;
+    const fromRepo = repoOptions.get(e.repo) ?? null;
+    const known = new Map();
+    for (const c of cards) if (c.typeName) known.set(c.typeName, TYPE_LABELS[c.type] ?? c.typeName);
     const types = new Map();
-    for (const c of cards) if (c.typeName) types.set(c.typeName, TYPE_LABELS[c.type] ?? c.typeName);
-    const labels = unique([...(options.labels ?? []).map((l) => l.name), ...(issue.labels ?? [])]);
-    const milestones = unique([...cards.map((c) => c.milestone), issue.milestone]);
+    if (fromRepo) for (const name of fromRepo.types) types.set(name, known.get(name) ?? name);
+    else for (const [name, label] of known) types.set(name, label);
+    const labels = unique([...(fromRepo ? fromRepo.labels : (options.labels ?? []).map((l) => l.name)), ...(issue.labels ?? [])]);
+    const milestones = unique([...(fromRepo ? fromRepo.milestones : cards.map((c) => c.milestone)), issue.milestone]);
     const parent = issue.parents?.at(-1);
     const parentKey = parent ? `${parent.repo ?? e.repo}#${parent.number}` : '';
     const parents = new Map();
-    for (const o of [...(options.initiatives ?? []), ...(options.epics ?? [])]) parents.set(o.key, `#${o.number}${o.title ? ` ${o.title}` : ''}`);
-    if (parent && !parents.has(parentKey)) parents.set(parentKey, `#${parent.number}${parent.title ? ` ${parent.title}` : ''}`);
+    const titled = (number, title) => `#${number}${title ? ` ${title}` : ''}`;
+    if (fromRepo) for (const p of fromRepo.parents) parents.set(p.key, titled(p.key.split('#').pop(), p.title));
+    else for (const o of [...(options.initiatives ?? []), ...(options.epics ?? [])]) parents.set(o.key, titled(o.number, o.title));
+    if (parent && !parents.has(parentKey)) parents.set(parentKey, titled(parent.number, parent.title));
     return {
       type: { value: issue.type ?? '', options: [...types].map(([value, label]) => ({ value, label })) },
       milestone: { value: issue.milestone ?? '', options: [...(issue.milestone ? [CLEAR] : []), ...milestones.map((value) => ({ value, label: value }))] },
