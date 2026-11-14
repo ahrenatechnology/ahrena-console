@@ -12,22 +12,25 @@
  * - `failed`: GitHub refused it otherwise (`forbidden`), or a read of one of its Projects failed (`network`, `rate-limited`,
  *   `no-scope`, `github-error`). Cards stored from an earlier read stay, and `readAt` is the time of that read.
  * The reason is always a code; GitHub's message goes to the log, never to the response (#495).
- * When every owner that was read failed, it is GitHub being down and not a warning per owner: the stored cards stay with
- * `stale` (ADR-0001), and with nothing stored the read is `NoDataError` (the route's 502).
+ * Where one Project of an owner failed, that owner is `failed` with the code, keeps the stored cards of the Projects that failed
+ * with their `readAt`, and is not a trusted owner (#609). When EVERY Project tried failed, it is GitHub being down and not a
+ * warning per owner: the stored cards stay with `stale` (ADR-0001), and with nothing stored the read is `NoDataError` (the
+ * route's 502).
  *
  * Closed Projects and Projects with no Status field are skipped. The owners the board read (`readOwners`) are the default of
  * the trusted owners (github/trusted-owners.ts): the owners with a Project read, never one with a warning.
  */
 
-import { githubFailureOf, NoDataError, type GithubFailure, type StaleCode } from './cache.ts';
+import { githubFailureOf, NoDataError, type GithubCache, type GithubFailure, type StaleCode } from './cache.ts';
 import type { GithubOrg } from './connection/connection.ts';
 import type { SyncStep } from './background-sync.ts';
 import { SYNC_WORK_PROJECTS_EVERY_MS } from './background-sync.ts';
-import type { ProjectBoard, ProjectRef } from './project.ts';
-import type { ProjectOption, ProjectOptionsList, ProjectOwner } from './project-options.ts';
+import type { GithubAccess } from './github-source.ts';
+import { createGithubProject, type ProjectBoard, type ProjectRef } from './project.ts';
+import type { OwnerBlockReason, ProjectOption, ProjectOptionsList, ProjectOwner } from './project-options.ts';
 import type { WorkBoardOrganization, WorkProjectBoard } from './work-board.ts';
 
-/** One Project read, with the owner it counts under. */
+/** #609 One Project read, with the owner it counts under. */
 export interface WorkProjectRead {
   organization: string;
   board: ProjectBoard;
@@ -35,28 +38,28 @@ export interface WorkProjectRead {
 
 export interface WorkProjectsRead {
   organizations: WorkBoardOrganization[];
-  /** In board order: the organizations in order, the account last, each one's Projects by number. */
+  /** #609 In board order: the organizations in order, the account last, each one's Projects by number. */
   boards: WorkProjectRead[];
-  /** The oldest read among the boards, epoch ms; `0` when none was read. */
+  /** #609 The oldest read among the boards, epoch ms; `0` when none was read. */
   fetchedAt: number;
-  /** GitHub did not answer for any owner that was read: the boards are the stored ones. */
+  /** #609 GitHub did not answer for any owner that was read: the boards are the stored ones. */
   stale: boolean;
   staleCode: StaleCode | null;
 }
 
 export interface WorkBoardProjectsOptions {
   options: { list(): Promise<ProjectOptionsList>; snapshot(): Promise<ProjectOptionsList | null> };
-  /** The organizations the connection granted and the ones that restrict the app (`GithubConnection.status().orgs`). */
+  /** #609 The organizations the connection granted and the ones that restrict the app (`GithubConnection.status().orgs`). */
   orgs: () => Promise<readonly GithubOrg[]>;
-  /** The board of one Project, through its own cache entry. */
+  /** #609 The board of one Project, through its own cache entry. */
   project: (ref: ProjectRef) => WorkProjectBoard;
   now?: () => number;
-  /** The raw error of a failed read goes here; the response only gets a code. */
+  /** #609 The raw error of a failed read goes here; the response only gets a code. */
   log?: (message: string) => void;
 }
 
 export interface WorkProjectsReadOptions {
-  /** The background sync and the refresh button: re-read GitHub (the cache keeps its 30 s floor). */
+  /** #609 The background sync and the refresh button: re-read GitHub (the cache keeps its 30 s floor). */
   force?: boolean;
   /** ADR-0015 answer the stored boards and call GitHub only for what is not stored. */
   fromStore?: boolean;
@@ -80,7 +83,7 @@ export class WorkBoardProjects {
     this.log = log;
   }
 
-  /** The owners (lower case) with a Project read by the last read: the default of the trusted owners. */
+  /** #609 The owners (lower case) with a Project read by the last read: the default of the trusted owners. */
   readOwners(): string[] {
     return [...this.owners];
   }
@@ -91,7 +94,7 @@ export class WorkBoardProjects {
     const byOwner = new Map<string, ProjectOwner>(listed.owners.map((o) => [o.login.toLowerCase(), o]));
     const account = listed.owners.find((o) => o.ownerType === 'user') ?? null;
 
-    // The entries in order: granted, then the ones that restrict the app, then the ones GitHub refused, the account last.
+    // #609 The entries in order: granted, then the ones that restrict the app, then the ones GitHub refused, the account last.
     const entries: WorkBoardOrganization[] = [];
     const seen = new Set<string>();
     const add = (entry: WorkBoardOrganization) => {
@@ -99,7 +102,7 @@ export class WorkBoardProjects {
       seen.add(entry.login.toLowerCase());
       entries.push(entry);
     };
-    const warning = (login: string, state: 'restricted' | 'saml' | 'failed', reason: string, urls: { approvalUrl: string; requestUrl: string } | null = null): WorkBoardOrganization => ({
+    const warning = (login: string, state: 'restricted' | 'saml' | 'failed', reason: OwnerBlockReason | GithubFailure, urls: { approvalUrl: string; requestUrl: string } | null = null): WorkBoardOrganization => ({
       login,
       own: false,
       state,
@@ -124,13 +127,15 @@ export class WorkBoardProjects {
     }
 
     const boards: WorkProjectRead[] = [];
-    const attempted: WorkBoardOrganization[] = [];
     const failures = new Map<string, GithubFailure>();
+    let tried = 0;
+    let failedProjects = 0;
     for (const { login, own } of toRead) {
       const projects = readableProjects(listed.projects, login);
       const entry: WorkBoardOrganization = { login: byOwner.get(login.toLowerCase())?.login ?? login, own, state: 'read', readAt: null, projects: [] };
       let readAt: number | null = null;
       for (const p of projects) {
+        tried += 1;
         const source = this.project({ owner: p.owner, number: p.number });
         let board: ProjectBoard | null = null;
         try {
@@ -138,10 +143,12 @@ export class WorkBoardProjects {
         } catch (err) {
           this.log(`work board: Project ${p.owner}/${p.number} not read: ${err instanceof Error ? err.message : String(err)}`);
           failures.set(entry.login, githubFailureOf(err));
+          failedProjects += 1;
           continue;
         }
         if (board.stale && board.staleCode && board.staleCode !== 'sync-pending') {
           failures.set(entry.login, board.staleCode);
+          failedProjects += 1;
           if (board.staleReason) this.log(`work board: Project ${p.owner}/${p.number} stale: ${board.staleReason}`);
         }
         boards.push({ organization: entry.login, board });
@@ -149,23 +156,25 @@ export class WorkBoardProjects {
         readAt = readAt === null ? board.fetchedAt : Math.min(readAt, board.fetchedAt);
       }
       entry.readAt = readAt;
-      if (projects.length) attempted.push(entry);
       add(entry);
     }
 
-    // The organizations with Projects first, then the ones with a warning, the person's account last (a stable sort).
+    // #609 The organizations with Projects first, then the ones with a warning, the person's account last (a stable sort).
     const rank = (e: WorkBoardOrganization) => (e.own ? 2 : e.projects.length ? 0 : 1);
     const ordered = [...entries].sort((a, b) => rank(a) - rank(b));
-    const failed = attempted.filter((e) => failures.has(e.login));
+    // #609 GitHub being down is every Project tried failing; otherwise each owner with a failed Project is a warning.
     let stale = false;
     let staleCode: StaleCode | null = null;
-    const code = failed[0] ? failures.get(failed[0].login) : undefined;
-    if (code && failed.length === attempted.length) {
+    if (tried > 0 && failedProjects === tried) {
+      const code = [...failures.values()][0] ?? 'github-error';
       if (!boards.length) throw new NoDataError(`no Project of any organization could be read: ${code}`, { failure: code });
       stale = true;
       staleCode = code;
     } else {
-      for (const e of failed) Object.assign(e, { state: 'failed', reason: failures.get(e.login) });
+      for (const e of ordered) {
+        const code = failures.get(e.login);
+        if (code) Object.assign(e, { state: 'failed', reason: code });
+      }
     }
 
     this.owners = ordered.filter((e) => e.state === 'read' && e.projects.length > 0).map((e) => e.login.toLowerCase());
@@ -173,13 +182,13 @@ export class WorkBoardProjects {
     return { organizations: ordered, boards, fetchedAt: stored.length ? Math.min(...stored) : this.now(), stale, staleCode };
   }
 
-  /** The list of Projects: the stored one for a read from the store, else through the 1 h cache. */
+  /** #609 The list of Projects: the stored one for a read from the store, else through the 1 h cache. */
   private async list(fromStore: boolean): Promise<ProjectOptionsList> {
     return (fromStore ? await this.options.snapshot() : null) ?? (await this.options.list());
   }
 }
 
-/** The open Projects of an owner that have a Status field, by number. */
+/** #609 The open Projects of an owner that have a Status field, by number. */
 function readableProjects(projects: readonly ProjectOption[], login: string): ProjectOption[] {
   return projects.filter((p) => p.owner.toLowerCase() === login.toLowerCase() && !p.closed && p.hasStatusField).sort((a, b) => a.number - b.number);
 }
@@ -199,4 +208,32 @@ export function workProjectsSyncStep(projects: WorkBoardProjects, connected: () 
       return 'done';
     },
   };
+}
+
+/**
+ * #609 the core's wiring of the reader: built when the connection has GitHub access and the Projects list is there, never
+ * under --demo (the simulator has one Project) nor --no-github (no access); `null` otherwise, and the board reads its one
+ * chosen Project. Each Project is read through the same cache entry as the chosen-Project kanban, with the connection's token.
+ */
+export function createWorkBoardProjects(o: {
+  demo: boolean;
+  projectOptions: WorkBoardProjectsOptions['options'] | null | undefined;
+  access: GithubAccess | null;
+  connection: { status(): Promise<{ orgs?: readonly GithubOrg[] }> };
+  cache: GithubCache;
+  log?: (message: string) => void;
+}): WorkBoardProjects | null {
+  const { access, projectOptions } = o;
+  if (o.demo || !projectOptions || !access) return null;
+  return new WorkBoardProjects({
+    options: projectOptions,
+    orgs: async () => (await o.connection.status()).orgs ?? [],
+    project: (ref) => createGithubProject({ project: ref, cache: o.cache, token: access.token, ...(access.fetch ? { fetch: access.fetch } : {}), ...(access.url ? { url: access.url } : {}) }),
+    ...(o.log ? { log: o.log } : {}),
+  });
+}
+
+/** #609 the sync steps of the reader: the `work-projects` step, or none when the core has no reader. */
+export function workProjectsSyncSteps(projects: WorkBoardProjects | null, connected: () => Promise<boolean>): SyncStep[] {
+  return projects ? [workProjectsSyncStep(projects, connected)] : [];
 }

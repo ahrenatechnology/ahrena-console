@@ -17,7 +17,7 @@ export interface RepositoryTrust {
   isTrusted(repo: string): boolean;
 }
 
-/** The trusted owners, lower-cased: the stored list when there is one, else the owners of the Projects read, else the chosen Project's owner. */
+/** #609 The trusted owners, lower-cased: the stored list when there is one, else the owners of the Projects read, else the chosen Project's owner. */
 export function trustedOwnersOf({ stored, selectedOwner, readOwners = [] }: { stored: readonly string[] | null; selectedOwner: string | null; readOwners?: readonly string[] }): string[] {
   const owners = stored ?? (readOwners.length ? readOwners : selectedOwner ? [selectedOwner] : []);
   return owners.map((o) => o.toLowerCase());
@@ -31,7 +31,7 @@ export function isTrustedRepo(repo: string, owners: readonly string[]): boolean 
   return owners.some((o) => o !== '' && o.toLowerCase() === owner);
 }
 
-/** The installation's trust: the setting, the owners the board read and the Project's owner, read at each question so a change applies at once. */
+/** #609 The installation's trust: the setting, the owners the board read and the Project's owner, read at each question so a change applies at once. */
 export class InstallationRepositoryTrust implements RepositoryTrust {
   private readonly settings: Pick<InstallationSettings, 'get'>;
   private readonly selection: () => { owner: string } | null;

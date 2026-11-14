@@ -311,7 +311,7 @@ export class WorkBoardService implements RunningCards, CardColumns {
       const origin = { organization, project: { owner: board.owner, number: board.number, title: board.title } };
       projects.push({ ...origin.project, url: board.url });
       for (const o of statusOptions(board)) {
-        // The same Status name in two Projects is one option: GitHub gives each Project its own option ids.
+        // #609 The same Status name in two Projects is one option: GitHub gives each Project its own option ids.
         const slug = statusSlug(o.name);
         const first = statuses.get(slug) ?? (statuses.set(slug, o.id), o.id);
         canonical.set(o.id, first);

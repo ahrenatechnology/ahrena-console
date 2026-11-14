@@ -65,7 +65,7 @@ function issue(owner: string, n: number, over: Partial<ProjectCard> = {}, prefix
   };
 }
 
-/** One Project on GitHub: `items` is what the next read answers; `fail` makes the read fail. */
+/** #609 One Project on GitHub: `items` is what the next read answers; `fail` makes the read fail. */
 class FakeProject implements ProjectSource {
   items: ProjectCard[] = [];
   fail: Error | null = null;
@@ -113,7 +113,7 @@ interface Rig {
   close(): Promise<void>;
 }
 
-/** The default world: acme-labs (3, 4), northwind (1) granted, and the account mira-dev (1). */
+/** #609 The default world: acme-labs (3, 4), northwind (1) granted, and the account mira-dev (1). */
 async function boot(): Promise<Rig> {
   const storage = openSqliteStorage({ path: ':memory:' });
   const now = clock();
@@ -317,7 +317,7 @@ describe('#609/AC-3 an organization that restricts the app or fails to read beco
       r.options.read.owners.push(owner('initech', { blocked: { reason: 'saml', message: GITHUB_MESSAGE } }), owner('umbrella'));
       r.options.read.projects.push(raw('umbrella', 1, 'Secret'));
       r.projects.set('umbrella/1', new FakeProject('Secret', 'umb1'));
-      r.projects.get('umbrella/1')!.fail = new GithubGatewayError(GITHUB_MESSAGE);
+      r.projects.get('umbrella/1')!.fail = new GithubGatewayError(GITHUB_MESSAGE, 502);
       const { status, json } = await get(r);
       assert.equal(status, 200);
       assert.deepEqual(numbersOf(json), [499, 503, 509, 510, 511], 'the other organizations stay on the board');
@@ -336,7 +336,7 @@ describe('#609/AC-3 an organization that restricts the app or fails to read beco
       await get(r);
       const readAt = r.now();
       r.now.add(31 * 60_000);
-      r.projects.get('northwind/1')!.fail = new GithubGatewayError('boom');
+      r.projects.get('northwind/1')!.fail = new GithubGatewayError('boom', 502);
       const { status, json } = await get(r, '?refresh=1');
       assert.equal(status, 200);
       assert.deepEqual(numbersOf(json), [499, 503, 509, 510, 511], 'northwind keeps its stored card');
@@ -349,7 +349,7 @@ describe('#609/AC-3 an organization that restricts the app or fails to read beco
 
   test('#609/AC-3 Given every organization failed and nothing stored, Then 502 github-unavailable with a reason code', () =>
     withRig(async (r) => {
-      for (const p of r.projects.values()) p.fail = new GithubGatewayError(GITHUB_MESSAGE);
+      for (const p of r.projects.values()) p.fail = new GithubGatewayError(GITHUB_MESSAGE, 502);
       const { status, json } = await get(r);
       assert.deepEqual([status, json], [502, { error: 'github-unavailable', reason: 'github-error' }]);
     }));
@@ -358,12 +358,43 @@ describe('#609/AC-3 an organization that restricts the app or fails to read beco
     withRig(async (r) => {
       await get(r);
       r.now.add(31 * 60_000);
-      for (const p of r.projects.values()) p.fail = new GithubGatewayError('down');
+      for (const p of r.projects.values()) p.fail = new GithubGatewayError('down', 502);
       const { status, json } = await get(r, '?refresh=1');
       assert.equal(status, 200);
       assert.deepEqual([json.stale, json.staleReason], [true, 'github-error']);
       assert.deepEqual(numbersOf(json), [499, 503, 509, 510, 511]);
       assert.deepEqual(json.organizations.map((o: any) => o.state), ['read', 'read', 'read']);
+    }));
+
+  test('#609/AC-3 Given one organization with Project 3 fresh and Project 4 failing, and the account\'s only Project failing with a network error, Then it is not stale for all: both owners are failed warnings and the fresh Project\'s cards are shown', () =>
+    withRig(async (r) => {
+      r.projects.get('acme-labs/4')!.fail = new GithubGatewayError('boom', 502);
+      r.projects.get(`${ACCOUNT}/1`)!.fail = new TypeError('fetch failed');
+      r.orgs.list = [{ login: 'acme-labs', access: 'granted' }];
+      const { status, json } = await get(r);
+      assert.equal(status, 200);
+      assert.deepEqual([json.stale, json.staleReason], [false, null]);
+      assert.deepEqual(numbersOf(json), [509, 510], 'the fresh Project\'s cards stay');
+      const acme = entry(json, 'acme-labs');
+      assert.deepEqual([acme.state, acme.reason, acme.projects.map((p: any) => p.number)], ['failed', 'github-error', [3]]);
+      const account = entry(json, ACCOUNT);
+      assert.deepEqual([account.state, account.reason, account.own, account.projects, account.readAt], ['failed', 'network', true, [], null]);
+      assert.deepEqual(r.reader.readOwners(), [], 'an owner with a failed Project is not a trusted read owner');
+    }));
+
+  test('#609/AC-3 Given an organization whose Project 4 failed after a read, Then it keeps the stored cards of Project 4 with their readAt, is failed, and owners all read stay read', () =>
+    withRig(async (r) => {
+      await get(r);
+      const readAt = r.now();
+      r.now.add(31 * 60_000);
+      r.projects.get('acme-labs/4')!.fail = new GithubGatewayError('boom', 502);
+      const { json } = await get(r, '?refresh=1');
+      assert.deepEqual([json.stale, numbersOf(json)], [false, [499, 503, 509, 510, 511]]);
+      const acme = entry(json, 'acme-labs');
+      assert.deepEqual([acme.state, acme.reason, acme.readAt, acme.projects.map((p: any) => p.number)], ['failed', 'github-error', readAt, [3, 4]]);
+      assert.equal(entry(json, 'northwind').state, 'read');
+      assert.equal(entry(json, ACCOUNT).state, 'read');
+      assert.deepEqual(r.reader.readOwners().sort(), ['northwind', ACCOUNT].sort());
     }));
 
   test('#609/AC-3 Given only restricted organizations and no account Project, Then 200 with the warnings and an empty board', () =>

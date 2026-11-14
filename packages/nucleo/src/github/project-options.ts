@@ -160,7 +160,7 @@ export class ProjectOptions {
     this.queue = queue;
   }
 
-  /** The stored list, of any age, without calling GitHub (decision 0015); `null` when nothing was ever stored. */
+  /** #609 The stored list, of any age, without calling GitHub (decision 0015); `null` when nothing was ever stored. */
   async snapshot(): Promise<ProjectOptionsList | null> {
     const hit = await this.cache.peek<ProjectOptionsRead>(PROJECT_OPTIONS_CACHE_KEY);
     if (!hit) return null;

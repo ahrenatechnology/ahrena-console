@@ -7,7 +7,8 @@
  * Pure domain: the ports at the end are what the use case (work-board-service.ts) reads.
  */
 
-import type { StaleCode } from './cache.ts';
+import type { GithubFailure, StaleCode } from './cache.ts';
+import type { OwnerBlockReason } from './project-options.ts';
 import type { ProjectBoard } from './project.ts';
 import type { RepositoryTrust } from './trusted-owners.ts';
 import type { QueueStop } from './work-queue.ts';
@@ -320,22 +321,22 @@ export interface WorkBoardOrigin {
   project: { owner: string; number: number; title: string };
 }
 
-/** Why an organization is not on the board: stable English codes, never GitHub's message. */
+/** #609 Why an organization is not on the board: stable English codes, never GitHub's message. */
 export type WorkBoardOrganizationState = 'read' | 'restricted' | 'saml' | 'failed';
 
 /** #609 one owner of Projects as the board read it. `readAt` is epoch ms, `null` when no Project of it was read. */
 export interface WorkBoardOrganization {
   login: string;
-  /** The person's own account. */
+  /** #609 The person's own account. */
   own: boolean;
   state: WorkBoardOrganizationState;
   readAt: number | null;
   projects: { owner: string; number: number; title: string }[];
-  /** A code, only on a warning: `oauth-restricted`, `saml`, `forbidden` or a failure code (`network`, `rate-limited`, `no-scope`, `github-error`). */
-  reason?: string;
-  /** `restricted` only: where an owner of the organization approves the app. */
+  /** #609 A code, only on a warning: `oauth-restricted`, `saml`, `forbidden` or a failure code (`network`, `rate-limited`, `no-scope`, `github-error`). */
+  reason?: OwnerBlockReason | GithubFailure;
+  /** #609 `restricted` only: where an owner of the organization approves the app. */
   approvalUrl?: string;
-  /** `restricted` only: where anyone grants or requests the app. */
+  /** #609 `restricted` only: where anyone grants or requests the app. */
   requestUrl?: string;
 }
 
