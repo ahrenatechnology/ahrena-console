@@ -3,14 +3,14 @@
  * shell), the file reader and the directory reads. Only the running núcleo uses this; tests pass doubles.
  *
  * - `LC_ALL=C` so numbers and dates do not change with the machine's language, and `GIT_OPTIONAL_LOCKS=0`
- *   so `git status` never writes to the repository (it would refresh the index otherwise).
+ *   so a git read never takes a lock or refreshes the index (no `git status` is run; see the catalog).
  * - The timeout kills the child; so does the abort signal. Output past `maxBytes` is a failure.
  * - A command that exits with an error is a failure, except where the catalog entry accepts its output
  *   (`du` exits 1 on a folder it cannot read): that answer comes back marked `incomplete`.
  */
 
 import { execFile } from 'node:child_process';
-import { readdir, readFile, stat } from 'node:fs/promises';
+import { lstat, readdir, readFile, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import type { SectionCollector } from '../diagnose.ts';
@@ -52,10 +52,11 @@ const ABSENT_CODES = new Set(['ENOENT', 'ENOTDIR']);
 /** The file operations `systemFs` and `systemReadFile` use; tests pass a fake that throws. */
 export interface FsOperations {
   stat: typeof stat;
+  lstat: typeof lstat;
   readdir: typeof readdir;
   readFile: typeof readFile;
 }
-const realOperations: FsOperations = { stat, readdir, readFile };
+const realOperations: FsOperations = { stat, lstat, readdir, readFile };
 
 function onReadError(log: (message: string) => void, path: string, err: unknown): void {
   const code = (err as NodeJS.ErrnoException | null)?.code ?? 'unknown';
@@ -63,7 +64,7 @@ function onReadError(log: (message: string) => void, path: string, err: unknown)
   log(stripControlCharacters(`diagnosis read failed ${path}: ${code}`));
 }
 
-export const systemFs = (log: (message: string) => void, ops: Pick<FsOperations, 'stat' | 'readdir'> = realOperations): DiagnosisFs => ({
+export const systemFs = (log: (message: string) => void, ops: Pick<FsOperations, 'stat' | 'lstat' | 'readdir'> = realOperations): DiagnosisFs => ({
   isDirectory: (path) => ops.stat(path).then((s) => s.isDirectory(), (err) => (onReadError(log, path, err), false)),
   listDirs: (path) =>
     ops.readdir(path, { withFileTypes: true }).then(
@@ -71,6 +72,11 @@ export const systemFs = (log: (message: string) => void, ops: Pick<FsOperations,
       (err) => (onReadError(log, path, err), []),
     ),
   modifiedAtMs: (path) => ops.stat(path).then((s) => s.mtimeMs, (err) => (onReadError(log, path, err), null)),
+  stamp: (path) =>
+    ops.lstat(path, { bigint: true }).then(
+      (s) => ({ size: Number(s.size), mtimeSec: Number(s.mtimeNs / 1_000_000_000n), mtimeNsec: Number(s.mtimeNs % 1_000_000_000n), isRegularFile: s.isFile(), isSymlink: s.isSymbolicLink() }),
+      (err) => (onReadError(log, path, err), null),
+    ),
   exists: (path) => ops.stat(path).then(() => true, (err) => (onReadError(log, path, err), false)),
 });
 

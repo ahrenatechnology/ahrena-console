@@ -8,11 +8,12 @@
  *   the only path argument, so no path is ever an argument.
  * - Nothing writes, kills or deletes: `ps`, `sysctl` (read), `df`, `du`, `docker system df`,
  *   `journalctl --disk-usage`, and four `git` reads. The runner sets `GIT_OPTIONAL_LOCKS=0`. Uncommitted work is asked with
- *   `diff-files --name-only`, `diff-index --cached --name-only HEAD` and `ls-files --others --exclude-standard`, never with
- *   `git status`: `status` hashes a file whose stat differs from the index and so runs the repository's `filter.<driver>.clean`
- *   command, which can write. These three compare stat and the index only, run no content filter, and run with
- *   `core.fsmonitor=false` so the repository's fsmonitor hook never runs. A file whose stat changed counts as uncommitted:
- *   the safe default. `rev-list` reads no index and runs no hook. Guaranteed by the argv and checked with a probe
+ *   `ls-files --cached --debug`, `diff-index --cached --name-only HEAD` and `ls-files --others --exclude-standard`, never with
+ *   `git status` or `diff-files`: both can hash a file whose stat differs from the index and so run the repository's
+ *   `filter.<driver>.clean` command, which can write. The three read the index and the tree listing only, run no content
+ *   filter, and run with `core.fsmonitor=false` so the repository's fsmonitor hook never runs. The collector itself compares
+ *   each tracked file's `lstat` (size and mtime) with the index entry; a changed file, a racy entry (mtime at or after the
+ *   index file's own) and any doubt count as uncommitted: the safe default. `rev-list` reads no index and runs no hook. Guaranteed by the argv and checked with a probe
  *   repository whose clean filter writes a marker file (#565).
  */
 
@@ -40,8 +41,8 @@ export const CATALOG = {
   'du-size': { command: 'du', args: ['-s', '-k', '.'], timeoutMs: 10_000, maxBytes: 64 * 1024, acceptOutputOnFailure: true },
   'docker-df': { command: 'docker', args: ['system', 'df', '--format', '{{json .}}'], timeoutMs: 10_000, maxBytes: 256 * 1024 },
   journal: { command: 'journalctl', args: ['--disk-usage'], timeoutMs: 5_000, maxBytes: 64 * 1024 },
-  /** Files whose stat differs from the index; no content is read, so no filter driver runs (#565). */
-  'git-stat-dirty': { command: 'git', args: ['-c', 'core.fsmonitor=false', 'diff-files', '--name-only'], timeoutMs: 8_000, maxBytes: 64 * 1024 },
+  /** Each tracked file's stat as the index recorded it; the collector compares it with the file's own `lstat`, so git never hashes a file and no filter driver runs (#565). */
+  'git-index-stat': { command: 'git', args: ['-c', 'core.fsmonitor=false', 'ls-files', '--cached', '--debug'], timeoutMs: 8_000, maxBytes: 32 * MB },
   /** Files staged against HEAD, from the index alone (#565). */
   'git-staged': { command: 'git', args: ['-c', 'core.fsmonitor=false', 'diff-index', '--cached', '--name-only', 'HEAD'], timeoutMs: 8_000, maxBytes: 64 * 1024 },
   /** Files git does not track and does not ignore (#565). */

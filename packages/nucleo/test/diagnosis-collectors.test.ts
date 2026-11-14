@@ -3,12 +3,17 @@
  * driven with a recording command runner, so no real tool runs.
  */
 import assert from 'node:assert/strict';
-import { describe, test } from 'node:test';
+import { execFileSync } from 'node:child_process';
+import { existsSync } from 'node:fs';
+import { mkdir, mkdtemp, realpath, rm, stat, utimes, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { after, describe, test } from 'node:test';
 import { CATALOG } from '../src/diagnosis/adapters/catalog.ts';
 import { DiagnosisCollector, stripControlCharacters, LARGEST_FOLDERS_BUDGET_MS, LARGEST_FOLDERS_CONCURRENCY, type DiagnosisDeps, type DiagnosisFs, type RunOptions, type RunResult } from '../src/diagnosis/adapters/common.ts';
 import { DarwinDiagnosisCollector } from '../src/diagnosis/adapters/darwin.ts';
 import { LinuxDiagnosisCollector } from '../src/diagnosis/adapters/linux.ts';
-import { parseDockerDf, parseDuSize, parseJournalUsage, parsePsProcesses } from '../src/diagnosis/adapters/parsers.ts';
+import { parseDockerDf, parseIndexDebug, parseDuSize, parseJournalUsage, parsePsProcesses } from '../src/diagnosis/adapters/parsers.ts';
 import type { SectionId } from '../src/diagnosis/model.ts';
 import { systemFs, systemReadFile, systemRunner, worktreeRootsOf } from '../src/diagnosis/adapters/system.ts';
 
@@ -59,6 +64,7 @@ function setup(answers: Record<string, Answer>, over: { files?: Record<string, s
     isDirectory: async (p) => p in dirs || Object.values(dirs).some((l) => l.includes(p)),
     listDirs: async (p) => dirs[p] ?? [],
     modifiedAtMs: async (p) => over.mtimes?.[p] ?? null,
+    stamp: async () => null,
     exists: async (p) => (over.exists ?? []).includes(p) || p in dirs,
   };
   const deps: DiagnosisDeps = {
@@ -79,13 +85,23 @@ function setup(answers: Record<string, Answer>, over: { files?: Record<string, s
   };
   return { calls, deps, logs };
 }
-const gitKey = (id: 'git-stat-dirty' | 'git-staged' | 'git-untracked' | 'git-unpushed', cwd: string) => `git ${CATALOG[id].args.join(' ')} @${cwd}`;
+const gitKey = (id: 'git-index-stat' | 'git-staged' | 'git-untracked' | 'git-unpushed', cwd: string) => `git ${CATALOG[id].args.join(' ')} @${cwd}`;
 /* The three read-only questions about uncommitted work, all answered with nothing printed (#565). */
-const cleanTree = (cwd: string): Record<string, Answer> => ({ [gitKey('git-stat-dirty', cwd)]: ok(''), [gitKey('git-staged', cwd)]: ok(''), [gitKey('git-untracked', cwd)]: ok('') });
+const cleanTree = (cwd: string): Record<string, Answer> => ({ [gitKey('git-index-stat', cwd)]: ok(''), [gitKey('git-staged', cwd)]: ok(''), [gitKey('git-untracked', cwd)]: ok('') });
+/* `git ls-files --cached --debug` for one tracked file (#565). */
+const INDEX_DEBUG = 'a.ts\n  ctime: 1700000000:5\n  mtime: 1700000000:7\n  dev: 16777234\tino: 99\n  uid: 501\tgid: 20\n  size: 12\tflags: 0\n';
 const ctx = (mount: string | null = null, signal = new AbortController().signal) => ({ mount, signal });
 const collect = <K extends SectionId>(c: DiagnosisCollector, id: K, mount: string | null = null) => c.collect(id, ctx(mount));
 
 describe('diagnosis parsers', () => {
+  test('#565/AC-7 the index listing gives path, size and mtime, and any entry it cannot read makes the whole answer unknown', () => {
+    assert.deepEqual(parseIndexDebug(INDEX_DEBUG), [{ path: 'a.ts', size: 12, mtimeSec: 1700000000, mtimeNsec: 7 }]);
+    assert.deepEqual(parseIndexDebug(''), []);
+    assert.equal(parseIndexDebug('a.ts\n  mtime: 1:2\n'), null);
+    assert.equal(parseIndexDebug('"tab\\there"\n  mtime: 1:2\n  size: 1\tflags: 0\n'), null);
+    assert.equal(parseIndexDebug('  mtime: 1:2\n'), null);
+  });
+
   test('ps rows become processes with basename, bytes and the start as ISO', () => {
     const rows = parsePsProcesses(PS_DARWIN);
     assert.equal(rows.length, 3);
@@ -377,7 +393,7 @@ describe('known-caches section', () => {
         [unpushedKey(old)]: ok('0\n'),
         [sizeKey(dirty)]: ok('900\t.\n'),
         ...cleanTree(dirty),
-        [gitKey('git-stat-dirty', dirty)]: ok('a.ts\n'),
+        [gitKey('git-index-stat', dirty)]: ok(INDEX_DEBUG),
         [unpushedKey(dirty)]: ok('2\n'),
       },
       {
@@ -433,6 +449,9 @@ describe('the real file reads', () => {
   const errno = (code: string) => Object.assign(new Error(code), { code });
   const failing = (code: string) => ({
     stat: async () => {
+      throw errno(code);
+    },
+    lstat: async () => {
       throw errno(code);
     },
     readdir: async () => {
@@ -524,7 +543,7 @@ describe('diagnosis catalog', () => {
     for (const [id, entry] of Object.entries(CATALOG)) {
       assert.ok(allowed.has(entry.command), id);
       assert.ok(entry.timeoutMs > 0 && entry.timeoutMs <= 15_000, id);
-      assert.ok(entry.maxBytes > 0 && entry.maxBytes <= 8 * 1024 * 1024, id);
+      assert.ok(entry.maxBytes > 0 && entry.maxBytes <= 32 * 1024 * 1024, id);
       assert.ok(entry.args.every((a) => !/[;&|$`<>]/.test(a) || a.startsWith('{{')), id);
     }
     assert.deepEqual(CATALOG['git-unpushed'].args.slice(0, 1), ['rev-list']);
@@ -589,15 +608,15 @@ describe('what git is asked in a worktree', () => {
 
   test('#565/AC-7 uncommitted work is read with commands that read only stat and the index, so no filter driver or hook the repository configures can run', () => {
     assert.ok(!('git-status' in CATALOG));
-    assert.deepEqual(CATALOG['git-stat-dirty'].args, ['-c', 'core.fsmonitor=false', 'diff-files', '--name-only']);
+    assert.deepEqual(CATALOG['git-index-stat'].args, ['-c', 'core.fsmonitor=false', 'ls-files', '--cached', '--debug']);
     assert.deepEqual(CATALOG['git-staged'].args, ['-c', 'core.fsmonitor=false', 'diff-index', '--cached', '--name-only', 'HEAD']);
     assert.deepEqual(CATALOG['git-untracked'].args, ['-c', 'core.fsmonitor=false', 'ls-files', '--others', '--exclude-standard']);
     assert.deepEqual(CATALOG['git-unpushed'].args.slice(0, 1), ['rev-list']);
   });
 
   test('#565/AC-9 any one of the three printing a file marks the worktree as uncommitted', async () => {
-    for (const id of ['git-stat-dirty', 'git-staged', 'git-untracked'] as const) {
-      const { deps } = setup({ [sizeKey(old)]: ok('300\t.\n'), ...cleanTree(old), [gitKey(id, old)]: ok('a.ts\n'), [unpushedKey(old)]: ok('0\n') }, place);
+    for (const id of ['git-index-stat', 'git-staged', 'git-untracked'] as const) {
+      const { deps } = setup({ [sizeKey(old)]: ok('300\t.\n'), ...cleanTree(old), [gitKey(id, old)]: ok(id === 'git-index-stat' ? INDEX_DEBUG : 'a.ts\n'), [unpushedKey(old)]: ok('0\n') }, place);
       const r = (await collect(new LinuxDiagnosisCollector(deps), 'known-caches')) as { hasUncommitted: boolean }[];
       assert.equal(r[0].hasUncommitted, true, id);
     }
@@ -611,7 +630,7 @@ describe('what git is asked in a worktree', () => {
   });
 
   test('#565/AC-9 a git state that cannot be read keeps the safe default and says why in the log', async () => {
-    const { deps, logs } = setup({ [sizeKey(old)]: ok('300\t.\n'), ...cleanTree(old), [gitKey('git-stat-dirty', old)]: fail('timeout'), [unpushedKey(old)]: fail('failed') }, place);
+    const { deps, logs } = setup({ [sizeKey(old)]: ok('300\t.\n'), ...cleanTree(old), [gitKey('git-index-stat', old)]: fail('timeout'), [unpushedKey(old)]: fail('failed') }, place);
     const r = (await collect(new LinuxDiagnosisCollector(deps), 'known-caches')) as { hasUncommitted: boolean; hasUnpushed: boolean }[];
     assert.deepEqual([r[0].hasUncommitted, r[0].hasUnpushed], [true, true]);
     assert.ok(logs.some((l) => l.includes('diagnosis worktree git state unknown') && l.includes(old) && l.includes('git timed out')));
@@ -630,5 +649,94 @@ describe('what git is asked in a worktree', () => {
     await collect(new LinuxDiagnosisCollector(deps), 'known-caches');
     assert.ok(logs.some((l) => l.includes('git state unknown')));
     assert.ok(logs.every((l) => !/[\x00-\x1f\x7f]/.test(l)));
+  });
+});
+
+/* The real runner against real repositories (#565): what the worktree check says about uncommitted work, and that no filter driver runs and the index is not written. */
+describe('uncommitted work read from real git repositories', () => {
+  const gitEnv = { ...process.env, GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@example.com', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@example.com', GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_SYSTEM: '/dev/null' };
+  const git = (cwd: string, ...args: string[]) => execFileSync('git', ['-c', 'protocol.file.allow=always', '-c', 'commit.gpgsign=false', ...args], { cwd, env: gitEnv, stdio: 'pipe' });
+  const OLD = new Date(Date.now() - 30 * DAY);
+  const PAST = new Date(Date.now() - 3_600_000);
+  const roots: string[] = [];
+  after(async () => {
+    for (const r of roots) await rm(r, { recursive: true, force: true });
+  });
+
+  /* A worktree folder old enough to be listed, holding one repository with `file.txt` committed. `stamp` sets the file's mtime before it is added, so the index records it. */
+  async function place(name: string, stamp: Date): Promise<{ base: string; dir: string; collect: () => Promise<{ hasUncommitted: boolean }[]>; logs: string[] }> {
+    const base = await realpath(await mkdtemp(join(tmpdir(), 'diagnosis-git-')));
+    roots.push(base);
+    const worktrees = join(base, 'repo', '.claude', 'worktrees');
+    const dir = join(worktrees, name);
+    await mkdir(dir, { recursive: true });
+    git(dir, 'init', '-q');
+    await writeFile(join(dir, 'file.txt'), 'one\n');
+    await utimes(join(dir, 'file.txt'), stamp, stamp);
+    git(dir, 'add', 'file.txt');
+    git(dir, 'commit', '-q', '-m', 'one');
+    const logs: string[] = [];
+    const deps: DiagnosisDeps = {
+      run: systemRunner,
+      readFile: systemReadFile((m) => logs.push(m)),
+      fs: systemFs((m) => logs.push(m)),
+      home: join(base, 'home'),
+      worktreeRoots: async () => [worktrees],
+      nowMs: () => Date.now(),
+      log: (m) => logs.push(m),
+    };
+    const collect = async () => {
+      await utimes(dir, OLD, OLD);
+      return (await new LinuxDiagnosisCollector(deps).collect('known-caches', ctx())) as { hasUncommitted: boolean }[];
+    };
+    return { base, dir, collect, logs };
+  }
+
+  test('#565/AC-7 a committed file older than the index reads as committed', async () => {
+    const w = await place('clean', PAST);
+    assert.equal((await w.collect())[0].hasUncommitted, false);
+  });
+
+  test('#565/AC-7 a file whose size changed reads as uncommitted', async () => {
+    const w = await place('modified', PAST);
+    await writeFile(join(w.dir, 'file.txt'), 'one and more\n');
+    await utimes(join(w.dir, 'file.txt'), PAST, PAST);
+    assert.equal((await w.collect())[0].hasUncommitted, true);
+  });
+
+  test('#565/AC-7 an entry stamped at or after the index file is racy and reads as uncommitted though its stat matches', async () => {
+    const w = await place('racy', new Date(Date.now() + 60_000));
+    assert.equal((await w.collect())[0].hasUncommitted, true);
+  });
+
+  test('#565/AC-7 a repository with a submodule is read without error and counts as uncommitted when git cannot say', async () => {
+    const w = await place('with-submodule', PAST);
+    const inner = join(w.base, 'inner');
+    await mkdir(inner);
+    git(inner, 'init', '-q');
+    await writeFile(join(inner, 'a.txt'), 'a\n');
+    git(inner, 'add', 'a.txt');
+    git(inner, 'commit', '-q', '-m', 'a');
+    git(w.dir, 'submodule', 'add', '-q', inner, 'sub');
+    git(w.dir, 'commit', '-q', '-m', 'sub');
+    const r = await w.collect();
+    assert.equal(r.length, 1);
+    assert.equal(r[0].hasUncommitted, true);
+  });
+
+  test('#565/AC-7 a clean filter the repository configures never runs and the index is not written', async () => {
+    const w = await place('filtered', PAST);
+    const marker = join(w.base, 'filter-ran');
+    await writeFile(join(w.dir, '.gitattributes'), '* filter=probe\n');
+    git(w.dir, 'config', 'filter.probe.clean', `sh -c 'touch ${marker}; cat'`);
+    await writeFile(join(w.dir, 'file.txt'), 'one\n');
+    const touched = new Date(Date.now() - 1_800_000);
+    await utimes(join(w.dir, 'file.txt'), touched, touched);
+    const indexBefore = (await stat(join(w.dir, '.git', 'index'))).mtimeMs;
+    const r = await w.collect();
+    assert.equal(r.length, 1);
+    assert.equal(r[0].hasUncommitted, true);
+    assert.equal(existsSync(marker), false, 'the clean filter ran');
+    assert.equal((await stat(join(w.dir, '.git', 'index'))).mtimeMs, indexBefore);
   });
 });

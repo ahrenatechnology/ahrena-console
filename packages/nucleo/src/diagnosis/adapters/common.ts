@@ -18,7 +18,7 @@ import type { CacheActionId, CacheItem, FolderItem, SectionId, WorktreeItem } fr
 import { isRealVolume, parseDfP } from '../../telemetry/adapters/common.ts';
 import type { FileReader } from '../../telemetry/ports.ts';
 import { CATALOG, type CatalogEntry, type CatalogId } from './catalog.ts';
-import { parseDockerDf, parseDuSize, parseJournalUsage, parsePsProcesses } from './parsers.ts';
+import { parseDockerDf, parseDuSize, parseIndexDebug, parseJournalUsage, parsePsProcesses } from './parsers.ts';
 
 export interface RunOptions {
   timeoutMs: number;
@@ -32,11 +32,22 @@ export type RunResult = { ok: true; stdout: string; incomplete?: true } | { ok: 
 /** Runs one executable with an argv list, no shell. */
 export type DiagnosisRunner = (command: string, args: readonly string[], options: RunOptions) => Promise<RunResult>;
 
+/** What `lstat` says about a path: size, mtime split into seconds and nanoseconds as the git index keeps it, and the kind (#565). */
+export interface FileStamp {
+  size: number;
+  mtimeSec: number;
+  mtimeNsec: number;
+  isRegularFile: boolean;
+  isSymlink: boolean;
+}
+
 /* The directory reads a collector makes, each answering "no" or "empty" rather than throwing (#565). */
 export interface DiagnosisFs {
   isDirectory(path: string): Promise<boolean>;
   listDirs(path: string): Promise<string[]>;
   modifiedAtMs(path: string): Promise<number | null>;
+  /** The file's own stat, not what a link points at; `null` when it cannot be read (#565). */
+  stamp(path: string): Promise<FileStamp | null>;
   /** A file or a directory: a worktree's `.git` is a file (#565). */
   exists(path: string): Promise<boolean>;
 }
@@ -63,7 +74,7 @@ export const LARGEST_FOLDERS_CONCURRENCY = 4;
 const LARGEST_FOLDERS_OPENED = 3;
 /** A worktree untouched for this long is old. */
 export const OLD_WORKTREE_DAYS = 14;
-/** The most worktrees one diagnosis looks into: each costs a `du` and two `git` runs. */
+/** The most worktrees one diagnosis looks into: each costs a `du`, four `git` runs and an `lstat` per tracked file. */
 export const MAX_WORKTREES = 20;
 
 /* Runs `task` over `items`, at most `limit` at a time (#565). */
@@ -262,18 +273,46 @@ export abstract class DiagnosisCollector {
     return bytes;
   }
 
+  /* Decides "a tracked file changed" without git hashing anything: the index's stat of each file against the file's own `lstat`. The answer is the names that differ, one per line, so it reads like the other two git answers. Any doubt names the file as changed: an entry git quoted or that does not parse, a file that cannot be read, is not a regular file or a link (a submodule is a folder), a size or mtime that differs, a racy entry (mtime at or after the index file's), or an index file whose own mtime cannot be read (#565). */
+  private async indexChanged(path: string, signal: AbortSignal): Promise<Executed> {
+    const r = await this.exec('git-index-stat', signal, path);
+    if (!('stdout' in r)) return r;
+    const entries = parseIndexDebug(r.stdout);
+    if (entries === null) return unavailable('git index listing not understood');
+    if (entries.length === 0) return { stdout: '' };
+    const index = await this.deps.fs.stamp(await this.indexPath(path));
+    if (index === null) return unavailable('git index file not readable');
+    const changed: string[] = [];
+    for (const entry of entries) {
+      const stamp = entry.path.split('/').includes('..') || entry.path.startsWith('/') ? null : await this.deps.fs.stamp(join(path, entry.path));
+      const racy = entry.mtimeSec >= index.mtimeSec;
+      const same = stamp !== null && (stamp.isRegularFile || stamp.isSymlink) && stamp.size === entry.size && stamp.mtimeSec === entry.mtimeSec && stamp.mtimeNsec === entry.mtimeNsec;
+      if (racy || !same) changed.push(entry.path);
+    }
+    return { stdout: changed.join('\n') };
+  }
+
+  /* The index file of a checkout: `.git/index`, or for a linked worktree (its `.git` is a file reading `gitdir: <folder>`) that folder's `index` (#565). */
+  private async indexPath(path: string): Promise<string> {
+    const dotGit = join(path, '.git');
+    if (await this.deps.fs.isDirectory(dotGit)) return join(dotGit, 'index');
+    const text = await this.deps.readFile(dotGit);
+    const m = text === null ? null : /^gitdir: (.+)$/m.exec(text);
+    return m ? join(path, m[1].trim(), 'index') : join(dotGit, 'index');
+  }
+
   /* What git cannot tell counts as not safe to remove: dirty and unpushed (#565). */
   private async worktree(path: string, modifiedMs: number, signal: AbortSignal): Promise<WorktreeItem | null> {
-    const [size, statDirty, staged, untracked, unpushed] = await Promise.all([
+    const [size, indexChanged, staged, untracked, unpushed] = await Promise.all([
       this.exec('du-size', signal, path),
-      this.exec('git-stat-dirty', signal, path),
+      this.indexChanged(path, signal),
       this.exec('git-staged', signal, path),
       this.exec('git-untracked', signal, path),
       this.exec('git-unpushed', signal, path),
     ]);
     const bytes = this.sizeOrLog(path, size);
     if (bytes === null) return null;
-    const uncommittedAnswers = [statDirty, staged, untracked];
+    const uncommittedAnswers = [indexChanged, staged, untracked];
     for (const answer of uncommittedAnswers) if (!('stdout' in answer)) this.say(`diagnosis worktree git state unknown ${path}: ${answer.reason}`);
     if (!('stdout' in unpushed)) this.say(`diagnosis worktree git state unknown ${path}: ${unpushed.reason}`);
     return {

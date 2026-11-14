@@ -69,3 +69,41 @@ export function parseDuSize(out: string): number | null {
   const m = /^(\d+)\t/m.exec(out);
   return m ? Number(m[1]) * 1024 : null;
 }
+
+/** One tracked file as the index recorded it: its size and its mtime in seconds and nanoseconds (#565). */
+export interface IndexEntry {
+  path: string;
+  size: number;
+  mtimeSec: number;
+  mtimeNsec: number;
+}
+
+/* `ls-files --cached --debug`: a path line, then indented `ctime:`, `mtime:`, `dev:`/`ino:`, `uid:`/`gid:` and `size:`/`flags:` lines. A path git quoted (it holds a control character or a quote) or an entry that does not parse makes the whole answer `null`: the caller treats that as doubt, never as clean (#565). */
+export function parseIndexDebug(out: string): IndexEntry[] | null {
+  const entries: IndexEntry[] = [];
+  let current: { path: string; size?: number; mtimeSec?: number; mtimeNsec?: number } | null = null;
+  const close = (): boolean => {
+    if (!current) return true;
+    if (current.size === undefined || current.mtimeSec === undefined || current.mtimeNsec === undefined) return false;
+    entries.push({ path: current.path, size: current.size, mtimeSec: current.mtimeSec, mtimeNsec: current.mtimeNsec });
+    return true;
+  };
+  for (const line of out.split('\n')) {
+    if (line === '') continue;
+    if (!line.startsWith(' ')) {
+      if (!close() || line.startsWith('"')) return null;
+      current = { path: line };
+      continue;
+    }
+    if (!current) return null;
+    const mtime = /^\s+mtime: (\d+):(\d+)\s*$/.exec(line);
+    if (mtime) {
+      current.mtimeSec = Number(mtime[1]);
+      current.mtimeNsec = Number(mtime[2]);
+      continue;
+    }
+    const size = /^\s+size: (\d+)\b/.exec(line);
+    if (size) current.size = Number(size[1]);
+  }
+  return close() ? entries : null;
+}
