@@ -18,6 +18,7 @@ import {
   moveStep,
   overwrite,
   reasonOf,
+  refusalPlace,
   rejected,
   reloadFailed,
   reloaded,
@@ -67,7 +68,7 @@ const issue = (over: Obj = {}): Obj => ({
   ...over,
 });
 const open = (over: Obj = {}): Obj => startEdit(issue(over));
-/** The write the state asks for, then the answer the core gives. */
+/** The write the state asks for, then the answer the core gives. (issue 535) */
 const asked = (s: Obj) => {
   assert.ok(s.request, 'a request was expected');
   return s.request;
@@ -410,8 +411,8 @@ describe('REL-3: no automatic retry after github-unavailable or written-unread',
     assert.equal(r.bases.body, 'T2');
   });
 
-  test('written-unread: GitHub applied it, so a reload, no band, no retry, and the failed write is not kept to repeat', () => {
-    const s = fail(submitComment(typeComment(open(), 'oi')), { status: 502, error: 'written-unread', reason: 'timeout' });
+  test('written-unread on a PATCH: GitHub applied it, so a reload, no band, no retry, and the failed write is not kept to repeat', () => {
+    const s = fail(chooseType(open(), 'bug'), { status: 502, error: 'written-unread', reason: 'timeout' });
     assert.ok(s.reload);
     assert.equal(s.refusal, null);
     assert.equal(s.request, null);
@@ -430,13 +431,165 @@ describe('REL-3: no automatic retry after github-unavailable or written-unread',
   });
 });
 
+describe('issue 535 round 2: a write whose outcome is unknown is never offered again (follow-up 544)', () => {
+  const unknown = ['github-unavailable', 'written-unread'];
+  const creating: Array<[string, (s: Obj) => Obj, string]> = [
+    ['comment', () => submitComment(typeComment(open(), 'oi')), 'comment'],
+    ['new step', () => saveNewStep(typeNewStep(startAddStep(open()), 'Quarto')), 'plan'],
+  ];
+
+  for (const error of unknown) {
+    for (const [name, start, place] of creating) {
+      test(`${error} on the ${name} POST: band without Tentar de novo, a reload, the text to copy, nothing to repeat`, () => {
+        const s = fail(start(open()), { status: 502, error });
+        assert.equal(s.refusal.retry, false);
+        assert.match(s.refusal.reason, /não sei se a mudança foi gravada/);
+        assert.equal(refusalPlace(s), place);
+        assert.match(s.reload.url, /refresh=1$/);
+        assert.equal(s.request, null);
+        assert.equal(s.last, null);
+        assert.equal(retryWrite(s).request, null);
+        assert.ok(textToCopy(s));
+      });
+    }
+  }
+
+  test('github-unavailable on a PATCH keeps Tentar de novo, only on the person click', () => {
+    const s = fail(saveBody(typeBody(open(), 'meu texto')), { status: 502, error: 'github-unavailable' });
+    assert.equal(s.refusal.retry, true);
+    assert.equal(s.request, null);
+    assert.equal(retryWrite(s).request.body.body, 'meu texto');
+  });
+
+  test('a refusal from the core on a POST keeps nothing ambiguous: Tentar de novo stays for a plain refusal', () => {
+    const s = fail(submitComment(typeComment(open(), 'oi')), { status: 502, error: 'github-refused' });
+    assert.equal(s.refusal.retry, true);
+  });
+
+  test('the typed text stays after the reload answers, and the band still waits', () => {
+    const s = fail(submitComment(typeComment(open(), 'oi')), { status: 502, error: 'github-unavailable' });
+    const r = reloaded(s, issue({ commentsTotal: 1 }), s.reload.id);
+    assert.equal(r.comment.text, 'oi');
+    assert.equal(r.refusal.retry, false);
+  });
+});
+
+describe('issue 535 round 2: where the refusal band goes, and a conflict on any field', () => {
+  const refuse = (s: Obj, error = 'github-refused') => fail(s, { status: 502, error });
+  const cases: Array<[string, () => Obj, string]> = [
+    ['title', () => saveTitle(typeTitle(open(), 'Outro')), 'title'],
+    ['body', () => saveBody(typeBody(open(), 'outro')), 'body'],
+    ['type', () => chooseType(open(), 'bug'), 'details'],
+    ['milestone', () => chooseMilestone(open(), 'M4'), 'details'],
+    ['parent', () => chooseParent(open(), `${REPO}#7`), 'details'],
+    ['label', () => addLabel(open(), 'docs'), 'details'],
+    ['step edit', () => saveStep(typeStepText(startStepEdit(open(), 521), 'Novo')), 'plan'],
+    ['new step', () => saveNewStep(typeNewStep(startAddStep(open()), 'Novo')), 'plan'],
+    ['move', () => moveStep(open(), 520, 2), 'plan'],
+    ['remove', () => removeStep(open(), 521), 'plan'],
+    ['comment', () => submitComment(typeComment(open(), 'oi')), 'comment'],
+  ];
+  for (const [name, start, place] of cases) {
+    test(`a refusal on ${name} goes ${place}, and only the description refusal puts the description editor in refused mode`, () => {
+      const s = refuse(start());
+      assert.equal(refusalPlace(s), place);
+      assert.equal(bodyMode(s), place === 'body' ? 'refused' : 'edit');
+      assert.equal(s.refusal.place, place);
+    });
+  }
+
+  test('Desfazer refused goes to the plan, a 422 too', () => {
+    const removed = answered(removeStep(open(), 521), { plan: { count: 2, steps: [step(520), step(522)] } });
+    const s = fail(undoRemove(removed), { status: 422, error: 'unknown-value' });
+    assert.equal(refusalPlace(s), 'plan');
+    assert.equal(bodyMode(s), 'edit');
+  });
+
+  test('no refusal, no place', () => {
+    assert.equal(refusalPlace(open()), null);
+  });
+
+  test('a 409 on the title or on a step edit is the conflict view, not the band', () => {
+    const t = fail(saveTitle(typeTitle(open(), 'Minha')), { status: 409, error: 'conflict', title: 'Deles', updatedAt: 'T9' });
+    assert.equal(bodyMode(t), 'conflict');
+    assert.equal(refusalPlace(t), null);
+  });
+});
+
+describe('issue 535 round 2: a missing version asks for one reload, then refuses (no endless reload)', () => {
+  test('title: the reload still without updatedAt ends in the generic band, and no write', () => {
+    const s0 = saveTitle(typeTitle(open({ updatedAt: '' }), 'Outro'));
+    assert.ok(s0.reload);
+    const s1 = reloaded(s0, issue({ updatedAt: '', title: 'Abrir a issue' }), s0.reload.id);
+    const s2 = saveTitle(s1);
+    assert.equal(s2.reload, null);
+    assert.equal(s2.request, null);
+    assert.equal(s2.refusal.reason, reasonOf({}));
+    assert.equal(s2.refusal.retry, false);
+    assert.equal(refusalPlace(s2), 'title');
+    assert.equal(s2.title, 'Outro');
+  });
+
+  test('body: the same', () => {
+    const s0 = saveBody(typeBody(open({ updatedAt: '' }), 'novo'));
+    const s1 = reloaded(s0, issue({ updatedAt: '' }), s0.reload.id);
+    const s2 = saveBody(s1);
+    assert.equal(s2.reload, null);
+    assert.equal(s2.request, null);
+    assert.equal(refusalPlace(s2), 'body');
+  });
+
+  test('step: the same, and the field stays closed', () => {
+    const plan = { count: 1, steps: [step(520, { updatedAt: '' })] };
+    const s0 = startStepEdit(open({ plan }), 520);
+    const s1 = reloaded(s0, issue({ plan }), s0.reload.id);
+    const s2 = startStepEdit(s1, 520);
+    assert.equal(s2.reload, null);
+    assert.equal(s2.steps.editing, null);
+    assert.equal(refusalPlace(s2), 'plan');
+  });
+
+  test('a reload that brings the version lets the save through', () => {
+    const s0 = saveTitle(typeTitle(open({ updatedAt: '' }), 'Outro'));
+    const s1 = reloaded(s0, issue({ updatedAt: 'T5' }), s0.reload.id);
+    assert.equal(saveTitle(s1).request.body.updatedAt, 'T5');
+  });
+});
+
+describe('issue 535 round 2: a conflict is recorded against the request, not the editor', () => {
+  test('a 409 on step 521 stays on step 521 when the editor now holds another step', () => {
+    const s0 = saveStep(typeStepText(startStepEdit(open(), 521), 'Minha'));
+    const moved = { ...s0, steps: { ...s0.steps, editing: { number: 522, text: 'outra', base: 'S522' } } };
+    const s = rejected(moved, { status: 409, error: 'conflict', title: 'Deles', updatedAt: 'S9' }, moved.request.id);
+    assert.equal(s.conflict.number, 521);
+    assert.equal(s.conflict.mine, 'Minha');
+    assert.deepEqual(asked(overwrite(s)).body, { repo: REPO, number: 506, step: `${REPO}#521`, updatedAt: 'S9', title: 'Minha' });
+    assert.equal(keepGithub(s).steps.editing.number, 522, 'the other field is left alone');
+  });
+
+  test('a 409 with no step open does not throw', () => {
+    const s0 = saveStep(typeStepText(startStepEdit(open(), 521), 'Minha'));
+    const none = { ...s0, steps: { ...s0.steps, editing: null } };
+    const s = rejected(none, { status: 409, error: 'conflict', title: 'Deles', updatedAt: 'S9' }, none.request.id);
+    assert.equal(s.conflict.number, 521);
+    assert.equal(s.conflict.mine, 'Minha');
+  });
+
+  test('the text sent is what the conflict keeps, even if the field changed after sending', () => {
+    const s0 = saveBody(typeBody(open(), 'enviado'));
+    const edited = typeBody(s0, 'digitado depois');
+    const s = rejected(edited, { status: 409, error: 'conflict', body: 'deles', updatedAt: 'T9' }, edited.request.id);
+    assert.equal(s.conflict.mine, 'enviado');
+  });
+});
+
 describe('the components driven from the state', () => {
   const find = (root: ElementoFalso, selector: string) => {
     const found = root.querySelector(selector);
     assert.ok(found, `no ${selector}`);
     return found;
   };
-  /** The screen in miniature: render the state, let a control change it, render again. */
+  /** The screen in miniature: render the state, let a control change it, render again. (issue 535) */
   function screen(initial: Obj) {
     const box = { s: initial };
     const set = (fn: (s: Obj) => Obj) => () => void (box.s = fn(box.s));
