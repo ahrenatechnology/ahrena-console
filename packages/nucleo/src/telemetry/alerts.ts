@@ -141,7 +141,7 @@ export function computeAlerts(reading: TelemetryReading, points: readonly Sample
   return alerts;
 }
 
-/** Memory under pressure: the macOS level when there is one (`normal` means none), else the used share of the total. */
+/** Memory under pressure (#564): the macOS level when there is one (`normal` means none), else the used share of the total. */
 function memoryHighAlert(reading: TelemetryReading, since: string): Alert | null {
   const { totalBytes, usedBytes, pressure } = reading.memory;
   const usedPct = totalBytes > 0 ? (usedBytes / totalBytes) * 100 : 0;
@@ -160,7 +160,7 @@ function memoryHighAlert(reading: TelemetryReading, since: string): Alert | null
   };
 }
 
-/** Swap nearly full: only when the total is known and above zero. */
+/** Swap nearly full (#564): only when the total is known and above zero. */
 function swapHighAlert(reading: TelemetryReading, since: string): Alert | null {
   const { swapTotalBytes, swapUsedBytes } = reading.memory;
   if (swapTotalBytes === null || swapUsedBytes === null || !(swapTotalBytes > 0)) return null;
