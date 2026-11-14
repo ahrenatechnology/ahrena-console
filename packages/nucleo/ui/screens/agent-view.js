@@ -351,7 +351,9 @@ export async function mount(area, ctx) {
   }
 
   // Back to the Agents tab is a navigation of the shell that carries the agent, so its row gets the focus
-  // (issue 539). `area` is the shell's shared content element, so the listener is released on leaving.
+  // (issue 539). `area` is the shell's shared content element, so the listener must come off when the screen is
+  // left. The shell registers the returned cleanup only after `mount` resolves, so a person who leaves during the
+  // first read would never trigger it: the release hangs on the screen's own signal as well (issue 539).
   const onBack = (ev) => {
     if (ev.defaultPrevented || ev.button > 0 || ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.altKey) return;
     const link = ev.target?.closest?.('a[href]');
@@ -359,6 +361,12 @@ export async function mount(area, ctx) {
     ev.preventDefault();
     ctx.navigate(agentsTabHref(sessionId), { focusAgent: agentId });
   };
+  const release = () => {
+    live = false;
+    area.removeEventListener('click', onBack);
+  };
+  if (ctx.signal.aborted) return release; // left before it began: nothing is added to the shared area
+  ctx.signal.addEventListener('abort', release, { once: true });
   area.addEventListener('click', onBack);
 
   reader.subscribe(draw);
@@ -370,8 +378,5 @@ export async function mount(area, ctx) {
   });
   ctx.onRestart(follow);
   await reader.load();
-  return () => {
-    live = false;
-    area.removeEventListener('click', onBack);
-  };
+  return release;
 }

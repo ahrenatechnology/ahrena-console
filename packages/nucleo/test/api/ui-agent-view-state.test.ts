@@ -387,6 +387,31 @@ describe('Back returns to the Agents tab with the focus on the agent', () => {
     assert.deepEqual(second.navigated, [[AGENTS_HREF, { focusAgent: IRIS }]]);
   });
 
+  test('leaving during the first read releases the click listener though the shell never calls the cleanup (#539)', async () => {
+    const area = new ElementoFalso('main');
+    let answer: (v: unknown) => void = () => {};
+    const first = ctxFor(() => new Promise((r) => (answer = r)));
+    const mounting = screen.mount(area, first.ctx);
+    await settle();
+    first.leave.abort(); // the shell registers the cleanup only after mount resolves: on an aborted signal it never fires
+    answer(agent());
+    await mounting;
+    await settle();
+    const link = area.querySelectorAll('.av-crumb a').find((a) => a.getAttribute('href') === AGENTS_HREF);
+    if (link) click(link);
+    assert.deepEqual(first.navigated, [], 'the screen that was left no longer answers a click');
+  });
+
+  test('a screen mounted on an already aborted signal adds no listener and draws nothing (#539)', async () => {
+    const area = new ElementoFalso('main');
+    const c = ctxFor(() => agent());
+    c.leave.abort();
+    await screen.mount(area, c.ctx);
+    await settle();
+    assert.equal(area.querySelector('.av-crumb'), null);
+    assert.equal(area.ouvintes.get('click')?.size ?? 0, 0);
+  });
+
   test('a click with a modifier, or a link to somewhere else, is left to the browser', async () => {
     const { area, navigated } = await mountView(() => agent());
     const agents = area.querySelectorAll('.av-crumb a').find((a) => a.getAttribute('href') === AGENTS_HREF)!;
