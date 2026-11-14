@@ -10,8 +10,8 @@
 // One step at a time, in the order given, on the core's single GitHub queue (the steps' own services
 // enqueue their calls). A step is due at start and then `everyMs` after it last ran, ok or not. While
 // GitHub has paused the core (403/429), no step runs: the tick after the pause picks them up. A step
-// answers `skipped` when there is nothing to read (GitHub not connected, no Project chosen), and
-// `pending` when what it needs is not ready yet: it runs again on the next tick.
+// answers `skipped` when there is nothing to read (no Project chosen), and `pending` when what it needs
+// is not ready yet (GitHub not connected, or revoked: #612, no call is made): it runs again on the next tick.
 
 /** One step of the sync. `run` reads GitHub and stores; it answers whether there was anything to read. */
 export interface SyncStep {

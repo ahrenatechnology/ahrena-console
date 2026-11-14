@@ -463,16 +463,37 @@ export class GithubConnection {
     } catch (err) {
       if (generation !== this.generation || this.credential !== token) return;
       if (err instanceof GithubAuthError && err.status === 401) {
-        this.credential = null;
-        if (source === 'gh') this.ghFailed = true;
-        else this.lastError = 'revoked'; // the login stays: Reconnect replaces the vault entry
-        this.log('github: GitHub rejected the credential (401)');
-        this.onChange();
+        this.dropRejectedCredential(source);
         return;
       }
       this.scopesChecked = false;
       this.log(`github: could not read the scopes (${err instanceof GithubAuthError ? err.code : 'error'})`);
     }
+  }
+
+  /** GitHub answered 401 for the credential in use: it is not served any more, once, with one log line. */
+  private dropRejectedCredential(source: GithubCredentialSource): void {
+    this.credential = null;
+    if (source === 'gh') this.ghFailed = true;
+    else this.lastError = 'revoked'; // the login stays: Reconnect replaces the vault entry
+    this.log('github: GitHub rejected the credential (401)');
+    this.onChange();
+  }
+
+  /**
+   * #612 The one place a 401 on a data call reaches the connection: the `fetch` every GitHub-backed
+   * source uses, answering as `base` does, but a 401 for the credential the connection holds drops it
+   * (as the `/user` check at load does). A 401 for a credential no longer held changes nothing.
+   */
+  watchRejections(base: typeof fetch): typeof fetch {
+    return async (input, init) => {
+      const res = await base(input, init);
+      if (res.status === 401) {
+        const bearer = /^(?:bearer|token) (.+)$/i.exec(new Headers(init?.headers).get('authorization') ?? '')?.[1];
+        if (bearer && bearer === this.credential) this.dropRejectedCredential(this.sourceInfo().source);
+      }
+      return res;
+    };
   }
 
   /**
