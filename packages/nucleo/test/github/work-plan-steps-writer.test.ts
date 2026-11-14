@@ -6,7 +6,7 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import { GithubGraphqlSource, QUERIES } from '../../src/github/github-source.ts';
-import { buildWorkIssue, WorkIssueRefusedError, WorkIssueWrittenUnreadError, type WorkIssueRef, type WorkIssueRead } from '../../src/github/work-issue.ts';
+import { buildWorkIssue, WorkIssueNotRemovedError, WorkIssueRefusedError, WorkIssueWrittenUnreadError, type WorkIssueRef, type WorkIssueRead } from '../../src/github/work-issue.ts';
 import { k, REPO } from './helpers.ts';
 
 const node = (n: number, over: Record<string, unknown> = {}) => ({
@@ -124,6 +124,51 @@ describe('#534/AC-4 removeStep', () => {
     assert.deepEqual(calls.map((c) => c.operation), ['WorkPlanSteps', 'CloseWorkPlanStep', 'WorkIssue']);
     assert.deepEqual(calls[1]!.variables.input, { issueId: 'I_602', stateReason: 'NOT_PLANNED' });
     assert.match(calls[1]!.query, /closeIssue/);
+  });
+});
+
+describe('#534/AC-4 restoreStep', () => {
+  const removed = (n: number) => node(n, { state: 'CLOSED', stateReason: 'NOT_PLANNED' });
+
+  test('#534/AC-4 one reopenIssue with the step id as a variable, then the parent read back', async () => {
+    const { source, calls } = fake({ subs: [node(601), removed(602)] });
+    await source.restoreStep(k(534), k(602));
+    assert.deepEqual(calls.map((c) => c.operation), ['WorkPlanSteps', 'ReopenWorkPlanStep', 'WorkIssue']);
+    assert.deepEqual(calls[1]!.variables.input, { issueId: 'I_602' });
+    assert.match(calls[1]!.query, /reopenIssue/);
+  });
+
+  test('#534/AC-4 a Plan sub-issue that is open or closed as completed is WorkIssueNotRemovedError, a non-Plan or absent one is WorkIssueRefusedError step; nothing is written', async () => {
+    const { source, calls } = fake({ subs: [node(601), node(602, { state: 'CLOSED', stateReason: 'COMPLETED' }), { ...removed(603), issueType: { name: 'Tech Task' } }] });
+    for (const step of [k(601), k(602)]) await assert.rejects(source.restoreStep(k(534), step), (e: any) => e instanceof WorkIssueNotRemovedError);
+    for (const step of [k(603), k(999)]) await assert.rejects(source.restoreStep(k(534), step), (e: any) => e instanceof WorkIssueRefusedError && e.param === 'step');
+    assert.ok(calls.every((c) => c.operation === 'WorkPlanSteps'));
+  });
+
+  test('#534/AC-5 a reopen that fails is never retried; a failed read-back is WorkIssueWrittenUnreadError; an unknown issue is null', async () => {
+    const m = fake({ subs: [removed(602)], failOn: 'ReopenWorkPlanStep' });
+    await assert.rejects(m.source.restoreStep(k(534), k(602)));
+    assert.equal(m.calls.filter((c) => c.operation === 'ReopenWorkPlanStep').length, 1);
+    const u = fake({ subs: [removed(602)], failOn: 'WorkIssue' });
+    await assert.rejects(u.source.restoreStep(k(534), k(602)), (e: any) => e instanceof WorkIssueWrittenUnreadError);
+    const f = (async () => new Response(JSON.stringify({ data: { repository: null } }), { status: 200 })) as unknown as typeof fetch;
+    assert.equal(await new GithubGraphqlSource({ token: 't', fetch: f, sleep: async () => {} }).restoreStep(k(1), k(2)), null);
+  });
+});
+
+describe('#534/AC-1 the read carries each step updatedAt', () => {
+  test('#534/AC-1 the issue read maps updatedAt of each sub-issue from GitHub, and plan.steps carries it', async () => {
+    const { source } = fake({ subs: [node(601, { updatedAt: '2026-11-11T09:00:00Z' }), node(602)] });
+    const r = (await source.issue(k(534)))!;
+    assert.deepEqual(r.subIssues.map((s) => [s.number, s.updatedAt]), [[601, '2026-11-11T09:00:00Z'], [602, '2026-11-10T10:00:00Z']]);
+    assert.match(QUERIES.issue, /subIssues\(first: 50\) \{ nodes \{ .*issueType \{ name \} updatedAt \}/);
+    assert.deepEqual(buildWorkIssue(r, null).plan.steps.map((s) => [s.number, s.updatedAt]), [[601, '2026-11-11T09:00:00Z'], [602, '2026-11-10T10:00:00Z']]);
+  });
+
+  test('#534/AC-1 a value cached before updatedAt was read gives an empty updatedAt, never undefined', () => {
+    const ref = { key: k(1), repo: REPO, number: 1, title: 's', url: 'u', state: 'OPEN', type: 'Plan' } as WorkIssueRef;
+    const read = { ...ref, number: 534, key: k(534), updatedAt: 't', labels: [], milestone: null, body: '', comments: [], commentsTotal: 0, parentChain: [], pullRequests: [], subIssues: [ref] } as WorkIssueRead;
+    assert.equal(buildWorkIssue(read, null).plan.steps[0]!.updatedAt, '');
   });
 });
 

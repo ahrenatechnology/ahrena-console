@@ -9,7 +9,7 @@ import { describe, test } from 'node:test';
 import { openSqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
 import { Accounts, MontadorDoPainel, startLocalApi, type LocalApi } from '../../src/api/index.ts';
 import { WORK_ISSUE_ROUTE } from '../../src/api/work-issue.ts';
-import { WORK_ISSUE_STEPS_ORDER_ROUTE, WORK_ISSUE_STEPS_ROUTE } from '../../src/api/work-issue-steps.ts';
+import { WORK_ISSUE_STEPS_ORDER_ROUTE, WORK_ISSUE_STEPS_RESTORE_ROUTE, WORK_ISSUE_STEPS_ROUTE } from '../../src/api/work-issue-steps.ts';
 import { GithubCache, MemoryCacheStore } from '../../src/github/cache.ts';
 import { GithubGraphqlSource } from '../../src/github/github-source.ts';
 import { WorkIssueService } from '../../src/github/work-issue-service.ts';
@@ -40,7 +40,7 @@ interface Github {
 
 const sub = (number: number, title: string, over: Partial<Sub> = {}): Sub => ({ number, title, body: `${title} body`, updatedAt: OPENED_AT, type: 'Plan', state: 'OPEN', stateReason: null, ...over });
 const ref = (s: Sub) => ({
-  number: s.number, title: s.title, url: `https://github.com/${REPO}/issues/${s.number}`, state: s.state, stateReason: s.stateReason,
+  updatedAt: s.updatedAt, number: s.number, title: s.title, url: `https://github.com/${REPO}/issues/${s.number}`, state: s.state, stateReason: s.stateReason,
   repository: { nameWithOwner: REPO }, issueType: s.type ? { name: s.type } : null,
 });
 const detail = (g: Github) => ({
@@ -55,7 +55,7 @@ async function boot({ withService = true }: { withService?: boolean } = {}): Pro
   const github: Github = {
     calls: 0, writes: [], mode: 'ok', secret: 'raw-github-text-never-on-screen',
     types: [{ id: 'T_task', name: 'Tech Task' }, { id: 'T_plan', name: 'Plan' }],
-    subs: [sub(601, 'step A'), sub(602, 'step B'), sub(603, 'step C'), sub(604, 'a task', { type: 'Tech Task' })],
+    subs: [sub(601, 'step A'), sub(602, 'step B'), sub(603, 'step C'), sub(604, 'a task', { type: 'Tech Task' }), sub(605, 'step D, removed', { state: 'CLOSED', stateReason: 'NOT_PLANNED' })],
   };
   const fakeFetch = (async (_u: string, init: RequestInit) => {
     github.calls++;
@@ -63,7 +63,7 @@ async function boot({ withService = true }: { withService?: boolean } = {}): Pro
     const { query, variables } = JSON.parse(String(init.body));
     const op = /(?:query|mutation) (\w+)/.exec(query)![1];
     if (github.mode === 'unread' && op === 'WorkIssue') throw new TypeError(github.secret);
-    const isWrite = /^(Update|Create|Close|Move)/.test(op);
+    const isWrite = /^(Update|Create|Close|Reopen|Move)/.test(op);
     if (isWrite && github.mode === 'forbidden') return new Response(JSON.stringify({ message: github.secret }), { status: 403 });
     const byId = (id: string) => github.subs.find((s) => `I_${s.number}` === id)!;
     let data: Record<string, unknown> = {};
@@ -90,6 +90,11 @@ async function boot({ withService = true }: { withService?: boolean } = {}): Pro
       const s = byId(variables.input.issueId);
       s.state = 'CLOSED';
       s.stateReason = variables.input.stateReason;
+      github.writes.push({ op, input: variables.input });
+    } else if (op === 'ReopenWorkPlanStep') {
+      const s = byId(variables.input.issueId);
+      s.state = 'OPEN';
+      s.stateReason = null;
       github.writes.push({ op, input: variables.input });
     } else if (op === 'MoveWorkPlanStep') {
       const i = variables.input;
@@ -130,6 +135,7 @@ const call = async (b: Boot, method: string, path: string, body: Record<string, 
 const edit = (b: Boot, body: Record<string, unknown>) => call(b, 'PATCH', WORK_ISSUE_STEPS_ROUTE, body);
 const add = (b: Boot, body: Record<string, unknown>) => call(b, 'POST', WORK_ISSUE_STEPS_ROUTE, body);
 const remove = (b: Boot, body: Record<string, unknown>) => call(b, 'DELETE', WORK_ISSUE_STEPS_ROUTE, body);
+const restore = (b: Boot, body: Record<string, unknown>) => call(b, 'POST', WORK_ISSUE_STEPS_RESTORE_ROUTE, body);
 const move = (b: Boot, body: Record<string, unknown>) => call(b, 'POST', WORK_ISSUE_STEPS_ORDER_ROUTE, body);
 const getIssue = async (b: Boot) => (await (await fetch(`${b.api.url}${WORK_ISSUE_ROUTE}?repo=${REPO}&number=${X}`)).json()) as any;
 const key = (n: number) => `${REPO}#${n}`;
@@ -266,11 +272,51 @@ describe('#534/AC-4 removing a step closes its sub-issue as not planned and the 
     }));
 });
 
+describe('#534/AC-4 a removed step is restored: its sub-issue is reopened and the plan count goes up by one', () => {
+  test('#534/AC-4 Given step B removed, when it is restored, Then GitHub reopens it, the answer has it back in plan.steps with count 3, and the cache holds that answer', async () =>
+    withApi(async (b) => {
+      assert.equal((await remove(b, { step: key(602) })).status, 200);
+      const r = await restore(b, { step: key(602) });
+      assert.equal(r.status, 200);
+      assert.deepEqual([r.json.plan.count, titles(r.json)], [3, ['step A', 'step B', 'step C']]);
+      assert.deepEqual(b.github.writes.at(-1), { op: 'ReopenWorkPlanStep', input: { issueId: 'I_602' } });
+      const calls = b.github.calls;
+      assert.deepEqual([titles(await getIssue(b)), b.github.calls], [['step A', 'step B', 'step C'], calls]);
+    }));
+
+  test('#534/AC-4 Given a step that is open or closed as completed, Then 409 not-removed and nothing is written', async () =>
+    withApi(async (b) => {
+      b.github.subs[1]!.state = 'CLOSED';
+      b.github.subs[1]!.stateReason = 'COMPLETED';
+      for (const n of [601, 602]) assert.deepEqual(await restore(b, { step: key(n) }), { status: 409, json: { error: 'not-removed' } });
+      assert.deepEqual(b.github.writes, []);
+    }));
+
+  test('#534/AC-4 Given a step that is not a Plan sub-issue of the issue, Then 422 unknown-value step; a bad step is 400 bad-param step; nothing is written', async () =>
+    withApi(async (b) => {
+      b.github.subs[3]!.state = 'CLOSED';
+      b.github.subs[3]!.stateReason = 'NOT_PLANNED';
+      for (const step of [key(604), key(999)]) assert.deepEqual(await restore(b, { step }), { status: 422, json: { error: 'unknown-value', param: 'step' } });
+      assert.deepEqual(await restore(b, { step: 'nope' }), { status: 400, json: { error: 'bad-param', param: 'step' } });
+      assert.deepEqual(b.github.writes, []);
+    }));
+});
+
+describe('#534/AC-1 each plan step carries the updatedAt the /ui sends to the edit', () => {
+  test('#534/AC-1 Given GitHub holds a step updatedAt, Then GET plan.steps carries it and an edit with it is accepted', async () =>
+    withApi(async (b) => {
+      const g = await getIssue(b);
+      assert.deepEqual(g.plan.steps.map((s: any) => s.updatedAt), [OPENED_AT, OPENED_AT, OPENED_AT]);
+      assert.equal((await edit(b, { step: key(601), title: 'edited', updatedAt: g.plan.steps[0].updatedAt })).status, 200);
+    }));
+});
+
 const all: [string, (b: Boot) => ReturnType<typeof call>][] = [
   ['edit', (b) => edit(b, { step: key(601), title: 'x', updatedAt: OPENED_AT })],
   ['add', (b) => add(b, { title: 'x' })],
   ['remove', (b) => remove(b, { step: key(601) })],
   ['move', (b) => move(b, { step: key(603), after: null })],
+  ['restore', (b) => restore(b, { step: key(605) })],
 ];
 
 describe('#534/AC-5 a GitHub refusal answers with a stable reason and leaves the cache as it was', () => {
@@ -327,6 +373,7 @@ describe('#534/AC-5 only the /ui, JSON, bounded, on the exact path', () => {
     ['POST', WORK_ISSUE_STEPS_ROUTE, { repo: REPO, number: X, title: 'x' }],
     ['DELETE', WORK_ISSUE_STEPS_ROUTE, { repo: REPO, number: X, step: key(601) }],
     ['POST', WORK_ISSUE_STEPS_ORDER_ROUTE, { repo: REPO, number: X, step: key(603), after: null }],
+    ['POST', WORK_ISSUE_STEPS_RESTORE_ROUTE, { repo: REPO, number: X, step: key(601) }],
   ];
 
   test('#534/AC-5 another Origin, no Origin, a look-alike Host, a query, a trailing slash or an encoded path is 403 and nothing is written', async () =>
@@ -352,6 +399,8 @@ describe('#534/AC-5 only the /ui, JSON, bounded, on the exact path', () => {
       assert.equal((await send(b, 'PUT', WORK_ISSUE_STEPS_ROUTE, {})).status, 403);
       assert.equal((await send(b, 'PATCH', WORK_ISSUE_STEPS_ORDER_ROUTE, {})).status, 403);
       assert.equal((await send(b, 'DELETE', WORK_ISSUE_STEPS_ORDER_ROUTE, {})).status, 403);
+      assert.equal((await send(b, 'PATCH', WORK_ISSUE_STEPS_RESTORE_ROUTE, {})).status, 403);
+      assert.equal((await send(b, 'DELETE', WORK_ISSUE_STEPS_RESTORE_ROUTE, {})).status, 403);
       assert.equal(b.github.calls, 0);
     }));
 

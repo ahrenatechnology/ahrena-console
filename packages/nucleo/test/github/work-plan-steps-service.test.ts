@@ -45,6 +45,10 @@ class FakeWriter implements WorkIssueWriter {
     this.calls.push(`removeStep ${parent} ${step}`);
     return this.done(parent);
   }
+  async restoreStep(parent: string, step: string) {
+    this.calls.push(`restoreStep ${parent} ${step}`);
+    return this.done(parent);
+  }
   async moveStep(parent: string, step: string, after: string | null) {
     this.calls.push(`moveStep ${parent} ${step} ${after}`);
     return this.done(parent);
@@ -93,6 +97,30 @@ describe('#534/AC-2 to AC-4 the other operations go through the same seam', () =
     const { cache, service } = setup();
     await service.issue(k(601));
     await service.removeStep(k(534), k(601));
+    assert.equal(await cache.peek(workIssueCacheKey(k(601))), null);
+  });
+});
+
+describe('#534/AC-4 restoring a removed step', () => {
+  test("#534/AC-4 restore answers the issue as GitHub returned it, stores it, and drops the step's own cache entry", async () => {
+    const { writer, cache, service } = setup();
+    await service.issue(k(601));
+    assert.equal((await service.restoreStep(k(534), k(601))).title, 'after the write');
+    assert.deepEqual(writer.calls, [`restoreStep ${k(534)} ${k(601)}`]);
+    assert.ok(await cache.peek(workIssueCacheKey(k(534))));
+    assert.equal(await cache.peek(workIssueCacheKey(k(601))), null);
+  });
+
+  test('#534/AC-5 restore of an unknown issue is WorkIssueNotFoundError; written but unread drops both entries', async () => {
+    const { writer, cache, service } = setup();
+    writer.missing = true;
+    await assert.rejects(service.restoreStep(k(534), k(601)), WorkIssueNotFoundError);
+    writer.missing = false;
+    await service.issue(k(534));
+    await service.issue(k(601));
+    writer.unread = new Error('raw read-back text');
+    await assert.rejects(service.restoreStep(k(534), k(601)), WorkIssueWrittenUnreadError);
+    assert.equal(await cache.peek(workIssueCacheKey(k(534))), null);
     assert.equal(await cache.peek(workIssueCacheKey(k(601))), null);
   });
 });

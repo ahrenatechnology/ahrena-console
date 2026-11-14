@@ -154,6 +154,11 @@ export class WorkIssueService {
     return this.write(key, (writer) => writer.removeStep(key, step), [step]);
   }
 
+  /** #534 restores a removed step: its sub-issue is reopened, and its own cached detail dropped as a removal's is. */
+  async restoreStep(key: string, step: string): Promise<WorkIssueResult> {
+    return this.write(key, (writer) => writer.restoreStep(key, step), [step]);
+  }
+
   /** #534 moves a step behind `after`, or to the top with `null`. */
   async moveStep(key: string, step: string, after: string | null): Promise<WorkIssueResult> {
     return this.write(key, (writer) => writer.moveStep(key, step, after));

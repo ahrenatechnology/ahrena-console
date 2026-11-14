@@ -30,7 +30,7 @@ import type { ManagedRuntime } from '../runtime/service.ts';
 // | `GET /api/work/issue`         | The work board's issue detail: body, comments, parents, sub-issues, Plan steps and the linked pull request (`?repo=owner/name`, `?number=`, `?refresh=1`; api/work-issue.ts, #506) |
 // | `PATCH /api/work/issue`       | Saves fields of one issue on GitHub (title, body, labels, type, milestone, parent) and answers the issue as GitHub returned it; a title or body save older than GitHub's is 409 (`{ repo, number, updatedAt?, ... }`; api/work-issue-write.ts, #533) |
 // | `POST /api/work/issue/comments` | Adds a comment to an issue on GitHub (`{ repo, number, body }`; api/work-issue-write.ts, #533) |
-// | `POST`, `PATCH` and `DELETE /api/work/issue/steps` and `POST /api/work/issue/steps/order` | The issue's Plan steps, as Plan sub-issues on GitHub: add one, edit its title and body (409 when older than GitHub's), remove it (closed as not planned) and move it (`{ repo, number, step, ... }`, `after` a key or `null` for the top); each answers the issue as GitHub returned it (api/work-issue-steps.ts, #534) |
+// | `POST`, `PATCH` and `DELETE /api/work/issue/steps`, `POST /api/work/issue/steps/order` and `POST /api/work/issue/steps/restore` | The issue's Plan steps, as Plan sub-issues on GitHub: add one, edit its title and body (409 when older than GitHub's), remove it (closed as not planned), restore it (reopened; 409 `not-removed` when it is not removed) and move it (`{ repo, number, step, ... }`, `after` a key or `null` for the top); each answers the issue as GitHub returned it (api/work-issue-steps.ts, #534) |
 // | `POST /api/work/plan`         | "Planejar": a planning-only Athena session for an issue, in its repository's folder, in the Claude Desktop or a terminal (`{ repo, number, target, replan? }`; api/work-plan.ts, #507) |
 // | `POST /api/work/run`          | "Executar plano": the Athena session that executes an issue's plan, in its repository's folder, in the Claude Desktop or a terminal; 409 at 2 cards in Em execução unless `force` (`{ repo, number, target, force? }`; api/work-run.ts, #531) |
 // | `GET /api/work`               | The work board: the Project's issues in the agent lifecycle columns (`?level=`, `?initiative=`, `?epic=`, `?type=`, `?label=`, `?repo=`, `?status=`, `?refresh=1`; api/work-board.ts, #465 #466) |
@@ -108,7 +108,7 @@ import { agentConfigWriteFromSameOrigin, AGENT_CONFIG_ROUTE, type AgentConfigRou
 import type { McpServer } from '../mcp/protocol.ts';
 import { criarRotaDoProjeto, ehDoProjeto, mesmaOrigemMovendo, PROJECT_OPTIONS_ROUTE, type OpcoesDoProjeto } from './project.ts';
 import { createWorkBoardRoute, WORK_BOARD_ROUTE, type WorkBoardRouteOptions } from './work-board.ts';
-import { createWorkIssueStepsRoute, WORK_ISSUE_STEPS_ORDER_ROUTE, WORK_ISSUE_STEPS_ROUTE, type WorkIssueStepsRouteOptions } from './work-issue-steps.ts';
+import { createWorkIssueStepsRoute, WORK_ISSUE_STEPS_ORDER_ROUTE, WORK_ISSUE_STEPS_RESTORE_ROUTE, WORK_ISSUE_STEPS_ROUTE, type WorkIssueStepsRouteOptions } from './work-issue-steps.ts';
 import { createWorkIssueRoute, WORK_ISSUE_COMMENTS_ROUTE, WORK_ISSUE_ROUTE, type WorkIssueRouteOptions } from './work-issue.ts';
 import { createWorkIssueWriteRoute, type WorkIssueWriteRouteOptions } from './work-issue-write.ts';
 import { createWorkPlanRoute, WORK_PLAN_ROUTE, type WorkPlanRouteOptions } from './work-plan.ts';
@@ -300,6 +300,7 @@ export function isGithubScreenRoute(pathname: string): boolean {
     pathname === WORK_ISSUE_COMMENTS_ROUTE ||
     pathname === WORK_ISSUE_STEPS_ROUTE ||
     pathname === WORK_ISSUE_STEPS_ORDER_ROUTE ||
+    pathname === WORK_ISSUE_STEPS_RESTORE_ROUTE ||
     pathname.startsWith(`${FRAMEWORK_INSTALL_ROUTE}/`) ||
     pathname === '/api/analytics/delivery'
   );
@@ -356,11 +357,11 @@ const sameOriginWorkPlan = (req: IncomingMessage, port: number): boolean => req.
 
 /**
  * #533 the issue writes: only `PATCH /api/work/issue` and `POST /api/work/issue/comments`, the exact raw path, from the same origin.
- * #534 and the Plan steps: `POST`, `PATCH` and `DELETE /api/work/issue/steps`, `POST /api/work/issue/steps/order`.
+ * #534 and the Plan steps: `POST`, `PATCH` and `DELETE /api/work/issue/steps`, `POST /api/work/issue/steps/order` and `POST /api/work/issue/steps/restore`.
  */
 const sameOriginWorkIssueWrite = (req: IncomingMessage, port: number): boolean =>
   ((req.method === 'PATCH' && req.url === WORK_ISSUE_ROUTE) ||
-    (req.method === 'POST' && (req.url === WORK_ISSUE_COMMENTS_ROUTE || req.url === WORK_ISSUE_STEPS_ROUTE || req.url === WORK_ISSUE_STEPS_ORDER_ROUTE)) ||
+    (req.method === 'POST' && (req.url === WORK_ISSUE_COMMENTS_ROUTE || req.url === WORK_ISSUE_STEPS_ROUTE || req.url === WORK_ISSUE_STEPS_ORDER_ROUTE || req.url === WORK_ISSUE_STEPS_RESTORE_ROUTE)) ||
     ((req.method === 'PATCH' || req.method === 'DELETE') && req.url === WORK_ISSUE_STEPS_ROUTE)) &&
   fromOwnUi(req, port);
 
@@ -595,7 +596,7 @@ export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
       return respondConnections(req, res, url.pathname, opts.connection);
     }
     // #533 the issue writes are the /ui's alone, like the six above: any other caller, local tools included, gets 403 (AC-4).
-    if ((url.pathname === WORK_ISSUE_COMMENTS_ROUTE || url.pathname === WORK_ISSUE_STEPS_ROUTE || url.pathname === WORK_ISSUE_STEPS_ORDER_ROUTE || (url.pathname === WORK_ISSUE_ROUTE && req.method === 'PATCH')) && (!sameOriginWorkIssueWrite(req, port) || fromAnotherSite(req))) {
+    if ((url.pathname === WORK_ISSUE_COMMENTS_ROUTE || url.pathname === WORK_ISSUE_STEPS_ROUTE || url.pathname === WORK_ISSUE_STEPS_ORDER_ROUTE || url.pathname === WORK_ISSUE_STEPS_RESTORE_ROUTE || (url.pathname === WORK_ISSUE_ROUTE && req.method === 'PATCH')) && (!sameOriginWorkIssueWrite(req, port) || fromAnotherSite(req))) {
       req.resume();
       return send(res, 403, { error: 'forbidden' });
     }
@@ -623,7 +624,7 @@ export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
     if (ehDoProjeto(url.pathname)) return projectRoute(req, res, url);
     if (url.pathname === WORK_BOARD_ROUTE) return workBoardRoute(req, res, url);
     if (url.pathname === WORK_ISSUE_COMMENTS_ROUTE || (url.pathname === WORK_ISSUE_ROUTE && req.method === 'PATCH')) return workIssueWrite(req, res);
-    if (url.pathname === WORK_ISSUE_STEPS_ROUTE || url.pathname === WORK_ISSUE_STEPS_ORDER_ROUTE) return workIssueSteps(req, res);
+    if (url.pathname === WORK_ISSUE_STEPS_ROUTE || url.pathname === WORK_ISSUE_STEPS_ORDER_ROUTE || url.pathname === WORK_ISSUE_STEPS_RESTORE_ROUTE) return workIssueSteps(req, res);
     if (url.pathname === WORK_ISSUE_ROUTE) return workIssueRoute(req, res, url);
     if (url.pathname === WORK_PLAN_ROUTE) return workPlan(req, res);
     if (url.pathname === WORK_RUN_ROUTE) return workRun(req, res);
