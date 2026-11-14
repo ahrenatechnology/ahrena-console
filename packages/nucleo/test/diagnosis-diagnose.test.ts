@@ -118,6 +118,25 @@ describe('diagnose', () => {
     assert.equal(swap.reason, undefined);
   });
 
+  test('#565/AC-9 a collector that read only part of its data comes back ok, marked partial with a capped reason, and the others are unaffected', async () => {
+    const collector: LooseCollector = async (id) => {
+      if (id === 'largest-folders') return { items: [{ path: '/a', bytes: 1 }, { path: '/b', bytes: 9 }], partial: { reason: 'x'.repeat(300) } };
+      if (id === 'docker-df') return [{ type: 'Images', usedBytes: 2, reclaimableBytes: 1 }];
+      return [];
+    };
+    const r = await diagnose({ machine: 'local', alertId: 'volume-full:/' }, deps([alert('volume-full:/', 'volume-full')], collector));
+    assert.equal(r.kind, 'ok');
+    if (r.kind !== 'ok') return;
+    const [folders, docker, caches] = r.diagnosis.sections;
+    assert.equal(folders.status, 'ok');
+    assert.deepEqual(folders.items, [{ path: '/b', bytes: 9 }, { path: '/a', bytes: 1 }]);
+    assert.deepEqual(folders.partial, { reason: 'x'.repeat(120) });
+    assert.equal(folders.reason, undefined);
+    assert.equal(docker.status, 'ok');
+    assert.equal('partial' in docker, false);
+    assert.equal('partial' in caches, false);
+  });
+
   test('#565/AC-6 a slow collector becomes timeout, the others come, and the timer is cleared', async () => {
     const collector: LooseCollector = (id) => (id === 'processes-by-cpu' ? new Promise(() => {}) : Promise.resolve(many(2)));
     const started = Date.now();
