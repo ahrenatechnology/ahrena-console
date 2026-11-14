@@ -3,6 +3,7 @@
 // `textContent` (`el()`), never as HTML.
 
 import { el, icon } from '../dom.js';
+import { agentRouteId, agentViewHref } from './agent-view-format.js';
 import { duration, num, shortAgentName } from './workflow-format.js';
 
 // ---------- Pure parts (tested in node) ----------
@@ -98,7 +99,7 @@ function stepEl(s, sessionId) {
   return el(
     'div',
     { class: `wfl-step wfl-${tone}` },
-    el('div', { class: 'wfl-step-top' }, el('b', { class: 'wfl-trunc', title: s.agentType ?? '' }, stepName(s)), link),
+    el('div', { class: 'wfl-step-top' }, el('a', { class: 'wfl-name wfl-trunc', href: agentViewHref(sessionId, agentRouteId(sessionId, s.agentId)), title: s.agentType ?? '', 'aria-label': `Abrir a vista de ${stepName(s)}` }, stepName(s)), link),
     el('span', { class: 'wfl-task wfl-trunc', title: s.task ?? '' }, s.task ?? ''),
     el('span', { class: `wfl-res wfl-res-${tone} wfl-trunc` }, stepResult(s), dur ? el('span', { class: 'wfl-mute' }, ` · ${dur}`) : null),
   );

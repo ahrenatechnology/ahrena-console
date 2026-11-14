@@ -1,4 +1,5 @@
 // Red end-to-end skeleton of the agent view (#521, parent #518); data from #529.
+// The components layer (#538) turned the Agents tab row and loop node tests green; the rest stay `todo` for the state (#539) and contract (#540) layers.
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import { documentoFalso, ElementoFalso, instalarDomFalso, texto } from './fake-dom.ts';
@@ -87,7 +88,7 @@ async function mountAgentsTab(extraServed: Served = {}) {
 }
 
 describe('AC-1: the Agents tab rows lead to the agent view (issue 521)', () => {
-  test('a subagent row is a real link to /ui/sessions/<id>/agents/<agentId>', TODO('AC-1 subagent rows are links'), async () => {
+  test('a subagent row is a real link to /ui/sessions/<id>/agents/<agentId>', async () => {
     const { area } = await mountAgentsTab();
     const rows = area.querySelectorAll('.sd-node').filter((r) => r.getAttribute('data-agent') !== 'main');
     assert.equal(rows.length, 3);
@@ -95,7 +96,7 @@ describe('AC-1: the Agents tab rows lead to the agent view (issue 521)', () => {
     assert.equal(rows.find((r) => texto(r).includes('iris'))!.getAttribute('href'), `/ui/sessions/${SID}/agents/${encodeURIComponent(IRIS)}`);
   });
 
-  test('the link is reachable by keyboard and has a name that says where it goes', TODO('AC-1 keyboard'), async () => {
+  test('the link is reachable by keyboard and has a name that says where it goes', async () => {
     const { area } = await mountAgentsTab();
     const link = area.querySelectorAll('a.sd-node')[0]!;
     assert.notEqual(link.getAttribute('tabindex'), '-1');
@@ -104,7 +105,7 @@ describe('AC-1: the Agents tab rows lead to the agent view (issue 521)', () => {
     assert.equal(documentoFalso.activeElement, link);
   });
 
-  test('the main agent row is not a link, and the rows are indented by parent', TODO('Q3 main row and indent'), async () => {
+  test('the main agent row is not a link, and the rows are indented by parent', async () => {
     const { area } = await mountAgentsTab();
     const rows = area.querySelectorAll('.sd-node');
     const main = rows.find((r) => r.getAttribute('data-agent') === 'main')!;
@@ -285,10 +286,10 @@ describe('a running agent (issue 521)', () => {
 });
 
 describe('the loop node of the Workflow tab (issue 521)', () => {
-  test('the node name links to the agent view and the icon keeps the Conversa link', TODO('Q2 loop node name link'), async () => {
+  test('the node name links to the agent view and the icon keeps the Conversa link', async () => {
     // @ts-expect-error: browser module, plain JavaScript
     const loop = await import('../../ui/screens/workflow-loop.js');
-    const group = { id: 'pr-524', kind: 'pr', pr: 524, issue: null, otherRefs: [], state: 'approved', rounds: 1, changeRequests: 0, steps: [{ agentId: IRIS, role: 'dev', agentType: 'ahrena-engineering-frontend:iris', task: 't', state: 'completed', startedAt: iso(20), endedAt: iso(10), verdict: null, findings: null }] };
+    const group = { id: 'pr-524', kind: 'pr', number: 524, issue: null, otherRefs: [], state: 'approved', rounds: 1, changeRequests: 0, steps: [{ agentId: IRIS, role: 'dev', agentType: 'ahrena-engineering-frontend:iris', task: 't', state: 'completed', startedAt: iso(20), endedAt: iso(10), verdict: null, findings: null }] };
     const area = new ElementoFalso('div');
     area.append(loop.loopPanel({ sessionId: SID, loop: { groups: [group], totals: { prs: 1, rounds: 1, changeRequests: 0, subagents: 1 } } }, null));
     const name = area.querySelector('a.wfl-name')!;
