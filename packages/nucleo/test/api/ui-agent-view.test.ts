@@ -1,5 +1,6 @@
 // Red end-to-end skeleton of the agent view (#521, parent #518); data from #529.
-// The components layer (#538) turned the Agents tab row and loop node tests green; the rest stay `todo` for the state (#539) and contract (#540) layers.
+// The components layer (#538) turned the Agents tab row and loop node tests green; the state layer (#539) turned every scenario that
+// mounts the screen over a fake read in the shape of #529 green. What stays `todo` needs the registered route, the contract layer (#540).
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import { documentoFalso, ElementoFalso, instalarDomFalso, texto } from './fake-dom.ts';
@@ -30,12 +31,12 @@ const AGENTS_LIST = {
 };
 
 const lines = (n: number) => Array.from({ length: n }, (_, i) => `linha ${i + 1}`).join('\n');
-const step = (i: number, extra = {}) => ({ kind: 'tool', name: 'Read', summary: `arquivo ${i}`, state: 'ok', startedAt: iso(30 - i), endedAt: iso(29 - i), toolUseId: `tu-${i}`, ...extra });
+// The shape of #529 (docs/contracts/agent-view.md): `agentId`, `start`/`end`, steps with `id`/`start`/`end`/`childAgentId`.
+const step = (i: number, extra = {}) => ({ id: `toolu_${i}`, kind: 'tool', name: 'Read', summary: `arquivo ${i}`, state: 'ok', start: iso(30 - i), end: iso(29 - i), childAgentId: null, ...extra });
 const view = (extra = {}) => ({
-  id: ATHENA, agentType: 'athena', description: 'planeja a issue', brief: 'Planeje a issue 521.', briefTruncated: false, spawnedByToolUseId: 'tu-main', state: 'completed',
-  startedAt: iso(30), endedAt: iso(10), costUsd: 0.41, costNote: null,
-  steps: [step(1), { kind: 'agent', name: 'Agent', summary: 'iris', state: 'ok', startedAt: iso(28), endedAt: iso(20), toolUseId: 'tu-iris', child: { id: IRIS, agentType: 'iris', description: 'camadas do front', state: 'completed' } }, step(3)],
-  result: 'Camadas ordenadas.', resultTruncated: false, ...extra,
+  agentId: ATHENA, agentType: 'athena', description: 'planeja a issue', brief: 'Planeje a issue 521.', briefTruncated: false, spawnedByToolUseId: 'toolu_main',
+  steps: [step(1), { id: 'toolu_iris', kind: 'agent', name: 'Agent', summary: 'iris', state: 'ok', start: iso(28), end: iso(20), childAgentId: IRIS }, step(3)],
+  result: 'Camadas ordenadas.', resultTruncated: false, costUsd: 0.41, costNote: null, totalCostUsd: 0.41, state: 'completed', start: iso(30), end: iso(10), ...extra,
 });
 
 interface Served { [route: string]: unknown }
@@ -60,7 +61,7 @@ const settle = () => new Promise((r) => setTimeout(r, 0));
 const registry = await import('../../ui/screens.js');
 
 async function mountAgentView(served: Served, calls: string[] = []) {
-  // The module does not exist yet: the import fails inside the body, so the scenario is red, not the whole file. (#521)
+  // The import sits in the body so a missing module turns the scenario red, not the whole file. (#521)
   const mod = await import('../../ui/screens/agent-view.js' as string);
   const c = ctxFor(served, { id: SID, agentId: ATHENA }, calls);
   const area = new ElementoFalso('main');
@@ -115,7 +116,7 @@ describe('AC-1: the Agents tab rows lead to the agent view (issue 521)', () => {
     assert.deepEqual([depth('main'), depth(ATHENA), depth(IRIS), depth('agent-erodos')], [0, 1, 2, 3]);
   });
 
-  test('Back returns focus to the row the person came from', TODO('Q9 back restores focus'), async () => {
+  test('Back returns focus to the row the person came from', async () => {
     Object.assign(history, { state: { focusAgent: IRIS } });
     try {
       const { area } = await mountAgentsTab();
@@ -137,7 +138,7 @@ describe('the route of the agent view (issue 521)', () => {
 });
 
 describe('AC-2: the populated agent view (issue 521)', () => {
-  test('shows the type and description, the brief, the state, the duration and the final result', TODO('AC-2 populated'), async () => {
+  test('shows the type and description, the brief, the state, the duration and the final result', async () => {
     const { area, calls } = await mountAgentView({ [`${BASE}/agents/${ATHENA}`]: view() });
     assert.ok(calls.includes(`${BASE}/agents/${ATHENA}`), 'one read of the agent');
     assert.equal(texto(area.querySelector('.av-kind')), 'athena');
@@ -148,7 +149,7 @@ describe('AC-2: the populated agent view (issue 521)', () => {
     assert.match(texto(area.querySelector('.av-result')), /Camadas ordenadas\./);
   });
 
-  test('lists the steps in order, with the child agent nested in the call that spawned it', TODO('AC-2 steps and nesting'), async () => {
+  test('lists the steps in order, with the child agent nested in the call that spawned it', async () => {
     const { area } = await mountAgentView({ [`${BASE}/agents/${ATHENA}`]: view() });
     const steps = area.querySelectorAll('.av-step');
     assert.deepEqual(steps.map((s) => s.getAttribute('data-depth')), ['0', '0', '0']);
@@ -158,58 +159,56 @@ describe('AC-2: the populated agent view (issue 521)', () => {
     assert.ok(child.querySelector(`a[href="/ui/sessions/${SID}/agents/${encodeURIComponent(IRIS)}"]`));
   });
 
-  test('a tool step opens its detail inline', TODO('Q10 inline tool detail'), async () => {
+  test('a tool step opens its detail inline', async () => {
     const { area } = await mountAgentView({ [`${BASE}/agents/${ATHENA}`]: view() });
-    const first = area.querySelectorAll('.av-step')[0]!;
-    assert.equal(first.querySelector('.av-detail'), null);
-    first.querySelector('button')!.click();
-    assert.ok(first.querySelector('.av-detail'), 'the detail is inside the step, no navigation');
+    assert.equal(area.querySelectorAll('.av-step')[0]!.querySelector('.av-detail'), null);
+    area.querySelectorAll('.av-step')[0]!.querySelector('button')!.click();
+    assert.ok(area.querySelectorAll('.av-step')[0]!.querySelector('.av-detail'), 'the detail is inside the step, no navigation');
   });
 
-  test('the own cost comes first, and "—" shows when no cost was measured', TODO('Q6 cost'), async () => {
+  test('the own cost comes first, and "—" shows when no cost was measured', async () => {
     const measured = await mountAgentView({ [`${BASE}/agents/${ATHENA}`]: view({ costUsd: 0.41 }) });
-    assert.match(texto(measured.area.querySelector('.av-cost')), /^US\$ 0,41/);
-    const unmeasured = await mountAgentView({ [`${BASE}/agents/${ATHENA}`]: view({ costUsd: null, costNote: 'sem uso medido' }) });
-    assert.match(texto(unmeasured.area.querySelector('.av-cost')), /^—/);
-    assert.match(texto(unmeasured.area.querySelector('.av-cost')), /sem uso medido/);
+    assert.match(texto(measured.area.querySelector('.av-cost')), /^Custo ~US\$ 0,41/);
+    const unmeasured = await mountAgentView({ [`${BASE}/agents/${ATHENA}`]: view({ costUsd: null, costNote: 'no_usage', totalCostUsd: null }) });
+    assert.match(texto(unmeasured.area.querySelector('.av-cost')), /^Custo —/);
+    assert.match(texto(unmeasured.area.querySelector('.av-cost')), /sem custo medido/);
+    assert.doesNotMatch(texto(unmeasured.area.querySelector('.av-cost')), /US\$/);
   });
 });
 
 describe('folds and elision (issue 521)', () => {
-  test('the brief and the result fold at 6 lines and open on request', TODO('Q5 fold at 6 lines'), async () => {
+  test('the brief and the result fold at 6 lines and open on request', async () => {
     const { area } = await mountAgentView({ [`${BASE}/agents/${ATHENA}`]: view({ brief: lines(10), result: lines(10) }) });
     for (const sel of ['.av-brief', '.av-result']) {
-      const box = area.querySelector(sel)!;
-      assert.equal(box.getAttribute('data-folded'), 'true', `${sel} folded`);
-      assert.ok(!texto(box).includes('linha 7'), `${sel} shows only 6 lines`);
-      box.querySelector('.av-fold')!.click();
-      assert.ok(texto(box).includes('linha 10'), `${sel} opened`);
+      assert.equal(area.querySelector(sel)!.getAttribute('data-folded'), 'true', `${sel} folded`);
+      assert.ok(!texto(area.querySelector(sel)).includes('linha 7'), `${sel} shows only 6 lines`);
+      area.querySelector(sel)!.querySelector('.av-fold')!.click();
+      assert.ok(texto(area.querySelector(sel)).includes('linha 10'), `${sel} opened`);
     }
   });
 
-  test('a brief of 6 lines or fewer has no fold', TODO('Q5 no fold up to 6 lines'), async () => {
+  test('a brief of 6 lines or fewer has no fold', async () => {
     const { area } = await mountAgentView({ [`${BASE}/agents/${ATHENA}`]: view({ brief: lines(6) }) });
     assert.equal(area.querySelector('.av-brief')!.querySelector('.av-fold'), null);
   });
 
-  test('above 12 steps the first 5 and the last 3 stay visible, the middle is elided', TODO('Q5 elision'), async () => {
+  test('above 12 steps the first 5 and the last 3 stay visible, the middle is elided', async () => {
     const steps = Array.from({ length: 14 }, (_, i) => step(i + 1));
     const { area } = await mountAgentView({ [`${BASE}/agents/${ATHENA}`]: view({ steps }) });
     assert.deepEqual(area.querySelectorAll('.av-step').map((s) => texto(s).match(/arquivo (\d+)/)![1]), ['1', '2', '3', '4', '5', '12', '13', '14']);
-    const gap = area.querySelector('.av-elided')!;
-    assert.match(texto(gap), /6 passos/);
-    gap.querySelector('button')!.click();
+    assert.match(texto(area.querySelector('.av-elided')), /6 passos/);
+    area.querySelector('.av-elided')!.querySelector('button')!.click();
     assert.equal(area.querySelectorAll('.av-step').length, 14);
   });
 
-  test('12 steps are all shown', TODO('Q5 elision threshold'), async () => {
+  test('12 steps are all shown', async () => {
     const steps = Array.from({ length: 12 }, (_, i) => step(i + 1));
     const { area } = await mountAgentView({ [`${BASE}/agents/${ATHENA}`]: view({ steps }) });
     assert.equal(area.querySelectorAll('.av-step').length, 12);
     assert.equal(area.querySelector('.av-elided'), null);
   });
 
-  test('nested children keep their depth in the sequence once opened inline', TODO('Q4 inline children'), async () => {
+  test('nested children keep their depth in the sequence once opened inline', async () => {
     const served = { [`${BASE}/agents/${ATHENA}`]: view(), [`${BASE}/agents/${encodeURIComponent(IRIS)}`]: view({ id: IRIS, agentType: 'iris', steps: [step(1)] }) };
     const { area } = await mountAgentView(served);
     area.querySelectorAll('.av-step')[1]!.querySelector('button')!.click();
@@ -219,7 +218,7 @@ describe('folds and elision (issue 521)', () => {
 });
 
 describe('the states of the view: loading, error, empty (issue 521)', () => {
-  test('while the read has not come back it shows the loading state', TODO('loading state'), async () => {
+  test('while the read has not come back it shows the loading state', async () => {
     let release: (v: unknown) => void = () => {};
     const pending = new Promise((r) => (release = r));
     const mod = await import('../../ui/screens/agent-view.js' as string);
@@ -233,7 +232,7 @@ describe('the states of the view: loading, error, empty (issue 521)', () => {
     await mounted;
   });
 
-  test('a failed read shows the error, and "Tentar de novo" retries only the read', TODO('Q7 error retries the read'), async () => {
+  test('a failed read shows the error, and "Tentar de novo" retries only the read', async () => {
     let fail = true;
     const calls: string[] = [];
     const served = { [`${BASE}/agents/${ATHENA}`]: () => { if (fail) throw Object.assign(new Error('down'), { name: 'ReadError' }); return view(); } };
@@ -249,16 +248,17 @@ describe('the states of the view: loading, error, empty (issue 521)', () => {
     assert.match(texto(area.querySelector('.av-brief')), /Planeje/);
   });
 
-  test('a failed agent shows its last error and the sequence it reached', TODO('Q7 failed agent'), async () => {
-    const failing = view({ state: 'error', result: null, failure: { at: iso(11), text: 'gh pr diff saiu com 1' }, steps: [step(1), step(2, { state: 'error' })] });
+  test('a failed agent shows its last error, taken from its last step in error, and the sequence it reached', async () => {
+    const failing = view({ state: 'error', result: null, steps: [step(1), step(2, { state: 'error', name: 'Bash', summary: 'gh pr diff' })] });
     const { area } = await mountAgentView({ [`${BASE}/agents/${ATHENA}`]: failing });
     assert.match(texto(area.querySelector('.av-state')), /Com erro/);
-    assert.match(texto(area.querySelector('.av-result')), /gh pr diff saiu com 1/);
+    assert.match(texto(area.querySelector('.av-failed')), /Bash gh pr diff/);
+    assert.match(texto(area.querySelector('.av-result')), /Falhou antes de devolver um resultado/);
     assert.equal(area.querySelectorAll('.av-step').length, 2);
   });
 
-  test('an agent with no recorded data shows the empty state, not blank fields', TODO('empty state'), async () => {
-    const bare = view({ brief: null, steps: [], result: null, costUsd: null, costNote: 'sem uso medido', agentType: null, description: null });
+  test('an agent with no recorded data shows the empty state, not blank fields', async () => {
+    const bare = view({ brief: null, steps: [], result: null, costUsd: null, costNote: 'no_usage', totalCostUsd: null, agentType: null, description: null });
     const { area } = await mountAgentView({ [`${BASE}/agents/${ATHENA}`]: bare });
     assert.ok(area.querySelector('.state'), 'empty state');
     assert.match(texto(area), /Sem brief|Sem dados/);
@@ -267,16 +267,22 @@ describe('the states of the view: loading, error, empty (issue 521)', () => {
 });
 
 describe('a running agent (issue 521)', () => {
-  test('new steps raise "N passos novos" and the view does not scroll by itself', TODO('Q8 no auto-scroll'), async () => {
-    let current = view({ state: 'running', endedAt: null, result: null, steps: [step(1), step(2)] });
+  test('new steps raise "N passos novos" and the view does not scroll by itself', async () => {
+    let current = view({ state: 'working', end: null, result: null, steps: [step(1), step(2)] });
     const { area, change } = await mountAgentView({ [`${BASE}/agents/${ATHENA}`]: () => current });
     assert.match(texto(area.querySelector('.av-state')), /Ativa|Rodando/);
     let scrolled = 0;
-    area.scrollIntoView = () => void scrolled++;
-    for (const s of area.querySelectorAll('.av-step')) s.scrollIntoView = () => void scrolled++;
-    current = view({ state: 'running', endedAt: null, result: null, steps: [step(1), step(2), step(3), step(4)] });
-    change();
-    await settle();
+    const proto = ElementoFalso.prototype;
+    const [intoView, scrollTo] = [proto.scrollIntoView, proto.scrollTo];
+    proto.scrollIntoView = () => void scrolled++;
+    proto.scrollTo = () => void scrolled++;
+    try {
+      current = view({ state: 'working', end: null, result: null, steps: [step(1), step(2), step(3), step(4)] });
+      change();
+      await settle();
+    } finally {
+      Object.assign(proto, { scrollIntoView: intoView, scrollTo });
+    }
     assert.match(texto(area.querySelector('.av-new-steps')), /2 passos novos/);
     assert.equal(area.querySelectorAll('.av-step').length, 2, 'the list stays as the person left it');
     assert.equal(scrolled, 0, 'no auto-scroll');

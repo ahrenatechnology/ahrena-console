@@ -1,7 +1,8 @@
-// The components of the agent view (issue 521, wireframe 521-1 to 521-10): the screen of one agent seen
-// from the inside, drawn from the data of the agent-view contract (docs/contracts/agent-view.md). Nothing
-// here reads the core: the read, the live update and the focus on Back are the state layer, the wiring is
-// the contract layer. Everything from the core goes in through `textContent` (`el()`), never as HTML.
+// The agent view (issue 521, wireframe 521-1 to 521-10): the screen of one agent seen from the inside, drawn
+// from the data of the agent-view contract (docs/contracts/agent-view.md). The components come first; `mount`
+// at the end is the state layer (issue 539): the read, the retry, the live update and the focus on Back, over
+// the `read` the shell gives it. Registering the route and the real read are the contract layer (issue 540).
+// Everything from the core goes in through `textContent` (`el()`), never as HTML.
 
 import { el, icon } from '../dom.js';
 import { error } from '../states.js';
@@ -9,6 +10,7 @@ import { shortAgentName } from './workflow-format.js';
 import {
   agentViewHref, clock, costNoteText, costText, durationText, elide, foldText, num, offsetText, stateLabel, stepDurationText,
 } from './agent-view-format.js';
+import { agentReadRoute, createAgentReader, isRunning } from './agent-view-state.js';
 
 function ensureStyle() {
   if (document.querySelector('link[data-screen="agent-view"]')) return;
@@ -280,6 +282,11 @@ export function agentView(initial, opts = {}) {
     childErrors.set(agentId, retry);
     draw();
   };
+  // A read of the child starts again: the slot goes back to "Lendo o agente…" and offers no retry (issue 539).
+  root.setChildLoading = (agentId) => {
+    childErrors.delete(agentId);
+    draw();
+  };
 
   draw();
   return root;
@@ -322,4 +329,85 @@ export function agentViewMissing({ sessionId, sessionTitle = null, agentId = nul
       el('a', { class: 'btn outline av-back', href: agentsTabHref(sessionId) }, icon('back'), 'Voltar para os agentes da sessão'),
     ),
   );
+}
+
+
+/**
+ * The screen: `/ui/sessions/<id>/agents/<agentId>` (issue 539). It reads the agent, shows the state the read is
+ * in, repeats only the read on "Tentar de novo", follows a running agent and opens children in line. Back (the
+ * crumb's Agents link, or the link of the missing state) navigates with `{ focusAgent }` so the Agents tab
+ * gives the focus back to the row the person came from. Nothing writes, and nothing scrolls by itself.
+ */
+export async function mount(area, ctx) {
+  const { id: sessionId, agentId } = ctx.params;
+  const reader = createAgentReader({ read: () => ctx.read(agentReadRoute(sessionId, agentId)) });
+  const children = new Set(); // the children read or being read: opened once, read once (issue 539)
+  const here = { sessionId, agentId };
+  let view = null;
+  let live = true;
+
+  function openChild(childId) {
+    if (children.has(childId)) return;
+    children.add(childId);
+    view?.setChildLoading(childId); // a stale error from the read before must not show while this one runs (issue 539)
+    const read = () =>
+      ctx.read(agentReadRoute(sessionId, childId)).then(
+        (data) => live && view?.setChild(childId, data),
+        () => {
+          children.delete(childId); // read again the next time it opens (issue 539)
+          // The retry repeats only this child's read and puts the child back in the read-once set, so a reopen
+          // while it runs, or after it succeeds, does not read it again (issue 539).
+          if (live) view?.setChildError(childId, () => { children.add(childId); read(); });
+        },
+      );
+    read();
+  }
+
+  function draw({ phase, data, message }) {
+    if (!live) return;
+    if (phase === 'ready') {
+      if (view) return view.update(data);
+      view = agentView(data, { sessionId, onOpenChild: openChild });
+      return area.replaceChildren(view);
+    }
+    view = null;
+    children.clear();
+    area.replaceChildren(
+      phase === 'loading'
+        ? agentViewLoading(here)
+        : phase === 'missing'
+          ? agentViewMissing(here)
+          : agentViewError({ ...here, text: message, retry: () => reader.load() }),
+    );
+  }
+
+  // Back to the Agents tab is a navigation of the shell that carries the agent, so its row gets the focus
+  // (issue 539). `area` is the shell's shared content element, so the listener must come off when the screen is
+  // left. The shell registers the returned cleanup only after `mount` resolves, so a person who leaves during the
+  // first read would never trigger it: the release hangs on the screen's own signal as well (issue 539).
+  const onBack = (ev) => {
+    if (ev.defaultPrevented || ev.button > 0 || ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.altKey) return;
+    const link = ev.target?.closest?.('a[href]');
+    if (link?.getAttribute('href') !== agentsTabHref(sessionId)) return;
+    ev.preventDefault();
+    ctx.navigate(agentsTabHref(sessionId), { focusAgent: agentId });
+  };
+  const release = () => {
+    live = false;
+    area.removeEventListener('click', onBack);
+  };
+  if (ctx.signal.aborted) return release; // left before it began: nothing is added to the shared area (issue 539)
+  ctx.signal.addEventListener('abort', release, { once: true });
+  area.addEventListener('click', onBack);
+
+  reader.subscribe(draw);
+  const follow = () => {
+    if (live) void reader.refresh(); // `refresh` answers every failed read itself: it never rejects on one (issue 539)
+  };
+  ctx.onChange(() => {
+    if (isRunning(reader.snapshot().data)) follow();
+  });
+  ctx.onRestart(follow);
+  await reader.load();
+  return release;
 }
