@@ -1,5 +1,5 @@
 /*
- * End-to-end skeleton of the work board over every granted organization (issue 598, layer 1 of issue 608).
+ * End-to-end skeleton of the work board over every granted organization (#598, layer 1 of #608).
  * Written against the approved wireframe 598-1 to 598-4 (docs/wireframes/index.html), approved by the design owner on
  * 2026-11-14. The screen is mounted in the fake DOM over a fake read of GET /api/work shaped as layer 2 will serve it.
  * The shape of `organizations` below is the wireframe's reading of the contract; layer 2 settles it and these scenarios
@@ -40,11 +40,11 @@ const clock = (at: number) => {
 
 type Obj = Record<string, unknown>;
 const project = (owner: string, number: number, title: string) => ({ owner, number, title });
-const PLATAFORMA = project('acme-labs', 3, 'Plataforma');
+const PLATFORM = project('acme-labs', 3, 'Plataforma');
 const MOBILE = project('acme-labs', 4, 'Mobile');
 const ROADMAP = project('northwind', 1, 'Roadmap');
-const SUPORTE = project('northwind', 2, 'Suporte');
-const EXPERIMENTOS = project('mira-dev', 1, 'Experimentos');
+const SUPPORT = project('northwind', 2, 'Suporte');
+const EXPERIMENTS = project('mira-dev', 1, 'Experimentos');
 
 function card(n: number, org: string, from: ReturnType<typeof project>, over: Obj = {}): Obj {
   return {
@@ -58,8 +58,8 @@ function card(n: number, org: string, from: ReturnType<typeof project>, over: Ob
 const READ_AT = NOW - 40_000;
 const STALE_AT = NOW - 31 * MIN;
 const org = (login: string, projects: ReturnType<typeof project>[], over: Obj = {}) => ({ login, own: false, state: 'read', readAt: READ_AT, projects, ...over });
-const ORGS = [org('acme-labs', [PLATAFORMA, MOBILE]), org('northwind', [ROADMAP, SUPORTE]), org('mira-dev', [EXPERIMENTOS], { own: true })];
-const CARDS = [card(509, 'acme-labs', PLATAFORMA), card(499, 'acme-labs', MOBILE), card(503, 'northwind', ROADMAP), card(505, 'northwind', SUPORTE, { column: 'running' }), card(511, 'mira-dev', EXPERIMENTOS, { repo: 'mira-dev/other' })];
+const ORGS = [org('acme-labs', [PLATFORM, MOBILE]), org('northwind', [ROADMAP, SUPPORT]), org('mira-dev', [EXPERIMENTS], { own: true })];
+const CARDS = [card(509, 'acme-labs', PLATFORM), card(499, 'acme-labs', MOBILE), card(503, 'northwind', ROADMAP), card(505, 'northwind', SUPPORT, { column: 'running' }), card(511, 'mira-dev', EXPERIMENTS, { repo: 'mira-dev/other' })];
 
 function board(over: Obj = {}, cards: Obj[] = CARDS) {
   const columns = ['planning', 'queued', 'running', 'review', 'blocked', 'done'].map((id) => ({ id, label: id, criterion: '', cards: cards.filter((c) => c.column === id) }));
@@ -74,7 +74,6 @@ interface Screen { area: ElementoFalso; reads: string[]; text(): string; button(
 const mounted: Screen[] = [];
 afterEach(() => mounted.splice(0).forEach((s) => s.leave()));
 
-/** `hold`: do not wait for the first read to answer (the loading state is what the test looks at). */
 async function open(answer: (route: string) => unknown, path = '/ui/work', hold = false): Promise<Screen> {
   go(path);
   pushed.length = 0;
@@ -121,8 +120,8 @@ describe('AC-1: the header counts organizations and Projects, and each card says
   });
 
   test('one organization and one Project: the header names them as today and the new filters and origin line are gone', TODO('598-1 one origin'), async () => {
-    const one = [org('acme-labs', [PLATAFORMA])];
-    const cards = CARDS.filter((c) => (c.origin as { organization: string }).organization === 'acme-labs' && (c.origin as { project: unknown }).project === PLATAFORMA);
+    const one = [org('acme-labs', [PLATFORM])];
+    const cards = CARDS.filter((c) => (c.origin as { organization: string }).organization === 'acme-labs' && (c.origin as { project: unknown }).project === PLATFORM);
     const s = await open(() => board({ organizations: one, options: { orgs: [], projects: [], initiatives: [], epics: [], types: [], labels: [], repos: [], statuses: [] } }, cards));
     assert.match(s.text(), /acme-labs · GitHub Project “Plataforma”/);
     assert.equal(s.area.querySelector('select[data-param="org"]'), null);
@@ -189,6 +188,17 @@ describe('AC-2: the Organização and Project filters narrow the board with the 
     assert.equal(new URL(here.pathname + here.search, here.origin).searchParams.get('project'), null);
     assert.match(s.text(), /O Project “Plataforma” é de acme-labs, não de northwind: voltou para Todos\./);
   });
+
+  test('the organization and Project params go into the read with the existing filter, and both chips show', TODO('598-2 with the six'), async () => {
+    const params = '?org=acme-labs&project=acme-labs/3&type=story';
+    const answer = () => board({ project: { owner: 'acme-labs', number: 3, title: 'Plataforma' }, filters: { level: 'item', type: 'story', org: 'acme-labs', project: 'acme-labs/3' } });
+    const s = await open(answer, `/ui/work${params}`);
+    const read = s.reads.map((r) => new URL(r, here.origin).searchParams).find((p) => p.get('org') === 'acme-labs');
+    assert.ok(read, 'GET /api/work carries org=acme-labs');
+    assert.equal(read.get('project'), 'acme-labs/3');
+    assert.equal(read.get('type'), 'story', 'the existing filter keeps applying with them');
+    for (const param of ['org', 'project', 'type']) assert.ok(s.area.querySelector(`.wb-chip[data-param="${param}"]`), `the ${param} chip is on screen`);
+  });
 });
 
 describe('AC-3: an organization that restricts the app or fails to read is a warning; the others stay (issue 598)', () => {
@@ -214,7 +224,7 @@ describe('AC-3: an organization that restricts the app or fails to read is a war
   });
 
   test('a read before that fails now keeps its last cards dimmed, and the band says the read time', TODO('598-3 stale organization'), async () => {
-    const stale = org('northwind', [ROADMAP, SUPORTE], { state: 'failed', readAt: STALE_AT });
+    const stale = org('northwind', [ROADMAP, SUPPORT], { state: 'failed', readAt: STALE_AT });
     const s = await open(() => board({ organizations: [ORGS[0], stale, ORGS[2]] }));
     assert.equal(s.cards().length, CARDS.length, 'northwind keeps its cards');
     assert.ok(cardOf(s, 503)!.classList.contains('wb-org-stale'), 'a northwind card is dimmed');
@@ -227,7 +237,7 @@ describe('AC-3: an organization that restricts the app or fails to read is a war
   test('more than three warnings: three bands and "Mais N organizações com aviso"', TODO('598-3 three and more'), async () => {
     const five = ['globex', 'initech', 'umbrella-corp', 'hooli', 'pied-piper'].map((l, i) => warn(l, i === 2 ? 'saml' : i === 0 ? 'restricted' : 'failed'));
     const s = await open(() => board({ organizations: [...ORGS, ...five] }));
-    assert.equal(s.area.querySelectorAll('.wb-warns > .faixa').length, 3);
+    assert.equal(s.area.querySelectorAll('.wb-warns > .wb-warn-band').length, 3);
     assert.match(s.text(), /Mais 2 organizações com aviso/);
   });
 });
@@ -271,6 +281,6 @@ describe('AC-1 and AC-3: loading, empty, all failed and GitHub down (issue 598)'
     const s = await open(() => board({ organizations: down, stale: true, staleReason: 'github-unavailable' }));
     assert.match(s.text(), /GitHub indisponível/);
     assert.match(s.text(), /3 organizações · 5 Projects/, 'the header still counts every organization');
-    assert.equal(s.area.querySelectorAll('.wb-warns > .faixa').length, 0, 'no per-organization band');
+    assert.equal(s.area.querySelectorAll('.wb-warns > .wb-warn-band').length, 0, 'no per-organization band');
   });
 });
