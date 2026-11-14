@@ -10,13 +10,14 @@ import { el, icon } from '../dom.js';
 import { PLANNABLE_TYPES, cardPlanParts, planState, targetChoice } from './work-board-plan.js';
 
 const ref = (n) => `#${n}`;
-/** Where the session opened, by the core's `opened` (the words of open-action.js). */
+/** Where the session opened, by the core's `opened` (the words of open-action.js; issue 532). */
 const WHERE = { desktop: 'abrindo no Claude Desktop', terminal: 'abrindo no Terminal', focused: 'Terminal à frente' };
-/** The columns a live session still gets "Abrir sessão" in: Em review and Concluído have no action (465-2). */
+/** The columns a live session still gets "Abrir sessão" in: Em review and Concluído have no action (465-2, issue 532). */
 const LIVE_COLUMNS = new Set(['running', 'blocked']);
 
 /**
  * What the card offers for execution: `hidden` (no action here), `booting` ("subindo…"), `live` (Abrir sessão),
+ * `queued` (Executar plano on a card in Na fila, 465-2), `planningLive` ("planejando…" with Abrir sessão, 465-2),
  * `planned` (Executar plano) or what `planState` says (`unplanned`, `planning`, `failed`, `hidden`). "Has a plan" is `plan.steps > 0`, as for Planejar.
  */
 export function runState(card) {
@@ -24,7 +25,9 @@ export function runState(card) {
   if (card.execution?.state === 'booting') return 'booting';
   const live = card.sessions?.count > 0 && card.sessions.state !== 'idle';
   if (live && LIVE_COLUMNS.has(card.column)) return 'live';
+  if (card.column === 'queued') return card.plan?.steps > 0 ? 'queued' : 'hidden';
   const planning = planState(card);
+  if (planning === 'planning' && live && card.sessions.ids?.length > 0) return 'planningLive';
   if ((planning === 'planned' || planning === 'failed') && card.plan?.steps > 0) return 'planned';
   return planning;
 }
@@ -41,9 +44,14 @@ export function cardRunParts(card, { onRun = null, onReplan = null, onPlan = nul
     const badge = el('span', { class: 'wb-pill wb-pill-waiting wb-session wb-run-boot', role: 'status', 'data-state': 'booting' }, icon('wall-loader'), 'subindo…');
     return { badge, note: null, actions: null };
   }
-  if (state === 'live') {
+  if (state === 'live' || state === 'planningLive') {
     const open = el('button', { type: 'button', class: 'btn outline sm wb-plan-act', 'data-action': 'open-session', 'aria-label': `Abrir a sessão da ${number}`, onClick: (ev) => onOpenSession?.(card, ev.currentTarget) }, icon('external'), 'Abrir sessão');
-    return { badge: null, note: null, actions: el('div', { class: 'wb-plan-acts' }, open) };
+    const badge = state === 'planningLive' ? cardPlanParts(card).badge : null;
+    return { badge, note: null, actions: el('div', { class: 'wb-plan-acts' }, open) };
+  }
+  if (state === 'queued') {
+    const run = el('button', { type: 'button', class: 'btn outline sm wb-plan-act', 'data-action': 'run', 'aria-label': `Executar o plano da ${number}`, onClick: (ev) => onRun?.(card, ev.currentTarget) }, icon('play'), 'Executar plano');
+    return { badge: null, note: null, actions: el('div', { class: 'wb-plan-acts' }, run) };
   }
   const lead =
     state === 'planned'
@@ -90,7 +98,7 @@ export function runConfirm({ repo, number, folder = null, target = 'desktop', pr
       'div',
       { class: 'wb-plan-pop-acts' },
       el('button', { type: 'button', class: 'btn outline sm', 'data-action': 'cancel', onClick: () => onCancel?.() }, 'Cancelar'),
-      el('button', { type: 'button', class: 'btn filled sm', 'data-action': 'confirm', disabled: busy, 'aria-busy': busy ? 'true' : null, onClick: () => onConfirm?.() }, icon('play'), label),
+      el('button', { type: 'button', class: 'btn filled sm', 'data-action': 'confirm', disabled: busy, 'aria-busy': busy ? 'true' : null, onClick: () => !busy && onConfirm?.() }, icon('play'), label),
     ),
   );
   root.addEventListener('keydown', (ev) => ev.key === 'Escape' && onCancel?.());
