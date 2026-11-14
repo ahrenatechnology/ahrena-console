@@ -11,7 +11,7 @@ const MAX_BODY_CHARS = 400;
 const MAX_RAW_CHARS = MAX_SUMMARY_CHARS * 8;
 
 // The name quantifiers are bounded, so no input makes a match cost more than a constant per start (#618/AC-7, INP-9).
-const SECRET_NAME = '[A-Za-z0-9_.-]{0,64}(?:token|secret|passw(?:or)?d|passwd|pwd|passphrase|credentials?|api[_-]?key|private[_-]?key|access[_-]?key|key|signature)[A-Za-z0-9_.-]{0,64}';
+const SECRET_NAME = '[A-Za-z0-9_.-]{0,64}(?:token|secret|passw(?:or)?d|passwd|pwd|passphrase|pass(?![a-z])|credentials?|api[_-]?key|private[_-]?key|access[_-]?key|key|signature)[A-Za-z0-9_.-]{0,64}';
 const VALUE = `"(?:[^"\\\\]|\\\\.)*"|'(?:[^'\\\\]|\\\\.)*'|[^\\s&"',;]+`;
 
 type Replacement = string | ((substring: string, ...groups: string[]) => string);
@@ -30,6 +30,10 @@ const MASKS: [RegExp, Replacement][] = [
   [/\b(?:AKIA|ASIA)[A-Z0-9]{16}\b/g, MASK],
   [/\bAIza[A-Za-z0-9_-]{30,}/g, MASK],
   [/\beyJ[A-Za-z0-9_-]{5,}\.eyJ[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]*/g, MASK],
+  // curl -u user:password, --user user:password, --user=user:password: the password is masked (#618/AC-7)
+  [/(\s(?:-u|--user)(?:\s+|=)?)(["']?)[^\s:"']{0,64}:[^\s"']{1,256}\2(?=\s|$)/g, (_m, head, quote) => `${head}${quote}${MASK}${quote}`],
+  // aws configure set aws_secret_access_key VALUE: a name that holds a secret, then the value after a space (#618/AC-7)
+  [/(\bset\s+[A-Za-z0-9_.-]{0,64}(?:secret|key|token|password|pass)[A-Za-z0-9_.-]{0,64}\s+)\S+/gi, `$1${MASK}`],
   // mysql -pSECRET (#618/AC-7)
   [/(\s-p)(?=\S)\S+/g, `$1${MASK}`],
   // --token VALUE, -password VALUE: the value is the next word, unless that is another flag (#618/AC-7)

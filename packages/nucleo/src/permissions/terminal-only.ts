@@ -3,7 +3,8 @@
 // The check is by text, a floor and not the defence (`$HOME/.ahr*` slips past it): the defence is the window credential (#619).
 // The data folders of the other instances in the instance registry are added to the citing check by a later layer (#618).
 
-const COMMAND_PATTERNS: RegExp[] = [/\bgit\s+reset\s+--hard\b/, /\bsudo\b/, /\b(?:ba|z)?sh\s+-c\s+["']?\$\(\s*(?:curl|wget)\b/];
+// `sh -c "$(curl …)"` and a shell or `source` fed by process substitution `<(curl …)` (#618/AC-6).
+const COMMAND_PATTERNS: RegExp[] = [/\bsudo\b/, /\b(?:ba|z|da|k)?sh\s+-c\s+["']?\$\(\s*(?:curl|wget)\b/, /\b(?:(?:ba|z|da|k)?sh|fish|source)\s+<\(\s*(?:curl|wget)\b/, /(?:^|[\s;&|])\.\s+<\(\s*(?:curl|wget)\b/];
 
 /** Files whose change changes what runs or what is secret, case-insensitive as the macOS disk is (#618/AC-6). */
 const PROTECTED_PATH_PATTERNS: RegExp[] = [
@@ -25,22 +26,54 @@ const RECURSIVE_FLAG = /^(?:-[a-zA-Z]*[rR][a-zA-Z]*|--recursive)$/;
 const FORCE_PUSH = /^(?:--force(?:-with-lease)?(?:=.*)?|-f|\+\S.*)$/;
 const FORCE_CLEAN = /^(?:-[a-zA-Z]*f[a-zA-Z]*|--force)$/;
 const bare = (token: string): string => token.replace(/^["'(]+|["')]+$/g, '');
+const SHELLS = new Set(['sh', 'bash', 'zsh', 'dash', 'ksh', 'fish']);
+const baseName = (token: string): string => token.slice(token.lastIndexOf('/') + 1);
 
-/** A tokenised scan, one pass per command segment, so the cost is linear in the command (#618/AC-6, 64 KiB bound in 0025). */
-function hasRiskyVerb(segment: string): boolean {
-  const tokens = segment.split(/\s+/).filter(Boolean).map(bare);
-  const rm = tokens.findIndex((t) => t === 'rm' || t.endsWith('/rm'));
-  if (rm >= 0 && tokens.slice(rm + 1).some((t) => RECURSIVE_FLAG.test(t))) return true;
-  const git = tokens.findIndex((t, i) => t === 'git' && (tokens[i + 1] === 'push' || tokens[i + 1] === 'clean'));
-  if (git < 0) return false;
-  const rest = tokens.slice(git + 2);
-  return tokens[git + 1] === 'push' ? rest.some((t) => FORCE_PUSH.test(t)) : rest.some((t) => FORCE_CLEAN.test(t));
+/** Git options that take the next word as their argument; any other leading `-…` is skipped alone, the safe side (#618/AC-6). */
+const GIT_OPTIONS_WITH_ARGUMENT = new Set(['-C', '-c', '--git-dir', '--work-tree', '--namespace', '--exec-path', '--super-prefix', '--config-env']);
+
+/** The git subcommand and where its words start, after the global options (`-C x`, `-c k=v`, `--git-dir …`) (#618/AC-6). */
+function gitCall(tokens: string[], at: number): { sub: string; from: number } | null {
+  let i = at + 1;
+  while (i < tokens.length && (tokens[i] ?? '').startsWith('-')) i += GIT_OPTIONS_WITH_ARGUMENT.has(tokens[i] ?? '') ? 2 : 1;
+  const sub = tokens[i];
+  return sub === undefined ? null : { sub, from: i + 1 };
 }
 
-/** `curl x | sh`: a segment with a download followed by a segment that is a shell (#618/AC-6). */
+/** A tokenised scan, one pass per command segment, so the cost is linear in the command: each git call reads up to the next one (#618/AC-6, 64 KiB bound in 0025). */
+function hasRiskyVerb(segment: string): boolean {
+  const tokens = segment.split(/\s+/).filter(Boolean).map(bare);
+  const rm = tokens.findIndex((t) => baseName(t) === 'rm');
+  if (rm >= 0 && tokens.slice(rm + 1).some((t) => RECURSIVE_FLAG.test(t))) return true;
+  const gits = tokens.flatMap((t, i) => (baseName(t) === 'git' ? [i] : []));
+  for (const [n, at] of gits.entries()) {
+    const call = gitCall(tokens, at);
+    if (call === null) continue;
+    const rest = tokens.slice(call.from, gits[n + 1] ?? tokens.length);
+    if (call.sub === 'push' && rest.some((t) => FORCE_PUSH.test(t))) return true;
+    if (call.sub === 'clean' && rest.some((t) => FORCE_CLEAN.test(t))) return true;
+    if (call.sub === 'reset' && rest.includes('--hard')) return true;
+  }
+  return false;
+}
+
+/** `curl x | sh`: a segment with a download followed, in any later segment of the line, by a shell (#618/AC-6). */
 function pipesDownloadIntoShell(line: string): boolean {
   const parts = line.split('|');
-  return parts.some((part, i) => i + 1 < parts.length && /\b(?:curl|wget)\b/.test(part) && /^\s*(?:sudo\s+)?(?:ba|z)?sh\b/.test(parts[i + 1] ?? ''));
+  let download = -1;
+  for (let i = 0; i < parts.length; i++) {
+    const part = parts[i] ?? '';
+    if (download >= 0 && isShellSegment(part)) return true;
+    if (download < 0 && /\b(?:curl|wget)\b/.test(part)) download = i;
+  }
+  return false;
+}
+
+/** A pipe segment that runs a shell, possibly behind `sudo` or `env` or a path (#618/AC-6). */
+function isShellSegment(part: string): boolean {
+  const tokens = part.split(/\s+/).filter(Boolean).map(bare);
+  const first = tokens.findIndex((t) => t !== 'sudo' && t !== 'env' && !t.includes('='));
+  return first >= 0 && SHELLS.has(baseName(tokens[first] ?? ''));
 }
 
 function commandIsTerminalOnly(command: string): boolean {

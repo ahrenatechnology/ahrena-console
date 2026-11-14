@@ -9,6 +9,8 @@
 //
 // What the request keeps of the call is its digest and a summary already masked. The raw tool input is never kept. (#618)
 import { digestOf } from './digest.ts';
+import { PermissionRefusal, REFUSAL_CODES, type RefusalCode } from './refusal.ts';
+export { PermissionRefusal, REFUSAL_CODES, type RefusalCode };
 import { summarize } from './summary.ts';
 import { isTerminalOnly } from './terminal-only.ts';
 
@@ -27,20 +29,6 @@ export type Channel = (typeof CHANNELS)[number];
 /** What closed a request: the clock, the hook, an event of the session, the core starting again. */
 export const SETTLERS = ['expiry', 'hook', 'session_event', 'core_restart'] as const;
 export type Settler = (typeof SETTLERS)[number];
-
-/** Why the domain refused. The API maps them: 409 `already_*`, 410 `gone`, 422 `terminal_only` and `invalid_*`. */
-export const REFUSAL_CODES = ['already_answered', 'already_delivered', 'gone', 'not_answered', 'not_due', 'terminal_only', 'invalid_decision', 'invalid_answer', 'invalid_reason'] as const;
-export type RefusalCode = (typeof REFUSAL_CODES)[number];
-
-/** A request refused by the rules of the aggregate. It changes nothing. */
-export class PermissionRefusal extends Error {
-  readonly code: RefusalCode;
-  constructor(code: RefusalCode, message: string = code) {
-    super(message);
-    this.name = 'PermissionRefusal';
-    this.code = code;
-  }
-}
 
 /** How long a request waits for an answer: below the 10 minutes of the hook entry, which has its own 9 min 30 s deadline. */
 export const EXPIRY_MS = 9 * 60_000 + 30_000;

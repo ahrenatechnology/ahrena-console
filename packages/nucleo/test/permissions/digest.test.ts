@@ -3,7 +3,8 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { describe, test } from 'node:test';
-import { canonicalJson, digestOf } from '../../src/permissions/digest.ts';
+import { MAX_CANONICAL_DEPTH, canonicalJson, digestOf } from '../../src/permissions/digest.ts';
+import { PermissionRefusal, PermissionRequest } from '../../src/permissions/model.ts';
 
 interface Vector {
   name: string;
@@ -48,5 +49,24 @@ describe('digestOf (#618/AC-1)', () => {
   test('#618/AC-1: only the four bound fields count: an extra field is not hashed', async () => {
     const base = { sessionId: 'S', toolName: 'Bash', toolInput: { command: 'ls' }, cwd: '/w' };
     assert.equal(await digestOf({ ...base, permissionMode: 'default' } as typeof base), await digestOf(base));
+  });
+
+  test('#618/AC-1: a nesting deeper than the ceiling is refused with input_too_deep, not a stack overflow', async () => {
+    assert.equal(MAX_CANONICAL_DEPTH, 64);
+    const deepArray = JSON.parse('['.repeat(10_000) + ']'.repeat(10_000)) as unknown;
+    let deepObject: unknown = {};
+    for (let i = 0; i < 10_000; i++) deepObject = { a: deepObject };
+    const isRefusal = (e: unknown) => e instanceof PermissionRefusal && e.code === 'input_too_deep';
+    for (const v of [deepArray, deepObject]) {
+      assert.throws(() => canonicalJson(v), isRefusal);
+      await assert.rejects(digestOf({ sessionId: 'S', toolName: 'X', toolInput: v, cwd: '/w' }), isRefusal);
+      await assert.rejects(PermissionRequest.open({ id: 'i', sessionId: 'S', toolName: 'X', toolInput: v, cwd: '/w', permissionMode: null, now: 0 }), isRefusal);
+    }
+  });
+
+  test('#618/AC-1: the ceiling is exact: 64 levels pass, 65 are refused; the digest envelope is level 1, so a tool input has 63; the hook (#620) applies the same', () => {
+    const nest = (levels: number): unknown => (levels === 0 ? 1 : [nest(levels - 1)]);
+    assert.doesNotThrow(() => canonicalJson(nest(MAX_CANONICAL_DEPTH)));
+    assert.throws(() => canonicalJson(nest(MAX_CANONICAL_DEPTH + 1)), PermissionRefusal);
   });
 });

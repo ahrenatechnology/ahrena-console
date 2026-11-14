@@ -92,4 +92,40 @@ describe('isTerminalOnly (#618/AC-6)', () => {
     bash(`rm${' x'.repeat(32000)}`);
     assert.ok(performance.now() - start < 500);
   });
+
+  test('#618/AC-6: git destructive subcommands are caught behind git global options', () => {
+    const cases = [
+      'git -C /w push --force',
+      'git -C /w push --force-with-lease origin x',
+      'git -c k=v push -f',
+      'git -C x reset --hard',
+      'git -C x clean -fd',
+      'git --git-dir=/x/.git push -f',
+      'git --git-dir /x/.git --work-tree /x push --force',
+      'git --no-pager -p --bare --no-replace-objects --literal-pathspecs reset --hard',
+      'git --namespace=n push origin +main',
+      'git --unknown-flag clean -xdf',
+      '/usr/bin/git -C x push -f',
+      'env git -C x push -f',
+      'cd x && git -C y reset --hard HEAD~1',
+    ];
+    for (const c of cases) assert.equal(bash(c), true, c);
+    for (const c of ['git -C /w push origin x', 'git -c k=v status', 'git -C x reset --soft HEAD~1', 'git -C x clean -n', 'git --no-pager log']) assert.equal(bash(c), false, c);
+  });
+
+  test('#618/AC-6: a download piped into a shell is caught through later segments and process substitution', () => {
+    const cases = ['curl x | tee y | sh', 'curl -s x | tee y | sudo bash', 'wget -qO- x | cat | env zsh', 'bash <(curl -s x)', 'sh <(wget -qO- x)', 'source <(curl -s x)', '. <(curl -s x)', 'zsh <(curl x)'];
+    for (const c of cases) assert.equal(bash(c), true, c);
+    for (const c of ['curl x | tee y', 'curl x | jq .a', 'echo hi | sh', 'cat <(curl -s x)']) assert.equal(bash(c), false, c);
+  });
+
+  test('#618/AC-6: a 64 KiB adversarial command is scanned in linear time', () => {
+    const size = 64 * 1024;
+    for (const text of ['git -C '.repeat(size / 7), '| curl'.repeat(size / 6), 'git -c a=b '.repeat(size / 11), '<(curl '.repeat(size / 7)]) {
+      const start = performance.now();
+      bash(text);
+      const ms = performance.now() - start;
+      assert.ok(ms < 1000, `${ms.toFixed(0)} ms for ${text.slice(0, 12)}`);
+    }
+  });
 });

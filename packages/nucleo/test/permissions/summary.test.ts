@@ -109,4 +109,32 @@ describe('redactSecrets (#618/AC-7)', () => {
     const s = summarize('Bash', { command: `${'x'.repeat(MAX_SUMMARY_CHARS * 8 - 20)} --token abcdefghijklmnop` });
     assert.doesNotMatch(s, /abcdefg/);
   });
+  test('#618/AC-7: curl user:password, DB_PASS and aws configure set values are masked', () => {
+    const cases: [string, string][] = [
+      ['curl -u admin:hunter2 https://h', 'hunter2'],
+      ['curl --user admin:hunter2 https://h', 'hunter2'],
+      ['curl --user=admin:hunter2 https://h', 'hunter2'],
+      ['curl -uadmin:hunter2 https://h', 'hunter2'],
+      ['curl -u "admin:hunter2" https://h', 'hunter2'],
+      ['export DB_PASS=hunter2', 'hunter2'],
+      ['aws configure set aws_secret_access_key ABCDEF', 'ABCDEF'],
+      ['aws configure set aws_session_token TOK123', 'TOK123'],
+    ];
+    for (const [text, secret] of cases) {
+      assert.doesNotMatch(summarize('Bash', { command: text }), new RegExp(secret), text);
+      assert.doesNotMatch(redactSecrets(text), new RegExp(secret), text);
+    }
+    assert.match(summarize('Bash', { command: 'curl -u admin:hunter2 https://h' }), /https:\/\/h$/);
+    assert.equal(redactSecrets('config set user.name Ana'), 'config set user.name Ana');
+  });
+  test('#618/AC-7: the new rules run in linear time on a 64 KiB adversarial input', () => {
+    const size = 64 * 1024;
+    const inputs = ['set a'.repeat(size / 5), ' set a_key'.repeat(size / 10), '-u a:'.repeat(size / 5), '--user '.repeat(size / 7), ' -u'.repeat(size / 3), 'pass '.repeat(size / 5), `${'set '.repeat(size / 4)}key`];
+    for (const text of inputs) {
+      const start = performance.now();
+      redactSecrets(text);
+      const ms = performance.now() - start;
+      assert.ok(ms < 1000, `${ms.toFixed(0)} ms for ${text.slice(0, 12)}`);
+    }
+  });
 });
