@@ -13,6 +13,11 @@
 //   #507 `.command` (0600, unique name) and the `.command` reads it back with `cat` into a variable and runs
 //   #507 `exec claude "$prompt"`: the text never passes through shell parsing and is in no shell-read file.
 //   #507 Both files remove themselves when they run.
+//   #515 When the prompt is a planning one (`planningKeyOfPrompt`), `claude` starts with PLANNING_TOOL_FLAGS
+//   #515 before the prompt: `--permission-mode dontAsk`, an allowed list (read, the issue and Plan sub-issues
+//   #515 through `gh`) and a denied list (no editing files, no push, commit or pull request), each flag
+//   #515 single-quoted. The flags are fixed here and never come from the prompt; any other prompt, and a
+//   #515 resume, produce the same file as before.
 // - Linux, open: `x-terminal-emulator -e claude [--resume <id>]` in the folder, when it is on the PATH.
 //   #507 With a first prompt: `unsupported`, because some emulators (gnome-terminal's `-e`) re-parse their
 //   #507 arguments through a shell, and the route answers 501 with the command to copy.
@@ -28,6 +33,7 @@ import { randomUUID } from 'node:crypto';
 import { constants } from 'node:fs';
 import { access, chmod, lstat, mkdir, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import { delimiter, join } from 'node:path';
+import { planningKeyOfPrompt } from '../github/work-plan.ts';
 import { isUsableCwd, SESSION_ID_PATTERN, shellQuote, type LiveProcess } from './session-open.ts';
 
 export interface TerminalRequest {
@@ -99,6 +105,20 @@ export async function findOnPath(name: string, path = process.env.PATH ?? ''): P
   return null;
 }
 
+/**
+ * #515 The tool restriction of a planning session: it reads, searches, runs skills and agents, reads and
+ * lists issues, creates and edits issues (the Plan sub-issues) and calls `gh api`; it cannot edit files,
+ * push, commit or touch pull requests, stacks, secrets, repositories, releases or workflows.
+ */
+export const PLANNING_TOOL_FLAGS: readonly string[] = [
+  '--permission-mode',
+  'dontAsk',
+  '--allowedTools',
+  'Read,Grep,Glob,Skill,Agent,Bash(gh issue view:*),Bash(gh issue list:*),Bash(gh issue create:*),Bash(gh issue edit:*),Bash(gh api:*)',
+  '--disallowedTools',
+  'Edit,Write,NotebookEdit,Bash(git push:*),Bash(git commit:*),Bash(gh pr:*),Bash(gh stack:*),Bash(gh secret:*),Bash(gh repo:*),Bash(gh release:*),Bash(gh workflow:*)',
+];
+
 /** `claude`'s arguments: resume the session, or none for a new one; throws on an id that is not the UUID. */
 function claudeArgs(sessionId: string | null): string[] {
   if (sessionId === null) return [];
@@ -108,15 +128,16 @@ function claudeArgs(sessionId: string | null): string[] {
 
 /**
  * The `.command` file that resumes a session (or starts one); throws when the folder or the id cannot be
- * carried. With `promptFile` (a new session only), `claude` gets the file's text as its one argument.
+ * carried. With `promptFile` (a new session only), `claude` gets the file's text as its one argument, after
+ * the `restriction` flags (#515), each single-quoted, when there are any.
  */
-export function commandFileContent(cwd: string, sessionId: string | null, promptFile?: string): string {
+export function commandFileContent(cwd: string, sessionId: string | null, promptFile?: string, restriction: readonly string[] = []): string {
   if (!isUsableCwd(cwd)) throw new Error('unusable folder');
   if (promptFile !== undefined && sessionId !== null) throw new Error('a prompt starts a new session');
   const start =
     promptFile === undefined
       ? [['exec claude', ...claudeArgs(sessionId)].join(' ')]
-      : [`prompt=$(cat -- ${shellQuote(promptFile)}) || exit 1`, `rm -f -- ${shellQuote(promptFile)}`, 'exec claude "$prompt"'];
+      : [`prompt=$(cat -- ${shellQuote(promptFile)}) || exit 1`, `rm -f -- ${shellQuote(promptFile)}`, `exec claude ${[...restriction.map(shellQuote), '"$prompt"'].join(' ')}`];
   return ['#!/bin/sh', 'rm -f -- "$0"', `cd -- ${shellQuote(cwd)} || exit 1`, ...start, ''].join('\n');
 }
 
@@ -162,7 +183,8 @@ export function createTerminalOpener({ dir, platform = process.platform, runner 
       const id = randomUUID();
       const name = sessionId === null ? 'new' : 'resume';
       const promptFile = text === undefined ? undefined : join(dir, `${name}-${id}.prompt`);
-      const content = commandFileContent(cwd, sessionId, promptFile);
+      const restriction = text !== undefined && planningKeyOfPrompt(text) !== null ? PLANNING_TOOL_FLAGS : [];
+      const content = commandFileContent(cwd, sessionId, promptFile, restriction);
       await privateDir(dir);
       await removeOld(dir, now(), maxAgeMs);
       const file = join(dir, `${name}-${id}.command`);
