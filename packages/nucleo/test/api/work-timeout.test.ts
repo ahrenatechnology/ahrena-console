@@ -22,7 +22,7 @@ import { WorkIssueService } from '../../src/github/work-issue-service.ts';
 import { clock, REPO, type Recorded } from '../github/helpers.ts';
 
 const TIMEOUT_MS = 50;
-/** A request that outlives this was not bounded: the test fails instead of waiting for the runner. */
+/** #512 a request that outlives this was not bounded: the test fails instead of waiting for the runner. */
 const GUARD_MS = 5_000;
 const PROJECT = { owner: 'ahrenatechnology', number: 3 };
 const recordedBoard: Recorded[] = JSON.parse(readFileSync(new URL('../github/fixtures/project.json', import.meta.url), 'utf8'));
@@ -46,7 +46,7 @@ const issueOf = (n: number) => ({
 
 type Mode = 'ok' | 'hang';
 
-/** GitHub as a switch: `ok` answers what the route reads, `hang` accepts the request and never answers. */
+/** #512 GitHub as a switch: `ok` answers what the route reads, `hang` accepts the request and never answers. */
 function github(answer: (operation: string) => Response) {
   const state = { mode: 'ok' as Mode, calls: 0, aborted: 0 };
   const fake = (async (_url: unknown, init?: RequestInit) => {
@@ -102,7 +102,7 @@ async function boot(kind: 'board' | 'issue-with-hanging-project'): Promise<Boot>
     });
     routes = { service, fromStore: false };
   } else {
-    // The issue's own read answers; the Project it asks for the card's status hangs.
+    // #512 the issue's own read answers; the Project it asks for the card's status hangs.
     const hangingProject = github(projectAnswer);
     hangingProject.state.mode = 'hang';
     const kanban = createGithubProject({ project: PROJECT, cache: new GithubCache({ store: new MemoryCacheStore(), now }), token: 'test-token', fetch: hangingProject.fetch, now, timeoutMs: TIMEOUT_MS });
@@ -127,10 +127,21 @@ async function boot(kind: 'board' | 'issue-with-hanging-project'): Promise<Boot>
   return { api, now, gh, logs, async close() { await api.close(); await storage.close(); } };
 }
 
+/** #512 the body the work routes answer with, as far as these tests read it. */
+interface RouteBody {
+  error?: string;
+  reason?: string;
+  stale?: boolean;
+  staleReason?: string | null;
+  number?: number;
+  projectStatus?: unknown;
+  columns?: { cards: unknown[] }[];
+}
+
 async function get(b: Boot, route: string, query = '') {
   const started = Date.now();
   const r = await fetch(`${b.api.url}${route}${query}`, { signal: AbortSignal.timeout(GUARD_MS) });
-  return { status: r.status, json: (await r.json()) as any, tookMs: Date.now() - started };
+  return { status: r.status, json: (await r.json()) as RouteBody, tookMs: Date.now() - started };
 }
 
 async function withApi(kind: Parameters<typeof boot>[0], fn: (b: Boot) => Promise<void>) {
@@ -156,14 +167,14 @@ describe('#512/AC-2 GET /api/work when GitHub accepts the request and never answ
     withApi('board', async (b) => {
       const first = await get(b, WORK_BOARD_ROUTE);
       assert.deepEqual([first.status, first.json.stale, first.json.staleReason], [200, false, null]);
-      const cards = first.json.columns.flatMap((c: any) => c.cards).length;
+      const cards = first.json.columns.flatMap(c => c.cards).length;
       assert.ok(cards > 0, 'the stored board has cards');
       b.gh.state.mode = 'hang';
       b.now.add(31_000);
       const r = await get(b, WORK_BOARD_ROUTE, '?refresh=1');
       assert.equal(r.status, 200);
       assert.deepEqual([r.json.stale, r.json.staleReason], [true, 'network']);
-      assert.equal(r.json.columns.flatMap((c: any) => c.cards).length, cards, 'the last board is still there');
+      assert.equal(r.json.columns.flatMap(c => c.cards).length, cards, 'the last board is still there');
       assert.equal(b.gh.state.aborted, 1);
     }));
 

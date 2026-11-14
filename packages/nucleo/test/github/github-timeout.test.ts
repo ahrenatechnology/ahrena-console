@@ -13,7 +13,7 @@ import { createGithubProject, GithubProjectSource } from '../../src/github/proje
 import { clock, k } from './helpers.ts';
 
 const TIMEOUT_MS = 30;
-/** The test fails (instead of hanging) when a read is not bounded: well above the timeout, well below the runner's. */
+/** #512 the test fails (instead of hanging) when a read is not bounded: well above the timeout, well below the runner's. */
 const GUARD_MS = 5_000;
 
 interface Hanging {
@@ -21,7 +21,7 @@ interface Hanging {
   calls: number;
 }
 
-/** A GitHub that accepts the request and never answers; it gives up only when the signal aborts. */
+/** #512 a GitHub that accepts the request and never answers; it gives up only when the signal aborts. */
 function hangingFetch(): Hanging {
   const hanging: Hanging = {
     calls: 0,
@@ -29,7 +29,7 @@ function hangingFetch(): Hanging {
       hanging.calls++;
       return new Promise((_resolve, reject) => {
         const signal = init?.signal;
-        if (!signal) return; // no signal handed: the call hangs for good, which the guard reports
+        if (!signal) return; // #512 no signal handed: the call hangs for good, which the guard reports
         if (signal.aborted) return reject(signal.reason);
         signal.addEventListener('abort', () => reject(signal.reason), { once: true });
       });
@@ -38,7 +38,7 @@ function hangingFetch(): Hanging {
   return hanging;
 }
 
-/** Rejects with a clear message when `read` has not settled within `GUARD_MS`. */
+/** #512 rejects with a clear message when `read` has not settled within `GUARD_MS`. */
 async function settles<T>(read: Promise<T>): Promise<{ ok: true; value: T } | { ok: false; error: unknown }> {
   let timer: NodeJS.Timeout | undefined;
   const guard = new Promise<never>((_, reject) => {
@@ -104,7 +104,7 @@ describe('#512/AC-1 the Project source aborts a request that does not answer', (
 });
 
 describe('#512/AC-1 the deadline bounds the response body, not only the headers', () => {
-  /** A loopback server that sends the 200 headers and part of a JSON body, then never ends the response. */
+  /** #512 a loopback server that sends the 200 headers and part of a JSON body, then never ends the response. */
   async function withStalledBody(fn: (url: string) => Promise<void>) {
     const server: Server = createServer((_req, res) => {
       res.writeHead(200, { 'content-type': 'application/json' });
