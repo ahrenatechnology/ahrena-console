@@ -469,46 +469,51 @@ export class GithubGraphqlSource implements WorkSource, WorkIssueSource, WorkIss
   }
 
   /**
-   * #534 the issue's sub-issues as GitHub holds them now, one fresh read, and the step among them: it must be a Plan
-   * sub-issue not closed as not planned, else `WorkIssueRefusedError` `step` and nothing is written. `null`: no such issue.
+   * #534 the issue's sub-issues as GitHub holds them now, one fresh read, and the step among them when `step` is given,
+   * found with no state check: absent, `WorkIssueRefusedError` `step` and nothing is written. Each caller applies its own
+   * check on the step (`requirePlanStep`, `requireRemovedStep`). `null`: no such issue.
    */
-  private async loadSteps(parent: string, step?: string, after?: string | null, removed = false) {
+  private async loadSteps(parent: string, step?: string) {
     const k = parseWorkKey(parent);
     type Node = RawRef & { id: string; body: string; updatedAt: string };
     type Data = { repository: { id: string; issueTypes: { nodes: { id: string; name: string }[] }; issue: { id: string; subIssues: { nodes: Node[] } } | null } | null };
     const data = await this.query<Data>('WorkPlanSteps', WRITE_QUERIES.steps, { o: k.owner, r: k.name, n: k.number }, { tolerateNotFound: true });
     const repo = data.repository;
     if (!repo?.issue) return null;
-    const subs = repo.issue.subIssues.nodes.map((node) => ({ node, key: toIssueRef(node).key.toLowerCase() }));
-    const find = (key: string) => subs.find((s) => s.key === key.toLowerCase())?.node;
-    let found: Node | undefined;
-    if (step !== undefined) {
-      found = find(step);
-      if (removed) {
-        // #534 a restore acts on a Plan sub-issue closed as not planned: a Plan one that is not, is not removed.
-        if (!found || !isPlan(toIssueRef(found).type)) throw new WorkIssueRefusedError('step', step);
-        if (isPlanStep(toIssueRef(found))) throw new WorkIssueNotRemovedError(step);
-      } else if (!found || !isPlanStep(toIssueRef(found))) throw new WorkIssueRefusedError('step', step);
-    }
-    let afterNode: Node | undefined;
-    if (typeof after === 'string') {
-      afterNode = find(after);
-      if (!afterNode) throw new WorkIssueRefusedError('after', after);
-    }
-    return { repoId: repo.id, parentId: repo.issue.id, types: repo.issueTypes.nodes, subs: subs.map((s) => s.node), step: found, after: afterNode };
+    const subs = repo.issue.subIssues.nodes;
+    const find = (key: string) => subs.find((node) => toIssueRef(node).key.toLowerCase() === key.toLowerCase());
+    const found = step === undefined ? undefined : find(step);
+    if (step !== undefined && !found) throw new WorkIssueRefusedError('step', step);
+    return { repoId: repo.id, parentId: repo.issue.id, types: repo.issueTypes.nodes, subs, step: found, find };
+  }
+
+  /** #534 the step of an edit, a removal, a move or a read: a Plan sub-issue not closed as not planned, else `WorkIssueRefusedError` `step`. */
+  private requirePlanStep<T extends RawRef>(found: T | undefined, step: string): T {
+    if (!found || !isPlanStep(toIssueRef(found))) throw new WorkIssueRefusedError('step', step);
+    return found;
+  }
+
+  /** #534 the step of a restore: a Plan sub-issue closed as not planned; a Plan one that is not, is `WorkIssueNotRemovedError`. */
+  private requireRemovedStep<T extends RawRef>(found: T | undefined, step: string): T {
+    if (!found || !isPlan(toIssueRef(found).type)) throw new WorkIssueRefusedError('step', step);
+    if (isPlanStep(toIssueRef(found))) throw new WorkIssueNotRemovedError(step);
+    return found;
   }
 
   /** #534 the title, body and `updatedAt` of the step GitHub holds now. */
   async stepCurrent(parent: string, step: string): Promise<WorkIssueCurrent | null> {
     const loaded = await this.loadSteps(parent, step);
-    return loaded ? { title: loaded.step!.title, body: loaded.step!.body, updatedAt: loaded.step!.updatedAt } : null;
+    if (!loaded) return null;
+    const found = this.requirePlanStep(loaded.step, step);
+    return { title: found.title, body: found.body, updatedAt: found.updatedAt };
   }
 
   /** #534 one `updateIssue` on the step, then the parent read back. */
   async editStep(parent: string, step: string, edit: { title?: string; body?: string }): Promise<WorkIssueRead | null> {
     const loaded = await this.loadSteps(parent, step);
     if (!loaded) return null;
-    await this.mutate('UpdateWorkIssue', WRITE_QUERIES.update, { input: { id: loaded.step!.id,...(edit.title !== undefined ? { title: edit.title } : {}), ...(edit.body !== undefined ? { body: edit.body } : {}) } });
+    const found = this.requirePlanStep(loaded.step, step);
+    await this.mutate('UpdateWorkIssue', WRITE_QUERIES.update, { input: { id: found.id,...(edit.title !== undefined ? { title: edit.title } : {}), ...(edit.body !== undefined ? { body: edit.body } : {}) } });
     return this.readBack(parent);
   }
 
@@ -526,25 +531,30 @@ export class GithubGraphqlSource implements WorkSource, WorkIssueSource, WorkIss
   async removeStep(parent: string, step: string): Promise<WorkIssueRead | null> {
     const loaded = await this.loadSteps(parent, step);
     if (!loaded) return null;
-    await this.mutate('CloseWorkPlanStep', WRITE_QUERIES.closeStep, { input: { issueId: loaded.step!.id, stateReason: 'NOT_PLANNED' } });
+    const found = this.requirePlanStep(loaded.step, step);
+    await this.mutate('CloseWorkPlanStep', WRITE_QUERIES.closeStep, { input: { issueId: found.id, stateReason: 'NOT_PLANNED' } });
     return this.readBack(parent);
   }
 
   /** #534 reopens the step closed as not planned: the read then puts it back in the plan. */
   async restoreStep(parent: string, step: string): Promise<WorkIssueRead | null> {
-    const loaded = await this.loadSteps(parent, step, undefined, true);
+    const loaded = await this.loadSteps(parent, step);
     if (!loaded) return null;
-    await this.mutate('ReopenWorkPlanStep', WRITE_QUERIES.reopenStep, { input: { issueId: loaded.step!.id } });
+    const found = this.requireRemovedStep(loaded.step, step);
+    await this.mutate('ReopenWorkPlanStep', WRITE_QUERIES.reopenStep, { input: { issueId: found.id } });
     return this.readBack(parent);
   }
 
   /** #534 `reprioritizeSubIssue` behind `after`, or before the first sub-issue for the top; a step already on top is left alone. */
   async moveStep(parent: string, step: string, after: string | null): Promise<WorkIssueRead | null> {
-    const loaded = await this.loadSteps(parent, step, after);
+    const loaded = await this.loadSteps(parent, step);
     if (!loaded) return null;
+    const found = this.requirePlanStep(loaded.step, step);
+    const afterNode = typeof after === 'string' ? loaded.find(after) : undefined;
+    if (typeof after === 'string' && !afterNode) throw new WorkIssueRefusedError('after', after);
     const first = loaded.subs[0]!;
-    const input = { issueId: loaded.parentId, subIssueId: loaded.step!.id, ...(loaded.after ? { afterId: loaded.after.id } : { beforeId: first.id }) };
-    if (loaded.after || first.id !== loaded.step!.id) await this.mutate('MoveWorkPlanStep', WRITE_QUERIES.moveStep, { input });
+    const input = { issueId: loaded.parentId, subIssueId: found.id, ...(afterNode ? { afterId: afterNode.id } : { beforeId: first.id }) };
+    if (afterNode || first.id !== found.id) await this.mutate('MoveWorkPlanStep', WRITE_QUERIES.moveStep, { input });
     return this.readBack(parent);
   }
 
