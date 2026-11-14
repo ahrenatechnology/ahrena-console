@@ -17,7 +17,7 @@ export function initialIssueState() {
   return { panel: CLOSED_PANEL, plans: {}, post: null };
 }
 
-// ---- The panel (AC-1) ----
+// ---- The panel (issue 508, AC-1) ----
 
 /** Which card is open: the skeleton while the issue loads (decision 1); a new request for GET /api/work/issue. */
 export function openPanel(state, card) {
@@ -65,7 +65,7 @@ export function closePanel(state) {
   return state.panel.open ? { ...state, panel: { ...CLOSED_PANEL, request: state.panel.request } } : state;
 }
 
-// ---- Planning (AC-2 to AC-4) ----
+// ---- Planning (issue 508, AC-2 to AC-4) ----
 
 const stepsOf = (entry, card) => entry?.steps ?? card?.plan?.steps ?? 0;
 
@@ -92,7 +92,8 @@ function put(state, key, entry) {
   return { ...state, plans };
 }
 
-// Closes any other open confirmation: only one is anchored at a time.
+// Closes any other open confirmation.
+// issue 508: only one confirmation is anchored at a time.
 function withoutOtherConfirmation(state, key) {
   return Object.entries(state.plans).reduce((s, [k, e]) => (k !== key && e.phase === 'confirming' ? put(s, k, e.prior ?? null) : s), state);
 }

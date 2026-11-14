@@ -316,7 +316,7 @@ describe('interaction: the confirmation is driven from the state', () => {
 });
 
 describe('conventions', () => {
-  test('the state file has no DOM, no fetch, no Portuguese identifiers and no #N in comments', () => {
+  test('the state file has no DOM, no fetch and no #N in comments', () => {
     const src = readFileSync(`${UI_FOLDER}screens/work-board-issue-state.js`, 'utf8');
     assert.doesNotMatch(src, /document\.|window\.|fetch\(|localStorage/);
     assert.doesNotMatch(src, /#\d{3}/);
