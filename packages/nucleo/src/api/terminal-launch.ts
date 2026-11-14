@@ -23,7 +23,7 @@
 //   #515 produces the same file as before.
 //   #515 `dontAsk` is NOT a closed allow list: the allow rules of every settings scope (the person's own
 //   #515 `Bash(gh run:*)`, an MCP tool) add to `--allowedTools`. Only the deny list removes them, so the deny
-//   #515 list is what holds. `gh api` stays whole until #593.
+//   #515 list is what holds. `gh api` is denied outright (the issue's AC-2 is partial: no sub-issue link, no dependencies; #593).
 //   #515 MCP: the Claude Code permissions page documents a catch-all deny, `mcp__*` ("matches every MCP tool
 //   #515 across all servers", removed from Claude's context); checked on claude 2.1.325, whose init tool list
 //   #515 drops from 262 MCP tools to none with it, so that is the choice; `--strict-mcp-config`
@@ -129,8 +129,8 @@ export async function findOnPath(name: string, path = process.env.PATH ?? ''): P
 
 /**
  * #515 The tool restriction of a planning session: it reads, searches, runs skills and agents, reads and
- * lists issues, creates and edits issues (the Plan sub-issues) and calls `gh api` (whole until #593); it
- * cannot edit files, run any git command through Bash (`Bash(git:*)`: every verb and every global-option form;
+ * lists issues, creates and edits issues (the Plan sub-issues, the plan in the parent's body); it
+ * cannot call `gh api` (a settings allow rule such as `Bash(gh api *)` would otherwise run it with no prompt, merge and delete included), edit files, run any git command through Bash (`Bash(git:*)`: every verb and every global-option form;
  * it reads the repository with Read, Grep and Glob), touch pull requests, stacks, secrets, repositories,
  * releases, workflows, runs, variables, gists, labels, credentials and keys, extensions, aliases, rulesets,
  * caches, codespaces or projects, close, reopen,
@@ -142,11 +142,11 @@ export const PLANNING_TOOL_FLAGS: readonly string[] = [
   '--permission-mode',
   'dontAsk',
   '--allowedTools',
-  'Read,Grep,Glob,Skill,Agent,Bash(gh issue view:*),Bash(gh issue list:*),Bash(gh issue create:*),Bash(gh issue edit:*),Bash(gh api:*)',
+  'Read,Grep,Glob,Skill,Agent,Bash(gh issue view:*),Bash(gh issue list:*),Bash(gh issue create:*),Bash(gh issue edit:*)',
   '--disallowedTools',
   [
     'Edit,Write,NotebookEdit,mcp__*',
-    'Bash(git:*),Bash(gh pr:*),Bash(gh stack:*),Bash(gh secret:*),Bash(gh repo:*),Bash(gh release:*),Bash(gh workflow:*)',
+    'Bash(git:*),Bash(gh pr:*),Bash(gh stack:*),Bash(gh secret:*),Bash(gh repo:*),Bash(gh release:*),Bash(gh workflow:*),Bash(gh api:*)',
     'Bash(gh issue delete:*),Bash(gh issue transfer:*),Bash(gh issue close:*),Bash(gh issue reopen:*),Bash(gh issue lock:*),Bash(gh issue unlock:*),Bash(gh issue pin:*),Bash(gh issue unpin:*),Bash(gh issue develop:*)',
     'Bash(gh run:*),Bash(gh variable:*),Bash(gh gist:*),Bash(gh label:*),Bash(gh auth:*),Bash(gh ssh-key:*),Bash(gh gpg-key:*),Bash(gh extension:*),Bash(gh alias:*),Bash(gh ruleset:*),Bash(gh cache:*),Bash(gh codespace:*),Bash(gh project:*)',
   ].join(','),

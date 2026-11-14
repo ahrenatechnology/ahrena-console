@@ -227,10 +227,10 @@ describe('#515 a planning session started from the terminal runs with a tool res
   const root = mkdtempSync(join(tmpdir(), 'ahrena-open-515-'));
   after(() => rmSync(root, { recursive: true, force: true }));
   const PLAN = planningPrompt({ repo: 'acme/app', number: 1 });
-  const ALLOWED = 'Read,Grep,Glob,Skill,Agent,Bash(gh issue view:*),Bash(gh issue list:*),Bash(gh issue create:*),Bash(gh issue edit:*),Bash(gh api:*)';
+  const ALLOWED = 'Read,Grep,Glob,Skill,Agent,Bash(gh issue view:*),Bash(gh issue list:*),Bash(gh issue create:*),Bash(gh issue edit:*)';
   const DENIED_FAMILIES = [
     'Edit', 'Write', 'NotebookEdit', 'mcp__*',
-    'Bash(git:*)', 'Bash(gh pr:*)', 'Bash(gh stack:*)', 'Bash(gh secret:*)', 'Bash(gh repo:*)', 'Bash(gh release:*)', 'Bash(gh workflow:*)',
+    'Bash(git:*)', 'Bash(gh pr:*)', 'Bash(gh stack:*)', 'Bash(gh secret:*)', 'Bash(gh repo:*)', 'Bash(gh release:*)', 'Bash(gh workflow:*)', 'Bash(gh api:*)',
     'Bash(gh issue delete:*)', 'Bash(gh issue transfer:*)', 'Bash(gh issue close:*)', 'Bash(gh issue reopen:*)', 'Bash(gh issue lock:*)', 'Bash(gh issue unlock:*)', 'Bash(gh issue pin:*)', 'Bash(gh issue unpin:*)', 'Bash(gh issue develop:*)',
     'Bash(gh run:*)', 'Bash(gh variable:*)', 'Bash(gh gist:*)', 'Bash(gh label:*)', 'Bash(gh auth:*)', 'Bash(gh ssh-key:*)', 'Bash(gh gpg-key:*)', 'Bash(gh extension:*)', 'Bash(gh alias:*)', 'Bash(gh ruleset:*)', 'Bash(gh cache:*)', 'Bash(gh codespace:*)', 'Bash(gh project:*)',
   ];
@@ -255,7 +255,7 @@ describe('#515 a planning session started from the terminal runs with a tool res
       'gh issue delete 1', 'gh issue transfer 1 o/r', 'gh issue close 1', 'gh issue reopen 1', 'gh issue lock 1', 'gh issue unlock 1',
       'gh issue pin 1', 'gh issue unpin 1', 'gh issue develop 1', 'gh run cancel 1', 'gh run rerun 1', 'gh variable set X', 'gh variable delete X',
       'gh gist create f', 'gh label delete x', 'gh auth token', 'gh ssh-key add k', 'gh gpg-key add k', 'gh extension install x', 'gh alias set a b',
-      'gh ruleset list', 'gh cache delete x', 'gh codespace create', 'gh project delete 1', 'git commit -m x', 'gh pr merge 1',
+      'gh ruleset list', 'gh cache delete x', 'gh codespace create', 'gh project delete 1', 'git commit -m x', 'gh pr merge 1', 'gh api -X PUT repos/o/r/pulls/1/merge', 'gh api repos/o/r',
     ];
     for (const c of writes) assert.ok(covered(c), c);
     for (const c of ['gh issue view 1', 'gh issue list', 'gh issue create', 'gh issue edit 1']) assert.ok(!covered(c), `${c} stays usable`);
@@ -301,7 +301,9 @@ describe('#515 a planning session started from the terminal runs with a tool res
   test('#515/AC-2 the allowed list keeps reading the issue and creating Plan sub-issues; the denied list blocks edits', () => {
     const allowed = PLANNING_TOOL_FLAGS[PLANNING_TOOL_FLAGS.indexOf('--allowedTools') + 1]!.split(',');
     const denied = PLANNING_TOOL_FLAGS[PLANNING_TOOL_FLAGS.indexOf('--disallowedTools') + 1]!.split(',');
-    for (const t of ['Read', 'Skill', 'Agent', 'Bash(gh issue view:*)', 'Bash(gh issue list:*)', 'Bash(gh issue create:*)', 'Bash(gh issue edit:*)', 'Bash(gh api:*)']) assert.ok(allowed.includes(t), t);
+    for (const t of ['Read', 'Skill', 'Agent', 'Bash(gh issue view:*)', 'Bash(gh issue list:*)', 'Bash(gh issue create:*)', 'Bash(gh issue edit:*)']) assert.ok(allowed.includes(t), t);
+    assert.ok(!allowed.some((t) => t.startsWith('Bash(gh api')), 'gh api is not allowed');
+    assert.ok(denied.includes('Bash(gh api:*)'), 'gh api is denied, so a settings allow rule cannot run it unprompted');
     for (const t of ['Edit', 'Write', 'NotebookEdit']) assert.ok(denied.includes(t), t);
     assert.ok(!allowed.some((t) => denied.includes(t)), 'no tool is both allowed and denied');
   });
