@@ -5488,6 +5488,9 @@ const TELAS = [
   { id: 'work-board-stale-reasons', cod: '614-2', nome: 'Quadro do trabalho · faixa por motivo na tela', sub: 'Issue 614, proposta. A credencial recusada e o limite de taxa na tela inteira, em 1100 e 1440; o que vem do GitHub segue desbotado.',
     html: () => wbReasonsHtml(),
     n: N(['Nada.'], ['Decisão 0001 segue: o quadro guarda a última leitura boa.']) },
+  { id: 'work-board-stale-panel-unknown', cod: '614-3', nome: 'Quadro do trabalho · faixa de motivo desconhecido no painel da issue', sub: 'Issue 614, proposta a aprovar. Quando o núcleo manda um motivo que a tela não conhece, a faixa fica neutra, diz “A leitura está desatualizada.” e oferece Tentar agora, sem afirmar nada sobre o GitHub. No painel da issue ela abre o painel, antes do título, e diz “Mostrando a issue de 22:41” em vez de “o quadro”. A versão do quadro é a 8 de 614-1.',
+    html: () => wbPanelUnknownHtml(),
+    n: N(['Nada.'], ['Mesmo lugar e forma da faixa do painel nos outros motivos: abaixo do cabeçalho, acima do título. O código real mantém “As sessões e a fila continuam ao vivo.” no painel; só o “o quadro” vira “a issue”.']) },
   { id: 'work-board-loading', cod: '465-5', nome: 'Quadro do trabalho · carregando', sub: 'Issue #465. Na primeira abertura, enquanto o GitHub é lido: as seis colunas com cards de esqueleto, os contadores em “…”, filtros desligados e Atualizar ocupado. Nas leituras seguintes o quadro fica e só o Atualizar gira. Em 1100 e 1440.',
     html: () => wbBoth(wbLoadingScreen),
     n: N(['O esqueleto do C19.'], ['O esqueleto tem a altura de um card curto, para o quadro não pular quando os dados chegam.']) },
@@ -6502,9 +6505,13 @@ const WB_REASON_BANDS = [
   ['5 · Sincronização pendente · neutro, Atualizar agora', wbBand('neutral', 'history', 'O quadro ainda não foi relido.', `${WB_FROM} A sincronização em segundo plano ainda não passou por ele; relemos em 2 min. ${WB_LIVE}`, `<span class="btn contorno">${ic('refresh-cw')}Atualizar agora</span>`)],
   ['6 · Leitura ao vivo: credencial sem a permissão (no-scope) · vermelho, Reconectar', wbBand('error', 'key-round', 'A credencial do GitHub não tem a permissão necessária.', `${WB_FROM} Reconecte para conceder a permissão do quadro. ${WB_LIVE}`, `<span class="btn cheio">${ic('github')}Reconectar</span>`)],
   ['7 · Leitura ao vivo: o GitHub respondeu com erro (github-error) · vermelho, Tentar agora', wbBand('error', 'cloud-off', 'O GitHub respondeu com erro.', `${WB_FROM} ${WB_LIVE}`, WB_RETRY)],
+  ['8 · Motivo desconhecido (o núcleo mandou um staleCode que a tela não conhece) · neutro, Tentar agora', wbBand('neutral', 'history', 'A leitura está desatualizada.', `${WB_FROM} ${WB_LIVE}`, WB_RETRY)],
 ]
 const wbReasonScreen = band => w => `${wbHead({ read: WB_READ_OLD })}${band}${wbLevels('item')}${wbFilters()}<div class="wb-stale">${wbBoard(w, wbCols(), WB_MAIN)}</div>`
 const wbReasonBandsHtml = () => `<div style="display:flex;flex-direction:column;gap:10px">${WB_REASON_BANDS.map(([t, b]) => `<div class="rotulo">${t}</div>${b}`).join('')}</div>`
+// 614-3 · the same unknown-reason band in the issue panel: the panel says "a issue" where the board says "o quadro", and keeps the live line.
+const WB_PANEL_UNKNOWN = wbBand('neutral', 'history', 'A leitura está desatualizada.', 'Mostrando a issue de 22:41 (há 31 min). As sessões e a fila continuam ao vivo.', WB_RETRY)
+const wbPanelUnknownHtml = () => wbRows([['#506 com a faixa de motivo desconhecido no topo do painel, antes do título', wbDetailScreen(wbItem(506), 'read', WB_PANEL_UNKNOWN)]])
 const wbReasonsHtml = () => wbRows([['Credencial recusada, na tela inteira', wbReasonScreen(WB_REASON_BANDS[2][1])], ['Limite de taxa, na tela inteira', wbReasonScreen(WB_REASON_BANDS[0][1])]])
 
 // 465-5 · loading (first open; later reads keep the board and only spin Atualizar).
@@ -6638,7 +6645,7 @@ const wbComments = edit => `<div class="wb-comment"><span class="wb-av">VC</span
   <div class="wb-comment"><span class="wb-av">AE</span><span><b>ana-exemplo</b> <small>· há 20 h</small><br>O passo 4 pode ficar para depois do primeiro PR.</span></div>
   ${edit ? `<div class="wb-textarea wb-ph">Escreva um comentário (Markdown)…</div><div class="wb-row" style="justify-content:flex-end"><span class="btn contorno">${ic('message-square')}Comentar</span></div>` : `<div class="wb-input wb-ph">Comentar…</div>`}`
 const wbStepsRead = (steps, done = false) => `<ol class="wb-steps">${steps.map(([n, t], i) => `<li${done ? ' class="wb-done"' : ''}><span class="wb-sn">${i + 1}</span><span class="trunc">${t}</span><span class="wb-st"><span class="mono">#${n}</span>${ic(done ? 'check-circle-2' : 'circle')}</span></li>`).join('')}</ol>`
-function wbDetailRead(c) {
+function wbDetailRead(c, band = '') {
   const col = WB_COLUMNS.find(([k]) => k === c.col)
   const acts = c.n === 506 ? `<div class="wb-dacts">${wbAct('play', 'Executar plano', true)}${wbAct('list-plus', 'Pôr na fila')}${wbAct('sparkles', 'Replanejar')}</div>`
     : c.n === 509 ? `<div class="wb-dacts">${wbAct('sparkles', 'Planejar', true)}</div>` : ''
@@ -6652,6 +6659,7 @@ Visto:    Concluído · 38</pre></div>`,
     : c.n === 497 ? ['Plano · 3 passos, todos fechados', wbStepsRead(WB_STEPS_497, true)]
     : ['Plano', `<div class="wb-pr"><span class="c-muted">Sem plano ainda. Planejar abre uma sessão da Athena só de planejamento, que lê a issue e o código e escreve os passos aqui como sub-issues do tipo Plan. Ela não escreve código.</span></div>`]
   return `<div class="wb-dhead"><b style="color:${WB_TYPES[c.t][1]};font-size:12px">${WB_TYPES[c.t][0]}</b><span class="c-muted mono" style="font-size:12px">#${c.n}</span><span class="badge b-abandoned"><span class="p"></span>${col[1]} · ${c.age}</span><span style="margin-left:auto"></span><span class="btn contorno">${ic('pencil')}Editar</span><span class="btn contorno" title="Abrir no GitHub">${ic('external-link')}</span><span class="wb-x">${ic('x')}</span></div>
+    ${band}
     <h5>${c.title}</h5>
     <div class="wb-chain">#1 Console como cockpit › #6 Quadro do trabalho › <b>#${c.n}</b></div>
     ${acts}
@@ -6690,10 +6698,10 @@ dentro do Console, **para** não sair para o GitHub.
     <div class="wb-sec"><div class="olhinho">Comentários · 2</div>${wbComments(true)}</div>`
 }
 // The detail is a panel at the right of the board, which stays behind under a scrim.
-const wbDetailScreen = (c, mode = 'read') => w => {
+const wbDetailScreen = (c, mode = 'read', band = '') => w => {
   const width = mode === 'read' ? (w >= 1440 ? 480 : 440) : (w >= 1440 ? 580 : 520)
   const cols = WB_COLUMNS.reduce((acc, [k]) => ({ ...acc, [k]: WB_ITEMS.filter(x => x.col === k).map(x => wbCard(x, { sel: x.n === c.n })) }), {})
-  return `${wbHead()}${wbLevels('item')}${wbFilters()}<div class="wb-stage">${wbBoard(w, cols, WB_MAIN)}<div class="wb-scrim"></div><aside class="cartao wb-drawer" style="width:${width}px">${mode === 'read' ? wbDetailRead(c) : wbDetailEdit(c, mode)}</aside></div>`
+  return `${wbHead()}${wbLevels('item')}${wbFilters()}<div class="wb-stage">${wbBoard(w, cols, WB_MAIN)}<div class="wb-scrim"></div><aside class="cartao wb-drawer" style="width:${width}px">${mode === 'read' ? wbDetailRead(c, band) : wbDetailEdit(c, mode)}</aside></div>`
 }
 const wbDetailHtml = () => wbRows([['#509 em Planejamento, sem plano: Planejar', wbDetailScreen(wbItem(509))], ['#506 em Planejamento, com plano: Executar plano, Pôr na fila e Replanejar', wbDetailScreen(wbItem(506))], ['#497 em Em review: o plano fechado e o PR com CI e review', wbDetailScreen(wbItem(497))]])
 
