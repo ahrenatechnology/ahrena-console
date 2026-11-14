@@ -1,6 +1,6 @@
 // A minimal DOM to mount the /ui screens in node, with no dependency: only what `dom.js`, `states.js`
 // and the screens use (creating nodes, attributes, classes, bubbling events and a `querySelector` of simple
-// selectors: tag, `.class`, `[attribute]`, `[attribute="value"]` and descendant and the child combinator `>`; `stopPropagation` stops the bubbling). Also `closest`,
+// selectors: tag, `.class`, `[attribute]`, `[attribute="value"]` and descendant and the child combinator `>` (#610); `stopPropagation` stops the bubbling). Also `closest`,
 // `contains`, `firstChild`, `style.setProperty` (a CSS variable through CSSOM) and a `document.head`.
 
 type Ouvinte = (ev: EventoFalso) => void;
