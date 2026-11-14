@@ -92,6 +92,8 @@ describe('the resume command and its quoting (#285/AC-4)', () => {
     assert.equal(resumeCommand("/w/it's", ID), `cd '/w/it'\\''s' && claude --resume ${ID}`);
     assert.equal(resumeCommand('/w/a\nb', ID), null);
     assert.equal(resumeCommand('/w/a', 'not-a-uuid'), null);
+    assert.equal(resumeCommand('/w/a', ID, ['--permission-mode', 'dontAsk', '--disallowedTools', 'Bash(gh run:*)']), `cd '/w/a' && claude --resume ${ID} '--permission-mode' 'dontAsk' '--disallowedTools' 'Bash(gh run:*)'`);
+    assert.equal(resumeCommand('/w/a', ID, []), resumeCommand('/w/a', ID));
   });
 });
 

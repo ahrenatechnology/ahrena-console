@@ -15,11 +15,22 @@
 //   #507 Both files remove themselves when they run.
 //   #515 When the prompt is a planning one (`planningKeyOfPrompt`), `claude` starts with PLANNING_TOOL_FLAGS
 //   #515 before the prompt: `--permission-mode dontAsk`, an allowed list (read, the issue and Plan sub-issues
-//   #515 through `gh`) and a denied list (no editing files, no push, commit or pull request), each flag
+//   #515 through `gh`) and a denied list (no editing files, no push, commit or pull request, no MCP tool, and
+//   #515 no write verb of `gh` or `git` that planning does not need), each flag
 //   #515 single-quoted, then a bare `--`: `--allowedTools` and `--disallowedTools` are variadic lists, so without
-//   #515 it the prompt would be swallowed as one more rule. The flags are fixed here and never come from the prompt; any other prompt, and a
-//   #515 resume, produce the same file as before.
-// - Linux, open: `x-terminal-emulator -e claude [--resume <id>]` in the folder, when it is on the PATH.
+//   #515 it the prompt would be swallowed as one more rule. The flags are fixed here and never come from the prompt; any other prompt
+//   #515 produces the same file as before.
+//   #515 `dontAsk` is NOT a closed allow list: the allow rules of every settings scope (the person's own
+//   #515 `Bash(gh run:*)`, an MCP tool) add to `--allowedTools`. Only the deny list removes them, so the deny
+//   #515 list is what holds. `gh api` stays whole until #593.
+//   #515 MCP: the Claude Code permissions page documents a catch-all deny, `mcp__*` ("matches every MCP tool
+//   #515 across all servers", removed from Claude's context), so that is the choice; `--strict-mcp-config`
+//   #515 was not needed. `--setting-sources` is not used: the planned repository's project settings may
+//   #515 enable the ahrena plugins.
+//   #515 A resume of a planning session (the route says so with `planning`, from the session's first prompt)
+//   #515 gets the same flags after `--resume <id>`, with nothing after them (the lists are variadic, so the
+//   #515 flags come last and no positional follows); the session still holds the issue's untrusted text.
+// - Linux, open: `x-terminal-emulator -e claude [--resume <id> [PLANNING_TOOL_FLAGS]]` in the folder, when it is on the PATH.
 //   #507 With a first prompt: `unsupported`, because some emulators (gnome-terminal's `-e`) re-parse their
 //   #507 arguments through a shell, and the route answers 501 with the command to copy.
 // - Anything else (Windows included: its folders are not POSIX paths): `unsupported`, and the route
@@ -47,6 +58,11 @@ export interface TerminalRequest {
    * header. It must not start with `-` (it would read as an option of `claude`).
    */
   prompt?: string;
+  /**
+   * #515 the session to resume is a planning one: `claude` gets PLANNING_TOOL_FLAGS after `--resume <id>`.
+   * A flag only; the flags themselves are fixed here and never come from a caller's text.
+   */
+  planning?: boolean;
 }
 
 const MAX_PROMPT = 20_000;
@@ -108,8 +124,12 @@ export async function findOnPath(name: string, path = process.env.PATH ?? ''): P
 
 /**
  * #515 The tool restriction of a planning session: it reads, searches, runs skills and agents, reads and
- * lists issues, creates and edits issues (the Plan sub-issues) and calls `gh api`; it cannot edit files,
- * push, commit or touch pull requests, stacks, secrets, repositories, releases or workflows.
+ * lists issues, creates and edits issues (the Plan sub-issues) and calls `gh api` (whole until #593); it
+ * cannot edit files, push, commit, touch pull requests, stacks, secrets, repositories, releases, workflows,
+ * runs, variables, gists, labels, credentials, extensions, rulesets, caches or codespaces, close, transfer
+ * or delete issues, rewrite or move the git history or branches, or call any MCP tool (`mcp__*`).
+ * `dontAsk` is not a closed allow list: the allow rules of every settings scope add to `--allowedTools`.
+ * The deny list is what holds, so it names every write verb planning does not need.
  */
 export const PLANNING_TOOL_FLAGS: readonly string[] = [
   '--permission-mode',
@@ -117,7 +137,13 @@ export const PLANNING_TOOL_FLAGS: readonly string[] = [
   '--allowedTools',
   'Read,Grep,Glob,Skill,Agent,Bash(gh issue view:*),Bash(gh issue list:*),Bash(gh issue create:*),Bash(gh issue edit:*),Bash(gh api:*)',
   '--disallowedTools',
-  'Edit,Write,NotebookEdit,Bash(git push:*),Bash(git commit:*),Bash(gh pr:*),Bash(gh stack:*),Bash(gh secret:*),Bash(gh repo:*),Bash(gh release:*),Bash(gh workflow:*)',
+  [
+    'Edit,Write,NotebookEdit,mcp__*',
+    'Bash(git push:*),Bash(git commit:*),Bash(gh pr:*),Bash(gh stack:*),Bash(gh secret:*),Bash(gh repo:*),Bash(gh release:*),Bash(gh workflow:*)',
+    'Bash(gh issue delete:*),Bash(gh issue transfer:*),Bash(gh issue close:*),Bash(gh issue reopen:*),Bash(gh issue lock:*),Bash(gh issue pin:*),Bash(gh issue develop:*)',
+    'Bash(gh run:*),Bash(gh variable:*),Bash(gh gist:*),Bash(gh label:*),Bash(gh auth:*),Bash(gh ssh-key:*),Bash(gh extension:*),Bash(gh alias:*),Bash(gh ruleset:*),Bash(gh cache:*),Bash(gh codespace:*)',
+    'Bash(git reset:*),Bash(git checkout:*),Bash(git switch:*),Bash(git rebase:*),Bash(git merge:*),Bash(git tag:*),Bash(git branch:*),Bash(git clean:*),Bash(git -C:*),Bash(git -c:*)',
+  ].join(','),
 ];
 
 /** `claude`'s arguments: resume the session, or none for a new one; throws on an id that is not the UUID. */
@@ -131,13 +157,14 @@ function claudeArgs(sessionId: string | null): string[] {
  * The `.command` file that resumes a session (or starts one); throws when the folder or the id cannot be
  * carried. With `promptFile` (a new session only), `claude` gets the file's text as its one argument, after
  * the `restriction` flags (#515), each single-quoted, and a bare `--` (the variadic tool lists would take the prompt), when there are any.
+ * Resuming (no prompt file) with a `restriction` puts the flags after `--resume <id>` and nothing after them.
  */
 export function commandFileContent(cwd: string, sessionId: string | null, promptFile?: string, restriction: readonly string[] = []): string {
   if (!isUsableCwd(cwd)) throw new Error('unusable folder');
   if (promptFile !== undefined && sessionId !== null) throw new Error('a prompt starts a new session');
   const start =
     promptFile === undefined
-      ? [['exec claude', ...claudeArgs(sessionId)].join(' ')]
+      ? [['exec claude', ...claudeArgs(sessionId), ...restriction.map(shellQuote)].join(' ')]
       : [`prompt=$(cat -- ${shellQuote(promptFile)}) || exit 1`, `rm -f -- ${shellQuote(promptFile)}`, `exec claude ${[...restriction.map(shellQuote), ...(restriction.length > 0 ? ['--'] : []), '"$prompt"'].join(' ')}`];
   return ['#!/bin/sh', 'rm -f -- "$0"', `cd -- ${shellQuote(cwd)} || exit 1`, ...start, ''].join('\n');
 }
@@ -177,14 +204,15 @@ async function removeOld(dir: string, now: number, maxAgeMs: number): Promise<vo
 }
 
 export function createTerminalOpener({ dir, platform = process.platform, runner = systemRunner, findExecutable = findOnPath, now = Date.now, maxAgeMs = HOUR }: TerminalOpenerOptions): TerminalOpener {
-  return async ({ sessionId, cwd, prompt }) => {
+  return async ({ sessionId, cwd, prompt, planning }) => {
     if (prompt !== undefined && sessionId !== null) throw new Error('a prompt starts a new session');
+    if (planning === true && sessionId === null) throw new Error('only a resume is marked planning');
     const text = prompt === undefined ? undefined : checkPrompt(prompt);
     if (platform === 'darwin') {
       const id = randomUUID();
       const name = sessionId === null ? 'new' : 'resume';
       const promptFile = text === undefined ? undefined : join(dir, `${name}-${id}.prompt`);
-      const restriction = text !== undefined && planningKeyOfPrompt(text) !== null ? PLANNING_TOOL_FLAGS : [];
+      const restriction = planning === true || (text !== undefined && planningKeyOfPrompt(text) !== null) ? PLANNING_TOOL_FLAGS : [];
       const content = commandFileContent(cwd, sessionId, promptFile, restriction);
       await privateDir(dir);
       await removeOld(dir, now(), maxAgeMs);
@@ -205,7 +233,7 @@ export function createTerminalOpener({ dir, platform = process.platform, runner 
     if (platform === 'linux') {
       const exe = await findExecutable('x-terminal-emulator');
       if (!exe) return 'unsupported';
-      await runner.spawnDetached(exe, ['-e', 'claude', ...args], { cwd });
+      await runner.spawnDetached(exe, ['-e', 'claude', ...args, ...(planning === true ? PLANNING_TOOL_FLAGS : [])], { cwd });
       return 'opened';
     }
     return 'unsupported';

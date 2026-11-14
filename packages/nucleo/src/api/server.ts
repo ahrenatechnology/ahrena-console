@@ -142,6 +142,7 @@ import { dockerWriteAllowed, isDockerRoute, isDockerWrite, type DockerRoute } fr
 import type { ToolsControl } from '../tools/executor.ts';
 import { fromAnotherSite, fromOwnUi } from './same-origin.ts';
 import { appUpdateWriteFromSameOrigin, isAppUpdateRoute, type AppUpdateRoute } from './app-update.ts';
+import { firstPromptOfSession } from '../github/work-board-sessions.ts';
 import type { GithubBackgroundSync } from '../github/background-sync.ts';
 import { cloudsWriteFromSameOrigin, isCloudsRoute, type CloudsRoute } from './clouds.ts';
 import { isPortsRoute, isPortsWrite, portsWriteAllowed, type PortsRoute } from './ports.ts';
@@ -446,6 +447,7 @@ export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
     openInDesktop: opts.openInDesktop,
     openTerminal: opts.openTerminal,
     focusTerminal: opts.focusTerminal,
+    firstPromptOf: (id) => firstPromptOfSession(opts.panelBuilder.storage, id),
     isRemote: (id) => remotes().some((r) => remoteAttentionItems(r.attention(), r).some((i) => i.session === id)),
     log,
   });

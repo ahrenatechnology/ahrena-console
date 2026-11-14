@@ -17,6 +17,11 @@ describe('#515 sessionCommand', () => {
     assert.match(sessionCommand('/w/app', PLAN), /'--permission-mode' 'dontAsk' '--allowedTools' 'Read,Grep,Glob,Skill,Agent,Bash\(gh issue view:\*\)/);
   });
 
+  test('#515/AC-1 the copied command carries the extended deny list, mcp__* included', () => {
+    const cmd = sessionCommand('/w/app', PLAN);
+    for (const t of ['mcp__*', 'Bash(gh run:*)', 'Bash(gh variable:*)', 'Bash(gh issue close:*)', 'Bash(git reset:*)', 'Bash(git -C:*)', 'Bash(git -c:*)']) assert.ok(cmd.includes(t), t);
+  });
+
   test('another prompt: unchanged', () => {
     const exec = executionPrompt({ repo: 'acme/app', number: 1, steps: [2] });
     assert.equal(sessionCommand('/w/app', exec), `cd '/w/app' && claude ${quoteAll([exec])}`);
