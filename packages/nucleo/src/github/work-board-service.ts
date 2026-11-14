@@ -32,6 +32,10 @@ export interface WorkBoardServiceOptions {
   /** #465 without it, parents outside the Project stay chain links with no title. */
   parents?: ParentLookup;
   now?: () => number;
+  /** #496 the end of the GitHub rate-limit pause (epoch ms; in the past or `0` when there is none). Lazy: read when the board is built. */
+  pausedUntil?: () => number;
+  /** #496 when the background sync next reads the Project (epoch ms), `null` when nothing is scheduled. Lazy: the sync is built after this service. */
+  nextScheduledRead?: () => number | null;
   /** #465 the raw error of a failed parent lookup goes here; the board only says it could not read them. */
   log?: (message: string) => void;
 }
@@ -50,15 +54,19 @@ export class WorkBoardService {
   private readonly history: WorkColumnHistory;
   private readonly parents: ParentLookup | undefined;
   private readonly now: () => number;
+  private readonly pausedUntil: () => number;
+  private readonly nextScheduledRead: () => number | null;
   private readonly log: (message: string) => void;
 
-  constructor({ project, sessions, queue, history, parents, now = Date.now, log = () => {} }: WorkBoardServiceOptions) {
+  constructor({ project, sessions, queue, history, parents, now = Date.now, pausedUntil = () => 0, nextScheduledRead = () => null, log = () => {} }: WorkBoardServiceOptions) {
     this.project = project;
     this.sessions = sessions;
     this.queue = queue;
     this.history = history;
     this.parents = parents;
     this.now = now;
+    this.pausedUntil = pausedUntil;
+    this.nextScheduledRead = nextScheduledRead;
     this.log = log;
   }
 
@@ -88,7 +96,16 @@ export class WorkBoardService {
       fetchedAt: read.fetchedAt,
       stale: staleReason !== null,
       staleReason,
+      retryAt: staleReason === null ? null : this.retryAt(now),
     });
+  }
+
+  /** #496 the pause the rate limit set wins; else the sync's next read, an overdue one counting as now (it runs on the next tick); else nothing is scheduled. */
+  private retryAt(now: number): number | null {
+    const paused = this.pausedUntil();
+    if (paused > now) return paused;
+    const next = this.nextScheduledRead();
+    return next === null ? null : Math.max(next, now);
   }
 
   private async readProject(force: boolean, fromStore: boolean): Promise<ProjectBoard> {

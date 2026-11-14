@@ -486,16 +486,17 @@ export function githubDownReason(code) {
   return Object.hasOwn(GITHUB_DOWN_REASONS, code) ? GITHUB_DOWN_REASONS[code] : UNKNOWN_GITHUB_DOWN_REASON;
 }
 
-/** The stale band (issue 465, ADR-0001): the board is from `fetchedAt`, why, and Tentar agora (`onRetry`). */
-export function staleBand({ fetchedAt = null, now = Date.now(), reason = null, busy = false, onRetry = null } = {}) {
+/** The stale band (issue 465, ADR-0001): the board is from `fetchedAt`, why, when the core tries again (`retryAt`, epoch ms, issue 496), and Tentar agora (`onRetry`). */
+export function staleBand({ fetchedAt = null, now = Date.now(), reason = null, retryAt = null, busy = false, onRetry = null } = {}) {
   const when = formatClock(fetchedAt);
   const from = when ? `Mostrando o quadro de ${when} (${formatAgo(fetchedAt, now)}).` : 'Mostrando o último quadro lido.';
+  const retry = Number.isFinite(retryAt) ? ` Tentamos de novo em ${Math.max(1, Math.round((retryAt - now) / 60_000))} min.` : '';
   const why = reason ? ` Motivo: ${githubDownReason(reason)}.` : '';
   return el(
     'div',
     { class: 'error-band wb-stale-band', role: 'status' },
     icon('offline'),
-    el('p', {}, el('b', {}, 'GitHub indisponível.'), ` ${from} As sessões e a fila continuam ao vivo.${why}`),
+    el('p', {}, el('b', {}, 'GitHub indisponível.'), ` ${from}${retry} As sessões e a fila continuam ao vivo.${why}`),
     el('button', { type: 'button', class: 'btn outline', 'data-action': 'retry', 'aria-busy': busy ? 'true' : null, disabled: busy, onClick: () => onRetry?.() }, icon('refresh'), 'Tentar agora'),
   );
 }

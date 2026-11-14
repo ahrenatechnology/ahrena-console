@@ -292,6 +292,11 @@ export interface WorkBoardInput {
   stale: boolean;
   /** #495 a stable English code (`StaleCode`), never GitHub's raw message; the screen translates it. */
   staleReason: StaleCode | null;
+  /**
+   * #496 epoch ms of the core's next GitHub read while the board is stale: the end of the rate-limit pause,
+   * else the next scheduled read of the Project. `null` when the board is not stale or no read is scheduled.
+   */
+  retryAt: number | null;
 }
 
 export interface WorkChainLink {
@@ -389,6 +394,11 @@ export interface WorkBoardView {
   stale: boolean;
   /** #495 a stable English code (`StaleCode`), never GitHub's raw message; the screen translates it. */
   staleReason: StaleCode | null;
+  /**
+   * #496 epoch ms of the core's next GitHub read while the board is stale: the end of the rate-limit pause,
+   * else the next scheduled read of the Project. `null` when the board is not stale or no read is scheduled.
+   */
+  retryAt: number | null;
 }
 
 /** A node with everything derived from the graph: level, ancestors, column, sessions and children. */
@@ -598,6 +608,7 @@ export function buildWorkBoard(input: WorkBoardInput): WorkBoardView {
     fetchedAt: input.fetchedAt,
     stale: input.stale,
     staleReason: input.staleReason,
+    retryAt: input.retryAt,
   };
 }
 

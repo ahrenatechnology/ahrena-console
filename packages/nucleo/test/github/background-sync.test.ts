@@ -113,6 +113,32 @@ describe('#356 GithubBackgroundSync', () => {
   });
 });
 
+describe('#496/AC-1 GithubBackgroundSync.nextRunAt', () => {
+  test('#496/AC-1 Given the sync is stopped, When asked, Then nextRunAt is null', async () => {
+    const sync = new GithubBackgroundSync({ steps: [step('project', 120_000, [], [])], now: () => T0 });
+    assert.equal(sync.nextRunAt('project'), null);
+    sync.start();
+    await sync.stop();
+    assert.equal(sync.nextRunAt('project'), null);
+  });
+
+  test('#496/AC-1 Given the sync is active, When a step ran, Then nextRunAt is its finish plus its interval; a step never run is due now; an unknown step is null', async () => {
+    const clock = { now: T0 };
+    const ran: string[] = [];
+    const sync = new GithubBackgroundSync({ steps: [step('project', 120_000, [], ran)], now: () => clock.now, tickMs: 3_600_000 });
+    sync.start();
+    try {
+      await sync.tick();
+      assert.equal(sync.nextRunAt('project'), T0 + 120_000);
+      sync.requestNow('project');
+      assert.equal(sync.nextRunAt('project'), clock.now);
+      assert.equal(sync.nextRunAt('nope'), null);
+    } finally {
+      await sync.stop();
+    }
+  });
+});
+
 describe('#356 the sync steps and the status route', () => {
   test('without a GitHub connection both steps are skipped and nothing is read', async () => {
     let read = 0;

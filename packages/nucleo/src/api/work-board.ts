@@ -16,10 +16,12 @@
  * The body is the use case's `WorkBoardView` as it is. Errors: 400 `bad-filter` with `param`, 503
  * `no-project` without a chosen Project, 503 `off` under --no-github, 502 `github-unavailable` with the
  * `reason` when the first read fails and nothing is stored. GitHub down after a read is not an error:
- * 200 with the last data, `stale` and `staleReason` (ADR-0001). `reason` and `staleReason` are a code,
+ * 200 with the last data, `stale`, `staleReason` and `retryAt` (ADR-0001). `reason` and `staleReason` are a code,
  * never GitHub's message (that goes to the core log, #495). `staleReason` is `network`, `rate-limited`,
  * `no-scope`, `github-error` or `sync-pending` (the stored board is old and no failure is recorded); a
- * 502 `reason` is only one of the first four and never `sync-pending`. With the background sync the GET answers the stored board (ADR-0015).
+ * 502 `reason` is only one of the first four and never `sync-pending`. `retryAt` (#496) is epoch ms: with `stale: true`, when the core reads GitHub
+ * again (the end of the rate-limit pause, else the next scheduled read of the Project, now if it is overdue);
+ * `null` when not stale or no read is scheduled. With the background sync the GET answers the stored board (ADR-0015).
  */
 
 import type { IncomingMessage, ServerResponse } from 'node:http';

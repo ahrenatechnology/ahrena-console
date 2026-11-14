@@ -90,6 +90,7 @@ function derive(state) {
     view: viewOf(phase, data, shownFor),
     stale: Boolean(data?.stale),
     staleReason: data?.staleReason ?? null,
+    retryAt: data?.retryAt ?? null,
     suggestion: data && shown === 'no-result' ? suggestionFor(dataFilters, placed, data) : null,
   };
 }

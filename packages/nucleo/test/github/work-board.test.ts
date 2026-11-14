@@ -88,6 +88,7 @@ function board(nodes: WorkBoardNode[], over: Partial<WorkBoardInput> = {}): Work
     fetchedAt: NOW,
     stale: false,
     staleReason: null,
+    retryAt: null,
     ...over,
   });
 }
