@@ -152,8 +152,8 @@ export function openAction(session, { size = 'full', write = defaultWrite, machi
       );
   // aria-disabled keeps the title readable on hover; the click does nothing.
   if (d.disabled) button.setAttribute('aria-disabled', 'true');
-  const status = el('span', { class: 'open-status', role: 'status', 'aria-live': 'polite' });
   const why = size === 'full' && d.where ? el('span', { class: 'open-why' }, icon('server'), d.where) : null;
+  const status = openStatusView(key, button, { iconOnly: compact || size === 'small', closable: compact, restoreDisabled: d.disabled });
   const root = el('span', { class: `open-action open-size-${size}${className ? ` ${className}` : ''}`, 'data-open-target': d.target }, button, why, status);
   // Nothing inside the action reaches the card or the row around it.
   root.addEventListener('click', (ev) => ev.stopPropagation?.());
@@ -164,12 +164,47 @@ export function openAction(session, { size = 'full', write = defaultWrite, machi
       setState(key, null);
     }
   });
+  button.addEventListener('click', (ev) => {
+    stop(ev);
+    if (d.disabled) return;
+    void requestOpen(key, id, { write, successMs, failMs });
+  });
+  return root;
+}
 
+/**
+ * The click of an open, for a surface that draws its own button (issue 532): refused while the session's open is in flight,
+ * "Abrindo…" while it runs, then the success for `successMs` or the failure, with the core's `command`, for `failMs`. `key`
+ * is the state's key (the session id for a local session) and `id` goes in the route. Never throws.
+ */
+export async function requestOpen(key, id, { write = defaultWrite, successMs = SUCCESS_MS, failMs = FAIL_MS } = {}) {
+  if (openStateOf(key)?.kind === 'busy') return;
+  // issue 285: the next click clears a failure.
+  setState(key, { kind: 'busy', text: 'Abrindo…', command: null, until: null });
+  let state;
+  try {
+    state = stateOfAnswer(await openSession(id, { write }));
+  } catch (e) {
+    if (e?.name === 'AbortError') state = null;
+    else state = stateOfAnswer(null, e instanceof Error ? e : new Error(String(e)));
+  }
+  if (!state) return setState(key, null);
+  setState(key, { ...state, command: state.kind === 'fail' ? state.command : null, until: Date.now() + (state.kind === 'ok' ? successMs : failMs) });
+}
+
+/**
+ * The state of a session's open beside the `button` that asks for it (issue 532): the `open-status` node that says
+ * "Abrindo…", the success or the failure with "Copiar comando", and keeps `button` aria-busy while the open is in flight.
+ * It follows the state of `key` across redraws, as the action of `openAction` does; `iconOnly` makes the copy a bare icon,
+ * `closable` adds "Fechar", and `restoreDisabled` keeps a button that never opens aria-disabled.
+ */
+export function openStatusView(key, button, { iconOnly = false, closable = false, restoreDisabled = false } = {}) {
+  const status = el('span', { class: 'open-status', role: 'status', 'aria-live': 'polite' });
   let timer = null;
 
   function draw() {
-    // A redraw dropped this action from the page: it stops listening.
-    if (root.isConnected === false && status.getAttribute('data-state') !== null) return void forget();
+    // issue 285: a redraw dropped this view from the page; it stops listening.
+    if (status.isConnected === false && status.getAttribute('data-state') !== null) return void forget();
     clearTimeout(timer);
     const st = openStateOf(key);
     // In flight: aria-disabled and aria-busy, not `disabled`, so the focus stays on the button.
@@ -177,13 +212,13 @@ export function openAction(session, { size = 'full', write = defaultWrite, machi
       setBusy(button, true);
     } else {
       setBusy(button, false);
-      if (d.disabled) button.setAttribute('aria-disabled', 'true');
+      if (restoreDisabled) button.setAttribute('aria-disabled', 'true');
     }
     status.setAttribute('data-state', st?.kind ?? 'idle');
     if (!st) return void status.replaceChildren();
     const msg = el('span', { class: `open-msg open-${st.kind}`, title: st.text }, st.text);
-    const copy = st.kind === 'fail' && st.command ? copyButton(st.command, compact || size === 'small') : null;
-    const close = st.kind === 'fail' && compact ? closeButton(() => setState(key, null)) : null;
+    const copy = st.kind === 'fail' && st.command ? copyButton(st.command, iconOnly) : null;
+    const close = st.kind === 'fail' && closable ? closeButton(() => setState(key, null)) : null;
     status.replaceChildren(...[msg, copy, close].filter(Boolean));
     if (st.until !== null) {
       timer = setTimeout(draw, Math.max(0, st.until - Date.now()));
@@ -201,23 +236,7 @@ export function openAction(session, { size = 'full', write = defaultWrite, machi
   if (!views.has(key)) views.set(key, new Set());
   views.get(key).add(draw);
   draw();
-
-  button.addEventListener('click', async (ev) => {
-    stop(ev);
-    if (d.disabled || openStateOf(key)?.kind === 'busy') return;
-    // The next click clears a failure.
-    setState(key, { kind: 'busy', text: 'Abrindo…', command: null, until: null });
-    let state;
-    try {
-      state = stateOfAnswer(await openSession(id, { write }));
-    } catch (e) {
-      if (e?.name === 'AbortError') state = null;
-      else state = stateOfAnswer(null, e instanceof Error ? e : new Error(String(e)));
-    }
-    if (!state) return setState(key, null);
-    setState(key, { ...state, command: state.kind === 'fail' ? state.command : null, until: Date.now() + (state.kind === 'ok' ? successMs : failMs) });
-  });
-  return root;
+  return status;
 }
 
 /** "Fechar": the icon's failure popover goes away. */
