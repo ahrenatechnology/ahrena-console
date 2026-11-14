@@ -9,6 +9,7 @@ import { el } from '../dom.js';
 import { githubDownReason, workCard } from './work-board-parts.js';
 import { cardPlanParts, missingFolder, planConfirm } from './work-board-plan.js';
 import { issuePanel, issuePanelFailure, issuePanelLoading, issuePanelStage } from './work-board-issue-panel.js';
+import { createEditLayer } from './work-board-issue-edit-layer.js';
 import {
   askPlan,
   cancelPlan,
@@ -65,12 +66,15 @@ function keyed(parts, key) {
  * confirmation. It reads the layer's state through `state()` and changes it only through `apply(next, intent)`; `retry` and
  * `confirm` are the layer's own, because they touch what the layer keeps (the forced re-read, the failure it saw before).
  */
-function createIssueView({ area, state, apply, cardFor, retry, confirm, run, onAsk }) {
+function createIssueView({ area, state, apply, cardFor, retry, confirm, run, onAsk, edit }) {
   let focus = null;
   let anchorInPanel = false;
 
   const shownCard = (card) => {
-    const planned = state().plans[card.key] ? cardWithPlanning(state(), card) : card;
+    // issue 535: the step count GitHub answered for an edited issue, until the board's own read says the same.
+    const counted = edit.countFor(card.key);
+    const counting = counted === null ? card : { ...card, plan: counted > 0 ? { ...card.plan, steps: counted } : null };
+    const planned = state().plans[card.key] ? cardWithPlanning(state(), counting) : counting;
     return run ? run.card(planned) : planned;
   };
   const focusOn = (intent) => {
@@ -139,9 +143,10 @@ function createIssueView({ area, state, apply, cardFor, retry, confirm, run, onA
     let node;
     if (view === 'skeleton') node = issuePanelLoading({ card, now, onClose: close });
     else if (view === 'failure') node = issuePanelFailure({ card, reason, now, onRetry: retry, onClose: close });
+    else if (edit.isOpen(key)) node = edit.render({ card, now, onClose: close });
     else {
       const parts = keyed(partsOf(card), `panel:${key}`);
-      node = issuePanel({ card, issue: { ...issue, stale: stale || issue.stale }, now, parts, onRetry: retrying ? null : retry, onClose: close });
+      node = issuePanel({ card, issue: { ...issue, stale: stale || issue.stale }, now, parts, onRetry: retrying ? null : retry, onEdit: () => edit.open(issue), onClose: close });
       const pop = (hostedInPanel(card) ? popupFor(card) : null) ?? run?.popup(card, 'panel', true) ?? null;
       if (pop) (node.querySelector('.wb-panel-acts') ?? node).append(pop);
     }
@@ -151,6 +156,7 @@ function createIssueView({ area, state, apply, cardFor, retry, confirm, run, onA
 
   /** issue 508: the board nodes, with the panel on their right when one is open. */
   function wrap(nodes) {
+    edit.capture();
     // issue 508: a redraw replaces the panel, so the focus on the panel itself (not on one of its buttons) is given back to it.
     const active = globalThis.document?.activeElement;
     if (!focus && active?.tagName === 'ASIDE' && active.closest?.('aside.wb-panel') === active && area.contains(active)) focus = { kind: 'panel' };
@@ -159,10 +165,15 @@ function createIssueView({ area, state, apply, cardFor, retry, confirm, run, onA
   }
 
   /** issue 508: what changes what `wrap` and `renderCard` draw, for the screen's "did it change" check. */
-  const signature = () => [state().panel, state().plans, anchorInPanel];
+  const signature = () => [state().panel, state().plans, anchorInPanel, edit.signature()];
 
   /** issue 508: after a draw, the focus goes where the person's last action sends it (the panel, the card, the confirmation). */
   function afterDraw() {
+    // issue 535: the edit mode puts the focus where its own action sends it; the panel itself is only for a read panel.
+    if (edit.afterDraw()) {
+      focus = null;
+      return;
+    }
     if (!focus) return;
     const { kind, key } = focus;
     focus = null;
@@ -183,7 +194,7 @@ function createIssueView({ area, state, apply, cardFor, retry, confirm, run, onA
  * GET /api/work quietly; `ctx` is the screen's (read, write, signal). It keeps the state and its effects; the view half is
  * createIssueView's.
  */
-export function createIssueLayer({ ctx, area, cards, redraw, reread, run = null, onAsk = null }) {
+export function createIssueLayer({ ctx, area, cards, options = () => ({}), redraw, reread, run = null, onAsk = null }) {
   let s = initialIssueState();
   let alive = true;
   let learning = false;
@@ -255,6 +266,8 @@ export function createIssueLayer({ ctx, area, cards, redraw, reread, run = null,
     if (next === s) return;
     const done = Object.entries(s.plans).some(([k, e]) => e.phase === 'planning' && next.plans[k]?.phase === 'planned');
     s = next;
+    // issue 535: the edit belongs to the open panel of its issue; a closed panel, or another card, ends it.
+    if (edit.key() && (!s.panel.open || s.panel.key !== edit.key())) edit.close();
     if (intent) view.focusOn(intent);
     effects();
     // issue 508: the steps of a plan that just came out are in the issue, not in the one the panel read before.
@@ -269,6 +282,7 @@ export function createIssueLayer({ ctx, area, cards, redraw, reread, run = null,
   }
 
   function learn() {
+    edit.learn(cards());
     let next = s;
     for (const card of cards()) {
       const entry = next.plans[card.key];
@@ -302,11 +316,22 @@ export function createIssueLayer({ ctx, area, cards, redraw, reread, run = null,
 
   function stop() {
     alive = false;
+    edit.stop();
     clearTimeout(poll);
     link.remove();
   }
 
-  const view = createIssueView({ area, state: () => s, apply, cardFor, retry, confirm, run, onAsk });
+  // issue 535: Editar turns the panel into the edit mode; Concluir gives the read panel the issue GitHub last answered.
+  const edit = createEditLayer({
+    ctx,
+    area,
+    redraw: () => redraw(),
+    choices: () => ({ cards: cards(), options: options() }),
+    onSaved: () => void reread(),
+    onFinished: (issue) => apply(panelLoaded(s, issue, s.panel.request)),
+  });
+
+  const view = createIssueView({ area, state: () => s, apply, cardFor, retry, confirm, run, onAsk, edit });
 
   // issue 532: the screen closes this layer's open confirmation when the run layer opens its own (one at a time, 465-6).
   const closeConfirmation = () => Object.keys(s.plans).forEach((key) => apply(cancelPlan(s, { key })));

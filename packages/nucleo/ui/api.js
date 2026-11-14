@@ -11,8 +11,9 @@
 //   the `AbortError` as it came.
 //
 // The write (`write(route, body)`) lives here too, with the same rules and a transport swappable
-// with `useWriter(...)`: POST with JSON (or, with `{ method: 'DELETE' }`, a DELETE without a body),
-// only `/api/`, only the local core. A failure becomes a `WriteError`.
+// with `useWriter(...)`: POST with JSON (or, with `{ method: 'DELETE' }`, a DELETE without a body; `{ method: 'PATCH' }` sends
+// JSON as POST does, and a DELETE that needs its JSON body says `{ jsonBody: true }`), only `/api/`, only the local core.
+// A failure becomes a `WriteError` (issue 535).
 
 export class ReadError extends Error {
   constructor(message, { status = 0, route = null, retryIn = null, body = null } = {}) {
@@ -84,16 +85,20 @@ export function read(route, options) {
   return current(route, options);
 }
 
-const WRITE_METHODS = new Set(['POST', 'DELETE']);
+const WRITE_METHODS = new Set(['POST', 'PATCH', 'DELETE']);
 
-/** The HTTP writer: POST with a JSON body (or DELETE; a `Blob` or bytes go as they are, with their own type: the dictation's WAV), only to `/api/` of the local core, without credentials. */
+/**
+ * The HTTP writer: POST or PATCH with a JSON body (or DELETE, which goes without one unless `jsonBody` is true: the issue's
+ * Plan step route names the step in it; a `Blob` or bytes go as they are, with their own type: the dictation's WAV), only to
+ * `/api/` of the local core, without credentials.
+ */
 export function httpWriter({ base = globalThis.location?.origin, fetch = globalThis.fetch?.bind(globalThis) } = {}) {
   const origin = new URL(base);
   if (origin.protocol !== 'http:' || !LOCAL_HOSTS.has(origin.hostname)) {
     throw new WriteError(`o console só escreve no núcleo local, não ${origin.origin}`);
   }
   const isBinary = (b) => (typeof Blob !== 'undefined' && b instanceof Blob) || b instanceof ArrayBuffer || ArrayBuffer.isView(b);
-  return async function writeOverHttp(route, body, { signal, method = 'POST' } = {}) {
+  return async function writeOverHttp(route, body, { signal, method = 'POST', jsonBody = false } = {}) {
     if (typeof route !== 'string' || !route.startsWith('/api/')) throw new WriteError(`rota fora da API: ${route}`, { route });
     if (!WRITE_METHODS.has(method)) throw new WriteError(`método de escrita não aceito: ${method}`, { route });
     const url = new URL(route, origin);
@@ -102,7 +107,7 @@ export function httpWriter({ base = globalThis.location?.origin, fetch = globalT
     try {
       response = await fetch(
         url,
-        method === 'DELETE'
+        method === 'DELETE' && !jsonBody
           ? { method, signal, headers: { ...ownerHeaders(), accept: 'application/json' }, credentials: 'omit', cache: 'no-store' }
           : isBinary(body)
             ? { method, signal, headers: { ...ownerHeaders(), accept: 'application/json', 'content-type': body.type || 'application/octet-stream' }, body, credentials: 'omit', cache: 'no-store' }
@@ -144,7 +149,7 @@ export function canWrite() {
   }
 }
 
-/** Sends `body` (JSON) to a route of the core API and returns the JSON of the answer; `{ method: 'DELETE' }` deletes. */
+/** Sends `body` (JSON) to a route of the core API and returns the JSON of the answer; `{ method: 'PATCH' }` patches, `{ method: 'DELETE' }` deletes (`jsonBody: true` keeps the body). */
 export function write(route, body, options) {
   writer ??= httpWriter();
   return writer(route, body, options);

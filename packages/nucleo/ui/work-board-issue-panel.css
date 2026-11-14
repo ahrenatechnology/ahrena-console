@@ -112,6 +112,8 @@ article[data-selected] { border-color: var(--accent); box-shadow: 0 0 0 1px var(
 .wb-edit-band .icon { flex: none; margin-top: 1px; }
 .wb-edit-refusal { color: var(--status-error-text); border-color: var(--status-error-dot); background: var(--status-error-badge); }
 .wb-edit-conflict { display: flex; flex-direction: column; gap: 8px; }
+.wb-edit-conflict:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 8px; }
+.wb-edit-place { display: flex; flex-direction: column; gap: 6px; }
 .wb-edit-version { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .wb-edit-version-title { font-size: 10.5px; font-weight: var(--weight-semibold); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
 .wb-edit-text { padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); font-family: var(--font-mono); font-size: 11.5px; line-height: 1.5; overflow-wrap: anywhere; }

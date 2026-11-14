@@ -467,6 +467,71 @@ describe('the refusal (478-3)', () => {
   });
 });
 
+describe('#535 contract layer: the refusal band goes where the refusal is, and Tentar de novo only when it can be repeated', () => {
+  const REASON = 'O GitHub não deixou gravar: a conta não pode editar esta issue.';
+  const refusal = (place: string, extra: Obj = {}) => ({ place, reason: REASON, retry: true, ...extra });
+
+  test('the band of the title sits right under the title field, with Tentar de novo and Copiar texto', () => {
+    const log: string[] = [];
+    const root = panel({ refusal: refusal('title', { onRetry: () => log.push('retry'), onCopy: () => log.push('copy') }) });
+    const kids = root.children;
+    const at = kids.findIndex((k) => k.classList.contains('wb-edit-title'));
+    assert.ok(at > 0, 'the title field is a child of the panel');
+    const band = kids[at + 1]!;
+    assert.ok(band.classList.contains('wb-edit-place'), 'the band follows the title');
+    assert.equal(one(band, '.wb-edit-refusal').getAttribute('role'), 'alert');
+    assert.ok(texto(band).includes(REASON));
+    click(one(band, '[data-action="retry"]'));
+    click(one(band, '[data-action="copy"]'));
+    assert.deepEqual(log, ['retry', 'copy']);
+  });
+
+  test('the band of the details, the plan and the comment sits in its own section', () => {
+    for (const [place, section] of [['details', 'details'], ['plan', 'plan'], ['comment', 'comments']] as const) {
+      const root = panel({ refusal: refusal(place, { onRetry: () => {}, onCopy: place === 'plan' ? null : () => {} }) });
+      assert.equal(all(root, '.wb-edit-refusal').length, 1, `one band for ${place}`);
+      assert.equal(all(one(root, `[data-section="${section}"]`), '.wb-edit-refusal').length, 1, `${place} band is in ${section}`);
+      assert.equal(all(one(root, '[data-section="description"]'), '.wb-edit-refusal').length, 0);
+    }
+  });
+
+  test('Tentar de novo is hidden when the refusal cannot be repeated, and Copiar texto when there is no text', () => {
+    const noRetry = panel({ refusal: refusal('comment', { retry: false, onRetry: () => {}, onCopy: () => {} }) });
+    assert.equal(all(noRetry, '[data-action="retry"]').length, 0);
+    assert.equal(all(noRetry, '[data-action="copy"]').length, 1);
+    const noText = panel({ refusal: refusal('plan', { onRetry: () => {}, onCopy: null }) });
+    assert.equal(all(noText, '[data-action="retry"]').length, 1);
+    assert.equal(all(noText, '[data-action="copy"]').length, 0);
+  });
+
+  test('a band says its own title when the caller gives one', () => {
+    const root = panel({ refusal: refusal('plan', { title: 'O GitHub não confirmou a edição.', onRetry: () => {} }) });
+    assert.ok(texto(one(root, '[data-section="plan"] .wb-edit-refusal')).startsWith('O GitHub não confirmou a edição.'));
+  });
+
+  test('on the description, a refusal that cannot be repeated keeps Salvar descrição and Copiar texto, with no Tentar de novo', () => {
+    const root = panel({ body: { mode: 'refused', text: 'meu texto', tab: 'write', reason: REASON, retry: false } });
+    const section = one(root, '[data-section="description"]');
+    assert.equal(all(section, '[data-action="retry"]').length, 0);
+    assert.equal(all(section, '[data-action="save-body"]').length, 1);
+    assert.equal(all(section, '[data-action="copy"]').length, 1);
+    assert.equal(one(section, 'textarea').value, 'meu texto');
+  });
+
+  test('a body refusal takes no second band from the `refusal` prop', () => {
+    const root = panel({ body: { mode: 'refused', text: 'x', tab: 'write', reason: REASON }, refusal: refusal('body') });
+    assert.equal(all(root, '.wb-edit-refusal').length, 1);
+  });
+
+  test('the conflict of a title or a step names its subject, and takes the focus as a region', () => {
+    const view = conflictView({ issueNumber: 506, mine: 'Meu título', subject: 'do título', conflict: { github: { text: 'Título do GitHub', updatedAt: new Date(NOW - 60_000).toISOString() } }, now: NOW });
+    assert.ok(texto(view).includes('A sua versão do título · não gravada'));
+    assert.ok(texto(view).includes('No GitHub, do título'));
+    assert.equal(view.getAttribute('tabindex'), '-1');
+    assert.ok(texto(conflictView({ issueNumber: 506, mine: 'a', conflict: { github: { text: 'b' } }, now: NOW })).includes('A sua versão · não gravada'), 'the description keeps its words');
+  });
+});
+
 describe('the files follow the project rules', () => {
   test('they call nothing outside, write no colour, no inline style, no innerHTML, no fetch, no URL access', () => {
     for (const file of FILES) {
