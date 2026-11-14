@@ -1,4 +1,4 @@
-/* issue 535: the state behind the issue panel's edit mode (layer 3): unit tests on the transitions, and interaction tests
+/* #535: the state behind the issue panel's edit mode (layer 3): unit tests on the transitions, and interaction tests
 that drive issueEditPanel from the state in the fake DOM (no workbench, visual or axe tool in this project). */
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
@@ -68,7 +68,7 @@ const issue = (over: Obj = {}): Obj => ({
   ...over,
 });
 const open = (over: Obj = {}): Obj => startEdit(issue(over));
-/** The write the state asks for, then the answer the core gives. (issue 535) */
+/** The write the state asks for, then the answer the core gives. (#535) */
 const asked = (s: Obj) => {
   assert.ok(s.request, 'a request was expected');
   return s.request;
@@ -421,6 +421,16 @@ describe('REL-3: no automatic retry after github-unavailable or written-unread',
     assert.equal(bodyMode(s), 'edit');
   });
 
+  test('written-unread on a title or body save: the reload takes GitHub\'s version as the base of the text GitHub now holds', () => {
+    for (const field of ['title', 'body'] as const) {
+      const typed = field === 'title' ? typeTitle(open(), 'Novo') : typeBody(open(), 'Novo');
+      const s = fail(field === 'title' ? saveTitle(typed) : saveBody(typed), { status: 502, error: 'written-unread', reason: 'timeout' });
+      const r = reloaded(s, issue({ [field]: 'Novo', updatedAt: 'T2' }), s.reload.id);
+      assert.equal(r.bases[field], 'T2', `${field} base`);
+      assert.equal(asked(field === 'title' ? saveTitle(typeTitle(r, 'Outro')) : saveBody(typeBody(r, 'Outro'))).body.updatedAt, 'T2');
+    }
+  });
+
   test('a single transition never leaves a request after those errors', () => {
     for (const error of ['github-unavailable', 'written-unread']) {
       const s = fail(removeStep(open(), 521), { status: 502, error, reason: 'timeout' });
@@ -431,7 +441,7 @@ describe('REL-3: no automatic retry after github-unavailable or written-unread',
   });
 });
 
-describe('issue 535 round 2: a write whose outcome is unknown is never offered again (follow-up 544)', () => {
+describe('#535 round 2: a write whose outcome is unknown is never offered again (follow-up 544)', () => {
   const unknown = ['github-unavailable', 'written-unread'];
   const creating: Array<[string, (s: Obj) => Obj, string]> = [
     ['comment', () => submitComment(typeComment(open(), 'oi')), 'comment'],
@@ -474,7 +484,7 @@ describe('issue 535 round 2: a write whose outcome is unknown is never offered a
   });
 });
 
-describe('issue 535 round 2: where the refusal band goes, and a conflict on any field', () => {
+describe('#535 round 2: where the refusal band goes, and a conflict on any field', () => {
   const refuse = (s: Obj, error = 'github-refused') => fail(s, { status: 502, error });
   const cases: Array<[string, () => Obj, string]> = [
     ['title', () => saveTitle(typeTitle(open(), 'Outro')), 'title'],
@@ -516,7 +526,7 @@ describe('issue 535 round 2: where the refusal band goes, and a conflict on any 
   });
 });
 
-describe('issue 535 round 2: a missing version asks for one reload, then refuses (no endless reload)', () => {
+describe('#535 round 2: a missing version asks for one reload, then refuses (no endless reload)', () => {
   test('title: the reload still without updatedAt ends in the generic band, and no write', () => {
     const s0 = saveTitle(typeTitle(open({ updatedAt: '' }), 'Outro'));
     assert.ok(s0.reload);
@@ -556,7 +566,7 @@ describe('issue 535 round 2: a missing version asks for one reload, then refuses
   });
 });
 
-describe('issue 535 round 2: a conflict is recorded against the request, not the editor', () => {
+describe('#535 round 2: a conflict is recorded against the request, not the editor', () => {
   test('a 409 on step 521 stays on step 521 when the editor now holds another step', () => {
     const s0 = saveStep(typeStepText(startStepEdit(open(), 521), 'Minha'));
     const moved = { ...s0, steps: { ...s0.steps, editing: { number: 522, text: 'outra', base: 'S522' } } };
@@ -589,7 +599,7 @@ describe('the components driven from the state', () => {
     assert.ok(found, `no ${selector}`);
     return found;
   };
-  /** The screen in miniature: render the state, let a control change it, render again. (issue 535) */
+  /** The screen in miniature: render the state, let a control change it, render again. (#535) */
   function screen(initial: Obj) {
     const box = { s: initial };
     const set = (fn: (s: Obj) => Obj) => () => void (box.s = fn(box.s));
