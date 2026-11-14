@@ -35,10 +35,10 @@ import { levelOf, workKey } from '../github/work.ts';
 import { send } from '../ingest/hooks/receiver.ts';
 import type { StoragePort } from '../storage-port.ts';
 import { readJsonBody } from './connections-route.ts';
-import { desktopNewSessionUrl, isThrowawayFolder, knownFolders, NEW_SESSION_TARGETS } from './new-session.ts';
-import { isUsableCwd, shellQuote } from './session-open.ts';
+import { NEW_SESSION_TARGETS } from './new-session.ts';
 import type { TerminalOpener } from './terminal-launch.ts';
-import { gitDoSistema, repoDoRemote, type Git } from './work.ts';
+import type { Git } from './work.ts';
+import { openWorkSession, repoFolderOnThisMachine, sessionCommand } from './work-session-open.ts';
 
 export const WORK_PLAN_ROUTE = '/api/work/plan';
 
@@ -60,20 +60,6 @@ export interface WorkPlanRouteDeps extends WorkPlanRouteOptions {
 }
 
 export type WorkPlanRoute = (req: IncomingMessage, res: ServerResponse) => Promise<void>;
-
-/** #507 The first listed folder (most recent first) whose `origin` is `repo`; `null` when none. */
-async function folderOfRepo(repo: string, folders: readonly { path: string }[], git: Git): Promise<string | null> {
-  const want = repo.toLowerCase();
-  for (const { path } of folders) {
-    const remote = await git(path, ['remote', 'get-url', 'origin']);
-    const found = remote ? repoDoRemote(remote) : null;
-    if (found && found.toLowerCase() === want) return path;
-  }
-  return null;
-}
-
-/** #507 `cd '<folder>' && claude '<prompt>'` for "Copiar comando"; `claude '<prompt>'` when there is no folder. */
-const planCommand = (folder: string | null, prompt: string): string => `${folder === null ? '' : `cd ${shellQuote(folder)} && `}claude ${shellQuote(prompt)}`;
 
 export function createWorkPlanRoute(o: WorkPlanRouteDeps | null): WorkPlanRoute {
   return async function workPlanRoute(req, res) {
@@ -116,26 +102,14 @@ export function createWorkPlanRoute(o: WorkPlanRouteDeps | null): WorkPlanRoute 
     // #507 client flag can only ask for one. The prompt lists the Plan-typed steps only.
     const replacing = replan === true || issue.subIssues.length > 0;
     const prompt = planningPrompt({ repo, number, ...(replacing ? { replaceSteps: issue.plan.steps.map((s) => s.number) } : {}) });
-    const folders = await knownFolders(o.storage, undefined, o.isThrowaway ?? isThrowawayFolder);
-    const folder = await folderOfRepo(repo, folders, o.git ?? gitDoSistema);
-    if (folder === null || !isUsableCwd(folder)) {
-      return send(res, 501, { error: `Não achei uma pasta de ${repo} nesta máquina; copie o comando e rode na pasta do repositório`, command: planCommand(null, prompt) });
+    const folder = await repoFolderOnThisMachine(o, repo);
+    if (folder === null) {
+      return send(res, 501, { error: `Não achei uma pasta de ${repo} nesta máquina; copie o comando e rode na pasta do repositório`, command: sessionCommand(null, prompt) });
     }
-    const command = planCommand(folder, prompt);
     const startedAt = new Date(now()).toISOString();
 
-    try {
-      if (target === 'desktop') {
-        if (!o.openInDesktop) return send(res, 501, { error: 'Abrir no Claude Desktop só no macOS, com o Claude Desktop', command });
-        await o.openInDesktop(desktopNewSessionUrl(folder, prompt));
-      } else {
-        const result = o.openTerminal ? await o.openTerminal({ sessionId: null, cwd: folder, prompt }) : 'unsupported';
-        if (result === 'unsupported') return send(res, 501, { error: 'Não há um terminal que o console saiba abrir aqui; copie o comando', command });
-      }
-    } catch (err) {
-      log(`work plan: opening failed in ${target} for ${key} (${err instanceof Error ? ((err as NodeJS.ErrnoException).code ?? err.name) : typeof err})`);
-      return send(res, 502, { error: 'Não deu para abrir a sessão de planejamento', command });
-    }
+    const opening = await openWorkSession(o, { target: target as PlanTarget, folder, prompt, key, failureText: 'Não deu para abrir a sessão de planejamento', logLabel: 'work plan' });
+    if (!opening.opened) return send(res, opening.status, opening.body);
     await o.runs.save({ key: key.toLowerCase(), target: target as PlanTarget, startedAt, replan: replacing, sessionId: null, outcome: 'running', failure: null, finishedAt: null });
     log(`work plan: planning session opened in ${target} for ${key}`);
     return send(res, 200, { ok: true, opened: target, key });
