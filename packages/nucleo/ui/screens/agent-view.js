@@ -344,10 +344,15 @@ export async function mount(area, ctx) {
   function openChild(childId) {
     if (children.has(childId)) return;
     children.add(childId);
-    ctx.read(agentReadRoute(sessionId, childId)).then(
-      (data) => live && view?.setChild(childId, data),
-      () => children.delete(childId), // read again the next time it opens (issue 539)
-    );
+    const read = () =>
+      ctx.read(agentReadRoute(sessionId, childId)).then(
+        (data) => live && view?.setChild(childId, data),
+        () => {
+          children.delete(childId); // read again the next time it opens (issue 539)
+          if (live) view?.setChildError(childId, read); // the retry repeats only this child's read (issue 539)
+        },
+      );
+    read();
   }
 
   function draw({ phase, data, message }) {
@@ -383,7 +388,7 @@ export async function mount(area, ctx) {
     live = false;
     area.removeEventListener('click', onBack);
   };
-  if (ctx.signal.aborted) return release; // left before it began: nothing is added to the shared area
+  if (ctx.signal.aborted) return release; // left before it began: nothing is added to the shared area (issue 539)
   ctx.signal.addEventListener('abort', release, { once: true });
   area.addEventListener('click', onBack);
 

@@ -354,6 +354,40 @@ describe('open and close in line', () => {
     assert.equal(calls.filter((r) => r === IRIS_ROUTE).length, 2);
     assert.equal(area.querySelectorAll('.av-step').length, 3);
   });
+
+  test('#539 AC-5: a child whose read fails shows its error in its slot, and "Tentar de novo" repeats only that read', async () => {
+    let fail = true;
+    const { area, calls } = await mountView((route) => {
+      if (route !== IRIS_ROUTE) return agent();
+      if (fail) throw readError(503);
+      return agent({ agentId: IRIS, steps: [step(7)] });
+    });
+    area.querySelector('.av-child .av-toggle')!.click();
+    await settle();
+    assert.match(texto(area.querySelector('.av-child')), /Não deu para ler o agente/);
+    assert.doesNotMatch(texto(area.querySelector('.av-child')), /Lendo o agente/);
+    const parentReads = calls.filter((r) => r !== IRIS_ROUTE).length;
+    fail = false;
+    area.querySelector('.av-child .av-child-retry')!.click();
+    await settle();
+    assert.equal(calls.filter((r) => r === IRIS_ROUTE).length, 2, 'the child is read once more');
+    assert.equal(calls.filter((r) => r !== IRIS_ROUTE).length, parentReads, 'the parent read is not repeated');
+    assert.equal(area.querySelectorAll('.av-step').length, 3, 'the steps of the child appear');
+    assert.equal(area.querySelector('.av-child-retry'), null);
+  });
+
+  test('#539 AC-5: a retry that fails again shows the error again', async () => {
+    const { area, calls } = await mountView((route) => {
+      if (route === IRIS_ROUTE) throw readError(503);
+      return agent();
+    });
+    area.querySelector('.av-child .av-toggle')!.click();
+    await settle();
+    area.querySelector('.av-child .av-child-retry')!.click();
+    await settle();
+    assert.equal(calls.filter((r) => r === IRIS_ROUTE).length, 2);
+    assert.match(texto(area.querySelector('.av-child')), /Não deu para ler o agente/);
+  });
 });
 
 describe('Back returns to the Agents tab with the focus on the agent', () => {
@@ -393,7 +427,7 @@ describe('Back returns to the Agents tab with the focus on the agent', () => {
     const first = ctxFor(() => new Promise((r) => (answer = r)));
     const mounting = screen.mount(area, first.ctx);
     await settle();
-    first.leave.abort(); // the shell registers the cleanup only after mount resolves: on an aborted signal it never fires
+    first.leave.abort(); // (#539) the shell registers the cleanup only after mount resolves: on an aborted signal it never fires
     answer(agent());
     await mounting;
     await settle();
