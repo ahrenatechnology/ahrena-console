@@ -14,7 +14,7 @@ import {
   type Fetcher,
 } from '../../src/index.ts';
 import { GithubGatewayError, GithubHttpError, GithubScopeError } from '../../src/github/github-source.ts';
-import { githubFailureOf } from '../../src/github/cache.ts';
+import { githubFailureOf, snapshotFailureOf } from '../../src/github/cache.ts';
 import { ProjectPermissionError } from '../../src/github/project.ts';
 import { clock } from './helpers.ts';
 
@@ -220,10 +220,7 @@ describe('#495/AC-1 the failure code of a GitHub read', () => {
     assert.equal(githubFailureOf(new RateLimitedError('limite', 1000)), 'rate-limited');
     assert.equal(githubFailureOf(new GithubScopeError('sem escopo')), 'no-scope');
     assert.equal(githubFailureOf(new ProjectPermissionError('detail')), 'no-scope');
-    assert.equal(githubFailureOf(new GithubGatewayError('502', 502)), 'github-unavailable', '#613 5xx is GitHub unavailable');
-    assert.equal(githubFailureOf(new GithubHttpError('500', 500)), 'github-unavailable');
-    assert.equal(githubFailureOf(new GithubHttpError('401', 401)), 'credential-refused', '#613/AC-2');
-    assert.equal(githubFailureOf(new GithubHttpError('404', 404)), 'github-error');
+    assert.equal(githubFailureOf(new GithubGatewayError('502', 502)), 'github-error');
     assert.equal(githubFailureOf(new Error('fetch failed')), 'github-error', 'a plain Error with network-like text is not a network failure');
     assert.equal(githubFailureOf('texto'), 'github-error');
   });
@@ -280,5 +277,30 @@ describe('#495/AC-1 the failure code of a GitHub read', () => {
     assert.equal(cache.failure('k'), 'github-error');
     await cache.clear();
     assert.equal(cache.failure('k'), null);
+  });
+});
+
+describe('#613 the snapshot code of a failed read, apart from the live code', () => {
+  test('#613/AC-2 a 401 is credential-refused on the snapshot and github-error live', () => {
+    assert.equal(snapshotFailureOf(new GithubHttpError('401', 401)), 'credential-refused');
+    assert.equal(githubFailureOf(new GithubHttpError('401', 401)), 'github-error');
+  });
+
+  test('#613/AC-3 a 5xx or a network failure is github-unavailable on the snapshot; the live code is unchanged', () => {
+    for (const err of [new GithubGatewayError('502', 502), new GithubHttpError('500', 500), new TypeError('fetch failed')]) assert.equal(snapshotFailureOf(err), 'github-unavailable');
+    assert.equal(githubFailureOf(new GithubGatewayError('502', 502)), 'github-error');
+    assert.equal(githubFailureOf(new TypeError('fetch failed')), 'network');
+  });
+
+  test('#613/AC-3 the cache keeps the snapshot code next to the live one, and a good read drops both', async () => {
+    const now = clock();
+    const cache = new GithubCache({ store: new MemoryCacheStore(), now });
+    await cache.get('k', 1000, async () => ({ value: 1 }));
+    now.add(2000);
+    await cache.get('k', 1000, async () => { throw new GithubHttpError('401', 401); });
+    assert.deepEqual([cache.failure('k'), cache.snapshotFailure('k')], ['github-error', 'credential-refused']);
+    now.add(2000);
+    await cache.get('k', 1000, async () => ({ value: 2 }));
+    assert.deepEqual([cache.failure('k'), cache.snapshotFailure('k')], [null, null]);
   });
 });

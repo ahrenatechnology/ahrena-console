@@ -349,7 +349,7 @@ describe('#495/AC-1 GET /api/work with GitHub down: a stable English reason code
     ['a missing token scope', () => new GithubScopeError('token sem escopo project'), 'no-scope'],
     ['a Project permission failure', () => new ProjectPermissionError('detail'), 'no-scope'],
     ['any other error', () => new Error('GitHub fora do ar'), 'github-error'],
-    ['a gateway error', () => new GithubGatewayError('bad gateway', 502), 'github-unavailable'], // #613
+    ['a gateway error', () => new GithubGatewayError('bad gateway', 502), 'github-error'],
   ];
 
   for (const [name, make, code] of FAILURES) {

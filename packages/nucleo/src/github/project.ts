@@ -19,7 +19,7 @@
  * (30 reads an hour) that is 90 points per hour per page, the `project` line of ADR-0015's budget.
  */
 
-import { GITHUB_TTL, RateLimitedError, snapshotCodeOf, type GithubCache, type StaleCode } from './cache.ts';
+import { GITHUB_TTL, RateLimitedError, type GithubCache, type StaleCode } from './cache.ts';
 import { githubDeadline, githubGraphql, GithubScopeError, requireGithubToken, resolveGithubToken, type GithubGraphqlSourceOptions } from './github-source.ts';
 import { workKey, type CiState, type LinkedPullRequest, type PullRequestState, type ReviewDecision } from './work.ts';
 
@@ -389,11 +389,11 @@ export class GithubProject {
     if (!hit) return null;
     const old = this.now() - hit.fetchedAt > 2 * GITHUB_TTL.project;
     if (!old) return this.view(hit.value, hit.fetchedAt, false, null, null);
-    // #613 the real reason, first match wins: the credential refused (the person must act; a pause is moot until
-    // it changes), the rate-limit pause in progress (with when it ends), the failure of the last read, else the sync is just late.
-    const failure = this.cache.failure(this.key);
+    /* #613 the real reason, first match wins: the credential refused (the person must act; a pause is moot until
+       it changes), the rate-limit pause in progress (with when it ends), the failure of the last read, else the sync is just late. */
+    const failure = this.cache.snapshotFailure(this.key);
     const paused = this.cache.pauseLeftMs() > 0;
-    const code: StaleCode = this.credentialRefused() || failure === 'credential-refused' ? 'credential-refused' : paused ? 'rate-limited' : failure ? snapshotCodeOf(failure) : 'sync-pending';
+    const code: StaleCode = this.credentialRefused() || failure === 'credential-refused' ? 'credential-refused' : paused ? 'rate-limited' : failure ?? 'sync-pending';
     return this.view(hit.value, hit.fetchedAt, true, 'o sincronismo em segundo plano ainda não releu o quadro', code, code === 'rate-limited' && paused ? this.cache.pausedUntil : null);
   }
 

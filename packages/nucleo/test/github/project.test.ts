@@ -317,7 +317,7 @@ describe('#613 the stale snapshot says why the stored board is old', () => {
   const value: ProjectBoardValue = { projectId: 'P', fieldId: 'F', field: 'Status', title: 'Board', url: 'u', options: [], items: [] };
   const OLD = 2 * GITHUB_TTL.project + 1;
 
-  /** A board stored once, then `OLD` ms later: the snapshot is stale; `fail` is what the next read of GitHub throws. */
+  /** #613 a board stored once, then `OLD` ms later: the snapshot is stale; `fail` is what the next read of GitHub throws. */
   async function oldBoard(fail?: unknown, credentialRefused?: () => boolean) {
     const now = clock();
     const cache = new GithubCache({ store: new MemoryCacheStore(), now });
@@ -370,7 +370,7 @@ describe('#613 the stale snapshot says why the stored board is old', () => {
     assert.equal((await project.snapshot())?.staleCode, 'credential-refused');
     cache.pause(60_000);
     assert.equal((await project.snapshot())?.staleCode, 'credential-refused');
-    refused = false; // reconnected
+    refused = false; // #613 reconnected
     assert.equal((await project.snapshot())?.staleCode, 'rate-limited');
   });
 
