@@ -1303,6 +1303,73 @@ body.captura[data-width="1100"] .width-col[data-w="1440"], body.captura[data-wid
 .wb-popfrag { display: flex; gap: 10px; align-items: flex-start; padding: 10px; align-self: flex-start; }
 .wb-popfrag .wb-field { width: 190px; }
 .wb-popfrag .wb-pop { position: static; }
+/* ---------- Agent view: the agent's cycle from the inside (issue 521, under issue 518) ---------- */
+.av-crumb { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); flex-wrap: wrap; }
+.av-crumb .lk, .av-lk { color: var(--accent-text); text-decoration: underline; text-underline-offset: 2px; }
+.av-crumb .cur { color: var(--text); font-weight: 600; }
+.av-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.av-head h4 { margin: 0; font-size: 19px; font-weight: 600; }
+.av-facts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.av-facts .kpi { height: auto; min-height: 62px; gap: 4px; }
+.av-facts .kpi .v small { display: block; }
+.av-sec { padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
+.av-sec .olhinho .r { margin-left: auto; text-transform: none; letter-spacing: 0; font-weight: 400; display: inline-flex; gap: 8px; align-items: center; }
+.av-from { font-size: 11.5px; color: var(--muted); }
+.av-text { font-size: 12.5px; line-height: 1.6; margin: 0; white-space: pre-wrap; }
+.av-text code { background: var(--raised); color: var(--accent-text); padding: 1px 5px; border-radius: 4px; font-size: 12px; }
+.av-clamp { max-height: 9.6em; overflow: hidden; position: relative; }
+.av-clamp::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 2.4em; background: linear-gradient(transparent, var(--surface)); }
+.av-more { display: inline-flex; gap: 5px; align-items: center; font-size: 11.5px; color: var(--accent-text); align-self: flex-start; }
+.av-seq { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0; }
+.av-seq > li { margin: 0; }
+.av-seq .ferrbloco .t { color: var(--muted); font-size: 10.5px; margin-left: auto; white-space: nowrap; }
+.av-seq .ferrbloco .t + .ok, .av-seq .ferrbloco .t + .run, .av-seq .ferrbloco .t + .err { margin-left: 0; min-width: 76px; }
+.av-fold { display: flex; align-items: center; gap: 10px; margin-top: 6px; padding: 7px 12px; border: 1px dashed var(--border); border-radius: 8px; font-size: 11.5px; color: var(--muted); }
+.av-fold .av-more { margin-left: auto; }
+.av-child { margin-top: 6px; border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: 10px; padding: 8px 10px; display: flex; flex-direction: column; gap: 4px; background: var(--surface); }
+.av-child-top { display: flex; gap: 8px; align-items: center; font-size: 12.5px; flex-wrap: wrap; }
+.av-child-top .av-ag { width: 22px; height: 22px; border-radius: 6px; background: var(--raised); display: grid; place-items: center; color: var(--muted); font-size: 12px; }
+.av-child-top .mono { font-size: 11px; color: var(--muted); }
+.av-child-top .av-openv { margin-left: auto; display: inline-flex; gap: 4px; align-items: center; color: var(--accent-text); font-size: 11.5px; }
+.av-child .av-seq { margin-left: 10px; padding-left: 10px; border-left: 1px dashed var(--border); }
+.av-focus { outline: 2px solid var(--accent); outline-offset: 2px; }
+.av-keyhint { display: inline-flex; gap: 6px; align-items: center; font-size: 11px; color: var(--muted); margin-left: 6px; }
+.av-keyhint kbd { font-family: var(--font-mono); font-size: 10.5px; border: 1px solid var(--border); background: var(--raised); border-radius: 5px; padding: 1px 6px; color: var(--text); }
+.av-n { display: inline-grid; place-items: center; width: 17px; height: 17px; border-radius: 99px; background: var(--accent); color: var(--on-accent); font-size: 10px; font-weight: 700; font-family: var(--font-sans); letter-spacing: 0; text-transform: none; flex: none; }
+.av-dep { display: inline-flex; gap: 4px; align-items: center; height: 18px; padding: 0 7px; border-radius: 99px; border: 1px dashed var(--status-waiting-dot); color: var(--status-waiting-text); font-size: 10px; font-weight: 600; letter-spacing: 0; text-transform: none; white-space: nowrap; font-family: var(--font-sans); }
+.av-dep svg { width: 10px; height: 10px; }
+.av-bone { height: 10px; border-radius: 5px; background: var(--raised); margin: 6px 0; }
+.av-bone.s { width: 30%; } .av-bone.m { width: 60%; } .av-bone.l { width: 90%; }
+.av-none { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border-radius: 8px; background: var(--bg); border: 1px dashed var(--border); font-size: 12.5px; color: var(--muted); }
+.av-none b { color: var(--text); }
+.av-none .ic { font-size: 16px; }
+.av-state { padding: 28px 20px; display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center; }
+.av-state h5 { margin: 0; font-size: 15px; font-weight: 600; }
+.av-state p { margin: 0; font-size: 12.5px; color: var(--muted); max-width: 460px; }
+.av-state .seal { width: 40px; height: 40px; border-radius: 99px; display: grid; place-items: center; background: var(--raised); color: var(--muted); font-size: 18px; }
+.av-state .seal.error { background: color-mix(in srgb, var(--status-error-badge) 70%, var(--surface)); color: var(--status-error-text); }
+.av-row { cursor: pointer; }
+.av-row .av-go { margin-left: 4px; color: var(--muted); font-size: 15px; }
+.av-row b.av-lk { text-decoration: underline; color: var(--text); }
+.av-flow { display: flex; align-items: stretch; gap: 10px; flex-wrap: wrap; }
+.av-box { padding: 10px 12px; min-width: 150px; flex: 1; display: flex; flex-direction: column; gap: 4px; font-size: 12px; }
+.av-box b { font-size: 12.5px; } .av-box small { color: var(--muted); font-size: 11px; }
+.av-box.new { border-color: var(--accent); }
+.av-arrow { align-self: center; font-size: 11px; color: var(--muted); text-align: center; max-width: 120px; }
+.av-opts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.av-opt { padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; font-size: 12px; line-height: 1.55; }
+.av-opt.rec { border-color: var(--accent); }
+.av-opt h5 { margin: 0; font-size: 13px; display: flex; gap: 8px; align-items: center; }
+.av-opt ul { margin: 0; padding-left: 18px; color: var(--muted); }
+.av-opt code, .av-box code { font-size: 11px; }
+.av-act { display: inline-flex; gap: 4px; align-items: center; color: var(--muted); }
+.av-act.on { color: var(--accent-text); }
+.av-tab { width: 100%; border-collapse: collapse; font-size: 12px; }
+.av-tab th { text-align: left; font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-weight: 600; padding: 6px 10px; border-bottom: 1px solid var(--border); }
+.av-tab td { vertical-align: top; padding: 8px 10px; border-bottom: 1px solid var(--border); line-height: 1.5; }
+.av-tab td:first-child { white-space: nowrap; }
+.av-tab code { font-size: 11px; }
+.av-wf-opts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
 </style>
 
 <header class="topo">
@@ -4983,6 +5050,8 @@ const wallStatesScreen = () => `${cab('layout-grid', 'Mural ao vivo · estados',
     <div style="grid-column:1/-1"><div class="rotulo">4 · Parada sem pedido</div>${wallParked(true, 2, wallParkedRows.slice(1, 3))}<p class="wall-cap">Terminou o turno há 6 h sem pedir nada: fora dos cards, dentro de Paradas. Arquivada no Desktop: nem aqui.</p></div>
   </div>`
 
+// Agent view (issue 521): the two notes of a screen. Defined here because `n:` is read when the list is built.
+const avNotes = (takes, open) => `<div class="notas"><div class="nota"><h4>O que vem de hoje</h4><ul>${takes.map(x => `<li>${x}</li>`).join('')}</ul></div><div class="nota"><h4>Em aberto, com a recomendação</h4><ul>${open.map(x => `<li>${x}</li>`).join('')}</ul></div></div>`
 const TELAS = [
   { cap: 'painel', titulo: 'Painel lateral', desc: 'O mod do Claude Code, ao lado da conversa, no recorte por sessão da decisão 0004 (issues #35, #36 e #37). Desenhado com os elementos nativos do mod (Box, Text, Button, Select, Svg, Link), na fonte monoespaçada do app, em 38 e 121 colunas.' },
   { id: 'painel-estados', cod: 'P0', nome: 'Os 6 status e os 8 motivos', sub: 'O card "Esta sessão" em cada status, e as mesmas pílulas como aparecem no console. O antigo estado de espera virou dois: Precisa de você (trava, amarelo, chip forte) e Ociosa (sua vez, neutra, chip leve), issue #245.', html: painelEstados,
@@ -5411,6 +5480,27 @@ const TELAS = [
   { id: 'work-board-edit-refused', cod: '478-3', nome: 'Quadro do trabalho · o GitHub recusou a edição', sub: 'Issue #478, critério 5. O GitHub respondeu 403: a faixa vermelha diz o motivo em palavras, o texto continua no editor como estava, e há Tentar de novo e Copiar texto. Em 1100 e 1440.',
     html: () => wbEditHtml('refused'),
     n: N(['Nada.'], ['O motivo vem da resposta do GitHub em pt-BR: sem permissão (403), não achou (404), recusou o valor (422, com o campo), ou o GitHub fora (com a hora da próxima tentativa, como no 465-4).', 'Nada se perde: o editor não fecha e o texto não volta ao que estava.']) },
+  { cap: 'agent-view', titulo: 'Vista do agente', desc: 'Issue 521, da issue 518 (aprovado por Fernando em 14/11/2026, “Aprovo como está”, com a resposta desenhada a cada pergunta; dados na issue 529, G6 na issue 530): cada linha de subagente da aba Agentes vira link e leva a uma vista do agente por dentro: o brief que recebeu, a sequência do que fez (ferramentas e subagentes filhos, aninhados como na aba), duração, custo, estado e o resultado final. Primeira camada da construção de fora para dentro: só estrutura, estados e fluxo; nenhum componente antes da aprovação. Onde a vista mora (521-1), a aba Agentes com as linhas links (521-2), o agente concluído (521-3), o aninhamento fundo e as dobras (521-4), o agente rodando (521-5), carregando (521-6), sem brief e sem custo (521-7), os erros (521-8), o nó do laço (521-9) e o que a vista pede ao núcleo e ele ainda não serve (521-10). Em 1100 e, onde pesa, 1440. Dados sintéticos; o que depende de dado novo traz a marca tracejada “dado novo · G”.' },
+  { id: 'agent-view-flow', cod: '521-1', nome: 'Vista do agente · onde mora e o fluxo', sub: 'Issue 521. A recomendação: uma tela com rota própria, <code>/ui/sessions/&lt;id&gt;/agents/&lt;agent&gt;</code>, em vez de um painel dentro da aba Agentes. O fluxo: linha da aba Agentes → vista do agente → vista do filho → voltar, um passo de cada vez, e o caminho que vem do laço da aba Workflow (521-9).', html: () => avFlowHtml(),
+    n: avNotes(['A aba Agentes e a Conversa são abas da mesma tela e trocam por <code>history.replaceState</code>: nenhuma cria entrada no histórico (<code>session-detail.js</code>).', 'O <code>?agent=&lt;id&gt;</code> da Conversa (issue 332) e do nó do laço continua como está.', 'Rotas com parâmetros e destaque da barra lateral já existem (<code>screens.js</code>: <code>/ui/repos/:owner/:repo</code> destaca Repositórios).'], ['<b>Onde a vista mora.</b> Recomendo a <b>rota própria</b>: o voltar funciona sem tocar nas abas, o endereço se copia, e a tela serve às três entradas (aba Agentes, filho na sequência, nó do laço).', '<b>O id na rota.</b> O id do agente tem “:” (<code>&lt;sessão&gt;:&lt;agente&gt;</code>); recomendo só a parte depois da sessão (o id do transcript), que é curta e sem “:”.', '<b>Voltar devolve o foco</b> à linha de onde se saiu. Recomendo, porque quem navega por teclado perde o lugar na lista, com os seis agentes de uma árvore funda.']) },
+  { id: 'agent-view-agents-tab', cod: '521-2', nome: 'Vista do agente · a aba Agentes com as linhas links', sub: 'Issue 521, critério 1. Cada linha de subagente passa a ser um link de verdade (<code>&lt;a href&gt;</code>), alcançável com Tab e aberto com Enter ou clique; a seta à direita e o nome sublinhado dizem que se abre. As linhas aninham pelo <code>parent</code>: athena › iris › daedalus › Explore, e Argos ao lado da iris. O foco aparece como o anel do app. Em 1100 e 1440.', html: () => avRow2([['1100 px · a janela do app', avFrame(1100, avAgentsTabScreen())], ['1440 px', avFrame(1440, avAgentsTabScreen())]], ['<b>A linha inteira é o alvo do clique</b>, mas o link é um só (o nome), para o leitor de tela anunciar “iris, link” e não a linha toda.', '<b>Nome curto, tipo inteiro no <code>title</code> e ao lado</b>, como a issue 518 (AC-1) já pede para a aba e para o laço.', '<b>Estado, custo e duração</b> ficam na linha como hoje; nada a mais.']),
+    n: avNotes(['<code>agents()</code> e <code>node()</code> de <code>session-detail.js</code>: o cartão <code>.sd-node</code> com ícone, nome, linha secundária, custo e a pílula de estado. Hoje é um <code>div</code>.', 'Os números, as ferramentas, as tarefas e o fluxo de tokens (C4) não mudam.', 'O <code>parent</code> de cada agente já vem no payload; hoje a aba põe todos os subagentes no mesmo recuo.'], ['<b>O agente principal não é link</b>: a conversa dele é a aba Conversa, e o critério fala de linha de subagente. Recomendo manter assim.', '<b>Recuo por <code>parent</code></b> (a aninhação que a vista mostra na sequência, a mesma da aba). Recomendo; a lista hoje é plana.']) },
+  { id: 'agent-view-finished', cod: '521-3', nome: 'Vista do agente · um subagente concluído', sub: 'Issue 521, critério 2. A anatomia numerada: (1) a migalha, (2) o nome curto e inteiro, o estado e as ações, (3) duração, custo, ferramentas e subagentes, (4) o brief que recebeu, dobrado, (5) a sequência do que fez, na ordem, (6) o filho dentro dela, com o estado e “Abrir a vista”, (7) o resultado final. Em 1100 e 1440.', html: () => avRow2([['1100 px · a janela do app', avFrame(1100, avFinishedScreen())], ['1440 px', avFrame(1440, avFinishedScreen())]], ['<b>De cima para baixo, a ordem do ciclo:</b> o que recebeu, o que fez, o que devolveu. Duração e custo ficam no alto porque são o que se procura primeiro.', '<b>O nome inteiro <code>plugin:agente</code></b> em chip ao lado do curto; no <code>title</code> também.', '<b>Cada ferramenta é uma linha</b> do jeito da Conversa (chevron, nome, alvo, hora relativa, duração, estado). Abrir a linha mostra a entrada e o resultado, como lá.', '<b>O filho é um bloco recuado</b> na posição da chamada: abre dentro (chevron) ou numa vista própria (“Abrir a vista”).']),
+    n: avNotes(['O molde de cartões, chips, <code>.ferrbloco</code> e pílula de estado é o da Conversa (C5) e da aba Agentes (C4).', 'O custo por agente (<code>costUsd</code>), as horas (<code>start</code> e <code>end</code>) e o estado já vêm em <code>AgenteDoDetalhe</code>.', '“Abrir a conversa” é o destino de hoje, com <code>?agent=</code>, na aba Conversa.'], ['<b>Custo.</b> Recomendo o do próprio agente em destaque e “com os filhos” embaixo, em texto secundário: a pessoa quer saber o que este agente custou e o que a árvore dele custou.', '<b>Detalhe de uma ferramenta</b> abre na própria linha (entrada e resultado, como na Conversa). Recomendo, para a vista bastar sem ir à Conversa.', '<b>Estado do agente</b> com os mesmos rótulos da aba Agentes (Ativa, Concluída, Com erro).']) },
+  { id: 'agent-view-nesting', cod: '521-4', nome: 'Vista do agente · aninhamento fundo e dobras', sub: 'Issue 521. A athena concluída: dentro da sequência, três níveis de filhos (iris › daedalus › Explore), cada um aberto no seu bloco; o meio de uma sequência longa dobrado (“8 passos escondidos”, “30 passos escondidos”); o brief de 4.812 caracteres dobrado em seis linhas e o resultado de 3.210, também. Em 1100.', html: () => avRow2([['1100 px · a janela do app', avFrame(1100, avNestingScreen())]], ['<b>Filho aberto em linha, até onde a pessoa abrir.</b> Cada nível recua e ganha um fio tracejado à esquerda; três níveis cabem em 1100 sem rolar de lado.', '<b>Sequência longa dobra no meio</b>: ficam os primeiros passos e os últimos, com “Mostrar os N”. O que importa (a chamada de um filho, o último passo) não se esconde: um filho nunca fica dentro de uma dobra.', '<b>Brief e resultado longos dobram em seis linhas</b> com “Ver … inteiro · N caracteres”, aberto no lugar.', '<b>Cada filho tem a sua vista</b>: “Abrir a vista” leva ao agente dele, com a migalha mais longa.']),
+    n: avNotes(['A Conversa já dobra blocos longos (<code>sd-messages</code>) e guarda o aberto/fechado por id enquanto atualiza; a vista segue o mesmo costume.', 'O texto dos agentes passa por <code>messageBody</code> / <code>textContent</code>: nunca como HTML.'], ['<b>O filho abre em linha ou só leva à vista?</b> Recomendo os dois: fechado por padrão (uma linha com estado, duração, custo e passos) e aberto sob demanda; o conteúdo do filho só é lido quando se abre.', '<b>Onde dobra.</b> Recomendo seis linhas para brief e resultado, e dobrar o meio de uma sequência acima de 12 passos (primeiros 5, últimos 3); um filho nunca cai dentro da dobra.', '<b>Profundidade.</b> O desenho mostra três níveis; a vista aceita mais, e passa de quatro a recuar menos (8 px), até a vista própria do filho.']) },
+  { id: 'agent-view-running', cod: '521-5', nome: 'Vista do agente · um subagente rodando', sub: 'Issue 521. A athena ainda rodando: o estado “Ativa” e “rodando · 24 min até agora”, a duração e o custo parciais (“até agora”), a sequência até agora com o filho que roda dentro (Argos, com o <code>Bash</code> em andamento) e, no lugar do resultado, “Ainda sem resultado”. Em 1100.', html: () => avRow2([['1100 px · a janela do app', avFrame(1100, avRunningScreen())]], ['<b>A vista se atualiza sozinha</b>, como a Conversa e as abas de hoje: o passo novo entra na sequência sem refazer a página e sem fechar o que a pessoa abriu.', '<b>Duração e custo são “até agora”</b>, com a palavra na linha secundária, para não parecerem finais.', '<b>Sem resultado ainda</b> é uma frase, não um bloco vazio.']),
+    n: avNotes(['O estado vem de <code>status</code> (<code>working</code>) e a duração, de <code>start</code> com <code>end</code> vazio, como <code>node()</code> faz hoje.', 'A atualização segue o <code>refresh()</code> das abas, com o aviso parcial se uma leitura falhar.'], ['<b>Ao vivo: o fim da sequência acompanha?</b> Recomendo que não role sozinho (diferente da Conversa): a pessoa lê um agente, não um chat; mostro “N passos novos” no pé e a pessoa decide.']) },
+  { id: 'agent-view-loading', cod: '521-6', nome: 'Vista do agente · carregando', sub: 'Issue 521. A primeira leitura ainda não voltou: a migalha já está (vem do endereço), o nome do agente ainda não, e cada bloco é um esqueleto com <code>aria-busy</code>. Em 1100.', html: () => avRow2([['1100 px · a janela do app', avFrame(1100, avLoadingScreen())]], ['O esqueleto tem a forma da vista pronta (cabeçalho, quatro números, três blocos), para nada pular de lugar quando os dados chegam.']),
+    n: avNotes(['O esqueleto em blocos de <code>loading()</code> de <code>states.js</code>.'], ['Nenhuma.']) },
+  { id: 'agent-view-no-data', cod: '521-7', nome: 'Vista do agente · sem brief e sem custo', sub: 'Issue 521. O Explore, achado só dentro do transcript de quem o chamou: sem o nome <code>plugin:agente</code>, sem brief registrado e sem custo medido. A vista diz “Sem brief registrado” e mostra “—” com “sem custo medido”, em vez de um bloco em branco ou de “US$ 0,00”. Em 1100.', html: () => avRow2([['1100 px · a janela do app', avFrame(1100, avNoDataScreen())]], ['<b>Nunca um zero que não foi medido.</b> Custo sem medida é “—” com o motivo embaixo.', '<b>Sem o nome inteiro</b>, o chip some; fica só o nome que o agente tem.', '<b>Sem brief</b> é uma linha que diz o porquê, no lugar do bloco.']),
+    n: avNotes(['<code>costUsd</code> já é <code>null</code> quando há uso sem preço ou nenhum uso medido (<code>AgenteDoDetalhe</code>); <code>node()</code> mostra vazio.', 'Um agente sem <code>meta.json</code> (só as linhas <code>isSidechain</code> do principal) vem sem tipo e sem <code>toolUseId</code>.'], ['<b>Dois motivos para o “—”</b> (sem uso, ou uso sem preço): hoje o núcleo não diz qual. Recomendo dizer, e com um só texto (“sem custo medido”) se o núcleo não puder.']) },
+  { id: 'agent-view-errors', cod: '521-8', nome: 'Vista do agente · os erros', sub: 'Issue 521. (1) O agente falhou: estado “Com erro”, a faixa vermelha com o último erro, a sequência terminando no passo que falhou e “Falhou antes de devolver um resultado”. (2) A leitura falhou: “Não deu para ler este agente” com “Tentar de novo”. (3) O endereço aponta para um agente que não existe. Em 1100.', html: () => avErrorsHtml(),
+    n: avNotes(['<code>error()</code> e <code>errorBand()</code> de <code>states.js</code>; “Tentar de novo” em destaque.', 'O estado <code>error</code> do agente e a pílula “Com erro” da aba Agentes.'], ['<b>No agente que falhou, o resultado vira o motivo</b> da falha (o último erro), em vez de uma seção vazia. Recomendo.', '<b>“Tentar de novo” é da leitura, não do agente.</b> O Console lê e não roda agentes; recomendo não oferecer reexecução aqui.']) },
+  { id: 'agent-view-workflow-node', cod: '521-9', nome: 'Vista do agente · o nó do laço da aba Workflow', sub: 'Issue 521, cenário 6, a decidir. Hoje o nó do laço tem um ícone que abre a Conversa com o subagente (<code>?agent=&lt;id&gt;#conversation</code>). A opção A (recomendada) põe uma segunda ação: o nome do agente leva à vista, e o ícone segue levando à Conversa. A opção B troca o destino do ícone. Em 1100.', html: () => avWfHtml(),
+    n: avNotes(['<code>stepEl()</code> de <code>workflow-loop.js</code>: o cartão do passo e o ícone de abrir, com <code>title</code> e <code>aria-label</code>.', 'A issue 518 (AC-2): o ícone leva à Conversa com o subagente selecionado, no Desktop e no navegador.'], ['<b>Segunda ação ou trocar o destino?</b> Recomendo a <b>segunda ação (A)</b>: o AC-2 da issue 518 continua valendo e quem quer o ciclo do agente chega em um clique. A opção B depende de o Fernando mudar o AC-2.', '<b>Ordem do Tab:</b> o nome, depois o ícone.']) },
+  { id: 'agent-view-data', cod: '521-10', nome: 'Vista do agente · o que ela pede ao núcleo', sub: 'Issue 521. Cada campo que a vista usa e o núcleo ainda não serve, com o que serve hoje e de onde viria (<code>packages/nucleo/src/api/session-detail.ts</code>, <code>src/ingest/history/importer.ts</code>, <code>transcript.ts</code>). As marcas G1 a G8 aparecem nas telas anteriores, nas partes que dependem de cada uma. Sem largura própria.', html: () => avGapsHtml(),
+    n: avNotes(['Já servidos em <code>AgenteDoDetalhe</code>: <code>id</code>, <code>type</code>, <code>name</code>, <code>task</code> (cortado), <code>model</code>, <code>status</code>, <code>start</code>, <code>end</code>, <code>costUsd</code>, <code>parent</code>.', 'A Conversa serve, por agente, as mensagens com as chamadas de ferramenta (estado, entrada, resultado até 4.000 caracteres).'], ['<b>Uma leitura do agente</b> (G8) em vez de duas. Recomendo, para a vista ter uma só falha e uma só tentativa de novo.', '<b>As camadas de código seguem o que o Fernando aprovar:</b> os dados novos (G1 a G7) são a camada de contrato; a vista sobe sem eles com o que existe (nome, estado, custo, duração), e as partes marcadas ficam fora até lá.']) },
 ]
 
 // =====================================================================
@@ -6486,6 +6576,220 @@ const wbDragHtml = () => wbRows([
 const wbEditHtml = mode => wbBoth(wbDetailScreen(wbItem(506), mode))
 
 // =====================================================================
+// Agent view (issue 521, under issue 518): the cycle of one subagent from the inside, opened from a
+// row of the Agents tab. 521-1 to 521-10. Layer 1 of the outside-in build: structure, states and
+// flow only. Synthetic data in the simulator's vocabulary. A part marked "dado novo" depends on a
+// field the core does not serve today (521-10 lists each one and where it would come from).
+// =====================================================================
+const avNum = n => `<span class="av-n">${n}</span>`
+const avDep = (g, tip) => `<span class="av-dep" title="${tip}">${ic('database')}dado novo · ${g}</span>`
+const avFrame = (w, body) => cc('sessoes', body, 5, w)
+// A width in the label ("1100 px") marks the column, so the capture can show one width at a time.
+const avRowR = (frames, note) => `<div class="tm-rc-row">${frames.map(([label, f]) => { const w = /(1100|1440) px/.exec(label)?.[1]; return `<div class="width-col"${w ? ` data-w="${w}"` : ''}><div class="rotulo">${label}</div>${f}</div>` }).join('')}${note ? rcNote(note) : ''}</div>`
+const avRow2 = (frames, note) => `<div class="tm-rc">${avRowR(frames, note)}</div>`
+const AV_SESSION = 'Separar pagamentos em serviços'
+const AV_FULL = { athena: 'ahrena-engineering-development:athena', iris: 'ahrena-engineering-frontend:iris', daedalus: 'ahrena-engineering-frontend:daedalus', Argos: 'ahrena-engineering-code-review:argos' }
+
+// Breadcrumb: the session, the Agents tab, the agents above this one, and this one. Every part but the last is a link.
+const avCrumb = (trail, cur, n = true) => `<div class="av-crumb">${n ? avNum(1) : ''}${ic('arrow-left')}<span class="lk">Sessão · ${AV_SESSION}</span>${ic('chevron-right')}<span class="lk">Agentes</span>${trail.map(t => `${ic('chevron-right')}<span class="lk">${t}</span>`).join('')}${ic('chevron-right')}<span class="cur">${cur}</span></div>`
+const avHead = (short, full, st, extra = '', n = true) => `<div class="av-head">${n ? avNum(2) : ''}<span class="c-muted" style="font-size:20px">${ic('git-fork')}</span><h4>${short}</h4>${full ? `<span class="chip">${full}</span>` : ''}${badge(st)}${extra}<span style="margin-left:auto;display:flex;gap:8px"><span class="btn contorno" title="A aba Conversa, já com este agente escolhido">${ic('message-square')}Abrir a conversa</span><span class="btn contorno">${ic('refresh-cw')}Atualizar</span></span></div>`
+const avFact = (rot, i, v, s) => `<div class="cartao kpi"><span class="rot">${ic(i)}${rot}</span><span class="v">${v}${s ? `<small>${s}</small>` : ''}</span></div>`
+const avFacts = (a, b, c, d, n = true) => `<div style="display:flex;gap:8px;align-items:flex-start">${n ? avNum(3) : ''}<div class="av-facts" style="flex:1">${a}${b}${c}${d}</div></div>`
+
+const avMore = (t, i = 'chevron-down') => `<span class="av-more">${ic(i)}${t}</span>`
+const avBrief = ({ from, body, more, dep = true, n = true }) => `<div class="cartao av-sec"><div class="olhinho">${n ? avNum(4) : ''}${ic('file-text')}Brief recebido<span class="r">${dep ? avDep('G2', 'O núcleo guarda só os 2.000 primeiros caracteres e sem as quebras de linha') : ''}</span></div>
+  <div class="av-from">${from}</div><div class="${more ? 'av-clamp' : ''}"><p class="av-text">${body}</p></div>${more ? avMore(more) : ''}</div>`
+const avResult = ({ from, body, more, n = true }) => `<div class="cartao av-sec"><div class="olhinho">${n ? avNum(7) : ''}${ic('check-circle-2')}Resultado final<span class="r">${avDep('G5', 'Hoje só o fim da conversa do agente; o núcleo não serve um campo de resultado')}</span></div>
+  <div class="av-from">${from}</div><div class="${more ? 'av-clamp' : ''}"><p class="av-text">${body}</p></div>${more ? avMore(more) : ''}</div>`
+const avNone = (i, title, text, cls = '') => `<div class="av-none"><span class="ic ${cls}">${ic(i)}</span><div><b>${title}</b> ${text}</div></div>`
+
+const AV_ST = { ok: ['ok', 'check-circle-2', 'OK'], run: ['run', 'clock', 'Rodando'], err: ['err', 'x-circle', 'Erro'] }
+const avStep = (name, cmd, at, dur, st = 'ok') => { const [c, i, l] = AV_ST[st]; return `<li><div class="ferrbloco">${ic('chevron-right')}<span class="n">${name}</span><span class="cmd trunc">${cmd}</span><span class="t">${at}${dur ? ` · ${dur}` : ''}</span><span class="${c}">${ic(i)}${l}</span></div></li>` }
+const avChild = (c, inner = '') => `<li><div class="av-child"><div class="av-child-top">${ic(inner ? 'chevron-down' : 'chevron-right')}${c.n ? avNum(6) : ''}<span class="av-ag">${ic('git-fork')}</span><b class="av-lk">${c.short}</b>${c.full ? `<span class="chip" style="height:18px;font-size:10.5px">${c.full}</span>` : ''}${badge(c.st)}<span class="mono">${c.at} · ${c.dur} · ${c.cost} · ${c.steps} passos</span><span class="av-openv">Abrir a vista ${ic('arrow-up-right')}</span></div>${inner ? `<ol class="av-seq">${inner}</ol>` : ''}</div></li>`
+const avFold = (hidden, label) => `<li><div class="av-fold">${ic('more-horizontal')}${hidden} passos escondidos, ${label}${avMore(`Mostrar os ${hidden}`)}</div></li>`
+const avSeq = (count, items, { n = true, extra = '' } = {}) => `<div class="cartao av-sec"><div class="olhinho">${n ? avNum(5) : ''}${ic('list')}O que fez<span class="r">${count}${extra}${avDep('G3 · G4', 'A ordem, o instante de cada passo e o ponto em que cada filho foi chamado')}</span></div><ol class="av-seq">${items}</ol></div>`
+
+const AV_IRIS_BRIEF = `Ordene as camadas do front da issue 521 (a vista do agente) e entregue o wireframe ao daedalus.
+
+Cenário: dada uma sessão cuja aba Agentes lista o agente principal e os subagentes aninhados, quando a pessoa chega com Tab numa linha e aperta Enter, a vista daquele agente abre com URL própria, e o botão de voltar retorna à aba.
+
+Regras: a aprovação do wireframe é do Fernando; nenhum componente antes dela. Dados sintéticos, no vocabulário do simulador. Não abra pull request.`
+const AV_IRIS_RESULT = `Camadas ordenadas: wireframe, componentes, estado e contrato, uma por pull request, empilhadas. O wireframe está na branch <code>docs/521-agent-view-wireframe</code>, aguardando a aprovação do Fernando. Nenhum código de componente foi escrito.`
+
+// 521-3 · a finished subagent (iris), the numbered anatomy.
+const avFinishedScreen = () => `${avCrumb(['athena'], 'iris')}
+  ${avHead('iris', AV_FULL.iris, 'completed', `<span class="chip">${ic('clock')}14:02 → 14:13</span>`)}
+  ${avFacts(avFact('Duração', 'timer', '11 min', '14:02 → 14:13'), avFact('Custo', 'coins', '~US$ 0,92', 'com os filhos ~US$ 1,38'), avFact('Ferramentas', 'wrench', '14', '5 únicas'), avFact('Subagentes', 'git-fork', '2', 'daedalus › Explore'))}
+  ${avBrief({ from: 'Recebido de <b>athena</b> às 14:02 · 1.284 caracteres', body: AV_IRIS_BRIEF, more: 'Ver o brief inteiro' })}
+  ${avSeq('14 ferramentas · 2 subagentes', [
+    avStep('Read', 'docs/wireframes/README.md', '+0:04', '0,1 s'),
+    avStep('Grep', 'sd-node  packages/nucleo/ui', '+0:09', '0,3 s'),
+    avChild({ short: 'daedalus', full: AV_FULL.daedalus, st: 'completed', at: '+0:21', dur: '6 min', cost: '~US$ 0,41', steps: 5, n: true }, [
+      avStep('Read', 'docs/wireframes/index.html', '+0:02', '0,2 s'),
+      avChild({ short: 'Explore', full: null, st: 'completed', at: '+0:15', dur: '1 min', cost: '~US$ 0,05', steps: 3 }),
+      avStep('Edit', 'docs/wireframes/index.html', '+2:40', '0,1 s'),
+      avStep('Bash', 'node docs/wireframes/montar.mjs --checar', '+5:12', '1,1 s'),
+    ].join('')),
+    avFold(8, 'do +6:40 ao +10:20'),
+    avStep('Bash', 'git status', '+10:31', '0,2 s'),
+    avStep('Bash', 'git push -u origin docs/521-agent-view-wireframe', '+10:52', '2,4 s'),
+  ].join(''))}
+  ${avResult({ from: 'Devolvido a <b>athena</b> às 14:13 · 318 caracteres', body: AV_IRIS_RESULT })}`
+
+// 521-4 · the deep nesting and the folds: athena, three levels of children in the sequence, long brief and long result.
+const AV_LONG_BRIEF = `Planeje a issue 521 e leve cada camada ao Argos antes do pull request. A história: a aba Agentes do Detalhe da sessão lista os subagentes em linhas que não se clicam, e a pessoa quer abrir um agente e ver o ciclo dele por dentro.
+
+Critérios de aceitação: (1) cada linha de subagente é um link de verdade, alcançável por teclado; (2) a vista mostra o brief, a sequência do que o agente fez, duração, custo, estado e o resultado final; (3) a forma da vista sai de um wireframe aprovado antes de qualquer código.
+
+Restrições: nomes em inglês, texto de tela em pt-BR, nenhum <code>#NNN</code> em comentário de UI.`
+const avNestingScreen = () => `${avCrumb([], 'athena', false)}
+  ${avHead('athena', AV_FULL.athena, 'completed', `<span class="chip">${ic('clock')}13:52 → 14:21</span>`, false)}
+  ${avFacts(avFact('Duração', 'timer', '29 min', '13:52 → 14:21'), avFact('Custo', 'coins', '~US$ 0,48', 'com os filhos ~US$ 2,13'), avFact('Ferramentas', 'wrench', '41', '7 únicas'), avFact('Subagentes', 'git-fork', '5', '3 níveis abaixo'), false)}
+  ${avBrief({ from: 'Recebido do <b>agente principal</b> às 13:52 · 4.812 caracteres <span class="c-muted">· o núcleo guarda 2.000</span>', body: AV_LONG_BRIEF, more: 'Ver o brief inteiro · 4.812 caracteres', n: false })}
+  ${avSeq('41 ferramentas · 5 subagentes', [
+    avStep('Read', 'AGENTS.md', '+0:03', '0,1 s'),
+    avChild({ short: 'iris', full: AV_FULL.iris, st: 'completed', at: '+0:40', dur: '11 min', cost: '~US$ 0,92', steps: 14 }, [
+      avStep('Read', 'docs/wireframes/README.md', '+0:04', '0,1 s'),
+      avChild({ short: 'daedalus', full: AV_FULL.daedalus, st: 'completed', at: '+0:21', dur: '6 min', cost: '~US$ 0,41', steps: 5 }, [
+        avStep('Read', 'docs/wireframes/index.html', '+0:02', '0,2 s'),
+        avChild({ short: 'Explore', full: null, st: 'completed', at: '+0:15', dur: '1 min', cost: '~US$ 0,05', steps: 3 }, [
+          avStep('Grep', 'sd-node', '+0:03', '0,3 s'),
+          avStep('Read', 'packages/nucleo/ui/screens/session-detail.js', '+0:20', '0,2 s'),
+        ].join('')),
+        avStep('Edit', 'docs/wireframes/index.html', '+2:40', '0,1 s'),
+      ].join('')),
+      avFold(8, 'do +6:40 ao +10:20'),
+    ].join('')),
+    avFold(30, 'do +12:10 ao +26:50'),
+    avChild({ short: 'Argos', full: AV_FULL.Argos, st: 'completed', at: '+26:55', dur: '3 min', cost: '~US$ 0,22', steps: 6 }),
+    avStep('Bash', 'gh pr ready 524', '+28:40', '1,9 s'),
+  ].join(''), { n: false })}
+  ${avResult({ from: 'Devolvido ao <b>agente principal</b> às 14:21 · 3.210 caracteres', body: `Issue 521 planejada em três camadas e entregue até o wireframe. O Argos aprovou o wireframe na primeira rodada. Resta a aprovação do Fernando antes de qualquer componente. Resumo por camada: wireframe (docs/wireframes), componentes (aba Agentes e vista), estado (leitura e atualização ao vivo) e contrato (a leitura do agente no núcleo).`, more: 'Ver o resultado inteiro · 3.210 caracteres', n: false })}`
+
+// 521-5 · a running subagent: the sequence up to now, no result yet.
+const avRunningScreen = () => `${avCrumb([], 'athena', false)}
+  ${avHead('athena', AV_FULL.athena, 'active', `<span class="chip" style="color:var(--status-active-text)">${ic('clock')}rodando · 24 min até agora</span>`, false)}
+  ${avFacts(avFact('Duração', 'timer', '24 min', 'rodando · desde 13:52'), avFact('Custo', 'coins', '~US$ 1,84', 'até agora, com os filhos'), avFact('Ferramentas', 'wrench', '19', '5 únicas'), avFact('Subagentes', 'git-fork', '2', '1 rodando'), false)}
+  ${avBrief({ from: 'Recebido do <b>agente principal</b> às 13:52 · 1.906 caracteres', body: AV_LONG_BRIEF.split('\n\n')[0], more: 'Ver o brief inteiro', n: false })}
+  ${avSeq('19 ferramentas · 2 subagentes · até agora', [
+    avStep('Read', 'AGENTS.md', '+0:03', '0,1 s'),
+    avChild({ short: 'iris', full: AV_FULL.iris, st: 'completed', at: '+0:40', dur: '11 min', cost: '~US$ 0,92', steps: 14 }),
+    avChild({ short: 'Argos', full: AV_FULL.Argos, st: 'active', at: '+22:10', dur: '2 min 05 s até agora', cost: '~US$ 0,14', steps: 4 }, [
+      avStep('Read', 'docs/wireframes/README.md', '+0:02', '0,1 s'),
+      avStep('Bash', 'gh pr diff 524', '+1:58', null, 'run'),
+    ].join('')),
+  ].join(''), { n: false, extra: ' ' })}
+  <div class="cartao av-sec"><div class="olhinho">${ic('check-circle-2')}Resultado final</div>${avNone('hourglass', 'Ainda sem resultado.', 'O agente está rodando; o resultado aparece aqui quando ele terminar. A sequência acima se atualiza sozinha, como a Conversa.')}</div>`
+
+// 521-6 · loading: the first read has not come back.
+const avLoadingScreen = () => `${avCrumb([], 'iris', false)}
+  <div class="av-head"><span class="c-muted" style="font-size:20px">${ic('git-fork')}</span><div class="av-bone m" style="width:180px;height:16px"></div><span class="c-muted" style="font-size:12px">Lendo o agente…</span></div>
+  <div class="av-facts">${[1, 2, 3, 4].map(() => `<div class="cartao kpi"><div class="av-bone s"></div><div class="av-bone m"></div></div>`).join('')}</div>
+  ${['Brief recebido', 'O que fez', 'Resultado final'].map(t => `<div class="cartao av-sec" aria-busy="true"><div class="olhinho">${t}</div><div class="av-bone l"></div><div class="av-bone m"></div><div class="av-bone l"></div></div>`).join('')}`
+
+// 521-7 · an agent with no brief and no cost data: it says so, no blank and no zero.
+const avNoDataScreen = () => `${avCrumb(['athena', 'iris', 'daedalus'], 'Explore', false)}
+  ${avHead('Explore', null, 'completed', `<span class="chip">${ic('clock')}14:09 → 14:10</span>`, false)}
+  ${avFacts(avFact('Duração', 'timer', '1 min', '14:09 → 14:10'), avFact('Custo', 'coins', '—', 'sem custo medido'), avFact('Ferramentas', 'wrench', '3', '2 únicas'), avFact('Subagentes', 'git-fork', '0', 'nenhum'), false)}
+  <div class="cartao av-sec"><div class="olhinho">${ic('file-text')}Brief recebido</div>${avNone('file-x', 'Sem brief registrado.', 'O transcript deste agente não traz o pedido que ele recebeu (a leitura só achou as linhas dele dentro do transcript de quem o chamou).')}</div>
+  ${avSeq('3 ferramentas · 0 subagentes', [
+    avStep('Grep', 'sd-node', '+0:03', '0,3 s'),
+    avStep('Read', 'packages/nucleo/ui/screens/session-detail.js', '+0:20', '0,2 s'),
+    avStep('Read', 'packages/nucleo/ui/screens/workflow-loop.js', '+0:41', '0,2 s'),
+  ].join(''), { n: false })}
+  ${avResult({ from: 'Devolvido a <b>daedalus</b> às 14:10 · 96 caracteres', body: 'A aba Agentes monta as linhas em <code>node()</code>, em <code>session-detail.js</code>; o laço, em <code>stepEl()</code>.', n: false })}
+  <div class="rotulo" style="margin:0">Custo, a regra: sem custo medido não é zero. “—” com o motivo embaixo; nunca “US$ 0,00”. ${avDep('G7', 'O núcleo devolve null para “sem uso” e para “uso sem preço” e não diz qual dos dois')}</div>`
+
+// 521-8 · the errors: the agent failed, the read failed, the agent is not there.
+const avFailedScreen = () => `${avCrumb(['athena'], 'Argos', false)}
+  ${avHead('Argos', AV_FULL.Argos, 'error', `<span class="chip">${ic('clock')}14:15 → 14:17</span>`, false)}
+  <div class="faixa erro"><span class="ic">${ic('x-circle')}</span><div><b>O agente falhou.</b> A última ferramenta devolveu erro: <code>gh pr diff 524</code> saiu com 1 (<span class="mono">could not resolve to a pull request</span>). ${avDep('G6', 'Hoje só um agente que o gancho marcou como erro chega aqui, e sem o motivo')}</div><span class="btn contorno">${ic('message-square')}Abrir a conversa</span></div>
+  ${avFacts(avFact('Duração', 'timer', '2 min', '14:15 → 14:17'), avFact('Custo', 'coins', '~US$ 0,06', 'até a falha'), avFact('Ferramentas', 'wrench', '3', '2 únicas'), avFact('Subagentes', 'git-fork', '0', 'nenhum'), false)}
+  ${avBrief({ from: 'Recebido de <b>athena</b> às 14:15 · 212 caracteres', body: 'Revise o pull request 524 (wireframe da vista do agente) e publique o veredito.', n: false })}
+  ${avSeq('3 ferramentas', [avStep('Read', 'docs/wireframes/README.md', '+0:02', '0,1 s'), avStep('Bash', 'gh pr view 524', '+0:20', '1,2 s'), avStep('Bash', 'gh pr diff 524', '+0:41', '1,0 s', 'err')].join(''), { n: false })}
+  <div class="cartao av-sec"><div class="olhinho">${ic('check-circle-2')}Resultado final</div>${avNone('x-circle', 'Falhou antes de devolver um resultado.', 'O último erro está na faixa de cima. A vista só lê: não há como rodar o agente de novo daqui.', 'c-error')}</div>`
+const avReadErrorScreen = () => `${avCrumb(['athena'], 'iris', false)}
+  <div class="cartao av-state" role="alert"><span class="seal error">${ic('wifi-off')}</span><h5>Não deu para ler este agente</h5><p>O núcleo não respondeu a tempo (503). O que estava na tela continua valendo; nada foi perdido.</p><span class="btn cheio">${ic('refresh-cw')}Tentar de novo</span></div>`
+const avNotFoundScreen = () => `${avCrumb([], 'agent-7f3a', false)}
+  <div class="cartao av-state"><span class="seal">${ic('search-x')}</span><h5>Este agente não existe nesta sessão</h5><p>O endereço aponta para um agente que o núcleo não conhece (a sessão foi apagada ou o link está errado).</p><span class="btn contorno">${ic('arrow-left')}Voltar para os agentes da sessão</span></div>`
+const avErrorsHtml = () => `<div class="tm-rc">
+  ${avRowR([['1 · o agente falhou · 1100 px', avFrame(1100, avFailedScreen())]], ['<b>Falhou é um estado do agente, não da leitura.</b> A vista se lê normalmente, com o erro numa faixa vermelha no topo e o resultado trocado por “Falhou antes de devolver um resultado”.', 'A sequência termina no passo com erro, em vermelho, e o brief continua à vista: é o que se precisa para entender a falha.', 'Sem “tentar de novo” do agente: o Console só lê as sessões. “Abrir a conversa” leva ao transcript dele.'])}
+  ${avRowR([['2 · a leitura falhou · 1100 px', avFrame(1100, avReadErrorScreen())], ['3 · o agente não existe · 1100 px', avFrame(1100, avNotFoundScreen())]], ['<b>A leitura que falha é a de sempre</b> (<code>error()</code> de <code>states.js</code>): ícone, título, o motivo e “Tentar de novo” em destaque. A migalha continua à vista, para sair dali.', '<b>Atualização ao vivo que falha:</b> a vista mantém o que já mostra e põe a faixa de erro parcial no topo, como as abas de hoje.'])}
+</div>`
+
+// 521-2 · the agents tab: every subagent row is a link, nested by its parent.
+const avRow = (depth, short, full, sub, cost, st, o = {}) => `<div class="cartao no${o.main ? '' : ' av-row'}${o.focus ? ' av-focus' : ''}" style="margin-left:${depth * 28}px"><span class="av">${ic(o.main ? 'bot' : 'git-fork')}</span><div><b${o.main ? '' : ' class="av-lk"'}>${short}</b>${full ? ` <span class="chip" style="height:18px;font-size:10.5px">${full}</span>` : ''}<div class="meta">${sub}</div></div><div class="dir"><span>${cost}</span>${badge(st)}${o.main ? '' : `<span class="av-go">${ic('chevron-right')}</span>`}</div></div>`
+const avAgentsTabScreen = () => `${detCab(byId('c3f09b52'))}${abas(0, 6)}
+  <div class="cartao" style="padding:10px 14px;display:flex;gap:10px;align-items:center;color:var(--muted);font-size:12px">${ic('layout-dashboard')}Números, ferramentas mais usadas, progresso das tarefas e fluxo de tokens: como hoje (C4), sem mudança.</div>
+  <div class="olhinho">${ic('bot')}Agentes · 6 <span class="av-keyhint" style="margin-left:auto;text-transform:none;letter-spacing:0">${ic('keyboard')}<kbd>Tab</kbd> chega na linha · <kbd>Enter</kbd> abre a vista</span></div>
+  <div class="arvore">
+    ${avRow(0, 'Agente principal', '', 'Opus 5.5 · 9 turnos', '~US$ 2,61', 'active', { main: true })}
+    ${avRow(1, 'athena', AV_FULL.athena, 'planejar a issue 521 · 24 min', '~US$ 1,84', 'active')}
+    ${avRow(2, 'iris', AV_FULL.iris, 'ordenar as camadas do front · 11 min', '~US$ 0,92', 'completed', { focus: true })}
+    ${avRow(3, 'daedalus', AV_FULL.daedalus, 'desenhar a vista do agente · 6 min', '~US$ 0,41', 'completed')}
+    ${avRow(4, 'Explore', '', 'achar a aba Agentes · 1 min', '~US$ 0,05', 'completed')}
+    ${avRow(2, 'Argos', AV_FULL.Argos, 'revisar o wireframe · 3 min', '~US$ 0,22', 'completed')}
+  </div>
+  <div class="rotulo" style="margin:0">Foco na linha da iris. O agente principal não é link: a conversa dele é a aba Conversa.</div>`
+
+// 521-1 · where the view lives, and the flow.
+const avFlowHtml = () => `<div class="tm-rc">
+  <div class="cartao av-sec" style="gap:12px"><div class="olhinho">${ic('route')}O fluxo, passo a passo</div>
+    <div class="av-flow">
+      <div class="cartao av-box"><b>1 · Aba Agentes</b><small><code>/ui/sessions/&lt;id&gt;#agents</code></small><small>A linha da iris é um link: <b>Enter</b> ou clique.</small></div>
+      <div class="av-arrow">abre ${ic('arrow-right')}<br>entrada nova no histórico</div>
+      <div class="cartao av-box new"><b>2 · Vista da iris</b><small><code>/ui/sessions/&lt;id&gt;/agents/&lt;agent&gt;</code></small><small>Na sequência, o filho <b>daedalus</b> tem “Abrir a vista”.</small></div>
+      <div class="av-arrow">abre ${ic('arrow-right')}<br>de novo, outra entrada</div>
+      <div class="cartao av-box new"><b>3 · Vista da daedalus</b><small><code>…/agents/&lt;outro agent&gt;</code></small><small>A migalha mostra o caminho: athena › iris › daedalus.</small></div>
+    </div>
+    <div class="av-flow"><div class="av-arrow" style="max-width:none;text-align:left">${ic('arrow-left')} <b>Voltar</b> (botão do navegador, do app, ou o link da migalha) desfaz um passo de cada vez: da daedalus à iris, da iris à aba Agentes, <b>com o foco de volta na linha da iris</b>.</div></div>
+    <div class="av-flow">
+      <div class="cartao av-box"><b>Aba Workflow</b><small>O nó do laço tem duas ações (521-10): o nome leva à vista; o ícone continua levando à Conversa.</small></div>
+      <div class="av-arrow">abre ${ic('arrow-right')}</div>
+      <div class="cartao av-box new"><b>Vista do agente</b><small>“Abrir a conversa” na vista leva à aba Conversa com este agente escolhido.</small></div>
+    </div>
+  </div>
+  <div class="av-opts">
+    <div class="cartao av-opt rec"><h5>${ic('check-circle-2')}A · Rota própria <span class="chip">recomendada</span></h5>
+      <div><code>/ui/sessions/&lt;id&gt;/agents/&lt;agent&gt;</code>, uma tela nova (<code>session-agent</code>) que destaca Sessões na barra lateral.</div>
+      <ul><li>O botão de voltar funciona de graça: cada agente é uma entrada no histórico. As abas de hoje trocam por <code>replaceState</code> e não criam nenhuma.</li><li>Um link para o agente que se copia e se manda; o laço e a Conversa podem apontar para ele.</li><li>A tela é só a leitura de um agente; sem peso das outras quatro abas da sessão.</li><li>Custo: um registro novo em <code>screens.js</code> e um parâmetro de rota; o id do agente tem “:” (<code>&lt;sessão&gt;:&lt;agente&gt;</code>) e vai na rota só a parte depois dele.</li></ul></div>
+    <div class="cartao av-opt"><h5>${ic('panel-right')}B · Painel dentro da aba Agentes</h5>
+      <div><code>/ui/sessions/&lt;id&gt;?agent=&lt;agent&gt;#agents</code>, a lista à esquerda e a vista à direita.</div>
+      <ul><li>A lista continua à vista: trocar de agente é um clique.</li><li>Em 1100 px a vista fica estreita: o brief, a sequência aninhada e o resultado pedem largura.</li><li>Voltar não desfaz a escolha, a menos que a aba passe a criar entradas no histórico: mexe na aba toda.</li><li>O <code>?agent=</code> já é da Conversa (issue 332): o mesmo nome para duas coisas.</li></ul></div>
+  </div>
+</div>`
+
+// 521-9 · the Workflow loop node: a second action to the agent view.
+const avNodeCard = (variant, o = {}) => `<div class="cartao wf-step" style="border-left:3px solid var(--status-completed-dot);min-width:230px;max-width:290px"><div class="wf-step-top"><b class="trunc ${variant === 'a' ? 'av-lk' : ''}" title="${AV_FULL.iris}">iris</b>${variant === 'a' ? `<span class="c-muted" title="Abre a vista do agente">${ic('git-fork')}</span>` : ''}<span class="c-muted wf-open" title="${variant === 'b' ? 'Abre a vista do agente' : 'Abre a conversa deste subagente'}">${ic(variant === 'b' ? 'git-fork' : 'external-link')}</span></div>
+  <span class="trunc c-muted" style="font-size:10.5px">${AV_FULL.iris}</span><span class="trunc c-muted" style="font-size:10.5px">Ordenar as camadas da issue 521</span><span class="trunc c-completed" style="font-size:10.5px">✓ Concluído <span class="c-muted">· 11 min</span></span></div>`
+const avWfScreen = () => `${detCab(byId('c3f09b52'))}${abas(3, 16)}
+  <div class="cartao" style="padding:14px 16px;display:flex;flex-direction:column;gap:12px">
+    <div class="ttl">${ic('workflow')}O laço da sessão, por PR<span class="r">dev → Argos → Erodos → Argos, até aprovar</span></div>
+    ${loopGroup(['PR 524', 'docs(521): wireframe da vista do agente', LOOP_OK, '1 rodada · 0 pedidos de mudança'], [avNodeCard('a'), loopLink('PR aberto'), loopStep('Argos', 'Revisar o PR 524', 'ok', 'Aprovou na primeira', '3 min')])}
+    <div class="leg"><span>${ic('git-fork')} <b>o nome</b>: abre a vista do agente (novo)</span><span>${ic('external-link')} <b>o ícone</b>: abre a Conversa com o agente escolhido, como hoje</span></div>
+  </div>`
+const avWfHtml = () => `<div class="tm-rc">
+  ${avRowR([['A · duas ações no nó (recomendada) · 1100 px', avFrame(1100, avWfScreen())]], ['<b>A · o nome leva à vista, o ícone fica na Conversa.</b> O ícone continua sendo o da issue 518 (AC-2): Conversa com o subagente selecionado. O nome do agente vira link e leva à vista do ciclo dele.', 'No nó, o nome vira o link da vista (sublinhado, na ordem do Tab antes do ícone); os dois têm <code>title</code> e <code>aria-label</code> próprios.', 'Quem vem do laço e quer o ciclo do agente chega em um clique; quem quer a conversa crua não perde o caminho de hoje.'])}
+  <div class="av-wf-opts">
+    <div class="cartao av-opt rec"><h5>${ic('check-circle-2')}A · segunda ação <span class="chip">recomendada</span></h5>${avNodeCard('a')}<ul><li>Nome → vista do agente; ícone → Conversa. Nada que existe é tirado.</li><li>Mesmo gesto da aba Agentes: clicar no nome do agente abre o agente.</li></ul></div>
+    <div class="cartao av-opt"><h5>${ic('replace')}B · trocar o destino do ícone</h5>${avNodeCard('b')}<ul><li>O ícone leva à vista; a Conversa fica só pelo botão “Abrir a conversa” dentro dela.</li><li>Desfaz o que a issue 518 pede no AC-2 (o ícone leva à Conversa com o subagente selecionado): só com a decisão do Fernando.</li></ul></div>
+  </div>
+</div>`
+
+// 521-10 · what the view asks of the core, and what the core serves today.
+const AV_GAPS = [
+  ['G1', 'O tipo do agente, à parte', '<code>name</code> é <code>subagentType ?? name ?? \'Subagente\'</code>: o tipo (<code>plugin:agent</code>) e a descrição curta do agente somem um no outro, e não há campo <code>agentType</code> (o comentário da issue 521 pede um).', '<code>Agent.subagentType</code> e <code>Agent.name</code> já estão no armazenamento (<code>meta.agentType</code> e <code>meta.description</code> do transcript). Falta servi-los separados em <code>AgenteDoDetalhe</code>.'],
+  ['G2', 'O brief inteiro', '<code>task</code> é o prompt cortado em <code>TASK_MAX</code> = 2.000 caracteres e com as quebras de linha achatadas (<code>truncate</code> junta os espaços).', 'O primeiro <code>UserPrompt</code> do agente guarda o texto inteiro, com as quebras, até 32.000 (<code>MESSAGE_TEXT_MAX</code>), em <code>data.text</code>. Servir como <code>brief</code> e <code>briefTruncated</code>. A Conversa traz esse texto, mas só nas últimas 200 mensagens: num agente longo o brief fica de fora.'],
+  ['G3', 'Onde o filho foi chamado', 'O vínculo do filho com a chamada da ferramenta que o criou só existe em <code>metadata.toolUseId</code> (e <code>spawnDepth</code>); <code>AgenteDoDetalhe</code> só traz <code>parent</code>. A sequência não consegue pôr o filho no ponto da chamada.', 'O <code>id</code> da chamada <code>Agent</code> na conversa do pai já é o <code>toolUseId</code>. Servir <code>spawnedByToolUseId</code> no agente filho. O <code>parent</code> cai no principal quando o dono do <code>toolUseId</code> não foi lido (importador).'],
+  ['G4', 'A sequência, com instante e duração', 'A Conversa devolve <code>messages[].tools[]</code> por agente, em ordem, mas sem o instante nem a duração de cada ferramenta (só o <code>at</code> da mensagem), limitada às últimas 200 mensagens, com o texto do assistente no meio.', 'Os eventos <code>ToolUse</code> e <code>ToolResult</code> (ou <code>Pre/PostToolUse</code>) têm <code>createdAt</code> e o mesmo <code>toolUseId</code>. Servir <code>steps[]</code>: tipo, nome, resumo, estado, início, fim e, na chamada <code>Agent</code>, o filho.'],
+  ['G5', 'O resultado final', 'Não há campo. O <code>tool_result</code> da chamada <code>Agent</code>, no pai, só guarda o resumo de 200 caracteres (<code>SUMMARY_MAX</code>).', 'A última <code>AssistantMessage</code> do próprio agente, com o texto inteiro (até 32.000). Servir <code>result</code> e <code>resultTruncated</code>; <code>null</code> enquanto roda.'],
+  ['G6 · fora da issue 521, agora issue 530', 'Por que o agente falhou', 'O importador grava todo subagente como <code>completed</code> (<code>prev?.status ?? \'completed\'</code>); <code>error</code> só chega pelo gancho ao vivo, e sem o motivo.', 'Eventos <code>ToolResult</code> com <code>isError</code> e <code>APIError</code> do agente. Servir <code>failure: { at, text }</code> e marcar como <code>error</code> o agente do histórico que terminou em erro.'],
+  ['G7', 'Custo: “sem medida” ou “sem preço”', '<code>costUsd</code> é o custo do próprio agente e <code>null</code> para “sem uso” e para “uso sem preço”; os filhos não entram no total.', 'O <code>costReport</code> já separa os dois casos por agente. Servir o motivo (<code>costNote</code>) e, se quiser, o total com os filhos (ou somar no navegador pelos <code>parent</code>).'],
+  ['G8', 'Uma leitura só para a vista', 'Hoje seriam duas leituras (a aba Agentes e a Conversa), com tetos diferentes, e uma só falha de cada vez.', 'Um <code>GET /api/sessions/:id/agents/:agentId</code> com os fatos, o brief, os passos e o resultado; os passos do filho abertos na sequência vêm da mesma leitura do filho, sob demanda. O id do agente tem “:”: a rota leva só a parte depois da sessão.'],
+]
+const avGapsHtml = () => `<div class="cartao av-sec" style="padding:6px 10px"><table class="av-tab"><thead><tr><th>Marca</th><th>O que a vista pede</th><th>O que o núcleo serve hoje</th><th>De onde viria</th></tr></thead><tbody>${AV_GAPS.map(([g, t, hoje, vem]) => `<tr><td>${avDep(g, t)}</td><td><b>${t}</b></td><td>${hoje}</td><td>${vem}</td></tr>`).join('')}</tbody></table></div>`
+
+// =====================================================================
 // Montagem
 // =====================================================================
 function montar() {
@@ -6522,6 +6826,7 @@ function montar() {
     <li><b>O botão Atualizar o núcleo remoto (#462, decisão 0022, proposta):</b> a faixa de defasado ganha Atualizar, com confirmação que já traz o resultado do <code>--check</code>, o andamento em cinco passos, e cada resultado em pt-BR (recusas 20 a 23, 30 a 33, falhou e voltou, falhou e a volta falhou com o caminho do backup, contato perdido, SSH). Sem <code>connection.update</code> no machines.json a tela diz o que falta, traz o bloco pronto e mantém o card de copiar (462-1 a 462-6). Em aberto: o Fernando aceitar a decisão.</li>
     <li><b>O núcleo remoto se atualiza sozinho (#484, decisão 0024, aceita):</b> o comando sai do <code>connection.credential</code> e o Mac roda o <code>--check</code> e a atualização sozinho, uma vez por versão do app. A faixa mostra a fase e a barra lateral “Atualizando” (484-1); se falhar, o motivo e “Tentar de novo”, com o card de copiar recolhido (484-2); “Atualizar agora” fica de reserva (462-1). O card “Ativar o botão Atualizar” e o bloco para colar saíram (462-6).</li>
     <li><b>Quadro do trabalho (#465, #466, #467, #468, #477, #478, a aprovar):</b> um quadro por projeto com as colunas do ciclo do agente (Planejamento, Na fila, Em execução, Em review, Bloqueado, Concluído), calculadas de sessão, PR, CI, review, estado, plano e fila; o Status do Project vira dado e filtro (465-1 a 465-5). Cada card traz as ações do seu estado: Planejar, “planejando…”, “plano · N passos” com Executar plano, Pôr na fila e Replanejar, Abrir sessão; épico e iniciativa sem ações (465-2, 465-6). Na fila é a fila de verdade: posição, limite (“2 de 2 rodando”), arrastar de Planejamento para Na fila só com plano, de volta para tirar, dentro dela para reordenar, e as quatro colunas de fato recusam (477-1, 477-2). O detalhe da issue abre num painel pelo card, para ler e editar, com o conflito e a recusa do GitHub (467-1, 478-1 a 478-3). Acima, a troca de nível e os seis filtros, juntos por E e guardados na URL em inglês (466-1 a 466-3). <b>Aprovado:</b> item com plano e sem sessão fica em Planejamento com “plano · N passos”. Escolhas desenhadas, cada uma a aprovar: (1) o Kanban do projeto (C11) <b>fica ao lado</b>, e o quadro entra em Entrega na barra lateral, logo abaixo dele; (2) a troca de nível fica <b>acima dos filtros, à esquerda</b>, com o caminho “Iniciativa #1 › Épico #6” à direita; (3) em Concluído o tempo é <b>desde o merge ou o fechamento</b>, e a coluna mostra os últimos 14 dias; (4) o pai é <b>compacto (↑ #6) por padrão e a cadeia inteira com qualquer filtro ativo</b>, nunca pela largura; (5) Bloqueado em ordem de motivo (precisa de você, 3 rodadas, CI falhou) e, dentro do motivo, quem espera há mais tempo; (6) em 1100 as seis colunas dobram em duas linhas de três, sem rolar na horizontal; (7) a coluna de um épico vem das filhas, e qualquer filha bloqueada põe o épico em Bloqueado; (8) um valor por filtro; (9) o repositório só aparece no card de outro repositório; (10) as ações ficam <b>sempre à vista</b> nos cards de Planejamento e Na fila, uma principal em botão e as secundárias em link; (11) com o GitHub fora, <b>as ações continuam</b>: a sessão abre neste Mac e é ela que esbarra no GitHub; (12) o limite conta <b>os cards em Em execução</b>, não as sessões, e a sessão só de planejamento não conta; (13) a confirmação de Planejar e de Executar plano abre <b>no próprio card</b>, com a conta e o destino da última escolha; (14) o detalhe é <b>um painel à direita, com o quadro atrás</b>, e a edição é o mesmo painel, mais largo, com Escrever e Pré-visualizar em abas; (15) título e descrição gravam no <b>Salvar</b>, labels, tipo, milestone e pai <b>ao escolher</b>, e remover um passo tem <b>Desfazer</b> em vez de confirmação; (16) no conflito, <b>três saídas e nenhuma padrão</b>, com as versões uma embaixo da outra; (17) a fila que falhou ao puxar <b>para até Tentar de novo ou Tirar da fila</b>.</li>
+    <li><b>Vista do agente (issue 521, da issue 518, aprovada):</b> aprovada por Fernando em 14/11/2026 (“Aprovo como está”), com a resposta desenhada a cada pergunta (521-1 a 521-10). Decisões: (Q1) a vista mora numa <b>rota própria</b>, <code>/ui/sessions/&lt;id&gt;/agents/&lt;agentId&gt;</code>; (Q2) no nó do laço, o <b>nome</b> leva à vista e o <b>ícone</b> fica na Conversa; (Q3) o agente principal <b>não</b> é link e as linhas <b>recuam por <code>parent</code></b>; (Q4) o filho na sequência <b>abre em linha</b> e oferece “Abrir a vista”; (Q5) brief e resultado <b>dobram em 6 linhas</b>, e acima de 12 passos ficam visíveis os 5 primeiros e os 3 últimos; (Q6) o <b>custo próprio vem primeiro</b>, e “—” aparece quando não houve medida; (Q7) o agente que falhou mostra o <b>último erro</b>, e “Tentar de novo” só repete a leitura; (Q8) <b>sem rolagem automática</b>: aparece o aviso “N passos novos”; (Q9) Voltar devolve o foco à linha; (Q10) o detalhe de um passo de ferramenta abre em linha. G6 (por que o agente falhou, no histórico) saiu da issue 521 e é a issue 530. Os dados vêm da issue 529 (<code>GET /api/sessions/:id/agents/:agentId</code>, G1 a G5, G7 e G8). O esqueleto vermelho: <code>packages/nucleo/test/api/ui-agent-view.test.ts</code>.</li>
     <li><b>Backlog:</b> Feed de atividade, Analytics completo, Workflows e o detalhe com o grafo de agentes estavam para depois da entrega. Entraram aqui a pedido do dono; o PM decide se viram itens da 0.0.1.</li></ol></section>`
   indice.innerHTML = htmlI; main.innerHTML = htmlM
   if (window.lucide) lucide.createIcons()

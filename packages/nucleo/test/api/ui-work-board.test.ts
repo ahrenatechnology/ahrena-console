@@ -255,7 +255,8 @@ describe('#465/AC-2 the six columns over GET /api/work', () => {
     assert.equal(s.area.querySelector('.wb-board')!.getAttribute('data-mode'), 'cards');
     assert.deepEqual(replaced, ['/ui/work?level=item'], 'the sidebar link is replaced by its canonical slice, not pushed');
     assert.deepEqual(pushed, []);
-    assert.doesNotMatch(s.text(), /Planejar|Executar plano|Pôr na fila|Replanejar|Abrir sessão|Tirar da fila/, 'the actions of other issues are not drawn');
+    // #508 Planejar and Replanejar are drawn now (issue 508); the actions of the other issues still are not.
+    assert.doesNotMatch(s.text(), /Executar plano|Pôr na fila|Abrir sessão|Tirar da fila/, 'the actions of other issues are not drawn');
     assert.equal(s.area.querySelectorAll('[draggable="true"]').length, 0, 'no drag');
   });
 
@@ -772,17 +773,17 @@ describe('#465 the keyboard focus survives the redraws', () => {
     assert.equal(active(), outside, 'the focus stays where the person put it');
   });
 
-  test('#465 a quiet re-read keeps the focus on the card link that had it', async () => {
+  test('#465 a quiet re-read keeps the focus on the card title that had it', async () => {
     const fresh = await boot();
     try {
       const s = await open(fresh);
-      const link = () => s.area.querySelectorAll('article.wb-card').find((c) => /#42/.test(texto(c.querySelector('.wb-number'))))!.querySelector('.wb-card-title a')!;
+      const link = () => s.area.querySelectorAll('article.wb-card').find((c) => /#42/.test(texto(c.querySelector('.wb-number'))))!.querySelector('.wb-card-title button')!;
       link().focus();
       fresh.source.titles.set(42, 'Kanban de sessões, outra vez');
       fresh.now.add(2 * 60_000 + 1);
       s.change([{ type: 'session' }]);
       await until(() => /outra vez/.test(s.text()));
-      assert.equal(active(), link(), 'the redrawn link of #42 has the focus');
+      assert.equal(active(), link(), 'the redrawn title of #42 has the focus');
     } finally {
       await fresh.close();
     }
