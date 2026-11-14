@@ -1,16 +1,16 @@
 // The agent view read (#529): a pure projection from the agent rows, the events and the per-agent cost.
-// Contract: docs/contracts/agent-view.md.
+// Contract: docs/contracts/agent-view.md (#529).
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
-import { buildAgentView, agentFacts, MESSAGE_TEXT_MAX } from '../../src/api/agent-view.ts';
+import { buildAgentView, agentFacts, MESSAGE_TEXT_MAX, type AgentViewInput } from '../../src/api/agent-view.ts';
 import { costReport, type CostSlice } from '../../src/cost/aggregation.ts';
-import { emptyTokenCounts, type Agent, type Session, type SessionEvent } from '../../src/model.ts';
+import { emptyTokenCounts, type Agent, type SessionEvent } from '../../src/model.ts';
 
 const SID = 'S0';
 const T1 = 'toolu_T1';
 const at = (s: number) => new Date(Date.UTC(2026, 10, 1, 10, 0, s)).toISOString();
 
-const session = { id: SID, startedAt: at(0), endedAt: null, status: 'active' } as unknown as Session;
+const session: AgentViewInput['session'] = { id: SID, startedAt: at(0), endedAt: null, status: 'active', awaitingInputSince: null };
 
 function agent(over: Partial<Agent> & Pick<Agent, 'id'>): Agent {
   return {
@@ -80,9 +80,9 @@ const slice = (agentId: string | null, costUsd: number | null): CostSlice => ({
   cost: costUsd === null ? { estimate: true, priced: false, pattern: null, costUsd: null, reason: 'model' } : { estimate: true, priced: true, pattern: 'claude-x', costUsd },
 });
 
-const read = (agentId: string, o: { agents?: Agent[]; events?: SessionEvent[]; slices?: CostSlice[]; sess?: Session } = {}) =>
+const read = (agentId: string, o: { agents?: Agent[]; events?: SessionEvent[]; slices?: CostSlice[] } = {}) =>
   buildAgentView({
-    session: o.sess ?? session,
+    session,
     agents: o.agents ?? [MAIN, S, CHILD],
     events: o.events ?? subEvents(),
     costLines: costReport(o.slices ?? [slice(SUB_ID, 0.4), slice(CHILD_ID, 0.1)]).byAgent,
@@ -108,6 +108,14 @@ describe('#529 agent view projection', () => {
     assert.equal(v.spawnedByToolUseId, null);
     assert.equal(v.brief, 'hi');
     assert.equal(v.state, 'working');
+  });
+
+  test('#529/AC-1 a main agent with no end of its own ends with the session, as the Agents tab shows it', () => {
+    const ended = { ...session, endedAt: at(500), status: 'completed' as const };
+    const open = { ...MAIN, status: 'completed' as const, endedAt: null };
+    const v = buildAgentView({ session: ended, agents: [open], events: [], costLines: [], agentId: 'main' })!;
+    assert.equal(v.end, at(500));
+    assert.equal(read('a1')!.end, at(100));
   });
 
   test('#529/AC-1 a raw hook agent id on the events belongs to the same agent', () => {

@@ -1,15 +1,15 @@
 // The agent view read (#529): what the view of one agent shows, projected from the rows the core already
 // stores. Pure: no storage and no clock; the route (next layer of #529) fetches the rows and calls this.
-// Contract: docs/contracts/agent-view.md. Names on the wire are English; the screen words are the client's.
+// Contract: docs/contracts/agent-view.md. Names on the wire are English; the screen words are the client's. (#529)
 
 import type { AgentCostLine } from '../cost/aggregation.ts';
 import { truncate } from '../ingest/history/transcript.ts';
 import type { Agent, AgentStatus, Session, SessionEvent } from '../model.ts';
 
-/** The ceiling of `brief` and `result`, the same as the Conversation's message text. */
+/** The ceiling of `brief` and `result`, the same as the Conversation's message text (#529). */
 export const MESSAGE_TEXT_MAX = 32_000;
 
-/** The importer stores a subagent without a description as its task cut at this length (`importer.ts`). */
+/** The importer stores a subagent without a description as its task cut at this length (`importer.ts`) (#529). */
 const NAME_FALLBACK_MAX = 80;
 
 export const STEP_KINDS = ['tool', 'agent'] as const;
@@ -17,7 +17,7 @@ export const STEP_STATES = ['ok', 'error', 'running', 'unknown'] as const;
 export const COST_NOTES = ['no_usage', 'unpriced'] as const;
 
 export interface AgentViewStep {
-  /** The tool use id (the event id when the call has none). */
+  /** The tool use id (the event id when the call has none) (#529). */
   id: string;
   kind: (typeof STEP_KINDS)[number];
   name: string;
@@ -25,7 +25,7 @@ export interface AgentViewStep {
   state: (typeof STEP_STATES)[number];
   start: string;
   end: string | null;
-  /** On an `agent` step: the `agentId` of the child it spawned; `null` otherwise or when the child was not read. */
+  /** On an `agent` step: the `agentId` of the child it spawned; `null` otherwise or when the child was not read (#529). */
   childAgentId: string | null;
 }
 
@@ -50,11 +50,11 @@ export interface AgentView {
 export interface AgentViewInput {
   session: Pick<Session, 'id' | 'startedAt' | 'endedAt' | 'status' | 'awaitingInputSince'>;
   agents: readonly Agent[];
-  /** The session's events in the order they were stored. */
+  /** The session's events in the order they were stored (#529). */
   events: readonly SessionEvent[];
-  /** `costReport(...).byAgent` of the session. */
+  /** `costReport(...).byAgent` of the session (#529). */
   costLines: readonly AgentCostLine[];
-  /** As the route carries it: the part of `Agent.id` after `<sessionId>:`, or `main`. */
+  /** As the route carries it: the part of `Agent.id` after `<sessionId>:`, or `main` (#529). */
   agentId: string;
 }
 
@@ -62,7 +62,7 @@ type Json = Record<string, unknown>;
 const obj = (v: unknown): Json | null => (v && typeof v === 'object' && !Array.isArray(v) ? (v as Json) : null);
 const str = (v: unknown): string | null => (typeof v === 'string' && v.length > 0 ? v : null);
 
-/** The agent's type and description, apart (G1); the Agents tab list serves the same two. */
+/** The agent's type and description, apart (G1); the Agents tab list serves the same two (#529). */
 export function agentFacts(a: Agent): { agentType: string | null; description: string | null } {
   if (a.type === 'main') return { agentType: null, description: null };
   const fallback = a.task !== null && a.name === truncate(a.task, NAME_FALLBACK_MAX);
@@ -87,7 +87,7 @@ function failed(e: SessionEvent): boolean {
   return r?.is_error === true || r?.success === false || (e.summary?.startsWith('erro:') ?? false);
 }
 
-/** A message's full text: the transcript's `data.text`, the hook's `data.prompt`, the summary only for old events. */
+/** A message's full text: the transcript's `data.text`, the hook's `data.prompt`, the summary only for old events (#529). */
 function textOf(e: SessionEvent): string | null {
   const d = obj(e.data);
   const full = str(d?.text) ?? (e.type === 'UserPromptSubmit' ? str(d?.prompt) : null);
@@ -103,41 +103,77 @@ function capped(text: string | null): { text: string | null; truncated: boolean 
 
 const tailOf = (sessionId: string, id: string): string => (id.startsWith(`${sessionId}:`) ? id.slice(sessionId.length + 1) : id);
 
-/** The agent view of `agentId`, or `null` when the session has no such agent (the route answers 404 `agent_not_found`). */
+type Costs = Map<string, { usd: number | null }>;
+
+/** The agent view of `agentId`, or `null` when the session has no such agent (the route answers 404 `agent_not_found`) (#529). */
 export function buildAgentView(input: AgentViewInput): AgentView | null {
   const { session, agents, events, costLines } = input;
   const sid = session.id;
   const mainRow = agents.find((a) => a.type === 'main') ?? null;
   const mainId = mainRow?.id ?? `${sid}:main`;
-  const known = new Set(agents.map((a) => a.id));
-  known.add(mainId);
-
-  // Who an id on an event or a cost row is: the hooks send the raw id, the transcript `<session>:<id>`.
-  const resolve = (id: string | null): string => {
-    if (!id || id === mainId || id.endsWith(':main')) return mainId;
-    if (known.has(id)) return id;
-    return known.has(`${sid}:${id}`) ? `${sid}:${id}` : id;
-  };
-
+  const resolve = idResolver(sid, mainId, agents);
   const targetId = input.agentId === 'main' ? mainId : `${sid}:${input.agentId}`;
   const row = targetId === mainId ? mainRow : (agents.find((a) => a.id === targetId && a.type !== 'main') ?? null);
   if (targetId !== mainId && !row) return null;
 
   const mine = events.filter((e) => resolve(e.agentId) === targetId);
-
-  // State, start and end: the agent's row; for a main agent with no row, derived from the session as the Agents tab does.
-  const state: AgentStatus = row?.status ?? (session.awaitingInputSince ? 'waiting' : session.status === 'error' ? 'error' : session.status === 'active' ? 'working' : 'completed');
+  const state = stateOf(row, session);
   const running = state === 'working' || state === 'waiting';
-
   const facts = row ? agentFacts(row) : { agentType: null, description: null };
-  const toolUseId = str(obj(row?.metadata)?.toolUseId);
+  const brief = briefOf(mine);
+  const reply = running ? { text: null, truncated: false } : resultOf(mine);
+  const own = ownCosts(costLines, sid, resolve);
+  const costUsd = own.get(targetId)?.usd ?? null;
 
-  const firstPrompt = mine.find((e) => PROMPTS.has(e.type) && textOf(e));
-  const brief = capped(firstPrompt ? textOf(firstPrompt) : null);
-  const lastReply = [...mine].reverse().find((e) => e.type === 'AssistantMessage' && textOf(e));
-  const reply = running || !lastReply ? { text: null, truncated: false } : capped(textOf(lastReply));
+  return {
+    agentId: tailOf(sid, targetId),
+    agentType: facts.agentType,
+    description: facts.description,
+    brief: brief.text,
+    briefTruncated: brief.truncated,
+    spawnedByToolUseId: str(obj(row?.metadata)?.toolUseId),
+    steps: stepsOf(mine, agents, sid, running),
+    result: reply.text,
+    resultTruncated: reply.truncated,
+    costUsd,
+    costNote: costUsd !== null ? null : own.has(targetId) ? 'unpriced' : 'no_usage',
+    totalCostUsd: totalWithDescendants(targetId, own, agents, mainId, resolve),
+    state,
+    start: row?.startedAt ?? session.startedAt,
+    end: row ? (row.type === 'main' ? (row.endedAt ?? session.endedAt) : row.endedAt) : session.endedAt, // Only the main agent falls back to the session's end, as session-detail does (#529).
+  };
+}
 
-  // Steps: each call once, closed by the first result with the same call id.
+// Who an id on an event or a cost row is: the hooks send the raw id, the transcript `<session>:<id>` (#529).
+function idResolver(sid: string, mainId: string, agents: readonly Agent[]): (id: string | null) => string {
+  const known = new Set([mainId, ...agents.map((a) => a.id)]);
+  return (id) => {
+    if (!id || id === mainId || id.endsWith(':main')) return mainId;
+    if (known.has(id)) return id;
+    return known.has(`${sid}:${id}`) ? `${sid}:${id}` : id;
+  };
+}
+
+// State: the agent's row; for a main agent with no row, derived from the session as the Agents tab does (#529).
+function stateOf(row: Agent | null, session: AgentViewInput['session']): AgentStatus {
+  if (row) return row.status;
+  if (session.awaitingInputSince) return 'waiting';
+  if (session.status === 'error') return 'error';
+  return session.status === 'active' ? 'working' : 'completed';
+}
+
+function briefOf(mine: readonly SessionEvent[]): { text: string | null; truncated: boolean } {
+  const first = mine.find((e) => PROMPTS.has(e.type) && textOf(e));
+  return capped(first ? textOf(first) : null);
+}
+
+function resultOf(mine: readonly SessionEvent[]): { text: string | null; truncated: boolean } {
+  const last = [...mine].reverse().find((e) => e.type === 'AssistantMessage' && textOf(e));
+  return capped(last ? textOf(last) : null);
+}
+
+// Steps: each call once, closed by the first result with the same call id (#529).
+function stepsOf(mine: readonly SessionEvent[], agents: readonly Agent[], sid: string, running: boolean): AgentViewStep[] {
   const results = new Map<string, { at: string; error: boolean }>();
   for (const e of mine) {
     const id = RESULTS.has(e.type) ? callId(e) : null;
@@ -168,19 +204,23 @@ export function buildAgentView(input: AgentViewInput): AgentView | null {
       childAgentId: kind === 'agent' ? (children.get(id) ?? null) : null,
     });
   }
+  return steps;
+}
 
-  // Cost: per agent, the usage with no agent (the compaction floor) goes to the main agent.
-  const own = new Map<string, { usd: number | null }>();
+// Cost per agent: the usage with no agent (the compaction floor) goes to the main agent (#529).
+function ownCosts(costLines: readonly AgentCostLine[], sid: string, resolve: (id: string | null) => string): Costs {
+  const own: Costs = new Map();
   for (const l of costLines) {
     if (l.sessionId !== sid) continue;
     const id = resolve(l.agentId);
     const prev = own.get(id)?.usd ?? null;
     own.set(id, { usd: l.costUsd === null ? prev : (prev ?? 0) + l.costUsd });
   }
-  const mineCost = own.get(targetId);
-  const costUsd = mineCost?.usd ?? null;
-  const costNote = costUsd !== null ? null : mineCost ? 'unpriced' : 'no_usage';
+  return own;
+}
 
+// The agent's own cost plus that of every descendant, each counted once (#529).
+function totalWithDescendants(targetId: string, own: Costs, agents: readonly Agent[], mainId: string, resolve: (id: string | null) => string): number | null {
   const kids = new Map<string, string[]>();
   for (const a of agents) {
     if (a.type === 'main') continue;
@@ -197,22 +237,5 @@ export function buildAgentView(input: AgentViewInput): AgentView | null {
     for (const k of kids.get(id) ?? []) walk(k);
   };
   walk(targetId);
-
-  return {
-    agentId: tailOf(sid, targetId),
-    agentType: facts.agentType,
-    description: facts.description,
-    brief: brief.text,
-    briefTruncated: brief.truncated,
-    spawnedByToolUseId: toolUseId,
-    steps,
-    result: reply.text,
-    resultTruncated: reply.truncated,
-    costUsd,
-    costNote,
-    totalCostUsd: total,
-    state,
-    start: row?.startedAt ?? session.startedAt,
-    end: row ? row.endedAt : session.endedAt,
-  };
+  return total;
 }
