@@ -516,9 +516,25 @@ describe('#532 the run confirmation does not depend on where the last plan confi
     await confirmRun(s, core);
     assert.deepEqual(core.runs, [{ repo: REPO, number: 506, target: 'desktop' }]);
   });
+
+  test('#532 panel open, Replanejar in the panel, Cancelar, then Executar plano in the panel: one run confirmation inside the panel, and it posts', async () => {
+    const core = new Core();
+    const s = await open(core);
+    await openPanel(s, 506);
+    press(buttonIn(panelOf(s)!, 'replan'), 'Replanejar in the panel');
+    assert.equal(s.area.querySelectorAll('div.wb-plan-pop').length, 1, 'the plan confirmation is open');
+    press(buttonIn(popup(s)!, 'cancel'), 'Cancelar');
+    assert.equal(popup(s), null);
+    press(buttonIn(panelOf(s)!, 'run'), 'Executar plano in the panel');
+    assert.equal(s.area.querySelectorAll('div.wb-plan-pop').length, 1, 'one run confirmation is drawn');
+    assert.ok(panelOf(s)!.contains(popup(s)!), 'it is inside the panel');
+    assert.match(popup(s)!.getAttribute('aria-label') ?? '', /Executar o plano da/);
+    await confirmRun(s, core);
+    assert.deepEqual(core.runs, [{ repo: REPO, number: 506, target: 'desktop' }]);
+  });
 });
 
-describe('#532 other failures: the core\'s error text and the card back on its action', () => {
+describe('#532 other failures:the core\'s error text and the card back on its action', () => {
   for (const [status, error] of [
     [422, 'A issue não tem plano.'],
     [502, 'O GitHub não respondeu.'],
