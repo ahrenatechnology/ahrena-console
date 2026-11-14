@@ -180,6 +180,21 @@ describe('#557 AC-2 the caller\'s own abort still cancels the request', () => {
     await assert.rejects(pending, (e: any) => e === reason);
   });
 
+  test('#557 AC-2 the caller aborting with its own reason during the fetch rejects with that reason, for a read and for a write', async () => {
+    for (const make of [
+      (fetch: any, signal: AbortSignal) => httpReader({ base: BASE, fetch, timeoutMs: 5_000 })('/api/work', { signal }),
+      (fetch: any, signal: AbortSignal) => httpWriter({ base: BASE, fetch, timeoutMs: 5_000 })('/api/x', {}, { signal }),
+    ]) {
+      const ctl = new AbortController();
+      const reason = new Error('left the screen');
+      const { fetch } = hangingFetch();
+      const pending = make(fetch, ctl.signal);
+      await wait(10);
+      ctl.abort(reason);
+      await assert.rejects(pending, (e: any) => e === reason);
+    }
+  });
+
   test('#557 AC-2 the deadline is not mistaken for the caller: both signals given, the deadline fires first, it is the status-0 failure', async () => {
     const ctl = new AbortController();
     const { fetch } = hangingFetch();

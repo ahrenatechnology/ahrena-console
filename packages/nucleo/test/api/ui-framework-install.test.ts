@@ -494,6 +494,8 @@ describe('Install (C36): step 2, the diff preview', () => {
     const band = texto(m.area.querySelector('.fwi-band'));
     assert.match(band, /O núcleo não respondeu a tempo; confira se o PR foi aberto antes de tentar de novo\./);
     assert.doesNotMatch(band, /Nada foi escrito/);
+    assert.match(band, /O PR pode não ter sido aberto\./);
+    assert.doesNotMatch(band, /Não abrimos o PR/);
   });
 
   test('an unreachable core (status 0, not timedOut) keeps the "Nada foi escrito" text (issue 525)', async () => {

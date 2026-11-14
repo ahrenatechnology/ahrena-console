@@ -614,7 +614,7 @@ export function mountInstallFlow(area, ctx, { owner, name, plan: first, step: fi
       }
       if (e?.timedOut) {
         // The deadline passed, but the core may still finish and open the PR: do not say nothing was written (issue 525).
-        notice = { tone: 'err', title: 'Não abrimos o PR.', text: 'O núcleo não respondeu a tempo; confira se o PR foi aberto antes de tentar de novo.' };
+        notice = { tone: 'err', title: 'O PR pode não ter sido aberto.', text: 'O núcleo não respondeu a tempo; confira se o PR foi aberto antes de tentar de novo.' };
       } else if (code === 'invalid-issue') {
         issueError = 'Só o número da issue, como 42.';
         notice = { tone: 'err', title: 'Confira a issue.', text: e.message };

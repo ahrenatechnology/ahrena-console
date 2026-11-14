@@ -55,7 +55,7 @@ const LOCAL_HOSTS = new Set(['127.0.0.1', 'localhost', '[::1]']);
 export const DEFAULT_TIMEOUT_MS = 60_000;
 
 /**
- * One deadline for one request, combined with the caller's `signal` (by hand, so both are honoured without `AbortSignal.any`).
+ * One deadline for one request, combined with the caller's `signal` (by hand, so both are honoured without `AbortSignal.any`) (issue 525).
  * `signal` goes to `fetch`; `run(promise)` ends as soon as either fires, even when the transport ignores the signal;
  * `timedOut` says it was the deadline, not the caller; `clear()` drops the timer and the listener.
  */
@@ -91,7 +91,7 @@ function startDeadline(callerSignal, timeoutMs) {
     get timedOut() {
       return state.timedOut && !callerSignal?.aborted;
     },
-    /** The caller's own abort, as it came (its reason, or an AbortError), or null while the caller has not given up. */
+    /** The caller's own abort, as it came (its reason, or an AbortError), or null while the caller has not given up (issue 557). */
     callerAbort: () => (callerSignal?.aborted ? (callerSignal.reason ?? new DOMException('This operation was aborted', 'AbortError')) : null),
     run: (promise) => Promise.race([promise, ended]),
     clear,
@@ -119,7 +119,8 @@ export function httpReader({ base = globalThis.location?.origin, fetch = globalT
         response = await deadline.run(fetch(url, { signal: deadline.signal, headers: { ...ownerHeaders(), accept: 'application/json' }, credentials: 'omit', cache: 'no-store' }));
       } catch (err) {
         if (deadline.timedOut) throw silent(true);
-        if (err?.name === 'AbortError') throw err;
+        const gaveUp = deadline.callerAbort();
+        if (gaveUp) throw gaveUp;
         throw silent();
       }
       let body;
@@ -197,7 +198,8 @@ export function httpWriter({ base = globalThis.location?.origin, fetch = globalT
         );
       } catch (err) {
         if (deadline.timedOut) throw silent(true);
-        if (err?.name === 'AbortError') throw err;
+        const gaveUp = deadline.callerAbort();
+        if (gaveUp) throw gaveUp;
         throw silent();
       }
       let answer;
