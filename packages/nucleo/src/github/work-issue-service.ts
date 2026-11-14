@@ -8,7 +8,7 @@
 
 import { GITHUB_TTL, NoDataError, RateLimitedError, type GithubCache } from './cache.ts';
 import type { WorkProjectBoard } from './work-board.ts';
-import { buildWorkIssue, type WorkIssueCurrent, type WorkIssueEdit, type WorkIssueRead, type WorkIssueSource, type WorkIssueView, type WorkIssueWriter } from './work-issue.ts';
+import { buildWorkIssue, type WorkIssueCurrent, type WorkIssueEdit, type WorkIssueRead, type WorkIssueSource, type WorkIssueView, type WorkIssueWriter, WorkIssueWrittenUnreadError } from './work-issue.ts';
 
 export interface WorkIssueServiceOptions {
   source: WorkIssueSource;
@@ -62,6 +62,12 @@ export class WorkIssueWriteOffError extends Error {
 
 /** The same issue in any letter case is the same cache entry. */
 export const workIssueCacheKey = (key: string): string => `github:work-issue:${key.toLowerCase()}`;
+
+/** #533 the raw text for the log: for a written-but-unread write, the read-back's own. */
+const rawTextOf = (err: unknown): string => {
+  const raw = err instanceof WorkIssueWrittenUnreadError ? err.cause : err;
+  return `${err instanceof WorkIssueWrittenUnreadError ? 'written, read-back failed: ' : ''}${raw instanceof Error ? raw.message : String(raw)}`;
+};
 
 export class WorkIssueService {
   private readonly source: WorkIssueSource;
@@ -122,7 +128,8 @@ export class WorkIssueService {
 
   /**
    * #533 the write seam: run one GitHub write, then store what GitHub returned (the cache keeps no earlier
-   * version of its own: ADR-0001) and answer it. A failure stores nothing, so the cache stays as it was; the
+   * version of its own: ADR-0001) and answer it. A failure stores nothing, so the cache stays as it was (except a
+   * write applied whose read-back failed, which drops the entry: the stored version is older than GitHub's); the
    * raw text goes to the log and the error goes up for the route to turn into a code. A rate limit also
    * pauses the cache's GitHub calls, as the Kanban mover does.
    */
@@ -135,7 +142,9 @@ export class WorkIssueService {
       read = await run(this.writer);
     } catch (err) {
       if (err instanceof RateLimitedError) this.cache.pause(err.retryAfterMs);
-      if (!(err instanceof WorkIssueConflictError)) this.log(`work issue ${key}: write failed: ${err instanceof Error ? err.message : String(err)}`);
+      // #533 GitHub holds the write: the cached version is stale, so the next read asks GitHub.
+      if (err instanceof WorkIssueWrittenUnreadError) await this.cache.invalidate(workIssueCacheKey(key));
+      if (!(err instanceof WorkIssueConflictError)) this.log(`work issue ${key}: write failed: ${rawTextOf(err)}`);
       throw err;
     }
     if (read === null) throw new WorkIssueNotFoundError(key);

@@ -19,7 +19,7 @@ const OPENED_AT = '2026-11-10T10:00:00Z';
 interface Github {
   calls: number;
   writes: string[];
-  mode: 'ok' | 'down' | 'forbidden';
+  mode: 'ok' | 'down' | 'forbidden' | 'unread';
   title: string;
   body: string;
   labels: string[];
@@ -45,6 +45,8 @@ async function boot({ withService = true }: { withService?: boolean } = {}): Pro
     if (github.mode === 'down') throw new TypeError(github.secret);
     const { query, variables } = JSON.parse(String(init.body));
     const op = /(?:query|mutation) (\w+)/.exec(query)![1];
+    // #533 'unread': the writes are applied and the read of the issue afterwards fails.
+    if (github.mode === 'unread' && op === 'WorkIssue') throw new TypeError(github.secret);
     const isWrite = /^(Update|Add|Remove)/.test(op);
     if (isWrite && github.mode === 'forbidden') return new Response(JSON.stringify({ message: github.secret }), { status: 403 });
     let data: Record<string, unknown> = {};
@@ -172,6 +174,22 @@ describe('#533/AC-3 a GitHub refusal answers with a stable reason and leaves the
       const r = await patch(b, { labels: [] });
       assert.deepEqual([r.status, r.json], [502, { error: 'github-unavailable', reason: 'network' }]);
       assert.ok(!JSON.stringify(r.json).includes(b.github.secret));
+    }));
+
+  test('#533/AC-3 Given GitHub was written and the read-back fails, Then 502 written-unread with the reason, the raw text only in the log, and the next GET re-reads GitHub (the new version, not the cached one)', async () =>
+    withApi(async (b) => {
+      await getIssue(b);
+      b.github.mode = 'unread';
+      const r = await patch(b, { labels: ['frontend'] });
+      assert.deepEqual([r.status, r.json], [502, { error: 'written-unread', reason: 'network' }]);
+      assert.ok(!JSON.stringify(r.json).includes(b.github.secret));
+      assert.ok(b.logs.some((l) => l.includes(b.github.secret)));
+      const c = await comment(b, { body: 'once' });
+      assert.deepEqual([c.status, c.json.error], [502, 'written-unread']);
+      assert.deepEqual(b.github.comments, ['once']);
+      b.github.mode = 'ok';
+      const again = await getIssue(b);
+      assert.deepEqual([again.labels, again.comments[0].body], [['frontend'], 'once']);
     }));
 
   test('#533/AC-3 a label GitHub does not know is 422 unknown-value with the param, and nothing is written', async () =>

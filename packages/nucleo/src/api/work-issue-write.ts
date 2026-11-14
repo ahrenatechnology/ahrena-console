@@ -20,6 +20,10 @@
  *   for `no-permission` and `no-scope`, `github-unavailable` for the rest. The raw text goes to the core log, and
  *   the cache is as it was. A label, type, milestone or parent GitHub does not know is 422 `unknown-value` with
  *   the `param`, before anything is written; no such issue is 404 `not-found`; --no-github is 503 `off`.
+ * - GitHub applied the write and reading the issue back failed: 502 `{ error: 'written-unread', reason }`, the
+ *   `reason` the #495 code of the failed read. It is not a refusal: the issue on GitHub is changed, so the /ui
+ *   reloads and never offers a retry (a retried comment would post twice). The core drops its cached version, so
+ *   the next `GET` reads GitHub.
  * - The same gate as `POST /api/work/plan` (decision 0003; server.ts lets only the /ui's own origin in, on the
  *   exact raw path): a query is 403, `Content-Type` other than JSON 415, a body over `MAX_WRITE_BYTES` 413,
  *   malformed JSON 400, an invalid value 400 `bad-param` with the `param`.
@@ -28,7 +32,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { githubFailureOf, type GithubFailure } from '../github/cache.ts';
 import { GithubHttpError, GraphqlResponseError } from '../github/github-source.ts';
-import { WorkIssueForbiddenError, WorkIssueRefusedError, type WorkIssueEdit } from '../github/work-issue.ts';
+import { WorkIssueForbiddenError, WorkIssueRefusedError, WorkIssueWrittenUnreadError, type WorkIssueEdit } from '../github/work-issue.ts';
 import { WorkIssueConflictError, WorkIssueNotFoundError, WorkIssueWriteOffError, type WorkIssueService } from '../github/work-issue-service.ts';
 import { isPlanNumber, isPlanRepo } from '../github/work-plan.ts';
 import { workKey } from '../github/work.ts';
@@ -156,6 +160,7 @@ export function createWorkIssueWriteRoute({ service }: WorkIssueWriteRouteOption
       if (err instanceof WorkIssueConflictError) return send(res, 409, { error: 'conflict', ...err.current });
       if (err instanceof WorkIssueRefusedError) return send(res, 422, { error: 'unknown-value', param: err.param });
       if (err instanceof WorkIssueWriteOffError) return send(res, 503, { error: 'off' });
+      if (err instanceof WorkIssueWrittenUnreadError) return send(res, 502, { error: 'written-unread', reason: githubFailureOf(err.cause) });
       const reason = reasonOf(err);
       return send(res, 502, { error: reason === 'no-permission' || reason === 'no-scope' ? 'github-refused' : 'github-unavailable', reason });
     }

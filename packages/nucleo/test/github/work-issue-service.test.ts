@@ -7,7 +7,7 @@ import { describe, test } from 'node:test';
 import { GITHUB_TTL, GithubCache, MemoryCacheStore, NoDataError, RateLimitedError } from '../../src/github/cache.ts';
 import type { ProjectBoard, ProjectCard } from '../../src/github/project.ts';
 import type { WorkProjectBoard } from '../../src/github/work-board.ts';
-import type { WorkIssueCurrent, WorkIssueEdit, WorkIssueRead, WorkIssueSource, WorkIssueWriter } from '../../src/github/work-issue.ts';
+import { WorkIssueWrittenUnreadError, type WorkIssueCurrent, type WorkIssueEdit, type WorkIssueRead, type WorkIssueSource, type WorkIssueWriter } from '../../src/github/work-issue.ts';
 import { workIssueCacheKey, WorkIssueConflictError, WorkIssueNotFoundError, WorkIssueService } from '../../src/github/work-issue-service.ts';
 import { clock, k, REPO } from './helpers.ts';
 
@@ -146,6 +146,8 @@ class FakeWriter implements WorkIssueWriter {
   calls: string[] = [];
   fail: Error | null = null;
   missing = false;
+  /** #533 the write is applied, then the read-back fails. */
+  unread: Error | null = null;
   github = { title: 'on github', body: 'body on github', updatedAt: '2026-11-10T10:00:00Z' };
   async current(key: string): Promise<WorkIssueCurrent | null> {
     this.calls.push(`current ${key}`);
@@ -156,6 +158,7 @@ class FakeWriter implements WorkIssueWriter {
     this.calls.push(`update ${key} ${JSON.stringify(edit)}`);
     if (this.fail) throw this.fail;
     if (this.missing) return null;
+    if (this.unread) throw new WorkIssueWrittenUnreadError(key, this.unread);
     this.github = { title: edit.title ?? this.github.title, body: edit.body ?? this.github.body, updatedAt: '2026-11-12T12:00:00Z' };
     return issueRead(Number(key.split('#')[1]), { ...this.github, labels: edit.labels ?? [] });
   }
@@ -163,6 +166,7 @@ class FakeWriter implements WorkIssueWriter {
     this.calls.push(`comment ${key} ${body}`);
     if (this.fail) throw this.fail;
     if (this.missing) return null;
+    if (this.unread) throw new WorkIssueWrittenUnreadError(key, this.unread);
     return issueRead(Number(key.split('#')[1]), { ...this.github, updatedAt: '2026-11-12T13:00:00Z', comments: [{ author: 'me', createdAt: '2026-11-12T13:00:00Z', body }], commentsTotal: 1 });
   }
 }
@@ -264,5 +268,20 @@ describe('#533/AC-3 a GitHub refusal leaves the cache as it was', () => {
   test('#533/AC-3 Given a service without a writer (--demo), Then a write throws WorkIssueWriteOffError', async () => {
     const base = setup();
     await assert.rejects(base.service.comment(k(533), 'x'), (e) => e instanceof Error && e.name === 'WorkIssueWriteOffError');
+  });
+});
+
+describe('#533/AC-3 a write applied whose read-back fails drops the cached version', () => {
+  test('#533/AC-3 Given a stored issue and a write whose read-back fails, Then the error goes up, the raw text goes to the log and the cache entry is gone, so the next read asks GitHub', async () => {
+    const { writer, service, cache, logs, source } = setupWrite();
+    await service.issue(k(533));
+    writer.unread = new Error('secret raw timeout');
+    await assert.rejects(service.update(k(533), { labels: ['x'] }), (e) => e instanceof WorkIssueWrittenUnreadError);
+    assert.equal(await cache.peek(workIssueCacheKey(k(533))), null);
+    assert.ok(logs.some((l) => l.includes('secret raw timeout')));
+    await assert.rejects(service.comment(k(533), 'x'), (e) => e instanceof WorkIssueWrittenUnreadError);
+    const before = source.calls.length;
+    await service.issue(k(533));
+    assert.equal(source.calls.length, before + 1);
   });
 });

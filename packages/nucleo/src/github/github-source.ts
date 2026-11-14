@@ -15,6 +15,7 @@ import type { ChildrenResult, WorkSource } from './source.ts';
 import {
   WorkIssueForbiddenError,
   WorkIssueRefusedError,
+  WorkIssueWrittenUnreadError,
   type WorkIssueComment,
   type WorkIssueCurrent,
   type WorkIssueEdit,
@@ -69,8 +70,10 @@ export const QUERIES = {
     subIssues(first: 50) { nodes { ${REF} } } ${DETAIL_PRS} } } }`,
 } as const;
 
-// #533 the issue write: the ids an edit names are resolved first (nothing is written when one is unknown), then
-// `updateIssue` writes the fields, `addSubIssue`/`removeSubIssue` the parent and `addComment` the comment.
+/**
+ * #533 the issue write: the ids an edit names are resolved first (nothing is written when one is unknown), then
+ * `updateIssue` writes the fields, `addSubIssue`/`removeSubIssue` the parent and `addComment` the comment.
+ */
 export const WRITE_QUERIES = {
   current: `query WorkIssueCurrent($o: String!, $r: String!, $n: Int!) {
   repository(owner: $o, name: $r) { issue(number: $n) { title body updatedAt } } }`,
@@ -439,7 +442,7 @@ export class GithubGraphqlSource implements WorkSource, WorkIssueSource, WorkIss
     if (Object.keys(fields).length > 1) await this.mutate('UpdateWorkIssue', WRITE_QUERIES.update, { input: fields });
     if (parentId) await this.mutate('AddWorkIssueParent', WRITE_QUERIES.addParent, { input: { issueId: parentId, subIssueId: issue.id, replaceParent: true } });
     else if (edit.parent === null && issue.parent) await this.mutate('RemoveWorkIssueParent', WRITE_QUERIES.removeParent, { input: { issueId: issue.parent.id, subIssueId: issue.id } });
-    return this.issue(key);
+    return this.readBack(key);
   }
 
   /** #533 adds a comment and answers the issue as GitHub holds it; `null` when GitHub has no such issue. */
@@ -447,7 +450,16 @@ export class GithubGraphqlSource implements WorkSource, WorkIssueSource, WorkIss
     const id = await this.issueId(key);
     if (id === null) return null;
     await this.mutate('AddWorkIssueComment', WRITE_QUERIES.comment, { input: { subjectId: id, body } });
-    return this.issue(key);
+    return this.readBack(key);
+  }
+
+  /** #533 the write is applied: a failure of this read is `WorkIssueWrittenUnreadError`, never "not written". */
+  private async readBack(key: string): Promise<WorkIssueRead | null> {
+    try {
+      return await this.issue(key);
+    } catch (err) {
+      throw new WorkIssueWrittenUnreadError(key, err);
+    }
   }
 
   private async issueId(key: string): Promise<string | null> {

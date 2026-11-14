@@ -90,6 +90,17 @@ export class WorkIssueForbiddenError extends Error {
   }
 }
 
+/**
+ * #533 GitHub applied the write, and reading the issue back failed (`cause`): not "nothing was written", so a
+ * retry is wrong and the cached version is stale.
+ */
+export class WorkIssueWrittenUnreadError extends Error {
+  constructor(key: string, cause: unknown) {
+    super(`written but not read back: ${key}`, { cause });
+    this.name = 'WorkIssueWrittenUnreadError';
+  }
+}
+
 /** #533 the edit names a label, type, milestone or parent GitHub does not know; raised before anything is written. */
 export class WorkIssueRefusedError extends Error {
   readonly param: 'labels' | 'type' | 'milestone' | 'parent';

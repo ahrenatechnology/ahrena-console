@@ -6,7 +6,7 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import { GithubGraphqlSource, GithubHttpError } from '../../src/github/github-source.ts';
-import { WorkIssueForbiddenError, WorkIssueRefusedError } from '../../src/github/work-issue.ts';
+import { WorkIssueForbiddenError, WorkIssueRefusedError, WorkIssueWrittenUnreadError } from '../../src/github/work-issue.ts';
 import { githubFailureOf } from '../../src/github/cache.ts';
 import { k, REPO } from './helpers.ts';
 
@@ -24,7 +24,7 @@ interface Repo {
   milestones?: { id: string; title: string; state: 'OPEN' | 'CLOSED' }[];
 }
 
-// GitHub as the adapter asks: a label by its name (any page), milestones by title filter and state, a page of issue types.
+// #533 GitHub as the adapter asks: a label by its name (any page), milestones by title filter and state, a page of issue types.
 function fake(over: Repo & { httpStatus?: Record<string, number>; hang?: string; timeoutMs?: number } = {}) {
   const calls: Call[] = [];
   const labels = over.labels ?? { backend: 'L_back', frontend: 'L_front' };
@@ -191,5 +191,21 @@ describe('#533/AC-3 every GitHub call has a deadline', () => {
     const { source, calls } = fake({ hang: 'WorkIssueTargets', timeoutMs: 20 });
     await assert.rejects(source.update(k(533), { title: 'T' }), (e) => githubFailureOf(e) === 'network');
     assert.equal(calls.filter((c) => c.operation === 'WorkIssueTargets').length, 1);
+  });
+});
+
+describe('#533/AC-3 a write applied whose read-back fails is not a failed write', () => {
+  test('#533/AC-3 Given the mutation succeeded and the read-back times out, Then WorkIssueWrittenUnreadError carries the failure, and the mutation was sent once', async () => {
+    const u = fake({ hang: 'WorkIssue', timeoutMs: 20 });
+    await assert.rejects(u.source.update(k(533), { title: 'T' }), (e) => e instanceof WorkIssueWrittenUnreadError && githubFailureOf(e.cause) === 'network');
+    assert.equal(u.calls.filter((c) => c.operation === 'UpdateWorkIssue').length, 1);
+    const c = fake({ hang: 'WorkIssue', timeoutMs: 20 });
+    await assert.rejects(c.source.comment(k(533), 'x'), (e) => e instanceof WorkIssueWrittenUnreadError && githubFailureOf(e.cause) === 'network');
+    assert.equal(c.calls.filter((x) => x.operation === 'AddWorkIssueComment').length, 1);
+  });
+
+  test('#533/AC-3 Given the mutation itself fails, Then the error is not WorkIssueWrittenUnreadError', async () => {
+    const { source } = fake({ hang: 'UpdateWorkIssue', timeoutMs: 20 });
+    await assert.rejects(source.update(k(533), { title: 'T' }), (e) => !(e instanceof WorkIssueWrittenUnreadError));
   });
 });
