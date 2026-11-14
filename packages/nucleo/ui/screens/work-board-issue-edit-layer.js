@@ -218,6 +218,8 @@ export function createEditLayer({ ctx, area, redraw, choices, onSaved = null, on
   /** Editar: the panel turns into the edit mode on the issue the read answered. (issue 535) */
   function open(issue) {
     apply(startEdit(issue), { kind: 'title' });
+    // Intentionally no .catch: a redraw error is not a read failure, and this matches the
+    // existing `void f()` calls in ui/screens. A failed read leaves the selectors as they were (issue 574).
     void readRepoOptions(e.repo);
   }
 
