@@ -40,6 +40,7 @@ import { WorkBoardService } from '../github/work-board-service.ts';
 import { FleetWorkSessions } from '../github/work-board-sessions.ts';
 import { SqliteWorkColumnHistory } from '../github/work-board-history.ts';
 import { CachedParentLookup } from '../github/work-board-parents.ts';
+import { WorkIssueService } from '../github/work-issue-service.ts';
 import { selectedProjectBoard } from './work-board.ts';
 import { createDemoGithubConnection, parseDemoGithubState } from '../simulator/demo-github-connection.ts';
 import { defaultProjectsRoot } from '../ingest/history/files.ts';
@@ -477,6 +478,13 @@ const workBoard =
         log,
       })
     : null;
+// issue 506 the work board's issue detail (`GET /api/work/issue`): one GraphQL query per issue through the
+// same GitHub cache, the Project Status from the same resolver. Under --demo the simulator has no issue
+// detail and under --no-github no GitHub: 503 off.
+const workIssue =
+  workSource instanceof GithubGraphqlSource
+    ? new WorkIssueService({ source: workSource, cache: githubCache, ...(screens.project ? { project: selectedProjectBoard(screens.project) } : {}), log })
+    : null;
 // Decision 0015 (#356): the core reads GitHub on a timer and the GitHub screens answer from the database.
 // Under --no-github there is no connection and no sync.
 githubSync = coreGithub.connected
@@ -728,6 +736,7 @@ const api: LocalApi = await startLocalApi({
   project: { kanban: null, fonte: demo ? 'demo' : 'github', resolver: screens.project, options: screens.projectOptions, credentialSource: () => connection.credentialSource(), fromStore: githubSync !== null, log },
   projectSelection: screens.project,
   work: { service: workBoard, fromStore: githubSync !== null },
+  workIssue: { service: workIssue },
   connection,
   // --no-github keeps its own off / no-github answers; otherwise 409 github-not-connected before any call.
   githubConnected: coreGithub.connected,

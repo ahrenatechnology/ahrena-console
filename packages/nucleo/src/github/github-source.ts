@@ -181,7 +181,8 @@ const toIssueRef = (r: RawRef): WorkIssueRef => ({
 export function toWorkIssueRead(raw: RawIssueDetail): WorkIssueRead {
   const parentChain: WorkIssueRef[] = [];
   for (let p = raw.parent; p; p = p.parent) parentChain.push(toIssueRef(p));
-  const pullRequests: WorkIssuePullRequest[] = toPullRequests(raw).map((p, i) => ({ ...p, title: raw.closedByPullRequestsReferences!.nodes[i].title }));
+  const titles = (raw.closedByPullRequestsReferences?.nodes ?? []).map((p) => p.title);
+  const pullRequests: WorkIssuePullRequest[] = toPullRequests(raw).map((p, i) => ({ ...p, title: titles[i] ?? '' }));
   const comments: WorkIssueComment[] = raw.comments.nodes.map((c) => ({ author: c.author?.login ?? null, createdAt: c.createdAt, body: c.body }));
   return {
     ...toIssueRef(raw),
