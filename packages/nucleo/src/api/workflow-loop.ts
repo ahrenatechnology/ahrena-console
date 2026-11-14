@@ -16,10 +16,13 @@
 // A task that cites two PRs stays in the first and carries the other in `otherRefs`.
 //
 // An orchestrator is the parent of the loops, never a step of one (#588): it leaves the groups and goes to
-// `orchestrators` (in start order), with the ids of the groups it leads, most recent first. A group is led by the
-// orchestrator that is the parent of its first step (`LoopStep.parentAgentId`); the `none` group is never a layer.
-// `totals.layers` counts the groups an orchestrator leads; the orchestrator still counts in `totals.subagents`, and in
-// no round or change request. Without an orchestrator the output is the same, with `orchestrators: []` and `layers: 0`.
+// `orchestrators` (in start order), with the ids of the groups it leads, most recent first. (#588)
+// A group is led by the orchestrator that is the parent of its first step (`LoopStep.parentAgentId`); the `none` (#588)
+// group is never a layer. (#588)
+// `totals.layers` counts the groups an orchestrator leads; the orchestrator still counts in `totals.subagents`, and in (#588)
+// no round or change request. (#588)
+// Without an orchestrator the output is the same, with `orchestrators: []` and `layers: 0`. (#588)
+// The agency's build agents (`apollo`, `iris`, `clio`, `hephaestus`, `aglaia`, `daedalus`, `mnemosyne`) count as `dev`. (#588)
 //
 // A round is each Argos call (a `review` step) on the group. A change request is a round whose verdict, read from
 // the last `Verdict: …` line of the reviewer's report (at ingest, from the full text; or `metadata.workflow.verdict`), is
@@ -76,9 +79,9 @@ export interface LoopOrchestrator {
   state: LoopStepState;
   startedAt: string;
   endedAt: string | null;
-  /** The agent that opened it: the main agent, or another orchestrator. */
+  /** The agent that opened it: the main agent, or another orchestrator (#588). */
   parentAgentId: string | null;
-  /** The ids of the groups it leads (`pr:<n>`, `issue:<n>`), most recent first. */
+  /** The ids of the groups it leads (`pr:<n>`, `issue:<n>`), most recent first (#588). */
   groups: string[];
 }
 
@@ -97,6 +100,8 @@ const PR_URL = /\/pull\/(\d{1,7})\b/g;
 const ISSUE_REF = /\b(?:issues?|refs?|closes?|fixes?)\s*#(\d{1,7})\b/gi;
 const BARE_REF = /(?<![\w/&])#(\d{1,7})\b/g;
 const ORCHESTRATOR_TYPE = /(^|:)athena$/;
+// The agency's builders and writers: no `workflow.role` is written for them at ingest, so the type says `dev` (#588).
+const BUILD_TYPE = /(^|:)(apollo|iris|clio|hephaestus|aglaia|daedalus|mnemosyne)$/;
 const BRANCH_ISSUE = /(?:^|\/)(\d{1,7})-/;
 
 const nums = (text: string, re: RegExp): number[] => [...text.matchAll(re)].map((m) => Number(m[1]));
@@ -134,6 +139,12 @@ export function loopRoleOf(role: string): LoopRole {
   return 'other';
 }
 
+/** The loop role of a subagent: the session graph's role, and `dev` for an agency build agent that has none (#588). */
+function roleInLoop(a: Agent, roleOf: (a: Agent) => string): LoopRole {
+  const role = loopRoleOf(roleOf(a));
+  return role === 'other' && BUILD_TYPE.test(a.subagentType ?? '') ? 'dev' : role;
+}
+
 interface Linked {
   agent: Agent;
   role: LoopRole;
@@ -151,7 +162,7 @@ export function buildPrLoop(session: Session, agents: readonly Agent[], events: 
   const parents = new Set(subs.map((a) => a.parentAgentId));
   // Only an `athena` type, or a parent whose loop role is `other`: a dev, review or fix agent that delegates keeps its PR. (#586)
   const isOrchestrator = (a: Agent) =>
-    ORCHESTRATOR_TYPE.test(a.subagentType ?? '') || (parents.has(a.id) && loopRoleOf(roleOf(a)) === 'other');
+    ORCHESTRATOR_TYPE.test(a.subagentType ?? '') || (parents.has(a.id) && roleInLoop(a, roleOf) === 'other');
   const explicitPrs = new Set(subs.filter((a) => !isOrchestrator(a)).flatMap((a) => refs.get(a.id)!.prs));
 
   const linked: Linked[] = subs.map((agent) => {
@@ -162,7 +173,7 @@ export function buildPrLoop(session: Session, agents: readonly Agent[], events: 
     const prs = orchestrator ? [] : unique([...r.prs, ...bareIsPr]);
     const issues = unique([...r.issues, ...r.bare.filter((n) => orchestrator || !explicitPrs.has(n))]);
     const branch = branchOf(agent);
-    return { agent, role: loopRoleOf(roleOf(agent)), pr: prs[0] ?? null, issue: issues[0] ?? null, otherRefs: prs.slice(1), branch };
+    return { agent, role: roleInLoop(agent, roleOf), pr: prs[0] ?? null, issue: issues[0] ?? null, otherRefs: prs.slice(1), branch };
   });
 
   // Rule 2: the same branch as a subagent that has a PR.

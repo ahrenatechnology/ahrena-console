@@ -290,14 +290,36 @@ describe('the orchestrator as parent of the layer groups (#588)', () => {
     assert.equal(loop.totals.layers, 2);
   });
 
-  test('#588/AC-1: a delegating dev is not an orchestrator and keeps both steps in its PR', () => {
-    // The role comes from the session graph: a dev has it in its metadata (`workflow.role`).
-    const dev = sub('dev', 'ahrena-engineering-backend:apollo', 2, 9, 'Build layer for PR #710', { metadata: { workflow: { role: 'dev' } } });
+  test('#588/AC-1: a delegating apollo with no role metadata is a dev, not an orchestrator, and keeps both steps in its PR', () => {
+    // No `workflow.role` is written at ingest: the build agents count as `dev` by their type (#588).
+    const dev = sub('dev', 'ahrena-engineering-backend:apollo', 2, 9, 'Build layer for PR #710');
     const helper = sub('helper', 'Explore', 3, 4, 'Read the files of PR #710', under(dev.id));
     const loop = buildPrLoop(live, [main, dev, helper], [], papelDe);
     assert.deepEqual(loop.orchestrators, []);
-    assert.deepEqual(loop.groups.find((g) => g.id === 'pr:710')?.steps.map((s) => s.agentId), [dev.id, helper.id]);
+    const group = loop.groups.find((g) => g.id === 'pr:710')!;
+    assert.deepEqual(group.steps.map((s) => [s.agentId, s.role]), [[dev.id, 'dev'], [helper.id, 'other']]);
     assert.equal(loop.totals.layers, 0);
+  });
+
+  test('#588/AC-1: every build agent of the agency, with or without a plugin prefix, counts as a dev', () => {
+    for (const type of ['apollo', 'ahrena-engineering-frontend:iris', 'clio', 'hephaestus', 'x:aglaia', 'daedalus', 'mnemosyne']) {
+      const dev = sub('dev', type, 2, 9, 'Build layer for PR #710');
+      const helper = sub('helper', 'Explore', 3, 4, 'Read PR #710', under(dev.id));
+      const loop = buildPrLoop(live, [main, dev, helper], [], papelDe);
+      assert.deepEqual(loop.orchestrators, [], type);
+      assert.equal(loop.groups[0].steps[0].role, 'dev', type);
+    }
+  });
+
+  test('#588/AC-1: an Athena that opens an Apollo that opens a Hephaestus has one orchestrator and one layer group', () => {
+    const lead = sub('ath', ATHENA, 1, null, 'Run the layers of the story');
+    const apollo = sub('apollo', 'ahrena-engineering-backend:apollo', 2, null, 'Build layer for PR #710', under(lead.id));
+    const hephaestus = sub('heph', 'ahrena-engineering-backend:hephaestus', 3, 8, 'Write the tests of PR #710', under(apollo.id));
+    const loop = buildPrLoop(live, [main, lead, apollo, hephaestus], [], papelDe);
+    assert.deepEqual(loop.orchestrators.map((o) => [o.agentId, o.groups]), [[lead.id, ['pr:710']]]);
+    const group = loop.groups.find((g) => g.id === 'pr:710')!;
+    assert.deepEqual(group.steps.map((s) => [s.agentId, s.role]), [[apollo.id, 'dev'], [hephaestus.id, 'dev']]);
+    assert.equal(loop.totals.layers, 1);
   });
 
   test('#588/AC-2: without an orchestrator the response is today\'s, plus the empty additive fields', () => {

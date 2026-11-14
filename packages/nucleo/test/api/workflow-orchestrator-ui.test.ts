@@ -91,7 +91,7 @@ describe('the orchestrator as parent of the per-PR loops (issue 509)', () => {
   });
 
   test('a delegating dev stays in its PR group and is not an orchestrator', TODO, () => {
-    const dev = sub('dev', 'ahrena-engineering-backend:apollo', 2, 9, 'Build layer for PR #710', main.id, { metadata: { workflow: { role: 'dev' } } });
+    const dev = sub('dev', 'ahrena-engineering-backend:apollo', 2, 9, 'Build layer for PR #710', main.id);
     const helper = sub('helper', 'Explore', 3, 4, 'Read the files of PR #710', dev.id);
     const loop = loopOf([main, dev, helper]);
     assert.deepEqual(loop.orchestrators, []);
