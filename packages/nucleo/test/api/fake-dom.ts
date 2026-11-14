@@ -237,8 +237,24 @@ function casaSimples(no: ElementoFalso, simples: string): boolean {
 function casa(no: ElementoFalso, partes: string[], raiz: ElementoFalso): boolean {
   if (!casaSimples(no, partes.at(-1)!)) return false;
   let i = partes.length - 2;
-  for (let p = no.parentNode; p && p !== raiz && i >= 0; p = p.parentNode) if (casaSimples(p, partes[i]!)) i--;
-  return i < 0;
+  let p = no.parentNode;
+  while (i >= 0) {
+    // The child combinator (`a > b`, #610): the parent itself must match, not just an ancestor.
+    const direto = partes[i] === '>';
+    const alvo = partes[direto ? i - 1 : i];
+    if (alvo === undefined) return false;
+    if (direto) {
+      if (!p || p === raiz || !casaSimples(p, alvo)) return false;
+      p = p.parentNode;
+      i -= 2;
+    } else {
+      for (; p && p !== raiz; p = p.parentNode) if (casaSimples(p, alvo)) break;
+      if (!p || p === raiz) return false;
+      p = p.parentNode;
+      i--;
+    }
+  }
+  return true;
 }
 
 /** Like the browser, a focused element taken out of the tree (even to be put back) loses the focus. */

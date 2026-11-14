@@ -3,16 +3,13 @@
  * Written against the approved wireframe 598-1 to 598-4 (docs/wireframes/index.html), approved by the design owner on
  * 2026-11-14. The screen is mounted in the fake DOM over a fake read of GET /api/work shaped as layer 2 will serve it.
  * The shape of `organizations` below is the wireframe's reading of the contract; layer 2 settles it and these scenarios
- * move with it. Every scenario is an explicit `todo` naming issue 598: it reports red now (the behaviour does not
- * exist) while the suite stays green. Each layer above turns scenarios green and removes their `todo`.
+ * move with it. The 20 scenarios were `todo` until the contract layer (issue 610), which wired the screen to GET /api/work and made them pass.
  */
 import assert from 'node:assert/strict';
 import { afterEach, describe, test } from 'node:test';
 import { ElementoFalso, instalarDomFalso, texto } from './fake-dom.ts';
 
 instalarDomFalso();
-
-const TODO = (what: string) => ({ todo: `issue 598 ${what}` });
 
 const here = { origin: 'http://127.0.0.1:4317', pathname: '/ui/work', search: '' };
 const pushed: string[] = [];
@@ -113,13 +110,13 @@ function choose(area: ElementoFalso, param: string, value: string) {
 const warn = (login: string, state: string, over: Obj = {}) => org(login, [], { state, readAt: null, ...over });
 
 describe('AC-1: the header counts organizations and Projects, and each card says where it comes from (issue 598)', () => {
-  test('several origins: the header counts, naming the account as "(você)"', TODO('598-1 header count'), async () => {
+  test('several origins: the header counts, naming the account as "(você)"', async () => {
     const s = await open(() => board());
     assert.match(s.text(), /3 organizações · 5 Projects/);
     assert.match(s.text(), /mira-dev \(você\)/);
   });
 
-  test('one organization and one Project: the header names them as today and the new filters and origin line are gone', TODO('598-1 one origin'), async () => {
+  test('one organization and one Project: the header names them as today and the new filters and origin line are gone', async () => {
     const one = [org('acme-labs', [PLATFORM])];
     const cards = CARDS.filter((c) => (c.origin as { organization: string }).organization === 'acme-labs' && (c.origin as { project: unknown }).project === PLATFORM);
     const s = await open(() => board({ organizations: one, options: { orgs: [], projects: [], initiatives: [], epics: [], types: [], labels: [], repos: [], statuses: [] } }, cards));
@@ -129,13 +126,13 @@ describe('AC-1: the header counts organizations and Projects, and each card says
     assert.equal(s.area.querySelectorAll('.wb-origin').length, 0);
   });
 
-  test('the header does not count an organization that has a warning, and marks "N com aviso"', TODO('598-1 warning count'), async () => {
+  test('the header does not count an organization that has a warning, and marks "N com aviso"', async () => {
     const s = await open(() => board({ organizations: [...ORGS, warn('globex', 'restricted'), warn('initech', 'failed')] }));
     assert.match(s.text(), /3 organizações · 5 Projects/);
     assert.match(s.text(), /2 com aviso/);
   });
 
-  test('every card has an origin line "organização · Project"; the repository stays only on the card of another repository', TODO('598-1 origin line'), async () => {
+  test('every card has an origin line "organização · Project"; the repository stays only on the card of another repository', async () => {
     const s = await open(() => board());
     const origin = (n: number) => texto(cardOf(s, n)!.querySelector('.wb-origin'));
     assert.match(origin(509), /acme-labs\s*·\s*Plataforma/);
@@ -146,7 +143,7 @@ describe('AC-1: the header counts organizations and Projects, and each card says
 });
 
 describe('AC-2: the Organização and Project filters narrow the board with the six existing ones (issue 598)', () => {
-  test('both filters are there, "Todas" and "Todos" by default, the account is "mira-dev (você)"', TODO('598-2 filters'), async () => {
+  test('both filters are there, "Todas" and "Todos" by default, the account is "mira-dev (você)"', async () => {
     const s = await open(() => board());
     const org = s.area.querySelector('select[data-param="org"]');
     const proj = s.area.querySelector('select[data-param="project"]');
@@ -156,14 +153,14 @@ describe('AC-2: the Organização and Project filters narrow the board with the 
     assert.match(texto(proj), /Todos/);
   });
 
-  test('an organization with a warning and no cards is not an option', TODO('598-2 warning not an option'), async () => {
+  test('an organization with a warning and no cards is not an option', async () => {
     const s = await open(() => board({ organizations: [...ORGS, warn('globex', 'restricted')] }));
     const org = s.area.querySelector('select[data-param="org"]');
     assert.ok(org, 'the org select is on screen');
     assert.doesNotMatch(texto(org), /globex/);
   });
 
-  test('choosing an organization reads and keeps `org` in the URL', TODO('598-2 org param'), async () => {
+  test('choosing an organization reads and keeps `org` in the URL', async () => {
     const s = await open(() => board());
     choose(s.area, 'org', 'acme-labs');
     await new Promise((r) => setTimeout(r, 0));
@@ -171,7 +168,7 @@ describe('AC-2: the Organização and Project filters narrow the board with the 
     assert.equal(new URL(here.pathname + here.search, here.origin).searchParams.get('org'), 'acme-labs');
   });
 
-  test('choosing a Project keeps `project=owner/number` in the URL; with an organization, only its Projects are options', TODO('598-2 project param'), async () => {
+  test('choosing a Project keeps `project=owner/number` in the URL; with an organization, only its Projects are options', async () => {
     const s = await open(() => board(), '/ui/work?org=acme-labs');
     const proj = s.area.querySelector('select[data-param="project"]');
     assert.ok(proj, 'the project select is on screen');
@@ -181,7 +178,7 @@ describe('AC-2: the Organização and Project filters narrow the board with the 
     assert.equal(new URL(here.pathname + here.search, here.origin).searchParams.get('project'), 'acme-labs/3');
   });
 
-  test('switching to an organization that does not own the chosen Project resets it to Todos and says why', TODO('598-2 reset'), async () => {
+  test('switching to an organization that does not own the chosen Project resets it to Todos and says why', async () => {
     const s = await open(() => board(), '/ui/work?org=acme-labs&project=acme-labs/3');
     choose(s.area, 'org', 'northwind');
     await new Promise((r) => setTimeout(r, 0));
@@ -189,7 +186,7 @@ describe('AC-2: the Organização and Project filters narrow the board with the 
     assert.match(s.text(), /O Project “Plataforma” é de acme-labs, não de northwind: voltou para Todos\./);
   });
 
-  test('the organization and Project params go into the read with the existing filter, and both chips show', TODO('598-2 with the six'), async () => {
+  test('the organization and Project params go into the read with the existing filter, and both chips show', async () => {
     const params = '?org=acme-labs&project=acme-labs/3&type=story';
     const answer = () => board({ project: { owner: 'acme-labs', number: 3, title: 'Plataforma' }, filters: { level: 'item', type: 'story', org: 'acme-labs', project: 'acme-labs/3' } });
     const s = await open(answer, `/ui/work${params}`);
@@ -202,7 +199,7 @@ describe('AC-2: the Organização and Project filters narrow the board with the 
 });
 
 describe('AC-3: an organization that restricts the app or fails to read is a warning; the others stay (issue 598)', () => {
-  test('restricts the app: yellow warning with Aprovar (dono) and Pedir acesso, the other cards stay', TODO('598-3 restricted'), async () => {
+  test('restricts the app: yellow warning with Aprovar (dono) and Pedir acesso, the other cards stay', async () => {
     const s = await open(() => board({ organizations: [...ORGS, warn('globex', 'restricted')] }));
     assert.match(s.text(), /globex restringe apps OAuth/);
     s.button('Aprovar (dono)');
@@ -210,20 +207,20 @@ describe('AC-3: an organization that restricts the app or fails to read is a war
     assert.equal(s.cards().length, CARDS.length);
   });
 
-  test('SSO required: the warning says so and offers Entrar pelo SSO', TODO('598-3 sso'), async () => {
+  test('SSO required: the warning says so and offers Entrar pelo SSO', async () => {
     const s = await open(() => board({ organizations: [...ORGS, warn('umbrella-corp', 'saml')] }));
     assert.match(s.text(), /umbrella-corp exige login pelo SSO/);
     s.button('Entrar pelo SSO');
   });
 
-  test('read failed with nothing stored: red warning with Tentar de novo, the others stay', TODO('598-3 failed'), async () => {
+  test('read failed with nothing stored: red warning with Tentar de novo, the others stay', async () => {
     const s = await open(() => board({ organizations: [...ORGS, warn('initech', 'failed')] }));
     assert.match(s.text(), /Não conseguimos ler os Projects de initech/);
     s.button('Tentar de novo');
     assert.equal(s.cards().length, CARDS.length);
   });
 
-  test('a read before that fails now keeps its last cards dimmed, and the band says the read time', TODO('598-3 stale organization'), async () => {
+  test('a read before that fails now keeps its last cards dimmed, and the band says the read time', async () => {
     const stale = org('northwind', [ROADMAP, SUPPORT], { state: 'failed', readAt: STALE_AT });
     const s = await open(() => board({ organizations: [ORGS[0], stale, ORGS[2]] }));
     assert.equal(s.cards().length, CARDS.length, 'northwind keeps its cards');
@@ -234,7 +231,7 @@ describe('AC-3: an organization that restricts the app or fails to read is a war
     s.button('Tentar de novo');
   });
 
-  test('more than three warnings: three bands and "Mais N organizações com aviso"', TODO('598-3 three and more'), async () => {
+  test('more than three warnings: three bands and "Mais N organizações com aviso"', async () => {
     const five = ['globex', 'initech', 'umbrella-corp', 'hooli', 'pied-piper'].map((l, i) => warn(l, i === 2 ? 'saml' : i === 0 ? 'restricted' : 'failed'));
     const s = await open(() => board({ organizations: [...ORGS, ...five] }));
     assert.equal(s.area.querySelectorAll('.wb-warns > .wb-warn-band').length, 3);
@@ -243,7 +240,7 @@ describe('AC-3: an organization that restricts the app or fails to read is a war
 });
 
 describe('AC-1 and AC-3: loading, empty, all failed and GitHub down (issue 598)', () => {
-  test('loading waits for every organization: counters in "…" and the filters off', TODO('598-4 loading'), async () => {
+  test('loading waits for every organization: counters in "…" and the filters off', async () => {
     let release!: () => void;
     const gate = new Promise<void>((r) => (release = r));
     const s = await open(async () => (await gate, board()), '/ui/work', true);
@@ -253,20 +250,20 @@ describe('AC-1 and AC-3: loading, empty, all failed and GitHub down (issue 598)'
     await new Promise((r) => setTimeout(r, 0));
   });
 
-  test('no issue in any Project read: says what the board would show and leads to GitHub and to the connection', TODO('598-4 empty'), async () => {
+  test('no issue in any Project read: says what the board would show and leads to GitHub and to the connection', async () => {
     const s = await open(() => board({ total: 0, matched: 0 }, []));
     assert.match(s.text(), /Nenhuma issue nos Projects das suas organizações/);
     s.button('Conceder acesso a outra organização');
   });
 
-  test('no Project at all: "Nenhum Project para mostrar", and "Trocar de Project" is not offered', TODO('598-4 no project'), async () => {
+  test('no Project at all: "Nenhum Project para mostrar", and "Trocar de Project" is not offered', async () => {
     const none = [org('acme-labs', [])];
     const s = await open(() => board({ organizations: none }, []));
     assert.match(s.text(), /Nenhum Project para mostrar/);
     assert.doesNotMatch(s.text(), /Trocar de Project/);
   });
 
-  test('every organization with a warning: nothing to show, each warning says what to do, and Tentar agora reads again', TODO('598-4 all failed'), async () => {
+  test('every organization with a warning: nothing to show, each warning says what to do, and Tentar agora reads again', async () => {
     const all = [warn('globex', 'restricted'), warn('initech', 'failed'), warn('umbrella-corp', 'saml')];
     const s = await open(() => board({ organizations: all }, []));
     assert.match(s.text(), /Não conseguimos ler nenhuma organização/);
@@ -276,11 +273,85 @@ describe('AC-1 and AC-3: loading, empty, all failed and GitHub down (issue 598)'
     assert.ok(s.reads.length > before, 'Tentar agora reads again');
   });
 
-  test('GitHub down: one band (the 465-4 one), not one warning per organization', TODO('598-4 github down'), async () => {
+  test('GitHub down: one band (the 465-4 one), not one warning per organization', async () => {
     const down = ORGS.map((o) => ({ ...o, state: 'failed' }));
     const s = await open(() => board({ organizations: down, stale: true, staleReason: 'github-unavailable' }));
     assert.match(s.text(), /GitHub indisponível/);
     assert.match(s.text(), /3 organizações · 5 Projects/, 'the header still counts every organization');
     assert.equal(s.area.querySelectorAll('.wb-warns > .wb-warn-band').length, 0, 'no per-organization band');
+  });
+});
+
+describe('AC-4: the assembled page over several organizations is accessible (page-level check, issue 610)', () => {
+  const nameOf = (n: ElementoFalso) => (n.getAttribute('aria-label') ?? texto(n)).trim();
+  const inOrder = (root: ElementoFalso): ElementoFalso[] => root.children.flatMap((c) => [c, ...inOrder(c)]);
+  const FOCUSABLE = new Set(['A', 'BUTTON', 'SELECT']);
+  const focusOrder = (s: Screen) => inOrder(s.area).filter((n) => FOCUSABLE.has(n.tagName) && !n.hasAttribute('disabled'));
+
+  function checkPage(s: Screen) {
+    const all = inOrder(s.area);
+    // Landmarks and headings: the filters and the board are named regions, one h1 and no skipped level.
+    assert.ok(s.area.querySelector('section[aria-label="Filtros"]'), 'the filters are a labelled section');
+    assert.ok(s.area.querySelector('div[role="region"][aria-label]'), 'the board is a labelled region');
+    const levels = all.filter((n) => /^H[1-6]$/.test(n.tagName)).map((n) => Number(n.tagName[1]));
+    assert.equal(levels.filter((l) => l === 1).length, 1, 'one h1');
+    assert.equal(levels[0], 1, 'the page starts with its h1');
+    levels.forEach((l, i) => i && assert.ok(l <= levels[i - 1]! + 1, `heading level ${l} follows ${levels[i - 1]}`));
+    for (const col of s.area.querySelectorAll('section.wb-col')) assert.ok(col.getAttribute('aria-labelledby'), 'a column is named by its heading');
+    // Every select is labelled and every button and link is named.
+    for (const select of s.area.querySelectorAll('select')) {
+      const label = select.closest('label');
+      assert.ok((label && texto(label.querySelector('span.wb-field-label')).trim()) || select.getAttribute('aria-label'), `select ${select.getAttribute('data-param')} has a label`);
+    }
+    for (const n of [...s.area.querySelectorAll('button'), ...s.area.querySelectorAll('a')]) assert.notEqual(nameOf(n), '', `${n.tagName} ${n.getAttribute('class')} has no name`);
+    // Bands are announced: a warning band is a status, a failure one an alert.
+    for (const band of s.area.querySelectorAll('div.wb-warn-band')) assert.ok(['status', 'alert'].includes(band.getAttribute('role') ?? ''), 'a warning band has a live role');
+    // Focus order: the filters come before the cards, and no id repeats.
+    const order = focusOrder(s);
+    const firstSelect = order.findIndex((n) => n.tagName === 'SELECT');
+    const firstCard = order.findIndex((n) => n.closest('article') !== null);
+    assert.ok(firstSelect >= 0 && firstCard > firstSelect, 'the filters come before the board in the focus order');
+    const ids = s.area.querySelectorAll('[id]').map((n) => n.getAttribute('id'));
+    assert.equal(new Set(ids).size, ids.length, 'no id twice');
+  }
+
+  test('populated over three organizations: landmarks, headings, labels, names and focus order', async () => {
+    const s = await open(() => board());
+    assert.equal(s.cards().length, CARDS.length);
+    checkPage(s);
+    assert.equal(s.area.querySelectorAll('select').length, 8, 'the org and project selects join the six');
+  });
+
+  test('with the Project reset note: the note is announced as a status', async () => {
+    const s = await open(() => board(), '/ui/work?org=acme-labs&project=acme-labs/3');
+    choose(s.area, 'org', 'northwind');
+    await new Promise((r) => setTimeout(r, 0));
+    assert.equal(s.area.querySelector('p.wb-reset-note')?.getAttribute('role'), 'status');
+    checkPage(s);
+  });
+
+  test('five warnings and a stale organization: bands are announced and "Mais N" is a toggle with aria-expanded', async () => {
+    const five = ['globex', 'initech', 'umbrella-corp', 'hooli', 'pied-piper'].map((l, i) => warn(l, i === 2 ? 'saml' : i === 0 ? 'restricted' : 'failed'));
+    const stale = org('northwind', [ROADMAP, SUPPORT], { state: 'failed', readAt: STALE_AT });
+    const s = await open(() => board({ organizations: [ORGS[0], stale, ORGS[2], ...five] }));
+    checkPage(s);
+    const bands = () => s.area.querySelectorAll('div.wb-warn-band');
+    assert.equal(bands().length, 3);
+    assert.ok(bands().some((b) => b.getAttribute('role') === 'alert') && bands().some((b) => b.getAttribute('role') === 'status'), 'both live roles are used');
+    const more = s.area.querySelector('button.wb-warns-more')!;
+    assert.equal(more.getAttribute('aria-expanded'), 'false');
+    more.dispatchEvent({ type: 'click' });
+    assert.equal(bands().length, 6, 'the toggle opens the rest');
+    assert.equal(s.area.querySelector('button.wb-warns-more')!.getAttribute('aria-expanded'), 'true');
+    checkPage(s);
+  });
+
+  test('the empty and all-failed states keep the page named and ordered', async () => {
+    const all = [warn('globex', 'restricted'), warn('initech', 'failed')];
+    const s = await open(() => board({ organizations: all }, []));
+    assert.equal(s.area.querySelector('section.wb-orgs-empty')?.getAttribute('role'), 'alert');
+    for (const n of [...s.area.querySelectorAll('button'), ...s.area.querySelectorAll('a')]) assert.notEqual(nameOf(n), '', `${n.tagName} has no name`);
+    const ids = s.area.querySelectorAll('[id]').map((n) => n.getAttribute('id'));
+    assert.equal(new Set(ids).size, ids.length, 'no id twice');
   });
 });

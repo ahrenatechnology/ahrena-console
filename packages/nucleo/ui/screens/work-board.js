@@ -12,6 +12,9 @@ import {
   githubDownReason,
   levelSwitch,
   noResult,
+  orgWarnings,
+  orgsEmpty,
+  projectResetNote,
   staleBand,
   workBoardError,
   workBoardHeader,
@@ -19,7 +22,7 @@ import {
 import { createIssueLayer } from './work-board-issue.js';
 import { createRunLayer } from './work-board-run-layer.js';
 import { createQueueLayer } from './work-board-queue-layer.js';
-import { boardUrl, clearFilters, drill, initialState, loadFailed, loadSucceeded, selectPath, setFilter, setLevel, startLoad } from './work-board-state.js';
+import { boardUrl, clearFilters, drill, initialState, loadFailed, loadSucceeded, selectPath, setFilter, setLevel, startLoad, toggleWarnings, warningTarget } from './work-board-state.js';
 
 const STYLE = '/ui/work-board.css';
 const LIVE_WAIT = 1000;
@@ -70,6 +73,9 @@ function focusKey(node) {
   const card = node.tagName === 'A' ? node.closest?.('article') : null;
   return card ? `link:${card.getAttribute('data-key')}:${node.getAttribute('class') ?? ''}` : null;
 }
+
+// issue 610: a GitHub address opens outside the Console, in a new tab with no link back to it, as the anchors of the screen do.
+const openOutside = (href) => globalThis.open?.(href, '_blank', 'noopener,noreferrer');
 
 const retryAction = (band) => (band.querySelector('button')?.setAttribute('data-action', 'retry'), band);
 
@@ -145,8 +151,23 @@ export async function mount(area, ctx) {
 
   function boardHeader(now) {
     const data = state.data;
-    return workBoardHeader({ project: data?.project ?? null, fetchedAt: data?.fetchedAt ?? null, now, stale: state.stale, reading: state.phase === 'loading', busy: state.busy, onRefresh: refresh });
+    // issue 610: over several origins the header counts the organizations; a core with no list, or an empty one, names the one Project.
+    const organizations = data?.organizations?.length ? data.organizations : null;
+    const loading = state.multiOrigin && !data && state.phase === 'loading';
+    return workBoardHeader({ project: data?.project ?? null, organizations, githubDown: state.githubDown, loading, fetchedAt: data?.fetchedAt ?? null, now, stale: state.stale, reading: state.phase === 'loading', busy: state.busy, onRefresh: refresh });
   }
+
+  // issue 610: what the actions of the warning bands and of the empty states do; a link opens GitHub outside the Console.
+  function onWarningAction(action, organization) {
+    const target = warningTarget(action, { organization, organizations: state.organizations });
+    if (target.kind === 'toggle') return run(toggleWarnings(state));
+    if (target.kind === 'read') return refresh();
+    if (target.kind === 'link') return openOutside(target.href);
+    if (target.kind === 'screen') return ctx.navigate(target.to);
+    return null;
+  }
+
+  const warnings = (now) => orgWarnings({ organizations: state.organizations, githubDown: state.githubDown, now, busy: state.busy, expanded: state.warningsExpanded, onAction: onWarningAction });
 
   function levels(off) {
     const options = state.data?.options ?? {};
@@ -165,6 +186,8 @@ export async function mount(area, ctx) {
       filters: state.filters,
       options: state.data?.options ?? {},
       link: state.url === DEFAULT_URL ? null : state.url,
+      origin: state.multiOrigin,
+      organizations: state.organizations,
       disabled: off,
       onFilterChange: filterTo,
       onClear: () => run(clearFilters(state)),
@@ -195,6 +218,8 @@ export async function mount(area, ctx) {
       doneWindowDays: data?.doneWindowDays ?? undefined,
       stale: state.stale,
       mode,
+      showOrigin: state.multiOrigin && mode === 'cards',
+      staleOrgs: state.staleOrgs,
       onDrill: (card) => run(drill(state, card)),
       renderCard: layer.renderCard,
       ...extra,
@@ -228,7 +253,9 @@ export async function mount(area, ctx) {
     const { view } = state;
     if (view === 'skeleton') return [boardHeader(now), levels(true), filters(true), columns('skeleton', { columns: null, counts: '…' })];
     if (view === 'failure') return failureView(now);
-    const top = [boardHeader(now), band(now), levels(false)].filter(Boolean);
+    const top = [boardHeader(now), band(now), warnings(now), levels(false)].filter(Boolean);
+    const note = state.resetNote ? projectResetNote(state.resetNote) : null;
+    if (view === 'empty' && state.emptyKind) return [...top, filters(true), orgsEmpty({ kind: state.emptyKind, organizations: state.organizations, busy: state.busy, onAction: onWarningAction }), columns('blank')];
     if (view === 'empty') return [...top, filters(true), emptyProject({ project: state.data.project }), columns('blank')];
     if (view === 'no-result') {
       const result = noResult({
@@ -238,9 +265,9 @@ export async function mount(area, ctx) {
         onClear: () => run(clearFilters(state)),
         onFilterChange: filterTo,
       });
-      return [...top, filters(false), result, columns('blank')];
+      return [...top, filters(false), note, result, columns('blank')].filter(Boolean);
     }
-    return [...top, filters(false), columns('cards')];
+    return [...top, filters(false), note, columns('cards')].filter(Boolean);
   }
 
   function draw() {
@@ -250,7 +277,7 @@ export async function mount(area, ctx) {
     queueLayer.learn();
     // issue 477: a redraw in the middle of a drag would cancel it; the layer draws again when the card is dropped.
     if (queueLayer.dragging()) return;
-    const shown = JSON.stringify([state.view, state.phase, state.busy, state.error, state.filters, state.dataFilters, state.suggestion, state.data, layer.signature(), execution.signature(), queueLayer.signature()]);
+    const shown = JSON.stringify([state.view, state.phase, state.busy, state.error, state.filters, state.dataFilters, state.suggestion, state.resetNote, state.warningsExpanded, state.data, layer.signature(), execution.signature(), queueLayer.signature()]);
     if (shown === drawn) return;
     drawn = shown;
     const active = globalThis.document?.activeElement;

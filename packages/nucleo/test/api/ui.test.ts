@@ -129,6 +129,8 @@ describe('/ui in the core', () => {
     'screens/adrs-common.js': ['https://adr.github.io/'],
     // Conexões (issue 241): "Como configurar", when the console has no OAuth App (C44).
     'screens/connections.js': ['https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/authorizing-oauth-apps#device-flow'],
+    // Work board over several organizations (#610): the base of the links of the warning bands and empty states (SSO, the Projects page, Abrir o GitHub), opened in a new tab with `noopener`.
+    'screens/work-board-state.js': ['https://github.com'],
   };
   const externalUrls = (file: string, text: string) => {
     const allowed = LINK_TARGETS[file] ?? [];
