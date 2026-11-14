@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
+import { immediateTransaction } from '../adapters/sqlite/immediate-transaction.ts';
 import type { ChangeCursor } from '../changes/cursor.ts';
 import { scopedEntityId } from '../identity.ts';
 import { RuntimeError, sameRuntimeScope, type RuntimeScope, type RuntimeRun, type RuntimeRequest, type RuntimeResponse, type RuntimeCommand, type RuntimeOperation, type RunState } from './contracts.ts';
@@ -25,10 +26,7 @@ export class SqliteRuntimeStore {
     return this.db.prepare('SELECT * FROM runtime_runs WHERE session_id = ? ORDER BY created_at DESC, id LIMIT 100').all(sessionId).map(run);
   }
   private transaction<T>(scope: RuntimeScope, fn: () => T, changed: (result: T) => boolean = () => true): T {
-    this.db.exec('BEGIN IMMEDIATE');
-    let result: T;
-    try { result = fn(); this.db.exec('COMMIT'); }
-    catch (error) { this.db.exec('ROLLBACK'); throw error; }
+    const result = immediateTransaction(this.db, fn);
     if (changed(result)) this.changes?.record({ type: 'state', key: scope.sessionId, sessionId: scope.sessionId, accountId: scope.accountId });
     return result;
   }

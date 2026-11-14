@@ -3,6 +3,7 @@ import { RUNTIME_MIGRATION_SQL } from '../../runtime/migration.ts';
 // Regra: migração publicada não muda; mudança de esquema é uma migração nova no fim da lista.
 
 import type { DatabaseSync } from 'node:sqlite';
+import { immediateTransaction } from './immediate-transaction.ts';
 import { CONTEXT_ENGLISH_SQL, CONTEXT_MIGRATION_DESCRIPTION, CONTEXT_MIGRATION_SQL } from '../../context/migration.ts';
 import {
   DECISIONS_ENGLISH_SQL,
@@ -319,14 +320,23 @@ export function migrate(db: DatabaseSync, migrations: readonly Migration[] = MIG
   const applied: number[] = [];
   for (const m of [...migrations].sort((a, b) => a.version - b.version)) {
     if (m.version <= current) continue;
-    db.exec('BEGIN IMMEDIATE');
+    let began = false;
+    let bodyError: unknown;
     try {
-      db.exec(m.sql);
-      m.up?.(db);
-      db.exec(`PRAGMA user_version = ${m.version}`);
-      db.exec('COMMIT');
+      immediateTransaction(db, () => {
+        began = true;
+        try {
+          db.exec(m.sql);
+          m.up?.(db);
+          db.exec(`PRAGMA user_version = ${m.version}`);
+        } catch (bodyFailure) {
+          bodyError = bodyFailure;
+          throw bodyFailure;
+        }
+      });
     } catch (err) {
-      db.exec('ROLLBACK');
+      // BEGIN failed, or ROLLBACK failed after the body threw: the raw error, as before #498.
+      if (!began || (bodyError !== undefined && err !== bodyError)) throw err;
       throw new Error(`migração ${m.version} (${m.description}) falhou: ${(err as Error).message}`, { cause: err });
     }
     applied.push(m.version);
