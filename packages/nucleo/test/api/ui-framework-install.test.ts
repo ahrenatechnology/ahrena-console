@@ -486,6 +486,22 @@ describe('Install (C36): step 2, the diff preview', () => {
     assert.equal(texto(m.area.querySelector('[aria-current="step"]')), '2 Prévia do diff');
   });
 
+  test('a deadline failure (status 0, timedOut) says the PR may have been opened, not that nothing was written (issue 525)', async () => {
+    const m = await toPreview({
+      write: () => Object.assign(new WriteFailure('O núcleo em 127.0.0.1:4317 não respondeu', 0, null), { timedOut: true }),
+    });
+    await click(action(m.area, 'open-pr'));
+    const band = texto(m.area.querySelector('.fwi-band'));
+    assert.match(band, /O núcleo não respondeu a tempo; confira se o PR foi aberto antes de tentar de novo\./);
+    assert.doesNotMatch(band, /Nada foi escrito/);
+  });
+
+  test('an unreachable core (status 0, not timedOut) keeps the "Nada foi escrito" text (issue 525)', async () => {
+    const m = await toPreview({ write: () => new WriteFailure('O núcleo em 127.0.0.1:4317 não respondeu', 0, null) });
+    await click(action(m.area, 'open-pr'));
+    assert.match(texto(m.area.querySelector('.fwi-band')), /não respondeu\. Nada foi escrito\./);
+  });
+
   test('invalid JSON blocks: the reason and the file, no Abrir PR', async () => {
     const blocked = plan({
       blocked: { kind: 'invalid-json', message: '.claude/settings.json: JSON inválido', path: '.claude/settings.json' },

@@ -582,7 +582,7 @@ export function mountInstallFlow(area, ctx, { owner, name, plan: first, step: fi
     draw();
     const body = { platforms: choice.platforms, plugins: choice.plugins, planHash: plan.planHash, title: title.trim() || undefined, issue: issue.value ?? undefined };
     try {
-      // Opening the installation PR makes several GitHub calls in a row; give it twice the default.
+      // Opening the installation PR makes several GitHub calls in a row; give it twice the default (issue 525).
       const r = await ctx.write(base, body, { timeoutMs: INSTALL_TIMEOUT_MS });
       if (!alive) return;
       const t = planTotals(plan);
@@ -612,7 +612,10 @@ export function mountInstallFlow(area, ctx, { owner, name, plan: first, step: fi
         }
         return;
       }
-      if (code === 'invalid-issue') {
+      if (e?.timedOut) {
+        // The deadline passed, but the core may still finish and open the PR: do not say nothing was written (issue 525).
+        notice = { tone: 'err', title: 'Não abrimos o PR.', text: 'O núcleo não respondeu a tempo; confira se o PR foi aberto antes de tentar de novo.' };
+      } else if (code === 'invalid-issue') {
         issueError = 'Só o número da issue, como 42.';
         notice = { tone: 'err', title: 'Confira a issue.', text: e.message };
       } else notice = { tone: 'err', title: 'Não abrimos o PR.', text: `${e?.message ?? e}. Nada foi escrito.` };

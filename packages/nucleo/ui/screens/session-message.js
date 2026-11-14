@@ -476,7 +476,7 @@ export function createComposeBox(ctx, sessionId, { head = () => null, openContro
       return draw();
     }
     try {
-      // The core may wait up to 2 min for whisper to start and 3 min to transcribe (src/transcription/whisper.ts): outlive both.
+      // The core may wait up to 2 min for whisper to start and 3 min to transcribe: outlive both (issue 557).
       const r = await ctx.write('/api/transcription', taken.wav, { timeoutMs: TRANSCRIPTION_TIMEOUT_MS });
       voiceState = 'idle';
       const words = String(r?.text ?? '').trim();

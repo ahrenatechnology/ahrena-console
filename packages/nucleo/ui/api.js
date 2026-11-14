@@ -19,13 +19,15 @@
 // (`{ timeoutMs }`, for a route that legitimately blocks longer: the dictation and the framework install). The deadline
 // covers the wait for the answer and the read of its body. When it passes, the request is aborted and ends as a
 // `ReadError` / `WriteError` with status 0 and the same "O núcleo em <host> não respondeu" as an unreachable core, so
-// every screen's existing failure state runs. It is combined with the caller's `signal`: the caller giving up first
-// still cancels the request and propagates its `AbortError`. The timer is cleared once the request settles.
+// every screen's existing failure state runs; `timedOut: true` tells that case from an unreachable core (the core may still finish
+// what it was asked). It is combined with the caller's `signal`: the caller giving up first
+// still cancels the request, also while the body is being read, and propagates its `AbortError`. The timer is cleared once the request settles.
 
 export class ReadError extends Error {
-  constructor(message, { status = 0, route = null, retryIn = null, body = null } = {}) {
+  constructor(message, { status = 0, route = null, retryIn = null, body = null, timedOut = false } = {}) {
     super(message);
     this.name = 'ReadError';
+    this.timedOut = timedOut;
     this.status = status;
     this.route = route;
     this.retryIn = retryIn;
@@ -33,7 +35,7 @@ export class ReadError extends Error {
   }
 }
 
-/** The write failed: the same fields as the read (`status`, `route`, `retryIn`, `body`). */
+/** The write failed: the same fields as the read (`status`, `route`, `retryIn`, `body`, `timedOut`). */
 export class WriteError extends ReadError {
   constructor(message, options) {
     super(message, options);
@@ -89,6 +91,8 @@ function startDeadline(callerSignal, timeoutMs) {
     get timedOut() {
       return state.timedOut && !callerSignal?.aborted;
     },
+    /** The caller's own abort, as it came (its reason, or an AbortError), or null while the caller has not given up. */
+    callerAbort: () => (callerSignal?.aborted ? (callerSignal.reason ?? new DOMException('This operation was aborted', 'AbortError')) : null),
     run: (promise) => Promise.race([promise, ended]),
     clear,
   };
@@ -108,13 +112,13 @@ export function httpReader({ base = globalThis.location?.origin, fetch = globalT
     const url = new URL(route, origin);
     if (url.origin !== origin.origin || !url.pathname.startsWith('/api/')) throw new ReadError(`rota fora do núcleo: ${route}`, { route });
     const deadline = startDeadline(signal, deadlineOf(timeoutMs, deadlineOf(defaultTimeoutMs, DEFAULT_TIMEOUT_MS)));
-    const silent = () => new ReadError(`O núcleo em ${origin.host} não respondeu`, { route });
+    const silent = (timedOut = false) => new ReadError(`O núcleo em ${origin.host} não respondeu`, { route, timedOut });
     try {
       let response;
       try {
         response = await deadline.run(fetch(url, { signal: deadline.signal, headers: { ...ownerHeaders(), accept: 'application/json' }, credentials: 'omit', cache: 'no-store' }));
       } catch (err) {
-        if (deadline.timedOut) throw silent();
+        if (deadline.timedOut) throw silent(true);
         if (err?.name === 'AbortError') throw err;
         throw silent();
       }
@@ -122,7 +126,9 @@ export function httpReader({ base = globalThis.location?.origin, fetch = globalT
       try {
         body = await deadline.run(response.json());
       } catch {
-        if (deadline.timedOut) throw silent();
+        if (deadline.timedOut) throw silent(true);
+        const gaveUp = deadline.callerAbort();
+        if (gaveUp) throw gaveUp;
         body = null;
       }
       if (!response.ok) {
@@ -173,7 +179,7 @@ export function httpWriter({ base = globalThis.location?.origin, fetch = globalT
     const url = new URL(route, origin);
     if (url.origin !== origin.origin || !url.pathname.startsWith('/api/')) throw new WriteError(`rota fora do núcleo: ${route}`, { route });
     const deadline = startDeadline(signal, deadlineOf(timeoutMs, deadlineOf(defaultTimeoutMs, DEFAULT_TIMEOUT_MS)));
-    const silent = () => new WriteError(`O núcleo em ${origin.host} não respondeu`, { route });
+    const silent = (timedOut = false) => new WriteError(`O núcleo em ${origin.host} não respondeu`, { route, timedOut });
     const common = { method, signal: deadline.signal, credentials: 'omit', cache: 'no-store' };
     const headers = { ...ownerHeaders(), accept: 'application/json' };
     try {
@@ -190,7 +196,7 @@ export function httpWriter({ base = globalThis.location?.origin, fetch = globalT
           ),
         );
       } catch (err) {
-        if (deadline.timedOut) throw silent();
+        if (deadline.timedOut) throw silent(true);
         if (err?.name === 'AbortError') throw err;
         throw silent();
       }
@@ -198,7 +204,9 @@ export function httpWriter({ base = globalThis.location?.origin, fetch = globalT
       try {
         answer = await deadline.run(response.json());
       } catch {
-        if (deadline.timedOut) throw silent();
+        if (deadline.timedOut) throw silent(true);
+        const gaveUp = deadline.callerAbort();
+        if (gaveUp) throw gaveUp;
         answer = null;
       }
       if (!response.ok) {

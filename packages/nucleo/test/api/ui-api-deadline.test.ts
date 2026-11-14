@@ -13,7 +13,7 @@ import * as api from '../../ui/api.js';
 const { httpReader, httpWriter, ReadError, WriteError } = api as any;
 const BASE = 'http://127.0.0.1:4317';
 
-// Counts the timers the module leaves alive: a settled request must leave none.
+// Counts the timers the module leaves alive: a settled request must leave none (#525).
 const live = new Set<unknown>();
 const realSet = globalThis.setTimeout;
 const realClear = globalThis.clearTimeout;
@@ -40,7 +40,7 @@ afterEach(() => {
 const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 const wait = (ms: number) => new Promise((r) => realSet(r, ms));
 
-/** A fetch that never answers but, like the real one, rejects with an AbortError once its signal fires. */
+/** A fetch that never answers but, like the real one, rejects with an AbortError once its signal fires (#525). */
 function hangingFetch() {
   const seen: AbortSignal[] = [];
   const fetch = (_url: unknown, init: RequestInit = {}) =>
@@ -51,7 +51,7 @@ function hangingFetch() {
   return { fetch, seen };
 }
 
-/** A fetch that answers the headers at once and whose body never ends (a stall after the headers). */
+/** A fetch that answers the headers at once and whose body never ends: a stall after the headers (#525). */
 function stalledBodyFetch() {
   const seen: AbortSignal[] = [];
   const fetch = async (_url: unknown, init: RequestInit = {}) => {
@@ -70,6 +70,7 @@ describe('#525 AC-1 a read or write with no answer within the deadline is aborte
       assert.equal(e.status, 0);
       assert.equal(e.route, '/api/work');
       assert.equal(e.message, 'O núcleo em 127.0.0.1:4317 não respondeu');
+      assert.equal(e.timedOut, true, 'the deadline is told apart from an unreachable core');
       return true;
     });
     assert.equal(seen[0]!.aborted, true);
@@ -83,9 +84,15 @@ describe('#525 AC-1 a read or write with no answer within the deadline is aborte
       assert.equal(e.name, 'WriteError');
       assert.equal(e.status, 0);
       assert.equal(e.message, 'O núcleo em 127.0.0.1:4317 não respondeu');
+      assert.equal(e.timedOut, true);
       return true;
     });
     assert.equal(seen[0]!.aborted, true);
+  });
+
+  test('#525 AC-1 an unreachable core is not a timeout: timedOut is false', async () => {
+    await assert.rejects(httpReader({ base: BASE, fetch: async () => Promise.reject(new TypeError('fetch failed')), timeoutMs: 5_000 })('/api/work'), (e: any) => e instanceof ReadError && e.status === 0 && e.timedOut === false);
+    await assert.rejects(httpWriter({ base: BASE, fetch: async () => Promise.reject(new TypeError('fetch failed')), timeoutMs: 5_000 })('/api/x', {}), (e: any) => e instanceof WriteError && e.status === 0 && e.timedOut === false);
   });
 
   test('#525 AC-1 a fetch that ignores its signal still ends at the deadline', async () => {
@@ -109,7 +116,7 @@ describe('#525 AC-1 a read or write with no answer within the deadline is aborte
 
   test('#525 AC-1 the body read is covered: headers at once, a body that stalls, the same status-0 failure', async () => {
     const r = stalledBodyFetch();
-    await assert.rejects(httpReader({ base: BASE, fetch: r.fetch, timeoutMs: 30 })('/api/work'), (e: any) => e instanceof ReadError && e.status === 0 && /não respondeu/.test(e.message));
+    await assert.rejects(httpReader({ base: BASE, fetch: r.fetch, timeoutMs: 30 })('/api/work'), (e: any) => e instanceof ReadError && e.status === 0 && e.timedOut === true && /não respondeu/.test(e.message));
     const w = stalledBodyFetch();
     await assert.rejects(httpWriter({ base: BASE, fetch: w.fetch, timeoutMs: 30 })('/api/x', {}), (e: any) => e instanceof WriteError && e.status === 0);
     assert.equal(r.seen[0]!.aborted, true);
@@ -145,14 +152,32 @@ describe('#557 AC-2 the caller\'s own abort still cancels the request', () => {
     assert.equal(live.size, 0, 'no timer started for a request that was already cancelled');
   });
 
-  test('#557 AC-2 the caller aborting during a stalled body read propagates as today (no deadline failure)', async () => {
+  test('#557 AC-2 the caller aborting during a stalled body read propagates its AbortError, for a read and for a write', async () => {
+    for (const make of [
+      (fetch: any, signal: AbortSignal) => httpReader({ base: BASE, fetch, timeoutMs: 5_000 })('/api/work', { signal }),
+      (fetch: any, signal: AbortSignal) => httpWriter({ base: BASE, fetch, timeoutMs: 5_000 })('/api/x', {}, { signal }),
+    ]) {
+      const ctl = new AbortController();
+      const { fetch } = stalledBodyFetch();
+      const pending = make(fetch, ctl.signal);
+      await wait(10);
+      ctl.abort();
+      await assert.rejects(pending, (e: any) => {
+        assert.equal(e.name, 'AbortError');
+        assert.ok(!(e instanceof ReadError));
+        return true;
+      });
+    }
+  });
+
+  test('#557 AC-2 the caller aborting with its own reason during the body read rejects with that reason', async () => {
     const ctl = new AbortController();
+    const reason = new Error('left the screen');
     const { fetch } = stalledBodyFetch();
-    const pending = httpWriter({ base: BASE, fetch, timeoutMs: 5_000 })('/api/x', {}, { signal: ctl.signal });
+    const pending = httpReader({ base: BASE, fetch, timeoutMs: 5_000 })('/api/work', { signal: ctl.signal });
     await wait(10);
-    ctl.abort();
-    // The body is read as null once the caller gives up, as before the deadline existed.
-    assert.equal(await pending, null);
+    ctl.abort(reason);
+    await assert.rejects(pending, (e: any) => e === reason);
   });
 
   test('#557 AC-2 the deadline is not mistaken for the caller: both signals given, the deadline fires first, it is the status-0 failure', async () => {
