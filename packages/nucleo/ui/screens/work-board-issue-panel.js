@@ -17,14 +17,14 @@ const NO_PLAN = 'Sem plano ainda. Planejar abre uma sessão da Athena só de pla
 
 const pill = (tone, text, extra = '') => el('span', { class: `wb-pill wb-pill-${tone}${extra}` }, text);
 
-/** A section of the panel: a labelled region with its heading (and what goes on the right of it). */
+/** A section of the panel: a labelled region with its heading (and what goes on the right of it). (issue 508). */
 function section(name, label, heading, ...body) {
   return el('section', { class: 'wb-panel-sec', 'data-section': name, 'aria-label': label }, heading, ...body);
 }
 
 const heading = (text, right = null) => el('div', { class: 'wb-panel-sec-head' }, el('h3', { class: 'wb-panel-sec-title' }, text), right);
 
-/** The body is the issue's Markdown source shown as text: paragraphs and fenced blocks, never HTML. */
+/** The body is the issue's Markdown source shown as text: paragraphs and fenced blocks, never HTML. (issue 508). */
 function bodyBlocks(body) {
   const blocks = [];
   let lines = [];
@@ -132,7 +132,7 @@ function commentsSection(issue, now) {
   return section('comments', 'Comentários', heading(`Comentários · ${total}`), ...items, more);
 }
 
-/** The header every state of the panel keeps (type, number, column and age, "Abrir no GitHub", close). */
+/** The header every state of the panel keeps (type, number, column and age, "Abrir no GitHub", close). (issue 508). */
 function panelHead({ card, number, url, now, onClose }) {
   const column = COLUMNS.find((c) => c.id === card?.column)?.label ?? null;
   const age = cardAge(card, now);

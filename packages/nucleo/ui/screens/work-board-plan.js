@@ -32,9 +32,9 @@ export function planState(card) {
 /**
  * The planning parts of a card (and of the panel): `badge` ("planejando…"), `note` (the failure and its reason, in red)
  * and `actions` (Planejar as the one primary action, Replanejar as a link in the line below). `onPlan` and `onReplan`
- * get the card and the button pressed, to anchor the confirmation on it; `onOpenSession` shows "Abrir sessão" while planning.
+ * get the card and the button pressed, to anchor the confirmation on it. While planning there is no action.
  */
-export function cardPlanParts(card, { onPlan = null, onReplan = null, onOpenSession = null } = {}) {
+export function cardPlanParts(card, { onPlan = null, onReplan = null } = {}) {
   const state = planState(card);
   const none = { badge: null, note: null, actions: null };
   if (state === 'hidden') return none;
@@ -43,8 +43,7 @@ export function cardPlanParts(card, { onPlan = null, onReplan = null, onOpenSess
     el('button', { type: 'button', class: cls, 'data-action': action, 'aria-label': name, onClick: (ev) => handler?.(card, ev.currentTarget) }, iconName ? icon(iconName) : null, label);
   if (state === 'planning') {
     const badge = el('span', { class: 'wb-pill wb-pill-active wb-session', role: 'status', 'data-state': 'planning' }, 'planejando…');
-    const open = onOpenSession ? act('btn outline sm wb-plan-act', 'open-session', 'Abrir sessão', `Abrir a sessão de planejamento da ${number}`, onOpenSession, 'external') : null;
-    return { ...none, badge, actions: open ? el('div', { class: 'wb-plan-acts' }, open) : null };
+    return { ...none, badge };
   }
   const note = state === 'failed' ? el('div', { class: 'wb-plan-note', role: 'alert' }, icon('alert'), el('span', {}, card.planning.reason || FAILED_FALLBACK)) : null;
   const hasPlan = card.plan?.steps > 0;
@@ -76,18 +75,15 @@ function targetChoice(target, onTarget) {
 }
 
 /**
- * The confirmation anchored on the card (465-6): repository, folder, the current account (read-only), where to open
- * and the start of the prompt. `folder` and `prompt` are optional: the core only reveals them after the POST, so
- * their rows show when given. `replan` is the same confirmation worded for a replan.
+ * The confirmation anchored on the card (465-6): repository, the current account (read-only) and where to open.
+ * `replan` is the same confirmation worded for a replan.
  */
-export function planConfirm({ repo, number, replan = false, target = 'desktop', account = null, folder = null, prompt = null, busy = false, onTarget = null, onCancel = null, onConfirm = null }) {
+export function planConfirm({ repo, number, replan = false, target = 'desktop', account = null, busy = false, onTarget = null, onCancel = null, onConfirm = null }) {
   const verb = replan ? 'Replanejar' : 'Planejar';
   const title = `${verb} a ${ref(number)} com a Athena`;
   const rows = [
     el('dt', {}, 'Repositório'),
     el('dd', { class: 'mono wb-plan-trunc', 'data-field': 'repo' }, repo),
-    folder ? el('dt', {}, 'Pasta') : null,
-    folder ? el('dd', { class: 'mono wb-plan-trunc', 'data-field': 'folder' }, folder) : null,
     account ? el('dt', {}, 'Conta') : null,
     account ? el('dd', { 'data-field': 'account' }, account) : null,
     el('dt', {}, 'Abrir em'),
@@ -98,7 +94,6 @@ export function planConfirm({ repo, number, replan = false, target = 'desktop', 
     { class: 'card wb-plan-pop', role: 'dialog', 'aria-label': title, 'data-kind': replan ? 'replan' : 'plan' },
     el('h3', {}, title),
     el('dl', { class: 'wb-plan-kv' }, ...rows),
-    prompt ? el('div', { class: 'wb-plan-prompt', role: 'note', 'aria-label': 'Começo do prompt' }, prompt) : null,
     el(
       'p',
       { class: 'wb-plan-hint' },

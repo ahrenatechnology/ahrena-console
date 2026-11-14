@@ -26,8 +26,7 @@ article[data-selected] { border-color: var(--accent); box-shadow: 0 0 0 1px var(
 .wb-plan-radio { display: inline-flex; align-items: center; gap: 5px; font: inherit; font-size: 12px; color: var(--muted); background: none; border: 0; border-radius: 6px; padding: 3px 8px; cursor: pointer; white-space: nowrap; }
 .wb-plan-radio[aria-checked="true"] { background: var(--raised); color: var(--text); }
 .wb-plan-radio:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-.wb-plan-prompt, .wb-plan-cmd { margin: 0; font-family: var(--font-mono); font-size: 11px; line-height: 1.5; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 7px 9px; }
-.wb-plan-prompt { color: var(--muted); display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+.wb-plan-cmd { margin: 0; font-family: var(--font-mono); font-size: 11px; line-height: 1.5; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 7px 9px; }
 .wb-plan-cmd { color: var(--text); white-space: pre-wrap; word-break: break-all; }
 .wb-plan-hint { margin: 0; color: var(--muted); line-height: 1.4; }
 .wb-plan-pop-acts { display: flex; gap: 6px; justify-content: flex-end; flex-wrap: wrap; }

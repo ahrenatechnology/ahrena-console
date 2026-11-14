@@ -163,16 +163,11 @@ describe('Planejar on the card (465-2, 465-6)', () => {
     assert.equal(all(root, '[data-action="replan"]').length, 0);
   });
 
-  test('while planning, "Abrir sessão" appears only when the screen can open it', () => {
+  test('while planning the card has no actions: no "Abrir sessão" (decision 8)', () => {
     const subject = card(500, { planning: { state: 'running' } });
-    assert.equal(all(holder(cardPlanParts(subject, {})), '[data-action="open-session"]').length, 0);
-    let opened = 0;
-    const parts = cardPlanParts(subject, { onOpenSession: () => (opened += 1) });
-    const open = one(holder(parts), '[data-action="open-session"]');
-    assert.equal(texto(open), 'Abrir sessão');
-    assert.equal(open.getAttribute('aria-label'), 'Abrir a sessão de planejamento da #500');
-    click(open);
-    assert.equal(opened, 1);
+    const parts = cardPlanParts(subject, { onPlan: () => {}, onReplan: () => {}, onOpenSession: () => {} });
+    assert.equal(parts.actions, null);
+    assert.equal(all(holder(parts), '[data-action="open-session"]').length, 0);
   });
 
   test('with a plan the action is Replanejar, a secondary link, and Planejar is gone', () => {
@@ -266,17 +261,17 @@ describe('the card carries the planning parts and opens the detail (465-2, 467-1
 });
 
 describe('the Planejar confirmation anchored on the card (465-6)', () => {
-  const base = { repo: REPO, number: 509, account: 'Ahrena · Team', folder: '~/Workspace/ahrena-console', prompt: 'Athena, só planejamento: leia a ahrenatechnology/ahrena-console#509 e o código.' };
+  const base = { repo: REPO, number: 509, account: 'Ahrena · Team' };
 
-  test('names the issue and shows repository, folder, current account, destination and the start of the prompt', () => {
-    const root = planConfirm({ ...base, target: 'desktop' });
+  test('names the issue and shows repository, current account and destination, with no Pasta and no prompt (decision 3)', () => {
+    const root = planConfirm({ ...base, folder: '~/Workspace/ahrena-console', prompt: 'Athena, só planejamento', target: 'desktop' });
     assert.equal(root.getAttribute('role'), 'dialog');
     assert.equal(root.getAttribute('aria-label'), 'Planejar a #509 com a Athena');
     assert.equal(texto(one(root, 'h3')), 'Planejar a #509 com a Athena');
     const rows = texto(one(root, 'dl'));
-    for (const part of ['Repositório', REPO, 'Pasta', '~/Workspace/ahrena-console', 'Conta', 'Ahrena · Team', 'Abrir em']) assert.ok(rows.includes(part), part);
-    assert.equal(texto(one(root, '.wb-plan-prompt')), base.prompt);
-    assert.equal(one(root, '.wb-plan-prompt').getAttribute('aria-label'), 'Começo do prompt');
+    for (const part of ['Repositório', REPO, 'Conta', 'Ahrena · Team', 'Abrir em']) assert.ok(rows.includes(part), part);
+    assert.ok(!rows.includes('Pasta'));
+    assert.equal(all(root, '.wb-plan-prompt').length, 0);
     assert.ok(texto(root).includes('planejando…'), 'says what the card shows next');
     assert.ok(texto(root).includes('Não conta no limite de execuções'));
   });
@@ -290,10 +285,8 @@ describe('the Planejar confirmation anchored on the card (465-6)', () => {
     assert.equal(account.getAttribute('role'), null);
   });
 
-  test('folder and prompt rows appear only when given: the contract reveals them after the POST', () => {
+  test('without an account the row is left out', () => {
     const root = planConfirm({ repo: REPO, number: 509, account: 'Ahrena · Team', target: 'desktop' });
-    assert.ok(!texto(root).includes('Pasta'));
-    assert.equal(all(root, '.wb-plan-prompt').length, 0);
     assert.ok(texto(root).includes('Repositório'));
     const noAccount = planConfirm({ repo: REPO, number: 509, target: 'desktop' });
     assert.equal(all(noAccount, '[data-field="account"]').length, 0);
