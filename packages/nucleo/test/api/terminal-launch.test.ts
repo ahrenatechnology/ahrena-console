@@ -151,6 +151,74 @@ describe('createTerminalOpener', () => {
   });
 });
 
+describe('#507/AC-6 a terminal that starts claude with a first prompt', () => {
+  const root = mkdtempSync(join(tmpdir(), 'ahrena-open-prompt-'));
+  after(() => rmSync(root, { recursive: true, force: true }));
+  const HOSTILE = ['$(touch HIT1)', '`touch HIT2`', "it's", 'say "hi"; touch HIT3', 'a | b && c', '\\n \\$HOME', 'line one\nline two\n', '*', '--help'].join(' ');
+
+  test('#507/AC-6 macOS: the prompt is its own 0600 file, and the .command only names that file', async () => {
+    const dir = join(root, 'mac');
+    const runner = fakeRunner();
+    const open = createTerminalOpener({ dir, platform: 'darwin', runner });
+    assert.equal(await open({ sessionId: null, cwd: '/w/app', prompt: HOSTILE }), 'opened');
+    const file = runner.calls[0]!.args[0]!;
+    const names = readdirSync(dir);
+    const promptName = names.find((n) => /^new-[0-9a-f-]{36}\.prompt$/.test(n));
+    assert.ok(promptName, 'a prompt file next to the .command');
+    assert.equal(statSync(join(dir, promptName)).mode & 0o777, 0o600);
+    assert.equal(readFileSync(join(dir, promptName), 'utf8'), HOSTILE);
+    const content = readFileSync(file, 'utf8');
+    assert.equal(content, commandFileContent('/w/app', null, join(dir, promptName)));
+    for (const piece of ['HIT1', 'HIT2', 'HIT3', 'line one', "it's"]) assert.ok(!content.includes(piece), `the .command does not carry ${piece}`);
+    assert.match(content, /exec claude "\$prompt"/);
+  });
+
+  test('#507/AC-6 macOS: run for real with a hostile prompt, claude gets it as one argument and nothing runs', async () => {
+    const dir = join(root, 'real');
+    const bin = join(root, 'bin');
+    const out = join(root, 'argv.txt');
+    mkdirSync(bin);
+    writeFileSync(join(bin, 'claude'), `#!/bin/sh\nprintf '%s' "$#" > '${out}.count'\nprintf '%s' "$1" > '${out}'\n`, { mode: 0o755 });
+    const work = join(root, 'work');
+    mkdirSync(work);
+    const hostile = HOSTILE.replaceAll('HIT', join(root, 'hit'));
+    const runner = fakeRunner();
+    await createTerminalOpener({ dir, platform: 'darwin', runner })({ sessionId: null, cwd: work, prompt: hostile });
+    const file = runner.calls[0]!.args[0]!;
+    execFileSync('/bin/sh', [file], { env: { ...process.env, PATH: `${bin}:${process.env.PATH}` } });
+    assert.equal(readFileSync(`${out}.count`, 'utf8'), '1');
+    assert.equal(readFileSync(out, 'utf8'), hostile.replace(/\n+$/, ''), 'the shell strips only trailing newlines');
+    assert.deepEqual(readdirSync(root).filter((n) => n.startsWith('hit')), [], 'no command from the prompt ran');
+    assert.deepEqual(readdirSync(dir), [], 'the .command and the prompt file removed themselves');
+  });
+
+  test('#507/AC-6 a prompt that starts with a dash, holds a NUL, or is too long is refused, nothing is written', async () => {
+    const dir = join(root, 'refused');
+    const runner = fakeRunner();
+    const open = createTerminalOpener({ dir, platform: 'darwin', runner });
+    for (const prompt of ['--dangerously-skip-permissions', '-p x', 'a\0b', '', 'x'.repeat(20_001)]) await assert.rejects(open({ sessionId: null, cwd: '/w/app', prompt }), String(prompt).slice(0, 10));
+    await assert.rejects(open({ sessionId: ID, cwd: '/w/app', prompt: 'resume with a prompt' }));
+    assert.equal(runner.calls.length, 0);
+  });
+
+  test('#507/AC-6 Linux: a prompt is never passed through x-terminal-emulator, which may re-parse it: unsupported', async () => {
+    const runner = fakeRunner();
+    const open = createTerminalOpener({ dir: root, platform: 'linux', runner, findExecutable: async () => '/usr/bin/x-terminal-emulator' });
+    assert.equal(await open({ sessionId: null, cwd: '/w/app', prompt: 'plan it' }), 'unsupported');
+    assert.equal(runner.calls.length, 0);
+  });
+
+  test('the old leftovers of prompt files go too', async () => {
+    const dir = join(root, 'old');
+    mkdirSync(dir);
+    const old = join(dir, 'new-00000000-0000-4000-8000-000000000000.prompt');
+    writeFileSync(old, 'old');
+    utimesSync(old, new Date(0), new Date(0));
+    await createTerminalOpener({ dir, platform: 'darwin', runner: fakeRunner() })({ sessionId: null, cwd: '/w/app', prompt: 'plan it' });
+    assert.ok(!readdirSync(dir).includes('new-00000000-0000-4000-8000-000000000000.prompt'));
+  });
+});
+
 describe('createTerminalFocuser', () => {
   const proc = { pid: 4242, sessionId: ID, cwd: '/w/app', procStart: 'Tue Oct 20 04:00:34 2026' };
 

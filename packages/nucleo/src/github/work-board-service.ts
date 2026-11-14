@@ -10,6 +10,9 @@ import { githubFailureOf, NoDataError, type GithubFailure } from './cache.ts';
 import type { ProjectBoard, ProjectCard } from './project.ts';
 import {
   analyzeWorkNodes,
+  type AnalyzedWorkNode,
+  type WorkCardPlanning,
+  type WorkSessionLink,
   buildWorkBoard,
   columnObservations,
   type ParentLookup,
@@ -22,6 +25,7 @@ import {
   type WorkQueue,
   type WorkSessions,
 } from './work-board.ts';
+import { planningOfRun, settlePlanRun, type WorkPlanRuns } from './work-plan.ts';
 import type { WorkNode } from './work.ts';
 
 export interface WorkBoardServiceOptions {
@@ -29,6 +33,8 @@ export interface WorkBoardServiceOptions {
   sessions: WorkSessions;
   queue: WorkQueue;
   history: WorkColumnHistory;
+  /** #507 the planning runs; without it no card has a planning state. */
+  planRuns?: WorkPlanRuns;
   /** #465 without it, parents outside the Project stay chain links with no title. */
   parents?: ParentLookup;
   now?: () => number;
@@ -52,17 +58,19 @@ export class WorkBoardService {
   private readonly sessions: WorkSessions;
   private readonly queue: WorkQueue;
   private readonly history: WorkColumnHistory;
+  private readonly planRuns: WorkPlanRuns | undefined;
   private readonly parents: ParentLookup | undefined;
   private readonly now: () => number;
   private readonly pausedUntil: () => number;
   private readonly nextScheduledRead: () => number | null;
   private readonly log: (message: string) => void;
 
-  constructor({ project, sessions, queue, history, parents, now = Date.now, pausedUntil = () => 0, nextScheduledRead = () => null, log = () => {} }: WorkBoardServiceOptions) {
+  constructor({ project, sessions, queue, history, planRuns, parents, now = Date.now, pausedUntil = () => 0, nextScheduledRead = () => null, log = () => {} }: WorkBoardServiceOptions) {
     this.project = project;
     this.sessions = sessions;
     this.queue = queue;
     this.history = history;
+    this.planRuns = planRuns;
     this.parents = parents;
     this.now = now;
     this.pausedUntil = pausedUntil;
@@ -75,9 +83,12 @@ export class WorkBoardService {
     const fromProject = issueCards(read).map(nodeOfCard);
     const { nodes: outside, reason } = await this.resolveParents(fromProject);
     const nodes = [...fromProject, ...outside];
-    const [sessions, queue] = await Promise.all([this.sessions.links(), this.queue.positions()]);
+    const [links, queue] = await Promise.all([this.sessions.links(), this.queue.positions()]);
+    // #507 a planning session is not an execution: it never moves the card, it gives it its planning state.
+    const sessions = links.filter((l) => !l.planning);
     const now = this.now();
     const analyzed = analyzeWorkNodes(nodes, sessions, queue);
+    const planning = await this.settlePlanning(analyzed, links.filter((l) => l.planning), now);
     const since = await this.history.observe(columnObservations(analyzed, now));
     // #495 the screen gets a code; the raw text of the stale read goes to the log.
     if (read.stale && read.staleReason) this.log(`work board: stale read: ${read.staleReason}`);
@@ -92,12 +103,39 @@ export class WorkBoardService {
       since,
       filters,
       analyzed,
+      planning,
       now,
       fetchedAt: read.fetchedAt,
       stale: staleReason !== null,
       staleReason,
       retryAt: staleReason === null ? null : this.retryAt(now),
     });
+  }
+
+  /**
+   * #507 settles every planning run whose issue is on the board against its live planning sessions and its
+   * sub-issue total (work-plan.ts), records the change, and returns the card states. The record failing
+   * never fails the board: the cards just carry no planning state.
+   */
+  private async settlePlanning(analyzed: ReadonlyMap<string, AnalyzedWorkNode>, planningLinks: readonly WorkSessionLink[], now: number): Promise<Map<string, WorkCardPlanning>> {
+    const out = new Map<string, WorkCardPlanning>();
+    if (!this.planRuns) return out;
+    try {
+      const onBoard = new Map([...analyzed.values()].filter((a) => a.node.inProject).map((a) => [a.node.key.toLowerCase(), a.node]));
+      for (const run of await this.planRuns.all()) {
+        const node = onBoard.get(run.key.toLowerCase());
+        if (!node) continue;
+        const live = planningLinks.filter((l) => l.key.toLowerCase() === run.key.toLowerCase()).map((l) => ({ sessionId: l.sessionId, since: l.since }));
+        const settled = settlePlanRun(run, { live, steps: node.subIssues?.total ?? 0, now });
+        if (settled !== run) await this.planRuns.save(settled);
+        const state = planningOfRun(settled);
+        if (state) out.set(run.key.toLowerCase(), state);
+      }
+    } catch (err) {
+      this.log(`work board: planning runs unavailable: ${err instanceof Error ? err.message : String(err)}`);
+      out.clear();
+    }
+    return out;
   }
 
   /** #496 the pause the rate limit set wins; else the sync's next read, an overdue one counting as now (it runs on the next tick); else nothing is scheduled. */

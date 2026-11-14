@@ -177,3 +177,26 @@ describe('#465 sessions linked to work board issues', () => {
     assert.deepEqual(await sessions().links(), []);
   });
 });
+
+describe('#507/AC-3 the planning session is told apart', () => {
+  const PLAN_PROMPT = 'Ahrena Console planning run: Owner/Repo#500\nRun Athena in planning-only mode.';
+
+  test('#507/AC-3 Given a session whose first prompt is the planning run marker, Then it links to that issue and is marked planning', async () => {
+    await live({ id: 'p', cwd: '/w/main' }, [prompt(PLAN_PROMPT)]);
+    assert.deepEqual(await sessions().links(), [{ sessionId: 'p', key: 'Owner/Repo#500', state: 'working', since: at(-60), planning: true }]);
+  });
+
+  test('#507/AC-3 the marker wins over the branch of the folder it started in', async () => {
+    await live({ id: 'p', cwd: '/w/board' }, [prompt(PLAN_PROMPT)]);
+    const [l] = await sessions().links();
+    assert.equal(l!.key, 'Owner/Repo#500');
+    assert.equal(l!.planning, true);
+  });
+
+  test('#507/AC-3 a session that merely mentions the issue, or a branch session, is not planning', async () => {
+    await live({ id: 'm', cwd: '/w/main' }, [prompt('look at owner/repo#500 please')]);
+    await live({ id: 'b', cwd: '/w/board' }, [prompt('do the thing')]);
+    const links = await sessions().links();
+    assert.ok(links.length === 2 && links.every((l) => l.planning === undefined));
+  });
+});
