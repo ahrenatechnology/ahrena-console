@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import { AlertTracker, computeAlerts, formatBytes, loadHighSince, machineUnreachableAlert } from '../../src/telemetry/alerts.ts';
-import { UNREACHABLE_REASONS } from '../../src/telemetry/model.ts';
+import { UNREACHABLE_REASONS, type TelemetryReading } from '../../src/telemetry/model.ts';
 import { iso, point, reading, T0 } from './reading.ts';
 
 const MIN = 60_000;
@@ -132,5 +132,77 @@ describe('#388 the alert of a remote that refuses the owner proof', () => {
       const a = machineUnreachableAlert('Workstation', 14720, r, iso(T0));
       assert.doesNotMatch(`${a.message} ${a.detail}`, /token|Bearer|BEGIN|secret|stderr|ssh -/i, r);
     }
+  });
+});
+
+const memory = (over: Partial<TelemetryReading['memory']>) => reading({ memory: { ...reading().memory, ...over } });
+const GB = 1e9;
+const swapOf = (usedGb: number, totalGb: number | null) => memory({ swapTotalBytes: totalGb === null ? null : totalGb * GB, swapUsedBytes: usedGb * GB });
+const memoryAlerts = (r: TelemetryReading) => computeAlerts(r, []).filter((a) => a.kind === 'memory-high');
+const swapAlerts = (r: TelemetryReading) => computeAlerts(r, []).filter((a) => a.kind === 'swap-high');
+
+describe('#564/AC-1 swap-high error', () => {
+  test('#564/AC-1 swap at 93% opens swap-high error with used and total in the detail', () => {
+    const [a, ...rest] = swapAlerts(swapOf(19, 20.4));
+    assert.equal(rest.length, 0);
+    assert.equal(a.id, 'swap-high');
+    assert.equal(a.level, 'error');
+    assert.equal(a.detail, '19 GB de 20,4 GB usados (93%)');
+    assert.equal(a.since, iso(T0));
+  });
+
+  test('#564/AC-1 swap at exactly 90% is already error', () => {
+    assert.equal(swapAlerts(swapOf(18, 20))[0]?.level, 'error');
+  });
+});
+
+describe('#564/AC-2 swap-high warning and none', () => {
+  test('#564/AC-2 swap between 80% and 90% opens swap-high warning, exactly 80% included', () => {
+    assert.equal(swapAlerts(swapOf(16, 20))[0]?.level, 'warning');
+    assert.equal(swapAlerts(swapOf(17.9, 20))[0]?.level, 'warning');
+  });
+
+  test('#564/AC-2 swap below 80% opens nothing', () => {
+    assert.deepEqual(swapAlerts(swapOf(15.9, 20)), []);
+  });
+
+  test('#564/AC-2 swap total 0 or unknown opens nothing', () => {
+    assert.deepEqual(swapAlerts(swapOf(0, 0)), []);
+    assert.deepEqual(swapAlerts(swapOf(5, null)), []);
+    assert.deepEqual(swapAlerts(memory({ swapTotalBytes: 20 * GB, swapUsedBytes: null })), []);
+  });
+});
+
+describe('#564/AC-3 memory-high by pressure', () => {
+  test('#564/AC-3 pressure critical opens memory-high error, warning opens warning, normal opens nothing', () => {
+    const low = { totalBytes: 36 * GB, usedBytes: 10 * GB };
+    const [c] = memoryAlerts(memory({ ...low, pressure: 'critical' }));
+    assert.equal(c.id, 'memory-high');
+    assert.equal(c.level, 'error');
+    assert.equal(memoryAlerts(memory({ ...low, pressure: 'warning' }))[0]?.level, 'warning');
+    assert.deepEqual(memoryAlerts(memory({ ...low, pressure: 'normal' })), []);
+  });
+
+  test('#564/AC-3 pressure normal wins over a high used percentage', () => {
+    assert.deepEqual(memoryAlerts(memory({ totalBytes: 36 * GB, usedBytes: 35 * GB, pressure: 'normal' })), []);
+  });
+});
+
+describe('#564/AC-4 memory-high by percentage without pressure', () => {
+  const noPressure = (usedGb: number) => memory({ totalBytes: 100 * GB, usedBytes: usedGb * GB, pressure: null });
+
+  test('#564/AC-4 exactly 90% opens warning and exactly 95% opens error', () => {
+    assert.equal(memoryAlerts(noPressure(90))[0]?.level, 'warning');
+    assert.equal(memoryAlerts(noPressure(94.9))[0]?.level, 'warning');
+    assert.equal(memoryAlerts(noPressure(95))[0]?.level, 'error');
+  });
+
+  test('#564/AC-4 below 90% opens nothing, and a zero total opens nothing', () => {
+    assert.deepEqual(memoryAlerts(noPressure(89.9)), []);
+    assert.deepEqual(memoryAlerts(memory({ totalBytes: 0, usedBytes: 0, pressure: null })), []);
+  });
+
+  test('#564/AC-4 the detail carries used and total', () => {
+    assert.equal(memoryAlerts(noPressure(96))[0]?.detail, '96 GB de 100 GB usados (96%)');
   });
 });

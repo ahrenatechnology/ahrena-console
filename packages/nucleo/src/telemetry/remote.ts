@@ -104,7 +104,7 @@ export const MAX_REMOTE_READING_BYTES = 256 * 1024;
 export const MAX_REMOTE_VOLUMES = 64;
 export const MAX_REMOTE_ALERTS = 50;
 /** The remote's alert kinds this núcleo knows; `machine-unreachable` is this Mac's to compute. */
-const REMOTE_ALERT_KINDS: readonly AlertKind[] = ['load-high', 'volume-full', 'port-exposed', 'tunnel-busy', 'terminal-stuck'];
+const REMOTE_ALERT_KINDS: readonly AlertKind[] = ['load-high', 'volume-full', 'port-exposed', 'tunnel-busy', 'terminal-stuck', 'memory-high', 'swap-high'];
 
 /**
  * The remote's reading, projected onto `TelemetryReading`, with `takenAt` set to when THIS Mac read
