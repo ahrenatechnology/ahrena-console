@@ -173,11 +173,22 @@ describe('an orchestrator names no PR group (#586)', () => {
     assert.deepEqual(loop.groups.map((g) => g.id), ['issue:467']);
   });
 
-  test('#586/AC-1: a subagent that is the parent of another subagent is an orchestrator, whatever its type', () => {
-    const boss = sub('boss', 'general-purpose', 0, 30, 'Coordinate issue #467, PR #475 is the model');
+  test('#586/AC-1: a parent of another subagent whose loop role is other is an orchestrator, whatever its type', () => {
+    const boss = sub('boss', 'tech-lead', 0, 30, 'Coordinate issue #467, PR #475 is the model');
     const child = sub('kid', 'general-purpose', 1, 5, 'Build the page', { parentAgentId: 's1:boss' });
     const loop = buildPrLoop(live, [main, boss, child], [], papelDe);
     assert.deepEqual(loop.groups.map((g) => g.id), ['issue:467', 'none']);
+  });
+
+  test('#586/AC-1: a review agent that delegates to a fix agent keeps its PR group and its round', () => {
+    const dev = sub('dev', 'general-purpose', 0, 10, 'Build PR #320');
+    const argos = sub('argos', 'ahrena-engineering-quality:argos', 10, 20, 'Review PR #320');
+    const erodos = sub('erodos', 'ahrena-engineering-quality:erodos', 12, 18, 'Fix the findings', { parentAgentId: 's1:argos' });
+    const loop = buildPrLoop(live, [main, dev, argos, erodos], [], papelDe);
+    const group = loop.groups.find((g) => g.id === 'pr:320');
+    assert.ok(group, 'the group pr:320 exists');
+    assert.ok(group.steps.some((s) => s.agentId === 's1:argos'), 'argos stays in pr:320');
+    assert.equal(group.rounds, 1);
   });
 
   test('#586/AC-1: an orchestrator that cites no issue goes to none', () => {

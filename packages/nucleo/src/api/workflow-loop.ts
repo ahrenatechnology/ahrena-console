@@ -10,8 +10,9 @@
 //    same branch and a PR, this one joins that PR;
 // 3. the issue the task cites with no PR (`Refs #N`, `issue #N`, a bare `#N`). A branch like `feat/333-x`
 //    carries issue 333 to the PR group whose subagents are on it, so the issue group folds into the PR.
-// An orchestrator (the parent of another subagent, or an `athena` type) gets no PR from rule 1 and feeds no bare `#N`
-// into a PR (#586): its `PR #N` is a reference, and its bare refs are issues.
+// An orchestrator (an `athena` type, or the parent of another subagent whose loop role is `other`) gets no PR from rule 1
+// and feeds no bare `#N` into a PR (#586): its `PR #N` is a reference, and its bare refs are issues. A dev, review or
+// fix agent that delegates is not one: it keeps its own PR.
 // A task that cites two PRs stays in the first and carries the other in `otherRefs`.
 //
 // A round is each Argos call (a `review` step) on the group. A change request is a round whose verdict, read from
@@ -123,7 +124,9 @@ export function buildPrLoop(session: Session, agents: readonly Agent[], events: 
   // A bare `#N` is a PR when some subagent of the session wrote it as a PR.
   // An orchestrator (#586) cites PRs as references, not as its own work: they feed no PR for anyone.
   const parents = new Set(subs.map((a) => a.parentAgentId));
-  const isOrchestrator = (a: Agent) => parents.has(a.id) || ORCHESTRATOR_TYPE.test(a.subagentType ?? '');
+  // Only an `athena` type, or a parent whose loop role is `other`: a dev, review or fix agent that delegates keeps its PR.
+  const isOrchestrator = (a: Agent) =>
+    ORCHESTRATOR_TYPE.test(a.subagentType ?? '') || (parents.has(a.id) && loopRoleOf(roleOf(a)) === 'other');
   const explicitPrs = new Set(subs.filter((a) => !isOrchestrator(a)).flatMap((a) => refs.get(a.id)!.prs));
 
   const linked: Linked[] = subs.map((agent) => {
