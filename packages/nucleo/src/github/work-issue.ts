@@ -92,7 +92,7 @@ export interface WorkIssueWriter {
   editStep(parent: string, step: string, edit: { title?: string; body?: string }): Promise<WorkIssueRead | null>;
   addStep(parent: string, step: { title: string; body: string }): Promise<WorkIssueRead | null>;
   removeStep(parent: string, step: string): Promise<WorkIssueRead | null>;
-  /** `after`: the key of the sub-issue it goes behind, or `null` for the top. */
+  /** #534 `after`: the key of the sub-issue it goes behind, or `null` for the top. */
   moveStep(parent: string, step: string, after: string | null): Promise<WorkIssueRead | null>;
 }
 
