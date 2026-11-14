@@ -320,13 +320,23 @@ export function migrate(db: DatabaseSync, migrations: readonly Migration[] = MIG
   const applied: number[] = [];
   for (const m of [...migrations].sort((a, b) => a.version - b.version)) {
     if (m.version <= current) continue;
+    let began = false;
+    let bodyError: unknown;
     try {
       immediateTransaction(db, () => {
-        db.exec(m.sql);
-        m.up?.(db);
-        db.exec(`PRAGMA user_version = ${m.version}`);
+        began = true;
+        try {
+          db.exec(m.sql);
+          m.up?.(db);
+          db.exec(`PRAGMA user_version = ${m.version}`);
+        } catch (bodyFailure) {
+          bodyError = bodyFailure;
+          throw bodyFailure;
+        }
       });
     } catch (err) {
+      // BEGIN failed, or ROLLBACK failed after the body threw: the raw error, as before #498.
+      if (!began || (bodyError !== undefined && err !== bodyError)) throw err;
       throw new Error(`migração ${m.version} (${m.description}) falhou: ${(err as Error).message}`, { cause: err });
     }
     applied.push(m.version);
