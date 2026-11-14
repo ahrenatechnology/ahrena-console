@@ -290,7 +290,7 @@ describe('AC-4: the assembled page over several organizations is accessible (pag
 
   function checkPage(s: Screen) {
     const all = inOrder(s.area);
-    // Landmarks and headings: the filters and the board are named regions, one h1 and no skipped level.
+    // Landmarks and headings: the filters and the board are named regions, one h1 and no skipped level (#610).
     assert.ok(s.area.querySelector('section[aria-label="Filtros"]'), 'the filters are a labelled section');
     assert.ok(s.area.querySelector('div[role="region"][aria-label]'), 'the board is a labelled region');
     const levels = all.filter((n) => /^H[1-6]$/.test(n.tagName)).map((n) => Number(n.tagName[1]));
@@ -298,15 +298,15 @@ describe('AC-4: the assembled page over several organizations is accessible (pag
     assert.equal(levels[0], 1, 'the page starts with its h1');
     levels.forEach((l, i) => i && assert.ok(l <= levels[i - 1]! + 1, `heading level ${l} follows ${levels[i - 1]}`));
     for (const col of s.area.querySelectorAll('section.wb-col')) assert.ok(col.getAttribute('aria-labelledby'), 'a column is named by its heading');
-    // Every select is labelled and every button and link is named.
+    // Every select is labelled and every button and link is named (#610).
     for (const select of s.area.querySelectorAll('select')) {
       const label = select.closest('label');
       assert.ok((label && texto(label.querySelector('span.wb-field-label')).trim()) || select.getAttribute('aria-label'), `select ${select.getAttribute('data-param')} has a label`);
     }
     for (const n of [...s.area.querySelectorAll('button'), ...s.area.querySelectorAll('a')]) assert.notEqual(nameOf(n), '', `${n.tagName} ${n.getAttribute('class')} has no name`);
-    // Bands are announced: a warning band is a status, a failure one an alert.
+    // Bands are announced: a warning band is a status, a failure one an alert (#610).
     for (const band of s.area.querySelectorAll('div.wb-warn-band')) assert.ok(['status', 'alert'].includes(band.getAttribute('role') ?? ''), 'a warning band has a live role');
-    // Focus order: the filters come before the cards, and no id repeats.
+    // Focus order: the filters come before the cards, and no id repeats (#610).
     const order = focusOrder(s);
     const firstSelect = order.findIndex((n) => n.tagName === 'SELECT');
     const firstCard = order.findIndex((n) => n.closest('article') !== null);
