@@ -81,6 +81,60 @@ article[data-selected] { border-color: var(--accent); box-shadow: 0 0 0 1px var(
 .wb-panel-more { font-size: 12px; color: var(--accent-text); }
 .wb-panel-more:focus-visible, .wb-panel-github:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
+/* ---------- the edit mode of the panel (issue 535, wireframes 478-1, 478-2 and 478-3) ---------- */
+.wb-panel.wb-edit-panel { width: 520px; }
+@media (min-width: 1280px) { .wb-panel.wb-edit-panel { width: 580px; } }
+.wb-edit-head { flex-wrap: wrap; }
+.wb-edit-badge { gap: 4px; }
+.wb-edit-badge .icon { width: 11px; height: 11px; }
+.wb-edit-saved { margin-left: auto; display: inline-flex; gap: 4px; align-items: center; font-size: 11.5px; color: var(--status-completed-text); }
+.wb-edit-done { margin-left: 0; }
+.wb-edit-title, .wb-edit-input, .wb-edit-textarea, .wb-edit-select { font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: 8px; min-width: 0; }
+.wb-edit-title { width: 100%; box-sizing: border-box; padding: 7px 9px; font-size: 16px; font-weight: var(--weight-semibold); line-height: 1.35; }
+.wb-edit-input { flex: 1; padding: 4px 8px; font-size: 12px; }
+.wb-edit-textarea { width: 100%; box-sizing: border-box; padding: 8px 10px; font-family: var(--font-mono); font-size: 11.5px; line-height: 1.5; resize: vertical; }
+.wb-edit-comment { font-family: inherit; font-size: 12px; }
+.wb-edit-title:focus-visible, .wb-edit-input:focus-visible, .wb-edit-textarea:focus-visible, .wb-edit-select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.wb-edit-select { padding: 4px 8px; font-size: 12px; max-width: 100%; }
+.wb-edit-select:disabled, .wb-edit-title:disabled { opacity: .5; cursor: progress; }
+.wb-edit-tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--border); }
+.wb-edit-tab { font: inherit; font-size: 12px; color: var(--muted); background: none; border: 0; border-bottom: 2px solid transparent; padding: 5px 10px; cursor: pointer; }
+.wb-edit-tab[aria-selected="true"] { color: var(--text); border-bottom-color: var(--accent); font-weight: var(--weight-semibold); }
+.wb-edit-tab:focus-visible, .wb-edit-grip:focus-visible, .wb-edit-icon:focus-visible, .wb-edit-add:focus-visible, .wb-edit-chip-x:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.wb-edit-pane { min-width: 0; }
+.wb-edit-preview { padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); }
+.wb-edit-row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.wb-edit-end { justify-content: flex-end; }
+.wb-edit-hint { margin-left: auto; font-size: 11.5px; color: var(--muted); line-height: 1.4; }
+.wb-edit-row > .wb-edit-hint { margin-left: auto; }
+.wb-edit-note { margin-left: auto; font-size: 11.5px; color: var(--muted); }
+.wb-edit-band { display: flex; gap: 8px; align-items: flex-start; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--raised); font-size: 12px; line-height: 1.45; }
+.wb-edit-band .icon { flex: none; margin-top: 1px; }
+.wb-edit-refusal { color: var(--status-error-text); border-color: var(--status-error-dot); background: var(--status-error-badge); }
+.wb-edit-conflict { display: flex; flex-direction: column; gap: 8px; }
+.wb-edit-version { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.wb-edit-version-title { font-size: 10.5px; font-weight: var(--weight-semibold); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.wb-edit-text { padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); font-family: var(--font-mono); font-size: 11.5px; line-height: 1.5; overflow-wrap: anywhere; }
+.wb-edit-line { min-height: 1.5em; white-space: pre-wrap; }
+.wb-edit-diff { color: var(--text); font-weight: var(--weight-semibold); background: var(--status-waiting-badge); text-decoration: underline; text-decoration-style: dotted; }
+.wb-edit-sr { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
+.wb-edit-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 5px; }
+.wb-edit-steps li { display: flex; gap: 8px; align-items: center; padding: 6px 8px; border: 1px solid var(--border); border-radius: 8px; font-size: 12px; background: var(--bg); min-width: 0; }
+.wb-edit-steps li.wb-edit-editing { border-color: var(--accent); }
+.wb-edit-steps li.wb-edit-add-step { border-style: dashed; background: none; padding: 0; }
+.wb-edit-step-n { flex: none; font-family: var(--font-mono); font-size: 11px; color: var(--muted); }
+.wb-edit-grip, .wb-edit-icon, .wb-edit-add, .wb-edit-chip-x { display: inline-flex; align-items: center; gap: 6px; font: inherit; color: var(--muted); background: none; border: 0; padding: 2px; border-radius: 4px; cursor: pointer; }
+.wb-edit-grip { cursor: grab; flex: none; }
+.wb-edit-icon:hover, .wb-edit-chip-x:hover { color: var(--text); }
+.wb-edit-add { width: 100%; padding: 6px 8px; color: var(--accent-text); }
+.wb-edit-notice { display: flex; gap: 8px; align-items: center; justify-content: space-between; padding: 6px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--raised); font-size: 12px; }
+.wb-edit-chip { gap: 4px; }
+.wb-edit-chip-x { padding: 0; }
+.wb-edit-chip-x .icon { width: 11px; height: 11px; }
+.wb-edit-add-label { height: 22px; padding: 0 8px; border-radius: 99px; font-size: 11.5px; color: var(--accent-text); }
+.wb-edit-exits { gap: 8px; }
+.wb-edit-steps li.wb-edit-new-step { border-color: var(--accent); color: var(--accent-text); }
+
 /* ---------- Executar plano (issue 532, wireframes 465-2 and 465-6): "subindo…", the limit warning, the prompt, the notice ---------- */
 .wb-run-boot .icon { animation: wb-run-spin 1.2s linear infinite; }
 @keyframes wb-run-spin { to { transform: rotate(360deg); } }
