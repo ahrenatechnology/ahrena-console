@@ -1,4 +1,3 @@
-import { OWNER_TOKEN, ownerFetch as fetch } from '../owner-http.ts';
 /*
  * #512 the work routes when GitHub accepts a request and never answers: `GET /api/work` and
  * `GET /api/work/issue` answer as with GitHub down (the stored value as stale, or 502 `github-unavailable`),
@@ -20,6 +19,7 @@ import { SqliteWorkColumnHistory } from '../../src/github/work-board-history.ts'
 import { WorkBoardService } from '../../src/github/work-board-service.ts';
 import { WorkIssueService } from '../../src/github/work-issue-service.ts';
 import { clock, REPO, type Recorded } from '../github/helpers.ts';
+import { OWNER_TOKEN, ownerFetch as fetch } from '../owner-http.ts';
 
 const TIMEOUT_MS = 50;
 /** #512 a request that outlives this was not bounded: the test fails instead of waiting for the runner. */
@@ -167,6 +167,7 @@ describe('#512/AC-2 GET /api/work when GitHub accepts the request and never answ
     withApi('board', async (b) => {
       const first = await get(b, WORK_BOARD_ROUTE);
       assert.deepEqual([first.status, first.json.stale, first.json.staleReason], [200, false, null]);
+      assert.ok(first.json.columns, '#512 the board has columns');
       const cards = first.json.columns.flatMap(c => c.cards).length;
       assert.ok(cards > 0, 'the stored board has cards');
       b.gh.state.mode = 'hang';
@@ -174,6 +175,7 @@ describe('#512/AC-2 GET /api/work when GitHub accepts the request and never answ
       const r = await get(b, WORK_BOARD_ROUTE, '?refresh=1');
       assert.equal(r.status, 200);
       assert.deepEqual([r.json.stale, r.json.staleReason], [true, 'network']);
+      assert.ok(r.json.columns, '#512 the board has columns');
       assert.equal(r.json.columns.flatMap(c => c.cards).length, cards, 'the last board is still there');
       assert.equal(b.gh.state.aborted, 1);
     }));
