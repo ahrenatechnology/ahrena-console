@@ -1,6 +1,7 @@
-// Red end-to-end skeleton of the agent view (#521, parent #518); data from #529.
+// End-to-end skeleton of the agent view (#521, parent #518); data from #529.
 // The components layer (#538) turned the Agents tab row and loop node tests green; the state layer (#539) turned every scenario that
-// mounts the screen over a fake read in the shape of #529 green. What stays `todo` needs the registered route, the contract layer (#540).
+// mounts the screen over a fake read in the shape of #529 green; the contract layer (#540) registers the route, reads the core's
+// own route and turns the last scenario and the page-level accessibility check green: no `todo` is left.
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import { documentoFalso, ElementoFalso, instalarDomFalso, texto } from './fake-dom.ts';
@@ -12,7 +13,6 @@ const BASE = `/api/sessions/${SID}`;
 const ORIGIN = 'http://127.0.0.1:8787';
 const ATHENA = 'agent-athena';
 const IRIS = 'agent-iris:abc1'; // an agent id has ":" in it: the route carries it encoded (#521)
-const TODO = (what: string) => ({ todo: `#521 ${what}` });
 
 const page = { pathname: `/ui/sessions/${SID}`, search: '', hash: '#agents', origin: ORIGIN, href: `${ORIGIN}/ui/sessions/${SID}#agents` };
 Object.assign(globalThis, { location: page, history: { state: null, replaceState: () => {}, pushState: () => {}, back: () => {} } });
@@ -129,11 +129,162 @@ describe('AC-1: the Agents tab rows lead to the agent view (issue 521)', () => {
 });
 
 describe('the route of the agent view (issue 521)', () => {
-  test('/ui/sessions/<id>/agents/<agentId> is the agent view screen, with the agent id decoded', TODO('Q1 own route'), () => {
+  test('/ui/sessions/<id>/agents/<agentId> is the agent view screen, with the agent id decoded', () => {
     const found = registry.findScreen(`/ui/sessions/${SID}/agents/${encodeURIComponent(IRIS)}`);
     assert.equal(found?.screen.file, '/ui/screens/agent-view.js');
     assert.deepEqual(found.params, { id: SID, agentId: IRIS });
     assert.equal(found.screen.highlights, 'sessions');
+  });
+
+  test('the session route and the shape of a bad agent id stay as they were (#540)', () => {
+    assert.equal(registry.findScreen(`/ui/sessions/${SID}`)?.screen.file, '/ui/screens/session-detail.js');
+    assert.equal(registry.findScreen(`/ui/sessions/${SID}/agents`), null);
+    assert.equal(registry.findScreen(`/ui/sessions/${SID}/agents/a%2Fb`), null, 'an encoded slash is no agent id');
+    assert.equal(registry.findScreen(`/ui/sessions/${SID}/agents/%E0%A4%A`), null, 'an id that does not decode is no route');
+  });
+});
+
+describe('AC-1 (#540): the view reads the core route of the contract', () => {
+  const body = (status: number, json: unknown) => ({ ok: status < 400, status, headers: new Headers(), json: async () => json });
+  async function mountOverHttp(respond: (url: URL) => ReturnType<typeof body>) {
+    // @ts-expect-error: browser module, plain JavaScript
+    const { httpReader } = await import('../../ui/api.js');
+    const urls: string[] = [];
+    const fetch = async (url: URL) => (urls.push(url.pathname + url.search), respond(url));
+    const reader = httpReader({ base: ORIGIN, fetch });
+    const mod = await import('../../ui/screens/agent-view.js' as string);
+    const found = registry.findScreen(`/ui/sessions/${SID}/agents/${encodeURIComponent(IRIS)}`);
+    const c = ctxFor({}, found.params);
+    const area = new ElementoFalso('main');
+    await mod.mount(area, { ...c.ctx, read: (r: string) => reader(r, { signal: c.ctx.signal }) });
+    await settle();
+    return { area, urls };
+  }
+
+  test('GET /api/sessions/<id>/agents/<agentId>, the id encoded, and the answer is drawn', async () => {
+    const { area, urls } = await mountOverHttp(() => body(200, view({ agentId: IRIS, agentType: 'iris', description: 'frontend', brief: 'Escreva a camada.' })));
+    assert.deepEqual(urls, [`${BASE}/agents/${encodeURIComponent(IRIS)}`]);
+    assert.equal(texto(area.querySelector('.av-kind')), 'iris');
+    assert.match(texto(area.querySelector('.av-brief')), /Escreva a camada\./);
+  });
+
+  test('404 agent_not_found shows the missing state, and any other failure the error with a retry', async () => {
+    const missing = await mountOverHttp(() => body(404, { error: 'Agente desconhecido', code: 'agent_not_found' }));
+    assert.ok(missing.area.querySelector('.av-missing'), 'missing state');
+    const down = await mountOverHttp(() => body(500, { error: 'falhou' }));
+    assert.ok(down.area.querySelector('[role="alert"]'), 'error state');
+    assert.ok(down.area.querySelectorAll('button').some((b) => texto(b) === 'Tentar de novo'));
+  });
+});
+
+describe('AC-2 (#540): the Agents tab rows use agentType, description and parent of the core list', () => {
+  const rowsOf = (area: ElementoFalso) => area.querySelectorAll('.sd-node');
+  const listWith = (agents: unknown[]) => ({ ...AGENTS_LIST, agents });
+
+  test('a row is named by its agentType and describes what it was asked, not the stored name', async () => {
+    const list = listWith([
+      agentRow('main', 'principal', null),
+      agentRow(`${SID}:a1`, 'x', 'main', { name: 'Plan the cut of issue 521', agentType: 'ahrena-engineering-development:athena', description: 'planeja a issue' }),
+    ]);
+    const { area } = await mountAgentsTab({ [`${BASE}/agents`]: list });
+    const row = rowsOf(area).find((r) => r.getAttribute('data-agent') === 'a1')!;
+    assert.equal(texto(row.querySelector('b')), 'Athena');
+    assert.match(texto(row.querySelector('small')), /ahrena-engineering-development:athena/);
+    assert.match(texto(row.querySelector('small')), /planeja a issue/);
+    assert.equal(row.getAttribute('aria-label'), 'Abrir a vista de Athena');
+    assert.equal(row.getAttribute('href'), `/ui/sessions/${SID}/agents/a1`);
+  });
+
+  test('with no agentType the row falls back to the description, then to the stored name', async () => {
+    const list = listWith([
+      agentRow('main', 'principal', null),
+      agentRow(`${SID}:b1`, 'x', 'main', { name: 'stored name', agentType: null, description: 'what it was asked' }),
+      agentRow(`${SID}:b2`, 'x', 'main', { name: 'stored name', agentType: null, description: null }),
+    ]);
+    const { area } = await mountAgentsTab({ [`${BASE}/agents`]: list });
+    const title = (id: string) => texto(rowsOf(area).find((r) => r.getAttribute('data-agent') === id)!.querySelector('b'));
+    assert.equal(title('b1'), 'what it was asked');
+    assert.equal(title('b2'), 'stored name');
+  });
+
+  test('the rows are indented by parent, and the main row keeps its name', async () => {
+    const list = listWith([
+      agentRow('main', 'principal', null),
+      agentRow(`${SID}:p`, 'athena', 'main'),
+      agentRow(`${SID}:q`, 'iris', `${SID}:p`),
+    ]);
+    const { area } = await mountAgentsTab({ [`${BASE}/agents`]: list });
+    const depth = (id: string) => rowsOf(area).find((r) => r.getAttribute('data-agent') === id)!.getAttribute('data-depth');
+    assert.deepEqual([depth('main'), depth('p'), depth('q')], ['0', '1', '2']);
+    assert.equal(texto(rowsOf(area)[0]!.querySelector('b')), 'principal');
+  });
+});
+
+describe('AC-4 and AC-5 (#540): the assembled page', () => {
+  type Node = ElementoFalso;
+  /** The elements the keyboard reaches, in document order: a link with an href and an enabled button, never tabindex -1. */
+  const tabOrder = (root: Node): Node[] => {
+    const out: Node[] = [];
+    const walk = (n: Node) => {
+      for (const c of n.children) {
+        const reachable = (c.tagName === 'A' && c.hasAttribute('href')) || (c.tagName === 'BUTTON' && !c.hasAttribute('disabled'));
+        if (reachable && c.getAttribute('tabindex') !== '-1') out.push(c);
+        walk(c);
+      }
+    };
+    walk(root);
+    return out;
+  };
+  const nameOf = (n: Node) => (n.getAttribute('aria-label') ?? texto(n)).trim();
+
+  test('the Agents tab: each subagent row is reachable by keyboard in the drawn order, with a name', async () => {
+    const { area } = await mountAgentsTab();
+    const order = tabOrder(area).filter((n) => n.classList.contains('sd-node'));
+    assert.deepEqual(order.map((n) => n.getAttribute('data-agent')), [ATHENA, IRIS, 'agent-erodos']);
+    for (const n of tabOrder(area)) assert.notEqual(nameOf(n), '', 'every reachable control has a name');
+    assert.ok(tabOrder(area).every((n) => Number(n.getAttribute('tabindex') ?? 0) <= 0), 'no positive tabindex');
+  });
+
+  test('the agent view: Back comes before the steps, every control has a name and the landmarks are there', async () => {
+    const { area } = await mountAgentView({ [`${BASE}/agents/${ATHENA}`]: view() });
+    const order = tabOrder(area);
+    const back = order.findIndex((n) => n.getAttribute('href') === `/ui/sessions/${SID}#agents`);
+    const firstStep = order.findIndex((n) => area.querySelectorAll('.av-step').some((s) => s.contains(n)));
+    assert.ok(back >= 0 && firstStep > back, 'Back (the Agents crumb) is reached before the first step');
+    for (const n of order) assert.notEqual(nameOf(n), '', 'every reachable control has a name');
+    const nav = area.querySelector('nav')!;
+    assert.ok(nav.getAttribute('aria-label'), 'the crumb is a named navigation landmark');
+    assert.equal(nav.querySelectorAll('[aria-current="page"]').length, 1);
+    assert.equal(area.querySelectorAll('h2').length, 1, 'one heading for the agent');
+    assert.ok(area.querySelectorAll('button').filter((b) => b.hasAttribute('aria-expanded')).length > 0, 'the toggles say whether they are open');
+  });
+
+  test('the whole path: row link, route, the view, Back with focus on the same row', async () => {
+    // 1. the Agents tab; the person activates the Iris row, which marks it for Back
+    let tab = await mountAgentsTab();
+    const link = tab.area.querySelectorAll('a.sd-node').find((r) => texto(r).includes('iris'))!;
+    link.dispatchEvent({ type: 'click', button: 0, preventDefault: () => {} } as never);
+    // 2. the route of the link opens that agent's view, the id decoded
+    const found = registry.findScreen(link.getAttribute('href')!.replace(/#.*$/, ''));
+    assert.deepEqual(found.params, { id: SID, agentId: IRIS });
+    const mod = await import('../../ui/screens/agent-view.js' as string);
+    const c = ctxFor({ [`${BASE}/agents/${encodeURIComponent(IRIS)}`]: view({ agentId: IRIS, agentType: 'iris' }) }, found.params);
+    const area = new ElementoFalso('main');
+    const shell: Array<[string, unknown]> = [];
+    await mod.mount(area, { ...c.ctx, navigate: (r: string, state: unknown) => void shell.push([r, state]) });
+    await settle();
+    // 3. Back asks the shell to go to the Agents tab, carrying the agent
+    area.querySelector(`a.av-crumb-link[href="/ui/sessions/${SID}#agents"]`)!.dispatchEvent({ type: 'click', button: 0 } as never);
+    assert.deepEqual(shell, [[`/ui/sessions/${SID}#agents`, { focusAgent: IRIS }]]);
+    // 4. the tab, remounted with that state, puts the focus on the row
+    Object.assign(history, { state: shell[0]![1] });
+    try {
+      tab = await mountAgentsTab();
+      const row = tab.area.querySelectorAll('a.sd-node').find((r) => texto(r).includes('iris'))!;
+      assert.equal(documentoFalso.activeElement, row);
+    } finally {
+      Object.assign(history, { state: null });
+    }
   });
 });
 

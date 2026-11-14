@@ -79,6 +79,17 @@ export const SCREENS = [
     file: '/ui/screens/session-detail.js', // #29 and #30
   },
   {
+    // One agent seen from the inside (issue 521, wireframe 521-1). The agent id has a ":" in it and travels encoded;
+    // the shell decodes it into `params.agentId`. It lights the Sessions item, like the session it belongs to (issue 540).
+    id: 'agent-view',
+    route: '/ui/sessions/:id/agents/:agentId',
+    highlights: 'sessions',
+    title: 'Agente',
+    sub: null,
+    icon: 'sessions',
+    file: '/ui/screens/agent-view.js',
+  },
+  {
     id: 'repos',
     route: '/ui/repos',
     item: { label: 'Repositórios', icon: 'repos', section: 'delivery' },
