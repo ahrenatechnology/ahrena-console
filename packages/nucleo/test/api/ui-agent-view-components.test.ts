@@ -1,5 +1,5 @@
-// The components of the agent view (issue 538, layer 2 of 521), rendered from data in the shape of the
-// agent-view contract (issue 529): no read, no core. One group per component and per drawn state.
+// The components of the agent view (#538, layer 2 of 521), rendered from data in the shape of the
+// agent-view contract (#529): no read, no core. One group per component and per drawn state.
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import { ElementoFalso, instalarDomFalso, texto } from './fake-dom.ts';
@@ -12,7 +12,7 @@ const format = await import('../../ui/screens/agent-view-format.js');
 const view = await import('../../ui/screens/agent-view.js');
 
 const SID = 'c3f09b52-4e10';
-const IRIS = 'a1b2:iris'; // an agent id may carry a ":" (the route carries it encoded) (issue 529)
+const IRIS = 'a1b2:iris'; // an agent id may carry a ":" (the route carries it encoded) (#529)
 const NOW = Date.parse('2026-11-01T10:30:00.000Z');
 const at = (min: number, sec = 0) => new Date(Date.parse('2026-11-01T10:00:00.000Z') + min * 60_000 + sec * 1000).toISOString();
 
