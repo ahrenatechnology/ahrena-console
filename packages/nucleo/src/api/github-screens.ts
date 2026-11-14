@@ -119,6 +119,7 @@ export function createGithubScreens(o: GithubScreensOptions): GithubScreens {
                 cache,
                 token: github!.token,
                 ...(github!.fetch ? { fetch: github!.fetch } : {}),
+                ...(github!.credentialRefused ? { credentialRefused: github!.credentialRefused } : {}),
                 ...(github!.url ? { url: github!.url } : {}),
               }),
       });

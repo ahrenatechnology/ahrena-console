@@ -241,6 +241,11 @@ export class GithubConnection {
     return this.credential;
   }
 
+  /** #613 GitHub answered 401 for the credential in use and the person has not reconnected since (no network call). */
+  credentialRefused(): boolean {
+    return this.lastError === 'revoked';
+  }
+
   async connected(): Promise<boolean> {
     try {
       await this.token();

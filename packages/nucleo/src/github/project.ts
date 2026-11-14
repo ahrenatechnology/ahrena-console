@@ -19,7 +19,7 @@
  * (30 reads an hour) that is 90 points per hour per page, the `project` line of ADR-0015's budget.
  */
 
-import { GITHUB_TTL, RateLimitedError, type GithubCache, type StaleCode } from './cache.ts';
+import { GITHUB_TTL, RateLimitedError, snapshotCodeOf, type GithubCache, type StaleCode } from './cache.ts';
 import { githubDeadline, githubGraphql, GithubScopeError, requireGithubToken, resolveGithubToken, type GithubGraphqlSourceOptions } from './github-source.ts';
 import { workKey, type CiState, type LinkedPullRequest, type PullRequestState, type ReviewDecision } from './work.ts';
 
@@ -109,6 +109,8 @@ export interface ProjectBoard {
   staleReason: string | null;
   /** #495 the stable code of `staleReason` (the work board shows it, not the raw text); `null` when not stale. */
   staleCode: StaleCode | null;
+  /** #613 epoch ms when the rate-limit pause ends: only with `staleCode` 'rate-limited' on a stored snapshot, else `null`. */
+  resumeAt: number | null;
 }
 
 /** Porta da fonte do Project: o adaptador local chama o GitHub; o do hub (7.9) lerá de lá. */
@@ -344,6 +346,8 @@ export interface GithubProjectOptions {
   cache: GithubCache;
   project: ProjectRef;
   now?: () => number;
+  /** #613 true while the connection holds a credential GitHub refused (401): the stored board is stale for that reason. */
+  credentialRefused?: () => boolean;
 }
 
 export const projectCacheKey = ({ owner, number, field = DEFAULT_PROJECT_FIELD }: ProjectRef) => `github:project:${owner}/${number}:${field}`;
@@ -354,8 +358,10 @@ export class GithubProject {
   private readonly source: ProjectSource;
   private readonly cache: GithubCache;
   private readonly now: () => number;
+  private readonly credentialRefused: () => boolean;
 
-  constructor({ source, cache, project, now = Date.now }: GithubProjectOptions) {
+  constructor({ source, cache, project, now = Date.now, credentialRefused = () => false }: GithubProjectOptions) {
+    this.credentialRefused = credentialRefused;
     this.source = source;
     this.cache = cache;
     this.now = now;
@@ -382,8 +388,13 @@ export class GithubProject {
     const hit = await this.cache.peek<ProjectBoardValue>(this.key);
     if (!hit) return null;
     const old = this.now() - hit.fetchedAt > 2 * GITHUB_TTL.project;
-    const code = old ? (this.cache.failure(this.key) ?? 'sync-pending') : null;
-    return this.view(hit.value, hit.fetchedAt, old, old ? 'o sincronismo em segundo plano ainda não releu o quadro' : null, code);
+    if (!old) return this.view(hit.value, hit.fetchedAt, false, null, null);
+    // #613 the real reason, first match wins: the credential refused (the person must act; a pause is moot until
+    // it changes), the rate-limit pause in progress (with when it ends), the failure of the last read, else the sync is just late.
+    const failure = this.cache.failure(this.key);
+    const paused = this.cache.pauseLeftMs() > 0;
+    const code: StaleCode = this.credentialRefused() || failure === 'credential-refused' ? 'credential-refused' : paused ? 'rate-limited' : failure ? snapshotCodeOf(failure) : 'sync-pending';
+    return this.view(hit.value, hit.fetchedAt, true, 'o sincronismo em segundo plano ainda não releu o quadro', code, code === 'rate-limited' && paused ? this.cache.pausedUntil : null);
   }
 
   /**
@@ -419,7 +430,7 @@ export class GithubProject {
     return this.cache.pauseLeftMs();
   }
 
-  private view(value: ProjectBoardValue, fetchedAt: number, stale: boolean, staleReason: string | null, staleCode: StaleCode | null): ProjectBoard {
+  private view(value: ProjectBoardValue, fetchedAt: number, stale: boolean, staleReason: string | null, staleCode: StaleCode | null, resumeAt: number | null = null): ProjectBoard {
     return {
       owner: this.project.owner,
       number: this.project.number,
@@ -432,6 +443,7 @@ export class GithubProject {
       stale,
       staleReason,
       staleCode,
+      resumeAt,
     };
   }
 }
@@ -439,9 +451,10 @@ export class GithubProject {
 export interface CreateGithubProjectOptions extends Partial<GithubGraphqlSourceOptions> {
   project: ProjectRef;
   cache: GithubCache;
+  credentialRefused?: () => boolean;
 }
 
 /** Monta o kanban do Project com o adaptador GraphQL, sobre o cache dado; `token` é o provedor da credencial (#241). */
-export function createGithubProject({ project, cache, token, ...rest }: CreateGithubProjectOptions): GithubProject {
-  return new GithubProject({ source: new GithubProjectSource({ token: requireGithubToken(token), ...rest }), cache, project, ...(rest.now ? { now: rest.now } : {}) });
+export function createGithubProject({ project, cache, token, credentialRefused, ...rest }: CreateGithubProjectOptions): GithubProject {
+  return new GithubProject({ source: new GithubProjectSource({ token: requireGithubToken(token), ...rest }), cache, project, ...(rest.now ? { now: rest.now } : {}), ...(credentialRefused ? { credentialRefused } : {}) });
 }

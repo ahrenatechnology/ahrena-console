@@ -68,9 +68,13 @@ export class RateLimitedError extends Error {
 }
 
 /** #495 why a GitHub read failed, as a stable English code: the screen translates it, the raw message stays in the log. */
-export type GithubFailure = 'network' | 'rate-limited' | 'no-scope' | 'github-error';
+export type GithubFailure = 'network' | 'rate-limited' | 'no-scope' | 'github-error' | 'credential-refused' | 'github-unavailable';
 
-/** #495 why a snapshot is stale: a `GithubFailure`, or 'sync-pending' when the stored board is old with no failure recorded. Never a failure's code. */
+/**
+ * #495 why a snapshot is stale: a `GithubFailure`, or 'sync-pending' when the stored board is old with no pause,
+ * no 401 and no failure recorded (#613). Never a failure's code. The stored snapshot folds 'network' into
+ * 'github-unavailable' (`snapshotCodeOf`); a live read keeps saying 'network'.
+ */
 export type StaleCode = GithubFailure | 'sync-pending';
 
 /** Nada no cache e o GitHub falhou; `cause` é o erro da fonte, quando houve um (permissão, limite, rede). */
@@ -93,8 +97,19 @@ export function githubFailureOf(err: unknown): GithubFailure {
   if (err instanceof NoDataError) return err.failure ?? (err.cause === undefined ? 'github-error' : githubFailureOf(err.cause));
   const name = err instanceof Error ? err.name : '';
   if (name === 'GithubScopeError' || name === 'ProjectPermissionError') return 'no-scope';
+  // #613 a 401 is the credential refused; a 5xx (the gateway errors and any HTTP error from 500) is GitHub unavailable.
+  if (name === 'GithubGatewayError' || name === 'GithubHttpError') {
+    const status = (err as { status?: unknown }).status;
+    if (status === 401) return 'credential-refused';
+    if (typeof status === 'number' && status >= 500) return 'github-unavailable';
+  }
   if (err instanceof TypeError || name === 'AbortError' || name === 'TimeoutError') return 'network';
   return 'github-error';
+}
+
+/** #613 the code a stored snapshot carries for a recorded failure: no network failure and 5xx are told apart, both are GitHub unavailable. */
+export function snapshotCodeOf(failure: GithubFailure): GithubFailure {
+  return failure === 'network' ? 'github-unavailable' : failure;
 }
 
 type HeaderBag = Headers | Record<string, string | undefined>;

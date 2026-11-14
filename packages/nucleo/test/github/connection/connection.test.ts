@@ -1022,6 +1022,18 @@ describe('#612 a data call GitHub answers 401 reaches the connection', () => {
     assert.ok(!s.logs.some((l) => l.includes(TOKEN)), 'the log never carries the credential');
   });
 
+  test('#613/AC-2 credentialRefused is true from the 401 that dropped the credential until the person reconnects', async () => {
+    const s = setup();
+    await connect(s);
+    assert.equal(s.conn.credentialRefused(), false);
+    s.auth.requireToken = true;
+    s.auth.token = OTHER_TOKEN;
+    await read(s.conn.watchRejections(s.gh.fetch), TOKEN);
+    assert.equal(s.conn.credentialRefused(), true);
+    await connect(s);
+    assert.equal(s.conn.credentialRefused(), false);
+  });
+
   test('#612/AC-3 reconnecting after the revocation connects again', async () => {
     const s = setup();
     await connect(s);

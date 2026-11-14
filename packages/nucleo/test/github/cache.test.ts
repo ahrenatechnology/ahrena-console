@@ -13,7 +13,7 @@ import {
   type CachePort,
   type Fetcher,
 } from '../../src/index.ts';
-import { GithubGatewayError, GithubScopeError } from '../../src/github/github-source.ts';
+import { GithubGatewayError, GithubHttpError, GithubScopeError } from '../../src/github/github-source.ts';
 import { githubFailureOf } from '../../src/github/cache.ts';
 import { ProjectPermissionError } from '../../src/github/project.ts';
 import { clock } from './helpers.ts';
@@ -220,7 +220,10 @@ describe('#495/AC-1 the failure code of a GitHub read', () => {
     assert.equal(githubFailureOf(new RateLimitedError('limite', 1000)), 'rate-limited');
     assert.equal(githubFailureOf(new GithubScopeError('sem escopo')), 'no-scope');
     assert.equal(githubFailureOf(new ProjectPermissionError('detail')), 'no-scope');
-    assert.equal(githubFailureOf(new GithubGatewayError('502', 502)), 'github-error');
+    assert.equal(githubFailureOf(new GithubGatewayError('502', 502)), 'github-unavailable', '#613 5xx is GitHub unavailable');
+    assert.equal(githubFailureOf(new GithubHttpError('500', 500)), 'github-unavailable');
+    assert.equal(githubFailureOf(new GithubHttpError('401', 401)), 'credential-refused', '#613/AC-2');
+    assert.equal(githubFailureOf(new GithubHttpError('404', 404)), 'github-error');
     assert.equal(githubFailureOf(new Error('fetch failed')), 'github-error', 'a plain Error with network-like text is not a network failure');
     assert.equal(githubFailureOf('texto'), 'github-error');
   });
