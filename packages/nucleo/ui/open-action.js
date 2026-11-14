@@ -179,7 +179,7 @@ export function openAction(session, { size = 'full', write = defaultWrite, machi
  */
 export async function requestOpen(key, id, { write = defaultWrite, successMs = SUCCESS_MS, failMs = FAIL_MS } = {}) {
   if (openStateOf(key)?.kind === 'busy') return;
-  // The next click clears a failure.
+  // issue 285: the next click clears a failure.
   setState(key, { kind: 'busy', text: 'Abrindo…', command: null, until: null });
   let state;
   try {
@@ -203,7 +203,7 @@ export function openStatusView(key, button, { iconOnly = false, closable = false
   let timer = null;
 
   function draw() {
-    // A redraw dropped this view from the page: it stops listening.
+    // issue 285: a redraw dropped this view from the page; it stops listening.
     if (status.isConnected === false && status.getAttribute('data-state') !== null) return void forget();
     clearTimeout(timer);
     const st = openStateOf(key);
