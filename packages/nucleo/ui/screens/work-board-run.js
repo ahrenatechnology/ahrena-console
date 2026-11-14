@@ -12,6 +12,8 @@ import { PLANNABLE_TYPES, cardPlanParts, planState, targetChoice } from './work-
 const ref = (n) => `#${n}`;
 /** Where the session opened, by the core's `opened` (the words of open-action.js; issue 532). */
 const WHERE = { desktop: 'abrindo no Claude Desktop', terminal: 'abrindo no Terminal', focused: 'Terminal à frente' };
+/** The note of a failed run when the core gave no reason (the words of 477-1; issue 532). */
+const RUN_FAILED_FALLBACK = 'A sessão não subiu';
 /** The columns a live session still gets "Abrir sessão" in: Em review and Concluído have no action (465-2, issue 532). */
 const LIVE_COLUMNS = new Set(['running', 'blocked']);
 
@@ -51,7 +53,9 @@ export function cardRunParts(card, { onRun = null, onReplan = null, onPlan = nul
   }
   if (state === 'queued') {
     const run = el('button', { type: 'button', class: 'btn outline sm wb-plan-act', 'data-action': 'run', 'aria-label': `Executar o plano da ${number}`, onClick: (ev) => onRun?.(card, ev.currentTarget) }, icon('play'), 'Executar plano');
-    return { badge: null, note: null, actions: el('div', { class: 'wb-plan-acts' }, run) };
+    // issue 532: a run that failed on this card shows the core's reason as the red note (465-2, legend 11; 477-1).
+    const failed = card.runFailure ? el('div', { class: 'wb-plan-note', role: 'alert' }, icon('alert'), el('span', {}, card.runFailure.reason || RUN_FAILED_FALLBACK)) : null;
+    return { badge: null, note: failed, actions: el('div', { class: 'wb-plan-acts' }, run) };
   }
   const lead =
     state === 'planned'
