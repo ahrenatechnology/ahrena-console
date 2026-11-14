@@ -79,6 +79,9 @@ function setup(answers: Record<string, Answer>, over: { files?: Record<string, s
   };
   return { calls, deps, logs };
 }
+const gitKey = (id: 'git-stat-dirty' | 'git-staged' | 'git-untracked' | 'git-unpushed', cwd: string) => `git ${CATALOG[id].args.join(' ')} @${cwd}`;
+/* The three read-only questions about uncommitted work, all answered with nothing printed (#565). */
+const cleanTree = (cwd: string): Record<string, Answer> => ({ [gitKey('git-stat-dirty', cwd)]: ok(''), [gitKey('git-staged', cwd)]: ok(''), [gitKey('git-untracked', cwd)]: ok('') });
 const ctx = (mount: string | null = null, signal = new AbortController().signal) => ({ mount, signal });
 const collect = <K extends SectionId>(c: DiagnosisCollector, id: K, mount: string | null = null) => c.collect(id, ctx(mount));
 
@@ -339,7 +342,6 @@ describe('volume sections', () => {
 
 describe('known-caches section', () => {
   const sizeKey = (cwd: string) => `du ${CATALOG['du-size'].args.join(' ')} @${cwd}`;
-  const statusKey = (cwd: string) => `git ${CATALOG['git-status'].args.join(' ')} @${cwd}`;
   const unpushedKey = (cwd: string) => `git ${CATALOG['git-unpushed'].args.join(' ')} @${cwd}`;
   const ROOT = '/home/dev/Workspace/org/repo/.claude/worktrees';
 
@@ -371,10 +373,11 @@ describe('known-caches section', () => {
     const { calls, deps } = setup(
       {
         [sizeKey(old)]: ok('300\t.\n'),
-        [statusKey(old)]: ok(''),
+        ...cleanTree(old),
         [unpushedKey(old)]: ok('0\n'),
         [sizeKey(dirty)]: ok('900\t.\n'),
-        [statusKey(dirty)]: ok(' M a.ts\n'),
+        ...cleanTree(dirty),
+        [gitKey('git-stat-dirty', dirty)]: ok('a.ts\n'),
         [unpushedKey(dirty)]: ok('2\n'),
       },
       {
@@ -389,7 +392,7 @@ describe('known-caches section', () => {
       { id: 'worktree', path: dirty, bytes: 900 * 1024, lastUsedAt: new Date(NOW_MS - 20 * DAY).toISOString(), hasUncommitted: true, hasUnpushed: true, actionId: null },
     ]);
     const git = calls.filter((x) => x.command === 'git');
-    assert.equal(git.length, 4);
+    assert.equal(git.length, 8);
     assert.ok(git.every((x) => x.options.cwd?.startsWith(ROOT) && x.args.every((a) => !a.includes('/'))));
     assert.ok(calls.every((x) => !x.args.some((a) => a.includes('old-') || a.includes('worktrees'))));
   });
@@ -544,7 +547,7 @@ describe('a command that exits non-zero but printed output', () => {
     assert.deepEqual(await systemRunner(process.execPath, ['-e', "console.log('ok')"], limits(true)), { ok: true, stdout: 'ok\n' });
   });
 
-  test('#565/AC-7 only the du entries accept output from a non-zero exit, and the runner is told so', async () => {
+  test('#565/AC-6 only the du entries accept output from a non-zero exit, and the runner is told so', async () => {
     const accepting = Object.entries(CATALOG).filter(([, e]) => 'acceptOutputOnFailure' in e).map(([id]) => id);
     assert.deepEqual(accepting.sort(), ['du-folder', 'du-size']);
     const { calls, deps } = setup({ [dfKey]: ok(DF), [folderKey('/data/a')]: ok('1000\t.\n') }, { dirs: { '/data': ['a'], '/data/a': [] } });
@@ -581,17 +584,34 @@ describe('what git is asked in a worktree', () => {
   const ROOT = `${HOME}/code/repo/.claude/worktrees`;
   const old = `${ROOT}/old-one`;
   const sizeKey = (cwd: string) => `du ${CATALOG['du-size'].args.join(' ')} @${cwd}`;
-  const statusKey = (cwd: string) => `git ${CATALOG['git-status'].args.join(' ')} @${cwd}`;
   const unpushedKey = (cwd: string) => `git ${CATALOG['git-unpushed'].args.join(' ')} @${cwd}`;
   const place = { dirs: { [ROOT]: ['old-one'], [old]: [] }, mtimes: { [old]: NOW_MS - 30 * DAY }, exists: [`${old}/.git`] };
 
-  test('#565/AC-7 git status turns the repository fsmonitor hook off, so reading cannot run a command the repository configures', () => {
-    assert.deepEqual(CATALOG['git-status'].args, ['-c', 'core.fsmonitor=false', 'status', '--porcelain']);
+  test('#565/AC-7 uncommitted work is read with commands that read only stat and the index, so no filter driver or hook the repository configures can run', () => {
+    assert.ok(!('git-status' in CATALOG));
+    assert.deepEqual(CATALOG['git-stat-dirty'].args, ['-c', 'core.fsmonitor=false', 'diff-files', '--name-only']);
+    assert.deepEqual(CATALOG['git-staged'].args, ['-c', 'core.fsmonitor=false', 'diff-index', '--cached', '--name-only', 'HEAD']);
+    assert.deepEqual(CATALOG['git-untracked'].args, ['-c', 'core.fsmonitor=false', 'ls-files', '--others', '--exclude-standard']);
     assert.deepEqual(CATALOG['git-unpushed'].args.slice(0, 1), ['rev-list']);
   });
 
+  test('#565/AC-9 any one of the three printing a file marks the worktree as uncommitted', async () => {
+    for (const id of ['git-stat-dirty', 'git-staged', 'git-untracked'] as const) {
+      const { deps } = setup({ [sizeKey(old)]: ok('300\t.\n'), ...cleanTree(old), [gitKey(id, old)]: ok('a.ts\n'), [unpushedKey(old)]: ok('0\n') }, place);
+      const r = (await collect(new LinuxDiagnosisCollector(deps), 'known-caches')) as { hasUncommitted: boolean }[];
+      assert.equal(r[0].hasUncommitted, true, id);
+    }
+  });
+
+  test('#565/AC-9 one of the three unavailable keeps the safe default even when the others print nothing, and logs why', async () => {
+    const { deps, logs } = setup({ [sizeKey(old)]: ok('300\t.\n'), ...cleanTree(old), [gitKey('git-staged', old)]: fail('timeout'), [unpushedKey(old)]: ok('0\n') }, place);
+    const r = (await collect(new LinuxDiagnosisCollector(deps), 'known-caches')) as { hasUncommitted: boolean }[];
+    assert.equal(r[0].hasUncommitted, true);
+    assert.ok(logs.some((l) => l.includes('diagnosis worktree git state unknown') && l.includes(old) && l.includes('git timed out')));
+  });
+
   test('#565/AC-9 a git state that cannot be read keeps the safe default and says why in the log', async () => {
-    const { deps, logs } = setup({ [sizeKey(old)]: ok('300\t.\n'), [statusKey(old)]: fail('timeout'), [unpushedKey(old)]: fail('failed') }, place);
+    const { deps, logs } = setup({ [sizeKey(old)]: ok('300\t.\n'), ...cleanTree(old), [gitKey('git-stat-dirty', old)]: fail('timeout'), [unpushedKey(old)]: fail('failed') }, place);
     const r = (await collect(new LinuxDiagnosisCollector(deps), 'known-caches')) as { hasUncommitted: boolean; hasUnpushed: boolean }[];
     assert.deepEqual([r[0].hasUncommitted, r[0].hasUnpushed], [true, true]);
     assert.ok(logs.some((l) => l.includes('diagnosis worktree git state unknown') && l.includes(old) && l.includes('git timed out')));
@@ -599,7 +619,7 @@ describe('what git is asked in a worktree', () => {
   });
 
   test('a git state that is known writes no log line', async () => {
-    const { deps, logs } = setup({ [sizeKey(old)]: ok('300\t.\n'), [statusKey(old)]: ok(''), [unpushedKey(old)]: ok('0\n') }, place);
+    const { deps, logs } = setup({ [sizeKey(old)]: ok('300\t.\n'), ...cleanTree(old), [unpushedKey(old)]: ok('0\n') }, place);
     await collect(new LinuxDiagnosisCollector(deps), 'known-caches');
     assert.deepEqual(logs, []);
   });

@@ -83,7 +83,7 @@ async function mapLimit<T, R>(items: readonly T[], limit: number, task: (item: T
 /* A name read from disk or a tool's reason can carry a line break; one that reaches a log line forges another line, so control characters never enter it: C0, DEL, C1 (which holds U+0085, a line break to some readers), and U+2028 and U+2029 (#565). */
 export const stripControlCharacters = (text: string): string => text.replace(/[\x00-\x1f\x7f-\x9f\u2028\u2029]/g, '');
 
-/* What `exec` gives back: the output (`incomplete` when the tool exited with an error but printed it), or the section's unavailable answer. */
+/* What `exec` gives back: the output (`incomplete` when the tool exited with an error but printed it), or the section's unavailable answer (#565). */
 type Executed = { stdout: string; incomplete?: true } | { unavailable: true; reason: string };
 
 const unavailable = (reason: string): { unavailable: true; reason: string } => ({ unavailable: true, reason });
@@ -264,17 +264,24 @@ export abstract class DiagnosisCollector {
 
   /* What git cannot tell counts as not safe to remove: dirty and unpushed (#565). */
   private async worktree(path: string, modifiedMs: number, signal: AbortSignal): Promise<WorktreeItem | null> {
-    const [size, status, unpushed] = await Promise.all([this.exec('du-size', signal, path), this.exec('git-status', signal, path), this.exec('git-unpushed', signal, path)]);
+    const [size, statDirty, staged, untracked, unpushed] = await Promise.all([
+      this.exec('du-size', signal, path),
+      this.exec('git-stat-dirty', signal, path),
+      this.exec('git-staged', signal, path),
+      this.exec('git-untracked', signal, path),
+      this.exec('git-unpushed', signal, path),
+    ]);
     const bytes = this.sizeOrLog(path, size);
     if (bytes === null) return null;
-    if (!('stdout' in status)) this.say(`diagnosis worktree git state unknown ${path}: ${status.reason}`);
+    const uncommittedAnswers = [statDirty, staged, untracked];
+    for (const answer of uncommittedAnswers) if (!('stdout' in answer)) this.say(`diagnosis worktree git state unknown ${path}: ${answer.reason}`);
     if (!('stdout' in unpushed)) this.say(`diagnosis worktree git state unknown ${path}: ${unpushed.reason}`);
     return {
       id: 'worktree',
       path,
       bytes,
       lastUsedAt: new Date(modifiedMs).toISOString(),
-      hasUncommitted: 'stdout' in status ? status.stdout.trim().length > 0 : true,
+      hasUncommitted: uncommittedAnswers.some((answer) => !('stdout' in answer) || answer.stdout.trim().length > 0),
       hasUnpushed: 'stdout' in unpushed ? Number(unpushed.stdout.trim()) > 0 || Number.isNaN(Number(unpushed.stdout.trim())) : true,
       actionId: null,
     };
