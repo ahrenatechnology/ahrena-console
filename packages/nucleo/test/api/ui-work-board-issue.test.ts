@@ -90,7 +90,7 @@ function issue(n: number, over: Obj = {}): Obj {
 
 const answer = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 
-/** The core, stubbed: the board's cards, the issue each number answers and what POST /api/work/plan says. */
+/** #508 The core, stubbed: the board's cards, the issue each number answers and what POST /api/work/plan says. */
 class Core {
   cards: Obj[] = [card(508)];
   issues = new Map<number, Obj>([[508, issue(508)]]);
@@ -211,7 +211,7 @@ const press = (node: ElementoFalso | null, what: string) => {
   node.dispatchEvent({ type: 'click' });
 };
 const popup = (s: Screen) => s.area.querySelector('div.wb-plan-pop');
-/** The clicks of a person on the card body, outside its buttons and links. */
+/** #508 The clicks of a person on the card body, outside its buttons and links. */
 const clickCard = (s: Screen, n: number) => articleOf(s, n).dispatchEvent({ type: 'click' });
 
 async function openPanel(core: Core, s: Screen, n = 508) {
@@ -334,7 +334,7 @@ describe('#508/AC-3 the card says planejando… and then plano · N passos, and 
     assert.equal(s.area.querySelectorAll('button[data-action="plan"]').length, 0, 'no Planejar while it plans');
     assert.equal(popup(s), null);
 
-    // The core now tells the card is planning (the board's own state), then that the plan is out.
+    // #508 The core now tells the card is planning (the board's own state), then that the plan is out.
     core.cards = [card(508, { planning: { state: 'running' } })];
     s.change();
     await tick(1300);
