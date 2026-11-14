@@ -1,0 +1,108 @@
+[
+  {
+    "name": "flat",
+    "input": {
+      "sessionId": "S",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "ls"
+      },
+      "cwd": "/w"
+    },
+    "canonical": "{\"cwd\":\"/w\",\"sessionId\":\"S\",\"toolInput\":{\"command\":\"ls\"},\"toolName\":\"Bash\"}",
+    "sha256": "962333b6bf4ab2a91a8263c88c87750d8db2684cb3359781d65cd47f0354b3a7"
+  },
+  {
+    "name": "keys sorted at every level, array order kept",
+    "input": {
+      "toolName": "Edit",
+      "cwd": "/w",
+      "toolInput": {
+        "z": {
+          "y": true,
+          "m": null
+        },
+        "a": [
+          3,
+          {
+            "c": 2,
+            "b": 1
+          },
+          "x"
+        ]
+      },
+      "sessionId": "S"
+    },
+    "canonical": "{\"cwd\":\"/w\",\"sessionId\":\"S\",\"toolInput\":{\"a\":[3,{\"b\":1,\"c\":2},\"x\"],\"z\":{\"m\":null,\"y\":true}},\"toolName\":\"Edit\"}",
+    "sha256": "1a970568af5c622acf11d88cc9c03c886b6269910b16d1d69f2b75d4e594f5ba"
+  },
+  {
+    "name": "unicode and escapes as JSON.stringify writes them",
+    "input": {
+      "sessionId": "S",
+      "toolName": "Bash",
+      "toolInput": {
+        "command": "echo \"olá ✓ 😀\"\nline2\ttab \\ back"
+      },
+      "cwd": "/tmp/ção"
+    },
+    "canonical": "{\"cwd\":\"/tmp/ção\",\"sessionId\":\"S\",\"toolInput\":{\"command\":\"echo \\\"olá ✓ 😀\\\"\\nline2\\ttab \\\\ back\"},\"toolName\":\"Bash\"}",
+    "sha256": "ac707528bdb5b5e737ff72cf313443f0cb7a9bb917bf0e042b1799d0c91825d9"
+  },
+  {
+    "name": "numbers as JSON.stringify writes them",
+    "input": {
+      "sessionId": "S",
+      "toolName": "Edit",
+      "toolInput": {
+        "int": 1,
+        "float": 1.5,
+        "neg": -2.5,
+        "big": 1e+21,
+        "small": 1e-7
+      },
+      "cwd": "/w"
+    },
+    "canonical": "{\"cwd\":\"/w\",\"sessionId\":\"S\",\"toolInput\":{\"big\":1e+21,\"float\":1.5,\"int\":1,\"neg\":-2.5,\"small\":1e-7},\"toolName\":\"Edit\"}",
+    "sha256": "3b47031a865c52875d5bac5e2eb647c4b12a76270cc76f89fe84ad68c1161896"
+  },
+  {
+    "name": "empty cwd and empty input object",
+    "input": {
+      "sessionId": "S",
+      "toolName": "Read",
+      "toolInput": {},
+      "cwd": ""
+    },
+    "canonical": "{\"cwd\":\"\",\"sessionId\":\"S\",\"toolInput\":{},\"toolName\":\"Read\"}",
+    "sha256": "496fc4ac89f0f2e8405a7e2578503313f70417026aea521f12a5c6aebbc0772a"
+  },
+  {
+    "name": "null input",
+    "input": {
+      "sessionId": "S",
+      "toolName": "ExitPlanMode",
+      "toolInput": null,
+      "cwd": "/w"
+    },
+    "canonical": "{\"cwd\":\"/w\",\"sessionId\":\"S\",\"toolInput\":null,\"toolName\":\"ExitPlanMode\"}",
+    "sha256": "dbb557a3ea99a848680501dd1adc68d72471a4feeda4827e334c6bf1811ff3e3"
+  },
+  {
+    "name": "array input",
+    "input": {
+      "sessionId": "S",
+      "toolName": "X",
+      "toolInput": [
+        "b",
+        "a",
+        {
+          "k": []
+        }
+      ],
+      "cwd": "/w"
+    },
+    "canonical": "{\"cwd\":\"/w\",\"sessionId\":\"S\",\"toolInput\":[\"b\",\"a\",{\"k\":[]}],\"toolName\":\"X\"}",
+    "sha256": "f722a7cff9dca3947dd6f2b378e5f5431dbd6f1065d174ebad2aaf6a63b19684"
+  }
+]
