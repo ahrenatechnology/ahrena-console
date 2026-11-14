@@ -407,10 +407,17 @@ function band(c) {
 
 function agentsTab(ctx, base, { head } = {}) {
   let target = null;
+  // Back from an agent's view (issue 539): the entry carries the agent the person came from, and its row gets
+  // the focus once, on the first draw; a later draw of the live tab never takes the focus again.
+  let focusAgent = history.state?.focusAgent ?? null;
   async function draw() {
     try {
       const a = await ctx.read(`${base}/agents`);
       target?.replaceChildren(...agents(a, head?.()?.session?.attention ?? null, ctx.params.id));
+      if (focusAgent && target) {
+        [...target.querySelectorAll('.sd-node')].find((n) => n.getAttribute('data-agent') === focusAgent)?.focus();
+        focusAgent = null;
+      }
     } catch (e) {
       if (e.name === 'AbortError') return;
       target?.replaceChildren(error({ title: 'Não deu para ler os agentes', text: e.message, retry: draw }));
@@ -576,6 +583,8 @@ function node(g, sessionAttention = null, sessionId = null, depth = g.type === '
     isSub && sessionId ? el('span', { class: 'sd-go', 'aria-hidden': 'true' }, icon('chevron-right')) : null,
   );
   row.style.setProperty('--sd-depth', String(depth));
+  // Leaving for the view marks this entry, so the browser's Back button finds the row too (issue 539).
+  if (isSub && sessionId) row.addEventListener('click', () => history.replaceState({ ...history.state, focusAgent: routeId }, ''));
   return row;
 }
 
