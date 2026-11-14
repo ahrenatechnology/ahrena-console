@@ -23,9 +23,11 @@ import { send } from '../ingest/hooks/receiver.ts';
 import { fromAnotherSite } from './same-origin.ts';
 
 export const WORK_ISSUE_ROUTE = '/api/work/issue';
+/** #533 `POST`: adds a comment (api/work-issue-write.ts). `PATCH` on `WORK_ISSUE_ROUTE` saves the issue's fields. */
+export const WORK_ISSUE_COMMENTS_ROUTE = '/api/work/issue/comments';
 
 export interface WorkIssueRouteOptions {
-  /** #506 `null` under --no-github: the route answers 503 `off`. */
+  /** #506 `null` under --no-github: the route answers 503 `off`; #533 the writes have their own options (api/work-issue-write.ts). */
   service: Pick<WorkIssueService, 'issue'> | null;
 }
 

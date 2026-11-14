@@ -492,7 +492,7 @@ const workBoard =
  * detail and under --no-github no GitHub: 503 off. */
 const workIssue =
   workSource instanceof GithubGraphqlSource
-    ? new WorkIssueService({ source: workSource, cache: githubCache, ...(screens.project ? { project: selectedProjectBoard(screens.project) } : {}), log })
+    ? new WorkIssueService({ source: workSource, writer: workSource, cache: githubCache, ...(screens.project ? { project: selectedProjectBoard(screens.project) } : {}), log })
     : null;
 // Decision 0015 (#356): the core reads GitHub on a timer and the GitHub screens answer from the database.
 // Under --no-github there is no connection and no sync.

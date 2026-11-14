@@ -55,13 +55,13 @@ export function strictWriteRefusal(req: IncomingMessage, port: number, pathname:
 }
 
 /** The JSON body; `too-large` past 4 KiB (the rest is not read: the answer closes the connection), `invalid` when not JSON. */
-export function readJsonBody(req: IncomingMessage): Promise<{ ok: true; value: unknown } | { ok: false; error: 'too-large' | 'invalid' }> {
+export function readJsonBody(req: IncomingMessage, maxBytes = MAX_BODY): Promise<{ ok: true; value: unknown } | { ok: false; error: 'too-large' | 'invalid' }> {
   return new Promise((resolve, reject) => {
     let text = '';
     req.setEncoding('utf8');
     const chunk = (part: string) => {
       text += part;
-      if (Buffer.byteLength(text) <= MAX_BODY) return;
+      if (Buffer.byteLength(text) <= maxBytes) return;
       req.off('data', chunk);
       req.pause();
       resolve({ ok: false, error: 'too-large' });
