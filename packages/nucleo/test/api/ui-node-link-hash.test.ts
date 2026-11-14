@@ -37,7 +37,6 @@ describe('internalRoute(href, base): the in-app route of a /ui link (issue 520)'
 
 describe('the node link to the selected agent in Conversa (issue 520)', () => {
   test('#520 AC-2: the route from the node link lands on Conversa with the agent selected and requested', async () => {
-    // What the shell does on the click: route the link, then the URL is the one the session screen reads.
     const route = link.internalRoute(NODE_HREF, page.href);
     const u = new URL(route, ORIGIN);
     Object.assign(page, { pathname: u.pathname, search: u.search, hash: u.hash });
@@ -47,7 +46,11 @@ describe('the node link to the selected agent in Conversa (issue 520)', () => {
     const read = async (r: string) => {
       requests.push(r);
       if (r === BASE) return { session: { id: `${SID}-0`, title: 'S', status: 'active', attention: null, model: 'm', startedAt: new Date().toISOString(), since: new Date().toISOString(), cwd: null, banner: null, identity: null }, endedAt: null, cost: null, branch: null, machine: null, open: null, counts: { agents: 2, events: 2 } };
-      if (r.startsWith(`${BASE}/conversation`)) return { agents: [{ id: 'main', name: 'principal' }, { id: 'sub-x', name: 'sub X' }], agent: 'sub-x', total: 0, messages: [], cursor: 'k0' };
+      if (r.startsWith(`${BASE}/conversation`)) {
+        // The server answers with the agent it was asked for, so the selection follows the request.
+        const asked = new URL(r, ORIGIN).searchParams.get('agent') ?? 'main';
+        return { agents: [{ id: 'main', name: 'principal' }, { id: 'sub-x', name: 'sub X' }], agent: asked, total: 0, messages: [], cursor: 'k0' };
+      }
       if (r.includes('/messaging')) return { available: false, reason: null, processes: 0 };
       if (r.includes('/transcription')) return {};
       if (r.endsWith('/agents')) return { numbers: { events: 0, perMinute: 0, tools: 0, uniqueTools: 0, subagents: 0, compactions: 0, errors: 0, durationMin: 0, running: false }, tools: [], tasks: null, tokens: null, agents: [] };
@@ -62,6 +65,7 @@ describe('the node link to the selected agent in Conversa (issue 520)', () => {
     const on = area.querySelectorAll('.sd-tab').filter((t) => t.getAttribute('aria-selected') === 'true');
     assert.deepEqual(on.map((t) => t.getAttribute('data-tab')), ['conversation']);
     assert.ok(requests.includes(`${BASE}/conversation?agent=sub-x`), `conversation requested with agent=sub-x, got ${requests.join(' | ')}`);
-    assert.equal(area.querySelector('.sd-select')!.querySelectorAll('option').find((o) => o.getAttribute('selected') !== null || (o as unknown as { selected?: boolean }).selected)?.getAttribute('value'), 'sub-x');
+    const chosen = area.querySelector('.sd-select')!.querySelectorAll('option').filter((o) => o.getAttribute('selected') !== null);
+    assert.deepEqual(chosen.map((o) => o.getAttribute('value')), ['sub-x']);
   });
 });
