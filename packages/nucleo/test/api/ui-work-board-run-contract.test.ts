@@ -92,7 +92,7 @@ class Core {
   cards: Obj[] = [planned(506)];
   runAnswers: (() => Response)[] = [];
   runAnswer: () => Response = () => answer(200, { ok: true, opened: 'desktop', key: `${REPO}#506` });
-  openAnswer: () => Response = () => answer(200, { ok: true, opened: 'desktop' });
+  openAnswer: () => Response | Promise<Response> = () => answer(200, { ok: true, opened: 'desktop' });
   calls: string[] = [];
   runs: Obj[] = [];
   opens: string[] = [];
@@ -389,7 +389,9 @@ describe('#532/AC-5 a card with a live session shows Abrir sessão, which opens 
     assert.equal(core.runs.length, 0);
   });
 
-  test('#532/AC-5 the panel has Abrir sessão too, and a failed open shows the core\'s text', async () => {
+  const statusOf = (root: ElementoFalso) => root.querySelector('.open-status');
+
+  test('#532/AC-5 the panel has Abrir sessão too, and a failed open shows the core\'s text beside the button, not at the top of the board', async () => {
     const core = new Core();
     core.cards = [live(506)];
     core.openAnswer = () => answer(502, { error: 'O Claude Desktop não abriu a sessão.' });
@@ -397,8 +399,105 @@ describe('#532/AC-5 a card with a live session shows Abrir sessão, which opens 
     await openPanel(s, 506);
     press(buttonIn(panelOf(s)!, 'open-session'), 'Abrir sessão in the panel');
     await until(() => core.opens.length === 1, 'the open route is called');
-    await until(() => /O Claude Desktop não abriu a sessão\./.test(s.text()), 'the core\'s text is shown');
-    assert.ok(s.area.querySelector('[role="alert"]'), 'announced');
+    await until(() => /O Claude Desktop não abriu a sessão\./.test(texto(statusOf(panelOf(s)!) ?? panelOf(s)!)), 'the core\'s text is shown in the panel, by the button');
+    assert.equal(s.area.querySelector('[data-field="open-failure"]'), null, 'no board-top note');
+    assert.equal(s.area.querySelector('.wb-plan-note'), null);
+    assert.equal(buttonIn(panelOf(s)!, 'open-session')!.parentNode, statusOf(panelOf(s)!)!.parentNode, 'beside the button');
+  });
+
+  test('#532/AC-5 busy: Abrindo… with the button aria-busy, and a second click sends no second POST', async () => {
+    const core = new Core();
+    core.cards = [live(506)];
+    let release: () => void = () => {};
+    core.openAnswer = () => new Promise<Response>((r) => (release = () => r(answer(200, { ok: true, opened: 'desktop' }))));
+    const s = await open(core);
+    const button = buttonIn(articleOf(s, 506), 'open-session')!;
+    press(button, 'Abrir sessão');
+    await until(() => core.opens.length === 1, 'the first POST');
+    await until(() => /Abrindo…/.test(texto(statusOf(articleOf(s, 506)) ?? articleOf(s, 506))), 'Abrindo… beside the button');
+    assert.equal(buttonIn(articleOf(s, 506), 'open-session')!.getAttribute('aria-busy'), 'true');
+    press(buttonIn(articleOf(s, 506), 'open-session'), 'Abrir sessão again');
+    await tick(30);
+    assert.equal(core.opens.length, 1, 'one POST only');
+    release();
+    await until(() => /Aberta no Claude Desktop/.test(texto(articleOf(s, 506))), 'the success text');
+    assert.equal(buttonIn(articleOf(s, 506), 'open-session')!.getAttribute('aria-busy'), null);
+  });
+
+  test('#532/AC-5 a success says where it opened, by the core\'s opened', async () => {
+    const core = new Core();
+    core.cards = [live(506)];
+    core.openAnswer = () => answer(200, { ok: true, opened: 'terminal' });
+    const s = await open(core);
+    press(buttonIn(articleOf(s, 506), 'open-session'), 'Abrir sessão');
+    await until(() => /Aberta no terminal/.test(texto(statusOf(articleOf(s, 506)) ?? articleOf(s, 506))), 'Aberta no terminal beside the button');
+  });
+
+  test('#532/AC-5 a failure with a command offers Copiar comando, which copies it', async () => {
+    const core = new Core();
+    core.cards = [live(506)];
+    core.openAnswer = () => answer(409, { error: 'Não deu para abrir o terminal.', command: 'claude --resume 3f2b' });
+    const s = await open(core);
+    press(buttonIn(articleOf(s, 506), 'open-session'), 'Abrir sessão');
+    await until(() => /Não deu para abrir o terminal\./.test(texto(articleOf(s, 506))), 'the core\'s text on the card');
+    const copy = articleOf(s, 506).querySelector('button.open-copy');
+    assert.ok(copy, 'Copiar comando is offered');
+    press(copy, 'Copiar comando');
+    await until(() => copied.length === 1, 'the command is copied');
+    assert.deepEqual(copied, ['claude --resume 3f2b']);
+  });
+
+  test('#532/AC-5 a failure without a command has no Copiar comando', async () => {
+    const core = new Core();
+    core.cards = [live(506)];
+    core.openAnswer = () => answer(502, { error: 'O Claude Desktop não abriu a sessão.' });
+    const s = await open(core);
+    press(buttonIn(articleOf(s, 506), 'open-session'), 'Abrir sessão');
+    await until(() => /O Claude Desktop não abriu a sessão\./.test(texto(articleOf(s, 506))), 'the core\'s text');
+    assert.equal(articleOf(s, 506).querySelector('button.open-copy'), null);
+  });
+});
+
+describe('#532 one confirmation at a time (465-6, decision 13): opening Planejar/Replanejar or Executar plano closes the other', () => {
+  const dialogs = (s: Screen) => s.area.querySelectorAll('div.wb-plan-pop');
+  const isRun = (n: ElementoFalso) => /Executar o plano da/.test(n.getAttribute('aria-label') ?? '');
+
+  test('#532 Replanejar open, then Executar plano: only the run confirmation shows and has focus', async () => {
+    const core = new Core();
+    const s = await open(core);
+    press(buttonIn(articleOf(s, 506), 'replan'), 'Replanejar');
+    assert.equal(dialogs(s).length, 1);
+    assert.equal(isRun(dialogs(s)[0]!), false, 'the plan confirmation is open');
+    press(buttonIn(articleOf(s, 506), 'run'), 'Executar plano');
+    assert.equal(dialogs(s).length, 1, 'one confirmation');
+    assert.ok(isRun(dialogs(s)[0]!), 'it is the run one');
+    assert.ok(dialogs(s)[0]!.contains(documentoFalso.activeElement), 'focus is inside it');
+  });
+
+  test('#532 Executar plano open, then Replanejar: only the plan confirmation shows and has focus', async () => {
+    const core = new Core();
+    const s = await open(core);
+    press(buttonIn(articleOf(s, 506), 'run'), 'Executar plano');
+    press(buttonIn(articleOf(s, 506), 'replan'), 'Replanejar');
+    assert.equal(dialogs(s).length, 1, 'one confirmation');
+    assert.equal(isRun(dialogs(s)[0]!), false, 'it is the plan one');
+    assert.ok(dialogs(s)[0]!.contains(documentoFalso.activeElement), 'focus is inside it');
+  });
+
+  test('#532 across two cards, in both orders', async () => {
+    const core = new Core();
+    core.cards = [planned(506), planned(507)];
+    const s = await open(core);
+    press(buttonIn(articleOf(s, 506), 'replan'), 'Replanejar #506');
+    press(buttonIn(articleOf(s, 507), 'run'), 'Executar plano #507');
+    assert.equal(dialogs(s).length, 1);
+    assert.ok(isRun(dialogs(s)[0]!) && /#507/.test(dialogs(s)[0]!.getAttribute('aria-label') ?? ''));
+    assert.ok(dialogs(s)[0]!.contains(documentoFalso.activeElement));
+    press(buttonIn(articleOf(s, 506), 'replan'), 'Replanejar #506');
+    assert.equal(dialogs(s).length, 1);
+    assert.equal(isRun(dialogs(s)[0]!), false);
+    assert.ok(/#506/.test(dialogs(s)[0]!.getAttribute('aria-label') ?? ''));
+    assert.ok(dialogs(s)[0]!.contains(documentoFalso.activeElement));
   });
 });
 
