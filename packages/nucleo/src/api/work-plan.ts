@@ -113,7 +113,7 @@ export function createWorkPlanRoute(o: WorkPlanRouteDeps | null): WorkPlanRoute 
     if (previous && isPlanRunActive(previous, now())) return send(res, 409, { error: 'Já há um planejamento em andamento para esta issue' });
 
     // #507 "has a plan" is the TOTAL sub-issue count, the card's meaning (#465 `plan: { steps }`): it decides a replan, the
-    // client flag can only ask for one. The prompt lists the Plan-typed steps only.
+    // #507 client flag can only ask for one. The prompt lists the Plan-typed steps only.
     const replacing = replan === true || issue.subIssues.length > 0;
     const prompt = planningPrompt({ repo, number, ...(replacing ? { replaceSteps: issue.plan.steps.map((s) => s.number) } : {}) });
     const folders = await knownFolders(o.storage, undefined, o.isThrowaway ?? isThrowawayFolder);
@@ -133,7 +133,7 @@ export function createWorkPlanRoute(o: WorkPlanRouteDeps | null): WorkPlanRoute 
         if (result === 'unsupported') return send(res, 501, { error: 'Não há um terminal que o console saiba abrir aqui; copie o comando', command });
       }
     } catch (err) {
-      log(`work plan: opening failed (${err instanceof Error ? ((err as NodeJS.ErrnoException).code ?? err.name) : typeof err})`);
+      log(`work plan: opening failed in ${target} for ${key} (${err instanceof Error ? ((err as NodeJS.ErrnoException).code ?? err.name) : typeof err})`);
       return send(res, 502, { error: 'Não deu para abrir a sessão de planejamento', command });
     }
     await o.runs.save({ key: key.toLowerCase(), target: target as PlanTarget, startedAt, replan: replacing, sessionId: null, outcome: 'running', failure: null, finishedAt: null });
