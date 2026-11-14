@@ -2,7 +2,7 @@
    because the sheet stays loaded after the screen leaves. */
 
 .av-root, .av-body { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
-/* The loading state wears `.state` for the shell's name for it; the skeleton has its own shape. */
+/* The loading state wears `.state` for the shell's name for it; the skeleton has its own shape. (issue 521) */
 .av-loading.state { min-height: 0; padding: 0; }
 
 .av-crumb { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; font-size: 12.5px; color: var(--muted); }
@@ -44,7 +44,7 @@
 .av-count { margin-left: auto; text-transform: none; letter-spacing: 0; font-weight: var(--weight-regular); }
 .av-sequence > .eyebrow { flex-wrap: wrap; }
 .av-text { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13px; line-height: 1.6; }
-/* A folded text keeps its 6 lines even when one of them wraps. */
+/* A folded text keeps its 6 lines even when one of them wraps. (issue 521) */
 .av-sec[data-folded="true"] .av-text { max-height: calc(6 * 1.6em); overflow: hidden; }
 .av-cut { color: var(--muted); font-size: 12px; }
 .av-fold { align-self: flex-start; }

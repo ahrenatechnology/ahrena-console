@@ -18,14 +18,13 @@ function ensureStyle() {
 const sessionHref = (sessionId) => `/ui/sessions/${encodeURIComponent(sessionId)}`;
 const agentsTabHref = (sessionId) => `${sessionHref(sessionId)}#agents`;
 
-/** The name the agent goes by: the short type, else "Agente principal" for the main one, else what it was asked. */
+/** The name the agent goes by: the short type, else "Agente principal" for the main one, else what it was asked. (issue 521) */
 export function agentLabel(data) {
   return shortAgentName(data.agentType) ?? (data.agentId === 'main' ? 'Agente principal' : (data.description ?? data.agentId));
 }
 
-// ---------- The breadcrumb ----------
 
-/** The session, the Agents tab, the agents above this one and this one: every part but the last is a link. */
+/** The session, the Agents tab, the agents above this one and this one: every part but the last is a link. (issue 521) */
 function crumb({ sessionId, sessionTitle = null, trail = [], current }) {
   const sep = () => icon('chevron-right');
   return el(
@@ -40,7 +39,6 @@ function crumb({ sessionId, sessionTitle = null, trail = [], current }) {
   );
 }
 
-// ---------- The header ----------
 
 const STEP_STATE = {
   ok: { tone: 'ok', icon: 'ok', label: 'OK' },
@@ -101,7 +99,6 @@ function header(data, { sessionId, now }) {
   ];
 }
 
-// ---------- The brief and the result ----------
 
 const NONE_ICON = { brief: 'file', result: 'ok' };
 
@@ -109,7 +106,7 @@ function none(kind, title, text) {
   return el('div', { class: 'av-none' }, icon(NONE_ICON[kind]), el('p', {}, el('b', {}, title), ` ${text}`));
 }
 
-/** A block of text that folds at 6 lines; `open` is the person's choice, kept by the caller. */
+/** A block of text that folds at 6 lines; `open` is the person's choice, kept by the caller. (issue 521) */
 function textBlock({ kind, title, iconName, text, truncated, open, onToggle, empty }) {
   const box = el('section', { class: `card av-sec av-${kind}` }, el('div', { class: 'eyebrow' }, icon(iconName), title));
   if (text === null || text === undefined || text === '') return (box.append(empty), box);
@@ -131,7 +128,6 @@ function textBlock({ kind, title, iconName, text, truncated, open, onToggle, emp
   return box;
 }
 
-// ---------- The sequence ----------
 
 function detail(step) {
   const row = (k, v) => [el('dt', {}, k), el('dd', { class: 'mono' }, v)];
@@ -139,7 +135,7 @@ function detail(step) {
 }
 
 /**
- * The agent view: the header, the brief, the sequence and the result, from the data of the contract.
+ * The agent view: the header, the brief, the sequence and the result, from the data of the contract. (issue 521)
  *
  * `opts`: `sessionId`; `sessionTitle` and `trail` (`[{ label, href }]`, the agents above) for the crumb; `now`
  * for a running agent's duration; `onOpenChild(agentId)` when the person opens a child in line, so the state
@@ -156,9 +152,9 @@ export function agentView(initial, opts = {}) {
   root.append(body);
 
   let data = initial;
-  let shown = initial.steps.length; // steps the person has accepted; the rest wait behind the pill
+  let shown = initial.steps.length; // steps the person has accepted; the rest wait behind the pill (issue 521)
   const children = new Map();
-  const open = new Set(); // details, folds, elided runs and open children, by key
+  const open = new Set(); // details, folds, elided runs and open children, by key (issue 521)
   const flip = (key) => () => {
     if (!open.delete(key)) open.add(key);
     draw(key);
@@ -271,9 +267,8 @@ export function agentView(initial, opts = {}) {
   return root;
 }
 
-// ---------- The states of the view ----------
 
-/** Loading: the crumb comes from the address, each block is a skeleton in the shape of the view. */
+/** Loading: the crumb comes from the address, each block is a skeleton in the shape of the view. (issue 521) */
 export function agentViewLoading({ sessionId, sessionTitle = null, agentId = null }) {
   ensureStyle();
   const bone = (cls) => el('div', { class: `bone ${cls}` });
@@ -287,13 +282,13 @@ export function agentViewLoading({ sessionId, sessionTitle = null, agentId = nul
   );
 }
 
-/** The read failed: the shell's error state, with the crumb left in place to leave the screen. */
+/** The read failed: the shell's error state, with the crumb left in place to leave the screen. (issue 521) */
 export function agentViewError({ sessionId, sessionTitle = null, agentId = null, text, retry }) {
   ensureStyle();
   return el('section', { class: 'av-root av-error' }, crumb({ sessionId, sessionTitle, current: agentId ?? '…' }), error({ title: 'Não deu para ler este agente', text, retry }));
 }
 
-/** The address points to an agent the core does not know in this session. */
+/** The address points to an agent the core does not know in this session. (issue 521) */
 export function agentViewMissing({ sessionId, sessionTitle = null, agentId = null }) {
   ensureStyle();
   return el(

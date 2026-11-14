@@ -12,7 +12,7 @@ const format = await import('../../ui/screens/agent-view-format.js');
 const view = await import('../../ui/screens/agent-view.js');
 
 const SID = 'c3f09b52-4e10';
-const IRIS = 'a1b2:iris'; // an agent id may carry a ":" (the route carries it encoded)
+const IRIS = 'a1b2:iris'; // an agent id may carry a ":" (the route carries it encoded) (issue 529)
 const NOW = Date.parse('2026-11-01T10:30:00.000Z');
 const at = (min: number, sec = 0) => new Date(Date.parse('2026-11-01T10:00:00.000Z') + min * 60_000 + sec * 1000).toISOString();
 
