@@ -1,4 +1,5 @@
 import { emptyTokenCounts, type Agent, type ClaudeAccount, type ModelPricing, type Session, type SessionEvent, type TokenUsage } from '../src/model.ts';
+import { isTrustedRepo, type RepositoryTrust } from '../src/github/trusted-owners.ts';
 
 export const T0 = '2026-11-02T12:00:00.000Z';
 
@@ -110,3 +111,6 @@ export function account(over: Partial<ClaudeAccount> & { n?: number } = {}): Cla
     ...rest,
   };
 }
+
+/** #594 a trust source for the tests: the repositories of these owners are trusted, any letter case. */
+export const trustOf = (...owners: string[]): RepositoryTrust => ({ isTrusted: (repo) => isTrustedRepo(repo, owners) });

@@ -8,6 +8,7 @@
 
 import { GITHUB_TTL, NoDataError, RateLimitedError, type GithubCache } from './cache.ts';
 import type { WorkProjectBoard } from './work-board.ts';
+import type { RepositoryTrust } from './trusted-owners.ts';
 import { buildWorkIssue, type WorkIssueCurrent, type WorkIssueEdit, type WorkIssueRead, type WorkIssueSource, type WorkIssueView, type WorkIssueWriter, WorkIssueWrittenUnreadError } from './work-issue.ts';
 
 export interface WorkIssueServiceOptions {
@@ -15,6 +16,8 @@ export interface WorkIssueServiceOptions {
   /** #533 where the writes go; without it (`--demo`) a write throws `WorkIssueWriteOffError`. */
   writer?: WorkIssueWriter;
   cache: GithubCache;
+  /** #594 whose repositories are trusted: the detail carries `trusted`. Required: no detail trusts by default. */
+  trust: RepositoryTrust;
   /** #506 the chosen Project, for the Project Status; without it the Status is `null`. */
   project?: WorkProjectBoard;
   /** #506 the raw text of a stale read or a failed Project read goes here; the answer only carries a code. */
@@ -28,6 +31,8 @@ export interface WorkIssueReadOptions {
 
 /** The detail with the cache's freshness: what the route answers. */
 export interface WorkIssueResult extends WorkIssueView {
+  /** #594 the owner of the repository is trusted: the core opens Planejar and Executar plano sessions for it. */
+  trusted: boolean;
   fetchedAt: number;
   stale: boolean;
   /** The stable code of why the read is stale (#495); `null` when fresh. */
@@ -73,13 +78,15 @@ export class WorkIssueService {
   private readonly source: WorkIssueSource;
   private readonly writer: WorkIssueWriter | undefined;
   private readonly cache: GithubCache;
+  private readonly trust: RepositoryTrust;
   private readonly project: WorkProjectBoard | undefined;
   private readonly log: (message: string) => void;
 
-  constructor({ source, writer, cache, project, log = () => {} }: WorkIssueServiceOptions) {
+  constructor({ source, writer, cache, trust, project, log = () => {} }: WorkIssueServiceOptions) {
     this.source = source;
     this.writer = writer;
     this.cache = cache;
+    this.trust = trust;
     this.project = project;
     this.log = log;
   }
@@ -101,7 +108,7 @@ export class WorkIssueService {
     }
     if (r.stale && r.staleReason) this.log(`work issue ${key}: stale read: ${r.staleReason}`);
     const view = buildWorkIssue(r.value, await this.projectStatus(r.value.key));
-    return { ...view, fetchedAt: r.fetchedAt, stale: r.stale, staleReason: r.stale ? (r.staleCode ?? 'github-error') : null };
+    return { ...view, trusted: this.trust.isTrusted(view.repo), fetchedAt: r.fetchedAt, stale: r.stale, staleReason: r.stale ? (r.staleCode ?? 'github-error') : null };
   }
 
   /**
@@ -192,7 +199,7 @@ export class WorkIssueService {
     for (const k of drop) await this.cache.invalidate(workIssueCacheKey(k));
     const stored = (await this.cache.peek(cacheKey))!;
     const view = buildWorkIssue(read, await this.projectStatus(read.key));
-    return { ...view, fetchedAt: stored.fetchedAt, stale: false, staleReason: null };
+    return { ...view, trusted: this.trust.isTrusted(view.repo), fetchedAt: stored.fetchedAt, stale: false, staleReason: null };
   }
 
   /** #506 the lane the issue's card is in; `null` when it is in no card, in the no-Status lane, or the Project cannot be read. */

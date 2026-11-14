@@ -1,6 +1,7 @@
 /*
  * #507 #531 what the work board's session routes share (api/work-plan.ts, api/work-run.ts): the folder of a
  * repository on this machine, the command to copy, and opening the session in the Desktop or a terminal.
+ * #594 and the refusal both give for a repository of an owner the installation does not trust.
  */
 
 import type { StoragePort } from '../storage-port.ts';
@@ -8,6 +9,12 @@ import { desktopNewSessionUrl, isThrowawayFolder, knownFolders } from './new-ses
 import { isUsableCwd, shellQuote } from './session-open.ts';
 import type { TerminalOpener } from './terminal-launch.ts';
 import { gitDoSistema, repoDoRemote, type Git } from './work.ts';
+
+/** #594 the 403 body of an untrusted repository: the `code` is stable (the screen branches on it), the `error` is what the screen shows. */
+export const UNTRUSTED_REPOSITORY = {
+  code: 'untrusted-repository',
+  error: 'Este repositório não é de um dono confiável nesta instalação; o console não abre sessão para ele',
+} as const;
 
 /** The first listed folder (most recent first) whose `origin` is `repo`; `null` when none. */
 export async function folderOfRepo(repo: string, folders: readonly { path: string }[], git: Git): Promise<string | null> {

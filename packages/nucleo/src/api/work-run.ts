@@ -8,6 +8,9 @@
  * | `{ repo: 'owner/name', number, target: 'desktop' \| 'terminal', force?: boolean }`      | 200 `{ ok, opened, key }`                   |
  * |                                                                                         | 409 `{ error, running, limit }` at the limit |
  *
+ * - #594 A repository whose owner is not trusted (github/trusted-owners.ts) is 403 `{ code: 'untrusted-repository', error }`,
+ *   right after `repo` and `number` are validated and before the issue is read or the cards are counted: no session
+ *   opens, no run is recorded.
  * - The issue is read through the issue use case (#506): an epic or an initiative is refused (422), and so
  *   is an issue with no sub-issue of any type (no plan, #467); a missing issue is 404, GitHub down with
  *   nothing stored 502 with the `reason` code, `--no-github` 503.
@@ -33,12 +36,13 @@ import { WorkIssueNotFoundError, type WorkIssueResult, type WorkIssueService } f
 import { isPlanNumber, isPlanRepo, type PlanTarget } from '../github/work-plan.ts';
 import { levelOf, workKey } from '../github/work.ts';
 import { send } from '../ingest/hooks/receiver.ts';
+import type { RepositoryTrust } from '../github/trusted-owners.ts';
 import type { StoragePort } from '../storage-port.ts';
 import { readJsonBody } from './connections-route.ts';
 import { NEW_SESSION_TARGETS } from './new-session.ts';
 import type { TerminalOpener } from './terminal-launch.ts';
 import type { Git } from './work.ts';
-import { openWorkSession, repoFolderOnThisMachine, sessionCommand } from './work-session-open.ts';
+import { openWorkSession, repoFolderOnThisMachine, sessionCommand, UNTRUSTED_REPOSITORY } from './work-session-open.ts';
 
 export const WORK_RUN_ROUTE = '/api/work/run';
 
@@ -46,6 +50,8 @@ export interface WorkRunRouteOptions {
   /** #506 the issue detail use case; `null` under --no-github: the route answers 503. */
   issues: Pick<WorkIssueService, 'issue'> | null;
   runs: WorkExecutionRuns;
+  /** #594 whose repositories the core opens sessions for. Required: a route without it would trust everyone. */
+  trust: RepositoryTrust;
   /** #531 counts the cards in Em execução; the board service implements it. */
   running: RunningCards;
   /** #531 where a folder's remote is read; injected so the tests need no git. */
@@ -137,6 +143,7 @@ export function createWorkRunRoute(o: WorkRunRouteDeps | null): WorkRunRoute {
     if (isRefusal(request)) return send(res, request.status, request.body);
     const { repo, number, target, force } = request;
     if (!o || !o.issues) return send(res, 503, { error: 'O GitHub está desligado neste console' });
+    if (!o.trust.isTrusted(repo)) return send(res, 403, UNTRUSTED_REPOSITORY);
     const deps = { ...o, issues: o.issues };
 
     const log = o.log ?? (() => {});

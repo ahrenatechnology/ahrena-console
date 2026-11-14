@@ -19,7 +19,9 @@ import { WorkIssueNotFoundError } from '../../src/github/work-issue-service.ts';
 import type { WorkIssueResult } from '../../src/github/work-issue-service.ts';
 import { planningPrompt, settlePlanRun } from '../../src/github/work-plan.ts';
 import { SqliteWorkPlanRuns } from '../../src/github/work-plan-runs.ts';
-import { session } from '../fixtures.ts';
+import { session, trustOf } from '../fixtures.ts';
+import { InstallationRepositoryTrust, type RepositoryTrust } from '../../src/github/trusted-owners.ts';
+import { MemoryInstallationSettings } from '../../src/settings/installation-settings.ts';
 
 const T0 = Date.parse('2026-11-13T10:00:00.000Z');
 
@@ -46,6 +48,7 @@ function issue(over: Partial<WorkIssueResult> & { stepNumbers?: number[] } = {})
     fetchedAt: T0,
     stale: false,
     staleReason: null,
+    trusted: true,
     ...rest,
   };
 }
@@ -90,6 +93,7 @@ describe('#507 POST /api/work/plan', () => {
       openTerminal: async (r) => (terminal.push(r), terminalAnswer),
       isThrowawayFolder: () => false,
       workPlan: {
+        trust: trustOf('acme'),
         issues: { issue: async () => { if (current instanceof Error) throw current; return current; } },
         runs,
         git,
@@ -349,7 +353,7 @@ describe('#507 POST /api/work/plan', () => {
     test('#507/AC-6 a repo, number or target that is not plain is a 400 before anything is read or run', async () => {
       fresh();
       let reads = 0;
-      const guarded = await startApi({ workPlan: { issues: { issue: async () => (reads++, issue()) }, runs, git, now: () => clock } });
+      const guarded = await startApi({ workPlan: { trust: trustOf('acme'), issues: { issue: async () => (reads++, issue()) }, runs, git, now: () => clock } });
       try {
         const bad = [
           { repo: 'acme/app; touch x', number: 1, target: 'terminal' },
@@ -402,13 +406,85 @@ describe('#507 POST /api/work/plan', () => {
       const r = await post(body);
       assert.equal(r.status, 502);
       assert.ok(!JSON.stringify(await json(r)).includes('secret raw message'));
-      const off = await startApi({ workPlan: { issues: null, runs, git, now: () => clock } });
+      const off = await startApi({ workPlan: { trust: trustOf('acme'), issues: null, runs, git, now: () => clock } });
       try {
         assert.equal((await post(body, {}, off)).status, 503);
       } finally {
         await off.close();
       }
       assert.deepEqual(terminal, []);
+    });
+  });
+
+  describe('#594/AC-1 Planejar refuses a repository of an owner that is not trusted', () => {
+    const refusal = { code: 'untrusted-repository', error: 'Este repositório não é de um dono confiável nesta instalação; o console não abre sessão para ele' };
+    const startWith = (trust: RepositoryTrust, reads: { n: number; c: number }) => startApi({ workPlan: { trust, issues: { issue: async () => (reads.n++, current as WorkIssueResult) }, runs, git, now: () => clock } });
+    const installation = (stored: string[] | null, selectedOwner: string | null) =>
+      new InstallationRepositoryTrust(new MemoryInstallationSettings(stored ? { 'work.trustedOwners': stored } : {}), () => (selectedOwner ? { owner: selectedOwner } : null));
+    const recorded = () => (storage.db.prepare('SELECT COUNT(*) AS n FROM work_plan_runs').get() as { n: number }).n;
+
+    test('#594/AC-1 Given the board reads the Project of "acme" and nothing is stored, When Planejar is asked for other-org/repo#7, Then 403 untrusted-repository, no issue read, no session opened, no run recorded', async () => {
+      fresh();
+      const reads = { n: 0, c: 0 };
+      const guarded = await startWith(installation(null, 'acme'), reads);
+      try {
+        for (const target of ['desktop', 'terminal']) {
+          const r = await post({ repo: 'other-org/repo', number: 7, target }, {}, guarded);
+          assert.equal(r.status, 403, target);
+          assert.deepEqual(await json(r), refusal);
+        }
+        assert.equal(reads.n, 0);
+        assert.deepEqual(desktop, []);
+        assert.deepEqual(terminal, []);
+        assert.equal(recorded(), 0);
+        assert.deepEqual(asked, [], 'no folder is looked up');
+      } finally {
+        await guarded.close();
+      }
+    });
+
+    test('#594/AC-2 Given the default list (the Project owner "acme"), When the repo is written as ACME/App in any letter case, Then the trust check passes and the route proceeds', async () => {
+      fresh();
+      const reads = { n: 0, c: 0 };
+      const open = await startWith(installation(null, 'acme'), reads);
+      try {
+        const r = await post({ ...{ repo: 'acme/app', number: 412, target: 'terminal' }, repo: 'ACME/App' }, {}, open);
+        assert.equal(r.status, 200);
+        assert.equal(reads.n, 1);
+      } finally {
+        await open.close();
+      }
+    });
+
+    test('#594/AC-2 Given a stored list ["beta"], When acme/app is asked, Then 403 untrusted-repository: the stored list replaces the default; and beta/app passes the check', async () => {
+      fresh();
+      const reads = { n: 0, c: 0 };
+      const stored = await startWith(installation(['beta'], 'acme'), reads);
+      try {
+        const r = await post({ repo: 'acme/app', number: 412, target: 'terminal' }, {}, stored);
+        assert.equal(r.status, 403);
+        assert.equal((await json(r)).code, 'untrusted-repository');
+        assert.equal(reads.n, 0);
+        assert.equal(recorded(), 0);
+        await post({ ...{ repo: 'acme/app', number: 412, target: 'terminal' }, repo: 'BETA/app' }, {}, stored);
+        assert.equal(reads.n, 1, 'a trusted owner reaches the issue read');
+      } finally {
+        await stored.close();
+      }
+    });
+
+    test('#594/AC-2 Given nothing stored and no Project chosen, or a stored empty list, Then nobody is trusted', async () => {
+      fresh();
+      const reads = { n: 0, c: 0 };
+      for (const trust of [installation(null, null), installation([], 'acme')]) {
+        const closed = await startWith(trust, reads);
+        try {
+          assert.equal((await post({ repo: 'acme/app', number: 412, target: 'terminal' }, {}, closed)).status, 403);
+        } finally {
+          await closed.close();
+        }
+      }
+      assert.equal(reads.n, 0);
     });
   });
 });

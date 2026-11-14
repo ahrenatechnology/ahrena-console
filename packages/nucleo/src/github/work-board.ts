@@ -9,6 +9,7 @@
 
 import type { StaleCode } from './cache.ts';
 import type { ProjectBoard } from './project.ts';
+import type { RepositoryTrust } from './trusted-owners.ts';
 import {
   levelOf,
   parseWorkKey,
@@ -308,6 +309,8 @@ export interface WorkBoardInput {
   planning?: ReadonlyMap<string, WorkCardPlanning>;
   /** #531 the execution state per issue key, lower case: the keys with a booting run; a key without one is `null` on its card. */
   execution?: ReadonlyMap<string, WorkCardExecution>;
+  /** #594 whose repositories are trusted: each card says whether its own is. Required, so no caller trusts by default. */
+  trust: RepositoryTrust;
   now: number;
   fetchedAt: number;
   stale: boolean;
@@ -345,6 +348,8 @@ export interface WorkBoardCard {
   type: WorkTypeSlug | null;
   typeName: string | null;
   state: 'open' | 'closed';
+  /** #594 the owner of the repository is trusted: the core opens Planejar and Executar plano sessions for it. */
+  trusted: boolean;
   column: WorkBoardColumn;
   columnSince: string | null;
   parent: { key: string; number: number } | null;
@@ -619,7 +624,7 @@ export function buildWorkBoard(input: WorkBoardInput): WorkBoardView {
     if (filters[key] === null) continue;
     countsWithoutFilter[key] = ofLevel.filter((a) => matchesWorkBoardFilters(a, filters, statuses, key) && inDoneWindow(a)).length;
   }
-  const cards = shown.map((a) => toCard(a, sinceOf(a), statuses, input.planning?.get(a.node.key.toLowerCase()) ?? null, input.execution?.get(a.node.key.toLowerCase()) ?? null));
+  const cards = shown.map((a) => toCard(a, sinceOf(a), statuses, input.planning?.get(a.node.key.toLowerCase()) ?? null, input.execution?.get(a.node.key.toLowerCase()) ?? null, input.trust.isTrusted(a.node.repo)));
 
   return {
     project: { ...input.project, primaryRepo: mostFrequent(nodes.filter((n) => n.inProject).map((n) => n.repo)) },
@@ -643,7 +648,7 @@ export function buildWorkBoard(input: WorkBoardInput): WorkBoardView {
   };
 }
 
-function toCard(a: AnalyzedWorkNode, columnSince: string | null, statuses: WorkStatusIndex, planning: WorkCardPlanning | null, execution: WorkCardExecution | null): WorkBoardCard {
+function toCard(a: AnalyzedWorkNode, columnSince: string | null, statuses: WorkStatusIndex, planning: WorkCardPlanning | null, execution: WorkCardExecution | null, trusted: boolean): WorkBoardCard {
   const n = a.node;
   const parent = a.chain.at(-1);
   const best = [...a.sessions].sort((x, y) => sessionRank[x.state] - sessionRank[y.state])[0];
@@ -658,6 +663,7 @@ function toCard(a: AnalyzedWorkNode, columnSince: string | null, statuses: WorkS
     type: typeSlugOf(n.type),
     typeName: n.type,
     state: n.state === 'CLOSED' ? 'closed' : 'open',
+    trusted,
     column: a.column.column,
     columnSince,
     parent: parent ? { key: parent.key, number: parent.number } : null,
