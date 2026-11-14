@@ -61,8 +61,121 @@ function keyed(parts, key) {
 }
 
 /**
+ * issue 508: the view and interaction half of the issue layer: where the focus goes, the card renderer, the panel and the
+ * confirmation. It reads the layer's state through `state()` and changes it only through `apply(next, intent)`; `retry` and
+ * `confirm` are the layer's own, because they touch what the layer keeps (the forced re-read, the failure it saw before).
+ */
+function createIssueView({ area, state, apply, cardFor, retry, confirm }) {
+  let focus = null;
+  let anchorInPanel = false;
+
+  const shownCard = (card) => (state().plans[card.key] ? cardWithPlanning(state(), card) : card);
+  const focusOn = (intent) => {
+    focus = intent;
+  };
+
+  const open = (card) => {
+    const s = state();
+    if (s.panel.open && s.panel.key === card.key) return;
+    apply(openPanel(s, cardFor(card.key) ?? card), { kind: 'panel' });
+  };
+  const close = () => apply(closePanel(state()), { kind: 'card', key: state().panel.key });
+  const ask = (replan) => (card, button) => {
+    anchorInPanel = Boolean(button?.closest?.('.wb-panel'));
+    const base = cardFor(card.key) ?? card;
+    apply(askPlan(state(), base, { replan }), { kind: 'popup' });
+  };
+  const handlers = { onPlan: ask(false), onReplan: ask(true) };
+
+  function popupFor(card) {
+    const entry = state().plans[card.key];
+    if (!entry || !POPUP_PHASES.has(entry.phase)) return null;
+    const base = cardFor(card.key) ?? card;
+    const where = () => ({ kind: 'plan-button', key: card.key });
+    let node;
+    if (entry.phase === 'missing-folder') {
+      node = missingFolder({ repo: card.repo, message: entry.message, command: entry.command, onClose: () => apply(closeMissingFolder(state(), base), where()) });
+    } else {
+      node = planConfirm({
+        repo: card.repo,
+        number: card.number,
+        replan: entry.replan,
+        target: entry.target,
+        busy: entry.phase === 'posting',
+        onTarget: (target) => apply(chooseTarget(state(), base, target), { kind: 'popup' }),
+        onCancel: () => apply(cancelPlan(state(), base), where()),
+        onConfirm: () => confirm(card),
+      });
+    }
+    // issue 508: Escape on the confirmation closes only it, not the panel it may sit in.
+    node.addEventListener('keydown', (ev) => ev.key === 'Escape' && ev.stopPropagation?.());
+    return node;
+  }
+
+  const hostedInPanel = (card) => anchorInPanel && state().panel.open && state().panel.key === card.key;
+
+  /** issue 508: the card of the board with its planning parts, the open one marked and the confirmation anchored on it. */
+  function renderCard(card, options) {
+    const shown = shownCard(card);
+    const parts = keyed(cardPlanParts(shown, handlers), card.key);
+    const node = workCard(shown, { ...options, parts, onOpen: open, selected: state().panel.open && state().panel.key === card.key });
+    const pop = hostedInPanel(card) ? null : popupFor(shown);
+    return pop ? el('div', { class: 'wb-anchor' }, node, pop) : node;
+  }
+
+  function panel() {
+    const s = state();
+    const view = panelView(s);
+    if (view === 'closed') return null;
+    const { key, issue, reason, stale, retrying } = s.panel;
+    const card = shownCard(cardFor(key) ?? s.panel.card);
+    const now = Date.now();
+    let node;
+    if (view === 'skeleton') node = issuePanelLoading({ card, now, onClose: close });
+    else if (view === 'failure') node = issuePanelFailure({ card, reason, now, onRetry: retry, onClose: close });
+    else {
+      const parts = keyed(cardPlanParts(card, handlers), `panel:${key}`);
+      node = issuePanel({ card, issue: { ...issue, stale: stale || issue.stale }, now, parts, onRetry: retrying ? null : retry, onClose: close });
+      const pop = hostedInPanel(card) ? popupFor(card) : null;
+      if (pop) (node.querySelector('.wb-panel-acts') ?? node).append(pop);
+    }
+    node.setAttribute('tabindex', '-1');
+    return node;
+  }
+
+  /** issue 508: the board nodes, with the panel on their right when one is open. */
+  function wrap(nodes) {
+    // issue 508: a redraw replaces the panel, so the focus on the panel itself (not on one of its buttons) is given back to it.
+    const active = globalThis.document?.activeElement;
+    if (!focus && active?.tagName === 'ASIDE' && active.closest?.('aside.wb-panel') === active && area.contains(active)) focus = { kind: 'panel' };
+    const side = panel();
+    return side ? [issuePanelStage({ board: el('div', { class: 'wb-panel-board' }, ...nodes), panel: side })] : nodes;
+  }
+
+  /** issue 508: what changes what `wrap` and `renderCard` draw, for the screen's "did it change" check. */
+  const signature = () => [state().panel, state().plans, anchorInPanel];
+
+  /** issue 508: after a draw, the focus goes where the person's last action sends it (the panel, the card, the confirmation). */
+  function afterDraw() {
+    if (!focus) return;
+    const { kind, key } = focus;
+    focus = null;
+    const card = key ? `article[data-key="${key}"]` : null;
+    const target =
+      kind === 'panel' ? area.querySelector('aside.wb-panel')
+      : kind === 'card' ? area.querySelector(card)
+      : kind === 'plan-button' ? (area.querySelector(`aside.wb-panel button[data-action="plan"]`) ?? area.querySelector(`aside.wb-panel button[data-action="replan"]`) ?? area.querySelector(`${card} button[data-action="plan"]`) ?? area.querySelector(card))
+      : (area.querySelector('.wb-plan-pop [aria-checked="true"]') ?? area.querySelector('.wb-plan-pop button'));
+    target?.focus();
+  }
+
+  return { renderCard, wrap, signature, afterDraw, focusOn };
+}
+
+/**
  * issue 508: the issue layer of the board. `cards()` is the board's cards, `redraw()` draws the screen again and `reread()` reads
- * GET /api/work quietly; `ctx` is the screen's (read, write, signal).
+ * GET /api/work quietly; `ctx` is the screen's (read, write, signal). It keeps the state and its effects; the view half is
+ * createIssueView's.
  */
 export function createIssueLayer({ ctx, area, cards, redraw, reread }) {
   let s = initialIssueState();
@@ -71,8 +184,6 @@ export function createIssueLayer({ ctx, area, cards, redraw, reread }) {
   let fetched = 0;
   let forceNext = false;
   let sent = null;
-  let focus = null;
-  let anchorInPanel = false;
   let poll = null;
   const seen = new Set();
   const accepted = new Map();
@@ -82,7 +193,6 @@ export function createIssueLayer({ ctx, area, cards, redraw, reread }) {
   if (!link.parentNode) globalThis.document?.head?.append(link);
 
   const cardFor = (key) => cards().find((c) => c.key === key) ?? (s.panel.key === key ? s.panel.card : null);
-  const shownCard = (card) => (s.plans[card.key] ? cardWithPlanning(s, card) : card);
 
   async function loadIssue({ request, card }) {
     const force = forceNext ? '&refresh=1' : '';
@@ -139,7 +249,7 @@ export function createIssueLayer({ ctx, area, cards, redraw, reread }) {
     if (next === s) return;
     const done = Object.entries(s.plans).some(([k, e]) => e.phase === 'planning' && next.plans[k]?.phase === 'planned');
     s = next;
-    if (intent) focus = intent;
+    if (intent) view.focusOn(intent);
     effects();
     // issue 508: the steps of a plan that just came out are in the issue, not in the one the panel read before.
     if (done && s.panel.open && s.plans[s.panel.key]?.phase === 'planned') reloadPanel();
@@ -172,21 +282,10 @@ export function createIssueLayer({ ctx, area, cards, redraw, reread }) {
     pollSoon();
   }
 
-  const open = (card) => {
-    if (s.panel.open && s.panel.key === card.key) return;
-    apply(openPanel(s, cardFor(card.key) ?? card), { kind: 'panel' });
-  };
-  const close = () => apply(closePanel(s), { kind: 'card', key: s.panel.key });
   const retry = () => {
     forceNext = true;
     apply(retryPanel(s));
   };
-  const ask = (replan) => (card, button) => {
-    anchorInPanel = Boolean(button?.closest?.('.wb-panel'));
-    const base = cardFor(card.key) ?? card;
-    apply(askPlan(s, base, { replan }), { kind: 'popup' });
-  };
-  const handlers = { onPlan: ask(false), onReplan: ask(true) };
 
   function confirm(card) {
     const base = cardFor(card.key) ?? card;
@@ -195,92 +294,13 @@ export function createIssueLayer({ ctx, area, cards, redraw, reread }) {
     apply(confirmPlan(s, base));
   }
 
-  function popupFor(card) {
-    const entry = s.plans[card.key];
-    if (!entry || !POPUP_PHASES.has(entry.phase)) return null;
-    const base = cardFor(card.key) ?? card;
-    const where = () => ({ kind: 'plan-button', key: card.key });
-    let node;
-    if (entry.phase === 'missing-folder') {
-      node = missingFolder({ repo: card.repo, message: entry.message, command: entry.command, onClose: () => apply(closeMissingFolder(s, base), where()) });
-    } else {
-      node = planConfirm({
-        repo: card.repo,
-        number: card.number,
-        replan: entry.replan,
-        target: entry.target,
-        busy: entry.phase === 'posting',
-        onTarget: (target) => apply(chooseTarget(s, base, target), { kind: 'popup' }),
-        onCancel: () => apply(cancelPlan(s, base), where()),
-        onConfirm: () => confirm(card),
-      });
-    }
-    // issue 508: Escape on the confirmation closes only it, not the panel it may sit in.
-    node.addEventListener('keydown', (ev) => ev.key === 'Escape' && ev.stopPropagation?.());
-    return node;
-  }
-
-  const hostedInPanel = (card) => anchorInPanel && s.panel.open && s.panel.key === card.key;
-
-  /** issue 508: the card of the board with its planning parts, the open one marked and the confirmation anchored on it. */
-  function renderCard(card, options) {
-    const shown = shownCard(card);
-    const parts = keyed(cardPlanParts(shown, handlers), card.key);
-    const node = workCard(shown, { ...options, parts, onOpen: open, selected: s.panel.open && s.panel.key === card.key });
-    const pop = hostedInPanel(card) ? null : popupFor(shown);
-    return pop ? el('div', { class: 'wb-anchor' }, node, pop) : node;
-  }
-
-  function panel() {
-    const view = panelView(s);
-    if (view === 'closed') return null;
-    const { key, issue, reason, stale, retrying } = s.panel;
-    const card = shownCard(cardFor(key) ?? s.panel.card);
-    const now = Date.now();
-    let node;
-    if (view === 'skeleton') node = issuePanelLoading({ card, now, onClose: close });
-    else if (view === 'failure') node = issuePanelFailure({ card, reason, now, onRetry: retry, onClose: close });
-    else {
-      const parts = keyed(cardPlanParts(card, handlers), `panel:${key}`);
-      node = issuePanel({ card, issue: { ...issue, stale: stale || issue.stale }, now, parts, onRetry: retrying ? null : retry, onClose: close });
-      const pop = hostedInPanel(card) ? popupFor(card) : null;
-      if (pop) (node.querySelector('.wb-panel-acts') ?? node).append(pop);
-    }
-    node.setAttribute('tabindex', '-1');
-    return node;
-  }
-
-  /** issue 508: the board nodes, with the panel on their right when one is open. */
-  function wrap(nodes) {
-    // issue 508: a redraw replaces the panel, so the focus on the panel itself (not on one of its buttons) is given back to it.
-    const active = globalThis.document?.activeElement;
-    if (!focus && active?.tagName === 'ASIDE' && active.closest?.('aside.wb-panel') === active && area.contains(active)) focus = { kind: 'panel' };
-    const side = panel();
-    return side ? [issuePanelStage({ board: el('div', { class: 'wb-panel-board' }, ...nodes), panel: side })] : nodes;
-  }
-
-  /** issue 508: what changes what `wrap` and `renderCard` draw, for the screen's "did it change" check. */
-  const signature = () => [s.panel, s.plans, anchorInPanel];
-
-  /** issue 508: after a draw, the focus goes where the person's last action sends it (the panel, the card, the confirmation). */
-  function afterDraw() {
-    if (!focus) return;
-    const { kind, key } = focus;
-    focus = null;
-    const card = key ? `article[data-key="${key}"]` : null;
-    const target =
-      kind === 'panel' ? area.querySelector('aside.wb-panel')
-      : kind === 'card' ? area.querySelector(card)
-      : kind === 'plan-button' ? (area.querySelector(`aside.wb-panel button[data-action="plan"]`) ?? area.querySelector(`aside.wb-panel button[data-action="replan"]`) ?? area.querySelector(`${card} button[data-action="plan"]`) ?? area.querySelector(card))
-      : (area.querySelector('.wb-plan-pop [aria-checked="true"]') ?? area.querySelector('.wb-plan-pop button'));
-    target?.focus();
-  }
-
   function stop() {
     alive = false;
     clearTimeout(poll);
     link.remove();
   }
 
-  return { renderCard, wrap, signature, learn, afterDraw, stop };
+  const view = createIssueView({ area, state: () => s, apply, cardFor, retry, confirm });
+
+  return { renderCard: view.renderCard, wrap: view.wrap, signature: view.signature, learn, afterDraw: view.afterDraw, stop };
 }
