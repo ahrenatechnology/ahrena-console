@@ -501,6 +501,23 @@ describe('#532 one confirmation at a time (465-6, decision 13): opening Planejar
   });
 });
 
+describe('#532 the run confirmation does not depend on where the last plan confirmation was pressed', () => {
+  test('#532 panel open, Replanejar in the panel, Cancelar, then Executar plano on the board card: one run confirmation on the card, and it posts', async () => {
+    const core = new Core();
+    const s = await open(core);
+    await openPanel(s, 506);
+    press(buttonIn(panelOf(s)!, 'replan'), 'Replanejar in the panel');
+    assert.equal(s.area.querySelectorAll('div.wb-plan-pop').length, 1, 'the plan confirmation is open');
+    press(buttonIn(popup(s)!, 'cancel'), 'Cancelar');
+    assert.equal(popup(s), null);
+    press(buttonIn(articleOf(s, 506), 'run'), 'Executar plano on the board card');
+    assert.equal(s.area.querySelectorAll('div.wb-plan-pop').length, 1, 'one run confirmation is drawn');
+    assert.match(popup(s)!.getAttribute('aria-label') ?? '', /Executar o plano da/);
+    await confirmRun(s, core);
+    assert.deepEqual(core.runs, [{ repo: REPO, number: 506, target: 'desktop' }]);
+  });
+});
+
 describe('#532 other failures: the core\'s error text and the card back on its action', () => {
   for (const [status, error] of [
     [422, 'A issue não tem plano.'],
