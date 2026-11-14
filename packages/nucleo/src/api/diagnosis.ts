@@ -213,8 +213,8 @@ function readSection<K extends SectionId>(id: K, status: SectionStatus, s: Recor
   const items = readItems(id, raw);
   if (!items) return null;
   const section: SectionOf<K> = { id, status, items } as SectionOf<K>;
-  if (typeof s.reason === 'string') section.reason = capReason(s.reason);
-  if (isRecord(s.partial) && typeof s.partial.reason === 'string') section.partial = { reason: capReason(s.partial.reason) };
+  if (status !== 'ok' && typeof s.reason === 'string') section.reason = capReason(s.reason);
+  if (status === 'ok' && isRecord(s.partial) && typeof s.partial.reason === 'string') section.partial = { reason: capReason(s.partial.reason) };
   return section;
 }
 

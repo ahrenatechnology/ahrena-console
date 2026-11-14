@@ -514,6 +514,15 @@ describe('#565 GET /api/diagnosis: the Workstation, through the tunnel', () => {
     assert.equal((await askWorkstation(diagnosisBody({ sections: [repeated[1], repeated[0], repeated[2], repeated[3]] }))).status, 502);
   });
 
+  test('#565/AC-5 Given the Workstation core answers an ok section with a reason and a timeout section with partial, When asked, Then neither key comes back', async () => {
+    const body = withSection(0, { id: 'largest-folders', status: 'ok', items: [{ path: '/var/lib', bytes: 900 }], reason: 'not for ok' });
+    body.sections[1] = { id: 'docker-df', status: 'timeout', items: [], partial: { reason: 'not for timeout' } } as (typeof body.sections)[number];
+    const a = await askWorkstation(body);
+    assert.equal(a.status, 200);
+    assert.deepEqual(a.body.sections[0], { id: 'largest-folders', status: 'ok', items: [{ path: '/var/lib', bytes: 900 }] });
+    assert.deepEqual(a.body.sections[1], { id: 'docker-df', status: 'timeout', items: [] });
+  });
+
   test('#565/AC-5 Given the Workstation core answers a takenAt that is not a date, When asked, Then 502 bad-response', async () => {
     assert.equal((await askWorkstation(diagnosisBody({ takenAt: 'yesterday' }))).status, 502);
   });
