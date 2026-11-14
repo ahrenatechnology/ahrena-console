@@ -33,9 +33,11 @@ export function roundsText(g) {
 const AGENT = [[/(?:^|:)argos$/i, 'Argos'], [/(?:^|:)erodos$/i, 'Erodos']];
 export function stepName(s) {
   for (const [re, name] of AGENT) if (s.agentType && re.test(s.agentType)) return name;
+  const short = shortAgentName(s.agentType);
+  if (short) return short;
   if (s.role === 'dev') return 'dev';
   if (s.role === 'review') return 'review';
-  return shortAgentName(s.agentType) ?? 'subagente';
+  return 'subagente';
 }
 
 /** The line under the name: what the step did. */

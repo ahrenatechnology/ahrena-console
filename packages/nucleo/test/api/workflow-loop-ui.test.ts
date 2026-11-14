@@ -21,6 +21,13 @@ describe('short agent name (issue 519)', () => {
     assert.equal(stepName(step('other', { agentType: 'ahrena:hephaestus' })), 'Hephaestus');
   });
 
+  test('#519 AC-1: a dev or review step with a plugin:agent type shows the agent, not the role', () => {
+    assert.equal(stepName(step('dev', { agentType: 'ahrena-engineering-backend:apollo' })), 'Apollo');
+    assert.equal(stepName(step('review', { agentType: 'ahrena-engineering-frontend:iris' })), 'Iris');
+    assert.equal(stepName(step('dev', { agentType: null })), 'dev');
+    assert.equal(stepName(step('review', { agentType: null })), 'review');
+  });
+
   test('#519 AC-2: the full name stays reachable, the helper keeps it apart from the short one', () => {
     const full = 'ahrena-engineering-backend:apollo';
     assert.notEqual(shortAgentName(full), full);
@@ -53,7 +60,9 @@ describe('the loop by PR on the screen', () => {
   test('step names and results: Argos, Erodos, dev, with the verdict and the findings', () => {
     assert.equal(stepName(step('review', { agentType: 'ahrena-engineering-quality:argos' })), 'Argos');
     assert.equal(stepName(step('fix', { agentType: 'erodos' })), 'Erodos');
-    assert.equal(stepName(step('dev', { agentType: 'general-purpose' })), 'dev');
+    assert.equal(stepName(step('dev', { agentType: null })), 'dev');
+    assert.equal(stepName(step('review', { agentType: null })), 'review');
+    assert.equal(stepName(step('dev', { agentType: 'general-purpose' })), 'general-purpose');
     assert.equal(stepName(step('other', { agentType: 'Explore' })), 'Explore');
     assert.equal(stepResult(step('review', { verdict: 'request-changes', findings: 3 })), 'Pediu mudanças · 3 achados');
     assert.equal(stepResult(step('review', { verdict: 'approve' })), 'Aprovou');
