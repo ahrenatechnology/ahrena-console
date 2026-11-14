@@ -1,4 +1,4 @@
-/* issue 535: the components of the issue panel's edit mode (layer 2), pure render functions in the fake DOM.
+/* #535: the components of the issue panel's edit mode (layer 2), pure render functions in the fake DOM.
 One test per state of wireframes 478-1 (edit), 478-2 (conflict) and 478-3 (refused), plus the line diff the conflict
 marks. There is no workbench, visual or axe tool in this project (component map: node:test with the fake DOM), so the
 accessibility checks are assertions on roles and accessible names. */

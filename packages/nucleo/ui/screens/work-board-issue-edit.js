@@ -12,10 +12,10 @@ import { el, icon } from '../dom.js';
 import { bodyBlocks, heading, section } from './work-board-issue-panel.js';
 import { formatAgo, formatClock, typeLabel, TYPE_LABELS } from './work-board-parts.js';
 
-/** The title of the refusal band when the caller gives none. */
+/** The title of the refusal band when the caller gives none (issue 535). */
 const REFUSED_TITLE = 'O GitHub recusou a edição.';
 const REFUSED_KEPT = 'O texto continua aqui; nada se perdeu.';
-/** The longest middle (lines times lines) the diff compares line by line; past it the whole middle is marked. */
+/** The longest middle (lines times lines) the diff compares line by line; past it the whole middle is marked (issue 535). */
 const DIFF_CELLS = 4_000_000;
 
 const lines = (text) => String(text ?? '').replace(/\r\n?/g, '\n').split('\n');
@@ -61,13 +61,13 @@ export function diffLines(mine, theirs) {
   return { mine: mark(a, keepA), theirs: mark(b, keepB) };
 }
 
-// ---------- DOM: from here, nodes ----------
+// ---------- DOM: from here, nodes (issue 535) ----------
 
 const ref = (n) => `#${n}`;
 const noop = () => {};
 const initials = (author) => (String(author ?? '').replace(/[^a-z0-9]/gi, '').slice(0, 2) || '?').toUpperCase();
 
-/** A write in flight disables the control that sent it and marks it busy; the others stay as they were. */
+/** A write in flight disables the control that sent it and marks it busy; the others stay as they were (issue 535). */
 const busyAttrs = (busy, name) => (busy === name ? { disabled: true, 'aria-busy': 'true' } : {});
 
 function button({ cls, action, label, name = null, onClick = noop, iconName = null, busy = null, title = null }) {
@@ -95,7 +95,7 @@ function textField(node, value, { onInput = null, onEnter = null, onEscape = nul
   return node;
 }
 
-/** The header: type, number, "editando", when the last change reached GitHub, Concluir and close (478-1). */
+/** The header: type, number, "editando", when the last change reached GitHub, Concluir and close (478-1) (issue 535). */
 function editHead({ card, number, savedAt, busy, onDone, onClose }) {
   const saved = savedAtLabel(savedAt);
   return el(
@@ -110,7 +110,7 @@ function editHead({ card, number, savedAt, busy, onDone, onClose }) {
   );
 }
 
-// ---------- the description: editor, refusal and conflict ----------
+// ---------- the description: editor, refusal and conflict (issue 535) ----------
 
 /** The refusal band (478-3): GitHub said no. `reason` is a pt-BR sentence the caller built from the answer. */
 export function refusalBand({ reason = null, title = REFUSED_TITLE } = {}) {
@@ -228,7 +228,7 @@ function descriptionSection({ number, body, now, busy }) {
 
 const pick = (obj, ...keys) => Object.fromEntries(keys.map((k) => [k, obj[k]]));
 
-// ---------- the details, saved on choose ----------
+// ---------- the details, saved on choose (issue 535) ----------
 
 function select(name, { value = '', options = [] }, onChange, busy, action) {
   const known = options.some((o) => String(o.value) === String(value));
@@ -267,7 +267,7 @@ function detailsSection({ details = {}, handlers, busy, band = null }) {
   return section('details', 'Detalhes', heading('Detalhes', el('span', { class: 'wb-edit-note' }, 'grava ao escolher')), el('dl', { class: 'wb-panel-meta' }, ...rows.flatMap(([k, v]) => [el('dt', {}, k), el('dd', {}, v)])), band);
 }
 
-// ---------- the Plan steps ----------
+// ---------- the Plan steps (issue 535) ----------
 
 function stepRow(step, index, count, plan, dragState) {
   const { editing = null, busy = null, onEdit, onRemove, onMove, onEditText, onEditSave, onEditCancel } = plan;
@@ -341,7 +341,7 @@ function planSection(plan = {}) {
   );
 }
 
-// ---------- the comments ----------
+// ---------- the comments (issue 535) ----------
 
 function commentsSection({ issue = {}, comment = {}, now, busy, band = null }) {
   const comments = issue.comments ?? [];
