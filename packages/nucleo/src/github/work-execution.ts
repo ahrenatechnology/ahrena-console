@@ -29,12 +29,12 @@ export const EXECUTION_SESSION_WINDOW_MS = 10 * 60_000;
 export const EXECUTION_LIMIT = 2;
 
 export interface ExecutionRun {
-  /** The issue key, lower case. */
+  /** #531 the issue key, lower case. */
   key: string;
   target: ExecutionTarget;
   startedAt: string;
   state: ExecutionRunState;
-  /** The execution session, once the board has seen it live. */
+  /** #531 the execution session, once the board has seen it live. */
   sessionId: string | null;
   finishedAt: string | null;
 }
@@ -43,7 +43,7 @@ export interface ExecutionRun {
 export interface WorkExecutionRuns {
   get(key: string): Promise<ExecutionRun | null>;
   all(): Promise<ExecutionRun[]>;
-  /** Inserts the issue's run or replaces its last one. */
+  /** #531 inserts the issue's run or replaces its last one. */
   save(run: ExecutionRun): Promise<void>;
 }
 
@@ -60,13 +60,13 @@ export const isOverExecutionLimit = (running: number, force: boolean): boolean =
 /** The first line of the prompt: how the board tells an execution session from a planning one. */
 export const EXECUTION_PROMPT_MARKER = 'Ahrena Console execution run: ';
 
-/** The Desktop cuts a prompt past ~14k characters; this stays far below. */
+/** #531 the Desktop cuts a prompt past ~14k characters; this stays far below. */
 const MAX_LISTED_STEPS = 50;
 
 export interface ExecutionPromptInput {
   repo: string;
   number: number;
-  /** The numbers of the Plan steps. */
+  /** #531 the numbers of the Plan steps. */
   steps: readonly number[];
 }
 
@@ -107,7 +107,7 @@ export interface LiveExecutionSession {
 }
 
 export interface SettleExecutionInput {
-  /** The live execution sessions of the run's issue. */
+  /** #531 the live execution sessions of the run's issue. */
   live: readonly LiveExecutionSession[];
   now: number;
 }

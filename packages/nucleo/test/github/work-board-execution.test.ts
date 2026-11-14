@@ -90,7 +90,7 @@ const booting = (over: Partial<ExecutionRun> = {}): ExecutionRun => ({ key: k(41
 const execSession = (id: string, over: Partial<WorkSessionLink> = {}): WorkSessionLink => ({ sessionId: id, key: k(412), state: 'working', since: '2026-10-18T12:00:05.000Z', execution: true, ...over });
 
 describe('#531/AC-2 the card while its execution session boots', () => {
-  test('#531/AC-2 Given a run and no session yet, Then the card is in Em execução with the boot state and no session', async () => {
+  test('#531/AC-2 Given a run and no session yet, Then the card is in running with the boot state and no session', async () => {
     const t = setup();
     await t.runs.save(booting());
     const c = await t.read();
@@ -149,7 +149,7 @@ describe('#531/AC-2 the card while its execution session boots', () => {
 });
 
 describe('#531/AC-3 the running count', () => {
-  test('#531/AC-3 Given one card with a live working session and one booting run, Then the service counts 2 cards in Em execução', async () => {
+  test('#531/AC-3 Given one card with a live working session and one booting run, Then the service counts 2 cards in running', async () => {
     const t = setup([card(412), card(413), card(414)]);
     await t.runs.save(booting());
     t.sessions.list = [{ sessionId: 'w', key: k(413), state: 'working', since: START }];

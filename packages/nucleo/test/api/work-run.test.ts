@@ -203,8 +203,8 @@ describe('#531 POST /api/work/run', () => {
     });
   });
 
-  describe('#531/AC-3 the limit of cards in Em execução', () => {
-    test('#531/AC-3 Given 2 cards in Em execução and no force, Then 409 with the reason and the count, and nothing opens', async () => {
+  describe('#531/AC-3 the limit of cards in the running column ("Em execução")', () => {
+    test('#531/AC-3 Given 2 cards in running and no force, Then 409 with the reason and the count, and nothing opens', async () => {
       fresh();
       running = 2;
       const r = await post(body);
@@ -217,7 +217,7 @@ describe('#531 POST /api/work/run', () => {
       assert.equal(await runs.get('acme/app#412'), null);
     });
 
-    test('#531/AC-3 Given 1 card in Em execução, Then the session opens', async () => {
+    test('#531/AC-3 Given 1 card in running, Then the session opens', async () => {
       fresh();
       running = 1;
       assert.equal((await post(body)).status, 200);
