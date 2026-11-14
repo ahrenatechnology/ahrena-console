@@ -143,6 +143,10 @@ import { ancestorsWith, listPortsWith, PortReleaser } from '../ports/release.ts'
 import { systemRunner } from '../telemetry/adapters/system.ts';
 import { createCloudsRoute } from './clouds.ts';
 import { createDockerRoute } from './docker.ts';
+import { createDiagnosisRoute } from './diagnosis.ts';
+import { knownFolders } from './new-session.ts';
+import { diagnosisCollectorFor, systemDiagnosisDeps, worktreeRootsOf } from '../diagnosis/adapters/system.ts';
+import { LARGEST_FOLDERS_BUDGET_MS } from '../diagnosis/adapters/common.ts';
 import { DockerService } from '../docker/service.ts';
 import { systemToolRunner } from '../tools/runner.ts';
 import { AppUpdateState } from '../app-update/state.ts';
@@ -692,6 +696,15 @@ const docker =
         acceptNoOrigin: acceptRemoteActions,
       }
     : null;
+// The diagnosis of an open saturation alert (#565): this machine's collectors (read-only, fixed commands) and the remote machines' through their tunnel port. Not in --demo, where the readings are synthetic.
+const diagnosisCollector = demo ? null : diagnosisCollectorFor(process.platform, systemDiagnosisDeps(async () => worktreeRootsOf((await knownFolders(storage)).map((f) => f.path)), log));
+const diagnosis = createDiagnosisRoute({
+  alerts: alertTracker,
+  local: diagnosisCollector ? { collect: diagnosisCollector, platform: process.platform === 'darwin' ? 'darwin' : 'linux', log, now: () => new Date().toISOString(), sectionTimeoutMs: LARGEST_FOLDERS_BUDGET_MS + 3_000 } : null,
+  // The remote núcleo answers once its own sections end (at most the section timeout), so the tunnel read waits a little longer.
+  remote: { port: (id) => remoteMachines?.get(id)?.port, get: loopbackGet({ timeoutMs: LARGEST_FOLDERS_BUDGET_MS + 15_000, proof: remoteProofs }) },
+  log,
+});
 // The desktop app's update notice (#330): the app reports what it found; the /ui reads it. Not in --demo.
 const appUpdate = demo ? null : createAppUpdateRoute(new AppUpdateState(changes));
 
@@ -767,6 +780,7 @@ const api: LocalApi = await startLocalApi({
   devConsole: screens.devConsole,
   agentConfig,
   telemetry: telemetryService,
+  diagnosis,
   machineReader: new MachineReader({ get: loopbackGet({ timeoutMs: MACHINE_READ_ADAPTER_TIMEOUT_MS, proof: remoteProofs }), machines: () => remoteMachines?.list() ?? [], connectionOf: (id) => machineConnection?.status(id) ?? null }),
   reconnect: machineConnection?.legacy ?? reconnectRunner,
   machineConnection: machineConnection ? createConnectionRoute(machineConnection) : null,

@@ -46,6 +46,7 @@ import type { ManagedRuntime } from '../runtime/service.ts';
 // | `?machine=` on the lists above and on the Detail | The sessions of every machine, merged, or of one (api/machine-sessions.ts, #243) |
 // | `GET /api/machines`           | The machines: this one and the remote ones, with state and alerts (api/telemetry.ts, #175) |
 // | `GET /api/telemetry`          | One machine's telemetry: current reading, series and alerts (`?machine=`, `?hours=1|12`; #175) |
+// | `GET /api/diagnosis`        | What consumes the resource an open saturation alert names, read-only; a remote machine's through its tunnel (`?machine=`, `?alert=`; api/diagnosis.ts, src/diagnosis, #565) |
 // | `POST /api/machines/<id>/reconnect` and `DELETE` | Reconnect a remote machine with the command of machines.json, and Cancel (api/telemetry.ts, #244) |
 // | `GET /api/sessions/<id>/messaging`, `POST /api/sessions/<id>/messages` and `GET /api/sessions/<id>/messages/<messageId>` | Send a message a person typed in the /ui to the session's live process, through Claude Code's cross-session inbox, and read its state (api/messaging.ts, src/messaging, #61) |
 // | `POST /api/terminals/<id>/actions/<action>` | Interrupt a terminal's foreground command or end its session, by ids (api/terminals.ts, #350) |
@@ -129,6 +130,7 @@ import { AGENT_INSTRUCTIONS_ROUTE, type AgentInstructionsRoute } from './agent-i
 import { FRAMEWORK_INSTALL_ROUTE, frameworkInstallWriteFromSameOrigin, type FrameworkInstallRoute } from './framework-install.ts';
 import { ADRS_ROUTE, PDRS_ROUTE, type DecisionsRoute } from './adrs.ts';
 import { DEV_CONSOLE_ROUTE, respondDevConsole, type DevConsole } from './dev-console.ts';
+import { DIAGNOSIS_ROUTE, respondDiagnosisUnsupported, type DiagnosisRoute } from './diagnosis.ts';
 import { isTelemetryRoute, reconnectFromSameOrigin, RECONNECT_ROUTE, respondReconnect, respondTelemetry } from './telemetry.ts';
 import type { ReconnectControl } from '../telemetry/reconnect.ts';
 import type { TelemetryService } from '../telemetry/service.ts';
@@ -245,6 +247,8 @@ export interface ApiOptions {
   telemetry?: TelemetryService | null;
   /** #243: reads the remote machines' lists for `?machine=` (api/machine-sessions.ts); without it, only this machine. */
   machineReader?: MachineReader | null;
+  /** The diagnosis of an open alert (#565, api/diagnosis.ts); without it, `GET /api/diagnosis` gives 501 `diagnosis-unsupported`. */
+  diagnosis?: DiagnosisRoute | null;
   /** The reconnect of the remote machines (#244); without it, `POST /api/machines/<id>/reconnect` gives 404 or 409. */
   reconnect?: ReconnectControl | null;
   /** Sending a message to a live session (api/messaging.ts, #61); without it, those routes give 404. */
@@ -666,6 +670,7 @@ export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
     if (opts.agentInstructions && url.pathname.startsWith(`${AGENT_INSTRUCTIONS_ROUTE}/`)) return opts.agentInstructions(res, url);
     if (opts.decisions && [ADRS_ROUTE, PDRS_ROUTE].some((r) => url.pathname === r || url.pathname.startsWith(`${r}/`))) return opts.decisions(res, url);
     if (url.pathname === DEV_CONSOLE_ROUTE && opts.devConsole) return respondDevConsole(res, url, opts.devConsole);
+    if (url.pathname === DIAGNOSIS_ROUTE) return opts.diagnosis ? opts.diagnosis(req, res, url) : respondDiagnosisUnsupported(res);
     if (isTelemetryRoute(url.pathname)) return respondTelemetry(res, url, opts.telemetry);
     if (isToolsRoute(url.pathname)) return respondTools(res, url, opts.tools);
     if (url.pathname === LOAD_ROUTE) {
