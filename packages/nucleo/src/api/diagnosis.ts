@@ -23,9 +23,30 @@
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { send } from '../ingest/hooks/receiver.ts';
-import { diagnose, type DiagnoseDeps } from '../diagnosis/diagnose.ts';
-import { SECTION_IDS, SECTION_STATUSES, capReason, isDiagnosable, type Diagnosis, type DiagnosisSection } from '../diagnosis/model.ts';
-import { LOCAL_MACHINE_ID, MACHINE_ID } from '../telemetry/model.ts';
+import { diagnose, shape, type DiagnoseDeps } from '../diagnosis/diagnose.ts';
+import {
+  CACHE_ACTION_IDS,
+  SECTION_IDS,
+  SECTION_STATUSES,
+  capReason,
+  isDiagnosable,
+  sectionsFor,
+  type CacheActionId,
+  type CacheItem,
+  type Diagnosis,
+  type DiagnosisSection,
+  type DockerDfItem,
+  type FolderItem,
+  type JournalItem,
+  type ProcessItem,
+  type SectionId,
+  type SectionItems,
+  type SectionOf,
+  type SectionStatus,
+  type SwapItem,
+  type WorktreeItem,
+} from '../diagnosis/model.ts';
+import { LOCAL_MACHINE_ID, MACHINE_ID, type AlertKind } from '../telemetry/model.ts';
 import type { RemoteGet } from '../telemetry/ports.ts';
 
 export const DIAGNOSIS_ROUTE = '/api/diagnosis';
@@ -88,8 +109,8 @@ export function createDiagnosisRoute(o: DiagnosisRouteOptions): DiagnosisRoute {
     }
     const body = r.body;
     if (r.status === 200) {
-      const sections = readSections(body, open.id);
-      if (sections) return send(res, 200, { machine, alertId: open.id, kind: open.kind, takenAt: takenAtOf(body), sections } satisfies Diagnosis);
+      const remoteDiagnosis = readDiagnosis(body, open.id, open.kind);
+      if (remoteDiagnosis) return send(res, 200, { machine, alertId: open.id, kind: open.kind, ...remoteDiagnosis } satisfies Diagnosis);
     } else if (r.status === 501 && isRecord(body) && body.error === UNSUPPORTED.error) {
       return respondDiagnosisUnsupported(res);
     } else if (r.status === 404 || r.status === 405) {
@@ -121,24 +142,99 @@ function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null && !Array.isArray(v);
 }
 
-function takenAtOf(body: unknown): string {
-  return isRecord(body) && typeof body.takenAt === 'string' ? body.takenAt : '';
+const isNumber = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
+const isString = (v: unknown): v is string => typeof v === 'string';
+const isBoolean = (v: unknown): v is boolean => typeof v === 'boolean';
+const ACTION_IDS: readonly unknown[] = Object.values(CACHE_ACTION_IDS);
+const isCacheActionId = (v: unknown): v is CacheActionId => ACTION_IDS.includes(v);
+
+/*
+ * One reader per item shape of the contract (docs/contracts/diagnosis.md): every documented field is
+ * checked, and the item is rebuilt from those fields only, so a key the contract does not name never
+ * passes. `null` when the item is not that shape.
+ */
+function readProcess(v: unknown): ProcessItem | null {
+  if (!isRecord(v) || !isNumber(v.pid) || !isString(v.name) || !isNumber(v.rssBytes) || !isNumber(v.cpuPct) || !isString(v.startedAt)) return null;
+  return { pid: v.pid, name: v.name, rssBytes: v.rssBytes, cpuPct: v.cpuPct, startedAt: v.startedAt };
+}
+function readSwap(v: unknown): SwapItem | null {
+  if (!isRecord(v) || !isNumber(v.usedBytes) || !isNumber(v.totalBytes)) return null;
+  return { usedBytes: v.usedBytes, totalBytes: v.totalBytes };
+}
+function readFolder(v: unknown): FolderItem | null {
+  if (!isRecord(v) || !isString(v.path) || !isNumber(v.bytes)) return null;
+  return { path: v.path, bytes: v.bytes };
+}
+function readDockerDf(v: unknown): DockerDfItem | null {
+  if (!isRecord(v) || !isString(v.type) || !isNumber(v.usedBytes) || !isNumber(v.reclaimableBytes)) return null;
+  return { type: v.type, usedBytes: v.usedBytes, reclaimableBytes: v.reclaimableBytes };
+}
+/** A cache points to a cleanup action of #569; a worktree (`id: 'worktree'`) points to none. */
+function readCache(v: unknown): CacheItem | WorktreeItem | null {
+  if (!isRecord(v) || !isString(v.id) || !isString(v.path) || !isNumber(v.bytes)) return null;
+  if (v.id === 'worktree') {
+    if (v.actionId !== null || !isString(v.lastUsedAt) || !isBoolean(v.hasUncommitted) || !isBoolean(v.hasUnpushed)) return null;
+    return { id: 'worktree', path: v.path, bytes: v.bytes, lastUsedAt: v.lastUsedAt, hasUncommitted: v.hasUncommitted, hasUnpushed: v.hasUnpushed, actionId: null };
+  }
+  if (!isCacheActionId(v.actionId)) return null;
+  return { id: v.id, path: v.path, bytes: v.bytes, actionId: v.actionId };
+}
+function readJournal(v: unknown): JournalItem | null {
+  if (!isRecord(v) || !isNumber(v.bytes)) return null;
+  return { bytes: v.bytes };
 }
 
+type ItemReaders = { [K in SectionId]: (v: unknown) => SectionItems[K][number] | null };
+const ITEM_READERS: ItemReaders = {
+  'processes-by-rss': readProcess,
+  'processes-by-cpu': readProcess,
+  swap: readSwap,
+  'largest-folders': readFolder,
+  'docker-df': readDockerDf,
+  'known-caches': readCache,
+  journal: readJournal,
+};
+
+/** The items of one section, each read by its shape, then sorted and capped as a local answer is; `null` when one is not that shape. */
+function readItems<K extends SectionId>(id: K, raw: unknown[]): SectionItems[K] | null {
+  const read: ItemReaders[K] = ITEM_READERS[id];
+  const items: SectionItems[K][number][] = [];
+  for (const v of raw) {
+    const item = read(v);
+    if (item === null) return null;
+    items.push(item);
+  }
+  return shape(id, items as SectionItems[K]);
+}
+
+function readSection<K extends SectionId>(id: K, status: SectionStatus, s: Record<string, unknown>, raw: unknown[]): SectionOf<K> | null {
+  // A section that did not come has no items (the contract); one that says otherwise is not a diagnosis.
+  if (status !== 'ok' && raw.length > 0) return null;
+  const items = readItems(id, raw);
+  if (!items) return null;
+  const section: SectionOf<K> = { id, status, items } as SectionOf<K>;
+  if (typeof s.reason === 'string') section.reason = capReason(s.reason);
+  if (isRecord(s.partial) && typeof s.partial.reason === 'string') section.partial = { reason: capReason(s.partial.reason) };
+  return section;
+}
+
+const sameIds = (a: readonly string[], b: readonly string[]) => a.length === b.length && a.every((id, i) => id === b[i]);
+
 /**
- * The sections of a remote diagnosis, re-projected: only known ids and statuses, the keys of a section and
- * no others, a short `reason`. `null` when the body is not a diagnosis of this alert.
+ * A remote diagnosis, re-projected: only known ids and statuses, the sections of the alert's kind on
+ * Darwin or Linux in order and once each, the keys of a section and of each item and no others, a short
+ * `reason`, lists sorted and capped. `null` when the body is not a diagnosis of this alert.
  */
-function readSections(body: unknown, alertId: string): DiagnosisSection[] | null {
-  if (!isRecord(body) || body.alertId !== alertId || typeof body.takenAt !== 'string' || !Array.isArray(body.sections)) return null;
+function readDiagnosis(body: unknown, alertId: string, kind: AlertKind): Pick<Diagnosis, 'takenAt' | 'sections'> | null {
+  if (!isRecord(body) || body.alertId !== alertId || typeof body.takenAt !== 'string' || Number.isNaN(Date.parse(body.takenAt)) || !Array.isArray(body.sections)) return null;
   const sections: DiagnosisSection[] = [];
   for (const s of body.sections as unknown[]) {
     if (!isRecord(s) || !(SECTION_IDS as readonly unknown[]).includes(s.id) || !(SECTION_STATUSES as readonly unknown[]).includes(s.status) || !Array.isArray(s.items)) return null;
-    const section: Record<string, unknown> = { id: s.id, status: s.status, items: s.items };
-    if (typeof s.reason === 'string') section.reason = capReason(s.reason);
-    if (isRecord(s.partial) && typeof s.partial.reason === 'string') section.partial = { reason: capReason(s.partial.reason) };
-    // The ids, statuses and the array were checked above; the items are the remote collector's, as `DiagnosisSection` says.
-    sections.push(section as unknown as DiagnosisSection);
+    const section = readSection(s.id as SectionId, s.status as SectionStatus, s, s.items as unknown[]);
+    if (!section) return null;
+    sections.push(section);
   }
-  return sections;
+  const ids = sections.map((s) => s.id);
+  if (!sameIds(ids, sectionsFor(kind, 'darwin')) && !sameIds(ids, sectionsFor(kind, 'linux'))) return null;
+  return { takenAt: body.takenAt, sections };
 }

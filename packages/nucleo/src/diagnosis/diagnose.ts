@@ -91,8 +91,11 @@ const SHAPERS: Shapers = {
   'largest-folders': rank((f) => f.bytes),
 };
 
-/** Sorting and the cap live here, not in the collectors: every machine and OS answers the same way (#565). */
-function shape<K extends SectionId>(id: K, items: SectionItems[K]): SectionItems[K] {
+/**
+ * Sorting and the cap live here, not in the collectors: every machine and OS answers the same way (#565).
+ * The route applies it again to a remote núcleo's answer, so a remote list is sorted and capped like a local one.
+ */
+export function shape<K extends SectionId>(id: K, items: SectionItems[K]): SectionItems[K] {
   const by: Shapers[K] = SHAPERS[id];
   return by ? by(items) : items;
 }

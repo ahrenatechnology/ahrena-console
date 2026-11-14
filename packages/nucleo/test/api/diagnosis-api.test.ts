@@ -438,6 +438,93 @@ describe('#565 GET /api/diagnosis: the Workstation, through the tunnel', () => {
     }
   });
 
+  /** Boots with a Workstation that answers `body` for volume-full:/ and returns the Mac's answer (#565/AC-5). */
+  async function askWorkstation(body: unknown) {
+    const { tracker, get, close } = await boot({ remote: fakeRemote({ kind: 'response', status: 200, body }).get });
+    try {
+      tracker.update('workstation', [alert('volume-full:/', 'volume-full')]);
+      const r = await get('?machine=workstation&alert=volume-full%3A%2F');
+      return { status: r.status, body: (await r.json()) as Body & { reason?: string } };
+    } finally {
+      await close();
+    }
+  }
+  const withSection = (index: number, section: Record<string, unknown>) => {
+    const sections: Array<Record<string, unknown>> = [...diagnosisBody().sections];
+    sections[index] = section;
+    return diagnosisBody({ sections });
+  };
+
+  test('#565/AC-5 Given the Workstation core answers an item with a field of the wrong type, When asked, Then 502 bad-response', async () => {
+    const a = await askWorkstation(withSection(0, { id: 'largest-folders', status: 'ok', items: [{ path: '/var/lib', bytes: 'x' }] }));
+    assert.equal(a.status, 502);
+    assert.equal(a.body.reason, 'bad-response');
+  });
+
+  test('#565/AC-5 Given the Workstation core answers a cache with an unknown actionId, When asked, Then 502 bad-response', async () => {
+    const a = await askWorkstation(withSection(2, { id: 'known-caches', status: 'ok', items: [{ id: 'npm', path: '/home/u/.npm', bytes: 50, actionId: 'rm-rf' }] }));
+    assert.equal(a.status, 502);
+  });
+
+  test('#565/AC-5 Given the Workstation core answers an item with an extra key, When asked, Then the key is dropped', async () => {
+    const a = await askWorkstation(withSection(0, { id: 'largest-folders', status: 'ok', items: [{ path: '/var/lib', bytes: 900, secret: 'x' }] }));
+    assert.equal(a.status, 200);
+    assert.deepEqual(a.body.sections[0]!.items, [{ path: '/var/lib', bytes: 900 }]);
+  });
+
+  test('#565/AC-5 Given the Workstation core answers 11 processes, When asked, Then 10 come back, highest RSS first', async () => {
+    const { tracker, get, close } = await boot({
+      remote: fakeRemote({
+        kind: 'response',
+        status: 200,
+        body: {
+          alertId: 'swap-high',
+          takenAt: NOW,
+          sections: [
+            { id: 'processes-by-rss', status: 'ok', items: processes(11) },
+            { id: 'processes-by-cpu', status: 'ok', items: processes(11) },
+            { id: 'swap', status: 'ok', items: [{ usedBytes: 5, totalBytes: 10 }] },
+          ],
+        },
+      }).get,
+    });
+    try {
+      tracker.update('workstation', [alert('swap-high', 'swap-high')]);
+      const r = await get('?machine=workstation&alert=swap-high');
+      assert.equal(r.status, 200);
+      const d = await ok(r);
+      assert.equal(d.sections[0]!.items.length, 10);
+      assert.equal(d.sections[1]!.items.length, 10);
+      assert.equal(d.sections[0]!.items[0]!.rssBytes, 1100);
+    } finally {
+      await close();
+    }
+  });
+
+  test('#565/AC-5 Given the Workstation core answers a timeout section with items, When asked, Then 502 bad-response', async () => {
+    const a = await askWorkstation(withSection(1, { id: 'docker-df', status: 'timeout', items: [{ type: 'Images', usedBytes: 800, reclaimableBytes: 300 }], reason: 'slow' }));
+    assert.equal(a.status, 502);
+  });
+
+  test('#565/AC-5 Given the Workstation core answers sections that are not the alert kind\'s, When asked, Then 502 bad-response', async () => {
+    const swapSection = { id: 'swap', status: 'ok', items: [{ usedBytes: 5, totalBytes: 10 }] };
+    assert.equal((await askWorkstation(withSection(1, swapSection))).status, 502);
+    const repeated = diagnosisBody().sections;
+    assert.equal((await askWorkstation(diagnosisBody({ sections: [repeated[0], repeated[0], repeated[1], repeated[2]] }))).status, 502);
+    assert.equal((await askWorkstation(diagnosisBody({ sections: [repeated[1], repeated[0], repeated[2], repeated[3]] }))).status, 502);
+  });
+
+  test('#565/AC-5 Given the Workstation core answers a takenAt that is not a date, When asked, Then 502 bad-response', async () => {
+    assert.equal((await askWorkstation(diagnosisBody({ takenAt: 'yesterday' }))).status, 502);
+  });
+
+  test('#565/AC-5 Given the Workstation core answers a Darwin volume-full without the journal, When asked, Then 200', async () => {
+    const sections = diagnosisBody().sections.slice(0, 3);
+    const a = await askWorkstation(diagnosisBody({ sections }));
+    assert.equal(a.status, 200);
+    assert.deepEqual(a.body.sections.map((s) => s.id), ['largest-folders', 'docker-df', 'known-caches']);
+  });
+
   test('#565/AC-5 Given the Workstation core closed the alert meanwhile, When asked, Then its 404 comes through as alert-not-open', async () => {
     const { tracker, get, close } = await boot({ remote: fakeRemote({ kind: 'response', status: 404, body: { error: 'o alerta não está aberto', reason: 'alert-not-open' } }).get });
     try {

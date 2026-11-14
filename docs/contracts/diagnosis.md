@@ -60,4 +60,4 @@ The ids are fixed. Each alert kind gets its own, in this order:
 | `501` | `{ "error": "diagnosis-unsupported" }`, stable: this núcleo cannot diagnose (no collector for its platform, or not wired), or the núcleo of the remote machine does not have the route (an old núcleo). The screen tells it from a failure by the `error` value. |
 | `502` | `{ error, reason }`: the remote machine did not answer (`reason` `unreachable`, the tunnel is down or the núcleo there did not respond), or answered something that is not a diagnosis (`bad-response`). |
 
-The remote núcleo's own `501 diagnosis-unsupported`, and its `404` that carries no `reason` (a núcleo without the route), come through as `501 diagnosis-unsupported`. Its `404` with `reason` `alert-not-open` comes through as that `404`.
+The remote núcleo's own `501 diagnosis-unsupported`, and its `404` that carries no `reason` or its `405` (a núcleo without the route), come through as `501 diagnosis-unsupported`. Its `404` with `reason` `alert-not-open` comes through as that `404`.
