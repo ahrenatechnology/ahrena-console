@@ -65,6 +65,23 @@ describe('AC1 · the list accepts exactly what the Mac sends', () => {
     assert.equal(remoteDetailPath('s:a', 'events', ''), '/api/sessions/s%3Aa/events');
   });
 
+  test('AC1 the agent view path the Mac builds is in the list, GET only (#529, decision 0020)', () => {
+    for (const id of ids) {
+      for (const agentId of ['main', 'a1', 'agent_1', 'a.b-c', 'sess:agent', 'x'.repeat(128)]) {
+        for (const query of ['', 'limit=5']) {
+          const path = remoteDetailPath(id, null, query, agentId);
+          assert.ok(remoteRouteFor('GET', path), path);
+          assert.equal(remoteRouteFor('POST', path), null, `POST ${path}`);
+          assert.equal(remoteRouteFor('DELETE', path), null, `DELETE ${path}`);
+        }
+      }
+    }
+    assert.equal(remoteDetailPath('s', null, '', 'a:1'), '/api/sessions/s/agents/a%3A1');
+    for (const target of ['/api/sessions/s/agents/..', '/api/sessions/s/agents/.', '/api/sessions/s/agents/a%2Fb', '/api/sessions/s/agents/a/b', '/api/sessions/s/agents/', `/api/sessions/s/agents/${'x'.repeat(129)}`, '/api/sessions/../agents/a1', '/api/sessions/s/agents/a1/events']) {
+      assert.equal(remoteRouteFor('GET', target), null, target);
+    }
+  });
+
   test('AC1 every panel path the Mac builds is in the list', () => {
     for (const id of ids) {
       for (const params of [new URLSearchParams(), new URLSearchParams('local=1&account=a&org=o&model=m&cwd=%2Ftmp')]) {

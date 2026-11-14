@@ -87,18 +87,23 @@ function failed(e: SessionEvent): boolean {
   return r?.is_error === true || r?.success === false || (e.summary?.startsWith('erro:') ?? false);
 }
 
-/** A message's full text: the transcript's `data.text`, the hook's `data.prompt`, the summary only for old events (#529). */
-function textOf(e: SessionEvent): string | null {
+/**
+ * A message's text: the transcript's `data.text`, the hook's `data.prompt`, or, for an old event that kept neither,
+ * its summary. The summary is cut at ingest, so `cut` is true whenever it is what is served (#529).
+ */
+function textOf(e: SessionEvent): { text: string; cut: boolean } | null {
   const d = obj(e.data);
   const full = str(d?.text) ?? (e.type === 'UserPromptSubmit' ? str(d?.prompt) : null);
-  if (full?.trim()) return full.trim();
+  if (full?.trim()) return { text: full.trim(), cut: false };
   if (e.type === 'UserPromptSubmit' && e.summary === 'prompt') return null;
-  return e.summary ?? str(d?.prompt)?.trim() ?? null;
+  const summary = e.summary ?? str(d?.prompt)?.trim() ?? null;
+  return summary ? { text: summary, cut: true } : null;
 }
 
-function capped(text: string | null): { text: string | null; truncated: boolean } {
-  if (text === null) return { text: null, truncated: false };
-  return text.length > MESSAGE_TEXT_MAX ? { text: text.slice(0, MESSAGE_TEXT_MAX), truncated: true } : { text, truncated: false };
+function capped(message: { text: string; cut: boolean } | null): { text: string | null; truncated: boolean } {
+  if (message === null) return { text: null, truncated: false };
+  const { text, cut } = message;
+  return text.length > MESSAGE_TEXT_MAX ? { text: text.slice(0, MESSAGE_TEXT_MAX), truncated: true } : { text, truncated: cut };
 }
 
 const tailOf = (sessionId: string, id: string): string => (id.startsWith(`${sessionId}:`) ? id.slice(sessionId.length + 1) : id);

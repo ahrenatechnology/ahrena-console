@@ -133,6 +133,21 @@ describe('#529 agent view projection', () => {
     assert.deepEqual(agentFacts(MAIN), { agentType: null, description: null });
   });
 
+  test('#529 an old event with only a summary still gives the brief and the result, flagged as cut', () => {
+    const old = [
+      ev(SUB_ID, 'UserPrompt', 10, {}, { summary: 'the prompt summary, cut at ingest' }),
+      ev(SUB_ID, 'AssistantMessage', 90, {}, { summary: 'the reply summary, cut at ingest' }),
+    ];
+    const v = read('a1', { events: old })!;
+    assert.equal(v.brief, 'the prompt summary, cut at ingest');
+    assert.equal(v.briefTruncated, true);
+    assert.equal(v.result, 'the reply summary, cut at ingest');
+    assert.equal(v.resultTruncated, true);
+    const full = read('a1', { events: [ev(SUB_ID, 'UserPrompt', 10, { text: 'whole' }, { summary: 'who' }), ev(SUB_ID, 'AssistantMessage', 90, { text: 'done' }, { summary: 'do' })] })!;
+    assert.equal(full.briefTruncated, false);
+    assert.equal(full.resultTruncated, false);
+  });
+
   test('#529/AC-3 the brief keeps its line breaks and stops at 32,000 characters, saying it was cut', () => {
     assert.equal(MESSAGE_TEXT_MAX, 32_000);
     const v = read('a1')!;

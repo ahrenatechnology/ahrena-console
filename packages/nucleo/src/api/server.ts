@@ -31,6 +31,7 @@ import type { ManagedRuntime } from '../runtime/service.ts';
 // | `POST /api/work/plan`         | "Planejar": a planning-only Athena session for an issue, in its repository's folder, in the Claude Desktop or a terminal (`{ repo, number, target, replan? }`; api/work-plan.ts, #507) |
 // | `GET /api/work`               | The work board: the Project's issues in the agent lifecycle columns (`?level=`, `?initiative=`, `?epic=`, `?type=`, `?label=`, `?repo=`, `?status=`, `?refresh=1`; api/work-board.ts, #465 #466) |
 // | `GET /api/sessions/<id>` and `/agents`, `/conversation`, `/events` | The session Detail in the /ui (api/session-detail.ts, #29 and #30) |
+// | `GET /api/sessions/<id>/agents/<agent>` | One agent's view (api/session-detail.ts, api/agent-view.ts, #529) |
 // | `GET /api/new-session/folders` and `POST /api/new-session` | "Nova sessão": the folders it can start in, and a new session in one of them, in the Claude Desktop or a terminal (api/new-session.ts) |
 // | `POST /api/sessions/<id>/open` | Opens the session where it runs: Claude Desktop, a terminal resuming it, or its live terminal brought forward; the núcleo picks the target (api/session-open-route.ts, #285) |
 // | `GET /api/decisions`, `GET /api/sessions/<id>/decisions` and `POST /api/decisions/<id>/promote` | The /ui's Decisions page and tab and the "Promover a registro" (api/decisions-ui.ts, #103) |
@@ -642,7 +643,7 @@ export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
     const d = DECISION_LIST.exec(url.pathname);
     if (d) return decisionList(res, decodeURIComponent(d[1]!), url);
     const det = opts.detail && DETAIL_ROUTE.exec(url.pathname);
-    if (det) return opts.detail!.responder(res, decodeURIComponent(det[1]), det[2] ?? null, url);
+    if (det) return opts.detail!.responder(res, decodeSegment(det[1]), det[2] ?? null, url, det[3] === undefined ? null : decodeSegment(det[3]));
     send(res, 404, { error: 'não encontrado' });
   }
 
