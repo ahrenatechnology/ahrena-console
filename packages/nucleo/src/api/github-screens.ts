@@ -236,24 +236,40 @@ export function createGithubScreens(o: GithubScreensOptions): GithubScreens {
  */
 export function githubSyncSteps(screens: Pick<GithubScreens, 'project' | 'current'>, connected: (() => Promise<boolean>) | null): SyncStep[] {
   const ready = async () => (connected ? connected().catch(() => false) : false);
+  // #612 Not connected (revoked, disconnected) is `pending`, not `skipped`: no GitHub call, and the step
+  // runs on the next tick, so a reconnect resumes the sync within one cycle instead of one interval.
+  const waiting = (): 'skipped' | 'pending' => (connected ? 'pending' : 'skipped');
+  // A call that dropped the connection (GitHub answered 401) is not a step failure: the connection logged
+  // the transition once, and the next ticks wait.
+  const unlessDropped = async (read: () => Promise<'done' | 'skipped' | 'pending'>) => {
+    try {
+      return await read();
+    } catch (err) {
+      if (connected && !(await ready())) return 'pending';
+      throw err;
+    }
+  };
   return [
     {
       name: 'project',
       everyMs: SYNC_PROJECT_EVERY_MS,
       async run() {
         const kanban = screens.project?.kanban();
-        if (!kanban || !(await ready())) return 'skipped';
-        const board = await kanban.board({ force: true });
-        if (board.stale) throw new Error(board.staleReason ?? 'o GitHub não respondeu; ficou o quadro guardado');
-        return 'done';
+        if (!kanban) return 'skipped';
+        if (!(await ready())) return waiting();
+        return unlessDropped(async () => {
+          const board = await kanban.board({ force: true });
+          if (board.stale) throw new Error(board.staleReason ?? 'o GitHub não respondeu; ficou o quadro guardado');
+          return 'done';
+        });
       },
     },
     {
       name: 'decisions',
       everyMs: SYNC_DECISIONS_EVERY_MS,
       async run() {
-        if (!(await ready())) return 'skipped';
-        return screens.current().decisions.sync();
+        if (!(await ready())) return waiting();
+        return unlessDropped(() => screens.current().decisions.sync());
       },
     },
   ];

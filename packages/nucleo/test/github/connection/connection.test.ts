@@ -999,3 +999,48 @@ describe('a new core on the same data dir (#372)', () => {
     next.close();
   });
 });
+
+describe('#612 a data call GitHub answers 401 reaches the connection', () => {
+  const DATA_URL = 'http://fake-api.test/user';
+  const read = (fetchLike: typeof fetch, token: string) => fetchLike(DATA_URL, { headers: { authorization: `bearer ${token}` } });
+
+  test('#612/AC-2 a 401 on a data call revokes the credential once: disconnected, login kept, one log line, one change', async () => {
+    const s = setup();
+    await connect(s);
+    s.auth.requireToken = true;
+    s.auth.token = OTHER_TOKEN; // GitHub revoked the credential the connection holds
+    const watched = s.conn.watchRejections(s.gh.fetch);
+    const changes = s.events.change;
+    const logs = s.logs.length;
+    assert.equal((await read(watched, TOKEN)).status, 401);
+    assert.equal((await read(watched, TOKEN)).status, 401, 'a second call in flight reads the same answer');
+    const st = await s.conn.status();
+    assert.deepEqual([st.state, st.lastError, st.login], ['disconnected', 'revoked', 'dev-sintetico']);
+    assert.equal(await s.conn.connected(), false);
+    assert.deepEqual(s.logs.slice(logs), ['github: GitHub rejected the credential (401)']);
+    assert.equal(s.events.change - changes, 1);
+    assert.ok(!s.logs.some((l) => l.includes(TOKEN)), 'the log never carries the credential');
+  });
+
+  test('#612/AC-3 reconnecting after the revocation connects again', async () => {
+    const s = setup();
+    await connect(s);
+    s.auth.requireToken = true;
+    s.auth.token = OTHER_TOKEN;
+    await read(s.conn.watchRejections(s.gh.fetch), TOKEN);
+    assert.equal(await s.conn.connected(), false);
+    await connect(s);
+    assert.equal(await s.conn.connected(), true);
+    assert.equal(await s.conn.token(), OTHER_TOKEN);
+  });
+
+  test('#612/AC-2 an answer that is not a 401, or a 401 for a credential the connection no longer holds, changes nothing', async () => {
+    const s = setup();
+    await connect(s);
+    s.auth.requireToken = true;
+    const watched = s.conn.watchRejections(s.gh.fetch);
+    assert.equal((await read(watched, TOKEN)).status, 200);
+    assert.equal((await read(watched, 'gho_FAKEanotherold000000000000000000000')).status, 401);
+    assert.equal(await s.conn.connected(), true);
+  });
+});

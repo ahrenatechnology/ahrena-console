@@ -140,12 +140,12 @@ describe('#496/AC-1 GithubBackgroundSync.nextRunAt', () => {
 });
 
 describe('#356 the sync steps and the status route', () => {
-  test('without a GitHub connection both steps are skipped and nothing is read', async () => {
+  test('#612 without a GitHub connection both steps wait for it (pending) and nothing is read', async () => {
     let read = 0;
     const kanban = { board: async () => (read++, { stale: false }) };
     const screens = { project: { kanban: () => kanban }, current: () => ({ decisions: { sync: async () => (read++, 'done' as const) } }) } as unknown as Parameters<typeof githubSyncSteps>[0];
     const steps = githubSyncSteps(screens, async () => false);
-    assert.deepEqual(await Promise.all(steps.map((s) => s.run())), ['skipped', 'skipped']);
+    assert.deepEqual(await Promise.all(steps.map((s) => s.run())), ['pending', 'pending']);
     assert.equal(read, 0);
     assert.deepEqual(await Promise.all(githubSyncSteps(screens, async () => true).map((s) => s.run())), ['done', 'done']);
     assert.equal(read, 2);
