@@ -311,11 +311,20 @@ function cardTop(card, { primaryRepo, now, withAge }) {
     el('span', { class: 'wb-number mono' }, ref(card.number)),
     otherRepo ? el('span', { class: 'wb-repo mono', title: card.repo }, shortRepo(card.repo)) : null,
     withAge ? ageNode(card, now) : null,
+    githubLink(card),
   );
 }
 
-const cardTitle = (card) =>
-  el('h3', { class: 'wb-card-title' }, el('a', { href: card.url, target: '_blank', rel: 'noopener noreferrer', title: 'Abrir a issue no GitHub' }, card.title));
+// issue 536: the title opens the detail in the Console (a button, so Enter and focus work); GitHub is the separate icon link.
+const cardTitle = (card, onOpen) =>
+  el(
+    'h3',
+    { class: 'wb-card-title' },
+    onOpen ? el('button', { type: 'button', class: 'wb-card-open', 'data-action': 'open', 'data-key': card.key, onClick: () => onOpen(card) }, card.title) : card.title,
+  );
+
+const githubLink = (card) =>
+  el('a', { class: 'wb-card-github', href: card.url, target: '_blank', rel: 'noopener noreferrer', 'aria-label': 'Abrir no GitHub', title: 'Abrir no GitHub' }, icon('external'));
 
 const pill = (kind, tone, text, extra = '') => el('span', { class: `wb-pill wb-pill-${tone} ${kind}${extra}` }, text);
 
@@ -355,7 +364,7 @@ export function workCard(card, { chainMode = 'compact', primaryRepo = null, now 
     'article',
     { class: `card wb-card${toneOf(card)}`, 'data-key': card.key, 'data-column': card.column },
     cardTop(card, { primaryRepo, now, withAge: false }),
-    cardTitle(card),
+    cardTitle(card, onOpen),
     chainNode(card, chainMode),
     reasonNode(card.blocked),
     parts?.note ?? null,

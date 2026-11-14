@@ -232,7 +232,7 @@ describe('the card carries the planning parts and opens the detail (465-2, 467-1
     assert.equal(texto(one(root, '[data-action="replan"]')), 'Replanejar');
   });
 
-  test('a click on the card opens the detail, a click on a button or the title link does not', () => {
+  test('a click on the card opens the detail, a click on a button or the GitHub link does not', () => {
     const opened: unknown[] = [];
     const subject = card(500);
     const root = workCard(subject, { now: NOW, onOpen: (c: unknown) => opened.push(c), parts: cardPlanParts(subject, {}) });
@@ -240,8 +240,57 @@ describe('the card carries the planning parts and opens the detail (465-2, 467-1
     click(one(root, '.wb-number'));
     assert.equal(opened.length, 2);
     click(one(root, '[data-action="plan"]'));
-    click(one(root, '.wb-card-title a'));
+    click(one(root, '.wb-card-github'));
     assert.equal(opened.length, 2, 'buttons and links keep their own click');
+  });
+
+  test('issue 536 AC-1: a click on the card title opens the detail once, without following a link', () => {
+    const opened: unknown[] = [];
+    const subject = card(500);
+    const root = workCard(subject, { now: NOW, onOpen: (c: unknown) => opened.push(c) });
+    const title = one(root, '.wb-card-title button');
+    assert.equal(texto(title), subject.title);
+    assert.equal(title.getAttribute('type'), 'button');
+    assert.equal(root.querySelector('.wb-card-title a'), null, 'the title is not a link to GitHub');
+    click(title);
+    assert.deepEqual(opened, [subject], 'one open, for that card');
+  });
+
+  test('issue 536 AC-1: a card that cannot open the detail shows the title as plain text', () => {
+    const root = workCard(card(500), { now: NOW });
+    assert.equal(root.querySelector('.wb-card-title button'), null);
+    assert.equal(root.querySelector('.wb-card-title a'), null);
+    assert.equal(texto(one(root, '.wb-card-title')), 'Issue 500');
+  });
+
+  test('issue 536 AC-2: GitHub is a separate icon link on the card, and the PR badge still goes to GitHub', () => {
+    const opened: unknown[] = [];
+    const subject = card(500, { pullRequest: { number: 512, url: `https://github.com/${REPO}/pull/512`, state: 'open', ci: 'running', review: 'pending' } });
+    for (const onOpen of [(c: unknown) => opened.push(c), null]) {
+      const root = workCard(subject, { now: NOW, onOpen });
+      const github = one(root, 'a.wb-card-github');
+      assert.equal(github.getAttribute('href'), subject.url);
+      assert.equal(github.getAttribute('target'), '_blank');
+      assert.equal(github.getAttribute('rel'), 'noopener noreferrer');
+      assert.equal(github.getAttribute('aria-label'), 'Abrir no GitHub');
+      assert.equal(github.getAttribute('title'), 'Abrir no GitHub');
+      assert.equal(github.closest('.wb-card-title'), null, 'never the title');
+      assert.equal(one(root, 'a.wb-pr').getAttribute('href'), `https://github.com/${REPO}/pull/512`);
+    }
+    click(one(workCard(subject, { now: NOW, onOpen: (c: unknown) => opened.push(c) }), 'a.wb-card-github'));
+    assert.equal(opened.length, 0, 'the GitHub link does not open the panel');
+  });
+
+  test('issue 536 AC-3: Enter on the focused title opens the detail, and the card does not open it twice', () => {
+    const opened: unknown[] = [];
+    const subject = card(500);
+    const root = workCard(subject, { now: NOW, onOpen: (c: unknown) => opened.push(c) });
+    const title = one(root, '.wb-card-title button');
+    title.focus();
+    key(title, 'Enter');
+    assert.equal(opened.length, 0, 'a real browser turns Enter on a button into its click, not into a second open');
+    click(title);
+    assert.equal(opened.length, 1);
   });
 
   test('the card is reachable by keyboard when it opens the detail, and marks the open one', () => {
@@ -493,6 +542,15 @@ describe('the issue panel (467-1)', () => {
     const back = issuePanel({ card: failed, issue: issue(509), now: NOW, parts: cardPlanParts(failed, {}) });
     assert.equal(texto(one(back, '.wb-panel-acts [role="alert"]')), 'A sessão de planejamento não abriu a tempo');
     assert.equal(texto(one(back, '.wb-panel-acts [data-action="plan"]')), 'Planejar');
+  });
+
+  test('issue 536 AC-2: the open panel header carries the same Abrir no GitHub icon link', () => {
+    const root = issuePanel({ card: card(509), issue: issue(509), now: NOW });
+    const github = one(root, '.wb-panel-head a.wb-panel-github');
+    assert.equal(github.getAttribute('aria-label'), 'Abrir no GitHub');
+    assert.equal(github.getAttribute('title'), 'Abrir no GitHub');
+    assert.equal(github.getAttribute('href'), `https://github.com/${REPO}/issues/509`);
+    assert.equal(github.getAttribute('target'), '_blank');
   });
 
   test('the GitHub link and the close button are named, and the close button and Escape close the panel', () => {
