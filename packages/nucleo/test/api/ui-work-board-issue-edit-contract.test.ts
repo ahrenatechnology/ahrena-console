@@ -120,6 +120,9 @@ class Core {
   reads: string[] = [];
   writes: Write[] = [];
   boardReadCount = 0;
+  /** issue 591: what GET /api/work/issue/options answers per repository (a repository with no entry is 404, as a core that refuses), and the repos it was asked for. */
+  optionsByRepo: Record<string, Obj | (() => Response | Promise<Response>)> = {};
+  optionReads: string[] = [];
   /** What the next writes answer instead of applying themselves (a queue; an entry may throw, or wait for the abort) (issue 535). */
   scripted: ((init: RequestInit) => Response | Promise<Response>)[] = [];
   /** What the next ?refresh=1 reads answer instead of reading (a queue; an entry may wait for the test to release it) (issue 535). */
@@ -220,6 +223,13 @@ class Core {
       // the board shows the plan GitHub holds: its card carries the step count of the issue (issue 535)
       const n = this.gh.plan.steps.length;
       return answer(200, { ...this.board(), columns: this.board().columns.map((c) => ({ ...c, cards: c.cards.map((k: Obj) => (k.number === 506 ? { ...k, plan: n > 0 ? { steps: n } : null } : k)) })) });
+    }
+    if (url.pathname === '/api/work/issue/options' && method === 'GET') {
+      const repo = url.searchParams.get('repo') ?? '';
+      this.optionReads.push(repo);
+      const found = this.optionsByRepo[repo];
+      if (typeof found === 'function') return found();
+      return found ? answer(200, clone(found)) : answer(404, { error: 'not-found' });
     }
     if (url.pathname === '/api/work/issue' && method === 'GET') {
       this.reads.push(url.search);
@@ -1152,5 +1162,134 @@ describe('issue 535 the page, as a person using it with a keyboard and a screen 
     key(title, 'Escape');
     assert.ok(editPanel(s), 'the edit mode is still open');
     assert.equal(named(editPanel(s), 'Título da issue').value, 'Digitando');
+  });
+});
+
+// ---------- issue 591: the detail selectors read the issue repository's options ----------
+
+const repoOptions = (over: Obj = {}): Obj => ({
+  labels: ['ui', 'docs', 'only-in-repo'],
+  types: ['User Story', 'Bug', 'Epic'],
+  milestones: ['M3', 'M9'],
+  parents: [
+    { key: KEY(6), title: 'Quadro do trabalho' },
+    { key: KEY(99), title: 'Pai que nenhum card carrega' },
+  ],
+  fetchedAt: NOW,
+  stale: false,
+  staleReason: null,
+  ...over,
+});
+const optionValues = (panel: ElementoFalso, name: string) =>
+  named(panel, name)
+    .querySelectorAll('option')
+    .map((o) => o.getAttribute('value') as string);
+const optionTexts = (panel: ElementoFalso, name: string) =>
+  named(panel, name)
+    .querySelectorAll('option')
+    .map((o) => texto(o));
+/** The options a selector offers today, from the board level alone (the stub's cards and options). (issue 591) */
+const TODAY = { type: ['User Story', 'Bug'], milestone: ['', 'M3', 'M4'].filter((v) => v !== ''), label: ['ui', 'docs'] };
+
+describe('issue 591 the edit mode reads the options of the issue repository', () => {
+  test('#591/AC-1 the selectors offer exactly the repository options, plus the issue values, and none of another repository', async () => {
+    const core = new Core();
+    core.cards.push(card(508, { repo: 'other/repo', key: 'other/repo#508', typeName: 'Foreign Type', milestone: 'Foreign milestone' }));
+    core.optionsByRepo[REPO] = repoOptions();
+    const s = await open(core);
+    const panel0 = await openEdit(s);
+    await until(() => optionValues(editPanel(s)!, 'Tipo').includes('Epic'), 'the repository types arrive');
+    const panel = editPanel(s)!;
+    assert.deepEqual(core.optionReads, [REPO], 'asked once, for the issue repository');
+    assert.ok(panel0, 'the panel was open');
+    assert.deepEqual(optionValues(panel, 'Tipo').sort(), ['Bug', 'Epic', 'User Story']);
+    assert.ok(!optionValues(panel, 'Tipo').includes('Foreign Type'));
+    assert.deepEqual(optionValues(panel, 'Milestone').filter((v) => v !== ''), ['M3', 'M9'], 'M4 (a card of this level) is not the repository answer');
+    assert.ok(!optionValues(panel, 'Milestone').includes('Foreign milestone'));
+    const labels = named(panel, 'Adicionar uma label').querySelectorAll('option').map((o) => o.getAttribute('value') as string).filter(Boolean);
+    assert.deepEqual(labels.sort(), ['docs', 'only-in-repo'], 'ui is already on the issue; only-in-repo comes from the repository');
+    assert.ok(optionTexts(panel, 'Tipo').includes('História'), 'a type the board already names keeps its label');
+    assert.ok(optionTexts(panel, 'Tipo').includes('Epic'), 'a type no card names shows its own name');
+  });
+
+  test('#591/AC-1 the issue own type, milestone and label stay selectable when the repository does not list them', async () => {
+    const core = new Core();
+    core.gh = { ...freshIssue(), type: 'Legacy', milestone: 'Old', labels: ['legacy-label'] };
+    core.optionsByRepo[REPO] = repoOptions();
+    const s = await open(core);
+    await openEdit(s);
+    await until(() => optionValues(editPanel(s)!, 'Tipo').includes('Epic'), 'the repository types arrive');
+    const panel = editPanel(s)!;
+    assert.ok(optionValues(panel, 'Tipo').includes('Legacy'));
+    assert.ok(optionValues(panel, 'Milestone').includes('Old'));
+    assert.equal(named(panel, 'Milestone').value, 'Old');
+    assert.ok(texto(panel).includes('legacy-label'));
+  });
+
+  test('#591/AC-2 a parent no card on the board level carries can be chosen, and the current parent stays selectable', async () => {
+    const core = new Core();
+    core.optionsByRepo[REPO] = repoOptions({ parents: [{ key: KEY(99), title: 'Pai que nenhum card carrega' }] });
+    const s = await open(core);
+    await openEdit(s);
+    await until(() => optionValues(editPanel(s)!, 'Pai').includes(KEY(99)), 'the repository parents arrive');
+    const panel = editPanel(s)!;
+    assert.ok(optionTexts(panel, 'Pai').includes('#99 Pai que nenhum card carrega'));
+    assert.ok(optionValues(panel, 'Pai').includes(KEY(6)), 'the issue current parent is still there');
+    assert.ok(!optionValues(panel, 'Pai').includes(KEY(7)), 'the board level epic that is not in the repository answer is gone');
+    choose(named(panel, 'Pai'), KEY(99));
+    await until(() => core.writes.length === 1, 'the PATCH');
+    assert.equal(lastWrite(core).body.parent, KEY(99));
+  });
+
+  test('#591/AC-3 while the read is pending the selectors show today options, and they swap when it arrives', async () => {
+    const core = new Core();
+    let release: (r: Response) => void = () => {};
+    core.optionsByRepo[REPO] = () => new Promise<Response>((r) => (release = r));
+    const s = await open(core);
+    await openEdit(s);
+    await tick(20);
+    const panel = editPanel(s)!;
+    assert.deepEqual(optionValues(panel, 'Tipo').sort(), [...TODAY.type].sort());
+    assert.ok(optionValues(panel, 'Milestone').includes('M4'));
+    assert.ok(optionValues(panel, 'Pai').includes(KEY(7)));
+    release(answer(200, repoOptions()));
+    await until(() => optionValues(editPanel(s)!, 'Tipo').includes('Epic'), 'the answer swaps the options');
+    assert.ok(!optionValues(editPanel(s)!, 'Milestone').includes('M4'));
+  });
+
+  for (const [what, make] of [
+    ['a 502', () => answer(502, { error: 'github-unavailable' })],
+    ['a 404', () => answer(404, { error: 'not-found' })],
+    ['a malformed body', () => answer(200, { labels: 'ui', types: [], milestones: [], parents: [] })],
+    ['a parent with no key', () => answer(200, repoOptions({ parents: [{ title: 'x' }] }))],
+    ['a network error', () => Promise.reject(new TypeError('fetch failed'))],
+  ] as [string, () => Response | Promise<Response>][]) {
+    test(`#591/AC-3 ${what} leaves the selectors as they are today, with no error on screen`, async () => {
+      const core = new Core();
+      core.optionsByRepo[REPO] = make;
+      const s = await open(core);
+      await openEdit(s);
+      await until(() => core.optionReads.length === 1, 'the read went out');
+      await settle();
+      const panel = editPanel(s)!;
+      assert.ok(panel, 'the edit mode is still open');
+      assert.deepEqual(optionValues(panel, 'Tipo').sort(), [...TODAY.type].sort());
+      assert.ok(optionValues(panel, 'Milestone').includes('M4'));
+      assert.ok(optionValues(panel, 'Pai').includes(KEY(7)));
+      assert.ok(!texto(panel).includes('não foi gravada'), 'no refusal band');
+    });
+  }
+
+  test('#591/AC-1 an answer that arrives after the person left the issue does not reopen the edit mode', async () => {
+    const core = new Core();
+    let release: (r: Response) => void = () => {};
+    core.optionsByRepo[REPO] = () => new Promise<Response>((r) => (release = r));
+    const s = await open(core);
+    const panel = await openEdit(s);
+    press(need(panel, 'button[data-action="close"]'), 'Fechar');
+    release(answer(200, repoOptions()));
+    await settle();
+    assert.equal(editPanel(s), null, 'the edit mode stays closed');
+    assert.equal(readPanel(s), null);
   });
 });
