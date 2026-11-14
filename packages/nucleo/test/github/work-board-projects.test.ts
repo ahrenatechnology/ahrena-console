@@ -73,7 +73,7 @@ describe('#609/AC-1 the background sync reads the Projects of every organization
     const dropping = new WorkBoardProjects({
       options: { list: async () => list(), snapshot: async () => null },
       orgs: async () => [{ login: 'acme-labs', access: 'granted' }],
-      project: () => ({ board: async () => { live = false; return board({ stale: true, staleReason: 'unauthorized', staleCode: 'unauthorized' as never }); } }),
+      project: () => ({ board: async () => { live = false; return board({ stale: true, staleReason: 'GitHub answered 401', staleCode: 'github-error' }); } }),
       now: () => NOW,
     });
     assert.equal(await workProjectsSyncStep(dropping, async () => live).run(), 'pending');
@@ -84,7 +84,7 @@ describe('#609/AC-1 the background sync reads the Projects of every organization
     const stale = new WorkBoardProjects({
       options: { list: async () => list(), snapshot: async () => null },
       orgs: async () => [{ login: 'acme-labs', access: 'granted' }],
-      project: () => ({ board: async () => board({ stale: true, staleReason: 'network', staleCode: 'network' as never }) }),
+      project: () => ({ board: async () => board({ stale: true, staleReason: 'network', staleCode: 'network' }) }),
       now: () => NOW,
     });
     await assert.rejects(() => workProjectsSyncStep(stale, async () => true).run(), /were not read/);
