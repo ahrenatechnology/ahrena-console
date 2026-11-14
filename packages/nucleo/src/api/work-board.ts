@@ -23,7 +23,7 @@
  * `options.orgs` and `options.projects` count what each would show, and `filters` echoes `org` and `project`. A `?project=`
  * that is not of `?org=` is 200 with an empty set; a malformed one is 400 `bad-filter`. An organization that restricts the app,
  * sits behind SAML or fails to read is an entry with its state and the others stay; its stored cards stay with its `readAt`.
- * Every owner failing is GitHub down: the stored cards with `stale`, and with nothing stored the 502 below.
+ * GitHub is down only when every Project tried fails (#609): the stored cards with `stale`, and with nothing stored the 502 below.
  *
  * The body is the use case's `WorkBoardView` as it is. Errors: 400 `bad-filter` with `param`, 503
  * `no-project` without a chosen Project, 503 `off` under --no-github, 502 `github-unavailable` with the

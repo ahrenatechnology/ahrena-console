@@ -91,101 +91,126 @@ export class WorkBoardProjects {
   async read({ force = false, fromStore = false }: WorkProjectsReadOptions = {}): Promise<WorkProjectsRead> {
     const listed = await this.list(fromStore && !force);
     const connection = await this.orgs();
+    const { entries, seen, toRead } = this.warningEntries(listed, connection);
     const byOwner = new Map<string, ProjectOwner>(listed.owners.map((o) => [o.login.toLowerCase(), o]));
-    const account = listed.owners.find((o) => o.ownerType === 'user') ?? null;
-
-    // #609 The entries in order: granted, then the ones that restrict the app, then the ones GitHub refused, the account last.
-    const entries: WorkBoardOrganization[] = [];
-    const seen = new Set<string>();
-    const add = (entry: WorkBoardOrganization) => {
-      if (seen.has(entry.login.toLowerCase())) return;
-      seen.add(entry.login.toLowerCase());
-      entries.push(entry);
-    };
-    const warning = (login: string, state: 'restricted' | 'saml' | 'failed', reason: OwnerBlockReason | GithubFailure, urls: { approvalUrl: string; requestUrl: string } | null = null): WorkBoardOrganization => ({
-      login,
-      own: false,
-      state,
-      readAt: null,
-      projects: [],
-      reason,
-      ...(urls ?? {}),
-    });
-    const pending = connection.flatMap((o) => (o.access === 'pending' ? [o] : []));
-    for (const o of pending) add(warning(o.login, 'restricted', 'oauth-restricted', { approvalUrl: o.approvalUrl, requestUrl: o.requestUrl }));
-    for (const o of listed.owners) {
-      if (!o.blocked || o.ownerType !== 'organization') continue;
-      this.log(`work board: ${o.login} refused its Projects: ${o.blocked.message}`);
-      add(warning(o.login, OWNER_REASON[o.blocked.reason], o.blocked.reason));
-    }
-    const granted = connection.flatMap((o) => (o.access === 'granted' && !seen.has(o.login.toLowerCase()) ? [o.login] : []));
-    const toRead: { login: string; own: boolean }[] = granted.map((login) => ({ login, own: false }));
-    if (account && account.blocked === null) toRead.push({ login: account.login, own: true });
-    else if (account?.blocked) {
-      this.log(`work board: ${account.login} refused its Projects: ${account.blocked.message}`);
-      entries.push({ ...warning(account.login, OWNER_REASON[account.blocked.reason], account.blocked.reason), own: true });
-    }
-
     const boards: WorkProjectRead[] = [];
     const failures = new Map<string, GithubFailure>();
     let tried = 0;
     let failedProjects = 0;
     for (const { login, own } of toRead) {
-      const projects = readableProjects(listed.projects, login);
-      const entry: WorkBoardOrganization = { login: byOwner.get(login.toLowerCase())?.login ?? login, own, state: 'read', readAt: null, projects: [] };
-      let readAt: number | null = null;
-      for (const p of projects) {
-        tried += 1;
-        const source = this.project({ owner: p.owner, number: p.number });
-        let board: ProjectBoard | null = null;
-        try {
-          board = (fromStore && !force ? await source.snapshot?.() : null) ?? (await source.board({ force }));
-        } catch (err) {
-          this.log(`work board: Project ${p.owner}/${p.number} not read: ${err instanceof Error ? err.message : String(err)}`);
-          failures.set(entry.login, githubFailureOf(err));
-          failedProjects += 1;
-          continue;
-        }
-        if (board.stale && board.staleCode && board.staleCode !== 'sync-pending') {
-          failures.set(entry.login, board.staleCode);
-          failedProjects += 1;
-          if (board.staleReason) this.log(`work board: Project ${p.owner}/${p.number} stale: ${board.staleReason}`);
-        }
-        boards.push({ organization: entry.login, board });
-        entry.projects.push({ owner: p.owner, number: p.number, title: board.title || p.title });
-        readAt = readAt === null ? board.fetchedAt : Math.min(readAt, board.fetchedAt);
-      }
-      entry.readAt = readAt;
-      add(entry);
+      const owner = await this.readOwner({ login: byOwner.get(login.toLowerCase())?.login ?? login, own }, readableProjects(listed.projects, login), { force, fromStore });
+      boards.push(...owner.boards);
+      tried += owner.tried;
+      failedProjects += owner.failed;
+      if (owner.failure) failures.set(owner.entry.login, owner.failure);
+      addEntry(entries, seen, owner.entry);
     }
-
     // #609 The organizations with Projects first, then the ones with a warning, the person's account last (a stable sort).
     const rank = (e: WorkBoardOrganization) => (e.own ? 2 : e.projects.length ? 0 : 1);
     const ordered = [...entries].sort((a, b) => rank(a) - rank(b));
-    // #609 GitHub being down is every Project tried failing; otherwise each owner with a failed Project is a warning.
-    let stale = false;
-    let staleCode: StaleCode | null = null;
-    if (tried > 0 && failedProjects === tried) {
-      const code = [...failures.values()][0] ?? 'github-error';
-      if (!boards.length) throw new NoDataError(`no Project of any organization could be read: ${code}`, { failure: code });
-      stale = true;
-      staleCode = code;
-    } else {
-      for (const e of ordered) {
-        const code = failures.get(e.login);
-        if (code) Object.assign(e, { state: 'failed', reason: code });
-      }
-    }
-
+    const { stale, staleCode } = settle(ordered, { boards, failures, tried, failedProjects });
     this.owners = ordered.filter((e) => e.state === 'read' && e.projects.length > 0).map((e) => e.login.toLowerCase());
     const stored = boards.map((b) => b.board.fetchedAt);
     return { organizations: ordered, boards, fetchedAt: stored.length ? Math.min(...stored) : this.now(), stale, staleCode };
+  }
+
+  /** #609 The entries in order: the organizations that restrict the app, then the ones GitHub refused, the account last; and what is left to read. */
+  private warningEntries(listed: ProjectOptionsList, connection: readonly GithubOrg[]): { entries: WorkBoardOrganization[]; seen: Set<string>; toRead: { login: string; own: boolean }[] } {
+    const entries: WorkBoardOrganization[] = [];
+    const seen = new Set<string>();
+    for (const o of connection) {
+      if (o.access === 'pending') addEntry(entries, seen, warning(o.login, 'restricted', 'oauth-restricted', { approvalUrl: o.approvalUrl, requestUrl: o.requestUrl }));
+    }
+    for (const o of listed.owners) {
+      if (!o.blocked || o.ownerType !== 'organization') continue;
+      this.log(`work board: ${o.login} refused its Projects: ${o.blocked.message}`);
+      addEntry(entries, seen, warning(o.login, OWNER_REASON[o.blocked.reason], o.blocked.reason));
+    }
+    const granted = connection.flatMap((o) => (o.access === 'granted' && !seen.has(o.login.toLowerCase()) ? [o.login] : []));
+    const toRead = granted.map((login) => ({ login, own: false }));
+    const account = listed.owners.find((o) => o.ownerType === 'user') ?? null;
+    if (account && account.blocked === null) toRead.push({ login: account.login, own: true });
+    else if (account?.blocked) {
+      this.log(`work board: ${account.login} refused its Projects: ${account.blocked.message}`);
+      entries.push({ ...warning(account.login, OWNER_REASON[account.blocked.reason], account.blocked.reason), own: true });
+    }
+    return { entries, seen, toRead };
+  }
+
+  /** #609 One owner: its entry, the boards read, the projects tried and failed, and the last failure code. */
+  private async readOwner(owner: { login: string; own: boolean }, projects: readonly ProjectOption[], opts: Required<WorkProjectsReadOptions>): Promise<OwnerRead> {
+    const entry: WorkBoardOrganization = { login: owner.login, own: owner.own, state: 'read', readAt: null, projects: [] };
+    const read: OwnerRead = { entry, boards: [], tried: projects.length, failed: 0, failure: null };
+    for (const p of projects) {
+      const { board, failure } = await this.readProject(p, opts);
+      if (failure) {
+        read.failed += 1;
+        read.failure = failure;
+      }
+      if (!board) continue;
+      read.boards.push({ organization: entry.login, board });
+      entry.projects.push({ owner: p.owner, number: p.number, title: board.title || p.title });
+      entry.readAt = entry.readAt === null ? board.fetchedAt : Math.min(entry.readAt, board.fetchedAt);
+    }
+    return read;
+  }
+
+  /** #609 One Project's board and the failure code of its read; no board when the read threw, the stored one when GitHub did not answer. */
+  private async readProject(p: ProjectOption, { force, fromStore }: Required<WorkProjectsReadOptions>): Promise<{ board: ProjectBoard | null; failure: GithubFailure | null }> {
+    const source = this.project({ owner: p.owner, number: p.number });
+    try {
+      const board = (fromStore && !force ? await source.snapshot?.() : null) ?? (await source.board({ force }));
+      if (!board.stale || !board.staleCode || board.staleCode === 'sync-pending') return { board, failure: null };
+      if (board.staleReason) this.log(`work board: Project ${p.owner}/${p.number} stale: ${board.staleReason}`);
+      return { board, failure: board.staleCode };
+    } catch (err) {
+      this.log(`work board: Project ${p.owner}/${p.number} not read: ${err instanceof Error ? err.message : String(err)}`);
+      return { board: null, failure: githubFailureOf(err) };
+    }
   }
 
   /** #609 The list of Projects: the stored one for a read from the store, else through the 1 h cache. */
   private async list(fromStore: boolean): Promise<ProjectOptionsList> {
     return (fromStore ? await this.options.snapshot() : null) ?? (await this.options.list());
   }
+}
+
+/** #609 What reading one owner gave: its entry, its boards, the Projects tried and failed, the last failure code. */
+interface OwnerRead {
+  entry: WorkBoardOrganization;
+  boards: WorkProjectRead[];
+  tried: number;
+  failed: number;
+  failure: GithubFailure | null;
+}
+
+/** #609 An owner GitHub did not let the board read: no Projects, a reason code and, where the connection built them, the URLs. */
+function warning(login: string, state: 'restricted' | 'saml' | 'failed', reason: OwnerBlockReason | GithubFailure, urls: { approvalUrl: string; requestUrl: string } | null = null): WorkBoardOrganization {
+  return { login, own: false, state, readAt: null, projects: [], reason, ...(urls ?? {}) };
+}
+
+/** #609 One entry per owner: the first one added wins. */
+function addEntry(entries: WorkBoardOrganization[], seen: Set<string>, entry: WorkBoardOrganization): void {
+  if (seen.has(entry.login.toLowerCase())) return;
+  seen.add(entry.login.toLowerCase());
+  entries.push(entry);
+}
+
+/**
+ * #609 GitHub being down is every Project tried failing (stored boards stay with `stale`, none stored is `NoDataError`);
+ * otherwise each owner with a failed Project becomes a warning with its code.
+ */
+function settle(ordered: WorkBoardOrganization[], r: { boards: readonly WorkProjectRead[]; failures: ReadonlyMap<string, GithubFailure>; tried: number; failedProjects: number }): { stale: boolean; staleCode: StaleCode | null } {
+  if (r.tried > 0 && r.failedProjects === r.tried) {
+    const code = [...r.failures.values()][0] ?? 'github-error';
+    if (!r.boards.length) throw new NoDataError(`no Project of any organization could be read: ${code}`, { failure: code });
+    return { stale: true, staleCode: code };
+  }
+  for (const e of ordered) {
+    const code = r.failures.get(e.login);
+    if (code) Object.assign(e, { state: 'failed', reason: code });
+  }
+  return { stale: false, staleCode: null };
 }
 
 /** #609 The open Projects of an owner that have a Status field, by number. */
