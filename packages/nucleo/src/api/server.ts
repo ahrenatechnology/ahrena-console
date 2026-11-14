@@ -643,7 +643,7 @@ export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
     const d = DECISION_LIST.exec(url.pathname);
     if (d) return decisionList(res, decodeURIComponent(d[1]!), url);
     const det = opts.detail && DETAIL_ROUTE.exec(url.pathname);
-    if (det) return opts.detail!.responder(res, decodeURIComponent(det[1]), det[2] ?? null, url, det[3] === undefined ? null : decodeSegment(det[3]));
+    if (det) return opts.detail!.responder(res, decodeSegment(det[1]), det[2] ?? null, url, det[3] === undefined ? null : decodeSegment(det[3]));
     send(res, 404, { error: 'não encontrado' });
   }
 

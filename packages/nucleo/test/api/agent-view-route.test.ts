@@ -1,7 +1,7 @@
 import { OWNER_TOKEN, ownerFetch as fetch } from '../owner-http.ts';
-// The agent view over HTTP (#529): `GET /api/sessions/<id>/agents/<agentId>` and the two fields the Agents
-// tab list gained, against the assembled API over a real database. Contract: docs/contracts/agent-view.md.
-// Synthetic data only.
+// The agent view over HTTP (#529): `GET /api/sessions/<id>/agents/<agentId>` and the two fields the Agents (#529)
+// tab list gained, against the assembled API over a real database. Contract: docs/contracts/agent-view.md (#529).
+// Synthetic data only (#529).
 import assert from 'node:assert/strict';
 import { after, before, describe, test } from 'node:test';
 import { openSqliteStorage, type SqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
@@ -128,6 +128,8 @@ describe('#529 agent view route', () => {
     const missing = await get('/api/sessions/no-such-session/agents/a1');
     assert.equal(missing.status, 404);
     assert.equal(missing.body.code, 'session_not_found');
+    assert.equal((await get('/api/sessions/%E0%A4%A/agents/a1')).status, 400, 'a session id that does not decode is an invalid id, not a 500');
+    assert.equal((await get('/api/sessions/%E0%A4%A/agents/a1')).body.code, 'invalid_session_id');
     const bad = await get('/api/sessions/bad%20id/agents/a1');
     assert.equal(bad.status, 400);
     assert.equal(bad.body.code, 'invalid_session_id');
