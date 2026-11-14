@@ -9,7 +9,7 @@ const NOW = '2026-11-14T12:00:00.000Z';
 const alert = (id: string, kind: AlertKind): Alert => ({ id, kind, level: 'warning', message: 'm', detail: null, since: NOW });
 const proc = (pid: number, rssBytes: number, cpuPct: number): ProcessItem => ({ pid, name: `p${pid}`, rssBytes, cpuPct, startedAt: NOW });
 
-// Tests answer loosely; the port itself is typed per section, so the cast lives here, once.
+// Tests answer loosely; the port itself is typed per section, so the cast lives here, once (#565).
 type LooseCollector = (id: SectionId, context: CollectContext) => Promise<unknown>;
 const logged: string[] = [];
 
@@ -46,13 +46,18 @@ describe('diagnose', () => {
     assert.equal(d.machine, 'local');
     assert.equal(d.alertId, 'swap-high');
     assert.equal(d.kind, 'swap-high');
-    const rss = d.sections[0].items as ProcessItem[];
+    const [rssSection, cpuSection, swapSection] = d.sections;
+    assert.equal(rssSection.id, 'processes-by-rss');
+    assert.equal(cpuSection.id, 'processes-by-cpu');
+    assert.equal(swapSection.id, 'swap');
+    if (rssSection.id !== 'processes-by-rss' || cpuSection.id !== 'processes-by-cpu' || swapSection.id !== 'swap') return;
+    const rss: ProcessItem[] = rssSection.items;
     assert.equal(rss.length, 10);
     assert.deepEqual(rss.map((p) => p.rssBytes), [...rss.map((p) => p.rssBytes)].sort((a, b) => b - a));
-    const cpu = d.sections[1].items as ProcessItem[];
+    const cpu: ProcessItem[] = cpuSection.items;
     assert.equal(cpu.length, 10);
     assert.deepEqual(cpu.map((p) => p.cpuPct), [...cpu.map((p) => p.cpuPct)].sort((a, b) => b - a));
-    assert.deepEqual(d.sections[2].items, [{ usedBytes: 5, totalBytes: 10 }]);
+    assert.deepEqual(swapSection.items, [{ usedBytes: 5, totalBytes: 10 }]);
   });
 
   test('#565/AC-2 load-high collects only processes-by-cpu', async () => {

@@ -63,14 +63,21 @@ export interface WorktreeItem {
 export interface JournalItem {
   bytes: number;
 }
-export type SectionItem = ProcessItem | SwapItem | FolderItem | DockerDfItem | CacheItem | WorktreeItem | JournalItem;
 
-export interface DiagnosisSection {
-  id: SectionId;
-  status: SectionStatus;
-  items: SectionItem[];
-  reason?: string;
+/** What each section carries, keyed by section id: the one place that says which items go with which section (#565). */
+export interface SectionItems {
+  'processes-by-rss': ProcessItem[];
+  'processes-by-cpu': ProcessItem[];
+  swap: SwapItem[];
+  'largest-folders': FolderItem[];
+  'docker-df': DockerDfItem[];
+  'known-caches': (CacheItem | WorktreeItem)[];
+  journal: JournalItem[];
 }
+
+/** A section of one id, with the items of that id; the union over all ids narrows on `id` (#565). */
+export type SectionOf<K extends SectionId> = { [P in K]: { id: P; status: SectionStatus; items: SectionItems[P]; reason?: string } }[K];
+export type DiagnosisSection = SectionOf<SectionId>;
 
 export interface Diagnosis {
   machine: string;

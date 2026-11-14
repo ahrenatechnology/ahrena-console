@@ -7,24 +7,13 @@
 // - The mount of a `volume-full` comes from the open alert the tracker holds, never from the request.
 
 import type { Alert, HostInfo } from '../telemetry/model.ts';
-import { LIST_CAP, capReason, isDiagnosable, sectionsFor, type CacheItem, type Diagnosis, type DiagnosisSection, type DockerDfItem, type FolderItem, type JournalItem, type ProcessItem, type SectionId, type SwapItem, type WorktreeItem } from './model.ts';
+import { LIST_CAP, capReason, isDiagnosable, sectionsFor, type Diagnosis, type SectionId, type SectionItems, type SectionOf } from './model.ts';
 
 export interface CollectContext {
   /** The mount of the open `volume-full:<mount>` alert; null for the other kinds (#565). */
   mount: string | null;
   /** Aborted when the section ends, by timeout or not: a collector that runs a command stops it (#565). */
   signal: AbortSignal;
-}
-
-/** What each section's collector returns, so the use case shapes by id with no cast (#565). */
-export interface SectionItems {
-  'processes-by-rss': ProcessItem[];
-  'processes-by-cpu': ProcessItem[];
-  swap: SwapItem[];
-  'largest-folders': FolderItem[];
-  'docker-df': DockerDfItem[];
-  'known-caches': (CacheItem | WorktreeItem)[];
-  journal: JournalItem[];
 }
 
 export type CollectResult<K extends SectionId> = SectionItems[K] | { unavailable: true; reason?: string };
@@ -62,7 +51,7 @@ export async function diagnose(request: { machine: string; alertId: string }, de
   return { kind: 'ok', diagnosis: { machine: request.machine, alertId: alert.id, kind: alert.kind, takenAt, sections } };
 }
 
-async function collectSection<K extends SectionId>(id: K, machine: string, context: Omit<CollectContext, 'signal'>, deps: DiagnoseDeps): Promise<DiagnosisSection> {
+async function collectSection<K extends SectionId>(id: K, machine: string, context: Omit<CollectContext, 'signal'>, deps: DiagnoseDeps): Promise<SectionOf<K>> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   const controller = new AbortController();
   const timeout = new Promise<typeof TIMED_OUT>((resolve) => {
@@ -82,24 +71,24 @@ async function collectSection<K extends SectionId>(id: K, machine: string, conte
   }
 }
 
-function unavailable(id: SectionId, reason: string | undefined): DiagnosisSection {
+function unavailable<K extends SectionId>(id: K, reason: string | undefined): SectionOf<K> {
   return reason ? { id, status: 'unavailable', items: [], reason: capReason(reason) } : { id, status: 'unavailable', items: [] };
 }
 
-function top<T>(list: T[], by: (item: T) => number): T[] {
-  return [...list].sort((a, b) => by(b) - by(a)).slice(0, LIST_CAP);
+function rank<T>(by: (item: T) => number): (list: T[]) => T[] {
+  return (list) => [...list].sort((a, b) => by(b) - by(a)).slice(0, LIST_CAP);
 }
 
-/** The sort key of each section that is ranked; the others keep the collector's order (#565). */
-type Rankers = { [K in SectionId]?: (item: SectionItems[K][number]) => number };
-const RANKERS: Rankers = {
-  'processes-by-rss': (p) => p.rssBytes,
-  'processes-by-cpu': (p) => p.cpuPct,
-  'largest-folders': (f) => f.bytes,
+/** How each ranked section is sorted and capped; the others keep the collector's order (#565). */
+type Shapers = { [K in SectionId]?: (items: SectionItems[K]) => SectionItems[K] };
+const SHAPERS: Shapers = {
+  'processes-by-rss': rank((p) => p.rssBytes),
+  'processes-by-cpu': rank((p) => p.cpuPct),
+  'largest-folders': rank((f) => f.bytes),
 };
 
 /** Sorting and the cap live here, not in the collectors: every machine and OS answers the same way (#565). */
-function shape<K extends SectionId>(id: K, items: SectionItems[K]): SectionItems[K][number][] {
-  const by: Rankers[K] = RANKERS[id];
-  return by ? top(items, by) : items;
+function shape<K extends SectionId>(id: K, items: SectionItems[K]): SectionItems[K] {
+  const by: Shapers[K] = SHAPERS[id];
+  return by ? by(items) : items;
 }
