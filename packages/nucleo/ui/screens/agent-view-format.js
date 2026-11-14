@@ -1,6 +1,7 @@
 // What the agent view says and how it cuts, with no DOM: the test imports it directly (issue 521).
 // The data is the shape of the agent-view contract (docs/contracts/agent-view.md, issue 529).
 
+import { LOCAL, machineFromQuery } from '../machine-filter.js';
 import { duration } from './workflow-format.js';
 
 const NUM = new Intl.NumberFormat('pt-BR');
@@ -18,9 +19,21 @@ const KEEP_LAST = 3;
 export const num = (n) => NUM.format(n);
 export const clock = (iso) => (iso ? HOUR.format(new Date(iso)) : '—');
 
+/** The remote machine the page was opened for (`?machine=<id>`), or `null` for a local session. (issue 540) */
+export function remoteMachine(search = globalThis.location?.search ?? '') {
+  const choice = machineFromQuery(search);
+  return choice && choice !== LOCAL && choice !== 'all' ? choice : null;
+}
+
+/** `?machine=<id>` for a remote session's links, `''` for a local one, so the machine follows the person. (issue 540) */
+export const machineQuery = () => {
+  const machine = remoteMachine();
+  return machine ? `?machine=${encodeURIComponent(machine)}` : '';
+};
+
 /** `/ui/sessions/<id>/agents/<agentId>`: the agent id has a ":" in it, so it travels encoded. (issue 521) */
 export function agentViewHref(sessionId, agentId) {
-  return `/ui/sessions/${encodeURIComponent(sessionId)}/agents/${encodeURIComponent(agentId)}`;
+  return `/ui/sessions/${encodeURIComponent(sessionId)}/agents/${encodeURIComponent(agentId)}${machineQuery()}`;
 }
 
 /** The part of a listed agent id after the `<sessionId>:` prefix, which is what the route carries. (issue 521) */

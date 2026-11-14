@@ -566,7 +566,7 @@ function node(g, sessionAttention = null, sessionId = null, depth = g.type === '
   const sub =
     g.type === 'main'
       ? [modelName(g.model), g.turns !== null ? `${num(g.turns)} turno${g.turns === 1 ? '' : 's'}` : null]
-      : [full, g.description ?? g.task, duration(end - Date.parse(g.start))];
+      : [full, g.agentType ? (g.description ?? g.task) : g.task, duration(end - Date.parse(g.start))];
   const isSub = g.type === 'subagent';
   const routeId = sessionId ? agentRouteId(sessionId, g.id) : g.id;
   const attributes = {

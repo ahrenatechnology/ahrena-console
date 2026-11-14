@@ -70,7 +70,7 @@ async function mountAgentView(served: Served, calls: string[] = []) {
   return { area, ...c };
 }
 
-async function mountAgentsTab(extraServed: Served = {}) {
+async function mountAgentsTab(extraServed: Served = {}, machine: string | null = null) {
   // @ts-expect-error: browser module, plain JavaScript
   const detail = await import('../../ui/screens/session-detail.js');
   const served: Served = {
@@ -80,6 +80,8 @@ async function mountAgentsTab(extraServed: Served = {}) {
     [`${BASE}/agents`]: AGENTS_LIST,
     ...extraServed,
   };
+  // A remote session reads every route of its own with `machine=<id>` (#540).
+  if (machine) for (const k of Object.keys(served)) (served[`${k}?machine=${machine}`] = served[k]), delete served[k];
   const c = ctxFor(served);
   const area = new ElementoFalso('main');
   await detail.mount(area, c.ctx);
@@ -205,6 +207,9 @@ describe('AC-2 (#540): the Agents tab rows use agentType, description and parent
     const title = (id: string) => texto(rowsOf(area).find((r) => r.getAttribute('data-agent') === id)!.querySelector('b'));
     assert.equal(title('b1'), 'what it was asked');
     assert.equal(title('b2'), 'stored name');
+    // the title already says the description: the subtitle does not repeat it (#540)
+    const subtitle = (id: string) => texto(rowsOf(area).find((r) => r.getAttribute('data-agent') === id)!.querySelector('small'));
+    assert.equal(subtitle('b1').split('what it was asked').length - 1, 0, 'the description is not repeated in the subtitle');
   });
 
   test('the rows are indented by parent, and the main row keeps its name', async () => {
@@ -220,9 +225,64 @@ describe('AC-2 (#540): the Agents tab rows use agentType, description and parent
   });
 });
 
+describe('AC-1 (#540): a remote session keeps its machine through the agent view', () => {
+  const MACHINE = 'workstation';
+  const withSearch = async (search: string, run: () => Promise<void>) => {
+    const before = page.search;
+    page.search = search;
+    try {
+      await run();
+    } finally {
+      page.search = before;
+    }
+  };
+  const tabHref = `/ui/sessions/${SID}?machine=${MACHINE}#agents`;
+
+  test('a remote row carries ?machine= on its href, and a local one does not', async () => {
+    await withSearch(`?machine=${MACHINE}`, async () => {
+      const { area } = await mountAgentsTab({}, MACHINE);
+      const hrefs = area.querySelectorAll('a.sd-node').map((r) => r.getAttribute('href'));
+      assert.equal(hrefs.length, 3);
+      assert.ok(hrefs.every((h) => h!.endsWith(`?machine=${MACHINE}`)), `every row keeps the machine: ${hrefs.join(', ')}`);
+    });
+    const local = await mountAgentsTab();
+    assert.ok(local.area.querySelectorAll('a.sd-node').every((r) => !r.getAttribute('href')!.includes('machine')));
+  });
+
+  test('the view reads the agent and a child opened in line with ?machine=', async () => {
+    await withSearch(`?machine=${MACHINE}`, async () => {
+      const iris = `${BASE}/agents/${encodeURIComponent(IRIS)}?machine=${MACHINE}`;
+      const { area, calls } = await mountAgentView({ [`${BASE}/agents/${ATHENA}?machine=${MACHINE}`]: view(), [iris]: view({ agentId: IRIS, agentType: 'iris', steps: [step(1)] }) });
+      assert.deepEqual(calls, [`${BASE}/agents/${ATHENA}?machine=${MACHINE}`]);
+      area.querySelectorAll('.av-step')[1]!.querySelector('button')!.click();
+      await settle();
+      assert.ok(calls.includes(iris), 'the child is read from the same machine');
+      const open = area.querySelector('a.av-open-view')!;
+      assert.equal(open.getAttribute('href'), `/ui/sessions/${SID}/agents/${encodeURIComponent(IRIS)}?machine=${MACHINE}`);
+    });
+  });
+
+  test('Back and the crumb keep the machine, and a local view reads without it', async () => {
+    await withSearch(`?machine=${MACHINE}`, async () => {
+      const mod = await import('../../ui/screens/agent-view.js' as string);
+      const c = ctxFor({ [`${BASE}/agents/${ATHENA}?machine=${MACHINE}`]: view() }, { id: SID, agentId: ATHENA });
+      const area = new ElementoFalso('main');
+      const shell: Array<[string, unknown]> = [];
+      await mod.mount(area, { ...c.ctx, navigate: (r: string, state: unknown) => void shell.push([r, state]) });
+      await settle();
+      assert.ok(area.querySelector(`a.av-crumb-link[href="/ui/sessions/${SID}?machine=${MACHINE}"]`), 'the Session crumb keeps ?machine=');
+      area.querySelector(`a.av-crumb-link[href="${tabHref}"]`)!.dispatchEvent({ type: 'click', button: 0 } as never);
+      assert.deepEqual(shell, [[tabHref, { focusAgent: ATHENA }]]);
+    });
+    const calls: string[] = [];
+    await mountAgentView({ [`${BASE}/agents/${ATHENA}`]: view() }, calls);
+    assert.deepEqual(calls, [`${BASE}/agents/${ATHENA}`]);
+  });
+});
+
 describe('AC-4 and AC-5 (#540): the assembled page', () => {
   type Node = ElementoFalso;
-  /** The elements the keyboard reaches, in document order: a link with an href and an enabled button, never tabindex -1. */
+  /** The elements the keyboard reaches, in document order: a link with an href and an enabled button, never tabindex -1. (#540) */
   const tabOrder = (root: Node): Node[] => {
     const out: Node[] = [];
     const walk = (n: Node) => {
@@ -260,11 +320,11 @@ describe('AC-4 and AC-5 (#540): the assembled page', () => {
   });
 
   test('the whole path: row link, route, the view, Back with focus on the same row', async () => {
-    // 1. the Agents tab; the person activates the Iris row, which marks it for Back
+    // 1. the Agents tab; the person activates the Iris row, which marks it for Back (#540)
     let tab = await mountAgentsTab();
     const link = tab.area.querySelectorAll('a.sd-node').find((r) => texto(r).includes('iris'))!;
     link.dispatchEvent({ type: 'click', button: 0, preventDefault: () => {} } as never);
-    // 2. the route of the link opens that agent's view, the id decoded
+    // 2. the route of the link opens that agent's view, the id decoded (#540)
     const found = registry.findScreen(link.getAttribute('href')!.replace(/#.*$/, ''));
     assert.deepEqual(found.params, { id: SID, agentId: IRIS });
     const mod = await import('../../ui/screens/agent-view.js' as string);
@@ -273,10 +333,10 @@ describe('AC-4 and AC-5 (#540): the assembled page', () => {
     const shell: Array<[string, unknown]> = [];
     await mod.mount(area, { ...c.ctx, navigate: (r: string, state: unknown) => void shell.push([r, state]) });
     await settle();
-    // 3. Back asks the shell to go to the Agents tab, carrying the agent
+    // 3. Back asks the shell to go to the Agents tab, carrying the agent (#540)
     area.querySelector(`a.av-crumb-link[href="/ui/sessions/${SID}#agents"]`)!.dispatchEvent({ type: 'click', button: 0 } as never);
     assert.deepEqual(shell, [[`/ui/sessions/${SID}#agents`, { focusAgent: IRIS }]]);
-    // 4. the tab, remounted with that state, puts the focus on the row
+    // 4. the tab, remounted with that state, puts the focus on the row (#540)
     Object.assign(history, { state: shell[0]![1] });
     try {
       tab = await mountAgentsTab();
