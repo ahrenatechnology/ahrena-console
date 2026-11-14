@@ -47,10 +47,13 @@ export function shellQuote(s: string): string {
   return `'${s.replaceAll("'", `'\\''`)}'`;
 }
 
-/** `cd '<cwd>' && claude --resume <id>`, or `null` when the folder or the id cannot be carried safely. */
-export function resumeCommand(cwd: string | null | undefined, sessionId: string): string | null {
+/**
+ * `cd '<cwd>' && claude --resume <id>`, or `null` when the folder or the id cannot be carried safely.
+ * #515 `restriction` (a planning session's tool flags) goes after the id, each single-quoted.
+ */
+export function resumeCommand(cwd: string | null | undefined, sessionId: string, restriction: readonly string[] = []): string | null {
   if (!isUsableCwd(cwd) || !SESSION_ID_PATTERN.test(sessionId)) return null;
-  return `cd ${shellQuote(cwd)} && claude --resume ${sessionId}`;
+  return `cd ${shellQuote(cwd)} && ${['claude', '--resume', sessionId, ...restriction.map(shellQuote)].join(' ')}`;
 }
 
 /** What decides the target: the session, the Desktop's id, the machine and whether a process runs here. */

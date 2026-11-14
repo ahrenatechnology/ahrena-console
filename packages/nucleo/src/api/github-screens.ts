@@ -230,30 +230,66 @@ export function createGithubScreens(o: GithubScreensOptions): GithubScreens {
 }
 
 /**
+ * The queue's step of the background sync (#477): after the Project read it wakes the puller. `connected` is the
+ * core's GitHub connection; while it is not connected the step answers `pending` (#612), so it runs on the next tick
+ * after a reconnect, as the steps below do.
+ */
+export function workQueueSyncSteps(puller: { trigger(): Promise<unknown> } | null, connected: () => Promise<boolean>): SyncStep[] {
+  if (!puller) return [];
+  return [
+    {
+      name: 'work-queue',
+      everyMs: SYNC_PROJECT_EVERY_MS,
+      async run() {
+        if (!(await connected().catch(() => false))) return 'pending';
+        await puller.trigger();
+        return 'done';
+      },
+    },
+  ];
+}
+
+/**
  * The background sync's steps over these screens (decision 0015): the chosen Project's board every
  * 2 min and the ADR/PDR index every 15 min. `connected` is the core's GitHub connection; without it
  * both steps are skipped.
  */
 export function githubSyncSteps(screens: Pick<GithubScreens, 'project' | 'current'>, connected: (() => Promise<boolean>) | null): SyncStep[] {
   const ready = async () => (connected ? connected().catch(() => false) : false);
+  // #612 Not connected (revoked, disconnected) is `pending`, not `skipped`: no GitHub call, and the step
+  // runs on the next tick, so a reconnect resumes the sync within one cycle instead of one interval.
+  const waiting = (): 'skipped' | 'pending' => (connected ? 'pending' : 'skipped');
+  // #612 A call that dropped the connection (GitHub answered 401) is not a step failure: the connection logged
+  // the transition once, and the next ticks wait.
+  const unlessDropped = async (read: () => Promise<'done' | 'skipped' | 'pending'>) => {
+    try {
+      return await read();
+    } catch (err) {
+      if (connected && !(await ready())) return 'pending';
+      throw err;
+    }
+  };
   return [
     {
       name: 'project',
       everyMs: SYNC_PROJECT_EVERY_MS,
       async run() {
         const kanban = screens.project?.kanban();
-        if (!kanban || !(await ready())) return 'skipped';
-        const board = await kanban.board({ force: true });
-        if (board.stale) throw new Error(board.staleReason ?? 'o GitHub não respondeu; ficou o quadro guardado');
-        return 'done';
+        if (!kanban) return 'skipped';
+        if (!(await ready())) return waiting();
+        return unlessDropped(async () => {
+          const board = await kanban.board({ force: true });
+          if (board.stale) throw new Error(board.staleReason ?? 'o GitHub não respondeu; ficou o quadro guardado');
+          return 'done';
+        });
       },
     },
     {
       name: 'decisions',
       everyMs: SYNC_DECISIONS_EVERY_MS,
       async run() {
-        if (!(await ready())) return 'skipped';
-        return screens.current().decisions.sync();
+        if (!(await ready())) return waiting();
+        return unlessDropped(() => screens.current().decisions.sync());
       },
     },
   ];

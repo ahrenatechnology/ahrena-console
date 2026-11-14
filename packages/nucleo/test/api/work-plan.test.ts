@@ -14,6 +14,7 @@ import { openSqliteStorage, type SqliteStorage } from '../../src/adapters/sqlite
 import { Accounts, DesktopIndex, MontadorDoPainel, startLocalApi, type LocalApi } from '../../src/api/index.ts';
 import type { TerminalRequest } from '../../src/api/terminal-launch.ts';
 import { WORK_PLAN_ROUTE } from '../../src/api/work-plan.ts';
+import { sessionCommand } from '../../src/api/work-session-open.ts';
 import { NoDataError } from '../../src/github/cache.ts';
 import { WorkIssueNotFoundError } from '../../src/github/work-issue-service.ts';
 import type { WorkIssueResult } from '../../src/github/work-issue-service.ts';
@@ -304,7 +305,7 @@ describe('#507 POST /api/work/plan', () => {
       assert.equal(r.status, 501);
       const body = await json(r);
       assert.match(body.error, /acme\/missing/);
-      assert.equal(body.command, `claude '${planningPrompt({ repo: 'acme/missing', number: 3 })}'`);
+      assert.equal(body.command, sessionCommand(null, planningPrompt({ repo: 'acme/missing', number: 3 })));
       assert.deepEqual(terminal, []);
       assert.deepEqual(desktop, []);
       assert.equal(await runs.get('acme/missing#3'), null);
@@ -313,7 +314,7 @@ describe('#507 POST /api/work/plan', () => {
     test('#507/AC-5 Given no Desktop launcher or no terminal it knows, Then 501 with cd <folder> && claude <prompt>', async () => {
       fresh();
       const prompt = planningPrompt({ repo: 'acme/app', number: 412 });
-      const want = `cd '${app.replaceAll("'", `'\\''`)}' && claude '${prompt}'`;
+      const want = sessionCommand(app, prompt);
       const bare = await startApi({ openInDesktop: null });
       try {
         const d = await post({ repo: 'acme/app', number: 412, target: 'desktop' }, {}, bare);
