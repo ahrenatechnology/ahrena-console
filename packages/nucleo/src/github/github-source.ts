@@ -12,7 +12,18 @@
 import { execFile } from 'node:child_process';
 import { backoffMs, RateLimitedError } from './cache.ts';
 import type { ChildrenResult, WorkSource } from './source.ts';
-import type { WorkIssueComment, WorkIssuePullRequest, WorkIssueRead, WorkIssueRef, WorkIssueSource } from './work-issue.ts';
+import {
+  WorkIssueForbiddenError,
+  WorkIssueRefusedError,
+  type WorkIssueComment,
+  type WorkIssueCurrent,
+  type WorkIssueEdit,
+  type WorkIssuePullRequest,
+  type WorkIssueRead,
+  type WorkIssueRef,
+  type WorkIssueSource,
+  type WorkIssueWriter,
+} from './work-issue.ts';
 import {
   parseWorkKey,
   stageOf,
@@ -50,10 +61,26 @@ export const QUERIES = {
   detail: `query WorkDetail($o: String!, $r: String!, $n: Int!) { ${RATE}
   repository(owner: $o, name: $r) { issue(number: $n) { number state repository { nameWithOwner } ${PRS} } } }`,
   issue: `query WorkIssue($o: String!, $r: String!, $n: Int!) { ${RATE}
-  repository(owner: $o, name: $r) { issue(number: $n) { ${REF} body labels(first: 50) { nodes { name } } milestone { title }
+  repository(owner: $o, name: $r) { issue(number: $n) { ${REF} updatedAt body labels(first: 50) { nodes { name } } milestone { title }
     comments(first: 50) { totalCount nodes { author { login } createdAt body } }
     parent { ${REF} parent { ${REF} parent { ${REF} } } }
     subIssues(first: 50) { nodes { ${REF} } } ${DETAIL_PRS} } } }`,
+} as const;
+
+// #533 the issue write: the ids an edit names are resolved first (nothing is written when one is unknown), then
+// `updateIssue` writes the fields, `addSubIssue`/`removeSubIssue` the parent and `addComment` the comment.
+export const WRITE_QUERIES = {
+  current: `query WorkIssueCurrent($o: String!, $r: String!, $n: Int!) {
+  repository(owner: $o, name: $r) { issue(number: $n) { title body updatedAt } } }`,
+  targets: `query WorkIssueTargets($o: String!, $r: String!, $n: Int!) {
+  repository(owner: $o, name: $r) { id issue(number: $n) { id viewerCanUpdate parent { id } }
+    labels(first: 100) { nodes { id name } } issueTypes(first: 50) { nodes { id name } } milestones(first: 100, states: OPEN) { nodes { id title } } } }`,
+  id: `query WorkIssueId($o: String!, $r: String!, $n: Int!) {
+  repository(owner: $o, name: $r) { issue(number: $n) { id } } }`,
+  update: `mutation UpdateWorkIssue($input: UpdateIssueInput!) { updateIssue(input: $input) { issue { id } } }`,
+  addParent: `mutation AddWorkIssueParent($input: AddSubIssueInput!) { addSubIssue(input: $input) { issue { id } } }`,
+  removeParent: `mutation RemoveWorkIssueParent($input: RemoveSubIssueInput!) { removeSubIssue(input: $input) { issue { id } } }`,
+  comment: `mutation AddWorkIssueComment($input: AddCommentInput!) { addComment(input: $input) { commentEdge { node { id } } } }`,
 } as const;
 
 /** Até quantas chaves cabem numa consulta de lote. */
@@ -159,6 +186,7 @@ interface RawRef {
   parent?: RawRef | null;
 }
 interface RawIssueDetail extends RawRef {
+  updatedAt: string;
   body: string;
   labels: { nodes: { name: string }[] };
   milestone: { title: string } | null;
@@ -186,6 +214,7 @@ export function toWorkIssueRead(raw: RawIssueDetail): WorkIssueRead {
   const comments: WorkIssueComment[] = raw.comments.nodes.map((c) => ({ author: c.author?.login ?? null, createdAt: c.createdAt, body: c.body }));
   return {
     ...toIssueRef(raw),
+    updatedAt: raw.updatedAt,
     labels: raw.labels.nodes.map((l) => l.name),
     milestone: raw.milestone?.title ?? null,
     body: raw.body,
@@ -248,7 +277,7 @@ export interface GraphqlError {
   path?: unknown[];
 }
 
-export class GithubGraphqlSource implements WorkSource, WorkIssueSource {
+export class GithubGraphqlSource implements WorkSource, WorkIssueSource, WorkIssueWriter {
   private readonly opts: GithubGraphqlSourceOptions;
 
   constructor(opts: GithubGraphqlSourceOptions) {
@@ -326,9 +355,94 @@ export class GithubGraphqlSource implements WorkSource, WorkIssueSource {
     return issue ? toWorkIssueRead(issue) : null;
   }
 
+  /** #533 the title, body and `updatedAt` GitHub holds now; `null` when GitHub has no such issue. */
+  async current(key: string): Promise<WorkIssueCurrent | null> {
+    const k = parseWorkKey(key);
+    type Data = { repository: { issue: WorkIssueCurrent | null } | null };
+    const data = await this.query<Data>('WorkIssueCurrent', WRITE_QUERIES.current, { o: k.owner, r: k.name, n: k.number }, { tolerateNotFound: true });
+    const issue = data.repository?.issue;
+    return issue ? { title: issue.title, body: issue.body, updatedAt: issue.updatedAt } : null;
+  }
+
+  /**
+   * #533 writes the fields of `edit` and answers the issue as GitHub holds it. The ids the edit names (labels,
+   * type, milestone, parent) are resolved before the first write: an unknown one is `WorkIssueRefusedError` and
+   * nothing is written; a credential that cannot update the issue is `WorkIssueForbiddenError`. The fields go
+   * in one `updateIssue`; the parent, when it is in the edit, in a second call.
+   */
+  async update(key: string, edit: WorkIssueEdit): Promise<WorkIssueRead | null> {
+    const k = parseWorkKey(key);
+    type Named<N extends string> = { id: string } & { [P in N]: string };
+    type Targets = {
+      repository: {
+        issue: { id: string; viewerCanUpdate: boolean; parent: { id: string } | null } | null;
+        labels: { nodes: Named<'name'>[] };
+        issueTypes: { nodes: Named<'name'>[] };
+        milestones: { nodes: Named<'title'>[] };
+      } | null;
+    };
+    const data = await this.query<Targets>('WorkIssueTargets', WRITE_QUERIES.targets, { o: k.owner, r: k.name, n: k.number }, { tolerateNotFound: true });
+    const repo = data.repository;
+    const issue = repo?.issue;
+    if (!repo || !issue) return null;
+    if (!issue.viewerCanUpdate) throw new WorkIssueForbiddenError(key);
+
+    const fields: Record<string, unknown> = { id: issue.id };
+    if (edit.title !== undefined) fields.title = edit.title;
+    if (edit.body !== undefined) fields.body = edit.body;
+    if (edit.labels !== undefined) {
+      fields.labelIds = edit.labels.map((name) => {
+        const found = repo.labels.nodes.find((l) => l.name === name);
+        if (!found) throw new WorkIssueRefusedError('labels', name);
+        return found.id;
+      });
+    }
+    if (edit.type !== undefined) {
+      const found = edit.type === null ? null : repo.issueTypes.nodes.find((t) => t.name === edit.type);
+      if (found === undefined) throw new WorkIssueRefusedError('type', edit.type!);
+      fields.issueTypeId = found?.id ?? null;
+    }
+    if (edit.milestone !== undefined) {
+      const found = edit.milestone === null ? null : repo.milestones.nodes.find((m) => m.title === edit.milestone);
+      if (found === undefined) throw new WorkIssueRefusedError('milestone', edit.milestone!);
+      fields.milestoneId = found?.id ?? null;
+    }
+    let parentId: string | null | undefined;
+    if (typeof edit.parent === 'string') {
+      parentId = await this.issueId(edit.parent);
+      if (parentId === null) throw new WorkIssueRefusedError('parent', edit.parent);
+    }
+
+    if (Object.keys(fields).length > 1) await this.mutate('UpdateWorkIssue', WRITE_QUERIES.update, { input: fields });
+    if (parentId) await this.mutate('AddWorkIssueParent', WRITE_QUERIES.addParent, { input: { issueId: parentId, subIssueId: issue.id, replaceParent: true } });
+    else if (edit.parent === null && issue.parent) await this.mutate('RemoveWorkIssueParent', WRITE_QUERIES.removeParent, { input: { issueId: issue.parent.id, subIssueId: issue.id } });
+    return this.issue(key);
+  }
+
+  /** #533 adds a comment and answers the issue as GitHub holds it; `null` when GitHub has no such issue. */
+  async comment(key: string, body: string): Promise<WorkIssueRead | null> {
+    const id = await this.issueId(key);
+    if (id === null) return null;
+    await this.mutate('AddWorkIssueComment', WRITE_QUERIES.comment, { input: { subjectId: id, body } });
+    return this.issue(key);
+  }
+
+  private async issueId(key: string): Promise<string | null> {
+    const k = parseWorkKey(key);
+    type Data = { repository: { issue: { id: string } | null } | null };
+    const data = await this.query<Data>('WorkIssueId', WRITE_QUERIES.id, { o: k.owner, r: k.name, n: k.number }, { tolerateNotFound: true });
+    return data.repository?.issue?.id ?? null;
+  }
+
   private async query<T>(operation: string, query: string, variables: Record<string, unknown>, { tolerateNotFound = false } = {}): Promise<T> {
     const token = await resolveGithubToken(this.opts.token);
     return retryOnGateway(() => githubGraphql<T>({ ...this.opts, token }, operation, query, variables, { tolerateNotFound }), { sleep: this.opts.sleep });
+  }
+
+  /** #533 a mutation is never retried: a 502 may have been applied on GitHub's side (see `retryOnGateway`). */
+  private async mutate<T>(operation: string, query: string, variables: Record<string, unknown>): Promise<T> {
+    const token = await resolveGithubToken(this.opts.token);
+    return githubGraphql<T>({ ...this.opts, token }, operation, query, variables);
   }
 }
 
@@ -393,10 +507,13 @@ export async function retryOnGateway<T>(
  */
 export class GraphqlResponseError extends Error {
   readonly paths: string[];
-  constructor(message: string, paths: string[]) {
+  /** #533 the GraphQL `type` of each error (`FORBIDDEN`, `NOT_FOUND`...), so a write can tell a refusal from a failure. */
+  readonly types: string[];
+  constructor(message: string, paths: string[], types: string[] = []) {
     super(message);
     this.name = 'GraphqlResponseError';
     this.paths = paths;
+    this.types = types;
   }
 }
 
@@ -413,7 +530,7 @@ export async function githubGraphql<T>(
 ): Promise<T> {
   const { data, errors, message } = await graphqlCall<T>(opts, operation, query, variables, signal);
   const fatal = errors.filter((e) => !(tolerateNotFound && e.type === 'NOT_FOUND'));
-  if (fatal.length) throw new GraphqlResponseError(`GitHub: ${fatal[0].message}`, fatal.map((e) => String(e.path?.[0] ?? '')));
+  if (fatal.length) throw new GraphqlResponseError(`GitHub: ${fatal[0].message}`, fatal.map((e) => String(e.path?.[0] ?? '')), fatal.map((e) => e.type ?? ''));
   if (!data) throw new Error(`GitHub: ${message}`);
   return data;
 }
@@ -432,7 +549,7 @@ export async function githubGraphqlPartial<T>(
 ): Promise<{ data: T; errors: GraphqlError[] }> {
   const { data, errors, message } = await graphqlCall<T>(opts, operation, query, variables, signal);
   if (data) return { data, errors };
-  if (errors.length) throw new GraphqlResponseError(`GitHub: ${errors[0].message}`, errors.map((e) => String(e.path?.[0] ?? '')));
+  if (errors.length) throw new GraphqlResponseError(`GitHub: ${errors[0].message}`, errors.map((e) => String(e.path?.[0] ?? '')), errors.map((e) => e.type ?? ''));
   throw new Error(`GitHub: ${message}`);
 }
 

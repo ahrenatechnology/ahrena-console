@@ -31,6 +31,8 @@ export interface WorkIssuePullRequest extends LinkedPullRequest {
 
 /** One issue as the source reads it from GitHub, in one query. */
 export interface WorkIssueRead extends WorkIssueRef {
+  /** #533 GitHub's `updatedAt`: the version a title or body save is checked against. */
+  updatedAt: string;
   labels: string[];
   milestone: string | null;
   body: string;
@@ -47,6 +49,55 @@ export interface WorkIssueRead extends WorkIssueRef {
 /** The port the issue detail reads through. `null`: GitHub has no such issue. */
 export interface WorkIssueSource {
   issue(key: string): Promise<WorkIssueRead | null>;
+}
+
+/** #533 what GitHub holds of the fields a conflict is decided on. */
+export interface WorkIssueCurrent {
+  title: string;
+  body: string;
+  updatedAt: string;
+}
+
+/**
+ * #533 the fields a save may change; an absent one is left alone. `type`, `milestone` and `parent` clear with
+ * `null`; `labels` replaces the whole set. `parent` is an issue key (`owner/repo#N`).
+ */
+export interface WorkIssueEdit {
+  title?: string;
+  body?: string;
+  labels?: string[];
+  type?: string | null;
+  milestone?: string | null;
+  parent?: string | null;
+}
+
+/**
+ * #533 the port the issue is written through. Each write answers the issue as GitHub holds it afterwards, or
+ * `null` when GitHub has no such issue (nothing is written then).
+ */
+export interface WorkIssueWriter {
+  /** The title, body and `updatedAt` GitHub holds now; `null`: no such issue. */
+  current(key: string): Promise<WorkIssueCurrent | null>;
+  update(key: string, edit: WorkIssueEdit): Promise<WorkIssueRead | null>;
+  comment(key: string, body: string): Promise<WorkIssueRead | null>;
+}
+
+/** #533 the credential cannot write this issue. */
+export class WorkIssueForbiddenError extends Error {
+  constructor(key: string) {
+    super(`no permission to write ${key}`);
+    this.name = 'WorkIssueForbiddenError';
+  }
+}
+
+/** #533 the edit names a label, type, milestone or parent GitHub does not know; raised before anything is written. */
+export class WorkIssueRefusedError extends Error {
+  readonly param: 'labels' | 'type' | 'milestone' | 'parent';
+  constructor(param: WorkIssueRefusedError['param'], detail: string) {
+    super(`unknown ${param}: ${detail}`);
+    this.name = 'WorkIssueRefusedError';
+    this.param = param;
+  }
 }
 
 export interface WorkIssueChecks {
@@ -83,6 +134,8 @@ export interface WorkIssueView {
   title: string;
   state: IssueState;
   url: string;
+  /** #533 GitHub's `updatedAt`; a title or body save carries the one it was opened at. Empty for a value cached before #533. */
+  updatedAt: string;
   labels: string[];
   milestone: string | null;
   /** #506 the issue's Status in the chosen Project; `null` when it is not in it. */
@@ -125,6 +178,7 @@ export function buildWorkIssue(read: WorkIssueRead, projectStatus: string | null
     title: read.title,
     state: read.state,
     url: read.url,
+    updatedAt: read.updatedAt ?? '',
     labels: read.labels,
     milestone: read.milestone,
     projectStatus,

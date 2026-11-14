@@ -6,12 +6,14 @@
  * or snapshot and never fails the detail: without it the Status is `null`.
  */
 
-import { GITHUB_TTL, NoDataError, type GithubCache } from './cache.ts';
+import { GITHUB_TTL, NoDataError, RateLimitedError, type GithubCache } from './cache.ts';
 import type { WorkProjectBoard } from './work-board.ts';
-import { buildWorkIssue, type WorkIssueRead, type WorkIssueSource, type WorkIssueView } from './work-issue.ts';
+import { buildWorkIssue, type WorkIssueCurrent, type WorkIssueEdit, type WorkIssueRead, type WorkIssueSource, type WorkIssueView, type WorkIssueWriter } from './work-issue.ts';
 
 export interface WorkIssueServiceOptions {
   source: WorkIssueSource;
+  /** #533 where the writes go; without it (`--demo`) a write throws `WorkIssueWriteOffError`. */
+  writer?: WorkIssueWriter;
   cache: GithubCache;
   /** #506 the chosen Project, for the Project Status; without it the Status is `null`. */
   project?: WorkProjectBoard;
@@ -40,17 +42,37 @@ export class WorkIssueNotFoundError extends Error {
   }
 }
 
+/** #533 a title or body save is older than GitHub's: nothing was written; `current` is what GitHub holds now. */
+export class WorkIssueConflictError extends Error {
+  readonly current: WorkIssueCurrent;
+  constructor(key: string, current: WorkIssueCurrent) {
+    super(`issue changed on GitHub since it was opened: ${key}`);
+    this.name = 'WorkIssueConflictError';
+    this.current = current;
+  }
+}
+
+/** #533 the service has no writer (`--demo`). */
+export class WorkIssueWriteOffError extends Error {
+  constructor() {
+    super('issue writes are off');
+    this.name = 'WorkIssueWriteOffError';
+  }
+}
+
 /** The same issue in any letter case is the same cache entry. */
 export const workIssueCacheKey = (key: string): string => `github:work-issue:${key.toLowerCase()}`;
 
 export class WorkIssueService {
   private readonly source: WorkIssueSource;
+  private readonly writer: WorkIssueWriter | undefined;
   private readonly cache: GithubCache;
   private readonly project: WorkProjectBoard | undefined;
   private readonly log: (message: string) => void;
 
-  constructor({ source, cache, project, log = () => {} }: WorkIssueServiceOptions) {
+  constructor({ source, writer, cache, project, log = () => {} }: WorkIssueServiceOptions) {
     this.source = source;
+    this.writer = writer;
     this.cache = cache;
     this.project = project;
     this.log = log;
@@ -74,6 +96,54 @@ export class WorkIssueService {
     if (r.stale && r.staleReason) this.log(`work issue ${key}: stale read: ${r.staleReason}`);
     const view = buildWorkIssue(r.value, await this.projectStatus(r.value.key));
     return { ...view, fetchedAt: r.fetchedAt, stale: r.stale, staleReason: r.stale ? (r.staleCode ?? 'github-error') : null };
+  }
+
+  /**
+   * #533 saves fields of the issue. A title or body save carries `seenAt`, the `updatedAt` it was opened at:
+   * when GitHub's is newer nothing is written and `WorkIssueConflictError` carries GitHub's version. The
+   * other fields save with no check.
+   */
+  async update(key: string, edit: WorkIssueEdit, seenAt?: string): Promise<WorkIssueResult> {
+    const checked = edit.title !== undefined || edit.body !== undefined;
+    return this.write(key, async (writer) => {
+      if (checked) {
+        const current = await writer.current(key);
+        if (!current) return null;
+        if (seenAt === undefined || Date.parse(current.updatedAt) > Date.parse(seenAt)) throw new WorkIssueConflictError(key, current);
+      }
+      return writer.update(key, edit);
+    });
+  }
+
+  /** #533 adds a comment; the answer and the cache carry the issue with it. */
+  async comment(key: string, body: string): Promise<WorkIssueResult> {
+    return this.write(key, (writer) => writer.comment(key, body));
+  }
+
+  /**
+   * #533 the write seam: run one GitHub write, then store what GitHub returned (the cache keeps no earlier
+   * version of its own: ADR-0001) and answer it. A failure stores nothing, so the cache stays as it was; the
+   * raw text goes to the log and the error goes up for the route to turn into a code. A rate limit also
+   * pauses the cache's GitHub calls, as the Kanban mover does.
+   */
+  private async write(key: string, run: (writer: WorkIssueWriter) => Promise<WorkIssueRead | null>): Promise<WorkIssueResult> {
+    if (!this.writer) throw new WorkIssueWriteOffError();
+    const wait = this.cache.pauseLeftMs();
+    if (wait > 0) throw new RateLimitedError('GitHub limitou as chamadas; tente de novo em instantes', wait);
+    let read: WorkIssueRead | null;
+    try {
+      read = await run(this.writer);
+    } catch (err) {
+      if (err instanceof RateLimitedError) this.cache.pause(err.retryAfterMs);
+      if (!(err instanceof WorkIssueConflictError)) this.log(`work issue ${key}: write failed: ${err instanceof Error ? err.message : String(err)}`);
+      throw err;
+    }
+    if (read === null) throw new WorkIssueNotFoundError(key);
+    const cacheKey = workIssueCacheKey(key);
+    await this.cache.put<WorkIssueRead | null>(cacheKey, read);
+    const stored = (await this.cache.peek(cacheKey))!;
+    const view = buildWorkIssue(read, await this.projectStatus(read.key));
+    return { ...view, fetchedAt: stored.fetchedAt, stale: false, staleReason: null };
   }
 
   /** #506 the lane the issue's card is in; `null` when it is in no card, in the no-Status lane, or the Project cannot be read. */

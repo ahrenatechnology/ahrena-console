@@ -27,6 +27,7 @@ const raw = (n: number, over: Record<string, unknown> = {}) => ({
 
 /** #506 the scenario: two comments, parents #467 > #464, five Plan sub-issues (one closed) and a Task, a PR with 3 of 5 checks done. */
 const ISSUE = raw(506, {
+  updatedAt: '2026-11-10T10:00:00Z',
   body: 'the body',
   labels: { nodes: [{ name: 'backend' }] },
   milestone: { title: 'Work board' },
@@ -127,6 +128,7 @@ describe('#506/AC-1 GET /api/work/issue: the issue with its body, comments, pare
         ['Plan', 506, 'issue 506', 'OPEN', `https://github.com/${REPO}/issues/506`, REPO, ['backend'], 'Work board', 'In Progress'],
       );
       assert.equal(json.body, 'the body');
+      assert.equal(json.updatedAt, '2026-11-10T10:00:00Z', '#533/AC-1 the read carries GitHub updatedAt, for the conflict check');
       assert.deepEqual(json.comments, [
         { author: 'ana', createdAt: '2026-11-10T10:00:00Z', body: 'first' },
         { author: 'bia', createdAt: '2026-11-11T10:00:00Z', body: 'second' },

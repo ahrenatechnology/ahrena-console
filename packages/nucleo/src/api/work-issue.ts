@@ -23,10 +23,12 @@ import { send } from '../ingest/hooks/receiver.ts';
 import { fromAnotherSite } from './same-origin.ts';
 
 export const WORK_ISSUE_ROUTE = '/api/work/issue';
+/** #533 `POST`: adds a comment (api/work-issue-write.ts). `PATCH` on `WORK_ISSUE_ROUTE` saves the issue's fields. */
+export const WORK_ISSUE_COMMENTS_ROUTE = '/api/work/issue/comments';
 
 export interface WorkIssueRouteOptions {
-  /** #506 `null` under --no-github: the route answers 503 `off`. */
-  service: Pick<WorkIssueService, 'issue'> | null;
+  /** #506 `null` under --no-github: the route answers 503 `off`; #533 the writes (api/work-issue-write.ts) go through the same service. */
+  service: Pick<WorkIssueService, 'issue' | 'update' | 'comment'> | null;
 }
 
 const REPO = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;

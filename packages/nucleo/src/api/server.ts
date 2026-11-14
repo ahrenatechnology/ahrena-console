@@ -28,6 +28,8 @@ import type { ManagedRuntime } from '../runtime/service.ts';
 // | `GET /api/project`            | The GitHub Project kanban (api/project.ts, #80); `?refresh=1` re-reads |
 // | `POST /api/project/move`      | Changes a card's Status: `{ itemId, optionId }` (api/project.ts) |
 // | `GET /api/work/issue`         | The work board's issue detail: body, comments, parents, sub-issues, Plan steps and the linked pull request (`?repo=owner/name`, `?number=`, `?refresh=1`; api/work-issue.ts, #506) |
+// | `PATCH /api/work/issue`       | Saves fields of one issue on GitHub (title, body, labels, type, milestone, parent) and answers the issue as GitHub returned it; a title or body save older than GitHub's is 409 (`{ repo, number, updatedAt?, ... }`; api/work-issue-write.ts, #533) |
+// | `POST /api/work/issue/comments` | Adds a comment to an issue on GitHub (`{ repo, number, body }`; api/work-issue-write.ts, #533) |
 // | `POST /api/work/plan`         | "Planejar": a planning-only Athena session for an issue, in its repository's folder, in the Claude Desktop or a terminal (`{ repo, number, target, replan? }`; api/work-plan.ts, #507) |
 // | `GET /api/work`               | The work board: the Project's issues in the agent lifecycle columns (`?level=`, `?initiative=`, `?epic=`, `?type=`, `?label=`, `?repo=`, `?status=`, `?refresh=1`; api/work-board.ts, #465 #466) |
 // | `GET /api/sessions/<id>` and `/agents`, `/conversation`, `/events` | The session Detail in the /ui (api/session-detail.ts, #29 and #30) |
@@ -103,7 +105,8 @@ import { agentConfigWriteFromSameOrigin, AGENT_CONFIG_ROUTE, type AgentConfigRou
 import type { McpServer } from '../mcp/protocol.ts';
 import { criarRotaDoProjeto, ehDoProjeto, mesmaOrigemMovendo, PROJECT_OPTIONS_ROUTE, type OpcoesDoProjeto } from './project.ts';
 import { createWorkBoardRoute, WORK_BOARD_ROUTE, type WorkBoardRouteOptions } from './work-board.ts';
-import { createWorkIssueRoute, WORK_ISSUE_ROUTE, type WorkIssueRouteOptions } from './work-issue.ts';
+import { createWorkIssueRoute, WORK_ISSUE_COMMENTS_ROUTE, WORK_ISSUE_ROUTE, type WorkIssueRouteOptions } from './work-issue.ts';
+import { createWorkIssueWriteRoute } from './work-issue-write.ts';
 import { createWorkPlanRoute, WORK_PLAN_ROUTE, type WorkPlanRouteOptions } from './work-plan.ts';
 import { DETAIL_ROUTE, type LeiturasDoDetalhe } from './session-detail.ts';
 import type { FleetReader } from '../mcp/fleet.ts';
@@ -287,6 +290,7 @@ export function isGithubScreenRoute(pathname: string): boolean {
     (ehDoProjeto(pathname)) ||
     pathname === WORK_BOARD_ROUTE ||
     pathname === WORK_ISSUE_ROUTE ||
+    pathname === WORK_ISSUE_COMMENTS_ROUTE ||
     pathname.startsWith(`${FRAMEWORK_INSTALL_ROUTE}/`) ||
     pathname === '/api/analytics/delivery'
   );
@@ -340,6 +344,10 @@ const sameOriginNewSession = (req: IncomingMessage, port: number): boolean => re
 
 /** #507 "Planejar": only `POST /api/work/plan`, the exact raw path, from the same origin. */
 const sameOriginWorkPlan = (req: IncomingMessage, port: number): boolean => req.method === 'POST' && req.url === WORK_PLAN_ROUTE && fromOwnUi(req, port);
+
+/** #533 the issue writes: only `PATCH /api/work/issue` and `POST /api/work/issue/comments`, the exact raw path, from the same origin. */
+const sameOriginWorkIssueWrite = (req: IncomingMessage, port: number): boolean =>
+  ((req.method === 'PATCH' && req.url === WORK_ISSUE_ROUTE) || (req.method === 'POST' && req.url === WORK_ISSUE_COMMENTS_ROUTE)) && fromOwnUi(req, port);
 
 /** `decodeURIComponent`, or the raw text when it is malformed (the id check then refuses it). */
 function decodeSegment(s: string): string {
@@ -401,6 +409,7 @@ export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
   const projectRoute = criarRotaDoProjeto(opts.project ?? { kanban: null, fonte: 'github', log });
   const workBoardRoute = createWorkBoardRoute(opts.work ?? { service: null });
   const workIssueRoute = createWorkIssueRoute(opts.workIssue ?? { service: null });
+  const workIssueWrite = createWorkIssueWriteRoute(opts.workIssue ?? { service: null });
   const openDescriber = opts.openDescriber ?? new SessionOpenDescriber();
   const wall = muralDoPainel(opts.panelBuilder, { open: openDescriber });
   const machineSessions = createMachineSessionsRoute({ reader: opts.machineReader, telemetry: opts.telemetry, local: { sessions: opts.sessions, wall, kanban: opts.kanban, history: opts.history, events: opts.events, dashboard: opts.fleet ? () => montarDashboard(opts.fleet!) : null, panel: opts.panelBuilder } });
@@ -563,11 +572,16 @@ export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
       if (!opts.connection) return send(res, 404, { error: 'not-found' });
       return respondConnections(req, res, url.pathname, opts.connection);
     }
-    if (!allowedLocalRequest(req, port) && !sameOriginRead(req, port) && !sameOriginOpen(req, port) && !sameOriginSessionOpen(req, port) && !sameOriginNewSession(req, port) && !sameOriginWorkPlan(req, port) && !mesmaOrigemMovendo(req, port) && !sameOriginDecision(req, port) && !agentConfigWriteFromSameOrigin(req, port) && !frameworkInstallWriteFromSameOrigin(req, port) && !reconnectFromSameOrigin(req, port) && !messagesWriteFromSameOrigin(req, port) && !transcriptionWriteFromSameOrigin(req, port) && !cloudsWriteFromSameOrigin(req, port) && !connectionWriteFromSameOrigin(req, port) && !coreUpdateWriteFromSameOrigin(req, port) && !ownerProofRetryFromSameOrigin(req, port) && !ordersWriteFromSameOrigin(req, port) && !appUpdateWriteFromSameOrigin(req, port)) return send(res, 403, { error: 'origem não permitida' });
+    // #533 the issue writes are the /ui's alone, like the six above: any other caller, local tools included, gets 403 (AC-4).
+    if ((url.pathname === WORK_ISSUE_COMMENTS_ROUTE || (url.pathname === WORK_ISSUE_ROUTE && req.method === 'PATCH')) && (!sameOriginWorkIssueWrite(req, port) || fromAnotherSite(req))) {
+      req.resume();
+      return send(res, 403, { error: 'forbidden' });
+    }
+    if (!allowedLocalRequest(req, port) && !sameOriginRead(req, port) && !sameOriginOpen(req, port) && !sameOriginSessionOpen(req, port) && !sameOriginNewSession(req, port) && !sameOriginWorkPlan(req, port) && !sameOriginWorkIssueWrite(req, port) && !mesmaOrigemMovendo(req, port) && !sameOriginDecision(req, port) && !agentConfigWriteFromSameOrigin(req, port) && !frameworkInstallWriteFromSameOrigin(req, port) && !reconnectFromSameOrigin(req, port) && !messagesWriteFromSameOrigin(req, port) && !transcriptionWriteFromSameOrigin(req, port) && !cloudsWriteFromSameOrigin(req, port) && !connectionWriteFromSameOrigin(req, port) && !coreUpdateWriteFromSameOrigin(req, port) && !ownerProofRetryFromSameOrigin(req, port) && !ordersWriteFromSameOrigin(req, port) && !appUpdateWriteFromSameOrigin(req, port)) return send(res, 403, { error: 'origem não permitida' });
     // The Project list spends GitHub quota and the connection status is the /ui's: another site's page
     // never gets either, connected or not (#241 review 2).
     // #465 the work board reads the Project the same way.
-    if ((url.pathname === PROJECT_OPTIONS_ROUTE || url.pathname === CONNECTIONS_ROUTE || url.pathname === WORK_BOARD_ROUTE || url.pathname === WORK_ISSUE_ROUTE) && fromAnotherSite(req)) return send(res, 403, { error: 'forbidden' });
+    if ((url.pathname === PROJECT_OPTIONS_ROUTE || url.pathname === CONNECTIONS_ROUTE || url.pathname === WORK_BOARD_ROUTE || url.pathname === WORK_ISSUE_ROUTE || url.pathname === WORK_ISSUE_COMMENTS_ROUTE) && fromAnotherSite(req)) return send(res, 403, { error: 'forbidden' });
     if (opts.githubConnected && isGithubScreenRoute(url.pathname) && !(await opts.githubConnected())) return send(res, 409, { error: 'github-not-connected' });
     if (url.pathname.startsWith(HOOKS_PATH)) return hooks(req, res);
     if (req.method === 'GET' && (await machineSessions(res, url))) return;
@@ -586,6 +600,7 @@ export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
     if (url.pathname === CONNECTIONS_ROUTE && opts.connection) return respondConnections(req, res, url.pathname, opts.connection);
     if (ehDoProjeto(url.pathname)) return projectRoute(req, res, url);
     if (url.pathname === WORK_BOARD_ROUTE) return workBoardRoute(req, res, url);
+    if (url.pathname === WORK_ISSUE_COMMENTS_ROUTE || (url.pathname === WORK_ISSUE_ROUTE && req.method === 'PATCH')) return workIssueWrite(req, res);
     if (url.pathname === WORK_ISSUE_ROUTE) return workIssueRoute(req, res, url);
     if (url.pathname === WORK_PLAN_ROUTE) return workPlan(req, res);
     if (opts.agentConfig && (url.pathname === AGENT_CONFIG_ROUTE || url.pathname.startsWith(`${AGENT_CONFIG_ROUTE}/`))) return opts.agentConfig(req, res, url);
