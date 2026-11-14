@@ -51,7 +51,7 @@ The read behind the agent view of #521 (wireframe screen 521-10, gaps G1 to G5, 
 | `totalCostUsd` | number or null | `costUsd` plus the cost of every descendant (the agents whose `parent` chain reaches this one). `null` when neither the agent nor any descendant has a priced cost. |
 | `state` | `"working"`, `"waiting"`, `"completed"` or `"error"` | `Agent.status`. For the main agent, the main `Agent` row when there is one, else derived from the session as the Agents tab does. |
 | `start` | ISO string | `Agent.startedAt` (the session's `startedAt` for a main agent with no row). |
-| `end` | ISO string or null | `Agent.endedAt`. |
+| `end` | ISO string or null | `Agent.endedAt`. For the main agent, its row's `endedAt`, else the session's `endedAt` (also when it has no row), as the session-detail agent list does. |
 
 ### Cost: absent is never zero
 
