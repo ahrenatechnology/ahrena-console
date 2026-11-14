@@ -137,7 +137,7 @@ export function buildAgentView(input: AgentViewInput): AgentView | null {
     resultTruncated: reply.truncated,
     costUsd,
     costNote: costUsd !== null ? null : own.has(targetId) ? 'unpriced' : 'no_usage',
-    totalCostUsd: totalWithDescendants(targetId, own, agents, mainId, resolve),
+    totalCostUsd: totalWithDescendants(targetId, own, agents, resolve),
     state,
     start: row?.startedAt ?? session.startedAt,
     end: row ? (row.type === 'main' ? (row.endedAt ?? session.endedAt) : row.endedAt) : session.endedAt, // Only the main agent falls back to the session's end, as session-detail does (#529).
@@ -220,11 +220,11 @@ function ownCosts(costLines: readonly AgentCostLine[], sid: string, resolve: (id
 }
 
 // The agent's own cost plus that of every descendant, each counted once (#529).
-function totalWithDescendants(targetId: string, own: Costs, agents: readonly Agent[], mainId: string, resolve: (id: string | null) => string): number | null {
+function totalWithDescendants(targetId: string, own: Costs, agents: readonly Agent[], resolve: (id: string | null) => string): number | null {
   const kids = new Map<string, string[]>();
   for (const a of agents) {
     if (a.type === 'main') continue;
-    const parent = a.parentAgentId ? resolve(a.parentAgentId) : mainId;
+    const parent = resolve(a.parentAgentId);
     kids.set(parent, [...(kids.get(parent) ?? []), a.id]);
   }
   let total: number | null = null;
