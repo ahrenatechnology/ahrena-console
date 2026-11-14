@@ -372,6 +372,21 @@ describe('Back returns to the Agents tab with the focus on the agent', () => {
     assert.deepEqual(navigated, [[AGENTS_HREF, { focusAgent: ATHENA }]]);
   });
 
+  test('leaving the screen releases its click listener: the next agent on the same area gets its own Back (#539)', async () => {
+    const area = new ElementoFalso('main');
+    const first = ctxFor(() => agent(), { id: SID, agentId: ATHENA });
+    const cleanFirst = await screen.mount(area, first.ctx);
+    first.leave.abort();
+    cleanFirst();
+    area.replaceChildren();
+    const second = ctxFor(() => agent({ agentId: IRIS }), { id: SID, agentId: IRIS });
+    await screen.mount(area, second.ctx);
+    const link = area.querySelectorAll('.av-crumb a').find((a) => a.getAttribute('href') === AGENTS_HREF)!;
+    click(link);
+    assert.deepEqual(first.navigated, [], 'the left screen no longer answers');
+    assert.deepEqual(second.navigated, [[AGENTS_HREF, { focusAgent: IRIS }]]);
+  });
+
   test('a click with a modifier, or a link to somewhere else, is left to the browser', async () => {
     const { area, navigated } = await mountView(() => agent());
     const agents = area.querySelectorAll('.av-crumb a').find((a) => a.getAttribute('href') === AGENTS_HREF)!;

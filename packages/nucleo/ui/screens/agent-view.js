@@ -328,7 +328,7 @@ export async function mount(area, ctx) {
     children.add(childId);
     ctx.read(agentReadRoute(sessionId, childId)).then(
       (data) => live && view?.setChild(childId, data),
-      () => children.delete(childId), // read again the next time it opens
+      () => children.delete(childId), // read again the next time it opens (issue 539)
     );
   }
 
@@ -350,14 +350,16 @@ export async function mount(area, ctx) {
     );
   }
 
-  // Back to the Agents tab is a navigation of the shell that carries the agent, so its row gets the focus.
-  area.addEventListener('click', (ev) => {
+  // Back to the Agents tab is a navigation of the shell that carries the agent, so its row gets the focus
+  // (issue 539). `area` is the shell's shared content element, so the listener is released on leaving.
+  const onBack = (ev) => {
     if (ev.defaultPrevented || ev.button > 0 || ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.altKey) return;
     const link = ev.target?.closest?.('a[href]');
     if (link?.getAttribute('href') !== agentsTabHref(sessionId)) return;
     ev.preventDefault();
     ctx.navigate(agentsTabHref(sessionId), { focusAgent: agentId });
-  });
+  };
+  area.addEventListener('click', onBack);
 
   reader.subscribe(draw);
   const follow = () => {
@@ -368,5 +370,8 @@ export async function mount(area, ctx) {
   });
   ctx.onRestart(follow);
   await reader.load();
-  return () => (live = false);
+  return () => {
+    live = false;
+    area.removeEventListener('click', onBack);
+  };
 }
