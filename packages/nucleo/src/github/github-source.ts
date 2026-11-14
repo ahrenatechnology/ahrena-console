@@ -72,8 +72,8 @@ export const QUERIES = {
     comments(first: 50) { totalCount nodes { author { login } createdAt body } }
     parent { ${REF} parent { ${REF} parent { ${REF} } } }
     subIssues(first: 50) { nodes { ${REF} updatedAt } } ${DETAIL_PRS} } } }`,
-  // #590 a repository's issue options, one query, each list bounded by `OPTIONS_LIMITS`: the labels, issue types and open
-  // milestones (the write matches a milestone by title), and the most recently updated open issues as parent candidates.
+  /* #590 a repository's issue options, one query, each list bounded by `OPTIONS_LIMITS`: the labels, issue types and open
+     milestones (the write matches a milestone by title), and the most recently updated open issues as parent candidates. */
   options: `query WorkIssueOptions($o: String!, $r: String!) { ${RATE}
   repository(owner: $o, name: $r) { labels(first: ${OPTIONS_LIMITS.labels}) { nodes { name } } issueTypes(first: ${OPTIONS_LIMITS.types}) { nodes { name } }
     milestones(first: ${OPTIONS_LIMITS.milestones}, states: [OPEN]) { nodes { title } }

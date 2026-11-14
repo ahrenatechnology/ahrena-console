@@ -26,7 +26,7 @@ import { fromAnotherSite } from './same-origin.ts';
 export const WORK_ISSUE_OPTIONS_ROUTE = '/api/work/issue/options';
 
 export interface WorkIssueOptionsRouteOptions {
-  /** `null` under --demo and --no-github: the route answers 503 `off`. */
+  /** #590 `null` under --demo and --no-github: the route answers 503 `off`. */
   service: Pick<WorkIssueOptionsService, 'options'> | null;
 }
 

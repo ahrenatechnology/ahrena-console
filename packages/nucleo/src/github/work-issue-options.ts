@@ -15,37 +15,37 @@
 
 import { GITHUB_TTL, NoDataError, type GithubCache } from './cache.ts';
 
-/** The bound of each list of the GraphQL read; GitHub's page maximum is 100. */
+/** #590 the bound of each list of the GraphQL read; GitHub's page maximum is 100. */
 export const OPTIONS_LIMITS = {
   labels: 100,
   types: 100,
   milestones: 100,
-  /** The parent candidates: the most recently updated open issues. */
+  /** #590 the parent candidates: the most recently updated open issues. */
   parents: 100,
 } as const;
 
-/** A parent candidate: an open issue, by the key the write's `parent` takes. */
+/** #590 A parent candidate: an open issue, by the key the write's `parent` takes. */
 export interface WorkIssueParentOption {
-  /** `owner/name#N`. */
+  /** #590 `owner/name#N`. */
   key: string;
   title: string;
 }
 
-/** What GitHub holds of one repository's options. */
+/** #590 What GitHub holds of one repository's options. */
 export interface WorkIssueOptions {
   labels: string[];
   types: string[];
-  /** Titles of the open milestones. */
+  /** #590 titles of the open milestones. */
   milestones: string[];
   parents: WorkIssueParentOption[];
 }
 
-/** The port the options are read through. `null`: GitHub has no such repository (or it is not visible). */
+/** #590 The port the options are read through. `null`: GitHub has no such repository (or it is not visible). */
 export interface WorkIssueOptionsSource {
   options(repo: string): Promise<WorkIssueOptions | null>;
 }
 
-/** The options with the cache's freshness: what the route answers. */
+/** #590 The options with the cache's freshness: what the route answers. */
 export interface WorkIssueOptionsResult extends WorkIssueOptions {
   fetchedAt: number;
   stale: boolean;
@@ -53,7 +53,7 @@ export interface WorkIssueOptionsResult extends WorkIssueOptions {
   staleReason: string | null;
 }
 
-/** GitHub answered, and has no such repository. */
+/** #590 GitHub answered, and has no such repository. */
 export class WorkRepositoryNotFoundError extends Error {
   constructor(repo: string) {
     super(`repository not found: ${repo}`);
@@ -61,13 +61,13 @@ export class WorkRepositoryNotFoundError extends Error {
   }
 }
 
-/** The same repository in any letter case is the same cache entry. */
+/** #590 The same repository in any letter case is the same cache entry. */
 export const workIssueOptionsCacheKey = (repo: string): string => `github:work-issue-options:${repo.toLowerCase()}`;
 
 export interface WorkIssueOptionsServiceOptions {
   source: WorkIssueOptionsSource;
   cache: GithubCache;
-  /** The raw text of a stale read or a failed read goes here; the answer only carries a code. */
+  /** #590 the raw text of a stale read or a failed read goes here; the answer only carries a code. */
   log?: (message: string) => void;
 }
 
@@ -83,12 +83,12 @@ export class WorkIssueOptionsService {
   }
 
   /**
-   * `force` is the refresh button: it re-reads GitHub (the cache keeps its 30 s floor). The TTL is the issues'
+   * #590 `force` is the refresh button: it re-reads GitHub (the cache keeps its 30 s floor). The TTL is the issues'
    * (5 min): the parent candidates are a list of issues, the rest changes more slowly.
    */
   async options(repo: string, { force = false }: { force?: boolean } = {}): Promise<WorkIssueOptionsResult> {
     const cacheKey = workIssueOptionsCacheKey(repo);
-    // A missing repository is the fetcher's `null`, not a failure: it is never served as a stale value.
+    // #590 a missing repository is the fetcher's `null`, not a failure: it is never served as a stale value.
     let r;
     try {
       r = await this.cache.get<WorkIssueOptions | null>(cacheKey, GITHUB_TTL.issues, async () => ({ value: await this.source.options(repo) }), { force });

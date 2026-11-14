@@ -15,7 +15,7 @@ import { GithubGraphqlSource } from '../../src/github/github-source.ts';
 import { WorkIssueOptionsService } from '../../src/github/work-issue-options.ts';
 import { clock, REPO } from '../github/helpers.ts';
 
-/** The repository as GitHub answers the options query: closed milestones are filtered by the query itself (states: OPEN). */
+/** #590 the repository as GitHub answers the options query: closed milestones are filtered by the query itself (states: OPEN). */
 const REPOSITORY = {
   labels: { nodes: [{ name: 'backend' }, { name: 'bug' }] },
   issueTypes: { nodes: [{ name: 'Epic' }, { name: 'Plan' }, { name: 'Task' }] },
