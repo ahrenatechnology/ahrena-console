@@ -8,6 +8,7 @@
 import { el, icon } from '../dom.js';
 import { loading, error, errorBand, empty } from '../states.js';
 import { subagentNodeName } from './workflow-format.js';
+import { agentDepths, agentRouteId, agentViewHref } from './agent-view-format.js';
 import { openAction } from '../open-action.js';
 import { create as workflowTab } from './session-detail-workflow.js';
 import { create as decisionsTab } from './session-detail-decisions.js';
@@ -406,10 +407,17 @@ function band(c) {
 
 function agentsTab(ctx, base, { head } = {}) {
   let target = null;
+  // Back from an agent's view (issue 539): the entry carries the agent the person came from, and its row gets
+  // the focus once, on the first draw; a later draw of the live tab never takes the focus again.
+  let focusAgent = history.state?.focusAgent ?? null;
   async function draw() {
     try {
       const a = await ctx.read(`${base}/agents`);
-      target?.replaceChildren(...agents(a, head?.()?.session?.attention ?? null));
+      target?.replaceChildren(...agents(a, head?.()?.session?.attention ?? null, ctx.params.id));
+      if (focusAgent && target) {
+        [...target.querySelectorAll('.sd-node')].find((n) => n.getAttribute('data-agent') === focusAgent)?.focus();
+        focusAgent = null;
+      }
     } catch (e) {
       if (e.name === 'AbortError') return;
       target?.replaceChildren(error({ title: 'Não deu para ler os agentes', text: e.message, retry: draw }));
@@ -429,7 +437,7 @@ function number(iconName, label, value, detail) {
   return el('div', { class: 'card sd-number' }, el('div', { class: 'eyebrow' }, icon(iconName), label), el('div', { class: 'sd-value' }, el('b', { class: 'mono' }, value), detail ? el('small', {}, detail) : null));
 }
 
-function agents(a, sessionAttention = null) {
+function agents(a, sessionAttention = null, sessionId = null) {
   const n = a.numbers;
   const numbers = el(
     'div',
@@ -480,7 +488,10 @@ function agents(a, sessionAttention = null) {
     'section',
     { class: 'sd-tree' },
     el('div', { class: 'eyebrow' }, icon('robot'), `Agentes · ${a.agents.length}`),
-    ...a.agents.map((g) => node(g, sessionAttention)),
+    ...(() => {
+      const depths = agentDepths(a.agents);
+      return a.agents.map((g) => node(g, sessionAttention, sessionId, depths[g.id] ?? 0));
+    })(),
   );
 
   return [numbers, el('div', { class: 'sd-two' }, tools, tasks), flow, tree];
@@ -542,22 +553,41 @@ function tokenFlow(k) {
   return el('div', {}, bar, el('div', { class: 'sd-legend' }, ...parts.map(([cls, r, v]) => el('span', { class: `sd-f-${cls}` }, `${r} `, el('b', { class: 'mono' }, tokens(v))))));
 }
 
-/** An agent node; the main one carries the session's attention (issue 245), a subagent none. */
-function node(g, sessionAttention = null) {
+/**
+ * An agent node; the main one carries the session's attention (issue 245), a subagent none. A subagent row is
+ * a real link to its view (issue 521): keyboard reachable, named by where it goes; the main agent's is not a
+ * link, its conversation is the Conversa tab. The rows indent by `parent` (`data-depth`).
+ */
+function node(g, sessionAttention = null, sessionId = null, depth = g.type === 'main' ? 0 : 1) {
   const end = g.end ? Date.parse(g.end) : Date.now();
-  const { short, full } = g.type === 'main' ? { short: g.name, full: null } : subagentNodeName(g.name);
+  // A subagent is named by its `agentType` and described by its `description` (issue 540, the list of issue 529).
+  // A list that predates them gives `name` and `task`, which is what the row showed before (issue 540).
+  const { short, full } = g.type === 'main' ? { short: g.name, full: null } : subagentNodeName(g.agentType ?? g.description ?? g.name);
   const sub =
     g.type === 'main'
       ? [modelName(g.model), g.turns !== null ? `${num(g.turns)} turno${g.turns === 1 ? '' : 's'}` : null]
-      : [full, g.task, duration(end - Date.parse(g.start))];
-  return el(
-    'div',
-    { class: `card sd-node${g.type === 'subagent' ? ' sd-sub' : ''}` },
+      : [full, g.agentType ? (g.description ?? g.task) : g.task, duration(end - Date.parse(g.start))];
+  const isSub = g.type === 'subagent';
+  const routeId = sessionId ? agentRouteId(sessionId, g.id) : g.id;
+  const attributes = {
+    class: `card sd-node${isSub ? ' sd-sub' : ''}${isSub && sessionId ? ' sd-agent-link' : ''}`,
+    'data-agent': g.type === 'main' ? 'main' : routeId,
+    'data-depth': String(depth),
+    ...(isSub && sessionId ? { href: agentViewHref(sessionId, routeId), 'aria-label': `Abrir a vista de ${short}` } : {}),
+  };
+  const row = el(
+    isSub && sessionId ? 'a' : 'div',
+    attributes,
     el('span', { class: 'sd-ico' }, icon(g.type === 'main' ? 'robot' : 'subagent')),
     el('div', { class: 'sd-text' }, el('b', { title: g.name }, short), el('small', { title: sub.filter(Boolean).join(' · ') }, sub.filter(Boolean).join(' · '))),
     el('span', { class: 'mono sd-cost' }, g.costUsd === null ? '' : usd(g.costUsd)),
     statusPill(g.status, g.type === 'main' && (g.status === 'waiting' || g.status === 'error') ? sessionAttention : null),
+    isSub && sessionId ? el('span', { class: 'sd-go', 'aria-hidden': 'true' }, icon('chevron-right')) : null,
   );
+  row.style.setProperty('--sd-depth', String(depth));
+  // Leaving for the view marks this entry, so the browser's Back button finds the row too (issue 539).
+  if (isSub && sessionId) row.addEventListener('click', () => history.replaceState({ ...history.state, focusAgent: routeId }, ''));
+  return row;
 }
 
 // ---------- Aba Conversa (C5) ----------
