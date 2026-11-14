@@ -16,6 +16,7 @@ import {
   workBoardError,
   workBoardHeader,
 } from './work-board-parts.js';
+import { createIssueLayer } from './work-board-issue.js';
 import { boardUrl, clearFilters, drill, initialState, loadFailed, loadSucceeded, selectPath, setFilter, setLevel, startLoad } from './work-board-state.js';
 
 const STYLE = '/ui/work-board.css';
@@ -79,6 +80,7 @@ export async function mount(area, ctx) {
   let liveTimer = null;
   let quiet = 0;
   let pendingFocus = null;
+  const layer = createIssueLayer({ ctx, area, cards: () => (state?.data?.columns ?? []).flatMap((c) => c.cards ?? []), redraw: () => draw(), reread: () => quietRead() });
 
   function follow(s) {
     const target = s.url;
@@ -188,6 +190,7 @@ export async function mount(area, ctx) {
       stale: state.stale,
       mode,
       onDrill: (card) => run(drill(state, card)),
+      renderCard: layer.renderCard,
       ...extra,
     });
   }
@@ -235,14 +238,16 @@ export async function mount(area, ctx) {
 
   function draw() {
     if (!alive) return;
-    const shown = JSON.stringify([state.view, state.phase, state.busy, state.error, state.filters, state.dataFilters, state.suggestion, state.data]);
+    layer.learn();
+    const shown = JSON.stringify([state.view, state.phase, state.busy, state.error, state.filters, state.dataFilters, state.suggestion, state.data, layer.signature()]);
     if (shown === drawn) return;
     drawn = shown;
     const active = globalThis.document?.activeElement;
     const nowhere = !active || active === globalThis.document?.body;
     const key = active && area.contains(active) ? focusKey(active) : nowhere ? pendingFocus : null;
-    area.replaceChildren(...nodes());
+    area.replaceChildren(...layer.wrap(nodes()));
     restoreFocus(key);
+    layer.afterDraw();
   }
 
   function restoreFocus(key) {
@@ -264,6 +269,7 @@ export async function mount(area, ctx) {
 
   const cleanup = () => {
     alive = false;
+    layer.stop();
     clearTimeout(liveTimer);
     sheet?.remove();
   };
