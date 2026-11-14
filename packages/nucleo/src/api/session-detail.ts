@@ -305,7 +305,7 @@ export class LeiturasDoDetalhe {
 
   /** Responde uma rota do Detalhe; o servidor só a registra. */
   async responder(res: ServerResponse, id: string, aba: string | null, url: URL, agentId: string | null = null): Promise<void> {
-    if (agentId !== null) return this.responderAgente(res, id, agentId);
+    if (agentId !== null) return this.respondAgent(res, id, agentId);
     if (!ID.test(id)) return send(res, 400, { error: 'id de sessão inválido' });
     const session = await this.storage.getSession(id);
     if (!session) return send(res, 404, { error: 'o núcleo não conhece esta sessão' });
@@ -316,18 +316,18 @@ export class LeiturasDoDetalhe {
   }
 
   /** The agent view route; its errors carry a `code`, the contract (docs/contracts/agent-view.md, #529). */
-  private async responderAgente(res: ServerResponse, id: string, agentId: string): Promise<void> {
+  private async respondAgent(res: ServerResponse, id: string, agentId: string): Promise<void> {
     if (!ID.test(id)) return send(res, 400, { error: 'id de sessão inválido', code: 'invalid_session_id' });
     const session = await this.storage.getSession(id);
     if (!session) return send(res, 404, { error: 'o núcleo não conhece esta sessão', code: 'session_not_found' });
-    const view = await this.agente(session, agentId);
+    const view = await this.agentView(session, agentId);
     if (!view) return send(res, 404, { error: 'a sessão não tem este agente', code: 'agent_not_found' });
     send(res, 200, view);
   }
 
-  async agente(session: Session, agentId: string): Promise<AgentView | null> {
-    const [agents, events, precos] = await Promise.all([this.storage.listAgents(session.id), this.todosOsEventos(session.id), currentPrices(this.storage)]);
-    const costLines = costReport(await sessionCostSlices(this.storage, session.id, precos)).byAgent;
+  async agentView(session: Session, agentId: string): Promise<AgentView | null> {
+    const [agents, events, prices] = await Promise.all([this.storage.listAgents(session.id), this.todosOsEventos(session.id), currentPrices(this.storage)]);
+    const costLines = costReport(await sessionCostSlices(this.storage, session.id, prices)).byAgent;
     return buildAgentView({ session, agents, events, costLines, agentId });
   }
 
@@ -366,7 +366,7 @@ export class LeiturasDoDetalhe {
 
   async agentes(session: Session): Promise<AgentesDoDetalhe> {
     const painel = await this.montador.montar({ sessionId: session.id }, { literal: true });
-    const [lista, eventos, buckets, precos] = await Promise.all([
+    const [lista, eventos, buckets, prices] = await Promise.all([
       this.storage.listAgents(session.id),
       this.todosOsEventos(session.id),
       this.storage.listTokenUsage(session.id),
@@ -411,7 +411,7 @@ export class LeiturasDoDetalhe {
     }
 
     // Custo por nó: o uso sem agente (o piso da compactação) fica com o principal.
-    const relatorio = costReport(await sessionCostSlices(this.storage, session.id, precos));
+    const relatorio = costReport(await sessionCostSlices(this.storage, session.id, prices));
     const custoDe = new Map<string, number | null>();
     for (const linha of relatorio.byAgent) {
       const id = linha.agentId ? quem.de(linha.agentId) : quem.principal;

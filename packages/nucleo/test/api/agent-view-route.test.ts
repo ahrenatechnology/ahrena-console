@@ -84,8 +84,8 @@ describe('#529 agent view route', () => {
   before(async () => {
     storage = openSqliteStorage({ path: ':memory:' });
     await seed(storage);
-    const montador = new MontadorDoPainel({ storage, contas: new Accounts({ storage, file: null }), desktop: null, trabalho: null, agora: () => NOW });
-    api = await startLocalApi({ ownerToken: () => OWNER_TOKEN, panelBuilder: montador, hooks: { storage }, port: 0, log: () => {}, detail: new LeiturasDoDetalhe({ storage, montador, agora: () => NOW }) });
+    const panelBuilder = new MontadorDoPainel({ storage, contas: new Accounts({ storage, file: null }), desktop: null, trabalho: null, agora: () => NOW });
+    api = await startLocalApi({ ownerToken: () => OWNER_TOKEN, panelBuilder, hooks: { storage }, port: 0, log: () => {}, detail: new LeiturasDoDetalhe({ storage, montador: panelBuilder, agora: () => NOW }) });
   });
   after(async () => {
     await api.close();

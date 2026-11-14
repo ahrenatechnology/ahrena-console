@@ -510,11 +510,26 @@ describe('#243 the Detail of a remote session', () => {
     assert.equal(ok.status, 200);
     assert.deepEqual(ok.body.machine, WS);
     assert.equal(typeof ok.body.agentId, 'string');
+    assert.deepEqual(Object.keys(ok.body).sort(), [...AGENT_VIEW_KEYS, 'machine'].sort());
     assert.ok(tunnel.paths.includes(`/api/sessions/${id}/agents/${encodeURIComponent(tail)}`));
     const missing = await get(`/api/sessions/${id}/agents/nope?machine=ws-test`);
     assert.equal(missing.status, 404);
     assert.equal(missing.body.code, 'agent_not_found');
     assert.deepEqual(missing.body.machine, WS);
+    // The contract: an agentId that does not decode or is not a plain id is an unknown agent (404), a bad session id is 400 with a code (#529).
+    tunnel.paths.length = 0;
+    for (const bad of ['%E0%A4%A', 'bad%20id']) {
+      const r = await get(`/api/sessions/${id}/agents/${bad}?machine=ws-test`);
+      assert.equal(r.status, 404, bad);
+      assert.equal(r.body.code, 'agent_not_found', bad);
+      assert.ok(typeof r.body.error === 'string');
+      assert.deepEqual(r.body.machine, WS);
+    }
+    const badSession = await get('/api/sessions/bad%20id/agents/main?machine=ws-test');
+    assert.equal(badSession.status, 400);
+    assert.equal(badSession.body.code, 'invalid_session_id');
+    assert.deepEqual(badSession.body.machine, WS);
+    assert.deepEqual(tunnel.paths, []);
   });
 
   test('only the known Detail paths and a valid id go to the remote', async () => {
@@ -535,6 +550,8 @@ describe('#243 the Detail of a remote session', () => {
     assert.deepEqual(r.body, { error: 'machine-unreachable', machine: { ...WS, state: 'unreachable', lastReadAt: null } });
   });
 });
+
+const AGENT_VIEW_KEYS = ['agentId', 'agentType', 'description', 'brief', 'briefTruncated', 'spawnedByToolUseId', 'steps', 'result', 'resultTruncated', 'costUsd', 'costNote', 'totalCostUsd', 'state', 'start', 'end'];
 
 describe('#243 the cursor of machine=all', () => {
   test('round-trips, and refuses what it did not make', () => {

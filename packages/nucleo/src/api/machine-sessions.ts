@@ -580,7 +580,12 @@ class MachineSessionsRoute {
     } catch {
       id = '';
     }
-    if (!REMOTE_ID.test(id)) throw new RequestError('id de sessão inválido');
+    const isAgentView = match[3] !== undefined;
+    if (!REMOTE_ID.test(id)) {
+      // The agent view names its error (docs/contracts/agent-view.md, #529); the sibling routes keep their body.
+      if (isAgentView) return send(res, 400, { error: 'id de sessão inválido', code: 'invalid_session_id', machine: { id: c.tag.id, label: c.tag.label } });
+      throw new RequestError('id de sessão inválido');
+    }
     const unreachable = () => send(res, 503, { error: 'machine-unreachable', machine: { id: c.state.id, label: c.tag.label, state: c.state.state, lastReadAt: c.state.lastReadAt } });
     const reader = this.o.reader;
     if (!c.source || !reader || c.source.status().state !== 'connected') return unreachable();
@@ -599,7 +604,7 @@ class MachineSessionsRoute {
       } catch {
         agentId = '';
       }
-      if (!REMOTE_ID.test(agentId)) throw new RequestError('id de agente inválido');
+      if (!REMOTE_ID.test(agentId)) return send(res, 404, { error: 'agente não encontrado', code: 'agent_not_found', machine: { id: c.tag.id, label: c.tag.label } });
     }
     const path = remoteDetailPath(id, tab, n ? query.toString() : '', agentId);
     const answer = await reader.answer(c.source, path);
@@ -614,7 +619,7 @@ class MachineSessionsRoute {
     const body = answer.status === 200 && isObject(answer.body) ? (boundedJson(answer.body) as Record<string, unknown>) : null;
     if (!body || Buffer.byteLength(JSON.stringify(body)) > MAX_REMOTE_DETAIL_BYTES) return send(res, 502, { error: 'machine-bad-response', machine: tag });
     body.machine = tag;
-    if (!tab) Object.assign(body, { local: null, opensSession: false, open: { target: 'remote', command: null } });
+    if (!tab && agentId === null) Object.assign(body, { local: null, opensSession: false, open: { target: 'remote', command: null } });
     send(res, 200, body);
   }
 }
