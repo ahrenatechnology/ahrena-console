@@ -1,7 +1,7 @@
-// End-to-end skeleton of the permission requests on screen (issue 621, parent issue 60); the wireframe is docs/wireframes/index.html,
-// screens 60-1 to 60-13 (ids `60-permission-*`), approved by the design owner on 2026-11-14.
-// Every scenario is red on purpose: the components layer, the state layer and the contract layer (reads of the core's
-// `GET /api/sessions/<id>/permission-requests`, decision 0025 draft) turn them green, and each removes its `todo`.
+// End-to-end skeleton of the permission requests on screen (#621, parent #60); the wireframe is docs/wireframes/index.html,
+// screens 60-1 to 60-13 (ids `60-permission-*`), approved by the design owner on 2026-11-14. (#621)
+// Every scenario is red on purpose: the components layer, the state layer and the contract layer (reads of the core's (#621)
+// `GET /api/sessions/<id>/permission-requests`, decision 0025 draft) turn them green, and each removes its `todo`. (#621)
 import assert from 'node:assert/strict';
 import { after, describe, test } from 'node:test';
 import { ElementoFalso, instalarDomFalso, texto } from './fake-dom.ts';
@@ -19,17 +19,17 @@ const NOW = Date.now();
 const iso = (secAgo: number) => new Date(NOW - secAgo * 1000).toISOString();
 const ahead = (sec: number) => new Date(NOW + sec * 1000).toISOString();
 
-// The shape of the draft of decision 0025: `state` is pending | answered | answered_elsewhere | expired | withdrawn | core_restarted;
-// `summary` is already redacted by the core, on one line; `terminalOnly` requests are denied from here only.
+// The shape of the draft of decision 0025: `state` is pending | answered | answered_elsewhere | expired | withdrawn | core_restarted; (#621)
+// `summary` is already redacted by the core, on one line; `terminalOnly` requests are denied from here only. (#621)
 const request = (id: string, extra: Record<string, unknown> = {}) => ({
   id, state: 'pending', tool: 'Bash', summary: 'DATABASE_URL=•••• npm run migrate -- --env local', folder: '/simulacao/motor-de-regras',
   requestedAt: iso(60), expiresAt: ahead(520), terminalOnly: false, decision: null, reason: null, answeredAt: null, ...extra,
 });
 const pendingList = (...items: unknown[]) => ({ available: true, requests: items });
 
-// Every mounted screen is left at the end, so its timers and listeners do not keep the runner alive.
+// Every mounted screen is left at the end, so its timers and listeners do not keep the runner alive. (#621)
 const leaves: AbortController[] = [];
-// `mount` returns what undoes it (the polling timers): every one is called at the end, so the runner can exit.
+// `mount` returns what undoes it (the polling timers): every one is called at the end, so the runner can exit. (#621)
 const cleanups: Array<() => void> = [];
 async function mounted(mod: { mount: (a: ElementoFalso, c: unknown) => unknown }, area: ElementoFalso, ctx: unknown) {
   const off = await mod.mount(area, ctx);
@@ -81,7 +81,7 @@ const buttons = (area: ElementoFalso) => area.querySelectorAll('button');
 const button = (area: ElementoFalso, label: string) => buttons(area).find((b) => texto(b).startsWith(label));
 
 async function mountDetail(served: Served) {
-  // The import sits in the body so a missing module turns the scenario red, not the whole file. (issue 621)
+  // The import sits in the body so a missing module turns the scenario red, not the whole file. (#621)
   const mod = await import('../../ui/screens/session-detail.js' as string);
   const c = ctxFor(served);
   const area = new ElementoFalso('main');
