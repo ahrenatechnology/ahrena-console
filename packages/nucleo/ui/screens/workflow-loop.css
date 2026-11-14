@@ -17,6 +17,9 @@
 .wfl-step.wfl-run { border-left-color: var(--status-active-dot); }
 .wfl-step.wfl-changes, .wfl-step.wfl-error { border-left-color: var(--status-error-dot); }
 .wfl-step-top { display: flex; align-items: center; gap: 6px; font-size: 11.5px; }
+.wfl-name { font-weight: var(--weight-semibold); color: var(--text); text-decoration: none; }
+.wfl-name:hover { text-decoration: underline; }
+.wfl-name:focus-visible, .wfl-open:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
 .wfl-open { margin-left: auto; color: var(--muted); display: inline-flex; }
 .wfl-open:hover { color: var(--text); }
 .wfl-task { font-size: 10.5px; color: var(--muted); }
