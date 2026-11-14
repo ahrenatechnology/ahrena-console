@@ -1,4 +1,4 @@
-/* issue 532 the components of "Executar plano" (layer 2), pure render functions in the fake DOM. One test per wireframe state:
+/* #532 the components of "Executar plano" (layer 2), pure render functions in the fake DOM. One test per wireframe state:
 465-2 (the card's actions: Executar plano, "subindo…", Abrir sessão), 465-6 (the confirmation, the limit full, the missing folder,
 the notice after confirming) and 467-1 (the same actions in the issue panel). There is no workbench, visual or axe tool in this
 project (component map: node:test with the fake DOM), so the accessibility checks are assertions on roles and names. */
@@ -127,17 +127,43 @@ describe('Executar plano on the card (465-2)', () => {
     assert.equal(texto(one(parts.actions, '[data-action="run"]')), 'Executar plano');
   });
 
-  test('while the plan is being written the card keeps "planejando…" and offers no action', () => {
+  test('while the plan is being written the card keeps "planejando…" and, without a live session, offers no action', () => {
     const parts = cardRunParts(planned(506, { planning: { state: 'running' } }), {});
     assert.equal(texto(parts.badge), 'planejando…');
     assert.equal(parts.actions, null);
   });
 
-  test('a card in another column than Planejamento with a plan does not offer Executar plano (the queue is issue 477)', () => {
-    for (const column of ['queued', 'review', 'done']) {
-      const parts = cardRunParts(planned(506, { column }), {});
-      assert.equal(parts.actions, null, column);
-    }
+  test('465-2 while planning with a live session the card keeps "planejando…" and offers Abrir sessão', () => {
+    const opened: unknown[] = [];
+    const subject = card(506, { planning: { state: 'running' }, sessions: { count: 1, state: 'working', ids: ['11111111-1111-4111-8111-111111111111'] } });
+    const parts = cardRunParts(subject, { onOpenSession: (c: unknown, from: unknown) => opened.push([c, from]) });
+    assert.equal(texto(parts.badge), 'planejando…');
+    const open = one(parts.actions, '[data-action="open-session"]');
+    assert.equal(texto(open), 'Abrir sessão');
+    assert.equal(open.getAttribute('aria-label'), 'Abrir a sessão da #506');
+    click(open);
+    assert.deepEqual(opened, [[subject, open]]);
+    assert.equal(all(parts.actions, '[data-action="plan"]').length, 0);
+    assert.equal(all(parts.actions, '[data-action="run"]').length, 0);
+  });
+
+  test('465-2 a card in Na fila with a plan offers Executar plano, with the same confirmation and no Tirar da fila (issue 477)', () => {
+    const asked: unknown[] = [];
+    const subject = planned(506, { column: 'queued', queuePosition: 1 });
+    assert.equal(runState(subject), 'queued');
+    const parts = cardRunParts(subject, { onRun: (c: unknown, from: unknown) => asked.push([c, from]) });
+    const run = one(parts.actions, '[data-action="run"]');
+    assert.equal(texto(run), 'Executar plano');
+    assert.equal(run.getAttribute('aria-label'), 'Executar o plano da #506');
+    click(run);
+    assert.deepEqual(asked, [[subject, run]]);
+    assert.equal(all(parts.actions, '[data-action="replan"]').length, 0);
+    assert.ok(!texto(parts.actions).includes('Tirar da fila'));
+  });
+
+  test('a card in Na fila without a plan, and the cards of Em review and Concluído, offer no action', () => {
+    assert.equal(cardRunParts(card(506, { column: 'queued' }), {}).actions, null);
+    for (const column of ['review', 'done']) assert.equal(cardRunParts(planned(506, { column }), {}).actions, null, column);
   });
 });
 
@@ -202,7 +228,7 @@ describe('the confirmation anchored on the card (465-6)', () => {
     assert.equal(texto(one(root, 'h3')), 'Executar o plano da #506');
     assert.equal(texto(one(root, '[data-field="repo"]')), REPO);
     assert.equal(texto(one(root, '[data-field="folder"]')), '~/Workspace/ahrena-console');
-    assert.equal(all(root, '[data-field="account"]').length, 0, 'the account is issue 524');
+    assert.equal(all(root, '[data-field="account"]').length, 0, 'the account is #524');
     assert.ok(!texto(root).includes('Conta'));
     const radios = all(root, '[role="radio"]');
     assert.deepEqual(radios.map((r) => texto(r)), ['Claude Desktop', 'Terminal']);
@@ -243,6 +269,8 @@ describe('the confirmation anchored on the card (465-6)', () => {
     const button = one(root, '[data-action="confirm"]');
     assert.equal(button.getAttribute('aria-busy'), 'true');
     assert.equal(button.hasAttribute('disabled'), true);
+    click(button);
+    assert.deepEqual(calls, []);
   });
 
   test('AC-3 the limit full warns with the count and the button becomes "Executar mesmo assim"', () => {
