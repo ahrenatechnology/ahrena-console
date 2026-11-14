@@ -34,7 +34,7 @@ import type { ManagedRuntime } from '../runtime/service.ts';
 // | `POST`, `PATCH` and `DELETE /api/work/issue/steps`, `POST /api/work/issue/steps/order` and `POST /api/work/issue/steps/restore` | The issue's Plan steps, as Plan sub-issues on GitHub: add one, edit its title and body (409 when older than GitHub's), remove it (closed as not planned), restore it (reopened; 409 `not-removed` when it is not removed) and move it (`{ repo, number, step, ... }`, `after` a key or `null` for the top); each answers the issue as GitHub returned it (api/work-issue-steps.ts, #534) |
 // | `POST /api/work/plan`         | "Planejar": a planning-only Athena session for an issue, in its repository's folder, in the Claude Desktop or a terminal (`{ repo, number, target, replan? }`; api/work-plan.ts, #507) |
 // | `POST /api/work/run`          | "Executar plano": the Athena session that executes an issue's plan, in its repository's folder, in the Claude Desktop or a terminal; 409 at 2 cards in Em execução unless `force` (`{ repo, number, target, force? }`; api/work-run.ts, #531) |
-// | `POST` and `DELETE /api/work/queue`, `POST /api/work/queue/order` | The execution queue: put an item in line (`{ repo, number, target }`; 422 `no-plan`, 409 `not-plannable` for a card in a fact column, 403 `untrusted-repository`), take it out (`{ repo, number }`) and reorder it (`{ repo, number, after }`, an issue key or `null` for the top); 404 `not-queued` (api/work-queue.ts, #477) |
+// | `POST` and `DELETE /api/work/queue`, `POST /api/work/queue/order`, `POST /api/work/queue/retry` | The execution queue: put an item in line (`{ repo, number, target }`; 422 `no-plan`, 409 `not-plannable` for a card in a fact column, 403 `untrusted-repository`), take it out (`{ repo, number }`) and reorder it (`{ repo, number, after }`, an issue key or `null` for the top); 404 `not-queued`; retry clears the stop of a failed pull and wakes the puller, 200 `{ ok, resumed }` (api/work-queue.ts, #477) |
 // | `GET /api/work`               | The work board: the Project's issues in the agent lifecycle columns (`?level=`, `?initiative=`, `?epic=`, `?type=`, `?label=`, `?repo=`, `?status=`, `?refresh=1`; api/work-board.ts, #465 #466) |
 // | `GET /api/sessions/<id>` and `/agents`, `/conversation`, `/events` | The session Detail in the /ui (api/session-detail.ts, #29 and #30) |
 // | `GET /api/sessions/<id>/agents/<agent>` | One agent's view (api/session-detail.ts, api/agent-view.ts, #529) |
@@ -115,7 +115,7 @@ import { createWorkIssueOptionsRoute, WORK_ISSUE_OPTIONS_ROUTE, type WorkIssueOp
 import { createWorkIssueRoute, WORK_ISSUE_COMMENTS_ROUTE, WORK_ISSUE_ROUTE, type WorkIssueRouteOptions } from './work-issue.ts';
 import { createWorkIssueWriteRoute, type WorkIssueWriteRouteOptions } from './work-issue-write.ts';
 import { createWorkPlanRoute, WORK_PLAN_ROUTE, type WorkPlanRouteOptions } from './work-plan.ts';
-import { createWorkQueueRoute, WORK_QUEUE_ORDER_ROUTE, WORK_QUEUE_ROUTE, type WorkQueueRouteOptions } from './work-queue.ts';
+import { createWorkQueueRoute, WORK_QUEUE_ORDER_ROUTE, WORK_QUEUE_RETRY_ROUTE, WORK_QUEUE_ROUTE, type WorkQueueRouteOptions } from './work-queue.ts';
 import { createWorkRunRoute, WORK_RUN_ROUTE, type WorkRunRouteOptions } from './work-run.ts';
 import { DETAIL_ROUTE, type LeiturasDoDetalhe } from './session-detail.ts';
 import type { FleetReader } from '../mcp/fleet.ts';
@@ -377,9 +377,9 @@ const sameOriginWorkIssueWrite = (req: IncomingMessage, port: number): boolean =
 /** #531 "Executar plano": only `POST /api/work/run`, the exact raw path, from the same origin. */
 const sameOriginWorkRun = (req: IncomingMessage, port: number): boolean => req.method === 'POST' && req.url === WORK_RUN_ROUTE && fromOwnUi(req, port);
 
-/** #477 the queue writes: `POST` and `DELETE /api/work/queue` and `POST /api/work/queue/order`, the exact raw path, from the same origin. */
+/** #477 the queue writes: `POST` and `DELETE /api/work/queue`, `POST /api/work/queue/order` and `POST /api/work/queue/retry`, the exact raw path, from the same origin. */
 const sameOriginWorkQueue = (req: IncomingMessage, port: number): boolean =>
-  ((req.url === WORK_QUEUE_ROUTE && (req.method === 'POST' || req.method === 'DELETE')) || (req.url === WORK_QUEUE_ORDER_ROUTE && req.method === 'POST')) && fromOwnUi(req, port);
+  ((req.url === WORK_QUEUE_ROUTE && (req.method === 'POST' || req.method === 'DELETE')) || ((req.url === WORK_QUEUE_ORDER_ROUTE || req.url === WORK_QUEUE_RETRY_ROUTE) && req.method === 'POST')) && fromOwnUi(req, port);
 
 /** `decodeURIComponent`, or the raw text when it is malformed (the id check then refuses it). */
 function decodeSegment(s: string): string {
@@ -644,7 +644,7 @@ export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
     if (url.pathname === WORK_ISSUE_ROUTE) return workIssueRoute(req, res, url);
     if (url.pathname === WORK_PLAN_ROUTE) return workPlan(req, res);
     if (url.pathname === WORK_RUN_ROUTE) return workRun(req, res);
-    if (url.pathname === WORK_QUEUE_ROUTE || url.pathname === WORK_QUEUE_ORDER_ROUTE) return workQueue(req, res);
+    if (url.pathname === WORK_QUEUE_ROUTE || url.pathname === WORK_QUEUE_ORDER_ROUTE || url.pathname === WORK_QUEUE_RETRY_ROUTE) return workQueue(req, res);
     if (opts.agentConfig && (url.pathname === AGENT_CONFIG_ROUTE || url.pathname.startsWith(`${AGENT_CONFIG_ROUTE}/`))) return opts.agentConfig(req, res, url);
     if (opts.frameworkInstall && url.pathname.startsWith(`${FRAMEWORK_INSTALL_ROUTE}/`)) return opts.frameworkInstall(req, res, url);
     if (opts.machineConnection && isConnectionRoute(url.pathname)) return opts.machineConnection(req, res, url);

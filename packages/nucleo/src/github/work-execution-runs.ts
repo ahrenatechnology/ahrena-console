@@ -4,7 +4,7 @@
  */
 
 import type { DatabaseSync, StatementSync } from 'node:sqlite';
-import type { ExecutionRun, ExecutionRunState, ExecutionTarget, WorkExecutionRuns } from './work-execution.ts';
+import type { ExecutionOrigin, ExecutionRun, ExecutionRunState, ExecutionTarget, WorkExecutionRuns } from './work-execution.ts';
 
 export const WORK_EXECUTION_MIGRATION_DESCRIPTION = 'work board: the last execution run per issue (#531)';
 
@@ -19,6 +19,10 @@ export const WORK_EXECUTION_MIGRATION_SQL = `
   ) STRICT;
 `;
 
+/** #477 migration 20, additive: who asked for the run; the runs that exist stay `manual`. */
+export const WORK_EXECUTION_ORIGIN_MIGRATION_DESCRIPTION = 'work board: who asked for an execution run (#477)';
+export const WORK_EXECUTION_ORIGIN_MIGRATION_SQL = "ALTER TABLE work_execution_runs ADD COLUMN origin TEXT NOT NULL DEFAULT 'manual';";
+
 interface Row {
   item_key: string;
   target: string;
@@ -26,6 +30,7 @@ interface Row {
   state: string;
   session_id: string | null;
   finished_at: string | null;
+  origin: string;
 }
 
 const toRun = (r: Row): ExecutionRun => ({
@@ -35,6 +40,8 @@ const toRun = (r: Row): ExecutionRun => ({
   state: r.state as ExecutionRunState,
   sessionId: r.session_id,
   finishedAt: r.finished_at,
+  // a `manual` run carries no `origin`: absent means manual
+  ...(r.origin === 'queue' ? { origin: 'queue' as ExecutionOrigin } : {}),
 });
 
 export class SqliteWorkExecutionRuns implements WorkExecutionRuns {
@@ -48,9 +55,9 @@ export class SqliteWorkExecutionRuns implements WorkExecutionRuns {
     this.one = db.prepare('SELECT * FROM work_execution_runs WHERE item_key = ?');
     this.every = db.prepare('SELECT * FROM work_execution_runs ORDER BY started_at');
     this.upsert = db.prepare(
-      `INSERT INTO work_execution_runs (item_key, target, started_at, state, session_id, finished_at) VALUES (?, ?, ?, ?, ?, ?)
+      `INSERT INTO work_execution_runs (item_key, target, started_at, state, session_id, finished_at, origin) VALUES (?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT (item_key) DO UPDATE SET target = excluded.target, started_at = excluded.started_at, state = excluded.state,
-         session_id = excluded.session_id, finished_at = excluded.finished_at`,
+         session_id = excluded.session_id, finished_at = excluded.finished_at, origin = excluded.origin`,
     );
   }
 
@@ -64,6 +71,6 @@ export class SqliteWorkExecutionRuns implements WorkExecutionRuns {
   }
 
   async save(run: ExecutionRun): Promise<void> {
-    this.upsert.run(run.key.toLowerCase(), run.target, run.startedAt, run.state, run.sessionId, run.finishedAt);
+    this.upsert.run(run.key.toLowerCase(), run.target, run.startedAt, run.state, run.sessionId, run.finishedAt, run.origin ?? 'manual');
   }
 }

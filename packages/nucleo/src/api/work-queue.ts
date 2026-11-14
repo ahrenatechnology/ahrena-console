@@ -7,6 +7,7 @@
  * | `POST /api/work/queue` `{ repo, number, target }`          | 200 `{ ok, key, position, target }`                       |
  * | `DELETE /api/work/queue` `{ repo, number }`                | 200 `{ ok, key }`                                         |
  * | `POST /api/work/queue/order` `{ repo, number, after }`     | 200 `{ ok, key, position }`; `after` is an issue key or `null` for the top |
+ * | `POST /api/work/queue/retry` (no body is read)             | 200 `{ ok, resumed }`                                     |
  *
  * `repo` is `owner/name`, `number` the issue number, `target` `'desktop' | 'terminal'`: where the session
  * opens when the queue pulls the item (the last choice wins, wireframe 477-1).
@@ -20,6 +21,12 @@
  *   Bloqueado or Concluído, which are facts of the session and of GitHub (`column` names it).
  * - 404 `not-queued`: take out or reorder of something that is not in line, or after something that is not.
  * Taking out and reordering never ask GitHub, so they work with it down and for any repository.
+ *
+ * Retry (#477 L2): when the puller failed to open the first item the queue is stopped with the item on top and
+ * its reason (`stopped` on the board); retry clears that stop and wakes the puller, which tries the same item
+ * again. `resumed` is whether a stop was cleared. It answers at once: the pull runs after the answer, and its
+ * outcome is on the board (the card leaves, or stops again with a new reason). Its refusals are `{ error }`
+ * (origin, JSON, query, method, malformed body); no body field is read.
  *
  * A missing issue is 404, GitHub down with nothing stored 502 with the `reason` code, `--no-github` 503.
  * Same-origin and JSON like /api/work/run; `repo`, `number`, `target` and `after` are validated before
@@ -40,6 +47,7 @@ import { UNTRUSTED_REPOSITORY } from './work-session-open.ts';
 
 export const WORK_QUEUE_ROUTE = '/api/work/queue';
 export const WORK_QUEUE_ORDER_ROUTE = '/api/work/queue/order';
+export const WORK_QUEUE_RETRY_ROUTE = '/api/work/queue/retry';
 
 export interface WorkQueueRouteOptions {
   /** #506 the issue detail use case; `null` under --no-github: putting in the queue answers 503. */
@@ -49,6 +57,8 @@ export interface WorkQueueRouteOptions {
   columns: CardColumns;
   /** #594 whose repositories the core queues. Required: a route without it would trust everyone. */
   trust: RepositoryTrust;
+  /** #477 L2 the puller `retry` wakes; without it retry only clears the stop. */
+  puller?: { trigger(): Promise<void> };
   now?: () => number;
 }
 
@@ -142,7 +152,31 @@ export function createWorkQueueRoute(o: WorkQueueRouteOptions | null): WorkQueue
     return { ok: true, key: r.key, position: (await o.queue.positions()).get(r.key.toLowerCase()) ?? null };
   }
 
+  /** Method, origin, content type and a readable body are checked; the body itself is ignored. */
+  async function retry(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    if (req.method !== 'POST') {
+      req.resume();
+      return send(res, 405, { error: 'use POST' });
+    }
+    if ((req.url ?? '').includes('?')) {
+      req.resume();
+      return send(res, 403, { error: 'origem não permitida' });
+    }
+    if (!/^application\/json\b/i.test(req.headers['content-type'] ?? '')) {
+      req.resume();
+      return send(res, 415, { error: 'use application/json' });
+    }
+    const read = await readJsonBody(req);
+    if (!read.ok) return send(res, read.error === 'too-large' ? 413 : 400, { error: 'pedido inválido' });
+    if (!o) return send(res, 503, { error: 'O GitHub está desligado neste console' });
+    const resumed = await o.queue.clearStop();
+    // the pull runs after the answer: it never throws, and its outcome is on the board
+    void o.puller?.trigger();
+    return send(res, 200, { ok: true, resumed });
+  }
+
   return async function workQueueRoute(req, res) {
+    if ((req.url ?? '').split('?')[0] === WORK_QUEUE_RETRY_ROUTE) return retry(req, res);
     const order = (req.url ?? '').split('?')[0] === WORK_QUEUE_ORDER_ROUTE;
     const handler = order ? (req.method === 'POST' ? reorder : null) : req.method === 'POST' ? enqueue : req.method === 'DELETE' ? remove : null;
     if (!handler) {

@@ -11,7 +11,7 @@ import { join } from 'node:path';
 import { after, before, describe, test } from 'node:test';
 import { openSqliteStorage, type SqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
 import { Accounts, DesktopIndex, MontadorDoPainel, startLocalApi, type LocalApi } from '../../src/api/index.ts';
-import { WORK_QUEUE_ORDER_ROUTE, WORK_QUEUE_ROUTE } from '../../src/api/work-queue.ts';
+import { WORK_QUEUE_ORDER_ROUTE, WORK_QUEUE_RETRY_ROUTE, WORK_QUEUE_ROUTE } from '../../src/api/work-queue.ts';
 import { NoDataError } from '../../src/github/cache.ts';
 import type { WorkBoardColumn } from '../../src/github/work-board.ts';
 import type { WorkIssueResult } from '../../src/github/work-issue-service.ts';
@@ -60,6 +60,7 @@ describe('#477 /api/work/queue', () => {
   let issues: string[];
   let issueOf: (n: number) => WorkIssueResult | Error;
   let columns: Map<number, WorkBoardColumn | null>;
+  let triggers = 0;
 
   const startApi = (over: Partial<Parameters<typeof startLocalApi>[0]> = {}) => {
     const panelBuilder = new MontadorDoPainel({ storage, contas: new Accounts({ storage, file: null }), desktop: new DesktopIndex({ root: join(root, 'desktop') }), trabalho: null });
@@ -82,6 +83,7 @@ describe('#477 /api/work/queue', () => {
         },
         queue,
         columns: { columnOf: async (key: string) => columns.get(Number(key.split('#')[1])) ?? 'planning' },
+        puller: { trigger: async () => void (triggers += 1) },
         now: () => T0,
       },
       ...over,
@@ -91,6 +93,7 @@ describe('#477 /api/work/queue', () => {
     issues = [];
     issueOf = (n) => issue(n);
     columns = new Map();
+    triggers = 0;
     storage.db.exec('DELETE FROM work_queue');
   };
   const call = (method: string, path: string, body: unknown, init: RequestInit = {}, base = api) =>
@@ -337,6 +340,47 @@ describe('#477 /api/work/queue', () => {
       const out = await json(await enqueue(509));
       assert.match(out.code, /^[a-z-]+$/);
       assert.match(out.error, /Planeje antes/);
+    });
+  });
+
+  describe('#477/AC-6 POST /api/work/queue/retry clears the stop and wakes the puller', () => {
+    const retry = (body: unknown = {}, init: RequestInit = {}) => call('POST', WORK_QUEUE_RETRY_ROUTE, body, init);
+
+    test('#477/AC-6 Given a stopped queue, When the person retries, Then the failure is cleared, the item keeps the top, and the puller is woken', async () => {
+      fresh();
+      await enqueue(500);
+      await enqueue(501);
+      await queue.markFailed('acme/app#501', 'Não deu para abrir a sessão', '2026-11-14T10:00:00.000Z');
+      const r = await retry();
+      assert.equal(r.status, 200);
+      assert.deepEqual(await json(r), { ok: true, resumed: true });
+      assert.equal(await queue.stopped(), null);
+      assert.deepEqual(await keys(), ['acme/app#501', 'acme/app#500']);
+      assert.equal(triggers, 1);
+    });
+
+    test('#477/AC-6 Given a queue that is not stopped, When the person retries, Then nothing changes, `resumed` is false, and the puller is still woken', async () => {
+      fresh();
+      await enqueue(500);
+      assert.deepEqual(await json(await retry()), { ok: true, resumed: false });
+      assert.equal(triggers, 1);
+    });
+
+    test('#477/AC-6 retry needs the same origin, JSON, no query and POST; any body is ignored', async () => {
+      fresh();
+      assert.equal((await retry({}, { headers: { 'content-type': 'application/json', origin: 'http://evil.example' } })).status, 403);
+      assert.equal((await retry({}, { headers: { 'content-type': 'text/plain', origin: `http://${new URL(api.url).host}` } })).status, 415);
+      assert.equal((await call('POST', `${WORK_QUEUE_RETRY_ROUTE}?x=1`, {})).status, 403);
+      assert.equal((await fetch(`${api.url}${WORK_QUEUE_RETRY_ROUTE}`)).status, 405);
+      assert.equal((await retry(null, { body: '{nope' })).status, 400);
+      assert.equal((await retry({ repo: 'evil/x', number: 1, junk: 'x' })).status, 200);
+      assert.equal(triggers, 1);
+    });
+
+    test('#477/AC-6 the retry route is English and its refusals are `{ error }` in pt-BR', async () => {
+      assert.equal(WORK_QUEUE_RETRY_ROUTE, '/api/work/queue/retry');
+      const r = await call('POST', WORK_QUEUE_RETRY_ROUTE, null, { body: '{nope' });
+      assert.match((await json(r)).error, /pedido inválido/);
     });
   });
 });

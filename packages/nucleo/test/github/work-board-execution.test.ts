@@ -12,6 +12,7 @@ import {
   type ProjectBoard,
   type ProjectCard,
   type WorkBoardCard,
+  type WorkBoardView,
   type WorkColumnHistory,
   type WorkProjectBoard,
   type WorkSessionLink,
@@ -75,14 +76,14 @@ class MemoryRuns implements WorkExecutionRuns {
 
 const history: WorkColumnHistory = { observe: async (os) => new Map(os.map((o) => [o.key, o.at])) };
 
-function setup(items: ProjectCard[] = [card(412)], withRuns = true) {
+function setup(items: ProjectCard[] = [card(412)], withRuns = true, hooks: { onRunExpired?: (run: ExecutionRun) => Promise<void>; onRead?: (view: WorkBoardView) => void } = {}) {
   const now = clock();
   const current = projectOf(items);
   const sessions = { list: [] as WorkSessionLink[] };
   const runs = new MemoryRuns();
   const project: WorkProjectBoard = { board: async () => current };
   const live: WorkSessions = { links: async () => sessions.list };
-  const service = new WorkBoardService({ trust: trustOf('ahrenatechnology'), project, sessions: live, queue: EMPTY_WORK_QUEUE, history, now, ...(withRuns ? { executionRuns: runs } : {}) });
+  const service = new WorkBoardService({ trust: trustOf('ahrenatechnology'), project, sessions: live, queue: EMPTY_WORK_QUEUE, history, now, ...(withRuns ? { executionRuns: runs } : {}), ...hooks });
   const read = async (n = 412): Promise<WorkBoardCard> => (await service.board({ ...DEFAULT_WORK_BOARD_FILTERS })).columns.flatMap((c) => c.cards).find((c) => c.number === n)!;
   return { now, runs, sessions, service, read };
 }
@@ -159,5 +160,40 @@ describe('#531/AC-3 the running count', () => {
 
   test('#531/AC-3 with nothing running the count is 0', async () => {
     assert.equal(await setup().service.runningCount(), 0);
+  });
+});
+
+describe('#477/AC-6 the board tells the queue what it settled', () => {
+  test('#477/AC-6 Given a booting run past its window, When the board settles it to expired, Then `onRunExpired` gets the expired run once', async () => {
+    const seen: ExecutionRun[] = [];
+    const t = setup([card(412)], true, { onRunExpired: async (r) => void seen.push(r) });
+    await t.runs.save(booting({ origin: 'queue' }));
+    t.now.add(EXECUTION_SESSION_WINDOW_MS + 1_000);
+    await t.read();
+    await t.read();
+    assert.equal(seen.length, 1);
+    assert.equal(seen[0]!.state, 'expired');
+    assert.equal(seen[0]!.origin, 'queue');
+  });
+
+  test('#477/AC-6 Given the hook throws, Then the board is still answered and the boot state of the other runs stays', async () => {
+    const t = setup([card(412)], true, { onRunExpired: async () => { throw new Error('boom'); } });
+    await t.runs.save(booting());
+    t.now.add(EXECUTION_SESSION_WINDOW_MS + 1_000);
+    const c = await t.read();
+    assert.equal(c.execution, null);
+  });
+
+  test('#477/AC-4 Given a read of the board, Then `onRead` gets the view it answered (the queue and its limit), for the puller to look at', async () => {
+    const views: WorkBoardView[] = [];
+    const t = setup([card(412)], true, { onRead: (v) => void views.push(v) });
+    await t.read();
+    assert.equal(views.length, 1);
+    assert.deepEqual(Object.keys(views[0]!.queue).sort(), ['available', 'limit', 'running', 'stopped']);
+  });
+
+  test('#477/AC-4 Given `onRead` throws, Then the board is still answered', async () => {
+    const t = setup([card(412)], true, { onRead: () => { throw new Error('boom'); } });
+    assert.equal((await t.read()).number, 412);
   });
 });

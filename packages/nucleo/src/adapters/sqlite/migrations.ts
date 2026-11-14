@@ -13,7 +13,7 @@ import {
 } from '../../decisions/migration.ts';
 import { renameLegacyGithubCacheKeys } from '../../github/sqlite-cache.ts';
 import { WORK_BOARD_MIGRATION_DESCRIPTION, WORK_BOARD_MIGRATION_SQL } from '../../github/work-board-history.ts';
-import { WORK_EXECUTION_MIGRATION_DESCRIPTION, WORK_EXECUTION_MIGRATION_SQL } from '../../github/work-execution-runs.ts';
+import { WORK_EXECUTION_MIGRATION_DESCRIPTION, WORK_EXECUTION_MIGRATION_SQL, WORK_EXECUTION_ORIGIN_MIGRATION_DESCRIPTION, WORK_EXECUTION_ORIGIN_MIGRATION_SQL } from '../../github/work-execution-runs.ts';
 import { WORK_QUEUE_MIGRATION_DESCRIPTION, WORK_QUEUE_MIGRATION_SQL } from '../../github/work-queue-store.ts';
 import { WORK_PLAN_MIGRATION_DESCRIPTION, WORK_PLAN_MIGRATION_SQL } from '../../github/work-plan-runs.ts';
 import { migrateJsonToEnglish } from './english-json.ts';
@@ -302,6 +302,7 @@ export const MIGRATIONS: readonly Migration[] = [
   { version: 17, description: WORK_PLAN_MIGRATION_DESCRIPTION, sql: WORK_PLAN_MIGRATION_SQL },
   { version: 18, description: WORK_EXECUTION_MIGRATION_DESCRIPTION, sql: WORK_EXECUTION_MIGRATION_SQL },
   { version: 19, description: WORK_QUEUE_MIGRATION_DESCRIPTION, sql: WORK_QUEUE_MIGRATION_SQL },
+  { version: 20, description: WORK_EXECUTION_ORIGIN_MIGRATION_DESCRIPTION, sql: WORK_EXECUTION_ORIGIN_MIGRATION_SQL },
 ];
 
 export function schemaVersion(db: DatabaseSync): number {

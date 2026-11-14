@@ -50,6 +50,7 @@ export class SqliteWorkQueue implements WorkQueueStore {
   private readonly delete: StatementSync;
   private readonly place: StatementSync;
   private readonly fail: StatementSync;
+  private readonly clear: StatementSync;
 
   constructor(db: DatabaseSync) {
     const ok = db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'work_queue'").get();
@@ -61,6 +62,7 @@ export class SqliteWorkQueue implements WorkQueueStore {
     this.delete = db.prepare('DELETE FROM work_queue WHERE item_key = ?');
     this.place = db.prepare('UPDATE work_queue SET position = ? WHERE item_key = ?');
     this.fail = db.prepare('UPDATE work_queue SET failed_reason = ?, failed_at = ? WHERE item_key = ?');
+    this.clear = db.prepare('UPDATE work_queue SET failed_reason = NULL, failed_at = NULL WHERE failed_reason IS NOT NULL');
   }
 
   private rows(): Row[] {
@@ -125,5 +127,9 @@ export class SqliteWorkQueue implements WorkQueueStore {
       this.renumber(moved);
       return true;
     });
+  }
+
+  async clearStop(): Promise<boolean> {
+    return immediateTransaction(this.db, () => Number(this.clear.run().changes) > 0);
   }
 }

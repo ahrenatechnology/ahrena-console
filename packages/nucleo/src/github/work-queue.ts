@@ -10,7 +10,7 @@
  * - Putting an item that is already queued again keeps its place and takes the new target (the last
  *   choice, wireframe 477-1).
  * - A failure to pull (`markFailed`, used by the puller of #477 L2) returns the entry to the top with the
- *   reason; the queue is then stopped until that entry is removed.
+ *   reason; the queue is then stopped until that entry is removed or the person retries (`clearStop`).
  * - Keys are issue keys (`owner/name#N`), stored and compared in lower case.
  */
 
@@ -42,6 +42,8 @@ export interface WorkQueueStore extends WorkQueue {
   reorder(key: string, after: string | null): Promise<boolean>;
   /** Returns the entry to the top with the reason; `false` when it is not queued. */
   markFailed(key: string, reason: string, at: string): Promise<boolean>;
+  /** Clears the recorded failure, which ends the queue's stop (the retry of #477 L2); `false` when no entry had one. */
+  clearStop(): Promise<boolean>;
 }
 
 /** The queue is stopped by the first entry that carries a failure: its key and reason. */

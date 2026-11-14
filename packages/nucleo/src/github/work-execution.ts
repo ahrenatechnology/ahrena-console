@@ -21,6 +21,8 @@ import { isPlanNumber, isPlanRepo, type PlanTarget } from './work-plan.ts';
 
 export type ExecutionTarget = PlanTarget;
 export type ExecutionRunState = 'booting' | 'linked' | 'expired';
+/** #477 who asked for the run: the person ("Executar plano") or the queue's puller. Only a queue run that expires puts its item back in line, stopped. */
+export type ExecutionOrigin = 'manual' | 'queue';
 
 /** How long a run waits for its session to show up before it expires. */
 export const EXECUTION_SESSION_WINDOW_MS = 10 * 60_000;
@@ -37,6 +39,8 @@ export interface ExecutionRun {
   /** #531 the execution session, once the board has seen it live. */
   sessionId: string | null;
   finishedAt: string | null;
+  /** #477 absent means `manual`. */
+  origin?: ExecutionOrigin;
 }
 
 /** The record of execution runs: the last one per issue. */

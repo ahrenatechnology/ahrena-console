@@ -33,10 +33,10 @@
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { githubFailureOf, NoDataError } from '../github/cache.ts';
-import { DEFAULT_EXECUTION_LIMIT, executionPrompt, isExecutionRunActive, isOverExecutionLimit, type RunningCards, type WorkExecutionRuns } from '../github/work-execution.ts';
+import { DEFAULT_EXECUTION_LIMIT, isExecutionRunActive, isOverExecutionLimit, type RunningCards, type WorkExecutionRuns } from '../github/work-execution.ts';
 import { WorkIssueNotFoundError, type WorkIssueResult, type WorkIssueService } from '../github/work-issue-service.ts';
 import { isPlanNumber, isPlanRepo, type PlanTarget } from '../github/work-plan.ts';
-import { levelOf, workKey } from '../github/work.ts';
+import { workKey } from '../github/work.ts';
 import { send } from '../ingest/hooks/receiver.ts';
 import type { RepositoryTrust } from '../github/trusted-owners.ts';
 import type { WorkQueueStore } from '../github/work-queue.ts';
@@ -45,7 +45,8 @@ import { readJsonBody } from './connections-route.ts';
 import { NEW_SESSION_TARGETS } from './new-session.ts';
 import type { TerminalOpener } from './terminal-launch.ts';
 import type { Git } from './work.ts';
-import { openWorkSession, repoFolderOnThisMachine, sessionCommand, UNTRUSTED_REPOSITORY } from './work-session-open.ts';
+import { ALREADY_BOOTING, openExecution, unrunnableReason } from './work-execution-open.ts';
+import { UNTRUSTED_REPOSITORY } from './work-session-open.ts';
 
 export const WORK_RUN_ROUTE = '/api/work/run';
 
@@ -122,10 +123,8 @@ async function runnableIssue(o: WorkRunRouteDeps & { issues: NonNullable<WorkRun
     if (err instanceof NoDataError) return { status: 502, body: { error: 'Não deu para ler a issue no GitHub', reason: githubFailureOf(err) } };
     throw err;
   }
-  const level = levelOf(issue.type, null);
-  if (level === 'epic' || level === 'initiative') return { status: 422, body: { error: 'Épicos e iniciativas não se executam aqui: execute as histórias deles' } };
-  // #531 "has a plan" is the TOTAL sub-issue count, the card's meaning (#467); the prompt lists the Plan-typed steps only.
-  if (issue.subIssues.length === 0) return { status: 422, body: { error: 'Esta issue não tem plano: planeje antes de executar' } };
+  const unrunnable = unrunnableReason(issue);
+  if (unrunnable !== null) return { status: 422, body: { error: unrunnable } };
   return issue;
 }
 
@@ -160,26 +159,19 @@ export function createWorkRunRoute(o: WorkRunRouteDeps | null): WorkRunRoute {
     const issue = await runnableIssue(deps, key);
     if (isRefusal(issue)) return send(res, issue.status, issue.body);
     const previous = await o.runs.get(key);
-    if (previous && isExecutionRunActive(previous, now())) return send(res, 409, { error: 'Já há uma execução subindo para esta issue' });
+    if (previous && isExecutionRunActive(previous, now())) return send(res, 409, { ...ALREADY_BOOTING });
 
     const refusal = force ? null : await limitRefusal(o);
     if (refusal) return send(res, refusal.status, refusal.body);
 
-    const prompt = executionPrompt({ repo, number, steps: issue.plan.steps.map((s) => s.number) });
-    const folder = await repoFolderOnThisMachine(o, repo);
-    if (folder === null) {
-      return send(res, 501, { error: `Não achei uma pasta de ${repo} nesta máquina; copie o comando e rode na pasta do repositório`, command: sessionCommand(null, prompt) });
-    }
-    const startedAt = new Date(now()).toISOString();
-
-    const opening = await openWorkSession(o, { target, folder, prompt, key, failureText: 'Não deu para abrir a sessão de execução', logLabel: 'work run' });
-    if (!opening.opened) return send(res, opening.status, opening.body);
-    await o.runs.save({ key: key.toLowerCase(), target, startedAt, state: 'booting', sessionId: null, finishedAt: null });
+    // #477 the same use case the queue's puller calls: prompt, folder, session and the recorded run.
+    const opened = await openExecution({ ...o, now }, { repo, number, target, issue, origin: 'manual' });
+    if (!opened.opened) return send(res, opened.status, opened.body);
     // #477 an item that was queued leaves the queue once its session opened: it is running now, the queue must not pull it again.
     try {
       await o.queue?.remove(key);
     } catch (err) {
-      // the session is open and the run recorded: the answer stays 200, the entry stays, so a puller must skip an issue that already runs (#477 L2)
+      // the session is open and the run recorded: the answer stays 200, the entry stays, so the puller skips an issue that already runs (#477 L2)
       log(`work run: could not take ${key} out of the queue: ${err instanceof Error ? err.message : String(err)}`);
     }
     log(`work run: execution session opened in ${target} for ${key}`);
