@@ -409,6 +409,31 @@ describe('open and close in line', () => {
     assert.equal(calls.filter((r) => r === IRIS_ROUTE).length, 2, 'the failed read and the retry, no more');
   });
 
+  test('#539 AC-5: a failed child closed and reopened while its re-read is pending shows "Lendo o agente", no retry, and 2 reads in total', async () => {
+    let fail = true;
+    let release: (v: unknown) => void = () => {};
+    const { area, calls } = await mountView((route) => {
+      if (route !== IRIS_ROUTE) return agent();
+      if (fail) throw readError(503);
+      return new Promise((r) => (release = r));
+    });
+    const toggle = () => area.querySelector('.av-child .av-toggle')!;
+    toggle().click();
+    await settle();
+    assert.match(texto(area.querySelector('.av-child')), /Não deu para ler o agente/);
+    fail = false;
+    toggle().click();
+    toggle().click();
+    await settle();
+    assert.match(texto(area.querySelector('.av-child')), /Lendo o agente/);
+    assert.equal(area.querySelector('.av-child-retry'), null, 'no retry while the re-read is pending');
+    assert.equal(calls.filter((r) => r === IRIS_ROUTE).length, 2, 'the failed read and one re-read');
+    release(agent({ agentId: IRIS, steps: [step(7)] }));
+    await settle();
+    assert.equal(area.querySelectorAll('.av-step').length, 3);
+    assert.equal(calls.filter((r) => r === IRIS_ROUTE).length, 2);
+  });
+
   test('#539 AC-5: reopening the child during an in-flight retry starts no second read', async () => {
     let fail = true;
     let release: (v: unknown) => void = () => {};
