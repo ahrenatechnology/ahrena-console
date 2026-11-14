@@ -123,7 +123,13 @@ export interface WriteRequest {
  * JSON only (415), the bounded body (413), malformed JSON (400), `--no-github` (503 `off`), then `repo` and `number`
  * (400 `bad-param`). It answers on failure and returns `null`; the route goes on with the body only when it returns one.
  */
-export async function readWriteRequest(req: IncomingMessage, res: ServerResponse, { method, route, enabled }: { method: string; route: string; enabled: boolean }): Promise<WriteRequest | null> {
+export async function readWriteRequest(req: IncomingMessage, res: ServerResponse, route: { method: string; route: string; enabled: boolean }): Promise<WriteRequest | null> {
+  const read = await readTransport(req, res, route);
+  return read === null ? null : readTarget(res, read.body);
+}
+
+/** #534 the transport checks: the method (405), the exact raw path (403), JSON only (415), the bounded body (413, 400), `--no-github` (503). */
+async function readTransport(req: IncomingMessage, res: ServerResponse, { method, route, enabled }: { method: string; route: string; enabled: boolean }): Promise<{ body: unknown } | null> {
   if (req.method !== method) {
     req.resume();
     send(res, 405, { error: 'method-not-allowed' });
@@ -154,7 +160,11 @@ export async function readWriteRequest(req: IncomingMessage, res: ServerResponse
     send(res, 503, { error: 'off' });
     return null;
   }
-  const b = read.value;
+  return { body: read.value };
+}
+
+/** #534 the target checks: the body is an object, `repo` and `number` name an issue (400 `bad-param`); answers the key. */
+function readTarget(res: ServerResponse, b: unknown): WriteRequest | null {
   if (typeof b !== 'object' || b === null || Array.isArray(b)) {
     send(res, 400, { error: 'bad-param', param: 'edit' });
     return null;

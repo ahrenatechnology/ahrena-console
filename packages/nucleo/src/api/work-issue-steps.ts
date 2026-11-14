@@ -50,12 +50,52 @@ export type WorkIssueStepsRoute = (req: IncomingMessage, res: ServerResponse) =>
 export const stepsRouteMethods = (path: string): readonly string[] =>
   path === WORK_ISSUE_STEPS_ROUTE ? ['POST', 'PATCH', 'DELETE'] : path === WORK_ISSUE_STEPS_ORDER_ROUTE ? ['POST'] : [];
 
+type Fail = { ok: false; param: string };
+
 const badParam = (res: ServerResponse, param: string) => send(res, 400, { error: 'bad-param', param });
+const isBody = (v: unknown): v is string => typeof v === 'string' && v.length <= MAX_TEXT;
+const isSeenAt = (v: unknown): v is string => typeof v === 'string' && v.length <= 40 && !Number.isNaN(Date.parse(v));
+
+/** #534 the body of a move: the step and the sub-issue it goes behind (`null`: the top), never behind itself. */
+function parseStepMove(b: Record<string, unknown>): { ok: true; step: string; after: string | null } | Fail {
+  const { step, after } = b;
+  if (!isIssueKey(step)) return { ok: false, param: 'step' };
+  if (after !== null && (!isIssueKey(after) || after.toLowerCase() === step.toLowerCase())) return { ok: false, param: 'after' };
+  return { ok: true, step, after };
+}
+
+/** #534 the body of an add: a title, and a text that defaults to empty. */
+function parseStepAdd(b: Record<string, unknown>): { ok: true; step: { title: string; body: string } } | Fail {
+  if (!isText(b.title, MAX_TITLE)) return { ok: false, param: 'title' };
+  if ('body' in b && !isBody(b.body)) return { ok: false, param: 'body' };
+  return { ok: true, step: { title: b.title, body: typeof b.body === 'string' ? b.body : '' } };
+}
+
+/** #534 the body of a remove: the step. */
+function parseStepKey(b: Record<string, unknown>): { ok: true; step: string } | Fail {
+  return isIssueKey(b.step) ? { ok: true, step: b.step } : { ok: false, param: 'step' };
+}
+
+/** #534 the body of an edit: the step, at least one of title and body, and the version the /ui read. */
+function parseStepEdit(b: Record<string, unknown>): { ok: true; step: string; edit: { title?: string; body?: string }; seenAt: string } | Fail {
+  if (!isIssueKey(b.step)) return { ok: false, param: 'step' };
+  const edit: { title?: string; body?: string } = {};
+  if ('title' in b) {
+    if (!isText(b.title, MAX_TITLE)) return { ok: false, param: 'title' };
+    edit.title = b.title;
+  }
+  if ('body' in b) {
+    if (!isBody(b.body)) return { ok: false, param: 'body' };
+    edit.body = b.body;
+  }
+  if (edit.title === undefined && edit.body === undefined) return { ok: false, param: 'edit' };
+  if (!isSeenAt(b.updatedAt)) return { ok: false, param: 'updatedAt' };
+  return { ok: true, step: b.step, edit, seenAt: b.updatedAt };
+}
 
 export function createWorkIssueStepsRoute({ service }: WorkIssueStepsRouteOptions): WorkIssueStepsRoute {
   return async function workIssueStepsRoute(req, res) {
     const path = (req.url ?? '').split('?')[0]!;
-    const order = path === WORK_ISSUE_STEPS_ORDER_ROUTE;
     const method = req.method ?? '';
     if (!stepsRouteMethods(path).includes(method)) {
       req.resume();
@@ -65,32 +105,20 @@ export function createWorkIssueStepsRoute({ service }: WorkIssueStepsRouteOption
     if (!request || !service) return;
     const { body: b, key } = request;
     try {
-      if (order) {
-        const { step, after } = b;
-        if (!isIssueKey(step)) return badParam(res, 'step');
-        if (after !== null && (!isIssueKey(after) || after.toLowerCase() === step.toLowerCase())) return badParam(res, 'after');
-        return send(res, 200, await service.moveStep(key, step, after));
+      if (path === WORK_ISSUE_STEPS_ORDER_ROUTE) {
+        const p = parseStepMove(b);
+        return p.ok ? send(res, 200, await service.moveStep(key, p.step, p.after)) : badParam(res, p.param);
       }
       if (method === 'POST') {
-        if (!isText(b.title, MAX_TITLE)) return badParam(res, 'title');
-        if ('body' in b && (typeof b.body !== 'string' || b.body.length > MAX_TEXT)) return badParam(res, 'body');
-        return send(res, 200, await service.addStep(key, { title: b.title, body: typeof b.body === 'string' ? b.body : '' }));
+        const p = parseStepAdd(b);
+        return p.ok ? send(res, 200, await service.addStep(key, p.step)) : badParam(res, p.param);
       }
-      if (!isIssueKey(b.step)) return badParam(res, 'step');
-      if (method === 'DELETE') return send(res, 200, await service.removeStep(key, b.step));
-      const edit: { title?: string; body?: string } = {};
-      if ('title' in b) {
-        if (!isText(b.title, MAX_TITLE)) return badParam(res, 'title');
-        edit.title = b.title;
+      if (method === 'DELETE') {
+        const p = parseStepKey(b);
+        return p.ok ? send(res, 200, await service.removeStep(key, p.step)) : badParam(res, p.param);
       }
-      if ('body' in b) {
-        if (typeof b.body !== 'string' || b.body.length > MAX_TEXT) return badParam(res, 'body');
-        edit.body = b.body;
-      }
-      if (edit.title === undefined && edit.body === undefined) return badParam(res, 'edit');
-      const seenAt = b.updatedAt;
-      if (typeof seenAt !== 'string' || seenAt.length > 40 || Number.isNaN(Date.parse(seenAt))) return badParam(res, 'updatedAt');
-      return send(res, 200, await service.editStep(key, b.step, edit, seenAt));
+      const p = parseStepEdit(b);
+      return p.ok ? send(res, 200, await service.editStep(key, p.step, p.edit, p.seenAt)) : badParam(res, p.param);
     } catch (err) {
       sendWriteFailure(res, err);
     }
