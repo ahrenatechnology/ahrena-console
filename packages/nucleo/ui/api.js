@@ -13,7 +13,7 @@
 // The write (`write(route, body)`) lives here too, with the same rules and a transport swappable
 // with `useWriter(...)`: POST with JSON (or, with `{ method: 'DELETE' }`, a DELETE without a body; `{ method: 'PATCH' }` sends
 // JSON as POST does, and a DELETE that needs its JSON body says `{ jsonBody: true }`), only `/api/`, only the local core.
-// A failure becomes a `WriteError`.
+// A failure becomes a `WriteError` (issue 535).
 
 export class ReadError extends Error {
   constructor(message, { status = 0, route = null, retryIn = null, body = null } = {}) {

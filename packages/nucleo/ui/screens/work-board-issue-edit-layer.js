@@ -76,7 +76,7 @@ const asList = (nodes) => [...nodes];
 
 /**
  * The failure the state understands, from what the writer threw. A rejected fetch (status 0), a timeout and a 5xx that carries no
- * error code of the core's are an unknown outcome: `github-unavailable`.
+ * error code of the core's are an unknown outcome: `github-unavailable` (issue 535).
  */
 function failureOf(err, timedOut) {
   const body = err?.body && typeof err.body === 'object' ? err.body : {};
@@ -98,16 +98,16 @@ export function createEditLayer({ ctx, area, redraw, choices, onSaved = null, on
   let rev = 0;
   let sentRequest = null;
   let sentReload = null;
-  /** The error code each refusal came with, for the title of its band. */
+  /** The error code each refusal came with, for the title of its band. (issue 535) */
   const failures = new WeakMap();
   let focus = null;
   let captured = null;
-  /** The step count the card shows for an issue GitHub answered, until the board's own read says the same. */
+  /** The step count the card shows for an issue GitHub answered, until the board's own read says the same. (issue 535) */
   const counts = new Map();
 
   const keyOf = () => (e.open ? `${e.repo}#${e.number}` : null);
 
-  // ---------- the state and what it asks for ----------
+  // ---------- the state and what it asks for (issue 535) ----------
 
   function apply(next, intent = null) {
     if (next === e) return;
@@ -121,7 +121,7 @@ export function createEditLayer({ ctx, area, redraw, choices, onSaved = null, on
     redraw();
   }
 
-  /** What is typed lands in the state with no redraw: the field already shows it. */
+  /** What is typed lands in the state with no redraw: the field already shows it. (issue 535) */
   const type = (change) => (text) => {
     e = change(e, text);
   };
@@ -149,12 +149,12 @@ export function createEditLayer({ ctx, area, redraw, choices, onSaved = null, on
     ctx.signal?.addEventListener('abort', leave, { once: true });
     try {
       const answer = await ctx.write(request.route, request.body, { method: request.method, signal: controller.signal, jsonBody: true });
-      if (!alive) return;
+      if (!alive || e.request !== request) return;
       if (!isIssue(answer)) throw Object.assign(new Error('answer'), { status: 502, body: { error: 'written-unread' } });
       apply(written(e, answer, request.id, Date.now()));
       onSaved?.();
     } catch (err) {
-      if (!alive || (err?.name === 'AbortError' && !timedOut)) return;
+      if (!alive || e.request !== request || (err?.name === 'AbortError' && !timedOut)) return;
       const failure = failureOf(err, timedOut);
       const next = rejected(e, failure, request.id);
       if (next.refusal && next.refusal !== e.refusal) failures.set(next.refusal, failure.error ?? null);
@@ -168,23 +168,23 @@ export function createEditLayer({ ctx, area, redraw, choices, onSaved = null, on
   async function fetchAgain(reload) {
     try {
       const issue = await ctx.read(reload.url);
-      if (!alive) return;
+      if (!alive || e.reload !== reload) return;
       if (!isIssue(issue)) throw new Error('answer');
       apply(reloaded(e, issue, reload.id));
     } catch (err) {
-      if (!alive || err?.name === 'AbortError') return;
+      if (!alive || e.reload !== reload || err?.name === 'AbortError') return;
       apply(reloadFailed(e, reload.id));
     }
   }
 
-  // ---------- opening and leaving ----------
+  // ---------- opening and leaving (issue 535) ----------
 
-  /** Editar: the panel turns into the edit mode on the issue the read answered. */
+  /** Editar: the panel turns into the edit mode on the issue the read answered. (issue 535) */
   function open(issue) {
     apply(startEdit(issue), { kind: 'title' });
   }
 
-  /** Concluir: back to reading, with the issue as GitHub last answered. A write in flight or a conflict keeps the person here. */
+  /** Concluir: back to reading, with the issue as GitHub last answered. A write in flight or a conflict keeps the person here. (issue 535) */
   function finish() {
     const next = finishEdit(e);
     if (next === e) return;
@@ -195,7 +195,7 @@ export function createEditLayer({ ctx, area, redraw, choices, onSaved = null, on
     onFinished?.(issue);
   }
 
-  /** The panel closed or went to another issue: the edit is forgotten, nothing is written. */
+  /** The panel closed or went to another issue: the edit is forgotten, nothing is written. (issue 535) */
   function close() {
     if (!e.open) return;
     e = initialEditState();
@@ -206,7 +206,7 @@ export function createEditLayer({ ctx, area, redraw, choices, onSaved = null, on
 
   const isOpen = (key) => e.open && keyOf() === key;
 
-  // ---------- the clipboard ----------
+  // ---------- the clipboard (issue 535) ----------
 
   async function copy() {
     const text = textToCopy(e);
@@ -225,7 +225,7 @@ export function createEditLayer({ ctx, area, redraw, choices, onSaved = null, on
     button.replaceChildren(icon(said === COPIED ? 'done' : 'error'), said);
   }
 
-  // ---------- what the details can be set to ----------
+  // ---------- what the details can be set to (issue 535) ----------
 
   function details() {
     const { cards = [], options = {} } = choices();
@@ -247,7 +247,7 @@ export function createEditLayer({ ctx, area, redraw, choices, onSaved = null, on
     };
   }
 
-  // ---------- the panel ----------
+  // ---------- the panel (issue 535) ----------
 
   const SUBJECTS = { title: 'do título', step: 'do passo' };
 
@@ -319,12 +319,12 @@ export function createEditLayer({ ctx, area, redraw, choices, onSaved = null, on
     });
   }
 
-  // ---------- the focus, which a redraw would otherwise lose ----------
+  // ---------- the focus, which a redraw would otherwise lose (issue 535) ----------
 
   const panelNode = () => area.querySelector('aside.wb-edit-panel');
   const withLabel = (root, name) => asList(root.querySelectorAll('[aria-label]')).find((n) => n.getAttribute('aria-label') === name) ?? null;
 
-  /** Before a draw: what the person is on inside the edit panel (the draw is about to replace it). */
+  /** Before a draw: what the person is on inside the edit panel (the draw is about to replace it). (issue 535) */
   function capture() {
     const active = globalThis.document?.activeElement;
     const root = panelNode();
@@ -364,7 +364,7 @@ export function createEditLayer({ ctx, area, redraw, choices, onSaved = null, on
     }
   }
 
-  /** The control the person was on, or the one that took its place; never the page. */
+  /** The control the person was on, or the one that took its place; never the page. (issue 535) */
   function restore(root) {
     const c = captured;
     if (!c) return null;
@@ -381,7 +381,7 @@ export function createEditLayer({ ctx, area, redraw, choices, onSaved = null, on
     return root;
   }
 
-  /** After a draw: the intent of the last action, else the control the person was on. `true` when the focus was placed here. */
+  /** After a draw: the intent of the last action, else the control the person was on. `true` when the focus was placed here. (issue 535) */
   function afterDraw() {
     const intent = focus;
     focus = null;
@@ -398,7 +398,7 @@ export function createEditLayer({ ctx, area, redraw, choices, onSaved = null, on
     return Boolean(found);
   }
 
-  /** What the board's own read says about each issue: an override the board agrees with is not needed any more. */
+  /** What the board's own read says about each issue: an override the board agrees with is not needed any more. (issue 535) */
   function learn(cards) {
     for (const c of cards) {
       if (!counts.has(c.key)) continue;
@@ -406,7 +406,7 @@ export function createEditLayer({ ctx, area, redraw, choices, onSaved = null, on
     }
   }
 
-  /** The step count GitHub last answered for the issue, or `null` when the edit mode has not heard of it. */
+  /** The step count GitHub last answered for the issue, or `null` when the edit mode has not heard of it. (issue 535) */
   const countFor = (key) => (counts.has(key) ? counts.get(key) : null);
 
   const signature = () => [rev, [...counts]];

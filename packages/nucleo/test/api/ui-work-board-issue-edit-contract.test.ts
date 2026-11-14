@@ -120,8 +120,10 @@ class Core {
   reads: string[] = [];
   writes: Write[] = [];
   boardReadCount = 0;
-  /** What the next writes answer instead of applying themselves (a queue; an entry may throw, or wait for the abort). */
+  /** What the next writes answer instead of applying themselves (a queue; an entry may throw, or wait for the abort) (issue 535). */
   scripted: ((init: RequestInit) => Response | Promise<Response>)[] = [];
+  /** What the next ?refresh=1 reads answer instead of reading (a queue; an entry may wait for the test to release it) (issue 535). */
+  refreshScripted: (() => Response | Promise<Response>)[] = [];
 
   board() {
     return {
@@ -215,12 +217,14 @@ class Core {
     const method = init.method ?? 'GET';
     if (url.pathname === '/api/work' && method === 'GET') {
       this.boardReadCount += 1;
-      // the board shows the plan GitHub holds: its card carries the step count of the issue
+      // the board shows the plan GitHub holds: its card carries the step count of the issue (issue 535)
       const n = this.gh.plan.steps.length;
       return answer(200, { ...this.board(), columns: this.board().columns.map((c) => ({ ...c, cards: c.cards.map((k: Obj) => (k.number === 506 ? { ...k, plan: n > 0 ? { steps: n } : null } : k)) })) });
     }
     if (url.pathname === '/api/work/issue' && method === 'GET') {
       this.reads.push(url.search);
+      const held = url.search.includes('refresh=1') ? this.refreshScripted.shift() : undefined;
+      if (held) return held();
       const n = Number(url.searchParams.get('number'));
       return answer(200, clone({ ...(n === this.gh.number ? this.gh : freshIssue(n)), fetchedAt: Date.now() }));
     }
@@ -287,7 +291,7 @@ async function open(core: Core): Promise<Screen> {
   return screen;
 }
 
-// ---------- reading the screen ----------
+// ---------- reading the screen (issue 535) ----------
 
 const articleOf = (s: Screen, n: number) => {
   const found = s.area.querySelector(`article[data-key="${KEY(n)}"]`);
@@ -956,6 +960,87 @@ describe('issue 535 closing the panel ends the edit; another card does not inher
     await until(() => editPanel(s) === null, 'the edit is gone');
     await until(() => readPanel(s) !== null, 'the other panel');
     assert.equal(core.writes.length, 0);
+  });
+});
+
+describe('issue 535 REL-4 an answer that belongs to a closed session never settles the next one', () => {
+  test('issue 535 a title PATCH answered after close and Editar again does not settle the comment POST of the new session', async () => {
+    const core = new Core();
+    let releaseTitle: (r: Response) => void = () => {};
+    let failComment: (r: Response) => void = () => {};
+    core.scripted = [() => new Promise<Response>((r) => (releaseTitle = r)), () => new Promise<Response>((r) => (failComment = r))];
+    const s = await open(core);
+    let panel = await openEdit(s);
+    const title = named(panel, 'Título da issue');
+    typeInto(title, 'Título novo');
+    key(title, 'Enter');
+    await until(() => core.writes.length === 1, 'the PATCH is out');
+    press(need(editPanel(s), 'button[data-action="close"]'), 'Fechar');
+    panel = await openEdit(s);
+    typeInto(named(panel, 'Escreva um comentário (Markdown)…'), 'Meu comentário');
+    press(need(panel, 'button[data-action="comment"]'), 'Comentar');
+    await until(() => core.writes.length === 2, 'the comment POST is out');
+    releaseTitle(answer(200, { ...clone(core.gh), title: 'Título novo', updatedAt: 'T2' }));
+    await tick(60);
+    assert.equal(named(editPanel(s), 'Escreva um comentário (Markdown)…').value, 'Meu comentário', 'the comment text is not emptied by the old answer');
+    assert.equal(saved(s), false, 'no "gravado no GitHub" while the new POST is in flight');
+    assert.equal(need(editPanel(s), 'button[data-action="comment"]').getAttribute('aria-busy'), 'true', 'the comment is still in flight');
+    failComment(answer(502, { error: 'github-unavailable', reason: 'timeout' }));
+    await until(() => editPanel(s)!.querySelector('[data-section="comments"] .wb-edit-refusal') !== null, 'the band');
+    await until(() => core.refreshReads === 1, 'the issue is read again');
+    assert.equal(editPanel(s)!.querySelector('[data-action="retry"]'), null, 'a comment is never offered again');
+    await tick(60);
+    assert.equal(core.refreshReads, 1, 'a single reload');
+    assert.equal(core.writes.length, 2);
+  });
+
+  test('issue 535 a reload answered after close and Editar again does not settle the reload of the new session', async () => {
+    const core = new Core();
+    let releaseOld: (r: Response) => void = () => {};
+    let releaseNew: (r: Response) => void = () => {};
+    core.scripted = [() => answer(502, { error: 'github-unavailable', reason: 'timeout' }), () => answer(502, { error: 'github-unavailable', reason: 'timeout' })];
+    core.refreshScripted = [() => new Promise<Response>((r) => (releaseOld = r)), () => new Promise<Response>((r) => (releaseNew = r))];
+    const s = await open(core);
+    let panel = await openEdit(s);
+    typeInto(named(panel, 'Escreva um comentário (Markdown)…'), 'Primeiro');
+    press(need(panel, 'button[data-action="comment"]'), 'Comentar');
+    await until(() => core.refreshReads === 1, 'the first reload is out');
+    press(need(editPanel(s), 'button[data-action="close"]'), 'Fechar');
+    panel = await openEdit(s);
+    typeInto(named(panel, 'Escreva um comentário (Markdown)…'), 'Segundo');
+    press(need(panel, 'button[data-action="comment"]'), 'Comentar');
+    await until(() => core.refreshReads === 2, 'the second reload is out');
+    releaseOld(answer(200, { ...clone(core.gh), title: 'Resposta velha', fetchedAt: Date.now() }));
+    await tick(60);
+    assert.notEqual(named(editPanel(s), 'Título da issue').value, 'Resposta velha', 'the old reload answer is not taken');
+    assert.ok(editPanel(s)!.querySelector('[data-section="comments"] .wb-edit-refusal') !== null, 'the band of the new session stays');
+    assert.equal(named(editPanel(s), 'Escreva um comentário (Markdown)…').value, 'Segundo', 'the text is kept');
+    releaseNew(answer(200, { ...clone(core.gh), title: 'Resposta nova', fetchedAt: Date.now() }));
+    await until(() => named(editPanel(s), 'Título da issue').value === 'Resposta nova', 'the new answer is taken');
+  });
+
+  test('issue 535 a write answered after another card was opened does not settle the edit of that card', async () => {
+    const core = new Core();
+    let releaseTitle: (r: Response) => void = () => {};
+    core.scripted = [() => new Promise<Response>((r) => (releaseTitle = r)), () => new Promise<Response>(() => {})];
+    const s = await open(core);
+    let panel = await openEdit(s);
+    const title = named(panel, 'Título da issue');
+    typeInto(title, 'Título do 506');
+    key(title, 'Enter');
+    await until(() => core.writes.length === 1, 'the PATCH is out');
+    articleOf(s, 507).dispatchEvent({ type: 'click' });
+    await until(() => editPanel(s) === null && readPanel(s)?.querySelector('button[data-action="edit"]') != null, 'the other card is read');
+    press(need(readPanel(s), 'button[data-action="edit"]'), 'Editar');
+    panel = editPanel(s)!;
+    typeInto(named(panel, 'Escreva um comentário (Markdown)…'), 'Do 507');
+    press(need(panel, 'button[data-action="comment"]'), 'Comentar');
+    await until(() => core.writes.length === 2, 'the comment POST is out');
+    releaseTitle(answer(200, { ...clone(core.gh), title: 'Título do 506', updatedAt: 'T2' }));
+    await tick(60);
+    assert.equal(named(editPanel(s), 'Escreva um comentário (Markdown)…').value, 'Do 507', 'the comment text is not emptied by the other card answer');
+    assert.equal(saved(s), false);
+    assert.equal(need(editPanel(s), 'button[data-action="comment"]').getAttribute('aria-busy'), 'true');
   });
 });
 
