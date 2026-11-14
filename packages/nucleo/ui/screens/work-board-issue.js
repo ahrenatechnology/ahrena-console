@@ -125,7 +125,7 @@ function createIssueView({ area, state, apply, cardFor, retry, confirm, run, onA
     const shown = shownCard(card);
     const parts = keyed(partsOf(shown), card.key);
     const node = workCard(shown, { ...options, parts, onOpen: open, selected: state().panel.open && state().panel.key === card.key });
-    const pop = hostedInPanel(card) ? null : (popupFor(shown) ?? run?.popup(shown, 'card', panelHolds(card)) ?? null);
+    const pop = (hostedInPanel(card) ? null : popupFor(shown)) ?? run?.popup(shown, 'card', panelHolds(card)) ?? null;
     return pop ? el('div', { class: 'wb-anchor' }, node, pop) : node;
   }
 
@@ -142,7 +142,7 @@ function createIssueView({ area, state, apply, cardFor, retry, confirm, run, onA
     else {
       const parts = keyed(partsOf(card), `panel:${key}`);
       node = issuePanel({ card, issue: { ...issue, stale: stale || issue.stale }, now, parts, onRetry: retrying ? null : retry, onClose: close });
-      const pop = hostedInPanel(card) ? popupFor(card) : (run?.popup(card, 'panel', true) ?? null);
+      const pop = (hostedInPanel(card) ? popupFor(card) : null) ?? run?.popup(card, 'panel', true) ?? null;
       if (pop) (node.querySelector('.wb-panel-acts') ?? node).append(pop);
     }
     node.setAttribute('tabindex', '-1');
