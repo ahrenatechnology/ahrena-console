@@ -39,6 +39,7 @@ export function createQueueLayer({ ctx, area, cards, queue, target = () => DEFAU
   let refused = null;
   let deferred = false;
   let focus = null;
+  let shown = null;
 
   const available = () => queue()?.available !== false;
   const find = (key) => cards().find((c) => c.key === key) ?? null;
@@ -52,12 +53,14 @@ export function createQueueLayer({ ctx, area, cards, queue, target = () => DEFAU
   }
 
   async function settle(card, work) {
+    // One request at a time: a second card computes its place from the board the first has not changed yet.
+    if (Object.keys(s.busy).length) return;
     apply(setBusy(clearNote(s, card.key), card.key, true));
     try {
       await work();
     } catch (e) {
       if (!alive || e?.name === 'AbortError') return;
-      apply(setNote(s, find(card.key) ?? card, queueReason(e)));
+      apply(setNote(s, find(card.key) ?? card, queueReason(e), e?.columns));
     } finally {
       if (alive) {
         await reread();
@@ -78,7 +81,8 @@ export function createQueueLayer({ ctx, area, cards, queue, target = () => DEFAU
           await post(card, ORDER_ROUTE, { after: plan.after });
         } catch (e) {
           if (e?.name === 'AbortError') throw e;
-          throw new Error(`Entrou na fila, mas não deu para mudar a posição: ${queueReason(e)}`);
+          // The card is in Na fila now: the note belongs to that column, so the next read does not drop it.
+          throw Object.assign(new Error(`Entrou na fila, mas não deu para mudar a posição: ${queueReason(e)}`), { columns: ['planning', 'queued'] });
         }
       }
     });
@@ -147,6 +151,7 @@ export function createQueueLayer({ ctx, area, cards, queue, target = () => DEFAU
       if (ev.target !== node) return;
       drag = { key: card.key };
       refused = null;
+      shown = null;
       if (ev.dataTransfer) {
         ev.dataTransfer.effectAllowed = 'move';
         ev.dataTransfer.setData?.('text/plain', card.key);
@@ -165,11 +170,10 @@ export function createQueueLayer({ ctx, area, cards, queue, target = () => DEFAU
       node.classList.remove('wb-drag');
       node.closest?.('.wb-board')?.classList.remove('wb-dragging');
       clearMarks(node.closest?.('.wb-board'));
-      if (lost) apply(setNote(s, find(lost.key) ?? card, lost.message));
-      if (deferred) {
-        deferred = false;
-        redraw();
-      }
+      if (lost) s = setNote(s, find(lost.key) ?? card, lost.message);
+      // A board read that came during the drag was not drawn: draw it now, also when the drag was cancelled.
+      deferred = false;
+      redraw();
     });
     if (queued) {
       node.addEventListener('keydown', (ev) => {
@@ -209,6 +213,15 @@ export function createQueueLayer({ ctx, area, cards, queue, target = () => DEFAU
     return key && key !== drag?.key && items.includes(under) ? key : null;
   }
 
+  // Safari sends no relatedTarget on drag events: with the pointer's position the column is left only when it is outside the box.
+  function stillInside(col, ev) {
+    if (typeof ev.clientX === 'number' && typeof ev.clientY === 'number' && typeof col.getBoundingClientRect === 'function') {
+      const r = col.getBoundingClientRect();
+      return ev.clientX >= r.left && ev.clientX <= r.right && ev.clientY >= r.top && ev.clientY <= r.bottom;
+    }
+    return col.contains(ev.relatedTarget);
+  }
+
   function planAt(col, ev) {
     const card = drag ? find(drag.key) : null;
     if (!card) return { kind: 'none' };
@@ -243,14 +256,24 @@ export function createQueueLayer({ ctx, area, cards, queue, target = () => DEFAU
       col.addEventListener('dragover', (ev) => {
         if (!drag) return;
         const plan = planAt(col, ev);
-        if (plan.kind === 'none') return;
+        if (plan.kind === 'none') {
+          refused = null;
+          clearMarks(col.parentNode);
+          shown = null;
+          return;
+        }
         ev.preventDefault?.();
         if (ev.dataTransfer) ev.dataTransfer.dropEffect = plan.kind === 'refuse' ? 'none' : 'move';
         refused = plan.kind === 'refuse' ? { key: drag.key, message: plan.message } : null;
+        const sig = `${col.getAttribute('data-column')}:${plan.kind}:${plan.index ?? ''}`;
+        if (sig === shown) return;
+        shown = sig;
         mark(col, plan, ev);
       });
       col.addEventListener('dragleave', (ev) => {
-        if (!drag || col.contains(ev.relatedTarget)) return;
+        if (!drag || stillInside(col, ev)) return;
+        refused = null;
+        shown = null;
         clearMarks(col.parentNode);
       });
       col.addEventListener('drop', (ev) => {
@@ -259,6 +282,7 @@ export function createQueueLayer({ ctx, area, cards, queue, target = () => DEFAU
         const plan = planAt(col, ev);
         const key = drag.key;
         refused = null;
+        shown = null;
         clearMarks(col.parentNode);
         const card = find(key);
         if (card) run(card, plan);
@@ -284,6 +308,7 @@ export function createQueueLayer({ ctx, area, cards, queue, target = () => DEFAU
   const dragging = () => drag !== null;
   const stop = () => {
     alive = false;
+    drag = null;
   };
 
   return { parts, decorate, wire, learn, afterDraw, signature, dragging, stop };

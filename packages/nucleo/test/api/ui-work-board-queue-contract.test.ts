@@ -68,6 +68,7 @@ class Core {
   calls: string[] = [];
   bodies: Obj[] = [];
   refuse: { status: number; body: Obj } | null = null;
+  refuseOrder: { status: number; body: Obj } | null = null;
   retryAnswer: () => Response = () => answer(200, { ok: true, resumed: true });
 
   board() {
@@ -101,6 +102,7 @@ class Core {
     const body = init.body ? JSON.parse(String(init.body)) : {};
     if (url.pathname.startsWith('/api/work/queue')) this.bodies.push({ route: `${method} ${url.pathname}`, ...body, headers: init.headers });
     if (url.pathname === '/api/work/queue/retry') return this.retryAnswer();
+    if (url.pathname === '/api/work/queue/order' && this.refuseOrder) return answer(this.refuseOrder.status, this.refuseOrder.body);
     if (url.pathname.startsWith('/api/work/queue')) {
       if (this.refuse) return answer(this.refuse.status, this.refuse.body);
       const n = body.number as number;
@@ -327,6 +329,33 @@ describe('#477/AC-2 dragging between Planejamento and Na fila and inside Na fila
     assert.equal(core.bodies[1]!.after, KEY(1));
   });
 
+  test('#477/AC-2 a card that entered the queue but whose place the core refused keeps its note after the board is read again', async () => {
+    const core = new Core();
+    core.cards = [planned(1), planned(2)];
+    core.queued = [2];
+    core.refuseOrder = { status: 409, body: { error: 'A fila mudou.' } };
+    const s = await open(core);
+    await dragStart(s, 1);
+    drop(s, 'queued', 2);
+    dragEnd(s, 1);
+    await until(() => inColumn(s, 'queued', 1), 'the card is in Na fila');
+    await tick(30);
+    assert.match(texto(articleOf(s, 1)), /Entrou na fila, mas não deu para mudar a posição: A fila mudou\./);
+  });
+
+  test('#477/AC-2 a drag cancelled outside any column draws the board again and leaves no note', async () => {
+    const core = new Core();
+    core.cards = [planned(1)];
+    const s = await open(core);
+    await dragStart(s, 1);
+    over(s, 'done');
+    columnOf(s, 'done').dispatchEvent({ type: 'dragleave' });
+    dragEnd(s, 1);
+    await tick(10);
+    assert.equal(s.area.querySelector('.wb-note, [data-field="queue-note"]'), null);
+    assert.deepEqual(writes(core), []);
+  });
+
   test('#477/AC-2 a drop the core refuses leaves the card where it was, with the core\'s text in red', async () => {
     const core = new Core();
     core.cards = [planned(1)];
@@ -447,8 +476,8 @@ describe('#477/AC-7 the page-level accessibility of the queue', () => {
     const s = await open(core);
     assert.equal(columnOf(s, 'queued').querySelector('.wb-limit')!.getAttribute('role'), 'status');
     assert.equal(columnOf(s, 'running').querySelector('.wb-lock')!.getAttribute('aria-hidden'), 'true');
-    assert.equal(buttonIn(articleOf(s, 1), 'enqueue')!.getAttribute('aria-label'), 'Pôr a #1 na fila');
-    assert.equal(buttonIn(articleOf(s, 2), 'dequeue')!.getAttribute('aria-label'), 'Tirar a #2 da fila');
+    assert.equal(buttonIn(articleOf(s, 1), 'enqueue')!.getAttribute('aria-label'), 'Pôr na fila (#1)');
+    assert.equal(buttonIn(articleOf(s, 2), 'dequeue')!.getAttribute('aria-label'), 'Tirar da fila (#2)');
     assert.match(texto(articleOf(s, 2)), /1º na fila/);
     assert.equal(articleOf(s, 2).getAttribute('aria-keyshortcuts'), 'ArrowUp ArrowDown');
     assert.equal(articleOf(s, 2).getAttribute('tabindex'), '0');

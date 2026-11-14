@@ -500,7 +500,7 @@ export function boardColumns({
         srOnly(`: ${countLabel(count)}`),
       ),
       el('p', { class: 'wb-criterion' }, c.criterion),
-      mode === 'cards' && c.id === 'queued' && queueAvailable ? queueLimit(queue) : null,
+      mode === 'cards' && !parents && c.id === 'queued' && queueAvailable ? queueLimit(queue) : null,
       windowNote,
       body,
       hidden.length ? doneMore(hidden, doneWindowDays) : null,

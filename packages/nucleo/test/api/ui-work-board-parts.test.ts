@@ -37,7 +37,7 @@ import {
 
 instalarDomFalso();
 
-const FILES = ['screens/work-board-parts.js', 'work-board.css'];
+const FILES = ['screens/work-board-parts.js', 'screens/work-board-queue.js', 'screens/work-board-queue-state.js', 'screens/work-board-queue-layer.js', 'work-board.css'];
 const REPO = 'ahrenatechnology/ahrena-console';
 const NOW = new Date(2026, 10, 13, 23, 12, 40).getTime();
 const ago = (ms: number) => new Date(NOW - ms).toISOString();

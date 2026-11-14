@@ -86,9 +86,9 @@ export function initialQueueState() {
 
 const without = (map, key) => Object.fromEntries(Object.entries(map).filter(([k]) => k !== key));
 
-/** The red note of a card (a refusal, a failed drop or a failed retry), with the column it was given in. */
-export function setNote(state, card, text) {
-  return { ...state, notes: { ...state.notes, [card.key]: { text, column: card.column } } };
+/** The red note of a card (a refusal, a failed drop or a failed retry), with the columns it stays through (the one it was given in, by default). */
+export function setNote(state, card, text, columns = [card.column]) {
+  return { ...state, notes: { ...state.notes, [card.key]: { text, columns } } };
 }
 
 export const clearNote = (state, key) => (state.notes[key] ? { ...state, notes: without(state.notes, key) } : state);
@@ -100,7 +100,7 @@ export const setRetrying = (state, retrying) => (state.retrying === retrying ? s
 
 /** After a board read: a note stays only on a card that is still in the column it was given in (a moved card has settled). */
 export function reconcileNotes(state, cards) {
-  const stale = Object.entries(state.notes).filter(([key, n]) => cards.find((c) => c.key === key)?.column !== n.column);
+  const stale = Object.entries(state.notes).filter(([key, n]) => !n.columns.includes(cards.find((c) => c.key === key)?.column));
   return stale.reduce((s, [key]) => clearNote(s, key), state);
 }
 
