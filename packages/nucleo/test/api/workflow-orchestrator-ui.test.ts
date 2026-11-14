@@ -1,7 +1,7 @@
-// End-to-end skeleton of the orchestrator as parent of the per-PR loops (issue 587, parent issue 509); wireframe 587-1 to 587-5
-// in docs/wireframes/index.html, approved by the design owner on 2026-11-14. It drives `buildPrLoop` (the data, issue 588) and
-// `loopPanel` (the screen, issue 589) through the fake DOM and asserts what the person reads. Every scenario is a `todo`
-// until issue 589 turns it green; the assertions are the finished behaviour, not the placeholders of the wireframe.
+// End-to-end skeleton of the orchestrator as parent of the per-PR loops (#587, parent #509); wireframe 587-1 to 587-5
+// in docs/wireframes/index.html, approved by the design owner on 2026-11-14. It drives `buildPrLoop` (the data, #588) and
+// `loopPanel` (the screen, #589) through the fake DOM and asserts what the person reads. Every scenario is a `todo`
+// until #589 turns it green; the assertions are the finished behaviour, not the placeholders of the wireframe.
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import { buildPrLoop } from '../../src/api/workflow-loop.ts';
@@ -28,9 +28,9 @@ const said = (a: Agent, summary: string, minute: number): SessionEvent =>
   event({ id: `m-${a.id}-${minute}`, agentId: a.id, type: 'AssistantMessage', toolName: null, summary, createdAt: at(minute) });
 
 const ATHENA_TYPE = 'ahrena-engineering-development:athena';
-// The orchestrator's own brief names no PR and no issue, so today it lands in the "no PR" group.
+// The orchestrator's own brief names no PR and no issue, so today it lands in the "no PR" group (#509).
 const athena = sub('athena', ATHENA_TYPE, 1, null, 'Run the layers of the story', main.id);
-// Layer 1: an issue, no PR yet. Layer 2: PR 710, second round (the most recent one).
+// Layer 1: an issue, no PR yet. Layer 2: PR 710, second round (the most recent one) (#587).
 const apollo702 = sub('apollo702', 'ahrena-engineering-backend:apollo', 2, null, 'Build layer 1 for issue #702', athena.id);
 const dev710 = sub('dev710', 'ahrena-engineering-frontend:iris', 5, 9, 'Build layer 2 for PR #710', athena.id);
 const argos1 = sub('argos1', 'ahrena-engineering-code-review:argos', 10, 14, 'Review PR #710', athena.id);
@@ -53,7 +53,7 @@ describe('the orchestrator as parent of the per-PR loops (issue 509)', () => {
     assert.match(text, /abriu 2 camadas · 1 PR/);
     assert.ok(at1(text, 'Athena') < at1(text, 'PR #710'));
     assert.ok(at1(text, 'Athena') < at1(text, 'Issue #702'));
-    assert.doesNotMatch(text, /Sem PR/, 'the orchestrator takes no "no PR" group of its own');
+    assert.doesNotMatch(text, /Sem PR(?! ainda)/, 'the orchestrator takes no "no PR" group of its own');
   });
 
   test('the layers are listed most recent first', TODO, () => {
