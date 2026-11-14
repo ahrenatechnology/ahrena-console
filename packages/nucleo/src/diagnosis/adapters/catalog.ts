@@ -7,7 +7,7 @@
  *   folder runs with that folder as its working directory (a path the núcleo found itself) and `.` as
  *   the only path argument, so no path is ever an argument.
  * - Nothing writes, kills or deletes: `ps`, `sysctl` (read), `df`, `du`, `docker system df`,
- *   `journalctl --disk-usage`, and `git status` / `git rev-list` (the runner sets `GIT_OPTIONAL_LOCKS=0`).
+ *   `journalctl --disk-usage`, and `git status` / `git rev-list` (the runner sets `GIT_OPTIONAL_LOCKS=0`, and `git status` runs with `core.fsmonitor=false` so a hook set in the repository's own config never runs; `rev-list` reads no index and runs no hook).
  */
 
 export interface CatalogEntry {
@@ -16,6 +16,8 @@ export interface CatalogEntry {
   timeoutMs: number;
   /** The most bytes of stdout read; more than that is a failure, never a silent cut (#565). */
   maxBytes: number;
+  /** `du` exits 1 on a folder it cannot read and still prints what it measured; that output is an answer in part, not a failure (#565). Every entry without this flag fails on a non-zero exit. */
+  acceptOutputOnFailure?: true;
 }
 
 const MB = 1024 * 1024;
@@ -27,12 +29,12 @@ export const CATALOG = {
   /** The core's own list of mounts: the only source of the mount a folder scan may use (#565). */
   df: { command: 'df', args: ['-P', '-k'], timeoutMs: 5_000, maxBytes: MB },
   /** One top-level folder of a volume, staying on its file system: a whole-volume `du -d 2` never finished on a Mac (#565). */
-  'du-folder': { command: 'du', args: ['-x', '-s', '-k', '.'], timeoutMs: 6_000, maxBytes: 64 * 1024 },
+  'du-folder': { command: 'du', args: ['-x', '-s', '-k', '.'], timeoutMs: 6_000, maxBytes: 64 * 1024, acceptOutputOnFailure: true },
   /** The total of the working directory (#565). */
-  'du-size': { command: 'du', args: ['-s', '-k', '.'], timeoutMs: 10_000, maxBytes: 64 * 1024 },
+  'du-size': { command: 'du', args: ['-s', '-k', '.'], timeoutMs: 10_000, maxBytes: 64 * 1024, acceptOutputOnFailure: true },
   'docker-df': { command: 'docker', args: ['system', 'df', '--format', '{{json .}}'], timeoutMs: 10_000, maxBytes: 256 * 1024 },
   journal: { command: 'journalctl', args: ['--disk-usage'], timeoutMs: 5_000, maxBytes: 64 * 1024 },
-  'git-status': { command: 'git', args: ['status', '--porcelain'], timeoutMs: 8_000, maxBytes: 64 * 1024 },
+  'git-status': { command: 'git', args: ['-c', 'core.fsmonitor=false', 'status', '--porcelain'], timeoutMs: 8_000, maxBytes: 64 * 1024 },
   /** Commits that no remote branch has: what would be lost with the worktree (#565). */
   'git-unpushed': { command: 'git', args: ['rev-list', '--count', 'HEAD', '--not', '--remotes'], timeoutMs: 8_000, maxBytes: 4 * 1024 },
 } as const satisfies Record<string, CatalogEntry>;

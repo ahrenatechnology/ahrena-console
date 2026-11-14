@@ -17,7 +17,7 @@ import type { CollectContext, CollectResult } from '../diagnose.ts';
 import type { CacheActionId, CacheItem, FolderItem, SectionId, WorktreeItem } from '../model.ts';
 import { isRealVolume, parseDfP } from '../../telemetry/adapters/common.ts';
 import type { FileReader } from '../../telemetry/ports.ts';
-import { CATALOG, type CatalogId } from './catalog.ts';
+import { CATALOG, type CatalogEntry, type CatalogId } from './catalog.ts';
 import { parseDockerDf, parseDuSize, parseJournalUsage, parsePsProcesses } from './parsers.ts';
 
 export interface RunOptions {
@@ -25,8 +25,10 @@ export interface RunOptions {
   maxBytes: number;
   cwd?: string;
   signal: AbortSignal;
+  /* Set from the catalog entry: a non-zero exit that printed output is then an answer marked `incomplete`, otherwise a failure (#565). */
+  acceptOutputOnFailure?: true;
 }
-export type RunResult = { ok: true; stdout: string } | { ok: false; why: 'missing' | 'timeout' | 'aborted' | 'too-large' | 'failed' };
+export type RunResult = { ok: true; stdout: string; incomplete?: true } | { ok: false; why: 'missing' | 'timeout' | 'aborted' | 'too-large' | 'failed' };
 /** Runs one executable with an argv list, no shell. */
 export type DiagnosisRunner = (command: string, args: readonly string[], options: RunOptions) => Promise<RunResult>;
 
@@ -81,6 +83,9 @@ async function mapLimit<T, R>(items: readonly T[], limit: number, task: (item: T
 /* A name read from disk or a tool's reason can carry a line break; one that reaches a log line forges another line, so control characters never enter it: C0, DEL, C1 (which holds U+0085, a line break to some readers), and U+2028 and U+2029 (#565). */
 export const stripControlCharacters = (text: string): string => text.replace(/[\x00-\x1f\x7f-\x9f\u2028\u2029]/g, '');
 
+/* What `exec` gives back: the output (`incomplete` when the tool exited with an error but printed it), or the section's unavailable answer. */
+type Executed = { stdout: string; incomplete?: true } | { unavailable: true; reason: string };
+
 const unavailable = (reason: string): { unavailable: true; reason: string } => ({ unavailable: true, reason });
 
 export abstract class DiagnosisCollector {
@@ -125,10 +130,16 @@ export abstract class DiagnosisCollector {
   }
 
   /* Runs a catalog entry; the failure is already a section's `unavailable` answer (#565). */
-  protected async exec(id: CatalogId, signal: AbortSignal, cwd?: string): Promise<{ stdout: string } | { unavailable: true; reason: string }> {
-    const entry = CATALOG[id];
-    const r = await this.deps.run(entry.command, entry.args, { timeoutMs: entry.timeoutMs, maxBytes: entry.maxBytes, signal, ...(cwd ? { cwd } : {}) });
-    if (r.ok) return { stdout: r.stdout };
+  protected async exec(id: CatalogId, signal: AbortSignal, cwd?: string): Promise<Executed> {
+    const entry: CatalogEntry = CATALOG[id];
+    const r = await this.deps.run(entry.command, entry.args, {
+      timeoutMs: entry.timeoutMs,
+      maxBytes: entry.maxBytes,
+      signal,
+      ...(cwd ? { cwd } : {}),
+      ...(entry.acceptOutputOnFailure ? { acceptOutputOnFailure: true as const } : {}),
+    });
+    if (r.ok) return r.incomplete ? { stdout: r.stdout, incomplete: true } : { stdout: r.stdout };
     const reasons = { missing: 'not found', timeout: 'timed out', aborted: 'aborted', 'too-large': 'output too large', failed: 'did not answer' } as const;
     return unavailable(`${entry.command} ${reasons[r.why]}`);
   }
@@ -168,17 +179,23 @@ export abstract class DiagnosisCollector {
   /* The folders directly under `parent`, each measured with its own `du` run in it; one that does not finish is left out and logged, and `complete` is false (#565). */
   private async measureChildren(parent: string, mounts: ReadonlySet<string>, signal: AbortSignal): Promise<{ items: FolderItem[]; complete: boolean }> {
     const paths = (await this.deps.fs.listDirs(parent)).map((name) => join(parent, name)).filter((path) => !mounts.has(path));
+    let underCounted = 0;
     const measured = await mapLimit(paths, LARGEST_FOLDERS_CONCURRENCY, async (path): Promise<FolderItem | null> => {
       if (signal.aborted) return null;
       const r = await this.exec('du-folder', signal, path);
       const bytes = 'stdout' in r ? parseDuSize(r.stdout) : null;
       if (bytes === null) this.say(`diagnosis folder left out ${path}: ${'stdout' in r ? 'du output not understood' : r.reason}`);
+      /* A `du` that exited with an error measured only part of the folder: the size is kept and the section is marked partial (#565). */
+      if (bytes !== null && 'stdout' in r && r.incomplete) {
+        this.say(`diagnosis folder measured in part ${path}: du exited with an error`);
+        underCounted++;
+      }
       return bytes === null ? null : { path, bytes };
     });
     const items = measured.filter((m): m is FolderItem => m !== null);
     const skipped = paths.length - items.length;
     if (signal.aborted && skipped > 0) this.say(`diagnosis folder scan under ${parent} ran out of time, ${skipped} folders left out`);
-    return { items, complete: skipped === 0 };
+    return { items, complete: skipped === 0 && underCounted === 0 };
   }
 
   private async dockerDf(signal: AbortSignal): Promise<CollectResult<'docker-df'>> {
@@ -234,7 +251,12 @@ export abstract class DiagnosisCollector {
   }
 
   /* The item has a non-null size, so one whose size cannot be read is dropped from the list and logged, never shown as zero (#565). */
-  private sizeOrLog(path: string, size: { stdout: string } | { unavailable: true; reason: string }): number | null {
+  private sizeOrLog(path: string, size: Executed): number | null {
+    /* A size from a `du` that exited with an error is an undercount, and a size is shown whole or not at all (#565). */
+    if ('stdout' in size && size.incomplete) {
+      this.say(`diagnosis item dropped ${path}: du exited with an error`);
+      return null;
+    }
     const bytes = 'stdout' in size ? parseDuSize(size.stdout) : null;
     if (bytes === null) this.say(`diagnosis item dropped ${path}: ${'stdout' in size ? 'du output not understood' : size.reason}`);
     return bytes;
@@ -245,6 +267,8 @@ export abstract class DiagnosisCollector {
     const [size, status, unpushed] = await Promise.all([this.exec('du-size', signal, path), this.exec('git-status', signal, path), this.exec('git-unpushed', signal, path)]);
     const bytes = this.sizeOrLog(path, size);
     if (bytes === null) return null;
+    if (!('stdout' in status)) this.say(`diagnosis worktree git state unknown ${path}: ${status.reason}`);
+    if (!('stdout' in unpushed)) this.say(`diagnosis worktree git state unknown ${path}: ${unpushed.reason}`);
     return {
       id: 'worktree',
       path,

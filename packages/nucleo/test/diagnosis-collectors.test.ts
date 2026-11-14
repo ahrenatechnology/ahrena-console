@@ -10,7 +10,7 @@ import { DarwinDiagnosisCollector } from '../src/diagnosis/adapters/darwin.ts';
 import { LinuxDiagnosisCollector } from '../src/diagnosis/adapters/linux.ts';
 import { parseDockerDf, parseDuSize, parseJournalUsage, parsePsProcesses } from '../src/diagnosis/adapters/parsers.ts';
 import type { SectionId } from '../src/diagnosis/model.ts';
-import { systemFs, systemReadFile, worktreeRootsOf } from '../src/diagnosis/adapters/system.ts';
+import { systemFs, systemReadFile, systemRunner, worktreeRootsOf } from '../src/diagnosis/adapters/system.ts';
 
 const HOME = '/home/dev';
 const NOW_MS = Date.parse('2026-11-14T12:00:00.000Z');
@@ -158,7 +158,7 @@ describe('process and swap sections', () => {
     }
   });
 
-  test('#565/AC-7 the abort signal and the catalog limits reach the runner', async () => {
+  test('#565/AC-6 the abort signal and the catalog limits reach the runner', async () => {
     const controller = new AbortController();
     const { calls, deps } = setup({ [['ps', ...CATALOG.ps.args].join(' ')]: ok(PS_LINUX) });
     await new LinuxDiagnosisCollector(deps).collect('processes-by-rss', { mount: null, signal: controller.signal });
@@ -260,7 +260,7 @@ describe('volume sections', () => {
     assert.ok(signals.length >= 2 && signals.every((s) => s.aborted), 'every subprocess signal is bound to the section deadline');
   });
 
-  test('#565/AC-3 when no folder could be measured the section is unavailable', async () => {
+  test('#565/AC-6 when no folder could be measured the section is unavailable', async () => {
     const { deps } = setup({ [dfKey]: ok(DF) }, { dirs: { '/data': ['a'] } });
     const r = await collect(new LinuxDiagnosisCollector(deps), 'largest-folders', '/data');
     assert.ok(!Array.isArray(r) && 'unavailable' in r);
@@ -408,7 +408,7 @@ describe('known-caches section', () => {
     assert.ok(calls.every((x) => x.options.cwd !== stray));
   });
 
-  test('#565/AC-11 a cache whose size cannot be read is dropped and logged with its tool and reason', async () => {
+  test('#565/AC-3 a cache whose size cannot be read is dropped and logged with its tool and reason', async () => {
     const { deps, logs } = setup({ [sizeKey(`${HOME}/.npm`)]: fail('timeout') }, { dirs: { [`${HOME}/.npm`]: [] } });
     assert.deepEqual(await collect(new LinuxDiagnosisCollector(deps), 'known-caches'), []);
     assert.ok(logs.some((l) => l.includes(`${HOME}/.npm`) && l.includes('du') && l.includes('timed out')));
@@ -421,7 +421,7 @@ describe('known-caches section', () => {
     assert.ok(logs.some((l) => l.includes(old) && l.includes('du') && l.includes('did not answer')));
   });
 
-  test('#565/AC-9 the worktree roots come from the repository folders the caller passes', () => {
+  test('#565/AC-3 the worktree roots come from the repository folders the caller passes', () => {
     assert.deepEqual(worktreeRootsOf(['/w/org/repo-a', '/w/org/repo-b']), ['/w/org/repo-a/.claude/worktrees', '/w/org/repo-b/.claude/worktrees']);
   });
 });
@@ -440,7 +440,7 @@ describe('the real file reads', () => {
     },
   });
 
-  test('#565/AC-11 an absent path (ENOENT, ENOTDIR) answers no, empty or null without a log line', async () => {
+  test('an absent path (ENOENT, ENOTDIR) answers no, empty or null without a log line', async () => {
     for (const code of ['ENOENT', 'ENOTDIR']) {
       const logs: string[] = [];
       const fs = systemFs((m) => logs.push(m), failing(code));
@@ -453,7 +453,7 @@ describe('the real file reads', () => {
     }
   });
 
-  test('#565/AC-11 any other error (EACCES) is logged with the path and the code, and the path counts as absent', async () => {
+  test('any other error (EACCES) is logged with the path and the code, and the path counts as absent', async () => {
     const logs: string[] = [];
     const fs = systemFs((m) => logs.push(m), failing('EACCES'));
     assert.equal(await fs.isDirectory('/secret'), false);
@@ -465,7 +465,7 @@ describe('the real file reads', () => {
     assert.ok(logs.every((l) => l.includes('/secret') && l.includes('EACCES')));
   });
 
-  test('#565/AC-11 a path with a line break cannot forge a log line', async () => {
+  test('a path with a line break cannot forge a log line', async () => {
     const logs: string[] = [];
     await systemFs((m) => logs.push(m), failing('EACCES')).isDirectory('/a\nforged line');
     assert.equal(logs.length, 1);
@@ -476,18 +476,18 @@ describe('the real file reads', () => {
 describe('what a diagnosis log line may carry', () => {
   const dfKey = ['df', ...CATALOG.df.args].join(' ');
 
-  test('#565/AC-3 control characters are stripped from a text before it is logged', () => {
+  test('control characters are stripped from a text before it is logged', () => {
     assert.equal(stripControlCharacters('a\nb\r\tc\u0000d\u007fe'), 'abcde');
   });
 
-  test('#565/AC-3 the C1 range, the next line, and the line and paragraph separators are stripped too', () => {
+  test('the C1 range, the next line, and the line and paragraph separators are stripped too', () => {
     assert.equal(stripControlCharacters('a\u0080b\u0085c\u009fd'), 'abcd');
     assert.equal(stripControlCharacters('a\u2028b'), 'ab');
     assert.equal(stripControlCharacters('a\u2029b'), 'ab');
     assert.equal(stripControlCharacters('caf\u00e9 \u00a0ok'), 'caf\u00e9 \u00a0ok');
   });
 
-  test('#565/AC-3 a folder name with a line break does not forge a log line when its measurement fails', async () => {
+  test('a folder name with a line break does not forge a log line when its measurement fails', async () => {
     const evil = 'x\n2026-11-14 forged entry';
     const { deps, logs } = setup({ [dfKey]: ok(DF) }, { dirs: { '/data': [evil] } });
     await collect(new LinuxDiagnosisCollector(deps), 'largest-folders', '/data');
@@ -496,14 +496,14 @@ describe('what a diagnosis log line may carry', () => {
     assert.ok(logs.some((l) => l.includes('forged entry')));
   });
 
-  test('#565/AC-11 a cache path with a line break does not forge a log line when its size cannot be read', async () => {
+  test('a cache path with a line break does not forge a log line when its size cannot be read', async () => {
     const { deps, logs } = setup({}, { dirs: { '/home/de\nv/.npm': [] } });
     await collect(new LinuxDiagnosisCollector({ ...deps, home: '/home/de\nv' }), 'known-caches');
     assert.ok(logs.some((l) => l.includes('/home/dev/.npm')));
     assert.ok(logs.every((l) => !/[\x00-\x1f\x7f]/.test(l)));
   });
 
-  test('#565/AC-9 a rejecting worktreeRoots is logged and the measured caches survive', async () => {
+  test('#565/AC-3 a rejecting worktreeRoots is logged and the measured caches survive', async () => {
     const sizeKey = (cwd: string) => `du ${CATALOG['du-size'].args.join(' ')} @${cwd}`;
     const { deps, logs } = setup({ [sizeKey(`${HOME}/.npm`)]: ok('2048\t.\n') }, { dirs: { [`${HOME}/.npm`]: [] } });
     deps.worktreeRoots = async () => {
@@ -524,8 +524,91 @@ describe('diagnosis catalog', () => {
       assert.ok(entry.maxBytes > 0 && entry.maxBytes <= 8 * 1024 * 1024, id);
       assert.ok(entry.args.every((a) => !/[;&|$`<>]/.test(a) || a.startsWith('{{')), id);
     }
-    assert.deepEqual(CATALOG['git-status'].args.slice(0, 1), ['status']);
     assert.deepEqual(CATALOG['git-unpushed'].args.slice(0, 1), ['rev-list']);
     assert.deepEqual(CATALOG['docker-df'].args.slice(0, 2), ['system', 'df']);
+  });
+});
+
+describe('a command that exits non-zero but printed output', () => {
+  const dfKey = ['df', ...CATALOG.df.args].join(' ');
+  const folderKey = (cwd: string) => `du ${CATALOG['du-folder'].args.join(' ')} @${cwd}`;
+  const sizeKey = (cwd: string) => `du ${CATALOG['du-size'].args.join(' ')} @${cwd}`;
+  const incomplete = (stdout: string): RunResult => ({ ok: true, stdout, incomplete: true });
+  const limits = (acceptOutputOnFailure?: true): RunOptions => ({ timeoutMs: 3000, maxBytes: 1024, signal: new AbortController().signal, ...(acceptOutputOnFailure ? { acceptOutputOnFailure } : {}) });
+  const exitOneWithOutput = ['-e', "console.log('7\\t.');process.exit(1)"];
+
+  test('#565/AC-6 the real runner answers a non-zero exit as failed, unless the entry accepts its output, then as incomplete', async () => {
+    assert.deepEqual(await systemRunner(process.execPath, exitOneWithOutput, limits()), { ok: false, why: 'failed' });
+    const accepted = await systemRunner(process.execPath, exitOneWithOutput, limits(true));
+    assert.deepEqual(accepted, { ok: true, stdout: '7\t.\n', incomplete: true });
+    assert.deepEqual(await systemRunner(process.execPath, ['-e', "console.log('ok')"], limits(true)), { ok: true, stdout: 'ok\n' });
+  });
+
+  test('#565/AC-7 only the du entries accept output from a non-zero exit, and the runner is told so', async () => {
+    const accepting = Object.entries(CATALOG).filter(([, e]) => 'acceptOutputOnFailure' in e).map(([id]) => id);
+    assert.deepEqual(accepting.sort(), ['du-folder', 'du-size']);
+    const { calls, deps } = setup({ [dfKey]: ok(DF), [folderKey('/data/a')]: ok('1000\t.\n') }, { dirs: { '/data': ['a'], '/data/a': [] } });
+    await collect(new LinuxDiagnosisCollector(deps), 'largest-folders', '/data');
+    assert.ok(calls.filter((c) => c.command === 'du').every((c) => c.options.acceptOutputOnFailure === true));
+    assert.ok(calls.filter((c) => c.command === 'df').every((c) => c.options.acceptOutputOnFailure === undefined));
+  });
+
+  test('#565/AC-3 a folder du measured in part is logged and the section is marked partial', async () => {
+    const { deps, logs } = setup({ [dfKey]: ok(DF), [folderKey('/data/a')]: incomplete('1000\t.\n'), [folderKey('/data/b')]: ok('500\t.\n') }, { dirs: { '/data': ['a', 'b'], '/data/a': [], '/data/b': [] } });
+    const r = await collect(new LinuxDiagnosisCollector(deps), 'largest-folders', '/data');
+    assert.ok(!Array.isArray(r) && 'partial' in r);
+    assert.ok(logs.some((l) => l.includes('/data/a') && l.includes('du') && l.includes('exited with an error')));
+  });
+
+  test('#565/AC-3 a folder opened and measured in part keeps the parent size and marks the section partial', async () => {
+    const { deps } = setup(
+      { [dfKey]: ok(DF), [folderKey('/data/a')]: ok('1000\t.\n'), [folderKey('/data/a/x')]: incomplete('600\t.\n') },
+      { dirs: { '/data': ['a'], '/data/a': ['x'] } },
+    );
+    const r = await collect(new LinuxDiagnosisCollector(deps), 'largest-folders', '/data');
+    assert.ok(!Array.isArray(r) && 'partial' in r);
+    assert.deepEqual(r.items, [{ path: '/data/a', bytes: 1000 * 1024 }]);
+  });
+
+  test('#565/AC-3 a cache whose du ran in part is dropped and logged, never shown as an undercount', async () => {
+    const { deps, logs } = setup({ [sizeKey(`${HOME}/.npm`)]: incomplete('2048\t.\n') }, { dirs: { [`${HOME}/.npm`]: [] } });
+    assert.deepEqual(await collect(new LinuxDiagnosisCollector(deps), 'known-caches'), []);
+    assert.ok(logs.some((l) => l.includes(`${HOME}/.npm`) && l.includes('du') && l.includes('exited with an error')));
+  });
+});
+
+describe('what git is asked in a worktree', () => {
+  const ROOT = `${HOME}/code/repo/.claude/worktrees`;
+  const old = `${ROOT}/old-one`;
+  const sizeKey = (cwd: string) => `du ${CATALOG['du-size'].args.join(' ')} @${cwd}`;
+  const statusKey = (cwd: string) => `git ${CATALOG['git-status'].args.join(' ')} @${cwd}`;
+  const unpushedKey = (cwd: string) => `git ${CATALOG['git-unpushed'].args.join(' ')} @${cwd}`;
+  const place = { dirs: { [ROOT]: ['old-one'], [old]: [] }, mtimes: { [old]: NOW_MS - 30 * DAY }, exists: [`${old}/.git`] };
+
+  test('#565/AC-7 git status turns the repository fsmonitor hook off, so reading cannot run a command the repository configures', () => {
+    assert.deepEqual(CATALOG['git-status'].args, ['-c', 'core.fsmonitor=false', 'status', '--porcelain']);
+    assert.deepEqual(CATALOG['git-unpushed'].args.slice(0, 1), ['rev-list']);
+  });
+
+  test('#565/AC-9 a git state that cannot be read keeps the safe default and says why in the log', async () => {
+    const { deps, logs } = setup({ [sizeKey(old)]: ok('300\t.\n'), [statusKey(old)]: fail('timeout'), [unpushedKey(old)]: fail('failed') }, place);
+    const r = (await collect(new LinuxDiagnosisCollector(deps), 'known-caches')) as { hasUncommitted: boolean; hasUnpushed: boolean }[];
+    assert.deepEqual([r[0].hasUncommitted, r[0].hasUnpushed], [true, true]);
+    assert.ok(logs.some((l) => l.includes('diagnosis worktree git state unknown') && l.includes(old) && l.includes('git timed out')));
+    assert.ok(logs.some((l) => l.includes('diagnosis worktree git state unknown') && l.includes(old) && l.includes('git did not answer')));
+  });
+
+  test('a git state that is known writes no log line', async () => {
+    const { deps, logs } = setup({ [sizeKey(old)]: ok('300\t.\n'), [statusKey(old)]: ok(''), [unpushedKey(old)]: ok('0\n') }, place);
+    await collect(new LinuxDiagnosisCollector(deps), 'known-caches');
+    assert.deepEqual(logs, []);
+  });
+
+  test('a worktree path with a line break cannot forge a line through the git state log', async () => {
+    const evil = `${ROOT}/ol\nd`;
+    const { deps, logs } = setup({ [sizeKey(evil)]: ok('300\t.\n') }, { dirs: { [ROOT]: ['ol\nd'], [evil]: [] }, mtimes: { [evil]: NOW_MS - 30 * DAY }, exists: [`${evil}/.git`] });
+    await collect(new LinuxDiagnosisCollector(deps), 'known-caches');
+    assert.ok(logs.some((l) => l.includes('git state unknown')));
+    assert.ok(logs.every((l) => !/[\x00-\x1f\x7f]/.test(l)));
   });
 });

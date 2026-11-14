@@ -5,8 +5,8 @@
  * - `LC_ALL=C` so numbers and dates do not change with the machine's language, and `GIT_OPTIONAL_LOCKS=0`
  *   so `git status` never writes to the repository (it would refresh the index otherwise).
  * - The timeout kills the child; so does the abort signal. Output past `maxBytes` is a failure.
- * - A command that exits with an error still counts when it printed something (`du` exits 1 on a
- *   folder it cannot read, and its output is still the answer).
+ * - A command that exits with an error is a failure, except where the catalog entry accepts its output
+ *   (`du` exits 1 on a folder it cannot read): that answer comes back marked `incomplete`.
  */
 
 import { execFile } from 'node:child_process';
@@ -40,7 +40,8 @@ export const systemRunner: DiagnosisRunner = (command, args, options) =>
         if (e.code === 'ENOENT') return resolve({ ok: false, why: 'missing' });
         if (e.code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER') return resolve({ ok: false, why: 'too-large' });
         if (e.killed) return resolve({ ok: false, why: 'timeout' });
-        resolve(stdout ? { ok: true, stdout } : { ok: false, why: 'failed' });
+        /* Output of a failed run is an answer only where the entry says so (`du`), and then it is marked incomplete (#565). */
+        resolve(options.acceptOutputOnFailure && stdout ? { ok: true, stdout, incomplete: true } : { ok: false, why: 'failed' });
       },
     );
   });
