@@ -220,17 +220,25 @@ function readableProjects(projects: readonly ProjectOption[], login: string): Pr
 
 /**
  * The background sync's step for the Projects of every organization (#609): forces the read of each one so the board
- * answers from the store. A read where GitHub did not answer fails, as the `project` step does, so the sync log says it.
+ * answers from the store. Like every step (#612) it answers `pending`, with no GitHub call, while GitHub is not connected
+ * or is revoked, and runs again on the next tick. A read where GitHub did not answer fails, as the `project` step does, so
+ * the sync log says it, unless the read dropped the connection (GitHub 401): the connection logged that once, so it is `pending`.
  */
 export function workProjectsSyncStep(projects: WorkBoardProjects, connected: () => Promise<boolean>): SyncStep {
+  const isConnected = () => connected().catch(() => false);
   return {
     name: 'work-projects',
     everyMs: SYNC_WORK_PROJECTS_EVERY_MS,
     async run() {
-      if (!(await connected().catch(() => false))) return 'skipped';
-      const read = await projects.read({ force: true });
-      if (read.stale) throw new Error(`the Projects were not read: ${read.staleCode ?? 'github-error'}`);
-      return 'done';
+      if (!(await isConnected())) return 'pending';
+      try {
+        const read = await projects.read({ force: true });
+        if (read.stale) throw new Error(`the Projects were not read: ${read.staleCode ?? 'github-error'}`);
+        return 'done';
+      } catch (err) {
+        if (!(await isConnected())) return 'pending';
+        throw err;
+      }
     },
   };
 }

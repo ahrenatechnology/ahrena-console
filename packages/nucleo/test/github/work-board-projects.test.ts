@@ -1,6 +1,6 @@
 /*
  * #609 the reader of the Projects of every granted organization, and its background-sync step: the step re-reads each Project
- * (forced), is skipped without a GitHub connection, and fails when GitHub did not answer so the sync log says it.
+ * (forced), waits (pending) without a GitHub connection, and fails when GitHub did not answer so the sync log says it.
  */
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
@@ -50,10 +50,44 @@ describe('#609/AC-1 the background sync reads the Projects of every organization
     assert.deepEqual(forced, [true]);
   });
 
-  test('#609/AC-1 the step is skipped, reading nothing, without a GitHub connection', async () => {
+  test('#612/AC-1 the step answers pending, reading nothing, while GitHub is not connected or is revoked', async () => {
     const { reader, forced } = rig();
-    assert.equal(await workProjectsSyncStep(reader, async () => false).run(), 'skipped');
+    assert.equal(await workProjectsSyncStep(reader, async () => false).run(), 'pending');
+    assert.equal(await workProjectsSyncStep(reader, async () => { throw new Error('status unavailable'); }).run(), 'pending');
     assert.deepEqual(forced, []);
+  });
+
+  test('#612/AC-3 the step reads again on the next tick once the connection is back', async () => {
+    const { reader, forced } = rig();
+    let live = false;
+    const step = workProjectsSyncStep(reader, async () => live);
+    assert.equal(await step.run(), 'pending');
+    live = true;
+    assert.equal(await step.run(), 'done');
+    assert.deepEqual(forced, [true]);
+  });
+
+  test('#612/AC-2 a read during which the connection dropped (GitHub 401) is pending, not a step failure', async () => {
+    const { reader } = rig(true);
+    let live = true;
+    const dropping = new WorkBoardProjects({
+      options: { list: async () => list(), snapshot: async () => null },
+      orgs: async () => [{ login: 'acme-labs', access: 'granted' }],
+      project: () => ({ board: async () => { live = false; return board({ stale: true, staleReason: 'unauthorized', staleCode: 'unauthorized' as never }); } }),
+      now: () => NOW,
+    });
+    assert.equal(await workProjectsSyncStep(dropping, async () => live).run(), 'pending');
+    assert.ok(reader);
+  });
+
+  test('#612/AC-2 a stale read while the connection stays up is still a step failure', async () => {
+    const stale = new WorkBoardProjects({
+      options: { list: async () => list(), snapshot: async () => null },
+      orgs: async () => [{ login: 'acme-labs', access: 'granted' }],
+      project: () => ({ board: async () => board({ stale: true, staleReason: 'network', staleCode: 'network' as never }) }),
+      now: () => NOW,
+    });
+    await assert.rejects(() => workProjectsSyncStep(stale, async () => true).run(), /were not read/);
   });
 
   test('#609/AC-3 the step fails with a code when nothing could be read, never a message from GitHub', async () => {
