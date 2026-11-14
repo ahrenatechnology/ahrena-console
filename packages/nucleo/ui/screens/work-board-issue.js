@@ -66,7 +66,7 @@ function keyed(parts, key) {
  * confirmation. It reads the layer's state through `state()` and changes it only through `apply(next, intent)`; `retry` and
  * `confirm` are the layer's own, because they touch what the layer keeps (the forced re-read, the failure it saw before).
  */
-function createIssueView({ area, state, apply, cardFor, retry, confirm, run, onAsk, edit }) {
+function createIssueView({ area, state, apply, cardFor, retry, confirm, run, queue, onAsk, edit }) {
   let focus = null;
   let anchorInPanel = false;
 
@@ -121,14 +121,17 @@ function createIssueView({ area, state, apply, cardFor, retry, confirm, run, onA
   }
 
   const panelHolds = (card) => state().panel.open && state().panel.key === card.key;
-  const partsOf = (card, place = 'card') => (run ? run.parts(card, { ...handlers, place }) : cardPlanParts(card, { ...handlers, place }));
+  const basePartsOf = (card, place) => (run ? run.parts(card, { ...handlers, place }) : cardPlanParts(card, { ...handlers, place }));
+  // issue 477: the queue adds Pôr na fila, Tirar da fila, the stopped reason and the red note of a refused drop.
+  const partsOf = (card, place = 'card') => (queue ? queue.parts(card, basePartsOf(card, place)) : basePartsOf(card, place));
   const hostedInPanel = (card) => anchorInPanel && panelHolds(card);
 
   /** issue 508: the card of the board with its planning parts, the open one marked and the confirmation anchored on it. */
   function renderCard(card, options) {
     const shown = shownCard(card);
     const parts = keyed(partsOf(shown), card.key);
-    const node = workCard(shown, { ...options, parts, onOpen: open, selected: state().panel.open && state().panel.key === card.key });
+    const made = workCard(shown, { ...options, parts, onOpen: open, selected: state().panel.open && state().panel.key === card.key });
+    const node = queue ? queue.decorate(made, shown) : made;
     const pop = (hostedInPanel(card) ? null : popupFor(shown)) ?? run?.popup(shown, 'card', panelHolds(card)) ?? null;
     return pop ? el('div', { class: 'wb-anchor' }, node, pop) : node;
   }
@@ -194,7 +197,7 @@ function createIssueView({ area, state, apply, cardFor, retry, confirm, run, onA
  * GET /api/work quietly; `ctx` is the screen's (read, write, signal). It keeps the state and its effects; the view half is
  * createIssueView's.
  */
-export function createIssueLayer({ ctx, area, cards, options = () => ({}), redraw, reread, run = null, onAsk = null }) {
+export function createIssueLayer({ ctx, area, cards, options = () => ({}), redraw, reread, run = null, queue = null, onAsk = null }) {
   let s = initialIssueState();
   let alive = true;
   let learning = false;
@@ -331,7 +334,7 @@ export function createIssueLayer({ ctx, area, cards, options = () => ({}), redra
     onFinished: (issue) => apply(panelLoaded(s, issue, s.panel.request)),
   });
 
-  const view = createIssueView({ area, state: () => s, apply, cardFor, retry, confirm, run, onAsk, edit });
+  const view = createIssueView({ area, state: () => s, apply, cardFor, retry, confirm, run, queue, onAsk, edit });
 
   // issue 532: the screen closes this layer's open confirmation when the run layer opens its own (one at a time, 465-6).
   const closeConfirmation = () => Object.keys(s.plans).forEach((key) => apply(cancelPlan(s, { key })));
