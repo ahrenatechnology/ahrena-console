@@ -6,6 +6,17 @@ const DEC = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 1, maximumFr
 
 export const num = (n) => NUM.format(n);
 
+/**
+ * "ahrena-engineering-backend:apollo" -> "Apollo" (issue 519). A type with no ":" or with nothing
+ * after it shows as is; `null`, `undefined` and "" give `null`, so the caller picks its own fallback.
+ */
+export function shortAgentName(agentType) {
+  if (typeof agentType !== 'string' || agentType.trim() === '') return null;
+  const agent = agentType.slice(agentType.lastIndexOf(':') + 1);
+  if (!agentType.includes(':') || agent === '') return agentType;
+  return agent.charAt(0).toUpperCase() + agent.slice(1);
+}
+
 /** `null` vira "—"; o resto, uma casa decimal: 1,6. */
 export const decimal = (n) => (n === null || n === undefined ? '—' : DEC.format(n));
 

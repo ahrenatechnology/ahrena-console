@@ -4,9 +4,41 @@ import { describe, test } from 'node:test';
 // @ts-expect-error: browser modules, in plain JavaScript
 import { groupTitle, roundsText, stepName, stepResult, stepTone, stepsWithLinks, linkBetween, loopSummary } from '../../ui/screens/workflow-loop.js';
 // @ts-expect-error: idem
+import { shortAgentName } from '../../ui/screens/workflow-format.js';
+// @ts-expect-error: idem
 import { treeKpis, nodeMeta, descendants, initialOpen, statusOf } from '../../ui/screens/workflow-tree.js';
 
 const step = (role: string, over: Record<string, unknown> = {}) => ({ agentId: `a-${role}`, role, agentType: null, task: 't', state: 'completed', startedAt: '2026-10-29T10:00:00Z', endedAt: '2026-10-29T10:05:00Z', verdict: null, findings: null, ...over });
+
+describe('short agent name (issue 519)', () => {
+  test('#519 AC-1: plugin:agent shows the agent with a capital initial; Argos and Erodos stay', () => {
+    assert.equal(shortAgentName('ahrena-engineering-backend:apollo'), 'Apollo');
+    assert.equal(shortAgentName('ahrena-engineering-development:athena'), 'Athena');
+    assert.equal(shortAgentName('ahrena-engineering-frontend:iris'), 'Iris');
+    assert.equal(shortAgentName('ahrena-engineering-code-review:argos'), 'Argos');
+    assert.equal(shortAgentName('ahrena-engineering-quality:erodos'), 'Erodos');
+    assert.equal(stepName(step('dev', { agentType: 'ahrena-engineering-backend:apollo' })), 'Apollo');
+    assert.equal(stepName(step('other', { agentType: 'ahrena:hephaestus' })), 'Hephaestus');
+  });
+
+  test('#519 AC-2: the full name stays reachable, the helper keeps it apart from the short one', () => {
+    const full = 'ahrena-engineering-backend:apollo';
+    assert.notEqual(shortAgentName(full), full);
+    assert.ok(full.endsWith(`:${shortAgentName(full)?.toLowerCase()}`));
+  });
+
+  test('#519 AC-3: a type with no colon shows as is; edge cases fall back to the whole value', () => {
+    assert.equal(shortAgentName('general-purpose'), 'general-purpose');
+    assert.equal(shortAgentName('Explore'), 'Explore');
+    assert.equal(shortAgentName('plugin:'), 'plugin:');
+    assert.equal(shortAgentName(':'), ':');
+    assert.equal(shortAgentName(''), null);
+    assert.equal(shortAgentName(null), null);
+    assert.equal(shortAgentName(undefined), null);
+    assert.equal(stepName(step('other', { agentType: 'general-purpose' })), 'general-purpose');
+    assert.equal(stepName(step('other', { agentType: null })), 'subagente');
+  });
+});
 
 describe('the loop by PR on the screen', () => {
   test('titles and counters: PR, issue, no PR; singular and plural', () => {
