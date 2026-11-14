@@ -7,6 +7,7 @@
 
 import { el, icon } from '../dom.js';
 import { loading, error, errorBand, empty } from '../states.js';
+import { subagentNodeName } from './workflow-format.js';
 import { openAction } from '../open-action.js';
 import { create as workflowTab } from './session-detail-workflow.js';
 import { create as decisionsTab } from './session-detail-decisions.js';
@@ -544,15 +545,16 @@ function tokenFlow(k) {
 /** An agent node; the main one carries the session's attention (issue 245), a subagent none. */
 function node(g, sessionAttention = null) {
   const end = g.end ? Date.parse(g.end) : Date.now();
+  const { short, full } = g.type === 'main' ? { short: g.name, full: null } : subagentNodeName(g.name);
   const sub =
     g.type === 'main'
       ? [modelName(g.model), g.turns !== null ? `${num(g.turns)} turno${g.turns === 1 ? '' : 's'}` : null]
-      : [g.task, duration(end - Date.parse(g.start))];
+      : [full, g.task, duration(end - Date.parse(g.start))];
   return el(
     'div',
     { class: `card sd-node${g.type === 'subagent' ? ' sd-sub' : ''}` },
     el('span', { class: 'sd-ico' }, icon(g.type === 'main' ? 'robot' : 'subagent')),
-    el('div', { class: 'sd-text' }, el('b', {}, g.name), el('small', {}, sub.filter(Boolean).join(' · '))),
+    el('div', { class: 'sd-text' }, el('b', { title: g.name }, short), el('small', { title: sub.filter(Boolean).join(' · ') }, sub.filter(Boolean).join(' · '))),
     el('span', { class: 'mono sd-cost' }, g.costUsd === null ? '' : usd(g.costUsd)),
     statusPill(g.status, g.type === 'main' && (g.status === 'waiting' || g.status === 'error') ? sessionAttention : null),
   );

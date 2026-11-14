@@ -3,7 +3,7 @@
 // `textContent` (`el()`), never as HTML.
 
 import { el, icon } from '../dom.js';
-import { duration, num } from './workflow-format.js';
+import { duration, num, shortAgentName } from './workflow-format.js';
 
 // ---------- Pure parts (tested in node) ----------
 
@@ -33,9 +33,11 @@ export function roundsText(g) {
 const AGENT = [[/(?:^|:)argos$/i, 'Argos'], [/(?:^|:)erodos$/i, 'Erodos']];
 export function stepName(s) {
   for (const [re, name] of AGENT) if (s.agentType && re.test(s.agentType)) return name;
+  const short = shortAgentName(s.agentType);
+  if (short) return short;
   if (s.role === 'dev') return 'dev';
   if (s.role === 'review') return 'review';
-  return s.agentType ?? 'subagente';
+  return 'subagente';
 }
 
 /** The line under the name: what the step did. */
@@ -96,7 +98,7 @@ function stepEl(s, sessionId) {
   return el(
     'div',
     { class: `wfl-step wfl-${tone}` },
-    el('div', { class: 'wfl-step-top' }, el('b', { class: 'wfl-trunc' }, stepName(s)), link),
+    el('div', { class: 'wfl-step-top' }, el('b', { class: 'wfl-trunc', title: s.agentType ?? '' }, stepName(s)), link),
     el('span', { class: 'wfl-task wfl-trunc', title: s.task ?? '' }, s.task ?? ''),
     el('span', { class: `wfl-res wfl-res-${tone} wfl-trunc` }, stepResult(s), dur ? el('span', { class: 'wfl-mute' }, ` · ${dur}`) : null),
   );
