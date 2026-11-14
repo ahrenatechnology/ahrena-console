@@ -663,7 +663,7 @@ describe('uncommitted work read from real git repositories', () => {
     for (const r of roots) await rm(r, { recursive: true, force: true });
   });
 
-  /* A worktree folder old enough to be listed, holding one repository with `file.txt` committed. `stamp` sets the file's mtime before it is added, so the index records it. */
+  /* A worktree folder old enough to be listed, holding one repository with `file.txt` committed. `stamp` sets the file's mtime before it is added, so the index records it (#565). */
   async function place(name: string, stamp: Date): Promise<{ base: string; dir: string; collect: () => Promise<{ hasUncommitted: boolean }[]>; logs: string[] }> {
     const base = await realpath(await mkdtemp(join(tmpdir(), 'diagnosis-git-')));
     roots.push(base);
@@ -707,6 +707,31 @@ describe('uncommitted work read from real git repositories', () => {
   test('#565/AC-7 an entry stamped at or after the index file is racy and reads as uncommitted though its stat matches', async () => {
     const w = await place('racy', new Date(Date.now() + 60_000));
     assert.equal((await w.collect())[0].hasUncommitted, true);
+  });
+
+  test('#565/AC-7 a clean linked worktree made by git worktree add (absolute gitdir) reads as committed and logs nothing', async () => {
+    const w = await place('main-checkout', PAST);
+    const linked = join(w.dir, '..', 'linked');
+    git(w.dir, 'worktree', 'add', '-q', '-b', 'linked-branch', linked);
+    await utimes(join(linked, 'file.txt'), PAST, PAST);
+    git(linked, 'update-index', '--refresh');
+    await utimes(linked, OLD, OLD);
+    await utimes(w.dir, new Date(), new Date());
+    const logs: string[] = [];
+    const deps: DiagnosisDeps = {
+      run: systemRunner,
+      readFile: systemReadFile((m) => logs.push(m)),
+      fs: systemFs((m) => logs.push(m)),
+      home: join(w.base, 'home'),
+      worktreeRoots: async () => [join(w.dir, '..')],
+      nowMs: () => Date.now(),
+      log: (m) => logs.push(m),
+    };
+    const items = (await new LinuxDiagnosisCollector(deps).collect('known-caches', ctx())) as { path: string; hasUncommitted: boolean }[];
+    const item = items.find((i) => i.path.endsWith('linked'));
+    assert.ok(item, 'the linked worktree is listed');
+    assert.equal(item.hasUncommitted, false);
+    assert.deepEqual(logs, []);
   });
 
   test('#565/AC-7 a repository with a submodule is read without error and counts as uncommitted when git cannot say', async () => {

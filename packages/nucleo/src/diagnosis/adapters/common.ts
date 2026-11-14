@@ -12,7 +12,7 @@
  *   used; an unknown mount is unavailable. The request's text never becomes a command argument.
  */
 
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import type { CollectContext, CollectResult } from '../diagnose.ts';
 import type { CacheActionId, CacheItem, FolderItem, SectionId, WorktreeItem } from '../model.ts';
 import { isRealVolume, parseDfP } from '../../telemetry/adapters/common.ts';
@@ -284,6 +284,7 @@ export abstract class DiagnosisCollector {
     if (index === null) return unavailable('git index file not readable');
     const changed: string[] = [];
     for (const entry of entries) {
+      if (signal.aborted) return unavailable('git index check stopped at the section deadline');
       const stamp = entry.path.split('/').includes('..') || entry.path.startsWith('/') ? null : await this.deps.fs.stamp(join(path, entry.path));
       const racy = entry.mtimeSec >= index.mtimeSec;
       const same = stamp !== null && (stamp.isRegularFile || stamp.isSymlink) && stamp.size === entry.size && stamp.mtimeSec === entry.mtimeSec && stamp.mtimeNsec === entry.mtimeNsec;
@@ -298,7 +299,7 @@ export abstract class DiagnosisCollector {
     if (await this.deps.fs.isDirectory(dotGit)) return join(dotGit, 'index');
     const text = await this.deps.readFile(dotGit);
     const m = text === null ? null : /^gitdir: (.+)$/m.exec(text);
-    return m ? join(path, m[1].trim(), 'index') : join(dotGit, 'index');
+    return m ? resolve(path, m[1].trim(), 'index') : join(dotGit, 'index');
   }
 
   /* What git cannot tell counts as not safe to remove: dirty and unpushed (#565). */
