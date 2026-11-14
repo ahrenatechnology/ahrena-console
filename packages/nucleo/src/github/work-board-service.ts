@@ -29,6 +29,7 @@ import {
 } from './work-board.ts';
 import { executionOfRun, settleExecutionRun, type RunningCards, type WorkExecutionRuns } from './work-execution.ts';
 import { planningOfRun, settlePlanRun, type WorkPlanRuns } from './work-plan.ts';
+import type { RepositoryTrust } from './trusted-owners.ts';
 import type { WorkNode } from './work.ts';
 
 export interface WorkBoardServiceOptions {
@@ -36,6 +37,8 @@ export interface WorkBoardServiceOptions {
   sessions: WorkSessions;
   queue: WorkQueue;
   history: WorkColumnHistory;
+  /** #594 whose repositories are trusted: each card carries `trusted`. Required: no board trusts by default. */
+  trust: RepositoryTrust;
   /** #507 the planning runs; without it no card has a planning state. */
   planRuns?: WorkPlanRuns;
   /** #531 the execution runs; without it no card has a boot state. */
@@ -63,6 +66,7 @@ export class WorkBoardService implements RunningCards {
   private readonly sessions: WorkSessions;
   private readonly queue: WorkQueue;
   private readonly history: WorkColumnHistory;
+  private readonly trust: RepositoryTrust;
   private readonly planRuns: WorkPlanRuns | undefined;
   private readonly executionRuns: WorkExecutionRuns | undefined;
   private readonly parents: ParentLookup | undefined;
@@ -71,11 +75,12 @@ export class WorkBoardService implements RunningCards {
   private readonly nextScheduledRead: () => number | null;
   private readonly log: (message: string) => void;
 
-  constructor({ project, sessions, queue, history, planRuns, executionRuns, parents, now = Date.now, pausedUntil = () => 0, nextScheduledRead = () => null, log = () => {} }: WorkBoardServiceOptions) {
+  constructor({ project, sessions, queue, history, trust, planRuns, executionRuns, parents, now = Date.now, pausedUntil = () => 0, nextScheduledRead = () => null, log = () => {} }: WorkBoardServiceOptions) {
     this.project = project;
     this.sessions = sessions;
     this.queue = queue;
     this.history = history;
+    this.trust = trust;
     this.planRuns = planRuns;
     this.executionRuns = executionRuns;
     this.parents = parents;
@@ -113,6 +118,7 @@ export class WorkBoardService implements RunningCards {
       analyzed,
       planning,
       execution,
+      trust: this.trust,
       now,
       fetchedAt: read.fetchedAt,
       stale: staleReason !== null,

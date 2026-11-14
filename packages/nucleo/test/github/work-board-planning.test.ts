@@ -19,6 +19,7 @@ import {
 } from '../../src/index.ts';
 import { PLAN_SESSION_WINDOW_MS, type PlanRun, type WorkPlanRuns } from '../../src/github/work-plan.ts';
 import { clock, k, REPO } from './helpers.ts';
+import { trustOf } from '../fixtures.ts';
 
 const START = '2026-10-18T12:00:00.000Z';
 
@@ -81,7 +82,7 @@ function setup(withRuns = true) {
   const runs = new MemoryRuns();
   const project: WorkProjectBoard = { board: async () => current };
   const live: WorkSessions = { links: async () => sessions.list };
-  const service = new WorkBoardService({ project, sessions: live, queue: EMPTY_WORK_QUEUE, history, now, ...(withRuns ? { planRuns: runs } : {}) });
+  const service = new WorkBoardService({ trust: trustOf('ahrenatechnology'), project, sessions: live, queue: EMPTY_WORK_QUEUE, history, now, ...(withRuns ? { planRuns: runs } : {}) });
   const read = async (): Promise<WorkBoardCard> => {
     const view = await service.board({ ...DEFAULT_WORK_BOARD_FILTERS });
     return view.columns.flatMap((c) => c.cards).find((c) => c.number === 412)!;

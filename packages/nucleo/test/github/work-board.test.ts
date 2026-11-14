@@ -24,6 +24,7 @@ import {
   type WorkBoardView,
 } from '../../src/index.ts';
 import { k, REPO } from './helpers.ts';
+import { trustOf } from '../fixtures.ts';
 
 const NOW = Date.parse('2026-11-13T12:00:00Z');
 const DAY = 86_400_000;
@@ -89,6 +90,7 @@ function board(nodes: WorkBoardNode[], over: Partial<WorkBoardInput> = {}): Work
     stale: false,
     staleReason: null,
     retryAt: null,
+    trust: trustOf('ahrenatechnology'),
     ...over,
   });
 }
@@ -680,5 +682,18 @@ describe('issue of a session prompt', () => {
   test('no reference, or something that only looks like one', () => {
     assert.equal(issueOfPrompt('sem issue aqui', REPO), null);
     assert.equal(issueOfPrompt('a cor &#123; e abc#4', REPO), null);
+  });
+});
+
+describe('#594/AC-3 the card says whether its repository is trusted', () => {
+  test('#594/AC-3 Given the trusted owner "acme", When the board is built, Then a card of Acme/App carries trusted true and a card of other-org/app trusted false', () => {
+    const view = board([boardNode(501, { key: 'Acme/App#501', repo: 'Acme/App' }), boardNode(502, { key: 'other-org/app#502', repo: 'other-org/app' })], { trust: trustOf('acme') });
+    assert.equal(card(view, 501).trusted, true);
+    assert.equal(card(view, 502).trusted, false);
+  });
+
+  test('#594/AC-3 Given nobody is trusted, Then every card carries trusted false, a boolean', () => {
+    const view = board([boardNode(501)], { trust: trustOf() });
+    assert.strictEqual(card(view, 501).trusted, false);
   });
 });

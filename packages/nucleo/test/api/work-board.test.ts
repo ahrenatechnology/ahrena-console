@@ -17,6 +17,7 @@ import { EMPTY_WORK_QUEUE, WORK_BLOCKED_REASONS, WORK_BOARD_COLUMNS, type WorkQu
 import { SqliteWorkColumnHistory } from '../../src/github/work-board-history.ts';
 import { WorkBoardService } from '../../src/github/work-board-service.ts';
 import { clock, k, REPO } from '../github/helpers.ts';
+import { trustOf } from '../fixtures.ts';
 
 const PROJECT: Required<ProjectRef> = { owner: 'ahrenatechnology', number: 3, field: 'Status' };
 const LANES = [
@@ -121,6 +122,7 @@ async function boot({ extra = {}, withWork = true, fromStore = false }: { extra?
   const logs: string[] = [];
   const schedule: { nextRead: number | null } = { nextRead: null };
   const service = new WorkBoardService({
+    trust: trustOf('ahrenatechnology'),
     project: selectedProjectBoard({ kanban: () => (chosen ? kanban : null) }),
     sessions,
     queue,
@@ -694,5 +696,16 @@ describe('#501/AC-1 GET /api/work: counts without each active filter', () => {
       b.source.items = items();
       const r = await get(b);
       assert.deepEqual(r.json.countsWithoutFilter, {});
+    }));
+});
+
+describe('#594/AC-3 GET /api/work: each card says whether its repository is trusted', () => {
+  test('#594/AC-3 Given a card of the trusted owner and one of another owner, Then trusted is true on the first and false on the second', () =>
+    withBoard(async (b) => {
+      b.source.items = [issue(500), issue(501, { repo: 'evil-org/app', key: 'evil-org/app#501' })];
+      const r = await get(b);
+      assert.equal(r.status, 200);
+      assert.strictEqual(cardOf(r.json, 500).trusted, true);
+      assert.strictEqual(cardOf(r.json, 501).trusted, false);
     }));
 });

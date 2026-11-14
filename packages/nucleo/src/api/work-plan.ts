@@ -6,6 +6,8 @@
  * | --------------------------------------------------------------------------------------- | --------------------------------- |
  * | `{ repo: 'owner/name', number, target: 'desktop' \| 'terminal', replan?: boolean }`     | 200 `{ ok, opened, key }`         |
  *
+ * - #594 A repository whose owner is not trusted (github/trusted-owners.ts) is 403 `{ code: 'untrusted-repository', error }`,
+ *   right after `repo` and `number` are validated and before the issue is read: no session opens, no run is recorded.
  * - The issue is read through layer 1's use case (#506): an epic or an initiative is refused (422), a missing
  *   issue is 404, GitHub down with nothing stored 502 with the `reason` code, `--no-github` 503.
  * - The folder is one of `knownFolders` (new-session.ts: the folders this machine's sessions ran in, a
@@ -33,12 +35,13 @@ import { WorkIssueNotFoundError, type WorkIssueService } from '../github/work-is
 import { isPlanNumber, isPlanRepo, isPlanRunActive, planningPrompt, type PlanTarget, type WorkPlanRuns } from '../github/work-plan.ts';
 import { levelOf, workKey } from '../github/work.ts';
 import { send } from '../ingest/hooks/receiver.ts';
+import type { RepositoryTrust } from '../github/trusted-owners.ts';
 import type { StoragePort } from '../storage-port.ts';
 import { readJsonBody } from './connections-route.ts';
 import { NEW_SESSION_TARGETS } from './new-session.ts';
 import type { TerminalOpener } from './terminal-launch.ts';
 import type { Git } from './work.ts';
-import { openWorkSession, repoFolderOnThisMachine, sessionCommand } from './work-session-open.ts';
+import { openWorkSession, repoFolderOnThisMachine, sessionCommand, UNTRUSTED_REPOSITORY } from './work-session-open.ts';
 
 export const WORK_PLAN_ROUTE = '/api/work/plan';
 
@@ -46,6 +49,8 @@ export interface WorkPlanRouteOptions {
   /** #506 the issue detail use case; `null` under --no-github: the route answers 503. */
   issues: Pick<WorkIssueService, 'issue'> | null;
   runs: WorkPlanRuns;
+  /** #594 whose repositories the core opens sessions for. Required: a route without it would trust everyone. */
+  trust: RepositoryTrust;
   /** #507 Where a folder's remote is read; injected so the tests need no git. */
   git?: Git;
   now?: () => number;
@@ -81,6 +86,7 @@ export function createWorkPlanRoute(o: WorkPlanRouteDeps | null): WorkPlanRoute 
     if (typeof target !== 'string' || !(NEW_SESSION_TARGETS as readonly string[]).includes(target)) return send(res, 400, { error: 'Escolha Claude Desktop ou terminal' });
     if (typeof repo !== 'string' || !isPlanRepo(repo) || !isPlanNumber(number) || (replan !== undefined && typeof replan !== 'boolean')) return send(res, 400, { error: 'pedido inválido' });
     if (!o || !o.issues) return send(res, 503, { error: 'O GitHub está desligado neste console' });
+    if (!o.trust.isTrusted(repo)) return send(res, 403, UNTRUSTED_REPOSITORY);
 
     const log = o.log ?? (() => {});
     const now = o.now ?? Date.now;

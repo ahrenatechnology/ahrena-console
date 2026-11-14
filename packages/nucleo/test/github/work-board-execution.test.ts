@@ -19,6 +19,7 @@ import {
 } from '../../src/index.ts';
 import { EXECUTION_SESSION_WINDOW_MS, type ExecutionRun, type WorkExecutionRuns } from '../../src/github/work-execution.ts';
 import { clock, k, REPO } from './helpers.ts';
+import { trustOf } from '../fixtures.ts';
 
 const START = '2026-10-18T12:00:00.000Z';
 
@@ -81,7 +82,7 @@ function setup(items: ProjectCard[] = [card(412)], withRuns = true) {
   const runs = new MemoryRuns();
   const project: WorkProjectBoard = { board: async () => current };
   const live: WorkSessions = { links: async () => sessions.list };
-  const service = new WorkBoardService({ project, sessions: live, queue: EMPTY_WORK_QUEUE, history, now, ...(withRuns ? { executionRuns: runs } : {}) });
+  const service = new WorkBoardService({ trust: trustOf('ahrenatechnology'), project, sessions: live, queue: EMPTY_WORK_QUEUE, history, now, ...(withRuns ? { executionRuns: runs } : {}) });
   const read = async (n = 412): Promise<WorkBoardCard> => (await service.board({ ...DEFAULT_WORK_BOARD_FILTERS })).columns.flatMap((c) => c.cards).find((c) => c.number === n)!;
   return { now, runs, sessions, service, read };
 }

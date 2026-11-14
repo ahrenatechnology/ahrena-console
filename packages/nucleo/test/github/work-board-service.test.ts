@@ -19,6 +19,7 @@ import {
   type WorkSessions,
 } from '../../src/index.ts';
 import { clock, k, node, REPO } from './helpers.ts';
+import { trustOf } from '../fixtures.ts';
 
 function projectCard(n: number, over: Partial<ProjectCard> = {}): ProjectCard {
   return {
@@ -140,7 +141,7 @@ function setup({ queue = EMPTY_WORK_QUEUE as WorkQueue, withParents = true } = {
   const sessions = new FakeSessions();
   const history = new MemoryHistory();
   const parents = new FakeParents();
-  const service = new WorkBoardService({ project, sessions, queue, history, parents: withParents ? parents : undefined, now, pausedUntil: () => retry.pausedUntil, nextScheduledRead: () => retry.nextRead, log: (m) => logged.push(m) });
+  const service = new WorkBoardService({ trust: trustOf('ahrenatechnology'), project, sessions, queue, history, parents: withParents ? parents : undefined, now, pausedUntil: () => retry.pausedUntil, nextScheduledRead: () => retry.nextRead, log: (m) => logged.push(m) });
   return { now, project, sessions, history, parents, service, logged, retry };
 }
 

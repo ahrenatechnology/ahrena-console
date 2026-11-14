@@ -13,6 +13,7 @@ import { GithubCache, MemoryCacheStore } from '../../src/github/cache.ts';
 import { GithubGraphqlSource } from '../../src/github/github-source.ts';
 import { WorkIssueService } from '../../src/github/work-issue-service.ts';
 import { clock, REPO } from '../github/helpers.ts';
+import { trustOf } from '../fixtures.ts';
 
 const OPENED_AT = '2026-11-10T10:00:00Z';
 
@@ -74,6 +75,7 @@ async function boot({ withService = true }: { withService?: boolean } = {}): Pro
   }) as unknown as typeof globalThis.fetch;
   const logs: string[] = [];
   const service = new WorkIssueService({
+    trust: trustOf('ahrenatechnology'),
     source: new GithubGraphqlSource({ token: 'test-token', fetch: fakeFetch, sleep: async () => {} }),
     writer: new GithubGraphqlSource({ token: 'test-token', fetch: fakeFetch, sleep: async () => {} }),
     cache: new GithubCache({ store: new MemoryCacheStore(), now: clock() }),

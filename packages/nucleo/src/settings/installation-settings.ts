@@ -1,7 +1,10 @@
-// The installation's settings (#241, decision 0011 §8): what one installation chose, none of it a
-// secret. Three keys and nothing else: the active GitHub login (the vault account), the credential
-// source and the Project of the kanban. Each value is validated on write, so a credential cannot land
-// here by mistake (a token is not a login, and there is no key for one).
+/*
+ * The installation's settings (#241, decision 0011 §8): what one installation chose, none of it a
+ * secret. Four keys and nothing else: the active GitHub login (the vault account), the credential
+ * source, the Project of the kanban and (#594) the owners the core opens work sessions for. Each
+ * value is validated on write, so a credential cannot land here by mistake (a token is not a login,
+ * and there is no key for one).
+ */
 
 import type { DatabaseSync } from 'node:sqlite';
 import { GITHUB_LOGIN, isGithubLogin } from '../github/login.ts';
@@ -20,11 +23,13 @@ export interface InstallationSettingValues {
   'github.login': string | null;
   'github.source': GithubCredentialSource;
   'project.selection': ProjectSelection;
+  /** #594 the GitHub owners whose repositories the core opens work sessions for; stored, it replaces the default (the Project's owner). `[]` trusts nobody. */
+  'work.trustedOwners': string[];
 }
 
 export type InstallationSettingKey = keyof InstallationSettingValues;
 
-export const INSTALLATION_SETTING_KEYS: readonly InstallationSettingKey[] = ['github.login', 'github.source', 'project.selection'];
+export const INSTALLATION_SETTING_KEYS: readonly InstallationSettingKey[] = ['github.login', 'github.source', 'project.selection', 'work.trustedOwners'];
 
 export interface InstallationSettings {
   get<K extends InstallationSettingKey>(key: K): InstallationSettingValues[K] | null;
@@ -36,6 +41,14 @@ export interface InstallationSettings {
 
 /** A GitHub login or organization (src/github/login.ts). */
 export const GITHUB_OWNER = GITHUB_LOGIN;
+
+/** #594 how many owners a trusted list holds at most. */
+export const MAX_TRUSTED_OWNERS = 100;
+
+/** Whether `value` is a list of at most `MAX_TRUSTED_OWNERS` GitHub owners; an empty list is valid. */
+export function isTrustedOwners(value: unknown): value is string[] {
+  return Array.isArray(value) && value.length <= MAX_TRUSTED_OWNERS && value.every((o) => typeof o === 'string' && GITHUB_OWNER.test(o));
+}
 
 /** Whether `value` is a valid Project selection: owner like a login, number 1..999999999, field 1..100 printable chars. */
 export function isProjectSelection(value: unknown): value is ProjectSelection {
@@ -58,6 +71,7 @@ const VALIDATORS: { [K in InstallationSettingKey]: (v: unknown) => v is Installa
   'github.login': (v): v is string | null => v === null || isGithubLogin(v),
   'github.source': (v): v is GithubCredentialSource => v === 'console' || v === 'gh',
   'project.selection': isProjectSelection,
+  'work.trustedOwners': isTrustedOwners,
 };
 
 function assertKey(key: string): asserts key is InstallationSettingKey {
