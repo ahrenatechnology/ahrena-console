@@ -817,6 +817,61 @@ body.captura[data-width="1100"] .width-col[data-w="1440"], body.captura[data-wid
 .sm-head b { font-weight: 600; }
 .sm-from { display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 7px; border-radius: 99px; font-size: 10.5px; font-weight: 500; background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--accent-text); font-family: var(--font-sans); }
 .sm-row-action { display: inline-flex; align-items: center; gap: 5px; color: var(--accent-text); font-weight: 600; }
+/* ---------- permission requests (60-1 to 60-13, issue 621, from issue 60) ---------- */
+.pm-band { display: flex; flex-direction: column; gap: 10px; padding: 12px 14px; border-radius: 10px; font-size: 12.5px; background: color-mix(in srgb, var(--status-waiting-badge) 70%, var(--surface)); border: 1px solid color-mix(in srgb, var(--status-waiting-dot) 50%, var(--border)); }
+.pm-band.pm-neutral { background: var(--surface); border-color: var(--border); }
+.pm-band.pm-ok { background: color-mix(in srgb, var(--status-completed-badge) 60%, var(--surface)); border-color: color-mix(in srgb, var(--status-completed-dot) 45%, var(--border)); }
+.pm-band.pm-bad { background: color-mix(in srgb, var(--status-error-badge) 60%, var(--surface)); border-color: color-mix(in srgb, var(--status-error-dot) 45%, var(--border)); }
+.pm-band.pm-off { background: var(--surface); border-style: dashed; border-color: var(--border); }
+.pm-top { display: flex; align-items: center; gap: 8px; min-width: 0; flex-wrap: wrap; }
+.pm-top > svg { color: var(--status-waiting-text); }
+.pm-top b { color: var(--status-waiting-text); font-weight: 600; }
+.pm-ok .pm-top > svg, .pm-ok .pm-top b { color: var(--status-completed-text); }
+.pm-bad .pm-top > svg, .pm-bad .pm-top b { color: var(--status-error-text); }
+.pm-neutral .pm-top > svg, .pm-neutral .pm-top b, .pm-off .pm-top > svg, .pm-off .pm-top b { color: var(--text); }
+.pm-top .pm-when { margin-left: auto; font-size: 11.5px; color: var(--muted); white-space: nowrap; }
+.pm-call { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-radius: 8px; background: var(--bg); border: 1px solid var(--border); font-family: var(--font-mono); font-size: 12px; min-width: 0; }
+.pm-call .pm-tool { color: var(--accent-text); font-weight: 600; flex: none; }
+.pm-call .pm-sum { color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 1; }
+.pm-redacted { display: inline-flex; align-items: center; padding: 0 5px; border-radius: 4px; background: var(--raised); color: var(--muted); font-size: 11px; }
+.pm-meta { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; font-size: 11.5px; color: var(--muted); }
+.pm-meta span { display: inline-flex; align-items: center; gap: 5px; }
+.pm-meta .mono { font-family: var(--font-mono); font-size: 11px; }
+.pm-meta .pm-soon { color: var(--status-waiting-text); font-weight: 600; }
+.pm-acts { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.pm-acts .pm-hint { font-size: 11.5px; color: var(--muted); display: inline-flex; gap: 5px; align-items: center; }
+.pm-acts .pm-right { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+.btn.pm-allow { background: var(--accent); color: var(--on-accent); font-weight: 600; }
+.btn.pm-deny { border-color: color-mix(in srgb, var(--status-error-dot) 55%, var(--border)); background: var(--surface); color: var(--status-error-text); font-weight: 600; }
+.btn.pm-disabled { opacity: .45; cursor: not-allowed; }
+.pm-reason { flex: 1 1 320px; min-width: 0; height: 30px; padding: 0 10px; border-radius: 8px; background: var(--bg); border: 1px solid var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent); display: flex; align-items: center; gap: 8px; font-size: 12.5px; }
+.pm-reason .pm-ph { color: var(--muted); } .pm-reason .pm-count { margin-left: auto; font-family: var(--font-mono); font-size: 10.5px; color: var(--muted); }
+.pm-reason .pm-caret { display: inline-block; width: 1.5px; height: 1.1em; background: var(--accent); vertical-align: -0.2em; }
+.pm-why { display: flex; gap: 6px; align-items: flex-start; font-size: 12px; line-height: 1.5; color: var(--muted); }
+.pm-why svg { margin-top: 2px; flex: none; }
+.pm-why b { color: var(--text); font-weight: 600; }
+.pm-list { display: flex; flex-direction: column; gap: 8px; }
+.pm-req { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; border-radius: 9px; background: var(--surface); border: 1px solid var(--border); }
+.pm-req .pm-n { font-family: var(--font-mono); font-size: 10.5px; color: var(--muted); }
+.pm-col { display: flex; flex-direction: column; gap: 12px; }
+.pm-strip { display: flex; flex-direction: column; gap: 6px; }
+.inbox .grade4 .pm-item { grid-column: span 2; height: auto; gap: 6px; }
+.pm-item .pm-call { padding: 5px 8px; font-size: 11.5px; }
+.pm-item .pm-acts .btn { height: 26px; padding: 0 10px; font-size: 12px; }
+.pm-item .pm-meta { gap: 10px; }
+.mini.pm-gone { border-style: dashed; opacity: .75; }
+.mc.pm-wall { height: auto; }
+.pm-wall .pm-acts .btn { height: 26px; padding: 0 9px; font-size: 12px; } .pm-wall .pm-meta { gap: 8px; }
+.pm-flow { display: flex; flex-direction: column; gap: 18px; padding: 18px; width: 1100px; }
+.pm-lane { display: flex; align-items: stretch; gap: 10px; }
+.pm-node { padding: 10px 12px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface); font-size: 12.5px; line-height: 1.45; display: flex; flex-direction: column; gap: 4px; flex: 1 1 0; min-width: 0; }
+.pm-node b { font-weight: 600; display: inline-flex; gap: 6px; align-items: center; }
+.pm-node small { color: var(--muted); font-size: 11.5px; }
+.pm-node.pm-main { border-color: var(--accent); }
+.pm-node.pm-link { border-style: dashed; }
+.pm-arrow { display: grid; place-items: center; color: var(--muted); flex: none; }
+.pm-states { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.pm-tag { align-self: flex-start; display: inline-flex; align-items: center; height: 18px; padding: 0 6px; border-radius: 5px; font-family: var(--font-mono); font-size: 10.5px; background: var(--raised); color: var(--muted); }
 .cc-nav .tm-dot { margin-left: auto; }
 /* ---------- machines (C24 to C26, decision 0008) ---------- */
 .tm-grid { display: grid; gap: 16px; align-items: start; grid-auto-flow: dense; }
@@ -5501,6 +5556,33 @@ const TELAS = [
     n: avNotes(['<code>stepEl()</code> de <code>workflow-loop.js</code>: o cartão do passo e o ícone de abrir, com <code>title</code> e <code>aria-label</code>.', 'A issue 518 (AC-2): o ícone leva à Conversa com o subagente selecionado, no Desktop e no navegador.'], ['<b>Segunda ação ou trocar o destino?</b> Recomendo a <b>segunda ação (A)</b>: o AC-2 da issue 518 continua valendo e quem quer o ciclo do agente chega em um clique. A opção B depende de o Fernando mudar o AC-2.', '<b>Ordem do Tab:</b> o nome, depois o ícone.']) },
   { id: 'agent-view-data', cod: '521-10', nome: 'Vista do agente · o que ela pede ao núcleo', sub: 'Issue 521. Cada campo que a vista usa e o núcleo ainda não serve, com o que serve hoje e de onde viria (<code>packages/nucleo/src/api/session-detail.ts</code>, <code>src/ingest/history/importer.ts</code>, <code>transcript.ts</code>). As marcas G1 a G8 aparecem nas telas anteriores, nas partes que dependem de cada uma. Sem largura própria.', html: () => avGapsHtml(),
     n: avNotes(['Já servidos em <code>AgenteDoDetalhe</code>: <code>id</code>, <code>type</code>, <code>name</code>, <code>task</code> (cortado), <code>model</code>, <code>status</code>, <code>start</code>, <code>end</code>, <code>costUsd</code>, <code>parent</code>.', 'A Conversa serve, por agente, as mensagens com as chamadas de ferramenta (estado, entrada, resultado até 4.000 caracteres).'], ['<b>Uma leitura do agente</b> (G8) em vez de duas. Recomendo, para a vista ter uma só falha e uma só tentativa de novo.', '<b>As camadas de código seguem o que o Fernando aprovar:</b> os dados novos (G1 a G7) são a camada de contrato; a vista sobe sem eles com o que existe (nome, estado, custo, duração), e as partes marcadas ficam fora até lá.']) },
+  { cap: 'permission', titulo: 'Permissão pelo Console', desc: 'Issue 621, da issue 60 (a aprovar): o pedido de permissão de uma sessão do Claude, respondido no Console, em “Precisa de você” (Dashboard e Mural) e no Detalhe da sessão, numa faixa no topo da Conversa. Permitir vale uma vez; Negar leva um motivo opcional; o cartão do Claude Desktop continua valendo em paralelo e quem responde primeiro decide. Primeira camada da construção de fora para dentro: só estrutura, estados e fluxo; nenhum componente antes da aprovação. O fluxo (60-1), o pedido pendente (60-2), “Precisa de você” (60-3), Negar com motivo (60-4), só negar (60-5), enviando (60-6), respondido aqui (60-7), respondido no Claude Desktop (60-8), expirado (60-9), resposta recusada (60-10), núcleo fora (60-11), capacidade ausente (60-12) e vários pedidos (60-13). Cada estado em 1100 e 1440, com o Detalhe e, embaixo, “Precisa de você” no mesmo estado. Dados sintéticos; o resumo da chamada vem redigido pelo núcleo e aparece como texto, numa linha.' },
+  { id: '60-permission-flow', cod: '60-1', nome: 'Permissão · por onde se chega e os estados', sub: 'Issue 621. A bandeja e a notificação do sistema só levam ao Detalhe (nenhuma tela nova nelas); o Dashboard e o Mural respondem ali mesmo; Sessões e Kanban ficam com o chip de hoje. Embaixo, cada estado do pedido com a palavra do núcleo (<code>state</code> ou o código HTTP) e a tela que o desenha. Sem largura própria.', html: () => pmFlowHtml(),
+    n: avNotes(['A notificação e o item da bandeja já dizem “Pede permissão” (issue 245) e abrem o Detalhe na janela do app (bandeja e notificação de hoje).', 'O destino é a aba Conversa de <code>session-detail.js</code>, por <code>#conversation</code>.'], ['<b>Responder na própria notificação</b> (botões de ação do macOS): recomendo que não, nesta issue. A notificação não mostra o resumo inteiro nem o porquê de um “só negar”, e a decisão 0025 só aceita resposta da <code>/ui</code> do dono.', '<b>Sessões e Kanban sem botões:</b> recomendo. Ali há uma linha por sessão; responder numa linha de tabela esconde o resumo.']) },
+  { id: '60-permission-pending', cod: '60-2', nome: 'Permissão · pedido pendente no Detalhe', sub: 'Issue 621, AC-2 e AC-6. A faixa no topo da Conversa: o que o Claude pede, a ferramenta e o resumo da chamada numa linha (o segredo já vem ocultado pelo núcleo como ••••), a pasta, a hora do pedido, quanto falta para expirar, Permitir uma vez, Negar e Abrir no Claude Desktop. Na conversa, o bloco do Bash “Aguardando permissão”, como hoje. Em 1100 e 1440.', html: () => pmStateHtml('pending'),
+    n: avNotes(['O cabeçalho do Detalhe, as abas e o bloco <code>.sd-tool.sd-asks</code> “Aguardando permissão” de <code>session-detail.js</code>.', 'A cor amarela de “Precisa de você” (<code>attention.js</code>).', 'Abrir no Claude Desktop (C70).'], ['<b>A faixa mora no topo da Conversa</b>, como pede a issue. Nas outras abas, a faixa de hoje (“Esperando você · Pede permissão”) ganha o link “Responder na Conversa”. Recomendo.', '<b>“Expira em”</b> conta o prazo do Console (9 min 30 s, decisão 0025), não o do Claude Desktop, que não expira. Abaixo de 1 min fica amarelo forte (60-13).', '<b>O resumo inteiro</b> fica no <code>title</code> e numa dobra ao clicar; a faixa nunca quebra em duas linhas.']) },
+  { id: '60-permission-need-you', cod: '60-3', nome: 'Permissão · em “Precisa de você” no Dashboard e no Mural', sub: 'Issue 621, AC-2. No Dashboard, o item de uma sessão que pede permissão ocupa duas casas e responde ali: ferramenta, resumo, hora, prazo, Permitir uma vez e Negar; “Abrir ›” leva ao Detalhe. Um pedido só negar mostra Permitir desligado. No Mural, o card da sessão cresce com o mesmo bloco. Em 1100 e 1440.', html: () => avRow2([1100, 1440].map(w => [`${w} px${w === 1100 ? ' · a janela do app' : ''}`, cc('dashboard', pmNeedYouScreen(w), 6, w)])),
+    n: avNotes(['A caixa “Precisam de você” do Dashboard (<code>dashboard.js</code>), ordenada pelo núcleo, e os cards do Mural (<code>wall.js</code>).', 'O chip “Pede permissão” de <code>attention.js</code>.'], ['<b>Negar no item</b> abre o motivo ali mesmo, numa linha (60-4); Enter nega.', '<b>Duas casas para o item:</b> recomendo. Numa casa só o resumo não cabe nem truncado; o item volta a uma casa quando o pedido sai.', '<b>Mural:</b> o card cresce em vez de abrir por cima, para não esconder as vizinhas.']) },
+  { id: '60-permission-deny-reason', cod: '60-4', nome: 'Permissão · Negar com motivo opcional', sub: 'Issue 621, AC-2. Negar abre um campo de uma linha, já em foco: o motivo é opcional, até 500 caracteres, e chega ao Claude como “Negado por você, pelo Ahrena Console: …”. Negar de novo envia; Cancelar volta. Esc também cancela. Em 1100 e 1440.', html: () => pmStateHtml('deny-open'),
+    n: avNotes(['O campo e o contador seguem a caixa de mensagem do C51.'], ['<b>Negar em dois toques</b> (abre o motivo, depois envia): recomendo, porque o motivo é o que ajuda o Claude a seguir. Quem não quer motivo aperta Negar duas vezes.', '<b>O motivo some da tela depois de enviado?</b> Não: aparece na faixa de respondido (60-7). Na auditoria vai só o hash.']) },
+  { id: '60-permission-deny-only', cod: '60-5', nome: 'Permissão · só negar daqui', sub: 'Issue 621, AC-2. Um pedido <code>terminalOnly</code>: um <code>git push --force</code>. Permitir uma vez aparece desligado, com o porquê em palavras: o que só o Claude Desktop ou o terminal liberam. Negar continua. Em 1100 e 1440.', html: () => pmStateHtml('deny-only'),
+    n: avNotes(['A lista do que é <code>terminalOnly</code> vem da decisão 0025 (núcleo); a tela só lê o campo.'], ['<b>Permitir desligado e à vista</b>, em vez de sumir: recomendo, para que a pessoa saiba que existe e por que não está ali.']) },
+  { id: '60-permission-sending', cod: '60-6', nome: 'Permissão · enviando', sub: 'Issue 621. Depois do clique, os dois botões travam e o escolhido diz “Enviando…” até o núcleo responder. Nenhum clique duplo vira duas respostas. Em 1100 e 1440.', html: () => pmStateHtml('sending'),
+    n: avNotes(['O “Enviando…” da caixa de mensagem (C52).'], ['<b>Sem desfazer:</b> a resposta sai na hora; não há janela de “desfazer” antes de enviar, porque cada segundo conta contra o cartão do Desktop.']) },
+  { id: '60-permission-answered', cod: '60-7', nome: 'Permissão · respondido aqui', sub: 'Issue 621. Permitido uma vez (verde, com a hora; a ferramenta roda e o bloco vira OK) e Negado (neutro, com a hora e o motivo enviado; o Claude responde na conversa). Os dois saem de “Precisa de você”: embaixo, a caixa sem o item. Em 1100 e 1440.', html: () => `<div class="tm-rc">${avRowR([1100, 1440].map(w => [`${w} px · permitido`, `<div class="pm-col">${avFrame(w, pmDetail('allowed'))}${pmInbox(w, 'allowed')}</div>`]))}${avRowR([1100, 1440].map(w => [`${w} px · negado, com motivo`, avFrame(w, pmDetail('denied'))]))}</div>`,
+    n: avNotes(['O bloco da ferramenta volta ao estado de hoje (OK, com erro) quando o transcript avança.'], ['<b>Quanto tempo a faixa fica:</b> recomendo enquanto o pedido estiver entre os encerrados recentes do núcleo (10 min) ou até o próximo turno, o que vier antes.', '<b>A célula tracejada “saiu daqui”</b> é só para esta captura: na tela o item some sem deixar rastro.']) },
+  { id: '60-permission-answered-desktop', cod: '60-8', nome: 'Permissão · respondido no Claude Desktop', sub: 'Issue 621, AC-3. A pessoa respondeu no cartão do Claude Desktop: o pedido some de “Precisa de você” e o Detalhe diz “Respondido no Claude Desktop”, com a hora. O Console não sabe se foi permitir ou negar e não inventa: a conversa mostra. Em 1100 e 1440.', html: () => pmStateHtml('desktop'),
+    n: avNotes(['O núcleo fecha o pedido como <code>answered_elsewhere</code> pelos hooks da própria sessão (decisão 0025).'], ['Nenhuma.']) },
+  { id: '60-permission-expired', cod: '60-9', nome: 'Permissão · expirado', sub: 'Issue 621, AC-3. O Console esperou 9 min 30 s e desistiu: a faixa diz “O Console parou de esperar · responda no Claude Desktop”, com os botões desligados e Abrir no Claude Desktop. A sessão continua em “Precisa de você”, como antes desta issue: sem botões e “Responda no Claude Desktop”. Em 1100 e 1440.', html: () => pmStateHtml('expired'),
+    n: avNotes(['O item sem botões é o de hoje, com “Abrir ›”.'], ['<b>O pedido sai, a sessão fica:</b> o critério AC-3 tira o pedido de “Precisa de você”; a sessão continua lá porque o cartão do Desktop ainda espera. Recomendo assim.']) },
+  { id: '60-permission-refused', cod: '60-10', nome: 'Permissão · resposta recusada (409 e 410)', sub: 'Issue 621, AC-4. A resposta chegou tarde: o núcleo respondeu 409 (já respondido) ou 410 (expirado, respondido em outro lugar ou núcleo reiniciado). A faixa vermelha diz “Este pedido já foi respondido ou expirou” e qual resposta não foi aplicada; não há Tentar de novo e nada tenta sozinho. Em 1100 e 1440.', html: () => pmStateHtml('refused'),
+    n: avNotes(['<code>errorBand()</code> de <code>states.js</code>, sem a ação.'], ['<b>Uma frase só para 409 e 410:</b> recomendo. Para a pessoa a saída é a mesma; o código vai no <code>title</code>.', '<b>A faixa some</b> na próxima leitura que já não traga o pedido (e então vale 60-8 ou 60-9).']) },
+  { id: '60-permission-core-down', cod: '60-11', nome: 'Permissão · núcleo fora, reconectando', sub: 'Issue 621. A /ui perdeu o núcleo: a faixa diz “Sem conexão com o núcleo · reconectando…”, os botões ficam desligados e nada é guardado para enviar depois. O cartão do Claude Desktop continua valendo. Em 1100 e 1440.', html: () => pmStateHtml('core-down'),
+    n: avNotes(['O aviso de reconexão das telas (a leitura que falhou, com a próxima tentativa).'], ['<b>Sem fila local:</b> uma resposta guardada podia chegar depois de o pedido mudar. Quando o núcleo volta, ele fecha como <code>core_restarted</code> o pedido que caiu com ele, e a faixa vira 60-9.']) },
+  { id: '60-permission-unavailable', cod: '60-12', nome: 'Permissão · indisponível (Codex ou sem o plugin)', sub: 'Issue 621, AC-5. Uma sessão do Codex e uma sessão do Claude sem o plugin do Console (ou com um plugin anterior): nenhum botão, “Responder por aqui: indisponível nesta sessão” e onde responder. Nada é simulado por texto. Em 1100 e 1440.', html: () => pmUnavailableHtml(),
+    n: avNotes(['Hoje uma sessão que espera permissão já aparece com o chip “Pede permissão”, lido do campo <code>attention</code> (issue 245); sem pedido registrado, é só isso que a tela sabe.'], ['<b>“Indisponível” e o porquê, sempre:</b> recomendo, para não parecer defeito.', '<b>Como a /ui sabe que falta o plugin:</b> o núcleo diz se recebeu um pedido registrado para a sessão; sem pedido, só há a atenção de hoje. Fica no contrato (L3).']) },
+  { id: '60-permission-several', cod: '60-13', nome: 'Permissão · vários pedidos na mesma sessão', sub: 'Issue 621. Três chamadas pedem permissão na mesma sessão (chamadas paralelas): a faixa lista as três, a mais antiga primeiro, cada uma com os seus botões e o seu prazo; a terceira é só negar. O resumo do Edit traz HTML e aparece como texto. Em “Precisa de você”, o item mostra a mais antiga e “+2 pedidos”. Em 1100 e 1440.', html: () => pmStateHtml('several'),
+    n: avNotes(['A lista do núcleo, em ordem de chegada (<code>GET /api/sessions/&lt;id&gt;/permission-requests</code>, decisão 0025).'], ['<b>Sem “Permitir todos”:</b> recomendo não ter. Cada pedido vale para a sua chamada; um botão em lote aprovaria o que não se leu.', '<b>A mais antiga expira primeiro</b> e o prazo fica amarelo abaixo de 1 min.']) },
 ]
 
 // =====================================================================
@@ -6792,6 +6874,182 @@ const AV_GAPS = [
 const avGapsHtml = () => `<div class="cartao av-sec" style="padding:6px 10px"><table class="av-tab"><thead><tr><th>Marca</th><th>O que a vista pede</th><th>O que o núcleo serve hoje</th><th>De onde viria</th></tr></thead><tbody>${AV_GAPS.map(([g, t, hoje, vem]) => `<tr><td>${avDep(g, t)}</td><td><b>${t}</b></td><td>${hoje}</td><td>${vem}</td></tr>`).join('')}</tbody></table></div>`
 
 // =====================================================================
+// Permission requests (60-1 to 60-13, issue 621, from issue 60): allow once or deny a permission
+// request from "Precisa de você" and from the session Detail. Layer 1 of the outside-in build:
+// structure, states and flow only. Synthetic data in the simulator's vocabulary. The summary of a call
+// is redacted by the core and drawn as text on one line, never as HTML.
+// =====================================================================
+const PM_S = byId('b91d04aa')
+const pmRedacted = `<span class="pm-redacted" title="Segredo ocultado pelo núcleo">••••</span>`
+// The requests of the synthetic session. `sum` is already escaped here: it is what textContent would show.
+const PM_REQ = {
+  bash: { tool: 'Bash', sum: `DATABASE_URL=${pmRedacted} npm run migrate -- --env local`, at: '23:02', left: '8 min 40 s' },
+  push: { tool: 'Bash', sum: 'git push --force origin feat/58-pedidos', at: '23:06', left: '9 min 10 s' },
+  edit: { tool: 'Edit', sum: 'src/pedidos/esquema.ts · +12 −3 · &lt;div class=&quot;aviso&quot;&gt;Pedido migrado&lt;/div&gt;', at: '23:03', left: '8 min 55 s' },
+  fetch: { tool: 'WebFetch', sum: 'https://docs.exemplo.dev/migracoes/esquema?token=' + pmRedacted, at: '23:04', left: '9 min 20 s' },
+}
+const pmCall = r => `<div class="pm-call" title="Resumo redigido pelo núcleo, numa linha"><span class="pm-tool">${r.tool}</span><span class="pm-sum">${r.sum}</span></div>`
+const pmMeta = (r, { left = true, folder = true, soon = false } = {}) => `<div class="pm-meta">${folder ? `<span>${ic('folder')}<span class="mono">/simulacao/motor-de-regras</span></span>` : ''}<span>${ic('clock')}pedido às ${r.at}</span>${left ? `<span class="${soon ? 'pm-soon' : ''}">${ic('timer')}expira em ${soon ? '40 s' : r.left}</span>` : ''}</div>`
+const pmBtn = (kind, label, icon, off = false, why = '') => `<span class="btn ${kind === 'allow' ? 'pm-allow' : kind === 'deny' ? 'pm-deny' : 'contorno'}${off ? ' pm-disabled' : ''}"${why ? ` title="${why}"` : ''}${off ? ' aria-disabled="true"' : ''}>${ic(icon)}${label}</span>`
+const PM_ALLOW = (off, why) => pmBtn('allow', 'Permitir uma vez', 'check', off, why)
+const PM_DENY = (off, why) => pmBtn('deny', 'Negar', 'x', off, why)
+const PM_DESKTOP = pmBtn('', 'Abrir no Claude Desktop', 'external-link')
+const pmHint = t => `<span class="pm-hint">${ic('info')}${t}</span>`
+const pmTop = (icon, title, when = '', extra = '') => `<div class="pm-top">${ic(icon)}<b>${title}</b>${extra}${when ? `<span class="pm-when">${when}</span>` : ''}</div>`
+const pmWhy = (icon, html) => `<div class="pm-why">${ic(icon)}<span>${html}</span></div>`
+const PM_ONCE = pmHint('Vale só para esta chamada. Nenhuma regra é gravada.')
+
+/** The actions of one pending request, by state. */
+function pmActs(state, r = PM_REQ.bash) {
+  if (state === 'deny-open') return `<div class="pm-acts"><span class="pm-reason" role="textbox" aria-label="Motivo da negação (opcional)">antes, confira se o banco local está vazio<span class="pm-caret"></span><span class="pm-count">42 / 500</span></span>${pmBtn('', 'Cancelar', 'undo-2')}${PM_DENY()}</div>
+    <div class="pm-acts">${pmHint('O motivo é opcional e chega ao Claude como “Negado por você, pelo Ahrena Console: …”. Uma linha, até 500 caracteres.')}</div>`
+  if (state === 'deny-only') return `<div class="pm-acts">${PM_ALLOW(true, 'Só o Claude Desktop ou o terminal liberam esta chamada')}${PM_DENY()}<span class="pm-right">${PM_DESKTOP}</span></div>`
+  if (state === 'sending') return `<div class="pm-acts">${pmBtn('allow', 'Enviando…', 'loader-2', true)}${PM_DENY(true)}<span class="pm-hint">${ic('loader-2')}Enviando sua resposta ao núcleo. Os botões ficam travados até ele responder.</span></div>`
+  if (state === 'core-down') return `<div class="pm-acts">${PM_ALLOW(true, 'Sem conexão com o núcleo')}${PM_DENY(true, 'Sem conexão com o núcleo')}<span class="pm-right">${PM_DESKTOP}</span></div>`
+  return `<div class="pm-acts">${PM_ALLOW()}${PM_DENY()}${PM_ONCE}<span class="pm-right">${PM_DESKTOP}</span></div>`
+}
+
+/** The band at the top of the Conversa, one per state. */
+function pmBand(state) {
+  const r = state === 'deny-only' ? PM_REQ.push : PM_REQ.bash
+  const pending = (top, extra = '', cls = '') => `<div class="pm-band${cls}" role="region" aria-label="Pedido de permissão">${top}${pmCall(r)}${pmMeta(r, { left: state !== 'core-down' })}${extra}${pmActs(state, r)}</div>`
+  switch (state) {
+    case 'pending': case 'deny-open':
+      return pending(pmTop('shield-alert', 'O Claude pede permissão para usar o Bash', 'há 1 min'))
+    case 'deny-only':
+      return pending(pmTop('shield-alert', 'O Claude pede permissão para usar o Bash', 'há 1 min', `<span class="mot">${ic('lock')}só negar daqui</span>`),
+        pmWhy('lock', '<b>Só o Claude Desktop ou o terminal liberam um push forçado.</b> Comandos que apagam, reescrevem o histórico ou mexem na configuração do Claude e do Console (<code>rm -r</code>, <code>git push --force</code>, <code>git reset --hard</code>, <code>sudo</code>, <code>.claude/settings*.json</code>, <code>.env*</code>) não se permitem pelo Console. Daqui, só negar.'))
+    case 'sending':
+      return pending(pmTop('loader-2', 'Enviando “Permitir uma vez”…', 'há 1 min'))
+    case 'core-down':
+      return pending(pmTop('wifi-off', 'Sem conexão com o núcleo · reconectando…', 'tentando de novo em 4 s'),
+        pmWhy('info', '<b>Os botões voltam quando o núcleo responder.</b> Nada fica guardado para enviar depois: o pedido pode ter mudado enquanto o núcleo estava fora. O cartão do Claude Desktop continua valendo.'), '')
+    case 'allowed':
+      return `<div class="pm-band pm-ok" role="status">${pmTop('check-circle-2', 'Permitido uma vez, por você, pelo Console', 'às 23:04')}${pmCall(r)}${pmWhy('info', 'Só esta chamada. A ferramenta rodou em seguida; o resultado está na conversa, abaixo.')}</div>`
+    case 'denied':
+      return `<div class="pm-band pm-neutral" role="status">${pmTop('x-circle', 'Negado por você, pelo Console', 'às 23:04')}${pmCall(r)}${pmWhy('message-square', 'Motivo enviado ao Claude: <b>“antes, confira se o banco local está vazio”</b>')}</div>`
+    case 'denied-plain':
+      return `<div class="pm-band pm-neutral" role="status">${pmTop('x-circle', 'Negado por você, pelo Console', 'às 23:04')}${pmCall(r)}${pmWhy('message-square', 'Sem motivo. O Claude recebeu “Negado por você, pelo Ahrena Console”.')}</div>`
+    case 'desktop':
+      return `<div class="pm-band pm-neutral" role="status">${pmTop('monitor', 'Respondido no Claude Desktop', 'às 23:05')}${pmCall(r)}${pmWhy('info', 'A resposta foi dada no cartão do Claude Desktop, antes de chegar uma daqui. O Console não sabe se foi permitir ou negar: a conversa mostra o que aconteceu.')}</div>`
+    case 'expired':
+      return `<div class="pm-band pm-off" role="status">${pmTop('timer-off', 'O Console parou de esperar · responda no Claude Desktop', 'às 23:11')}${pmCall(r)}${pmWhy('info', '<b>O pedido expirou aqui</b> depois de 9 min 30 s sem resposta. A sessão continua esperando no cartão do Claude Desktop, que é onde se responde agora.')}<div class="pm-acts">${PM_ALLOW(true, 'Expirado')}${PM_DENY(true, 'Expirado')}<span class="pm-right">${PM_DESKTOP}</span></div></div>`
+    case 'refused':
+      return `<div class="pm-band pm-bad" role="alert">${pmTop('ban', 'Este pedido já foi respondido ou expirou', 'às 23:06')}${pmCall(r)}${pmWhy('info', '<b>Sua resposta (Negar) não foi aplicada.</b> Alguém respondeu antes no Claude Desktop, ou o prazo acabou enquanto ela ia. O Console não tenta de novo sozinho; a conversa mostra o que aconteceu.')}<div class="pm-acts">${PM_ALLOW(true, 'Pedido encerrado')}${PM_DENY(true, 'Pedido encerrado')}<span class="pm-right">${PM_DESKTOP}</span></div></div>`
+    case 'codex':
+      return `<div class="pm-band pm-off" role="status">${pmTop('shield-off', 'Responder por aqui: indisponível nesta sessão', 'há 1 min')}${pmCall({ tool: 'shell', sum: 'npm run migrate -- --env local' })}${pmWhy('info', '<b>Sessão do Codex.</b> O Codex não avisa o Console de um pedido de permissão nem aceita resposta de fora. Responda no app da sessão.')}</div>`
+    case 'no-plugin':
+      return `<div class="pm-band pm-off" role="status">${pmTop('shield-off', 'Responder por aqui: indisponível nesta sessão', 'há 1 min')}${pmCall(r)}${pmWhy('info', '<b>Esta sessão não tem o plugin do Ahrena Console</b> (ou tem uma versão anterior aos pedidos de permissão), então o Console só sabe que ela espera. Responda no Claude Desktop.')}<div class="pm-acts"><span class="pm-right">${PM_DESKTOP}</span></div></div>`
+  }
+}
+
+/** Several pending requests in one session: oldest first, each with its own buttons. */
+const pmSeveralBand = () => `<div class="pm-band" role="region" aria-label="Pedidos de permissão">
+  ${pmTop('shield-alert', '3 pedidos de permissão nesta sessão', 'o mais antigo há 3 min', '<span class="pm-hint" style="font-size:11.5px;color:var(--muted)">em ordem de chegada · cada um vale só para a sua chamada</span>')}
+  <div class="pm-list">${[['1', PM_REQ.edit, ''], ['2', PM_REQ.fetch, ''], ['3', PM_REQ.push, 'deny-only']].map(([n, r, st]) => `<div class="pm-req">
+    <div class="pm-top"><span class="pm-n">${n} de 3</span>${st ? `<span class="mot">${ic('lock')}só negar daqui</span>` : ''}</div>${pmCall(r)}${pmMeta(r, { folder: false, soon: n === '1' })}
+    <div class="pm-acts">${PM_ALLOW(!!st, st ? 'Só o Claude Desktop ou o terminal liberam esta chamada' : '')}${PM_DENY()}</div></div>`).join('')}</div>
+  ${pmWhy('info', 'Duas chamadas iguais viram dois pedidos, com ids diferentes. Responder um não responde os outros.')}
+</div>`
+
+/** The Conversa of the session, with the tool block in the state the request left it. */
+function pmConversation(state) {
+  const tool = { allowed: `<span class="ok">${ic('check-circle-2')}OK · permitido pelo Console</span>`, denied: `<span class="err">${ic('x-circle')}Negado pelo Console</span>`, desktop: `<span class="ok">${ic('check-circle-2')}OK</span>` }[state] ?? `<span class="esp">${ic('hourglass')}Aguardando permissão</span>`
+  const cmd = state === 'deny-only' ? 'git push --force origin feat/58-pedidos' : 'npm run migrate -- --env local'
+  return `<div class="cartao" style="padding:14px 18px;display:flex;flex-direction:column;gap:14px">
+    <div class="msg"><span class="av eu">${ic('user')}</span><div><div class="quem">Você<span class="h">22:58</span></div><div class="corpo">escreva a migração do esquema de pedidos e aplique no banco local</div></div></div>
+    <div class="msg"><span class="av">${ic('bot')}</span><div><div class="quem">Assistente<span class="chip">Opus 5.5</span><span class="chip">↓ 2,3 k · ↑ 310</span><span class="h">23:02</span></div>
+      <div class="corpo">${state === 'deny-only' ? 'Vou publicar a branch reescrita.' : 'Vou aplicar a migração no banco local.'}</div>
+      <div class="ferrbloco">${ic('chevron-down')}<span class="n">Bash</span><span class="cmd trunc">${cmd}</span>${tool}</div></div></div>
+    ${state === 'denied' ? `<div class="msg"><span class="av">${ic('bot')}</span><div><div class="quem">Assistente<span class="chip">Opus 5.5</span><span class="h">23:04</span></div><div class="corpo">Entendido. Antes de migrar, vou conferir se o banco local está vazio.</div></div></div>` : ''}
+  </div>`
+}
+
+/** The Detail of the session, Conversa tab, with the band on top. */
+function pmDetail(state, s = PM_S) {
+  const band = state === 'several' ? pmSeveralBand() : pmBand(state)
+  const st = ['allowed', 'denied', 'desktop'].includes(state) ? Object.assign({}, s, { st: 'active', mot: undefined }) : s
+  return `${detCab(st)}${abas(1, 3, '240/1.877')}${band}${pmConversation(state)}`
+}
+
+// "Precisa de você" in the Dashboard: the permission item spans two cells and answers in place.
+const pmMini = s => `<div class="cartao mini"><div style="display:flex;min-width:0">${sessionChip(s)}<span style="margin-left:auto;font-size:11px" class="c-muted">${s.idade}</span></div><div class="n trunc">${s.pj}</div><div class="x trunc">${s.pede ?? s.erro}</div><div class="pe"><span>${s.mo}</span><b>Abrir ›</b></div></div>`
+function pmItem(state) {
+  const r = state === 'deny-only' ? PM_REQ.push : state === 'several' ? PM_REQ.edit : PM_REQ.bash
+  const head = (extra = '') => `<div style="display:flex;gap:6px;align-items:center;min-width:0">${motChip('permission')}${extra}<span style="margin-left:auto;font-size:11px" class="c-muted">há 1 min</span></div><div class="n trunc">motor-de-regras · ${PM_S.nome}</div>`
+  const acts = {
+    several: `${PM_ALLOW()}${PM_DENY()}<span class="pm-hint">${ic('layers')}+2 pedidos nesta sessão · Abrir ›</span>`,
+    pending: `${PM_ALLOW()}${PM_DENY()}<span class="pm-right"><b class="c-muted" style="font-size:11px">Abrir ›</b></span>`,
+    'deny-open': `<span class="pm-reason" style="height:26px;flex-basis:160px"><span class="pm-ph">Motivo (opcional)</span><span class="pm-caret"></span></span>${PM_DENY()}`,
+    'deny-only': `${PM_ALLOW(true, 'Só o Claude Desktop ou o terminal liberam esta chamada')}${PM_DENY()}<span class="pm-hint">${ic('lock')}só negar daqui</span>`,
+    sending: `${pmBtn('allow', 'Enviando…', 'loader-2', true)}${PM_DENY(true)}`,
+    'core-down': `${PM_ALLOW(true)}${PM_DENY(true)}<span class="pm-hint">${ic('wifi-off')}reconectando…</span>`,
+    refused: `<span class="pm-hint" style="color:var(--status-error-text)">${ic('ban')}Este pedido já foi respondido ou expirou</span>`,
+    codex: `<span class="pm-hint">${ic('shield-off')}Responder por aqui: indisponível · responda no app da sessão</span>`,
+    'no-plugin': `<span class="pm-hint">${ic('shield-off')}Responder por aqui: indisponível · responda no Claude Desktop</span>`,
+  }[state]
+  return `<div class="cartao mini pm-item">${head()}${pmCall(state === 'codex' ? { tool: 'shell', sum: 'npm run migrate -- --env local' } : r)}${['codex', 'no-plugin', 'refused'].includes(state) ? '' : pmMeta(r, { folder: false, left: state !== 'core-down' })}<div class="pm-acts">${acts}</div></div>`
+}
+const PM_OTHERS = ['d6c0e4a9', '8e17b6f2'].map(byId)
+/** The Dashboard inbox in a given state; `gone` draws what is left after the request closed. */
+function pmInbox(w, state) {
+  const shown = state === 'desktop' || state === 'allowed' || state === 'denied' ? null : state === 'expired' ? 'expired' : state
+  const count = shown ? 5 : 4
+  const cells = shown === 'expired'
+    ? `<div class="cartao mini"><div style="display:flex;min-width:0">${motChip('permission')}<span style="margin-left:auto;font-size:11px" class="c-muted">12 min</span></div><div class="n trunc">motor-de-regras</div><div class="x trunc">Responda no Claude Desktop</div><div class="pe"><span>${PM_S.mo}</span><b>Abrir ›</b></div></div>${PM_OTHERS.map(pmMini).join('')}`
+    : shown ? `${pmItem(shown)}${PM_OTHERS.map(pmMini).join('')}`
+    : `${PM_OTHERS.map(pmMini).join('')}${pmMini(byId('4d2a9c35'))}<div class="cartao mini pm-gone"><div class="n">${ic('check')} motor-de-regras saiu daqui</div><div class="x">${state === 'desktop' ? 'Respondido no Claude Desktop às 23:05' : state === 'allowed' ? 'Permitido uma vez às 23:04' : 'Negado às 23:04'}</div><div class="pe"><span>só nesta captura</span></div></div>`
+  return `<div class="pm-strip" style="width:${w}px"><div class="rotulo">“Precisa de você” no Dashboard, no mesmo estado</div><div class="cartao inbox"><div class="ttl">${ic('bell')}<span class="c-blocked">${count} precisam de você</span><span class="r">travadas até você agir · quem espera há mais tempo primeiro ${ic('chevron-right')}</span></div><div class="grade4">${cells}</div></div></div>`
+}
+
+/** One state screen: the Detail framed, and "Precisa de você" under it, at 1100 and 1440. */
+const pmStateHtml = (state, inbox = state) => avRow2([1100, 1440].map(w => [`${w} px${w === 1100 ? ' · a janela do app' : ''}`, `<div class="pm-col">${avFrame(w, pmDetail(state))}${inbox ? pmInbox(w, inbox) : ''}</div>`]))
+
+// 60-3: "Precisa de você" in the Dashboard and in the Mural, with the request answered in place.
+function pmNeedYouScreen(w) {
+  const wall = `<div class="cartao mc st-blocked pm-wall"><div class="l1"><span class="tt trunc">${PM_S.nome}</span>${badge('blocked')}</div><div class="pj trunc">motor-de-regras · feat/58-pedidos</div>
+    <div class="mural-reason">${motChip('permission')}<span class="c-muted trunc">há 1 min</span></div>${pmCall(PM_REQ.bash)}${pmMeta(PM_REQ.bash, { folder: false })}<div class="pm-acts">${PM_ALLOW()}${PM_DENY()}</div></div>`
+  const others = ['4d2a9c35', '8e17b6f2'].map(byId).map(s => `<div class="cartao mc st-${s.st}"><div class="l1"><span class="tt trunc">${s.nome}</span>${badge(s.st)}</div><div class="pj trunc">${s.pj} · ${s.br}</div><div class="mural-reason">${motChip(s.mot)}<span class="c-muted trunc">${s.pede}</span></div><div class="gr"><div>Modelo<b>${s.mo.split(' ')[0]}</b></div><div>Esforço<b>${s.esf}</b></div><div>Agentes<b>${s.ag}</b></div><div>Custo<b>~${s.custo}</b></div></div></div>`).join('')
+  return `${cab('layout-dashboard', 'Dashboard', 'O agora das suas sessões')}
+  <div class="cartao inbox"><div class="ttl">${ic('bell')}<span class="c-blocked">6 precisam de você</span><span class="r">travadas até você agir · quem espera há mais tempo primeiro ${ic('chevron-right')}</span></div>
+    <div class="grade4">${pmItem('pending')}${PM_OTHERS.map(pmMini).join('')}${pmItem('deny-only').replace('há 1 min', 'há 30 s').replace('motor-de-regras · ' + PM_S.nome, 'motor-de-regras · Separar pagamentos em serviços').replaceAll('feat/58-pedidos', 'refactor/pagamentos')}${pmMini(byId('4d2a9c35'))}${pmMini(byId('5a61c2bf'))}</div></div>
+  <div class="olhinho">${ic('layout-grid')}Mural ao vivo · o card da sessão que pede permissão</div>
+  <div class="mural">${wall}${others}</div>`
+}
+
+// 60-1: where the request shows and how one gets to it. No width of its own.
+function pmFlowHtml() {
+  const node = (cls, icon, t, s) => `<div class="pm-node ${cls}"><b>${ic(icon)}${t}</b><small>${s}</small></div>`
+  const arrow = `<span class="pm-arrow">${ic('arrow-right')}</span>`
+  const st = (tag, t, s) => `<div class="pm-node"><span class="pm-tag">${tag}</span><b>${t}</b><small>${s}</small></div>`
+  return `<div class="cartao pm-flow">
+    <div class="olhinho">${ic('route')}Por onde se chega ao pedido</div>
+    <div class="pm-lane">${node('pm-link', 'bell-ring', 'Notificação do sistema', '“Migração do esquema de pedidos pede permissão: Bash”. Sem botões: o clique abre o Detalhe. (sem tela nova)')}${arrow}${node('pm-main', 'message-square', 'Detalhe · Conversa', 'A faixa no topo da Conversa com o pedido, Permitir uma vez e Negar (60-2, 60-4 a 60-13).')}</div>
+    <div class="pm-lane">${node('pm-link', 'menu', 'Bandeja · item da sessão', '“Pede permissão” como hoje. Sem botões no menu: o clique abre o Detalhe na janela do app. (sem tela nova)')}${arrow}${node('pm-main', 'message-square', 'Detalhe · Conversa', 'O mesmo destino: <code>/ui/sessions/&lt;id&gt;#conversation</code>.')}</div>
+    <div class="pm-lane">${node('', 'layout-dashboard', 'Dashboard · “Precisa de você”', 'O item responde ali mesmo; “Abrir ›” leva ao Detalhe (60-3).')}${node('', 'layout-grid', 'Mural ao vivo', 'O card da sessão responde ali mesmo; o título leva ao Detalhe (60-3).')}${node('', 'folder-open', 'Sessões e Kanban', 'Só o chip “Pede permissão”, como hoje. Sem botões: a linha leva ao Detalhe.')}</div>
+    <div class="olhinho" style="margin-top:6px">${ic('git-branch')}Os estados de um pedido, como a tela os diz</div>
+    <div class="pm-states">
+      ${st('pending', 'Pendente', 'Permitir uma vez e Negar (60-2). Negar abre o motivo opcional (60-4).')}
+      ${st('pending · terminalOnly', 'Só negar', 'Permitir desligado, com o porquê (60-5).')}
+      ${st('sending', 'Enviando', 'Botões travados até o núcleo responder (60-6).')}
+      ${st('answered', 'Respondido aqui', 'Permitido uma vez ou Negado, com hora e motivo; sai de “Precisa de você” (60-7).')}
+      ${st('answered_elsewhere', 'Respondido no Claude Desktop', 'Sai de “Precisa de você”; o Detalhe diz onde (60-8).')}
+      ${st('expired · withdrawn', 'Expirado', '“Responda no Claude Desktop”; a sessão segue esperando lá (60-9).')}
+      ${st('409 · 410', 'Resposta recusada', '“Este pedido já foi respondido ou expirou”, sem nova tentativa (60-10).')}
+      ${st('core_restarted', 'Núcleo fora · reconectando', 'Botões desligados, sem fila local; o pedido que caiu com o núcleo volta como encerrado (60-11).')}
+    </div>
+    <div class="pm-lane">${node('pm-link', 'shield-off', 'Capacidade ausente', 'Codex, ou sessão sem o plugin: nunca há botões, “indisponível” (60-12).')}${node('pm-link', 'layers', 'Vários pedidos', 'Uma lista na mesma faixa, o mais antigo primeiro, cada um com os seus botões (60-13).')}</div>
+  </div>`
+}
+
+// 60-12: capability absent, the two causes side by side.
+const PM_CODEX = { id: '9c4e0b21', nome: 'Normalizar endereços de entrega', pj: 'gateway-sandbox', st: 'blocked', mot: 'permission', mo: 'Codex', dur: '9 min', custo: '—', br: 'feat/27-enderecos' }
+const pmUnavailableHtml = () => avRow2([1100, 1440].map(w => [`${w} px${w === 1100 ? ' · a janela do app' : ''}`, `<div class="pm-col">
+  <div class="rotulo">Sessão do Codex</div>${avFrame(w, `${detCab(PM_CODEX)}${abas(1, 1, '38/210')}${pmBand('codex')}`)}
+  <div class="rotulo">Sessão do Claude sem o plugin do Console</div>${avFrame(w, `${detCab(PM_S)}${abas(1, 3, '240/1.877')}${pmBand('no-plugin')}`)}
+  ${pmInbox(w, 'codex')}</div>`]))
+
+// =====================================================================
 // Montagem
 // =====================================================================
 function montar() {
@@ -6829,6 +7087,7 @@ function montar() {
     <li><b>O núcleo remoto se atualiza sozinho (#484, decisão 0024, aceita):</b> o comando sai do <code>connection.credential</code> e o Mac roda o <code>--check</code> e a atualização sozinho, uma vez por versão do app. A faixa mostra a fase e a barra lateral “Atualizando” (484-1); se falhar, o motivo e “Tentar de novo”, com o card de copiar recolhido (484-2); “Atualizar agora” fica de reserva (462-1). O card “Ativar o botão Atualizar” e o bloco para colar saíram (462-6).</li>
     <li><b>Quadro do trabalho (#465, #466, #467, #468, #477, #478, a aprovar):</b> um quadro por projeto com as colunas do ciclo do agente (Planejamento, Na fila, Em execução, Em review, Bloqueado, Concluído), calculadas de sessão, PR, CI, review, estado, plano e fila; o Status do Project vira dado e filtro (465-1 a 465-5). Cada card traz as ações do seu estado: Planejar, “planejando…”, “plano · N passos” com Executar plano, Pôr na fila e Replanejar, Abrir sessão; épico e iniciativa sem ações (465-2, 465-6). Na fila é a fila de verdade: posição, limite (“2 de 2 rodando”), arrastar de Planejamento para Na fila só com plano, de volta para tirar, dentro dela para reordenar, e as quatro colunas de fato recusam (477-1, 477-2). O detalhe da issue abre num painel pelo card, para ler e editar, com o conflito e a recusa do GitHub (467-1, 478-1 a 478-3). Acima, a troca de nível e os seis filtros, juntos por E e guardados na URL em inglês (466-1 a 466-3). <b>Aprovado:</b> item com plano e sem sessão fica em Planejamento com “plano · N passos”. Escolhas desenhadas, cada uma a aprovar: (1) o Kanban do projeto (C11) <b>fica ao lado</b>, e o quadro entra em Entrega na barra lateral, logo abaixo dele; (2) a troca de nível fica <b>acima dos filtros, à esquerda</b>, com o caminho “Iniciativa #1 › Épico #6” à direita; (3) em Concluído o tempo é <b>desde o merge ou o fechamento</b>, e a coluna mostra os últimos 14 dias; (4) o pai é <b>compacto (↑ #6) por padrão e a cadeia inteira com qualquer filtro ativo</b>, nunca pela largura; (5) Bloqueado em ordem de motivo (precisa de você, 3 rodadas, CI falhou) e, dentro do motivo, quem espera há mais tempo; (6) em 1100 as seis colunas dobram em duas linhas de três, sem rolar na horizontal; (7) a coluna de um épico vem das filhas, e qualquer filha bloqueada põe o épico em Bloqueado; (8) um valor por filtro; (9) o repositório só aparece no card de outro repositório; (10) as ações ficam <b>sempre à vista</b> nos cards de Planejamento e Na fila, uma principal em botão e as secundárias em link; (11) com o GitHub fora, <b>as ações continuam</b>: a sessão abre neste Mac e é ela que esbarra no GitHub; (12) o limite conta <b>os cards em Em execução</b>, não as sessões, e a sessão só de planejamento não conta; (13) a confirmação de Planejar e de Executar plano abre <b>no próprio card</b>, com a conta e o destino da última escolha; (14) o detalhe é <b>um painel à direita, com o quadro atrás</b>, e a edição é o mesmo painel, mais largo, com Escrever e Pré-visualizar em abas; (15) título e descrição gravam no <b>Salvar</b>, labels, tipo, milestone e pai <b>ao escolher</b>, e remover um passo tem <b>Desfazer</b> em vez de confirmação; (16) no conflito, <b>três saídas e nenhuma padrão</b>, com as versões uma embaixo da outra; (17) a fila que falhou ao puxar <b>para até Tentar de novo ou Tirar da fila</b>.</li>
     <li><b>Vista do agente (issue 521, da issue 518, aprovada):</b> aprovada por Fernando em 14/11/2026 (“Aprovo como está”), com a resposta desenhada a cada pergunta (521-1 a 521-10). Decisões: (Q1) a vista mora numa <b>rota própria</b>, <code>/ui/sessions/&lt;id&gt;/agents/&lt;agentId&gt;</code>; (Q2) no nó do laço, o <b>nome</b> leva à vista e o <b>ícone</b> fica na Conversa; (Q3) o agente principal <b>não</b> é link e as linhas <b>recuam por <code>parent</code></b>; (Q4) o filho na sequência <b>abre em linha</b> e oferece “Abrir a vista”; (Q5) brief e resultado <b>dobram em 6 linhas</b>, e acima de 12 passos ficam visíveis os 5 primeiros e os 3 últimos; (Q6) o <b>custo próprio vem primeiro</b>, e “—” aparece quando não houve medida; (Q7) o agente que falhou mostra o <b>último erro</b>, e “Tentar de novo” só repete a leitura; (Q8) <b>sem rolagem automática</b>: aparece o aviso “N passos novos”; (Q9) Voltar devolve o foco à linha; (Q10) o detalhe de um passo de ferramenta abre em linha. G6 (por que o agente falhou, no histórico) saiu da issue 521 e é a issue 530. Os dados vêm da issue 529 (<code>GET /api/sessions/:id/agents/:agentId</code>, G1 a G5, G7 e G8). O esqueleto vermelho: <code>packages/nucleo/test/api/ui-agent-view.test.ts</code>.</li>
+    <li><b>Permissão pelo Console (issue 621, da issue 60, a aprovar):</b> o pedido de permissão de uma sessão do Claude aparece numa faixa no topo da Conversa do Detalhe e no item de “Precisa de você” do Dashboard e do Mural, com Permitir uma vez e Negar (motivo opcional); a bandeja e a notificação só levam ao Detalhe (60-1 a 60-13). Pedido só negar, enviando, respondido aqui, respondido no Claude Desktop, expirado, resposta recusada (409 e 410, sem nova tentativa), núcleo fora (sem fila local), indisponível (Codex ou sem o plugin) e vários pedidos. Cada pergunta em aberto traz a recomendação na própria tela.</li>
     <li><b>Backlog:</b> Feed de atividade, Analytics completo, Workflows e o detalhe com o grafo de agentes estavam para depois da entrega. Entraram aqui a pedido do dono; o PM decide se viram itens da 0.0.1.</li></ol></section>`
   indice.innerHTML = htmlI; main.innerHTML = htmlM
   if (window.lucide) lucide.createIcons()
