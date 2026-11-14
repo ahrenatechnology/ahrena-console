@@ -78,8 +78,8 @@ async function mapLimit<T, R>(items: readonly T[], limit: number, task: (item: T
   return results;
 }
 
-/* A name read from disk or a tool's reason can carry a line break; one that reaches a log line forges another line, so control characters never enter it (#565). */
-export const stripControlCharacters = (text: string): string => text.replace(/[\x00-\x1f\x7f]/g, '');
+/* A name read from disk or a tool's reason can carry a line break; one that reaches a log line forges another line, so control characters never enter it: C0, DEL, C1 (which holds U+0085, a line break to some readers), and U+2028 and U+2029 (#565). */
+export const stripControlCharacters = (text: string): string => text.replace(/[\x00-\x1f\x7f-\x9f\u2028\u2029]/g, '');
 
 const unavailable = (reason: string): { unavailable: true; reason: string } => ({ unavailable: true, reason });
 
@@ -135,32 +135,38 @@ export abstract class DiagnosisCollector {
 
   private async processes(signal: AbortSignal): Promise<CollectResult<'processes-by-rss'>> {
     const r = await this.exec('ps', signal);
-    return 'stdout' in r ? parsePsProcesses(r.stdout) : r;
+    if (!('stdout' in r)) return r;
+    const items = parsePsProcesses(r.stdout);
+    return items.length > 0 ? items : unavailable('ps output not understood');
   }
 
   private async largestFolders(mount: string | null, signal: AbortSignal): Promise<CollectResult<'largest-folders'>> {
     if (!mount) return unavailable('no volume to scan');
-    const df = await this.exec('df', signal);
+    /* One deadline for the whole section, counted from here: `df`, the first pass and the opening pass all run under it, so no subprocess outlives it (#565). */
+    const budget = this.deps.largestFoldersBudgetMs ?? LARGEST_FOLDERS_BUDGET_MS;
+    const whole = AbortSignal.any([signal, AbortSignal.timeout(budget)]);
+    const firstPass = AbortSignal.any([signal, AbortSignal.timeout(Math.floor(budget * 0.6))]);
+    const df = await this.exec('df', whole);
     if (!('stdout' in df)) return df;
     const known = parseDfP(df.stdout).find((row) => isRealVolume(row) && row.mount === mount);
     if (!known) return unavailable('volume not known to this machine');
-    const budget = this.deps.largestFoldersBudgetMs ?? LARGEST_FOLDERS_BUDGET_MS;
-    const firstPass = AbortSignal.any([signal, AbortSignal.timeout(Math.floor(budget * 0.6))]);
-    const whole = AbortSignal.any([signal, AbortSignal.timeout(budget)]);
     const mounts = new Set(parseDfP(df.stdout).map((row) => row.mount));
     const top = await this.measureChildren(known.mount, mounts, firstPass);
-    if (top.length === 0) return unavailable('du measured no folder');
+    if (top.items.length === 0) return unavailable('du measured no folder');
+    let partial = !top.complete;
     const items: FolderItem[] = [];
-    const largest = [...top].sort((a, b) => b.bytes - a.bytes);
+    const largest = [...top.items].sort((a, b) => b.bytes - a.bytes);
     for (const [i, folder] of largest.entries()) {
-      const inside = i < LARGEST_FOLDERS_OPENED ? await this.measureChildren(folder.path, mounts, whole) : [];
-      items.push(...(inside.length > 0 ? inside : [folder]));
+      const inside = i < LARGEST_FOLDERS_OPENED ? await this.measureChildren(folder.path, mounts, whole) : { items: [], complete: true };
+      /* A folder opened in part keeps its own measured size: the children found would add up to less than it holds (#565). */
+      if (!inside.complete) partial = true;
+      items.push(...(inside.complete && inside.items.length > 0 ? inside.items : [folder]));
     }
-    return items;
+    return partial ? { items, partial: { reason: 'some folders could not be measured' } } : items;
   }
 
-  /* The folders directly under `parent`, each measured with its own `du` run in it; one that does not finish is left out and logged (#565). A partial scan is logged and not surfaced: the section stays `ok` with what was measured, by design for this layer; the domain has no partial state. */
-  private async measureChildren(parent: string, mounts: ReadonlySet<string>, signal: AbortSignal): Promise<FolderItem[]> {
+  /* The folders directly under `parent`, each measured with its own `du` run in it; one that does not finish is left out and logged, and `complete` is false (#565). */
+  private async measureChildren(parent: string, mounts: ReadonlySet<string>, signal: AbortSignal): Promise<{ items: FolderItem[]; complete: boolean }> {
     const paths = (await this.deps.fs.listDirs(parent)).map((name) => join(parent, name)).filter((path) => !mounts.has(path));
     const measured = await mapLimit(paths, LARGEST_FOLDERS_CONCURRENCY, async (path): Promise<FolderItem | null> => {
       if (signal.aborted) return null;
@@ -169,14 +175,17 @@ export abstract class DiagnosisCollector {
       if (bytes === null) this.say(`diagnosis folder left out ${path}: ${'stdout' in r ? 'du output not understood' : r.reason}`);
       return bytes === null ? null : { path, bytes };
     });
-    const skipped = paths.length - measured.filter((m) => m !== null).length;
+    const items = measured.filter((m): m is FolderItem => m !== null);
+    const skipped = paths.length - items.length;
     if (signal.aborted && skipped > 0) this.say(`diagnosis folder scan under ${parent} ran out of time, ${skipped} folders left out`);
-    return measured.filter((m): m is FolderItem => m !== null);
+    return { items, complete: skipped === 0 };
   }
 
   private async dockerDf(signal: AbortSignal): Promise<CollectResult<'docker-df'>> {
     const r = await this.exec('docker-df', signal);
-    return 'stdout' in r ? parseDockerDf(r.stdout) : r;
+    if (!('stdout' in r)) return r;
+    const items = parseDockerDf(r.stdout);
+    return items.length > 0 ? items : unavailable('docker output not understood');
   }
 
   protected async journal(signal: AbortSignal): Promise<CollectResult<'journal'>> {

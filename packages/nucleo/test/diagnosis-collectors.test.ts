@@ -130,7 +130,7 @@ describe('process and swap sections', () => {
     assert.deepEqual(await collect(new LinuxDiagnosisCollector(deps), 'swap'), [{ usedBytes: 1048576 * 1024, totalBytes: 2097152 * 1024 }]);
     const none = setup({}, { files: { '/proc/meminfo': MEMINFO_NO_SWAP } });
     const r = await collect(new LinuxDiagnosisCollector(none.deps), 'swap');
-    assert.ok(!Array.isArray(r) && r.unavailable);
+    assert.ok(!Array.isArray(r) && 'unavailable' in r);
   });
 
   test('#565/AC-6 a missing, slow or aborted tool makes only its section unavailable, with a short reason', async () => {
@@ -141,7 +141,21 @@ describe('process and swap sections', () => {
     assert.deepEqual(await collect(new LinuxDiagnosisCollector(slow.deps), 'processes-by-cpu'), { unavailable: true, reason: 'ps timed out' });
     const aborted = setup({ [['ps', ...CATALOG.ps.args].join(' ')]: fail('aborted') });
     const r = await collect(new LinuxDiagnosisCollector(aborted.deps), 'processes-by-cpu');
-    assert.ok(!Array.isArray(r) && r.unavailable);
+    assert.ok(!Array.isArray(r) && 'unavailable' in r);
+  });
+
+  test('#565/AC-6 ps output that cannot be parsed is unavailable, not an empty ok section', async () => {
+    for (const out of ['', 'garbage\nmore garbage\n']) {
+      const { deps } = setup({ [['ps', ...CATALOG.ps.args].join(' ')]: ok(out) });
+      assert.deepEqual(await collect(new LinuxDiagnosisCollector(deps), 'processes-by-rss'), { unavailable: true, reason: 'ps output not understood' });
+    }
+  });
+
+  test('#565/AC-6 docker system df output that cannot be parsed is unavailable, not an empty ok section', async () => {
+    for (const out of ['', 'Cannot connect to the Docker daemon\n']) {
+      const { deps } = setup({ [['docker', ...CATALOG['docker-df'].args].join(' ')]: ok(out) });
+      assert.deepEqual(await collect(new LinuxDiagnosisCollector(deps), 'docker-df'), { unavailable: true, reason: 'docker output not understood' });
+    }
   });
 
   test('#565/AC-7 the abort signal and the catalog limits reach the runner', async () => {
@@ -180,14 +194,76 @@ describe('volume sections', () => {
       { dirs: { '/data': ['a', 'b'], '/data/a': [], '/data/b': [] } },
     );
     const r = await collect(new LinuxDiagnosisCollector(deps), 'largest-folders', '/data');
-    assert.deepEqual(r, [{ path: '/data/a', bytes: 1000 * 1024 }]);
+    assert.deepEqual(r, { items: [{ path: '/data/a', bytes: 1000 * 1024 }], partial: { reason: 'some folders could not be measured' } });
     assert.ok(logs.some((l) => l.includes('/data/b') && l.includes('du') && l.includes('timed out')));
+  });
+
+  test('#565/AC-3 a folder opened only in part keeps its own measured size and the section is marked partial', async () => {
+    const { deps } = setup(
+      { [dfKey]: ok(DF), [folderKey('/data/a')]: ok('1000\t.\n'), [folderKey('/data/b')]: ok('500\t.\n'), [folderKey('/data/a/x')]: ok('600\t.\n'), [folderKey('/data/a/y')]: fail('failed') },
+      { dirs: { '/data': ['a', 'b'], '/data/a': ['x', 'y'], '/data/b': [] } },
+    );
+    const r = await collect(new LinuxDiagnosisCollector(deps), 'largest-folders', '/data');
+    assert.ok(!Array.isArray(r) && 'partial' in r);
+    assert.deepEqual(byPath(r.items), [
+      { path: '/data/a', bytes: 1000 * 1024 },
+      { path: '/data/b', bytes: 500 * 1024 },
+    ]);
+    assert.ok(r.partial.reason.length > 0 && r.partial.reason.length <= 120);
+  });
+
+  test('#565/AC-3 a scan that hits its budget while opening a folder keeps the parent and is marked partial', async () => {
+    const { deps } = setup(
+      { [dfKey]: ok(DF), [folderKey('/data/a')]: ok('1000\t.\n') },
+      { dirs: { '/data': ['a'], '/data/a': ['x'] } },
+    );
+    deps.largestFoldersBudgetMs = 40;
+    const inner = deps.run;
+    deps.run = (command, args, options) =>
+      command === 'du' && options.cwd === '/data/a/x' ? new Promise((resolve) => options.signal.addEventListener('abort', () => resolve(fail('aborted')))) : inner(command, args, options);
+    const r = await collect(new LinuxDiagnosisCollector(deps), 'largest-folders', '/data');
+    assert.ok(!Array.isArray(r) && 'partial' in r);
+    assert.deepEqual(r.items, [{ path: '/data/a', bytes: 1000 * 1024 }]);
+  });
+
+  test('#565/AC-3 a scan that finds everything is not marked partial', async () => {
+    const { deps } = setup({ [dfKey]: ok(DF), [folderKey('/data/a')]: ok('1000\t.\n') }, { dirs: { '/data': ['a'], '/data/a': [] } });
+    assert.ok(Array.isArray(await collect(new LinuxDiagnosisCollector(deps), 'largest-folders', '/data')));
+  });
+
+  test('#565/AC-6 the df call of largest-folders runs inside the section deadline', async () => {
+    const { deps } = setup({}, { dirs: { '/data': ['a'] } });
+    deps.largestFoldersBudgetMs = 40;
+    let dfSignal: AbortSignal | undefined;
+    deps.run = (command, _args, options) => {
+      if (command !== 'df') return Promise.resolve(fail('missing'));
+      dfSignal = options.signal;
+      return new Promise((resolve) => options.signal.addEventListener('abort', () => resolve(fail('aborted'))));
+    };
+    const controller = new AbortController();
+    const started = Date.now();
+    const r = await new LinuxDiagnosisCollector(deps).collect('largest-folders', { mount: '/data', signal: controller.signal });
+    assert.deepEqual(r, { unavailable: true, reason: 'df aborted' });
+    assert.ok(Date.now() - started < 2_000);
+    assert.notEqual(dfSignal, controller.signal);
+    assert.equal(controller.signal.aborted, false);
+  });
+
+  test('#565/AC-6 df, the first pass and the opening pass all share one deadline counted from the section start', async () => {
+    const { deps } = setup({ [dfKey]: ok(DF), [folderKey('/data/a')]: ok('1\t.\n') }, { dirs: { '/data': ['a'], '/data/a': [] } });
+    deps.largestFoldersBudgetMs = 100;
+    const signals: AbortSignal[] = [];
+    const inner = deps.run;
+    deps.run = (command, args, options) => (signals.push(options.signal), inner(command, args, options));
+    await collect(new LinuxDiagnosisCollector(deps), 'largest-folders', '/data');
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    assert.ok(signals.length >= 2 && signals.every((s) => s.aborted), 'every subprocess signal is bound to the section deadline');
   });
 
   test('#565/AC-3 when no folder could be measured the section is unavailable', async () => {
     const { deps } = setup({ [dfKey]: ok(DF) }, { dirs: { '/data': ['a'] } });
     const r = await collect(new LinuxDiagnosisCollector(deps), 'largest-folders', '/data');
-    assert.ok(!Array.isArray(r) && r.unavailable);
+    assert.ok(!Array.isArray(r) && 'unavailable' in r);
   });
 
   test('#565/AC-3 another mount under the volume is not scanned as part of it', async () => {
@@ -225,7 +301,7 @@ describe('volume sections', () => {
       command !== 'du' ? inner(command, args, options) : new Promise((resolve) => options.signal.addEventListener('abort', () => resolve(fail('aborted'))));
     const started = Date.now();
     const r = await collect(new LinuxDiagnosisCollector(deps), 'largest-folders', '/data');
-    assert.ok(!Array.isArray(r) && r.unavailable);
+    assert.ok(!Array.isArray(r) && 'unavailable' in r);
     assert.ok(Date.now() - started < 2_000);
   });
 
@@ -233,7 +309,7 @@ describe('volume sections', () => {
     for (const hostile of ['/etc/../root', '/; rm -rf /', '/nope', '', null]) {
       const { calls, deps } = setup({ [dfKey]: ok(DF) });
       const r = await collect(new LinuxDiagnosisCollector(deps), 'largest-folders', hostile);
-      assert.ok(!Array.isArray(r) && r.unavailable, String(hostile));
+      assert.ok(!Array.isArray(r) && 'unavailable' in r, String(hostile));
       assert.ok(calls.every((x) => x.command === 'df' && !x.options.cwd && !x.args.some((a) => a.includes('rm'))));
     }
   });
@@ -257,7 +333,7 @@ describe('volume sections', () => {
   test('journal does not exist on the Mac', async () => {
     const { deps } = setup({ 'journalctl --disk-usage': ok(JOURNAL) });
     const r = await collect(new DarwinDiagnosisCollector(deps), 'journal');
-    assert.ok(!Array.isArray(r) && r.unavailable);
+    assert.ok(!Array.isArray(r) && 'unavailable' in r);
   });
 });
 
@@ -402,6 +478,13 @@ describe('what a diagnosis log line may carry', () => {
 
   test('#565/AC-3 control characters are stripped from a text before it is logged', () => {
     assert.equal(stripControlCharacters('a\nb\r\tc\u0000d\u007fe'), 'abcde');
+  });
+
+  test('#565/AC-3 the C1 range, the next line, and the line and paragraph separators are stripped too', () => {
+    assert.equal(stripControlCharacters('a\u0080b\u0085c\u009fd'), 'abcd');
+    assert.equal(stripControlCharacters('a\u2028b'), 'ab');
+    assert.equal(stripControlCharacters('a\u2029b'), 'ab');
+    assert.equal(stripControlCharacters('caf\u00e9 \u00a0ok'), 'caf\u00e9 \u00a0ok');
   });
 
   test('#565/AC-3 a folder name with a line break does not forge a log line when its measurement fails', async () => {
