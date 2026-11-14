@@ -405,9 +405,10 @@ describe('#465/AC-4 Atualizar and GitHub down (ADR-0001)', () => {
     await until(() => s.area.querySelector('.wb-stale-band') !== null);
     const band = s.area.querySelector('.wb-stale-band')!;
     assert.equal(band.getAttribute('role'), 'status');
-    assert.match(texto(band), /GitHub indisponível\./);
-    assert.match(texto(band), /Motivo: o GitHub respondeu com erro\./);
-    assert.doesNotMatch(texto(band), /github-error|GitHub fora do ar/);
+    assert.match(texto(band), /O GitHub respondeu com erro\./);
+    assert.doesNotMatch(texto(band), /GitHub indisponível|Motivo:/, 'issue 614: the band names the real reason, not "GitHub indisponível."');
+    assert.equal(band.getAttribute('data-stale-code'), 'github-error');
+    assert.doesNotMatch(texto(band), /GitHub fora do ar/);
     assert.deepEqual(s.numbers(), before, 'the last data stays');
     assert.ok(s.area.querySelector('.wb-board')!.classList.contains('wb-board-stale'));
     assert.ok(s.area.querySelector('.wb-read-old'), 'the header hour is marked old');
@@ -646,8 +647,8 @@ describe('#465 each error code of GET /api/work in pt-BR', () => {
     for (const [code, text] of Object.entries(texts)) {
       assert.equal(githubDownReason(code), text);
       const strip = texto(staleBand({ fetchedAt: 0, now: 1000, reason: code }));
-      assert.ok(strip.includes(`Motivo: ${text}.`), `${code}: ${strip}`);
       assert.ok(!strip.includes(code) || text.includes(code), `${code} must not show raw`);
+      assert.doesNotMatch(strip, /Motivo:/, 'issue 614: the stale band has no trailing "Motivo:"');
     }
     assert.doesNotMatch(texto(staleBand({ fetchedAt: 0, now: 1000, reason: null })), /Motivo/);
   });
@@ -655,7 +656,7 @@ describe('#465 each error code of GET /api/work in pt-BR', () => {
   test('#495/AC-2 an unknown code, even an inherited name, shows the neutral fallback and not the raw value', () => {
     for (const code of ['proxy-timeout', 'constructor', 'toString']) {
       assert.equal(githubDownReason(code), 'motivo não identificado');
-      assert.ok(texto(staleBand({ fetchedAt: 0, now: 1000, reason: code })).includes('Motivo: motivo não identificado.'));
+      assert.ok(!texto(staleBand({ fetchedAt: 0, now: 1000, reason: code })).includes(code));
       assert.ok(!texto(firstReadFailure({ reason: code })).includes(code));
     }
     assert.equal(githubDownReason(null), null);

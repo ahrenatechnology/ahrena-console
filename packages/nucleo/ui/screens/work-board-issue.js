@@ -6,6 +6,7 @@
  for the card renderer, to wrap its nodes with the panel, and to put the focus where the person's last action sends it. */
 
 import { el } from '../dom.js';
+import { CONNECT_STATE, CONNECT_UI } from '../github-connect.js';
 import { githubDownReason, workCard } from './work-board-parts.js';
 import { cardPlanParts, missingFolder, planConfirm } from './work-board-plan.js';
 import { issuePanel, issuePanelFailure, issuePanelLoading, issuePanelStage } from './work-board-issue-panel.js';
@@ -149,7 +150,7 @@ function createIssueView({ area, state, apply, cardFor, retry, confirm, run, que
     else if (edit.isOpen(key)) node = edit.render({ card, now, onClose: close });
     else {
       const parts = keyed(partsOf(card, 'panel'), `panel:${key}`);
-      node = issuePanel({ card, issue: { ...issue, stale: stale || issue.stale }, now, parts, onRetry: retrying ? null : retry, onEdit: () => edit.open(issue), onClose: close });
+      node = issuePanel({ card, issue: { ...issue, stale: stale || issue.stale }, now, parts, onRetry: retrying ? null : retry, onReconnect: () => ctx.navigate(CONNECT_UI, CONNECT_STATE), onEdit: () => edit.open(issue), onClose: close });
       const pop = (hostedInPanel(card) ? popupFor(card) : null) ?? run?.popup(card, 'panel', true) ?? null;
       if (pop) (node.querySelector('.wb-panel-acts') ?? node).append(pop);
     }
