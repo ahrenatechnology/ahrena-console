@@ -545,8 +545,6 @@ function tokenFlow(k) {
 /** An agent node; the main one carries the session's attention (issue 245), a subagent none. */
 function node(g, sessionAttention = null) {
   const end = g.end ? Date.parse(g.end) : Date.now();
-  // issue 519: a subagent shows the short agent name; the full "plugin:agent" goes in the title and
-  // leads the secondary line when it differs.
   const { short, full } = g.type === 'main' ? { short: g.name, full: null } : subagentNodeName(g.name);
   const sub =
     g.type === 'main'
