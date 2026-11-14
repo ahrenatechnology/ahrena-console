@@ -40,6 +40,7 @@ import { WorkBoardService } from '../github/work-board-service.ts';
 import { FleetWorkSessions } from '../github/work-board-sessions.ts';
 import { SqliteWorkColumnHistory } from '../github/work-board-history.ts';
 import { CachedParentLookup } from '../github/work-board-parents.ts';
+import { WorkIssueOptionsService } from '../github/work-issue-options.ts';
 import { WorkIssueService } from '../github/work-issue-service.ts';
 import { SqliteWorkExecutionRuns } from '../github/work-execution-runs.ts';
 import { SqliteWorkPlanRuns } from '../github/work-plan-runs.ts';
@@ -494,6 +495,8 @@ const workIssue =
   workSource instanceof GithubGraphqlSource
     ? new WorkIssueService({ source: workSource, writer: workSource, cache: githubCache, ...(screens.project ? { project: selectedProjectBoard(screens.project) } : {}), log })
     : null;
+/* #590 the issue options of a repository (`GET /api/work/issue/options`), through the same GitHub cache; off as the issue detail is. */
+const workIssueOptions = workSource instanceof GithubGraphqlSource ? new WorkIssueOptionsService({ source: workSource, cache: githubCache, log }) : null;
 // Decision 0015 (#356): the core reads GitHub on a timer and the GitHub screens answer from the database.
 // Under --no-github there is no connection and no sync.
 githubSync = coreGithub.connected
@@ -746,6 +749,7 @@ const api: LocalApi = await startLocalApi({
   projectSelection: screens.project,
   work: { service: workBoard, fromStore: githubSync !== null },
   workIssue: { service: workIssue },
+  workIssueOptions: { service: workIssueOptions },
   workPlan: { issues: workIssue, runs: planRuns },
   // #531 without the board there is nothing to count the limit against: the route answers 503.
   ...(workBoard ? { workRun: { issues: workIssue, runs: executionRuns, running: workBoard } } : {}),

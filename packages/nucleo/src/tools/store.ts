@@ -4,6 +4,7 @@
 // applied the migration.
 
 import type { DatabaseSync, StatementSync } from 'node:sqlite';
+import { immediateTransaction } from '../adapters/sqlite/immediate-transaction.ts';
 
 export const CHECK_VALIDITY_MS = 6 * 60 * 60 * 1000;
 
@@ -67,14 +68,9 @@ export class SqliteToolChecksStore implements ToolChecksStore {
   }
 
   replace(machineId: string, checks: readonly ToolCheck[]): void {
-    this.db.exec('BEGIN IMMEDIATE');
-    try {
+    immediateTransaction(this.db, () => {
       this.clear.run(machineId);
       for (const c of checks) this.insert.run(machineId, c.toolId, c.sourceId, c.installed, c.latest, Math.floor(c.checkedAt), c.error);
-      this.db.exec('COMMIT');
-    } catch (err) {
-      this.db.exec('ROLLBACK');
-      throw err;
-    }
+    });
   }
 }

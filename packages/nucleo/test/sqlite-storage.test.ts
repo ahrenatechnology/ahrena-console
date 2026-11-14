@@ -83,6 +83,40 @@ describe('migrações', () => {
     db.close();
   });
 
+  test('migrate() throws the raw error when BEGIN IMMEDIATE fails on a locked database', () => {
+    const path = join(dir, `locked-${n++}.sqlite`);
+    const db = new DatabaseSync(path);
+    migrate(db, MIGRATIONS);
+    const holder = new DatabaseSync(path);
+    holder.exec('BEGIN IMMEDIATE');
+    try {
+      assert.throws(
+        () => migrate(db, extra),
+        (err: Error & { code?: string }) =>
+          err.code === 'ERR_SQLITE_ERROR' && /database is locked/.test(err.message) && !/falhou/.test(err.message) && err.cause === undefined,
+      );
+    } finally {
+      holder.exec('ROLLBACK');
+      holder.close();
+      db.close();
+    }
+  });
+
+  test('migrate() throws the raw ROLLBACK error when the body failed and ROLLBACK fails too', () => {
+    const db = new DatabaseSync(':memory:');
+    migrate(db, MIGRATIONS);
+    const endsItsOwnTransaction: Migration[] = [
+      ...MIGRATIONS,
+      { version: ultima + 1, description: 'ends its own transaction', sql: 'COMMIT; SELECT * FROM missing_table;' },
+    ];
+    assert.throws(
+      () => migrate(db, endsItsOwnTransaction),
+      (err: Error & { code?: string }) =>
+        err.code === 'ERR_SQLITE_ERROR' && /no transaction is active/.test(err.message) && !/falhou/.test(err.message) && err.cause === undefined,
+    );
+    db.close();
+  });
+
   test('recusa banco mais novo que o código', () => {
     const db = new DatabaseSync(':memory:');
     migrate(db, extra);

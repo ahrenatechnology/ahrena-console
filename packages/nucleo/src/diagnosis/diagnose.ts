@@ -9,7 +9,7 @@
  */
 
 import type { Alert, HostInfo } from '../telemetry/model.ts';
-import { LIST_CAP, capReason, isDiagnosable, sectionsFor, type Diagnosis, type SectionId, type SectionItems, type SectionOf } from './model.ts';
+import { LIST_CAP, capReason, isDiagnosable, sectionsFor, type Diagnosis, type PartialMarker, type SectionId, type SectionItems, type SectionOf } from './model.ts';
 
 export interface CollectContext {
   /** The mount of the open `volume-full:<mount>` alert; null for the other kinds (#565). */
@@ -18,7 +18,8 @@ export interface CollectContext {
   signal: AbortSignal;
 }
 
-export type CollectResult<K extends SectionId> = SectionItems[K] | { unavailable: true; reason?: string };
+/** Items read whole, items read in part (`partial`), or nothing (`unavailable`) (#565). */
+export type CollectResult<K extends SectionId> = SectionItems[K] | { items: SectionItems[K]; partial: PartialMarker } | { unavailable: true; reason?: string };
 export type SectionCollector = <K extends SectionId>(id: K, context: CollectContext) => Promise<CollectResult<K>>;
 
 export interface DiagnoseDeps {
@@ -62,8 +63,9 @@ async function collectSection<K extends SectionId>(id: K, machine: string, conte
   try {
     const result = await Promise.race([deps.collect(id, { ...context, signal: controller.signal }), timeout]);
     if (result === TIMED_OUT) return { id, status: 'timeout', items: [] };
-    if (!Array.isArray(result)) return unavailable(id, result.reason);
-    return { id, status: 'ok', items: shape(id, result) };
+    if (Array.isArray(result)) return { id, status: 'ok', items: shape(id, result) };
+    if ('unavailable' in result) return unavailable(id, result.reason);
+    return { id, status: 'ok', items: shape(id, result.items), partial: { reason: capReason(result.partial.reason) } };
   } catch (err) {
     deps.log(`diagnosis section ${id} failed on ${machine}: ${err}`);
     return unavailable(id, err instanceof Error ? err.message : undefined);

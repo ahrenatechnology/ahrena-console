@@ -3,6 +3,7 @@
 // pruning go in the same transaction: the table never holds more than 12 h, not even for a moment.
 
 import type { DatabaseSync, StatementSync } from 'node:sqlite';
+import { immediateTransaction } from '../../adapters/sqlite/immediate-transaction.ts';
 import { samplePointOf, type SamplePoint, type TelemetryReading } from '../model.ts';
 import type { TelemetryStore } from '../ports.ts';
 
@@ -35,8 +36,7 @@ export class SqliteTelemetryStore implements TelemetryStore {
   async putSample(machineId: string, reading: TelemetryReading, retentionMs: number): Promise<void> {
     const p = samplePointOf(reading);
     if (!Number.isFinite(p.takenAt)) throw new RangeError(`invalid takenAt: ${reading.takenAt}`);
-    this.db.exec('BEGIN IMMEDIATE');
-    try {
+    immediateTransaction(this.db, () => {
       this.insert.run(
         machineId,
         p.takenAt,
@@ -51,11 +51,7 @@ export class SqliteTelemetryStore implements TelemetryStore {
         JSON.stringify(reading),
       );
       this.prune.run(machineId, p.takenAt - retentionMs);
-      this.db.exec('COMMIT');
-    } catch (err) {
-      this.db.exec('ROLLBACK');
-      throw err;
-    }
+    });
   }
 
   async listPoints(machineId: string, sinceMs: number): Promise<SamplePoint[]> {

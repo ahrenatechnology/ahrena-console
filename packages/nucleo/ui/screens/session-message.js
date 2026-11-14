@@ -21,6 +21,7 @@
 import { el, icon } from '../dom.js';
 import { MAX_SECONDS, BARS, clock, createRecordingBar, dictationSupported, microphoneError, secondsText, startRecording } from './session-voice.js';
 
+const TRANSCRIPTION_TIMEOUT_MS = 330_000;
 const HOUR = new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '2-digit' });
 
 /** The text limit of the core, in UTF-8 bytes (decision 0003). */
@@ -475,7 +476,8 @@ export function createComposeBox(ctx, sessionId, { head = () => null, openContro
       return draw();
     }
     try {
-      const r = await ctx.write('/api/transcription', taken.wav);
+      // The core may wait up to 2 min for whisper to start and 3 min to transcribe: outlive both (issue 557).
+      const r = await ctx.write('/api/transcription', taken.wav, { timeoutMs: TRANSCRIPTION_TIMEOUT_MS });
       voiceState = 'idle';
       const words = String(r?.text ?? '').trim();
       if (!words) {

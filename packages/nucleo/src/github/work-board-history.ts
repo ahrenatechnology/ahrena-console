@@ -6,6 +6,7 @@
  */
 
 import type { DatabaseSync, StatementSync } from 'node:sqlite';
+import { immediateTransaction } from '../adapters/sqlite/immediate-transaction.ts';
 import type { WorkColumnHistory, WorkColumnObservation } from './work-board.ts';
 
 export const WORK_BOARD_MIGRATION_DESCRIPTION = 'work board: current column and since when per issue (#465)';
@@ -36,8 +37,7 @@ export class SqliteWorkColumnHistory implements WorkColumnHistory {
   async observe(observations: readonly WorkColumnObservation[]): Promise<Map<string, string>> {
     const since = new Map<string, string>();
     if (!observations.length) return since;
-    this.db.exec('BEGIN IMMEDIATE');
-    try {
+    immediateTransaction(this.db, () => {
       for (const { key, column, at } of observations) {
         const row = this.select.get(key) as { column_id: string; since: string } | undefined;
         if (row && row.column_id === column) {
@@ -47,11 +47,7 @@ export class SqliteWorkColumnHistory implements WorkColumnHistory {
         this.upsert.run(key, column, at);
         since.set(key, at);
       }
-      this.db.exec('COMMIT');
-    } catch (err) {
-      this.db.exec('ROLLBACK');
-      throw err;
-    }
+    });
     return since;
   }
 }
