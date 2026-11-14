@@ -1,6 +1,8 @@
-// #594 which repositories the core opens sessions for: the owners the installation trusts. The rule is
-// pure (a stored list replaces the default, which is the owner of the Project the board reads, and the
-// comparison ignores letter case); the installation's adapter reads the setting and the resolver.
+/*
+ * #594 which repositories the core opens sessions for: the owners the installation trusts. The rule is
+ * pure (a stored list replaces the default, which is the owner of the Project the board reads, and the
+ * comparison ignores letter case); the installation's adapter reads the setting and the resolver.
+ */
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import { InstallationRepositoryTrust, isTrustedRepo, trustedOwnersOf } from '../../src/github/trusted-owners.ts';

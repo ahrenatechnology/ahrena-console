@@ -1,7 +1,10 @@
-// The installation's settings (#241, decision 0011 §8): what one installation chose, none of it a
-// secret. Four keys and nothing else: the active GitHub login (the vault account), the credential
-// source, the Project of the kanban and (#594) the owners the core opens work sessions for. Each value is validated on write, so a credential cannot land
-// here by mistake (a token is not a login, and there is no key for one).
+/*
+ * The installation's settings (#241, decision 0011 §8): what one installation chose, none of it a
+ * secret. Four keys and nothing else: the active GitHub login (the vault account), the credential
+ * source, the Project of the kanban and (#594) the owners the core opens work sessions for. Each
+ * value is validated on write, so a credential cannot land here by mistake (a token is not a login,
+ * and there is no key for one).
+ */
 
 import type { DatabaseSync } from 'node:sqlite';
 import { GITHUB_LOGIN, isGithubLogin } from '../github/login.ts';

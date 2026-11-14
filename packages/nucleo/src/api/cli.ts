@@ -464,8 +464,10 @@ coreGithub = await createCoreGithub({
   log,
 });
 const { connection, screens } = coreGithub;
-// #594 one trust source for the board's cards, the issue detail and the Planejar / Executar plano routes: the stored
-// `work.trustedOwners`, else the owner of the Project the board reads (none chosen: nobody is trusted).
+/*
+ * #594 one trust source for the board's cards, the issue detail and the Planejar / Executar plano routes: the stored
+ * `work.trustedOwners`, else the owner of the Project the board reads (none chosen: nobody is trusted).
+ */
 const repositoryTrust = new InstallationRepositoryTrust(settings, () => screens.project?.selection() ?? null);
 /*
  * #465 #466 the work board (`GET /api/work`): the kanban's Project (the same resolver as /api/project),

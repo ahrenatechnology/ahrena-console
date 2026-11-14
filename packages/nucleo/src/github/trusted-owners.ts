@@ -1,10 +1,12 @@
-// #594 which repositories the core opens sessions for: the ones whose owner the installation trusts.
-// Text written in an issue reaches an Athena session that runs with the owner's Claude Code authority,
-// so "Planejar" and "Executar plano" refuse a repository of an owner outside this list.
-//
-// The list is the installation setting `work.trustedOwners`; with nothing stored it is the owner of the
-// Project the board reads, and a stored list replaces that default (it never adds to it). An empty
-// stored list trusts nobody, and so does no list with no Project chosen. Owners compare in any letter case.
+/*
+ * #594 which repositories the core opens sessions for: the ones whose owner the installation trusts.
+ * Text written in an issue reaches an Athena session that runs with the owner's Claude Code authority,
+ * so "Planejar" and "Executar plano" refuse a repository of an owner outside this list.
+ *
+ * The list is the installation setting `work.trustedOwners`; with nothing stored it is the owner of the
+ * Project the board reads, and a stored list replaces that default (it never adds to it). An empty
+ * stored list trusts nobody, and so does no list with no Project chosen. Owners compare in any letter case.
+ */
 
 import type { InstallationSettings } from '../settings/installation-settings.ts';
 
