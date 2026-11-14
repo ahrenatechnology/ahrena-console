@@ -121,7 +121,7 @@ function createIssueView({ area, state, apply, cardFor, retry, confirm, run, onA
   }
 
   const panelHolds = (card) => state().panel.open && state().panel.key === card.key;
-  const partsOf = (card) => (run ? run.parts(card, handlers) : cardPlanParts(card, handlers));
+  const partsOf = (card, place = 'card') => (run ? run.parts(card, { ...handlers, place }) : cardPlanParts(card, { ...handlers, place }));
   const hostedInPanel = (card) => anchorInPanel && panelHolds(card);
 
   /** issue 508: the card of the board with its planning parts, the open one marked and the confirmation anchored on it. */
@@ -145,7 +145,7 @@ function createIssueView({ area, state, apply, cardFor, retry, confirm, run, onA
     else if (view === 'failure') node = issuePanelFailure({ card, reason, now, onRetry: retry, onClose: close });
     else if (edit.isOpen(key)) node = edit.render({ card, now, onClose: close });
     else {
-      const parts = keyed(partsOf(card), `panel:${key}`);
+      const parts = keyed(partsOf(card, 'panel'), `panel:${key}`);
       node = issuePanel({ card, issue: { ...issue, stale: stale || issue.stale }, now, parts, onRetry: retrying ? null : retry, onEdit: () => edit.open(issue), onClose: close });
       const pop = (hostedInPanel(card) ? popupFor(card) : null) ?? run?.popup(card, 'panel', true) ?? null;
       if (pop) (node.querySelector('.wb-panel-acts') ?? node).append(pop);
