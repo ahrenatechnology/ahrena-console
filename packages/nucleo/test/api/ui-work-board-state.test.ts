@@ -204,6 +204,11 @@ describe('#465/AC-4 GitHub down (465-4, ADR-0001)', () => {
     assert.equal(s.staleReason, 'GitHub respondeu 502');
   });
 
+  test('#496/AC-2 the retry time of the payload is exposed, null when absent', () => {
+    assert.equal(loaded('level=item', payload({ stale: true, retryAt: 5_000 })).retryAt, 5_000);
+    assert.equal(loaded('level=item', payload({ stale: true })).retryAt, null);
+  });
+
   test('#465/AC-4 the first read failed with nothing stored: error, no data, the code kept for the screen to word', () => {
     const s0 = initialState('level=item');
     const s = loadFailed(s0, { error: 'github-unavailable', reason: 'GitHub respondeu 502' }, s0.request);
@@ -454,7 +459,7 @@ describe('#465/AC-5 the state module is pure and English (ADR-0009)', () => {
 
   test('#465/AC-5 every key and value of the state is English', () => {
     const s = loaded('level=item&label=ui');
-    assert.deepEqual(Object.keys(s).sort(), ['api', 'busy', 'chainMode', 'data', 'dataFilters', 'error', 'filters', 'navigation', 'phase', 'placed', 'request', 'refresh', 'stale', 'staleReason', 'suggestion', 'url', 'view'].sort());
+    assert.deepEqual(Object.keys(s).sort(), ['api', 'busy', 'chainMode', 'data', 'dataFilters', 'error', 'filters', 'navigation', 'phase', 'placed', 'request', 'refresh', 'retryAt', 'stale', 'staleReason', 'suggestion', 'url', 'view'].sort());
     for (const value of [s.phase, s.view, s.chainMode]) assert.match(value, /^[a-z-]+$/);
   });
 });

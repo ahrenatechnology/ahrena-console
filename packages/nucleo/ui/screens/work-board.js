@@ -171,7 +171,7 @@ export async function mount(area, ctx) {
       const { title } = errorMessage(state.error);
       return retryAction(workBoardError({ title: 'Não deu para reler o quadro.', text: `${title} Mostrando a última leitura.`, retryLabel: 'Tentar agora', onRetry: refresh }));
     }
-    if (state.stale) return staleBand({ fetchedAt: state.data.fetchedAt, now, reason: state.staleReason, busy: state.busy, onRetry: refresh });
+    if (state.stale) return staleBand({ fetchedAt: state.data.fetchedAt, now, reason: state.staleReason, retryAt: state.retryAt, busy: state.busy, onRetry: refresh });
     return null;
   }
 
