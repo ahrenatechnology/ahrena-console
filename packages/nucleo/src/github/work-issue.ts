@@ -76,7 +76,7 @@ export interface WorkIssueEdit {
  * `null` when GitHub has no such issue (nothing is written then).
  */
 export interface WorkIssueWriter {
-  /** The title, body and `updatedAt` GitHub holds now; `null`: no such issue. */
+  /** #533 the title, body and `updatedAt` GitHub holds now; `null`: no such issue. */
   current(key: string): Promise<WorkIssueCurrent | null>;
   update(key: string, edit: WorkIssueEdit): Promise<WorkIssueRead | null>;
   comment(key: string, body: string): Promise<WorkIssueRead | null>;

@@ -7,6 +7,7 @@ import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import { GithubGraphqlSource, GithubHttpError } from '../../src/github/github-source.ts';
 import { WorkIssueForbiddenError, WorkIssueRefusedError } from '../../src/github/work-issue.ts';
+import { githubFailureOf } from '../../src/github/cache.ts';
 import { k, REPO } from './helpers.ts';
 
 const detail = (over: Record<string, unknown> = {}) => ({
@@ -15,34 +16,46 @@ const detail = (over: Record<string, unknown> = {}) => ({
   comments: { totalCount: 0, nodes: [] }, parent: null, subIssues: { nodes: [] }, closedByPullRequestsReferences: { nodes: [] }, ...over,
 });
 
-interface Call { operation: string; variables: any; headers: Record<string, string> }
+interface Call { operation: string; query: string; variables: any; headers: Record<string, string>; signal: AbortSignal | null | undefined }
+interface Repo {
+  issue?: { id: string; viewerCanUpdate: boolean; parent: { id: string } | null } | null;
+  labels?: Record<string, string>;
+  types?: { id: string; name: string }[];
+  milestones?: { id: string; title: string; state: 'OPEN' | 'CLOSED' }[];
+}
 
-function fake(over: { targets?: unknown; httpStatus?: Record<string, number> } = {}) {
+// GitHub as the adapter asks: a label by its name (any page), milestones by title filter and state, a page of issue types.
+function fake(over: Repo & { httpStatus?: Record<string, number>; hang?: string; timeoutMs?: number } = {}) {
   const calls: Call[] = [];
-  const targets = over.targets ?? {
-    repository: {
-      id: 'R_1',
-      issue: { id: 'I_533', viewerCanUpdate: true, parent: { id: 'I_OLD' } },
-      labels: { nodes: [{ id: 'L_back', name: 'backend' }, { id: 'L_front', name: 'frontend' }] },
-      issueTypes: { nodes: [{ id: 'T_plan', name: 'Plan' }, { id: 'T_task', name: 'Tech Task' }] },
-      milestones: { nodes: [{ id: 'M_wb', title: 'Work board' }] },
-    },
-  };
+  const labels = over.labels ?? { backend: 'L_back', frontend: 'L_front' };
+  const types = over.types ?? [{ id: 'T_plan', name: 'Plan' }, { id: 'T_task', name: 'Tech Task' }];
+  const milestones = over.milestones ?? [{ id: 'M_wb', title: 'Work board', state: 'OPEN' as const }];
+  const issue = over.issue === undefined ? { id: 'I_533', viewerCanUpdate: true, parent: { id: 'I_OLD' } } : over.issue;
   const f = (async (_u: string, init: RequestInit) => {
     const { query, variables } = JSON.parse(String(init.body));
     const operation = /(?:query|mutation) (\w+)/.exec(query)![1];
-    calls.push({ operation, variables, headers: init.headers as Record<string, string> });
+    calls.push({ operation, query, variables, headers: init.headers as Record<string, string>, signal: init.signal });
+    if (over.hang === operation) {
+      return new Promise<Response>((_, reject) => init.signal?.addEventListener('abort', () => reject(init.signal!.reason)));
+    }
     const status = over.httpStatus?.[operation];
     if (status) return new Response(JSON.stringify({ message: 'raw github text' }), { status });
-    const data: Record<string, unknown> =
-      operation === 'WorkIssueCurrent' ? { repository: { issue: { title: 'on github', body: 'b', updatedAt: '2026-11-10T10:00:00Z' } } }
-      : operation === 'WorkIssueTargets' ? targets as Record<string, unknown>
-      : operation === 'WorkIssueId' ? { repository: { issue: variables.n === 999 ? null : { id: `I_${variables.n}` } } }
-      : operation === 'WorkIssue' ? { repository: { issue: detail() } }
-      : {};
+    let data: Record<string, unknown> = {};
+    if (operation === 'WorkIssueCurrent') data = { repository: { issue: { title: 'on github', body: 'b', updatedAt: '2026-11-10T10:00:00Z' } } };
+    else if (operation === 'WorkIssueTargets') {
+      const repository: Record<string, unknown> = { id: 'R_1', issue, issueTypes: { nodes: types } };
+      for (const [name, value] of Object.entries<string>(variables)) {
+        if (/^l\d+$/.test(name)) repository[name] = labels[value] ? { id: labels[value], name: value } : null;
+      }
+      const title = variables.m as string | undefined;
+      const states = /states: \[([^\]]*)\]/.exec(query)?.[1] ?? 'OPEN';
+      repository.milestones = { nodes: milestones.filter((m) => states.includes(m.state) && (title === undefined || m.title.includes(title))) };
+      data = { repository };
+    } else if (operation === 'WorkIssueId') data = { repository: { issue: variables.n === 999 ? null : { id: `I_${variables.n}` } } };
+    else if (operation === 'WorkIssue') data = { repository: { issue: detail() } };
     return new Response(JSON.stringify({ data }), { status: 200 });
   }) as unknown as typeof fetch;
-  return { calls, source: new GithubGraphqlSource({ token: 'test-token', fetch: f, sleep: async () => {} }) };
+  return { calls, source: new GithubGraphqlSource({ token: 'test-token', fetch: f, sleep: async () => {}, ...(over.timeoutMs ? { timeoutMs: over.timeoutMs } : {}) }) };
 }
 
 describe('#533/AC-1 the adapter reads updatedAt and writes each field', () => {
@@ -91,7 +104,7 @@ describe('#533/AC-1 the adapter reads updatedAt and writes each field', () => {
   });
 
   test('#533/AC-1 an unknown issue is null for update and comment, and nothing is written', async () => {
-    const { source, calls } = fake({ targets: { repository: { id: 'R', issue: null, labels: { nodes: [] }, issueTypes: { nodes: [] }, milestones: { nodes: [] } } } });
+    const { source, calls } = fake({ issue: null });
     assert.equal(await source.update(k(533), { labels: [] }), null);
     assert.ok(!calls.some((c) => c.operation.startsWith('Update') || c.operation.startsWith('Add')));
   });
@@ -112,7 +125,7 @@ describe('#533/AC-3 refusals', () => {
   });
 
   test('#533/AC-3 Given the credential cannot update the issue, Then WorkIssueForbiddenError and no write', async () => {
-    const { source, calls } = fake({ targets: { repository: { id: 'R', issue: { id: 'I', viewerCanUpdate: false, parent: null }, labels: { nodes: [] }, issueTypes: { nodes: [] }, milestones: { nodes: [] } } } });
+    const { source, calls } = fake({ issue: { id: 'I', viewerCanUpdate: false, parent: null } });
     await assert.rejects(source.update(k(533), { labels: [] }), (e) => e instanceof WorkIssueForbiddenError);
     assert.equal(calls.length, 1);
   });
@@ -123,5 +136,60 @@ describe('#533/AC-3 refusals', () => {
     assert.equal(m.calls.filter((c) => c.operation === 'UpdateWorkIssue').length, 1);
     const c = fake({ httpStatus: { AddWorkIssueComment: 403 } });
     await assert.rejects(c.source.comment(k(533), 'x'), (e) => e instanceof GithubHttpError && e.status === 403);
+  });
+});
+
+describe('#533/AC-1 the ids an edit names are resolved wherever GitHub holds them', () => {
+  test('#533/AC-1 a label beyond any first page resolves by its own name, not by a page of labels', async () => {
+    const { source, calls } = fake({ labels: { 'rare-label': 'L_rare', backend: 'L_back' } });
+    await source.update(k(533), { labels: ['rare-label', 'backend'] });
+    const targets = calls.find((c) => c.operation === 'WorkIssueTargets')!;
+    assert.ok(!/labels\(/.test(targets.query), 'no page of labels');
+    assert.deepEqual(Object.values(targets.variables).filter((v) => v === 'rare-label' || v === 'backend'), ['rare-label', 'backend']);
+    assert.deepEqual(calls.find((c) => c.operation === 'UpdateWorkIssue')!.variables.input.labelIds, ['L_rare', 'L_back']);
+  });
+
+  test('#533/AC-3 a label GitHub does not hold is refused as labels, whatever its position', async () => {
+    const { source, calls } = fake();
+    await assert.rejects(source.update(k(533), { labels: ['backend', 'nope'] }), (e) => e instanceof WorkIssueRefusedError && e.param === 'labels');
+    assert.ok(!calls.some((c) => c.operation === 'UpdateWorkIssue'));
+  });
+
+  test('#533/AC-1 a closed milestone resolves by its title', async () => {
+    const { source, calls } = fake({ milestones: [{ id: 'M_old', title: 'Old release', state: 'CLOSED' }, { id: 'M_wb', title: 'Work board', state: 'OPEN' }] });
+    await source.update(k(533), { milestone: 'Old release' });
+    assert.equal(calls.find((c) => c.operation === 'UpdateWorkIssue')!.variables.input.milestoneId, 'M_old');
+  });
+
+  test('#533/AC-3 a milestone whose title only contains the name is not the milestone', async () => {
+    const { source } = fake({ milestones: [{ id: 'M_old', title: 'Old release', state: 'CLOSED' }] });
+    await assert.rejects(source.update(k(533), { milestone: 'Old' }), (e) => e instanceof WorkIssueRefusedError && e.param === 'milestone');
+  });
+
+  test('#533/AC-1 the issue types are read 100 at a time', async () => {
+    const { source, calls } = fake();
+    await source.update(k(533), { type: 'Plan' });
+    assert.match(calls.find((c) => c.operation === 'WorkIssueTargets')!.query, /issueTypes\(first: 100\)/);
+  });
+});
+
+describe('#533/AC-3 every GitHub call has a deadline', () => {
+  test('#533/AC-3 a read and a mutation carry an abort signal', async () => {
+    const { source, calls } = fake();
+    await source.update(k(533), { title: 'T' });
+    for (const c of calls) assert.ok(c.signal instanceof AbortSignal, c.operation);
+  });
+
+  test('#533/AC-3 a mutation GitHub never answers fails as a timeout, which the route reports as network', async () => {
+    const { source } = fake({ hang: 'UpdateWorkIssue', timeoutMs: 20 });
+    await assert.rejects(source.update(k(533), { title: 'T' }), (e) => githubFailureOf(e) === 'network');
+    const c = fake({ hang: 'AddWorkIssueComment', timeoutMs: 20 });
+    await assert.rejects(c.source.comment(k(533), 'x'), (e) => githubFailureOf(e) === 'network');
+  });
+
+  test('#533/AC-3 a read GitHub never answers fails as a timeout and is not retried', async () => {
+    const { source, calls } = fake({ hang: 'WorkIssueTargets', timeoutMs: 20 });
+    await assert.rejects(source.update(k(533), { title: 'T' }), (e) => githubFailureOf(e) === 'network');
+    assert.equal(calls.filter((c) => c.operation === 'WorkIssueTargets').length, 1);
   });
 });

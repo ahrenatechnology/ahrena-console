@@ -106,7 +106,7 @@ import type { McpServer } from '../mcp/protocol.ts';
 import { criarRotaDoProjeto, ehDoProjeto, mesmaOrigemMovendo, PROJECT_OPTIONS_ROUTE, type OpcoesDoProjeto } from './project.ts';
 import { createWorkBoardRoute, WORK_BOARD_ROUTE, type WorkBoardRouteOptions } from './work-board.ts';
 import { createWorkIssueRoute, WORK_ISSUE_COMMENTS_ROUTE, WORK_ISSUE_ROUTE, type WorkIssueRouteOptions } from './work-issue.ts';
-import { createWorkIssueWriteRoute } from './work-issue-write.ts';
+import { createWorkIssueWriteRoute, type WorkIssueWriteRouteOptions } from './work-issue-write.ts';
 import { createWorkPlanRoute, WORK_PLAN_ROUTE, type WorkPlanRouteOptions } from './work-plan.ts';
 import { DETAIL_ROUTE, type LeiturasDoDetalhe } from './session-detail.ts';
 import type { FleetReader } from '../mcp/fleet.ts';
@@ -201,7 +201,7 @@ export interface ApiOptions {
   /** #465 #466 the work board; without it, `/api/work` answers 503 `off` (--no-github). */
   work?: WorkBoardRouteOptions;
   /** #506 the work board's issue detail; without it, `/api/work/issue` answers 503 `off`. */
-  workIssue?: WorkIssueRouteOptions;
+  workIssue?: WorkIssueRouteOptions & WorkIssueWriteRouteOptions;
   /** #507 "Planejar" (`POST /api/work/plan`); without it the route answers 503. */
   workPlan?: WorkPlanRouteOptions;
   /** The session Detail reads (`/api/sessions/<id>…`); without them, 404. */

@@ -52,7 +52,10 @@ async function boot({ withService = true }: { withService?: boolean } = {}): Pro
     else if (op === 'WorkIssueCurrent') data = { repository: { issue: { title: github.title, body: github.body, updatedAt: github.updatedAt } } };
     else if (op === 'WorkIssueId') data = { repository: { issue: { id: `I_${variables.n}` } } };
     else if (op === 'WorkIssueTargets') {
-      data = { repository: { id: 'R_1', issue: { id: 'I_533', viewerCanUpdate: true, parent: null }, labels: { nodes: [{ id: 'L_back', name: 'backend' }, { id: 'L_front', name: 'frontend' }] }, issueTypes: { nodes: [] }, milestones: { nodes: [] } } };
+      const repository: Record<string, unknown> = { id: 'R_1', issue: { id: 'I_533', viewerCanUpdate: true, parent: null }, issueTypes: { nodes: [] }, milestones: { nodes: [] } };
+      const known: Record<string, string> = { backend: 'L_back', frontend: 'L_front' };
+      for (const [name, value] of Object.entries<string>(variables)) if (/^l\d+$/.test(name)) repository[name] = known[value] ? { id: known[value], name: value } : null;
+      data = { repository };
     } else if (op === 'UpdateWorkIssue') {
       const i = variables.input;
       github.writes.push(op);
@@ -224,6 +227,19 @@ describe('#533/AC-4 only the /ui, JSON, bounded, on the exact path', () => {
       assert.deepEqual(await patch(b, { repo: 'nope', labels: [] }), { status: 400, json: { error: 'bad-param', param: 'repo' } });
       assert.deepEqual(await patch(b, { number: 0, labels: [] }), { status: 400, json: { error: 'bad-param', param: 'number' } });
       assert.deepEqual(await patch(b, {}), { status: 400, json: { error: 'bad-param', param: 'edit' } });
+      assert.equal(b.github.calls, 0);
+    }));
+
+  test('#533/AC-4 a parent saves on its own: with any other field it is 400 bad-param parent and nothing is written', async () =>
+    withApi(async (b) => {
+      assert.deepEqual(await patch(b, { parent: `${REPO}#478`, labels: ['backend'] }), { status: 400, json: { error: 'bad-param', param: 'parent' } });
+      assert.deepEqual(await patch(b, { parent: null, title: 'x', updatedAt: OPENED_AT }), { status: 400, json: { error: 'bad-param', param: 'parent' } });
+      assert.equal(b.github.calls, 0);
+      assert.deepEqual(b.github.writes, []);
+    }));
+
+  test('#533/AC-4 the remaining bad values', async () =>
+    withApi(async (b) => {
       assert.deepEqual(await comment(b, { body: '' }), { status: 400, json: { error: 'bad-param', param: 'body' } });
       assert.deepEqual(await comment(b, { body: 'x'.repeat(65_537) }), { status: 400, json: { error: 'bad-param', param: 'body' } });
       assert.equal(b.github.calls, 0);

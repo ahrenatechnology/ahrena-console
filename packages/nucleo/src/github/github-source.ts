@@ -40,6 +40,8 @@ import {
 import { deltaQuery } from './tree.ts';
 
 export const GITHUB_GRAPHQL_URL = 'https://api.github.com/graphql';
+/** #533 the deadline of one GitHub call; a call that outlives it fails as a timeout (`network` for the reason codes). */
+export const GITHUB_TIMEOUT_MS = 30_000;
 
 const LEAN = `number title url state updatedAt repository { nameWithOwner } issueType { name }
   subIssuesSummary { total completed percentCompleted } parent { number repository { nameWithOwner } }`;
@@ -72,9 +74,6 @@ export const QUERIES = {
 export const WRITE_QUERIES = {
   current: `query WorkIssueCurrent($o: String!, $r: String!, $n: Int!) {
   repository(owner: $o, name: $r) { issue(number: $n) { title body updatedAt } } }`,
-  targets: `query WorkIssueTargets($o: String!, $r: String!, $n: Int!) {
-  repository(owner: $o, name: $r) { id issue(number: $n) { id viewerCanUpdate parent { id } }
-    labels(first: 100) { nodes { id name } } issueTypes(first: 50) { nodes { id name } } milestones(first: 100, states: OPEN) { nodes { id title } } } }`,
   id: `query WorkIssueId($o: String!, $r: String!, $n: Int!) {
   repository(owner: $o, name: $r) { issue(number: $n) { id } } }`,
   update: `mutation UpdateWorkIssue($input: UpdateIssueInput!) { updateIssue(input: $input) { issue { id } } }`,
@@ -82,6 +81,24 @@ export const WRITE_QUERIES = {
   removeParent: `mutation RemoveWorkIssueParent($input: RemoveSubIssueInput!) { removeSubIssue(input: $input) { issue { id } } }`,
   comment: `mutation AddWorkIssueComment($input: AddCommentInput!) { addComment(input: $input) { commentEdge { node { id } } } }`,
 } as const;
+
+/**
+ * #533 the ids an edit names, in one query: the issue and its viewer permission always; each requested label by its
+ * own name (`l0`, `l1`... so a label on any page is found), the issue types (one page of 100, an org has few) when
+ * the edit sets a type, and the milestones whose title matches `$m` in any state when it sets a milestone.
+ */
+export function targetsQuery(edit: { labels?: readonly string[]; type?: string | null; milestone?: string | null }): string {
+  const labels = edit.labels ?? [];
+  const vars = ['$o: String!', '$r: String!', '$n: Int!', ...labels.map((_, i) => `$l${i}: String!`), ...(typeof edit.milestone === 'string' ? ['$m: String!'] : [])];
+  const fields = [
+    'id',
+    'issue(number: $n) { id viewerCanUpdate parent { id } }',
+    ...labels.map((_, i) => `l${i}: label(name: $l${i}) { id name }`),
+    ...(typeof edit.type === 'string' ? ['issueTypes(first: 100) { nodes { id name } }'] : []),
+    ...(typeof edit.milestone === 'string' ? ['milestones(first: 100, query: $m, states: [OPEN, CLOSED]) { nodes { id title } }'] : []),
+  ];
+  return `query WorkIssueTargets(${vars.join(', ')}) {\n  repository(owner: $o, name: $r) { ${fields.join(' ')} } }`;
+}
 
 /** Até quantas chaves cabem numa consulta de lote. */
 export const NODES_BATCH = 50;
@@ -269,6 +286,8 @@ export interface GithubGraphqlSourceOptions {
   onCost?: (cost: QueryCost) => void;
   /** Waits between retries of a 502/503/504 (tests make it instant). Default `setTimeout`. */
   sleep?: (ms: number) => Promise<void>;
+  /** #533 the deadline of one call; default `GITHUB_TIMEOUT_MS`. */
+  timeoutMs?: number;
 }
 
 export interface GraphqlError {
@@ -368,20 +387,24 @@ export class GithubGraphqlSource implements WorkSource, WorkIssueSource, WorkIss
    * #533 writes the fields of `edit` and answers the issue as GitHub holds it. The ids the edit names (labels,
    * type, milestone, parent) are resolved before the first write: an unknown one is `WorkIssueRefusedError` and
    * nothing is written; a credential that cannot update the issue is `WorkIssueForbiddenError`. The fields go
-   * in one `updateIssue`; the parent, when it is in the edit, in a second call.
+   * in one `updateIssue`; the parent, when it is in the edit, in a second call (the route (#533) lets a parent
+   * come alone, so a failed second call never leaves a half-written save).
    */
   async update(key: string, edit: WorkIssueEdit): Promise<WorkIssueRead | null> {
     const k = parseWorkKey(key);
     type Named<N extends string> = { id: string } & { [P in N]: string };
     type Targets = {
-      repository: {
+      repository: ({
         issue: { id: string; viewerCanUpdate: boolean; parent: { id: string } | null } | null;
-        labels: { nodes: Named<'name'>[] };
-        issueTypes: { nodes: Named<'name'>[] };
-        milestones: { nodes: Named<'title'>[] };
-      } | null;
+        issueTypes?: { nodes: Named<'name'>[] };
+        milestones?: { nodes: Named<'title'>[] };
+      } & { [alias: `l${number}`]: Named<'name'> | null }) | null;
     };
-    const data = await this.query<Targets>('WorkIssueTargets', WRITE_QUERIES.targets, { o: k.owner, r: k.name, n: k.number }, { tolerateNotFound: true });
+    const labelNames = edit.labels ?? [];
+    const variables: Record<string, unknown> = { o: k.owner, r: k.name, n: k.number };
+    labelNames.forEach((name, i) => (variables[`l${i}`] = name));
+    if (typeof edit.milestone === 'string') variables.m = edit.milestone;
+    const data = await this.query<Targets>('WorkIssueTargets', targetsQuery(edit), variables, { tolerateNotFound: true });
     const repo = data.repository;
     const issue = repo?.issue;
     if (!repo || !issue) return null;
@@ -391,19 +414,19 @@ export class GithubGraphqlSource implements WorkSource, WorkIssueSource, WorkIss
     if (edit.title !== undefined) fields.title = edit.title;
     if (edit.body !== undefined) fields.body = edit.body;
     if (edit.labels !== undefined) {
-      fields.labelIds = edit.labels.map((name) => {
-        const found = repo.labels.nodes.find((l) => l.name === name);
+      fields.labelIds = labelNames.map((name, i) => {
+        const found = repo[`l${i}`];
         if (!found) throw new WorkIssueRefusedError('labels', name);
         return found.id;
       });
     }
     if (edit.type !== undefined) {
-      const found = edit.type === null ? null : repo.issueTypes.nodes.find((t) => t.name === edit.type);
+      const found = edit.type === null ? null : (repo.issueTypes?.nodes ?? []).find((t) => t.name === edit.type);
       if (found === undefined) throw new WorkIssueRefusedError('type', edit.type!);
       fields.issueTypeId = found?.id ?? null;
     }
     if (edit.milestone !== undefined) {
-      const found = edit.milestone === null ? null : repo.milestones.nodes.find((m) => m.title === edit.milestone);
+      const found = edit.milestone === null ? null : (repo.milestones?.nodes ?? []).find((m) => m.title === edit.milestone);
       if (found === undefined) throw new WorkIssueRefusedError('milestone', edit.milestone!);
       fields.milestoneId = found?.id ?? null;
     }
@@ -436,13 +459,18 @@ export class GithubGraphqlSource implements WorkSource, WorkIssueSource, WorkIss
 
   private async query<T>(operation: string, query: string, variables: Record<string, unknown>, { tolerateNotFound = false } = {}): Promise<T> {
     const token = await resolveGithubToken(this.opts.token);
-    return retryOnGateway(() => githubGraphql<T>({ ...this.opts, token }, operation, query, variables, { tolerateNotFound }), { sleep: this.opts.sleep });
+    // #533 a fresh deadline per try: a timeout is not a gateway error and is not retried.
+    return retryOnGateway(() => githubGraphql<T>({ ...this.opts, token }, operation, query, variables, { tolerateNotFound, signal: this.deadline() }), { sleep: this.opts.sleep });
   }
 
   /** #533 a mutation is never retried: a 502 may have been applied on GitHub's side (see `retryOnGateway`). */
   private async mutate<T>(operation: string, query: string, variables: Record<string, unknown>): Promise<T> {
     const token = await resolveGithubToken(this.opts.token);
-    return githubGraphql<T>({ ...this.opts, token }, operation, query, variables);
+    return githubGraphql<T>({ ...this.opts, token }, operation, query, variables, { signal: this.deadline() });
+  }
+
+  private deadline(): AbortSignal {
+    return AbortSignal.timeout(this.opts.timeoutMs ?? GITHUB_TIMEOUT_MS);
   }
 }
 

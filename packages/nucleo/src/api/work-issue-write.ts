@@ -11,6 +11,8 @@
  *
  * - `repo` is `owner/name` and `number` a positive integer, as in the read. `labels` replaces the whole set;
  *   `type`, `milestone` and `parent` (an `owner/name#N` key) clear with `null`; an absent field is left alone.
+ *   `parent` is saved on its own: carried with another field it is 400 `bad-param` `parent` and nothing is written
+ *   (a parent change is a second GitHub call, and a half-written save would 409 the user's own retry).
  * - A `title` or `body` save carries `updatedAt`, the version it was opened at: when GitHub's is newer nothing
  *   is written and the answer is 409 `{ error: 'conflict', title, body, updatedAt }`, GitHub's current. The
  *   other fields save with no check.
@@ -34,7 +36,7 @@ import { send } from '../ingest/hooks/receiver.ts';
 import { readJsonBody } from './connections-route.ts';
 import { WORK_ISSUE_COMMENTS_ROUTE, WORK_ISSUE_ROUTE } from './work-issue.ts';
 
-/** GitHub's limits: a title is 256 characters, a body or a comment 65536; UTF-8 takes up to 4 bytes of each. */
+/** #533 GitHub's limits: a title is 256 characters, a body or a comment 65536; UTF-8 takes up to 4 bytes of each. */
 const MAX_TITLE = 256;
 const MAX_TEXT = 65_536;
 export const MAX_WRITE_BYTES = 4 * MAX_TEXT + 16_384;
@@ -95,6 +97,7 @@ function parseEdit(b: Record<string, unknown>): Parsed {
     edit.parent = b.parent as string | null;
   }
   if (Object.keys(edit).length === 0) return { ok: false, param: 'edit' };
+  if ('parent' in edit && Object.keys(edit).length > 1) return { ok: false, param: 'parent' };
   const seenAt = b.updatedAt;
   if (edit.title !== undefined || edit.body !== undefined) {
     if (typeof seenAt !== 'string' || seenAt.length > 40 || Number.isNaN(Date.parse(seenAt))) return { ok: false, param: 'updatedAt' };
@@ -125,7 +128,7 @@ export function createWorkIssueWriteRoute({ service }: WorkIssueWriteRouteOption
     const read = await readJsonBody(req, MAX_WRITE_BYTES);
     if (!read.ok) {
       if (read.error === 'too-large') {
-        // The rest of the body is read and dropped (only the /ui reaches here), so the client sees the 413 and not a broken pipe.
+        // #533 the rest of the body is read and dropped (only the /ui reaches here), so the client sees the 413 and not a broken pipe.
         req.resume();
         res.setHeader('connection', 'close');
         return send(res, 413, { error: 'too-large' });

@@ -27,8 +27,8 @@ export const WORK_ISSUE_ROUTE = '/api/work/issue';
 export const WORK_ISSUE_COMMENTS_ROUTE = '/api/work/issue/comments';
 
 export interface WorkIssueRouteOptions {
-  /** #506 `null` under --no-github: the route answers 503 `off`; #533 the writes (api/work-issue-write.ts) go through the same service. */
-  service: Pick<WorkIssueService, 'issue' | 'update' | 'comment'> | null;
+  /** #506 `null` under --no-github: the route answers 503 `off`; #533 the writes have their own options (api/work-issue-write.ts). */
+  service: Pick<WorkIssueService, 'issue'> | null;
 }
 
 const REPO = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
