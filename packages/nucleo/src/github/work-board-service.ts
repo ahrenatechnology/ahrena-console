@@ -11,9 +11,11 @@ import type { ProjectBoard, ProjectCard } from './project.ts';
 import {
   analyzeWorkNodes,
   type AnalyzedWorkNode,
+  type WorkCardExecution,
   type WorkCardPlanning,
   type WorkSessionLink,
   buildWorkBoard,
+  DEFAULT_WORK_BOARD_FILTERS,
   columnObservations,
   type ParentLookup,
   type WorkBoardFilters,
@@ -25,6 +27,7 @@ import {
   type WorkQueue,
   type WorkSessions,
 } from './work-board.ts';
+import { executionOfRun, settleExecutionRun, type RunningCards, type WorkExecutionRuns } from './work-execution.ts';
 import { planningOfRun, settlePlanRun, type WorkPlanRuns } from './work-plan.ts';
 import type { WorkNode } from './work.ts';
 
@@ -35,6 +38,8 @@ export interface WorkBoardServiceOptions {
   history: WorkColumnHistory;
   /** #507 the planning runs; without it no card has a planning state. */
   planRuns?: WorkPlanRuns;
+  /** #531 the execution runs; without it no card has a boot state. */
+  executionRuns?: WorkExecutionRuns;
   /** #465 without it, parents outside the Project stay chain links with no title. */
   parents?: ParentLookup;
   now?: () => number;
@@ -53,24 +58,26 @@ export interface WorkBoardReadOptions {
   fromStore?: boolean;
 }
 
-export class WorkBoardService {
+export class WorkBoardService implements RunningCards {
   private readonly project: WorkProjectBoard;
   private readonly sessions: WorkSessions;
   private readonly queue: WorkQueue;
   private readonly history: WorkColumnHistory;
   private readonly planRuns: WorkPlanRuns | undefined;
+  private readonly executionRuns: WorkExecutionRuns | undefined;
   private readonly parents: ParentLookup | undefined;
   private readonly now: () => number;
   private readonly pausedUntil: () => number;
   private readonly nextScheduledRead: () => number | null;
   private readonly log: (message: string) => void;
 
-  constructor({ project, sessions, queue, history, planRuns, parents, now = Date.now, pausedUntil = () => 0, nextScheduledRead = () => null, log = () => {} }: WorkBoardServiceOptions) {
+  constructor({ project, sessions, queue, history, planRuns, executionRuns, parents, now = Date.now, pausedUntil = () => 0, nextScheduledRead = () => null, log = () => {} }: WorkBoardServiceOptions) {
     this.project = project;
     this.sessions = sessions;
     this.queue = queue;
     this.history = history;
     this.planRuns = planRuns;
+    this.executionRuns = executionRuns;
     this.parents = parents;
     this.now = now;
     this.pausedUntil = pausedUntil;
@@ -87,7 +94,8 @@ export class WorkBoardService {
     // #507 a planning session is not an execution: it never moves the card, it gives it its planning state.
     const sessions = links.filter((l) => !l.planning);
     const now = this.now();
-    const analyzed = analyzeWorkNodes(nodes, sessions, queue);
+    const execution = await this.settleExecution(links.filter((l) => l.execution), now);
+    const analyzed = analyzeWorkNodes(nodes, sessions, queue, new Set(execution.keys()));
     const planning = await this.settlePlanning(analyzed, links.filter((l) => l.planning), now);
     const since = await this.history.observe(columnObservations(analyzed, now));
     // #495 the screen gets a code; the raw text of the stale read goes to the log.
@@ -104,12 +112,45 @@ export class WorkBoardService {
       filters,
       analyzed,
       planning,
+      execution,
       now,
       fetchedAt: read.fetchedAt,
       stale: staleReason !== null,
       staleReason,
       retryAt: staleReason === null ? null : this.retryAt(now),
     });
+  }
+
+  /**
+   * #531 how many cards are in Em execução now, booting runs included: what the run route counts against
+   * the limit. It reads the board the way the screen does (the store first, level item).
+   */
+  async runningCount(): Promise<number> {
+    const view = await this.board({ ...DEFAULT_WORK_BOARD_FILTERS }, { fromStore: true });
+    return view.columns.find((c) => c.id === 'running')?.count ?? 0;
+  }
+
+  /**
+   * #531 settles every execution run against the live execution sessions of its issue (work-execution.ts),
+   * records the change, and returns the boot state of the runs still booting. The record failing never
+   * fails the board: the cards just carry no boot state.
+   */
+  private async settleExecution(executionLinks: readonly WorkSessionLink[], now: number): Promise<Map<string, WorkCardExecution>> {
+    const out = new Map<string, WorkCardExecution>();
+    if (!this.executionRuns) return out;
+    try {
+      for (const run of await this.executionRuns.all()) {
+        const live = executionLinks.filter((l) => l.key.toLowerCase() === run.key.toLowerCase()).map((l) => ({ sessionId: l.sessionId, since: l.since }));
+        const settled = settleExecutionRun(run, { live, now });
+        if (settled !== run) await this.executionRuns.save(settled);
+        const state = executionOfRun(settled);
+        if (state) out.set(run.key.toLowerCase(), state);
+      }
+    } catch (err) {
+      this.log(`work board: execution runs unavailable: ${err instanceof Error ? err.message : String(err)}`);
+      out.clear();
+    }
+    return out;
   }
 
   /**

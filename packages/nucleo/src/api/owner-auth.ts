@@ -59,6 +59,8 @@ export const REMOTE_ROUTES: readonly RemoteRoute[] = [
   { method: 'GET', path: /^\/api\/events$/, query: eventsQuery },
   { method: 'GET', path: /^\/api\/dashboard$/, query: NO_QUERY },
   { method: 'GET', path: /^\/api\/sessions\/(?!\.{1,2}(?:\/|$))(?:[A-Za-z0-9_.-]|%3A){1,128}(?:\/(?:agents|conversation|events|workflow|decisions))?$/, query: /^[A-Za-z][A-Za-z0-9_]{0,31}$/ },
+  // The agent view (#529, decision 0020 section 5): `remoteDetailPath` emits `/agents/<encodeURIComponent(agentId)>`, a REMOTE_ID, so `%3A` is allowed and `.`/`..` are not.
+  { method: 'GET', path: /^\/api\/sessions\/(?!\.{1,2}\/)(?:[A-Za-z0-9_.-]|%3A){1,128}\/agents\/(?!\.{1,2}$)(?:[A-Za-z0-9_.-]|%3A){1,128}$/, query: /^[A-Za-z][A-Za-z0-9_]{0,31}$/ },
   { method: 'GET', path: /^\/api\/panel\/(?!\.{1,2}$)(?:[A-Za-z0-9_.-]|%3A){1,128}$/, query: ['local', 'account', 'org', 'model', 'cwd'] },
   { method: 'POST', path: /^\/api\/connectors\/aws\/sessions\/(?!\.{1,2}\/)[A-Za-z0-9._-]{1,64}\/login$/, query: NO_QUERY },
   { method: 'DELETE', path: /^\/api\/connectors\/aws\/sessions\/(?!\.{1,2}\/)[A-Za-z0-9._-]{1,64}\/login$/, query: NO_QUERY },

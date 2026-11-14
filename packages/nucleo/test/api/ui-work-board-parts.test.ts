@@ -316,7 +316,7 @@ describe('#466/AC-3 the filter bar', () => {
 });
 
 describe('#465/AC-2 the card (465-2), data only', () => {
-  test('#465/AC-2 anatomy: type, number, title linked to GitHub, parent, Status as data, time in the column, plan chip', () => {
+  test('#465/AC-2 anatomy: type, number, title, GitHub link, parent, Status as data, time in the column, plan chip', () => {
     const node = workCard(CARDS.planning[0], { chainMode: 'compact', primaryRepo: REPO, now: NOW });
     assert.equal(node.tagName, 'ARTICLE');
     assert.ok(node.classList.contains('card') && node.classList.contains('wb-card'));
@@ -324,8 +324,8 @@ describe('#465/AC-2 the card (465-2), data only', () => {
     assert.equal(texto(node.querySelector('.wb-type')), 'História');
     assert.ok(node.querySelector('.wb-type')!.classList.contains('wb-type-story'));
     assert.equal(texto(node.querySelector('.wb-number')), '#506');
-    const link = node.querySelector('h3 a')!;
-    assert.equal(texto(link), 'Issue 506');
+    assert.equal(texto(node.querySelector('h3')), 'Issue 506');
+    const link = node.querySelector('.wb-card-top a.wb-card-github')!;
     assert.equal(link.getAttribute('href'), `https://github.com/${REPO}/issues/506`);
     assert.equal(link.getAttribute('rel'), 'noopener noreferrer');
     assert.equal(texto(node.querySelector('.wb-chain')), '↑ #6');
