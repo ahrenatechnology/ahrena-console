@@ -230,10 +230,9 @@ describe('#515 a planning session started from the terminal runs with a tool res
   const ALLOWED = 'Read,Grep,Glob,Skill,Agent,Bash(gh issue view:*),Bash(gh issue list:*),Bash(gh issue create:*),Bash(gh issue edit:*),Bash(gh api:*)';
   const DENIED_FAMILIES = [
     'Edit', 'Write', 'NotebookEdit', 'mcp__*',
-    'Bash(git push:*)', 'Bash(git commit:*)', 'Bash(gh pr:*)', 'Bash(gh stack:*)', 'Bash(gh secret:*)', 'Bash(gh repo:*)', 'Bash(gh release:*)', 'Bash(gh workflow:*)',
+    'Bash(git:*)', 'Bash(gh pr:*)', 'Bash(gh stack:*)', 'Bash(gh secret:*)', 'Bash(gh repo:*)', 'Bash(gh release:*)', 'Bash(gh workflow:*)',
     'Bash(gh issue delete:*)', 'Bash(gh issue transfer:*)', 'Bash(gh issue close:*)', 'Bash(gh issue reopen:*)', 'Bash(gh issue lock:*)', 'Bash(gh issue pin:*)', 'Bash(gh issue develop:*)',
     'Bash(gh run:*)', 'Bash(gh variable:*)', 'Bash(gh gist:*)', 'Bash(gh label:*)', 'Bash(gh auth:*)', 'Bash(gh ssh-key:*)', 'Bash(gh extension:*)', 'Bash(gh alias:*)', 'Bash(gh ruleset:*)', 'Bash(gh cache:*)', 'Bash(gh codespace:*)',
-    'Bash(git reset:*)', 'Bash(git checkout:*)', 'Bash(git switch:*)', 'Bash(git rebase:*)', 'Bash(git merge:*)', 'Bash(git tag:*)', 'Bash(git branch:*)', 'Bash(git clean:*)', 'Bash(git -C:*)', 'Bash(git -c:*)',
   ];
   const DENIED = DENIED_FAMILIES.join(',');
 
@@ -244,6 +243,7 @@ describe('#515 a planning session started from the terminal runs with a tool res
   test('#515/AC-1 every denied family is in the deny value, and no MCP server is reachable (mcp__* deny)', () => {
     const denied = PLANNING_TOOL_FLAGS[PLANNING_TOOL_FLAGS.indexOf('--disallowedTools') + 1]!.split(',');
     for (const t of DENIED_FAMILIES) assert.ok(denied.includes(t), t);
+    assert.ok(!denied.some((t) => t.startsWith('Bash(git ')), 'all git is one entry, Bash(git:*), not a list of verbs');
     assert.ok(!PLANNING_TOOL_FLAGS.includes('--strict-mcp-config'), 'the documented mcp__* deny is the choice');
   });
 

@@ -19,7 +19,7 @@ describe('#515 sessionCommand', () => {
 
   test('#515/AC-1 the copied command carries the extended deny list, mcp__* included', () => {
     const cmd = sessionCommand('/w/app', PLAN);
-    for (const t of ['mcp__*', 'Bash(gh run:*)', 'Bash(gh variable:*)', 'Bash(gh issue close:*)', 'Bash(git reset:*)', 'Bash(git -C:*)', 'Bash(git -c:*)']) assert.ok(cmd.includes(t), t);
+    for (const t of ['mcp__*', 'Bash(gh run:*)', 'Bash(gh variable:*)', 'Bash(gh issue close:*)', 'Bash(git:*)']) assert.ok(cmd.includes(t), t);
   });
 
   test('another prompt: unchanged', () => {

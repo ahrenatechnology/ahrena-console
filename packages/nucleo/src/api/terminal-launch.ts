@@ -15,8 +15,9 @@
 //   #507 Both files remove themselves when they run.
 //   #515 When the prompt is a planning one (`planningKeyOfPrompt`), `claude` starts with PLANNING_TOOL_FLAGS
 //   #515 before the prompt: `--permission-mode dontAsk`, an allowed list (read, the issue and Plan sub-issues
-//   #515 through `gh`) and a denied list (no editing files, no push, commit or pull request, no MCP tool, and
-//   #515 no write verb of `gh` or `git` that planning does not need), each flag
+//   #515 through `gh`) and a denied list (no editing files, no git at all through Bash (`Bash(git:*)`, which
+//   #515 covers every verb and global-option form), no pull request, no MCP tool, and no write verb of `gh`
+//   #515 that planning does not need), each flag
 //   #515 single-quoted, then a bare `--`: `--allowedTools` and `--disallowedTools` are variadic lists, so without
 //   #515 it the prompt would be swallowed as one more rule. The flags are fixed here and never come from the prompt; any other prompt
 //   #515 produces the same file as before.
@@ -128,11 +129,12 @@ export async function findOnPath(name: string, path = process.env.PATH ?? ''): P
 /**
  * #515 The tool restriction of a planning session: it reads, searches, runs skills and agents, reads and
  * lists issues, creates and edits issues (the Plan sub-issues) and calls `gh api` (whole until #593); it
- * cannot edit files, push, commit, touch pull requests, stacks, secrets, repositories, releases, workflows,
- * runs, variables, gists, labels, credentials, extensions, rulesets, caches or codespaces, close, transfer
- * or delete issues, rewrite or move the git history or branches, or call any MCP tool (`mcp__*`).
+ * cannot edit files, run any git command through Bash (`Bash(git:*)`: every verb and every global-option form;
+ * it reads the repository with Read, Grep and Glob), touch pull requests, stacks, secrets, repositories,
+ * releases, workflows, runs, variables, gists, labels, credentials, extensions, rulesets, caches or
+ * codespaces, close, transfer or delete issues, or call any MCP tool (`mcp__*`).
  * `dontAsk` is not a closed allow list: the allow rules of every settings scope add to `--allowedTools`.
- * The deny list is what holds, so it names every write verb planning does not need.
+ * The deny list is what holds, so it names every family planning does not need.
  */
 export const PLANNING_TOOL_FLAGS: readonly string[] = [
   '--permission-mode',
@@ -142,10 +144,9 @@ export const PLANNING_TOOL_FLAGS: readonly string[] = [
   '--disallowedTools',
   [
     'Edit,Write,NotebookEdit,mcp__*',
-    'Bash(git push:*),Bash(git commit:*),Bash(gh pr:*),Bash(gh stack:*),Bash(gh secret:*),Bash(gh repo:*),Bash(gh release:*),Bash(gh workflow:*)',
+    'Bash(git:*),Bash(gh pr:*),Bash(gh stack:*),Bash(gh secret:*),Bash(gh repo:*),Bash(gh release:*),Bash(gh workflow:*)',
     'Bash(gh issue delete:*),Bash(gh issue transfer:*),Bash(gh issue close:*),Bash(gh issue reopen:*),Bash(gh issue lock:*),Bash(gh issue pin:*),Bash(gh issue develop:*)',
     'Bash(gh run:*),Bash(gh variable:*),Bash(gh gist:*),Bash(gh label:*),Bash(gh auth:*),Bash(gh ssh-key:*),Bash(gh extension:*),Bash(gh alias:*),Bash(gh ruleset:*),Bash(gh cache:*),Bash(gh codespace:*)',
-    'Bash(git reset:*),Bash(git checkout:*),Bash(git switch:*),Bash(git rebase:*),Bash(git merge:*),Bash(git tag:*),Bash(git branch:*),Bash(git clean:*),Bash(git -C:*),Bash(git -c:*)',
   ].join(','),
 ];
 
