@@ -478,9 +478,9 @@ const workBoard =
         log,
       })
     : null;
-// #506 the work board's issue detail (`GET /api/work/issue`): one GraphQL query per issue through the
-// same GitHub cache, the Project Status from the same resolver. Under --demo the simulator has no issue
-// detail and under --no-github no GitHub: 503 off.
+/* #506 the work board's issue detail (`GET /api/work/issue`): one GraphQL query per issue through the
+ * same GitHub cache, the Project Status from the same resolver. Under --demo the simulator has no issue
+ * detail and under --no-github no GitHub: 503 off. */
 const workIssue =
   workSource instanceof GithubGraphqlSource
     ? new WorkIssueService({ source: workSource, cache: githubCache, ...(screens.project ? { project: selectedProjectBoard(screens.project) } : {}), log })

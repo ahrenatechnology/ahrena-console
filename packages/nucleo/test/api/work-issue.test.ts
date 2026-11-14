@@ -215,7 +215,7 @@ describe('#506/AC-3 GET /api/work/issue: GitHub off or down, an unknown issue', 
         [`?repo=${REPO}&number=abc`, 'number'],
         [`?repo=${REPO}&number=0`, 'number'],
         [`?repo=${REPO}&number=5.5`, 'number'],
-        // GitHub's GraphQL Int is 32-bit: above it the read would fail as a 502, so it is the caller's 400
+        // #506 GitHub's GraphQL Int is 32-bit: above it the read would fail as a 502, so it is the caller's 400
         [`?repo=${REPO}&number=2147483648`, 'number'],
         [`?repo=${REPO}&number=9999999999`, 'number'],
       ] as const) {
