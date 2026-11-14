@@ -133,7 +133,8 @@ export async function findOnPath(name: string, path = process.env.PATH ?? ''): P
  * cannot edit files, run any git command through Bash (`Bash(git:*)`: every verb and every global-option form;
  * it reads the repository with Read, Grep and Glob), touch pull requests, stacks, secrets, repositories,
  * releases, workflows, runs, variables, gists, labels, credentials and keys, extensions, aliases, rulesets,
- * caches, codespaces or projects, close, reopen, transfer, lock, pin or delete issues, or call any MCP tool (`mcp__*`).
+ * caches, codespaces or projects, close, reopen,
+ * transfer, lock or unlock, pin or unpin, develop or delete issues, or call any MCP tool (`mcp__*`).
  * `dontAsk` is not a closed allow list: the allow rules of every settings scope add to `--allowedTools`.
  * The deny list is what holds, so it names every family planning does not need.
  */

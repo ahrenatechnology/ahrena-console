@@ -247,7 +247,7 @@ describe('#515 a planning session started from the terminal runs with a tool res
     assert.ok(!PLANNING_TOOL_FLAGS.includes('--strict-mcp-config'), 'the documented mcp__* deny is the choice');
   });
 
-  test('#515/AC-1 dontAsk is not a closed allow list: every write a user-settings allow could add is denied', () => {
+  test('#515/AC-1 dontAsk is not a closed allow list: each family the security review named is covered by a deny prefix', () => {
     const denied = PLANNING_TOOL_FLAGS[PLANNING_TOOL_FLAGS.indexOf('--disallowedTools') + 1]!.split(',');
     const prefixes = denied.flatMap((t) => /^Bash\((.+):\*\)$/.exec(t)?.slice(1) ?? []);
     const covered = (command: string) => prefixes.some((p) => command === p || command.startsWith(`${p} `));
