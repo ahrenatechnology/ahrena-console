@@ -5,12 +5,12 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import { CATALOG } from '../src/diagnosis/adapters/catalog.ts';
-import { DiagnosisCollector, LARGEST_FOLDERS_BUDGET_MS, LARGEST_FOLDERS_CONCURRENCY, type DiagnosisDeps, type DiagnosisFs, type RunOptions, type RunResult } from '../src/diagnosis/adapters/common.ts';
+import { DiagnosisCollector, stripControlCharacters, LARGEST_FOLDERS_BUDGET_MS, LARGEST_FOLDERS_CONCURRENCY, type DiagnosisDeps, type DiagnosisFs, type RunOptions, type RunResult } from '../src/diagnosis/adapters/common.ts';
 import { DarwinDiagnosisCollector } from '../src/diagnosis/adapters/darwin.ts';
 import { LinuxDiagnosisCollector } from '../src/diagnosis/adapters/linux.ts';
 import { parseDockerDf, parseDuSize, parseJournalUsage, parsePsProcesses } from '../src/diagnosis/adapters/parsers.ts';
 import type { SectionId } from '../src/diagnosis/model.ts';
-import { worktreeRootsOf } from '../src/diagnosis/adapters/system.ts';
+import { systemFs, systemReadFile, worktreeRootsOf } from '../src/diagnosis/adapters/system.ts';
 
 const HOME = '/home/dev';
 const NOW_MS = Date.parse('2026-11-14T12:00:00.000Z');
@@ -347,6 +347,88 @@ describe('known-caches section', () => {
 
   test('#565/AC-9 the worktree roots come from the repository folders the caller passes', () => {
     assert.deepEqual(worktreeRootsOf(['/w/org/repo-a', '/w/org/repo-b']), ['/w/org/repo-a/.claude/worktrees', '/w/org/repo-b/.claude/worktrees']);
+  });
+});
+
+describe('the real file reads', () => {
+  const errno = (code: string) => Object.assign(new Error(code), { code });
+  const failing = (code: string) => ({
+    stat: async () => {
+      throw errno(code);
+    },
+    readdir: async () => {
+      throw errno(code);
+    },
+    readFile: async () => {
+      throw errno(code);
+    },
+  });
+
+  test('#565/AC-11 an absent path (ENOENT, ENOTDIR) answers no, empty or null without a log line', async () => {
+    for (const code of ['ENOENT', 'ENOTDIR']) {
+      const logs: string[] = [];
+      const fs = systemFs((m) => logs.push(m), failing(code));
+      assert.equal(await fs.isDirectory('/x'), false);
+      assert.deepEqual(await fs.listDirs('/x'), []);
+      assert.equal(await fs.modifiedAtMs('/x'), null);
+      assert.equal(await fs.exists('/x'), false);
+      assert.equal(await systemReadFile((m) => logs.push(m), failing(code))('/x'), null);
+      assert.deepEqual(logs, []);
+    }
+  });
+
+  test('#565/AC-11 any other error (EACCES) is logged with the path and the code, and the path counts as absent', async () => {
+    const logs: string[] = [];
+    const fs = systemFs((m) => logs.push(m), failing('EACCES'));
+    assert.equal(await fs.isDirectory('/secret'), false);
+    assert.deepEqual(await fs.listDirs('/secret'), []);
+    assert.equal(await fs.modifiedAtMs('/secret'), null);
+    assert.equal(await fs.exists('/secret'), false);
+    assert.equal(await systemReadFile((m) => logs.push(m), failing('EACCES'))('/secret'), null);
+    assert.equal(logs.length, 5);
+    assert.ok(logs.every((l) => l.includes('/secret') && l.includes('EACCES')));
+  });
+
+  test('#565/AC-11 a path with a line break cannot forge a log line', async () => {
+    const logs: string[] = [];
+    await systemFs((m) => logs.push(m), failing('EACCES')).isDirectory('/a\nforged line');
+    assert.equal(logs.length, 1);
+    assert.ok(!/[\x00-\x1f\x7f]/.test(logs[0]));
+  });
+});
+
+describe('what a diagnosis log line may carry', () => {
+  const dfKey = ['df', ...CATALOG.df.args].join(' ');
+
+  test('#565/AC-3 control characters are stripped from a text before it is logged', () => {
+    assert.equal(stripControlCharacters('a\nb\r\tc\u0000d\u007fe'), 'abcde');
+  });
+
+  test('#565/AC-3 a folder name with a line break does not forge a log line when its measurement fails', async () => {
+    const evil = 'x\n2026-11-14 forged entry';
+    const { deps, logs } = setup({ [dfKey]: ok(DF) }, { dirs: { '/data': [evil] } });
+    await collect(new LinuxDiagnosisCollector(deps), 'largest-folders', '/data');
+    assert.ok(logs.length > 0);
+    assert.ok(logs.every((l) => !/[\x00-\x1f\x7f]/.test(l)));
+    assert.ok(logs.some((l) => l.includes('forged entry')));
+  });
+
+  test('#565/AC-11 a cache path with a line break does not forge a log line when its size cannot be read', async () => {
+    const { deps, logs } = setup({}, { dirs: { '/home/de\nv/.npm': [] } });
+    await collect(new LinuxDiagnosisCollector({ ...deps, home: '/home/de\nv' }), 'known-caches');
+    assert.ok(logs.some((l) => l.includes('/home/dev/.npm')));
+    assert.ok(logs.every((l) => !/[\x00-\x1f\x7f]/.test(l)));
+  });
+
+  test('#565/AC-9 a rejecting worktreeRoots is logged and the measured caches survive', async () => {
+    const sizeKey = (cwd: string) => `du ${CATALOG['du-size'].args.join(' ')} @${cwd}`;
+    const { deps, logs } = setup({ [sizeKey(`${HOME}/.npm`)]: ok('2048\t.\n') }, { dirs: { [`${HOME}/.npm`]: [] } });
+    deps.worktreeRoots = async () => {
+      throw new Error('sessions store unreadable');
+    };
+    const r = await collect(new LinuxDiagnosisCollector(deps), 'known-caches');
+    assert.deepEqual(r, [{ id: 'npm-cache', path: `${HOME}/.npm`, bytes: 2048 * 1024, actionId: 'npm-cache' }]);
+    assert.ok(logs.some((l) => l.includes('diagnosis worktree roots failed') && l.includes('sessions store unreadable')));
   });
 });
 

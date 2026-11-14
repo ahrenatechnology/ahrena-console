@@ -78,6 +78,9 @@ async function mapLimit<T, R>(items: readonly T[], limit: number, task: (item: T
   return results;
 }
 
+/* A name read from disk or a tool's reason can carry a line break; one that reaches a log line forges another line, so control characters never enter it (#565). */
+export const stripControlCharacters = (text: string): string => text.replace(/[\x00-\x1f\x7f]/g, '');
+
 const unavailable = (reason: string): { unavailable: true; reason: string } => ({ unavailable: true, reason });
 
 export abstract class DiagnosisCollector {
@@ -85,6 +88,11 @@ export abstract class DiagnosisCollector {
 
   constructor(deps: DiagnosisDeps) {
     this.deps = deps;
+  }
+
+  /* The one way a collector logs: every message is stripped of control characters first (#565). */
+  private say(message: string): void {
+    this.deps.log(stripControlCharacters(message));
   }
 
   /* The swap used and total; differs by OS (#565). */
@@ -151,18 +159,18 @@ export abstract class DiagnosisCollector {
     return items;
   }
 
-  /* The folders directly under `parent`, each measured with its own `du` run in it; one that does not finish is left out and logged (#565). */
+  /* The folders directly under `parent`, each measured with its own `du` run in it; one that does not finish is left out and logged (#565). A partial scan is logged and not surfaced: the section stays `ok` with what was measured, by design for this layer; the domain has no partial state. */
   private async measureChildren(parent: string, mounts: ReadonlySet<string>, signal: AbortSignal): Promise<FolderItem[]> {
     const paths = (await this.deps.fs.listDirs(parent)).map((name) => join(parent, name)).filter((path) => !mounts.has(path));
     const measured = await mapLimit(paths, LARGEST_FOLDERS_CONCURRENCY, async (path): Promise<FolderItem | null> => {
       if (signal.aborted) return null;
       const r = await this.exec('du-folder', signal, path);
       const bytes = 'stdout' in r ? parseDuSize(r.stdout) : null;
-      if (bytes === null) this.deps.log(`diagnosis folder left out ${path}: ${'stdout' in r ? 'du output not understood' : r.reason}`);
+      if (bytes === null) this.say(`diagnosis folder left out ${path}: ${'stdout' in r ? 'du output not understood' : r.reason}`);
       return bytes === null ? null : { path, bytes };
     });
     const skipped = paths.length - measured.filter((m) => m !== null).length;
-    if (signal.aborted && skipped > 0) this.deps.log(`diagnosis folder scan under ${parent} ran out of time, ${skipped} folders left out`);
+    if (signal.aborted && skipped > 0) this.say(`diagnosis folder scan under ${parent} ran out of time, ${skipped} folders left out`);
     return measured.filter((m): m is FolderItem => m !== null);
   }
 
@@ -199,7 +207,12 @@ export abstract class DiagnosisCollector {
     const { fs, nowMs } = this.deps;
     const limit = nowMs() - OLD_WORKTREE_DAYS * 86_400_000;
     const found: { path: string; modifiedMs: number }[] = [];
-    for (const root of await this.deps.worktreeRoots()) {
+    /* The caller's roots can fail; the caches already measured must survive that, so it is logged and no worktree is listed (#565). */
+    const roots = await this.deps.worktreeRoots().catch((err: unknown) => {
+      this.say(`diagnosis worktree roots failed: ${err instanceof Error ? err.message : String(err)}`);
+      return [] as string[];
+    });
+    for (const root of roots) {
       for (const name of await fs.listDirs(root)) {
         const path = join(root, name);
         const modifiedMs = await fs.modifiedAtMs(path);
@@ -214,7 +227,7 @@ export abstract class DiagnosisCollector {
   /* The item has a non-null size, so one whose size cannot be read is dropped from the list and logged, never shown as zero (#565). */
   private sizeOrLog(path: string, size: { stdout: string } | { unavailable: true; reason: string }): number | null {
     const bytes = 'stdout' in size ? parseDuSize(size.stdout) : null;
-    if (bytes === null) this.deps.log(`diagnosis item dropped ${path}: ${'stdout' in size ? 'du output not understood' : size.reason}`);
+    if (bytes === null) this.say(`diagnosis item dropped ${path}: ${'stdout' in size ? 'du output not understood' : size.reason}`);
     return bytes;
   }
 

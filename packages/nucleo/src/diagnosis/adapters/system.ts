@@ -15,7 +15,8 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import type { SectionCollector } from '../diagnose.ts';
 import type { HostInfo } from '../../telemetry/model.ts';
-import { type DiagnosisDeps, type DiagnosisFs, type DiagnosisRunner, type RunResult } from './common.ts';
+import type { FileReader } from '../../telemetry/ports.ts';
+import { stripControlCharacters, type DiagnosisDeps, type DiagnosisFs, type DiagnosisRunner, type RunResult } from './common.ts';
 import { DarwinDiagnosisCollector } from './darwin.ts';
 import { LinuxDiagnosisCollector } from './linux.ts';
 
@@ -44,16 +45,39 @@ export const systemRunner: DiagnosisRunner = (command, args, options) =>
     );
   });
 
-export const systemFs: DiagnosisFs = {
-  isDirectory: (path) => stat(path).then((s) => s.isDirectory(), () => false),
+/* What the reads below do with an error (#565): ENOENT and ENOTDIR mean "not there" and answer no, empty or null quietly; any other code (EACCES, EMFILE...) is logged with the path and the code, and the path is treated as absent, so the section still answers with what could be read. */
+const ABSENT_CODES = new Set(['ENOENT', 'ENOTDIR']);
+
+/** The file operations `systemFs` and `systemReadFile` use; tests pass a fake that throws. */
+export interface FsOperations {
+  stat: typeof stat;
+  readdir: typeof readdir;
+  readFile: typeof readFile;
+}
+const realOperations: FsOperations = { stat, readdir, readFile };
+
+function onReadError(log: (message: string) => void, path: string, err: unknown): void {
+  const code = (err as NodeJS.ErrnoException | null)?.code ?? 'unknown';
+  if (ABSENT_CODES.has(code)) return;
+  log(stripControlCharacters(`diagnosis read failed ${path}: ${code}`));
+}
+
+export const systemFs = (log: (message: string) => void, ops: Pick<FsOperations, 'stat' | 'readdir'> = realOperations): DiagnosisFs => ({
+  isDirectory: (path) => ops.stat(path).then((s) => s.isDirectory(), (err) => (onReadError(log, path, err), false)),
   listDirs: (path) =>
-    readdir(path, { withFileTypes: true }).then(
+    ops.readdir(path, { withFileTypes: true }).then(
       (entries) => entries.filter((e) => e.isDirectory()).map((e) => e.name),
-      () => [],
+      (err) => (onReadError(log, path, err), []),
     ),
-  modifiedAtMs: (path) => stat(path).then((s) => s.mtimeMs, () => null),
-  exists: (path) => stat(path).then(() => true, () => false),
-};
+  modifiedAtMs: (path) => ops.stat(path).then((s) => s.mtimeMs, (err) => (onReadError(log, path, err), null)),
+  exists: (path) => ops.stat(path).then(() => true, (err) => (onReadError(log, path, err), false)),
+});
+
+export const systemReadFile = (log: (message: string) => void, ops: Pick<FsOperations, 'readFile'> = realOperations): FileReader => (path) =>
+  ops.readFile(path, 'utf8').then(
+    (text) => text,
+    (err) => (onReadError(log, path, err), null),
+  );
 
 /** `<repo>/.claude/worktrees` for each repository folder the core already knows from the sessions that ran there (`knownFolders`). */
 export const worktreeRootsOf = (repositoryFolders: readonly string[]): string[] => repositoryFolders.map((folder) => join(folder, '.claude', 'worktrees'));
@@ -61,8 +85,8 @@ export const worktreeRootsOf = (repositoryFolders: readonly string[]): string[] 
 export function systemDiagnosisDeps(worktreeRoots: () => Promise<string[]>, log: (message: string) => void, home: string = homedir()): DiagnosisDeps {
   return {
     run: systemRunner,
-    readFile: (path) => readFile(path, 'utf8').catch(() => null),
-    fs: systemFs,
+    readFile: systemReadFile(log),
+    fs: systemFs(log),
     home,
     worktreeRoots,
     nowMs: () => Date.now(),
