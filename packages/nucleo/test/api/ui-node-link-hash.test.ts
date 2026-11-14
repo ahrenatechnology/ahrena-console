@@ -1,5 +1,5 @@
-// A Workflow loop node's open icon lands on the Conversa tab with that subagent selected (issue 520, parent 518).
-// The shell's internal-link step used to drop the `#conversation` hash, so the session opened on its default tab.
+// A Workflow loop node's open icon lands on the Conversa tab with that subagent selected (#520, parent #518).
+// The shell's internal-link step used to drop the `#conversation` hash, so the session opened on its default tab. (#520)
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import { ElementoFalso, instalarDomFalso } from './fake-dom.ts';
@@ -47,7 +47,7 @@ describe('the node link to the selected agent in Conversa (issue 520)', () => {
       requests.push(r);
       if (r === BASE) return { session: { id: `${SID}-0`, title: 'S', status: 'active', attention: null, model: 'm', startedAt: new Date().toISOString(), since: new Date().toISOString(), cwd: null, banner: null, identity: null }, endedAt: null, cost: null, branch: null, machine: null, open: null, counts: { agents: 2, events: 2 } };
       if (r.startsWith(`${BASE}/conversation`)) {
-        // The server answers with the agent it was asked for, so the selection follows the request.
+        // The server answers with the agent it was asked for, so the selection follows the request. (#520)
         const asked = new URL(r, ORIGIN).searchParams.get('agent') ?? 'main';
         return { agents: [{ id: 'main', name: 'principal' }, { id: 'sub-x', name: 'sub X' }], agent: asked, total: 0, messages: [], cursor: 'k0' };
       }
