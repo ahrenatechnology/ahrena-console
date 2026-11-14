@@ -25,7 +25,8 @@
 //   #515 `Bash(gh run:*)`, an MCP tool) add to `--allowedTools`. Only the deny list removes them, so the deny
 //   #515 list is what holds. `gh api` stays whole until #593.
 //   #515 MCP: the Claude Code permissions page documents a catch-all deny, `mcp__*` ("matches every MCP tool
-//   #515 across all servers", removed from Claude's context), so that is the choice; `--strict-mcp-config`
+//   #515 across all servers", removed from Claude's context); checked on claude 2.1.325, whose init tool list
+//   #515 drops from 262 MCP tools to none with it, so that is the choice; `--strict-mcp-config`
 //   #515 was not needed. `--setting-sources` is not used: the planned repository's project settings may
 //   #515 enable the ahrena plugins.
 //   #515 A resume of a planning session (the route says so with `planning`, from the session's first prompt)
@@ -131,8 +132,8 @@ export async function findOnPath(name: string, path = process.env.PATH ?? ''): P
  * lists issues, creates and edits issues (the Plan sub-issues) and calls `gh api` (whole until #593); it
  * cannot edit files, run any git command through Bash (`Bash(git:*)`: every verb and every global-option form;
  * it reads the repository with Read, Grep and Glob), touch pull requests, stacks, secrets, repositories,
- * releases, workflows, runs, variables, gists, labels, credentials, extensions, rulesets, caches or
- * codespaces, close, transfer or delete issues, or call any MCP tool (`mcp__*`).
+ * releases, workflows, runs, variables, gists, labels, credentials and keys, extensions, aliases, rulesets,
+ * caches, codespaces or projects, close, reopen, transfer, lock, pin or delete issues, or call any MCP tool (`mcp__*`).
  * `dontAsk` is not a closed allow list: the allow rules of every settings scope add to `--allowedTools`.
  * The deny list is what holds, so it names every family planning does not need.
  */
@@ -145,8 +146,8 @@ export const PLANNING_TOOL_FLAGS: readonly string[] = [
   [
     'Edit,Write,NotebookEdit,mcp__*',
     'Bash(git:*),Bash(gh pr:*),Bash(gh stack:*),Bash(gh secret:*),Bash(gh repo:*),Bash(gh release:*),Bash(gh workflow:*)',
-    'Bash(gh issue delete:*),Bash(gh issue transfer:*),Bash(gh issue close:*),Bash(gh issue reopen:*),Bash(gh issue lock:*),Bash(gh issue pin:*),Bash(gh issue develop:*)',
-    'Bash(gh run:*),Bash(gh variable:*),Bash(gh gist:*),Bash(gh label:*),Bash(gh auth:*),Bash(gh ssh-key:*),Bash(gh extension:*),Bash(gh alias:*),Bash(gh ruleset:*),Bash(gh cache:*),Bash(gh codespace:*)',
+    'Bash(gh issue delete:*),Bash(gh issue transfer:*),Bash(gh issue close:*),Bash(gh issue reopen:*),Bash(gh issue lock:*),Bash(gh issue unlock:*),Bash(gh issue pin:*),Bash(gh issue unpin:*),Bash(gh issue develop:*)',
+    'Bash(gh run:*),Bash(gh variable:*),Bash(gh gist:*),Bash(gh label:*),Bash(gh auth:*),Bash(gh ssh-key:*),Bash(gh gpg-key:*),Bash(gh extension:*),Bash(gh alias:*),Bash(gh ruleset:*),Bash(gh cache:*),Bash(gh codespace:*),Bash(gh project:*)',
   ].join(','),
 ];
 

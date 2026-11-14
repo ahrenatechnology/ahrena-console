@@ -231,8 +231,8 @@ describe('#515 a planning session started from the terminal runs with a tool res
   const DENIED_FAMILIES = [
     'Edit', 'Write', 'NotebookEdit', 'mcp__*',
     'Bash(git:*)', 'Bash(gh pr:*)', 'Bash(gh stack:*)', 'Bash(gh secret:*)', 'Bash(gh repo:*)', 'Bash(gh release:*)', 'Bash(gh workflow:*)',
-    'Bash(gh issue delete:*)', 'Bash(gh issue transfer:*)', 'Bash(gh issue close:*)', 'Bash(gh issue reopen:*)', 'Bash(gh issue lock:*)', 'Bash(gh issue pin:*)', 'Bash(gh issue develop:*)',
-    'Bash(gh run:*)', 'Bash(gh variable:*)', 'Bash(gh gist:*)', 'Bash(gh label:*)', 'Bash(gh auth:*)', 'Bash(gh ssh-key:*)', 'Bash(gh extension:*)', 'Bash(gh alias:*)', 'Bash(gh ruleset:*)', 'Bash(gh cache:*)', 'Bash(gh codespace:*)',
+    'Bash(gh issue delete:*)', 'Bash(gh issue transfer:*)', 'Bash(gh issue close:*)', 'Bash(gh issue reopen:*)', 'Bash(gh issue lock:*)', 'Bash(gh issue unlock:*)', 'Bash(gh issue pin:*)', 'Bash(gh issue unpin:*)', 'Bash(gh issue develop:*)',
+    'Bash(gh run:*)', 'Bash(gh variable:*)', 'Bash(gh gist:*)', 'Bash(gh label:*)', 'Bash(gh auth:*)', 'Bash(gh ssh-key:*)', 'Bash(gh gpg-key:*)', 'Bash(gh extension:*)', 'Bash(gh alias:*)', 'Bash(gh ruleset:*)', 'Bash(gh cache:*)', 'Bash(gh codespace:*)', 'Bash(gh project:*)',
   ];
   const DENIED = DENIED_FAMILIES.join(',');
 
@@ -245,6 +245,21 @@ describe('#515 a planning session started from the terminal runs with a tool res
     for (const t of DENIED_FAMILIES) assert.ok(denied.includes(t), t);
     assert.ok(!denied.some((t) => t.startsWith('Bash(git ')), 'all git is one entry, Bash(git:*), not a list of verbs');
     assert.ok(!PLANNING_TOOL_FLAGS.includes('--strict-mcp-config'), 'the documented mcp__* deny is the choice');
+  });
+
+  test('#515/AC-1 dontAsk is not a closed allow list: every write a user-settings allow could add is denied', () => {
+    const denied = PLANNING_TOOL_FLAGS[PLANNING_TOOL_FLAGS.indexOf('--disallowedTools') + 1]!.split(',');
+    const prefixes = denied.flatMap((t) => /^Bash\((.+):\*\)$/.exec(t)?.slice(1) ?? []);
+    const covered = (command: string) => prefixes.some((p) => command === p || command.startsWith(`${p} `));
+    const writes = [
+      'gh issue delete 1', 'gh issue transfer 1 o/r', 'gh issue close 1', 'gh issue reopen 1', 'gh issue lock 1', 'gh issue unlock 1',
+      'gh issue pin 1', 'gh issue unpin 1', 'gh issue develop 1', 'gh run cancel 1', 'gh run rerun 1', 'gh variable set X', 'gh variable delete X',
+      'gh gist create f', 'gh label delete x', 'gh auth token', 'gh ssh-key add k', 'gh gpg-key add k', 'gh extension install x', 'gh alias set a b',
+      'gh ruleset list', 'gh cache delete x', 'gh codespace create', 'gh project delete 1', 'git commit -m x', 'gh pr merge 1',
+    ];
+    for (const c of writes) assert.ok(covered(c), c);
+    for (const c of ['gh issue view 1', 'gh issue list', 'gh issue create', 'gh issue edit 1']) assert.ok(!covered(c), `${c} stays usable`);
+    assert.ok(denied.includes('mcp__*'), 'an MCP tool a settings allow names (e.g. mcp__x__archive_session) is denied by mcp__*');
   });
 
   test('#515/AC-1 commandFileContent with the restriction: exact string, each flag single-quoted before the prompt', () => {
