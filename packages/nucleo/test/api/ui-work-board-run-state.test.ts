@@ -275,7 +275,7 @@ describe('the components driven through the state (scenario)', () => {
     s.answer((st) => runAccepted(st, subject, { opened: 'terminal' }));
     const done = s.view();
     assert.equal(done.confirm, null);
-    assert.equal(texto(one(done.parts.badge!, '.wb-run-boot')), 'subindo…');
+    assert.equal(texto(done.parts.badge!), 'subindo…');
     assert.ok(texto(one(done.notice!, '[data-field="text"]')).includes('Terminal'));
     click(one(done.notice!, '[data-action="close"]'));
     assert.equal(s.view().notice, null);
