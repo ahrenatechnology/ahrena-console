@@ -23,10 +23,11 @@ export async function folderOfRepo(repo: string, folders: readonly { path: strin
 
 /**
  * `cd '<folder>' && claude '<prompt>'` for "Copiar comando"; `claude '<prompt>'` when there is no folder. Each part
- * single-quoted. #515 A planning prompt goes after the tool restriction of the terminal (PLANNING_TOOL_FLAGS).
+ * single-quoted. #515 A planning prompt goes after the tool restriction of the terminal (PLANNING_TOOL_FLAGS),
+ * then a bare `--`: the tool lists are variadic and would take the prompt as one more rule.
  */
 export const sessionCommand = (folder: string | null, prompt: string): string => {
-  const flags = planningKeyOfPrompt(prompt) !== null ? PLANNING_TOOL_FLAGS.map(shellQuote) : [];
+  const flags = planningKeyOfPrompt(prompt) !== null ? [...PLANNING_TOOL_FLAGS.map(shellQuote), '--'] : [];
   return `${folder === null ? '' : `cd ${shellQuote(folder)} && `}claude ${[...flags, shellQuote(prompt)].join(' ')}`;
 };
 

@@ -16,7 +16,8 @@
 //   #515 When the prompt is a planning one (`planningKeyOfPrompt`), `claude` starts with PLANNING_TOOL_FLAGS
 //   #515 before the prompt: `--permission-mode dontAsk`, an allowed list (read, the issue and Plan sub-issues
 //   #515 through `gh`) and a denied list (no editing files, no push, commit or pull request), each flag
-//   #515 single-quoted. The flags are fixed here and never come from the prompt; any other prompt, and a
+//   #515 single-quoted, then a bare `--`: `--allowedTools` and `--disallowedTools` are variadic lists, so without
+//   #515 it the prompt would be swallowed as one more rule. The flags are fixed here and never come from the prompt; any other prompt, and a
 //   #515 resume, produce the same file as before.
 // - Linux, open: `x-terminal-emulator -e claude [--resume <id>]` in the folder, when it is on the PATH.
 //   #507 With a first prompt: `unsupported`, because some emulators (gnome-terminal's `-e`) re-parse their
@@ -129,7 +130,7 @@ function claudeArgs(sessionId: string | null): string[] {
 /**
  * The `.command` file that resumes a session (or starts one); throws when the folder or the id cannot be
  * carried. With `promptFile` (a new session only), `claude` gets the file's text as its one argument, after
- * the `restriction` flags (#515), each single-quoted, when there are any.
+ * the `restriction` flags (#515), each single-quoted, and a bare `--` (the variadic tool lists would take the prompt), when there are any.
  */
 export function commandFileContent(cwd: string, sessionId: string | null, promptFile?: string, restriction: readonly string[] = []): string {
   if (!isUsableCwd(cwd)) throw new Error('unusable folder');
@@ -137,7 +138,7 @@ export function commandFileContent(cwd: string, sessionId: string | null, prompt
   const start =
     promptFile === undefined
       ? [['exec claude', ...claudeArgs(sessionId)].join(' ')]
-      : [`prompt=$(cat -- ${shellQuote(promptFile)}) || exit 1`, `rm -f -- ${shellQuote(promptFile)}`, `exec claude ${[...restriction.map(shellQuote), '"$prompt"'].join(' ')}`];
+      : [`prompt=$(cat -- ${shellQuote(promptFile)}) || exit 1`, `rm -f -- ${shellQuote(promptFile)}`, `exec claude ${[...restriction.map(shellQuote), ...(restriction.length > 0 ? ['--'] : []), '"$prompt"'].join(' ')}`];
   return ['#!/bin/sh', 'rm -f -- "$0"', `cd -- ${shellQuote(cwd)} || exit 1`, ...start, ''].join('\n');
 }
 

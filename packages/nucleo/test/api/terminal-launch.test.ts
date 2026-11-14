@@ -238,13 +238,14 @@ describe('#515 a planning session started from the terminal runs with a tool res
     const quoted = PLANNING_TOOL_FLAGS.map((f) => `'${f}'`).join(' ');
     assert.equal(
       commandFileContent('/w/app', null, '/d/new-x.prompt', PLANNING_TOOL_FLAGS),
-      `#!/bin/sh\nrm -f -- "$0"\ncd -- '/w/app' || exit 1\nprompt=$(cat -- '/d/new-x.prompt') || exit 1\nrm -f -- '/d/new-x.prompt'\nexec claude ${quoted} "$prompt"\n`,
+      `#!/bin/sh\nrm -f -- "$0"\ncd -- '/w/app' || exit 1\nprompt=$(cat -- '/d/new-x.prompt') || exit 1\nrm -f -- '/d/new-x.prompt'\nexec claude ${quoted} -- "$prompt"\n`,
     );
     assert.match(quoted, /^'--permission-mode' 'dontAsk' '--allowedTools' 'Read,/);
   });
 
   test('without the restriction the .command is byte-identical to before', () => {
     assert.equal(commandFileContent('/w/app', null, '/d/new-x.prompt'), `#!/bin/sh\nrm -f -- "$0"\ncd -- '/w/app' || exit 1\nprompt=$(cat -- '/d/new-x.prompt') || exit 1\nrm -f -- '/d/new-x.prompt'\nexec claude "$prompt"\n`);
+    assert.ok(!commandFileContent('/w/app', null, '/d/new-x.prompt').includes(' -- "$prompt"'));
     assert.equal(commandFileContent('/w/app', null, '/d/new-x.prompt', []), commandFileContent('/w/app', null, '/d/new-x.prompt'));
   });
 
@@ -255,7 +256,7 @@ describe('#515 a planning session started from the terminal runs with a tool res
     const content = readFileSync(runner.calls[0]!.args[0]!, 'utf8');
     assert.ok(content.includes("'--permission-mode' 'dontAsk'"));
     assert.ok(content.includes(`'--disallowedTools' '${DENIED}'`));
-    assert.match(content, /'--disallowedTools' '[^']*' "\$prompt"\n$/);
+    assert.match(content, /'--disallowedTools' '[^']*' -- "\$prompt"\n$/);
   });
 
   test('another prompt (execution, plain) gets no restriction', async () => {
@@ -289,10 +290,11 @@ describe('#515 a planning session started from the terminal runs with a tool res
     const runner = fakeRunner();
     await createTerminalOpener({ dir, platform: 'darwin', runner })({ sessionId: null, cwd: work, prompt: hostile });
     execFileSync('/bin/sh', [runner.calls[0]!.args[0]!], { env: { ...process.env, PATH: `${bin}:${process.env.PATH}` } });
-    assert.equal(readFileSync(`${out}.count`, 'utf8'), '7');
+    assert.equal(readFileSync(`${out}.count`, 'utf8'), '8');
     const argv = readFileSync(out, 'utf8').split('\0').slice(0, -1);
     assert.deepEqual(argv.slice(0, 6), [...PLANNING_TOOL_FLAGS]);
-    assert.equal(argv[6], hostile.replace(/\n+$/, ''));
+    assert.equal(argv[6], '--');
+    assert.equal(argv[7], hostile.replace(/\n+$/, ''));
     assert.deepEqual(readdirSync(root).filter((n) => n.startsWith('hit')), [], 'nothing from the prompt ran');
   });
 });
