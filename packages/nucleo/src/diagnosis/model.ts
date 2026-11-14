@@ -7,6 +7,8 @@
  * - Old worktrees have no section of their own (AC-8 lists none): each one is an item of `known-caches`,
  *   with `id: 'worktree'` and `actionId: null` (no cleanup action removes a worktree).
  * - A section that did not come carries `status` and a short `reason`, never an empty list pretending to be data.
+ * - A section that came but was read only in part (a folder that could not be fully read) is `ok`, with its items
+ *   and a `partial` marker with a short reason; an `ok` section whole carries no marker.
  */
 
 import type { AlertKind, HostInfo } from '../telemetry/model.ts';
@@ -77,8 +79,13 @@ export interface SectionItems {
   journal: JournalItem[];
 }
 
+/** Marks an `ok` section whose items were read only in part; `reason` is short, like the others (#565). */
+export interface PartialMarker {
+  reason: string;
+}
+
 /** A section of one id, with the items of that id; the union over all ids narrows on `id` (#565). */
-export type SectionOf<K extends SectionId> = { [P in K]: { id: P; status: SectionStatus; items: SectionItems[P]; reason?: string } }[K];
+export type SectionOf<K extends SectionId> = { [P in K]: { id: P; status: SectionStatus; items: SectionItems[P]; reason?: string; partial?: PartialMarker } }[K];
 export type DiagnosisSection = SectionOf<SectionId>;
 
 export interface Diagnosis {

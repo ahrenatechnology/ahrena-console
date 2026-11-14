@@ -42,10 +42,14 @@ import {
   type WorkNode,
 } from './work.ts';
 import { deltaQuery } from './tree.ts';
+import { OPTIONS_LIMITS, type WorkIssueOptions, type WorkIssueOptionsSource } from './work-issue-options.ts';
 
 export const GITHUB_GRAPHQL_URL = 'https://api.github.com/graphql';
 /** #533 the deadline of one GitHub call; a call that outlives it fails as a timeout (`network` for the reason codes). */
 export const GITHUB_TIMEOUT_MS = 30_000;
+
+/** #512 a fresh deadline for one GitHub request, declared once for every adapter of the work board: it aborts the headers and the body alike. */
+export const githubDeadline = (timeoutMs: number = GITHUB_TIMEOUT_MS): AbortSignal => AbortSignal.timeout(timeoutMs);
 
 const LEAN = `number title url state updatedAt repository { nameWithOwner } issueType { name }
   subIssuesSummary { total completed percentCompleted } parent { number repository { nameWithOwner } }`;
@@ -71,6 +75,12 @@ export const QUERIES = {
     comments(first: 50) { totalCount nodes { author { login } createdAt body } }
     parent { ${REF} parent { ${REF} parent { ${REF} } } }
     subIssues(first: 50) { nodes { ${REF} updatedAt } } ${DETAIL_PRS} } } }`,
+  /* #590 a repository's issue options, one query, each list bounded by `OPTIONS_LIMITS`: the labels, issue types and open
+     milestones (the write matches a milestone by title), and the most recently updated open issues as parent candidates. */
+  options: `query WorkIssueOptions($o: String!, $r: String!) { ${RATE}
+  repository(owner: $o, name: $r) { labels(first: ${OPTIONS_LIMITS.labels}) { nodes { name } } issueTypes(first: ${OPTIONS_LIMITS.types}) { nodes { name } }
+    milestones(first: ${OPTIONS_LIMITS.milestones}, states: [OPEN]) { nodes { title } }
+    issues(first: ${OPTIONS_LIMITS.parents}, states: [OPEN], orderBy: { field: UPDATED_AT, direction: DESC }) { nodes { number title repository { nameWithOwner } } } } }`,
 } as const;
 
 /**
@@ -314,7 +324,7 @@ export interface GraphqlError {
   path?: unknown[];
 }
 
-export class GithubGraphqlSource implements WorkSource, WorkIssueSource, WorkIssueWriter {
+export class GithubGraphqlSource implements WorkSource, WorkIssueSource, WorkIssueOptionsSource, WorkIssueWriter {
   private readonly opts: GithubGraphqlSourceOptions;
 
   constructor(opts: GithubGraphqlSourceOptions) {
@@ -390,6 +400,29 @@ export class GithubGraphqlSource implements WorkSource, WorkIssueSource, WorkIss
     const data = await this.query<Data>('WorkIssue', QUERIES.issue, { o: k.owner, r: k.name, n: k.number }, { tolerateNotFound: true });
     const issue = data.repository?.issue;
     return issue ? toWorkIssueRead(issue) : null;
+  }
+
+  /** #590 the repository's labels, issue types, open milestones and parent candidates; `null` when GitHub has no such repository. */
+  async options(repo: string): Promise<WorkIssueOptions | null> {
+    const [owner, name] = repo.split('/') as [string, string];
+    type Nodes<T> = { nodes: T[] } | null;
+    type Data = {
+      repository: {
+        labels: Nodes<{ name: string }>;
+        issueTypes: Nodes<{ name: string }>;
+        milestones: Nodes<{ title: string }>;
+        issues: Nodes<{ number: number; title: string; repository: { nameWithOwner: string } }>;
+      } | null;
+    };
+    const data = await this.query<Data>('WorkIssueOptions', QUERIES.options, { o: owner, r: name }, { tolerateNotFound: true });
+    const r = data.repository;
+    if (!r) return null;
+    return {
+      labels: (r.labels?.nodes ?? []).map((l) => l.name),
+      types: (r.issueTypes?.nodes ?? []).map((t) => t.name),
+      milestones: (r.milestones?.nodes ?? []).map((m) => m.title),
+      parents: (r.issues?.nodes ?? []).map((i) => ({ key: workKey(i.repository.nameWithOwner, i.number), title: i.title })),
+    };
   }
 
   /** #533 the title, body and `updatedAt` GitHub holds now; `null` when GitHub has no such issue. */
@@ -577,17 +610,13 @@ export class GithubGraphqlSource implements WorkSource, WorkIssueSource, WorkIss
   private async query<T>(operation: string, query: string, variables: Record<string, unknown>, { tolerateNotFound = false } = {}): Promise<T> {
     const token = await resolveGithubToken(this.opts.token);
     // #533 a fresh deadline per try: a timeout is not a gateway error and is not retried.
-    return retryOnGateway(() => githubGraphql<T>({ ...this.opts, token }, operation, query, variables, { tolerateNotFound, signal: this.deadline() }), { sleep: this.opts.sleep });
+    return retryOnGateway(() => githubGraphql<T>({ ...this.opts, token }, operation, query, variables, { tolerateNotFound, signal: githubDeadline(this.opts.timeoutMs) }), { sleep: this.opts.sleep });
   }
 
   /** #533 a mutation is never retried: a 502 may have been applied on GitHub's side (see `retryOnGateway`). */
   private async mutate<T>(operation: string, query: string, variables: Record<string, unknown>): Promise<T> {
     const token = await resolveGithubToken(this.opts.token);
-    return githubGraphql<T>({ ...this.opts, token }, operation, query, variables, { signal: this.deadline() });
-  }
-
-  private deadline(): AbortSignal {
-    return AbortSignal.timeout(this.opts.timeoutMs ?? GITHUB_TIMEOUT_MS);
+    return githubGraphql<T>({ ...this.opts, token }, operation, query, variables, { signal: githubDeadline(this.opts.timeoutMs) });
   }
 }
 
