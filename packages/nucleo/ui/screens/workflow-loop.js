@@ -88,7 +88,6 @@ export function loopSummary(loop, subagents) {
   return rows;
 }
 
-/** The orchestrator's state: the label on the screen and the tones it takes. (issue 589) */
 const ORCHESTRATOR_STATE = { running: ['Rodando', 'active', 'run'], completed: ['Concluída', 'completed', 'ok'], error: ['Com erro', 'error', 'error'] };
 
 /** "abriu 2 camadas · 1 PR": the layers an orchestrator opened and how many of them already have a PR. */
@@ -119,7 +118,6 @@ function stepEl(s, sessionId) {
 
 function groupEl(g, sessionId, led = false) {
   const [label, tone] = GROUP_STATE[g.state] ?? GROUP_STATE.open;
-  // A layer that has no PR yet says so; it becomes "PR #N" in the same place when the PR shows up. (issue 589)
   const pill = led && g.kind === 'issue' && g.state === 'open' ? ['Sem PR ainda', 'completed'] : [label, tone];
   const head = el(
     'div',
@@ -152,7 +150,6 @@ function groupEl(g, sessionId, led = false) {
   return el('div', { class: 'card wfl-group', 'data-group': g.id }, head, row, foot);
 }
 
-/** The orchestrator as the parent: its card, and the groups it opened beneath it, most recent first. (issue 589) */
 function orchestratorEl(o, groupsById, sessionId) {
   const [label, pillTone, tone] = ORCHESTRATOR_STATE[o.state] ?? ORCHESTRATOR_STATE.completed;
   const name = shortAgentName(o.agentType) ?? 'Orquestrador';
@@ -177,7 +174,6 @@ function orchestratorEl(o, groupsById, sessionId) {
   return el('div', { class: 'wfl-orchestrator' }, card, el('div', { class: 'wfl-layers' }, ...beneath));
 }
 
-/** The groups of the panel: each orchestrator with its layers, then the groups nobody opened, as before. (issue 589) */
 function groupsEl(loop, sessionId) {
   const groupsById = new Map(loop.groups.map((g) => [g.id, g]));
   const orchestrators = loop.orchestrators ?? [];
