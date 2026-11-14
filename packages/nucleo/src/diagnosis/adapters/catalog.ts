@@ -7,10 +7,10 @@
  *   folder runs with that folder as its working directory (a path the núcleo found itself) and `.` as
  *   the only path argument, so no path is ever an argument.
  * - Nothing writes, kills or deletes: `ps`, `sysctl` (read), `df`, `du`, `docker system df`,
- *   `journalctl --disk-usage`, and four `git` reads. The runner sets `GIT_OPTIONAL_LOCKS=0`. Uncommitted work is asked with
- *   `ls-files --cached --debug`, `diff-index --cached --name-only HEAD` and `ls-files --others --exclude-standard`, never with
- *   `git status` or `diff-files`: both can hash a file whose stat differs from the index and so run the repository's
- *   `filter.<driver>.clean` command, which can write. The three read the index and the tree listing only, run no content
+ *   `journalctl --disk-usage`, and five `git` reads. The runner sets `GIT_OPTIONAL_LOCKS=0`. Uncommitted work is asked with
+ *   `ls-files --cached --debug`, `ls-files --cached --stage` against `ls-tree -r HEAD`, and `ls-files --others --exclude-standard`,
+ *   never with `git status`, `diff-files` or `diff-index`: the first two can hash a file whose stat differs from the index and so run the repository's
+ *   `filter.<driver>.clean` command, which can write. They read the index and the tree listings only, run no content
  *   filter, and run with `core.fsmonitor=false` so the repository's fsmonitor hook never runs. The collector itself compares
  *   each tracked file's `lstat` (size and mtime) with the index entry; a changed file, a racy entry (mtime at or after the
  *   index file's own) and any doubt count as uncommitted: the safe default. `rev-list` reads no index and runs no hook. Guaranteed by the argv and checked with a probe
@@ -43,8 +43,10 @@ export const CATALOG = {
   journal: { command: 'journalctl', args: ['--disk-usage'], timeoutMs: 5_000, maxBytes: 64 * 1024 },
   /** Each tracked file's stat as the index recorded it; the collector compares it with the file's own `lstat`, so git never hashes a file and no filter driver runs (#565). */
   'git-index-stat': { command: 'git', args: ['-c', 'core.fsmonitor=false', 'ls-files', '--cached', '--debug'], timeoutMs: 8_000, maxBytes: 32 * MB },
-  /** Files staged against HEAD, from the index alone (#565). */
-  'git-staged': { command: 'git', args: ['-c', 'core.fsmonitor=false', 'diff-index', '--cached', '--name-only', 'HEAD'], timeoutMs: 8_000, maxBytes: 64 * 1024 },
+  /** Every index entry's mode, object id and stage; the collector compares it with `git-head-tree`, so staged work is read without `diff-index` (#565). */
+  'git-index-entries': { command: 'git', args: ['-c', 'core.fsmonitor=false', 'ls-files', '--cached', '--stage', '-z'], timeoutMs: 8_000, maxBytes: 32 * MB },
+  /** Every entry of HEAD's tree; an unborn HEAD fails, which counts as uncommitted (#565). */
+  'git-head-tree': { command: 'git', args: ['ls-tree', '-r', '-z', '--full-tree', 'HEAD'], timeoutMs: 8_000, maxBytes: 32 * MB },
   /** Files git does not track and does not ignore (#565). */
   'git-untracked': { command: 'git', args: ['-c', 'core.fsmonitor=false', 'ls-files', '--others', '--exclude-standard'], timeoutMs: 8_000, maxBytes: 64 * 1024 },
   /** Commits that no remote branch has: what would be lost with the worktree (#565). */

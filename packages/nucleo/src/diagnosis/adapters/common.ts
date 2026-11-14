@@ -18,7 +18,7 @@ import type { CacheActionId, CacheItem, FolderItem, SectionId, WorktreeItem } fr
 import { isRealVolume, parseDfP } from '../../telemetry/adapters/common.ts';
 import type { FileReader } from '../../telemetry/ports.ts';
 import { CATALOG, type CatalogEntry, type CatalogId } from './catalog.ts';
-import { parseDockerDf, parseDuSize, parseIndexDebug, parseJournalUsage, parsePsProcesses } from './parsers.ts';
+import { parseDockerDf, parseDuSize, parseHeadTree, parseIndexDebug, parseIndexStage, parseJournalUsage, parsePsProcesses } from './parsers.ts';
 
 export interface RunOptions {
   timeoutMs: number;
@@ -74,7 +74,7 @@ export const LARGEST_FOLDERS_CONCURRENCY = 4;
 const LARGEST_FOLDERS_OPENED = 3;
 /** A worktree untouched for this long is old. */
 export const OLD_WORKTREE_DAYS = 14;
-/** The most worktrees one diagnosis looks into: each costs a `du`, four `git` runs and an `lstat` per tracked file. */
+/** The most worktrees one diagnosis looks into: each costs a `du`, five `git` runs and an `lstat` per tracked file; at most `LARGEST_FOLDERS_CONCURRENCY` of them are looked into at once. */
 export const MAX_WORKTREES = 20;
 
 /* Runs `task` over `items`, at most `limit` at a time (#565). */
@@ -257,7 +257,7 @@ export abstract class DiagnosisCollector {
       }
     }
     const oldest = found.sort((a, b) => a.modifiedMs - b.modifiedMs).slice(0, MAX_WORKTREES);
-    const items = await Promise.all(oldest.map(({ path, modifiedMs }) => this.worktree(path, modifiedMs, signal)));
+    const items = await mapLimit(oldest, LARGEST_FOLDERS_CONCURRENCY, ({ path, modifiedMs }) => this.worktree(path, modifiedMs, signal));
     return items.filter((i): i is WorktreeItem => i !== null);
   }
 
@@ -293,6 +293,20 @@ export abstract class DiagnosisCollector {
     return { stdout: changed.join('\n') };
   }
 
+  /* Decides "a file is staged" without `diff-index`: the index's entries (mode and object id per path) against HEAD's tree. The answer is the paths that differ, one per line. An unborn HEAD, a listing that does not parse or an entry in conflict is doubt, and doubt is uncommitted (#565). */
+  private async staged(path: string, signal: AbortSignal): Promise<Executed> {
+    const [index, head] = await Promise.all([this.exec('git-index-entries', signal, path), this.exec('git-head-tree', signal, path)]);
+    if (!('stdout' in index)) return index;
+    if (!('stdout' in head)) return head;
+    const indexed = parseIndexStage(index.stdout);
+    const committed = parseHeadTree(head.stdout);
+    if (indexed === null || committed === null) return unavailable('git index or HEAD listing not understood');
+    const differ = new Set<string>();
+    for (const [p, entry] of indexed) if (committed.get(p) !== entry) differ.add(p);
+    for (const p of committed.keys()) if (!indexed.has(p)) differ.add(p);
+    return { stdout: [...differ].join('\n') };
+  }
+
   /* The index file of a checkout: `.git/index`, or for a linked worktree (its `.git` is a file reading `gitdir: <folder>`) that folder's `index` (#565). */
   private async indexPath(path: string): Promise<string> {
     const dotGit = join(path, '.git');
@@ -307,7 +321,7 @@ export abstract class DiagnosisCollector {
     const [size, indexChanged, staged, untracked, unpushed] = await Promise.all([
       this.exec('du-size', signal, path),
       this.indexChanged(path, signal),
-      this.exec('git-staged', signal, path),
+      this.staged(path, signal),
       this.exec('git-untracked', signal, path),
       this.exec('git-unpushed', signal, path),
     ]);

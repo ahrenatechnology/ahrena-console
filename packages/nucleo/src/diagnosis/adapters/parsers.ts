@@ -96,14 +96,54 @@ export function parseIndexDebug(out: string): IndexEntry[] | null {
       continue;
     }
     if (!current) return null;
-    const mtime = /^\s+mtime: (\d+):(\d+)\s*$/.exec(line);
+    /* git does not quote a path that begins with a space, so an indented line that is not one of git's own debug lines is a path, and the listing cannot be split safely (#565). */
+    if (!/^  (ctime|mtime|dev|uid|size): /.test(line)) return null;
+    const mtime = /^  mtime: (\d+):(\d+)\s*$/.exec(line);
     if (mtime) {
+      if (current.mtimeSec !== undefined) return null;
       current.mtimeSec = Number(mtime[1]);
       current.mtimeNsec = Number(mtime[2]);
       continue;
     }
-    const size = /^\s+size: (\d+)\b/.exec(line);
-    if (size) current.size = Number(size[1]);
+    const size = /^  size: (\d+)\b/.exec(line);
+    if (size) {
+      if (current.size !== undefined) return null;
+      current.size = Number(size[1]);
+    }
   }
   return close() ? entries : null;
+}
+
+/* One index or tree entry as `<mode> <oid>\t<path>`, so the two listings compare as sets (#565). */
+const ENTRY_MODE = /^[0-7]{6}$/;
+const ENTRY_OID = /^[0-9a-f]{40}(?:[0-9a-f]{24})?$/;
+
+/* `ls-files --cached --stage -z`: `<mode> <oid> <stage>\t<path>`, NUL-terminated. A record that does not parse, or an entry at a stage other than 0 (a merge conflict), makes the whole answer `null`: doubt, never clean (#565). */
+export function parseIndexStage(out: string): Map<string, string> | null {
+  const entries = new Map<string, string>();
+  for (const record of out.split('\0')) {
+    if (record === '') continue;
+    const tab = record.indexOf('\t');
+    if (tab < 0) return null;
+    const [mode, oid, stage, ...rest] = record.slice(0, tab).split(' ');
+    const path = record.slice(tab + 1);
+    if (rest.length > 0 || !ENTRY_MODE.test(mode) || !ENTRY_OID.test(oid ?? '') || stage !== '0' || path === '' || entries.has(path)) return null;
+    entries.set(path, `${mode} ${oid}`);
+  }
+  return entries;
+}
+
+/* `ls-tree -r -z --full-tree HEAD`: `<mode> <type> <oid>\t<path>`, NUL-terminated; a submodule is a `commit` entry, as it is in the index. A record that does not parse makes the whole answer `null` (#565). */
+export function parseHeadTree(out: string): Map<string, string> | null {
+  const entries = new Map<string, string>();
+  for (const record of out.split('\0')) {
+    if (record === '') continue;
+    const tab = record.indexOf('\t');
+    if (tab < 0) return null;
+    const [mode, type, oid, ...rest] = record.slice(0, tab).split(' ');
+    const path = record.slice(tab + 1);
+    if (rest.length > 0 || !ENTRY_MODE.test(mode) || (type !== 'blob' && type !== 'commit') || !ENTRY_OID.test(oid ?? '') || path === '' || entries.has(path)) return null;
+    entries.set(path, `${mode} ${oid}`);
+  }
+  return entries;
 }

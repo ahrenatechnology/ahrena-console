@@ -13,7 +13,7 @@ import { CATALOG } from '../src/diagnosis/adapters/catalog.ts';
 import { DiagnosisCollector, stripControlCharacters, LARGEST_FOLDERS_BUDGET_MS, LARGEST_FOLDERS_CONCURRENCY, type DiagnosisDeps, type DiagnosisFs, type RunOptions, type RunResult } from '../src/diagnosis/adapters/common.ts';
 import { DarwinDiagnosisCollector } from '../src/diagnosis/adapters/darwin.ts';
 import { LinuxDiagnosisCollector } from '../src/diagnosis/adapters/linux.ts';
-import { parseDockerDf, parseIndexDebug, parseDuSize, parseJournalUsage, parsePsProcesses } from '../src/diagnosis/adapters/parsers.ts';
+import { parseDockerDf, parseHeadTree, parseIndexDebug, parseIndexStage, parseDuSize, parseJournalUsage, parsePsProcesses } from '../src/diagnosis/adapters/parsers.ts';
 import type { SectionId } from '../src/diagnosis/model.ts';
 import { systemFs, systemReadFile, systemRunner, worktreeRootsOf } from '../src/diagnosis/adapters/system.ts';
 
@@ -85,9 +85,16 @@ function setup(answers: Record<string, Answer>, over: { files?: Record<string, s
   };
   return { calls, deps, logs };
 }
-const gitKey = (id: 'git-index-stat' | 'git-staged' | 'git-untracked' | 'git-unpushed', cwd: string) => `git ${CATALOG[id].args.join(' ')} @${cwd}`;
-/* The three read-only questions about uncommitted work, all answered with nothing printed (#565). */
-const cleanTree = (cwd: string): Record<string, Answer> => ({ [gitKey('git-index-stat', cwd)]: ok(''), [gitKey('git-staged', cwd)]: ok(''), [gitKey('git-untracked', cwd)]: ok('') });
+const gitKey = (id: 'git-index-stat' | 'git-index-entries' | 'git-head-tree' | 'git-untracked' | 'git-unpushed', cwd: string) => `git ${CATALOG[id].args.join(' ')} @${cwd}`;
+/* The read-only questions about uncommitted work, all answered with nothing printed (#565). */
+const cleanTree = (cwd: string): Record<string, Answer> => ({
+  [gitKey('git-index-stat', cwd)]: ok(''),
+  [gitKey('git-index-entries', cwd)]: ok(''),
+  [gitKey('git-head-tree', cwd)]: ok(''),
+  [gitKey('git-untracked', cwd)]: ok(''),
+});
+/* One index entry at stage 0, as `ls-files --cached --stage -z` prints it (#565). */
+const INDEX_STAGE = `100644 1111111111111111111111111111111111111111 0\ta.ts\x00`;
 /* `git ls-files --cached --debug` for one tracked file (#565). */
 const INDEX_DEBUG = 'a.ts\n  ctime: 1700000000:5\n  mtime: 1700000000:7\n  dev: 16777234\tino: 99\n  uid: 501\tgid: 20\n  size: 12\tflags: 0\n';
 const ctx = (mount: string | null = null, signal = new AbortController().signal) => ({ mount, signal });
@@ -100,6 +107,26 @@ describe('diagnosis parsers', () => {
     assert.equal(parseIndexDebug('a.ts\n  mtime: 1:2\n'), null);
     assert.equal(parseIndexDebug('"tab\\there"\n  mtime: 1:2\n  size: 1\tflags: 0\n'), null);
     assert.equal(parseIndexDebug('  mtime: 1:2\n'), null);
+  });
+
+  test('#565/AC-7 a path that begins with a space makes the whole answer unknown', () => {
+    assert.equal(parseIndexDebug(`${INDEX_DEBUG} lead\n  ctime: 1:1\n  mtime: 200:0\n  size: 9\tflags: 0\n`), null);
+  });
+
+  test('#565/AC-7 a second mtime or size within one entry makes the whole answer unknown', () => {
+    assert.equal(parseIndexDebug(`${INDEX_DEBUG}  mtime: 200:0\n`), null);
+    assert.equal(parseIndexDebug(`${INDEX_DEBUG}  size: 9\tflags: 0\n`), null);
+  });
+
+  test('#565/AC-7 the index stage and HEAD tree listings give mode and object id per path, and any record they cannot read makes the answer unknown', () => {
+    const oid = '1111111111111111111111111111111111111111';
+    assert.deepEqual(parseIndexStage(`100644 ${oid} 0\ta b.ts\x00160000 ${oid} 0\tsub\x00`), new Map([['a b.ts', `100644 ${oid}`], ['sub', `160000 ${oid}`]]));
+    assert.deepEqual(parseHeadTree(`100644 blob ${oid}\ta b.ts\x00160000 commit ${oid}\tsub\x00`), new Map([['a b.ts', `100644 ${oid}`], ['sub', `160000 ${oid}`]]));
+    assert.deepEqual(parseIndexStage(''), new Map());
+    assert.equal(parseIndexStage(`100644 ${oid} 2\ta.ts\x00`), null);
+    assert.equal(parseIndexStage('garbage\x00'), null);
+    assert.equal(parseHeadTree(`100644 tree ${oid}\ta\x00`), null);
+    assert.equal(parseHeadTree('fatal\x00'), null);
   });
 
   test('ps rows become processes with basename, bytes and the start as ISO', () => {
@@ -408,7 +435,7 @@ describe('known-caches section', () => {
       { id: 'worktree', path: dirty, bytes: 900 * 1024, lastUsedAt: new Date(NOW_MS - 20 * DAY).toISOString(), hasUncommitted: true, hasUnpushed: true, actionId: null },
     ]);
     const git = calls.filter((x) => x.command === 'git');
-    assert.equal(git.length, 8);
+    assert.equal(git.length, 10);
     assert.ok(git.every((x) => x.options.cwd?.startsWith(ROOT) && x.args.every((a) => !a.includes('/'))));
     assert.ok(calls.every((x) => !x.args.some((a) => a.includes('old-') || a.includes('worktrees'))));
   });
@@ -609,21 +636,24 @@ describe('what git is asked in a worktree', () => {
   test('#565/AC-7 uncommitted work is read with commands that read only stat and the index, so no filter driver or hook the repository configures can run', () => {
     assert.ok(!('git-status' in CATALOG));
     assert.deepEqual(CATALOG['git-index-stat'].args, ['-c', 'core.fsmonitor=false', 'ls-files', '--cached', '--debug']);
-    assert.deepEqual(CATALOG['git-staged'].args, ['-c', 'core.fsmonitor=false', 'diff-index', '--cached', '--name-only', 'HEAD']);
+    assert.ok(Object.values(CATALOG).every((e) => !e.args.includes('diff-index') && !e.args.includes('diff-files') && !e.args.includes('status')));
+    assert.deepEqual(CATALOG['git-index-entries'].args, ['-c', 'core.fsmonitor=false', 'ls-files', '--cached', '--stage', '-z']);
+    assert.deepEqual(CATALOG['git-head-tree'].args, ['ls-tree', '-r', '-z', '--full-tree', 'HEAD']);
     assert.deepEqual(CATALOG['git-untracked'].args, ['-c', 'core.fsmonitor=false', 'ls-files', '--others', '--exclude-standard']);
     assert.deepEqual(CATALOG['git-unpushed'].args.slice(0, 1), ['rev-list']);
   });
 
-  test('#565/AC-9 any one of the three printing a file marks the worktree as uncommitted', async () => {
-    for (const id of ['git-index-stat', 'git-staged', 'git-untracked'] as const) {
-      const { deps } = setup({ [sizeKey(old)]: ok('300\t.\n'), ...cleanTree(old), [gitKey(id, old)]: ok(id === 'git-index-stat' ? INDEX_DEBUG : 'a.ts\n'), [unpushedKey(old)]: ok('0\n') }, place);
+  test('#565/AC-9 any one of them printing a file marks the worktree as uncommitted, an index entry HEAD lacks or the reverse included', async () => {
+    const answers = { 'git-index-stat': INDEX_DEBUG, 'git-index-entries': INDEX_STAGE, 'git-head-tree': '100644 blob 1111111111111111111111111111111111111111\ta.ts\x00', 'git-untracked': 'a.ts\n' } as const;
+    for (const id of ['git-index-stat', 'git-index-entries', 'git-head-tree', 'git-untracked'] as const) {
+      const { deps } = setup({ [sizeKey(old)]: ok('300\t.\n'), ...cleanTree(old), [gitKey(id, old)]: ok(answers[id]), [unpushedKey(old)]: ok('0\n') }, place);
       const r = (await collect(new LinuxDiagnosisCollector(deps), 'known-caches')) as { hasUncommitted: boolean }[];
       assert.equal(r[0].hasUncommitted, true, id);
     }
   });
 
-  test('#565/AC-9 one of the three unavailable keeps the safe default even when the others print nothing, and logs why', async () => {
-    const { deps, logs } = setup({ [sizeKey(old)]: ok('300\t.\n'), ...cleanTree(old), [gitKey('git-staged', old)]: fail('timeout'), [unpushedKey(old)]: ok('0\n') }, place);
+  test('#565/AC-9 one of them unavailable keeps the safe default even when the others print nothing, and logs why', async () => {
+    const { deps, logs } = setup({ [sizeKey(old)]: ok('300\t.\n'), ...cleanTree(old), [gitKey('git-head-tree', old)]: fail('timeout'), [unpushedKey(old)]: ok('0\n') }, place);
     const r = (await collect(new LinuxDiagnosisCollector(deps), 'known-caches')) as { hasUncommitted: boolean }[];
     assert.equal(r[0].hasUncommitted, true);
     assert.ok(logs.some((l) => l.includes('diagnosis worktree git state unknown') && l.includes(old) && l.includes('git timed out')));
@@ -763,5 +793,48 @@ describe('uncommitted work read from real git repositories', () => {
     assert.equal(r[0].hasUncommitted, true);
     assert.equal(existsSync(marker), false, 'the clean filter ran');
     assert.equal((await stat(join(w.dir, '.git', 'index'))).mtimeMs, indexBefore);
+  });
+
+  test('#565/AC-7 a staged change is read as uncommitted, from the index against HEAD alone', async () => {
+    const w = await place('staged', PAST);
+    /* Staged with its own stat, so the file matches the index and only the index against HEAD tells (#565). */
+    const later = new Date(PAST.getTime() + 60_000);
+    await writeFile(join(w.dir, 'file.txt'), 'two\n');
+    await utimes(join(w.dir, 'file.txt'), later, later);
+    git(w.dir, 'add', 'file.txt');
+    const r = await w.collect();
+    assert.equal(r[0].hasUncommitted, true);
+    assert.deepEqual(w.logs, []);
+  });
+
+  test('#565/AC-7 a clean index is not read as staged', async () => {
+    const w = await place('clean-index', PAST);
+    const r = await w.collect();
+    assert.equal(r[0].hasUncommitted, false);
+    assert.deepEqual(w.logs, []);
+  });
+
+  test('#565/AC-7 an unborn HEAD counts as uncommitted and says why in the log', async () => {
+    const base = await realpath(await mkdtemp(join(tmpdir(), 'diagnosis-git-')));
+    roots.push(base);
+    const worktrees = join(base, 'repo', '.claude', 'worktrees');
+    const dir = join(worktrees, 'unborn');
+    await mkdir(dir, { recursive: true });
+    git(dir, 'init', '-q');
+    await utimes(dir, OLD, OLD);
+    const logs: string[] = [];
+    const deps: DiagnosisDeps = {
+      run: systemRunner,
+      readFile: systemReadFile((m) => logs.push(m)),
+      fs: systemFs((m) => logs.push(m)),
+      home: join(base, 'home'),
+      worktreeRoots: async () => [worktrees],
+      nowMs: () => Date.now(),
+      log: (m) => logs.push(m),
+    };
+    const r = (await new LinuxDiagnosisCollector(deps).collect('known-caches', ctx())) as { hasUncommitted: boolean }[];
+    assert.equal(r.length, 1);
+    assert.equal(r[0].hasUncommitted, true);
+    assert.ok(logs.some((l) => l.includes('diagnosis worktree git state unknown') && l.includes(dir)));
   });
 });
