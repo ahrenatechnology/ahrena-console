@@ -393,7 +393,7 @@ export class GithubProject {
        it changes), the rate-limit pause in progress (with when it ends), the failure of the last read, else the sync is just late. */
     const failure = this.cache.snapshotFailure(this.key);
     const paused = this.cache.pauseLeftMs() > 0;
-    /* a recorded 'rate-limited' whose pause is over is no reason any more: the sync is just late. */
+    /* #613 a recorded 'rate-limited' whose pause is over is no reason any more: the sync is just late. */
     const recorded = failure === 'rate-limited' ? null : failure;
     const code: StaleCode = this.credentialRefused() || failure === 'credential-refused' ? 'credential-refused' : paused ? 'rate-limited' : recorded ?? 'sync-pending';
     return this.view(hit.value, hit.fetchedAt, true, 'o sincronismo em segundo plano ainda não releu o quadro', code, code === 'rate-limited' ? this.cache.pausedUntil : null);
