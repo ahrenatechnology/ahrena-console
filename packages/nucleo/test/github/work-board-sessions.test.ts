@@ -200,3 +200,20 @@ describe('#507/AC-3 the planning session is told apart', () => {
     assert.ok(links.length === 2 && links.every((l) => l.planning === undefined));
   });
 });
+
+describe('#531/AC-2 the execution session is told apart', () => {
+  const EXEC_PROMPT = 'Ahrena Console execution run: Owner/Repo#500\nRun Athena to execute the plan.';
+
+  test('#531/AC-2 Given a session whose first prompt is the execution run marker, Then it links to that issue, marked execution and not planning', async () => {
+    await live({ id: 'e', cwd: '/w/main' }, [prompt(EXEC_PROMPT)]);
+    assert.deepEqual(await sessions().links(), [{ sessionId: 'e', key: 'Owner/Repo#500', state: 'working', since: at(-60), execution: true }]);
+  });
+
+  test('#531/AC-2 the marker wins over the branch of the folder it started in', async () => {
+    await live({ id: 'e', cwd: '/w/board' }, [prompt(EXEC_PROMPT)]);
+    const [l] = await sessions().links();
+    assert.equal(l!.key, 'Owner/Repo#500');
+    assert.equal(l!.execution, true);
+    assert.equal(l!.planning, undefined);
+  });
+});

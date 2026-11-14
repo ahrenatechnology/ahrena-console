@@ -3,7 +3,8 @@
  * session links to `<repo>#<n>`: n from a `<type>/<n>-…` branch (Desktop's, else git's), else the first
  * reference in its first prompt; the repo is the folder's git remote, lower case, as the Dev Console
  * reads it. Any live session counts, whatever agent runs it. #507 a session whose first prompt is the
- * planning run's (work-plan.ts) links to the issue it names and is marked `planning`, on any branch.
+ * planning run's (work-plan.ts) links to the issue it names and is marked `planning`, on any branch; #531 the same for
+ * an execution run's (work-execution.ts), marked `execution`.
  */
 
 import { repoKey } from '../dev-console/model.ts';
@@ -11,6 +12,7 @@ import { gitLocator, type LocateFolder } from '../dev-console/sessions.ts';
 import { LIVE_STATES, type FleetReader, type FleetSession } from '../mcp/fleet.ts';
 import type { SessionEvent } from '../model.ts';
 import { issueOfPrompt, type WorkSessionLink, type WorkSessionState, type WorkSessions } from './work-board.ts';
+import { executionKeyOfPrompt } from './work-execution.ts';
 import { planningKeyOfPrompt } from './work-plan.ts';
 import { workKey } from './work.ts';
 
@@ -64,11 +66,13 @@ export class FleetWorkSessions implements WorkSessions {
       // #507 a planning run names its issue in its first prompt, whatever branch the folder is on.
       const prompt = await this.firstPrompt(s.session.id);
       const planningKey = prompt ? planningKeyOfPrompt(prompt) : null;
-      const key = planningKey ?? (await this.keyOf(s, prompt));
+      // #531 an execution run names its issue the same way; it is a normal session for the column, marked `execution`.
+      const executionKey = prompt ? executionKeyOfPrompt(prompt) : null;
+      const key = planningKey ?? executionKey ?? (await this.keyOf(s, prompt));
       if (!key) continue;
       const state = await this.stateOf(s);
       const since = state === 'needs-you' ? (s.session.awaitingInputSince ?? s.session.updatedAt) : s.session.startedAt;
-      out.push({ sessionId: s.session.id, key, state, since, ...(planningKey ? { planning: true as const } : {}) });
+      out.push({ sessionId: s.session.id, key, state, since, ...(planningKey ? { planning: true as const } : {}), ...(executionKey && !planningKey ? { execution: true as const } : {}) });
     }
     return out;
   }

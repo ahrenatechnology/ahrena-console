@@ -31,8 +31,10 @@ import type { ManagedRuntime } from '../runtime/service.ts';
 // | `PATCH /api/work/issue`       | Saves fields of one issue on GitHub (title, body, labels, type, milestone, parent) and answers the issue as GitHub returned it; a title or body save older than GitHub's is 409 (`{ repo, number, updatedAt?, ... }`; api/work-issue-write.ts, #533) |
 // | `POST /api/work/issue/comments` | Adds a comment to an issue on GitHub (`{ repo, number, body }`; api/work-issue-write.ts, #533) |
 // | `POST /api/work/plan`         | "Planejar": a planning-only Athena session for an issue, in its repository's folder, in the Claude Desktop or a terminal (`{ repo, number, target, replan? }`; api/work-plan.ts, #507) |
+// | `POST /api/work/run`          | "Executar plano": the Athena session that executes an issue's plan, in its repository's folder, in the Claude Desktop or a terminal; 409 at 2 cards in Em execução unless `force` (`{ repo, number, target, force? }`; api/work-run.ts, #531) |
 // | `GET /api/work`               | The work board: the Project's issues in the agent lifecycle columns (`?level=`, `?initiative=`, `?epic=`, `?type=`, `?label=`, `?repo=`, `?status=`, `?refresh=1`; api/work-board.ts, #465 #466) |
 // | `GET /api/sessions/<id>` and `/agents`, `/conversation`, `/events` | The session Detail in the /ui (api/session-detail.ts, #29 and #30) |
+// | `GET /api/sessions/<id>/agents/<agent>` | One agent's view (api/session-detail.ts, api/agent-view.ts, #529) |
 // | `GET /api/new-session/folders` and `POST /api/new-session` | "Nova sessão": the folders it can start in, and a new session in one of them, in the Claude Desktop or a terminal (api/new-session.ts) |
 // | `POST /api/sessions/<id>/open` | Opens the session where it runs: Claude Desktop, a terminal resuming it, or its live terminal brought forward; the núcleo picks the target (api/session-open-route.ts, #285) |
 // | `GET /api/decisions`, `GET /api/sessions/<id>/decisions` and `POST /api/decisions/<id>/promote` | The /ui's Decisions page and tab and the "Promover a registro" (api/decisions-ui.ts, #103) |
@@ -108,6 +110,7 @@ import { createWorkBoardRoute, WORK_BOARD_ROUTE, type WorkBoardRouteOptions } fr
 import { createWorkIssueRoute, WORK_ISSUE_COMMENTS_ROUTE, WORK_ISSUE_ROUTE, type WorkIssueRouteOptions } from './work-issue.ts';
 import { createWorkIssueWriteRoute, type WorkIssueWriteRouteOptions } from './work-issue-write.ts';
 import { createWorkPlanRoute, WORK_PLAN_ROUTE, type WorkPlanRouteOptions } from './work-plan.ts';
+import { createWorkRunRoute, WORK_RUN_ROUTE, type WorkRunRouteOptions } from './work-run.ts';
 import { DETAIL_ROUTE, type LeiturasDoDetalhe } from './session-detail.ts';
 import type { FleetReader } from '../mcp/fleet.ts';
 import { montarAtencao, remoteAttentionItems, ATTENTION_ROUTE, type RemoteAttentionSource } from './attention-route.ts';
@@ -204,6 +207,8 @@ export interface ApiOptions {
   workIssue?: WorkIssueRouteOptions & WorkIssueWriteRouteOptions;
   /** #507 "Planejar" (`POST /api/work/plan`); without it the route answers 503. */
   workPlan?: WorkPlanRouteOptions;
+  /** #531 "Executar plano" (`POST /api/work/run`); without it the route answers 503. */
+  workRun?: WorkRunRouteOptions;
   /** The session Detail reads (`/api/sessions/<id>…`); without them, 404. */
   detail?: LeiturasDoDetalhe;
   /** The activity feed; turns on `GET /api/events` (#94). */
@@ -349,6 +354,9 @@ const sameOriginWorkPlan = (req: IncomingMessage, port: number): boolean => req.
 const sameOriginWorkIssueWrite = (req: IncomingMessage, port: number): boolean =>
   ((req.method === 'PATCH' && req.url === WORK_ISSUE_ROUTE) || (req.method === 'POST' && req.url === WORK_ISSUE_COMMENTS_ROUTE)) && fromOwnUi(req, port);
 
+/** #531 "Executar plano": only `POST /api/work/run`, the exact raw path, from the same origin. */
+const sameOriginWorkRun = (req: IncomingMessage, port: number): boolean => req.method === 'POST' && req.url === WORK_RUN_ROUTE && fromOwnUi(req, port);
+
 /** `decodeURIComponent`, or the raw text when it is malformed (the id check then refuses it). */
 function decodeSegment(s: string): string {
   try {
@@ -432,6 +440,9 @@ export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
   const newSession = createNewSessionRoute({ storage: opts.panelBuilder.storage, openInDesktop: opts.openInDesktop, openTerminal: opts.openTerminal, isThrowaway: opts.isThrowawayFolder, log });
   const workPlan = createWorkPlanRoute(
     opts.workPlan ? { ...opts.workPlan, storage: opts.panelBuilder.storage, openInDesktop: opts.openInDesktop, openTerminal: opts.openTerminal, isThrowaway: opts.isThrowawayFolder, log } : null,
+  );
+  const workRun = createWorkRunRoute(
+    opts.workRun ? { ...opts.workRun, storage: opts.panelBuilder.storage, openInDesktop: opts.openInDesktop, openTerminal: opts.openTerminal, isThrowaway: opts.isThrowawayFolder, log } : null,
   );
   const remoteStore = opts.remoteCredentials === undefined ? new RemoteCredentialStore() : opts.remoteCredentials;
   const remoteVerifier = remoteStore
@@ -577,7 +588,7 @@ export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
       req.resume();
       return send(res, 403, { error: 'forbidden' });
     }
-    if (!allowedLocalRequest(req, port) && !sameOriginRead(req, port) && !sameOriginOpen(req, port) && !sameOriginSessionOpen(req, port) && !sameOriginNewSession(req, port) && !sameOriginWorkPlan(req, port) && !sameOriginWorkIssueWrite(req, port) && !mesmaOrigemMovendo(req, port) && !sameOriginDecision(req, port) && !agentConfigWriteFromSameOrigin(req, port) && !frameworkInstallWriteFromSameOrigin(req, port) && !reconnectFromSameOrigin(req, port) && !messagesWriteFromSameOrigin(req, port) && !transcriptionWriteFromSameOrigin(req, port) && !cloudsWriteFromSameOrigin(req, port) && !connectionWriteFromSameOrigin(req, port) && !coreUpdateWriteFromSameOrigin(req, port) && !ownerProofRetryFromSameOrigin(req, port) && !ordersWriteFromSameOrigin(req, port) && !appUpdateWriteFromSameOrigin(req, port)) return send(res, 403, { error: 'origem não permitida' });
+    if (!allowedLocalRequest(req, port) && !sameOriginRead(req, port) && !sameOriginOpen(req, port) && !sameOriginSessionOpen(req, port) && !sameOriginNewSession(req, port) && !sameOriginWorkPlan(req, port) && !sameOriginWorkRun(req, port) && !sameOriginWorkIssueWrite(req, port) && !mesmaOrigemMovendo(req, port) && !sameOriginDecision(req, port) && !agentConfigWriteFromSameOrigin(req, port) && !frameworkInstallWriteFromSameOrigin(req, port) && !reconnectFromSameOrigin(req, port) && !messagesWriteFromSameOrigin(req, port) && !transcriptionWriteFromSameOrigin(req, port) && !cloudsWriteFromSameOrigin(req, port) && !connectionWriteFromSameOrigin(req, port) && !coreUpdateWriteFromSameOrigin(req, port) && !ownerProofRetryFromSameOrigin(req, port) && !ordersWriteFromSameOrigin(req, port) && !appUpdateWriteFromSameOrigin(req, port)) return send(res, 403, { error: 'origem não permitida' });
     // The Project list spends GitHub quota and the connection status is the /ui's: another site's page
     // never gets either, connected or not (#241 review 2).
     // #465 the work board reads the Project the same way.
@@ -603,6 +614,7 @@ export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
     if (url.pathname === WORK_ISSUE_COMMENTS_ROUTE || (url.pathname === WORK_ISSUE_ROUTE && req.method === 'PATCH')) return workIssueWrite(req, res);
     if (url.pathname === WORK_ISSUE_ROUTE) return workIssueRoute(req, res, url);
     if (url.pathname === WORK_PLAN_ROUTE) return workPlan(req, res);
+    if (url.pathname === WORK_RUN_ROUTE) return workRun(req, res);
     if (opts.agentConfig && (url.pathname === AGENT_CONFIG_ROUTE || url.pathname.startsWith(`${AGENT_CONFIG_ROUTE}/`))) return opts.agentConfig(req, res, url);
     if (opts.frameworkInstall && url.pathname.startsWith(`${FRAMEWORK_INSTALL_ROUTE}/`)) return opts.frameworkInstall(req, res, url);
     if (opts.machineConnection && isConnectionRoute(url.pathname)) return opts.machineConnection(req, res, url);
@@ -657,7 +669,7 @@ export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
     const d = DECISION_LIST.exec(url.pathname);
     if (d) return decisionList(res, decodeURIComponent(d[1]!), url);
     const det = opts.detail && DETAIL_ROUTE.exec(url.pathname);
-    if (det) return opts.detail!.responder(res, decodeURIComponent(det[1]), det[2] ?? null, url);
+    if (det) return opts.detail!.responder(res, decodeSegment(det[1]), det[2] ?? null, url, det[3] === undefined ? null : decodeSegment(det[3]));
     send(res, 404, { error: 'não encontrado' });
   }
 
