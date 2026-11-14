@@ -1,5 +1,5 @@
 // The permission request domain (#618): its life from pending to delivered or closed, the refusals the API maps to
-// 409/410/422, and what it keeps of the call. Pure: no disk, no socket, no clock (times come in as milliseconds).
+// 409/410/422, and what it keeps of the call. Pure: no disk, no socket, no clock (times come in as milliseconds). (#618)
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import { digestOf } from '../../src/permissions/digest.ts';

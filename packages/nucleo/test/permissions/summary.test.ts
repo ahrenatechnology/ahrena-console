@@ -88,4 +88,25 @@ describe('redactSecrets (#618/AC-7)', () => {
     const plain = 'npm run migrate -- --env local && git status';
     assert.equal(masked(plain), plain);
   });
+  test('#618/AC-7: a header with an opaque value, a quoted header and an escaped quote are masked', () => {
+    assert.equal(masked('{"headers":{"Authorization":"opaque-token-value-123"}}'), `{"headers":{"Authorization":"${MASK}"}}`);
+    assert.doesNotMatch(masked('Authorization: "opaque123456"'), /opaque123456/);
+    const escaped = masked('{"password":"pa\\"ss-tail-secret"}');
+    assert.doesNotMatch(escaped, /tail-secret/);
+  });
+  test('#618/AC-7: a 64 KiB adversarial input is masked in linear time', () => {
+    const size = 64 * 1024;
+    const inputs = ['a.key'.repeat(size / 5), 'token_'.repeat(Math.floor(size / 6)), 'a'.repeat(size), '-p'.repeat(size / 2), ' --key'.repeat(Math.floor(size / 6)), 'password='.repeat(Math.floor(size / 9)), `"${'\\"'.repeat(size / 2)}`, '-----BEGIN PRIVATE KEY-----'.repeat(Math.floor(size / 27))];
+    for (const text of inputs) {
+      const start = performance.now();
+      redactSecrets(text);
+      summarize('Bash', { command: text });
+      const ms = performance.now() - start;
+      assert.ok(ms < 1000, `${ms.toFixed(0)} ms for ${text.slice(0, 12)}`);
+    }
+  });
+  test('#618/AC-7: a secret near the pre-cut ceiling does not leave half of it in the summary', () => {
+    const s = summarize('Bash', { command: `${'x'.repeat(MAX_SUMMARY_CHARS * 8 - 20)} --token abcdefghijklmnop` });
+    assert.doesNotMatch(s, /abcdefg/);
+  });
 });

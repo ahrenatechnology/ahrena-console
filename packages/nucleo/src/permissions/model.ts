@@ -1,13 +1,13 @@
 // A permission request from a Claude Code session, answered from the Console (decision 0025, #618): the domain.
-// Pure: no disk, no socket, no clock (times come in as milliseconds, ids come in from the caller).
+// Pure: no disk, no socket, no clock (times come in as milliseconds, ids come in from the caller). (#618)
 //
-// The hook of the plugin registers one request per call that needs a permission. The request is `pending` until the
-// window of the `/ui` answers it (`answered`), then it is handed once to the hook process that waits for it
-// (`delivered`). Anything else that ends it first is a closing that is never delivered: the deadline (`expired`), the
-// hook giving up (`withdrawn`), the card or the terminal answering first (`answered_elsewhere`), or the core starting
-// again (`core_restarted`). An answered request that was not yet delivered can still be closed by any of them.
+// The hook of the plugin registers one request per call that needs a permission. The request is `pending` until the (#618)
+// window of the `/ui` answers it (`answered`), then it is handed once to the hook process that waits for it (#618)
+// (`delivered`). Anything else that ends it first is a closing that is never delivered: the deadline (`expired`), the (#618)
+// hook giving up (`withdrawn`), the card or the terminal answering first (`answered_elsewhere`), or the core starting (#618)
+// again (`core_restarted`). An answered request that was not yet delivered can still be closed by any of them. (#618)
 //
-// What the request keeps of the call is its digest and a summary already masked. The raw tool input is never kept.
+// What the request keeps of the call is its digest and a summary already masked. The raw tool input is never kept. (#618)
 import { digestOf } from './digest.ts';
 import { summarize } from './summary.ts';
 import { isTerminalOnly } from './terminal-only.ts';
@@ -52,7 +52,7 @@ const LINE_BREAK = /[\r\n\u0085\u2028\u2029]/;
 
 export interface AnswerInput {
   decision: Decision;
-  /** Only with a `deny`: one line, at most `MAX_REASON_CHARS` characters. Blank reads as none. */
+  /** Only with a `deny`: one line, at most `MAX_REASON_CHARS` characters. Blank reads as none. (#618) */
   reason?: string;
   answeredBy: string;
   channel: Channel;
@@ -65,11 +65,11 @@ export class PermissionRequest {
   readonly sessionId: string;
   readonly toolName: string;
   readonly digest: string;
-  /** The text the person reads, with the secrets already masked. */
+  /** The text the person reads, with the secrets already masked. (#618) */
   readonly summary: string;
   readonly cwd: string;
   readonly permissionMode: string | null;
-  /** Only the person at the terminal allows this call; the Console can only deny it. */
+  /** Only the person at the terminal allows this call; the Console can only deny it. (#618) */
   readonly terminalOnly: boolean;
   readonly createdAt: number;
   readonly expiresAt: number;
@@ -94,7 +94,7 @@ export class PermissionRequest {
     this.expiresAt = p.expiresAt;
   }
 
-  /** Opens a request from a hook payload. The tool input is read for the digest, the summary and the policy, and dropped. */
+  /** Opens a request from a hook payload. The tool input is read for the digest, the summary and the policy, and dropped. (#618) */
   static async open(p: { id: string; sessionId: string; toolName: string; toolInput: unknown; cwd: string; permissionMode: string | null; now: number }): Promise<PermissionRequest> {
     return new PermissionRequest({
       id: p.id,
@@ -132,12 +132,12 @@ export class PermissionRequest {
     return this._settledBy;
   }
 
-  /** It can still change: pending, or answered and not yet delivered. */
+  /** It can still change: pending, or answered and not yet delivered. (#618) */
   get isOpen(): boolean {
     return this._state === 'pending' || this._state === 'answered';
   }
 
-  /** The person's answer, only while pending and before the deadline. A refusal changes nothing. */
+  /** The person's answer, only while pending and before the deadline. A refusal changes nothing. (#618) */
   answer({ decision, reason, answeredBy, channel, now }: AnswerInput): void {
     if (this._state === 'answered' || this._state === 'delivered') throw new PermissionRefusal('already_answered');
     if (this._state !== 'pending' || now >= this.expiresAt) throw new PermissionRefusal('gone');
@@ -152,7 +152,7 @@ export class PermissionRequest {
     this._channel = channel;
   }
 
-  /** The hook process takes the answer. Once: a second delivery is refused. */
+  /** The hook process takes the answer. Once: a second delivery is refused. (#618) */
   deliver(now: number): void {
     if (this._state === 'delivered') throw new PermissionRefusal('already_delivered');
     if (this._state === 'pending' && now < this.expiresAt) throw new PermissionRefusal('not_answered');
@@ -160,26 +160,26 @@ export class PermissionRequest {
     this.settle('delivered', 'hook', now);
   }
 
-  /** The deadline passed with no delivery. Due only at or after `expiresAt`. */
+  /** The deadline passed with no delivery. Due only at or after `expiresAt`. (#618) */
   expire(now: number): void {
     this.mustBeOpen();
     if (now < this.expiresAt) throw new PermissionRefusal('not_due');
     this.settle('expired', 'expiry', now);
   }
 
-  /** The hook gave up at its own deadline. */
+  /** The hook gave up at its own deadline. (#618) */
   withdraw(now: number): void {
     this.mustBeOpen();
     this.settle('withdrawn', 'hook', now);
   }
 
-  /** The card or the terminal answered first, or the session moved on: an answered request that was not delivered closes too. */
+  /** The card or the terminal answered first, or the session moved on: an answered request that was not delivered closes too. (#618) */
   closeElsewhere(now: number): void {
     this.mustBeOpen();
     this.settle('answered_elsewhere', 'session_event', now);
   }
 
-  /** The core started again: nothing answered before is delivered after it. */
+  /** The core started again: nothing answered before is delivered after it. (#618) */
   closeAfterRestart(now: number): void {
     this.mustBeOpen();
     this.settle('core_restarted', 'core_restart', now);
@@ -197,7 +197,7 @@ export class PermissionRequest {
   }
 }
 
-/** A `deny` reason: none, or one line of at most `MAX_REASON_CHARS` characters. */
+/** A `deny` reason: none, or one line of at most `MAX_REASON_CHARS` characters. (#618) */
 function checkReason(reason: string | undefined): string | null {
   if (reason === undefined) return null;
   if (typeof reason !== 'string' || LINE_BREAK.test(reason) || [...reason].length > MAX_REASON_CHARS) throw new PermissionRefusal('invalid_reason');
@@ -205,7 +205,7 @@ function checkReason(reason: string | undefined): string | null {
   return trimmed === '' ? null : trimmed;
 }
 
-/** An `allow` carries no reason: there is nothing to say about a call that goes ahead. */
+/** An `allow` carries no reason: there is nothing to say about a call that goes ahead. (#618) */
 function rejectReason(reason: string | undefined): null {
   if (reason !== undefined && reason.trim() !== '') throw new PermissionRefusal('invalid_reason');
   return null;

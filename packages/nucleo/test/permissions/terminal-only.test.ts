@@ -11,7 +11,8 @@ describe('isTerminalOnly (#618/AC-6)', () => {
     assert.equal(bash('git push origin feat/x'), false);
     assert.equal(bash('rm build/file.txt'), false);
     assert.equal(bash('git clean -n'), false);
-    assert.equal(bash('cat .env.example'), false);
+    assert.equal(bash('cat README.md'), false);
+    assert.equal(bash('git add src/environment.ts'), false);
     assert.equal(isTerminalOnly('Read', { file_path: '/w/src/a.ts' }), false);
     assert.equal(isTerminalOnly('Edit', { file_path: '/w/src/a.ts', old_string: 'a', new_string: 'b' }), false);
     assert.equal(isTerminalOnly('WebFetch', { url: 'https://example.dev' }), false);
@@ -70,5 +71,25 @@ describe('isTerminalOnly (#618/AC-6)', () => {
   test('#618/AC-6: a tool with an input object and no command or path is not terminal-only', () => {
     assert.equal(isTerminalOnly('ExitPlanMode', { plan: 'x' }), false);
     assert.equal(isTerminalOnly('mcp__db__query', { sql: 'select 1' }), false);
+  });
+  test('#618/AC-6: protected paths are matched whatever the case, as on a case-insensitive disk', () => {
+    for (const p of ['/p/.CLAUDE/settings.local.json', '/p/.Env', '/Users/u/.SSH/authorized_keys', '/p/.Claude/Hooks/x.mjs', '/p/.MCP.json']) {
+      assert.equal(isTerminalOnly('Write', { file_path: p, content: 'x' }), true, p);
+    }
+  });
+
+  test('#618/AC-6: a Bash command citing a protected path is terminal-only', () => {
+    for (const c of ['echo {} > .claude/settings.local.json', 'cp evil.sh .claude/hooks/pre.sh', 'cat .env', 'git add .env', 'echo x >> .mcp.json', 'cat ~/.ssh/id_rsa', 'cat .ENV', 'tee .claude/./settings.json']) {
+      assert.equal(bash(c), true, c);
+    }
+  });
+
+  test('#618/AC-6: the recursive rm check is linear on a 64 KiB command', () => {
+    const start = performance.now();
+    bash('rm '.repeat(21000));
+    bash('git push '.repeat(8000));
+    bash(`rm ${'-a '.repeat(22000)}`);
+    bash(`rm${' x'.repeat(32000)}`);
+    assert.ok(performance.now() - start < 500);
   });
 });

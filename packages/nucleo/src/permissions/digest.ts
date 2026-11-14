@@ -1,9 +1,9 @@
 // The digest that binds an answer to its session and its call (decision 0025, #618/AC-1).
-// Pure: no disk, no socket, no clock. SHA-256 comes from the standard `crypto.subtle` global, so no module is imported.
+// Pure: no disk, no socket, no clock. SHA-256 comes from the standard `crypto.subtle` global, so no module is imported. (#618)
 //
 // The canonicalisation is one function shared with the plugin hook (#620): keys sorted at every level, no spaces,
-// numbers and Unicode as `JSON.stringify` writes them, undefined keys dropped. The vectors in
-// `test/permissions/digest-vectors.json` are the contract between the two sides.
+// numbers and Unicode as `JSON.stringify` writes them, undefined keys dropped. The vectors in (#618)
+// `test/permissions/digest-vectors.json` are the contract between the two sides. (#618)
 
 /** What a digest binds: exactly these four fields. */
 export interface DigestInput {
