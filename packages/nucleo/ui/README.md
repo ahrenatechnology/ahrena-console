@@ -7,7 +7,7 @@ A moldura do console ([#26](https://github.com/ahrenatechnology/ahrena-console/i
 | `index.html` | A página: barra lateral, logo, "Ao vivo" e porta. Toda rota `/ui/...` devolve esta página |
 | `app.js` | A moldura: monta a barra, roteia no cliente, liga o "Ao vivo" e abre a tela da rota |
 | `screens.js` | **O registro das telas** (`route`, `item`, `file`) |
-| `api.js` | A camada de leitura, `read(route)`, e de escrita: `write(route, body)` (POST JSON na `/api/`, ou DELETE com `{ method: 'DELETE' }`). Por HTTP na janela; o artefato troca o transporte com `useReader()` e `useWriter()` |
+| `api.js` | A camada de leitura, `read(route)`, e de escrita: `write(route, body)` (POST JSON na `/api/`; PATCH com `{ method: 'PATCH' }`; DELETE com `{ method: 'DELETE' }`, que vai sem corpo a não ser com `jsonBody: true`). Por HTTP na janela; o artefato troca o transporte com `useReader()` e `useWriter()` |
 | `open-action.js` | Abrir a sessão onde ela roda ([#285](https://github.com/ahrenatechnology/ahrena-console/issues/285), C70 e C71): a mesma ação no cabeçalho do Detalhe, no pé do card do Mural, na linha de Sessões e no "precisam de você" do Dashboard. O alvo vem do núcleo (`open.target`: Claude Desktop, terminal, terminal já rodando, outra máquina ou nada); o clique é `write('/api/sessions/<uuid>/open', {})`, e ao lado do botão aparecem "Abrindo…", o sucesso (some em 4 s) ou o erro do núcleo com "Copiar comando" |
 | `open-action.css` | O estilo dessa ação (classes `open-`), carregado uma vez pelo `index.html` |
 | `new-session.js` | O botão "Nova sessão" no cabeçalho do Dashboard, do Mural e de Sessões: um popover com a pasta (as pastas onde já rodaram sessões desta máquina, de `GET /api/new-session/folders`; um worktree vira o repositório, e as pastas temporárias ficam de fora) e os destinos Claude Desktop (`claude://code/new?folder=…`) e Terminal (`claude` na pasta). O clique é `write('/api/new-session', { folder, target })`; o núcleo só aceita uma pasta da lista (`src/api/new-session.ts`). Sem lançador, o erro traz "Copiar comando" |
@@ -158,7 +158,7 @@ Sessões, Mural ao vivo, Kanban (as duas visões), Feed, Histórico e Dashboard 
 | --- | --- |
 | `params` | Os `:parametros` da rota (`{ id }` no Detalhe), já validados |
 | `read(route)` | A camada de leitura, já com o `signal` da tela: sair da tela cancela o pedido |
-| `write(route, body)` | A camada de escrita (POST com JSON, ou DELETE com `{ method: 'DELETE' }`), com o mesmo `signal`. Só para tela que muda algo (o Kanban do projeto move cards; a Agent Config grava um `SKILL.md` em `POST /api/agent-config/skill`) |
+| `write(route, body)` | A camada de escrita (POST com JSON; PATCH com `{ method: 'PATCH' }`; DELETE com `{ method: 'DELETE' }`, sem corpo a não ser com `jsonBody: true`), com o mesmo `signal`. Só para tela que muda algo (o Kanban do projeto move cards; a Agent Config grava um `SKILL.md` em `POST /api/agent-config/skill`) |
 | `signal` | O `AbortSignal` que dispara quando a pessoa sai da tela |
 | `onChange(f)` | `f(changes)` a cada novidade do long polling (`{ type, key, sessionId, accountId, seq }`) |
 | `onRestart(f)` | `f()` quando a tela tem de reler tudo: núcleo reiniciado, cursor velho ou a conexão voltou |

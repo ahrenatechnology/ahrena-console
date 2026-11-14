@@ -117,6 +117,21 @@ export function refusalBand({ reason = null, title = REFUSED_TITLE } = {}) {
   return el('div', { class: 'wb-edit-band wb-edit-refusal', role: 'alert' }, icon('shield-alert'), el('div', {}, el('b', {}, title), reason ? ` ${reason}` : null, ` ${REFUSED_KEPT}`));
 }
 
+/**
+ * The refusal band of a refused write that is not the description's (478-3, issue 535): next to the control that was refused,
+ * with Tentar de novo (only when `retry` is not false) and Copiar texto (only when the caller has a text to copy).
+ * `refusal` is `{ place, reason, title?, retry?, onRetry?, onCopy? }`; the description's own band is the editor's.
+ */
+function placeBand(refusal, place, busy) {
+  if (!refusal || refusal.place !== place) return null;
+  const { reason = null, title = REFUSED_TITLE, retry = true, onRetry = null, onCopy = null } = refusal;
+  const acts = [
+    retry ? button({ cls: 'btn filled sm', action: 'retry', label: 'Tentar de novo', iconName: 'refresh', onClick: onRetry, busy }) : null,
+    onCopy ? button({ cls: 'btn outline sm', action: 'copy', label: 'Copiar texto', iconName: 'copy', onClick: onCopy, busy }) : null,
+  ].filter(Boolean);
+  return el('div', { class: 'wb-edit-place' }, refusalBand({ reason, title }), acts.length ? el('div', { class: 'wb-edit-row' }, ...acts) : null);
+}
+
 function tabs({ number, tab, onTab }) {
   const items = [
     ['write', 'Escrever'],
@@ -138,7 +153,7 @@ function tabs({ number, tab, onTab }) {
 }
 
 function editor(body, number, busy) {
-  const { text = '', tab = 'write', mode = 'edit', onTab = null, onText = null, onSave = null, onCancel = null, onRetry = null, onCopy = null } = body;
+  const { text = '', tab = 'write', mode = 'edit', retry = true, onTab = null, onText = null, onSave = null, onCancel = null, onRetry = null, onCopy = null } = body;
   const preview = tab === 'preview';
   const pane = el(
     'div',
@@ -147,10 +162,10 @@ function editor(body, number, busy) {
       ? el('div', { class: 'wb-panel-md wb-edit-preview' }, ...(String(text).trim() ? bodyBlocks(text) : [el('span', { class: 'wb-panel-muted' }, 'Sem descrição.')]))
       : textField(el('textarea', { class: 'wb-edit-textarea', rows: '9', 'aria-label': 'Descrição da issue (Markdown)', spellcheck: 'false' }), text, { onInput: onText }),
   );
-  const acts =
-    mode === 'refused'
-      ? [button({ cls: 'btn filled sm', action: 'retry', label: 'Tentar de novo', iconName: 'refresh', onClick: onRetry, busy }), button({ cls: 'btn outline sm', action: 'copy', label: 'Copiar texto', iconName: 'copy', onClick: onCopy, busy })]
-      : [button({ cls: 'btn filled sm', action: 'save-body', label: 'Salvar descrição', iconName: 'done', onClick: onSave, busy })];
+  const save = button({ cls: 'btn filled sm', action: 'save-body', label: 'Salvar descrição', iconName: 'done', onClick: onSave, busy });
+  const copy = button({ cls: 'btn outline sm', action: 'copy', label: 'Copiar texto', iconName: 'copy', onClick: onCopy, busy });
+  // a refusal that cannot be repeated (`retry: false`) has no Tentar de novo: the person saves again, or copies the text (issue 535)
+  const acts = mode !== 'refused' ? [save] : retry ? [button({ cls: 'btn filled sm', action: 'retry', label: 'Tentar de novo', iconName: 'refresh', onClick: onRetry, busy }), copy] : [save, copy];
   return [
     mode === 'refused' ? refusalBand(body) : null,
     tabs({ number, tab, onTab }),
@@ -179,17 +194,18 @@ function version(label, diff, group) {
  * a <mark> and a hidden "diferente", so it is not colour alone) and three exits, none the default. Nothing is written
  * until one is chosen. `conflict.github` is `{ text, author?, updatedAt }`.
  */
-export function conflictView({ issueNumber, mine = '', conflict, now = Date.now(), busy = null, onOverwrite = null, onKeepGithub = null, onCopyMine = null }) {
+export function conflictView({ issueNumber, mine = '', conflict, now = Date.now(), busy = null, subject = null, onOverwrite = null, onKeepGithub = null, onCopyMine = null }) {
   const github = conflict?.github ?? {};
   const diff = diffLines(mine, github.text);
   const when = [github.author, formatAgo(github.updatedAt, now)].filter(Boolean).join(', ');
+  const of = subject ? ` ${subject}` : '';
   const exit = (action, label, iconName, onClick) => button({ cls: 'btn outline sm', action, label, iconName, onClick, busy });
   return el(
     'div',
-    { class: 'wb-edit-conflict' },
+    { class: 'wb-edit-conflict', tabindex: '-1' },
     el('div', { class: 'wb-edit-band', role: 'status' }, icon('git-compare'), el('div', {}, el('b', {}, `A ${ref(issueNumber)} mudou no GitHub enquanto você editava.`), ' Nada foi gravado por cima. Escolha a versão que fica.')),
-    version('A sua versão · não gravada', diff.mine, 'A sua versão'),
-    version(when ? `No GitHub · ${when}` : 'No GitHub', diff.theirs, 'A versão do GitHub'),
+    version(`A sua versão${of} · não gravada`, diff.mine, 'A sua versão'),
+    version(`No GitHub${subject ? `, ${subject}` : ''}${when ? ` · ${when}` : ''}`, diff.theirs, 'A versão do GitHub'),
     el(
       'div',
       { class: 'wb-edit-row wb-edit-exits' },
@@ -206,7 +222,7 @@ function titleField({ title, busy, onTitle, onTitleSave }) {
 }
 
 function descriptionSection({ number, body, now, busy }) {
-  const content = body.mode === 'conflict' ? [conflictView({ issueNumber: number, mine: body.text, conflict: body.conflict, now, busy, ...pick(body, 'onOverwrite', 'onKeepGithub', 'onCopyMine') })] : editor(body, number, busy);
+  const content = body.mode === 'conflict' ? [conflictView({ issueNumber: number, mine: body.text, conflict: body.conflict, now, busy, ...pick(body, 'onOverwrite', 'onKeepGithub', 'onCopyMine', 'subject') })] : editor(body, number, busy);
   return section('description', 'Descrição', heading('Descrição'), ...content);
 }
 
@@ -241,14 +257,14 @@ function labelsField({ values = [], options = [] }, { onLabelAdd, onLabelRemove 
   );
 }
 
-function detailsSection({ details = {}, handlers, busy }) {
+function detailsSection({ details = {}, handlers, busy, band = null }) {
   const rows = [
     ['Tipo', select('Tipo', details.type ?? {}, handlers.onType, busy, 'type')],
     ['Labels', labelsField(details.labels ?? {}, handlers, busy)],
     ['Milestone', select('Milestone', details.milestone ?? {}, handlers.onMilestone, busy, 'milestone')],
     ['Pai', select('Pai', details.parent ?? {}, handlers.onParent, busy, 'parent')],
   ];
-  return section('details', 'Detalhes', heading('Detalhes', el('span', { class: 'wb-edit-note' }, 'grava ao escolher')), el('dl', { class: 'wb-panel-meta' }, ...rows.flatMap(([k, v]) => [el('dt', {}, k), el('dd', {}, v)])));
+  return section('details', 'Detalhes', heading('Detalhes', el('span', { class: 'wb-edit-note' }, 'grava ao escolher')), el('dl', { class: 'wb-panel-meta' }, ...rows.flatMap(([k, v]) => [el('dt', {}, k), el('dd', {}, v)])), band);
 }
 
 // ---------- the Plan steps ----------
@@ -299,7 +315,7 @@ function stepRow(step, index, count, plan, dragState) {
 }
 
 function planSection(plan = {}) {
-  const { steps = [], adding = null, removed = null, busy = null, onAdd, onAddText, onAddSave, onAddCancel, onUndo } = plan;
+  const { steps = [], adding = null, removed = null, busy = null, band = null, onAdd, onAddText, onAddSave, onAddCancel, onUndo } = plan;
   const dragState = { from: null };
   const right = el('span', { class: 'wb-panel-sec-note' }, icon('list-checks'), 'sub-issues Plan');
   const add = adding
@@ -320,13 +336,14 @@ function planSection(plan = {}) {
     heading(`Plano · ${plural(steps.length, 'passo', 'passos')}`, right),
     el('ol', { class: 'wb-edit-steps', 'aria-label': 'Passos do plano' }, ...steps.map((s, i) => stepRow(s, i, steps.length, plan, dragState)), add),
     notice,
+    band,
     el('span', { class: 'wb-edit-hint' }, 'Arraste para reordenar. Remover fecha a sub-issue como “not planned” no GitHub, com Desfazer.'),
   );
 }
 
 // ---------- the comments ----------
 
-function commentsSection({ issue = {}, comment = {}, now, busy }) {
+function commentsSection({ issue = {}, comment = {}, now, busy, band = null }) {
   const comments = issue.comments ?? [];
   const items = comments.map((c) => {
     const ago = formatAgo(c.createdAt, now);
@@ -340,7 +357,7 @@ function commentsSection({ issue = {}, comment = {}, now, busy }) {
   const box = textField(el('textarea', { class: 'wb-edit-textarea wb-edit-comment', rows: '3', placeholder: 'Escreva um comentário (Markdown)…', 'aria-label': 'Escreva um comentário (Markdown)…' }), comment.text, { onInput: comment.onText });
   const send = button({ cls: 'btn outline sm', action: 'comment', label: 'Comentar', iconName: 'conversation', busy });
   send.addEventListener('click', () => comment.onSubmit?.(box.value));
-  return section('comments', 'Comentários', heading(`Comentários · ${issue.commentsTotal ?? comments.length}`), ...items, box, el('div', { class: 'wb-edit-row wb-edit-end' }, send));
+  return section('comments', 'Comentários', heading(`Comentários · ${issue.commentsTotal ?? comments.length}`), ...items, box, band, el('div', { class: 'wb-edit-row wb-edit-end' }, send));
 }
 
 /**
@@ -353,19 +370,22 @@ function commentsSection({ issue = {}, comment = {}, now, busy }) {
  *   `onType`, `onMilestone`, `onParent`, `onLabelAdd`, `onLabelRemove`.
  * - `plan`: `{ steps, editing: { number, text }, adding: { text }, removed: { number, title } }`, with `onEdit`, `onEditText`,
  *   `onEditSave`, `onEditCancel`, `onRemove`, `onUndo`, `onMove(step, toIndex)`, `onAdd`, `onAddText`, `onAddSave`, `onAddCancel`.
+ * - `refusal`: `{ place: 'title' | 'body' | 'details' | 'plan' | 'comment', reason, title?, retry?, onRetry?, onCopy? }`, the refused write: its band is drawn next to
+ *   the control (the description's is the editor's, through `body.mode: 'refused'`); `retry: false` hides Tentar de novo, no `onCopy` hides Copiar texto.
  * - `comment`: `{ text, onText, onSubmit }`; `busy`: the control that sent a write (`save-body`, `save-title`, `type`, `milestone`,
  *   `parent`, `label`, `save-step`, `save-new-step`, `remove:<number>`, `undo`, `comment`, `retry`, `overwrite`, `keep-github`, `done`).
  */
-export function issueEditPanel({ card = null, issue = {}, now = Date.now(), savedAt = null, title = '', body = {}, details = {}, plan = {}, comment = {}, busy = null, onTitle = null, onTitleSave = null, onType = null, onMilestone = null, onParent = null, onLabelAdd = null, onLabelRemove = null, onDone = null, onClose = null } = {}) {
+export function issueEditPanel({ card = null, issue = {}, now = Date.now(), savedAt = null, title = '', body = {}, details = {}, plan = {}, comment = {}, refusal = null, busy = null, onTitle = null, onTitleSave = null, onType = null, onMilestone = null, onParent = null, onLabelAdd = null, onLabelRemove = null, onDone = null, onClose = null } = {}) {
   const number = issue.number ?? card?.number;
   return el(
     'aside',
     { class: 'card wb-panel wb-edit-panel', role: 'dialog', 'aria-label': `Edição da issue ${ref(number)}` },
     editHead({ card, number, savedAt, busy, onDone, onClose }),
     titleField({ title, busy, onTitle, onTitleSave }),
+    placeBand(refusal, 'title', busy),
     descriptionSection({ number, body, now, busy }),
-    detailsSection({ details, handlers: { onType, onMilestone, onParent, onLabelAdd, onLabelRemove }, busy }),
-    planSection({ ...plan, busy }),
-    commentsSection({ issue, comment, now, busy }),
+    detailsSection({ details, handlers: { onType, onMilestone, onParent, onLabelAdd, onLabelRemove }, busy, band: placeBand(refusal, 'details', busy) }),
+    planSection({ ...plan, busy, band: placeBand(refusal, 'plan', busy) }),
+    commentsSection({ issue, comment, now, busy, band: placeBand(refusal, 'comment', busy) }),
   );
 }

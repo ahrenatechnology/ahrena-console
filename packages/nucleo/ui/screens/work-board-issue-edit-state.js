@@ -206,7 +206,9 @@ const current = (state, id) => state.open && state.request?.id === id;
 /** The refreshed fields: what GitHub holds becomes what the panel shows; a field the person has changed and not saved keeps its text. (issue 535) */
 function adopt(state, issue) {
   // dirty: typed text that differs from what the panel last held and from what GitHub holds now (issue 535)
-  const dirtyTitle = state.title !== state.issue.title && state.title !== issue.title;
+  // the title is compared trimmed, as `saveTitle` sends it: whitespace around the same text is not a change (issue 535)
+  const typedTitle = state.title.trim();
+  const dirtyTitle = typedTitle !== (state.issue.title ?? '').trim() && typedTitle !== (issue.title ?? '').trim();
   const dirtyBody = state.body.text !== state.issue.body && state.body.text !== issue.body;
   return {
     ...state,

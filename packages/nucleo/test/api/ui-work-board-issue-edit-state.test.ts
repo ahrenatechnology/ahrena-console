@@ -697,3 +697,27 @@ describe('the components driven from the state', () => {
     assert.equal(box.s.request.body.type, 'bug');
   });
 });
+
+describe('#535 contract layer: a title that differs from GitHub only in surrounding whitespace is not dirty', () => {
+  const pending = () => fail(chooseType(open(), 'bug'), { status: 502, error: 'github-unavailable' });
+
+  test('the reload takes GitHub text over a title that is the same once trimmed, and its version', () => {
+    const s = typeTitle(pending(), '  Abrir a issue \n');
+    const r = reloaded(s, issue({ type: 'bug', title: 'Mudou lá', updatedAt: 'T2' }), s.reload.id);
+    assert.equal(r.title, 'Mudou lá');
+    assert.equal(r.bases.title, 'T2');
+  });
+
+  test('a title that really differs once trimmed is still kept through the reload', () => {
+    const s = typeTitle(pending(), '  Outro título ');
+    const r = reloaded(s, issue({ type: 'bug', title: 'Mudou lá', updatedAt: 'T2' }), s.reload.id);
+    assert.equal(r.title, '  Outro título ');
+  });
+
+  test('a typed title that equals GitHub new title once trimmed is not dirty either', () => {
+    const s = typeTitle(pending(), ' Mudou lá ');
+    const r = reloaded(s, issue({ type: 'bug', title: 'Mudou lá', updatedAt: 'T2' }), s.reload.id);
+    assert.equal(r.title, 'Mudou lá');
+    assert.equal(r.bases.title, 'T2');
+  });
+});

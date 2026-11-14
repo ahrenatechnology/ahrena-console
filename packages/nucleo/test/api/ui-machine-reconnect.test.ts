@@ -247,7 +247,7 @@ describe('#244 the write helper: POST and DELETE, only /api/ on the local core',
     await write('/api/machines/ws-exemplo/reconnect', {});
     assert.equal(sent[1]!.init.method, 'POST');
     assert.equal(sent[1]!.init.body, '{}');
-    for (const method of ['PUT', 'GET', 'PATCH']) await assert.rejects(write('/api/machines/ws-exemplo/reconnect', {}, { method }), (e: Error) => e instanceof WriteError && /método de escrita não aceito/.test(e.message));
+    for (const method of ['PUT', 'GET']) await assert.rejects(write('/api/machines/ws-exemplo/reconnect', {}, { method }), (e: Error) => e instanceof WriteError && /método de escrita não aceito/.test(e.message));
     await assert.rejects(write('/ui/machines/ws-exemplo', null, { method: 'DELETE' }), /rota fora da API/);
     assert.equal(sent.length, 2);
   });
