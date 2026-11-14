@@ -17,7 +17,7 @@ describe('short agent name (issue 519)', () => {
     assert.equal(shortAgentName('ahrena-engineering-frontend:iris'), 'Iris');
     assert.equal(shortAgentName('ahrena-engineering-code-review:argos'), 'Argos');
     assert.equal(shortAgentName('ahrena-engineering-quality:erodos'), 'Erodos');
-    assert.equal(stepName(step('dev', { agentType: 'ahrena-engineering-backend:apollo' })), 'Apollo');
+    assert.equal(stepName(step('fix', { agentType: 'ahrena-engineering-backend:apollo' })), 'Apollo');
     assert.equal(stepName(step('other', { agentType: 'ahrena:hephaestus' })), 'Hephaestus');
   });
 
