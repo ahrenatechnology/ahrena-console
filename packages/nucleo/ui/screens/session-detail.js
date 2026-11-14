@@ -7,7 +7,7 @@
 
 import { el, icon } from '../dom.js';
 import { loading, error, errorBand, empty } from '../states.js';
-import { shortAgentName } from './workflow-format.js';
+import { subagentNodeName } from './workflow-format.js';
 import { openAction } from '../open-action.js';
 import { create as workflowTab } from './session-detail-workflow.js';
 import { create as decisionsTab } from './session-detail-decisions.js';
@@ -547,8 +547,7 @@ function node(g, sessionAttention = null) {
   const end = g.end ? Date.parse(g.end) : Date.now();
   // issue 519: a subagent shows the short agent name; the full "plugin:agent" goes in the title and
   // leads the secondary line when it differs.
-  const short = g.type === 'main' ? g.name : (shortAgentName(g.name) ?? g.name);
-  const full = g.type !== 'main' && short !== g.name ? g.name : null;
+  const { short, full } = g.type === 'main' ? { short: g.name, full: null } : subagentNodeName(g.name);
   const sub =
     g.type === 'main'
       ? [modelName(g.model), g.turns !== null ? `${num(g.turns)} turno${g.turns === 1 ? '' : 's'}` : null]

@@ -17,6 +17,18 @@ export function shortAgentName(agentType) {
   return agent.charAt(0).toUpperCase() + agent.slice(1);
 }
 
+const AGENT_IDENTIFIER = /^[a-z0-9-]+:[a-z0-9-]+$/;
+
+/**
+ * The name a subagent node shows on the Agents tab (issue 519). `g.name` may be a `plugin:agent`
+ * identifier or free text (a description); only a whole identifier is shortened, and then `full`
+ * carries it for the secondary line. Free text stays exactly as it is, with `full` null.
+ */
+export function subagentNodeName(name) {
+  if (typeof name === 'string' && AGENT_IDENTIFIER.test(name)) return { short: shortAgentName(name), full: name };
+  return { short: name, full: null };
+}
+
 /** `null` vira "—"; o resto, uma casa decimal: 1,6. */
 export const decimal = (n) => (n === null || n === undefined ? '—' : DEC.format(n));
 
