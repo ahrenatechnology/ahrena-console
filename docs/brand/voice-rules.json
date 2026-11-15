@@ -1,0 +1,90 @@
+{
+  "version": 1,
+  "approvedOn": "2026-11-14",
+  "approvedBy": "product owner",
+  "language": "pt-BR",
+  "source": "Issue 665 (parent 656). The lint is test/voice-lint.lib.mjs, held by test/voice-lint.test.mjs. See docs/brand/voice.md.",
+  "limits": {
+    "label": { "maxWords": 4, "maxCharacters": 28 },
+    "title": { "maxWords": 6 },
+    "support": { "maxWords": 20, "maxSentences": 2 }
+  },
+  "forbiddenTerms": [
+    "por favor",
+    "infelizmente",
+    "ops",
+    "clique aqui",
+    "aguarde",
+    "basicamente",
+    "simplesmente",
+    "incrível",
+    "poderoso",
+    "intuitivo",
+    "sem complicação"
+  ],
+  "preferredTerms": [
+    { "avoid": "acessar", "use": "abrir" },
+    { "avoid": "utilizar", "use": "usar" },
+    { "avoid": "visualizar", "use": "ver" },
+    { "avoid": "novamente", "use": "de novo" },
+    { "avoid": "Verificar", "use": "Conferir" }
+  ],
+  "fillerPatterns": {
+    "phrases": [
+      "vale ressaltar",
+      "vale notar",
+      "é importante destacar",
+      "em resumo",
+      "aqui está",
+      "com certeza",
+      "vamos lá",
+      "bem-vindo",
+      "descubra",
+      "explore",
+      "nesta tela você pode"
+    ],
+    "exclamationMark": true,
+    "longDash": true,
+    "emoji": true
+  },
+  "classification": {
+    "notes": [
+      "A string is classified by the object key or the element or attribute it is used in. A string that is classified nowhere gets the term, preferred and filler rules, but not the length limits.",
+      "label: a key whose last word is label or placeholder (label, stateLabel, aria-label, placeholder); the text of a button or label element.",
+      "title: a key whose last word is title or heading (title, heading); the text of an h1, h2 or h3 element; the title attribute.",
+      "support: a key whose last word is sub, body, description, hint or message.",
+      "The last word of a key is read after splitting camelCase and hyphens, so stateLabel is a label and aria-label is a label.",
+      "The key wins over the element. In a JavaScript call el('tag', attrs, children), the element is the last el('tag' written before the literal on the same line; a call that spans lines is not classified by its element."
+    ],
+    "labelKeys": ["label", "placeholder"],
+    "titleKeys": ["title", "heading"],
+    "supportKeys": ["sub", "body", "description", "hint", "message"],
+    "labelElements": ["button", "label"],
+    "titleElements": ["h1", "h2", "h3"],
+    "htmlAttributes": { "aria-label": "label", "placeholder": "label", "title": "title" }
+  },
+  "matching": {
+    "notes": [
+      "Case-insensitive, whole words, accent-aware: the characters either side of a match must be neither a Unicode letter, a digit nor an underscore, so ops does not match inside copos and incrível matches Incrível.",
+      "Exact words only. No stems and no inflections: the forbidden term aguarde does not match aguardando, and the preferred term acessar does not match acesse or acessa. Add an inflection to the list when it is wanted.",
+      "A phrase matches with any run of white space between its words.",
+      "A template literal is read with each interpolation replaced by {}; {} counts as one word.",
+      "Emoji is a character with the Emoji_Presentation property, or an Extended_Pictographic one followed by U+FE0F. Text symbols without it (the status glyphs, arrows, checks) are not emoji.",
+      "A sentence ends at . ! ? or an ellipsis followed by white space and an upper case letter, or at the end of the text."
+    ]
+  },
+  "scope": {
+    "notes": [
+      "Linted: the string literals of packages/nucleo/ui/*.js and packages/nucleo/ui/screens/*.js, and the text, aria-label, placeholder and title attributes of packages/nucleo/ui/index.html. The screens are in scope because most of the text a person reads is written there.",
+      "A string literal is on-screen text only when it passes the heuristic below. Everything else is skipped: CSS class lists, ids, URLs and API paths, selectors, keys, import specifiers, event names, strings with no letter, and the operands of a comparison.",
+      "Heuristic. Skip a string with no letter; one that starts with /, ., #, http, data: or a scheme; one written after ===, !==, == or != or case; one inside console.*, import, require, querySelector, classList, getAttribute, setAttribute, addEventListener or dispatchEvent calls on its line; one with no white space that is not a single capitalised word of letters (Fechar passes, fechar, app-update and a.b do not); and one with white space whose every token is lower case ASCII with no accent and that is not classified by a key or element (a class list such as card active). A string classified as a label, title or support text skips the single-word and class-list checks, but never the URL, path and operand checks."
+    ],
+    "includedFiles": ["packages/nucleo/ui/*.js", "packages/nucleo/ui/screens/*.js", "packages/nucleo/ui/index.html"]
+  },
+  "ratchet": {
+    "notes": [
+      "The rules hold new and changed code. What already broke them is frozen in test/voice-lint.baseline.json, keyed by file, rule and text (no line numbers), with a count.",
+      "The test fails on a finding that is not in the baseline and on a baseline entry that no longer occurs, so the baseline only shrinks. Never add an entry: fix the text. VOICE_LINT_SHRINK=1 rewrites the baseline with the stale entries removed."
+    ]
+  }
+}

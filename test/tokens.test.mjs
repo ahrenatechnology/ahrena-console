@@ -157,3 +157,36 @@ test('a amostra usa os mesmos valores dos tokens', () => {
   for (const id of STATUS) used.push(tokens.status[id].color, tokens.status[id].label, tokens.status[id].glyph)
   for (const value of new Set(used)) assert.ok(html.includes(value), `a amostra não tem ${value}`)
 })
+
+// Issue 665: every theme-dependent colour has a value in both themes (the dark theme is an
+// accessibility requirement, photosensitivity, never an extra) and the spacing scale is compact.
+const roleKeys = (theme) => Object.keys(theme).filter((k) => !k.startsWith('_')).sort()
+
+test('dark and light have identical colour keys, each a hex, and nothing is left to one theme', () => {
+  const dark = roleKeys(tokens.themes.dark)
+  assert.deepEqual(roleKeys(tokens.themes.light), dark)
+  assert.deepEqual(Object.keys(tokens.themes).sort(), ['dark', 'light'])
+  assert.ok(dark.length >= 10)
+  for (const theme of THEMES) for (const role of dark) assert.ok(isHex(tokens.themes[theme][role]), `themes.${theme}.${role} is not a hex`)
+})
+
+test('each status has the same keys, all hex, in the dark and the light theme', () => {
+  for (const id of STATUS) {
+    const dark = roleKeys(tokens.status[id].dark)
+    assert.deepEqual(dark, ['badge', 'dot', 'text'], `${id}.dark`)
+    assert.deepEqual(roleKeys(tokens.status[id].light), dark, `${id}.light`)
+    for (const theme of THEMES) for (const key of dark) assert.ok(isHex(tokens.status[id][theme][key]), `status.${id}.${theme}.${key} is not a hex`)
+  }
+})
+
+test('the spacing scale is present, compact, in px and strictly ascending', () => {
+  const names = Object.keys(tokens.spacing).filter((k) => !k.startsWith('_'))
+  assert.deepEqual(names, ['xxs', 'xs', 'sm', 'md', 'lg', 'xl', 'xxl'])
+  const px = names.map((n) => {
+    assert.match(tokens.spacing[n], /^\d+px$/, `spacing.${n} is not px`)
+    return parseInt(tokens.spacing[n], 10)
+  })
+  assert.deepEqual(px, [2, 4, 6, 8, 12, 16, 24])
+  px.forEach((v, i) => i > 0 && assert.ok(v > px[i - 1], `spacing is not ascending at ${names[i]}`))
+  assert.ok(px.at(-1) <= 24, 'the scale is dense: nothing above 24px')
+})

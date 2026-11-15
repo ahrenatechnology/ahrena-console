@@ -203,5 +203,15 @@ export const tipografia = {
   }
 } as const
 
+export const spacing = {
+  "xxs": "2px",
+  "xs": "4px",
+  "sm": "6px",
+  "md": "8px",
+  "lg": "12px",
+  "xl": "16px",
+  "xxl": "24px"
+} as const
+
 export type Tema = keyof typeof temas
 export type StatusId = (typeof ordemStatus)[number]

@@ -45,7 +45,7 @@ const cabecalho = (comentario: string) =>
 
 export function gerarTs(tokens: Tokens): string {
   for (const escala of Object.keys(tokens)) {
-    if (!escala.startsWith('_') && !FORA.has(escala) && !PALETA.includes(escala) && !['ci', 'themes', 'status', 'typography'].includes(escala)) {
+    if (!escala.startsWith('_') && !FORA.has(escala) && !PALETA.includes(escala) && !['ci', 'themes', 'status', 'typography', 'spacing'].includes(escala)) {
       throw new Error(`escala nova no tokens.json: ${escala}. Decida se entra na paleta (PALETA) ou fica de fora (FORA).`)
     }
   }
@@ -58,6 +58,7 @@ export function gerarTs(tokens: Tokens): string {
     ['ordemStatus', tokens.status._ordem],
     ['status', status],
     ['tipografia', limpo(tokens.typography)],
+    ['spacing', limpo(tokens.spacing)],
   ] as const
   const corpo = partes.map(([nome, valor]) => `export const ${nome} = ${JSON.stringify(valor, null, 2)} as const\n`).join('\n')
   return `${cabecalho('//')}\n${corpo}\nexport type Tema = keyof typeof temas\nexport type StatusId = (typeof ordemStatus)[number]\n`
@@ -85,6 +86,7 @@ export function gerarCss(tokens: Tokens): string {
   const tipo = tokens.typography
   fixas.push(variavel('font-sans', tipo.sans), variavel('font-mono', tipo.mono))
   for (const [nome, v] of Object.entries(tipo.size)) fixas.push(variavel(`text-${nome}`, v as string))
+  for (const [nome, v] of Object.entries(limpo(tokens.spacing))) fixas.push(variavel(`space-${nome}`, v as string))
   for (const [nome, v] of Object.entries(tipo.weight)) fixas.push(variavel(`weight-${nome}`, v as number))
 
   const escuro = variaveisDoTema(tokens, 'dark')

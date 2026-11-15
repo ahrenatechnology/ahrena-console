@@ -1,0 +1,728 @@
+[
+  {
+    "file": "packages/nucleo/ui/app.js",
+    "rule": "limit-label-words",
+    "text": "Há uma versão nova do app",
+    "count": 1
+  },
+  {
+    "file": "packages/nucleo/ui/github-connect.js",
+    "rule": "limit-title-words",
+    "text": "Build de desenvolvimento sem o aplicativo do GitHub",
+    "count": 1
+  },
+  {
+    "file": "packages/nucleo/ui/github-connect.js",
+    "rule": "limit-title-words",
+    "text": "Não há onde guardar a credencial com segurança",
+    "count": 1
+  },
+  {
+    "file": "packages/nucleo/ui/github-connect.js",
+    "rule": "limit-title-words",
+    "text": "O gh desta máquina não tem login",
+    "count": 1
+  },
+  {
+    "file": "packages/nucleo/ui/github-connect.js",
+    "rule": "limit-title-words",
+    "text": "O gh não está instalado nesta máquina",
+    "count": 1
+  },
+  {
+    "file": "packages/nucleo/ui/github-connect.js",
+    "rule": "limit-title-words",
+    "text": "O GitHub não aceita mais a credencial guardada",
+    "count": 1
+  },
+  {
+    "file": "packages/nucleo/ui/new-session.js",
+    "rule": "limit-title-words",
+    "text": "Abre o terminal padrão e roda claude nesta pasta",
+    "count": 1
+  },
+  {
+    "file": "packages/nucleo/ui/new-session.js",
+    "rule": "limit-title-words",
+    "text": "Abre uma sessão nova do Claude Code no Claude Desktop, nesta pasta",
+    "count": 1
+  },
+  {
+    "file": "packages/nucleo/ui/open-action.js",
+    "rule": "limit-title-words",
+    "text": "Abre o terminal padrão e roda claude --resume na pasta da sessão",
+    "count": 1
+  },
+  {
+    "file": "packages/nucleo/ui/open-action.js",
+    "rule": "limit-title-words",
+    "text": "Já roda num terminal; traz a janela à frente",
+    "count": 1
+  },
+  {
+    "file": "packages/nucleo/ui/screens/adr-record.js",
+    "rule": "limit-title-words",
+    "text": "De onde veio o tipo ADR ou PDR",
+    "count": 1
+  },
+  {
+    "file": "packages/nucleo/ui/screens/agent-config.js",
+    "rule": "limit-label-characters",
+    "text": "Lendo as pastas de configuração",
+    "count": 1
+  },
+  {
+    "file": "packages/nucleo/ui/screens/agent-config.js",
+    "rule": "limit-label-words",
+    "text": "Abrir o projeto mais recente",
+    "count": 1
+  },
+  {
+    "file": "packages/nucleo/ui/screens/agent-config.js",
+    "rule": "limit-label-words",
+    "text": "Copiar o caminho de {}",
+    "count": 1
+  },
+  {
+    "file": "packages/nucleo/ui/screens/agent-config.js",
+    "rule": "limit-label-words",
+    "text": "Lendo as pastas de configuração",
+    "count": 1
+  },
+  {
+    "file": "packages/nucleo/ui/screens/agent-instructions-markdown.js",
+    "rule": "limit-title-words",
+    "text": "Link fora de http(s) e do repositório: mostrado como texto",
+    "count": 1
+  },
+  {
+    "file": "packages/nucleo/ui/screens/agent-instructions.js",
+    "rule": "limit-label-characters",
+    "text": "Arquivos de instrução e .claude",
+    "count": 1
+  },
+  {
+    "file": "packages/nucleo/ui/screens/agent-instructions.js",
+    "rule": "limit-label-characters",
+    "text": "Buscar nas instruções deste repositório",
+    "count": 1
+  },
+  {
+    "file": "packages/nucleo/ui/screens/agent-instructions.js",
+    "rule": "limit-label-characters",
+    "text": "Buscar nas instruções deste repositório: \"inglês\", \"npm test\"…",
+    "count": 1
+  },
+  {
+    "file": "packages/nucleo/ui/screens/agent-instructions.js",
+    "rule": "limit-label-words",
+    "text": "Arquivos de instrução e .claude",
+    "count": 1
+  },
+  {
+    "file": "packages/nucleo/ui/screens/agent-instructions.js",
+    "rule": "limit-label-words",
+    "text": "Buscar nas instruções deste repositório",
+    "count": 1
+  },
+  {
+    "file": "packages/nucleo/ui/screens/agent-instructions.js",
+    "rule": "limit-label-words",
+    "text": "Buscar nas instruções deste repositório: \"inglês\", \"npm test\"…",
+    "count": 1
+  },
+  {
+    "file": "packages/nucleo/ui/screens/agent-view.js",
+    "rule": "limit-label-characters",
+    "text": "btn outline sm av-child-retry",
+    "count": 1
+  },
+  {
+    "file": "packages/nucleo/ui/screens/agent-view.js",
+    "rule": "limit-label-words",
+    "text": "{} o detalhe de {}",
+    "count": 1
+  },
+  {
+    "file": "packages/nucleo/ui/screens/agent-view.js",
+    "rule": "limit-label-words",
+    "text": "Abrir a vista de {}",
+    "count": 1
+  },
+  {
+    "file": "packages/nucleo/ui/screens/agent-view.js",
+    "rule": "limit-title-words",
+    "text": "A aba Conversa, já com este agente escolhido",
+    "count": 1
+  },
+  {
+    "file": "packages/nucleo/ui/screens/analytics-delivery.js",
+    "rule": "limit-label-characters",
+    "text": "Buscar por título, repositório ou número",
+    "count": 2
+  },
+  {
+    "file": "packages/nucleo/ui/screens/analytics-delivery.js",
+    "rule": "limit-label-words",
+    "text": "Buscar por título, repositório ou número",
+    "count": 2
+  },
+  {
+    "file": "packages/nucleo/ui/screens/analytics-delivery.js",
+    "rule": "limit-label-words",
+    "text": "PRs mesclados por dia em {}",
+    "count": 1
+  },
+  {
+    "file": "packages/nucleo/ui/screens/analytics-delivery.js",
+    "rule": "limit-title-words",
+    "text": "Baixar o JSON do que está na tela",
+    "count": 1
+  },
+  {
+    "file": "packages/nucleo/ui/screens/analytics-delivery.js",
+    "rule": "limit-title-words",
+    "text": "Conecte o GitHub para ver as entregas",
+    "count": 1
+  },
+  {
+    "file": "packages/nucleo/ui/screens/analytics-delivery.js",
+    "rule": "limit-title-words",
+    "text": "Nada em {} nos últimos {} dias",
+    "count": 1
+  },
+  {
+    "file": "packages/nucleo/ui/screens/analytics-delivery.js",
+    "rule": "limit-title-words",
+    "text": "Não deu para ler os GitHub Projects.",
+    "count": 1
+  },
+  {
+    "file": "packages/nucleo/ui/screens/analytics-delivery.js",
+    "rule": "limit-title-words",
+    "text": "Nenhum repositório com atividade nos últimos {} dias",
+    "count": 1
+  },
+  {
+    "file": "packages/nucleo/ui/screens/analytics.js",
+    "rule": "filler-long-dash",
+    "text": "por sessão: —",
+    "count": 1
+  },
+  {
+    "file": "packages/nucleo/ui/screens/analytics.js",
+    "rule": "limit-label-characters",
+    "text": "Custo estimado por dia, em dólares",
+    "count": 1
+  },
+  {
+    "file": "packages/nucleo/ui/screens/analytics.js",
+    "rule": "limit-label-characters",
+    "text": "Custo por modelo nos últimos {} dias",
+    "count": 1
+  },
+  {
+    "file": "packages/nucleo/ui/screens/analytics.js",
+    "rule": "limit-label-characters",
+    "text": "Eventos por dia nas últimas {} semanas",
+    "count": 1
+  },
+  {
+    "file": "packages/nucleo/ui/screens/analytics.js",
+    "rule": "limit-label-characters",
+    "text": "Sessões por dia nos últimos 30 dias",
+    "count": 1
+  },
+  {
+    "file": "packages/nucleo/ui/screens/analytics.js",
+    "rule": "limit-label-words",
+    "text": "Custo estimado por dia, em dólares",
+    "count": 1
+  },
+  {
+    "file": "packages/nucleo/ui/screens/analytics.js",
+    "rule": "limit-label-words",
+    "text": "Custo por modelo nos últimos {} dias",
+    "count": 1
+  },
+  {
+    "file": "packages/nucleo/ui/screens/analytics.js",
+    "rule": "limit-label-words",
+    "text": "Eventos por dia nas últimas {} semanas",
+    "count": 1
+  },
+  {
+    "file": "packages/nucleo/ui/screens/analytics.js",
+    "rule": "limit-label-words",
+    "text": "Ir para a Visão geral",
+    "count": 1
+  },
+  {
+    "file": "packages/nucleo/ui/screens/analytics.js",
+    "rule": "limit-label-words",
+    "text": "Sessões por dia nos últimos 30 dias",
+    "count": 1
+  },
+  {
+    "file": "packages/nucleo/ui/screens/analytics.js",
+    "rule": "limit-title-words",
+    "text": "Baixar o JSON do que está na tela",
+    "count": 1
+  },
+  {
+    "file": "packages/nucleo/ui/screens/analytics.js",
+    "rule": "limit-title-words",
+    "text": "Hora em que o núcleo calculou estes números",
+    "count": 1
+  },
+  {
+    "file": "packages/nucleo/ui/screens/cloud-connections.js",
+    "rule": "limit-label-words",
+    "text": "Lendo os perfis da AWS",
+    "count": 1
+  },
+  {
+    "file": "packages/nucleo/ui/screens/cloud-connections.js",
+    "rule": "limit-title-words",
+    "text": "Este núcleo não tem os conectores de nuvem",
+    "count": 1
+  },
+  {
+    "file": "packages/nucleo/ui/screens/cloud-connections.js",
+    "rule": "limit-title-words",
+    "text": "O núcleo da {} não tem os conectores de nuvem",
+    "count": 1
+  },
+  {
+    "file": "packages/nucleo/ui/screens/connections.js",
+    "rule": "limit-title-words",
+    "text": "A conexão com o GitHub não está disponível",
+    "count": 1
+  },
+  {
+    "file": "packages/nucleo/ui/screens/dashboard.js",
+    "rule": "filler-long-dash",
+    "text": "~US$ —",
+    "count": 1
+  },
+  {
+    "file": "packages/nucleo/ui/screens/dashboard.js",
+    "rule": "limit-title-words",
+    "text": "Não deu para ler quem precisa de você.",
+    "count": 1
+  },
+  {
+    "file": "packages/nucleo/ui/screens/decisions-common.js",
+    "rule": "limit-label-words",
+    "text": "Não dá para gravar daqui",
+    "count": 1
+  },
+  {
+    "file": "packages/nucleo/ui/screens/decisions.js",
+    "rule": "limit-label-characters",
+    "text": "Buscar: \"banco de testes\", \"kanban\", \"review\"…",
+    "count": 1
+  },
+  {
+    "file": "packages/nucleo/ui/screens/decisions.js",
+    "rule": "limit-label-words",
+    "text": "Buscar: \"banco de testes\", \"kanban\", \"review\"…",
+    "count": 1
+  },
+  {
+    "file": "packages/nucleo/ui/screens/docker-actions.js",
+    "rule": "limit-label-words",
+    "text": "Buscar por nome ou imagem",
+    "count": 1
+  },
+  {
+    "file": "packages/nucleo/ui/screens/docker-actions.js",
+    "rule": "limit-label-words",
+    "text": "Tentar de novo: o Docker",
+    "count": 1
+  },
+  {
+    "file": "packages/nucleo/ui/screens/docker-actions.js",
+    "rule": "preferred-term:verificar",
+    "text": "Rodei, verificar de novo",
+    "count": 1
+  },
+  {
+    "file": "packages/nucleo/ui/screens/feed.js",
+    "rule": "limit-label-characters",
+    "text": "Buscar no resumo ou na ferramenta",
+    "count": 1
+  },
+  {
+    "file": "packages/nucleo/ui/screens/feed.js",
+    "rule": "limit-label-characters",
+    "text": "Buscar no resumo ou na ferramenta…",
+    "count": 1
+  },
+  {
+    "file": "packages/nucleo/ui/screens/feed.js",
+    "rule": "limit-label-words",
+    "text": "Buscar no resumo ou na ferramenta",
+    "count": 1
+  },
+  {
+    "file": "packages/nucleo/ui/screens/feed.js",
+    "rule": "limit-label-words",
+    "text": "Buscar no resumo ou na ferramenta…",
+    "count": 1
+  },
+  {
+    "file": "packages/nucleo/ui/screens/framework-install.js",
+    "rule": "limit-label-characters",
+    "text": "Instalação do Ahrena Framework",
+    "count": 5
+  },
+  {
+    "file": "packages/nucleo/ui/screens/framework-install.js",
+    "rule": "limit-label-words",
+    "text": "O que achamos no repositório",
+    "count": 1
+  },
+  {
+    "file": "packages/nucleo/ui/screens/framework-install.js",
+    "rule": "limit-title-words",
+    "text": "O PR pode não ter sido aberto.",
+    "count": 1
+  },
+  {
+    "file": "packages/nucleo/ui/screens/machine-connection-format.js",
+    "rule": "limit-title-words",
+    "text": "Túnel no ar, núcleo de lá parado.",
+    "count": 1
+  },
+  {
+    "file": "packages/nucleo/ui/screens/machine-connection.js",
+    "rule": "limit-label-characters",
+    "text": "Entrar na AWS e subir o túnel",
+    "count": 1
+  },
+  {
+    "file": "packages/nucleo/ui/screens/machine-connection.js",
+    "rule": "limit-label-words",
+    "text": "Entrar na AWS e subir o túnel",
+    "count": 1
+  },
+  {
+    "file": "packages/nucleo/ui/screens/machine-core-format.js",
+    "rule": "limit-title-words",
+    "text": "Configure o comando de credencial antes de atualizar a {}.",
+    "count": 1
+  },
+  {
+    "file": "packages/nucleo/ui/screens/machine-core-format.js",
+    "rule": "limit-title-words",
+    "text": "O núcleo da {} está na {} e o app, na {}.",
+    "count": 1
+  },
+  {
+    "file": "packages/nucleo/ui/screens/machine-core-format.js",
+    "rule": "limit-title-words",
+    "text": "O núcleo da {} tem a mesma versão do app ({}), mas um commit mais antigo.",
+    "count": 1
+  },
+  {
+    "file": "packages/nucleo/ui/screens/machine-terminals.js",
+    "rule": "limit-title-words",
+    "text": "{} enviado e o processo continua vivo.",
+    "count": 2
+  },
+  {
+    "file": "packages/nucleo/ui/screens/machine-update-format.js",
+    "rule": "limit-title-words",
+    "text": "Falhou e voltou ao código de antes",
+    "count": 1
+  },
+  {
+    "file": "packages/nucleo/ui/screens/machine-update.js",
+    "rule": "limit-title-words",
+    "text": "Atualizar o núcleo da {} para a {}?",
+    "count": 1
+  },
+  {
+    "file": "packages/nucleo/ui/screens/machine.js",
+    "rule": "limit-title-words",
+    "text": "A {} pede a prova do dono, e este Mac ainda não sabe pedi-la.",
+    "count": 1
+  },
+  {
+    "file": "packages/nucleo/ui/screens/machine.js",
+    "rule": "limit-title-words",
+    "text": "A {} recusou o acesso: a prova do dono falhou.",
+    "count": 1
+  },
+  {
+    "file": "packages/nucleo/ui/screens/machine.js",
+    "rule": "limit-title-words",
+    "text": "Esta não parece ser a mesma {}.",
+    "count": 1
+  },
+  {
+    "file": "packages/nucleo/ui/screens/machine.js",
+    "rule": "limit-title-words",
+    "text": "O túnel está de pé, mas o núcleo de lá não respondeu",
+    "count": 1
+  },
+  {
+    "file": "packages/nucleo/ui/screens/project-picker.js",
+    "rule": "limit-label-words",
+    "text": "Campo que vira colunas em {}",
+    "count": 1
+  },
+  {
+    "file": "packages/nucleo/ui/screens/project.js",
+    "rule": "limit-title-words",
+    "text": "Arraste para outra raia (ou Alt+← / Alt+→)",
+    "count": 1
+  },
+  {
+    "file": "packages/nucleo/ui/screens/repo-adrs.js",
+    "rule": "limit-label-characters",
+    "text": "Buscar nas decisões deste repositório",
+    "count": 1
+  },
+  {
+    "file": "packages/nucleo/ui/screens/repo-adrs.js",
+    "rule": "limit-label-characters",
+    "text": "Buscar nas decisões deste repositório…",
+    "count": 1
+  },
+  {
+    "file": "packages/nucleo/ui/screens/repo-adrs.js",
+    "rule": "limit-label-words",
+    "text": "Buscar nas decisões deste repositório",
+    "count": 1
+  },
+  {
+    "file": "packages/nucleo/ui/screens/repo-adrs.js",
+    "rule": "limit-label-words",
+    "text": "Buscar nas decisões deste repositório…",
+    "count": 1
+  },
+  {
+    "file": "packages/nucleo/ui/screens/repo.js",
+    "rule": "limit-label-characters",
+    "text": "Commits por dia, {} semanas: {} no total, {} nesta semana",
+    "count": 1
+  },
+  {
+    "file": "packages/nucleo/ui/screens/repo.js",
+    "rule": "limit-label-characters",
+    "text": "Frequência de código, {} semanas: {} linhas adicionadas e {} removidas",
+    "count": 1
+  },
+  {
+    "file": "packages/nucleo/ui/screens/repo.js",
+    "rule": "limit-label-words",
+    "text": "Commits por dia, {} semanas: {} no total, {} nesta semana",
+    "count": 1
+  },
+  {
+    "file": "packages/nucleo/ui/screens/repo.js",
+    "rule": "limit-label-words",
+    "text": "Frequência de código, {} semanas: {} linhas adicionadas e {} removidas",
+    "count": 1
+  },
+  {
+    "file": "packages/nucleo/ui/screens/repo.js",
+    "rule": "limit-title-words",
+    "text": "As decisões ainda não têm contagem por repositório",
+    "count": 1
+  },
+  {
+    "file": "packages/nucleo/ui/screens/repos.js",
+    "rule": "limit-label-characters",
+    "text": "Commits por semana nas últimas 12 semanas: {}",
+    "count": 1
+  },
+  {
+    "file": "packages/nucleo/ui/screens/repos.js",
+    "rule": "limit-label-words",
+    "text": "Commits por semana nas últimas 12 semanas: {}",
+    "count": 1
+  },
+  {
+    "file": "packages/nucleo/ui/screens/repos.js",
+    "rule": "limit-title-words",
+    "text": "O GitHub ainda não mandou as semanas",
+    "count": 1
+  },
+  {
+    "file": "packages/nucleo/ui/screens/session-detail-workflow.js",
+    "rule": "limit-label-words",
+    "text": "Grafo dos agentes da sessão",
+    "count": 1
+  },
+  {
+    "file": "packages/nucleo/ui/screens/session-detail.js",
+    "rule": "limit-label-characters",
+    "text": "Buscar no resumo, ferramenta, conteúdo…",
+    "count": 1
+  },
+  {
+    "file": "packages/nucleo/ui/screens/session-detail.js",
+    "rule": "limit-label-words",
+    "text": "Abrir a vista de {}",
+    "count": 1
+  },
+  {
+    "file": "packages/nucleo/ui/screens/session-detail.js",
+    "rule": "limit-label-words",
+    "text": "Buscar no resumo, ferramenta, conteúdo…",
+    "count": 1
+  },
+  {
+    "file": "packages/nucleo/ui/screens/session-detail.js",
+    "rule": "limit-title-words",
+    "text": "Não deu para ler a linha do tempo",
+    "count": 1
+  },
+  {
+    "file": "packages/nucleo/ui/screens/wall.js",
+    "rule": "filler-long-dash",
+    "text": "contexto —",
+    "count": 1
+  },
+  {
+    "file": "packages/nucleo/ui/screens/work-board-issue-edit.js",
+    "rule": "limit-label-characters",
+    "text": "Descrição da issue (Markdown)",
+    "count": 1
+  },
+  {
+    "file": "packages/nucleo/ui/screens/work-board-issue-edit.js",
+    "rule": "limit-label-characters",
+    "text": "Escreva um comentário (Markdown)…",
+    "count": 2
+  },
+  {
+    "file": "packages/nucleo/ui/screens/work-board-issue-edit.js",
+    "rule": "limit-label-words",
+    "text": "Reordenar o passo {}: {}",
+    "count": 1
+  },
+  {
+    "file": "packages/nucleo/ui/screens/work-board-issue-panel.js",
+    "rule": "limit-label-characters",
+    "text": "btn outline sm wb-panel-github",
+    "count": 1
+  },
+  {
+    "file": "packages/nucleo/ui/screens/work-board-parts.js",
+    "rule": "limit-label-characters",
+    "text": "+ {} nos últimos {} dias · ver todas",
+    "count": 1
+  },
+  {
+    "file": "packages/nucleo/ui/screens/work-board-parts.js",
+    "rule": "limit-label-words",
+    "text": "+ {} nos últimos {} dias · ver todas",
+    "count": 1
+  },
+  {
+    "file": "packages/nucleo/ui/screens/work-board-parts.js",
+    "rule": "limit-label-words",
+    "text": "Quadro por ciclo do agente",
+    "count": 1
+  },
+  {
+    "file": "packages/nucleo/ui/screens/work-board-parts.js",
+    "rule": "limit-label-words",
+    "text": "Ver filhos ({}) de {}",
+    "count": 1
+  },
+  {
+    "file": "packages/nucleo/ui/screens/work-board-parts.js",
+    "rule": "limit-title-words",
+    "text": "A credencial do GitHub não tem a permissão necessária.",
+    "count": 1
+  },
+  {
+    "file": "packages/nucleo/ui/screens/work-board-parts.js",
+    "rule": "limit-title-words",
+    "text": "Nenhuma issue nos Projects das suas organizações",
+    "count": 1
+  },
+  {
+    "file": "packages/nucleo/ui/screens/work-board-parts.js",
+    "rule": "limit-title-words",
+    "text": "O GitHub recusou a credencial do console.",
+    "count": 1
+  },
+  {
+    "file": "packages/nucleo/ui/screens/work-board-queue.js",
+    "rule": "limit-label-characters",
+    "text": "Tentar de novo (fila parada na {})",
+    "count": 1
+  },
+  {
+    "file": "packages/nucleo/ui/screens/work-board-queue.js",
+    "rule": "limit-label-words",
+    "text": "Tentar de novo (fila parada na {})",
+    "count": 1
+  },
+  {
+    "file": "packages/nucleo/ui/screens/work-board-queue.js",
+    "rule": "limit-title-words",
+    "text": "Limite de execuções simultâneas: preferência da instalação",
+    "count": 2
+  },
+  {
+    "file": "packages/nucleo/ui/screens/work-board-run.js",
+    "rule": "limit-label-words",
+    "text": "Abrir a sessão da {}",
+    "count": 1
+  },
+  {
+    "file": "packages/nucleo/ui/screens/work-board-run.js",
+    "rule": "limit-label-words",
+    "text": "Executar o plano da {}",
+    "count": 2
+  },
+  {
+    "file": "packages/nucleo/ui/screens/work-board.js",
+    "rule": "limit-title-words",
+    "text": "O console não está conectado ao GitHub.",
+    "count": 1
+  },
+  {
+    "file": "packages/nucleo/ui/screens/workflow-loop.js",
+    "rule": "limit-label-words",
+    "text": "Abrir a conversa de {}",
+    "count": 2
+  },
+  {
+    "file": "packages/nucleo/ui/screens/workflow-loop.js",
+    "rule": "limit-label-words",
+    "text": "Abrir a vista de {}",
+    "count": 2
+  },
+  {
+    "file": "packages/nucleo/ui/screens/workflow-tree.js",
+    "rule": "limit-title-words",
+    "text": "Ativa, mais velha que o período: entra sempre",
+    "count": 1
+  },
+  {
+    "file": "packages/nucleo/ui/screens/workflow-tree.js",
+    "rule": "limit-title-words",
+    "text": "Quem abriu esta sessão está fora do período",
+    "count": 1
+  },
+  {
+    "file": "packages/nucleo/ui/screens/workflows.js",
+    "rule": "limit-label-words",
+    "text": "Abrir a sessão de {}",
+    "count": 1
+  },
+  {
+    "file": "packages/nucleo/ui/screens/workflows.js",
+    "rule": "limit-label-words",
+    "text": "Limpar o filtro do nó",
+    "count": 1
+  }
+]

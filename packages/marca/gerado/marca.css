@@ -48,6 +48,13 @@
   --text-lg: 16px;
   --text-xl: 20px;
   --text-xxl: 28px;
+  --space-xxs: 2px;
+  --space-xs: 4px;
+  --space-sm: 6px;
+  --space-md: 8px;
+  --space-lg: 12px;
+  --space-xl: 16px;
+  --space-xxl: 24px;
   --weight-regular: 400;
   --weight-medium: 500;
   --weight-semibold: 600;
