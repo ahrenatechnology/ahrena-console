@@ -127,7 +127,7 @@ describe('the format, with no DOM', () => {
     ]);
     assert.equal(format.cacheRows([{ id: 'xcode', path: '~/DerivedData', bytes: 1, actionId: 'xcode-derived-data' }])[0].title, 'Xcode DerivedData');
     assert.equal(format.cacheRows([{ id: 'worktree', path: '/w', bytes: 1, lastUsedAt: '2026-11-12T00:00:00.000Z', actionId: null }], NOW)[0].path, '1 sem uso há mais de 2 dias, em /');
-    // no readable lastUsedAt: only the number and the folder, never an invented age
+    // no readable lastUsedAt: only the number and the folder, never an invented age (#566)
     assert.equal(format.cacheRows([{ id: 'worktree', path: '~/Workspace/x/a', bytes: 1, actionId: null }, { id: 'worktree', path: '~/Workspace/x/b', bytes: 1, lastUsedAt: 'nope', actionId: null }], NOW)[0].path, '2 worktrees, em ~/Workspace/x');
   });
 

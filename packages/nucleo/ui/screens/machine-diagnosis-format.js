@@ -98,7 +98,7 @@ const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 
 const DAY_MS = 86_400_000;
 
-/** The folder that holds every path: the longest shared parent, "" when they share none ("~/Workspace/a" and ".../b" give "~/Workspace"). */
+/** The folder that holds every path: the longest shared parent, "" when they share none ("~/Workspace/a" and ".../b" give "~/Workspace") (issue 566). */
 function commonParent(paths) {
   const parents = paths.map((p) => String(p ?? '').split('/').slice(0, -1));
   const shared = parents.reduce((acc, parts) => {
@@ -109,7 +109,7 @@ function commonParent(paths) {
   return joined || (String(paths[0] ?? '').startsWith('/') ? '/' : '');
 }
 
-/** "9 sem uso há mais de 14 dias, em ~/Workspace" (566-6): the number, the whole days the least idle one has been unused, the folder. */
+/** "9 sem uso há mais de 14 dias, em ~/Workspace" (566-6): the number, the whole days the least idle one has been unused, the folder (issue 566). */
 function worktreeLine(trees, now) {
   const ages = trees.map((t) => (now - new Date(t?.lastUsedAt ?? NaN).getTime()) / DAY_MS).filter(Number.isFinite);
   const days = ages.length === trees.length ? Math.floor(Math.min(...ages)) : 0;
@@ -168,7 +168,7 @@ export const MEMORY_SHARE = 0.4;
 export const LOAD_SHARE = 0.5;
 export const LOAD_TOP = 3;
 
-/** How the cause names this machine when the screen does not say otherwise: the drawn screen is the Mac's (566-5). */
+/** How the cause names this machine when the screen does not say otherwise: the drawn screen is the Mac's (566-5) (issue 566). */
 const MACHINE_HERE = 'o Mac';
 
 /** What the screen says of a section that did not come, from its `status` and `id` (wireframe D4); the núcleo's `reason` is never the sentence. */
