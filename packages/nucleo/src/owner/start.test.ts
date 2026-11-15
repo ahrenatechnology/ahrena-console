@@ -1,7 +1,10 @@
 // How the owner `start` spawns the core (#619, layer 1): the window channel is fd 3 of a core it STARTS, never of an adopted one.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { coreSpawn } from './start.ts';
+import { existsSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { coreSpawn, startOrAdopt } from './start.ts';
 
 const base = { api: '/x/api/cli.ts', port: 0, installation: 'app' as const, dir: '/d', parent: null };
 
@@ -21,4 +24,10 @@ test('with a channel the core gets it as fd 3 and is told so', () => {
 test('the channel cannot arrive through the API options after --', () => {
   assert.throws(() => coreSpawn({ ...base, apiArgs: ['--window-channel', '3'] }, 9), /--window-channel/);
   assert.throws(() => coreSpawn({ ...base, apiArgs: ['--window-channel=3'] }, 9), /--window-channel/);
+});
+
+test('bad API options throw before any plan or open: no data directory, no log file (#619)', async () => {
+  const dir = join(tmpdir(), `ahrena-start-guard-${process.pid}-${Date.now()}`);
+  await assert.rejects(startOrAdopt({ port: 0, installation: 'app', dir, parent: null, apiArgs: ['--window-channel', '3'] } as never), /--window-channel/);
+  assert.equal(existsSync(dir), false);
 });

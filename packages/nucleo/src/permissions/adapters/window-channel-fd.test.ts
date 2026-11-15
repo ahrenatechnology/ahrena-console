@@ -1,4 +1,4 @@
-// A real socketpair: node's `pipe` stdio entry is one, so the child reads its fd 3 through the adapter and the parent writes.
+// A real socketpair: node's `pipe` stdio entry is one, so the child reads its fd 3 through the adapter and the parent writes. (#619)
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';

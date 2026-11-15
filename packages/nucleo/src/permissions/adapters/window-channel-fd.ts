@@ -1,5 +1,5 @@
-// Opens the inherited descriptor of the window channel as a read-only stream and starts reading it (#619). The descriptor is the
-// app's socketpair end, handed through the owner `start` to a core it started; the core only reads from it.
+/* Opens the inherited descriptor of the window channel as a read-only stream and starts reading it. The descriptor is the
+   app's socketpair end, handed through the owner `start` to a core it started; the core only reads from it. (#619) */
 import { Socket } from 'node:net';
 import { readWindowChannel, type PeerVerifier, type WindowChannel } from '../window-channel.ts';
 import type { WindowCredentialHolder } from '../window-credential.ts';
@@ -16,7 +16,7 @@ export function openWindowChannel(o: OpenWindowChannelOptions): WindowChannel {
   try {
     stream = new Socket({ fd: o.fd, readable: true, writable: false });
   } catch {
-    // Not a socket, or not open: no channel, no credential. The cause's text stays out of the log.
+    /* Not a socket, or not open: no channel, no credential. The cause's text stays out of the log (#619). */
     o.log('window channel revoked reason=error');
     o.holder.revoke();
     return { done: Promise.resolve() };

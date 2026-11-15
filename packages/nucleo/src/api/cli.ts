@@ -810,9 +810,9 @@ runtimeStore.recoverDisconnected();
 const permissionDeps = openPermissionDeps(sqlite.db, dataDir, log);
 const restartedRequests = sweepOnStart(permissionDeps);
 if (restartedRequests.length > 0) log(`permission requests closed by the restart: ${restartedRequests.length}`);
-// The window credential (#619): in memory, accepted only over the inherited channel from the app that started this core. Layer 1 wires
-// the channel with a verifier that always answers `unavailable` (the native peer check is layer 2, the app's side layer 3, the Controle
-// switch layer 4), so no credential is ever held and the capability stays off.
+/* The window credential (#619): in memory, accepted only over the inherited channel from the app that started this core. Layer 1 wires
+   the channel with a verifier that always answers `unavailable` (the native peer check is layer 2, the app's side layer 3, the Controle
+   switch layer 4), so no credential is ever held and the capability stays off. */
 const windowCredential = createWindowCredentialHolder();
 if (o.windowChannel !== undefined) openWindowChannel({ fd: o.windowChannel, verifier: new UnavailablePeerVerifier(), holder: windowCredential, log });
 let ownerToken: string | null = null;

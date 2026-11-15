@@ -1,7 +1,7 @@
-// The channel the app uses to hand the core its window credential (decision 0025, #619). The app writes one credential per line
-// over an inherited Unix socket; the core accepts a line only when the peer verifier says the peer is the installed app. Anything
-// else revokes and closes: a line that is not 64 lowercase hex characters, a peer that does not match or cannot be checked, the
-// end of the stream, an error. The value is never logged: only closed codes. (#619, layer 1; the native verifier is layer 2)
+/* The channel the app uses to hand the core its window credential (decision 0025, #619). The app writes one credential per line
+   over an inherited Unix socket; the core accepts a line only when the peer verifier says the peer is the installed app. Anything
+   else revokes and closes: a line that is not 64 lowercase hex characters, a peer that does not match or cannot be checked, the
+   end of the stream, an error. The value is never logged: only closed codes. (#619, layer 1; the native verifier is layer 2) */
 import type { Readable } from 'node:stream';
 import type { WindowCredentialHolder } from './window-credential.ts';
 
@@ -13,22 +13,22 @@ export interface PeerVerifier {
 }
 
 export interface WindowChannelDeps {
-  /** The channel's descriptor, handed to the verifier before each line is accepted. */
+  /** The channel's descriptor, handed to the verifier before each line is accepted (#619). */
   fd: number;
   stream: Readable;
   verifier: PeerVerifier;
   holder: WindowCredentialHolder;
-  /** Receives closed codes only (`window channel refused peer=mismatch`), never the value. */
+  /** Receives closed codes only (`window channel refused peer=mismatch`), never the value (#619). */
   log: (message: string) => void;
 }
 
 export interface WindowChannel {
-  /** Settles when the channel is closed, for whatever reason. Never rejects. */
+  /** Settles when the channel is closed, for whatever reason. Never rejects (#619). */
   done: Promise<void>;
 }
 
 const CREDENTIAL = /^[0-9a-f]{64}$/;
-/** A credential is 64 characters; a longer unterminated run is not one. */
+/** A credential is 64 characters; a longer unterminated run is not one (#619). */
 const MAX_LINE = 64;
 const MIN_FD = 3;
 const MAX_FD = 65535;
@@ -56,7 +56,7 @@ export function readWindowChannel(deps: WindowChannelDeps): WindowChannel {
     holder.revoke();
     if (reason !== 'refused') log(`window channel revoked reason=${reason}`);
     stream.destroy();
-    // The queued verdicts of lines read before the close are awaited, so `done` means nothing can set a credential any more.
+    /* The queued verdicts of lines read before the close are awaited, so `done` means nothing can set a credential any more (#619). */
     void queue.then(finish);
   };
 
@@ -64,18 +64,21 @@ export function readWindowChannel(deps: WindowChannelDeps): WindowChannel {
     try {
       return await verifier.verify(fd);
     } catch {
-      // The native failure's text stays out of the log: the verdict is all that is recorded.
+      /* The native failure's text stays out of the log: the verdict is all that is recorded (#619). */
       return 'unavailable';
     }
   };
 
   const accept = async (line: string): Promise<void> => {
-    // A new line revokes the previous credential before the peer is checked again: rotation never leaves the old one live.
+    // A line queued behind a close never reaches the verifier, so the native check never sees a stale or reused fd number (#619).
+    if (closed) return;
+    // A new line revokes the previous credential before the peer is checked again: rotation never leaves the old one live (#619).
     holder.revoke();
     const verdict = await verdictOf();
     if (closed) return;
     if (verdict === 'match') {
       holder.accept(line);
+      log('window channel accepted');
       return;
     }
     log(`window channel refused peer=${verdict}`);

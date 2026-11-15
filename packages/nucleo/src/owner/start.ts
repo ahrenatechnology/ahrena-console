@@ -70,16 +70,21 @@ export const runningOutput = (t: Lock, extra: Partial<StartOutput> = {}): StartO
   ...extra,
 });
 
-/** The fd the spawned core sees the window channel on, and the option that says so. */
+/** The fd the spawned core sees the window channel on, and the option that says so (#619). */
 const CHILD_WINDOW_CHANNEL_FD = 3;
+
+/** The channel arrives only through `--window-channel` of start, never through the options passed on to the API (#619). */
+function assertNoWindowChannelInApiArgs(apiArgs: string[] | undefined): void {
+  if ((apiArgs ?? []).some((a) => a === '--window-channel' || a.startsWith('--window-channel='))) throw new Error('--window-channel is not an API option of start');
+}
 
 /** The arguments and stdio of the core's process. The window channel is the fourth stdio entry, only when there is one. */
 export function coreSpawn(
   o: { api: string; port: number; installation: Installation; dir: string; parent: number | null; apiArgs?: string[]; windowChannelFd?: number },
   out: number,
 ): { args: string[]; stdio: Array<'ignore' | number> } {
+  assertNoWindowChannelInApiArgs(o.apiArgs);
   const extra = o.apiArgs ?? [];
-  if (extra.some((a) => a === '--window-channel' || a.startsWith('--window-channel='))) throw new Error('--window-channel is not an API option of start');
   const channel = o.windowChannelFd;
   return {
     args: [
@@ -107,10 +112,12 @@ export async function startOrAdopt(o: StartOptions): Promise<StartOutput> {
     try {
       closeSync(o.windowChannelFd);
     } catch {
-      // Already closed: nothing to release.
+      /* Already closed: nothing to release (#619). */
     }
   };
   try {
+    // Refused before the plan can stop an older core and before any descriptor opens (#619).
+    assertNoWindowChannelInApiArgs(o.apiArgs);
     return await startOrAdoptInner(o, closeChannel);
   } finally {
     closeChannel();
@@ -147,14 +154,18 @@ async function startOrAdoptInner(o: StartOptions, closeChannel: () => void): Pro
   const logFile = join(dir, 'nucleo.log');
   const out = openSync(logFile, 'a', 0o600);
   const api = join(dirname(fileURLToPath(import.meta.url)), '..', 'api', 'cli.ts');
-  const { args, stdio } = coreSpawn({ api, port: o.port, installation, dir, parent, apiArgs: o.apiArgs, windowChannelFd: o.windowChannelFd }, out);
-  const child = spawn(process.execPath, args, { detached: true, stdio });
+  let child: ReturnType<typeof spawn>;
+  try {
+    const { args, stdio } = coreSpawn({ api, port: o.port, installation, dir, parent, apiArgs: o.apiArgs, windowChannelFd: o.windowChannelFd }, out);
+    child = spawn(process.execPath, args, { detached: true, stdio });
+  } finally {
+    /* The child has its own copy of the log's descriptor and of the channel, and a failed spawn leaks neither (#619). */
+    closeSync(out);
+    closeChannel();
+  }
   let exitCode: number | null = null;
   child.on('exit', (c) => (exitCode = c ?? 1));
   child.unref();
-  // The child has its own copy of the log's descriptor and of the channel.
-  closeSync(out);
-  closeChannel();
 
   const end = Date.now() + (o.timeoutMs ?? 60_000);
   while (Date.now() < end) {

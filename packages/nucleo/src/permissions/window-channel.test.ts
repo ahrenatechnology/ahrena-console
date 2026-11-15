@@ -187,3 +187,21 @@ test('the channel option is a small integer of 3 or more', () => {
     assert.throws(() => parseWindowChannelFd(bad), /--window-channel/, bad);
   }
 });
+
+test('an accepted line logs the closed code and never the value (#619)', async () => {
+  const { stream, logs } = setup('match');
+  stream.write(`${A}\n`);
+  await tick();
+  await tick();
+  assert.ok(logs.includes('window channel accepted'));
+  assert.ok(logs.every((m) => !m.includes(A)));
+});
+
+test('a line queued behind a refusal never reaches the verifier: the channel is closed first (#619)', async () => {
+  const { stream, seen } = setup('mismatch');
+  stream.write(`${A}\n${B}\n`);
+  await tick();
+  await tick();
+  await tick();
+  assert.deepEqual(seen, [3]);
+});
