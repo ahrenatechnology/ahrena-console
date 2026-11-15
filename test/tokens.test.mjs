@@ -191,7 +191,7 @@ test('the spacing scale is present, compact, in px and strictly ascending', () =
   assert.ok(px.at(-1) <= 24, 'the scale is dense: nothing above 24px')
 })
 
-// issue 700 (part of 698): success is neutral gray with the check glyph; green is history only.
+// #700 (part of #698): success is neutral gray with the check glyph; green is history only.
 test('#700/AC-3: completed and ci.success are gray-100 in the dark theme and gray-500 in the light one, with the check glyph', () => {
   const completed = tokens.status.completed
   assert.equal(completed.glyph, '\u2713')
