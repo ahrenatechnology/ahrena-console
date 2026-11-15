@@ -793,7 +793,7 @@ const api: LocalApi = await startLocalApi({
   observer: observability.observer,
   ownerToken: () => ownerToken,
   // The permission routes (decision 0025, #618): off, with no window credential, until the desktop app can hand one over (#619): the hook
-  // routes answer 503 off and the answer route 403 window_only.
+  // routes answer 503 off and the answer route 403 window_only. (#618)
   permissions: { deps: permissionDeps, enabled: () => false, windowCredential: () => null },
   runtime: new ManagedRuntime(storage, runtimeStore),
   listenOn: reservation,

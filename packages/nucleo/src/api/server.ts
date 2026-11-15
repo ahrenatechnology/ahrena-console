@@ -461,7 +461,7 @@ export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
       })
     : null;
   // A hook event is also read by the permission use cases (#618), from the payload as the hook sent it (the stored one is cut): a settle
-  // never throws and never keeps the other consumers waiting.
+  // never throws and never keeps the other consumers waiting. (#618)
   const hooks = createHookRoute(
     permissions
       ? {

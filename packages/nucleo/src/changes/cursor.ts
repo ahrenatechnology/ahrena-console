@@ -34,8 +34,8 @@
 // the Feed and the Conversa tab drop their 5 s clock. Only the HTTP route exposes it; MCP's `wait_for_changes`
 // filters it out (mcp.ts), like `repos`.
 // `permission` (#618, decision 0025): a permission request opened or changed state; the key is the request id, with its session
-// and account. It is what lets the /ui drop its clock on the request list. Only the HTTP route exposes it; MCP's
-// `wait_for_changes` filters it out (mcp.ts).
+// and account. It is what lets the /ui drop its clock on the request list. Only the HTTP route exposes it; MCP's (#618)
+// `wait_for_changes` filters it out (mcp.ts). (#618)
 // The values are English since #173 phase 2b; the old Portuguese ones left in phase 6.
 export const CHANGE_TYPES = ['session', 'state', 'needs-you', 'plan', 'decision', 'activity', 'account', 'repos', 'alert', 'agent-instructions', 'framework-install', 'adrs', 'connections', 'tools', 'connector', 'app-update', 'permission'] as const;
 export type ChangeType = (typeof CHANGE_TYPES)[number];

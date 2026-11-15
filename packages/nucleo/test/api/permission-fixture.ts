@@ -1,5 +1,5 @@
 // The assembled core for the permission request routes (#618, API layer): the real server, the real hook receiver and change
-// feed, and the use cases over the in-memory doubles of test/permissions/fakes.ts, so a test moves the clock without waiting.
+// feed, and the use cases over the in-memory doubles of test/permissions/fakes.ts, so a test moves the clock without waiting. (#618)
 // The window credential is a constant of the test, held in memory and never written anywhere. (#618)
 import { request } from 'node:http';
 import { openSqliteStorage, type SqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
