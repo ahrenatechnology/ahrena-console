@@ -24,7 +24,8 @@ import { HELP, parseApiOptions } from './cli-options.ts';
 import { openPermissionDeps } from '../permissions/adapters/deps.ts';
 import { sweepOnStart } from '../permissions/expire-due.ts';
 import { openWindowChannel } from '../permissions/adapters/window-channel-fd.ts';
-import { UnavailablePeerVerifier } from '../permissions/adapters/unavailable-peer-verifier.ts';
+import { NativePeerVerifier } from '../permissions/adapters/native-peer-verifier.ts';
+import { reopenCloseOnExec } from '../permissions/adapters/close-on-exec-fd.ts';
 import { createWindowCredentialHolder } from '../permissions/window-credential.ts';
 import { openSqliteStorage } from '../adapters/sqlite/sqlite-storage.ts';
 import { HookDecisionCapture } from '../decisions/capture-hooks.ts';
@@ -181,6 +182,8 @@ if (o.help) {
 }
 
 const log = (m: string) => console.error(`[ahrena-console] ${m}`);
+// The window channel's descriptor is taken first, before the commit's git or any other spawn: nothing this process spawns inherits it (#619).
+const windowChannelFd = o.windowChannel === undefined ? undefined : reopenCloseOnExec(o.windowChannel);
 // The port asked for; 0 (the default) lets the system pick. `boundPort`, below, is the one it got.
 const port = resolvePort(o.port);
 const installation = parseInstallation(o.installation);
@@ -814,7 +817,11 @@ if (restartedRequests.length > 0) log(`permission requests closed by the restart
    the channel with a verifier that always answers `unavailable` (the native peer check is layer 2, the app's side layer 3, the Controle
    switch layer 4), so no credential is ever held and the capability stays off. */
 const windowCredential = createWindowCredentialHolder();
-if (o.windowChannel !== undefined) openWindowChannel({ fd: o.windowChannel, verifier: new UnavailablePeerVerifier(), holder: windowCredential, log });
+if (o.windowChannel !== undefined) {
+  // Without a reopened descriptor there is no channel and no credential: the capability stays unavailable (#619).
+  if (windowChannelFd === null || windowChannelFd === undefined) log('window channel unavailable reason=reopen');
+  else openWindowChannel({ fd: windowChannelFd, verifier: new NativePeerVerifier(), holder: windowCredential, log });
+}
 let ownerToken: string | null = null;
 // #661 the observer: the no-op one unless AHRENA_CONSOLE_OTEL_EXPORTER is configured (src/observability).
 const observability = await createObservability(process.env, API_VERSION);

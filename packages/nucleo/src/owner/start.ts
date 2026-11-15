@@ -14,6 +14,7 @@ import { codeWarning, examine, planStart, ReplaceError } from './owner.ts';
 import { sleep, probeCore } from './probe.ts';
 import { prepareDir, type Lock } from './lock.ts';
 import { DEFAULT_INSTALLATION, resolveDataDir, type Installation } from './installation.ts';
+import { reopenCloseOnExec } from '../permissions/adapters/close-on-exec-fd.ts';
 
 /**
  * The `--json` line of `start` and `status`, in English since phase 6 of #173 (the desktop app reads
@@ -105,12 +106,14 @@ export function coreSpawn(
 }
 
 export async function startOrAdopt(o: StartOptions): Promise<StartOutput> {
-  let channelOpen = o.windowChannelFd !== undefined;
+  /* The descriptor this call holds: the inherited one until it is reopened close-on-exec, the new one after (#619). */
+  let channelFd = o.windowChannelFd;
   const closeChannel = (): void => {
-    if (!channelOpen || o.windowChannelFd === undefined) return;
-    channelOpen = false;
+    if (channelFd === undefined) return;
+    const fd = channelFd;
+    channelFd = undefined;
     try {
-      closeSync(o.windowChannelFd);
+      closeSync(fd);
     } catch {
       /* Already closed: nothing to release (#619). */
     }
@@ -118,7 +121,12 @@ export async function startOrAdopt(o: StartOptions): Promise<StartOutput> {
   try {
     // Refused before the plan can stop an older core and before any descriptor opens (#619).
     assertNoWindowChannelInApiArgs(o.apiArgs);
-    return await startOrAdoptInner(o, closeChannel);
+    // The first thing done with the channel, before the commit's git or any other spawn: nothing this process spawns inherits it (#619).
+    if (channelFd !== undefined) {
+      channelFd = reopenCloseOnExec(channelFd) ?? undefined;
+      if (channelFd === undefined) o.log?.('window channel unavailable reason=reopen');
+    }
+    return await startOrAdoptInner({ ...o, windowChannelFd: channelFd }, closeChannel);
   } finally {
     closeChannel();
   }

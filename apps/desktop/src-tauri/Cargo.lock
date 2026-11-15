@@ -22,6 +22,8 @@ name = "ahrena-console-desktop"
 version = "0.0.21"
 dependencies = [
  "block2",
+ "core-foundation 0.10.1",
+ "core-foundation-sys",
  "libc",
  "objc2",
  "objc2-app-kit",
