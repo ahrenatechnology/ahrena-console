@@ -30,7 +30,7 @@ export interface OtelObserverOptions {
   readonly log?: (line: string) => void;
 }
 
-/* ExportResultCode.FAILED of @opentelemetry/core, which is not a direct dependency of the core. */
+/* ExportResultCode.FAILED of @opentelemetry/core, not a direct dependency of the core (#661). */
 const EXPORT_FAILED = 1;
 
 interface ExportOutcome {
