@@ -34,6 +34,8 @@ const NOW = Date.now();
 const GB = 1024 ** 3;
 const iso = (msAgo: number) => new Date(NOW - msAgo).toISOString();
 const WS = { id: 'ws-example', label: 'Workstation', port: 14720 };
+/** A configured remote that never answered: no reading stored, the core there does not respond. */
+const DOWN = { id: 'ws-down', label: 'Workstation parada', port: 14721 };
 
 const alert = (id: string, kind: Alert['kind'], level: Alert['level'], minutesAgo = 12): Alert => ({ id, kind, level, message: `message of ${id}`, detail: null, since: iso(minutesAgo * 60_000) });
 const SWAP_HIGH = alert('swap-high', 'swap-high', 'error', 40);
@@ -367,7 +369,9 @@ before(async () => {
   await new TelemetrySampler({ machineId: WS.id, collector: new SimulatedCollector('workstation', () => NOW), store, tracker }).sampleOnce();
   const status = { state: 'connected' as const, reason: null, version: TELEMETRY_VERSION };
   const remoteEntry = { id: WS.id, label: WS.label, port: WS.port, state: () => status.state, status: () => status };
-  service = new TelemetryService({ store, tracker, machines: [localMachine(), remoteEntry], now: () => NOW });
+  const downStatus = { state: 'unreachable' as const, reason: 'no-response', version: null };
+  const downEntry = { id: DOWN.id, label: DOWN.label, port: DOWN.port, state: () => downStatus.state, status: () => downStatus };
+  service = new TelemetryService({ store, tracker, machines: [localMachine(), remoteEntry, downEntry], now: () => NOW });
 });
 after(() => storage.close());
 
@@ -642,6 +646,28 @@ describe('the machine screen drives the panels (issue 566)', () => {
     assert.ok(after && after !== toggle, 'the button was rebuilt');
     assert.equal(after.getAttribute('data-dg-action'), 'toggle');
     assert.equal(after.closest('[data-alert]')!.getAttribute('data-alert'), odd.id);
+  });
+
+  test('a repaint keeps the focus when the mount has a dot in its name (the selector must not read it as a class)', async () => {
+    const dotted = alert('volume-full:/Volumes/My.Drive', 'volume-full', 'error', 60);
+    const m = mount({ alerts: [dotted], diagnosis: [answerMemory] });
+    await m.ready;
+    const toggle = m.area.querySelectorAll('li').find((li) => li.getAttribute('data-alert') === dotted.id)!.querySelector('[data-dg-action="toggle"]')!;
+    toggle.focus();
+    await m.reread();
+    const after = documentoFalso.activeElement;
+    assert.ok(after && after !== toggle, 'the button was rebuilt');
+    assert.equal(after.getAttribute('data-dg-action'), 'toggle');
+    assert.equal(after.closest('[data-alert]')!.getAttribute('data-alert'), dotted.id);
+  });
+
+  test('#566/AC-5 a remote with no reading and no alerts card on screen reads no diagnosis, whatever its alerts', async () => {
+    const m = mount({ machine: DOWN.id, alerts: [SWAP_HIGH, VOLUME_FULL], diagnosis: [answerMemory] });
+    await m.ready;
+    await m.reread();
+    assert.equal(m.area.querySelector('[data-part="alerts"]'), null, 'no alerts card is drawn: there is no body');
+    assert.deepEqual(m.diagnosisReads(), []);
+    assert.equal(panels(m.area).length, 0);
   });
 
   test('#566/AC-5 a screen with no saturation alert reads no diagnosis and draws no panel', async () => {

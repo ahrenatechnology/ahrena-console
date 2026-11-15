@@ -763,7 +763,9 @@ export async function mount(area, ctx) {
     const connection = condition.row ?? null;
     docker.refresh();
     const dockerNode = docker.node();
-    diagnosis.sync(data.alerts);
+    // The panels live in the body: with no body (a remote with no reading that is not connected) there is no read, and the entries stay as they were.
+    const drawsBody = Boolean(data.reading) || local || remoteCondition(machine) === null;
+    if (drawsBody) diagnosis.sync(data.alerts);
     const diagnosisParts = {
       view: diagnosis.view,
       toggle: diagnosis.toggle,
@@ -774,7 +776,7 @@ export async function mount(area, ctx) {
       remote: !local,
       label: machine?.label ?? id,
     };
-    const body = data.reading || local || remoteCondition(machine) === null ? machineBody(shownData, { local, filter, setFilter, now, ownPort, release: condition.faded ? null : release, terminals, connection, docker: dockerNode, diagnosis: diagnosisParts, retry: () => draw() }) : [];
+    const body = drawsBody ? machineBody(shownData, { local, filter, setFilter, now, ownPort, release: condition.faded ? null : release, terminals, connection, docker: dockerNode, diagnosis: diagnosisParts, retry: () => draw() }) : [];
     // Without a body (a remote that is not connected and has no reading) the cards that read by themselves stay.
     const bands = body.length ? body : [connection, dockerNode].filter(Boolean);
     // The last reading fades (offline) or sits behind a question (a dialog); the connection and Docker cards, which act, never do.
