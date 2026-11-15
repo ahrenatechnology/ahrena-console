@@ -1,7 +1,7 @@
 // The `permission_requests` table (#618, layer 3). One row per request, with every field of the aggregate and the
-// `tool_use_id` a PreToolUse of the same call linked to it. There is no column for the tool input: the aggregate never holds
+// `tool_use_id` a PreToolUse of the same call linked to it. There is no column for the tool input: the aggregate never holds (#618)
 // it (#618/AC-7). No foreign key to `sessions`: the hook may register before the core has read the session.
-// The lists below repeat the model's (`REQUEST_STATES`, `DECISIONS`, `CHANNELS`, `SETTLERS`); a test keeps them equal.
+// The lists below repeat the model's (`REQUEST_STATES`, `DECISIONS`, `CHANNELS`, `SETTLERS`); a test keeps them equal. (#618)
 export const PERMISSION_REQUESTS_MIGRATION_DESCRIPTION = 'Permission requests from the sessions (#618)';
 
 export const PERMISSION_REQUESTS_MIGRATION_SQL = `

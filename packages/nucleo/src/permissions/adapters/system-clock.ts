@@ -1,5 +1,5 @@
 // `Clock` on the system's time and timers (#618, layer 3). The timer is not kept alive for the process: a long poll waiting
-// on it never holds the core open.
+// on it never holds the core open. (#618)
 import type { Clock, Timer } from '../ports.ts';
 
 export class SystemClock implements Clock {

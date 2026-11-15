@@ -1,5 +1,5 @@
 // What the permission use cases get at the core's start (#618, layer 3): the SQLite repository on the core's database, the
-// audit file in its data folder, the system clock, an in-process change notifier and random ids.
+// audit file in its data folder, the system clock, an in-process change notifier and random ids. (#618)
 import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import type { PermissionDeps } from '../ports.ts';

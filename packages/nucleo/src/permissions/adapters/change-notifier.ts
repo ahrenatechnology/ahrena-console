@@ -1,5 +1,5 @@
 // `PermissionChangeNotifier` inside the core's process (#618, layer 3): the listeners of one request, called on its next
-// change. Nothing here is persisted; the change feed of the `/ui` reads the rows.
+// change. Nothing here is persisted; the change feed of the `/ui` reads the rows. (#618)
 import type { PermissionChange, PermissionChangeNotifier } from '../ports.ts';
 
 export class InProcessChangeNotifier implements PermissionChangeNotifier {

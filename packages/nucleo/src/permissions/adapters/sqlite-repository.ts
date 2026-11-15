@@ -1,5 +1,5 @@
 // `PermissionRequestRepository` on the core's SQLite (#618, layer 3). `save` is one transaction, and a save that would undo
-// a step another reader already took is refused, so the decision is delivered once even to a reader holding a stale copy
+// a step another reader already took is refused, so the decision is delivered once even to a reader holding a stale copy (#618)
 // (#618/AC-2). The tool input is not here: the aggregate does not hold it (#618/AC-7).
 import type { DatabaseSync } from 'node:sqlite';
 import { immediateTransaction } from '../../adapters/sqlite/immediate-transaction.ts';
@@ -11,10 +11,10 @@ type Row = Record<string, unknown>;
 const COLUMNS = ['id', 'session_id', 'tool_name', 'digest', 'summary', 'summary_truncated', 'cwd', 'permission_mode', 'terminal_only', 'created_at', 'expires_at', 'state', 'decision', 'reason', 'answered_by', 'channel', 'answered_at', 'settled_at', 'settled_by'] as const;
 const OLDEST_FIRST = 'ORDER BY created_at, rowid';
 
-/** The states a request may be saved into from the state the store holds: it only moves forward, once. */
+/** The states a request may be saved into from the state the store holds: it only moves forward, once. (#618) */
 const SETTLED_STATES: readonly RequestState[] = ['delivered', 'expired', 'withdrawn', 'answered_elsewhere', 'core_restarted'];
 
-/** Why a save from `held` into `next` is refused, or `null` when it moves forward (or stays) from an open state. */
+/** Why a save from `held` into `next` is refused, or `null` when it moves forward (or stays) from an open state. (#618) */
 function refusalFor(held: RequestState, next: RequestState): 'already_answered' | 'already_delivered' | 'gone' | null {
   if (held === 'pending' && (next === 'pending' || next === 'answered' || SETTLED_STATES.includes(next))) return null;
   if (held === 'answered' && SETTLED_STATES.includes(next)) return null;
@@ -66,7 +66,7 @@ export class SqlitePermissionRepository implements PermissionRequestRepository {
   }
 
   /**
-   * Inserts the request, or updates the stored one when it moves forward from the state the store holds *now*, read and
+   * Inserts the request, or updates the stored one when it moves forward from the state the store holds *now*, read and (#618)
    * written in one `BEGIN IMMEDIATE` transaction. A copy that would deliver, answer or close what was already delivered,
    * answered or closed throws `PermissionRefusal` (`already_delivered`, `already_answered` or `gone`) and writes nothing.
    */
@@ -80,8 +80,10 @@ export class SqlitePermissionRepository implements PermissionRequestRepository {
       const heldState = held.state as RequestState;
       const refused = refusalFor(heldState, request.state);
       if (refused !== null) throw new PermissionRefusal(refused);
-      const assignments = COLUMNS.filter((c) => c !== 'id').map((c) => `${c} = ?`).join(', ');
-      const changed = this.db.prepare(`UPDATE permission_requests SET ${assignments} WHERE id = ? AND state = ?`).run(...values(request).slice(1), request.id, heldState);
+      // A step into a settled state writes the settling columns only: the copy may be stale and not hold the stored answer (#618/AC-2).
+      const changed = SETTLED_STATES.includes(request.state)
+        ? this.db.prepare('UPDATE permission_requests SET state = ?, settled_at = ?, settled_by = ? WHERE id = ? AND state = ?').run(request.state, request.settledAt, request.settledBy, request.id, heldState)
+        : this.db.prepare(`UPDATE permission_requests SET ${COLUMNS.filter((c) => c !== 'id').map((c) => `${c} = ?`).join(', ')} WHERE id = ? AND state = ?`).run(...values(request).slice(1), request.id, heldState);
       if (changed.changes !== 1) throw new PermissionRefusal('gone');
     });
   }

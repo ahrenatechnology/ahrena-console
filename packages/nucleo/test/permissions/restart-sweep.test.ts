@@ -24,7 +24,7 @@ describe('the sweep on start (#618/AC-3)', () => {
     withdrawn.withdraw(Date.now() + 1);
     for (const r of [pending, answered, delivered, withdrawn]) before.save(r);
 
-    // The core starts again: a new connection, new deps.
+    // The core starts again: a new connection, new deps. (#618)
     const deps = openPermissionDeps(openDatabase(file), dataDir);
     assert.deepEqual(sweepOnStart(deps).sort(), ['answered', 'pending']);
 

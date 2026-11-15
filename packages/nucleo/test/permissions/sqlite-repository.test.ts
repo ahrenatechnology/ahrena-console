@@ -4,7 +4,7 @@ import { describe, test } from 'node:test';
 import { join } from 'node:path';
 import { schemaVersion } from '../../src/adapters/sqlite/migrations.ts';
 import { SqlitePermissionRepository } from '../../src/permissions/adapters/sqlite-repository.ts';
-import { CHANNELS, DECISIONS, PermissionRefusal, PermissionRequest, REQUEST_STATES, SETTLERS } from '../../src/permissions/model.ts';
+import { CHANNELS, DECISIONS, EXPIRY_MS, PermissionRefusal, PermissionRequest, REQUEST_STATES, SETTLERS } from '../../src/permissions/model.ts';
 import { waitForDecision } from '../../src/permissions/wait-for-decision.ts';
 import { answerRequest } from '../../src/permissions/answer-request.ts';
 import { registerRequest } from '../../src/permissions/register-request.ts';
@@ -218,5 +218,42 @@ describe('the single delivery (#618/AC-2)', () => {
     stale.deliver(T0 + 3_000);
     assert.throws(() => b.save(stale), refusedWith('gone'));
     assert.equal(a.find('S1', 'rq-1')?.state, 'answered_elsewhere');
+  });
+
+  // A save that settles a request writes the settling columns only, never the answer a stale copy does not hold (#618/AC-2).
+  const ANSWER_COLUMNS = 'decision, reason, answered_by, channel, answered_at';
+  const settlers: [string, (r: PermissionRequest) => void, string][] = [
+    ['withdrawn', (r) => r.withdraw(T0 + 2_000), 'hook'],
+    ['expired', (r) => r.expire(T0 + EXPIRY_MS), 'expiry'],
+    ['answered_elsewhere', (r) => r.closeElsewhere(T0 + 2_000), 'session_event'],
+    ['core_restarted', (r) => r.closeAfterRestart(T0 + 2_000), 'core_restart'],
+  ];
+  for (const [state, settle, by] of settlers) {
+    test(`#618/AC-2: a stale pending copy closed as ${state} over an answered row keeps the stored answer`, async () => {
+      const { dbA, a, b } = twoConnections();
+      a.save(await openRequest());
+      const first = a.find('S1', 'rq-1')!;
+      const stale = b.find('S1', 'rq-1')!;
+      answerWith(first, 'deny', 'first');
+      a.save(first);
+      const answerColumns = () => dbA.prepare(`SELECT ${ANSWER_COLUMNS} FROM permission_requests WHERE id = ?`).get('rq-1');
+      const before = { ...answerColumns() };
+      assert.equal(before.reason, 'first');
+      settle(stale);
+      b.save(stale);
+      assert.deepEqual({ ...answerColumns() }, before);
+      const row = dbA.prepare('SELECT state, settled_by FROM permission_requests WHERE id = ?').get('rq-1');
+      assert.deepEqual({ ...row }, { state, settled_by: by });
+    });
+  }
+
+  test('#618/AC-2: a stale answered copy delivered over an answered row leaves the answer columns as stored', async () => {
+    const { dbA, a, b } = twoConnections();
+    a.save(answerWith(await openRequest(), 'deny', 'first'));
+    const stale = b.find('S1', 'rq-1')!;
+    stale.deliver(T0 + 3_000);
+    b.save(stale);
+    const row = dbA.prepare(`SELECT state, ${ANSWER_COLUMNS} FROM permission_requests WHERE id = ?`).get('rq-1');
+    assert.deepEqual({ ...row }, { state: 'delivered', decision: 'deny', reason: 'first', answered_by: 'owner', channel: 'ui', answered_at: T0 + 1_000 });
   });
 });
