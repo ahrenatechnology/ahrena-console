@@ -130,10 +130,11 @@ interface Mounted {
 }
 const open: Mounted[] = [];
 const copied: string[] = [];
-const body = () => documentoFalso.body as unknown as ElementoFalso;
+const doc = documentoFalso as typeof documentoFalso & { body: ElementoFalso };
+const body = () => doc.body;
 
 beforeEach(() => {
-  (documentoFalso as unknown as { body: ElementoFalso }).body = new ElementoFalso('body');
+  doc.body = new ElementoFalso('body');
   documentoFalso.activeElement = null;
   copied.length = 0;
   Object.defineProperty(globalThis, 'navigator', { value: { clipboard: { writeText: async (t: string) => void copied.push(t) } }, configurable: true, writable: true });
@@ -242,7 +243,7 @@ describe('"Delegar ao Claude" on a saturation alert (issue 568)', () => {
     const m = mount({ alerts, diagnosis: diagnosisOk, previews: [previewOf(PROMPT_MAC)] });
     await m.ready;
     for (const id of ['swap-high', 'memory-high', 'load-high', 'volume-full:/']) {
-      // Q3: only the most severe alert opens by itself; the button lives in the open panel, so open each one.
+      // Q3: only the most severe alert opens by itself; the button lives in the open panel, so open each one (#566).
       await until(() => alertRow(m.area, id).querySelector('[data-dg-action="toggle"]') !== null);
       const toggle = alertRow(m.area, id).querySelector('[data-dg-action="toggle"]')!;
       if (toggle.getAttribute('aria-expanded') !== 'true') toggle.click();
@@ -317,7 +318,6 @@ describe('"Delegar ao Claude" on a saturation alert (issue 568)', () => {
     (target('terminal') as ElementoFalso).click();
     assert.equal(target('terminal')!.getAttribute('aria-checked'), 'true');
     assert.equal(target('desktop')!.getAttribute('aria-checked'), 'false', 'one target at a time');
-    assert.equal(target('terminal')!.getAttribute('aria-checked'), 'true', 'the open button follows the chosen target');
     assert.equal(m.previewReads().length, 1, 'choosing a target does not read the preview again');
     (action('delegate-open') as ElementoFalso).click();
     await until(() => m.posts.length === 1);
