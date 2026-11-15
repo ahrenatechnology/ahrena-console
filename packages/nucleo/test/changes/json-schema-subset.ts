@@ -6,7 +6,7 @@
  */
 
 type Json = null | boolean | number | string | Json[] | { [k: string]: Json };
-type Schema = { [k: string]: Json };
+export type Schema = { [k: string]: Json };
 
 const KNOWN = new Set(['$schema', '$id', 'title', 'description', 'type', 'const', 'enum', 'required', 'properties', 'additionalProperties', 'pattern', 'minLength', 'format']);
 const DATE_TIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$/;
@@ -20,6 +20,14 @@ function typeOf(value: unknown): string {
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeOf(value) === 'object';
+}
+
+/** Narrows an authored schema file read as unknown: a plain object whose required and properties have the shape the validator reads (#663). */
+export function isSchema(value: unknown): value is Schema {
+  if (!isObject(value)) return false;
+  const { required, properties } = value;
+  const requiredOk = required === undefined || (Array.isArray(required) && required.every((name) => typeof name === 'string'));
+  return requiredOk && (properties === undefined || isObject(properties));
 }
 
 /** Returns the list of violations, empty when `value` satisfies `schema`. */

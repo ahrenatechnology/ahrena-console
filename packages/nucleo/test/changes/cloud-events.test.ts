@@ -10,15 +10,18 @@ import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { describe, test } from 'node:test';
 import { CHANGE_TYPES, ChangeCursor, serveChanges, serveStream, toCloudEvent, type ChangeType, type CloudEvent, type NewChange } from '../../src/changes/index.ts';
-import { validate } from './json-schema-subset.ts';
+import { isSchema, type Schema, validate } from './json-schema-subset.ts';
 
 const EVENTS_DIR = new URL('../../../../docs/contracts/events/', import.meta.url);
 const ENVELOPE_FILE = 'cloudevents-1.0.schema.json';
 const TYPE_SCHEMA_SUFFIX = '.changed.v1.schema.json';
 const OCCURRED_AT = Date.parse('2026-11-14T12:00:00.000Z');
 
-type Schema = Record<string, never>;
-const readSchema = (file: string): Schema => JSON.parse(readFileSync(new URL(file, EVENTS_DIR), 'utf8')) as Schema;
+function readSchema(file: string): Schema {
+  const raw: unknown = JSON.parse(readFileSync(new URL(file, EVENTS_DIR), 'utf8'));
+  if (!isSchema(raw)) throw new Error(`${file} is not a schema object`);
+  return raw;
+}
 const envelopeSchema = (): Schema => readSchema(ENVELOPE_FILE);
 const typeSchemaFile = (type: ChangeType): string => `${type}${TYPE_SCHEMA_SUFFIX}`;
 
