@@ -115,6 +115,7 @@ describe('delegation prompt', () => {
     assert.deepEqual(r.leftOut, []);
     assert.equal(r.size, encodeURIComponent(r.prompt).length);
     assert.equal(r.prompt.includes('ficou de fora'), false);
+    assert.deepEqual(r.alertCut, []);
   });
 
   test('#567/AC-7 size is the encoded length the URL budget measures', () => {
@@ -151,8 +152,58 @@ describe('delegation prompt', () => {
     assert.ok(r.leftOut.some((e) => e.dropped));
   });
 
-  test('#567/AC-7 an oversized alert is still within the budget', () => {
+  test('#567/AC-7 an oversized alert detail keeps a small diagnosis whole and the text names the detail', () => {
+    const r = delegationPrompt({ alert: { ...alert, detail: 'd'.repeat(30_000) }, diagnosis: diagnosis([proc(1)]) });
+    assert.ok(fits(r.prompt), `size ${r.size}`);
+    assert.equal(r.truncated, true);
+    assert.deepEqual(r.alertCut, ['detail']);
+    assert.deepEqual(r.leftOut, []);
+    const data = JSON.parse(block(r.prompt));
+    assert.equal(data.diagnosis.sections.length, 3);
+    assert.equal(data.diagnosis.sections[0].items[0].name, 'proc-1');
+    assert.equal('detail' in data.alert, false);
+    const fixed = r.prompt.slice(0, r.prompt.indexOf(OPEN));
+    assert.match(fixed, /ficou de fora/);
+    assert.match(fixed, /detalhe do alerta \(omitido/);
+  });
+
+  test('#567/AC-7 without a diagnosis an oversized detail is named too', () => {
     const r = delegationPrompt({ alert: { ...alert, detail: 'd'.repeat(30_000) }, diagnosis: null });
     assert.ok(fits(r.prompt), `size ${r.size}`);
+    assert.equal(r.truncated, true);
+    assert.deepEqual(r.alertCut, ['detail']);
+    assert.match(r.prompt.slice(0, r.prompt.indexOf(OPEN)), /detalhe do alerta \(omitido/);
+    assert.equal(JSON.parse(block(r.prompt)).diagnosis, null);
+  });
+
+  test('#567/AC-7 an oversized message is cut to 500 characters, named, and the prompt still fits', () => {
+    const r = delegationPrompt({ alert: { ...alert, message: 'm'.repeat(40_000), detail: 'd'.repeat(30_000) }, diagnosis: diagnosis([proc(1)]) });
+    assert.ok(r.size <= URL_BUDGET, `size ${r.size}`);
+    assert.equal(r.size, encodeURIComponent(r.prompt).length);
+    assert.deepEqual(r.alertCut, ['detail', 'message']);
+    assert.equal(JSON.parse(block(r.prompt)).alert.message.length, 500);
+    assert.match(r.prompt.slice(0, r.prompt.indexOf(OPEN)), /mensagem do alerta \(cortada em 500 caracteres\)/);
+  });
+
+  test('#567/AC-7 an oversized message with no detail and no diagnosis fits and names only the message', () => {
+    const r = delegationPrompt({ alert: { ...alert, message: 'm'.repeat(40_000) }, diagnosis: null });
+    assert.ok(r.size <= URL_BUDGET, `size ${r.size}`);
+    assert.deepEqual(r.alertCut, ['message']);
+    assert.equal(r.prompt.includes('detalhe do alerta'), false);
+  });
+
+  test('#567/AC-7 when fewer items and the omitted detail are not enough, sections are dropped and the detail stays named', () => {
+    const huge = Array.from({ length: 10 }, (_, i) => proc(i, 'n'.repeat(5000)));
+    const r = delegationPrompt({ alert: { ...alert, detail: 'd'.repeat(2_000) }, diagnosis: diagnosis(huge) });
+    assert.ok(fits(r.prompt), `size ${r.size}`);
+    assert.ok(r.alertCut.includes('detail'));
+    assert.ok(r.leftOut.some((e) => e.dropped));
+  });
+
+  test('#567/AC-7 a summary that needs no alert cut reports none', () => {
+    const big = Array.from({ length: 10 }, (_, i) => proc(i, `${'n'.repeat(900)}-${i}`));
+    const r = delegationPrompt({ alert, diagnosis: diagnosis(big) });
+    assert.deepEqual(r.alertCut, []);
+    assert.equal(JSON.parse(block(r.prompt)).alert.detail, null);
   });
 });
