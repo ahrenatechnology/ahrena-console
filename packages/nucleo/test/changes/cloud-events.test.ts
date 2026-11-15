@@ -49,8 +49,15 @@ const REMOTE_NEEDS_YOU: NewChange = { type: 'needs-you', key: 'mac2:s9', session
 
 const newCursor = (): ChangeCursor => new ChangeCursor({ generation: 'g1', batchMs: 0, minIntervalMs: 0, wallClock: () => OCCURRED_AT });
 
+const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null;
+/** An event is a CloudEvent when it passes the authored envelope schema (#663). */
+const isCloudEvent = (value: unknown): value is CloudEvent => validate(envelopeSchema(), value).length === 0;
+const hasEvents = (value: unknown): value is { events: unknown[] } => isRecord(value) && Array.isArray(value.events);
+const hasChangesAndEvents = (value: unknown): value is { changes: unknown[]; events: unknown[] } => hasEvents(value) && isRecord(value) && Array.isArray(value.changes);
+
 function validateEvent(event: unknown, type: ChangeType): string[] {
-  return [...validate(envelopeSchema(), event), ...validate(readSchema(typeSchemaFile(type)), (event as CloudEvent).data, '$.data')];
+  const data: unknown = isRecord(event) ? event.data : undefined;
+  return [...validate(envelopeSchema(), event), ...validate(readSchema(typeSchemaFile(type)), data, '$.data')];
 }
 
 describe('#663/AC-1 the event contracts', () => {
@@ -105,7 +112,7 @@ async function withServer(handler: Parameters<typeof createServer>[1], run: (bas
 }
 
 /** Reads the data of the first `changes` SSE message (#663). */
-async function firstChangesMessage(res: Response): Promise<{ id: string | null; data: { events: unknown[] } }> {
+async function firstChangesMessage(res: Response): Promise<{ id: string | null; data: unknown }> {
   const reader = res.body!.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
@@ -117,7 +124,7 @@ async function firstChangesMessage(res: Response): Promise<{ id: string | null; 
       if (!block.includes('event: changes')) continue;
       const line = (prefix: string) => block.split('\n').find((l) => l.startsWith(prefix))?.slice(prefix.length) ?? null;
       void reader.cancel();
-      return { id: line('id: '), data: JSON.parse(line('data: ')!) as { events: unknown[] } };
+      return { id: line('id: '), data: JSON.parse(line('data: ')!) };
     }
   }
 }
@@ -128,12 +135,14 @@ describe('#663/AC-1 delivery on the HTTP routes', () => {
     const start = await cursor.wait(null);
     const recorded = CHANGE_TYPES.map((t) => cursor.record(SAMPLES[t]));
     await withServer((req, res) => void serveChanges(res, new URL(req.url!, 'http://x'), cursor), async (base) => {
-      const body = (await (await fetch(`${base}/api/changes?since=${start.cursor}&wait=0`)).json()) as { changes: unknown[]; events: CloudEvent[] };
+      const body: unknown = await (await fetch(`${base}/api/changes?since=${start.cursor}&wait=0`)).json();
+      assert.ok(hasChangesAndEvents(body));
       assert.deepEqual(body.changes, recorded);
       assert.equal(body.events.length, recorded.length);
       body.events.forEach((event, i) => {
         const change = recorded[i]!;
         assert.deepEqual(validateEvent(event, change.type), [], change.type);
+        assert.ok(isCloudEvent(event));
         assert.equal(event.id, `g1.${change.seq}`);
         assert.equal(event.subject, change.key);
         assert.equal(event.time, '2026-11-14T12:00:00.000Z');
@@ -147,13 +156,16 @@ describe('#663/AC-1 delivery on the HTTP routes', () => {
     const recorded = CHANGE_TYPES.map((t) => cursor.record(SAMPLES[t]));
     await withServer((req, res) => void serveStream(req, res, new URL(req.url!, 'http://x'), cursor), async (base) => {
       const message = await firstChangesMessage(await fetch(`${base}/api/stream?since=${start.cursor}`));
-      assert.equal(message.data.events.length, recorded.length);
-      message.data.events.forEach((event, i) => {
+      const data = message.data;
+      assert.ok(hasEvents(data));
+      assert.equal(data.events.length, recorded.length);
+      data.events.forEach((event, i) => {
         const change = recorded[i]!;
         assert.deepEqual(validateEvent(event, change.type), [], change.type);
-        assert.equal((event as CloudEvent).id, `g1.${change.seq}`);
-        assert.equal((event as CloudEvent).subject, change.key);
-        assert.equal((event as CloudEvent).time, '2026-11-14T12:00:00.000Z');
+        assert.ok(isCloudEvent(event));
+        assert.equal(event.id, `g1.${change.seq}`);
+        assert.equal(event.subject, change.key);
+        assert.equal(event.time, '2026-11-14T12:00:00.000Z');
       });
       assert.equal(message.id, cursor.current);
     });
