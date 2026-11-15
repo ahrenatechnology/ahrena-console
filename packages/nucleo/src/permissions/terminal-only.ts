@@ -1,7 +1,7 @@
 // The calls the Console never allows, only the person at the terminal (decision 0025, "Por tipo de chamada", #618/AC-6).
 // The Console can still deny them, which is the safe side; pure: no disk, no socket, no clock (#618).
 // The check is by text, a floor and not the defence (`$HOME/.ahr*` slips past it): the defence is the window credential (#619).
-// The floor over-matches in doubt, and #654 widened it: any command substitution, any unquoted glob, any `xargs`, `patch`, `unzip` and bulk copy is terminal-only (decision 0025 amendment, "na dúvida, só Desktop").
+// The floor over-matches in doubt, and #654 widened it: any command substitution, any unquoted glob, any `xargs`, `patch`, `unzip` and bulk copy is terminal-only (decision 0025 amendment, "when in doubt, Desktop only").
 // The data folders of the other instances in the instance registry are added to the citing check by a later layer (#618).
 
 import { exceedsDepth } from './digest.ts';
@@ -112,12 +112,20 @@ function gitRegistersOrApplies(afterGit: string[]): boolean {
   return false;
 }
 
-/** `git checkout` and `git restore` that bring files without naming them: a `.` pathspec, `--source`, `-s` or `FETCH_HEAD` (#654/AC-11). */
+/** A git pathspec that names many files or none: `.`, `./`, magic that starts with `:`, or a glob git expands itself, quoted or not (#654/AC-11). */
+const isBulkPathspec = (t: string): boolean => t === '.' || t === './' || t.startsWith(':') || /[*?[]/.test(t);
+
+/** `git checkout` and `git restore` that bring files without naming them: a bulk pathspec, `--source`, `-s` (also glued: `-sHEAD~1`), `FETCH_HEAD`, or a tree-ish before `--` (`git checkout origin/main -- src`). Over-matches `git checkout -b x -- y`, by design (#654/AC-11, decision 0025 amendment). */
 function gitBringsFilesInBulk(afterGit: string[]): boolean {
   let restoring = false;
+  let namedBeforeSeparator = false;
   for (const t of afterGit) {
     if (t === 'checkout' || t === 'restore') restoring = true;
-    else if (restoring && (t === '.' || t === '-s' || t.startsWith('--source') || t === 'fetch_head')) return true;
+    else if (restoring) {
+      if (isBulkPathspec(t) || t.startsWith('-s') || t.startsWith('--source') || t === 'fetch_head') return true;
+      if (t === '--' && namedBeforeSeparator) return true;
+      if (!t.startsWith('-')) namedBeforeSeparator = true;
+    }
   }
   return false;
 }
@@ -187,7 +195,7 @@ const CONFIG_WORDS = new Set(['c', 'config', 'conf']);
 /** Tools whose config command rewrites a file that runs or authenticates later: the word to find after the tool, anywhere in the segment (#618/AC-11). */
 const TOOL_CONFIG_WORDS: ReadonlyMap<string, ReadonlySet<string>> = new Map([
   ['claude', new Set(['mcp', 'config', 'plugin', 'plugins'])],
-  ['gh', new Set(['alias', 'config', 'auth', 'extension'])],
+  ['gh', new Set(['alias', 'config', 'auth', 'extension', 'extensions', 'ext'])],
   ['aws', new Set(['configure', 'update-kubeconfig'])],
   ['docker', new Set(['login', 'context'])],
   ['kubectl', new Set(['config'])],
@@ -222,24 +230,22 @@ function changesToolConfig(form: string): boolean {
 const SCHEDULER_PATTERNS: RegExp[] = [
   new RegExp(`${A}(?:launchctl|systemctl|systemd-run)${END}`),
   /login\s*items?|com\.apple\.loginitems|loginwindow/,
-  new RegExp(`${A}git_(?:config[a-z0-9_]*|dir|ssh_command|external_diff|exec_path|pager|editor|sequence_editor|askpass|ssh|proxy_command|work_tree|template_dir)=`),
+  new RegExp(`${A}git_(?:config[a-z0-9_]*|dir|ssh_command|external_diff|exec_path|pager|editor|sequence_editor|askpass|ssh|proxy_command|work_tree|template_dir)\\+?=`),
 ];
-/** `at` and `batch` count only in command position (first word of a segment, after env assignments and the wrappers `env`, `nohup`, `time`, `command`, `exec`, `xargs` with their flags), never as a word of prose (#618/AC-11, #654/AC-1). */
+/** `at` and `batch` count in command position (first word of a segment, after env assignments), and, once that word is a wrapper or a shell keyword, in any later word of the segment: a wrapper flag may take a separate value (`env -u FOO at now`), so the word cannot be told. Over-matches `env echo look at the logs`, by design; `echo look at the logs` stays false (#618/AC-11, #654/AC-1, decision 0025 amendment). */
 const LEADING_NOISE = /^[\s({]+/;
 const ENV_ASSIGNMENT = /^[a-z_][a-z0-9_]*=/;
-const COMMAND_WRAPPERS = new Set(['env', 'nohup', 'time', 'command', 'exec', 'xargs']);
+const COMMAND_WRAPPERS = new Set(['env', 'nohup', 'time', 'command', 'exec', 'xargs', 'nice', 'timeout', 'stdbuf', 'ionice', 'caffeinate', 'if', 'then', 'else', 'elif', 'do', 'while', 'until', '!']);
 /** A new command position opens at a separator, after `$(` and after a backtick (#654/AC-1). */
 const COMMAND_POSITION_SPLIT = /[|;&\n]+|\$\(|`/;
-/** Linear: strip the leading noise once, then one pass over the words: skip `name=value`, a wrapper and the flags after it; compare the base name of the first remaining word (no overlapping quantifiers; #618/INP-9). */
+const isScheduler = (word: string): boolean => baseName(word) === 'at' || baseName(word) === 'batch';
+/** Linear: strip the leading noise once, then one pass over the words: skip `name=value`, then the first remaining word is the command; a wrapper or keyword makes every later word count (#618/INP-9). */
 function startsWithAt(segment: string): boolean {
-  let afterWrapper = false;
-  for (const word of segment.replace(LEADING_NOISE, '').split(/\s+/)) {
-    if (ENV_ASSIGNMENT.test(word) || (afterWrapper && word.startsWith('-'))) continue;
-    const name = baseName(word);
-    if (COMMAND_WRAPPERS.has(name)) afterWrapper = true;
-    else return name === 'at' || name === 'batch';
-  }
-  return false;
+  const words = segment.replace(LEADING_NOISE, '').split(/\s+/);
+  const first = words.findIndex((word) => !ENV_ASSIGNMENT.test(word));
+  if (first < 0) return false;
+  if (COMMAND_WRAPPERS.has(baseName(words[first] ?? ''))) return words.slice(first + 1).some(isScheduler);
+  return isScheduler(words[first] ?? '');
 }
 
 /** The git global options that point git at another repository, work tree or program directory: terminal-only in both spellings, `=v` and a separate value (#654/AC-2). */
@@ -365,11 +371,20 @@ function joinsExpansionWithSlash(command: string): boolean {
   return shellWords(command).some(({ plain }) => plain.includes('$') && plain.includes('/'));
 }
 
+/** `print` with a flag that holds `P` (`-P`, `-rP`, `-r -P`) in any later word of its segment: zsh expands the prompt escapes of the text. One pass per segment, from the first `print` word (#654/AC-6). */
+function printsWithPromptExpansion(command: string): boolean {
+  return command.split(/[|;&\n]+/).some((segment) => {
+    const tokens = tokensOf(segment);
+    const print = tokens.findIndex((t) => baseName(t) === 'print');
+    return print >= 0 && tokens.slice(print + 1).some((t) => /^-[A-Za-z]*P/.test(t));
+  });
+}
+
 function commandIsTerminalOnly(rawCommand: string): boolean {
   // `$'\x2e…'` spells any character by code, so no text scan can read it: any ANSI-C quote is terminal-only (#618/AC-11).
   if (rawCommand.includes("$'")) return true;
-  // Any command substitution (`$(…)` or a backtick) hides what runs, and a backslash before a digit, `x`, `u` or `U`, `print -P` and `%b` spell a character by code: all over-match by design (#654/AC-6, AC-11).
-  if (rawCommand.includes('$(') || rawCommand.includes('`') || /\\[0-9xuU]/.test(rawCommand) || rawCommand.includes('%b') || /\bprint\s+-[A-Za-z]*P/.test(rawCommand)) return true;
+  // Any command substitution (`$(…)` or a backtick) hides what runs, and a backslash before a digit, `x`, `u` or `U`, `print -P` and `%b` (with any width or flag) spell a character by code: all over-match by design (#654/AC-6, AC-11).
+  if (rawCommand.includes('$(') || rawCommand.includes('`') || /\\[0-9xuU]/.test(rawCommand) || /%[-+ #0-9.*]*b/.test(rawCommand) || printsWithPromptExpansion(rawCommand)) return true;
   if (spellings(rawCommand).some((form) => gitInjectsConfig(form) || namesAutoRunDirectory(form) || movesToExpandedDirectory(form)) || expandsPathByGlob(rawCommand) || joinsExpansionWithSlash(rawCommand)) return true;
   // Command names are compared whatever the case, as the macOS disk is: `Git push`, `RM -rf` (#618/AC-11).
   const forms = spellings(rawCommand.toLowerCase());

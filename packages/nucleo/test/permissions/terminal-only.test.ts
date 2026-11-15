@@ -627,7 +627,7 @@ describe('Janus findings, round 2: git globals, tool config, split paths, escape
   });
 });
 
-describe('the floor over-matches the #654 items (decision 0025 amendment, "na dÃºvida, sÃ³ Desktop")', () => {
+describe('the floor over-matches the #654 items (decision 0025 amendment, Desktop only when in doubt)', () => {
   const allTrue = (cases: string[]) => {
     for (const c of cases) assert.equal(bash(c), true, c);
   };
@@ -640,6 +640,11 @@ describe('the floor over-matches the #654 items (decision 0025 amendment, "na dÃ
     allFalse(['echo look at the logs']);
   });
 
+  test('#654/AC-1: a wrapper flag with a separate value, a wrapper outside the list and a keyword before at or batch are terminal-only', () => {
+    allTrue(['env -u FOO at now', 'exec -a n at now', 'nice at now', 'timeout 5 at now', 'stdbuf -o0 at now', 'ionice -c3 batch', 'caffeinate at now', 'if at now; then :; fi', '! at now', 'while at now; do :; done', 'until at now; do :; done', 'true && then at now', 'env echo look at the logs']);
+    allFalse(['echo look at the logs', 'echo batch', 'ls at']);
+  });
+
   test('#654/AC-2: git --git-dir, --work-tree and --exec-path are terminal-only in both spellings', () => {
     allTrue(['git --git-dir=/tmp/d log', 'git --git-dir /tmp/d log', 'git --exec-path=/tmp/x status', 'git --exec-path /tmp/x status', 'git --work-tree=/tmp/w status', 'git --work-tree /tmp/w status']);
     allFalse(['git status', 'git -C x status']);
@@ -647,7 +652,7 @@ describe('the floor over-matches the #654 items (decision 0025 amendment, "na dÃ
 
   test('#654/AC-3: assigning a git variable that runs a chosen command is terminal-only', () => {
     for (const v of ['GIT_PAGER', 'GIT_EDITOR', 'GIT_SEQUENCE_EDITOR', 'GIT_ASKPASS', 'GIT_SSH', 'GIT_PROXY_COMMAND', 'GIT_WORK_TREE']) {
-      allTrue([`${v}=/tmp/x git log`, `export ${v}=/tmp/x`, `env ${v}=x true`]);
+      allTrue([`${v}=/tmp/x git log`, `export ${v}=/tmp/x`, `env ${v}=x true`, `${v}+=/tmp/x git log`, `export ${v}+=/tmp/x`, `env ${v}+=x true`]);
     }
   });
 
@@ -664,16 +669,18 @@ describe('the floor over-matches the #654 items (decision 0025 amendment, "na dÃ
 
   test('#654/AC-6: a backslash before a digit, x, u or U, print -P and %b are terminal-only', () => {
     allTrue(["tee $(printf '\\056claude/x')", "echo -e '\\x2eclaude'", 'echo -e "\\u002eclaude"', 'echo -e "\\U0000002eclaude"', 'print -P "%F"', 'print -rP x', 'printf %b x']);
+    allTrue(["printf '%5b' \"$a$b\"", "printf '%-b' x", 'printf %.9b x', 'printf "%#0*b" 3 x', "print -r -P '%F'", 'print -r -P x', 'print -n -P x', 'echo a; print -n -r -P x']);
+    allFalse(['print -r x', 'print -n x', 'echo -P x', 'printf "%d" 5', 'printf %s b']);
     allFalse(['echo a\\ b', 'git \\\n status']);
   });
 
   test('#654/AC-7: tool config words that plant commands or credentials are terminal-only, plain reads are not', () => {
-    allTrue(['claude plugin add x', 'claude plugins list', 'gh auth login', 'gh extension install x', 'aws eks update-kubeconfig --name c', 'docker login', 'docker context use x', 'gcloud container clusters get-credentials c', 'echo kubeconfig', 'az aks get-credentials -n c']);
+    allTrue(['claude plugin add x', 'claude plugins list', 'gh auth login', 'gh extension install x', 'gh ext install x', 'gh extensions install x', 'aws eks update-kubeconfig --name c', 'docker login', 'docker context use x', 'gcloud container clusters get-credentials c', 'echo kubeconfig', 'az aks get-credentials -n c']);
     allFalse(['gh pr list', 'kubectl get pods', 'aws s3 ls', 'docker ps', 'claude --version']);
   });
 
   test('#654/AC-8: assigning GIT_TEMPLATE_DIR is terminal-only', () => {
-    allTrue(['GIT_TEMPLATE_DIR=/tmp/t git init', 'export GIT_TEMPLATE_DIR=/tmp/t', 'env GIT_TEMPLATE_DIR=/tmp/t git clone u']);
+    allTrue(['GIT_TEMPLATE_DIR=/tmp/t git init', 'export GIT_TEMPLATE_DIR=/tmp/t', 'env GIT_TEMPLATE_DIR=/tmp/t git clone u', 'GIT_TEMPLATE_DIR+=/tmp/t git init', 'export GIT_TEMPLATE_DIR+=/tmp/t']);
   });
 
   test('#654/AC-9: git apply, am, remote add, lfs install, maintenance start and patch are terminal-only', () => {
@@ -694,17 +701,29 @@ describe('the floor over-matches the #654 items (decision 0025 amendment, "na dÃ
     allTrue(['cp -r /tmp/r/. .', 'cp -R a b', 'cp -a a b', 'cp --recursive a b', 'cp --archive a b', 'cp -pr a b', 'rsync -av a b', 'rsync -r a b', 'rsync --archive a b', 'ditto a b', 'ditto -x a b']);
     allTrue(['git checkout .', 'git restore .', 'git checkout FETCH_HEAD -- .', 'git checkout -- .', 'git restore --source=HEAD~1 x', 'git restore --source HEAD~1 x', 'git checkout FETCH_HEAD -- x', 'git -C x checkout .']);
     allTrue(['tar xf a.tar', 'tar xzf a.tgz', 'tar -xf a.tar', 'tar -xzf a.tgz', 'tar --extract -f a.tar', 'tar --get -f a.tar', 'unzip a.zip', '/usr/bin/unzip -o a.zip']);
+    allTrue(['git restore -sHEAD~1 x', 'git checkout -sHEAD~1 x', 'git checkout ./', 'git restore ./', 'git checkout :/', "git restore ':(top)'", "git checkout -- ':/x'", "git checkout -- '*.json'", "git restore '?x'", "git restore '[ab]'", 'git checkout origin/main -- src', 'git checkout evil -- x', 'git restore x -- y']);
+    allFalse(['git checkout main', 'git checkout -b x', 'git restore x', 'git checkout -- x']);
     allFalse(['cp a b', 'rsync a b', 'git checkout main', 'git restore x', 'tar cf a.tar x', 'tar -tvf a.tar', 'tar -czf a.tgz x', 'zip a.zip x']);
   });
 
-  test('#654: each new scan finishes well under two seconds on 64 KiB', () => {
-    const units = ['env ', '$(at ', '\\x', 'find -exec ', 'xargs ', 'cp -r ', 'tar x', 'git --git-dir ', '.claude/', 'cd $', '=.git/', 'git checkout ', 'git remote ', 'print -', 'nohup env time ', 'a{', 'git_pager=', 'unzip ', 'patch '];
+  test('#654: each new scan is linear on 64 KiB', () => {
+    // The ratio method of the rm probe (#691): the best of three runs, and the full size under 3x the half size plus 50 ms.
+    const units = ['env ', '$(at ', '\\x', 'find -exec ', 'xargs ', 'cp -r ', 'tar x', 'git --git-dir ', '.claude/', 'cd $', '=.git/', 'git checkout ', 'git remote ', 'print -', 'nohup env time ', 'a{', 'git_pager=', 'unzip ', 'patch ', 'git_pager+=', '%5b', 'print -r ', 'git checkout x -- '];
+    const best = (unit: string, size: number): number => {
+      const command = unit.repeat(Math.floor(size / unit.length));
+      let min = Infinity;
+      for (let run = 0; run < 3; run++) {
+        const start = performance.now();
+        bash(command);
+        bash(`echo x | ${command}`);
+        min = Math.min(min, performance.now() - start);
+      }
+      return min;
+    };
     for (const unit of units) {
-      const command = unit.repeat(Math.floor(65536 / unit.length));
-      const started = Date.now();
-      bash(command);
-      bash(`echo x | ${command}`);
-      assert.ok(Date.now() - started < 2000, `${unit} took ${Date.now() - started} ms`);
+      const half = best(unit, 32_768);
+      const full = best(unit, 65_536);
+      assert.ok(full < half * 3 + 50, `${unit}: ${full.toFixed(0)} ms at 64 KiB against ${half.toFixed(0)} ms at 32 KiB`);
     }
   });
 });
