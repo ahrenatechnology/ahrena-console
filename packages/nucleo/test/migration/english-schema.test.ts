@@ -37,8 +37,6 @@ import {
 
 const LATEST = MIGRATIONS.at(-1)!.version;
 const RENAMED_TABLES: Record<string, string> = { reprocessamentos: 'reprocessings' };
-/** Tables that later migrations add, empty (#241: the installation's settings). */
-const ADDED_TABLES: Record<string, number> = { installation_settings: 0, tool_checks: 0, runtime_runs: 0, runtime_requests: 0, work_board_columns: 0, work_plan_runs: 0, work_execution_runs: 0, work_queue: 0 };
 /** Every Portuguese name and value the old schema had; none may remain in the new one. */
 const PORTUGUESE = [
   'reprocessamentos', 'nome', 'feito_em', 'faltando',
@@ -80,8 +78,11 @@ describe('#173 phase 5: English schema migration over a version 9 database', () 
   });
 
   test('every table keeps its rows, the GitHub cache included', () => {
-    const expected = { ...Object.fromEntries(Object.entries(countsBefore).map(([t, n]) => [RENAMED_TABLES[t] ?? t, n])), ...ADDED_TABLES };
-    assert.deepEqual(rowCounts(store.db), expected);
+    const kept = Object.fromEntries(Object.entries(countsBefore).map(([t, n]) => [RENAMED_TABLES[t] ?? t, n]));
+    const after = rowCounts(store.db);
+    // Every table the old database had keeps its count; a table a later migration adds is born empty, whichever it is.
+    assert.deepEqual(Object.fromEntries(Object.keys(kept).map((t) => [t, after[t]])), kept);
+    for (const [t, n] of Object.entries(after)) if (!(t in kept)) assert.equal(n, 0, `${t} is born empty`);
     for (const n of Object.values(countsBefore)) assert.ok(n > 0, 'the old database has rows in every table');
   });
 

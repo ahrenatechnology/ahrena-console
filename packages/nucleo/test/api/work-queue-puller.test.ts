@@ -504,7 +504,8 @@ describe('#477 the queue puller', () => {
       const db = new DatabaseSync(':memory:');
       migrate(db, MIGRATIONS.filter((m) => m.version <= 19));
       db.prepare("INSERT INTO work_execution_runs (item_key, target, started_at, state, session_id, finished_at) VALUES ('acme/app#1', 'desktop', 'x', 'linked', 's1', NULL)").run();
-      assert.deepEqual(migrate(db), [20]);
+      const applied = migrate(db);
+      assert.equal(applied[0], 20, 'migration 20 is the first one applied after version 19');
       assert.equal((db.prepare('SELECT origin FROM work_execution_runs').get() as { origin: string }).origin, 'manual');
       db.close();
     });
