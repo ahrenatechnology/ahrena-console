@@ -4,10 +4,12 @@
 // created the socketpair is the installed app: the cdhash of the running peer, from its audit token, equals the cdhash of the file
 // at the constant path, read on disk. It writes nothing to stdout or stderr. (#619)
 
+use std::ffi::{OsStr, OsString};
 use std::path::Path;
 
 /// The one place the installed app is looked for. Never taken from an argument, an environment variable, a file or the peer (#619).
-pub const INSTALLED_APP: &str = "/Applications/Ahrena Console.app/Contents/MacOS/ahrena-console-desktop";
+pub const INSTALLED_APP: &str =
+    "/Applications/Ahrena Console.app/Contents/MacOS/ahrena-console-desktop";
 
 /// The only argument the helper mode answers to (#619).
 pub const HELPER_ARG: &str = "--verify-window-peer";
@@ -32,8 +34,8 @@ impl Verdict {
 }
 
 /// Whether `args` (the whole argv) ask for the helper mode: exactly the executable and the one argument (#619).
-pub fn is_helper_invocation(args: &[String]) -> bool {
-    matches!(args, [_, arg] if arg == HELPER_ARG)
+pub fn is_helper_invocation(args: &[OsString]) -> bool {
+    matches!(args, [_, arg] if arg.as_os_str() == OsStr::new(HELPER_ARG))
 }
 
 /// The decision, apart from the system calls: a verdict needs both cdhashes; an unreadable side is `Unavailable`, never `Mismatch` (#619).
@@ -54,7 +56,10 @@ pub fn decide(running: Option<&[u8]>, installed: Option<&[u8]>) -> Verdict {
 pub fn check_peer(fd: i32, app: &Path) -> Verdict {
     #[cfg(target_os = "macos")]
     {
-        decide(security::running_peer_cdhash(fd).as_deref(), security::installed_cdhash(app).as_deref())
+        decide(
+            security::running_peer_cdhash(fd).as_deref(),
+            security::installed_cdhash(app).as_deref(),
+        )
     }
     #[cfg(not(target_os = "macos"))]
     {
@@ -92,9 +97,18 @@ mod security {
     extern "C" {
         static kSecGuestAttributeAudit: CFStringRef;
         static kSecCodeInfoUnique: CFStringRef;
-        fn SecCodeCopyGuestWithAttributes(host: SecRef, attributes: CFDictionaryRef, flags: u32, guest: *mut SecRef) -> OsStatus;
+        fn SecCodeCopyGuestWithAttributes(
+            host: SecRef,
+            attributes: CFDictionaryRef,
+            flags: u32,
+            guest: *mut SecRef,
+        ) -> OsStatus;
         fn SecCodeCheckValidity(code: SecRef, flags: u32, requirement: SecRef) -> OsStatus;
-        fn SecCodeCopySigningInformation(code: SecRef, flags: u32, information: *mut CFDictionaryRef) -> OsStatus;
+        fn SecCodeCopySigningInformation(
+            code: SecRef,
+            flags: u32,
+            information: *mut CFDictionaryRef,
+        ) -> OsStatus;
         fn SecStaticCodeCreateWithPath(path: CFURLRef, flags: u32, code: *mut SecRef) -> OsStatus;
     }
 
@@ -115,7 +129,15 @@ mod security {
         let mut len = libc::socklen_t::try_from(AUDIT_TOKEN_LEN).ok()?;
         // SAFETY: `token` is a writable buffer of exactly `len` bytes and both outlive the call; getsockopt writes at most `len`
         // bytes and reports the written length through `len`; a bad `fd` makes it fail with -1, never touch memory.
-        let status = unsafe { libc::getsockopt(fd, libc::SOL_LOCAL, libc::LOCAL_PEERTOKEN, token.as_mut_ptr().cast(), &mut len) };
+        let status = unsafe {
+            libc::getsockopt(
+                fd,
+                libc::SOL_LOCAL,
+                libc::LOCAL_PEERTOKEN,
+                token.as_mut_ptr().cast(),
+                &mut len,
+            )
+        };
         (status == 0 && usize::try_from(len).ok()? == AUDIT_TOKEN_LEN).then_some(token)
     }
 
@@ -126,7 +148,14 @@ mod security {
         let attributes = CFDictionary::from_CFType_pairs(&[(key, CFData::from_buffer(token))]);
         let mut guest: SecRef = std::ptr::null();
         // SAFETY: a null host asks the system; `attributes` is a live CFDictionary for the call; `guest` is a valid out pointer.
-        let status = unsafe { SecCodeCopyGuestWithAttributes(std::ptr::null(), attributes.as_concrete_TypeRef(), 0, &mut guest) };
+        let status = unsafe {
+            SecCodeCopyGuestWithAttributes(
+                std::ptr::null(),
+                attributes.as_concrete_TypeRef(),
+                0,
+                &mut guest,
+            )
+        };
         if status != 0 || guest.is_null() {
             return None;
         }
@@ -139,12 +168,14 @@ mod security {
     fn cdhash(code: &Code) -> Option<Vec<u8>> {
         let mut info: CFDictionaryRef = std::ptr::null();
         // SAFETY: `code.0` is a live SecCode or SecStaticCode (the one CF type serves both); `info` is a valid out pointer.
-        let status = unsafe { SecCodeCopySigningInformation(code.0, SIGNING_INFORMATION, &mut info) };
+        let status =
+            unsafe { SecCodeCopySigningInformation(code.0, SIGNING_INFORMATION, &mut info) };
         if status != 0 || info.is_null() {
             return None;
         }
         // SAFETY: the Copy call returned `info` with a +1 count, which the wrapper takes over and releases.
-        let info: CFDictionary<CFString, CFType> = unsafe { CFDictionary::wrap_under_create_rule(info) };
+        let info: CFDictionary<CFString, CFType> =
+            unsafe { CFDictionary::wrap_under_create_rule(info) };
         // SAFETY: the extern static is a constant CFString; it is read, never written, and never released.
         let key = unsafe { CFString::wrap_under_get_rule(kSecCodeInfoUnique) };
         let value = info.find(&key)?;
@@ -161,7 +192,8 @@ mod security {
         let url = CFURL::from_path(path, false)?;
         let mut code: SecRef = std::ptr::null();
         // SAFETY: `url` is a live CFURL for the call; `code` is a valid out pointer.
-        let status = unsafe { SecStaticCodeCreateWithPath(url.as_concrete_TypeRef(), 0, &mut code) };
+        let status =
+            unsafe { SecStaticCodeCreateWithPath(url.as_concrete_TypeRef(), 0, &mut code) };
         if status != 0 || code.is_null() {
             return None;
         }
@@ -178,8 +210,8 @@ pub fn run_helper() -> i32 {
 mod tests {
     use super::*;
 
-    fn args(list: &[&str]) -> Vec<String> {
-        list.iter().map(|s| (*s).to_owned()).collect()
+    fn args(list: &[&str]) -> Vec<OsString> {
+        list.iter().map(OsString::from).collect()
     }
 
     #[test]
@@ -189,7 +221,10 @@ mod tests {
 
     #[test]
     fn different_cdhashes_mismatch() {
-        assert_eq!(decide(Some(&[1, 2, 3]), Some(&[1, 2, 4])), Verdict::Mismatch);
+        assert_eq!(
+            decide(Some(&[1, 2, 3]), Some(&[1, 2, 4])),
+            Verdict::Mismatch
+        );
     }
 
     #[test]
@@ -213,11 +248,33 @@ mod tests {
 
     #[test]
     fn only_the_exact_argv_is_the_helper_mode() {
-        assert!(is_helper_invocation(&args(&["app", "--verify-window-peer"])));
+        assert!(is_helper_invocation(&args(&[
+            "app",
+            "--verify-window-peer"
+        ])));
         assert!(!is_helper_invocation(&args(&["app"])));
-        assert!(!is_helper_invocation(&args(&["app", "--verify-window-peer", "x"])));
-        assert!(!is_helper_invocation(&args(&["app", "--verify-window-peer=1"])));
-        assert!(!is_helper_invocation(&args(&["app", "x", "--verify-window-peer"])));
+        assert!(!is_helper_invocation(&args(&[
+            "app",
+            "--verify-window-peer",
+            "x"
+        ])));
+        assert!(!is_helper_invocation(&args(&[
+            "app",
+            "--verify-window-peer=1"
+        ])));
+        assert!(!is_helper_invocation(&args(&[
+            "app",
+            "x",
+            "--verify-window-peer"
+        ])));
+    }
+
+    #[test]
+    fn a_non_utf8_argument_is_not_the_helper_mode_and_does_not_panic() {
+        // (#619)
+        use std::os::unix::ffi::OsStringExt;
+        let argv = [OsString::from("app"), OsString::from_vec(vec![0xff])];
+        assert!(!is_helper_invocation(&argv));
     }
 
     #[cfg(target_os = "macos")]
@@ -237,13 +294,22 @@ mod tests {
         #[test]
         fn a_peer_that_is_another_binary_mismatches() {
             let (a, _b) = UnixStream::pair().unwrap();
-            assert_eq!(check_peer(a.as_raw_fd(), Path::new("/bin/ls")), Verdict::Mismatch);
+            assert_eq!(
+                check_peer(a.as_raw_fd(), Path::new("/bin/ls")),
+                Verdict::Mismatch
+            );
         }
 
         #[test]
         fn an_absent_app_is_unavailable() {
             let (a, _b) = UnixStream::pair().unwrap();
-            assert_eq!(check_peer(a.as_raw_fd(), Path::new("/nonexistent/Ahrena Console.app/x")), Verdict::Unavailable);
+            assert_eq!(
+                check_peer(
+                    a.as_raw_fd(),
+                    Path::new("/nonexistent/Ahrena Console.app/x")
+                ),
+                Verdict::Unavailable
+            );
         }
 
         #[test]

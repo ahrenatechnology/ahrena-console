@@ -23,7 +23,10 @@ fn run(args: &[&str]) -> std::process::Output {
 fn a_peer_that_is_not_the_installed_app_never_matches_and_the_helper_stays_silent() {
     let output = run(&["--verify-window-peer"]);
     let code = output.status.code();
-    assert!(matches!(code, Some(101) | Some(102)), "unexpected exit {code:?}");
+    assert!(
+        matches!(code, Some(101) | Some(102)),
+        "unexpected exit {code:?}"
+    );
     assert!(output.stdout.is_empty());
     assert!(output.stderr.is_empty());
 }

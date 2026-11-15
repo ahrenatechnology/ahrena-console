@@ -5,7 +5,11 @@
 import type { Readable } from 'node:stream';
 import type { WindowCredentialHolder } from './window-credential.ts';
 
-export type PeerVerdict = 'match' | 'mismatch' | 'unavailable';
+/** Why a peer could not be checked, a closed list: the only thing about the failure that is ever logged, never its text (#619). */
+export type PeerUnavailableReason = 'spawn' | 'timeout' | 'signal' | 'exit' | 'platform';
+
+/** `match` and `mismatch` are the check's answer; `unavailable` is the check not being able to look, with its closed cause (#619). */
+export type PeerVerdict = 'match' | 'mismatch' | { unavailable: PeerUnavailableReason };
 
 /** Whether the process at the other end of the channel's descriptor is the installed app. The native adapter is #619's layer 2. */
 export interface PeerVerifier {
@@ -64,8 +68,8 @@ export function readWindowChannel(deps: WindowChannelDeps): WindowChannel {
     try {
       return await verifier.verify(fd);
     } catch {
-      /* The native failure's text stays out of the log: the verdict is all that is recorded (#619). */
-      return 'unavailable';
+      /* The failure's text stays out of the log: a verifier that throws is a check that could not run, recorded as its closed cause (#619). */
+      return { unavailable: 'spawn' };
     }
   };
 
@@ -81,7 +85,7 @@ export function readWindowChannel(deps: WindowChannelDeps): WindowChannel {
       log('window channel accepted');
       return;
     }
-    log(`window channel refused peer=${verdict}`);
+    log(typeof verdict === 'string' ? `window channel refused peer=${verdict}` : `window channel refused peer=unavailable reason=${verdict.unavailable}`);
     close('refused');
   };
 

@@ -92,7 +92,7 @@ struct CoreLoop(Mutex<Sender<()>>);
 
 fn main() {
     // The helper mode of the window channel's peer check answers before anything else starts: no PATH fix, no app (#619).
-    if window_peer::is_helper_invocation(&std::env::args().collect::<Vec<_>>()) {
+    if window_peer::is_helper_invocation(&std::env::args_os().collect::<Vec<_>>()) {
         std::process::exit(window_peer::run_helper());
     }
     shell_path::fix_path();

@@ -22,7 +22,7 @@ class FakeHelper extends EventEmitter implements HelperProcess {
   }
 }
 
-/** A fake helper that ends the way the test says; records how it was spawned and whether it was killed. */
+/** A fake helper that ends the way the test says; records how it was spawned and whether it was killed. (#619) */
 function fake(end: (p: EventEmitter) => void): { spawn: NativePeerVerifierSpawn; calls: Call[]; killed: () => boolean } {
   const calls: Call[] = [];
   let helper: FakeHelper | null = null;
@@ -54,35 +54,42 @@ test('the helper is the constant path with the one argument, the channel as stdi
   assert.notEqual(f.calls[0]?.shell, true);
 });
 
-test('exit 100 is match, 101 is mismatch, 102 is unavailable', async () => {
-  for (const [code, verdict] of [[100, 'match'], [101, 'mismatch'], [102, 'unavailable']] as const) {
+test('exit 100 is match, 101 is mismatch, 102 is unavailable because the helper could not tell', async () => {
+  for (const [code, verdict] of [[100, 'match'], [101, 'mismatch'], [102, { unavailable: 'exit' }]] as const) {
     const f = fake((p) => p.emit('exit', code, null));
-    assert.equal(await verifier(f.spawn).verify(7), verdict);
+    assert.deepEqual(await verifier(f.spawn).verify(7), verdict);
   }
 });
 
-test('any other exit code (0 of an app without the mode included), a signal and a spawn error are unavailable', async () => {
-  for (const end of [(p: EventEmitter) => p.emit('exit', 0, null), (p: EventEmitter) => p.emit('exit', 3, null), (p: EventEmitter) => p.emit('exit', null, 'SIGKILL'), (p: EventEmitter) => p.emit('error', new Error('ENOENT with /secret/text'))]) {
-    assert.equal(await verifier(fake(end).spawn).verify(7), 'unavailable');
+test('any other exit code (0 of an app without the mode included) is unavailable with the cause exit', async () => {
+  for (const code of [0, 3]) {
+    assert.deepEqual(await verifier(fake((p) => p.emit('exit', code, null)).spawn).verify(7), { unavailable: 'exit' });
   }
 });
 
-test('a spawn that throws is unavailable', async () => {
-  const v = verifier(() => {
-    throw new Error('boom');
+test('a signal is unavailable with the cause signal', async () => {
+  assert.deepEqual(await verifier(fake((p) => p.emit('exit', null, 'SIGKILL')).spawn).verify(7), { unavailable: 'signal' });
+});
+
+test('a spawn error event and a spawn that throws are unavailable with the cause spawn, and no error text is kept (#619)', async () => {
+  assert.deepEqual(await verifier(fake((p) => p.emit('error', new Error('ENOENT with /secret/text'))).spawn).verify(7), { unavailable: 'spawn' });
+  const throwing = verifier(() => {
+    throw new Error('boom /secret/text');
   });
-  assert.equal(await v.verify(7), 'unavailable');
+  const verdict = await throwing.verify(7);
+  assert.deepEqual(verdict, { unavailable: 'spawn' });
+  assert.ok(!JSON.stringify(verdict).includes('secret'));
 });
 
-test('a helper that does not answer in time is killed and unavailable', async () => {
+test('a helper that does not answer in time is killed and unavailable with the cause timeout', async () => {
   const f = fake(() => {});
-  assert.equal(await verifier(f.spawn, { timeoutMs: 20 }).verify(7), 'unavailable');
+  assert.deepEqual(await verifier(f.spawn, { timeoutMs: 20 }).verify(7), { unavailable: 'timeout' });
   assert.equal(f.killed(), true);
 });
 
-test('off macOS nothing is spawned and the answer is unavailable', async () => {
+test('off macOS nothing is spawned and the answer is unavailable with the cause platform', async () => {
   const f = fake((p) => p.emit('exit', 100, null));
-  assert.equal(await verifier(f.spawn, { platform: 'linux' }).verify(7), 'unavailable');
+  assert.deepEqual(await verifier(f.spawn, { platform: 'linux' }).verify(7), { unavailable: 'platform' });
   assert.equal(f.calls.length, 0);
 });
 
@@ -94,5 +101,5 @@ test('the real process spawn: an executable that exits 101 is mismatch, one that
   const fd = openSync('/dev/null', 'r');
   const real = (appPath: string) => new NativePeerVerifier({ appPath, platform: 'darwin', timeoutMs: 5000 });
   assert.equal(await real(script).verify(fd), 'mismatch');
-  assert.equal(await real(join(dir, 'absent')).verify(fd), 'unavailable');
+  assert.deepEqual(await real(join(dir, 'absent')).verify(fd), { unavailable: 'spawn' });
 });
