@@ -19,10 +19,6 @@ export const paleta = {
     "700": "#b28807",
     "900": "#664e04"
   },
-  "green": {
-    "500": "#1baf7a",
-    "700": "#0d7350"
-  },
   "red": {
     "300": "#f06463",
     "500": "#e34948",
@@ -44,7 +40,7 @@ export const paleta = {
 } as const
 
 export const ci = {
-  "success": "#1baf7a",
+  "success": "#d7d7d9",
   "failure": "#e34948",
   "pending": "#ffc30a"
 } as const
@@ -136,16 +132,16 @@ export const status = {
   "completed": {
     "label": "Concluída",
     "glyph": "✓",
-    "color": "#1baf7a",
+    "color": "#d7d7d9",
     "dark": {
-      "dot": "#1baf7a",
-      "text": "#1baf7a",
-      "badge": "#1e2f2e"
+      "dot": "#d7d7d9",
+      "text": "#d7d7d9",
+      "badge": "#34343a"
     },
     "light": {
-      "dot": "#0d7350",
-      "text": "#0d7350",
-      "badge": "#e2f4ed"
+      "dot": "#3a3a44",
+      "text": "#3a3a44",
+      "badge": "#f8f8f9"
     }
   },
   "error": {

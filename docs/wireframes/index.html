@@ -22,8 +22,6 @@
   --yellow-500: #ffc30a;
   --yellow-700: #b28807;
   --yellow-900: #664e04;
-  --green-500: #1baf7a;
-  --green-700: #0d7350;
   --red-300: #f06463;
   --red-500: #e34948;
   --red-700: #b42a2a;
@@ -36,12 +34,12 @@
   --gray-900: #17171b;
   --mono-white: #fdfdfd;
   --mono-black: #0e1016;
-  --ci-success: #1baf7a;
+  --ci-success: #d7d7d9;
   --ci-failure: #e34948;
   --ci-pending: #ffc30a;
   --status-active: #f47720;
   --status-waiting: #ffc30a;
-  --status-completed: #1baf7a;
+  --status-completed: #d7d7d9;
   --status-error: #e34948;
   --status-abandoned: #a6a6aa;
   --badge-alpha: 0.12;
@@ -53,6 +51,13 @@
   --text-lg: 16px;
   --text-xl: 20px;
   --text-xxl: 28px;
+  --space-xxs: 2px;
+  --space-xs: 4px;
+  --space-sm: 6px;
+  --space-md: 8px;
+  --space-lg: 12px;
+  --space-xl: 16px;
+  --space-xxl: 24px;
   --weight-regular: 400;
   --weight-medium: 500;
   --weight-semibold: 600;
@@ -72,9 +77,9 @@
   --status-waiting-dot: #ffc30a;
   --status-waiting-text: #ffc30a;
   --status-waiting-badge: #393221;
-  --status-completed-dot: #1baf7a;
-  --status-completed-text: #1baf7a;
-  --status-completed-badge: #1e2f2e;
+  --status-completed-dot: #d7d7d9;
+  --status-completed-text: #d7d7d9;
+  --status-completed-badge: #34343a;
   --status-error-dot: #e34948;
   --status-error-text: #f06463;
   --status-error-badge: #362328;
@@ -103,9 +108,9 @@
     --status-waiting-dot: #664e04;
     --status-waiting-text: #664e04;
     --status-waiting-badge: #fdf6e0;
-    --status-completed-dot: #0d7350;
-    --status-completed-text: #0d7350;
-    --status-completed-badge: #e2f4ed;
+    --status-completed-dot: #3a3a44;
+    --status-completed-text: #3a3a44;
+    --status-completed-badge: #f8f8f9;
     --status-error-dot: #b42a2a;
     --status-error-text: #b42a2a;
     --status-error-badge: #fae7e7;
@@ -134,9 +139,9 @@
   --status-waiting-dot: #664e04;
   --status-waiting-text: #664e04;
   --status-waiting-badge: #fdf6e0;
-  --status-completed-dot: #0d7350;
-  --status-completed-text: #0d7350;
-  --status-completed-badge: #e2f4ed;
+  --status-completed-dot: #3a3a44;
+  --status-completed-text: #3a3a44;
+  --status-completed-badge: #f8f8f9;
   --status-error-dot: #b42a2a;
   --status-error-text: #b42a2a;
   --status-error-badge: #fae7e7;
@@ -5216,7 +5221,7 @@ const TELAS = [
   { cap: 'painel', titulo: 'Painel lateral', desc: 'O mod do Claude Code, ao lado da conversa, no recorte por sessão da decisão 0004 (issues #35, #36 e #37). Desenhado com os elementos nativos do mod (Box, Text, Button, Select, Svg, Link), na fonte monoespaçada do app, em 38 e 121 colunas.' },
   { id: 'painel-estados', cod: 'P0', nome: 'Os 6 status e os 8 motivos', sub: 'O card "Esta sessão" em cada status, e as mesmas pílulas como aparecem no console. O antigo estado de espera virou dois: Precisa de você (trava, amarelo, chip forte) e Ociosa (sua vez, neutra, chip leve), issue #245.', html: painelEstados,
     n: N(['Os 5 status de sessão e a camada <code>waiting</code> com <code>awaiting_reason</code> (<code>StatusBadge.tsx</code>).', 'O chip do motivo dentro da pílula, como na coluna Status de Sessions ("At prompt").'],
-      ['Cores da paleta do Ahrena: ativa é laranja e concluída é verde (no CCAM, ativa é verde e concluída é violeta).', 'Glifo e rótulo sempre junto da cor, porque o painel nativo pode perder a cor.']) },
+      ['Cores da paleta do Ahrena: ativa é laranja e concluída é cinza com ✓ (no CCAM, ativa é verde e concluída é violeta).', 'Glifo e rótulo sempre junto da cor, porque o painel nativo pode perder a cor.']) },
   { id: 'painel-ativa', cod: 'P1', nome: 'Sessão ativa', sub: 'No meio de um turno, com um subagente, dois processos em background, plano pela metade e PR em rascunho. Duas outras sessões precisam de você.', html: () => painel('ativa'),
     n: N([...NP_BASE, 'Card "Contexto e custo": a statusline do CCAM (contexto com %, ↑ entrada ↓ saída, custo).', 'Card "Plano": o anel do Task Progress.'], [...NP_DIV, 'Barra de contexto laranja até 79% e vermelha a partir de 80%, sem verde nem amarelo, que aqui são status.']) },
   { id: 'painel-esperando', cod: 'P2', nome: 'Esperando uma pergunta', sub: 'O Claude perguntou e parou. A faixa amarela mostra a pergunta inteira; a resposta é na conversa ao lado.', html: () => painel('esperando'),

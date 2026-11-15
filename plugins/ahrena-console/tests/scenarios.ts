@@ -303,7 +303,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
           "account": {
             "id": "00000000-0000-4000-8000-000000000ca1/00000000-0000-4000-8000-000000000cb1",
             "label": "cliente-exemplo",
-            "color": "#1baf7a",
+            "color": "#a6a6aa",
             "source": "config"
           }
         }
@@ -768,7 +768,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
           "account": {
             "id": "00000000-0000-4000-8000-000000000ca1/00000000-0000-4000-8000-000000000cb1",
             "label": "cliente-exemplo",
-            "color": "#1baf7a",
+            "color": "#a6a6aa",
             "source": "config"
           }
         }
@@ -791,7 +791,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
           "account": {
             "id": "00000000-0000-4000-8000-000000000ca1/00000000-0000-4000-8000-000000000cb1",
             "label": "cliente-exemplo",
-            "color": "#1baf7a",
+            "color": "#a6a6aa",
             "source": "config"
           }
         }
@@ -1449,7 +1449,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
           "account": {
             "id": "00000000-0000-4000-8000-000000000ca1/00000000-0000-4000-8000-000000000cb1",
             "label": "cliente-exemplo",
-            "color": "#1baf7a",
+            "color": "#a6a6aa",
             "source": "config"
           }
         }
@@ -1538,7 +1538,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
           "account": {
             "id": "00000000-0000-4000-8000-000000000ca1/00000000-0000-4000-8000-000000000cb1",
             "label": "cliente-exemplo",
-            "color": "#1baf7a",
+            "color": "#a6a6aa",
             "source": "config"
           },
           "n": 1
@@ -1584,7 +1584,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
           "account": {
             "id": "00000000-0000-4000-8000-000000000ca1/00000000-0000-4000-8000-000000000cb1",
             "label": "cliente-exemplo",
-            "color": "#1baf7a",
+            "color": "#a6a6aa",
             "source": "config"
           }
         },
@@ -1605,7 +1605,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
           "account": {
             "id": "00000000-0000-4000-8000-000000000ca1/00000000-0000-4000-8000-000000000cb1",
             "label": "cliente-exemplo",
-            "color": "#1baf7a",
+            "color": "#a6a6aa",
             "source": "config"
           }
         }
@@ -1761,7 +1761,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
           "account": {
             "id": "00000000-0000-4000-8000-000000000ca1/00000000-0000-4000-8000-000000000cb1",
             "label": "cliente-exemplo",
-            "color": "#1baf7a",
+            "color": "#a6a6aa",
             "source": "config"
           },
           "n": 1
@@ -1850,7 +1850,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
           "account": {
             "id": "00000000-0000-4000-8000-000000000ca1/00000000-0000-4000-8000-000000000cb1",
             "label": "cliente-exemplo",
-            "color": "#1baf7a",
+            "color": "#a6a6aa",
             "source": "config"
           }
         },
@@ -2185,7 +2185,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
           "account": {
             "id": "00000000-0000-4000-8000-000000000ca1/00000000-0000-4000-8000-000000000cb1",
             "label": "cliente-exemplo",
-            "color": "#1baf7a",
+            "color": "#a6a6aa",
             "source": "config"
           }
         }
@@ -2787,7 +2787,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
           "account": {
             "id": "00000000-0000-4000-8000-000000000ca1/00000000-0000-4000-8000-000000000cb1",
             "label": "cliente-exemplo",
-            "color": "#1baf7a",
+            "color": "#a6a6aa",
             "source": "config"
           },
           "n": 1
@@ -2812,7 +2812,7 @@ export const SCENARIOS: Record<'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 
           "account": {
             "id": "00000000-0000-4000-8000-000000000ca1/00000000-0000-4000-8000-000000000cb1",
             "label": "cliente-exemplo",
-            "color": "#1baf7a",
+            "color": "#a6a6aa",
             "source": "config"
           }
         }

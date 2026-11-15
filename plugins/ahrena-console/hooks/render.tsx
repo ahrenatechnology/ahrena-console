@@ -71,7 +71,7 @@ export const CARD_W = 34
 export const CARD_H = CARD_BORDER + CARD_LINES
 export const GAP = 2
 /** A versão deste plugin; o teste do núcleo confere com o plugin.json. */
-export const PLUGIN_VERSION = '0.0.38'
+export const PLUGIN_VERSION = '0.0.39'
 const KPI_W = 15
 /** No estreito, quantos cards de decisão cabem antes do rodapé "+N". */
 const DECISIONS_WHEN_NARROW = 3
@@ -80,7 +80,8 @@ const HOW_TO_START = 'https://github.com/ahrenatechnology/ahrena-console/tree/ma
 const ORANGE = paleta.orange['500']
 const ROSE = paleta.rose['500']
 const YELLOW = paleta.yellow['500']
-const GREEN = paleta.green['500']
+// Success is neutral gray with the check glyph, never green (issue 700): the completed status's own color.
+const SUCCESS = STATUS_COR.completed.dark.text
 const RED = paleta.red['500']
 const RED_TEXT = STATUS_COR.error.dark.text
 const GRAY = paleta.gray['200']
@@ -92,7 +93,7 @@ export const BAND_BG = temas.dark.raised
 const BADGE = {
   orange: STATUS_COR.active.dark.badge,
   yellow: STATUS_COR.waiting.dark.badge,
-  green: STATUS_COR.completed.dark.badge,
+  completed: STATUS_COR.completed.dark.badge,
   red: STATUS_COR.error.dark.badge,
   gray: STATUS_COR.abandoned.dark.badge,
 }
@@ -102,7 +103,7 @@ const accountColor = (c: PanelAccount) => (/^#[0-9a-f]{6}$/i.test(c.color) ? c.c
 const STATUS_COLOR = {
   active: { color: STATUS_COR.active.dark.text, background: BADGE.orange, border: ORANGE },
   waiting: { color: STATUS_COR.waiting.dark.text, background: BADGE.yellow, border: YELLOW },
-  completed: { color: STATUS_COR.completed.dark.text, background: BADGE.green, border: GREEN },
+  completed: { color: STATUS_COR.completed.dark.text, background: BADGE.completed, border: SUCCESS },
   error: { color: RED_TEXT, background: BADGE.red, border: RED },
   abandoned: { color: STATUS_COR.abandoned.dark.text, background: BADGE.gray, border: BORDER },
 } as const
@@ -216,7 +217,7 @@ function subagentsSvg(items: PanelSubagent[]) {
   const total = Math.max(1, items.length)
   const parts: [number, string][] = [
     [items.filter((s) => s.status === 'working' || s.status === 'waiting').length, ORANGE],
-    [items.filter((s) => s.status === 'completed').length, GREEN],
+    [items.filter((s) => s.status === 'completed').length, SUCCESS],
     [items.filter((s) => s.status === 'error').length, RED],
   ]
   let x = 0
@@ -441,7 +442,7 @@ function top(c: DrawContext, width: number) {
           {off ? `${c.core} · sem resposta` : c.core}
         </Text>
       </Box>
-      {pill(c, 'connection', off ? '● Offline' : '● Online', off ? RED_TEXT : GREEN, off ? BADGE.red : BADGE.green)}
+      {pill(c, 'connection', off ? '● Offline' : '● Online', off ? RED_TEXT : SUCCESS, off ? BADGE.red : BADGE.completed)}
     </Box>
   )
 }
@@ -958,10 +959,10 @@ function workCard(c: DrawContext, t: PanelWork | null) {
   const pills: RenderElement[] = []
   // Com a contagem: "CI ✓ 6/6", "CI ✕ 2 falhas", "CI … 3/7" (as que terminaram).
   const k = pr.checks
-  if (pr.ci === 'ok') pills.push(pill(c, 'ci', k ? `CI ✓ ${k.ok}/${k.total}` : 'CI ✓', GREEN, BADGE.green))
+  if (pr.ci === 'ok') pills.push(pill(c, 'ci', k ? `CI ✓ ${k.ok}/${k.total}` : 'CI ✓', SUCCESS, BADGE.completed))
   if (pr.ci === 'failed') pills.push(pill(c, 'ci', k?.failed ? `CI ✕ ${k.failed} ${k.failed === 1 ? 'falha' : 'falhas'}` : 'CI ✕ falhou', RED_TEXT, BADGE.red))
   if (pr.ci === 'running') pills.push(pill(c, 'ci', k ? `CI … ${k.total - k.running}/${k.total}` : 'CI … rodando', YELLOW, BADGE.yellow))
-  if (pr.review === 'approved') pills.push(pill(c, 'review', 'aprovado', GREEN, BADGE.green))
+  if (pr.review === 'approved') pills.push(pill(c, 'review', 'aprovado', SUCCESS, BADGE.completed))
   if (pr.review === 'changes-requested') pills.push(pill(c, 'review', 'ajustes pedidos', RED_TEXT, BADGE.red))
   if (pr.review === 'pending') pills.push(pill(c, 'review', 'review pendente', YELLOW, BADGE.yellow, true))
   if (pills.length) body.push(<Box flexDirection="row" gap={1}>{pills}</Box>)
@@ -1003,7 +1004,7 @@ const planDuration = (p: SessionPlan, now: number) => duration((p.end ? Date.par
 /** Uma linha de plano: ✓ concluído, ◐ abandonado (X/Y) ou ● o atual, o resumo e a duração. */
 function planLine(c: DrawContext, p: SessionPlan, detail = false) {
   const { Text } = c.el
-  const mark = p.outcome === 'completed' ? { g: '✓', color: GREEN } : p.outcome === 'abandoned' ? { g: '◐', color: YELLOW } : { g: '●', color: ORANGE }
+  const mark = p.outcome === 'completed' ? { g: '✓', color: SUCCESS } : p.outcome === 'abandoned' ? { g: '◐', color: YELLOW } : { g: '●', color: ORANGE }
   return listLine(
     c,
     `plan-${p.number}`,
@@ -1064,14 +1065,14 @@ function planCard(c: DrawContext, p: Panel['plan'], plans: SessionPlan[]) {
     const current = x.state === 'in_progress'
     return (
       <Text key={`step-${x.id}`} mono size="footnote" wrap="truncate-end" dimColor={!done && !current}>
-        <Text color={done ? GREEN : current ? ORANGE : undefined}>{done ? '✓' : current ? '●' : '○'} </Text>
+        <Text color={done ? SUCCESS : current ? ORANGE : undefined}>{done ? '✓' : current ? '●' : '○'} </Text>
         <Text weight={current ? 'bold' : undefined}>{textWithPrs(c, current ? (x.activeText ?? x.text) : x.text, STEP_IN_CARD)}</Text>
       </Text>
     )
   }
   // Sem os passos (núcleo antigo): o resumo do P1, "✓ N feitas", o atual e o próximo.
   const summary = [
-    <Text key="done" mono size="footnote" color={GREEN} wrap="truncate-end">
+    <Text key="done" mono size="footnote" color={SUCCESS} wrap="truncate-end">
       ✓ {p.done} {p.done === 1 ? 'feita' : 'feitas'}
     </Text>,
     <Text key="current" mono size="footnote" wrap="truncate-end">
@@ -1081,7 +1082,7 @@ function planCard(c: DrawContext, p: Panel['plan'], plans: SessionPlan[]) {
           <Text weight="bold">{p.current}</Text>
         </Text>
       ) : (
-        <Text color={GREEN} weight="semibold">
+        <Text color={SUCCESS} weight="semibold">
           concluído ✓
         </Text>
       )}
@@ -1117,7 +1118,7 @@ const TYPE_MIN = 6
 function subagentLine(c: DrawContext, s: PanelSubagent, full = false) {
   const { Text } = c.el
   const mark =
-    s.status === 'completed' ? { g: '✓', color: GREEN } : s.status === 'error' ? { g: '✕', color: RED_TEXT } : { g: '●', color: ORANGE }
+    s.status === 'completed' ? { g: '✓', color: SUCCESS } : s.status === 'error' ? { g: '✕', color: RED_TEXT } : { g: '●', color: ORANGE }
   const time = s.until ? duration(Date.parse(s.until) - Date.parse(s.since)) : since(s.since, c.now)
   // O que distingue um subagente é a descrição: no card, se ela não couber com pelo menos
   // DESCRIPTION_MIN caracteres, é o tipo que encurta ("general…").
@@ -1177,7 +1178,7 @@ function subagentsFooter(outside: PanelSubagent[]): string {
 
 /**
  * O card Subagentes (pnSubs do P1): "N ativos" à direita do cabeçalho, a barra por estado (ativo
- * laranja, concluído verde, erro vermelho) e até 3 linhas "glifo tipo · descrição … tempo", os
+ * laranja, concluído cinza com ✓, erro vermelho) e até 3 linhas "glifo tipo · descrição … tempo", os
  * concluídos também. O pé abre o grafo da sessão (P11). Nunca só o cabeçalho.
  */
 function subagentsCard(c: DrawContext, s: Panel['subagents']) {
@@ -1406,7 +1407,7 @@ const GRAPH_COLUMNS = {
 /** O que o grafo tem em volta, em linhas: o respiro, o topo, os dois "← voltar", o rótulo, a borda da caixa, a régua, a raiz, o pé e a versão. */
 const AROUND_GRAPH = 2 + 4 + 1 + 1 + 2 + 2 + 2 + 2 + 1 + 5
 
-const SUB_COLOR = (s: PanelSubagent['status']) => (s === 'completed' ? GREEN : s === 'error' ? RED : ORANGE)
+const SUB_COLOR = (s: PanelSubagent['status']) => (s === 'completed' ? SUCCESS : s === 'error' ? RED : ORANGE)
 const SUB_GLYPH = (s: PanelSubagent['status']) => (s === 'completed' ? '✓' : s === 'error' ? '✕' : '●')
 const SUB_STATE = (s: PanelSubagent['status']) => (s === 'completed' ? 'concluído' : s === 'error' ? 'com erro' : 'ativo')
 const SESSION_STATE: Record<ReturnType<typeof statusOf>, string> = { active: 'ativa', waiting: 'precisa', completed: 'concluída', error: 'com erro', abandoned: 'abandonada' }
@@ -1493,7 +1494,7 @@ function waveLine(c: DrawContext, o: Extract<GraphLine, { type: 'wave' }>, wide:
         : { closed: state.closed.filter((n) => n !== o.number), opened: [...state.opened.filter((n) => n !== o.number), o.number] },
     )
   const what = o.types.length === 1 ? `${o.total} ${o.types[0]}` : `${o.total} subagentes`
-  const waveColor = o.count.errors ? RED : o.count.active ? ORANGE : GREEN
+  const waveColor = o.count.errors ? RED : o.count.active ? ORANGE : SUCCESS
   const name = [
     <Button key={`wave-${o.number}`} plain label={`${o.open ? '▾' : '▸'} Onda ${o.number}`} onPress={toggle} />,
     <Text key="summary" mono size="footnote" wrap="truncate-end">
@@ -1918,7 +1919,7 @@ function decisionPill(c: DrawContext, d: PanelDecision) {
   const label = DECISION_STATES[d.state]
   if (d.state === 'to_confirm') return pill(c, 'state', label, YELLOW, BADGE.yellow, true)
   if (d.state === 'superseded') return pill(c, 'state', label, STATUS_COR.abandoned.dark.text, BADGE.gray)
-  return pill(c, 'state', label, GREEN, BADGE.green)
+  return pill(c, 'state', label, SUCCESS, BADGE.completed)
 }
 
 function decisionCard(c: DrawContext, d: PanelDecision) {
@@ -2299,7 +2300,7 @@ function plansScreen(c: DrawContext, p: Panel, g: ReturnType<typeof grid>, narro
   const steps = p.plan?.steps ?? []
   const aroundSteps = steps.length ? 1 + 2 + 1 + steps.length : 0
   const fit = howManyFit(plans.map((x) => (narrow ? 1 : textLines(`● ${x.summary} · ${x.done}/${x.total}${x.current ? ` · ${x.current}` : ''}`, usable))), free(c, 2 + 4 + 1 + 1 + 2 + 3 + 1 + 5 + aroundSteps))
-  const mark = (e: PanelStep['state']) => (e === 'completed' ? { g: '✓', color: GREEN } : e === 'in_progress' ? { g: '●', color: ORANGE } : { g: '○', color: undefined })
+  const mark = (e: PanelStep['state']) => (e === 'completed' ? { g: '✓', color: SUCCESS } : e === 'in_progress' ? { g: '●', color: ORANGE } : { g: '○', color: undefined })
   return [
     steps.length ? (
       <Box key="steps-of-plan" flexDirection="column" width={g.width} borderStyle="round" borderColor={BORDER} backgroundColor={CARD_BG} paddingX={1}>

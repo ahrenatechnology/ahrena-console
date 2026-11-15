@@ -20,8 +20,8 @@ export const SAIDAS = {
 }
 
 // Escalas que o tokens.json guarda só como histórico e marca como "não usar".
-const FORA = new Set(['purple', 'pink'])
-const PALETA = ['orange', 'rose', 'yellow', 'green', 'red', 'gray', 'mono']
+const FORA = new Set(['purple', 'pink', 'green'])
+const PALETA = ['orange', 'rose', 'yellow', 'red', 'gray', 'mono']
 const TEMAS = ['dark', 'light'] as const
 
 type Tokens = Record<string, any>

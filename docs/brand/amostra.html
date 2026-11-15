@@ -21,7 +21,7 @@
     --text: #d7d7d9; --muted: #a6a6aa; --accent: #f47720; --on-accent: #17171b; --accent-text: #f47720;
     --active-dot: #f47720; --active-text: #f47720; --active-badge: #382924;
     --waiting-dot: #ffc30a; --waiting-text: #ffc30a; --waiting-badge: #393221;
-    --completed-dot: #1baf7a; --completed-text: #1baf7a; --completed-badge: #1e2f2e;
+    --completed-dot: #d7d7d9; --completed-text: #d7d7d9; --completed-badge: #34343a;
     --error-dot: #e34948; --error-text: #f06463; --error-badge: #362328;
     --abandoned-dot: #a6a6aa; --abandoned-text: #a6a6aa; --abandoned-badge: #2e2e34;
   }
@@ -30,7 +30,7 @@
     --text: #17171b; --muted: #5a5a63; --accent: #f47720; --on-accent: #17171b; --accent-text: #ab5316;
     --active-dot: #ab5316; --active-text: #ab5316; --active-badge: #fcede2;
     --waiting-dot: #664e04; --waiting-text: #664e04; --waiting-badge: #fdf6e0;
-    --completed-dot: #0d7350; --completed-text: #0d7350; --completed-badge: #e2f4ed;
+    --completed-dot: #3a3a44; --completed-text: #3a3a44; --completed-badge: #f8f8f9;
     --error-dot: #b42a2a; --error-text: #b42a2a; --error-badge: #fae7e7;
     --abandoned-dot: #5a5a63; --abandoned-text: #5a5a63; --abandoned-badge: #f3f3f3;
   }
@@ -169,7 +169,7 @@
       <tbody>
         <tr><td><span class="pill s-active"><span class="g">●</span>Ativa</span></td><td class="why">O Claude está no meio de um turno. Não pede nada, só dá para acompanhar.</td></tr>
         <tr><td><span class="pill s-waiting"><span class="g">◐</span>Esperando você</span></td><td class="why">A vez é sua: permissão, pergunta ou fim de turno. Alimenta o inbox "quem precisa de você".</td></tr>
-        <tr><td><span class="pill s-completed"><span class="g">✓</span>Concluída</span></td><td class="why">Terminou sem erro. Verde como o sucesso do CI.</td></tr>
+        <tr><td><span class="pill s-completed"><span class="g">✓</span>Concluída</span></td><td class="why">Terminou sem erro. Cinza com ✓, como o sucesso do CI, e mais forte que a Abandonada.</td></tr>
         <tr><td><span class="pill s-error"><span class="g">✕</span>Com erro</span></td><td class="why">Parou num erro e não se recuperou. Vermelho como a falha do CI.</td></tr>
         <tr><td><span class="pill s-abandoned"><span class="g">○</span>Abandonada</span></td><td class="why">Ficou ativa sem sinal por 180 min. Não pede ação e não é erro.</td></tr>
       </tbody>

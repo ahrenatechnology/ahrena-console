@@ -97,7 +97,7 @@ const plural = (n, one, many) => `${integer.format(n)} ${n === 1 ? one : many}`;
 
 // The account color arrives as a value; here it only becomes a class when it is one of the brand
 // colors the core gives accounts (profiles/colors.ts). A custom color outside the palette keeps only the label.
-const ACCOUNT_COLORS = { 'an-account-pink': '--rose-500', 'an-account-green': '--green-500', 'an-account-yellow': '--yellow-500', 'an-account-gray': '--gray-200' };
+const ACCOUNT_COLORS = { 'an-account-pink': '--rose-500', 'an-account-yellow': '--yellow-500', 'an-account-gray': '--gray-200' };
 
 export function accountClass(color) {
   if (typeof color !== 'string' || typeof getComputedStyle !== 'function') return null;

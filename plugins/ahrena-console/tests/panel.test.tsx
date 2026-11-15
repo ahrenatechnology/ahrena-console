@@ -1,7 +1,7 @@
 import { expect, mock, test } from 'claude-code/testing'
 
 import type { Panel } from '../types'
-import { paleta } from '../hooks/brand'
+import { paleta, status as brandStatus } from '../hooks/brand'
 import { UNCUT_COLUMNS, modelLine, viewLines, highlightedSteps, sessionPills } from '../hooks/render'
 import { CARD_LINES } from '../hooks/height'
 import { clockTime } from '../hooks/format'
@@ -185,6 +185,22 @@ test('P4: parallel subagents and the child sessions', async ($, on) => {
   await ui.unmount()
 })
 
+test('#700/AC-3: success is neutral gray, never green: the Online pill, CI ok and the approved review', async ($, on) => {
+  const f = await open($, on, { scenario: 'p4' })
+  const p4 = SCENARIOS.p4
+  f.state.panel = { ...p4, work: { ...p4.work!, pr: { ...p4.work!.pr!, ci: 'ok', review: 'approved', checks: { total: 6, ok: 6, failed: 0, running: 0 } } } }
+  await f.timer.advance(15_000)
+  const ui = await $.ui.mount({ plugin: 'ahrena-console', surface: 'desktop', ...high(WIDE, 120) })
+  const gray = brandStatus.completed.dark
+  expect(brandStatus.completed.dark.text).toBe(paleta.gray['100'])
+  for (const text of [/● Online/, /CI ✓/, /aprovado/]) {
+    const pill = await ui.find({ type: 'Text', text })
+    expect(pill?.props.color).toBe(gray.text)
+    expect(pill?.props.backgroundColor).toBe(gray.badge)
+  }
+  await ui.unmount()
+})
+
 test('CI with counts: "CI ✓ 6/6", "CI ✕ 2 falhas", "CI … 3/7"; without the count, as before', async ($, on) => {
   const f = await open($, on, { scenario: 'p4' })
   const p4 = SCENARIOS.p4
@@ -208,7 +224,7 @@ test('CI with counts: "CI ✓ 6/6", "CI ✕ 2 falhas", "CI … 3/7"; without the
 test(`0.0.14: nothing cut and no raw markdown; the org's e-mail never shows`, async ($, on) => {
   const f = await open($, on, { scenario: 'p1' })
   const p1 = SCENARIOS.p1
-  const account = { ...(p1.session!.account ?? { id: 'c', color: '#1baf7a', source: 'config' as const }), label: "pessoa@exemplo.test's Organization" }
+  const account = { ...(p1.session!.account ?? { id: 'c', color: '#a6a6aa', source: 'config' as const }), label: "pessoa@exemplo.test's Organization" }
   f.state.panel = {
     ...p1,
     session: { ...p1.session!, account, state: 'waiting', status: 'waiting', reason: 'stop', activity: { type: 'your-turn', text: '"Fechei o [#131](#local_00000000-0000-4000-8000-000000000001) com **tudo** verde e o `npm test` ok"' } },
@@ -241,7 +257,7 @@ test(`0.0.14: nothing cut and no raw markdown; the org's e-mail never shows`, as
 test('0.0.15: the account name never gets cut next to "ESTA SESSÃO"; when narrow the chip shortens to "5 s" or goes away', async ($, on) => {
   const f = await open($, on, { scenario: 'p1' })
   const p1 = SCENARIOS.p1
-  const withAccount = (label: string): Panel => ({ ...p1, session: { ...p1.session!, account: { id: 'c', label, color: '#1baf7a', source: 'config' } } })
+  const withAccount = (label: string): Panel => ({ ...p1, session: { ...p1.session!, account: { id: 'c', label, color: '#a6a6aa', source: 'config' } } })
   const cases: [string, string | null][] = [['conta pessoal', '5 s'], ['cliente sintético longo!', null]]
   for (const [label, chip] of cases) {
     f.state.panel = withAccount(label)

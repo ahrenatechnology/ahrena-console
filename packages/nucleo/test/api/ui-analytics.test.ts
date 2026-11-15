@@ -255,16 +255,24 @@ describe('Analytics: formatação', () => {
   });
   test('a cor da conta vira classe só quando é uma cor da marca; senão, nenhuma', () => {
     assert.equal(accountClass('#df285d'), null, 'sem getComputedStyle, sem classe');
-    const vars: Record<string, string> = { '--rose-500': ' #df285d', '--green-500': '#1baf7a', '--yellow-500': '#ffc30a', '--gray-200': '#a6a6aa' };
+    const vars: Record<string, string> = { '--rose-500': ' #df285d', '--yellow-500': '#ffc30a', '--gray-200': '#a6a6aa' };
     Object.assign(globalThis, { getComputedStyle: () => ({ getPropertyValue: (k: string) => vars[k] ?? '' }) });
     try {
       assert.equal(accountClass('#DF285D'), 'an-account-pink');
-      assert.equal(accountClass('#1baf7a'), 'an-account-green');
+      assert.equal(accountClass('#ffc30a'), 'an-account-yellow');
+      assert.equal(accountClass('#a6a6aa'), 'an-account-gray');
       assert.equal(accountClass('#123456'), null);
       assert.equal(accountClass(null), null);
     } finally {
       delete (globalThis as { getComputedStyle?: unknown }).getComputedStyle;
     }
+  });
+  test('#700/AC-5: analytics draws accounts only in rose-500, yellow-500 and gray-200: no green class, no green variable', () => {
+    const css = readFileSync(`${UI_FOLDER}analytics.css`, 'utf8');
+    const source = readFileSync(`${UI_FOLDER}screens/analytics.js`, 'utf8');
+    const accountClasses = [...css.matchAll(/^\.(an-account-[a-z]+)\s*\{\s*background:\s*var\((--[a-z0-9-]+)\)/gm)].map((m) => [m[1], m[2]]);
+    assert.deepEqual(accountClasses, [['an-account-pink', '--rose-500'], ['an-account-yellow', '--yellow-500'], ['an-account-gray', '--gray-200']]);
+    assert.doesNotMatch(css + source, /an-account-gre{2}n|--gre{2}n-/);
   });
   test('o nome do arquivo exportado', () => {
     assert.equal(fileName('overview', { until: '2026-10-18' }, 30), 'ahrena-analytics-2026-10-18.json');

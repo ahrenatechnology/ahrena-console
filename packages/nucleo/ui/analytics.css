@@ -34,7 +34,6 @@
 .an-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex: none; }
 .an-dot.an-empty { border: 1px solid var(--muted); }
 .an-account-pink { background: var(--rose-500); }
-.an-account-green { background: var(--green-500); }
 .an-account-yellow { background: var(--yellow-500); }
 .an-account-gray { background: var(--gray-200); }
 

@@ -23,7 +23,7 @@ A paleta parte da do The Forward Deployed Engineer ([brand/tokens.json](brand/to
 | --- | --- | --- | --- |
 | Destaque, ações, barras | laranja | `#f47720` | The Forward Deployed Engineer (fica) |
 | Institucional, réguas, seleção | rosa | `#df285d` | Rosa da marca; substitui o roxo `#552973` desde 2026-10-18 |
-| Sucesso (CI e sessão concluída) | verde | `#1baf7a` | Cor do CI |
+| Sucesso (CI, PR aprovado, sessão e subagente concluídos, "Online") | cinza 100 no escuro, cinza 500 no claro, sempre com `✓` | `#d7d7d9` / `#3a3a44` | Decisão do dono do produto em 2026-11-15 (issue 698): o verde deixa de ser cor de sucesso e fica no `tokens.json` só como histórico. Contraste do texto: 12,4:1 sobre o fundo, 11,5:1 sobre o cartão e 10,2:1 sobre o realce no escuro; 10,2:1, 11,1:1 e 9,8:1 no claro. Mais forte que o cinza da Abandonada nos dois temas |
 | Pendente (CI e sessão esperando) | amarelo | `#ffc30a` | Cor do CI |
 | Erro, falha (CI e sessão com erro) | vermelho | `#e34948` | Cor do CI, reaproveitada (ver abaixo) |
 | Fundo (tema escuro) | cinza 900 | `#17171b` | The Forward Deployed Engineer |
@@ -76,13 +76,13 @@ Os cinco status do Claude Code Agent Monitor (detalhe no benchmark interno, seç
 | --- | --- | --- | --- | --- |
 | `active` | Ativa | `●` | laranja `#f47720` | O Claude está no meio de um turno. Não pede nada, só dá para acompanhar. Laranja porque é onde a ação está, como nas barras de progresso |
 | `waiting` | Esperando você | `◐` | amarelo `#ffc30a` | O turno parou e a vez é sua. É o estado que alimenta o inbox "quem precisa de você". Amarelo como o pendente do CI: algo aguarda alguém |
-| `completed` | Concluída | `✓` | verde `#1baf7a` | Terminou sem erro. Verde como o sucesso do CI |
+| `completed` | Concluída | `✓` | cinza `#d7d7d9` (escuro) / `#3a3a44` (claro) | Terminou sem erro. Cinza com `✓`, como o sucesso do CI, e mais forte que a Abandonada. O verde e o rosa nunca são status |
 | `error` | Com erro | `✕` | vermelho `#e34948` | Parou num erro e não se recuperou. Vermelho como a falha do CI |
 | `abandoned` | Abandonada | `○` | cinza `#a6a6aa` | Ficou ativa sem sinal por 180 min. Não pede ação e não é erro, então sai do caminho em cinza |
 
 O motivo do "Esperando você" aparece num chip ao lado do status: **Pede permissão** (`notification`) e **Interrompida** (`interrupted`) são urgentes; **Sua vez** (`stop`) e **No prompt** (`session_start`) não são.
 
-No tema claro, ponto e rótulo usam um tom mais escuro da mesma cor (laranja 700, amarelo 900, verde 700, vermelho 700 e cinza 300), para passar o contraste. A pílula é a cor canônica a 12% sobre o cartão.
+No tema claro, ponto e rótulo usam um tom mais escuro da mesma cor (laranja 700, amarelo 900, vermelho 700, cinza 300 e, na Concluída, cinza 500), para passar o contraste. A pílula é a cor canônica a 12% sobre o cartão.
 
 ### Tipografia
 
