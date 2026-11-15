@@ -152,7 +152,15 @@ const SCHEDULER_PATTERNS: RegExp[] = [
   new RegExp(`${A}git_(?:config[a-z0-9_]*|dir|ssh_command|external_diff|exec_path)=`),
 ];
 /** `at` and `batch` count only in command position (first word of a segment, after env assignments), never as a word of prose (#618/AC-11). */
-const AT_IN_COMMAND_POSITION = /^[\s({]*(?:[a-z_][a-z0-9_]*=\S*\s+)*(?:\S*\/)?(?:at|batch)(?=\s|$)/;
+const LEADING_NOISE = /^[\s({]+/;
+const ENV_ASSIGNMENT = /^[a-z_][a-z0-9_]*=/;
+/** Linear: strip the leading noise once, skip `name=value` words, compare the base name of the first remaining word (no overlapping quantifiers; #618/INP-9). */
+function startsWithAt(segment: string): boolean {
+  const words = segment.replace(LEADING_NOISE, '').split(/\s+/);
+  const first = words.find((w) => !ENV_ASSIGNMENT.test(w)) ?? '';
+  const name = first.slice(first.lastIndexOf('/') + 1);
+  return name === 'at' || name === 'batch';
+}
 
 const GIT_OPTIONS_WITH_VALUE = new Set(['-C', '--git-dir', '--work-tree', '--namespace', '--exec-path']);
 /** Subcommands where `-c` is no configuration: `commit -c <commit>` reuses a message, `log`, `diff` and `show` take it as combined diff (#618/AC-9). */
@@ -160,9 +168,17 @@ const GIT_SUBCOMMANDS_WITH_PLAIN_C = new Set(['commit', 'log', 'diff', 'show']);
 
 /** A git option that injects configuration or a template, on any token after a `git` word of the segment, not only before the subcommand: `git clone -c k=v`, `git init --template=d`, `-ck=v`. Case matters (`-C` is not `-c`), so it reads the raw spelling. After the subcommand, `-c` is let through only for the subcommands that read it otherwise; any other subcommand, an alias included, over-matches (#618/AC-9, decision 0025 amendment). */
 function gitSegmentInjectsConfig(tokens: string[]): boolean {
+  // Every `git` word restarts the scan, so a second git nested in the segment (`$(git -c k=v status)`) is read with its own subcommand; one pass, each token read once.
+  let active = false;
   let subcommand: string | undefined;
   for (let i = 0; i < tokens.length; i++) {
     const o = tokens[i] ?? '';
+    if (baseName(o).toLowerCase() === 'git') {
+      active = true;
+      subcommand = undefined;
+      continue;
+    }
+    if (!active) continue;
     const plainC = o.startsWith('-c') && !o.startsWith('--');
     if (o.startsWith('--config') || o.startsWith('--template')) return true;
     if (plainC && (subcommand === undefined || !GIT_SUBCOMMANDS_WITH_PLAIN_C.has(subcommand))) return true;
@@ -174,11 +190,7 @@ function gitSegmentInjectsConfig(tokens: string[]): boolean {
 
 function gitInjectsConfig(form: string): boolean {
   // One pass per segment, each token read once: linear in the command (#618/AC-9).
-  return form.split(/[|;&\n]+/).some((segment) => {
-    const tokens = tokensOf(segment);
-    const git = tokens.findIndex((t) => baseName(t).toLowerCase() === 'git');
-    return git >= 0 && gitSegmentInjectsConfig(tokens.slice(git + 1));
-  });
+  return form.split(/[|;&\n]+/).some((segment) => gitSegmentInjectsConfig(tokensOf(segment)));
 }
 
 /** Words of a command as the shell would split them, with each character marked quoted or not: quotes and backslashes are dropped, a quoted or escaped character reads as `q` in `masked`. Redirections and separators split words (#618/AC-11). */
@@ -214,13 +226,31 @@ function shellWords(command: string): Array<{ plain: string; masked: string }> {
   return words;
 }
 
-const UNQUOTED_GLOB = /[*?[]|\{[^}]*(?:,|\.\.)[^}]*\}/;
+/** Linear scan: `*`, `?`, `[`, or a `{` closed by `}` with a `,` or `..` between (#618/INP-9). */
+function hasUnquotedGlob(masked: string): boolean {
+  let open = false;
+  let sep = false;
+  for (let i = 0; i < masked.length; i++) {
+    const c = masked[i];
+    if (c === '*' || c === '?' || c === '[') return true;
+    if (c === '{') {
+      open = true;
+      sep = false;
+    } else if (open && (c === ',' || (c === '.' && masked[i + 1] === '.'))) sep = true;
+    else if (c === '}') {
+      if (open && sep) return true;
+      open = false;
+      sep = false;
+    }
+  }
+  return false;
+}
 const PATH_START = /^[~./]/;
 
 /** An unquoted `*`, `?`, `[` or `{a,b}` in a word that starts with `~`, `.` or `/` (or after an `=`): it could expand to a floor path, so it is terminal-only. Over-matches `./scripts/*.sh` and `/tmp/*.log`; `src/*.ts` stays allowable (#618/AC-11, decision 0025 amendment). */
 function expandsPathByGlob(command: string): boolean {
   return shellWords(command).some(({ plain, masked }) => {
-    if (!UNQUOTED_GLOB.test(masked)) return false;
+    if (!hasUnquotedGlob(masked)) return false;
     const eq = plain.indexOf('=');
     return PATH_START.test(plain) || (eq >= 0 && PATH_START.test(plain.slice(eq + 1)));
   });
@@ -231,7 +261,7 @@ function commandIsTerminalOnly(rawCommand: string): boolean {
   // Command names are compared whatever the case, as the macOS disk is: `Git push`, `RM -rf` (#618/AC-11).
   const forms = spellings(rawCommand.toLowerCase());
   if (forms.some((form) => COMMAND_PATTERNS.some((re) => re.test(form)))) return true;
-  if (forms.some((form) => SCHEDULER_PATTERNS.some((re) => re.test(form)) || form.split(/[|;&\n]+/).some((segment) => AT_IN_COMMAND_POSITION.test(segment)))) return true;
+  if (forms.some((form) => SCHEDULER_PATTERNS.some((re) => re.test(form)) || form.split(/[|;&\n]+/).some(startsWithAt))) return true;
   if (forms.some(downloadsAndRuns) || forms.some(reachesGitIndirectly) || forms.some(mutatesPackageJson) || forms.some(changesToolConfig)) return true;
   return forms.some((form) => form.split(/[|;&\n]+/).some(hasRiskyVerb));
 }

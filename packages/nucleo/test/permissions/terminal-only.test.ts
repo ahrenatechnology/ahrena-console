@@ -504,3 +504,28 @@ describe('Janus findings, round 1: git options anywhere, config commands, more a
     assert.equal(isTerminalOnly('Write', { file_path: '/w/src/notes-*.md', content: 'x' }), false);
   });
 });
+
+describe('review of 35003a8: nested git, and linear scans at 64 KiB (#618/AC-9, INP-9)', () => {
+  test('#618/AC-9: a git nested in the segment is read with its own subcommand', () => {
+    const cases = ['git log -1 $(git -c core.fsmonitor=/tmp/x.sh status)', 'git show `git -c core.fsmonitor=/tmp/x.sh status`', 'git log -1 "$(git -c core.fsmonitor=/tmp/x.sh status)"'];
+    for (const c of cases) assert.equal(bash(c), true, c);
+  });
+
+  test('#618/INP-9: 64 KiB of { or ( or {a finishes well under one second', () => {
+    for (const unit of ['{', '(', '{a', 'echo {a']) {
+      const command = unit.repeat(Math.floor(65536 / unit.length));
+      const started = Date.now();
+      bash(command);
+      assert.ok(Date.now() - started < 500, `${unit} took ${Date.now() - started} ms`);
+    }
+  });
+
+  test('#618/INP-9: at and batch in command position still match, prose does not', () => {
+    for (const c of ['at now + 1 minute', '(at now)', 'FOO=1 /usr/bin/at now', 'batch']) assert.equal(bash(c), true, c);
+    assert.equal(bash('echo at noon'), false);
+  });
+
+  test('#618/AC-11: brace globs in a path-start word stay terminal-only', () => {
+    for (const c of ['cat ~/{a,b}', 'cat ./{1..3}']) assert.equal(bash(c), true, c);
+  });
+});
