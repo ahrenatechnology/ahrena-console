@@ -1,6 +1,6 @@
 import { el, header, icon } from '../dom.js';
 import { empty } from '../states.js';
-import { connectEmptyFor, connectionChanged, GITHUB_NOT_CONNECTED } from '../github-connect.js';
+import { CONNECT_STATE, CONNECT_UI, connectEmptyFor, connectionChanged, GITHUB_NOT_CONNECTED } from '../github-connect.js';
 import {
   FILTER_FIELDS,
   SWITCH_PROJECT_HREF,
@@ -136,6 +136,8 @@ export async function mount(area, ctx) {
   }
 
   const refresh = () => run(startLoad(state, { refresh: true }));
+  // Reconectar on the stale band opens Conexões and starts the device flow (issue 614).
+  const reconnect = () => ctx.navigate(CONNECT_UI, CONNECT_STATE);
   const filterTo = (param, value) => run(setFilter(state, param, value));
 
   async function copyLink(button) {
@@ -201,7 +203,7 @@ export async function mount(area, ctx) {
       const { title } = errorMessage(state.error);
       return retryAction(workBoardError({ title: 'Não deu para reler o quadro.', text: `${title} Mostrando a última leitura.`, retryLabel: 'Tentar agora', onRetry: refresh }));
     }
-    if (state.stale) return staleBand({ fetchedAt: state.data.fetchedAt, now, reason: state.staleReason, retryAt: state.retryAt, busy: state.busy, onRetry: refresh });
+    if (state.stale) return staleBand({ fetchedAt: state.data.fetchedAt, now, reason: state.staleReason, retryAt: state.retryAt, busy: state.busy, onRetry: refresh, onReconnect: reconnect });
     return null;
   }
 

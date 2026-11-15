@@ -12,9 +12,9 @@
  *   used; an unknown mount is unavailable. The request's text never becomes a command argument.
  */
 
-import { join, resolve } from 'node:path';
+import { join, resolve, sep } from 'node:path';
 import type { CollectContext, CollectResult } from '../diagnose.ts';
-import type { CacheActionId, CacheItem, FolderItem, SectionId, WorktreeItem } from '../model.ts';
+import type { CacheActionId, CacheItem, FolderItem, SectionId, WorktreeItem, WorktreesInfo } from '../model.ts';
 import { isRealVolume, parseDfP } from '../../telemetry/adapters/common.ts';
 import type { FileReader } from '../../telemetry/ports.ts';
 import { CATALOG, type CatalogEntry, type CatalogId } from './catalog.ts';
@@ -74,6 +74,26 @@ export const LARGEST_FOLDERS_CONCURRENCY = 4;
 const LARGEST_FOLDERS_OPENED = 3;
 /** A worktree untouched for this long is old. */
 export const OLD_WORKTREE_DAYS = 14;
+
+/**
+ * The longest folder that is a parent of every root searched, cut at a folder boundary, with `home` written as `~` (#566).
+ * `null` when there is no root or the roots share nothing but the filesystem root.
+ */
+export function sharedRoot(roots: readonly string[], home: string): string | null {
+  const [first, ...rest] = roots.map((r) => resolve(r).split(sep));
+  if (!first) return null;
+  let length = first.length;
+  for (const parts of rest) {
+    let i = 0;
+    while (i < length && i < parts.length && parts[i] === first[i]) i++;
+    length = i;
+  }
+  const shared = first.slice(0, length).join(sep);
+  if (shared === '' || shared === sep) return null;
+  const base = resolve(home);
+  if (shared === base) return '~';
+  return shared.startsWith(base + sep) ? `~${shared.slice(base.length)}` : shared;
+}
 /** The most worktrees one diagnosis looks into: each costs a `du`, five `git` runs and an `lstat` per tracked file; at most `LARGEST_FOLDERS_CONCURRENCY` of them are looked into at once. */
 export const MAX_WORKTREES = 20;
 
@@ -225,7 +245,7 @@ export abstract class DiagnosisCollector {
 
   private async knownCaches(signal: AbortSignal): Promise<CollectResult<'known-caches'>> {
     const [caches, worktrees] = await Promise.all([this.caches(signal), this.worktrees(signal)]);
-    return [...caches, ...worktrees];
+    return { items: [...caches, ...worktrees.items], worktrees: { oldAfterDays: OLD_WORKTREE_DAYS, root: sharedRoot(worktrees.roots, this.deps.home) } };
   }
 
   private async caches(signal: AbortSignal): Promise<CacheItem[]> {
@@ -240,7 +260,7 @@ export abstract class DiagnosisCollector {
     return items.filter((i): i is CacheItem => i !== null);
   }
 
-  private async worktrees(signal: AbortSignal): Promise<WorktreeItem[]> {
+  private async worktrees(signal: AbortSignal): Promise<{ items: WorktreeItem[]; roots: string[] }> {
     const { fs, nowMs } = this.deps;
     const limit = nowMs() - OLD_WORKTREE_DAYS * 86_400_000;
     const found: { path: string; modifiedMs: number }[] = [];
@@ -258,7 +278,7 @@ export abstract class DiagnosisCollector {
     }
     const oldest = found.sort((a, b) => a.modifiedMs - b.modifiedMs).slice(0, MAX_WORKTREES);
     const items = await mapLimit(oldest, LARGEST_FOLDERS_CONCURRENCY, ({ path, modifiedMs }) => this.worktree(path, modifiedMs, signal));
-    return items.filter((i): i is WorktreeItem => i !== null);
+    return { items: items.filter((i): i is WorktreeItem => i !== null), roots };
   }
 
   /* The item has a non-null size, so one whose size cannot be read is dropped from the list and logged, never shown as zero (#565). */

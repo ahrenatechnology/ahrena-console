@@ -9,7 +9,7 @@
  */
 
 import type { Alert, HostInfo } from '../telemetry/model.ts';
-import { LIST_CAP, capReason, isDiagnosable, sectionsFor, type Diagnosis, type PartialMarker, type SectionId, type SectionItems, type SectionOf } from './model.ts';
+import { LIST_CAP, capReason, isDiagnosable, sectionsFor, type Diagnosis, type PartialMarker, type SectionId, type SectionItems, type SectionOf, type WorktreesInfo } from './model.ts';
 
 export interface CollectContext {
   /** The mount of the open `volume-full:<mount>` alert; null for the other kinds (#565). */
@@ -18,8 +18,8 @@ export interface CollectContext {
   signal: AbortSignal;
 }
 
-/** Items read whole, items read in part (`partial`), or nothing (`unavailable`) (#565). */
-export type CollectResult<K extends SectionId> = SectionItems[K] | { items: SectionItems[K]; partial: PartialMarker } | { unavailable: true; reason?: string };
+/** Items read whole, items with a `partial` marker and, for `known-caches`, the `worktrees` facts (#566), or nothing (`unavailable`) (#565). */
+export type CollectResult<K extends SectionId> = SectionItems[K] | { items: SectionItems[K]; partial?: PartialMarker; worktrees?: WorktreesInfo } | { unavailable: true; reason?: string };
 export type SectionCollector = <K extends SectionId>(id: K, context: CollectContext) => Promise<CollectResult<K>>;
 
 export interface DiagnoseDeps {
@@ -65,7 +65,10 @@ async function collectSection<K extends SectionId>(id: K, machine: string, conte
     if (result === TIMED_OUT) return { id, status: 'timeout', items: [] };
     if (Array.isArray(result)) return { id, status: 'ok', items: shape(id, result) };
     if ('unavailable' in result) return unavailable(id, result.reason);
-    return { id, status: 'ok', items: shape(id, result.items), partial: { reason: capReason(result.partial.reason) } };
+    const section: SectionOf<K> = { id, status: 'ok', items: shape(id, result.items) } as SectionOf<K>;
+    if (result.partial) section.partial = { reason: capReason(result.partial.reason) };
+    if (result.worktrees) section.worktrees = result.worktrees;
+    return section;
   } catch (err) {
     deps.log(`diagnosis section ${id} failed on ${machine}: ${err}`);
     return unavailable(id, err instanceof Error ? err.message : undefined);
@@ -91,8 +94,11 @@ const SHAPERS: Shapers = {
   'largest-folders': rank((f) => f.bytes),
 };
 
-/** Sorting and the cap live here, not in the collectors: every machine and OS answers the same way (#565). */
-function shape<K extends SectionId>(id: K, items: SectionItems[K]): SectionItems[K] {
+/**
+ * Sorting and the cap live here, not in the collectors: every machine and OS answers the same way (#565).
+ * The route applies it again to a remote núcleo's answer, so a remote list is sorted and capped like a local one.
+ */
+export function shape<K extends SectionId>(id: K, items: SectionItems[K]): SectionItems[K] {
   const by: Shapers[K] = SHAPERS[id];
   return by ? by(items) : items;
 }

@@ -56,6 +56,7 @@ const projectOf = (items: ProjectCard[]): ProjectBoard => ({
   stale: false,
   staleReason: null,
   staleCode: null,
+  resumeAt: null,
 });
 
 class MemoryRuns implements WorkPlanRuns {

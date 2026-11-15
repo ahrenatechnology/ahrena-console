@@ -1,7 +1,11 @@
 // A minimal DOM to mount the /ui screens in node, with no dependency: only what `dom.js`, `states.js`
-// and the screens use (creating nodes, attributes, classes, bubbling events and a `querySelector` of simple
-// selectors: tag, `.class`, `[attribute]`, `[attribute="value"]` and descendant and the child combinator `>` (#610); `stopPropagation` stops the bubbling). Also `closest`,
-// `contains`, `firstChild`, `style.setProperty` (a CSS variable through CSSOM) and a `document.head`.
+// and the screens use (creating nodes, attributes, classes, bubbling events; `stopPropagation` stops the bubbling).
+// `querySelector`, `querySelectorAll` and `closest` take what the browser takes of the selectors the screens use: a
+// comma-separated list; per item the descendant combinator and the child combinator `>` (#610); per compound selector a tag,
+// `*`, `.class`, `#id` and `[attribute]` with `=`, `~=`, `|=`, `^=`, `$=` or `*=` and a double-quoted, single-quoted or
+// unquoted value. Pseudo-classes, pseudo-elements and the sibling combinators are not supported. What the grammar does not
+// accept (an unterminated value, an empty list item, a stray token) throws a SyntaxError, as in the browser. Also `contains`,
+// `firstChild`, `style.setProperty` (a CSS variable through CSSOM) and a `document.head`.
 
 type Ouvinte = (ev: EventoFalso) => void;
 
@@ -76,7 +80,8 @@ export class ElementoFalso extends NoFalso {
     return false;
   }
   closest(seletor: string): ElementoFalso | null {
-    for (let n: ElementoFalso | null = this; n; n = n.parentNode) if (casaSimples(n, seletor.trim())) return n;
+    const list = selectorList(seletor);
+    for (let n: ElementoFalso | null = this; n; n = n.parentNode) if (list.some((parts) => casa(n!, parts, null))) return n;
     return null;
   }
   setAttribute(k: string, v: unknown): void {
@@ -207,34 +212,100 @@ export class ElementoFalso extends NoFalso {
     this.dispatchEvent({ type: 'click' });
   }
   querySelectorAll(seletor: string): ElementoFalso[] {
-    const partes = seletor.trim().split(/\s+/);
-    const achados: ElementoFalso[] = [];
+    const list = selectorList(seletor);
+    const matches: ElementoFalso[] = [];
     const visitar = (no: ElementoFalso) => {
       for (const filho of no.children) {
-        if (casa(filho, partes, this)) achados.push(filho);
+        if (list.some((parts) => casa(filho, parts, this))) matches.push(filho);
         visitar(filho);
       }
     };
     visitar(this);
-    return achados;
+    return matches;
   }
   querySelector(seletor: string): ElementoFalso | null {
     return this.querySelectorAll(seletor)[0] ?? null;
   }
 }
 
-function casaSimples(no: ElementoFalso, simples: string): boolean {
-  const tag = /^[a-z][a-z0-9-]*/i.exec(simples)?.[0];
-  if (tag && no.tagName !== tag.toUpperCase()) return false;
-  for (const [, c] of simples.matchAll(/\.([\w-]+)/g)) if (!no.classList.contains(c!)) return false;
-  for (const [, k, v] of simples.matchAll(/\[([\w-]+)(?:="([^"]*)")?\]/g)) {
+const ATTRIBUTE = String.raw`\[\s*([\w-]+)\s*(?:([~|^$*]?)=\s*(?:"((?:[^"\\]|\\.)*)"|'((?:[^'\\]|\\.)*)'|([^\s\]"'\\]+))\s*)?\]`;
+const COMPOUND = String.raw`(?:\[\s*[\w-]+\s*(?:[~|^$*]?=\s*(?:"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|[^\s\]"'\\]+)\s*)?\]|\\.|[^\s\[\\,>])+`;
+
+/**
+ * A selector list as the browser reads it: one array per comma-separated item, each a sequence of compound selectors
+ * and `>`. A quoted attribute value ends at the first unescaped quote; whatever the grammar does not accept is a SyntaxError. (#566)
+ */
+function selectorList(selector: string): string[][] {
+  const invalid = () => new SyntaxError(`'${selector}' is not a valid selector`);
+  const tokens = [...selector.matchAll(new RegExp(`${COMPOUND}|[,>]`, 'g'))];
+  // Anything between two tokens that is not whitespace is something the grammar does not accept. (#566)
+  let end = 0;
+  for (const t of tokens) {
+    if (selector.slice(end, t.index).trim()) throw invalid();
+    end = t.index + t[0].length;
+  }
+  if (selector.slice(end).trim()) throw invalid();
+  const list: string[][] = [[]];
+  for (const t of tokens) {
+    if (t[0] === ',') list.push([]);
+    else list.at(-1)!.push(t[0]);
+  }
+  for (const parts of list) {
+    const bad = parts.length === 0 || parts[0] === '>' || parts.at(-1) === '>' || parts.some((p, i) => p === '>' && parts[i - 1] === '>');
+    if (bad) throw invalid();
+  }
+  return list;
+}
+
+/** A name or a quoted attribute value with its CSS escapes undone (`\\"` is `"`, `\\\\` is `\`, `\\2f ` is `/`). (#566) */
+function cssUnescape(value: string): string {
+  return value.replace(/\\([0-9a-f]{1,6}) ?|\\(.)/gi, (_, hex?: string, c?: string) => (hex ? String.fromCodePoint(parseInt(hex, 16)) : c!));
+}
+
+/** `CSS.escape` as the CSSOM spec defines it, which Node does not have. (#566) */
+function cssEscape(value: unknown): string {
+  const s = String(value);
+  return Array.from(s, (ch, i) => {
+    const c = ch.codePointAt(0)!;
+    if (c === 0) return '\uFFFD';
+    if ((c >= 1 && c <= 0x1f) || c === 0x7f || (i === 0 && c >= 0x30 && c <= 0x39) || (i === 1 && c >= 0x30 && c <= 0x39 && s[0] === '-')) return `\\${c.toString(16)} `;
+    if (i === 0 && c === 0x2d && s.length === 1) return `\\${ch}`;
+    if (c >= 0x80 || c === 0x2d || c === 0x5f || (c >= 0x30 && c <= 0x39) || (c >= 0x41 && c <= 0x5a) || (c >= 0x61 && c <= 0x7a)) return ch;
+    return `\\${ch}`;
+  }).join('');
+}
+
+function casaSimples(no: ElementoFalso, simple: string): boolean {
+  // The class, id and tag are read outside the `[...]` blocks: an attribute value is not a class or an id. (#566)
+  const bare = simple.replace(new RegExp(ATTRIBUTE, 'g'), '');
+  const tag = /^(?:[a-z][a-z0-9-]*|\*)/i.exec(bare)?.[0];
+  if (tag && tag !== '*' && no.tagName !== tag.toUpperCase()) return false;
+  for (const [, c] of bare.matchAll(/\.((?:[\w-]|\\.)+)/g)) if (!no.classList.contains(cssUnescape(c!))) return false;
+  for (const [, id] of bare.matchAll(/#((?:[\w-]|\\.)+)/g)) if (no.getAttribute('id') !== cssUnescape(id!)) return false;
+  for (const [, k, op, double, single, bareValue] of simple.matchAll(new RegExp(ATTRIBUTE, 'g'))) {
     if (!no.hasAttribute(k!)) return false;
-    if (v !== undefined && no.getAttribute(k!) !== v) return false;
+    const raw = double ?? single ?? bareValue;
+    if (raw === undefined) continue;
+    const expected = cssUnescape(raw);
+    const actual = no.getAttribute(k!)!;
+    if (op === '') {
+      if (actual !== expected) return false;
+    } else if (!expected) {
+      return false; // `^=`, `$=`, `*=` and `~=` with an empty value match nothing (#566)
+    } else if (op === '^') {
+      if (!actual.startsWith(expected)) return false;
+    } else if (op === '$') {
+      if (!actual.endsWith(expected)) return false;
+    } else if (op === '*') {
+      if (!actual.includes(expected)) return false;
+    } else if (op === '~') {
+      if (/\s/.test(expected) || !actual.split(/\s+/).includes(expected)) return false;
+    } else if (actual !== expected && !actual.startsWith(`${expected}-`)) return false;
   }
   return true;
 }
 
-function casa(no: ElementoFalso, partes: string[], raiz: ElementoFalso): boolean {
+function casa(no: ElementoFalso, partes: string[], raiz: ElementoFalso | null): boolean {
   if (!casaSimples(no, partes.at(-1)!)) return false;
   let i = partes.length - 2;
   let p = no.parentNode;
@@ -282,7 +353,7 @@ export const documentoFalso = {
 
 /** Põe o DOM falso no global (`document`, `Node` e `Element`), como o navegador. */
 export function instalarDomFalso(): void {
-  Object.assign(globalThis, { document: documentoFalso, Node: NoFalso, Element: ElementoFalso });
+  Object.assign(globalThis, { document: documentoFalso, Node: NoFalso, Element: ElementoFalso, CSS: { escape: cssEscape } });
 }
 
 /** Todo o texto de um nó, um pedaço por nó de texto, com espaços normalizados. */

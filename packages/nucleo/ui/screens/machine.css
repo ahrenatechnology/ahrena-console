@@ -260,3 +260,59 @@
 .tm-up-progress h2 .icon { animation: tm-rc-turn 1s linear infinite; }
 @media (prefers-reduced-motion: reduce) { .tm-up-progress h2 .icon { animation: none; } }
 .tm-up-path { font-size: 11.5px; padding: 6px 8px; border-radius: 7px; background: var(--bg); border: 1px solid var(--border); word-break: break-all; }
+
+/* ---------- the diagnosis next to a saturation alert (issue 566, wireframe 566-3 to 566-9) ---------- */
+/* The Memória card in warning (Q6): the same drawing as tm-bad, with the warning colours. Only that card takes it (issue 566). */
+.tm-stat.tm-warn { background: color-mix(in srgb, var(--status-waiting-badge) 80%, var(--surface)); border-color: color-mix(in srgb, var(--status-waiting-dot) 40%, var(--border)); }
+.tm-alerts li.tm-dg-open { flex-wrap: wrap; }
+/* While a saturation alert is open the attention band is two lines: O que pede atenção on the whole line, Processos do Claude below (Q2). */
+.tm-band-stack { display: grid; gap: 16px; min-width: 0; }
+.tm-band-stack > * { min-width: 0; }
+.tm-dg-toggle { display: inline-flex; gap: 4px; align-items: center; margin-top: 3px; padding: 0; border: 0; background: none; font: inherit; font-size: 11.5px; color: var(--accent-text); cursor: pointer; }
+.tm-dg-toggle:focus-visible, .tm-dg-link:focus-visible, .tm-dg-more:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+.tm-dg-panel { flex: 1 0 calc(100% - 25px); margin: 6px 0 4px 25px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg); padding: 12px 14px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.tm-dg-head { display: flex; align-items: center; gap: 8px; font-size: 12.5px; flex-wrap: wrap; }
+.tm-dg-head .tm-muted { font-size: 11.5px; }
+.tm-dg-link { margin-left: auto; display: inline-flex; gap: 5px; align-items: center; padding: 0; border: 0; background: none; font: inherit; font-size: 11.5px; color: var(--accent-text); cursor: pointer; }
+.tm-dg-cols { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: start; }
+.tm-dg-cols.tm-dg-one { grid-template-columns: minmax(0, 1fr); max-width: 560px; }
+.tm-dg-sec { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.tm-dg-sec.tm-dg-wide { grid-column: 1 / -1; }
+.tm-dg-sec-head { display: flex; align-items: center; gap: 6px; }
+.tm-dg-sec-tail { margin-left: auto; display: inline-flex; gap: 8px; align-items: center; text-transform: none; letter-spacing: 0; font-weight: var(--weight-regular); }
+.tm-dg-plain { text-transform: none; letter-spacing: 0; font-weight: var(--weight-regular); }
+.tm-dg-tab th, .tm-dg-tab td { padding: 6px 8px; }
+.tm-dg-tab td { font-size: 12px; }
+.tm-dg-tab th:first-child, .tm-dg-tab td:first-child { padding-left: 0; }
+.tm-dg-tab .tm-dg-r { text-align: right; }
+.tm-dg-tab .tm-dg-by { font-weight: var(--weight-semibold); color: var(--text); }
+.tm-dg-tab td.tm-dg-nm { overflow: hidden; text-overflow: ellipsis; }
+.tm-dg-tab small { display: block; color: var(--muted); font-size: 10.5px; font-weight: var(--weight-regular); }
+.tm-dg-more { align-self: flex-start; display: inline-flex; gap: 4px; align-items: center; padding: 0; border: 0; background: none; font: inherit; font-size: 11.5px; color: var(--accent-text); cursor: pointer; }
+.tm-dg-state { display: flex; gap: 8px; align-items: flex-start; font-size: 12px; color: var(--muted); padding: 8px 10px; border-radius: 8px; border: 1px dashed var(--border); }
+.tm-dg-partial { font-size: 11px; }
+/* Loading: a skeleton in the shape of the ready panel; the widths are classes because the screens write no inline style (issue 566). */
+.tm-dg-skel { gap: 10px; padding-top: 4px; }
+.tm-dg-skel i { display: block; height: 10px; border-radius: 99px; background: var(--raised); }
+.tm-dg-skel .tm-dg-w0 { width: 100%; } .tm-dg-skel .tm-dg-w1 { width: 88%; } .tm-dg-skel .tm-dg-w2 { width: 94%; } .tm-dg-skel .tm-dg-w3 { width: 76%; } .tm-dg-skel .tm-dg-w4 { width: 82%; }
+.tm-dg-spin .icon { animation: tm-rc-turn 1s linear infinite; }
+@media (prefers-reduced-motion: reduce) { .tm-dg-spin .icon { animation: none; } }
+/* Failed (red) and calm (grey: the alert closed, an old núcleo). Calm is never red and never has a retry (issue 566). */
+.tm-dg-fail, .tm-dg-calm { flex-direction: row; align-items: flex-start; gap: 12px; }
+.tm-dg-ic { flex: none; font-size: 18px; line-height: 1; display: inline-flex; }
+.tm-dg-fail .tm-dg-ic { color: var(--status-error-text); }
+.tm-dg-calm .tm-dg-ic { color: var(--muted); }
+.tm-dg-old .tm-dg-ic { color: var(--status-waiting-text); }
+.tm-dg-msg { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; font-size: 12.5px; }
+.tm-dg-calm .tm-dg-msg span { color: var(--muted); font-size: 11.5px; }
+.tm-dg-fail .tm-dg-msg span { color: var(--muted); font-size: 11.5px; }
+.tm-dg-code { font-size: 10.5px; }
+.tm-dg-btns { flex: none; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+/* The Resolver block: its header and the probable cause; the groups of the next stories go in the slot (issue 566). */
+.tm-rs { border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--border)); border-radius: 10px; background: var(--surface); padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.tm-rs-head { display: flex; align-items: center; gap: 8px; font-size: 12.5px; }
+.tm-rs-cause { display: flex; gap: 8px; align-items: flex-start; font-size: 12.5px; }
+.tm-rs-cause > .icon { color: var(--status-waiting-text); flex: none; margin-top: 1px; }
+.tm-rs-cause small { display: block; color: var(--muted); font-size: 11px; margin-top: 2px; }
+.tm-rs-actions:empty { display: none; }
+@media (max-width: 760px) { .tm-dg-cols { grid-template-columns: minmax(0, 1fr); } .tm-dg-panel { margin-left: 0; } }

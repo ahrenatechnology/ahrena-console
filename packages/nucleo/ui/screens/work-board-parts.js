@@ -682,19 +682,73 @@ export function githubDownReason(code) {
   return Object.hasOwn(GITHUB_DOWN_REASONS, code) ? GITHUB_DOWN_REASONS[code] : UNKNOWN_GITHUB_DOWN_REASON;
 }
 
-/** The stale band (issue 465, ADR-0001): the board is from `fetchedAt`, why, when the core tries again (`retryAt`, epoch ms, issue 496), and Tentar agora (`onRetry`). */
-export function staleBand({ fetchedAt = null, now = Date.now(), reason = null, retryAt = null, busy = false, subject = 'board', onRetry = null } = {}) {
+const minutesUntil = (at, now) => Math.max(1, Math.round((at - now) / 60_000));
+
+/** The title, tone and icon of the two codes where GitHub did not answer: the only ones that say "GitHub indisponível." (issue 614). */
+const GITHUB_DID_NOT_ANSWER = { tone: 'error', icon: 'cloud-off', title: 'GitHub indisponível.' };
+const waitingOn = (retryAt, now, lead) => (Number.isFinite(retryAt) ? `${lead} ${minutesUntil(retryAt, now)} min.` : '');
+/*
+ * What the stale band says for each reason code the core sends (`staleReason`, issues 495 and 614): tone, icon, title, the
+ * detail sentence after "Mostrando o quadro de …" (`detail(retryAt, now)`) and the one action: `retry`, `reconnect`, or none
+ * while the core already waits (`paused`).
+ */
+const STALE_BANDS = Object.freeze({
+  'rate-limited': {
+    tone: 'warn',
+    icon: 'clock',
+    title: 'O GitHub limitou as chamadas.',
+    // The core does not call GitHub before `retryAt` (the end of the pause): no button while it still runs (issue 614).
+    paused: (retryAt, now) => Number.isFinite(retryAt) && retryAt > now,
+    detail: (retryAt, now) => (Number.isFinite(retryAt) && retryAt > now ? `Volta às ${formatClock(retryAt)} (em ${minutesUntil(retryAt, now)} min).` : 'O limite já passou; relemos na próxima sincronização.'),
+  },
+  'credential-refused': { tone: 'error', icon: 'key-round', title: 'O GitHub recusou a credencial do console.', detail: () => 'O quadro só volta a se atualizar depois de reconectar.', boardOnly: true, action: 'reconnect' },
+  'no-scope': { tone: 'error', icon: 'key-round', title: 'A credencial do GitHub não tem a permissão necessária.', detail: () => 'Reconecte para conceder a permissão do quadro.', boardOnly: true, action: 'reconnect' },
+  'github-unavailable': { ...GITHUB_DID_NOT_ANSWER, detail: (retryAt, now) => `O GitHub não respondeu.${waitingOn(retryAt, now, ' Tentamos de novo em')}`, action: 'retry' },
+  network: { ...GITHUB_DID_NOT_ANSWER, detail: (retryAt, now) => `O GitHub não respondeu.${waitingOn(retryAt, now, ' Tentamos de novo em')}`, action: 'retry' },
+  'github-error': { tone: 'error', icon: 'cloud-off', title: 'O GitHub respondeu com erro.', detail: () => '', action: 'retry' },
+  'sync-pending': {
+    tone: 'neutral',
+    icon: 'history',
+    title: 'O quadro ainda não foi relido.',
+    detail: (retryAt, now) => `A sincronização em segundo plano ainda não passou por ele${Number.isFinite(retryAt) ? `; relemos em ${minutesUntil(retryAt, now)} min` : ''}.`,
+    boardOnly: true,
+    action: 'retry',
+    actionLabel: 'Atualizar agora',
+  },
+});
+/** No code, or a code this build does not know: neutral, no claim about GitHub, and Tentar agora (the raw code never shows; issue 614). */
+const UNKNOWN_STALE_BAND = { tone: 'neutral', icon: 'history', title: 'A leitura está desatualizada.', detail: (retryAt, now) => waitingOn(retryAt, now, 'Tentamos de novo em'), action: 'retry' };
+
+/** The band of a stale read: its own title, tone and action per reason code (`data-stale-code`), same place and shape for the board and the issue panel (issue 614). */
+function staleBandOf(reason) {
+  return typeof reason === 'string' && Object.hasOwn(STALE_BANDS, reason) ? STALE_BANDS[reason] : UNKNOWN_STALE_BAND;
+}
+
+/**
+ * The stale band (issue 465, ADR-0001; per reason in issue 614): the board is from `fetchedAt`, why and what to do.
+ * `retryAt` is epoch ms (the next try, or the end of a rate-limit pause); `onRetry` runs Tentar agora / Atualizar agora and
+ * `onReconnect` runs Reconectar. It is a `role="status"`: a polite, persistent notice, the board below stays usable.
+ */
+export function staleBand({ fetchedAt = null, now = Date.now(), reason = null, retryAt = null, busy = false, subject = 'board', onRetry = null, onReconnect = null } = {}) {
+  const spec = staleBandOf(reason);
   const when = formatClock(fetchedAt);
   const issue = subject === 'issue';
   const from = when ? `Mostrando ${issue ? 'a issue' : 'o quadro'} de ${when} (${formatAgo(fetchedAt, now)}).` : `Mostrando ${issue ? 'a última issue lida' : 'o último quadro lido'}.`;
-  const retry = Number.isFinite(retryAt) ? ` Tentamos de novo em ${Math.max(1, Math.round((retryAt - now) / 60_000))} min.` : '';
-  const why = reason ? ` Motivo: ${githubDownReason(reason)}.` : '';
+  // The issue service reports rate-limited only while the pause runs and sends no `retryAt` (issue 614): without a future
+  // one the panel has no time to give and nothing to retry, so it keeps the title and the lines of the first band.
+  const noPauseTime = issue && reason === 'rate-limited' && !spec.paused(retryAt, now);
+  const action = spec.paused?.(retryAt, now) || noPauseTime ? null : (spec.action ?? 'retry');
+  const detail = noPauseTime || (issue && spec.boardOnly) ? '' : spec.detail(retryAt, now);
+  const text = [from, detail, 'As sessões e a fila continuam ao vivo.'].filter(Boolean).join(' ');
+  let button = null;
+  if (action === 'reconnect') button = el('button', { type: 'button', class: 'btn filled', 'data-action': 'reconnect', onClick: () => onReconnect?.() }, icon('github'), 'Reconectar');
+  else if (action === 'retry') button = el('button', { type: 'button', class: 'btn outline', 'data-action': 'retry', 'aria-busy': busy ? 'true' : null, disabled: busy, onClick: () => onRetry?.() }, icon('refresh'), spec.actionLabel ?? 'Tentar agora');
   return el(
     'div',
-    { class: 'error-band wb-stale-band', role: 'status' },
-    icon('offline'),
-    el('p', {}, el('b', {}, 'GitHub indisponível.'), ` ${from}${retry} As sessões e a fila continuam ao vivo.${why}`),
-    el('button', { type: 'button', class: 'btn outline', 'data-action': 'retry', 'aria-busy': busy ? 'true' : null, disabled: busy, onClick: () => onRetry?.() }, icon('refresh'), 'Tentar agora'),
+    { class: `error-band wb-stale-band wb-stale-${spec.tone}`, role: 'status', 'data-stale-code': typeof reason === 'string' ? reason : null },
+    icon(spec.icon),
+    el('p', {}, el('b', {}, spec.title), ` ${text}`),
+    button,
   );
 }
 

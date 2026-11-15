@@ -99,6 +99,8 @@ const INDEX_STAGE = `100644 1111111111111111111111111111111111111111 0\ta.ts\x00
 const INDEX_DEBUG = 'a.ts\n  ctime: 1700000000:5\n  mtime: 1700000000:7\n  dev: 16777234\tino: 99\n  uid: 501\tgid: 20\n  size: 12\tflags: 0\n';
 const ctx = (mount: string | null = null, signal = new AbortController().signal) => ({ mount, signal });
 const collect = <K extends SectionId>(c: DiagnosisCollector, id: K, mount: string | null = null) => c.collect(id, ctx(mount));
+/** The items of the known-caches section, whose result is the object form that also carries the worktrees facts (#566). */
+const cacheItems = async (c: DiagnosisCollector) => ((await c.collect('known-caches', ctx())) as { items: unknown[] }).items;
 
 describe('diagnosis parsers', () => {
   test('#565/AC-7 the index listing gives path, size and mtime, and any entry it cannot read makes the whole answer unknown', () => {
@@ -393,7 +395,7 @@ describe('known-caches section', () => {
       { [sizeKey(`${HOME}/.npm`)]: ok('2048\t.\n'), [sizeKey(`${HOME}/.cache/pip`)]: ok('1024\t.\n') },
       { dirs: { [`${HOME}/.npm`]: [], [`${HOME}/.cache/pip`]: [] } },
     );
-    const r = await collect(new LinuxDiagnosisCollector(deps), 'known-caches');
+    const r = await cacheItems(new LinuxDiagnosisCollector(deps));
     assert.deepEqual(r, [
       { id: 'npm-cache', path: `${HOME}/.npm`, bytes: 2048 * 1024, actionId: 'npm-cache' },
       { id: 'pip-cache', path: `${HOME}/.cache/pip`, bytes: 1024 * 1024, actionId: 'pip-cache' },
@@ -405,7 +407,7 @@ describe('known-caches section', () => {
     const xcode = `${HOME}/Library/Developer/Xcode/DerivedData`;
     const pip = `${HOME}/Library/Caches/pip`;
     const { deps } = setup({ [sizeKey(xcode)]: ok('10\t.\n'), [sizeKey(pip)]: ok('5\t.\n') }, { dirs: { [xcode]: [], [pip]: [] } });
-    const r = (await collect(new DarwinDiagnosisCollector(deps), 'known-caches')) as { actionId: string | null }[];
+    const r = (await cacheItems(new DarwinDiagnosisCollector(deps))) as { actionId: string | null }[];
     assert.deepEqual(r.map((x) => x.actionId), ['pip-cache', 'xcode-derived-data']);
   });
 
@@ -429,7 +431,7 @@ describe('known-caches section', () => {
         exists: [`${old}/.git`, `${fresh}/.git`, `${dirty}/.git`],
       },
     );
-    const r = await collect(new LinuxDiagnosisCollector(deps), 'known-caches');
+    const r = await cacheItems(new LinuxDiagnosisCollector(deps));
     assert.deepEqual(r, [
       { id: 'worktree', path: old, bytes: 300 * 1024, lastUsedAt: new Date(NOW_MS - 30 * DAY).toISOString(), hasUncommitted: false, hasUnpushed: false, actionId: null },
       { id: 'worktree', path: dirty, bytes: 900 * 1024, lastUsedAt: new Date(NOW_MS - 20 * DAY).toISOString(), hasUncommitted: true, hasUnpushed: true, actionId: null },
@@ -443,28 +445,74 @@ describe('known-caches section', () => {
   test('#565/AC-6 a missing git does not drop the worktree: the unknown state counts as not safe to remove', async () => {
     const old = `${ROOT}/old-one`;
     const { deps } = setup({ [sizeKey(old)]: ok('300\t.\n') }, { dirs: { [ROOT]: ['old-one'], [old]: [] }, mtimes: { [old]: NOW_MS - 30 * DAY }, exists: [`${old}/.git`] });
-    const r = (await collect(new LinuxDiagnosisCollector(deps), 'known-caches')) as { hasUncommitted: boolean; hasUnpushed: boolean }[];
+    const r = (await cacheItems(new LinuxDiagnosisCollector(deps))) as { hasUncommitted: boolean; hasUnpushed: boolean }[];
     assert.deepEqual([r[0].hasUncommitted, r[0].hasUnpushed], [true, true]);
   });
 
   test('#565/AC-9 a folder under worktrees without its own .git is not a worktree and is never run in', async () => {
     const stray = `${ROOT}/stray`;
     const { calls, deps } = setup({ [sizeKey(stray)]: ok('300\t.\n') }, { dirs: { [ROOT]: ['stray'], [stray]: [] }, mtimes: { [stray]: NOW_MS - 30 * DAY } });
-    assert.deepEqual(await collect(new LinuxDiagnosisCollector(deps), 'known-caches'), []);
+    assert.deepEqual(await cacheItems(new LinuxDiagnosisCollector(deps)), []);
     assert.ok(calls.every((x) => x.options.cwd !== stray));
   });
 
   test('#565/AC-3 a cache whose size cannot be read is dropped and logged with its tool and reason', async () => {
     const { deps, logs } = setup({ [sizeKey(`${HOME}/.npm`)]: fail('timeout') }, { dirs: { [`${HOME}/.npm`]: [] } });
-    assert.deepEqual(await collect(new LinuxDiagnosisCollector(deps), 'known-caches'), []);
+    assert.deepEqual(await cacheItems(new LinuxDiagnosisCollector(deps)), []);
     assert.ok(logs.some((l) => l.includes(`${HOME}/.npm`) && l.includes('du') && l.includes('timed out')));
   });
 
   test('#565/AC-9 a worktree whose size cannot be read is dropped and logged with its tool and reason', async () => {
     const old = `${ROOT}/old-one`;
     const { deps, logs } = setup({ [sizeKey(old)]: fail('failed') }, { dirs: { [ROOT]: ['old-one'], [old]: [] }, mtimes: { [old]: NOW_MS - 30 * DAY }, exists: [`${old}/.git`] });
-    assert.deepEqual(await collect(new LinuxDiagnosisCollector(deps), 'known-caches'), []);
+    assert.deepEqual(await cacheItems(new LinuxDiagnosisCollector(deps)), []);
     assert.ok(logs.some((l) => l.includes(old) && l.includes('du') && l.includes('did not answer')));
+  });
+
+  /** The section-level facts of the worktrees, served by the core so the screen draws "more than 14 days, in ~/Workspace" without guessing (#566). */
+  const worktreesFacts = async (roots: string[]) => {
+    const { deps } = setup({});
+    deps.worktreeRoots = async () => roots;
+    const r = (await new LinuxDiagnosisCollector(deps).collect('known-caches', ctx())) as { worktrees?: unknown };
+    return r.worktrees;
+  };
+
+  test('#566 the section carries the age limit in days that makes a worktree old', async () => {
+    assert.deepEqual(await worktreesFacts([]), { oldAfterDays: 14, root: null });
+  });
+
+  test('#566 the root is the longest shared parent of the worktree roots searched, with the home folder written as ~', async () => {
+    const facts = await worktreesFacts([`${HOME}/Workspace/org/repo-a/.claude/worktrees`, `${HOME}/Workspace/org/repo-b/.claude/worktrees`]);
+    assert.deepEqual(facts, { oldAfterDays: 14, root: '~/Workspace/org' });
+    const wider = await worktreesFacts([`${HOME}/Workspace/org/repo-a/.claude/worktrees`, `${HOME}/Workspace/other/repo-b/.claude/worktrees`]);
+    assert.deepEqual(wider, { oldAfterDays: 14, root: '~/Workspace' });
+  });
+
+  test('#566 the root is cut at a folder boundary, never inside a folder name', async () => {
+    const facts = await worktreesFacts([`${HOME}/Workspace/app-a/.claude/worktrees`, `${HOME}/Workspace/app-b/.claude/worktrees`]);
+    assert.deepEqual(facts, { oldAfterDays: 14, root: '~/Workspace' });
+  });
+
+  test('#566 the root is null when the roots share no folder besides the filesystem root', async () => {
+    assert.deepEqual(await worktreesFacts(['/srv/a/.claude/worktrees', '/opt/b/.claude/worktrees']), { oldAfterDays: 14, root: null });
+  });
+
+  test('#566 a root outside the home folder keeps its absolute path, and a home-prefix lookalike is not rewritten', async () => {
+    assert.deepEqual(await worktreesFacts(['/srv/work/a/.claude/worktrees', '/srv/work/b/.claude/worktrees']), { oldAfterDays: 14, root: '/srv/work' });
+    assert.deepEqual(await worktreesFacts([`${HOME}x/a/.claude/worktrees`, `${HOME}x/b/.claude/worktrees`]), { oldAfterDays: 14, root: `${HOME}x` });
+  });
+
+  test('#566 the root is ~ when the roots share exactly the home folder', async () => {
+    assert.deepEqual(await worktreesFacts([`${HOME}/a/.claude/worktrees`, `${HOME}/b/.claude/worktrees`]), { oldAfterDays: 14, root: '~' });
+  });
+
+  test('#566 a rejecting worktreeRoots leaves the section with no root', async () => {
+    const { deps } = setup({});
+    deps.worktreeRoots = async () => {
+      throw new Error('sessions store unreadable');
+    };
+    const r = (await new LinuxDiagnosisCollector(deps).collect('known-caches', ctx())) as { worktrees?: unknown };
+    assert.deepEqual(r.worktrees, { oldAfterDays: 14, root: null });
   });
 
   test('#565/AC-3 the worktree roots come from the repository folders the caller passes', () => {
@@ -547,7 +595,7 @@ describe('what a diagnosis log line may carry', () => {
 
   test('a cache path with a line break does not forge a log line when its size cannot be read', async () => {
     const { deps, logs } = setup({}, { dirs: { '/home/de\nv/.npm': [] } });
-    await collect(new LinuxDiagnosisCollector({ ...deps, home: '/home/de\nv' }), 'known-caches');
+    await cacheItems(new LinuxDiagnosisCollector({ ...deps, home: '/home/de\nv' }));
     assert.ok(logs.some((l) => l.includes('/home/dev/.npm')));
     assert.ok(logs.every((l) => !/[\x00-\x1f\x7f]/.test(l)));
   });
@@ -558,7 +606,7 @@ describe('what a diagnosis log line may carry', () => {
     deps.worktreeRoots = async () => {
       throw new Error('sessions store unreadable');
     };
-    const r = await collect(new LinuxDiagnosisCollector(deps), 'known-caches');
+    const r = await cacheItems(new LinuxDiagnosisCollector(deps));
     assert.deepEqual(r, [{ id: 'npm-cache', path: `${HOME}/.npm`, bytes: 2048 * 1024, actionId: 'npm-cache' }]);
     assert.ok(logs.some((l) => l.includes('diagnosis worktree roots failed') && l.includes('sessions store unreadable')));
   });
@@ -621,7 +669,7 @@ describe('a command that exits non-zero but printed output', () => {
 
   test('#565/AC-3 a cache whose du ran in part is dropped and logged, never shown as an undercount', async () => {
     const { deps, logs } = setup({ [sizeKey(`${HOME}/.npm`)]: incomplete('2048\t.\n') }, { dirs: { [`${HOME}/.npm`]: [] } });
-    assert.deepEqual(await collect(new LinuxDiagnosisCollector(deps), 'known-caches'), []);
+    assert.deepEqual(await cacheItems(new LinuxDiagnosisCollector(deps)), []);
     assert.ok(logs.some((l) => l.includes(`${HOME}/.npm`) && l.includes('du') && l.includes('exited with an error')));
   });
 });
@@ -647,21 +695,21 @@ describe('what git is asked in a worktree', () => {
     const answers = { 'git-index-stat': INDEX_DEBUG, 'git-index-entries': INDEX_STAGE, 'git-head-tree': '100644 blob 1111111111111111111111111111111111111111\ta.ts\x00', 'git-untracked': 'a.ts\n' } as const;
     for (const id of ['git-index-stat', 'git-index-entries', 'git-head-tree', 'git-untracked'] as const) {
       const { deps } = setup({ [sizeKey(old)]: ok('300\t.\n'), ...cleanTree(old), [gitKey(id, old)]: ok(answers[id]), [unpushedKey(old)]: ok('0\n') }, place);
-      const r = (await collect(new LinuxDiagnosisCollector(deps), 'known-caches')) as { hasUncommitted: boolean }[];
+      const r = (await cacheItems(new LinuxDiagnosisCollector(deps))) as { hasUncommitted: boolean }[];
       assert.equal(r[0].hasUncommitted, true, id);
     }
   });
 
   test('#565/AC-9 one of them unavailable keeps the safe default even when the others print nothing, and logs why', async () => {
     const { deps, logs } = setup({ [sizeKey(old)]: ok('300\t.\n'), ...cleanTree(old), [gitKey('git-head-tree', old)]: fail('timeout'), [unpushedKey(old)]: ok('0\n') }, place);
-    const r = (await collect(new LinuxDiagnosisCollector(deps), 'known-caches')) as { hasUncommitted: boolean }[];
+    const r = (await cacheItems(new LinuxDiagnosisCollector(deps))) as { hasUncommitted: boolean }[];
     assert.equal(r[0].hasUncommitted, true);
     assert.ok(logs.some((l) => l.includes('diagnosis worktree git state unknown') && l.includes(old) && l.includes('git timed out')));
   });
 
   test('#565/AC-9 a git state that cannot be read keeps the safe default and says why in the log', async () => {
     const { deps, logs } = setup({ [sizeKey(old)]: ok('300\t.\n'), ...cleanTree(old), [gitKey('git-index-stat', old)]: fail('timeout'), [unpushedKey(old)]: fail('failed') }, place);
-    const r = (await collect(new LinuxDiagnosisCollector(deps), 'known-caches')) as { hasUncommitted: boolean; hasUnpushed: boolean }[];
+    const r = (await cacheItems(new LinuxDiagnosisCollector(deps))) as { hasUncommitted: boolean; hasUnpushed: boolean }[];
     assert.deepEqual([r[0].hasUncommitted, r[0].hasUnpushed], [true, true]);
     assert.ok(logs.some((l) => l.includes('diagnosis worktree git state unknown') && l.includes(old) && l.includes('git timed out')));
     assert.ok(logs.some((l) => l.includes('diagnosis worktree git state unknown') && l.includes(old) && l.includes('git did not answer')));
@@ -669,14 +717,14 @@ describe('what git is asked in a worktree', () => {
 
   test('a git state that is known writes no log line', async () => {
     const { deps, logs } = setup({ [sizeKey(old)]: ok('300\t.\n'), ...cleanTree(old), [unpushedKey(old)]: ok('0\n') }, place);
-    await collect(new LinuxDiagnosisCollector(deps), 'known-caches');
+    await cacheItems(new LinuxDiagnosisCollector(deps));
     assert.deepEqual(logs, []);
   });
 
   test('a worktree path with a line break cannot forge a line through the git state log', async () => {
     const evil = `${ROOT}/ol\nd`;
     const { deps, logs } = setup({ [sizeKey(evil)]: ok('300\t.\n') }, { dirs: { [ROOT]: ['ol\nd'], [evil]: [] }, mtimes: { [evil]: NOW_MS - 30 * DAY }, exists: [`${evil}/.git`] });
-    await collect(new LinuxDiagnosisCollector(deps), 'known-caches');
+    await cacheItems(new LinuxDiagnosisCollector(deps));
     assert.ok(logs.some((l) => l.includes('git state unknown')));
     assert.ok(logs.every((l) => !/[\x00-\x1f\x7f]/.test(l)));
   });
@@ -717,7 +765,7 @@ describe('uncommitted work read from real git repositories', () => {
     };
     const collect = async () => {
       await utimes(dir, OLD, OLD);
-      return (await new LinuxDiagnosisCollector(deps).collect('known-caches', ctx())) as { hasUncommitted: boolean }[];
+      return (await cacheItems(new LinuxDiagnosisCollector(deps))) as { hasUncommitted: boolean }[];
     };
     return { base, dir, collect, logs };
   }
@@ -757,7 +805,7 @@ describe('uncommitted work read from real git repositories', () => {
       nowMs: () => Date.now(),
       log: (m) => logs.push(m),
     };
-    const items = (await new LinuxDiagnosisCollector(deps).collect('known-caches', ctx())) as { path: string; hasUncommitted: boolean }[];
+    const items = (await cacheItems(new LinuxDiagnosisCollector(deps))) as { path: string; hasUncommitted: boolean }[];
     const item = items.find((i) => i.path.endsWith('linked'));
     assert.ok(item, 'the linked worktree is listed');
     assert.equal(item.hasUncommitted, false);
@@ -832,7 +880,7 @@ describe('uncommitted work read from real git repositories', () => {
       nowMs: () => Date.now(),
       log: (m) => logs.push(m),
     };
-    const r = (await new LinuxDiagnosisCollector(deps).collect('known-caches', ctx())) as { hasUncommitted: boolean }[];
+    const r = (await cacheItems(new LinuxDiagnosisCollector(deps))) as { hasUncommitted: boolean }[];
     assert.equal(r.length, 1);
     assert.equal(r[0].hasUncommitted, true);
     assert.ok(logs.some((l) => l.includes('diagnosis worktree git state unknown') && l.includes(dir)));

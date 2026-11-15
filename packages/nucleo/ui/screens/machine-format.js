@@ -281,6 +281,20 @@ export function normalizeAlerts(a) {
 /** The value's color for a used percentage: yellow from 85, red from 90 (the volume alert is at 85). */
 export const levelOf = (pct) => (pct >= 90 ? 'bad' : pct >= VOLUME_FULL_PCT ? 'warn' : 'ok');
 
+const MEMORY_KINDS = ['memory-high', 'swap-high'];
+const TONE_OF_LEVEL = { error: 'bad', warning: 'warn' };
+const TONE_SEVERITY = { ok: 0, warn: 1, bad: 2 };
+
+/** The tone of the Memória card from the open alerts (issue 566, Q6): `ok`, `warn` (yellow) or `bad` (red); the worst wins. */
+export function memoryTone(alerts) {
+  let tone = 'ok';
+  for (const a of Array.isArray(alerts) ? alerts : []) {
+    const t = MEMORY_KINDS.includes(a?.kind) ? (TONE_OF_LEVEL[a.level] ?? 'ok') : 'ok';
+    if (TONE_SEVERITY[t] > TONE_SEVERITY[tone]) tone = t;
+  }
+  return tone;
+}
+
 /** The sessions of this machine in `GET /api/attention`: `machine: null` is this machine. */
 export function sessionsOf(attention, machineId) {
   if (!isObject(attention)) return null;
@@ -309,7 +323,7 @@ export function statCards(reading, { local, sessions = null, alerts = [], now = 
   }
   if (memory) {
     const swap = memory.swapUsedBytes === null ? '' : local || memory.swapTotalBytes === null ? `swap ${gib(memory.swapUsedBytes)} GB` : `swap ${gib(memory.swapUsedBytes)} de ${gib(memory.swapTotalBytes)}`;
-    byId.memory = { id: 'memory', label: 'Memória', icon: 'memory-stick', value: gib(memory.usedBytes), unit: `de ${gib(memory.totalBytes)} GB`, sub: swap, tone: 'ok' };
+    byId.memory = { id: 'memory', label: 'Memória', icon: 'memory-stick', value: gib(memory.usedBytes), unit: `de ${gib(memory.totalBytes)} GB`, sub: swap, tone: memoryTone(alerts) };
   }
   const root = volumes.find((v) => v.mount === '/') ?? volumes[0];
   if (root) {

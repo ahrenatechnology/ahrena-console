@@ -61,6 +61,7 @@ function projectBoard(items: ProjectCard[], over: Partial<ProjectBoard> = {}): P
     stale: false,
     staleReason: null,
     staleCode: null,
+    resumeAt: null,
     ...over,
   };
 }

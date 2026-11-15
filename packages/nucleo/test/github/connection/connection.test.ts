@@ -1022,6 +1022,32 @@ describe('#612 a data call GitHub answers 401 reaches the connection', () => {
     assert.ok(!s.logs.some((l) => l.includes(TOKEN)), 'the log never carries the credential');
   });
 
+  test('#613/AC-2 credentialRefused is true from the 401 that dropped the credential until the person reconnects', async () => {
+    const s = setup();
+    await connect(s);
+    assert.equal(s.conn.credentialRefused(), false);
+    s.auth.requireToken = true;
+    s.auth.token = OTHER_TOKEN;
+    await read(s.conn.watchRejections(s.gh.fetch), TOKEN);
+    assert.equal(s.conn.credentialRefused(), true);
+    await connect(s);
+    assert.equal(s.conn.credentialRefused(), false);
+  });
+
+  test('#613/AC-2 under the gh source a 401 on a data call is credential-refused; gh simply not logged in is not', async () => {
+    const s = setup({ options: { env: { AHRENA_CONSOLE_GITHUB_SOURCE: 'gh' }, ghInstalled: () => true, ghToken: async () => TOKEN } });
+    assert.equal(await s.conn.connected(), true);
+    assert.equal(s.conn.credentialRefused(), false);
+    s.auth.requireToken = true;
+    s.auth.token = OTHER_TOKEN;
+    await read(s.conn.watchRejections(s.gh.fetch), TOKEN);
+    assert.equal(s.conn.credentialRefused(), true);
+
+    const loggedOut = setup({ options: { env: { AHRENA_CONSOLE_GITHUB_SOURCE: 'gh' }, ghInstalled: () => true, ghToken: async () => Promise.reject(new Error('no token')) } });
+    assert.equal(await loggedOut.conn.connected(), false);
+    assert.equal(loggedOut.conn.credentialRefused(), false);
+  });
+
   test('#612/AC-3 reconnecting after the revocation connects again', async () => {
     const s = setup();
     await connect(s);

@@ -287,6 +287,8 @@ export type GithubToken = string | (() => Promise<string>);
 export interface GithubAccess {
   token: GithubToken;
   fetch?: typeof fetch;
+  /** #613 true while the credential was refused (401), so a stored snapshot says so; the core's connection answers it. */
+  credentialRefused?: () => boolean;
   /** GraphQL endpoint. */
   url?: string;
   /** REST base. */

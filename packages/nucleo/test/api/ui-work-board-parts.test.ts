@@ -527,40 +527,144 @@ describe('#466/AC-2 the epic and initiative card (466-1)', () => {
 });
 
 describe('#465/AC-4 GitHub down (465-4, ADR-0001)', () => {
-  test('#465/AC-4 the stale band: reason, when the board is from, Tentar agora calls back', () => {
+  test('#465/AC-4 the stale band: when the board is from, the reason, Tentar agora calls back', () => {
     let retried = 0;
     const band = staleBand({ fetchedAt: NOW - 31 * MIN, now: NOW, reason: 'network', onRetry: () => retried++ });
     assert.equal(band.getAttribute('role'), 'status');
-    assert.match(texto(band), /^GitHub indisponível\. Mostrando o quadro de 22:41 \(há 31 min\)\. As sessões e a fila continuam ao vivo\. Motivo: falha de rede ao falar com o GitHub\./);
+    assert.match(texto(band.querySelector('p')!), /^GitHub indisponível\. Mostrando o quadro de 22:41 \(há 31 min\)\. O GitHub não respondeu\. As sessões e a fila continuam ao vivo\.$/);
     buttonNamed(band, /Tentar agora/)!.click();
     assert.equal(retried, 1);
-    const busy = staleBand({ fetchedAt: NOW - MIN, now: NOW, reason: null, busy: true, onRetry: () => {} });
-    assert.doesNotMatch(texto(busy), /Motivo/);
+    const busy = staleBand({ fetchedAt: NOW - MIN, now: NOW, reason: 'network', busy: true, onRetry: () => {} });
     assert.equal(buttonNamed(busy, /Tentar agora/)!.getAttribute('aria-busy'), 'true');
   });
 
   test('#496/AC-2 the stale band says when it tries again, between the board time and the live note', () => {
-    const band = staleBand({ fetchedAt: NOW - 31 * MIN, now: NOW, retryAt: NOW + 2 * MIN });
-    assert.match(texto(band), /^GitHub indisponível\. Mostrando o quadro de 22:41 \(há 31 min\)\. Tentamos de novo em 2 min\. As sessões e a fila continuam ao vivo\./);
-    const withReason = texto(staleBand({ fetchedAt: NOW - 31 * MIN, now: NOW, reason: 'network', retryAt: NOW + 2 * MIN }));
-    assert.match(withReason, /Tentamos de novo em 2 min\. As sessões e a fila continuam ao vivo\. Motivo: falha de rede/);
+    const band = staleBand({ fetchedAt: NOW - 31 * MIN, now: NOW, reason: 'network', retryAt: NOW + 2 * MIN });
+    assert.match(texto(band.querySelector('p')!), /^GitHub indisponível\. Mostrando o quadro de 22:41 \(há 31 min\)\. O GitHub não respondeu\. Tentamos de novo em 2 min\. As sessões e a fila continuam ao vivo\.$/);
   });
 
-  test('#496/AC-2 without a retry time the band has no "Tentamos de novo" line', () => {
-    for (const retryAt of [null, undefined, Number.NaN, Number.POSITIVE_INFINITY, '5' as unknown as number]) {
-      assert.doesNotMatch(texto(staleBand({ fetchedAt: NOW - MIN, now: NOW, retryAt })), /Tentamos de novo/);
+  describe('#614 one band per reason code', () => {
+    const band = (reason: string | null, extra = {}) => staleBand({ fetchedAt: NOW - 31 * MIN, now: NOW, reason, ...extra });
+    const SPEC: [string | null, string, string, string | null, string | null][] = [
+      // #614: code, tone, title, button label, data-action
+      ['rate-limited', 'warn', 'O GitHub limitou as chamadas.', 'Tentar agora', 'retry'],
+      ['credential-refused', 'error', 'O GitHub recusou a credencial do console.', 'Reconectar', 'reconnect'],
+      ['no-scope', 'error', 'A credencial do GitHub não tem a permissão necessária.', 'Reconectar', 'reconnect'],
+      ['github-unavailable', 'error', 'GitHub indisponível.', 'Tentar agora', 'retry'],
+      ['network', 'error', 'GitHub indisponível.', 'Tentar agora', 'retry'],
+      ['github-error', 'error', 'O GitHub respondeu com erro.', 'Tentar agora', 'retry'],
+      ['sync-pending', 'neutral', 'O quadro ainda não foi relido.', 'Atualizar agora', 'retry'],
+    ];
+    for (const [code, tone, title, label, action] of SPEC) {
+      test(`${code}: ${tone}, "${title}", ${label}`, () => {
+        const node = band(code);
+        assert.ok(node.classList.contains('wb-stale-band') && node.classList.contains(`wb-stale-${tone}`));
+        assert.equal(node.getAttribute('data-stale-code'), code);
+        assert.equal(node.getAttribute('role'), 'status');
+        assert.ok(texto(node).startsWith(title), texto(node));
+        assert.ok(texto(node).includes('Mostrando o quadro de 22:41 (há 31 min).'));
+        assert.ok(texto(node.querySelector('p')!).endsWith('As sessões e a fila continuam ao vivo.'));
+        assert.doesNotMatch(texto(node), /Motivo:/);
+        const button = node.querySelector('button')!;
+        assert.equal(button.getAttribute('data-action'), action);
+        assert.equal(texto(button), label);
+        assert.ok(node.querySelector('svg'), 'an icon leads the band');
+        assert.equal(texto(node).includes('GitHub indisponível.'), code === 'github-unavailable' || code === 'network', 'only the codes where GitHub did not answer');
+      });
     }
-  });
 
-  test('#496/AC-2 overdue or under one minute shows 1 min, never zero or negative', () => {
-    for (const retryAt of [NOW + 10_000, NOW, NOW - 5 * MIN]) {
-      assert.match(texto(staleBand({ fetchedAt: NOW - MIN, now: NOW, retryAt })), /Tentamos de novo em 1 min\./);
-    }
-  });
+    test('rate-limited with the pause still running: "Volta às HH:MM (em N min).", no button', () => {
+      const node = band('rate-limited', { retryAt: NOW + 4 * MIN });
+      assert.ok(texto(node).includes(`Volta às ${formatClock(NOW + 4 * MIN)} (em 4 min).`), texto(node));
+      assert.equal(node.querySelector('button'), null);
+      assert.doesNotMatch(texto(node), /O limite já passou/);
+    });
 
-  test('#496/AC-2 the wait rounds to whole minutes', () => {
-    assert.match(texto(staleBand({ fetchedAt: NOW - MIN, now: NOW, retryAt: NOW + 2 * MIN + 20_000 })), /em 2 min\./);
-    assert.match(texto(staleBand({ fetchedAt: NOW - MIN, now: NOW, retryAt: NOW + 2 * MIN + 40_000 })), /em 3 min\./);
+    test('rate-limited with the pause ended (retryAt null or past) says so and offers Tentar agora', () => {
+      for (const retryAt of [null, NOW - MIN, NOW]) {
+        const node = band('rate-limited', { retryAt });
+        assert.ok(texto(node).includes('O limite já passou; relemos na próxima sincronização.'));
+        assert.doesNotMatch(texto(node), /Volta às/);
+        assert.equal(node.querySelector('button')!.getAttribute('data-action'), 'retry');
+      }
+    });
+
+    describe('#614 the band of the issue panel (subject issue) says nothing about the board', () => {
+      const issueBand = (reason: string | null, extra = {}) => staleBand({ fetchedAt: NOW - 31 * MIN, now: NOW, reason, subject: 'issue', ...extra });
+      test('rate-limited without a running pause: the title, the issue time and the live note; no time sentence, no button', () => {
+        for (const retryAt of [null, NOW - MIN]) {
+          const node = issueBand('rate-limited', { retryAt });
+          assert.equal(texto(node), 'O GitHub limitou as chamadas. Mostrando a issue de 22:41 (há 31 min). As sessões e a fila continuam ao vivo.');
+          assert.equal(node.querySelector('button'), null);
+        }
+      });
+      test('rate-limited with a running pause keeps "Volta às" and no button', () => {
+        const node = issueBand('rate-limited', { retryAt: NOW + 4 * MIN });
+        assert.ok(texto(node).includes(`Volta às ${formatClock(NOW + 4 * MIN)} (em 4 min).`));
+        assert.equal(node.querySelector('button'), null);
+      });
+      test('credential-refused and no-scope omit the board sentences and still offer Reconectar', () => {
+        for (const code of ['credential-refused', 'no-scope']) {
+          const node = issueBand(code);
+          assert.doesNotMatch(texto(node), /O quadro só volta|permissão do quadro/);
+          assert.ok(texto(node).includes('Mostrando a issue de 22:41 (há 31 min). As sessões e a fila continuam ao vivo.'), texto(node));
+          assert.equal(node.querySelector('button')!.getAttribute('data-action'), 'reconnect');
+        }
+      });
+      test('no band under subject issue talks about the board in its detail', () => {
+        for (const code of ['rate-limited', 'credential-refused', 'no-scope', 'github-unavailable', 'network', 'github-error', 'sync-pending', null]) {
+          assert.doesNotMatch(texto(issueBand(code).querySelector('p')!).replace(/^O quadro ainda não foi relido\. /, ''), /quadro/, String(code));
+        }
+      });
+    });
+
+    test('Reconectar is the filled button and runs onReconnect; Tentar agora and Atualizar agora run onRetry', () => {
+      let reconnected = 0;
+      let retried = 0;
+      const refused = band('credential-refused', { onReconnect: () => reconnected++, onRetry: () => retried++ });
+      assert.ok(refused.querySelector('button')!.classList.contains('filled'));
+      refused.querySelector('button')!.click();
+      assert.deepEqual([reconnected, retried], [1, 0]);
+      band('sync-pending', { onRetry: () => retried++ }).querySelector('button')!.click();
+      assert.deepEqual([reconnected, retried], [1, 1]);
+    });
+
+    test('a busy retry is disabled and aria-busy; Reconectar is never disabled by it', () => {
+      const retry = band('network', { busy: true }).querySelector('button')!;
+      assert.equal(retry.getAttribute('aria-busy'), 'true');
+      assert.ok(retry.hasAttribute('disabled'));
+      assert.ok(!band('credential-refused', { busy: true }).querySelector('button')!.hasAttribute('disabled'));
+    });
+
+    test('the detail lines: sync-pending and github-unavailable add "em N min" only with a retryAt', () => {
+      assert.ok(texto(band('sync-pending', { retryAt: NOW + 2 * MIN })).includes('ainda não passou por ele; relemos em 2 min.'));
+      assert.ok(texto(band('sync-pending')).includes('ainda não passou por ele.'));
+      assert.ok(texto(band('github-unavailable', { retryAt: NOW + 2 * MIN })).includes('O GitHub não respondeu. Tentamos de novo em 2 min.'));
+      assert.doesNotMatch(texto(band('github-unavailable')), /Tentamos de novo/);
+      for (const retryAt of [null, undefined, Number.NaN, '5' as unknown as number]) assert.doesNotMatch(texto(band('network', { retryAt })), /Tentamos de novo/);
+    });
+
+    test('overdue or under one minute shows 1 min, and the wait rounds to whole minutes', () => {
+      for (const retryAt of [NOW + 10_000, NOW, NOW - 5 * MIN]) assert.match(texto(band('network', { retryAt })), /Tentamos de novo em 1 min\./);
+      assert.match(texto(band('network', { retryAt: NOW + 2 * MIN + 20_000 })), /em 2 min\./);
+      assert.match(texto(band('network', { retryAt: NOW + 2 * MIN + 40_000 })), /em 3 min\./);
+    });
+
+    test('a missing code or one this build does not know (even an inherited name): neutral, no claim about GitHub, Tentar agora, the raw code never shows', () => {
+      for (const code of [null, 'proxy-timeout', 'constructor', 'toString']) {
+        const node = band(code);
+        assert.ok(node.classList.contains('wb-stale-neutral'));
+        assert.ok(texto(node).startsWith('A leitura está desatualizada.'));
+        assert.doesNotMatch(texto(node), /GitHub indisponível|proxy-timeout|constructor|toString|Motivo:/);
+        assert.equal(node.querySelector('button')!.getAttribute('data-action'), 'retry');
+      }
+      assert.equal(band(null).getAttribute('data-stale-code'), null);
+    });
+
+    test('the issue panel wording: "Mostrando a issue de …" with the same title for the same code', () => {
+      const node = staleBand({ fetchedAt: NOW - 31 * MIN, now: NOW, reason: 'no-scope', subject: 'issue' });
+      assert.ok(texto(node).startsWith('A credencial do GitHub não tem a permissão necessária. Mostrando a issue de 22:41'));
+    });
   });
 
   test('#465/AC-4 the stale board fades what comes from GitHub (Status, PR, CI, review); sessions and queue stay live', () => {

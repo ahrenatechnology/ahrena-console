@@ -194,6 +194,8 @@ export class GithubConnection {
   private scopes: string[] = [];
   private scopesChecked = false;
   private ghFailed = false;
+  /** #613 GitHub answered 401 for the gh credential: told apart from gh simply not being logged in. */
+  private ghRefused = false;
   private lastError: GithubLastError | null = null;
   private orgs: { checked: boolean; failed: boolean; granted: string[]; pending: string[] } = { checked: false, failed: false, granted: [], pending: [] };
   /** The generation whose org check is running: a recheck of it waits instead of starting another. */
@@ -239,6 +241,11 @@ export class GithubConnection {
     await this.ensureCredential();
     if (this.credential === null) throw new GithubNotConnectedError();
     return this.credential;
+  }
+
+  /** #613 GitHub answered 401 for the credential in use and the person has not reconnected since (no network call). */
+  credentialRefused(): boolean {
+    return this.lastError === 'revoked' || this.ghRefused;
   }
 
   async connected(): Promise<boolean> {
@@ -408,6 +415,7 @@ export class GithubConnection {
         if (stale()) return;
         this.credential = token.trim() || null;
         this.ghFailed = this.credential === null;
+        this.ghRefused = false;
       } catch {
         if (stale()) return;
         this.ghFailed = true;
@@ -474,8 +482,10 @@ export class GithubConnection {
   /** #612 GitHub answered 401 for the credential in use: it is not served any more, once, with one log line. */
   private dropRejectedCredential(source: GithubCredentialSource): void {
     this.credential = null;
-    if (source === 'gh') this.ghFailed = true;
-    else this.lastError = 'revoked'; // #372 the login stays: Reconnect replaces the vault entry
+    if (source === 'gh') {
+      this.ghFailed = true;
+      this.ghRefused = true;
+    } else this.lastError = 'revoked'; // #372 the login stays: Reconnect replaces the vault entry
     this.log('github: GitHub rejected the credential (401)');
     this.onChange();
   }
@@ -681,6 +691,7 @@ export class GithubConnection {
     this.scopes = [];
     this.scopesChecked = false;
     this.ghFailed = false;
+    this.ghRefused = false;
     this.lastError = null;
     this.orgs = { checked: false, failed: false, granted: [], pending: [] };
     this.profileLoad = null;

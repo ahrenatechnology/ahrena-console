@@ -48,7 +48,7 @@ export async function createCoreGithub(o: CoreGithubOptions): Promise<CoreGithub
     },
   });
   // #612 a 401 on any source's data call reaches the connection through this one fetch.
-  const access: GithubAccess | null = o.noGithub ? null : { ...transport, fetch: connection.watchRejections(transport?.fetch ?? fetch), token: () => connection.token() };
+  const access: GithubAccess | null = o.noGithub ? null : { ...transport, fetch: connection.watchRejections(transport?.fetch ?? fetch), token: () => connection.token(), credentialRefused: () => connection.credentialRefused() };
   screens = createGithubScreens({ ...screenOptions, github: access });
   return {
     connection,

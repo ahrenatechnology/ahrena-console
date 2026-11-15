@@ -143,6 +143,11 @@ button.wb-path-step:hover:not(:disabled) { color: var(--text); text-decoration: 
 /* ---------- states ---------- */
 .wb-skeleton { gap: 8px; min-height: 84px; }
 .wb-stale-band p { margin: 0; flex: 1; min-width: 0; }
+/* issue 614: the band's tone per reason; red (wb-stale-error) is the base .error-band. */
+.wb-stale-band.wb-stale-warn { border-color: var(--status-waiting-dot); background: var(--status-waiting-badge); }
+.wb-stale-band.wb-stale-warn > .icon, .wb-stale-band.wb-stale-warn b { color: var(--status-waiting-text); }
+.wb-stale-band.wb-stale-neutral { border-color: var(--border); background: var(--raised); }
+.wb-stale-band.wb-stale-neutral > .icon, .wb-stale-band.wb-stale-neutral b { color: var(--text); }
 .wb-empty, .wb-first-failure { min-height: 0; padding: 26px 20px; }
 .wb-empty-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; }
 .wb-no-result { display: flex; align-items: flex-start; gap: 14px; padding: 16px 20px; }

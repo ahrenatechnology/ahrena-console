@@ -9,6 +9,8 @@
  * - A section that did not come carries `status` and a short `reason`, never an empty list pretending to be data.
  * - A section that came but was read only in part (a folder that could not be fully read) is `ok`, with its items
  *   and a `partial` marker with a short reason; an `ok` section whole carries no marker.
+ * - An `ok` `known-caches` section also carries `worktrees`, the two facts the screen words its worktree line from
+ *   (age limit in days, shared root folder), so the screen never guesses them (#566).
  */
 
 import type { AlertKind, HostInfo } from '../telemetry/model.ts';
@@ -64,6 +66,11 @@ export interface WorktreeItem {
   hasUnpushed: boolean;
   actionId: null;
 }
+/** The facts about the old worktrees of a `known-caches` section: the limit in whole days after which one is old, and the shared parent of the roots searched, `~` for this core's home, `null` for none (#566). */
+export interface WorktreesInfo {
+  oldAfterDays: number;
+  root: string | null;
+}
 export interface JournalItem {
   bytes: number;
 }
@@ -85,7 +92,7 @@ export interface PartialMarker {
 }
 
 /** A section of one id, with the items of that id; the union over all ids narrows on `id` (#565). */
-export type SectionOf<K extends SectionId> = { [P in K]: { id: P; status: SectionStatus; items: SectionItems[P]; reason?: string; partial?: PartialMarker } }[K];
+export type SectionOf<K extends SectionId> = { [P in K]: { id: P; status: SectionStatus; items: SectionItems[P]; reason?: string; partial?: PartialMarker; worktrees?: WorktreesInfo } }[K];
 export type DiagnosisSection = SectionOf<SectionId>;
 
 export interface Diagnosis {

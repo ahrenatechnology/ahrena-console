@@ -408,7 +408,7 @@ describe('#495/AC-1 GET /api/work with GitHub down: a stable English reason code
         await refresh(b, '');
         b.now.add(10 * 60_000);
         const r = await get(b);
-        assert.deepEqual([r.status, r.json.stale, r.json.staleReason], [200, true, 'network']);
+        assert.deepEqual([r.status, r.json.stale, r.json.staleReason], [200, true, 'github-unavailable']); // #613 a stored snapshot folds network into github-unavailable
         assert.ok(!JSON.stringify(r.json).includes('fetch failed'));
       },
       { fromStore: true },

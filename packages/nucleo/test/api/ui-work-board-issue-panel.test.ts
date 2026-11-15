@@ -644,7 +644,7 @@ describe('the panel while it loads, when it fails and when it is stale (467-1, d
   test('a stale issue shows the stale band "Mostrando a issue de HH:MM" under the header, with Tentar agora', () => {
     let retried = 0;
     const fetchedAt = new Date(2026, 10, 13, 22, 5).getTime();
-    const root = issuePanel({ card: card(509), issue: issue(509, { stale: true, staleReason: 'rate-limit', fetchedAt }), now: NOW, onRetry: () => (retried += 1) });
+    const root = issuePanel({ card: card(509), issue: issue(509, { stale: true, staleReason: 'github-error', fetchedAt }), now: NOW, onRetry: () => (retried += 1) });
     const band = one(root, '.wb-stale-band');
     assert.ok(texto(band).includes('Mostrando a issue de 22:05'), texto(band));
     assert.ok(!texto(band).includes('quadro'), 'it is the issue, not the board');
