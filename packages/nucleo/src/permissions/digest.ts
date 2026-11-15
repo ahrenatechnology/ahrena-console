@@ -40,7 +40,7 @@ export function canonicalJson(value: unknown, depth = 1): string {
   return writeCanonical(value);
 }
 
-// Runs only after `assertWithinDepth`, so it recurses at most MAX_CANONICAL_DEPTH levels.
+// Runs only after `assertWithinDepth`, so it recurses at most MAX_CANONICAL_DEPTH levels. (#618/AC-1)
 function writeCanonical(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map((v) => writeCanonical(v)).join(',')}]`;
   if (value !== null && typeof value === 'object') {
