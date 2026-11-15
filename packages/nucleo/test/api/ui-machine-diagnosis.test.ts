@@ -1,7 +1,7 @@
 /* End-to-end skeleton of the diagnosis next to a saturation alert (#566, epic #563); wireframe 566-1 to 566-9 in
 docs/wireframes/index.html, chapter "Saturou, entendi, resolvi", approved by the design owner on 2026-11-14. It mounts
 the machine screen on the fake DOM with the simulator's telemetry, swaps in the open alerts per test, and answers
-GET /api/diagnosis here, shaped like docs/contracts/diagnosis.md (issue 565). No network, no process runs.
+GET /api/diagnosis here, shaped like docs/contracts/core-api.openapi.json, the diagnosis operation (issue 565). No network, no process runs.
 Every scenario runs as a test (the contract layer, #566, turns the last one green); the page-level accessibility check is at the end. */
 import assert from 'node:assert/strict';
 import { after, afterEach, before, describe, test } from 'node:test';

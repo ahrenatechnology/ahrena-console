@@ -1,5 +1,5 @@
 // What the agent view says and how it cuts, with no DOM: the test imports it directly (issue 521).
-// The data is the shape of the agent-view contract (docs/contracts/agent-view.md, issue 529).
+// The data is the shape of the agent-view contract (docs/contracts/core-api.openapi.json, the agent view operation, issue 529).
 
 import { LOCAL, machineFromQuery } from '../machine-filter.js';
 import { duration } from './workflow-format.js';

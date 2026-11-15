@@ -31,7 +31,7 @@ const AGENTS_LIST = {
 };
 
 const lines = (n: number) => Array.from({ length: n }, (_, i) => `linha ${i + 1}`).join('\n');
-// The shape of #529 (docs/contracts/agent-view.md): `agentId`, `start`/`end`, steps with `id`/`start`/`end`/`childAgentId`.
+// The shape of #529 (docs/contracts/core-api.openapi.json, the agent view operation): `agentId`, `start`/`end`, steps with `id`/`start`/`end`/`childAgentId`.
 const step = (i: number, extra = {}) => ({ id: `toolu_${i}`, kind: 'tool', name: 'Read', summary: `arquivo ${i}`, state: 'ok', start: iso(30 - i), end: iso(29 - i), childAgentId: null, ...extra });
 const view = (extra = {}) => ({
   agentId: ATHENA, agentType: 'athena', description: 'planeja a issue', brief: 'Planeje a issue 521.', briefTruncated: false, spawnedByToolUseId: 'toolu_main',

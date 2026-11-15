@@ -1,5 +1,5 @@
 // The components of the diagnosis next to a saturation alert (#566, layer 2 of 4), rendered from fixed data in the
-// shape of docs/contracts/diagnosis.md (#565): no read, no core, no screen state. One group per component and per
+// shape of docs/contracts/core-api.openapi.json, the diagnosis operation (#565): no read, no core, no screen state. One group per component and per
 // state the wireframe drew (566-3 to 566-9), the pure format and the probable-cause rule with no DOM, and the
 // accessibility each component owes (aria-busy, roles, real buttons with names, tables with headers).
 import assert from 'node:assert/strict';

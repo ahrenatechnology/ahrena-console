@@ -3,7 +3,7 @@
  * like the other reads:
  *
  * - `GET /api/diagnosis?machine=<id>&alert=<alertId>`: 200 `{ machine, alertId, kind, takenAt, sections }`
- *   (src/diagnosis/model.ts). The contract is docs/contracts/diagnosis.md.
+ *   (src/diagnosis/model.ts). The contract is docs/contracts/core-api.openapi.json, the diagnosis operation.
  * - 400 for a missing, repeated or invalid parameter; 404 `{ error, reason }` for a machine that does not
  *   exist (`unknown-machine`) or an alert that is not open on it (`alert-not-open`); 422 `not-diagnosable`
  *   for an open alert of a kind that has no diagnosis; 405 for another method.
@@ -150,7 +150,7 @@ const ACTION_IDS: readonly unknown[] = Object.values(CACHE_ACTION_IDS);
 const isCacheActionId = (v: unknown): v is CacheActionId => ACTION_IDS.includes(v);
 
 /*
- * One reader per item shape of the contract (docs/contracts/diagnosis.md): every documented field is
+ * One reader per item shape of the contract (docs/contracts/core-api.openapi.json, the diagnosis operation): every documented field is
  * checked, and the item is rebuilt from those fields only, so a key the contract does not name never
  * passes. `null` when the item is not that shape.
  */

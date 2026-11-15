@@ -316,7 +316,7 @@ export class LeiturasDoDetalhe {
     send(res, 200, headExtra ? { ...(await this.cabeca(session)), ...headExtra() } : await this.cabeca(session));
   }
 
-  /** The agent view route; its errors carry a `code`, the contract (docs/contracts/agent-view.md, #529). */
+  /** The agent view route; its errors carry a `code`, the contract (docs/contracts/core-api.openapi.json, the agent view operation, #529). */
   private async respondAgent(res: ServerResponse, id: string, agentId: string): Promise<void> {
     if (!ID.test(id)) return send(res, 400, { error: 'id de sessão inválido', code: 'invalid_session_id' });
     const session = await this.storage.getSession(id);

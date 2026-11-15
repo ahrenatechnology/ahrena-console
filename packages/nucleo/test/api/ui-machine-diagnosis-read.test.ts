@@ -1,5 +1,5 @@
 /* The reader seam of the diagnosis next to a saturation alert (#566, layer 4 of 4): the 200 body checked against
-docs/contracts/diagnosis.md, and each status of GET /api/diagnosis mapped to the outcome the state understands, per the
+docs/contracts/core-api.openapi.json, the diagnosis operation, and each status of GET /api/diagnosis mapped to the outcome the state understands, per the
 table of wireframe 566-18. Unit tests: no DOM, `ctx.read` is a function the test gives. */
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';

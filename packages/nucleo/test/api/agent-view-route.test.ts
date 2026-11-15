@@ -1,12 +1,13 @@
 import { OWNER_TOKEN, ownerFetch as fetch } from '../owner-http.ts';
 // The agent view over HTTP (#529): `GET /api/sessions/<id>/agents/<agentId>` and the two fields the Agents (#529)
-// tab list gained, against the assembled API over a real database. Contract: docs/contracts/agent-view.md (#529).
+// tab list gained, against the assembled API over a real database. Contract: the agent view operation of docs/contracts/core-api.openapi.json (#529).
 // Synthetic data only (#529).
 import assert from 'node:assert/strict';
 import { after, before, describe, test } from 'node:test';
 import { openSqliteStorage, type SqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
 import { Accounts, startLocalApi, LeiturasDoDetalhe, MontadorDoPainel, type AgentesDoDetalhe, type LocalApi } from '../../src/api/index.ts';
 import type { AgentView } from '../../src/api/agent-view.ts';
+import { assertAnswersTheSpec } from './openapi-spec.ts';
 import { emptyTokenCounts, type Agent, type SessionEvent, type TokenCounts, type TokenUsage } from '../../src/model.ts';
 
 const NOW = Date.parse('2026-11-01T11:00:00.000Z');
@@ -73,7 +74,10 @@ describe('#529 agent view route', () => {
   let api: LocalApi;
   const get = async (path: string) => {
     const r = await fetch(`${api.url}${path}`);
-    return { status: r.status, body: (await r.json()) as Record<string, unknown> };
+    const body = (await r.json()) as Record<string, unknown>;
+    // #662: every answer of the agent view route, errors included, conforms to the authored contract.
+    if (/^\/api\/sessions\/[^/]+\/agents\/[^/]+$/.test(path)) assertAnswersTheSpec('GET', '/api/sessions/{sessionId}/agents/{agentId}', r.status, body);
+    return { status: r.status, body };
   };
   const view = async (tail: string): Promise<AgentView> => {
     const r = await get(`/api/sessions/${SID}/agents/${tail}`);

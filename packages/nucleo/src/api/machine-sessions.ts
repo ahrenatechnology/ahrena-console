@@ -582,7 +582,7 @@ class MachineSessionsRoute {
     }
     const isAgentView = match[3] !== undefined;
     if (!REMOTE_ID.test(id)) {
-      // The agent view names its error (docs/contracts/agent-view.md, #529); the sibling routes keep their body.
+      // The agent view names its error (docs/contracts/core-api.openapi.json, the agent view operation, #529); the sibling routes keep their body.
       if (isAgentView) return send(res, 400, { error: 'id de sessão inválido', code: 'invalid_session_id', machine: { id: c.tag.id, label: c.tag.label } });
       throw new RequestError('id de sessão inválido');
     }
@@ -612,7 +612,7 @@ class MachineSessionsRoute {
     const tag = { id: c.tag.id, label: c.tag.label };
     if (answer.status === 400 || answer.status === 404) {
       const message = isObject(answer.body) && typeof answer.body.error === 'string' ? answer.body.error.slice(0, 300) : 'não encontrado';
-      // The agent view's error `code` (docs/contracts/agent-view.md, #529) goes through when it is a plain token.
+      // The agent view's error `code` (docs/contracts/core-api.openapi.json, the agent view operation, #529) goes through when it is a plain token.
       const code = isObject(answer.body) && typeof answer.body.code === 'string' && ERROR_CODE.test(answer.body.code) ? answer.body.code : null;
       return send(res, answer.status, { error: message, ...(code ? { code } : {}), machine: tag });
     }
