@@ -6,7 +6,7 @@
 // first use, never logged, never written to the audit). Without a key the line is written with no `reasonHmac` at all (#618)
 // (`null` means "there was no reason"). A write that fails is logged by its error code, never thrown. (#618)
 import { createHmac, randomBytes } from 'node:crypto';
-import { appendFileSync, chmodSync, linkSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, closeSync, constants, fchmodSync, fstatSync, linkSync, mkdirSync, openSync, readFileSync, unlinkSync, writeFileSync, writeSync, type Stats } from 'node:fs';
 import { join } from 'node:path';
 import type { PermissionAudit, PermissionAuditRecord } from '../ports.ts';
 
@@ -33,9 +33,8 @@ export class PermissionAuditFile implements PermissionAudit {
   append(record: PermissionAuditRecord): void {
     try {
       mkdirSync(this.dataDir, { recursive: true, mode: 0o700 });
-      const file = join(this.dataDir, PERMISSION_AUDIT_FILE);
-      appendFileSync(file, `${JSON.stringify(this.lineOf(record))}\n`, { mode: 0o600 });
-      chmodSync(file, 0o600);
+      chmodSync(this.dataDir, 0o700);
+      appendThroughDescriptor(join(this.dataDir, PERMISSION_AUDIT_FILE), `${JSON.stringify(this.lineOf(record))}\n`);
     } catch (e) {
       this.log(`permission audit: could not write (${codeOf(e)})`);
     }
@@ -88,13 +87,39 @@ export class PermissionAuditFile implements PermissionAudit {
   }
 }
 
+/** A regular file of this process's user that no group or other can touch: what a file of the audit folder must be. (#618) */
+const isPrivateFileOfMine = (stat: Stats, exactMode?: number): boolean =>
+  stat.isFile() && stat.uid === process.getuid?.() && (exactMode === undefined ? (stat.mode & 0o077) === 0 : (stat.mode & 0o777) === exactMode);
+
+/**
+ * Appends through one descriptor opened without following a symlink: what is written and chmodded is the file that was checked. (#618)
+ * A file that is not a regular file of this user, or that others can read, is refused with `ERR_AUDIT_MODE`.
+ */
+function appendThroughDescriptor(file: string, line: string): void {
+  const fd = openSync(file, constants.O_WRONLY | constants.O_APPEND | constants.O_CREAT | constants.O_NOFOLLOW, 0o600);
+  try {
+    if (!isPrivateFileOfMine(fstatSync(fd))) throw Object.assign(new Error('audit file mode'), { code: 'ERR_AUDIT_MODE' });
+    fchmodSync(fd, 0o600);
+    writeSync(fd, line);
+  } finally {
+    closeSync(fd);
+  }
+}
+
 function readKeyIfThere(path: string): Buffer | null {
   let key: Buffer;
+  let fd: number;
   try {
-    key = readFileSync(path);
+    fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW);
   } catch (e) {
     if (codeOf(e) === 'ENOENT') return null;
     throw e;
+  }
+  try {
+    if (!isPrivateFileOfMine(fstatSync(fd), 0o600)) throw Object.assign(new Error('key mode'), { code: 'ERR_KEY_MODE' });
+    key = readFileSync(fd);
+  } finally {
+    closeSync(fd);
   }
   if (key.length !== KEY_BYTES) throw Object.assign(new Error('key size'), { code: 'ERR_KEY_SIZE' });
   return key;

@@ -1,7 +1,7 @@
 // The audit file of the permission requests (#618, layer 3): permissions, the allow-list of fields, and the keyed hash of the reason.
 import assert from 'node:assert/strict';
 import { createHmac } from 'node:crypto';
-import { chmodSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, readFileSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { describe, test } from 'node:test';
 import { join } from 'node:path';
 import { PERMISSION_AUDIT_FILE, PERMISSION_AUDIT_KEY_FILE, PermissionAuditFile } from '../../src/permissions/adapters/audit-file.ts';
@@ -22,16 +22,45 @@ describe('the file and its folder (#618/AC-7)', () => {
     assert.equal(mode(join(dataDir, PERMISSION_AUDIT_FILE)), 0o600);
   });
 
-  test('a file that existed with wider permissions is narrowed to 0600, and each record is one line', () => {
+  test('a folder that existed more open is closed to 0700', () => {
+    const dataDir = tempDir();
+    chmodSync(dataDir, 0o755);
+    new PermissionAuditFile(dataDir).append({ at: 1, event: 'registered', requestId: 'rq-1', sessionId: 'S1' });
+    assert.equal(mode(dataDir), 0o700);
+  });
+
+  test('each record is one line, appended', () => {
+    const dataDir = tempDir();
+    const audit = new PermissionAuditFile(dataDir);
+    audit.append({ at: 1, event: 'registered', requestId: 'rq-1', sessionId: 'S1' });
+    audit.append({ at: 2, event: 'closed', requestId: 'rq-1', sessionId: 'S1', settledBy: 'expiry', state: 'expired' });
+    assert.deepEqual(lines(dataDir).map((l) => l.event), ['registered', 'closed']);
+  });
+
+  test('a symlink at the audit path is not followed: the target is untouched and only the error code is logged', () => {
+    const dataDir = tempDir();
+    const target = join(tempDir(), 'victim.txt');
+    writeFileSync(target, 'victim content', { mode: 0o644 });
+    symlinkSync(target, join(dataDir, PERMISSION_AUDIT_FILE));
+    const logged: string[] = [];
+    assert.doesNotThrow(() => new PermissionAuditFile(dataDir, (m) => logged.push(m)).append(answered('top secret words')));
+    assert.equal(readFileSync(target, 'utf8'), 'victim content');
+    assert.equal(mode(target), 0o644);
+    assert.equal(logged.length, 1);
+    assert.match(logged[0]!, /permission audit: could not write \(\w+\)/);
+    assert.doesNotMatch(logged[0]!, /victim|top secret words/);
+  });
+
+  test('an audit file that others can read is refused, not narrowed: nothing is written to it, and the code is logged', () => {
     const dataDir = tempDir();
     const file = join(dataDir, PERMISSION_AUDIT_FILE);
     writeFileSync(file, '');
     chmodSync(file, 0o644);
-    const audit = new PermissionAuditFile(dataDir);
-    audit.append({ at: 1, event: 'registered', requestId: 'rq-1', sessionId: 'S1' });
-    audit.append({ at: 2, event: 'closed', requestId: 'rq-1', sessionId: 'S1', settledBy: 'expiry', state: 'expired' });
-    assert.equal(mode(file), 0o600);
-    assert.deepEqual(lines(dataDir).map((l) => l.event), ['registered', 'closed']);
+    const logged: string[] = [];
+    new PermissionAuditFile(dataDir, (m) => logged.push(m)).append(answered('top secret words'));
+    assert.equal(readFileSync(file, 'utf8'), '');
+    assert.equal(logged.length, 1);
+    assert.match(logged[0]!, /permission audit: could not write \(ERR_AUDIT_MODE\)/);
   });
 
   test('a write that fails is logged by its code and never thrown, and the log holds neither the reason nor the path', () => {
@@ -149,5 +178,31 @@ describe('the keyed hash of the reason (#618/AC-7)', () => {
     const [line] = lines(dataDir);
     assert.equal('reasonHmac' in line!, false);
     assert.equal(line!.event, 'answered');
+  });
+
+  test('a key file that is a symlink is not followed: logged by code, and the line is written with no reasonHmac', () => {
+    const dataDir = tempDir();
+    const real = join(tempDir(), 'real.key');
+    writeFileSync(real, Buffer.alloc(32, 9), { mode: 0o600 });
+    symlinkSync(real, join(dataDir, PERMISSION_AUDIT_KEY_FILE));
+    const logged: string[] = [];
+    new PermissionAuditFile(dataDir, (m) => logged.push(m)).append(answered('words'));
+    assert.equal(logged.length, 1);
+    assert.match(logged[0]!, /permission audit: the reason key is unusable \(\w+\)/);
+    assert.doesNotMatch(logged[0]!, /real\.key|words/);
+    assert.equal('reasonHmac' in lines(dataDir)[0]!, false);
+  });
+
+  test('a key file that others can read is not used: ERR_KEY_MODE is logged and the line has no reasonHmac', () => {
+    const dataDir = tempDir();
+    const keyFile = join(dataDir, PERMISSION_AUDIT_KEY_FILE);
+    writeFileSync(keyFile, Buffer.alloc(32, 7));
+    chmodSync(keyFile, 0o644);
+    const logged: string[] = [];
+    new PermissionAuditFile(dataDir, (m) => logged.push(m)).append(answered('words'));
+    assert.equal(logged.length, 1);
+    assert.match(logged[0]!, /the reason key is unusable \(ERR_KEY_MODE\)/);
+    assert.equal('reasonHmac' in lines(dataDir)[0]!, false);
+    assert.equal(mode(keyFile), 0o644, 'the file is left as it was');
   });
 });
