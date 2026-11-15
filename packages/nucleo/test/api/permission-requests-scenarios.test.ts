@@ -378,6 +378,52 @@ describe('what is stored, served, logged and audited (#618/AC-7, AC-9)', () => {
       void rid;
     }));
 
+  test('#618/AC-7: a fault of a route is logged with its operation, ids and error class, and never its message', () =>
+    given(async (f) => {
+      Reflect.set(f.deps.repository, 'listBySession', () => {
+        throw new TypeError(`secret-detail-8812 ${WINDOW_CREDENTIAL} reason-sentinel-7788`);
+      });
+      assert.equal((await f.call('GET', reqPath(SID))).status, 500);
+      const line = f.logs.find((m) => m.startsWith('permission route failed'));
+      assert.equal(line, `permission route failed operation="list" sessionId=${JSON.stringify(SID)} requestId="-" error="TypeError"`);
+      for (const text of ['secret-detail-8812', WINDOW_CREDENTIAL, OWNER_TOKEN, 'reason-sentinel-7788']) assert.ok(!f.logs.join('\n').includes(text), `logs: ${text}`);
+    }));
+
+  test('#618/AC-7: a fault that is no Error is logged as such, with nothing of what was thrown', () =>
+    given(async (f) => {
+      Reflect.set(f.deps.repository, 'listBySession', () => {
+        throw 'secret-detail-8812 thrown as a string';
+      });
+      assert.equal((await f.call('GET', reqPath(SID))).status, 500);
+      assert.ok(f.logs.some((m) => m.startsWith('permission route failed operation="list"') && m.endsWith('error="non_error"')));
+      assert.ok(!f.logs.join('\n').includes('secret-detail-8812'));
+    }));
+
+  test('#618/AC-4, AC-7: a hook event that could not be settled is logged with its name, session and error class, and never its message', () =>
+    given(async (f) => {
+      Reflect.set(f.deps.repository, 'listBySession', () => {
+        throw new RangeError('secret-detail-8812 /private/path');
+      });
+      await f.hookEvent({ session_id: SID, hook_event_name: 'Stop' });
+      await until(() => f.logs.some((m) => m.startsWith('permission hook event not settled')));
+      const line = f.logs.find((m) => m.startsWith('permission hook event not settled'));
+      assert.equal(line, `permission hook event not settled event="Stop" sessionId=${JSON.stringify(SID)} error="RangeError"`);
+      assert.ok(!f.logs.join('\n').includes('secret-detail-8812'));
+    }));
+
+  test('#618/AC-3, AC-7: an expiry sweep that failed is logged with the error class, and never its message', () =>
+    given(
+      async (f) => {
+        Reflect.set(f.deps.repository, 'clearReasonsSettledBefore', () => {
+          throw new SyntaxError('secret-detail-8812 /private/path');
+        });
+        await until(() => f.logs.some((m) => m.startsWith('permission expiry sweep failed')));
+        assert.ok(f.logs.includes('permission expiry sweep failed error="SyntaxError"'));
+        assert.ok(!f.logs.join('\n').includes('secret-detail-8812'));
+      },
+      { sweepEveryMs: 10 },
+    ));
+
   test('#618/AC-9: the summary masks a quoted credential with a space', () =>
     given(async (f) => {
       await f.register({ toolInput: { command: 'curl -u "admin:s3 cret-sentinel" https://x.example' } });

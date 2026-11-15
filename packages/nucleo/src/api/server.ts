@@ -460,7 +460,7 @@ export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
         log,
       })
     : null;
-  // A hook event is also read by the permission use cases, from the payload as the hook sent it (the stored one is cut): a settle
+  // A hook event is also read by the permission use cases (#618), from the payload as the hook sent it (the stored one is cut): a settle
   // never throws and never keeps the other consumers waiting.
   const hooks = createHookRoute(
     permissions
@@ -639,7 +639,7 @@ export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
       }
       return opts.docker.route(req, res, url);
     }
-    // The permission routes check their own proofs (hook only, the window's answer, the list) before the chain below, and audit what they refuse.
+    // The permission routes (#618) check their own proofs (hook only, the window's answer, the list) before the chain below, and audit what they refuse.
     if (permissions?.matches(url.pathname)) {
       const refusal = permissions.gate(req, url);
       if (refusal) {

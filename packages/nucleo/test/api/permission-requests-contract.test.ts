@@ -258,13 +258,13 @@ describe('operation 5: POST …/:rid/answer (#618/AC-8)', () => {
         assert.equal(r.status, 403, JSON.stringify(headers));
         assert.deepEqual(r.json, { error: 'window_only' });
       }
-      // Refused by the answer route's own proof, with its code.
+      // Refused by the answer route's own proof, with its code (#618).
       for (const headers of [{ origin: null }, { 'content-type': 'text/plain' }]) {
         const r = await f.answer(SID, rid, { decision: 'deny' }, { headers });
         assert.equal(r.status, 403, JSON.stringify(headers));
         assert.deepEqual(r.json, { error: 'forbidden_origin' }, JSON.stringify(headers));
       }
-      // Refused earlier, by the owner gate or the chain (a foreign Origin, another Host, a page of another site).
+      // Refused earlier (#618), by the owner gate or the chain (a foreign Origin, another Host, a page of another site).
       for (const headers of [{ origin: 'http://evil.example' }, { origin: 'http://localhost:1' }, { 'sec-fetch-site': 'cross-site' }, { 'sec-fetch-site': 'same-site' }, { host: 'evil.example' }]) {
         const r = await f.answer(SID, rid, { decision: 'deny' }, { headers });
         assert.equal(r.status, 403, JSON.stringify(headers));

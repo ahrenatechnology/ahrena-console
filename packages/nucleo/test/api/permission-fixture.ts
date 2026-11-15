@@ -24,15 +24,15 @@ export interface Reply {
 export interface CallOptions {
   headers?: Record<string, string>;
   body?: unknown;
-  /** Send this text as the body, as it is. */
+  /** Send this text as the body, as it is. (#618) */
   raw?: string;
-  /** The owner bearer; `false` leaves it out. */
+  /** The owner bearer; `false` leaves it out. (#618) */
   bearer?: string | false;
-  /** Fires as soon as the request is written, for a long poll the test then leaves open. */
+  /** Fires as soon as the request is written, for a long poll the test then leaves open. (#618) */
   onSent?: () => void;
 }
 
-/** Polls until the condition holds, for work the server does after it answered (a hook event settles after its 202). */
+/** Polls until the condition holds, for work the server does after it answered (a hook event settles after its 202). (#618) */
 export async function until(condition: () => boolean, ms = 3000): Promise<void> {
   const end = Date.now() + ms;
   while (!condition()) {
@@ -47,15 +47,15 @@ export interface PermissionFixture {
   storage: SqliteStorage;
   changes: ChangeCursor;
   logs: string[];
-  /** Turns the capability switch and the in-memory window credential. */
+  /** Turns the capability switch and the in-memory window credential. (#618) */
   set(over: { enabled?: boolean; credential?: string | null }): void;
-  /** A plain call, as the hook makes it: no `Origin`. */
+  /** A plain call, as the hook makes it: no `Origin`. (#618) */
   call(method: string, path: string, options?: CallOptions): Promise<Reply>;
-  /** The /ui window: `Origin` exactly the core's, JSON, a declared length and the window credential. */
+  /** The /ui window: `Origin` exactly the core's, JSON, a declared length and the window credential. (#618) */
   answer(sid: string, rid: string, body: unknown, over?: { headers?: Record<string, string | null>; raw?: string }): Promise<Reply>;
-  /** Registers a request as the hook does, with the digest the hook computes; returns its reply. */
+  /** Registers a request as the hook does, with the digest the hook computes; returns its reply. (#618) */
   register(over?: { sid?: string; toolName?: string; toolInput?: unknown; cwd?: string }): Promise<Reply & { rid: string }>;
-  /** A hook event of the session through the real receiver. */
+  /** A hook event of the session through the real receiver. (#618) */
   hookEvent(payload: Record<string, unknown>): Promise<Reply>;
   close(): Promise<void>;
 }
