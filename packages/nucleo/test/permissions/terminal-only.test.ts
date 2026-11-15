@@ -110,7 +110,8 @@ describe('isTerminalOnly (#618/AC-6)', () => {
       'cd x && git -C y reset --hard HEAD~1',
     ];
     for (const c of cases) assert.equal(bash(c), true, c);
-    for (const c of ['git -c k=v status', 'git --no-pager log']) assert.equal(bash(c), false, c);
+    // `git -c k=v status` is terminal-only since round 3: -c injects configuration (#618/AC-11).
+    for (const c of ['git --no-pager log', 'git -C x status']) assert.equal(bash(c), false, c);
   });
 
   test('#618/AC-6: a download piped into a shell is caught through later segments and process substitution', () => {
@@ -347,5 +348,50 @@ describe('Bash and other tools writing into auto-run files (#618/AC-11, round 2)
     }
     assert.equal(isTerminalOnly('Write', { file_path: '/w/docs/claude-notes.md', content: 'x' }), false);
     assert.equal(isTerminalOnly('Read', { file_path: '/w/CLAUDE.md' }), false);
+  });
+
+  test('#618/AC-11: git config rewrites a config file without naming it, so it is terminal-only (round 3)', () => {
+    for (const c of ['git config core.hooksPath /tmp/h', 'git config --global core.fsmonitor "sh /tmp/x"', "git config alias.st '!sh /tmp/x'", 'git -C /w config --local core.pager x', 'git config --get user.name']) assert.equal(bash(c), true, c);
+  });
+
+  test('#618/AC-11: git -c and the GIT_CONFIG and GIT_DIR variables inject configuration, so they are terminal-only (round 3)', () => {
+    const calls = [
+      'git -c core.hooksPath=/tmp/h status', 'git -c core.fsmonitor="sh /tmp/x" status', "git -c 'alias.x=!sh x' x", 'git --config-env=core.pager=EVIL log', 'git -C /w -c core.pager=x log',
+      'GIT_CONFIG_GLOBAL=/tmp/c git status', 'GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.hooksPath GIT_CONFIG_VALUE_0=/tmp/h git status', 'export GIT_DIR=/tmp/d', 'env GIT_DIR=/tmp/d git log', 'GIT_SSH_COMMAND="sh /tmp/x" git fetch', 'GIT_EXTERNAL_DIFF=/tmp/x git diff',
+    ];
+    for (const c of calls) assert.equal(bash(c), true, c);
+    for (const c of ['git -C /w status', 'git commit -c HEAD', 'git log -c', 'echo GIT_DIRECTORY']) assert.equal(bash(c), false, c);
+  });
+
+  test('#618/AC-11: schedulers registered by command are terminal-only (round 3)', () => {
+    const calls = [
+      'launchctl submit -l x -- /tmp/x', 'launchctl load /tmp/x.plist', '/bin/launchctl bootstrap gui/501 /tmp/x.plist', 'systemctl --user enable x', 'sudo-less systemd-run --user /tmp/x', 'LAUNCHCTL load x',
+      'at -f /tmp/x now', 'echo run | at now + 1 minute', 'cd x && batch', 'FOO=1 at midnight', '/usr/bin/at 5pm',
+      "osascript -e 'tell application \"System Events\" to make login item at end with properties {path:\"/tmp/x\"}'", 'defaults write com.apple.loginwindow LoginHook /tmp/x',
+    ];
+    for (const c of calls) assert.equal(bash(c), true, c);
+    for (const c of ['echo look at the logs', 'git commit -m "fix at start"', 'cat at.ts', 'ls batch-jobs', 'echo at', 'grep -rn "at least" src']) assert.equal(bash(c), false, c);
+  });
+
+  test('#618/AC-11: local instruction files, submodule and bare-repo hooks and config are terminal-only (round 3)', () => {
+    const paths = [
+      '/r/CLAUDE.local.md', '/r/AGENTS.local.md', '/r/.git/modules/sub/hooks/pre-commit', '/r/.git/modules/sub/config', '/srv/repo.git/hooks/post-receive', '/srv/repo.git/config', '/r/.git/worktrees/w/config.worktree/../hooks/x',
+    ];
+    for (const p of paths) {
+      assert.equal(isTerminalOnly('Write', { file_path: p, content: 'x' }), true, `Write ${p}`);
+      assert.equal(bash(`echo x >> ${p}`), true, `Bash ${p}`);
+    }
+    for (const p of ['/r/.github/CODEOWNERS', '/r/.gitattributes', '/r/docs/claude.local-notes.md', '/r/src/git/hooks.ts']) assert.equal(isTerminalOnly('Write', { file_path: p, content: 'x' }), false, p);
+  });
+
+  test('#618/AC-11: the round 3 scans stay linear on a 64 KiB adversarial command', () => {
+    const size = 64 * 1024;
+    for (const text of ['/.git/'.repeat(size / 6), '.git/ '.repeat(size / 6), 'git -C '.repeat(size / 7), 'at '.repeat(size / 3), 'GIT_'.repeat(size / 4)]) {
+      const start = performance.now();
+      bash(text);
+      isTerminalOnly('Write', { file_path: text, content: 'x' });
+      const ms = performance.now() - start;
+      assert.ok(ms < 1000, `${ms.toFixed(0)} ms for ${text.slice(0, 8)}`);
+    }
   });
 });

@@ -21,9 +21,18 @@ const A = '(?:^|[\\s"\'=<>:;|&(,{/~])';
 // A name ends where a longer name would start (#618/AC-11).
 const END = '(?![A-Za-z0-9_-])';
 
+/** A `hooks` or `config` segment anywhere below a `.git/`: the repo, a submodule, a bare repo, a worktree. Per word, from the first `.git/` only, so it is linear where the one-regex form is quadratic on `.git/.git/…` (#618/AC-11). */
+function namesGitHooksOrConfig(text: string): boolean {
+  return text.split(/\s+/).some((word) => {
+    const at = word.toLowerCase().indexOf('.git/');
+    return at >= 0 && new RegExp(`(?:^|/)(?:hooks|config)${END}`).test(word.slice(at + 5).toLowerCase());
+  });
+}
+
 /** Files that run by themselves later, or that change what the next agent run does (a git hook or config, a build or install script, a CI workflow, a shell, system or login start-up file, a scheduler, a package manager config, an instruction file). A call that names one is terminal-only, whatever the tool and however the path is spelled in a command, case-insensitive, anywhere in the tree. It over-matches by design, reads included: when in doubt, Desktop only (decision 0025 amendment, item 7; #618/AC-11). */
-const AUTO_RUN_PATH_PATTERNS: RegExp[] = [
-  new RegExp(`${A}\\.git/(?:hooks|config)${END}`, 'i'),
+const AUTO_RUN_PATH_PATTERNS: ReadonlyArray<{ test(text: string): boolean }> = [
+  // A bare repo (`x.git/hooks`) and a submodule (`.git/modules/m/config`) are caught too; over-matches by design (#618).
+  { test: namesGitHooksOrConfig },
   new RegExp(`${A}\\.gitconfig${END}`, 'i'),
   new RegExp(`${A}package\\.json${END}`, 'i'),
   new RegExp(`${A}(?:gnumakefile|makefile)${END}|\\.mk${END}`, 'i'),
@@ -41,7 +50,7 @@ const AUTO_RUN_PATH_PATTERNS: RegExp[] = [
   new RegExp(`${A}crontab${END}`, 'i'),
   // What the next agent run reads as its commands, agents, skills and instructions (#618/AC-11).
   new RegExp(`${A}\\.claude/(?:commands|agents|skills)${END}`, 'i'),
-  new RegExp(`${A}(?:claude|agents)\\.md${END}`, 'i'),
+  new RegExp(`${A}(?:claude|agents)(?:\\.local)?\\.md${END}`, 'i'),
 ];
 /** The tools that only read: a path in their input is no write (#618/AC-11). */
 const READ_ONLY_TOOLS: ReadonlySet<string> = new Set(['Read', 'Grep', 'Glob', 'WebFetch']);
@@ -75,7 +84,8 @@ function spellings(text: string): string[] {
   return [text, unescapeShell(text)].flatMap((t) => [t, stripQuotes(t), deleteQuotes(t)]).map(normalizePath);
 }
 
-const RISKY_GIT_SUBCOMMANDS = new Set(['push', 'reset', 'clean']);
+// `config` rewrites .git/config or ~/.gitconfig without naming the file; `git config --get` over-matches, accepted (#618).
+const RISKY_GIT_SUBCOMMANDS = new Set(['push', 'reset', 'clean', 'config']);
 
 /** A tokenised scan, one pass per command segment (linear in the command, 64 KiB bound in 0025): recursive `rm`, and any `push`, `reset` or `clean` after a `git` word, whatever the flags or global options (#618/AC-9). */
 function hasRiskyVerb(segment: string): boolean {
@@ -111,10 +121,43 @@ function mutatesPackageJson(form: string): boolean {
   return tokens.some((t, i) => t === 'set-script' || (t === 'pkg' && PACKAGE_JSON_EDITS.has(tokens[i + 1] ?? '')));
 }
 
+/** Schedulers and login items registered by command, and git configuration injected by environment (#618/AC-11). */
+const SCHEDULER_PATTERNS: RegExp[] = [
+  new RegExp(`${A}(?:launchctl|systemctl|systemd-run)${END}`),
+  /login\s*items?|com\.apple\.loginitems|loginwindow/,
+  new RegExp(`${A}git_(?:config[a-z0-9_]*|dir|ssh_command|external_diff|exec_path)=`),
+];
+/** `at` and `batch` count only in command position (first word of a segment, after env assignments), never as a word of prose (#618/AC-11). */
+const AT_IN_COMMAND_POSITION = /^[\s({]*(?:[a-z_][a-z0-9_]*=\S*\s+)*(?:\S*\/)?(?:at|batch)(?=\s|$)/;
+
+/** `git -c k=v` and `git --config-env` among the options before the subcommand, on every `git` word; `-C dir` is skipped. Case matters here (`-C` is not `-c`), so it reads the raw spelling (#618/AC-11). */
+function gitInjectsConfig(form: string): boolean {
+  const tokens = tokensOf(form);
+  // One pass: each token is read by at most one option scan, so the cost is linear in the command (#618/AC-11).
+  let at = 0;
+  while (at < tokens.length) {
+    if (baseName(tokens[at] ?? '').toLowerCase() !== 'git') {
+      at++;
+      continue;
+    }
+    let i = at + 1;
+    for (; i < tokens.length; i++) {
+      const o = tokens[i] ?? '';
+      if (o === '-c' || o.startsWith('--config-env')) return true;
+      if (o === '-C' || o === '--git-dir' || o === '--work-tree' || o === '--namespace' || o === '--exec-path') i++;
+      else if (!o.startsWith('-')) break;
+    }
+    at = i;
+  }
+  return false;
+}
+
 function commandIsTerminalOnly(rawCommand: string): boolean {
+  if (spellings(rawCommand).some(gitInjectsConfig)) return true;
   // Command names are compared whatever the case, as the macOS disk is: `Git push`, `RM -rf` (#618/AC-11).
   const forms = spellings(rawCommand.toLowerCase());
   if (forms.some((form) => COMMAND_PATTERNS.some((re) => re.test(form)))) return true;
+  if (forms.some((form) => SCHEDULER_PATTERNS.some((re) => re.test(form)) || form.split(/[|;&\n]+/).some((segment) => AT_IN_COMMAND_POSITION.test(segment)))) return true;
   if (forms.some(downloadsAndRuns) || forms.some(reachesGitIndirectly) || forms.some(mutatesPackageJson)) return true;
   return forms.some((form) => form.split(/[|;&\n]+/).some(hasRiskyVerb));
 }
