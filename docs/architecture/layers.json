@@ -57,6 +57,10 @@
         "evidence": "registry, hub, inference and capture orchestrate over the decisions port (port.ts); 12 files",
         "mixed": "sqlite.ts and migration.ts import node:sqlite (edge) and capture-transcript.ts imports node:fs/promises (edge); capture-hooks.ts reads hook payloads handed to it and does no IO of its own"
       },
+      "delegation": {
+        "layer": "domain",
+        "evidence": "the delegation prompt and its URL budget (model, prompt); pure text building over the diagnosis and telemetry models, no node: import in either file"
+      },
       "dev-console": {
         "layer": "application",
         "evidence": "service, reader, sessions and contexts compose the work source and the github sources; 1 of 7 files (contexts.ts) reads the disk with node:fs/promises"
