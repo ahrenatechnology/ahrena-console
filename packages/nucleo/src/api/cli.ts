@@ -104,6 +104,7 @@ import { FRAMEWORK_REPO_ENV } from './framework-install.ts';
 import { createCoreGithub, type CoreGithub } from './core-github.ts';
 import { readOwnerTokenFile } from './owner-auth.ts';
 import { startLocalApi, API_VERSION, type LocalApi } from './server.ts';
+import { createObservability } from '../observability/setup.ts';
 import { createMessagingRoute } from './messaging.ts';
 import { createTranscriptionRoute } from './transcription.ts';
 import { createTranscription, resolveWhisperConfig } from '../transcription/whisper.ts';
@@ -780,7 +781,10 @@ const follower =
 const runtimeStore = new SqliteRuntimeStore(sqlite.db, changes);
 runtimeStore.recoverDisconnected();
 let ownerToken: string | null = null;
+// #661 the observer: the no-op one unless AHRENA_CONSOLE_OTEL_EXPORTER is configured (src/observability).
+const observability = await createObservability(process.env);
 const api: LocalApi = await startLocalApi({
+  observer: observability.observer,
   ownerToken: () => ownerToken,
   runtime: new ManagedRuntime(storage, runtimeStore),
   listenOn: reservation,
@@ -879,6 +883,7 @@ if (lock && 'conflict' in lock) {
   // Jobs run in their own process groups: end them (SIGTERM, then SIGKILL) so none outlives the núcleo.
   await toolsExecutor?.stopAll().catch(() => undefined);
   await api.close().catch(() => undefined);
+  await observability.shutdown().catch(() => undefined);
   await storage.close();
   adopt(lock.conflict.port, lock.conflict.version);
 }
@@ -982,6 +987,7 @@ async function shutdown() {
   await awsConnector?.stop().catch(() => undefined);
   await githubSync?.stop().catch(() => undefined);
   await api.close().catch(() => undefined);
+  await observability.shutdown().catch(() => undefined);
   await storage.close();
   if (demoFolder) rmSync(demoFolder, { recursive: true, force: true });
   process.exit(0);
