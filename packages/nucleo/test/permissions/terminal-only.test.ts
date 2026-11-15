@@ -85,13 +85,21 @@ describe('isTerminalOnly (#618/AC-6)', () => {
   });
 
   test('#618/AC-6: the recursive rm check is linear on a 64 KiB command', () => {
-    const start = performance.now();
-    bash('rm '.repeat(21000));
-    bash('git push '.repeat(8000));
-    bash(`rm ${'-a '.repeat(22000)}`);
-    bash(`rm${' x'.repeat(32000)}`);
-    // A quadratic scan of 64 KiB takes seconds; 2 s keeps that apart from linear without failing on a loaded CI runner (#618).
-    assert.ok(performance.now() - start < 2000);
+    // Linear, not quadratic: doubling the input must not come near quadrupling the time. A ratio holds on a loaded CI
+    // runner where a wall-clock budget does not; the best of three runs drops scheduler noise (#618).
+    const inputs = (n: number): string[] => ['rm '.repeat(n), 'git push '.repeat(Math.floor(n / 2.6)), `rm ${'-a '.repeat(n)}`, `rm${' x'.repeat(Math.floor(n * 1.5))}`];
+    const best = (n: number): number => {
+      let min = Infinity;
+      for (let run = 0; run < 3; run++) {
+        const start = performance.now();
+        for (const text of inputs(n)) bash(text);
+        min = Math.min(min, performance.now() - start);
+      }
+      return min;
+    };
+    const half = best(10_500);
+    const full = best(21_000);
+    assert.ok(full < half * 3 + 50, `${full.toFixed(0)} ms at 64 KiB against ${half.toFixed(0)} ms at 32 KiB`);
   });
 
   test('#618/AC-6: git destructive subcommands are caught behind git global options', () => {
