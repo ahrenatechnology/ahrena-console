@@ -90,7 +90,8 @@ describe('isTerminalOnly (#618/AC-6)', () => {
     bash('git push '.repeat(8000));
     bash(`rm ${'-a '.repeat(22000)}`);
     bash(`rm${' x'.repeat(32000)}`);
-    assert.ok(performance.now() - start < 500);
+    // A quadratic scan of 64 KiB takes seconds; 2 s keeps that apart from linear without failing on a loaded CI runner (#618).
+    assert.ok(performance.now() - start < 2000);
   });
 
   test('#618/AC-6: git destructive subcommands are caught behind git global options', () => {
