@@ -3,7 +3,10 @@
 // draws one state from a plain object, and the buttons call the handlers the state layer gives (`onRetry`,
 // `onReread`, `onMore`, and the toggle's `onToggle`). Everything that comes from the machine goes in as text.
 //
-//   diagnosisPanel({ state, alert, diagnosis, failure, remote, label, context, expanded, now }, { onRetry, onReread, onMore })
+//   diagnosisPanel({ state, alert, diagnosis, failure, remote, label, host, context, expanded, now }, { onRetry, onReread, onMore, onDelegate })
+//
+// `onDelegate` (issue 568) is opt-in: with it the Resolver's slot and the failed panel carry "Delegar ao Claude"
+// (`machine-delegation.js`); without it they are what they were.
 //
 // `state` is `loading`, `ready`, `failed`, `closed` (404: the alert already closed) or `unsupported` (501). The Resolver
 // block has its header and the probable cause only; the groups of the next stories get the empty
@@ -11,6 +14,7 @@
 
 import { el, icon } from '../dom.js';
 import { bytes, DASH } from './machine-format.js';
+import { delegateButton, delegateOffer } from './machine-delegation.js';
 import {
   cacheRows,
   cpuText,
@@ -203,15 +207,18 @@ function causePart(p) {
   return p.text;
 }
 
-/** The Resolver block: its header and the probable cause, with the empty slot for the groups of the next stories. */
-export function resolverBlock(cause) {
+/**
+ * The Resolver block: its header and the probable cause, with the slot for the groups of the next stories. `delegate`
+ * (`{ remote, host, onDelegate }`) puts "Delegar ao Claude" in the slot (issue 568); with no `onDelegate` the slot stays empty.
+ */
+export function resolverBlock(cause, delegate = null) {
   if (!cause) return null;
   return el(
     'div',
     { class: 'tm-rs', 'data-part': 'resolver', 'data-obvious': String(cause.obvious), role: 'group', 'aria-label': 'Resolver' },
     el('div', { class: 'tm-rs-head' }, icon('settings'), el('b', {}, 'Resolver')),
     el('div', { class: 'tm-rs-cause' }, icon('lightbulb'), el('div', {}, el('b', {}, 'Causa provável:'), ' ', ...cause.parts.map(causePart), cause.note ? el('small', {}, cause.note) : null)),
-    el('div', { class: 'tm-rs-actions', 'data-slot': 'resolver-actions' }),
+    el('div', { class: 'tm-rs-actions', 'data-slot': 'resolver-actions' }, delegate?.onDelegate ? delegateOffer({ cause, remote: delegate.remote, host: delegate.host }, { onDelegate: delegate.onDelegate }) : null),
   );
 }
 
@@ -235,7 +242,7 @@ export function diagnosisLoading(alert) {
 }
 
 /** 566-4 to 566-6: the sections of the alert's kind, the read line, "Ler de novo" and the Resolver. */
-export function diagnosisReady(alert, diagnosis, { context = {}, machine, expanded = new Set(), now = Date.now(), onReread, onMore } = {}) {
+export function diagnosisReady(alert, diagnosis, { context = {}, machine, expanded = new Set(), now = Date.now(), onReread, onMore, delegate = null } = {}) {
   const ctx = { mount: mountOf(diagnosis.alertId ?? alert.id), expanded: expanded instanceof Set ? expanded : new Set(expanded), onMore, now };
   const present = sectionsFor(alert.kind, diagnosis);
   const group = groupOf(alert.kind);
@@ -257,12 +264,12 @@ export function diagnosisReady(alert, diagnosis, { context = {}, machine, expand
     ),
     inCols.length ? el('div', { class: `tm-dg-cols${group === 'load' ? ' tm-dg-one' : ''}` }, ...inCols.map((s, i) => section(s, ctx, lonely && i === inCols.length - 1))) : null,
     ...below.map((s) => section(s, ctx, false)),
-    resolverBlock(probableCause({ ...diagnosis, kind: alert.kind }, { ...context, ...(machine ? { machine } : {}) })),
+    resolverBlock(probableCause({ ...diagnosis, kind: alert.kind }, { ...context, ...(machine ? { machine } : {}) }), delegate),
   );
 }
 
-/** 566-8: "Não deu para diagnosticar" and "Tentar de novo"; the Workstation's 502 changes the sentence only. */
-export function diagnosisFailed(alert, failure, { onRetry } = {}) {
+/** 566-8: "Não deu para diagnosticar" and "Tentar de novo", with "Delegar ao Claude" beside it (secondary) when `onDelegate` is given; the Workstation's 502 changes the sentence only. */
+export function diagnosisFailed(alert, failure, { onRetry, onDelegate } = {}) {
   const { reason, code } = failureText(failure ?? {});
   return panelRoot(
     'failed',
@@ -270,7 +277,12 @@ export function diagnosisFailed(alert, failure, { onRetry } = {}) {
     { cls: 'tm-dg-fail', role: 'alert' },
     el('span', { class: 'tm-dg-ic' }, icon('error')),
     el('div', { class: 'tm-dg-msg' }, el('b', {}, 'Não deu para diagnosticar'), el('span', {}, reason), el('span', { class: 'mono tm-dg-code' }, code)),
-    el('div', { class: 'tm-dg-btns' }, el('button', { type: 'button', class: 'btn filled', 'data-dg-action': 'retry', onClick: onRetry }, icon('refresh'), 'Tentar de novo')),
+    el(
+      'div',
+      { class: 'tm-dg-btns' },
+      el('button', { type: 'button', class: 'btn filled', 'data-dg-action': 'retry', onClick: onRetry }, icon('refresh'), 'Tentar de novo'),
+      onDelegate ? delegateButton({ emphasis: 'secondary' }, { onDelegate }) : null,
+    ),
   );
 }
 
@@ -304,7 +316,7 @@ export function diagnosisPanel(v, handlers = {}) {
     case 'loading':
       return diagnosisLoading(alert);
     case 'ready':
-      return v.diagnosis ? diagnosisReady(alert, v.diagnosis, { context: v.context, machine: v.remote ? `a ${v.label || 'Workstation'}` : undefined, expanded: v.expanded, now: v.now, onReread: handlers.onReread, onMore: handlers.onMore }) : null;
+      return v.diagnosis ? diagnosisReady(alert, v.diagnosis, { context: v.context, machine: v.remote ? `a ${v.label || 'Workstation'}` : undefined, expanded: v.expanded, now: v.now, onReread: handlers.onReread, onMore: handlers.onMore, delegate: handlers.onDelegate ? { remote: Boolean(v.remote), host: v.host, onDelegate: handlers.onDelegate } : null }) : null;
     case 'failed':
       return diagnosisFailed(alert, { remote: Boolean(v.remote), ...v.failure }, handlers);
     case 'closed':

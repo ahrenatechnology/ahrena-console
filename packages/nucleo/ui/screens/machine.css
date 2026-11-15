@@ -315,4 +315,34 @@
 .tm-rs-cause > .icon { color: var(--status-waiting-text); flex: none; margin-top: 1px; }
 .tm-rs-cause small { display: block; color: var(--muted); font-size: 11px; margin-top: 2px; }
 .tm-rs-actions:empty { display: none; }
+/* "Delegar ao Claude" (issue 568): the Resolver's row, the "aberto" status and the dialog of wireframe 566-17. */
+.tm-dl-offer { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border: 1px dashed var(--border); border-radius: 8px; font-size: 12px; }
+.tm-dl-offer > .icon { flex: none; color: var(--accent-text); }
+.tm-dl-offer > div { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.tm-dl-offer small { color: var(--muted); font-size: 11.5px; }
+.tm-dl-pri { border-style: solid; border-color: color-mix(in srgb, var(--accent) 55%, var(--border)); background: color-mix(in srgb, var(--accent) 7%, transparent); }
+.tm-dl-status { display: inline-flex; gap: 6px; align-items: center; font-size: 11.5px; color: var(--status-completed-text); }
+.tm-dl-veil { position: fixed; inset: 0; z-index: 50; display: flex; justify-content: center; align-items: flex-start; padding: 90px 16px 16px; background: color-mix(in srgb, var(--bg) 62%, transparent); overflow-y: auto; }
+.tm-dl-dialog { width: 640px; max-width: 100%; display: flex; flex-direction: column; gap: 14px; padding: 18px 20px; box-shadow: 0 18px 50px color-mix(in srgb, var(--bg) 70%, transparent); }
+.tm-dl-head { display: flex; align-items: center; gap: 10px; font-size: 15px; }
+.tm-dl-head .tm-dl-x { margin-left: auto; }
+.tm-dl-sec { display: flex; flex-direction: column; gap: 8px; }
+.tm-dl-opts { display: flex; flex-direction: column; gap: 8px; }
+.tm-dl-opt { display: flex; gap: 10px; padding: 9px 11px; border: 1px solid var(--border); border-radius: 10px; align-items: flex-start; text-align: left; font: inherit; color: var(--text); background: transparent; cursor: pointer; }
+.tm-dl-opt.tm-dl-on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 7%, transparent); }
+.tm-dl-opt:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.tm-dl-dot { flex: none; width: 16px; height: 16px; border: 1px solid var(--border); border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; color: var(--accent-text); }
+.tm-dl-dot .icon { width: 12px; height: 12px; }
+.tm-dl-opt-b { display: flex; flex-direction: column; gap: 4px; min-width: 0; flex: 1; }
+.tm-dl-opt-t { display: flex; gap: 10px; align-items: baseline; font-size: 13px; }
+.tm-dl-opt-d { font-size: 11.5px; color: var(--muted); }
+.tm-dl-prompt { margin: 0; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; font-family: var(--font-mono); font-size: 11px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--text); max-height: 320px; overflow-y: auto; }
+.tm-dl-prompt:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.tm-dl-data { display: block; margin: 6px 0; border: 1px dashed var(--accent); border-radius: 6px; padding: 8px 10px; background: color-mix(in srgb, var(--accent) 6%, transparent); }
+.tm-dl-tag { display: block; color: var(--accent-text); font-size: 10.5px; }
+.tm-dl-hint { font-size: 11.5px; color: var(--muted); }
+.tm-dl-note { display: flex; gap: 8px; font-size: 11.5px; color: var(--muted); align-items: flex-start; }
+.tm-dl-note .icon { flex: none; margin-top: 1px; color: var(--status-completed-text); }
+.tm-dl-err .icon { color: var(--status-error-text); }
+.tm-dl-actions { display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
 @media (max-width: 760px) { .tm-dg-cols { grid-template-columns: minmax(0, 1fr); } .tm-dg-panel { margin-left: 0; } }
