@@ -1,17 +1,17 @@
 // The permission request routes (decision 0025, #618, API layer), written against docs/contracts/permission-requests.md.
 // The routes and who calls them (#618):
-// | Route                                                       | Who        | What |
+// | Route                                                       | Who        | What (#618) |
 // | ----------------------------------------------------------- | ---------- | ---- |
-// | `POST /api/sessions/<sid>/permission-requests`              | the hook   | Registers → 201 `{ requestId, expiresAt }` |
-// | `GET …/permission-requests/<rid>/decision?wait=25`          | the hook   | Long poll: 200 once, 204, 409, 410, 404 |
-// | `POST …/permission-requests/<rid>/withdraw`                 | the hook   | The hook gave up |
-// | `GET /api/sessions/<sid>/permission-requests`               | the /ui    | The pending and the recently closed |
-// | `POST …/permission-requests/<rid>/answer`                   | the window | `{ decision, reason? }`, with three proofs |
+// | `POST /api/sessions/<sid>/permission-requests`              | the hook   | Registers → 201 `{ requestId, expiresAt }` (#618) |
+// | `GET …/permission-requests/<rid>/decision?wait=25`          | the hook   | Long poll: 200 once, 204, 409, 410, 404 (#618) |
+// | `POST …/permission-requests/<rid>/withdraw`                 | the hook   | The hook gave up (#618) |
+// | `GET /api/sessions/<sid>/permission-requests`               | the /ui    | The pending and the recently closed (#618) |
+// | `POST …/permission-requests/<rid>/answer`                   | the window | `{ decision, reason? }`, with three proofs (#618) |
 //
 // The two proofs of the answer (#618) come before any body is read: the same-origin exception of decision 0003 and the in-memory
-// window credential (`Ahrena-Window`, compared in constant time). The hook routes refuse a request that carries `Origin` or
-// `Sec-Fetch-Site`, as the mod routes of orders.ts do. Every refusal reaches the caller as `{ error: <code> }`, a closed code,
-// and the audit; no caught error, no request text and no credential goes into a response or the log (decision 0025).
+// window credential (`Ahrena-Window`, compared in constant time). The hook routes refuse a request that carries `Origin` or (#618)
+// `Sec-Fetch-Site`, as the mod routes of orders.ts do. Every refusal reaches the caller as `{ error: <code> }`, a closed code, (#618)
+// and the audit; no caught error, no request text and no credential goes into a response or the log (decision 0025). (#618)
 
 import { createHash, timingSafeEqual } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
@@ -276,8 +276,8 @@ export function createPermissions(options: PermissionsOptions, ctx: PermissionsC
     const record: PermissionAuditRecord = { at: deps.clock.now(), event: 'refused', requestId: id(parsed.requestId, REQUEST_ID), sessionId: id(parsed.sessionId, SESSION_ID), operation, code };
     try {
       deps.audit.append(record);
-    } catch {
-      ctx.log('permission audit failed');
+    } catch (error) {
+      ctx.log(`permission audit failed operation=${field(operation)} code=${field(code)} sessionId=${field(record.sessionId || '-')} requestId=${field(record.requestId || '-')} error=${field(errorClass(error))}`);
     }
   }
 
@@ -353,7 +353,7 @@ export function createPermissions(options: PermissionsOptions, ctx: PermissionsC
     const waitMs = waitOf(url);
     if (waitMs === null) return send(res, 400, { error: 'invalid_request' });
     // (#618) The hook leaving. While it waits, no read delivers: the delivery is the one synchronous read that finds an answer, and it
-    // happens only while the connection is still open, so a hook that disconnected is never handed a decision it cannot apply.
+    // happens only while the connection is still open, so a hook that disconnected is never handed a decision it cannot apply. (#618)
     let left = false;
     let leave: () => void = () => {};
     const closed = new Promise<void>((resolve) => {
@@ -447,7 +447,7 @@ export function createPermissions(options: PermissionsOptions, ctx: PermissionsC
         try {
           expireDue(deps);
         } catch (error) {
-          ctx.log(`permission expiry sweep failed error=${field(errorClass(error))}`);
+          ctx.log(`permission expiry sweep failed operation=${field('expiry_sweep')} error=${field(errorClass(error))}`);
         }
       }, options.sweepEveryMs ?? DEFAULT_SWEEP_MS);
       timer.unref();

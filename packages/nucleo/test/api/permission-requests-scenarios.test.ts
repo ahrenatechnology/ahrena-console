@@ -411,6 +411,19 @@ describe('what is stored, served, logged and audited (#618/AC-7, AC-9)', () => {
       assert.ok(!f.logs.join('\n').includes('secret-detail-8812'));
     }));
 
+  test('#618/AC-5, AC-7: a refusal whose audit failed is still refused, and is logged with its operation, code, ids and error class, never its message', () =>
+    given(async (f) => {
+      const { rid } = await f.register();
+      Reflect.set(f.deps.audit, 'append', () => {
+        throw new EvalError(`secret-detail-8812 ${WINDOW_CREDENTIAL} reason-sentinel-7788`);
+      });
+      const forged = await f.call('POST', reqPath(SID, rid, '/answer'), { body: { decision: 'deny', reason: 'reason-sentinel-7788' }, headers: { origin: f.api.url } });
+      assert.equal(forged.status, 403);
+      const line = f.logs.find((m) => m.startsWith('permission audit failed'));
+      assert.equal(line, `permission audit failed operation="answer" code="window_only" sessionId=${JSON.stringify(SID)} requestId=${JSON.stringify(rid)} error="EvalError"`);
+      for (const text of ['secret-detail-8812', WINDOW_CREDENTIAL, OWNER_TOKEN, 'reason-sentinel-7788']) assert.ok(!f.logs.join('\n').includes(text), `logs: ${text}`);
+    }));
+
   test('#618/AC-3, AC-7: an expiry sweep that failed is logged with the error class, and never its message', () =>
     given(
       async (f) => {
@@ -418,7 +431,7 @@ describe('what is stored, served, logged and audited (#618/AC-7, AC-9)', () => {
           throw new SyntaxError('secret-detail-8812 /private/path');
         });
         await until(() => f.logs.some((m) => m.startsWith('permission expiry sweep failed')));
-        assert.ok(f.logs.includes('permission expiry sweep failed error="SyntaxError"'));
+        assert.ok(f.logs.includes('permission expiry sweep failed operation="expiry_sweep" error="SyntaxError"'));
         assert.ok(!f.logs.join('\n').includes('secret-detail-8812'));
       },
       { sweepEveryMs: 10 },
