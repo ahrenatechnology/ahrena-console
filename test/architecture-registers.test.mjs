@@ -7,7 +7,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { join, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-const ROOT = process.env.ROOT ?? join(fileURLToPath(new URL('.', import.meta.url)), '..')
+const ROOT = join(fileURLToPath(new URL('.', import.meta.url)), '..')
 const DIR = join(ROOT, 'docs', 'architecture')
 export const PROBLEMS = ['result', 'error-format', 'http-client', 'validation', 'test', 'date-time', 'persistence', 'events']
 export const MODES = ['append-only', 'upsert-with-history', 'upsert']

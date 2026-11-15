@@ -7,7 +7,7 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-const ROOT = process.env.ROOT ?? join(fileURLToPath(new URL('.', import.meta.url)), '..')
+const ROOT = join(fileURLToPath(new URL('.', import.meta.url)), '..')
 const MAP_FILE = join(ROOT, 'docs', 'architecture', 'layers.json')
 const LAYERS = ['domain', 'application', 'edge', 'composition-root']
 
