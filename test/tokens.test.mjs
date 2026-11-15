@@ -158,8 +158,7 @@ test('a amostra usa os mesmos valores dos tokens', () => {
   for (const value of new Set(used)) assert.ok(html.includes(value), `a amostra não tem ${value}`)
 })
 
-// Issue 665: every theme-dependent colour has a value in both themes (the dark theme is an
-// accessibility requirement, photosensitivity, never an extra) and the spacing scale is compact.
+// #665: each colour has a value in both themes and the spacing scale is compact
 const roleKeys = (theme) => Object.keys(theme).filter((k) => !k.startsWith('_')).sort()
 
 test('dark and light have identical colour keys, each a hex, and nothing is left to one theme', () => {

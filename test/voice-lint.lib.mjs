@@ -1,6 +1,4 @@
-// The voice lint of issue 665: holds the pt-BR on-screen text to docs/brand/voice-rules.json.
-// Shared by voice-lint.test.mjs. The rules, the heuristic that picks the on-screen text and how a
-// string is classified are documented in the rules file itself and in docs/brand/voice.md.
+// Voice lint of #665: holds the pt-BR on-screen text to docs/brand/voice-rules.json.
 import { readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 
@@ -8,22 +6,16 @@ export function loadRules(path) {
   return JSON.parse(readFileSync(path, 'utf8'))
 }
 
-// ---------------------------------------------------------------------------------------------
-// The rules on one text
-
-const LETTER = '\\p{L}\\p{N}_'
+const LETTER = '\\p{L}\\p{M}\\p{N}_'
 const escapeRegex = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
-/** A whole-word, case-insensitive, accent-aware matcher: the characters around it are not letters. */
 function wordMatcher(phrase, flags = 'giu') {
-  const body = phrase.trim().split(/\s+/).map(escapeRegex).join('\\s+')
+  const body = phrase.normalize('NFC').trim().split(/\s+/).map(escapeRegex).join('\\s+')
   return new RegExp(`(?<![${LETTER}])${body}(?![${LETTER}])`, flags)
 }
 
-/** The words of a text: the tokens that hold a letter, a digit or an interpolation. */
 const wordsOf = (text) => text.split(/\s+/).filter((t) => /[\p{L}\p{N}]|\{\}/u.test(t))
 
-/** Sentences end at . ! ? or an ellipsis followed by white space and an upper case letter. */
 function sentencesOf(text) {
   const trimmed = text.trim()
   if (!trimmed) return 0
@@ -36,7 +28,8 @@ const EMOJI = /\p{Emoji_Presentation}|\p{Extended_Pictographic}️/u
  * The findings of one text. `kind` is 'label', 'title', 'support' or absent (unclassified: no length
  * limits). A finding: { rule, match, suggestion?, message }.
  */
-export function lintText(text, rules, { kind } = {}) {
+export function lintText(rawText, rules, { kind } = {}) {
+  const text = rawText.normalize('NFC')
   const findings = []
   const add = (rule, match, message, suggestion) => findings.push({ rule, match, message, ...(suggestion ? { suggestion } : {}) })
   const words = wordsOf(text).length
@@ -66,13 +59,8 @@ export function lintText(text, rules, { kind } = {}) {
   if (rules.fillerPatterns.longDash && text.includes('—')) add('filler-long-dash', '—', 'no long dash')
   if (rules.fillerPatterns.emoji && EMOJI.test(text)) add('filler-emoji', text.match(EMOJI)[0], 'no emoji')
 
-  // The public rule ids of the rule kinds that carry a term in the id are kept whole in the baseline,
-  // but a test or a reader asks for the kind: forbidden-term, preferred-term, filler-phrase.
   return findings.map((f) => ({ ...f, rule: f.rule.replace(/^(forbidden-term|preferred-term|filler-phrase):.*/, '$1'), key: f.rule }))
 }
-
-// ---------------------------------------------------------------------------------------------
-// Classification and the on-screen text heuristic
 
 const lastWord = (key) => key.replace(/([a-z0-9])([A-Z])/g, '$1 $2').split(/[^A-Za-z0-9]+/).filter(Boolean).pop()?.toLowerCase()
 
@@ -92,18 +80,13 @@ export function classify({ key, tag }, rules) {
   return null
 }
 
-/** Whether a literal of a source is on-screen text; `kind` is its classification. See the rules file. */
 function isScreenText(text, kind) {
   if (!/\p{L}/u.test(text)) return false
   if (/^(\/|\.|#|https?:|data:|[a-z][a-z0-9+.-]*:\/\/)/i.test(text)) return false
   if (kind) return true
-  if (!/\s/.test(text)) return /^\p{Lu}\p{L}*$/u.test(text)
-  // white space and every token lower case ASCII: a class list
+  if (!/\s/.test(text)) return /^\p{Lu}\p{L}*[.!?…]*$/u.test(text)
   return !text.split(/\s+/).every((t) => /^[a-z0-9_:.,\-[\]#>*=/~()'"]+$/.test(t))
 }
-
-// ---------------------------------------------------------------------------------------------
-// The extractors
 
 const REGEX_BEFORE = /[(,=:[!&|?{};+\-*%<>~^]$/
 const KEYWORD_BEFORE = /(?:^|[^\w$.])(?:return|typeof|case|of|in|delete|void|throw|new|else|yield|await)$/
@@ -164,7 +147,6 @@ export function extractJs(source) {
       } else text += source[i++]
     }
     i++
-    // a literal that starts a property and is followed by a colon is a key (`'aria-label': …`), not text
     const isKey = /^\s*:/.test(source.slice(i, i + 40)) && /[{,]\s*$/.test(source.slice(Math.max(0, start - 40), start))
     if (!isKey) out.push({ text, line: startLine, ...context(start) })
   }
@@ -229,8 +211,10 @@ export function extractJs(source) {
 }
 
 /** Text nodes and the aria-label, placeholder and title attributes of an HTML page. */
-export function extractHtml(html) {
+export function extractHtml(html, htmlAttributes) {
   const out = []
+  const names = Object.keys(htmlAttributes).map(escapeRegex).join('|')
+  const attributeRe = new RegExp(`\\b(${names})\\s*=\\s*"([^"]*)"`, 'gi')
   const lineOf = (pos) => (html.slice(0, pos).match(/\n/g) ?? []).length + 1
   const blank = (s) => s.replace(/[^\n]/g, ' ')
   const source = html
@@ -238,8 +222,9 @@ export function extractHtml(html) {
     .replace(/<(script|style|svg)\b[\s\S]*?<\/\1>/gi, blank)
   for (const m of source.matchAll(/<([a-z][a-z0-9-]*)\b([^>]*)>/gi)) {
     const [, tag, attrs] = m
-    for (const a of attrs.matchAll(/\b(aria-label|placeholder|title)\s*=\s*"([^"]*)"/gi)) {
-      out.push({ text: a[2].replace(/\s+/g, ' ').trim(), line: lineOf(m.index), key: a[1].toLowerCase(), tag: tag.toLowerCase(), skip: false })
+    for (const a of attrs.matchAll(attributeRe)) {
+      const key = a[1].toLowerCase()
+      out.push({ text: a[2].replace(/\s+/g, ' ').trim(), line: lineOf(m.index), key, tag: tag.toLowerCase(), kind: htmlAttributes[key], skip: false })
     }
     const after = m.index + m[0].length
     const text = /^[^<]*/.exec(source.slice(after))[0]
@@ -249,20 +234,17 @@ export function extractHtml(html) {
   return out
 }
 
-// ---------------------------------------------------------------------------------------------
-// The lint over files
+function filesOf(root, pattern) {
+  const cut = pattern.lastIndexOf('/')
+  const dir = pattern.slice(0, cut)
+  const name = new RegExp(`^${pattern.slice(cut + 1).split('*').map(escapeRegex).join('.*')}$`)
+  return readdirSync(join(root, dir)).filter((f) => name.test(f)).sort().map((f) => `${dir}/${f}`)
+}
 
-const UI_DIRS = ['packages/nucleo/ui', 'packages/nucleo/ui/screens']
-
-function uiFiles(root) {
-  const files = []
-  for (const dir of UI_DIRS) {
-    for (const f of readdirSync(join(root, dir)).sort()) {
-      if (f.endsWith('.js')) files.push({ file: `${dir}/${f}`, source: readFileSync(join(root, dir, f), 'utf8') })
-    }
-  }
-  files.push({ file: 'packages/nucleo/ui/index.html', source: readFileSync(join(root, 'packages/nucleo/ui/index.html'), 'utf8') })
-  return files
+function uiFiles(root, rules) {
+  return rules.scope.includedFiles
+    .flatMap((pattern) => filesOf(root, pattern))
+    .map((file) => ({ file, source: readFileSync(join(root, file), 'utf8') }))
 }
 
 /**
@@ -270,13 +252,13 @@ function uiFiles(root) {
  * `{ root }` reads the files of the checkout; `{ virtual: [{ file, source }] }` reads the given ones.
  */
 export function lintFiles({ root, virtual }, rules) {
-  const files = virtual ?? uiFiles(root)
+  const files = virtual ?? uiFiles(root, rules)
   const findings = []
   for (const { file, source } of files) {
-    const literals = file.endsWith('.html') ? extractHtml(source) : extractJs(source)
+    const literals = file.endsWith('.html') ? extractHtml(source, rules.classification.htmlAttributes) : extractJs(source)
     for (const lit of literals) {
       if (lit.skip) continue
-      const kind = classify(lit, rules)
+      const kind = lit.kind ?? classify(lit, rules)
       if (!isScreenText(lit.text, kind)) continue
       for (const f of lintText(lit.text, rules, { kind })) {
         findings.push({ file, line: lit.line, text: lit.text, kind, ...f })
@@ -286,10 +268,6 @@ export function lintFiles({ root, virtual }, rules) {
   return findings
 }
 
-// ---------------------------------------------------------------------------------------------
-// The ratchet
-
-/** The key of a finding: file, rule and text. No line number, so an unrelated edit does not churn it. */
 const keyOf = (f) => `${f.file}\u0000${f.key ?? f.rule}\u0000${f.text}`
 
 /** The baseline of a list of findings: one entry per file, rule and text, with a count. */

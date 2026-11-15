@@ -86,7 +86,7 @@ export function gerarCss(tokens: Tokens): string {
   const tipo = tokens.typography
   fixas.push(variavel('font-sans', tipo.sans), variavel('font-mono', tipo.mono))
   for (const [nome, v] of Object.entries(tipo.size)) fixas.push(variavel(`text-${nome}`, v as string))
-  for (const [nome, v] of Object.entries(limpo(tokens.spacing))) fixas.push(variavel(`space-${nome}`, v as string))
+  for (const [name, v] of Object.entries(limpo(tokens.spacing))) fixas.push(variavel(`space-${name}`, v as string))
   for (const [nome, v] of Object.entries(tipo.weight)) fixas.push(variavel(`weight-${nome}`, v as number))
 
   const escuro = variaveisDoTema(tokens, 'dark')

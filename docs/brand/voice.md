@@ -20,6 +20,9 @@ It holds new and changed code. What already broke the rules is frozen in
 that no longer occurs, so the baseline only shrinks.
 
 - Fix the text; never add a baseline entry.
+- The baseline only shrinks. The test refuses a stale entry, and `VOICE_LINT_SHRINK=1` refuses to write while a
+  new violation exists. Nothing in the test stops a hand-added baseline entry: review of the diff of
+  `test/voice-lint.baseline.json` catches it.
 - When a fix removes a baselined violation, the test asks for it to leave the baseline:
   `VOICE_LINT_SHRINK=1 node --test --test-concurrency=1 test/voice-lint.test.mjs`.
 - Changing a rule is a change to the rules file, approved by the product owner, with a new version.

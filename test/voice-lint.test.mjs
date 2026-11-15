@@ -1,18 +1,11 @@
-// Guard for the voice of the pt-BR on-screen text (issue 665): the rules are docs/brand/voice-rules.json,
-// the lint is voice-lint.lib.mjs, and what already broke them is frozen in voice-lint.baseline.json.
-// A ratchet: a finding that is not in the baseline fails, and so does a baseline entry that no longer
-// occurs, so the baseline only shrinks.
-//
-// Run with: node --test --test-concurrency=1 test/voice-lint.test.mjs
-// Create the baseline (only when the file does not exist): VOICE_LINT_FREEZE=1 node --test test/voice-lint.test.mjs
-// Remove stale entries:                                     VOICE_LINT_SHRINK=1 node --test test/voice-lint.test.mjs
+// Voice test of #665: the rules are docs/brand/voice-rules.json, what already broke them is frozen in voice-lint.baseline.json.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { existsSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
-  baselineEntries,
   compareToBaseline,
   extractHtml,
   extractJs,
@@ -42,11 +35,21 @@ test('the rules file exists and is well-formed', () => {
   })
   const strings = (list) => Array.isArray(list) && list.length > 0 && list.every((s) => typeof s === 'string' && s.trim() === s && s !== '')
   assert.ok(strings(rules.forbiddenTerms))
-  assert.equal(rules.forbiddenTerms.length, 11)
-  assert.ok(Array.isArray(rules.preferredTerms) && rules.preferredTerms.length === 5)
+  assert.deepEqual(rules.forbiddenTerms, [
+    'por favor', 'infelizmente', 'ops', 'clique aqui', 'aguarde', 'basicamente', 'simplesmente', 'incrível', 'poderoso', 'intuitivo', 'sem complicação',
+  ])
+  assert.deepEqual(rules.preferredTerms, [
+    { avoid: 'acessar', use: 'abrir' },
+    { avoid: 'utilizar', use: 'usar' },
+    { avoid: 'visualizar', use: 'ver' },
+    { avoid: 'novamente', use: 'de novo' },
+    { avoid: 'Verificar', use: 'Conferir' },
+  ])
   for (const p of rules.preferredTerms) assert.ok(strings([p.avoid, p.use]), JSON.stringify(p))
   assert.ok(strings(rules.fillerPatterns.phrases))
-  assert.equal(rules.fillerPatterns.phrases.length, 11)
+  assert.deepEqual(rules.fillerPatterns.phrases, [
+    'vale ressaltar', 'vale notar', 'é importante destacar', 'em resumo', 'aqui está', 'com certeza', 'vamos lá', 'bem-vindo', 'descubra', 'explore', 'nesta tela você pode',
+  ])
   for (const flag of ['exclamationMark', 'longDash', 'emoji']) assert.equal(rules.fillerPatterns[flag], true, flag)
   for (const section of ['classification', 'matching', 'scope', 'ratchet']) assert.ok(rules[section], `section ${section}`)
   for (const key of ['labelKeys', 'titleKeys', 'supportKeys', 'labelElements', 'titleElements']) assert.ok(strings(rules.classification[key]), key)
@@ -62,7 +65,6 @@ test('the good examples pass', () => {
 test('label limits: words and characters', () => {
   assert.deepEqual(lintText('Uma duas três quatro', rules, { kind: 'label' }), [])
   assert.deepEqual(ruleIds(lintText('Uma duas três quatro cinco', rules, { kind: 'label' })), ['limit-label-words'])
-  // 4 words, 29 characters
   const long = 'Abcdefgh abcdefgh abcdefgh abc'
   assert.equal(long.length, 30)
   assert.deepEqual(ruleIds(lintText(long, rules, { kind: 'label' })), ['limit-label-characters'])
@@ -96,7 +98,6 @@ test('a forbidden term is a finding, whole word, any case, accent-aware', () => 
   assert.equal(count(lintText('Incrível', rules), 'forbidden-term'), 1)
   assert.equal(count(lintText('INFELIZMENTE não deu', rules), 'forbidden-term'), 1)
   assert.equal(count(lintText('Ops, deu errado', rules), 'forbidden-term'), 1)
-  // whole words only
   assert.equal(count(lintText('Fechar os copos e as ópticas', rules), 'forbidden-term'), 0)
   assert.equal(count(lintText('Aguardando a resposta', rules), 'forbidden-term'), 0)
   assert.equal(count(lintText('Por   favor confira', rules), 'forbidden-term'), 1)
@@ -123,7 +124,6 @@ test('a preferred term is flagged with its suggestion', () => {
     assert.equal(found[0].match.toLowerCase(), avoid)
     assert.equal(found[0].suggestion, use)
   }
-  // exact words: an inflection is not matched
   assert.equal(count(lintText('Acesse o painel', rules), 'preferred-term'), 0)
   assert.equal(count(lintText('A verificação terminou', rules), 'preferred-term'), 0)
 })
@@ -142,7 +142,6 @@ test('an exclamation mark, a long dash and an emoji are findings', () => {
   assert.deepEqual(ruleIds(lintText('Salvo — sem erro', rules)), ['filler-long-dash'])
   assert.deepEqual(ruleIds(lintText('Salvo 🎉', rules)), ['filler-emoji'])
   assert.deepEqual(ruleIds(lintText('Atenção ⚠️ aqui', rules)), ['filler-emoji'])
-  // the status glyphs, the arrows and the middle dot are text symbols, not emoji; the short dash is allowed
   assert.deepEqual(lintText('● ✓ ✕ ◐ ○ → · – Ativa', rules), [])
 })
 
@@ -184,7 +183,7 @@ test('the HTML extractor finds text nodes and the text attributes', () => {
     '<!-- Comentário! -->',
     '<p>Texto   com\n quebra</p>',
   ].join('\n')
-  const found = extractHtml(html)
+  const found = extractHtml(html, rules.classification.htmlAttributes)
   const texts = found.map((s) => s.text)
   assert.ok(texts.includes('Um título'))
   assert.ok(texts.includes('Fechar o painel'))
@@ -218,6 +217,38 @@ test('a single capitalised word and a classified word are on-screen text', () =>
   assert.deepEqual(rows.map((f) => f.text), ['Aguarde', 'incrível'])
 })
 
+test('a single capitalised word that ends in punctuation is on-screen text', () => {
+  const rows = lintFiles({ virtual: [{ file: 'x.js', source: "const t = 'Pronto!'" }] }, rules)
+  assert.deepEqual(ruleIds(rows), ['filler-exclamation-mark'])
+})
+
+test('a decomposed accent matches the composed term', () => {
+  const decomposed = 'incri\u0301vel'
+  assert.notEqual(decomposed, 'incrível')
+  assert.equal(count(lintText(`Texto ${decomposed} aqui`, rules), 'forbidden-term'), 1)
+  assert.equal(count(lintText('Texto incrível aqui', { ...rules, forbiddenTerms: [decomposed] }), 'forbidden-term'), 1)
+})
+
+test('the HTML attributes that carry text and their kind come from the rules', () => {
+  const html = '<p alt="Uma duas três quatro cinco" title="Texto livre aqui">x</p>'
+  const attrs = { alt: 'label' }
+  const found = extractHtml(html, attrs).filter((s) => s.key)
+  assert.deepEqual(found.map((s) => [s.key, s.kind]), [['alt', 'label']])
+  const rows = lintFiles({ virtual: [{ file: 'x.html', source: html }] }, { ...rules, classification: { ...rules.classification, htmlAttributes: attrs } })
+  assert.deepEqual(ruleIds(rows), ['limit-label-words'])
+})
+
+test('the files linted come from scope.includedFiles', () => {
+  const root = mkdtempSync(join(tmpdir(), 'voice-lint-'))
+  mkdirSync(join(root, 'a/b'), { recursive: true })
+  writeFileSync(join(root, 'a/x.js'), "const t = { label: 'Salvo!' }")
+  writeFileSync(join(root, 'a/b/y.js'), "const t = { label: 'Salvo!' }")
+  writeFileSync(join(root, 'a/page.html'), '<p>Pronto!</p>')
+  const only = (includedFiles) => [...new Set(lintFiles({ root }, { ...rules, scope: { ...rules.scope, includedFiles } }).map((f) => f.file))]
+  assert.deepEqual(only(['a/*.js']), ['a/x.js'])
+  assert.deepEqual(only(['a/b/*.js', 'a/page.html']), ['a/b/y.js', 'a/page.html'])
+})
+
 test('the lint classifies by key and element, and holds each kind to its limit', () => {
   const source = [
     "const a = { label: 'Uma duas três quatro cinco' }",
@@ -242,19 +273,14 @@ test('the baseline comparison reports what is new and what is stale', () => {
   assert.equal(changed.added.length, 1)
   assert.equal(changed.stale.length, 1)
   assert.match(changed.stale[0], /ops/)
-  // a third copy of a baselined text is new
   const more = compareToBaseline(Array(3).fill(finding('a.js', 'forbidden-term:ops', 'Ops')), baseline.slice(1))
   assert.equal(more.added.length, 1)
-  // shrink drops what is stale and never adds
   const shrunk = shrinkBaseline([finding('a.js', 'forbidden-term:ops', 'Ops'), finding('z.js', 'filler-long-dash', 'x — y')], baseline)
   assert.deepEqual(shrunk, [{ file: 'a.js', rule: 'forbidden-term:ops', text: 'Ops', count: 1 }])
 })
 
 test('the UI strings hold the rules, with no new violation and no stale baseline entry', () => {
   const findings = lintFiles({ root: ROOT }, rules)
-  if (process.env.VOICE_LINT_FREEZE === '1' && !existsSync(BASELINE_FILE)) {
-    writeFileSync(BASELINE_FILE, `${JSON.stringify(baselineEntries(findings), null, 2)}\n`)
-  }
   assert.ok(existsSync(BASELINE_FILE), 'test/voice-lint.baseline.json is missing')
   const baseline = JSON.parse(readFileSync(BASELINE_FILE, 'utf8'))
   assert.ok(Array.isArray(baseline))
@@ -263,6 +289,7 @@ test('the UI strings hold the rules, with no new violation and no stale baseline
     assert.ok(Number.isInteger(e.count) && e.count > 0)
   }
   if (process.env.VOICE_LINT_SHRINK === '1') {
+    assert.deepEqual(compareToBaseline(findings, baseline).added, [], 'a new violation cannot be shrunk away: fix the text')
     writeFileSync(BASELINE_FILE, `${JSON.stringify(shrinkBaseline(findings, baseline), null, 2)}\n`)
     return
   }
