@@ -1,6 +1,6 @@
 // The agent view read (#529): what the view of one agent shows, projected from the rows the core already
 // stores. Pure: no storage and no clock; the route (next layer of #529) fetches the rows and calls this.
-// Contract: docs/contracts/agent-view.md. Names on the wire are English; the screen words are the client's. (#529)
+// Contract: docs/contracts/core-api.openapi.json, the agent view operation. Names on the wire are English; the screen words are the client's. (#529)
 
 import type { AgentCostLine } from '../cost/aggregation.ts';
 import { truncate } from '../ingest/history/transcript.ts';

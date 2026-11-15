@@ -1,11 +1,11 @@
 /*
  * GET /api/diagnosis (#565), through the assembled route on 127.0.0.1: the collectors and the remote
  * núcleo are doubles, the AlertTracker and the use case are the real ones. One scenario per acceptance
- * criterion, named by its token; the contract test at the end checks every status the authored contract
- * (docs/contracts/diagnosis.md) declares is answered by the route, and no other.
+ * criterion, named by its token; every answer is validated against the authored contract
+ * (docs/contracts/core-api.openapi.json), and the contract test at the end checks every status the
+ * contract declares is answered by the route, and no other.
  */
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
 import { describe, test } from 'node:test';
 import { openSqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
 import { Accounts, MontadorDoPainel, startLocalApi } from '../../src/api/index.ts';
@@ -16,6 +16,7 @@ import { AlertTracker } from '../../src/telemetry/alerts.ts';
 import type { Alert, AlertKind } from '../../src/telemetry/model.ts';
 import type { RemoteGet, RemoteGetResult } from '../../src/telemetry/ports.ts';
 import { OWNER_TOKEN, ownerFetch as fetch } from '../owner-http.ts';
+import { assertAnswersTheSpec, declaredOperations, readSpec } from './openapi-spec.ts';
 
 const NOW = '2026-11-14T12:00:00.000Z';
 const WORKSTATION_PORT = 14720;
@@ -79,6 +80,8 @@ async function boot(options: BootOptions = {}) {
     get: async (query: string, init: { method?: string } = {}) => {
       const r = await fetch(`${api.url}/api/diagnosis${query}`, init);
       answered.add(r.status);
+      // #662: every answer of the route, errors included, conforms to the authored contract.
+      assertAnswersTheSpec('GET', '/api/diagnosis', r.status, await r.clone().json());
       return r;
     },
     close: async () => {
@@ -716,16 +719,19 @@ describe('#565 GET /api/diagnosis: the request', () => {
 });
 
 describe('#565 the authored contract', () => {
-  test('#565/AC-12 every status docs/contracts/diagnosis.md declares is answered by the route, and the route answers no other', () => {
-    const doc = readFileSync(new URL('../../../../docs/contracts/diagnosis.md', import.meta.url), 'utf8');
-    const declared = [...doc.matchAll(/^\| `(\d{3})` \|/gm)].map((m) => Number(m[1])).sort();
+  const diagnosisOperation = () => declaredOperations(readSpec()).find((o) => o.method === 'GET' && o.path === '/api/diagnosis')!;
+
+  test('#565/AC-12 every status the spec declares for GET /api/diagnosis is answered by the route, and the route answers no other', () => {
+    const declared = Object.keys(diagnosisOperation().operation.responses ?? {}).map(Number).sort();
     assert.ok(declared.length > 0, 'the contract declares no status');
     assert.deepEqual([...answered].sort(), declared);
   });
 
-  test('#565/AC-8 the contract names the same section ids and statuses as the model', () => {
-    const doc = readFileSync(new URL('../../../../docs/contracts/diagnosis.md', import.meta.url), 'utf8');
-    for (const id of SECTION_IDS) assert.ok(doc.includes(`\`${id}\``), id);
-    for (const status of SECTION_STATUSES) assert.ok(doc.includes(`\`${status}\``), status);
+  test('#565/AC-8 the spec names the same section ids and statuses as the model', () => {
+    const schemas = readSpec().components!.schemas!;
+    const sections = schemas.DiagnosisSection!.oneOf as Array<{ properties: { id: { const?: string; enum?: string[] }; status: { enum: string[] } } }>;
+    const ids = sections.flatMap((s) => s.properties.id.enum ?? [s.properties.id.const!]);
+    assert.deepEqual([...ids].sort(), [...SECTION_IDS].sort());
+    for (const section of sections) assert.deepEqual(section.properties.status.enum, [...SECTION_STATUSES]);
   });
 });

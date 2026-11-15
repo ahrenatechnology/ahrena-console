@@ -1,5 +1,5 @@
 // The agent view read (#529): a pure projection from the agent rows, the events and the per-agent cost.
-// Contract: docs/contracts/agent-view.md (#529).
+// Contract: docs/contracts/core-api.openapi.json, the agent view operation (#529).
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import { buildAgentView, agentFacts, MESSAGE_TEXT_MAX, type AgentViewInput } from '../../src/api/agent-view.ts';

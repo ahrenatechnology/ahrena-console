@@ -1,4 +1,4 @@
-// The read of one diagnosis, bound to the route and to docs/contracts/diagnosis.md (issue 566). The state
+// The read of one diagnosis, bound to the route and to docs/contracts/core-api.openapi.json, the diagnosis operation (issue 566). The state
 // (`machine-diagnosis-state.js`) calls this through its `read` seam: it gives the alert and a signal and gets an outcome,
 // `{ state: 'ready', diagnosis } | { state: 'failed', failure } | { state: 'closed' } | { state: 'unsupported' }`.
 // A 200 is checked against the contract (a body that is not a diagnosis of this alert is a failure), and each status

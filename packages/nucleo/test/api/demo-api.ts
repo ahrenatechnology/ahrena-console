@@ -7,7 +7,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { openSqliteStorage, type SqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
-import { Accounts, FeedDeEventos, LeiturasDoDetalhe, ListaDeSessoes, MontadorDoPainel, QuadroKanban, TrabalhoPorBranch, startLocalApi, type LocalApi } from '../../src/api/index.ts';
+import { Accounts, FeedDeEventos, LeiturasDoDetalhe, ListaDeSessoes, MontadorDoPainel, QuadroKanban, TrabalhoPorBranch, startLocalApi, type ApiOptions, type LocalApi } from '../../src/api/index.ts';
 import { RotaAnalytics } from '../../src/api/analytics-route.ts';
 import type { MessagingRoute } from '../../src/api/messaging.ts';
 import type { TranscriptionRoute } from '../../src/api/transcription.ts';
@@ -55,9 +55,11 @@ export interface DemoApiOptions {
   transcription?: TranscriptionRoute;
   /** The per-session orders (#61, mod part), built the same way. */
   orders?: (storage: SqliteStorage) => OrdersRoute;
+  /** More server options, over the demo's (the contract tests wire the routes the demo leaves out, issue 662). */
+  extra?: Partial<ApiOptions>;
 }
 
-export async function startDemoApi({ messaging, orders, transcription }: DemoApiOptions = {}): Promise<DemoApi> {
+export async function startDemoApi({ messaging, orders, transcription, extra }: DemoApiOptions = {}): Promise<DemoApi> {
   const clock = () => NOW;
   const opened: string[] = [];
   const records = mkdtempSync(join(tmpdir(), 'ahrena-demo-api-'));
@@ -107,6 +109,7 @@ export async function startDemoApi({ messaging, orders, transcription }: DemoApi
     messaging: messaging?.(sqlite),
     transcription,
     orders: orders?.(sqlite),
+    ...extra,
   });
   return {
     api,

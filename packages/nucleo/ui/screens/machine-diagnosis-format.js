@@ -1,7 +1,7 @@
 // The diagnosis next to a saturation alert (issue 566, wireframe 566-1 to 566-9) without the DOM: which alerts have
 // a diagnosis, which sections each one shows and in what order, how a list is cut, what the read line says, the tone
 // of the Memória card, what a failure says and the probable cause of the Resolver block. It reads the shape of
-// `GET /api/diagnosis` (docs/contracts/diagnosis.md, issue 565); the read itself is not here. The test imports this
+// `GET /api/diagnosis` (docs/contracts/core-api.openapi.json, the diagnosis operation, issue 565); the read itself is not here. The test imports this
 // file directly. Nothing here throws on a strange value: a list that is not a list is empty, a number that is not
 // finite is a dash.
 
