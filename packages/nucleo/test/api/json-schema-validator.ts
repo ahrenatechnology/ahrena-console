@@ -74,7 +74,7 @@ function check(keyword: string, rule: unknown, schema: Schema, value: unknown, d
     case 'properties':
       return isRecord(value) ? properties(rule as { [k: string]: Schema }, value, doc, at) : [];
     case 'required':
-      return isRecord(value) ? (rule as string[]).filter((k) => !(k in value)).map((k) => `${at}: missing required ${k}`) : [];
+      return isRecord(value) ? (rule as string[]).filter((k) => !Object.hasOwn(value, k)).map((k) => `${at}: missing required ${k}`) : [];
     case 'additionalProperties':
       return isRecord(value) ? additional(rule, schema, value, doc, at) : [];
     case 'items':
@@ -108,7 +108,7 @@ function check(keyword: string, rule: unknown, schema: Schema, value: unknown, d
 }
 
 function properties(rule: { [k: string]: Schema }, value: { [k: string]: unknown }, doc: SchemaDocument, at: string): string[] {
-  return Object.entries(rule).flatMap(([name, sub]) => (name in value ? validate(sub, value[name], doc, `${at}.${name}`) : []));
+  return Object.entries(rule).flatMap(([name, sub]) => (Object.hasOwn(value, name) ? validate(sub, value[name], doc, `${at}.${name}`) : []));
 }
 
 function additional(rule: unknown, schema: Schema, value: { [k: string]: unknown }, doc: SchemaDocument, at: string): string[] {

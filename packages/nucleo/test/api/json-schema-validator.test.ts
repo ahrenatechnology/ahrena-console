@@ -28,6 +28,12 @@ describe('#662 json schema subset validator', () => {
     assert.deepEqual(problems({ type: 'object', additionalProperties: true }, { k: 'x' }), []);
   });
 
+  test('a key of Object.prototype is not a present property: required reports it missing and properties does not read it', () => {
+    assert.deepEqual(problems({ type: 'object', required: ['constructor'] }, {}), ['$: missing required constructor']);
+    assert.deepEqual(problems({ type: 'object', properties: { constructor: { type: 'string' }, toString: { type: 'string' } } }, {}), []);
+    assert.deepEqual(problems({ type: 'object', required: ['constructor'] }, JSON.parse('{"constructor": 1}')), []);
+  });
+
   test('array keywords: items, minItems, maxItems', () => {
     const schema: Schema = { type: 'array', items: { type: 'integer' }, minItems: 1, maxItems: 2 };
     assert.deepEqual(problems(schema, [1, 2]), []);

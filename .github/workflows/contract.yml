@@ -4,12 +4,17 @@
 #
 #   - Spectral lints it with the committed ruleset (docs/contracts/core-api.spectral.json, which
 #     extends spectral:oas and turns no rule off). A warning fails, so the contract stays clean.
+#     Spectral and all of its dependencies come from scripts/spectral/package-lock.json (npm ci).
 #   - oasdiff compares it with the contract at the merge base and fails a breaking change unless
 #     info.version moved to a higher MAJOR version (oasdiff's own versioning policy,
 #     --fail-on MISSING-VERSION-BUMP: a breaking change passes only with a new major version). A
 #     merge base with no contract passes: there is nothing to break yet.
+#   - The legacy list (docs/contracts/core-api.legacy.json, the operations whose response schema is still a
+#     placeholder) only shrinks: every operation of the head's list must be in the merge base's list
+#     (scripts/check-contract-legacy-shrinks.mjs). A merge base with no list passes.
 #
-# Pinned on purpose: both tools by exact version, oasdiff's download by sha256, the actions by commit.
+# Pinned on purpose: Spectral by a lockfile (every dependency, with its integrity hash), oasdiff by exact
+# version and its download by sha256, the actions by commit.
 # The token is read-only and the contract under test is the pull request's own file, so nothing here
 # runs with a secret, and no text a pull request controls reaches a command line (the two commits come
 # through `env`, the spec is only read by the tools, and oasdiff follows no external reference).
@@ -41,12 +46,14 @@ jobs:
         with:
           node-version: 24
 
-      # npx, not a dependency of the core: the linter is a tool of this check alone, and the exact version is
-      # the pin. Its install scripts are off; its own dependencies resolve at run time, like any npx run.
+      # Not a dependency of the core: the linter is a tool of this check alone, with its own manifest and
+      # lockfile in scripts/spectral. npm ci installs exactly what the lockfile says (it fails on a
+      # lockfile that does not match the manifest) and runs no install script.
+      - name: Install Spectral from the lockfile
+        run: npm ci --ignore-scripts --prefix scripts/spectral
+
       - name: Spectral
-        env:
-          NPM_CONFIG_IGNORE_SCRIPTS: 'true'
-        run: npx --yes @stoplight/spectral-cli@6.17.1 lint docs/contracts/core-api.openapi.json --ruleset docs/contracts/core-api.spectral.json --fail-severity warn
+        run: scripts/spectral/node_modules/.bin/spectral lint docs/contracts/core-api.openapi.json --ruleset docs/contracts/core-api.spectral.json --fail-severity warn
 
   oasdiff:
     if: github.event_name == 'pull_request'
@@ -84,3 +91,20 @@ jobs:
           git show "$base:$spec" > "$RUNNER_TEMP/base.openapi.json"
           git show "$HEAD_SHA:$spec" > "$RUNNER_TEMP/head.openapi.json"
           oasdiff breaking "$RUNNER_TEMP/base.openapi.json" "$RUNNER_TEMP/head.openapi.json" --fail-on MISSING-VERSION-BUMP --allow-external-refs=false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+
+      - name: The legacy list only shrinks
+        run: |
+          set -euo pipefail
+          legacy=docs/contracts/core-api.legacy.json
+          base=$(git merge-base "$BASE_SHA" "$HEAD_SHA")
+          if ! git cat-file -e "$base:$legacy" 2>/dev/null; then
+            echo "No legacy list at the merge base ($base): nothing to compare."
+            exit 0
+          fi
+          git show "$base:$legacy" > "$RUNNER_TEMP/base.legacy.json"
+          git show "$HEAD_SHA:$legacy" > "$RUNNER_TEMP/head.legacy.json"
+          node scripts/check-contract-legacy-shrinks.mjs "$RUNNER_TEMP/base.legacy.json" "$RUNNER_TEMP/head.legacy.json"

@@ -30,9 +30,26 @@ describe('#662/AC-2 the contract workflow', () => {
     for (const u of uses) assert.match(u, /^[\w.-]+\/[\w.-]+@[0-9a-f]{40}$/, u);
   });
 
-  test('#662/AC-2 Spectral lints the contract with the committed ruleset at an exact version, and a warning fails', () => {
-    assert.match(workflow, /npx --yes @stoplight\/spectral-cli@\d+\.\d+\.\d+ lint docs\/contracts\/core-api\.openapi\.json --ruleset docs\/contracts\/core-api\.spectral\.json --fail-severity warn/);
-    assert.match(workflow, /NPM_CONFIG_IGNORE_SCRIPTS: 'true'/);
+  test('#662/AC-2 Spectral is installed from the committed lockfile with no install script, and lints the contract with the committed ruleset; a warning fails', () => {
+    assert.match(workflow, /npm ci --ignore-scripts --prefix scripts\/spectral\n/);
+    assert.match(workflow, /scripts\/spectral\/node_modules\/\.bin\/spectral lint docs\/contracts\/core-api\.openapi\.json --ruleset docs\/contracts\/core-api\.spectral\.json --fail-severity warn/);
+    assert.doesNotMatch(workflow, /npx\b/, 'npx resolves the dependencies at run time: install from the lockfile');
+  });
+
+  test('#662/AC-2 the Spectral manifest is private, pins the linter exactly, has no script, and every locked package carries an integrity hash', () => {
+    const manifest = readJson(new URL('scripts/spectral/package.json', ROOT));
+    assert.ok(typeof manifest === 'object' && manifest !== null);
+    const { private: isPrivate, scripts, dependencies, devDependencies } = manifest as { private?: unknown; scripts?: unknown; dependencies?: unknown; devDependencies?: { [name: string]: string } };
+    assert.equal(isPrivate, true);
+    assert.equal(scripts, undefined, 'a manifest script is a command nobody reviewed');
+    assert.equal(dependencies, undefined);
+    assert.match(devDependencies?.['@stoplight/spectral-cli'] ?? '', /^\d+\.\d+\.\d+$/, 'the version is exact: no range');
+    const lock = readJson(new URL('scripts/spectral/package-lock.json', ROOT)) as { lockfileVersion?: number; packages?: { [path: string]: { version?: string; resolved?: string; integrity?: string; link?: boolean } } };
+    assert.ok((lock.lockfileVersion ?? 0) >= 2);
+    const locked = Object.entries(lock.packages ?? {}).filter(([path]) => path.startsWith('node_modules/'));
+    assert.ok(locked.length > 50, 'the lockfile resolves the whole tree');
+    assert.equal(lock.packages?.['node_modules/@stoplight/spectral-cli']?.version, devDependencies?.['@stoplight/spectral-cli']);
+    assert.deepEqual(locked.filter(([, p]) => !p.integrity || !p.resolved?.startsWith('https://registry.npmjs.org/')).map(([path]) => path), []);
   });
 
   test('#662/AC-2 the ruleset extends spectral:oas and turns no rule off', () => {
@@ -48,6 +65,12 @@ describe('#662/AC-2 the contract workflow', () => {
     assert.match(workflow, /git merge-base/);
     assert.match(workflow, /oasdiff breaking [^\n]*--fail-on MISSING-VERSION-BUMP/);
     assert.match(workflow, /oasdiff breaking [^\n]*--allow-external-refs=false/, 'the spec is the pull request\'s: no external reference is followed');
+  });
+
+  test('#662/AC-2 the legacy list is compared with the merge base by the committed script, and a merge base with no list passes', () => {
+    assert.match(workflow, /git show "\$base:\$legacy" > "\$RUNNER_TEMP\/base\.legacy\.json"/);
+    assert.match(workflow, /node scripts\/check-contract-legacy-shrinks\.mjs "\$RUNNER_TEMP\/base\.legacy\.json" "\$RUNNER_TEMP\/head\.legacy\.json"/);
+    assert.match(workflow, /git cat-file -e "\$base:\$legacy"/);
   });
 
   test('#662/AC-2 no step puts text the pull request controls into a command', () => {
