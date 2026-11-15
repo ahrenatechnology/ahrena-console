@@ -136,6 +136,12 @@
       "createdIn": "packages/nucleo/src/github/work-plan-runs.ts",
       "note": "the last run per item_key; ON CONFLICT DO UPDATE",
       "legacy": true
+    },
+    "permission_requests": {
+      "mode": "upsert-with-history",
+      "createdIn": "packages/nucleo/src/permissions/adapters/migration.ts",
+      "history": "permission-audit.jsonl",
+      "note": "one row per request, updated forward only (pending, answered, then a settled state) inside one BEGIN IMMEDIATE transaction; every step is a line of the audit file permission-audit.jsonl (a file in the data folder, not a table), and a deny reason is nulled in the row once the request settled more than 10 minutes ago"
     }
   }
 }

@@ -72,6 +72,11 @@ export class InMemoryRepository implements PermissionRequestRepository {
   listOpen(): PermissionRequest[] {
     return [...this.requests.values()].filter((r) => r.isOpen).sort((a, b) => a.createdAt - b.createdAt).map((r) => this.out(r));
   }
+  clearReasonsSettledBefore(at: number): void {
+    for (const r of this.requests.values()) {
+      if (r.settledAt !== null && r.settledAt < at) Object.assign(r, { _reason: null });
+    }
+  }
   linkToolUse(requestId: string, toolUseId: string): void {
     this.links.set(requestId, toolUseId);
   }

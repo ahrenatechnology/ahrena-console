@@ -18,6 +18,11 @@ export interface PermissionRequestRepository {
   listBySession(sessionId: string): PermissionRequest[];
   /** Every request that is still pending or answered, of every session, oldest first. (#618) */
   listOpen(): PermissionRequest[];
+  /**
+   * Nulls the reason of every request settled before `at`: a deny reason is clear in the store only while the request is open and while
+   * the /ui still lists it (#618/AC-7). Rows still open, or settled at or after `at`, are left as they are.
+   */
+  clearReasonsSettledBefore(at: number): void;
   /** Remembers the `tool_use_id` a PreToolUse of the same call carried (decision 0025, "Respondido em outro lugar"). (#618) */
   linkToolUse(requestId: string, toolUseId: string): void;
   /** The `tool_use_id` linked to the request, or `null`. (#618) */

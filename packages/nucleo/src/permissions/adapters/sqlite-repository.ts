@@ -101,6 +101,10 @@ export class SqlitePermissionRepository implements PermissionRequestRepository {
     return this.db.prepare(`SELECT * FROM permission_requests WHERE state IN ('pending', 'answered') ${OLDEST_FIRST}`).all().map(restore);
   }
 
+  clearReasonsSettledBefore(at: number): void {
+    this.db.prepare('UPDATE permission_requests SET reason = NULL WHERE reason IS NOT NULL AND settled_at IS NOT NULL AND settled_at < ?').run(at);
+  }
+
   linkToolUse(requestId: string, toolUseId: string): void {
     this.db.prepare('UPDATE permission_requests SET tool_use_id = ? WHERE id = ?').run(toolUseId, requestId);
   }

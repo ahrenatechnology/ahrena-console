@@ -288,4 +288,31 @@ describe('listRequests (#618/AC-7)', () => {
     await register(h);
     assert.deepEqual(listRequests(h, { sessionId: 'S1', unavailableReason: 'off' }), { available: false, reason: 'off', requests: [] });
   });
+
+  test('#618/AC-7: a listing clears the reason of what settled before the window and leaves the rest', async () => {
+    const h = harness();
+    const old = await register(h);
+    answerRequest(h, { sessionId: 'S1', requestId: old, decision: 'deny', reason: 'old words', answeredBy: 'owner', channel: 'ui' });
+    await waitForDecision(h, { sessionId: 'S1', requestId: old, waitMs: 0 });
+    await h.clock.advance(RECENT_MS - 1_000);
+    const recent = await register(h, { toolInput: { command: 'ls' } });
+    answerRequest(h, { sessionId: 'S1', requestId: recent, decision: 'deny', reason: 'recent words', answeredBy: 'owner', channel: 'ui' });
+    await waitForDecision(h, { sessionId: 'S1', requestId: recent, waitMs: 0 });
+    await h.clock.advance(2_000);
+    const { requests } = listRequests(h, { sessionId: 'S1', unavailableReason: null });
+    assert.deepEqual(requests.map((r) => [r.id, r.reason]), [[recent, 'recent words']]);
+    assert.equal(h.repository.find('S1', old)?.reason, null);
+    assert.equal(h.repository.find('S1', old)?.decision, 'deny');
+    assert.equal(h.repository.find('S1', recent)?.reason, 'recent words');
+  });
+
+  test('#618/AC-7: the start sweep clears the reason of what settled before the window', async () => {
+    const h = harness();
+    const old = await register(h);
+    answerRequest(h, { sessionId: 'S1', requestId: old, decision: 'deny', reason: 'old words', answeredBy: 'owner', channel: 'ui' });
+    await waitForDecision(h, { sessionId: 'S1', requestId: old, waitMs: 0 });
+    await h.clock.advance(RECENT_MS + 1_000);
+    sweepOnStart(h);
+    assert.equal(h.repository.find('S1', old)?.reason, null);
+  });
 });
