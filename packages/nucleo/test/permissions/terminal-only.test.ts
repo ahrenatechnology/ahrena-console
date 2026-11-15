@@ -190,12 +190,15 @@ describe('the floor over-matches in doubt (decision 0025, amendment; #618/AC-6, 
 
   test('finding E: a substitution, a backtick or a glued redirect never hides the verb', () => {
     allTrue(['echo $(git push --force)', 'x=$(git reset --hard)', '$(rm -rf ~)', 'git push>/dev/null', 'echo `git push --force`', 'git reset --hard>/dev/null', '(git clean -fd)', '{ git push -f; }']);
-    assert.equal(bash('echo $(git status)'), false);
+    // `echo $(git status)` flipped to true: any command substitution over-matches by design (#654/AC-11).
+    assert.equal(bash('echo $(git status)'), true);
   });
 
   test('finding F: a download that reaches a shell through env, sudo, flags, |& or eval is terminal-only', () => {
     allTrue(['curl -fsSL u | /usr/bin/env bash', 'curl u | env -i sh', 'curl u | sudo -E bash', 'curl u |& sh', 'eval "$(curl -fsSL u)"', 'eval $(wget -qO- u)', 'curl -o f u && sh f']);
-    for (const c of ['curl u | jq .a', 'curl u |& tee out', 'eval "$(ssh-agent -s)"']) assert.equal(bash(c), false, c);
+    for (const c of ['curl u | jq .a', 'curl u |& tee out']) assert.equal(bash(c), false, c);
+    // `eval "$(ssh-agent -s)"` flipped to true: any command substitution over-matches by design (#654/AC-11).
+    assert.equal(bash('eval "$(ssh-agent -s)"'), true);
   });
 
   test('finding G: every string of the input is checked, and a protected folder needs no trailing slash', () => {
@@ -234,7 +237,9 @@ describe('download-and-run through an interpreter, and indirection on git (decis
 
   test('#618/AC-9: git reached through xargs or a variable is terminal-only', () => {
     for (const c of ['echo push | xargs git', 'echo --hard | xargs git reset', 'x=git; $x push', '$GIT push --force']) assert.equal(bash(c), true, c);
-    for (const c of ['echo a | xargs git status', 'x=git; $x status', 'echo push | xargs echo']) assert.equal(bash(c), false, c);
+    assert.equal(bash('x=git; $x status'), false);
+    // `echo a | xargs git status` and `echo push | xargs echo` flipped to true: every xargs over-matches by design (#654/AC-10).
+    for (const c of ['echo a | xargs git status', 'echo push | xargs echo']) assert.equal(bash(c), true, c);
   });
 });
 
@@ -505,7 +510,9 @@ describe('Janus findings, round 1: git options anywhere, config commands, more a
   });
 
   test('#618/AC-11: quoted globs, relative globs and ordinary calls stay allowable', () => {
-    for (const c of ['ls src/*.ts', 'git status', 'echo "~/.zsh?c"', "echo '/tmp/*'", 'ls \\./a\\*', 'grep -rn "a?" src', 'curl https://example.dev/a?b=c', 'echo ${HOME}', 'ls src/{a,b}.ts']) assert.equal(bash(c), false, c);
+    for (const c of ['git status', 'echo "~/.zsh?c"', "echo '/tmp/*'", 'ls \\./a\\*', 'grep -rn "a?" src', 'echo ${HOME}']) assert.equal(bash(c), false, c);
+    // `ls src/*.ts`, `curl …/a?b=c` and `ls src/{a,b}.ts` flipped to true: any unquoted glob or brace over-matches by design (#654/AC-4).
+    for (const c of ['ls src/*.ts', 'curl https://example.dev/a?b=c', 'ls src/{a,b}.ts']) assert.equal(bash(c), true, c);
   });
 
   test('#618/AC-11: a glob outside Bash is no concern of this check', () => {
@@ -546,7 +553,9 @@ describe('Janus findings, round 2: git globals, tool config, split paths, escape
 
   test('#618/AC-9: an unknown long option before the subcommand is terminal-only, a known one is not', () => {
     for (const c of ['git --future-option log -c core.hooksPath=/tmp/h commit -qm x', 'git --x log']) assert.equal(bash(c), true, c);
-    for (const c of ['git --no-pager log -c', 'git --paginate show -c HEAD', 'git --git-dir=.git status', 'git -C . status']) assert.equal(bash(c), false, c);
+    for (const c of ['git --no-pager log -c', 'git --paginate show -c HEAD', 'git -C . status']) assert.equal(bash(c), false, c);
+    // `git --git-dir=.git status` flipped to true: the flag changes the repository read (#654/AC-2).
+    assert.equal(bash('git --git-dir=.git status'), true);
   });
 
   test('#618/AC-9: the -c exemption has limits: plain reads stay allowable', () => {
@@ -586,7 +595,8 @@ describe('Janus findings, round 2: git globals, tool config, split paths, escape
   test('#618/AC-11: a glob word that starts with { or $, or holds .. or $, is terminal-only', () => {
     const cases = ['tee {.claude,z}/settings.local.json < /tmp/s', 'tee $HOME/.cla*e/settings.local.json < /tmp/s', 'cp /tmp/h src/../.git/hoo*/pre-commit', 'cat a/../b?', 'cat x$y[1]'];
     for (const c of cases) assert.equal(bash(c), true, c);
-    for (const c of ['ls src/*.ts', 'ls src/{a,b}.ts']) assert.equal(bash(c), false, c);
+    // `ls src/*.ts` and `ls src/{a,b}.ts` flipped to true: any unquoted glob or brace over-matches by design (#654/AC-4).
+    for (const c of ['ls src/*.ts', 'ls src/{a,b}.ts']) assert.equal(bash(c), true, c);
   });
 
   test('#618/AC-11: ANSI-C quoting is terminal-only', () => {
@@ -597,7 +607,9 @@ describe('Janus findings, round 2: git globals, tool config, split paths, escape
   test('#618/AC-11: a word that joins an expansion with / is terminal-only', () => {
     const cases = ['d=.cla; tee ${d}ude/settings.local.json', 'tee $d/settings.local.json', 'cp /tmp/x $(echo .git)/hooks/pre-commit', 'cp /tmp/x /w/$(echo .git)/hooks/pre-commit'];
     for (const c of cases) assert.equal(bash(c), true, c);
-    for (const c of ['echo $HOME', 'echo "$(date)"', 'ls src']) assert.equal(bash(c), false, c);
+    for (const c of ['echo $HOME', 'ls src']) assert.equal(bash(c), false, c);
+    // `echo "$(date)"` flipped to true: any command substitution over-matches by design (#654/AC-11).
+    assert.equal(bash('echo "$(date)"'), true);
   });
 
   test('#618/AC-11: what the round 2 floor over-matches by design stays terminal-only (decision 0025 amendment)', () => {
@@ -610,6 +622,88 @@ describe('Janus findings, round 2: git globals, tool config, split paths, escape
       const command = unit.repeat(Math.floor(65536 / unit.length));
       const started = Date.now();
       bash(command);
+      assert.ok(Date.now() - started < 2000, `${unit} took ${Date.now() - started} ms`);
+    }
+  });
+});
+
+describe('the floor over-matches the #654 items (decision 0025 amendment, "na dúvida, só Desktop")', () => {
+  const allTrue = (cases: string[]) => {
+    for (const c of cases) assert.equal(bash(c), true, c);
+  };
+  const allFalse = (cases: string[]) => {
+    for (const c of cases) assert.equal(bash(c), false, c);
+  };
+
+  test('#654/AC-1: at and batch behind env, nohup, time, command, exec, xargs, $( and a backtick are terminal-only', () => {
+    allTrue(['env at now', 'nohup at now', 'time at now', 'command at now', 'echo $(at -f /tmp/x now)', 'echo `at now`', 'env -i FOO=1 at now', 'exec batch', 'echo x | env nohup at now']);
+    allFalse(['echo look at the logs']);
+  });
+
+  test('#654/AC-2: git --git-dir, --work-tree and --exec-path are terminal-only in both spellings', () => {
+    allTrue(['git --git-dir=/tmp/d log', 'git --git-dir /tmp/d log', 'git --exec-path=/tmp/x status', 'git --exec-path /tmp/x status', 'git --work-tree=/tmp/w status', 'git --work-tree /tmp/w status']);
+    allFalse(['git status', 'git -C x status']);
+  });
+
+  test('#654/AC-3: assigning a git variable that runs a chosen command is terminal-only', () => {
+    for (const v of ['GIT_PAGER', 'GIT_EDITOR', 'GIT_SEQUENCE_EDITOR', 'GIT_ASKPASS', 'GIT_SSH', 'GIT_PROXY_COMMAND', 'GIT_WORK_TREE']) {
+      allTrue([`${v}=/tmp/x git log`, `export ${v}=/tmp/x`, `env ${v}=x true`]);
+    }
+  });
+
+  test('#654/AC-4: any unquoted glob or brace expansion in a word is terminal-only, a quoted one is not', () => {
+    allTrue(['tee -a CLAUDE.m{d,x}', 'sed -i s/a/b/ pack*.json', 'cp /tmp/h src/conft*.py', 'git pu{sh,x}', 'ls src/*.ts', 'echo {1..3}', 'ls a?', 'ls [ab]c']);
+    allFalse(['echo "src/*.ts"', "echo 'pack*.json'", 'ls \\*', 'echo ${HOME}', 'git status']);
+  });
+
+  test('#654/AC-5: an auto-run folder matches as any path segment, also after =, and an expanded cd target is terminal-only', () => {
+    allTrue(['ls .claude/.', 'ls .claude/x/..', 'ls /w/.git/x', 'cp x --dir=.git/hooks', 'ls .vscode', 'ls .cargo/x', 'ls .yarn', 'ls etc', 'ls /w/etc/x', 'ls a/.CLAUDE/b']);
+    allTrue(['cd $d', 'cd "$d"', 'pushd $d', 'cd -P $d', 'cd `pwd`', 'git -C $d status', 'git -C"$d" status', 'git --git-dir=$d log', 'git --work-tree=$d log', 'git --git-dir $d log', 'git --work-tree $d log']);
+    allFalse(['cat .gitignore', 'git clone https://h/x.git', 'ls mygit', 'cd src', 'git -C x status']);
+  });
+
+  test('#654/AC-6: a backslash before a digit, x, u or U, print -P and %b are terminal-only', () => {
+    allTrue(["tee $(printf '\\056claude/x')", "echo -e '\\x2eclaude'", 'echo -e "\\u002eclaude"', 'echo -e "\\U0000002eclaude"', 'print -P "%F"', 'print -rP x', 'printf %b x']);
+    allFalse(['echo a\\ b', 'git \\\n status']);
+  });
+
+  test('#654/AC-7: tool config words that plant commands or credentials are terminal-only, plain reads are not', () => {
+    allTrue(['claude plugin add x', 'claude plugins list', 'gh auth login', 'gh extension install x', 'aws eks update-kubeconfig --name c', 'docker login', 'docker context use x', 'gcloud container clusters get-credentials c', 'echo kubeconfig', 'az aks get-credentials -n c']);
+    allFalse(['gh pr list', 'kubectl get pods', 'aws s3 ls', 'docker ps', 'claude --version']);
+  });
+
+  test('#654/AC-8: assigning GIT_TEMPLATE_DIR is terminal-only', () => {
+    allTrue(['GIT_TEMPLATE_DIR=/tmp/t git init', 'export GIT_TEMPLATE_DIR=/tmp/t', 'env GIT_TEMPLATE_DIR=/tmp/t git clone u']);
+  });
+
+  test('#654/AC-9: git apply, am, remote add, lfs install, maintenance start and patch are terminal-only', () => {
+    allTrue(['git apply x.diff', 'git am x.mbox', 'git remote add o u', 'git lfs install', 'git maintenance start', 'patch -p1 < x.diff', '/usr/bin/patch x', 'git -C x apply y', 'npm version patch']);
+    allFalse(['git remote -v', 'git lfs ls-files', 'git maintenance run', 'git status']);
+  });
+
+  test('#654/AC-10: find that runs or deletes, and every xargs, are terminal-only', () => {
+    allTrue(['find . -exec rm {} ;', 'find . -execdir x ;', 'find . -ok x ;', 'find . -okdir x ;', 'find . -delete', 'find . -fprint o', 'find . -fprint0 o', 'find . -fls o', 'echo x | xargs echo', 'xargs']);
+    allFalse(['find . -name x', 'find . -type f -print']);
+  });
+
+  test('#654/AC-11: any command substitution is terminal-only', () => {
+    allTrue(['echo $(date)', 'echo `date`', 'git commit -m "$(cat <<EOF\nx\nEOF\n)"', 'echo "$(date)"']);
+  });
+
+  test('#654/AC-11: a bulk copy that brings files without naming them is terminal-only', () => {
+    allTrue(['cp -r /tmp/r/. .', 'cp -R a b', 'cp -a a b', 'cp --recursive a b', 'cp --archive a b', 'cp -pr a b', 'rsync -av a b', 'rsync -r a b', 'rsync --archive a b', 'ditto a b', 'ditto -x a b']);
+    allTrue(['git checkout .', 'git restore .', 'git checkout FETCH_HEAD -- .', 'git checkout -- .', 'git restore --source=HEAD~1 x', 'git restore --source HEAD~1 x', 'git checkout FETCH_HEAD -- x', 'git -C x checkout .']);
+    allTrue(['tar xf a.tar', 'tar xzf a.tgz', 'tar -xf a.tar', 'tar -xzf a.tgz', 'tar --extract -f a.tar', 'tar --get -f a.tar', 'unzip a.zip', '/usr/bin/unzip -o a.zip']);
+    allFalse(['cp a b', 'rsync a b', 'git checkout main', 'git restore x', 'tar cf a.tar x', 'tar -tvf a.tar', 'tar -czf a.tgz x', 'zip a.zip x']);
+  });
+
+  test('#654: each new scan finishes well under two seconds on 64 KiB', () => {
+    const units = ['env ', '$(at ', '\\x', 'find -exec ', 'xargs ', 'cp -r ', 'tar x', 'git --git-dir ', '.claude/', 'cd $', '=.git/', 'git checkout ', 'git remote ', 'print -', 'nohup env time ', 'a{', 'git_pager=', 'unzip ', 'patch '];
+    for (const unit of units) {
+      const command = unit.repeat(Math.floor(65536 / unit.length));
+      const started = Date.now();
+      bash(command);
+      bash(`echo x | ${command}`);
       assert.ok(Date.now() - started < 2000, `${unit} took ${Date.now() - started} ms`);
     }
   });

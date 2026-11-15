@@ -1,6 +1,7 @@
 // The calls the Console never allows, only the person at the terminal (decision 0025, "Por tipo de chamada", #618/AC-6).
 // The Console can still deny them, which is the safe side; pure: no disk, no socket, no clock (#618).
 // The check is by text, a floor and not the defence (`$HOME/.ahr*` slips past it): the defence is the window credential (#619).
+// The floor over-matches in doubt, and #654 widened it: any command substitution, any unquoted glob, any `xargs`, `patch`, `unzip` and bulk copy is terminal-only (decision 0025 amendment, "na dúvida, só Desktop").
 // The data folders of the other instances in the instance registry are added to the citing check by a later layer (#618).
 
 import { exceedsDepth } from './digest.ts';
@@ -95,13 +96,63 @@ function spellings(text: string): string[] {
 // `config` rewrites .git/config or ~/.gitconfig without naming the file; `git config --get` over-matches, accepted (#618).
 const RISKY_GIT_SUBCOMMANDS = new Set(['push', 'reset', 'clean', 'config']);
 
-/** A tokenised scan, one pass per command segment (linear in the command, 64 KiB bound in 0025): recursive `rm`, and any `push`, `reset` or `clean` after a `git` word, whatever the flags or global options (#618/AC-9). */
+const RECURSIVE_OR_ARCHIVE_FLAG = /^(?:-[a-zA-Z]*[rRa][a-zA-Z]*|--recursive|--archive)$/;
+const FIND_RUNNING_FLAGS = new Set(['-exec', '-execdir', '-ok', '-okdir', '-delete', '-fls']);
+/** Git subcommands whose second word registers or starts something that runs later: `remote add`, `lfs install`, `maintenance start` (#654/AC-9). */
+const GIT_SECOND_WORDS: ReadonlyMap<string, string> = new Map([['remote', 'add'], ['lfs', 'install'], ['maintenance', 'start']]);
+
+/** `git apply` and `git am` write files from a patch; `remote add`, `lfs install` and `maintenance start` register a remote, hooks or a scheduler. Over-matches `git log apply`, by design (#654/AC-9). */
+function gitRegistersOrApplies(afterGit: string[]): boolean {
+  const heads = new Set<string>();
+  for (const t of afterGit) {
+    if (t === 'apply' || t === 'am') return true;
+    for (const head of heads) if (GIT_SECOND_WORDS.get(head) === t) return true;
+    if (GIT_SECOND_WORDS.has(t)) heads.add(t);
+  }
+  return false;
+}
+
+/** `git checkout` and `git restore` that bring files without naming them: a `.` pathspec, `--source`, `-s` or `FETCH_HEAD` (#654/AC-11). */
+function gitBringsFilesInBulk(afterGit: string[]): boolean {
+  let restoring = false;
+  for (const t of afterGit) {
+    if (t === 'checkout' || t === 'restore') restoring = true;
+    else if (restoring && (t === '.' || t === '-s' || t.startsWith('--source') || t === 'fetch_head')) return true;
+  }
+  return false;
+}
+
+/** `tar` in extract mode: `x` in the old-style cluster right after `tar`, `-x…`, `--extract` or `--get` (#654/AC-11). */
+function tarExtracts(afterTar: string[]): boolean {
+  const first = afterTar[0] ?? '';
+  if (!first.startsWith('-') && first.includes('x')) return true;
+  return afterTar.some((t) => /^-[a-zA-Z]*x[a-zA-Z]*$/.test(t) || t === '--extract' || t === '--get');
+}
+
+/** Verbs that run other commands or bring files in bulk, found by base name: `find -exec|-delete|-fprint*`, any `xargs`, `patch`, `unzip`, `ditto`, recursive `cp` and `rsync`, extracting `tar`. Over-matches `npm version patch`, by design (#654/AC-9, AC-10, AC-11). */
+function runsOrBringsInBulk(tokens: string[]): boolean {
+  const names = tokens.map(baseName);
+  if (names.some((n) => n === 'xargs' || n === 'patch' || n === 'unzip' || n === 'ditto')) return true;
+  const after = (name: string): string[] | undefined => {
+    const at = names.indexOf(name);
+    return at >= 0 ? tokens.slice(at + 1) : undefined;
+  };
+  if (after('find')?.some((t) => FIND_RUNNING_FLAGS.has(t) || t.startsWith('-fprint'))) return true;
+  if (after('cp')?.some((t) => RECURSIVE_OR_ARCHIVE_FLAG.test(t)) || after('rsync')?.some((t) => RECURSIVE_OR_ARCHIVE_FLAG.test(t))) return true;
+  const tar = after('tar');
+  return tar !== undefined && tarExtracts(tar);
+}
+
+/** A tokenised scan, one pass per command segment (linear in the command, 64 KiB bound in 0025): recursive `rm`, any `push`, `reset` or `clean` after a `git` word, whatever the flags or global options (#618/AC-9), and the verbs of #654 (AC-9, AC-10, AC-11). */
 function hasRiskyVerb(segment: string): boolean {
   const tokens = tokensOf(segment);
   const rm = tokens.findIndex((t) => baseName(t) === 'rm');
   if (rm >= 0 && tokens.slice(rm + 1).some((t) => RECURSIVE_FLAG.test(t))) return true;
+  if (runsOrBringsInBulk(tokens)) return true;
   const git = tokens.findIndex((t) => baseName(t) === 'git');
-  return git >= 0 && tokens.slice(git + 1).some((t) => RISKY_GIT_SUBCOMMANDS.has(t));
+  if (git < 0) return false;
+  const afterGit = tokens.slice(git + 1);
+  return afterGit.some((t) => RISKY_GIT_SUBCOMMANDS.has(t)) || gitRegistersOrApplies(afterGit) || gitBringsFilesInBulk(afterGit);
 }
 
 const RUNNERS = new Set([...SHELLS, 'eval', 'source', 'python', 'python2', 'python3', 'node', 'perl', 'ruby', 'php', 'osascript']);
@@ -135,9 +186,10 @@ function mutatesPackageJson(form: string): boolean {
 const CONFIG_WORDS = new Set(['c', 'config', 'conf']);
 /** Tools whose config command rewrites a file that runs or authenticates later: the word to find after the tool, anywhere in the segment (#618/AC-11). */
 const TOOL_CONFIG_WORDS: ReadonlyMap<string, ReadonlySet<string>> = new Map([
-  ['claude', new Set(['mcp', 'config'])],
-  ['gh', new Set(['alias', 'config'])],
-  ['aws', new Set(['configure'])],
+  ['claude', new Set(['mcp', 'config', 'plugin', 'plugins'])],
+  ['gh', new Set(['alias', 'config', 'auth', 'extension'])],
+  ['aws', new Set(['configure', 'update-kubeconfig'])],
+  ['docker', new Set(['login', 'context'])],
   ['kubectl', new Set(['config'])],
   ['pip', new Set(['config'])],
   ['pip3', new Set(['config'])],
@@ -159,28 +211,39 @@ function segmentChangesToolConfig(tokens: string[]): boolean {
   return false;
 }
 
-/** `npm set` and `npm c set|delete|edit` (also pnpm, yarn, bun) write the user's `.npmrc`; `claude mcp|config` change what the next agent run loads; `gh alias|config` plant commands; `aws configure`, `kubectl config` and `pip config` write credentials and endpoints. Within a segment, with any option between. Over-matches by design: reads included (#618/AC-11, decision 0025 amendment). */
+/** `npm set` and `npm c set|delete|edit` (also pnpm, yarn, bun) write the user's `.npmrc`; `claude mcp|config|plugin` change what the next agent run loads; `gh alias|config|auth|extension` plant commands and credentials; `aws configure|update-kubeconfig`, `docker login|context`, `kubectl config` and `pip config` write credentials and endpoints (#654/AC-7). Within a segment, with any option between. Over-matches by design: reads included (#618/AC-11, decision 0025 amendment). */
 function changesToolConfig(form: string): boolean {
+  // `get-credentials` and `kubeconfig` write a cluster credential, whatever the tool (#654/AC-7).
+  if (form.includes('get-credentials') || form.includes('kubeconfig')) return true;
   return form.split(/[|;&\n]+/).some((segment) => segmentChangesToolConfig(tokensOf(segment)));
 }
 
-/** Schedulers and login items registered by command, and git configuration injected by environment (#618/AC-11). */
+/** Schedulers and login items registered by command, and git configuration or a chosen command injected by environment: `GIT_PAGER`, `GIT_EDITOR`, `GIT_ASKPASS`, `GIT_SSH`, `GIT_WORK_TREE`, `GIT_TEMPLATE_DIR` and the like (#618/AC-11, #654/AC-3, AC-8). */
 const SCHEDULER_PATTERNS: RegExp[] = [
   new RegExp(`${A}(?:launchctl|systemctl|systemd-run)${END}`),
   /login\s*items?|com\.apple\.loginitems|loginwindow/,
-  new RegExp(`${A}git_(?:config[a-z0-9_]*|dir|ssh_command|external_diff|exec_path)=`),
+  new RegExp(`${A}git_(?:config[a-z0-9_]*|dir|ssh_command|external_diff|exec_path|pager|editor|sequence_editor|askpass|ssh|proxy_command|work_tree|template_dir)=`),
 ];
-/** `at` and `batch` count only in command position (first word of a segment, after env assignments), never as a word of prose (#618/AC-11). */
+/** `at` and `batch` count only in command position (first word of a segment, after env assignments and the wrappers `env`, `nohup`, `time`, `command`, `exec`, `xargs` with their flags), never as a word of prose (#618/AC-11, #654/AC-1). */
 const LEADING_NOISE = /^[\s({]+/;
 const ENV_ASSIGNMENT = /^[a-z_][a-z0-9_]*=/;
-/** Linear: strip the leading noise once, skip `name=value` words, compare the base name of the first remaining word (no overlapping quantifiers; #618/INP-9). */
+const COMMAND_WRAPPERS = new Set(['env', 'nohup', 'time', 'command', 'exec', 'xargs']);
+/** A new command position opens at a separator, after `$(` and after a backtick (#654/AC-1). */
+const COMMAND_POSITION_SPLIT = /[|;&\n]+|\$\(|`/;
+/** Linear: strip the leading noise once, then one pass over the words: skip `name=value`, a wrapper and the flags after it; compare the base name of the first remaining word (no overlapping quantifiers; #618/INP-9). */
 function startsWithAt(segment: string): boolean {
-  const words = segment.replace(LEADING_NOISE, '').split(/\s+/);
-  const first = words.find((w) => !ENV_ASSIGNMENT.test(w)) ?? '';
-  const name = first.slice(first.lastIndexOf('/') + 1);
-  return name === 'at' || name === 'batch';
+  let afterWrapper = false;
+  for (const word of segment.replace(LEADING_NOISE, '').split(/\s+/)) {
+    if (ENV_ASSIGNMENT.test(word) || (afterWrapper && word.startsWith('-'))) continue;
+    const name = baseName(word);
+    if (COMMAND_WRAPPERS.has(name)) afterWrapper = true;
+    else return name === 'at' || name === 'batch';
+  }
+  return false;
 }
 
+/** The git global options that point git at another repository, work tree or program directory: terminal-only in both spellings, `=v` and a separate value (#654/AC-2). */
+const GIT_REPOSITORY_OPTIONS = ['--git-dir', '--work-tree', '--exec-path'];
 const GIT_OPTIONS_WITH_VALUE = new Set(['-C', '--git-dir', '--work-tree', '--namespace', '--exec-path', '--attr-source', '--super-prefix']);
 /** The git global options that take no value. A long option before the subcommand that is in neither set nor spelled `--x=v` may take a separate value, so the subcommand cannot be told: terminal-only (#618/AC-9, decision 0025 amendment). */
 const GIT_OPTIONS_WITHOUT_VALUE = new Set(['--version', '--help', '--html-path', '--man-path', '--info-path', '--paginate', '--no-pager', '--no-replace-objects', '--bare', '--no-optional-locks', '--no-lazy-fetch', '--literal-pathspecs', '--glob-pathspecs', '--noglob-pathspecs', '--icase-pathspecs', '--no-advice']);
@@ -201,7 +264,7 @@ function gitSegmentInjectsConfig(tokens: string[]): boolean {
     }
     if (!active) continue;
     const plainC = o.startsWith('-c') && !o.startsWith('--');
-    if (o.startsWith('--config') || o.startsWith('--template')) return true;
+    if (o.startsWith('--config') || o.startsWith('--template') || GIT_REPOSITORY_OPTIONS.some((opt) => o === opt || o.startsWith(`${opt}=`))) return true;
     if (plainC && (subcommand === undefined || !GIT_SUBCOMMANDS_WITH_PLAIN_C.has(subcommand))) return true;
     if (subcommand === undefined && o.startsWith('--') && !o.includes('=') && !GIT_OPTIONS_WITH_VALUE.has(o) && !GIT_OPTIONS_WITHOUT_VALUE.has(o)) return true;
     if (GIT_OPTIONS_WITH_VALUE.has(o) && subcommand === undefined) i++;
@@ -267,24 +330,33 @@ function hasUnquotedGlob(masked: string): boolean {
   }
   return false;
 }
-const PATH_START = /^[~./]/;
-
-/** An unquoted `*`, `?`, `[` or `{a,b}` in a word that starts with `~`, `.` or `/` (or after an `=`): it could expand to a floor path, so it is terminal-only. Over-matches `./scripts/*.sh` and `/tmp/*.log`; `src/*.ts` stays allowable (#618/AC-11, decision 0025 amendment). */
+/** An unquoted `*`, `?`, `[` or `{a,b}` in any word, whatever it starts with: it could expand to a floor path (`CLAUDE.m{d,x}`, `pack*.json`, `git pu{sh,x}`). Over-matches `ls src/*.ts` and a URL with `?`, by design (#654/AC-4, decision 0025 amendment). */
 function expandsPathByGlob(command: string): boolean {
-  return shellWords(command).some(({ plain, masked }) => {
-    if (!hasUnquotedGlob(masked)) return false;
-    const eq = plain.indexOf('=');
-    return PATH_START.test(plain) || (eq >= 0 && PATH_START.test(plain.slice(eq + 1))) || /^[{$]/.test(plain) || plain.includes('..') || plain.includes('$');
-  });
+  return shellWords(command).some(({ masked }) => hasUnquotedGlob(masked));
 }
 
-/** A word of a command that is only the directory of an auto-run folder, with any prefix (`~/`, `$HOME/`, `./`, a path) and a trailing `/`: the file comes in a later word (`cd .claude && tee settings.local.json`). Over-matches `ls ~/.config` (#618/AC-11, decision 0025 amendment). */
-const AUTO_RUN_DIRECTORIES = ['.claude', '.git', '.github', '.aws', '.kube', '.docker', '.config', '.config/gh', '.config/fish', '.config/git', '.config/systemd', '.config/autostart'];
+/** An auto-run folder named as any segment of a word (split at whitespace, separators and `=`), so `.claude/.`, `.claude/x/..`, `/w/.git/x` and `--dir=.git/hooks` match: the file comes in a later word (`cd .claude && tee settings.local.json`). Over-matches `ls ~/.config` and `ls etc`, by design (#618/AC-11, #654/AC-5, decision 0025 amendment). */
+const AUTO_RUN_DIRECTORIES: ReadonlySet<string> = new Set(['.claude', '.git', '.github', '.aws', '.kube', '.docker', '.config', '.vscode', '.cargo', '.yarn', 'etc']);
 function namesAutoRunDirectory(text: string): boolean {
-  return text.split(/[\s;|&()<>]+/).some((word) => {
-    const w = word.replace(/\/+$/, '').toLowerCase();
-    return AUTO_RUN_DIRECTORIES.some((dir) => w === dir || w.endsWith(`/${dir}`));
-  });
+  return text.split(/[\s;|&()<>=]+/).some((word) => word.toLowerCase().split('/').some((segment) => AUTO_RUN_DIRECTORIES.has(segment)));
+}
+
+const EXPANSION = /[$`]/;
+/** The argument of `cd`, `pushd`, `-C`, `--git-dir` or `--work-tree` holding `$` or a backtick: the directory it moves to is unknown, so a later word could name a floor file in it. One pass, each token read once; case matters (`-C`), so it reads the raw spelling (#654/AC-5). */
+function movesToExpandedDirectory(text: string): boolean {
+  let expectArgument = false;
+  let skipFlags = false;
+  for (const t of text.split(/[\s;|&()<>{}]+/)) {
+    if (expectArgument && !(skipFlags && t.startsWith('-'))) {
+      if (EXPANSION.test(t)) return true;
+      expectArgument = false;
+    }
+    const name = baseName(t);
+    if (name === 'cd' || name === 'pushd') [expectArgument, skipFlags] = [true, true];
+    else if (t === '-C' || t === '--git-dir' || t === '--work-tree') [expectArgument, skipFlags] = [true, false];
+    else if (EXPANSION.test(t) && (t.startsWith('-C') || t.startsWith('--git-dir=') || t.startsWith('--work-tree='))) return true;
+  }
+  return false;
 }
 
 /** An expansion joined to a path: a word with `$` and `/`, or `$(…)` next to a `/`. The text it expands to is unknown, so it could rebuild a floor path (`d=.cla; tee ${d}ude/settings.local.json`). Over-matches `cat $HOME/x` (#618/AC-11, decision 0025 amendment). */
@@ -296,11 +368,13 @@ function joinsExpansionWithSlash(command: string): boolean {
 function commandIsTerminalOnly(rawCommand: string): boolean {
   // `$'\x2e…'` spells any character by code, so no text scan can read it: any ANSI-C quote is terminal-only (#618/AC-11).
   if (rawCommand.includes("$'")) return true;
-  if (spellings(rawCommand).some((form) => gitInjectsConfig(form) || namesAutoRunDirectory(form)) || expandsPathByGlob(rawCommand) || joinsExpansionWithSlash(rawCommand)) return true;
+  // Any command substitution (`$(…)` or a backtick) hides what runs, and a backslash before a digit, `x`, `u` or `U`, `print -P` and `%b` spell a character by code: all over-match by design (#654/AC-6, AC-11).
+  if (rawCommand.includes('$(') || rawCommand.includes('`') || /\\[0-9xuU]/.test(rawCommand) || rawCommand.includes('%b') || /\bprint\s+-[A-Za-z]*P/.test(rawCommand)) return true;
+  if (spellings(rawCommand).some((form) => gitInjectsConfig(form) || namesAutoRunDirectory(form) || movesToExpandedDirectory(form)) || expandsPathByGlob(rawCommand) || joinsExpansionWithSlash(rawCommand)) return true;
   // Command names are compared whatever the case, as the macOS disk is: `Git push`, `RM -rf` (#618/AC-11).
   const forms = spellings(rawCommand.toLowerCase());
   if (forms.some((form) => COMMAND_PATTERNS.some((re) => re.test(form)))) return true;
-  if (forms.some((form) => SCHEDULER_PATTERNS.some((re) => re.test(form)) || form.split(/[|;&\n]+/).some(startsWithAt))) return true;
+  if (forms.some((form) => SCHEDULER_PATTERNS.some((re) => re.test(form)) || form.split(COMMAND_POSITION_SPLIT).some(startsWithAt))) return true;
   if (forms.some(downloadsAndRuns) || forms.some(reachesGitIndirectly) || forms.some(mutatesPackageJson) || forms.some(changesToolConfig)) return true;
   return forms.some((form) => form.split(/[|;&\n]+/).some(hasRiskyVerb));
 }
