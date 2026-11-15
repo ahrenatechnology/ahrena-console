@@ -1,8 +1,8 @@
-// End-to-end skeleton of the diagnosis next to a saturation alert (issue 566, epic 563); wireframe 566-1 to 566-9 in
-// docs/wireframes/index.html, chapter "Saturou, entendi, resolvi", approved by the design owner on 2026-11-14. It mounts
-// the machine screen on the fake DOM with the simulator's telemetry, swaps in the open alerts per test, and answers
-// GET /api/diagnosis here, shaped like docs/contracts/diagnosis.md (issue 565). No network, no process runs.
-// Every scenario is a `todo` until the layers of issue 566 turn it green; the assertions are the finished behaviour.
+/* End-to-end skeleton of the diagnosis next to a saturation alert (#566, epic #563); wireframe 566-1 to 566-9 in
+docs/wireframes/index.html, chapter "Saturou, entendi, resolvi", approved by the design owner on 2026-11-14. It mounts
+the machine screen on the fake DOM with the simulator's telemetry, swaps in the open alerts per test, and answers
+GET /api/diagnosis here, shaped like docs/contracts/diagnosis.md (issue 565). No network, no process runs.
+Every scenario is a `todo` until the layers of issue 566 turn it green; the assertions are the finished behaviour. */
 import assert from 'node:assert/strict';
 import { after, afterEach, before, describe, test } from 'node:test';
 import { openSqliteStorage, type SqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
@@ -33,7 +33,7 @@ const WS = { id: 'ws-example', label: 'Workstation', port: 14720 };
 const GB = 1024 ** 3;
 const iso = (msAgo: number) => new Date(NOW - msAgo).toISOString();
 
-// ---------- the open alerts and the diagnoses, as the core serves them ----------
+// ---------- the open alerts and the diagnoses, as the core serves them ---------- (#566)
 
 const alert = (id: string, kind: Alert['kind'], level: Alert['level'], message: string): Alert => ({ id, kind, level, message, detail: null, since: iso(12 * 60_000) });
 const SWAP_HIGH = alert('swap-high', 'swap-high', 'error', 'O swap passou de 90%');
@@ -55,7 +55,7 @@ const memoryDiagnosis = (machine: string, alertId: string) => ({
   ],
 });
 
-// ---------- the simulator's telemetry behind the core's service ----------
+// ---------- the simulator's telemetry behind the core's service ---------- (#566)
 
 let storage: SqliteStorage;
 let service: TelemetryService;
@@ -73,7 +73,7 @@ before(async () => {
 });
 after(() => storage.close());
 
-/** One answer per GET /api/diagnosis, in order; the last one repeats. */
+/** One answer per GET /api/diagnosis, in order; the last one repeats. (#566) */
 type DiagnosisAnswer = (route: URL) => Promise<unknown>;
 
 interface Mounted {
@@ -201,7 +201,7 @@ describe('the diagnosis next to a saturation alert (issue 566)', () => {
     assert.doesNotMatch(texto(panel(m.area)), /Não deu para diagnosticar/);
   });
 
-  test('#566/AC-3 the Workstation with an old núcleo (501 diagnosis-unsupported) says it does not diagnose yet, with no retry', TODO, async () => {
+  test('#566/AC-3 the Workstation with an old core (501 diagnosis-unsupported) says it does not diagnose yet, with no retry', TODO, async () => {
     const m = mount({ machine: WS.id, alerts: [LOAD_HIGH], diagnosis: [fails(501, { error: 'diagnosis-unsupported' })] });
     await m.ready;
     await until(() => /ainda não faz diagnóstico/.test(texto(panel(m.area))));
@@ -240,7 +240,7 @@ describe('the diagnosis next to a saturation alert (issue 566)', () => {
     assert.deepEqual(m.diagnosisReads(), []);
     const memory = memoryCard(m.area);
     assert.ok(!memory.classList.contains('tm-bad') && !memory.classList.contains('tm-warn'), 'the Memória card stays as today');
-    // Proves the panel would exist: the same screen with a saturation alert does read the route.
+    // Proves the panel would exist: the same screen with a saturation alert does read the route. (#566)
     const withAlert = mount({ alerts: [PORT_EXPOSED, SWAP_HIGH], diagnosis: [ok(() => memoryDiagnosis('local', 'swap-high'))] });
     await withAlert.ready;
     await until(() => withAlert.diagnosisReads().length === 1);
