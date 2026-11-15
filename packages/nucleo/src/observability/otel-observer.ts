@@ -96,7 +96,7 @@ function describeFailure(error: unknown): Failure {
   return { type, message: isError ? error.message : null, stacktrace: isError ? (error.stack ?? null) : null, code };
 }
 
-/** The exception attributes (OTL-3, LOG-5), through the masking. */
+/** The exception attributes (#661, OTL-3, LOG-5), through the masking. */
 function exceptionAttributes(failure: Failure): Record<string, AttributeValue> {
   const attributes: Record<string, AttributeValue> = { 'exception.type': failure.type };
   if (failure.message !== null) attributes['exception.message'] = failure.message;
