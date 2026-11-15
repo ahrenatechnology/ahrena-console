@@ -36,9 +36,11 @@ const iso = (ms: number | null): string | null => (ms === null ? null : new Date
 
 export function listRequests(deps: PermissionDeps, input: { sessionId: string; unavailableReason: string | null }): RequestListing {
   if (input.unavailableReason !== null) return { available: false, reason: input.unavailableReason, requests: [] };
+  const since = deps.clock.now() - RECENT_MS;
+  // A deny reason settled before the window is nulled here, at the first listing, expiry sweep or start after it (#618/AC-7).
+  deps.repository.clearReasonsSettledBefore(since);
   const requests = deps.repository.listBySession(input.sessionId);
   for (const request of requests) expireIfDue(deps, request);
-  const since = deps.clock.now() - RECENT_MS;
   const shown = requests.filter((request) => request.isOpen || (request.settledAt ?? 0) >= since);
   return {
     available: true,

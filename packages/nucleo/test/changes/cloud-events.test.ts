@@ -43,6 +43,7 @@ const SAMPLES: Record<ChangeType, NewChange> = {
   tools: { type: 'tools', key: 'local', sessionId: null, accountId: null },
   connector: { type: 'connector', key: 'aws', sessionId: null, accountId: null },
   'app-update': { type: 'app-update', key: 'app', sessionId: null, accountId: null },
+  permission: { type: 'permission', key: 'rq-1', sessionId: 's1', accountId: 'conta-a' },
 };
 /** The remote machine's needs-you (telemetry/remote.ts) has no session id (#663). */
 const REMOTE_NEEDS_YOU: NewChange = { type: 'needs-you', key: 'mac2:s9', sessionId: null, accountId: null };

@@ -90,6 +90,7 @@ export const PARAM_SAMPLES: { [name: string]: string } = {
   sessionName: 'dev',
   uiFile: 'shell.css',
   uiScreenFile: 'agent-view.js',
+  requestId: 'req-1',
 };
 
 /** The concrete path of a template: each `{name}` replaced by its sample. */

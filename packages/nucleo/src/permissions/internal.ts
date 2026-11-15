@@ -1,15 +1,11 @@
 // What the use cases share: finding a request of a session, settling an overdue one, and writing what happened to the (#618)
 // audit and the change feed. Nothing here is exported by the package. (#618, layer 2)
-import { createHash } from 'node:crypto';
 import { DigestMismatch, PermissionNotFound } from './errors.ts';
 import { PermissionRefusal, type PermissionRequest } from './model.ts';
 import type { PermissionDeps } from './ports.ts';
 
 /** The id of a caller is data: it is cut before it reaches the audit. (#618) */
 const clip = (text: string): string => text.slice(0, 128);
-
-/** SHA-256 hex of a reason: the only form in which a reason reaches the audit (#618/AC-7). */
-export const sha256Hex = (text: string): string => createHash('sha256').update(text).digest('hex');
 
 /** The request with this id of this session, or `PermissionNotFound`: another session's id is no request (#618/AC-1). */
 export function mustFind(deps: PermissionDeps, sessionId: string, requestId: string): PermissionRequest {
@@ -27,7 +23,7 @@ export function recordChange(deps: PermissionDeps, request: PermissionRequest, e
       deps.audit.append({ ...base, toolName: request.toolName, terminalOnly: request.terminalOnly });
       break;
     case 'answered':
-      deps.audit.append({ ...base, decision: request.decision ?? undefined, answeredBy: request.answeredBy ?? undefined, channel: request.channel ?? undefined, reasonSha256: request.reason === null ? null : sha256Hex(request.reason) });
+      deps.audit.append({ ...base, decision: request.decision ?? undefined, answeredBy: request.answeredBy ?? undefined, channel: request.channel ?? undefined, reason: request.reason });
       break;
     case 'delivered':
       deps.audit.append({ ...base, decision: request.decision ?? undefined, answeredBy: request.answeredBy ?? undefined, channel: request.channel ?? undefined });

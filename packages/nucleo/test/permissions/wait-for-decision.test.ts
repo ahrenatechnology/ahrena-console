@@ -140,6 +140,7 @@ describe('waitForDecision (#618/AC-2, AC-3)', () => {
     await wait(h);
     const delivered = h.audit.records.find((r) => r.event === 'delivered');
     assert.ok(delivered);
-    assert.doesNotMatch(JSON.stringify(h.audit.records), /hunter2pw|because|migrate/);
+    // The reason travels on the `answered` record to the file adapter, which hashes it; no other record carries it (#618/AC-7).
+    assert.doesNotMatch(JSON.stringify(h.audit.records.filter((r) => r.event !== 'answered')), /hunter2pw|because|migrate/);
   });
 });

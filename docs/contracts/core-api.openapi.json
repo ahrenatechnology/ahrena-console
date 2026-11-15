@@ -132,6 +132,10 @@
     {
       "name": "Mcp",
       "description": "The MCP server."
+    },
+    {
+      "name": "Permissions",
+      "description": "The permission requests of a tool call: the plugin's hook opens one, the owner answers it from the /ui window, the hook reads the decision once (docs/contracts/permission-requests.md)."
     }
   ],
   "paths": {
@@ -889,7 +893,7 @@
           "Sessions"
         ],
         "summary": "The session Detail",
-        "description": "The session Detail.",
+        "description": "The session Detail. When the permission routes are wired the answer also carries `pendingPermissions`, an array of the requests still pending for this session (session, requestId, tool, terminalOnly, requestedAt, expiresAt; no summary and no folder); a core without them keeps the old shape.",
         "parameters": [
           {
             "$ref": "#/components/parameters/sessionId"
@@ -1343,7 +1347,7 @@
           "Analytics"
         ],
         "summary": "Who needs you, across all accounts and machines",
-        "description": "Who needs you, across all accounts and machines.",
+        "description": "Who needs you, across all accounts and machines. When the permission routes are wired the answer also carries `pendingPermissions`, an array of the requests still pending (session, requestId, tool, terminalOnly, requestedAt, expiresAt; no summary and no folder); a core without them keeps the old shape.",
         "responses": {
           "200": {
             "description": "The answer.",
@@ -5211,6 +5215,387 @@
           }
         }
       }
+    },
+    "/api/sessions/{sessionId}/permission-requests": {
+      "post": {
+        "operationId": "registerPermissionRequest",
+        "tags": [
+          "Permissions"
+        ],
+        "summary": "The hook registers a permission request for a tool call",
+        "description": "Caller: the plugin's hook. Refuses any request that carries `Origin` or `Sec-Fetch-Site` (`403 hook_only`). The core recomputes the digest and keeps only the redacted summary and the `terminalOnly` flag. Body at most 64 KiB.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/sessionId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PermissionRegisterBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Registered.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PermissionRegistered"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`digest_mismatch`, `invalid_request`, `invalid_session_id` or `input_too_deep`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PermissionRefusal"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "A request that carries `Origin` or `Sec-Fetch-Site` (`hook_only`): a page never calls a hook route.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PermissionRefusal"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "The body is over 64 KiB (`too_large`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PermissionRefusal"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "The content type is not JSON (`use application/json`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PermissionRefusal"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The capability is off (`off`): this core has no window credential or the switch is off.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PermissionRefusal"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "operationId": "listPermissionRequests",
+        "tags": [
+          "Permissions"
+        ],
+        "summary": "The permission requests of a session, pending and closed in the last 10 minutes",
+        "description": "Caller: the /ui or any bearer client. `summary` is redacted. While the capability is off the answer is `200` with `available: false`, `reason: \"off\"` and no request. The first listing after the window also nulls the deny reason of an older request.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/sessionId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The requests, oldest first.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PermissionRequestList"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sessions/{sessionId}/permission-requests/{requestId}/decision": {
+      "get": {
+        "operationId": "getPermissionDecision",
+        "tags": [
+          "Permissions"
+        ],
+        "summary": "The hook reads the decision of its request, once",
+        "description": "Caller: the hook (`Origin` and `Sec-Fetch-Site` are refused). Long polls up to `wait` seconds. The decision is handed once; a request handed to a reader that already left is not handed again. A decision is never delivered with a `410`.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/sessionId"
+          },
+          {
+            "$ref": "#/components/parameters/requestId"
+          },
+          {
+            "$ref": "#/components/parameters/permissionWait"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The decision, once.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PermissionDecisionDelivered"
+                }
+              }
+            }
+          },
+          "204": {
+            "description": "No answer yet when the slice ends."
+          },
+          "403": {
+            "description": "A request that carries `Origin` or `Sec-Fetch-Site` (`hook_only`): a page never calls a hook route.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PermissionRefusal"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown id, or an id of another session (`not_found`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PermissionRefusal"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The decision was already read (`already_delivered`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PermissionRefusal"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "Expired, withdrawn, answered elsewhere or open before a core restart (`gone`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PermissionRefusal"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The capability is off (`off`): this core has no window credential or the switch is off.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PermissionRefusal"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sessions/{sessionId}/permission-requests/{requestId}/withdraw": {
+      "post": {
+        "operationId": "withdrawPermissionRequest",
+        "tags": [
+          "Permissions"
+        ],
+        "summary": "The hook withdraws its request at its own deadline",
+        "description": "Caller: the hook (`Origin` and `Sec-Fetch-Site` are refused). No body is read.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/sessionId"
+          },
+          {
+            "$ref": "#/components/parameters/requestId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Withdrawn.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PermissionOk"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "A request that carries `Origin` or `Sec-Fetch-Site` (`hook_only`): a page never calls a hook route.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PermissionRefusal"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown id, or an id of another session (`not_found`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PermissionRefusal"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The decision was already read (`already_delivered`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PermissionRefusal"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "It already closed (`gone`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PermissionRefusal"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The capability is off (`off`): this core has no window credential or the switch is off.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PermissionRefusal"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sessions/{sessionId}/permission-requests/{requestId}/answer": {
+      "post": {
+        "operationId": "answerPermissionRequest",
+        "tags": [
+          "Permissions"
+        ],
+        "summary": "The owner answers a request from the /ui window",
+        "description": "Three proofs, all required and checked before the body is read: the owner bearer; a same-origin `POST` of the exact raw path (`Origin` exactly `http://<Host>`, no `Sec-Fetch-Site` of `cross-site` or `same-site`, `Content-Type: application/json`, a declared `Content-Length` of at most 2048 bytes); and the `Ahrena-Window` credential. The answer carries no session or digest of its own: the core uses the stored ones. Not open to the AhrenaRemote proof.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/sessionId"
+          },
+          {
+            "$ref": "#/components/parameters/requestId"
+          },
+          {
+            "$ref": "#/components/parameters/ahrenaWindow"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PermissionAnswerBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Answered.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PermissionOk"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`invalid_decision`, `invalid_reason` or `invalid_request`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PermissionRefusal"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`window_only` (no or wrong window credential, or the capability off) or `forbidden_origin` (the same-origin proof failed, including a body over 2048 bytes or a content type other than JSON).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PermissionRefusal"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown id, or an id of another session (`not_found`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PermissionRefusal"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Already answered (`already_answered`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PermissionRefusal"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "Gone (`gone`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PermissionRefusal"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`allow` on a `terminalOnly` request (`terminal_only`); a `deny` is accepted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PermissionRefusal"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -5462,6 +5847,36 @@
         "schema": {
           "type": "string",
           "pattern": "^[a-z0-9][a-z0-9-]{0,63}$"
+        }
+      },
+      "requestId": {
+        "name": "requestId",
+        "in": "path",
+        "required": true,
+        "description": "The permission request id, `[A-Za-z0-9-]` up to 64 characters, as returned when the hook registered it. An id of another session is not found.",
+        "schema": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9-]{1,64}$"
+        }
+      },
+      "permissionWait": {
+        "name": "wait",
+        "in": "query",
+        "required": false,
+        "description": "Seconds the hook waits for an answer, whole number, at most 25 (default 0).",
+        "schema": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 25
+        }
+      },
+      "ahrenaWindow": {
+        "name": "Ahrena-Window",
+        "in": "header",
+        "required": true,
+        "description": "The window credential the desktop app holds, compared in constant time with the one the core keeps in memory. Never in a URL or a body.",
+        "schema": {
+          "type": "string"
         }
       }
     },
@@ -6406,6 +6821,265 @@
         "properties": {
           "error": {
             "const": "delegation-unsupported"
+          }
+        }
+      },
+      "PermissionRefusal": {
+        "type": "object",
+        "description": "A refusal of the permission routes: a closed code, never the text of an exception, a dependency or the request.",
+        "required": [
+          "error"
+        ],
+        "properties": {
+          "error": {
+            "type": "string",
+            "enum": [
+              "off",
+              "window_only",
+              "forbidden_origin",
+              "hook_only",
+              "digest_mismatch",
+              "invalid_request",
+              "invalid_session_id",
+              "input_too_deep",
+              "invalid_decision",
+              "invalid_reason",
+              "too_large",
+              "use application/json",
+              "already_delivered",
+              "already_answered",
+              "gone",
+              "not_found",
+              "terminal_only",
+              "method_not_allowed",
+              "internal"
+            ]
+          }
+        }
+      },
+      "PermissionRegisterBody": {
+        "type": "object",
+        "required": [
+          "toolName",
+          "toolInput",
+          "cwd",
+          "digest"
+        ],
+        "properties": {
+          "toolName": {
+            "type": "string"
+          },
+          "toolInput": {
+            "description": "Any JSON value; the core keeps only a redacted summary and the terminalOnly flag, never this."
+          },
+          "cwd": {
+            "type": "string"
+          },
+          "permissionMode": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "digest": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "description": "The digest of `{ sessionId, toolName, toolInput, cwd }`; the core recomputes it and refuses a mismatch."
+          }
+        }
+      },
+      "PermissionRegistered": {
+        "type": "object",
+        "required": [
+          "requestId",
+          "expiresAt"
+        ],
+        "properties": {
+          "requestId": {
+            "type": "string"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "PermissionDecisionDelivered": {
+        "type": "object",
+        "description": "The decision, handed once.",
+        "required": [
+          "requestId",
+          "digest",
+          "decision",
+          "reason",
+          "answeredBy",
+          "channel"
+        ],
+        "properties": {
+          "requestId": {
+            "type": "string"
+          },
+          "digest": {
+            "type": "string"
+          },
+          "decision": {
+            "type": "string",
+            "enum": [
+              "allow",
+              "deny"
+            ]
+          },
+          "reason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "answeredBy": {
+            "type": "string"
+          },
+          "channel": {
+            "type": "string",
+            "const": "ui"
+          }
+        }
+      },
+      "PermissionOk": {
+        "type": "object",
+        "required": [
+          "ok"
+        ],
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "const": true
+          }
+        }
+      },
+      "PermissionAnswerBody": {
+        "type": "object",
+        "description": "Only `decision` and `reason`: a body that names a session, a request or a digest is `400 invalid_request`.",
+        "required": [
+          "decision"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "decision": {
+            "type": "string",
+            "enum": [
+              "allow",
+              "deny"
+            ]
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500,
+            "description": "One line, only for `deny`."
+          }
+        }
+      },
+      "PermissionRequestItem": {
+        "type": "object",
+        "required": [
+          "id",
+          "state",
+          "tool",
+          "summary",
+          "folder",
+          "requestedAt",
+          "expiresAt",
+          "terminalOnly",
+          "decision",
+          "reason",
+          "answeredAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "answered",
+              "delivered",
+              "expired",
+              "withdrawn",
+              "answered_elsewhere",
+              "core_restarted"
+            ]
+          },
+          "tool": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string",
+            "description": "Redacted."
+          },
+          "folder": {
+            "type": "string"
+          },
+          "requestedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "terminalOnly": {
+            "type": "boolean"
+          },
+          "decision": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "allow",
+              "deny",
+              null
+            ]
+          },
+          "reason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "answeredAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          }
+        }
+      },
+      "PermissionRequestList": {
+        "type": "object",
+        "description": "The pending requests and the ones closed in the last 10 minutes, oldest first.",
+        "required": [
+          "available",
+          "reason",
+          "requests"
+        ],
+        "properties": {
+          "available": {
+            "type": "boolean"
+          },
+          "reason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "requests": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PermissionRequestItem"
+            }
           }
         }
       }

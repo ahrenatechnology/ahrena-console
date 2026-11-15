@@ -20,8 +20,12 @@ export interface HookReceiverOptions {
   host?: string;
   /** 0 escolhe uma porta livre (testes). */
   port?: number;
-  /** Chamado depois de cada evento gravado; é onde a máquina de estados (1.5) entra. Erros aqui não derrubam a gravação. */
-  onEvent?: (result: IngestResult) => void | Promise<void>;
+  /**
+   * Chamado depois de cada evento gravado; é onde a máquina de estados (1.5) entra. Erros aqui não derrubam a gravação.
+   * `raw` is the payload as the hook sent it: the stored event keeps `data` cut at 4000 characters, which is not enough to
+   * recompute the digest of a tool call (permission requests, #618). A consumer that does not need it ignores it.
+   */
+  onEvent?: (result: IngestResult, raw: unknown) => void | Promise<void>;
   /** Para onde vão os erros; o padrão é `console.error`. */
   log?: (message: string) => void;
   now?: () => Date;
@@ -124,7 +128,7 @@ export function createHookRoute(opts: HookRouteOptions): HookRoute {
       send(res, 202, { id: result.event.id, duplicate: !result.appended });
       if (result.appended && opts.onEvent) {
         try {
-          await opts.onEvent(result);
+          await opts.onEvent(result, raw);
         } catch (err) {
           log(`onEvent failed for ${result.event.type}: ${(err as Error).message}`);
         }
