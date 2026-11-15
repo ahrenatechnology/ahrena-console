@@ -14,7 +14,7 @@ Decision [0009](docs/decisoes/0009-english-internals.md), issue #173.
 
 ## Tests
 
-- New code is born with its unit test beside it: same folder, same name (`packages/nucleo/src/model.ts` -> `packages/nucleo/src/model.test.ts`). Old tests in `packages/nucleo/test/` stay: legacy does not block, and migrating it is another issue.
+- New code in `packages/nucleo` is born with its unit test beside it: same folder, same name (`packages/nucleo/src/model.ts` -> `packages/nucleo/src/model.test.ts`). Old tests in `packages/nucleo/test/` stay: legacy does not block, and migrating it is another issue.
 - The proof that a PR passes the core is CI: `.github/workflows/repo-tests.yml` runs all of `packages/nucleo/test` and the colocated `packages/nucleo/src/**/*.test.ts` in 6 parallel shards on every PR (#395, #660).
 - Locally, run only the file you touched, with `--test-concurrency=1`: `node --test --test-concurrency=1 packages/nucleo/test/<file>.test.ts` (or `packages/nucleo/src/<module>.test.ts` for a colocated one). Do not run the whole suite on a laptop; it exhausts memory.
 - A failing test is fixed or gets an issue. Never hide it behind a silent skip.
