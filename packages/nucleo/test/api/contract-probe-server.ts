@@ -43,7 +43,6 @@ import { SqliteTelemetryStore } from '../../src/telemetry/adapters/sqlite.ts';
 import { AlertTracker } from '../../src/telemetry/alerts.ts';
 import { localMachine, TelemetryService, type MachineEntry } from '../../src/telemetry/service.ts';
 import { ToolsExecutor, type ToolsHost } from '../../src/tools/executor.ts';
-import type { ToolsOverview } from '../../src/tools/service.ts';
 import { OWNER_TOKEN, ownerFetch } from '../owner-http.ts';
 import { fakeRunner, fakeSpawn } from '../tools/doubles.ts';
 import { startDemoApi, type DemoApi } from './demo-api.ts';
@@ -63,7 +62,7 @@ export const PROBE_MACHINE = 'workstation';
 const connection = new GithubConnection({ vault: null, settings: new MemoryInstallationSettings(), off: true });
 
 const toolsHost: ToolsHost = {
-  overview: async () => ({ version: 1, jobs: { current: null, queue: [], recent: [], batch: null } }) as unknown as ToolsOverview,
+  overview: async () => null,
   check: async () => null,
   actionPlan: async () => ({ kind: 'unknown' }),
   verify: async () => null,
