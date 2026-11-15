@@ -47,6 +47,8 @@ const AUTO_RUN_PATH_PATTERNS: ReadonlyArray<{ test(text: string): boolean }> = [
   new RegExp(`${A}\\.yarn/plugins${END}|${A}\\.cargo/config(?:\\.toml)?${END}`, 'i'),
   new RegExp(`${A}\\.pre-commit-config\\.ya?ml${END}|${A}\\.?lefthook(?:-local)?\\.(?:ya?ml|json|toml)${END}`, 'i'),
   new RegExp(`${A}\\.vscode/tasks\\.json${END}`, 'i'),
+  // Python start-up files run by every interpreter or pytest start (#618/AC-11).
+  new RegExp(`${A}(?:sitecustomize\\.py|usercustomize\\.py|conftest\\.py)${END}|\\.pth${END}`, 'i'),
   // System start-up files and schedulers: the dotless ones too (#618/AC-11).
   new RegExp(`${A}/?etc/(?:z(?:shrc|profile|shenv|login|logout|sh)|bash\\.bashrc|bashrc|profile|environment|rc\\.local|rc\\d?\\.d|init\\.d|sudoers|cron|systemd|paths|launchd)`, 'i'),
   new RegExp(`${A}/?var/spool/cron`, 'i'),

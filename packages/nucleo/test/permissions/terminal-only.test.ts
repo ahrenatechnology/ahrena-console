@@ -407,6 +407,12 @@ describe('isTerminalOnly: build scripts and package manager config (#618/AC-11)'
     for (const p of paths) assert.equal(isTerminalOnly('Write', { file_path: p, content: 'x' }), true, `Write ${p}`);
   });
 
+  test('#618/AC-11: writing a Python start-up file is terminal-only, the look-alikes are not', () => {
+    const paths = ['/u/lib/python3.12/site-packages/sitecustomize.py', '/u/lib/python3.12/site-packages/usercustomize.py', '/u/lib/python3.12/site-packages/x.pth', '/w/conftest.py'];
+    for (const p of paths) assert.equal(isTerminalOnly('Write', { file_path: p, content: 'x' }), true, `Write ${p}`);
+    for (const p of ['/w/src/conftest_helpers.ts', '/w/docs/path.md']) assert.equal(isTerminalOnly('Write', { file_path: p, content: 'x' }), false, p);
+  });
+
   test('#618/AC-11: a package manager config set, delete or edit is terminal-only, any manager', () => {
     const cases = [
       'npm config set ignore-scripts false', 'pnpm config set x y', 'yarn config set x y', 'bun config set x y',
