@@ -285,14 +285,14 @@ describe('one value class for every mask, a complete PEM only (decision 0025 ame
 });
 
 describe('a mask already in the input (#618/AC-10)', () => {
-  test('#618/AC-10: a literal mask in the input is not a mask that acted', () => {
-    assert.equal(summarizeCall('Bash', { command: 'sh ./••••' }).masked, false);
+  test('#618/AC-10: a literal mask in the input counts as masked, since the person cannot tell it from a hidden value', () => {
+    assert.equal(summarizeCall('Bash', { command: 'sh ./••••' }).masked, true);
   });
 
-  test('#618/AC-10: consecutive literal masks lose no line when no mask acted', () => {
+  test('#618/AC-10: consecutive literal masks are masked true and still lose no line', () => {
     const command = `echo ok\n${MASK}\n${MASK}`;
     const r = summarizeCall('Bash', { command });
-    assert.equal(r.masked, false);
+    assert.equal(r.masked, true);
     assert.equal(r.summary, command);
   });
 

@@ -62,18 +62,20 @@ const DECLINED: RegExp[] = [
 
 /** Masks what looks like a secret in `text`, whatever the tool, and says whether any mask acted (#618/AC-10). `atCut`: the text was cut at the raw ceiling. */
 export function redactWithReport(text: string, atCut = false): { text: string; masked: boolean } {
-  let masked = false;
+  let acted = false;
   const apply = (re: RegExp, to: Replacement, input: string): string => {
     const next = typeof to === 'string' ? input.replace(re, to) : input.replace(re, to);
-    if (next !== input) masked = true;
+    if (next !== input) acted = true;
     return next;
   };
   let out = apply(atCut ? PEM_CUT : PEM_BLOCK, MASK, text);
   for (const [re, to] of MASKS) out = apply(re, to, out);
-  if (DECLINED.some((re) => re.test(out))) masked = true;
+  if (DECLINED.some((re) => re.test(out))) acted = true;
   // One rule reading the output of another (`Authorization: Bearer ••••`) can leave two masks in a row (#618/AC-7).
-  // Only when a mask acted: a mask already in the input is the person's text and loses nothing (#618/AC-10).
-  return { text: masked ? out.replace(new RegExp(`${MASK}(?:\\s${MASK})+`, 'g'), MASK) : out, masked };
+  // Only when a mask acted: a mask already in the input is the person's text and loses no line (#618/AC-10).
+  const collapsed = acted ? out.replace(new RegExp(`${MASK}(?:\\s${MASK})+`, 'g'), MASK) : out;
+  // A literal mask in the input counts as masked: the person cannot tell it from a hidden value, so the Console never allows it outright (#618/AC-10).
+  return { text: collapsed, masked: acted || text.includes(MASK) };
 }
 
 /** Masks what looks like a secret in `text`, whatever the tool. */

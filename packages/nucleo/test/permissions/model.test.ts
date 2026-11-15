@@ -359,7 +359,12 @@ describe('a call that runs at approval is terminalOnly when a mask acted or the 
     assert.equal((await open({ toolName: 'mcp__db__query', toolInput: { sql: 'select 1' } })).terminalOnly, false);
   });
 
-  test('#618/AC-10: a literal mask character run in the input is not a mask that acted', async () => {
-    assert.equal((await open({ toolInput: { command: 'sh ./••••' } })).terminalOnly, false);
+  test('#618/AC-10: a literal mask character run in a Bash input is terminalOnly, as a hidden value would be', async () => {
+    assert.equal((await open({ toolInput: { command: 'sh ./••••' } })).terminalOnly, true);
+  });
+
+  test('#618/AC-10: a literal mask in a Write or Edit is not terminalOnly by that alone', async () => {
+    assert.equal((await open({ toolName: 'Write', toolInput: { file_path: '/w/notes.md', content: 'see ••••' } })).terminalOnly, false);
+    assert.equal((await open({ toolName: 'Edit', toolInput: { file_path: '/w/notes.md', old_string: '••••', new_string: 'x' } })).terminalOnly, false);
   });
 });
