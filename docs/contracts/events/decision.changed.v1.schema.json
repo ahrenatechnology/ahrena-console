@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ahrenatechnology/ahrena-console/blob/main/docs/contracts/events/decision.changed.v1.schema.json",
+  "title": "decision.changed.v1 data",
+  "description": "A decision of a session changed. Subject: the decision id.",
+  "type": "object",
+  "required": [
+    "sessionId",
+    "accountId"
+  ],
+  "properties": {
+    "sessionId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "accountId": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "additionalProperties": false
+}

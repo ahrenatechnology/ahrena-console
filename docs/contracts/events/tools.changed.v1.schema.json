@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ahrenatechnology/ahrena-console/blob/main/docs/contracts/events/tools.changed.v1.schema.json",
+  "title": "tools.changed.v1 data",
+  "description": "The Tools screen of a machine changed. Subject: the machine id.",
+  "type": "object",
+  "required": [
+    "sessionId",
+    "accountId"
+  ],
+  "properties": {
+    "sessionId": {
+      "type": "null"
+    },
+    "accountId": {
+      "type": "null"
+    }
+  },
+  "additionalProperties": false
+}

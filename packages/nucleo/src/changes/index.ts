@@ -4,3 +4,4 @@ export { SessionAccounts, visibleFields, withChanges, decisionsWithChanges, onMa
 export { NO_ACCOUNT, parseChangesRequest, serveChanges } from './http.ts';
 export { STREAM_ROUTE, serveStream } from './stream.ts';
 export * from './mcp.ts';
+export * from './cloud-event.ts';

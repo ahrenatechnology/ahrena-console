@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ahrenatechnology/ahrena-console/blob/main/docs/contracts/events/alert.changed.v1.schema.json",
+  "title": "alert.changed.v1 data",
+  "description": "A machine alert entered or exited. Subject: `<machine>:<alert>`.",
+  "type": "object",
+  "required": [
+    "sessionId",
+    "accountId"
+  ],
+  "properties": {
+    "sessionId": {
+      "type": "null"
+    },
+    "accountId": {
+      "type": "null"
+    }
+  },
+  "additionalProperties": false
+}

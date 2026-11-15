@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ahrenatechnology/ahrena-console/blob/main/docs/contracts/events/app-update.changed.v1.schema.json",
+  "title": "app-update.changed.v1 data",
+  "description": "The desktop app's update notice changed. Subject: `app`.",
+  "type": "object",
+  "required": [
+    "sessionId",
+    "accountId"
+  ],
+  "properties": {
+    "sessionId": {
+      "type": "null"
+    },
+    "accountId": {
+      "type": "null"
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ahrenatechnology/ahrena-console/blob/main/docs/contracts/events/adrs.changed.v1.schema.json",
+  "title": "adrs.changed.v1 data",
+  "description": "The decision records of a repository, or the list, changed. Subject: `list` or `<owner>/<repo>`.",
+  "type": "object",
+  "required": [
+    "sessionId",
+    "accountId"
+  ],
+  "properties": {
+    "sessionId": {
+      "type": "null"
+    },
+    "accountId": {
+      "type": "null"
+    }
+  },
+  "additionalProperties": false
+}
