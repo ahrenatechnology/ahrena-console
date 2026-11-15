@@ -1,5 +1,5 @@
 // The components of the diagnosis next to a saturation alert (issue 566, wireframe 566-3 to 566-9), drawn from the
-// data of docs/contracts/diagnosis.md (issue 565). No read, no screen state and no timer are here: `diagnosisPanel`
+// data of docs/contracts/core-api.openapi.json, the diagnosis operation (issue 565). No read, no screen state and no timer are here: `diagnosisPanel`
 // draws one state from a plain object, and the buttons call the handlers the state layer gives (`onRetry`,
 // `onReread`, `onMore`, and the toggle's `onToggle`). Everything that comes from the machine goes in as text.
 //

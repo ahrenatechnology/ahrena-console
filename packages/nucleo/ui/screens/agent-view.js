@@ -1,5 +1,5 @@
 // The agent view (issue 521, wireframe 521-1 to 521-10): the screen of one agent seen from the inside, drawn
-// from the data of the agent-view contract (docs/contracts/agent-view.md). The components come first; `mount`
+// from the data of the agent-view contract (docs/contracts/core-api.openapi.json, the agent view operation). The components come first; `mount`
 // at the end is the state layer (issue 539): the read, the retry, the live update and the focus on Back, over
 // the `read` the shell gives it. Registering the route and the real read are the contract layer (issue 540).
 // Everything from the core goes in through `textContent` (`el()`), never as HTML.

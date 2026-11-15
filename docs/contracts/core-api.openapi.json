@@ -1,0 +1,6056 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Ahrena Console core API",
+    "version": "1.0.0",
+    "description": "The HTTP API of the Ahrena Console core, on loopback. This file is the contract: it is authored, the code is validated against it (a test proves that the routes served and the routes declared are the same set, and that the agent view and the diagnosis answer what it declares), and a pull request that breaks it needs a new major version. Operations whose response is still the minimal placeholder `{ type: object }` are the debt listed in core-api.legacy.json, which only shrinks.",
+    "license": {
+      "name": "Apache-2.0",
+      "identifier": "Apache-2.0"
+    },
+    "contact": {
+      "name": "Ahrena Console",
+      "url": "https://github.com/ahrenatechnology/ahrena-console"
+    }
+  },
+  "servers": [
+    {
+      "url": "http://127.0.0.1:4720",
+      "description": "The core on loopback; the port is configurable (`AHRENA_CONSOLE_CORE_PORT`)."
+    }
+  ],
+  "security": [
+    {
+      "ownerBearer": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "Health",
+      "description": "Liveness, version and load of the core."
+    },
+    {
+      "name": "Hooks",
+      "description": "The receiver of the Claude Code hooks."
+    },
+    {
+      "name": "Panel",
+      "description": "What the Claude Desktop panel draws and the decisions it lists."
+    },
+    {
+      "name": "Sessions",
+      "description": "The sessions of this machine and of the remote ones: lists, Detail, agents, conversation, events and the agent view."
+    },
+    {
+      "name": "Decisions",
+      "description": "The decisions of a session and the records they are promoted to."
+    },
+    {
+      "name": "Desktop",
+      "description": "Opening a session in the Claude Desktop, a terminal or its live terminal."
+    },
+    {
+      "name": "Changes",
+      "description": "Long polling and the stream of what changed."
+    },
+    {
+      "name": "Analytics",
+      "description": "The Analytics, Dashboard, History, Kanban and Events screens."
+    },
+    {
+      "name": "Interface",
+      "description": "The console's own interface, served from the interface folder."
+    },
+    {
+      "name": "Project",
+      "description": "The GitHub Project kanban and its selection."
+    },
+    {
+      "name": "Work",
+      "description": "The work board: issues, their Plan steps, planning, running and the execution queue."
+    },
+    {
+      "name": "Repositories",
+      "description": "GitHub repositories, their metrics and instructions, and installing the framework through a pull request."
+    },
+    {
+      "name": "Records",
+      "description": "The decision records (ADRs and PDRs) of the repositories."
+    },
+    {
+      "name": "Configuration",
+      "description": "The agent configuration folders and the dev console."
+    },
+    {
+      "name": "Machines",
+      "description": "The machines (this one and the remote ones): telemetry, connection, update and reconnect."
+    },
+    {
+      "name": "Diagnosis",
+      "description": "The read-only diagnosis of a saturation alert."
+    },
+    {
+      "name": "Messaging",
+      "description": "Messages and orders to a live session."
+    },
+    {
+      "name": "Tools",
+      "description": "The Tools screen: CLIs, runtimes and containers, and the jobs that act on them."
+    },
+    {
+      "name": "Docker",
+      "description": "The Docker actions of a machine."
+    },
+    {
+      "name": "Ports",
+      "description": "Releasing a listening port."
+    },
+    {
+      "name": "Connectors",
+      "description": "The cloud connectors and their logins."
+    },
+    {
+      "name": "Connections",
+      "description": "The console's own GitHub connection."
+    },
+    {
+      "name": "Updates",
+      "description": "The desktop app's update notice."
+    },
+    {
+      "name": "Runtime",
+      "description": "The managed runtime."
+    },
+    {
+      "name": "Owner",
+      "description": "Credentials the owner issues."
+    },
+    {
+      "name": "Mcp",
+      "description": "The MCP server."
+    }
+  ],
+  "paths": {
+    "/api/overview": {
+      "get": {
+        "operationId": "getOverview",
+        "tags": [
+          "Health"
+        ],
+        "summary": "Health of the core: the panel and the load script wait on it",
+        "description": "Health of the core: the panel and the load script wait on it.",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "The core is up. `pid` proves who holds the port: whoever reads the lock only stops the core if its pid is this one.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "ok",
+                    "name",
+                    "version",
+                    "pid",
+                    "commit"
+                  ],
+                  "properties": {
+                    "ok": {
+                      "const": true
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "version": {
+                      "type": "string"
+                    },
+                    "pid": {
+                      "type": "integer"
+                    },
+                    "commit": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "description": "The commit of the running code, or null when not known."
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/load": {
+      "get": {
+        "operationId": "getLoad",
+        "tags": [
+          "Health"
+        ],
+        "summary": "Counters for the load measurement",
+        "description": "Counters for the load measurement.",
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/hooks": {
+      "post": {
+        "operationId": "receiveHook",
+        "tags": [
+          "Hooks"
+        ],
+        "summary": "The hooks receiver",
+        "description": "The hooks receiver.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/hooks/health": {
+      "get": {
+        "operationId": "getHooksHealth",
+        "tags": [
+          "Hooks"
+        ],
+        "summary": "Health of the hooks receiver",
+        "description": "Health of the hooks receiver.",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "The receiver is up.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "ok"
+                  ],
+                  "properties": {
+                    "ok": {
+                      "const": true
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/panel/{sessionId}": {
+      "get": {
+        "operationId": "getPanel",
+        "tags": [
+          "Panel"
+        ],
+        "summary": "Everything the panel draws, in one request",
+        "description": "Everything the panel draws, in one request.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/sessionId"
+          },
+          {
+            "name": "local",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "account",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "org",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "model",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "cwd",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "decisions",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/machine"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/wall": {
+      "get": {
+        "operationId": "getWall",
+        "tags": [
+          "Panel"
+        ],
+        "summary": "One card per open session, for the live wall",
+        "description": "One card per open session, for the live wall.",
+        "parameters": [
+          {
+            "name": "parkedLimit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/machine"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/decisions": {
+      "get": {
+        "operationId": "listDecisions",
+        "tags": [
+          "Decisions"
+        ],
+        "summary": "The Decisions page of the interface",
+        "description": "The Decisions page of the interface.",
+        "parameters": [
+          {
+            "name": "group",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/decisions/{sessionId}": {
+      "get": {
+        "operationId": "listSessionDecisions",
+        "tags": [
+          "Decisions"
+        ],
+        "summary": "The decisions of a scope (`?scope=session|family|branch`)",
+        "description": "The decisions of a scope (`?scope=session|family|branch`).",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/sessionId"
+          },
+          {
+            "name": "scope",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/decisions/{decisionId}/confirm": {
+      "post": {
+        "operationId": "confirmDecision",
+        "tags": [
+          "Decisions"
+        ],
+        "summary": "Confirm a suggested decision",
+        "description": "Confirm a suggested decision.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/decisionId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/decisions/{decisionId}/dismiss": {
+      "post": {
+        "operationId": "dismissDecision",
+        "tags": [
+          "Decisions"
+        ],
+        "summary": "Dismiss a suggested decision",
+        "description": "Dismiss a suggested decision.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/decisionId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/decisions/{decisionId}/adjust": {
+      "post": {
+        "operationId": "adjustDecision",
+        "tags": [
+          "Decisions"
+        ],
+        "summary": "Write an adjustment (`{ session, text }`)",
+        "description": "Write an adjustment (`{ session, text }`).",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/decisionId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/decisions/{decisionId}/undo": {
+      "post": {
+        "operationId": "undoDecision",
+        "tags": [
+          "Decisions"
+        ],
+        "summary": "Undo the last action on a decision",
+        "description": "Undo the last action on a decision.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/decisionId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/decisions/{decisionId}/promote": {
+      "post": {
+        "operationId": "promoteDecision",
+        "tags": [
+          "Decisions"
+        ],
+        "summary": "Promote a decision to a record",
+        "description": "Promote a decision to a record.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/decisionId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/open/{local}": {
+      "get": {
+        "operationId": "redirectToDesktop",
+        "tags": [
+          "Desktop"
+        ],
+        "summary": "Redirects to `claude://claude.ai/epitaxy/<local>`, which opens the conversation in the Claude Desktop",
+        "description": "Redirects to `claude://claude.ai/epitaxy/<local>`, which opens the conversation in the Claude Desktop.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/local"
+          }
+        ],
+        "responses": {
+          "302": {
+            "description": "A redirect to the `claude://` address.",
+            "headers": {
+              "Location": {
+                "description": "The `claude://claude.ai/epitaxy/<local>` address.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "openInDesktop",
+        "tags": [
+          "Desktop"
+        ],
+        "summary": "Opens the conversation in the Claude Desktop (`open claude://...` on macOS); 501 elsewhere",
+        "description": "Opens the conversation in the Claude Desktop (`open claude://...` on macOS); 501 elsewhere.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/local"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sessions/{sessionId}/open": {
+      "post": {
+        "operationId": "openSession",
+        "tags": [
+          "Desktop"
+        ],
+        "summary": "Opens the session where it runs: the Claude Desktop, a terminal resuming it, or its live terminal brought forward",
+        "description": "Opens the session where it runs: the Claude Desktop, a terminal resuming it, or its live terminal brought forward.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/sessionId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/new-session/folders": {
+      "get": {
+        "operationId": "listNewSessionFolders",
+        "tags": [
+          "Desktop"
+        ],
+        "summary": "The folders a new session can start in",
+        "description": "The folders a new session can start in.",
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/new-session": {
+      "post": {
+        "operationId": "startNewSession",
+        "tags": [
+          "Desktop"
+        ],
+        "summary": "A new session in one of the folders, in the Claude Desktop or a terminal",
+        "description": "A new session in one of the folders, in the Claude Desktop or a terminal.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sessions": {
+      "get": {
+        "operationId": "listSessions",
+        "tags": [
+          "Sessions"
+        ],
+        "summary": "The Sessions screen's list, paginated and filtered",
+        "description": "The Sessions screen's list, paginated and filtered.",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "dir",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "order",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "direction",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "perPage",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/machine"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sessions/{sessionId}": {
+      "get": {
+        "operationId": "getSession",
+        "tags": [
+          "Sessions"
+        ],
+        "summary": "The session Detail",
+        "description": "The session Detail.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/sessionId"
+          },
+          {
+            "$ref": "#/components/parameters/machine"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sessions/{sessionId}/agents": {
+      "get": {
+        "operationId": "listSessionAgents",
+        "tags": [
+          "Sessions"
+        ],
+        "summary": "The Agents tab: the session's agents (each with `agentType` and `description`, null for the main agent)",
+        "description": "The Agents tab: the session's agents (each with `agentType` and `description`, null for the main agent).",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/sessionId"
+          },
+          {
+            "$ref": "#/components/parameters/machine"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sessions/{sessionId}/conversation": {
+      "get": {
+        "operationId": "getSessionConversation",
+        "tags": [
+          "Sessions"
+        ],
+        "summary": "The Conversation tab",
+        "description": "The Conversation tab.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/sessionId"
+          },
+          {
+            "$ref": "#/components/parameters/machine"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sessions/{sessionId}/events": {
+      "get": {
+        "operationId": "listSessionEvents",
+        "tags": [
+          "Sessions"
+        ],
+        "summary": "The Events tab",
+        "description": "The Events tab.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/sessionId"
+          },
+          {
+            "$ref": "#/components/parameters/machine"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sessions/{sessionId}/workflow": {
+      "get": {
+        "operationId": "getSessionWorkflow",
+        "tags": [
+          "Sessions"
+        ],
+        "summary": "The Workflow tab",
+        "description": "The Workflow tab.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/sessionId"
+          },
+          {
+            "$ref": "#/components/parameters/machine"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sessions/{sessionId}/decisions": {
+      "get": {
+        "operationId": "listSessionDecisionsTab",
+        "tags": [
+          "Sessions"
+        ],
+        "summary": "The Decisions tab",
+        "description": "The Decisions tab.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/sessionId"
+          },
+          {
+            "$ref": "#/components/parameters/machine"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sessions/{sessionId}/agents/{agentId}": {
+      "get": {
+        "operationId": "getAgentView",
+        "tags": [
+          "Sessions"
+        ],
+        "summary": "One agent's view: its brief, its steps, its result and its cost",
+        "description": "Read-only, from the database: no storage change. `?machine=<id>` reads the agent view from a remote machine, as the other detail routes do: the answer carries `machine`, and the remote's error `code` goes through. The agent view names its errors with a `code`; the sibling detail routes keep their bodies with no `code`.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/sessionId"
+          },
+          {
+            "$ref": "#/components/parameters/agentId"
+          },
+          {
+            "$ref": "#/components/parameters/machine"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The view.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The session id does not match the route pattern (`invalid_session_id`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentViewError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The core does not know the session (`session_not_found`), or the session has no agent with that `agentId` (`agent_not_found`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentViewError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The remote machine answered something that is not an agent view.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MachineFailure"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The remote machine is not connected.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MachineFailure"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/workflows": {
+      "get": {
+        "operationId": "listWorkflows",
+        "tags": [
+          "Sessions"
+        ],
+        "summary": "Workflows, across the sessions",
+        "description": "Workflows, across the sessions.",
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/changes": {
+      "get": {
+        "operationId": "pollChanges",
+        "tags": [
+          "Changes"
+        ],
+        "summary": "Long polling of the changes (`?since=`, `?wait=`)",
+        "description": "Long polling of the changes (`?since=`, `?wait=`).",
+        "parameters": [
+          {
+            "name": "since",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "wait",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/stream": {
+      "get": {
+        "operationId": "streamChanges",
+        "tags": [
+          "Changes"
+        ],
+        "summary": "The changes as a server-sent event stream",
+        "description": "The changes as a server-sent event stream.",
+        "parameters": [
+          {
+            "name": "since",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The stream stays open; each change is an event.",
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/events": {
+      "get": {
+        "operationId": "listEvents",
+        "tags": [
+          "Analytics"
+        ],
+        "summary": "The activity feed, all sessions",
+        "description": "The activity feed, all sessions.",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "after",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "before",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "session",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "tool",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/machine"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/attention": {
+      "get": {
+        "operationId": "getAttention",
+        "tags": [
+          "Analytics"
+        ],
+        "summary": "Who needs you, across all accounts and machines",
+        "description": "Who needs you, across all accounts and machines.",
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/dashboard": {
+      "get": {
+        "operationId": "getDashboard",
+        "tags": [
+          "Analytics"
+        ],
+        "summary": "The Dashboard's numbers, active agents and activity",
+        "description": "The Dashboard's numbers, active agents and activity.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/machine"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/analytics": {
+      "get": {
+        "operationId": "getAnalytics",
+        "tags": [
+          "Analytics"
+        ],
+        "summary": "The Analytics screen's overview",
+        "description": "The Analytics screen's overview.",
+        "parameters": [
+          {
+            "name": "tz",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "days",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/analytics/cost": {
+      "get": {
+        "operationId": "getAnalyticsCost",
+        "tags": [
+          "Analytics"
+        ],
+        "summary": "The cost report",
+        "description": "The cost report.",
+        "parameters": [
+          {
+            "name": "tz",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "days",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "groupBy",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "key",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/analytics/delivery": {
+      "get": {
+        "operationId": "getAnalyticsDelivery",
+        "tags": [
+          "Analytics"
+        ],
+        "summary": "The delivery metrics",
+        "description": "The delivery metrics.",
+        "parameters": [
+          {
+            "name": "tz",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "days",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/history": {
+      "get": {
+        "operationId": "getHistory",
+        "tags": [
+          "Analytics"
+        ],
+        "summary": "The ended sessions by day",
+        "description": "The ended sessions by day.",
+        "parameters": [
+          {
+            "name": "before",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "days",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/machine"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/kanban": {
+      "get": {
+        "operationId": "getKanban",
+        "tags": [
+          "Analytics"
+        ],
+        "summary": "The read-only Kanban, sessions or agents by column",
+        "description": "The read-only Kanban, sessions or agents by column.",
+        "parameters": [
+          {
+            "name": "view",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "column",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/machine"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ui": {
+      "get": {
+        "operationId": "getInterface",
+        "tags": [
+          "Interface"
+        ],
+        "summary": "The console's interface page",
+        "description": "The console's interface page.",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "The page.",
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ui/{uiFile}": {
+      "get": {
+        "operationId": "getInterfaceFile",
+        "tags": [
+          "Interface"
+        ],
+        "summary": "A file of the interface, or the page for a screen id",
+        "description": "A file of the interface, or the page for a screen id.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/uiFile"
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "The file, with its content type; a path with no file extension serves the page.",
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "text/css": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "text/javascript": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "image/svg+xml": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ui/screens/{uiScreenFile}": {
+      "get": {
+        "operationId": "getInterfaceScreenFile",
+        "tags": [
+          "Interface"
+        ],
+        "summary": "A file of the interface's screens",
+        "description": "A file of the interface's screens.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/uiScreenFile"
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "The file, with its content type.",
+            "content": {
+              "text/css": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "text/javascript": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "image/svg+xml": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/project": {
+      "get": {
+        "operationId": "getProject",
+        "tags": [
+          "Project"
+        ],
+        "summary": "The GitHub Project kanban",
+        "description": "The GitHub Project kanban.",
+        "parameters": [
+          {
+            "name": "refresh",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/project/move": {
+      "post": {
+        "operationId": "moveProjectCard",
+        "tags": [
+          "Project"
+        ],
+        "summary": "Changes a card's Status (`{ itemId, optionId }`)",
+        "description": "Changes a card's Status (`{ itemId, optionId }`).",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/project/options": {
+      "get": {
+        "operationId": "listProjectOptions",
+        "tags": [
+          "Project"
+        ],
+        "summary": "The Projects the account sees, to choose the kanban's",
+        "description": "The Projects the account sees, to choose the kanban's.",
+        "parameters": [
+          {
+            "name": "refresh",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/project/selection": {
+      "post": {
+        "operationId": "selectProject",
+        "tags": [
+          "Project"
+        ],
+        "summary": "Stores the chosen Project (`{ owner, number, field? }`); accepted only from the interface itself",
+        "description": "Stores the chosen Project (`{ owner, number, field? }`); accepted only from the interface itself.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/work": {
+      "get": {
+        "operationId": "getWorkBoard",
+        "tags": [
+          "Work"
+        ],
+        "summary": "The work board",
+        "description": "The work board.",
+        "parameters": [
+          {
+            "name": "level",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "org",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "project",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "initiative",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "epic",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "label",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "repo",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "refresh",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/work/issue": {
+      "get": {
+        "operationId": "getWorkIssue",
+        "tags": [
+          "Work"
+        ],
+        "summary": "The work board's issue detail: body, comments, parents, sub-issues, Plan steps and the linked pull request",
+        "description": "The work board's issue detail: body, comments, parents, sub-issues, Plan steps and the linked pull request.",
+        "parameters": [
+          {
+            "name": "repo",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "number",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "refresh",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "operationId": "updateWorkIssue",
+        "tags": [
+          "Work"
+        ],
+        "summary": "Saves fields of one issue on GitHub and answers the issue as GitHub returned it; a title or body save older than GitHub's is 409",
+        "description": "Saves fields of one issue on GitHub and answers the issue as GitHub returned it; a title or body save older than GitHub's is 409.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/work/issue/options": {
+      "get": {
+        "operationId": "getWorkIssueOptions",
+        "tags": [
+          "Work"
+        ],
+        "summary": "A repository's issue options for the edit mode's selectors",
+        "description": "A repository's issue options for the edit mode's selectors.",
+        "parameters": [
+          {
+            "name": "repo",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "refresh",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/work/issue/comments": {
+      "post": {
+        "operationId": "commentOnWorkIssue",
+        "tags": [
+          "Work"
+        ],
+        "summary": "Adds a comment to an issue on GitHub (`{ repo, number, body }`)",
+        "description": "Adds a comment to an issue on GitHub (`{ repo, number, body }`).",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/work/issue/steps": {
+      "post": {
+        "operationId": "addWorkIssueStep",
+        "tags": [
+          "Work"
+        ],
+        "summary": "Adds a Plan step, as a Plan sub-issue on GitHub",
+        "description": "Adds a Plan step, as a Plan sub-issue on GitHub.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "operationId": "editWorkIssueStep",
+        "tags": [
+          "Work"
+        ],
+        "summary": "Edits a Plan step's title and body (409 when older than GitHub's)",
+        "description": "Edits a Plan step's title and body (409 when older than GitHub's).",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "removeWorkIssueStep",
+        "tags": [
+          "Work"
+        ],
+        "summary": "Removes a Plan step (closed as not planned)",
+        "description": "Removes a Plan step (closed as not planned).",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/work/issue/steps/order": {
+      "post": {
+        "operationId": "moveWorkIssueStep",
+        "tags": [
+          "Work"
+        ],
+        "summary": "Moves a Plan step (`after` a key, or null for the top)",
+        "description": "Moves a Plan step (`after` a key, or null for the top).",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/work/issue/steps/restore": {
+      "post": {
+        "operationId": "restoreWorkIssueStep",
+        "tags": [
+          "Work"
+        ],
+        "summary": "Restores a removed Plan step (409 `not-removed` when it is not removed)",
+        "description": "Restores a removed Plan step (409 `not-removed` when it is not removed).",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/work/plan": {
+      "post": {
+        "operationId": "planWorkIssue",
+        "tags": [
+          "Work"
+        ],
+        "summary": "A planning-only Athena session for an issue, in its repository's folder",
+        "description": "A planning-only Athena session for an issue, in its repository's folder.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/work/run": {
+      "post": {
+        "operationId": "runWorkPlan",
+        "tags": [
+          "Work"
+        ],
+        "summary": "The Athena session that executes an issue's plan; 409 at 2 cards in progress unless forced",
+        "description": "The Athena session that executes an issue's plan; 409 at 2 cards in progress unless forced.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/work/queue": {
+      "post": {
+        "operationId": "enqueueWorkItem",
+        "tags": [
+          "Work"
+        ],
+        "summary": "Puts an item in the execution queue",
+        "description": "Puts an item in the execution queue.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "dequeueWorkItem",
+        "tags": [
+          "Work"
+        ],
+        "summary": "Takes an item out of the execution queue",
+        "description": "Takes an item out of the execution queue.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/work/queue/order": {
+      "post": {
+        "operationId": "reorderWorkQueue",
+        "tags": [
+          "Work"
+        ],
+        "summary": "Reorders the execution queue",
+        "description": "Reorders the execution queue.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/work/queue/retry": {
+      "post": {
+        "operationId": "retryWorkQueue",
+        "tags": [
+          "Work"
+        ],
+        "summary": "Clears the stop of a failed pull and wakes the puller",
+        "description": "Clears the stop of a failed pull and wakes the puller.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/repos": {
+      "get": {
+        "operationId": "listRepos",
+        "tags": [
+          "Repositories"
+        ],
+        "summary": "GitHub repositories and metrics",
+        "description": "GitHub repositories and metrics.",
+        "parameters": [
+          {
+            "name": "period",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "refresh",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/repos/{owner}/{repo}": {
+      "get": {
+        "operationId": "getRepo",
+        "tags": [
+          "Repositories"
+        ],
+        "summary": "One repository and its metrics",
+        "description": "One repository and its metrics.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/owner"
+          },
+          {
+            "$ref": "#/components/parameters/repo"
+          },
+          {
+            "name": "period",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "refresh",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/agent-instructions/{owner}/{repo}": {
+      "get": {
+        "operationId": "getAgentInstructions",
+        "tags": [
+          "Repositories"
+        ],
+        "summary": "A repository's Instructions tab: instruction files, imports, `.claude/` and `.mcp.json`",
+        "description": "A repository's Instructions tab: instruction files, imports, `.claude/` and `.mcp.json`.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/owner"
+          },
+          {
+            "$ref": "#/components/parameters/repo"
+          },
+          {
+            "name": "refresh",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/agent-instructions/{owner}/{repo}/file": {
+      "get": {
+        "operationId": "getAgentInstructionFile",
+        "tags": [
+          "Repositories"
+        ],
+        "summary": "One instruction file and the imports already read",
+        "description": "One instruction file and the imports already read.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/owner"
+          },
+          {
+            "$ref": "#/components/parameters/repo"
+          },
+          {
+            "name": "path",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/framework-install/{owner}/{repo}/plan": {
+      "get": {
+        "operationId": "planFrameworkInstall",
+        "tags": [
+          "Repositories"
+        ],
+        "summary": "The preview of installing the Ahrena Framework, with the diff; writes nothing",
+        "description": "The preview of installing the Ahrena Framework, with the diff; writes nothing.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/owner"
+          },
+          {
+            "$ref": "#/components/parameters/repo"
+          },
+          {
+            "name": "platforms",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "plugins",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/framework-install/{owner}/{repo}/pull-request": {
+      "get": {
+        "operationId": "getFrameworkInstallPullRequest",
+        "tags": [
+          "Repositories"
+        ],
+        "summary": "The state of the install pull request, or null",
+        "description": "The state of the install pull request, or null.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/owner"
+          },
+          {
+            "$ref": "#/components/parameters/repo"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/framework-install/{owner}/{repo}": {
+      "post": {
+        "operationId": "openFrameworkInstallPullRequest",
+        "tags": [
+          "Repositories"
+        ],
+        "summary": "Opens the install pull request",
+        "description": "Opens the install pull request.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/owner"
+          },
+          {
+            "$ref": "#/components/parameters/repo"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/adrs": {
+      "get": {
+        "operationId": "listAdrs",
+        "tags": [
+          "Records"
+        ],
+        "summary": "The ADRs of the repositories",
+        "description": "The ADRs of the repositories.",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "repo",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "refresh",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/adrs/{owner}/{repo}": {
+      "get": {
+        "operationId": "listAdrsOfRepo",
+        "tags": [
+          "Records"
+        ],
+        "summary": "The ADRs of one repository",
+        "description": "The ADRs of one repository.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/owner"
+          },
+          {
+            "$ref": "#/components/parameters/repo"
+          },
+          {
+            "name": "refresh",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/adrs/{owner}/{repo}/{recordId}": {
+      "get": {
+        "operationId": "getAdr",
+        "tags": [
+          "Records"
+        ],
+        "summary": "One ADR",
+        "description": "One ADR.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/owner"
+          },
+          {
+            "$ref": "#/components/parameters/repo"
+          },
+          {
+            "$ref": "#/components/parameters/recordId"
+          },
+          {
+            "name": "refresh",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/pdrs": {
+      "get": {
+        "operationId": "listPdrs",
+        "tags": [
+          "Records"
+        ],
+        "summary": "The PDRs of the repositories",
+        "description": "The PDRs of the repositories.",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "repo",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "refresh",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/pdrs/{owner}/{repo}": {
+      "get": {
+        "operationId": "listPdrsOfRepo",
+        "tags": [
+          "Records"
+        ],
+        "summary": "The PDRs of one repository",
+        "description": "The PDRs of one repository.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/owner"
+          },
+          {
+            "$ref": "#/components/parameters/repo"
+          },
+          {
+            "name": "refresh",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/pdrs/{owner}/{repo}/{recordId}": {
+      "get": {
+        "operationId": "getPdr",
+        "tags": [
+          "Records"
+        ],
+        "summary": "One PDR",
+        "description": "One PDR.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/owner"
+          },
+          {
+            "$ref": "#/components/parameters/repo"
+          },
+          {
+            "$ref": "#/components/parameters/recordId"
+          },
+          {
+            "name": "refresh",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/agent-config": {
+      "get": {
+        "operationId": "getAgentConfig",
+        "tags": [
+          "Configuration"
+        ],
+        "summary": "What is in the agent configuration folders",
+        "description": "What is in the agent configuration folders.",
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/agent-config/codex": {
+      "get": {
+        "operationId": "getCodexConfig",
+        "tags": [
+          "Configuration"
+        ],
+        "summary": "The Codex configuration folder",
+        "description": "The Codex configuration folder.",
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/agent-config/claude": {
+      "get": {
+        "operationId": "getClaudeConfig",
+        "tags": [
+          "Configuration"
+        ],
+        "summary": "The Claude configuration folder",
+        "description": "The Claude configuration folder.",
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/agent-config/skill": {
+      "get": {
+        "operationId": "getSkill",
+        "tags": [
+          "Configuration"
+        ],
+        "summary": "A skill's `SKILL.md`, with its `version` (sha256)",
+        "description": "A skill's `SKILL.md`, with its `version` (sha256).",
+        "parameters": [
+          {
+            "name": "root",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "name",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "saveSkill",
+        "tags": [
+          "Configuration"
+        ],
+        "summary": "Edits a skill, with backup",
+        "description": "Edits a skill, with backup.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/dev-console": {
+      "get": {
+        "operationId": "getDevConsole",
+        "tags": [
+          "Configuration"
+        ],
+        "summary": "The Dev Console: the overview, or one context's view with `?context=`",
+        "description": "The Dev Console: the overview, or one context's view with `?context=`.",
+        "parameters": [
+          {
+            "name": "context",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/diagnosis": {
+      "get": {
+        "operationId": "getDiagnosis",
+        "tags": [
+          "Diagnosis"
+        ],
+        "summary": "What consumes the resource an open saturation alert names",
+        "description": "Read-only: every collector runs a fixed command of the catalog (`src/diagnosis/adapters/catalog.ts`) and nothing in the request reaches a command. For a remote machine, the core of this machine asks the core there the same route through the tunnel (as `machine=local`) and answers with its sections, under the requested machine. The remote core's own 501 `diagnosis-unsupported`, and its 404 that carries no `reason` or its 405 (a core without the route), come through as 501 `diagnosis-unsupported`; its 404 with `reason` `alert-not-open` comes through as that 404.",
+        "parameters": [
+          {
+            "name": "machine",
+            "in": "query",
+            "required": true,
+            "description": "A machine id (`local`, or a remote machine of machines.json), exactly once. It must be known before anything runs.",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "alert",
+            "in": "query",
+            "required": true,
+            "description": "The id of an alert open on that machine, as `GET /api/telemetry` lists it in `alerts`, URL-encoded in the query (`volume-full%3A%2F`); the server decodes it once, never twice. It must be open on the machine before anything runs: this route reads the open alerts, it does not decide them. At most 200 characters, exactly once.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The diagnosis. A section that did not come back is inside it, not an error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Diagnosis"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`machine` or `alert` missing, repeated, empty, too long (200 characters for `alert`) or not a valid id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`reason` is `unknown-machine`, or `alert-not-open` (the alert is not open on that machine, or has closed since).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DiagnosisRefusal"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "A method other than GET.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The alert is open but its kind has no diagnosis (`port-exposed`, `tunnel-busy`, `machine-unreachable`, `terminal-stuck`): `reason` is `not-diagnosable`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DiagnosisRefusal"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "This core cannot diagnose (no collector for its platform, or not wired), or the remote machine's core is an old one without the route.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DiagnosisUnsupported"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The remote machine did not answer (`reason` `unreachable`) or answered something that is not a diagnosis (`bad-response`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DiagnosisRefusal"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/machines": {
+      "get": {
+        "operationId": "listMachines",
+        "tags": [
+          "Machines"
+        ],
+        "summary": "The machines: this one and the remote ones, with state and alerts",
+        "description": "The machines: this one and the remote ones, with state and alerts.",
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/telemetry": {
+      "get": {
+        "operationId": "getTelemetry",
+        "tags": [
+          "Machines"
+        ],
+        "summary": "One machine's telemetry: current reading, series and alerts",
+        "description": "One machine's telemetry: current reading, series and alerts.",
+        "parameters": [
+          {
+            "name": "machine",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "hours",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "1",
+                "12"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/machines/{machineId}/reconnect": {
+      "post": {
+        "operationId": "reconnectMachine",
+        "tags": [
+          "Machines"
+        ],
+        "summary": "Reconnects a remote machine with the command of machines.json",
+        "description": "Reconnects a remote machine with the command of machines.json.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/machineId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "cancelMachineReconnect",
+        "tags": [
+          "Machines"
+        ],
+        "summary": "Cancels the reconnect of a remote machine",
+        "description": "Cancels the reconnect of a remote machine.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/machineId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/machines/{machineId}/connection/{connectionAction}": {
+      "post": {
+        "operationId": "actOnMachineConnection",
+        "tags": [
+          "Machines"
+        ],
+        "summary": "The connection of a remote machine: start, stop, reconnect or login and start",
+        "description": "The connection of a remote machine: start, stop, reconnect or login and start.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/machineId"
+          },
+          {
+            "$ref": "#/components/parameters/connectionAction"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/machines/{machineId}/connection": {
+      "delete": {
+        "operationId": "cancelMachineConnection",
+        "tags": [
+          "Machines"
+        ],
+        "summary": "Cancels the connection attempt of a remote machine",
+        "description": "Cancels the connection attempt of a remote machine.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/machineId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/machines/{machineId}/owner-proof/retry": {
+      "post": {
+        "operationId": "retryOwnerProof",
+        "tags": [
+          "Machines"
+        ],
+        "summary": "Requests the remote owner's proof now and reads the machine",
+        "description": "Requests the remote owner's proof now and reads the machine.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/machineId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/machines/{machineId}/update/check": {
+      "post": {
+        "operationId": "checkMachineUpdate",
+        "tags": [
+          "Machines"
+        ],
+        "summary": "Checks whether a remote machine's core has a newer version",
+        "description": "Checks whether a remote machine's core has a newer version.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/machineId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/machines/{machineId}/update": {
+      "post": {
+        "operationId": "updateMachineCore",
+        "tags": [
+          "Machines"
+        ],
+        "summary": "Updates a remote machine's core",
+        "description": "Updates a remote machine's core.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/machineId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "cancelMachineUpdate",
+        "tags": [
+          "Machines"
+        ],
+        "summary": "Cancels the update of a remote machine's core",
+        "description": "Cancels the update of a remote machine's core.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/machineId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sessions/{sessionId}/messaging": {
+      "get": {
+        "operationId": "getSessionMessaging",
+        "tags": [
+          "Messaging"
+        ],
+        "summary": "Whether a message can be sent to the session's live process",
+        "description": "Whether a message can be sent to the session's live process.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/sessionId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sessions/{sessionId}/messages": {
+      "post": {
+        "operationId": "sendSessionMessage",
+        "tags": [
+          "Messaging"
+        ],
+        "summary": "Sends a message a person typed in the interface to the session's live process",
+        "description": "Sends a message a person typed in the interface to the session's live process.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/sessionId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sessions/{sessionId}/messages/{messageId}": {
+      "get": {
+        "operationId": "getSessionMessage",
+        "tags": [
+          "Messaging"
+        ],
+        "summary": "The state of a sent message",
+        "description": "The state of a sent message.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/sessionId"
+          },
+          {
+            "$ref": "#/components/parameters/messageId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sessions/{sessionId}/commands": {
+      "get": {
+        "operationId": "listSessionOrders",
+        "tags": [
+          "Messaging"
+        ],
+        "summary": "The interface's orders to a session",
+        "description": "The interface's orders to a session.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/sessionId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "createSessionOrder",
+        "tags": [
+          "Messaging"
+        ],
+        "summary": "Creates an order to a session",
+        "description": "Creates an order to a session.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/sessionId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sessions/{sessionId}/commands/{orderId}": {
+      "get": {
+        "operationId": "getSessionOrder",
+        "tags": [
+          "Messaging"
+        ],
+        "summary": "One order",
+        "description": "One order.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/sessionId"
+          },
+          {
+            "$ref": "#/components/parameters/orderId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sessions/{sessionId}/commands/{orderId}/done": {
+      "post": {
+        "operationId": "completeSessionOrder",
+        "tags": [
+          "Messaging"
+        ],
+        "summary": "Marks an order done",
+        "description": "Marks an order done.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/sessionId"
+          },
+          {
+            "$ref": "#/components/parameters/orderId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/transcription": {
+      "get": {
+        "operationId": "getTranscriptionAvailability",
+        "tags": [
+          "Messaging"
+        ],
+        "summary": "Whether dictation is available (`{ version, available, reason, model }`)",
+        "description": "Whether dictation is available (`{ version, available, reason, model }`).",
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "transcribe",
+        "tags": [
+          "Messaging"
+        ],
+        "summary": "Transcribes an `audio/wav` recording; accepted only from the interface",
+        "description": "Transcribes an `audio/wav` recording; accepted only from the interface.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "audio/wav": {
+              "schema": {
+                "type": "string",
+                "contentEncoding": "binary"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/terminals/{terminalId}/actions/{terminalAction}": {
+      "post": {
+        "operationId": "actOnTerminal",
+        "tags": [
+          "Messaging"
+        ],
+        "summary": "Interrupts a terminal's foreground command or ends its session",
+        "description": "Interrupts a terminal's foreground command or ends its session.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/terminalId"
+          },
+          {
+            "$ref": "#/components/parameters/terminalAction"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/tools": {
+      "get": {
+        "operationId": "listTools",
+        "tags": [
+          "Tools"
+        ],
+        "summary": "The Tools screen: CLIs, runtimes and containers, installed and latest versions, the catalog's actions, the jobs",
+        "description": "The Tools screen: CLIs, runtimes and containers, installed and latest versions, the catalog's actions, the jobs.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/machine"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/tools/{toolId}/actions/{toolAction}": {
+      "post": {
+        "operationId": "runToolAction",
+        "tags": [
+          "Tools"
+        ],
+        "summary": "Runs a catalog action as a job",
+        "description": "Runs a catalog action as a job.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/toolId"
+          },
+          {
+            "$ref": "#/components/parameters/toolAction"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/tools/jobs/{jobId}": {
+      "delete": {
+        "operationId": "cancelToolJob",
+        "tags": [
+          "Tools"
+        ],
+        "summary": "Cancels a job",
+        "description": "Cancels a job.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/jobId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/tools/checks": {
+      "post": {
+        "operationId": "checkTools",
+        "tags": [
+          "Tools"
+        ],
+        "summary": "Verificar agora: checks the tools",
+        "description": "Verificar agora: checks the tools.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/tools/mcp/checks": {
+      "post": {
+        "operationId": "checkMcpConnections",
+        "tags": [
+          "Tools"
+        ],
+        "summary": "Verificar conexões: checks the MCP connections",
+        "description": "Verificar conexões: checks the MCP connections.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/docker": {
+      "get": {
+        "operationId": "getDocker",
+        "tags": [
+          "Docker"
+        ],
+        "summary": "The Docker state of a machine",
+        "description": "The Docker state of a machine.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/machine"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/docker/plan": {
+      "get": {
+        "operationId": "planDockerAction",
+        "tags": [
+          "Docker"
+        ],
+        "summary": "The plan of a Docker action",
+        "description": "The plan of a Docker action.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/machine"
+          },
+          {
+            "name": "action",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "target",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/docker/actions/{dockerAction}": {
+      "post": {
+        "operationId": "runDockerAction",
+        "tags": [
+          "Docker"
+        ],
+        "summary": "Runs a Docker action on the Tools executor's queue",
+        "description": "Runs a Docker action on the Tools executor's queue.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/dockerAction"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/docker/jobs/{jobId}": {
+      "delete": {
+        "operationId": "cancelDockerJob",
+        "tags": [
+          "Docker"
+        ],
+        "summary": "Cancels a Docker job",
+        "description": "Cancels a Docker job.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/jobId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/ports/release": {
+      "get": {
+        "operationId": "listReleasablePorts",
+        "tags": [
+          "Ports"
+        ],
+        "summary": "The listening ports that can be released",
+        "description": "The listening ports that can be released.",
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "releasePort",
+        "tags": [
+          "Ports"
+        ],
+        "summary": "Releases a listening port: SIGTERM, then SIGKILL",
+        "description": "Releases a listening port: SIGTERM, then SIGKILL.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/ports/release/preview": {
+      "get": {
+        "operationId": "previewPortRelease",
+        "tags": [
+          "Ports"
+        ],
+        "summary": "What releasing a port would stop",
+        "description": "What releasing a port would stop.",
+        "parameters": [
+          {
+            "name": "port",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "pid",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/machines/{machineId}/ports/release": {
+      "get": {
+        "operationId": "listMachineReleasablePorts",
+        "tags": [
+          "Ports"
+        ],
+        "summary": "The listening ports of a remote machine",
+        "description": "The listening ports of a remote machine.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/machineId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "releaseMachinePort",
+        "tags": [
+          "Ports"
+        ],
+        "summary": "Releases a listening port of a remote machine",
+        "description": "Releases a listening port of a remote machine.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/machineId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/machines/{machineId}/ports/release/preview": {
+      "get": {
+        "operationId": "previewMachinePortRelease",
+        "tags": [
+          "Ports"
+        ],
+        "summary": "What releasing a port of a remote machine would stop",
+        "description": "What releasing a port of a remote machine would stop.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/machineId"
+          },
+          {
+            "name": "port",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "pid",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/connectors": {
+      "get": {
+        "operationId": "listConnectors",
+        "tags": [
+          "Connectors"
+        ],
+        "summary": "The cloud connectors",
+        "description": "The cloud connectors.",
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/connectors/aws/sessions/{sessionName}/login": {
+      "post": {
+        "operationId": "startAwsLogin",
+        "tags": [
+          "Connectors"
+        ],
+        "summary": "Starts the login of an AWS session",
+        "description": "Starts the login of an AWS session.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/sessionName"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "cancelAwsLogin",
+        "tags": [
+          "Connectors"
+        ],
+        "summary": "Cancels the login of an AWS session",
+        "description": "Cancels the login of an AWS session.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/sessionName"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/machines/{machineId}/connectors": {
+      "get": {
+        "operationId": "listMachineConnectors",
+        "tags": [
+          "Connectors"
+        ],
+        "summary": "The cloud connectors of a remote machine",
+        "description": "The cloud connectors of a remote machine.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/machineId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/machines/{machineId}/connectors/aws/sessions/{sessionName}/login": {
+      "post": {
+        "operationId": "startMachineAwsLogin",
+        "tags": [
+          "Connectors"
+        ],
+        "summary": "Starts the login of an AWS session on a remote machine",
+        "description": "Starts the login of an AWS session on a remote machine.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/machineId"
+          },
+          {
+            "$ref": "#/components/parameters/sessionName"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "cancelMachineAwsLogin",
+        "tags": [
+          "Connectors"
+        ],
+        "summary": "Cancels the login of an AWS session on a remote machine",
+        "description": "Cancels the login of an AWS session on a remote machine.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/machineId"
+          },
+          {
+            "$ref": "#/components/parameters/sessionName"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/github/sync": {
+      "get": {
+        "operationId": "getGithubSync",
+        "tags": [
+          "Connections"
+        ],
+        "summary": "The GitHub background sync's steps: last run, next run, last error",
+        "description": "The GitHub background sync's steps: last run, next run, last error.",
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/connections": {
+      "get": {
+        "operationId": "getConnections",
+        "tags": [
+          "Connections"
+        ],
+        "summary": "The console's own GitHub connection: `{ github: <status> }`",
+        "description": "The console's own GitHub connection: `{ github: <status> }`.",
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/connections/github/start": {
+      "post": {
+        "operationId": "startGithubConnection",
+        "tags": [
+          "Connections"
+        ],
+        "summary": "Starts the device flow; accepted only from the interface itself",
+        "description": "Starts the device flow; accepted only from the interface itself.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/connections/github/cancel": {
+      "post": {
+        "operationId": "cancelGithubConnection",
+        "tags": [
+          "Connections"
+        ],
+        "summary": "Cancels the device flow; accepted only from the interface itself",
+        "description": "Cancels the device flow; accepted only from the interface itself.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/connections/github/disconnect": {
+      "post": {
+        "operationId": "disconnectGithub",
+        "tags": [
+          "Connections"
+        ],
+        "summary": "Disconnects GitHub; accepted only from the interface itself",
+        "description": "Disconnects GitHub; accepted only from the interface itself.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/connections/github/source": {
+      "post": {
+        "operationId": "chooseGithubCredentialSource",
+        "tags": [
+          "Connections"
+        ],
+        "summary": "Chooses the credential source; accepted only from the interface itself",
+        "description": "Chooses the credential source; accepted only from the interface itself.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/connections/github/orgs": {
+      "post": {
+        "operationId": "recheckGithubOrgs",
+        "tags": [
+          "Connections"
+        ],
+        "summary": "Rechecks the granted organizations; accepted only from the interface itself",
+        "description": "Rechecks the granted organizations; accepted only from the interface itself.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/app-update": {
+      "get": {
+        "operationId": "getAppUpdate",
+        "tags": [
+          "Updates"
+        ],
+        "summary": "The desktop app's update notice",
+        "description": "The desktop app's update notice.",
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/app-update/state": {
+      "put": {
+        "operationId": "putAppUpdateState",
+        "tags": [
+          "Updates"
+        ],
+        "summary": "The app reports its update state",
+        "description": "The app reports its update state.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/app-update/actions/{appUpdateAction}": {
+      "post": {
+        "operationId": "actOnAppUpdate",
+        "tags": [
+          "Updates"
+        ],
+        "summary": "The interface clicks: check, install, dismiss or acknowledge",
+        "description": "The interface clicks: check, install, dismiss or acknowledge.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/appUpdateAction"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/runtime": {
+      "get": {
+        "operationId": "discoverRuntime",
+        "tags": [
+          "Runtime"
+        ],
+        "summary": "Discovers the managed runtime of a session",
+        "description": "Discovers the managed runtime of a session.",
+        "parameters": [
+          {
+            "name": "sessionId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/runtime/commands": {
+      "post": {
+        "operationId": "executeRuntimeCommand",
+        "tags": [
+          "Runtime"
+        ],
+        "summary": "A command to the managed runtime",
+        "description": "A command to the managed runtime.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/owner/remote-credentials": {
+      "post": {
+        "operationId": "issueRemoteCredential",
+        "tags": [
+          "Owner"
+        ],
+        "summary": "Issues a remote owner credential; refused to a request opened with an `AhrenaRemote` proof",
+        "description": "Issues a remote owner credential; refused to a request opened with an `AhrenaRemote` proof.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/mcp": {
+      "post": {
+        "operationId": "callMcp",
+        "tags": [
+          "Mcp"
+        ],
+        "summary": "The MCP server (JSON-RPC), when the core runs with `mcp`",
+        "description": "The MCP server (JSON-RPC), when the core runs with `mcp`.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "ownerBearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "The owner's credential: only the owner context (0600 lock, desktop bootstrap) receives it; never in a URL, cookie or body. Owner proof is mandatory before every write and private read. Only static interface GETs, `GET /api/overview` and `GET /api/hooks/health` are anonymous. A closed list of read routes also accepts the `AhrenaRemote` signed proof a remote machine's core sends (decision 0020)."
+      }
+    },
+    "parameters": {
+      "sessionId": {
+        "name": "sessionId",
+        "in": "path",
+        "required": true,
+        "description": "The session id, `[A-Za-z0-9_.:-]` up to 128 characters.",
+        "schema": {
+          "type": "string"
+        }
+      },
+      "agentId": {
+        "name": "agentId",
+        "in": "path",
+        "required": true,
+        "description": "The part of `Agent.id` after the `<sessionId>:` prefix (the id has a `:`, the route carries only the tail). `main` is the main agent. A raw id the hooks send (no prefix) resolves to the same agent. A value that does not decode is an unknown agent.",
+        "schema": {
+          "type": "string"
+        }
+      },
+      "decisionId": {
+        "name": "decisionId",
+        "in": "path",
+        "required": true,
+        "description": "The decision id.",
+        "schema": {
+          "type": "string"
+        }
+      },
+      "local": {
+        "name": "local",
+        "in": "path",
+        "required": true,
+        "description": "The Claude Desktop id of a session, `local_<uuid>`.",
+        "schema": {
+          "type": "string",
+          "pattern": "^local_[0-9a-f-]{8,64}$"
+        }
+      },
+      "machineId": {
+        "name": "machineId",
+        "in": "path",
+        "required": true,
+        "description": "A machine id: `local` is this machine, the others are the remote machines of machines.json.",
+        "schema": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9-]{0,63}$"
+        }
+      },
+      "owner": {
+        "name": "owner",
+        "in": "path",
+        "required": true,
+        "description": "The GitHub owner (user or organization).",
+        "schema": {
+          "type": "string"
+        }
+      },
+      "repo": {
+        "name": "repo",
+        "in": "path",
+        "required": true,
+        "description": "The GitHub repository name.",
+        "schema": {
+          "type": "string"
+        }
+      },
+      "recordId": {
+        "name": "recordId",
+        "in": "path",
+        "required": true,
+        "description": "The record's id within its repository.",
+        "schema": {
+          "type": "string"
+        }
+      },
+      "orderId": {
+        "name": "orderId",
+        "in": "path",
+        "required": true,
+        "description": "The order id.",
+        "schema": {
+          "type": "string"
+        }
+      },
+      "messageId": {
+        "name": "messageId",
+        "in": "path",
+        "required": true,
+        "description": "The message id.",
+        "schema": {
+          "type": "string"
+        }
+      },
+      "toolId": {
+        "name": "toolId",
+        "in": "path",
+        "required": true,
+        "description": "A tool of the catalog.",
+        "schema": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9-]{0,63}$"
+        }
+      },
+      "toolAction": {
+        "name": "toolAction",
+        "in": "path",
+        "required": true,
+        "description": "An action of the catalog.",
+        "schema": {
+          "type": "string",
+          "enum": [
+            "install",
+            "update",
+            "start",
+            "stop"
+          ]
+        }
+      },
+      "jobId": {
+        "name": "jobId",
+        "in": "path",
+        "required": true,
+        "description": "A job id, 12 hexadecimal characters.",
+        "schema": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{12}$"
+        }
+      },
+      "terminalId": {
+        "name": "terminalId",
+        "in": "path",
+        "required": true,
+        "description": "A terminal, `pts-<n>` or `ttys<n>`.",
+        "schema": {
+          "type": "string",
+          "pattern": "^(?:pts-\\d{1,6}|ttys\\d{1,4})$"
+        }
+      },
+      "terminalAction": {
+        "name": "terminalAction",
+        "in": "path",
+        "required": true,
+        "description": "What to do with the terminal.",
+        "schema": {
+          "type": "string",
+          "enum": [
+            "interrupt",
+            "terminate",
+            "kill",
+            "hangup",
+            "end"
+          ]
+        }
+      },
+      "dockerAction": {
+        "name": "dockerAction",
+        "in": "path",
+        "required": true,
+        "description": "A Docker action of the catalog.",
+        "schema": {
+          "type": "string",
+          "enum": [
+            "stack-stop",
+            "stack-start",
+            "stack-remove",
+            "stack-remove-volumes",
+            "container-stop",
+            "container-restart",
+            "container-remove",
+            "clean",
+            "daemon-restart"
+          ]
+        }
+      },
+      "connectionAction": {
+        "name": "connectionAction",
+        "in": "path",
+        "required": true,
+        "description": "What to do with the connection of the machine.",
+        "schema": {
+          "type": "string",
+          "enum": [
+            "start",
+            "stop",
+            "reconnect",
+            "login-and-start"
+          ]
+        }
+      },
+      "appUpdateAction": {
+        "name": "appUpdateAction",
+        "in": "path",
+        "required": true,
+        "description": "What the /ui asks the app's update notice to do.",
+        "schema": {
+          "type": "string",
+          "enum": [
+            "check",
+            "install",
+            "dismiss",
+            "ack"
+          ]
+        }
+      },
+      "sessionName": {
+        "name": "sessionName",
+        "in": "path",
+        "required": true,
+        "description": "The name of an AWS session.",
+        "schema": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9._-]{1,64}$"
+        }
+      },
+      "uiFile": {
+        "name": "uiFile",
+        "in": "path",
+        "required": true,
+        "description": "A file of the interface folder (`.js`, `.css` or `.svg`), or a screen id, which serves the page.",
+        "schema": {
+          "type": "string"
+        }
+      },
+      "uiScreenFile": {
+        "name": "uiScreenFile",
+        "in": "path",
+        "required": true,
+        "description": "A file of the interface's screens folder (`.js`, `.css` or `.svg`).",
+        "schema": {
+          "type": "string",
+          "pattern": "^[a-z0-9-]+\\.(js|css|svg)$"
+        }
+      },
+      "machine": {
+        "name": "machine",
+        "in": "query",
+        "required": false,
+        "description": "Read the same screen from this machine (`local`, or a remote machine of machines.json): the sessions of every machine merged, or of one.",
+        "schema": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9-]{0,63}$"
+        }
+      }
+    },
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "description": "The body of a refusal: a message for a person, in the person's language (not meant to be matched).",
+        "required": [
+          "error"
+        ],
+        "properties": {
+          "error": {
+            "type": "string"
+          }
+        }
+      },
+      "AgentViewMachine": {
+        "type": "object",
+        "description": "The machine a remote read came from. Present only when the request carried ?machine=<id> for a remote machine.",
+        "required": [
+          "id",
+          "label"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "AgentViewStep": {
+        "type": "object",
+        "description": "One tool call of the agent, counted once when the hook and the transcript both carry it (same tool use id).",
+        "required": [
+          "id",
+          "kind",
+          "name",
+          "summary",
+          "state",
+          "start",
+          "end",
+          "childAgentId"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "The tool use id (the event id when the call has none)."
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "tool",
+              "agent"
+            ],
+            "description": "`agent` for a call that spawns an agent (`Agent`, and `Task`, its former name), `tool` for every other."
+          },
+          "name": {
+            "type": "string",
+            "description": "The tool name."
+          },
+          "summary": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The event summary (the target or command, cut at ingest), or null."
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "error",
+              "running",
+              "unknown"
+            ],
+            "description": "`ok` or `error` once a result arrived; `running` with no result while the agent is working or waiting; `unknown` with no result once the agent ended."
+          },
+          "start": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the call was made."
+          },
+          "end": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "When its result arrived; null with none."
+          },
+          "childAgentId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Only on kind `agent`: the agentId of the child whose metadata.toolUseId is this step's id; null otherwise or when the child was not read."
+          }
+        },
+        "additionalProperties": false
+      },
+      "AgentView": {
+        "type": "object",
+        "description": "What one agent of a session did: its brief, its tool calls in order, its result and its cost. Read-only, from the database; only the agent's own events are read (an event belongs to an agent by SessionEvent.agentId, resolved as the session Detail does). Brief and result hold at most 32,000 characters (the Conversation's ceiling), cut with no ellipsis, so the truncation flags carry the cut. Steps are not capped.",
+        "required": [
+          "agentId",
+          "agentType",
+          "description",
+          "brief",
+          "briefTruncated",
+          "spawnedByToolUseId",
+          "steps",
+          "result",
+          "resultTruncated",
+          "costUsd",
+          "costNote",
+          "totalCostUsd",
+          "state",
+          "start",
+          "end"
+        ],
+        "properties": {
+          "agentId": {
+            "type": "string",
+            "description": "The id as the route takes it (after the session prefix)."
+          },
+          "agentType": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Agent.subagentType (for example `Explore` or `plugin:agent`). Null for the main agent and when the transcript gave none. Kept apart from the description."
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The short description the parent gave the agent. The stored Agent.name of a subagent is that description, or the task cut at 80 characters when the transcript had none; the two cannot always be told apart, so the description is Agent.name except when it equals the task cut at 80 characters (the fallback), and then it is null. A short description that equals its own task is read as the fallback: an accepted loss. The main agent has no description."
+          },
+          "brief": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The text of the agent's first prompt, line breaks kept, outer whitespace trimmed, at most 32,000 characters. Null when the agent has no prompt event. An event stored before the full text was kept has only its summary, which the ingest cut: that is served instead and briefTruncated is true."
+          },
+          "briefTruncated": {
+            "type": "boolean",
+            "description": "True when the prompt had more than 32,000 characters and brief holds the first 32,000, or when brief is an event summary."
+          },
+          "spawnedByToolUseId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "metadata.toolUseId of the agent: the id of the Agent call, in the parent's conversation, that created it. Null for the main agent and when the transcript did not say."
+          },
+          "steps": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AgentViewStep"
+            },
+            "description": "The agent's tool calls in the order they were made."
+          },
+          "result": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The text of the agent's last assistant message, at most 32,000 characters. Null while the agent runs (state working or waiting) and when it has no assistant text. An old event that kept no full text serves its summary instead and resultTruncated is true."
+          },
+          "resultTruncated": {
+            "type": "boolean",
+            "description": "True when the last message had more than 32,000 characters, or when result is an event summary."
+          },
+          "costUsd": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "The agent's own cost. For the main agent it includes the usage with no agent (the compaction floor), as the Agents tab does. Absent is never zero: see costNote."
+          },
+          "costNote": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "no_usage",
+              "unpriced",
+              null
+            ],
+            "description": "Why costUsd is null: `no_usage` (the agent has no measured usage at all) or `unpriced` (it has usage and none of it has a price in the table). Null when costUsd is a number. With usage priced for only part of it, costUsd is the sum of the priced part and costNote is null."
+          },
+          "totalCostUsd": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "costUsd plus the cost of every descendant (the agents whose parent chain reaches this one). Null when neither the agent nor any descendant has a priced cost."
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "working",
+              "waiting",
+              "completed",
+              "error"
+            ],
+            "description": "Agent.status. For the main agent, the main Agent row when there is one, else derived from the session as the Agents tab does."
+          },
+          "start": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Agent.startedAt (the session's startedAt for a main agent with no row)."
+          },
+          "end": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Agent.endedAt. For the main agent, its row's endedAt, else the session's endedAt."
+          },
+          "machine": {
+            "$ref": "#/components/schemas/AgentViewMachine"
+          }
+        },
+        "additionalProperties": false
+      },
+      "AgentViewError": {
+        "type": "object",
+        "description": "The refusal of the agent view: `code` is the contract, `error` is a message for a person (not matched). The other detail routes keep their bodies with no code.",
+        "required": [
+          "error"
+        ],
+        "properties": {
+          "error": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string",
+            "enum": [
+              "session_not_found",
+              "agent_not_found",
+              "invalid_session_id"
+            ]
+          },
+          "machine": {
+            "$ref": "#/components/schemas/AgentViewMachine"
+          }
+        }
+      },
+      "MachineFailure": {
+        "type": "object",
+        "description": "A remote machine could not answer: `machine-unreachable` (503, with the machine's state) or `machine-bad-response` (502).",
+        "required": [
+          "error",
+          "machine"
+        ],
+        "properties": {
+          "error": {
+            "type": "string",
+            "enum": [
+              "machine-unreachable",
+              "machine-bad-response"
+            ]
+          },
+          "machine": {
+            "type": "object",
+            "required": [
+              "id",
+              "label"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "label": {
+                "type": "string"
+              },
+              "state": {
+                "type": "string"
+              },
+              "lastReadAt": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
+          }
+        }
+      },
+      "DiagnosisProcessItem": {
+        "type": "object",
+        "required": [
+          "pid",
+          "name",
+          "rssBytes",
+          "cpuPct",
+          "startedAt"
+        ],
+        "properties": {
+          "pid": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "rssBytes": {
+            "type": "number",
+            "minimum": 0
+          },
+          "cpuPct": {
+            "type": "number",
+            "minimum": 0
+          },
+          "startedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false
+      },
+      "DiagnosisSwapItem": {
+        "type": "object",
+        "required": [
+          "usedBytes",
+          "totalBytes"
+        ],
+        "properties": {
+          "usedBytes": {
+            "type": "number",
+            "minimum": 0
+          },
+          "totalBytes": {
+            "type": "number",
+            "minimum": 0
+          }
+        },
+        "additionalProperties": false
+      },
+      "DiagnosisFolderItem": {
+        "type": "object",
+        "required": [
+          "path",
+          "bytes"
+        ],
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "bytes": {
+            "type": "number",
+            "minimum": 0
+          }
+        },
+        "additionalProperties": false
+      },
+      "DiagnosisDockerItem": {
+        "type": "object",
+        "description": "One row of `docker system df`.",
+        "required": [
+          "type",
+          "usedBytes",
+          "reclaimableBytes"
+        ],
+        "properties": {
+          "type": {
+            "type": "string"
+          },
+          "usedBytes": {
+            "type": "number",
+            "minimum": 0
+          },
+          "reclaimableBytes": {
+            "type": "number",
+            "minimum": 0
+          }
+        },
+        "additionalProperties": false
+      },
+      "DiagnosisCacheItem": {
+        "type": "object",
+        "description": "A known cache; `actionId` is the cleanup action that removes it.",
+        "required": [
+          "id",
+          "path",
+          "bytes",
+          "actionId"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "bytes": {
+            "type": "number",
+            "minimum": 0
+          },
+          "actionId": {
+            "type": "string",
+            "enum": [
+              "npm-cache",
+              "pip-cache",
+              "xcode-derived-data"
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "DiagnosisWorktreeItem": {
+        "type": "object",
+        "description": "An old worktree: each one is its own item of `known-caches`, and no cleanup action removes it (`actionId` is null).",
+        "required": [
+          "id",
+          "path",
+          "bytes",
+          "lastUsedAt",
+          "hasUncommitted",
+          "hasUnpushed",
+          "actionId"
+        ],
+        "properties": {
+          "id": {
+            "const": "worktree"
+          },
+          "path": {
+            "type": "string"
+          },
+          "bytes": {
+            "type": "number",
+            "minimum": 0
+          },
+          "lastUsedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "hasUncommitted": {
+            "type": "boolean"
+          },
+          "hasUnpushed": {
+            "type": "boolean"
+          },
+          "actionId": {
+            "type": "null"
+          }
+        },
+        "additionalProperties": false
+      },
+      "DiagnosisJournalItem": {
+        "type": "object",
+        "required": [
+          "bytes"
+        ],
+        "properties": {
+          "bytes": {
+            "type": "number",
+            "minimum": 0
+          }
+        },
+        "additionalProperties": false
+      },
+      "DiagnosisPartial": {
+        "type": "object",
+        "description": "Marks an `ok` section whose items were read only in part.",
+        "required": [
+          "reason"
+        ],
+        "properties": {
+          "reason": {
+            "type": "string",
+            "maxLength": 120
+          }
+        },
+        "additionalProperties": false
+      },
+      "DiagnosisWorktrees": {
+        "type": "object",
+        "description": "Only on a `known-caches` section that is `ok`, so the screen words \"no use for more than 14 days, in ~/Workspace\" from what the core served and guesses neither. The field is optional for a consumer: a core older than the diagnosis screen does not send it.",
+        "required": [
+          "oldAfterDays",
+          "root"
+        ],
+        "properties": {
+          "oldAfterDays": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "The age limit in whole days after which a worktree counts as old."
+          },
+          "root": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The longest folder that is a parent of every worktree root the core searched, cut at a folder boundary, with this core's home folder written as `~`. Null when no root was searched or the roots share nothing but the filesystem root."
+          }
+        },
+        "additionalProperties": false
+      },
+      "DiagnosisSection": {
+        "description": "One section of a diagnosis. The ids are fixed. A section that did not come back is inside the diagnosis, not an error: an `unavailable` (the tool is missing or failed) or `timeout` (the collection passed its limit) section has no items and never fails the others. `reason` (a short text, at most 120 characters) goes with a status other than `ok`, and `partial` goes with an `ok` section read only in part.",
+        "oneOf": [
+          {
+            "type": "object",
+            "required": [
+              "id",
+              "status",
+              "items"
+            ],
+            "properties": {
+              "id": {
+                "enum": [
+                  "processes-by-rss",
+                  "processes-by-cpu"
+                ]
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "ok",
+                  "unavailable",
+                  "timeout"
+                ]
+              },
+              "items": {
+                "type": "array",
+                "description": "Up to 10 processes, sorted by RSS or by CPU, highest first.",
+                "items": {
+                  "$ref": "#/components/schemas/DiagnosisProcessItem"
+                },
+                "maxItems": 10
+              },
+              "reason": {
+                "type": "string",
+                "maxLength": 120
+              },
+              "partial": {
+                "$ref": "#/components/schemas/DiagnosisPartial"
+              }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": [
+              "id",
+              "status",
+              "items"
+            ],
+            "properties": {
+              "id": {
+                "const": "swap"
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "ok",
+                  "unavailable",
+                  "timeout"
+                ]
+              },
+              "items": {
+                "type": "array",
+                "description": "One row: the swap in use and its total.",
+                "items": {
+                  "$ref": "#/components/schemas/DiagnosisSwapItem"
+                }
+              },
+              "reason": {
+                "type": "string",
+                "maxLength": 120
+              },
+              "partial": {
+                "$ref": "#/components/schemas/DiagnosisPartial"
+              }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": [
+              "id",
+              "status",
+              "items"
+            ],
+            "properties": {
+              "id": {
+                "const": "largest-folders"
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "ok",
+                  "unavailable",
+                  "timeout"
+                ]
+              },
+              "items": {
+                "type": "array",
+                "description": "The largest folders under the volume's mount, largest first.",
+                "items": {
+                  "$ref": "#/components/schemas/DiagnosisFolderItem"
+                }
+              },
+              "reason": {
+                "type": "string",
+                "maxLength": 120
+              },
+              "partial": {
+                "$ref": "#/components/schemas/DiagnosisPartial"
+              }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": [
+              "id",
+              "status",
+              "items"
+            ],
+            "properties": {
+              "id": {
+                "const": "docker-df"
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "ok",
+                  "unavailable",
+                  "timeout"
+                ]
+              },
+              "items": {
+                "type": "array",
+                "description": "One item per row of `docker system df`.",
+                "items": {
+                  "$ref": "#/components/schemas/DiagnosisDockerItem"
+                }
+              },
+              "reason": {
+                "type": "string",
+                "maxLength": 120
+              },
+              "partial": {
+                "$ref": "#/components/schemas/DiagnosisPartial"
+              }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": [
+              "id",
+              "status",
+              "items"
+            ],
+            "properties": {
+              "id": {
+                "const": "known-caches"
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "ok",
+                  "unavailable",
+                  "timeout"
+                ]
+              },
+              "items": {
+                "type": "array",
+                "description": "The known caches and, one item each, the old worktrees.",
+                "items": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/DiagnosisCacheItem"
+                    },
+                    {
+                      "$ref": "#/components/schemas/DiagnosisWorktreeItem"
+                    }
+                  ]
+                }
+              },
+              "reason": {
+                "type": "string",
+                "maxLength": 120
+              },
+              "partial": {
+                "$ref": "#/components/schemas/DiagnosisPartial"
+              },
+              "worktrees": {
+                "$ref": "#/components/schemas/DiagnosisWorktrees"
+              }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": [
+              "id",
+              "status",
+              "items"
+            ],
+            "properties": {
+              "id": {
+                "const": "journal"
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "ok",
+                  "unavailable",
+                  "timeout"
+                ]
+              },
+              "items": {
+                "type": "array",
+                "description": "Linux only: one row with the journal size.",
+                "items": {
+                  "$ref": "#/components/schemas/DiagnosisJournalItem"
+                }
+              },
+              "reason": {
+                "type": "string",
+                "maxLength": 120
+              },
+              "partial": {
+                "$ref": "#/components/schemas/DiagnosisPartial"
+              }
+            },
+            "additionalProperties": false
+          }
+        ]
+      },
+      "Diagnosis": {
+        "type": "object",
+        "description": "The read-only diagnosis of an open saturation alert: who consumes the resource that saturated. Every collector runs a fixed command of the catalog and nothing in the request reaches a command. Each alert kind gets its own sections, in this order: `load-high` gets processes-by-cpu; `memory-high` and `swap-high` get processes-by-rss, processes-by-cpu and swap; `volume-full` gets largest-folders, docker-df, known-caches, and journal on Linux only.",
+        "required": [
+          "machine",
+          "alertId",
+          "kind",
+          "takenAt",
+          "sections"
+        ],
+        "properties": {
+          "machine": {
+            "type": "string",
+            "description": "The requested machine id. For a remote machine the core of this machine asks the core there the same route through the tunnel and answers with its sections, under the requested machine."
+          },
+          "alertId": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "load-high",
+              "memory-high",
+              "swap-high",
+              "volume-full"
+            ],
+            "description": "The alert's kind."
+          },
+          "takenAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "sections": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DiagnosisSection"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "DiagnosisRefusal": {
+        "type": "object",
+        "description": "A refusal with a stable `reason`.",
+        "required": [
+          "error",
+          "reason"
+        ],
+        "properties": {
+          "error": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "unknown-machine",
+              "alert-not-open",
+              "not-diagnosable",
+              "unreachable",
+              "bad-response"
+            ]
+          }
+        }
+      },
+      "DiagnosisUnsupported": {
+        "type": "object",
+        "description": "Stable: this core cannot diagnose (no collector for its platform, or not wired), or the core of the remote machine does not have the route (an old core). The screen tells it from a failure by the `error` value.",
+        "required": [
+          "error"
+        ],
+        "properties": {
+          "error": {
+            "const": "diagnosis-unsupported"
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  }
+}

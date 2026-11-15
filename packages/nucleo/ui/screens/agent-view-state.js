@@ -1,6 +1,6 @@
 // The state of the agent view, with no DOM (issue 539, layer 3 of issue 521): which route the read takes, what a
 // failed read means, and the read state machine (loading, then ready, error or missing). `agent-view.js` draws
-// from it; the test imports it directly. The data is the shape of docs/contracts/agent-view.md.
+// from it; the test imports it directly. The data is the shape of docs/contracts/core-api.openapi.json, the agent view operation.
 
 /** `GET /api/sessions/:id/agents/:agentId`: the agent id has a ":" in it, so it travels encoded. (issue 539) */
 export const agentReadRoute = (sessionId, agentId) => `/api/sessions/${encodeURIComponent(sessionId)}/agents/${encodeURIComponent(agentId)}`;

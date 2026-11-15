@@ -1,0 +1,86 @@
+# The contract of the core's HTTP API (issue 662): docs/contracts/core-api.openapi.json is the source,
+# the routes served and the routes declared are proved to be one set by the core tests (repo-tests),
+# and this workflow guards the file itself on every pull request:
+#
+#   - Spectral lints it with the committed ruleset (docs/contracts/core-api.spectral.json, which
+#     extends spectral:oas and turns no rule off). A warning fails, so the contract stays clean.
+#   - oasdiff compares it with the contract at the merge base and fails a breaking change unless
+#     info.version moved to a higher MAJOR version (oasdiff's own versioning policy,
+#     --fail-on MISSING-VERSION-BUMP: a breaking change passes only with a new major version). A
+#     merge base with no contract passes: there is nothing to break yet.
+#
+# Pinned on purpose: both tools by exact version, oasdiff's download by sha256, the actions by commit.
+# The token is read-only and the contract under test is the pull request's own file, so nothing here
+# runs with a secret, and no text a pull request controls reaches a command line (the two commits come
+# through `env`, the spec is only read by the tools, and oasdiff follows no external reference).
+# packages/nucleo/test/api/contract-ci.test.ts holds this file to all of the above.
+
+name: contract
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: contract-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  spectral:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+
+      # npx, not a dependency of the core: the linter is a tool of this check alone, and the exact version is
+      # the pin. Its install scripts are off; its own dependencies resolve at run time, like any npx run.
+      - name: Spectral
+        env:
+          NPM_CONFIG_IGNORE_SCRIPTS: 'true'
+        run: npx --yes @stoplight/spectral-cli@6.17.1 lint docs/contracts/core-api.openapi.json --ruleset docs/contracts/core-api.spectral.json --fail-severity warn
+
+  oasdiff:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    env:
+      OASDIFF_VERSION: '1.38.0'
+      OASDIFF_SHA256: '613037fd6a1d3362a1b742d6d86c338c0eb5ab3511f4942ce3948e78720ea2da' # oasdiff_1.38.0_linux_amd64.tar.gz, from the release's checksums.txt
+      BASE_SHA: ${{ github.event.pull_request.base.sha }}
+      HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Install oasdiff
+        run: |
+          set -euo pipefail
+          dir="$RUNNER_TEMP/oasdiff"
+          mkdir -p "$dir"
+          curl --fail --silent --show-error --location --output "$dir/oasdiff.tar.gz" "https://github.com/oasdiff/oasdiff/releases/download/v${OASDIFF_VERSION}/oasdiff_${OASDIFF_VERSION}_linux_amd64.tar.gz"
+          echo "${OASDIFF_SHA256}  $dir/oasdiff.tar.gz" | sha256sum --check
+          tar -xzf "$dir/oasdiff.tar.gz" -C "$dir" oasdiff
+          echo "$dir" >> "$GITHUB_PATH"
+
+      - name: Breaking changes against the merge base
+        run: |
+          set -euo pipefail
+          spec=docs/contracts/core-api.openapi.json
+          base=$(git merge-base "$BASE_SHA" "$HEAD_SHA")
+          if ! git cat-file -e "$base:$spec" 2>/dev/null; then
+            echo "No contract at the merge base ($base): nothing to compare."
+            exit 0
+          fi
+          git show "$base:$spec" > "$RUNNER_TEMP/base.openapi.json"
+          git show "$HEAD_SHA:$spec" > "$RUNNER_TEMP/head.openapi.json"
+          oasdiff breaking "$RUNNER_TEMP/base.openapi.json" "$RUNNER_TEMP/head.openapi.json" --fail-on MISSING-VERSION-BUMP --allow-external-refs=false
