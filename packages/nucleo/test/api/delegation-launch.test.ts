@@ -46,16 +46,18 @@ const mode = (path: string) => statSync(path).mode & 0o777;
 const files = (dir: string, ext: string) => readdirSync(dir).filter((n) => n.endsWith(ext));
 
 describe('the handoff .command file (#567)', () => {
-  test('local: self-removal, quoted cd, header, cat of the prompt file, rm, exec claude with no argument', () => {
+  test('local: self-removal, header, cat of the prompt file, rm, quoted cd, exec claude with no argument', () => {
     assert.equal(
       handoffCommandContent({ folder: '/w/app', promptFile: `/d/handoff-${ID}.prompt` }),
       [
         '#!/bin/sh',
         'rm -f -- "$0"',
-        "cd -- '/w/app' || exit 1",
         `printf '%s\\n\\n' '${HANDOFF_HEADER}'`,
-        `cat -- '/d/handoff-${ID}.prompt' || exit 1`,
+        `cat -- '/d/handoff-${ID}.prompt'`,
+        'status=$?',
         `rm -f -- '/d/handoff-${ID}.prompt'`,
+        "cd -- '/w/app' || exit 1",
+        '[ "$status" -eq 0 ] || exit 1',
         'exec claude',
         '',
       ].join('\n'),
@@ -92,6 +94,28 @@ describe('the handoff .command file (#567)', () => {
   });
 });
 
+describe('the handoff .command file on a failing exit (#567)', () => {
+  test('run by a real sh with a missing folder: it exits 1 and the prompt file and the .command are gone', () => {
+    const root = mkdtempSync(join(tmpdir(), 'ahrena-probe-'));
+    after(() => rmSync(root, { recursive: true, force: true }));
+    const promptFile = join(root, `handoff-${ID}.prompt`);
+    writeFileSync(promptFile, HOSTILE, { mode: 0o600 });
+    const file = join(root, 'probe.sh');
+    writeFileSync(file, handoffCommandContent({ folder: join(root, 'missing'), promptFile }).replace('exec claude', 'true'));
+    assert.throws(() => execFileSync('/bin/sh', [file], { cwd: root, encoding: 'utf8', stdio: 'pipe' }), (err: { status?: number }) => err.status === 1);
+    assert.deepEqual(readdirSync(root), []);
+  });
+
+  test('run by a real sh with a prompt file that cannot be read: it exits 1 and removes what is left', () => {
+    const root = mkdtempSync(join(tmpdir(), 'ahrena-probe-'));
+    after(() => rmSync(root, { recursive: true, force: true }));
+    const file = join(root, 'probe.sh');
+    writeFileSync(file, handoffCommandContent({ folder: root, promptFile: join(root, `handoff-${ID}.prompt`) }).replace('exec claude', 'true'));
+    assert.throws(() => execFileSync('/bin/sh', [file], { cwd: root, encoding: 'utf8', stdio: 'pipe' }), (err: { status?: number }) => err.status === 1);
+    assert.deepEqual(readdirSync(root), []);
+  });
+});
+
 describe('createDelegationLauncher: openTerminal (#567)', () => {
   test('puts the prompt on the clipboard through stdin, writes 0600/0700 files, opens the .command', async () => {
     const { dir, runner, launcher } = setup();
@@ -111,6 +135,32 @@ describe('createDelegationLauncher: openTerminal (#567)', () => {
     assert.equal(content, handoffCommandContent({ folder: '/w/app', promptFile: join(dir, promptName!) }));
     for (const piece of ["touch pwned1", '`', '</console-data>', 'rm -rf', 'line two']) assert.ok(!content.includes(piece), piece);
     for (const call of runner.calls) assert.ok(!call.args.some((a) => a.includes('pwned1')), 'the prompt is in no argument');
+  });
+
+  test('terminal-safe display: the clipboard keeps the exact prompt, the printed copy shows each control as \\uXXXX', async () => {
+    const { dir, runner, launcher } = setup();
+    const raw = 'a\u001b[31mred\u009b2J\u009d0;title\u0007\u007fx\u0085\ttab\nline\r\u2028end';
+    await launcher.openTerminal('/w/app', raw);
+    assert.equal(runner.calls[0]!.input, raw);
+    const [promptName] = files(dir, '.prompt');
+    const shown = readFileSync(join(dir, promptName!), 'utf8');
+    assert.equal(shown, 'a\\u001b[31mred\\u009b2J\\u009d0;title\\u0007\\u007fx\\u0085\ttab\nline\\u000d\u2028end');
+    assert.doesNotMatch(shown, /[\u0000-\u0008\u000b-\u001f\u007f-\u009f]/);
+  });
+
+  test('terminal-safe display, run by a real sh: no raw escape reaches the output', () => {
+    const root = mkdtempSync(join(tmpdir(), 'ahrena-probe-'));
+    after(() => rmSync(root, { recursive: true, force: true }));
+    const dir = join(root, 'handoff');
+    const runner = fakeRunner();
+    const launcher = createDelegationLauncher({ dir, platform: 'darwin', runner });
+    return launcher.openTerminal(root, `x\u001b]0;pwned\u0007\u009b31m\u009d0;t${HOSTILE}`).then(() => {
+      const probe = join(root, 'probe.sh');
+      writeFileSync(probe, readFileSync(runner.calls[1]!.args[0]!, 'utf8').replace('exec claude', 'true'));
+      const out = execFileSync('/bin/sh', [probe], { cwd: root, encoding: 'utf8' });
+      assert.doesNotMatch(out, /[\u0000-\u0008\u000b-\u001f\u007f-\u009f]/);
+      assert.ok(out.includes('\\u001b]0;pwned\\u0007\\u009b31m\\u009d0;t'));
+    });
   });
 
   test('the clipboard is filled before the terminal opens', async () => {
@@ -189,6 +239,10 @@ describe('createDelegationLauncher: openSsh (#567)', () => {
   test('a timeout maps to ssh-timeout, any other failure to ssh-unreachable; nothing is written or opened', async () => {
     for (const [err, reason] of [
       [Object.assign(new Error('Command failed: ssh … secret-host'), { killed: true, signal: 'SIGTERM' }), 'ssh-timeout'],
+      [Object.assign(new Error('Command failed: ssh'), { code: 255, stderr: 'ssh: connect to host secret-host port 22: Operation timed out\n' }), 'ssh-timeout'],
+      [Object.assign(new Error('Command failed: ssh'), { code: 255, stderr: 'ssh: Connection timed out during banner exchange' }), 'ssh-timeout'],
+      [Object.assign(new Error('Command failed: ssh'), { code: 1, stderr: 'timed out' }), 'ssh-unreachable'],
+      [Object.assign(new Error('Permission denied'), { code: 255, stderr: 'Permission denied (publickey).' }), 'ssh-unreachable'],
       [Object.assign(new Error('Permission denied'), { code: 255 }), 'ssh-unreachable'],
       [Object.assign(new Error('spawn ssh ENOENT'), { code: 'ENOENT' }), 'ssh-unreachable'],
     ] as const) {

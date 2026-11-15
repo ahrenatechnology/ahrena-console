@@ -6,9 +6,14 @@
 // #567 - Terminal and SSH, "handoff": claude 2.1.325 has no pre-fill flag (`claude "<p>"` sends it), so the prompt
 // #567 goes on the Mac clipboard (`pbcopy`, the text on stdin), is printed in the terminal from its own 0600 file
 // #567 (`cat`), and `claude` starts with NO prompt: the person pastes and sends. The `.command` (0700) holds only
-// #567 fixed text and single-quoted paths; both files remove themselves when it runs.
-// #567 - SSH first runs a pre-flight (`ssh -o BatchMode=yes -o ConnectTimeout=5 <host> true`): a timeout is
-// #567 `ssh-timeout`, any other failure `ssh-unreachable`. The command's text is never returned or logged.
+// #567 fixed text and single-quoted paths; both files remove themselves when it runs, on every exit path
+// #567 before `exec` (the prompt file is removed right after `cat`, before `cd` can fail).
+// #567 The clipboard keeps the exact prompt; the file `cat` prints is a display copy (terminalDisplayCopy):
+// #567 every control but newline and tab (C0, DEL, C1: ESC, CSI U+009B, OSC U+009D) is written as visible `\uXXXX`
+// #567 text, so third-party text cannot drive the terminal.
+// #567 - SSH first runs a pre-flight (`ssh -o BatchMode=yes -o ConnectTimeout=5 <host> true`): a killed process,
+// #567 or ssh's own connect timeout (exit 255 with "timed out" in its stderr), is `ssh-timeout`; any other
+// #567 failure `ssh-unreachable`. The stderr is only matched, never returned or logged.
 // #567 - Anything but macOS: `unsupported`.
 // #567 No shell string is run by Node: every program goes through the runner with an argument list.
 
@@ -28,6 +33,17 @@ const SSH_HOST_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,252}$/;
 
 /** #567 The pre-flight waits for ssh's own connect timeout (5 s) and then a margin before it kills the process. */
 const PREFLIGHT_TIMEOUT_MS = 10_000;
+
+/** #567 C0 controls but newline and tab, DEL and the C1 range: what a terminal reads as a command. */
+const TERMINAL_CONTROLS = /[\u0000-\u0008\u000b-\u001f\u007f-\u009f]/g;
+
+/** #567 The prompt as the terminal prints it: each terminal control becomes visible `\uXXXX` text. */
+export function terminalDisplayCopy(prompt: string): string {
+  return prompt.replace(TERMINAL_CONTROLS, (c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, '0')}`);
+}
+
+/** #567 ssh's own connect timeout: it exits 255 and says "timed out" on stderr. */
+const SSH_CONNECT_TIMED_OUT = /timed out/i;
 
 function checkHost(host: string): string {
   if (!SSH_HOST_PATTERN.test(host)) throw new Error('unusable ssh host');
@@ -50,13 +66,22 @@ export function handoffCommandContent({ folder, promptFile, sshHost }: HandoffCo
   return [
     '#!/bin/sh',
     'rm -f -- "$0"',
-    ...(folder === null ? [] : [`cd -- ${shellQuote(folder)} || exit 1`]),
     `printf '%s\\n\\n' ${shellQuote(HANDOFF_HEADER)}`,
-    `cat -- ${shellQuote(promptFile)} || exit 1`,
+    `cat -- ${shellQuote(promptFile)}`,
+    'status=$?',
     `rm -f -- ${shellQuote(promptFile)}`,
+    ...(folder === null ? [] : [`cd -- ${shellQuote(folder)} || exit 1`]),
+    '[ "$status" -eq 0 ] || exit 1',
     start,
     '',
   ].join('\n');
+}
+
+/** #567 A killed process, or exit 255 whose stderr says "timed out"; the stderr is read here and goes nowhere else. */
+function isSshTimeout(err: unknown): boolean {
+  if (typeof err !== 'object' || err === null) return false;
+  const { killed, code, stderr } = err as { killed?: unknown; code?: unknown; stderr?: unknown };
+  return killed === true || (code === 255 && typeof stderr === 'string' && SSH_CONNECT_TIMED_OUT.test(stderr));
 }
 
 export interface DelegationLauncherOptions {
@@ -82,7 +107,7 @@ export function createDelegationLauncher({ dir, openInDesktop = null, platform =
     await removeOld(dir, now(), maxAgeMs);
     await runner.run('pbcopy', [], { input: prompt });
     try {
-      await writeFile(promptFile, prompt, { mode: 0o600, flag: 'wx' });
+      await writeFile(promptFile, terminalDisplayCopy(prompt), { mode: 0o600, flag: 'wx' });
       await writeFile(file, content, { mode: 0o700, flag: 'wx' });
       await chmod(file, 0o700);
       await runner.run('open', [file]);
@@ -98,7 +123,7 @@ export function createDelegationLauncher({ dir, openInDesktop = null, platform =
       await runner.run('ssh', ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=5', host, 'true'], { timeoutMs: PREFLIGHT_TIMEOUT_MS });
       return null;
     } catch (err) {
-      return typeof err === 'object' && err !== null && (err as { killed?: unknown }).killed === true ? 'ssh-timeout' : 'ssh-unreachable';
+      return isSshTimeout(err) ? 'ssh-timeout' : 'ssh-unreachable';
     }
   }
 

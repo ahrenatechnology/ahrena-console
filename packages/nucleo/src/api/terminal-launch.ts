@@ -105,7 +105,7 @@ export const systemRunner: ProcessRunner = {
       const child = execFile(file, [...args], { env: opts.env ?? process.env, timeout: opts.timeoutMs ?? 5_000, encoding: 'utf8' }, (err, stdout) => (err ? reject(err) : resolve(stdout)));
       if (opts.input !== undefined) {
         child.stdin?.on('error', () => {
-          // the program closed its stdin early: execFile's callback reports how it ended
+          // #567 the program closed its stdin early: execFile's callback reports how it ended
         });
         child.stdin?.end(opts.input);
       }
