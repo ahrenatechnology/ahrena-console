@@ -1,16 +1,16 @@
 // The adapters behind the delegation Launcher port (#567): the mechanism of opening a Claude session for an
-// alert, in the Claude Desktop, in a terminal on this Mac, or over SSH on the Workstation.
+// #567 alert, in the Claude Desktop, in a terminal on this Mac, or over SSH on the Workstation.
 //
-// The prompt holds third-party text (process names, folders, command output), so it is never shell-parsed:
-// - Desktop: the address `claude://code/new?folder=…&q=…` (desktopNewSessionUrl), pre-filled, not sent.
-// - Terminal and SSH, "handoff": claude 2.1.325 has no pre-fill flag (`claude "<p>"` sends it), so the prompt
-//   goes on the Mac clipboard (`pbcopy`, the text on stdin), is printed in the terminal from its own 0600 file
-//   (`cat`), and `claude` starts with NO prompt: the person pastes and sends. The `.command` (0700) holds only
-//   fixed text and single-quoted paths; both files remove themselves when it runs.
-// - SSH first runs a pre-flight (`ssh -o BatchMode=yes -o ConnectTimeout=5 <host> true`): a timeout is
-//   `ssh-timeout`, any other failure `ssh-unreachable`. The command's text is never returned or logged.
-// - Anything but macOS: `unsupported`.
-// No shell string is run by Node: every program goes through the runner with an argument list.
+// #567 The prompt holds third-party text (process names, folders, command output), so it is never shell-parsed:
+// #567 - Desktop: the address `claude://code/new?folder=…&q=…` (desktopNewSessionUrl), pre-filled, not sent.
+// #567 - Terminal and SSH, "handoff": claude 2.1.325 has no pre-fill flag (`claude "<p>"` sends it), so the prompt
+// #567 goes on the Mac clipboard (`pbcopy`, the text on stdin), is printed in the terminal from its own 0600 file
+// #567 (`cat`), and `claude` starts with NO prompt: the person pastes and sends. The `.command` (0700) holds only
+// #567 fixed text and single-quoted paths; both files remove themselves when it runs.
+// #567 - SSH first runs a pre-flight (`ssh -o BatchMode=yes -o ConnectTimeout=5 <host> true`): a timeout is
+// #567 `ssh-timeout`, any other failure `ssh-unreachable`. The command's text is never returned or logged.
+// #567 - Anything but macOS: `unsupported`.
+// #567 No shell string is run by Node: every program goes through the runner with an argument list.
 
 import { randomUUID } from 'node:crypto';
 import { chmod, rm, writeFile } from 'node:fs/promises';
@@ -20,13 +20,13 @@ import { desktopNewSessionUrl } from './new-session.ts';
 import { isUsableCwd, shellQuote } from './session-open.ts';
 import { checkPrompt, HOUR, privateDir, removeOld, systemRunner, type ProcessRunner } from './terminal-launch.ts';
 
-/** What the terminal prints above the prompt; person-read text (pt-BR). Fixed, no quote in it. */
+/** #567 What the terminal prints above the prompt; person-read text (pt-BR). Fixed, no quote in it. */
 export const HANDOFF_HEADER = 'O prompt abaixo já está na área de transferência: cole na sessão do claude e envie.';
 
-/** A plain host name or ssh config alias: no leading dash (an option), no space, quote or shell character. */
+/** #567 A plain host name or ssh config alias: no leading dash (an option), no space, quote or shell character. */
 const SSH_HOST_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,252}$/;
 
-/** The pre-flight waits for ssh's own connect timeout (5 s) and then a margin before it kills the process. */
+/** #567 The pre-flight waits for ssh's own connect timeout (5 s) and then a margin before it kills the process. */
 const PREFLIGHT_TIMEOUT_MS = 10_000;
 
 function checkHost(host: string): string {
@@ -35,15 +35,15 @@ function checkHost(host: string): string {
 }
 
 export interface HandoffCommand {
-  /** The folder `claude` starts in (local); `null` for ssh, where the remote home is the folder. */
+  /** #567 The folder `claude` starts in (local); `null` for ssh, where the remote home is the folder. */
   folder: string | null;
-  /** The file holding the prompt text; the `.command` prints it and removes it. */
+  /** #567 The file holding the prompt text; the `.command` prints it and removes it. */
   promptFile: string;
-  /** Present for ssh: `claude` runs on this host. */
+  /** #567 Present for ssh: `claude` runs on this host. */
   sshHost?: string;
 }
 
-/** The `.command` of a handoff; throws on a folder or a host it cannot carry. The prompt is not in it. */
+/** #567 The `.command` of a handoff; throws on a folder or a host it cannot carry. The prompt is not in it. */
 export function handoffCommandContent({ folder, promptFile, sshHost }: HandoffCommand): string {
   if (folder !== null && !isUsableCwd(folder)) throw new Error('unusable folder');
   const start = sshHost === undefined ? 'exec claude' : `exec ssh -t ${shellQuote(checkHost(sshHost))} 'claude'`;
@@ -60,19 +60,19 @@ export function handoffCommandContent({ folder, promptFile, sshHost }: HandoffCo
 }
 
 export interface DelegationLauncherOptions {
-  /** The folder the handoff files go in (macOS); the núcleo owns it (0700). */
+  /** #567 The folder the handoff files go in (macOS); the núcleo owns it (0700). */
   dir: string;
-  /** Opens a `claude://` address (macOS `open`); without it the Desktop is `unsupported`. */
+  /** #567 Opens a `claude://` address (macOS `open`); without it the Desktop is `unsupported`. */
   openInDesktop?: ((url: string) => Promise<void>) | null;
   platform?: NodeJS.Platform;
   runner?: ProcessRunner;
   now?: () => number;
-  /** A leftover handoff file older than this is removed. Default an hour. */
+  /** #567 A leftover handoff file older than this is removed. Default an hour. */
   maxAgeMs?: number;
 }
 
 export function createDelegationLauncher({ dir, openInDesktop = null, platform = process.platform, runner = systemRunner, now = Date.now, maxAgeMs = HOUR }: DelegationLauncherOptions): Launcher {
-  /** Clipboard, files, then the terminal; the files are removed when any step fails. */
+  /** #567 Clipboard, files, then the terminal; the files are removed when any step fails. */
   async function handoff(request: Pick<HandoffCommand, 'folder' | 'sshHost'>, prompt: string): Promise<void> {
     const id = randomUUID();
     const promptFile = join(dir, `handoff-${id}.prompt`);
