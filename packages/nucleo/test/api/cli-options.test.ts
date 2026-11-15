@@ -13,6 +13,7 @@ describe('API command line options (#173)', () => {
   test('the defaults', () => {
     assert.deepEqual(parseApiOptions([]), {
       port: undefined,
+      windowChannel: undefined,
       installation: undefined,
       dataDir: undefined,
       db: undefined,
@@ -36,9 +37,10 @@ describe('API command line options (#173)', () => {
   });
 
   test('every English name', () => {
-    const fresh = parseApiOptions(['--port', '4799', '--db', '/tmp/x.sqlite', '--projects', '/p', '--scan-interval', '5', '--no-history', '--no-desktop', '--no-github', '--demo', '--scenario', 'p4', '--parent', '123', '--replace', '--no-lock', '--no-telemetry', '--machines', '/m.json', '--demo-github', 'pending', '--demo-project', 'none']);
+    const fresh = parseApiOptions(['--port', '4799', '--db', '/tmp/x.sqlite', '--projects', '/p', '--scan-interval', '5', '--no-history', '--no-desktop', '--no-github', '--demo', '--scenario', 'p4', '--parent', '123', '--replace', '--no-lock', '--no-telemetry', '--machines', '/m.json', '--demo-github', 'pending', '--demo-project', 'none', '--window-channel', '3']);
     assert.deepEqual(fresh, {
       port: '4799',
+      windowChannel: 3,
       installation: undefined,
       dataDir: undefined,
       db: '/tmp/x.sqlite',
@@ -88,6 +90,13 @@ describe('API command line options (#173)', () => {
     assert.match(HELP, /AHRENA_CONSOLE_PROJECT/);
     assert.match(HELP, /AHRENA_CONSOLE_VAULT=keychain\|secret-service\|memory\|none/);
     assert.doesNotMatch(HELP, /with the \`gh\` token/);
+  });
+
+  test('#619: --window-channel is a descriptor number of 3 or more, and never a credential', () => {
+    assert.equal(parseApiOptions(['--window-channel', '3']).windowChannel, 3);
+    assert.equal(parseApiOptions([]).windowChannel, undefined);
+    for (const bad of ['2', 'x', '3.5', '', 'a1'.repeat(32)]) assert.throws(() => parseApiOptions(['--window-channel', bad]), /--window-channel/);
+    assert.match(HELP, /--window-channel/);
   });
 
   test('an unknown option is refused', () => {

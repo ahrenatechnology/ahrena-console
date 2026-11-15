@@ -13,6 +13,7 @@ import { isPidAlive } from './probe.ts';
 import { runningOutput, startOrAdopt, type StartOutput } from './start.ts';
 import { removeLock, type Lock } from './lock.ts';
 import { INSTALLATIONS, consoleHome, parseInstallation, resolveDataDir, resolvePort } from './installation.ts';
+import { parseWindowChannelFd } from '../permissions/window-channel.ts';
 import { listInstances, type Instance } from './registry.ts';
 
 const HELP = `Usage: npm run core -- <command> [options] [-- API options]
@@ -42,6 +43,9 @@ const HELP = `Usage: npm run core -- <command> [options] [-- API options]
   --replace           For start: also replaces the core that is up if it runs an ancestor commit of
                       this version. A core of an older version is always replaced; other code only
                       warns
+  --window-channel <fd>  For start: the descriptor (3 or more) of the channel on which the desktop app hands over its window
+                      credential (#619). Passed on as fd 3 only to a core this call starts; an adopted core never
+                      gets it. The credential is never an argument, an environment variable or a file
   --json              One JSON line on stdout, for the app and the extension
   --help
 
@@ -58,6 +62,7 @@ const { values: o, positionals } = parseArgs({
     help: { type: 'boolean', default: false },
     installation: { type: 'string' },
     'data-dir': { type: 'string' },
+    'window-channel': { type: 'string' },
   },
 });
 const [command, ...apiArgs] = positionals;
@@ -68,6 +73,7 @@ if (o.help || !command) {
 const portOption = o.port;
 const parentOption = o.parent;
 const replace = o.replace;
+const windowChannelFd = parseWindowChannelFd(o['window-channel']);
 
 const log = (m: string) => console.error(`[ahrena-console] ${m}`);
 const installation = parseInstallation(o.installation);
@@ -112,7 +118,7 @@ async function start(): Promise<never> {
   const parent = parentOption === undefined ? null : Number(parentOption);
   if (parent !== null && !(Number.isInteger(parent) && parent > 0 && isPidAlive(parent))) throw new Error('--parent: the pid of a live process');
   const port = resolvePort(portOption);
-  const s = await startOrAdopt({ installation, dir, port, parent, replace, apiArgs, log });
+  const s = await startOrAdopt({ installation, dir, port, parent, replace, apiArgs, windowChannelFd, log });
   if (s.state !== 'up') finish({ ...s, ...where }, `the core did not start: ${s.reason}`, 1);
   const how = s.started ? 'just started' : 'adopted';
   finish(s, `core up at ${s.url} · version ${s.version}${s.commit ? ` (${s.commit})` : ''}${s.pid ? ` · pid ${s.pid}` : ''} (${how})`);
