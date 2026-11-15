@@ -42,6 +42,9 @@ const AUTO_RUN_PATH_PATTERNS: ReadonlyArray<{ test(text: string): boolean }> = [
   new RegExp(`${A}\\.husky${END}`, 'i'),
   /launch(?:agents|daemons)/i,
   new RegExp(`${A}\\.npmrc${END}|${A}\\.yarnrc(?:\\.ya?ml)?${END}`, 'i'),
+  // Build and install scripts run by the next build or install, and the package manager configs that steer them (#618/AC-11).
+  new RegExp(`${A}(?:setup\\.py|pyproject\\.toml|build\\.rs|rakefile|\\.?justfile|taskfile\\.ya?ml|\\.pnpmfile\\.c?js|bunfig\\.toml|pip\\.conf)${END}`, 'i'),
+  new RegExp(`${A}\\.yarn/plugins${END}|${A}\\.cargo/config(?:\\.toml)?${END}`, 'i'),
   new RegExp(`${A}\\.pre-commit-config\\.ya?ml${END}|${A}\\.?lefthook(?:-local)?\\.(?:ya?ml|json|toml)${END}`, 'i'),
   new RegExp(`${A}\\.vscode/tasks\\.json${END}`, 'i'),
   // System start-up files and schedulers: the dotless ones too (#618/AC-11).
@@ -113,12 +116,14 @@ function reachesGitIndirectly(form: string): boolean {
 
 const PACKAGE_MANAGERS = new Set(['npm', 'pnpm', 'yarn', 'bun']);
 const PACKAGE_JSON_EDITS = new Set(['set', 'delete', 'fix']);
+// `npm config set|delete|edit` rewrites `.npmrc` (or `.yarnrc.yml`) without naming it (#618/AC-11).
+const CONFIG_EDITS = new Set(['set', 'delete', 'edit']);
 
-/** `npm pkg set|delete|fix` and `npm set-script`, with any manager and any option between: they rewrite `package.json` without naming it (#618/AC-11). */
+/** `npm pkg set|delete|fix`, `npm set-script` and `npm config set|delete|edit`, with any manager and any option between: they rewrite `package.json` without naming it (#618/AC-11). */
 function mutatesPackageJson(form: string): boolean {
   const tokens = tokensOf(form);
   if (!tokens.some((t) => PACKAGE_MANAGERS.has(baseName(t)))) return false;
-  return tokens.some((t, i) => t === 'set-script' || (t === 'pkg' && PACKAGE_JSON_EDITS.has(tokens[i + 1] ?? '')));
+  return tokens.some((t, i) => t === 'set-script' || (t === 'pkg' && PACKAGE_JSON_EDITS.has(tokens[i + 1] ?? '')) || (t === 'config' && CONFIG_EDITS.has(tokens[i + 1] ?? '')));
 }
 
 /** Schedulers and login items registered by command, and git configuration injected by environment (#618/AC-11). */

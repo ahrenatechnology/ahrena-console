@@ -396,3 +396,28 @@ describe('Bash and other tools writing into auto-run files (#618/AC-11, round 2)
     }
   });
 });
+
+describe('isTerminalOnly: build scripts and package manager config (#618/AC-11)', () => {
+  test('#618/AC-11: writing a build or install script or a package manager config is terminal-only', () => {
+    const paths = [
+      '/w/setup.py', '/w/pyproject.toml', '/w/build.rs', '/w/Rakefile', '/w/justfile', '/w/Justfile', '/w/.justfile',
+      '/w/Taskfile.yml', '/w/Taskfile.yaml', '/w/.pnpmfile.cjs', '/w/.yarn/plugins/x.cjs',
+      '/w/.cargo/config.toml', '/Users/u/.cargo/config', '/w/bunfig.toml', '/Users/u/.config/pip/pip.conf', '/etc/pip.conf',
+    ];
+    for (const p of paths) assert.equal(isTerminalOnly('Write', { file_path: p, content: 'x' }), true, `Write ${p}`);
+  });
+
+  test('#618/AC-11: a package manager config set, delete or edit is terminal-only, any manager', () => {
+    const cases = [
+      'npm config set ignore-scripts false', 'pnpm config set x y', 'yarn config set x y', 'bun config set x y',
+      'npm config delete ignore-scripts', 'npm config edit', 'npm --global config set x y',
+    ];
+    for (const c of cases) assert.equal(bash(c), true, c);
+  });
+
+  test('#618/AC-11: reading the config and ordinary sources stay allowable', () => {
+    assert.equal(bash('npm config get registry'), false);
+    assert.equal(bash('npm config list'), false);
+    for (const p of ['/w/src/setup.ts', '/w/docs/build.md', '/w/src/taskfile.ts']) assert.equal(isTerminalOnly('Write', { file_path: p, content: 'x' }), false, p);
+  });
+});
