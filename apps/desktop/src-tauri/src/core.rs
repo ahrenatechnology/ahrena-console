@@ -21,6 +21,7 @@
 // (~/.ahrena-console/instances/) as it goes.
 
 use std::ffi::OsString;
+use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::Duration;
@@ -29,6 +30,7 @@ use serde::Deserialize;
 
 use crate::http;
 use crate::menu::CoreState;
+use crate::window_channel::{self, Grant};
 
 pub const NO_NODE: &str = "Node não encontrado no PATH do login";
 
@@ -255,29 +257,186 @@ pub fn demo_port() -> Option<u16> {
     env_var("AHRENA_CONSOLE_DEMO_PORT").and_then(|p| p.parse().ok()).filter(|p| *p != 0)
 }
 
+/// The options that hand the owner's `start` the window credential channel (decision 0025, #619).
+pub fn window_channel_args() -> [String; 2] {
+    [window_channel::CHANNEL_OPTION.to_string(), window_channel::CHANNEL_FD.to_string()]
+}
+
+/// Whether a credential is issued for this result of the start: only for a core this app STARTED and that is up (#619).
+fn is_issued_for(outcome: &Outcome) -> bool {
+    outcome.started && outcome.core.is_some() && matches!(outcome.state, CoreState::Up { .. })
+}
+
+/// The credential for this result of the start, written on the app's end of the channel, which the grant then keeps open. For a core
+/// the app did not start, or without a channel, or when the write fails, none exists and the end is closed (dropped) (#619).
+pub fn issue_for(outcome: &Outcome, channel: Option<UnixStream>) -> Option<Grant> {
+    let channel = channel?;
+    if !is_issued_for(outcome) {
+        return None;
+    }
+    window_channel::issue(channel).ok()
+}
+
+/// Runs the owner's `start`, with the channel's far end as its fd 3 when there is one. The command owns the far end, and is dropped
+/// right after the spawn, which closes the app's copy at once (#619).
+fn run_start(mut command: Command, far_end: Option<window_channel::ChildEnd>) -> std::io::Result<std::process::Output> {
+    command.stdout(Stdio::piped());
+    if let Some(end) = far_end {
+        end.pass_as_fd3(&mut command);
+        command.args(window_channel_args());
+    }
+    let child = command.spawn();
+    drop(command);
+    child?.wait_with_output()
+}
+
+/// The arguments after `node`: the owner's `stop` for the app's installation and folder (src/owner/cli.ts `stop`) (#619).
+pub fn stop_args(cli: &Path, data_dir: Option<&Path>) -> Vec<OsString> {
+    let mut args: Vec<OsString> = vec!["--disable-warning=ExperimentalWarning".into(), cli.into(), "stop".into(), "--installation".into(), INSTALLATION.into()];
+    if let Some(dir) = data_dir {
+        args.extend(["--data-dir".into(), dir.into()]);
+    }
+    args.push("--json".into());
+    args
+}
+
+/// Whether the last JSON line of `stop --json` says the core is gone: `state` `stopped` (the owner prints `up` and exits 1 when the
+/// core did not leave) (#619).
+pub fn read_stop(output: &str) -> bool {
+    let line = output.lines().rev().find(|l| l.trim_start().starts_with('{')).unwrap_or("");
+    serde_json::from_str::<StartLine>(line).is_ok_and(|s| s.state == StartState::Stopped)
+}
+
+/// What to do with the window credential after a start reported `outcome` (#619).
+#[derive(Debug, PartialEq)]
+pub enum GrantDecision {
+    /// The turn ended against the same core (same pid and port) the app already holds a grant for: keep the grant and publish it again.
+    Keep,
+    /// The app started this core and issued a credential: the new grant replaces any previous one.
+    Replace,
+    /// The core was not started by the app in this run and the run's restart is unspent: stop it and start it again with a fresh channel.
+    Restart,
+    /// Hold no grant: no core answers, the core has no pid to tell it by, or the run's restart is already spent.
+    None,
+}
+
+/// A loop turn of `follow` is not one core lifetime: `watch_core` also returns on a hiccup while the same core is up, so the grant is
+/// kept across turns while the next start reports the same core (`previous`, by pid and port), and dropped when it is another core or
+/// none answers. Decision 0025 restarts only a core the app did not start in this run: that happens at most once per run
+/// (`restart_spent`, set by the first core the app starts or the first restart it attempts), never in a loop (#619).
+pub fn decide_grant(previous: Option<&Core>, outcome: &Outcome, issued: bool, restart_spent: bool) -> GrantDecision {
+    let Some(core) = &outcome.core else { return GrantDecision::None };
+    if issued {
+        return GrantDecision::Replace;
+    }
+    if outcome.started {
+        return GrantDecision::None;
+    }
+    if previous == Some(core) {
+        return GrantDecision::Keep;
+    }
+    if !restart_spent && core.pid.is_some() {
+        return GrantDecision::Restart;
+    }
+    GrantDecision::None
+}
+
+/// The core the app holds a window credential for, with its grant, and whether the run's one restart is spent (#619).
+#[derive(Default)]
+pub struct Holding {
+    held: Option<(Core, Grant)>,
+    restart_spent: bool,
+}
+
+impl Holding {
+    /// The credential in force for the core of the last `start`, if any.
+    pub fn grant(&self) -> Option<&Grant> {
+        self.held.as_ref().map(|(_, grant)| grant)
+    }
+
+    /// Spends the run's restart when the app started a core (whatever the grant) or is about to restart one (#619).
+    fn note(&mut self, outcome: &Outcome, decision: &GrantDecision) {
+        if outcome.started || *decision == GrantDecision::Restart {
+            self.restart_spent = true;
+        }
+    }
+
+    /// Starts (or adopts) the app's core and settles the grant: kept for the same core, replaced for a core this call started, none
+    /// otherwise. Adopting a core the app did not start in this run restarts it once per run, because an adopted core cannot receive
+    /// a credential (decision 0025): restarting closes open requests as `core_restarted` and rotates the owner token, as 0025
+    /// accepts. A core the app started without getting a grant is never restarted later (#619).
+    pub fn start(&mut self, core: &Path, data_dir: Option<&Path>) -> Outcome {
+        let (mut outcome, mut grant) = start_own_core(core, data_dir);
+        let mut decision = decide_grant(self.held.as_ref().map(|(c, _)| c), &outcome, grant.is_some(), self.restart_spent);
+        self.note(&outcome, &decision);
+        if decision == GrantDecision::Restart {
+            // Spent whatever the result: a failed stop or a second adoption gives up, it never loops.
+            if stop_own_core(core, data_dir) {
+                (outcome, grant) = start_own_core(core, data_dir);
+                decision = decide_grant(None, &outcome, grant.is_some(), true);
+            } else {
+                decision = GrantDecision::None;
+            }
+        }
+        match (decision, outcome.core.clone(), grant) {
+            (GrantDecision::Keep, ..) => {}
+            (GrantDecision::Replace, Some(core), Some(grant)) => self.held = Some((core, grant)),
+            _ => {
+                self.held = None;
+                window_channel::clear();
+            }
+        }
+        outcome
+    }
+}
+
+/// Stops the app's core through the owner's `stop`; true when it is gone (#619).
+fn stop_own_core(core: &Path, data_dir: Option<&Path>) -> bool {
+    let cli = core.join(OWNER_CLI);
+    let Ok(node) = find_node() else { return false };
+    let mut command = Command::new(node);
+    command.args(stop_args(&cli, data_dir)).current_dir(core).stdin(Stdio::null()).stderr(Stdio::null()).stdout(Stdio::piped());
+    for name in FOREIGN_ENV {
+        command.env_remove(name);
+    }
+    command.output().is_ok_and(|out| read_stop(&String::from_utf8_lossy(&out.stdout)))
+}
+
 /// Starts (or, within its own installation, adopts) the app's core. `data_dir`: the app's data
-/// folder, from Tauri (`~/Library/Application Support/dev.ahrena.console`).
-pub fn start_own_core(core: &Path, data_dir: Option<&Path>) -> Outcome {
+/// folder, from Tauri (`~/Library/Application Support/dev.ahrena.console`). The `Grant` is the
+/// window credential, only for a core this call started: the caller keeps it for as long as that
+/// core is the app's, and dropping it revokes the credential (#619).
+pub fn start_own_core(core: &Path, data_dir: Option<&Path>) -> (Outcome, Option<Grant>) {
     let cli = core.join(OWNER_CLI);
     match choose(demo_port(), find_node(), cli.is_file()) {
         Plan::Watch { port } => {
             let demo = Core { port, pid: None };
-            if demo.answers() {
+            let outcome = if demo.answers() {
                 Outcome::up(demo, false)
             } else {
                 Outcome::stopped(format!("Nada responde como núcleo na porta {port} (AHRENA_CONSOLE_DEMO_PORT)"))
-            }
+            };
+            (outcome, None)
         }
-        Plan::Stopped { reason, no_node } => Outcome { state: CoreState::Stopped { reason, no_node }, core: None, started: false },
+        Plan::Stopped { reason, no_node } => (Outcome { state: CoreState::Stopped { reason, no_node }, core: None, started: false }, None),
         Plan::Start { node } => {
             let mut command = Command::new(node);
             command.args(start_args(&cli, data_dir, std::process::id())).current_dir(core).stdin(Stdio::null()).stderr(Stdio::null());
             for name in FOREIGN_ENV {
                 command.env_remove(name);
             }
-            match command.output() {
-                Ok(out) => read_start(&String::from_utf8_lossy(&out.stdout), data_dir, bundled_version(core).as_deref()),
-                Err(e) => Outcome::stopped(format!("node: {e}")),
+            // Without a channel the core still starts, and the capability stays unavailable.
+            let (app_end, far_end) = match window_channel::open() {
+                Ok((app, far)) => (Some(app), Some(far)),
+                Err(_) => (None, None),
+            };
+            match run_start(command, far_end) {
+                Ok(out) => {
+                    let outcome = read_start(&String::from_utf8_lossy(&out.stdout), data_dir, bundled_version(core).as_deref());
+                    let grant = issue_for(&outcome, app_end);
+                    (outcome, grant)
+                }
+                Err(e) => (Outcome::stopped(format!("node: {e}")), None),
             }
         }
     }
@@ -427,6 +586,122 @@ mod tests {
         let core = Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../../packages/nucleo"));
         assert_eq!(bundled_version(core).as_deref(), Some(env!("CARGO_PKG_VERSION")), "the core follows the app (#261)");
         assert_eq!(bundled_version(Path::new("/nonexistent")), None);
+    }
+
+    #[test]
+    fn only_a_core_the_app_started_and_that_is_up_gets_a_credential() {
+        let up = |started| Outcome::up(Core { port: 4720, pid: Some(9) }, started);
+        assert!(is_issued_for(&up(true)));
+        assert!(!is_issued_for(&up(false)), "an adopted core");
+        let stopped = Outcome { state: CoreState::Stopped { reason: "x".into(), no_node: false }, core: None, started: true };
+        assert!(!is_issued_for(&stopped));
+    }
+
+    #[test]
+    fn the_owner_is_told_the_channel_is_fd_3() {
+        assert_eq!(window_channel_args(), ["--window-channel", "3"]);
+    }
+
+    #[test]
+    fn a_started_core_gets_a_credential_on_the_app_end() {
+        use std::io::Read;
+        let (app, child) = crate::window_channel::open().unwrap();
+        let up = Outcome::up(Core { port: 4720, pid: Some(9) }, true);
+        let grant = issue_for(&up, Some(app)).expect("a started core gets one");
+        let mut line = vec![0u8; 65];
+        child.into_stream().read_exact(&mut line).unwrap();
+        assert_eq!(String::from_utf8(line).unwrap(), format!("{}\n", grant.credential().reveal()));
+    }
+
+    #[test]
+    fn an_adopted_core_gets_none_and_the_app_end_is_closed() {
+        use std::io::Read;
+        for outcome in [Outcome::up(Core { port: 4720, pid: Some(9) }, false), Outcome::stopped("x")] {
+            let (app, child) = crate::window_channel::open().unwrap();
+            assert!(issue_for(&outcome, Some(app)).is_none());
+            let mut rest = Vec::new();
+            child.into_stream().read_to_end(&mut rest).unwrap();
+            assert!(rest.is_empty(), "nothing was written and the end is closed (EOF)");
+        }
+        assert!(issue_for(&Outcome::up(Core { port: 1, pid: None }, true), None).is_none(), "no channel, no credential");
+    }
+
+    fn adopted(port: u16, pid: u32) -> Outcome {
+        Outcome::up(Core { port, pid: Some(pid) }, false)
+    }
+
+    #[test]
+    fn a_core_the_app_started_replaces_the_grant() {
+        let started = Outcome::up(Core { port: 4721, pid: Some(10) }, true);
+        assert_eq!(decide_grant(None, &started, true, true), GrantDecision::Replace);
+        let previous = Core { port: 4720, pid: Some(9) };
+        assert_eq!(decide_grant(Some(&previous), &started, true, true), GrantDecision::Replace);
+    }
+
+    #[test]
+    fn a_turn_that_ends_against_the_same_core_keeps_its_grant() {
+        let previous = Core { port: 4720, pid: Some(9) };
+        assert_eq!(decide_grant(Some(&previous), &adopted(4720, 9), false, true), GrantDecision::Keep);
+        assert_eq!(decide_grant(Some(&previous), &adopted(4720, 9), false, false), GrantDecision::Keep);
+    }
+
+    #[test]
+    fn a_different_core_than_the_held_one_never_restarts_once_the_app_started_a_core() {
+        let previous = Core { port: 4720, pid: Some(9) };
+        assert_eq!(decide_grant(Some(&previous), &adopted(4720, 10), false, true), GrantDecision::None, "another pid on the port");
+        assert_eq!(decide_grant(Some(&previous), &adopted(4799, 9), false, true), GrantDecision::None, "the pid on another port");
+    }
+
+    #[test]
+    fn the_first_adoption_of_the_run_is_restarted_and_a_later_one_is_not() {
+        assert_eq!(decide_grant(None, &adopted(4720, 9), false, false), GrantDecision::Restart, "the first adoption at open");
+        assert_eq!(decide_grant(None, &adopted(4720, 11), false, true), GrantDecision::None, "another pid later in the run");
+        assert_eq!(decide_grant(None, &adopted(4720, 9), false, true), GrantDecision::None, "the same pid after the restart was spent");
+    }
+
+    #[test]
+    fn a_started_core_without_a_credential_is_not_restarted_when_the_next_turn_adopts_it() {
+        let started = Outcome::up(Core { port: 4721, pid: Some(10) }, true);
+        assert_eq!(decide_grant(None, &started, false, false), GrantDecision::None, "the credential could not be written");
+        // Holding::start records the start as the run's restart: the next turn adopts the same pid with nothing held.
+        let mut holding = Holding::default();
+        holding.note(&started, &GrantDecision::None);
+        assert_eq!(decide_grant(None, &adopted(4721, 10), false, holding.restart_spent), GrantDecision::None);
+    }
+
+    #[test]
+    fn a_restart_attempt_spends_the_runs_restart() {
+        let mut holding = Holding::default();
+        holding.note(&adopted(4720, 9), &GrantDecision::Restart);
+        assert!(holding.restart_spent);
+    }
+
+    #[test]
+    fn nothing_is_restarted_without_a_pid_or_a_core() {
+        let demo = Outcome::up(Core { port: 4797, pid: None }, false);
+        assert_eq!(decide_grant(None, &demo, false, false), GrantDecision::None);
+        assert_eq!(decide_grant(None, &Outcome::stopped("x"), false, false), GrantDecision::None);
+        let previous = Core { port: 4720, pid: Some(9) };
+        assert_eq!(decide_grant(Some(&previous), &Outcome::stopped("x"), false, true), GrantDecision::None, "no core answers: the grant is dropped");
+    }
+
+    #[test]
+    fn stop_runs_the_owner_for_the_app_installation_and_folder() {
+        let args = stop_args(Path::new("/r/packages/nucleo/src/owner/cli.ts"), Some(Path::new(DIR)));
+        let args: Vec<&str> = args.iter().map(|a| a.to_str().unwrap()).collect();
+        assert_eq!(args, ["--disable-warning=ExperimentalWarning", "/r/packages/nucleo/src/owner/cli.ts", "stop", "--installation", "app", "--data-dir", DIR, "--json"]);
+        let without_dir = stop_args(Path::new("cli.ts"), None);
+        assert!(!without_dir.iter().any(|a| a == "--data-dir"));
+        assert!(!without_dir.iter().any(|a| a == "--window-channel" || a == "--port" || a == "--parent"));
+    }
+
+    #[test]
+    fn the_stop_line_says_whether_the_core_is_gone() {
+        assert!(read_stop(r#"{"state":"stopped","pid":5151}"#));
+        assert!(read_stop("[log]\n{\"state\":\"stopped\"}\n"), "no core up is as good as stopped");
+        assert!(!read_stop(r#"{"state":"up","pid":5151,"reason":"não saiu"}"#));
+        assert!(!read_stop(""));
+        assert!(!read_stop("not json"));
     }
 
     #[test]
