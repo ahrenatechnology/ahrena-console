@@ -448,7 +448,7 @@ describe('#178 criterion 3: a remote without connection (C26)', () => {
   // when machines.json has one (test/api/ui-machine-reconnect.test.ts); without it, nothing changes here.
   test('no button starts, stops or forwards a tunnel: the app only shows', async () => {
     // The port actions (Liberar, Ver a stack, Copiar comando, issue 286) act on a process, never on the tunnel.
-    const allowed = new Set(['1 h', '12 h', 'Tentar agora', 'Tentar de novo', 'Liberar', 'Ver a stack', 'Copiar comando']);
+    const allowed = new Set(['1 h', '12 h', 'Tentar agora', 'Tentar de novo', 'Liberar', 'Ver a stack', 'Copiar comando', 'Diagnóstico', 'Ver diagnóstico']);
     for (const [state, reason] of [['connected', null], ['unreachable', 'port-closed'], ['unreachable', 'no-response'], ['incompatible-version', null], ['unreachable', null]] as const) {
       setRemote(state, reason);
       for (const id of [WS.id, null]) {

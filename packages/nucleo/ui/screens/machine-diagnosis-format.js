@@ -135,19 +135,8 @@ export function readLine(takenAt, now = Date.now()) {
   return Number.isFinite(t.getTime()) ? `lido às ${clock(t)} · ${ago(t.toISOString(), now)}` : '';
 }
 
-const MEMORY_KINDS = ['memory-high', 'swap-high'];
-const TONE_OF_LEVEL = { error: 'bad', warning: 'warn' };
-const SEVERITY = { ok: 0, warn: 1, bad: 2 };
-
-/** The tone of the Memória card from the open alerts: `ok`, `warn` (`tm-warn`) or `bad` (`tm-bad`); the worst wins (Q6). */
-export function memoryTone(alerts) {
-  let tone = 'ok';
-  for (const a of Array.isArray(alerts) ? alerts : []) {
-    const t = MEMORY_KINDS.includes(a?.kind) ? (TONE_OF_LEVEL[a.level] ?? 'ok') : 'ok';
-    if (SEVERITY[t] > SEVERITY[tone]) tone = t;
-  }
-  return tone;
-}
+// `memoryTone` lives in machine-format.js, where the Memória card takes it (a file that imports this one could not be imported back).
+export { memoryTone } from './machine-format.js';
 
 const ROUTE = 'GET /api/diagnosis';
 const ROUTE_FAILED = 'A rota de diagnóstico não respondeu. O alerta continua aberto: só o diagnóstico não veio.';

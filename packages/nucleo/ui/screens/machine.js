@@ -86,6 +86,10 @@ import { machineConnection } from './machine-connection.js';
 import { updateParts, versionNode } from './machine-core.js';
 import { machineUpdate } from './machine-update.js';
 import { machineTerminals } from './machine-terminals.js';
+import { diagnosisPanel, diagnosisPanelId, diagnosisToggle } from './machine-diagnosis.js';
+import { isSaturationKind } from './machine-diagnosis-format.js';
+import { diagnosisReader } from './machine-diagnosis-read.js';
+import { createDiagnosisState, readingContext, saturationAlerts } from './machine-diagnosis-state.js';
 
 const STYLE = '/ui/screens/machine.css';
 const SVG = 'http://www.w3.org/2000/svg';
@@ -116,7 +120,8 @@ function card(title, iconName, note, ...children) {
 function statCard(c) {
   return el(
     'div',
-    { class: `card tm-stat${c.tone === 'bad' ? ' tm-bad' : ''}`, 'data-card': c.id },
+    // Yellow is only the Memória card's (issue 566, Q6): the Disco card keeps the colour of its icon.
+    { class: `card tm-stat${c.tone === 'bad' ? ' tm-bad' : c.id === 'memory' && c.tone === 'warn' ? ' tm-warn' : ''}`, 'data-card': c.id },
     el('span', { class: 'tm-stat-label' }, c.label),
     el('span', { class: `tm-stat-ic tm-c-${c.tone === 'bad' ? 'error' : c.tone === 'warn' || c.tone === 'session' ? 'waiting' : 'accent'}` }, icon(c.icon)),
     el('span', { class: 'tm-stat-v' }, c.value, c.unit ? el('small', {}, c.unit) : null),
@@ -177,22 +182,29 @@ function volumesCard(reading) {
 
 const ALERT_ICON = { error: ['error', 'tm-c-error'], warning: ['alert', 'tm-c-waiting'], info: ['info', 'tm-c-muted'] };
 
-function alertsCard(alerts, now) {
-  const body = alerts.length
-    ? el(
-        'ul',
-        { class: 'tm-alerts' },
-        ...alerts.map((a) =>
-          el(
-            'li',
-            { 'data-alert': a.id },
-            el('span', { class: `tm-alert-ic ${ALERT_ICON[a.level][1]}` }, icon(ALERT_ICON[a.level][0])),
-            el('div', { class: 'tm-alert-text' }, el('span', {}, a.message), a.detail ? el('small', {}, a.detail) : null),
-            a.since ? el('span', { class: 'tm-alert-age' }, ago(a.since, now)) : null,
-          ),
-        ),
-      )
-    : el('p', { class: 'tm-muted' }, 'Nada pede atenção agora.');
+/**
+ * O que pede atenção. With `dg` (issue 566) the four saturation alerts carry the toggle and, when open, the panel under their
+ * row: `dg = { view(alertId), toggle, retry, reread, more, context(alert), remote, label }`; without it the card is as it was.
+ */
+function alertsCard(alerts, now, dg = null) {
+  const row = (a) => {
+    const view = dg && isSaturationKind(a.kind) ? dg.view(a.id) : null;
+    const panel = view?.open
+      ? diagnosisPanel(
+          { state: view.state, alert: a, diagnosis: view.diagnosis, failure: view.failure, remote: dg.remote, label: dg.label, context: dg.context(a), expanded: view.expanded, now },
+          { onRetry: () => dg.retry(a.id), onReread: () => dg.reread(a.id), onMore: (sectionId) => dg.more(a.id, sectionId) },
+        )
+      : null;
+    return el(
+      'li',
+      { 'data-alert': a.id, class: panel ? 'tm-dg-open' : null },
+      el('span', { class: `tm-alert-ic ${ALERT_ICON[a.level][1]}` }, icon(ALERT_ICON[a.level][0])),
+      el('div', { class: 'tm-alert-text' }, el('span', {}, a.message), a.detail ? el('small', {}, a.detail) : null, view ? diagnosisToggle({ open: view.open, controls: diagnosisPanelId(a.id), onToggle: () => dg.toggle(a.id) }) : null),
+      a.since ? el('span', { class: 'tm-alert-age' }, ago(a.since, now)) : null,
+      panel,
+    );
+  };
+  const body = alerts.length ? el('ul', { class: 'tm-alerts' }, ...alerts.map(row)) : el('p', { class: 'tm-muted' }, 'Nada pede atenção agora.');
   const node = card('O que pede atenção', 'bell', String(alerts.length), body);
   node.classList.add('tm-quiet');
   node.setAttribute('data-part', 'alerts');
@@ -539,16 +551,23 @@ function readErrorCard({ part, iconName, title, what, detail = null, retry, labe
   );
 }
 
-/** The band of Processos do Claude (and the Codex ones) beside O que pede atenção, both in a quiet tone. */
-function processesBand(reading, alerts, now) {
+/**
+ * The band of Processos do Claude (and the Codex ones) beside O que pede atenção, both in a quiet tone. While a saturation
+ * alert is open (issue 566, Q2) the alerts card takes the whole line, for the two lists of the panel, and Processos do Claude
+ * goes to the line below. The result is a list with one node: the band.
+ */
+function processesBand(reading, alerts, now, dg = null) {
   const claude = reading.claude ? claudeCard(reading.claude, reading.topProcesses) : null;
   const codex = reading.codex ? claudeCard(reading.codex, null, { provider: 'Codex' }) : null;
   const left = [claude, codex].filter(Boolean);
-  const children = [];
-  if (left.length === 1) children.push(left[0]);
-  else if (left.length > 1) children.push(el('div', { class: 'card-column' }, ...left));
-  children.push(alertsCard(alerts, now));
-  return el('div', { class: `tm-band tm-band-half${left.length ? '' : ' tm-band-single'}`, 'data-band': 'attention' }, ...children);
+  const leftNode = left.length > 1 ? el('div', { class: 'card-column' }, ...left) : (left[0] ?? null);
+  if (dg && saturationAlerts(alerts).length) {
+    const wide = el('div', { class: 'tm-band tm-band-single' }, alertsCard(alerts, now, dg));
+    return [el('div', { class: 'tm-band-stack', 'data-band': 'attention' }, wide, ...(leftNode ? [el('div', { class: 'tm-band tm-band-half' }, leftNode)] : []))];
+  }
+  const children = leftNode ? [leftNode] : [];
+  children.push(alertsCard(alerts, now, dg));
+  return [el('div', { class: `tm-band tm-band-half${left.length ? '' : ' tm-band-single'}`, 'data-band': 'attention' }, ...children)];
 }
 
 /**
@@ -557,7 +576,7 @@ function processesBand(reading, alerts, now) {
  * Sessões de terminal, the ports and `docker`. The profiles above and the bands of the condition are the
  * screen's. Exported for the test.
  */
-export function machineBody(data, { local, filter = 'all', setFilter = () => {}, now = Date.now(), ownPort = null, release = null, terminals = null, connection = null, docker = null, retry = () => {} } = {}) {
+export function machineBody(data, { local, filter = 'all', setFilter = () => {}, now = Date.now(), ownPort = null, release = null, terminals = null, connection = null, docker = null, diagnosis = null, retry = () => {} } = {}) {
   const { reading, series, alerts, machines, machine, sessions, localReading, hours = 1 } = data;
   const parts = [];
   if (!reading) {
@@ -571,7 +590,7 @@ export function machineBody(data, { local, filter = 'all', setFilter = () => {},
     ? volumesCard(reading)
     : readErrorCard({ part: 'volumes', iconName: 'hard-drive', title: 'Volumes', what: 'Não consegui ler os volumes.', detail: 'A leitura chegou vazia; o núcleo tenta de novo a cada 30 s.', retry, label: 'ler os volumes' });
   parts.push(el('div', { class: 'tm-band tm-band-23', 'data-band': 'chart' }, chart(series, reading, { local, hours, now }), volumes));
-  parts.push(processesBand(reading, alerts, now));
+  parts.push(...processesBand(reading, alerts, now, diagnosis));
   if (connection) parts.push(connection);
   const terminalsNode = terminals?.card(reading.terminals, sessions, { now });
   if (terminalsNode) parts.push(terminalsNode);
@@ -686,6 +705,9 @@ export async function mount(area, ctx) {
   // The terminal sessions card (issue 350, C96 to C99): the actions and their confirmations are its own.
   const terminals = machineTerminals(ctx, { id, local, label: () => (local ? 'Esta máquina' : (last?.machine?.label ?? id)), repaint: () => last && paint(last), reread: () => draw() });
 
+  // The diagnosis next to a saturation alert (issue 566): which panels are open and what each holds; its own reads, aborted on leaving.
+  const diagnosis = createDiagnosisState({ read: diagnosisReader(ctx, id), onChange: () => last && paint(last), signal: ctx.signal });
+
   const hourButtons = WINDOWS.map((h) => el('button', { type: 'button', 'aria-pressed': String(h === hours), 'data-hours': h, onClick: () => setHours(h) }, `${h} h`));
   const toggle = el('div', { class: 'tm-seg', role: 'group', 'aria-label': 'Janela do gráfico' }, ...hourButtons);
   const pillSlot = el('span', { class: 'tm-pill-slot' });
@@ -741,7 +763,18 @@ export async function mount(area, ctx) {
     const connection = condition.row ?? null;
     docker.refresh();
     const dockerNode = docker.node();
-    const body = data.reading || local || remoteCondition(machine) === null ? machineBody(shownData, { local, filter, setFilter, now, ownPort, release: condition.faded ? null : release, terminals, connection, docker: dockerNode, retry: () => draw() }) : [];
+    diagnosis.sync(data.alerts);
+    const diagnosisParts = {
+      view: diagnosis.view,
+      toggle: diagnosis.toggle,
+      retry: diagnosis.retry,
+      reread: diagnosis.reread,
+      more: diagnosis.more,
+      context: (alert) => readingContext(data.reading, alert, { local }),
+      remote: !local,
+      label: machine?.label ?? id,
+    };
+    const body = data.reading || local || remoteCondition(machine) === null ? machineBody(shownData, { local, filter, setFilter, now, ownPort, release: condition.faded ? null : release, terminals, connection, docker: dockerNode, diagnosis: diagnosisParts, retry: () => draw() }) : [];
     // Without a body (a remote that is not connected and has no reading) the cards that read by themselves stay.
     const bands = body.length ? body : [connection, dockerNode].filter(Boolean);
     // The last reading fades (offline) or sits behind a question (a dialog); the connection and Docker cards, which act, never do.
@@ -759,6 +792,7 @@ export async function mount(area, ctx) {
   function replaceKeepingFocus(...nodes) {
     const active = globalThis.document?.activeElement;
     let key = null;
+    let alertRow = null;
     if (active && area.contains(active)) {
       if (active.getAttribute?.('data-filter')) key = `[data-filter="${active.getAttribute('data-filter')}"]`;
       else if (active.getAttribute?.('data-hours')) key = `[data-hours="${active.getAttribute('data-hours')}"]`;
@@ -766,11 +800,21 @@ export async function mount(area, ctx) {
       else if (active.getAttribute?.('data-retry-for')) key = `[data-retry-for="${active.getAttribute('data-retry-for')}"]`;
       else if (active.getAttribute?.('data-mc-action')) key = `[data-mc-action="${active.getAttribute('data-mc-action')}"]`;
       else if (active.getAttribute?.('data-up-action')) key = `[data-up-action="${active.getAttribute('data-up-action')}"]`;
+      else if (active.getAttribute?.('data-dg-action')) {
+        // A diagnosis button: the same one of the same alert (and section), which the repaint rebuilt (issue 566).
+        const row = active.closest?.('[data-alert]')?.getAttribute('data-alert');
+        const section = active.closest?.('[data-section]')?.getAttribute('data-section');
+        if (row) {
+          alertRow = `[data-alert="${row}"]`;
+          key = `${alertRow}${section ? ` [data-section="${section}"]` : ''} [data-dg-action="${active.getAttribute('data-dg-action')}"]`;
+        }
+      }
     }
     area.replaceChildren(...nodes);
     if (!key) return;
     // Reconectar becomes Cancelar (and back): the focus goes to the band's first button.
-    const target = area.querySelector(key) ?? (key.startsWith('[data-rc-action') ? area.querySelector('[data-rc-action]') : null);
+    // The button that went away (Tentar de novo becomes the loading panel): the focus goes to the alert's own toggle.
+    const target = area.querySelector(key) ?? (key.startsWith('[data-rc-action') ? area.querySelector('[data-rc-action]') : alertRow ? area.querySelector(`${alertRow} [data-dg-action="toggle"]`) : null);
     target?.focus();
   }
 
@@ -941,6 +985,7 @@ export async function mount(area, ctx) {
   const stop = () => {
     clearTimeout(wait);
     clearTimeout(noteTimer);
+    diagnosis.stop();
     clearInterval(background);
     clearInterval(running);
     clearInterval(ticker);

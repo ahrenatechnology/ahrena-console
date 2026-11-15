@@ -265,6 +265,9 @@
 /* The Memória card in warning (Q6): the same drawing as tm-bad, with the warning colours. Only that card takes it (issue 566). */
 .tm-stat.tm-warn { background: color-mix(in srgb, var(--status-waiting-badge) 80%, var(--surface)); border-color: color-mix(in srgb, var(--status-waiting-dot) 40%, var(--border)); }
 .tm-alerts li.tm-dg-open { flex-wrap: wrap; }
+/* While a saturation alert is open the attention band is two lines: O que pede atenção on the whole line, Processos do Claude below (Q2). */
+.tm-band-stack { display: grid; gap: 16px; min-width: 0; }
+.tm-band-stack > * { min-width: 0; }
 .tm-dg-toggle { display: inline-flex; gap: 4px; align-items: center; margin-top: 3px; padding: 0; border: 0; background: none; font: inherit; font-size: 11.5px; color: var(--accent-text); cursor: pointer; }
 .tm-dg-toggle:focus-visible, .tm-dg-link:focus-visible, .tm-dg-more:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
 .tm-dg-panel { flex: 1 0 calc(100% - 25px); margin: 6px 0 4px 25px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg); padding: 12px 14px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }

@@ -2,7 +2,7 @@
 docs/wireframes/index.html, chapter "Saturou, entendi, resolvi", approved by the design owner on 2026-11-14. It mounts
 the machine screen on the fake DOM with the simulator's telemetry, swaps in the open alerts per test, and answers
 GET /api/diagnosis here, shaped like docs/contracts/diagnosis.md (issue 565). No network, no process runs.
-Every scenario is a `todo` until the layers of issue 566 turn it green; the assertions are the finished behaviour. */
+The scenarios the state layer turns green run as tests; the one left as a `todo` waits for the contract layer (the 501 mapping). */
 import assert from 'node:assert/strict';
 import { after, afterEach, before, describe, test } from 'node:test';
 import { openSqliteStorage, type SqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
@@ -26,7 +26,7 @@ const screen = await import(
   '../../ui/screens/machine.js'
 );
 
-const TODO = { todo: 'issue 566: the diagnosis panel next to a saturation alert is not built yet' };
+const TODO = { todo: 'issue 566: the 501 of GET /api/diagnosis becomes the old-core state in the contract layer' };
 
 const NOW = Date.now();
 const WS = { id: 'ws-example', label: 'Workstation', port: 14720 };
@@ -151,7 +151,7 @@ const memoryCard = (area: ElementoFalso) => area.querySelector('[data-card="memo
 const buttonNamed = (node: ElementoFalso | null, name: string) => (node ? node.querySelectorAll('button').find((b) => texto(b).includes(name)) ?? null : null);
 
 describe('the diagnosis next to a saturation alert (issue 566)', () => {
-  test('#566/AC-2 an open swap-high reads GET /api/diagnosis and shows the processes by memory and by CPU and the swap', TODO, async () => {
+  test('#566/AC-2 an open swap-high reads GET /api/diagnosis and shows the processes by memory and by CPU and the swap', async () => {
     const m = mount({ alerts: [SWAP_HIGH], diagnosis: [ok((u) => memoryDiagnosis('local', u.searchParams.get('alert')!))] });
     await m.ready;
     await until(() => /Processos por memória/.test(texto(panel(m.area))));
@@ -166,7 +166,7 @@ describe('the diagnosis next to a saturation alert (issue 566)', () => {
     assert.ok(panel(m.area)!.closest('[data-part="alerts"]'), 'the panel lives in the card O que pede atenção');
   });
 
-  test('#566/AC-2 a volume-full on the Workstation asks the route for that machine and alert, URL-encoded', TODO, async () => {
+  test('#566/AC-2 a volume-full on the Workstation asks the route for that machine and alert, URL-encoded', async () => {
     const m = mount({ machine: WS.id, alerts: [VOLUME_FULL], diagnosis: [ok((u) => ({ machine: WS.id, alertId: u.searchParams.get('alert'), kind: 'volume-full', takenAt: iso(5000), sections: [{ id: 'largest-folders', status: 'ok', items: [{ path: '/home/ubuntu/.cache', bytes: 31.4 * GB }] }] }))] });
     await m.ready;
     await until(() => m.diagnosisReads().length > 0);
@@ -175,7 +175,7 @@ describe('the diagnosis next to a saturation alert (issue 566)', () => {
     await until(() => /Maiores pastas de \//.test(texto(panel(m.area))));
   });
 
-  test('#566/AC-3 while the diagnosis loads the alert shows "Carregando diagnóstico", then the diagnosis', TODO, async () => {
+  test('#566/AC-3 while the diagnosis loads the alert shows "Carregando diagnóstico", then the diagnosis', async () => {
     const gate = deferred();
     const m = mount({ alerts: [SWAP_HIGH], diagnosis: [() => gate.promise] });
     await m.ready;
@@ -188,7 +188,7 @@ describe('the diagnosis next to a saturation alert (issue 566)', () => {
     assert.notEqual(panel(m.area)!.getAttribute('aria-busy'), 'true');
   });
 
-  test('#566/AC-3 a failed route shows "Não deu para diagnosticar" and "Tentar de novo", which asks again', TODO, async () => {
+  test('#566/AC-3 a failed route shows "Não deu para diagnosticar" and "Tentar de novo", which asks again', async () => {
     const m = mount({ alerts: [SWAP_HIGH], diagnosis: [fails(500, { error: 'O núcleo respondeu 500' }), ok(() => memoryDiagnosis('local', 'swap-high'))] });
     await m.ready;
     await until(() => /Não deu para diagnosticar/.test(texto(panel(m.area))));
@@ -212,7 +212,7 @@ describe('the diagnosis next to a saturation alert (issue 566)', () => {
     assert.match(texto(m.area), /CPU saturada há 12 min/, 'the alert itself stays');
   });
 
-  test('#566/AC-4 the Memória card takes the tone of the memory or swap alert level, the most severe one winning', TODO, async () => {
+  test('#566/AC-4 the Memória card takes the tone of the memory or swap alert level, the most severe one winning', async () => {
     const answers = [ok((u) => memoryDiagnosis('local', u.searchParams.get('alert')!))];
     const warning = mount({ alerts: [MEMORY_HIGH], diagnosis: answers });
     await warning.ready;
@@ -231,7 +231,7 @@ describe('the diagnosis next to a saturation alert (issue 566)', () => {
     assert.ok(!memoryCard(both.area).classList.contains('tm-warn'));
   });
 
-  test('#566/AC-5 without a saturation alert there is no diagnosis panel and no diagnosis read', TODO, async () => {
+  test('#566/AC-5 without a saturation alert there is no diagnosis panel and no diagnosis read', async () => {
     const m = mount({ alerts: [PORT_EXPOSED] });
     await m.ready;
     assert.match(texto(m.area.querySelector('[data-part="alerts"]')), /A porta 5432 está aberta/, 'the screen is mounted, so this is not vacuous');
