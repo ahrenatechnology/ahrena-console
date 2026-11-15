@@ -76,7 +76,14 @@ const normalizePath = (p: string): string => p.replace(/\\/g, '/').replace(/\/\.
 /** A cluster of short options (`-rf`): one dash, then letters only. Two linear scans, where `-[a-z]*r[a-z]*` under anchors backtracks quadratically on one long token (#654). */
 const isShortCluster = (t: string): boolean => /^-[a-zA-Z]+$/.test(t);
 const RECURSIVE_FLAG_LETTER = /[rR]/;
-const isRecursiveFlag = (t: string): boolean => t === '--recursive' || (isShortCluster(t) && RECURSIVE_FLAG_LETTER.test(t));
+/** A long option spelled whole or abbreviated, with or without `=value`: git, tar and cp accept a unique prefix. The prefix needs `minLetters` after the dashes, so `--sou` is `--source` and `--s` is not. Linear: one `indexOf`, one `startsWith` (#654/AC-11). */
+const isLongOption = (t: string, full: string, minLetters = 3): boolean => {
+  if (!t.startsWith('--')) return false;
+  const eq = t.indexOf('=');
+  const name = eq < 0 ? t : t.slice(0, eq);
+  return name.length >= 2 + minLetters && full.startsWith(name);
+};
+const isRecursiveFlag = (t: string): boolean => isLongOption(t, '--recursive') || (isShortCluster(t) && RECURSIVE_FLAG_LETTER.test(t));
 /** Trims leading `"'(` and trailing `"')` with two indexes and one slice: linear, where the regex alternation is quadratic on a run of quotes after a letter (INP-9, #654). */
 const bare = (token: string): string => {
   let start = 0;
@@ -84,13 +91,6 @@ const bare = (token: string): string => {
   while (start < end && (token[start] === '"' || token[start] === "'" || token[start] === '(')) start++;
   while (end > start && (token[end - 1] === '"' || token[end - 1] === "'" || token[end - 1] === ')')) end--;
   return token.slice(start, end);
-};
-/** A long option spelled whole or abbreviated, with or without `=value`: git, tar and cp accept a unique prefix. The prefix needs `minLetters` after the dashes, so `--sou` is `--source` and `--s` is not. Linear: one `indexOf`, one `startsWith` (#654/AC-11). */
-const isLongOption = (t: string, full: string, minLetters = 3): boolean => {
-  if (!t.startsWith('--')) return false;
-  const eq = t.indexOf('=');
-  const name = eq < 0 ? t : t.slice(0, eq);
-  return name.length >= 2 + minLetters && full.startsWith(name);
 };
 const SHELLS = new Set(['sh', 'bash', 'zsh', 'dash', 'ksh', 'fish']);
 const baseName = (token: string): string => token.slice(token.lastIndexOf('/') + 1);

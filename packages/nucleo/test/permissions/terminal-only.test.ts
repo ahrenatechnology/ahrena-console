@@ -22,6 +22,11 @@ describe('isTerminalOnly (#618/AC-6)', () => {
     for (const c of ['rm -rf build', 'rm -r build', 'rm -fr build', 'rm -f -r build', 'rm --recursive build', 'cd x && rm -Rf y']) assert.equal(bash(c), true, c);
   });
 
+  test('#654: recursive rm is terminal-only with an abbreviated --recursive, and a two-letter prefix is not enough', () => {
+    for (const c of ['rm --recur dir', 'rm --rec -f dir']) assert.equal(bash(c), true, c);
+    assert.equal(bash('rm --re dir'), false);
+  });
+
   test('#618/AC-6: forced pushes, hard resets and forced cleans are terminal-only', () => {
     for (const c of ['git push --force', 'git push -f origin main', 'git push --force-with-lease', 'git push origin +main', 'git reset --hard HEAD~1', 'git clean -fd', 'git clean -xdf', 'git clean --force']) {
       assert.equal(bash(c), true, c);
