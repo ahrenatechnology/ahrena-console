@@ -227,17 +227,17 @@ test('#700/AC-3: success is never green or rose', () => {
 })
 
 test('#700/AC-1: tokens.json keeps green only as history, marked as not to be used', () => {
-  assert.match(tokens.green._nota, /Não usar/)
+  assert.match(tokens.green._note, /Não usar/)
 })
 
-// The files allowed to name the retired green: the history, the core's re-read of a stored green and its test, and this guard.
+// #700: the files allowed to name the retired green: the history, the core's re-read of a stored green and its test, and this guard.
 const GREEN_ALLOWED = new Set([
   'docs/brand/tokens.json',
   'packages/nucleo/src/profiles/colors.ts',
   'packages/nucleo/test/profiles/profiles.test.ts',
   'test/tokens.test.mjs',
 ])
-// The two retired hex values are built from pieces so this guard does not match its own search.
+// #700 AC-1: the retired hex values are built from pieces so the AC-1 grep does not match this file.
 const RETIRED_GREEN_HEX = [['1baf', '7a'], ['0d73', '50']].map((parts) => parts.join('')).join('|')
 const GREEN_REFERENCE = new RegExp(`--green-\\d|paleta\\.green|BADGE\\.green|an-account-green|green-(?:5|7)00|${RETIRED_GREEN_HEX}`, 'i')
 
@@ -248,7 +248,7 @@ test('#700/AC-2: no generated or hand-written consumer references a green token'
   for (const file of files) {
     if (file.startsWith('spikes/') || GREEN_ALLOWED.has(file) || /\.(png|jpe?g|gif|ico|icns|woff2?|ttf|lock|svg)$/i.test(file)) continue
     let text
-    try { text = readFileSync(new URL(file, root), "utf8") } catch { continue } // a tracked file that is not readable text (a deleted or binary file) holds no reference
+    try { text = readFileSync(new URL(file, root), "utf8") } catch { continue } // #700: a tracked file that is not readable text (a deleted or binary file) holds no reference
     text.split('\n').forEach((line, i) => { if (GREEN_REFERENCE.test(line)) found.push(`${file}:${i + 1}`) })
   }
   assert.deepEqual(found, [], 'a consumer still references the retired green')

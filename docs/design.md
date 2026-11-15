@@ -23,7 +23,7 @@ A paleta parte da do The Forward Deployed Engineer ([brand/tokens.json](brand/to
 | --- | --- | --- | --- |
 | Destaque, ações, barras | laranja | `#f47720` | The Forward Deployed Engineer (fica) |
 | Institucional, réguas, seleção | rosa | `#df285d` | Rosa da marca; substitui o roxo `#552973` desde 2026-10-18 |
-| Sucesso (CI, PR aprovado, sessão e subagente concluídos, "Online") | cinza 100 no escuro, cinza 500 no claro, sempre com `✓` | `#d7d7d9` / `#3a3a44` | Decisão do dono do produto em 2026-11-15 (issue 698): o verde deixa de ser cor de sucesso e fica no `tokens.json` só como histórico. Contraste do texto: 12,4:1 sobre o fundo, 11,5:1 sobre o cartão e 10,2:1 sobre o realce no escuro; 10,2:1, 11,1:1 e 9,8:1 no claro. Mais forte que o cinza da Abandonada nos dois temas |
+| Sucesso (CI, PR aprovado, sessão e subagente concluídos, "Online") | cinza 100 no escuro, cinza 500 no claro, sempre com `✓` | `#d7d7d9` / `#3a3a44` | Decisão do dono do produto em 2026-11-15 (issue 698): o verde deixa de ser cor de sucesso e fica no `tokens.json` só como histórico. Contraste do texto: 12,4:1 sobre o fundo, 11,5:1 sobre o cartão e 10,2:1 sobre o realce no escuro; 10,2:1, 11,0:1 e 9,8:1 no claro. Mais forte que o cinza da Abandonada nos dois temas |
 | Pendente (CI e sessão esperando) | amarelo | `#ffc30a` | Cor do CI |
 | Erro, falha (CI e sessão com erro) | vermelho | `#e34948` | Cor do CI, reaproveitada (ver abaixo) |
 | Fundo (tema escuro) | cinza 900 | `#17171b` | The Forward Deployed Engineer |

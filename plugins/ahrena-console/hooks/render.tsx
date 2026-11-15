@@ -1178,7 +1178,7 @@ function subagentsFooter(outside: PanelSubagent[]): string {
 
 /**
  * O card Subagentes (pnSubs do P1): "N ativos" à direita do cabeçalho, a barra por estado (ativo
- * laranja, concluído cinza com ✓, erro vermelho) e até 3 linhas "glifo tipo · descrição … tempo", os
+ * laranja, concluído cinza com ✓ (issue 700), erro vermelho) e até 3 linhas "glifo tipo · descrição … tempo", os
  * concluídos também. O pé abre o grafo da sessão (P11). Nunca só o cabeçalho.
  */
 function subagentsCard(c: DrawContext, s: Panel['subagents']) {
