@@ -17,7 +17,7 @@ const readJson = (name) => {
   return existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) : null
 }
 
-// Files whose text only imitates a transcript: the demo mentions `create table` inside fake tool output,
+// issue 657: files whose text only imitates a transcript: the demo mentions `create table` inside fake tool output,
 // which no database ever runs, so the scan skips them.
 const FAKE_SQL_TEXT = ['packages/nucleo/src/simulator/detail.ts']
 

@@ -59,7 +59,7 @@
       },
       "dev-console": {
         "layer": "application",
-        "evidence": "service, reader, sessions and contexts compose the work source and the github sources; 1 of 7 files calls the network"
+        "evidence": "service, reader, sessions and contexts compose the work source and the github sources; 1 of 7 files (contexts.ts) reads the disk with node:fs/promises"
       },
       "diagnosis": {
         "layer": "application",

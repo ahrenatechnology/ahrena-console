@@ -31,11 +31,11 @@ A contagem é por expressão regular (`grep -rE 'throw new'` e `grep -rE 'extend
 | --- | --- |
 | `send(res, status, { error … })` | 417 corpos, em 47 arquivos |
 | Desses, com `reason` além de `error` | 64 |
-| Só com `reason` | 5 |
+| Corpos 200 que levam só `reason` (estado, não erro) | 6 |
 | `error` com texto pt-BR para a pessoa | maioria (ex.: `messaging.ts`) |
 | `error` com código em inglês (`'not-found'`, `'conflict'`) | pelo menos 56 dos 335 literais simples (ex.: `work-issue-write.ts`) |
 | Corpo com `stack` | 0 |
-| Corpo com `err.message` / `e.message` / `error.message` | 11 corpos literais `{ error: <x>.message … }`, todos de classes de erro do próprio projeto (texto fixo nosso, não de fornecedor), mais 2 montados no mapa de `api/project.ts` (linhas 177 e 178). Uma exceção à regra: `api/analytics-route.ts:562` põe a mensagem de qualquer erro capturado de `sources.projects()` em `projectsError`, e isso pode ser texto de upstream; fica para a issue de migração (ERR-3) |
+| Corpo com `err.message` / `e.message` / `error.message` | 11 corpos literais `{ error: <x>.message … }`, todos de classes de erro do próprio projeto (texto fixo nosso, não de fornecedor), mais 2 montados no mapa de `api/project.ts` (linhas 177 e 178), também de classes nossas. Duas exceções à regra, com texto que pode ser de upstream: `api/analytics-route.ts:562` põe a mensagem de qualquer erro capturado de `sources.projects()` em `projectsError`, e `api/project.ts:179-180` monta `motivo` a partir de qualquer erro capturado (GitHub ou `gh`) e o envia no corpo do 502; ficam para a issue de migração (ERR-3) |
 | Falha inesperada | `api/server.ts` responde 500 com `{ error: 'erro interno' }` e registra só uma frase fixa, sem URL, cabeçalho nem texto da exceção |
 
 ## Decisão
@@ -77,7 +77,7 @@ Formato, derivado do que o código já faz:
 
 ## Catraca
 
-Vale para **código novo**. O legado não bloqueia: os formatos `param`, `error`, `why`, `refusal` e as exceções de falha esperada que existem hoje continuam como estão, e os 11 corpos que enviam `err.message`, `e.message` ou `error.message` de erro do próprio projeto também (o texto é nosso e fixo). **Migrar o código antigo para o `Result` é uma issue à parte**, depois do check, como diz o #657. As tabelas `upsert` sem histórico estão marcadas `legacy: true` no registro de modos pelo mesmo motivo.
+Vale para **código novo**. O legado não bloqueia: os formatos `param`, `error`, `why`, `refusal` e as exceções de falha esperada que existem hoje continuam como estão, e os 11 corpos que enviam `err.message`, `e.message` ou `error.message` de erro do próprio projeto também (o texto é nosso e fixo). As duas exceções nomeadas acima (`api/analytics-route.ts:562` e `api/project.ts:179-180`) também continuam como estão, mas o texto delas não é nosso nem fixo: é de upstream, e a issue de migração as corrige. **Migrar o código antigo para o `Result` é uma issue à parte**, depois do check, como diz o #657. As tabelas `upsert` sem histórico estão marcadas `legacy: true` no registro de modos pelo mesmo motivo.
 
 ## Consequências
 
