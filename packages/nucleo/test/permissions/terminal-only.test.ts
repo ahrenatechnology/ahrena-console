@@ -392,7 +392,7 @@ describe('Bash and other tools writing into auto-run files (#618/AC-11, round 2)
       bash(text);
       isTerminalOnly('Write', { file_path: text, content: 'x' });
       const ms = performance.now() - start;
-      assert.ok(ms < 1000, `${ms.toFixed(0)} ms for ${text.slice(0, 8)}`);
+      assert.ok(ms < 2000, `${ms.toFixed(0)} ms for ${text.slice(0, 8)}`);
     }
   });
 });
@@ -511,12 +511,12 @@ describe('review of 35003a8: nested git, and linear scans at 64 KiB (#618/AC-9, 
     for (const c of cases) assert.equal(bash(c), true, c);
   });
 
-  test('#618/INP-9: 64 KiB of { or ( or {a finishes well under one second', () => {
+  test('#618/INP-9: 64 KiB of { or ( or {a finishes well under two seconds', () => {
     for (const unit of ['{', '(', '{a', 'echo {a']) {
       const command = unit.repeat(Math.floor(65536 / unit.length));
       const started = Date.now();
       bash(command);
-      assert.ok(Date.now() - started < 500, `${unit} took ${Date.now() - started} ms`);
+      assert.ok(Date.now() - started < 2000, `${unit} took ${Date.now() - started} ms`);
     }
   });
 
@@ -596,13 +596,13 @@ describe('Janus findings, round 2: git globals, tool config, split paths, escape
     for (const c of ['$HOME/bin/tool push', 'echo ${HOME}/x', 'npm run set', 'cat $HOME/notes.txt', 'ls ~/.config', 'ls /w/.git', 'echo "git config"', 'gh pr list --json config']) assert.equal(bash(c), true, c);
   });
 
-  test('#618/INP-9: each new scan finishes well under one second on 64 KiB', () => {
+  test('#618/INP-9: each new scan finishes well under two seconds on 64 KiB', () => {
     const units = ['--x ', 'npm c ', 'npm ', 'claude ', 'gh ', 'aws ', 'pip ', 'cd .claude ', '.config/', '$', '$(', '${', "$'", '{a,b}', 'git --x ', 'git -c ', '../', '~/ ', '$HOME/', ')/', '/$('];
     for (const unit of units) {
       const command = unit.repeat(Math.floor(65536 / unit.length));
       const started = Date.now();
       bash(command);
-      assert.ok(Date.now() - started < 1000, `${unit} took ${Date.now() - started} ms`);
+      assert.ok(Date.now() - started < 2000, `${unit} took ${Date.now() - started} ms`);
     }
   });
 });

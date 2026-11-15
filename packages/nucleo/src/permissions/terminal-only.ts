@@ -189,7 +189,7 @@ const GIT_SUBCOMMANDS_WITH_PLAIN_C = new Set(['commit', 'log', 'diff', 'show']);
 
 /** A git option that injects configuration or a template, on any token after a `git` word of the segment, not only before the subcommand: `git clone -c k=v`, `git init --template=d`, `-ck=v`. Case matters (`-C` is not `-c`), so it reads the raw spelling. After the subcommand, `-c` is let through only for the subcommands that read it otherwise; any other subcommand, an alias included, over-matches (#618/AC-9, decision 0025 amendment). */
 function gitSegmentInjectsConfig(tokens: string[]): boolean {
-  // Every `git` word restarts the scan, so a second git nested in the segment (`$(git -c k=v status)`) is read with its own subcommand; one pass, each token read once.
+  // Every `git` word restarts the scan, so a second git nested in the segment (`$(git -c k=v status)`) is read with its own subcommand; one pass, each token read once (#618/AC-9).
   let active = false;
   let subcommand: string | undefined;
   for (let i = 0; i < tokens.length; i++) {
