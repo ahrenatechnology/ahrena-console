@@ -16,6 +16,21 @@ const PROTECTED_PATH_PATTERNS: RegExp[] = [
   /(?:^|[^A-Za-z0-9_.-])\.ssh(?:\/|$|[^A-Za-z0-9_-])/i,
 ];
 
+/** Files that run by themselves later (a git hook, a build or install script, a CI workflow, a shell start-up file, a login agent): a Write, Edit or NotebookEdit into one is terminal-only (#618/AC-11). Matched on the path, case-insensitive, anywhere in the tree: it over-matches by design (decision 0025 amendment, item 7). */
+const AUTO_RUN_PATH_PATTERNS: RegExp[] = [
+  /(?:^|\/)\.git\/hooks(?:\/|$)/i,
+  /(?:^|\/)package\.json$/i,
+  /(?:^|\/)(?:gnumakefile|makefile)$|\.mk$/i,
+  /(?:^|\/)\.github\/workflows(?:\/|$)/i,
+  /(?:^|\/)\.(?:zshrc|bashrc|bash_profile|bash_login|bash_logout|profile|zprofile|zshenv|zlogin|zlogout)[^/]*$/i,
+  /(?:^|\/)\.config\/fish(?:\/|$)/i,
+  /(?:^|\/)\.husky(?:\/|$)/i,
+  /launch(?:agents|daemons)/i,
+];
+/** The tools that write a file, and the input fields that name its path. */
+const FILE_WRITING_TOOLS: ReadonlySet<string> = new Set(['Write', 'Edit', 'NotebookEdit']);
+const PATH_FIELDS = ['file_path', 'notebook_path', 'path'] as const;
+
 /** What the agent could read the owner token from, or swap the hook through: cited anywhere in a command or a path (#618/AC-6). */
 const CITED_PATTERNS: RegExp[] = [/\.ahrena-console/i, /dev\.ahrena\.console/i, /\.claude\/plugins\b/i];
 
@@ -69,7 +84,8 @@ function reachesGitIndirectly(form: string): boolean {
 }
 
 function commandIsTerminalOnly(rawCommand: string): boolean {
-  const forms = spellings(rawCommand);
+  // Command names are compared whatever the case, as the macOS disk is: `Git push`, `RM -rf` (#618/AC-11).
+  const forms = spellings(rawCommand.toLowerCase());
   if (forms.some((form) => COMMAND_PATTERNS.some((re) => re.test(form)))) return true;
   if (forms.some(downloadsAndRuns) || forms.some(reachesGitIndirectly)) return true;
   return forms.some((form) => form.split(/[|;&\n]+/).some(hasRiskyVerb));
@@ -100,5 +116,14 @@ export function isTerminalOnly(toolName: string, toolInput: unknown): boolean {
   if (!collectStrings(toolInput, strings)) return true;
   const cites = (form: string) => CITED_PATTERNS.some((re) => re.test(form)) || PROTECTED_PATH_PATTERNS.some((re) => re.test(form));
   if (strings.some((text) => spellings(text).some(cites))) return true;
+  if (FILE_WRITING_TOOLS.has(toolName) && writesAutoRunFile(toolInput as Record<string, unknown>)) return true;
   return typeof command === 'string' && commandIsTerminalOnly(command);
+}
+
+/** A path field of a file-writing call that names a file that runs by itself (#618/AC-11). Only the path: a body that names `package.json` is not a write to it. */
+function writesAutoRunFile(input: Record<string, unknown>): boolean {
+  return PATH_FIELDS.some((field) => {
+    const path = input[field];
+    return typeof path === 'string' && spellings(path).some((form) => AUTO_RUN_PATH_PATTERNS.some((re) => re.test(form)));
+  });
 }

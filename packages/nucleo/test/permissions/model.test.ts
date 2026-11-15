@@ -355,6 +355,15 @@ describe('a call that runs at approval is terminalOnly when a mask acted or the 
     assert.equal(edit.terminalOnly, false);
   });
 
+  test('#618/AC-11: a WebFetch whose URL was cut in the summary is terminalOnly', async () => {
+    const cut = await open({ toolName: 'WebFetch', toolInput: { url: `https://example.dev/?q=${'x'.repeat(2100)}&next=https://evil.example`, prompt: 'p' } });
+    assert.equal(cut.summaryTruncated, true);
+    assert.equal(cut.terminalOnly, true);
+    const whole = await open({ toolName: 'WebFetch', toolInput: { url: 'https://example.dev/docs', prompt: 'p' } });
+    assert.equal(whole.summaryTruncated, false);
+    assert.equal(whole.terminalOnly, false);
+  });
+
   test('#618/AC-10: a tool that runs nothing and is neither masked nor cut stays as it was', async () => {
     assert.equal((await open({ toolName: 'mcp__db__query', toolInput: { sql: 'select 1' } })).terminalOnly, false);
   });

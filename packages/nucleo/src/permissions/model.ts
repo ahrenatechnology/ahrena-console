@@ -104,7 +104,8 @@ export class PermissionRequest {
       permissionMode: p.permissionMode,
       // A call that runs something at approval (every tool outside the non-executing set) is terminalOnly when a mask acted (#618/AC-10)
       // on its summary or the summary was cut: a mask or a cut must never hide code that runs (#618/AC-10).
-      terminalOnly: isTerminalOnly(p.toolName, p.toolInput) || ((masked || truncated) && !NON_EXECUTING_TOOLS.has(p.toolName)),
+      // A WebFetch whose URL was cut: the person did not read where it goes (#618/AC-11).
+      terminalOnly: isTerminalOnly(p.toolName, p.toolInput) || ((masked || truncated) && !NON_EXECUTING_TOOLS.has(p.toolName)) || (truncated && p.toolName === 'WebFetch'),
       createdAt: p.now,
       expiresAt: p.now + EXPIRY_MS,
     });
