@@ -427,3 +427,80 @@ describe('isTerminalOnly: build scripts and package manager config (#618/AC-11)'
     for (const p of ['/w/src/setup.ts', '/w/docs/build.md', '/w/src/taskfile.ts']) assert.equal(isTerminalOnly('Write', { file_path: p, content: 'x' }), false, p);
   });
 });
+
+describe('Janus findings, round 1: git options anywhere, config commands, more auto-run files, globs (#618/AC-9, AC-11)', () => {
+  test('#618/AC-9: git config injection is terminal-only anywhere in the git segment, not only before the subcommand', () => {
+    const cases = [
+      'git clone -c core.hooksPath=/tmp/h https://example.dev/r.git',
+      'git clone --config core.fsmonitor=x https://example.dev/r.git',
+      'git clone --config=core.fsmonitor=x https://example.dev/r.git',
+      'git clone --config-env=core.x=VAR https://example.dev/r.git',
+      'git init --template=/tmp/t',
+      'git init --template /tmp/t',
+      'git clone --template=/tmp/t https://example.dev/r.git',
+      'git submodule add -c x=y https://example.dev/r.git',
+      'git clone -ccore.hooksPath=/tmp/h https://example.dev/r.git',
+      'cd x && git clone -c a=b u',
+    ];
+    for (const c of cases) assert.equal(bash(c), true, c);
+  });
+
+  test('#618/AC-9: git calls without those options stay allowable, and another command after git is its own segment', () => {
+    for (const c of ['git status', 'git commit -C HEAD', 'git clone https://example.dev/r.git', 'git log --oneline; ls -c', 'git status && ls -c']) assert.equal(bash(c), false, c);
+  });
+
+  test('#618/AC-11: tool configuration commands are terminal-only', () => {
+    const cases = ['npm set ignore-scripts false', 'pnpm set x y', 'yarn set x y', 'bun set x y', 'npm --global set x y', 'claude mcp add x', 'claude config set x y', 'gh alias set x y', 'cd w && claude mcp list'];
+    for (const c of cases) assert.equal(bash(c), true, c);
+  });
+
+  test('#618/AC-11: look-alikes of the configuration commands stay allowable', () => {
+    for (const c of ['npm run set', 'gh pr list', 'npm test', 'claude --version']) assert.equal(bash(c), false, c);
+  });
+
+  const AUTO_RUN_FILES: Array<[string, string]> = [
+    ['~/.claude.json', '/Users/u/.claude.json'],
+    ['.claude/rules', '/w/.claude/rules/x.md'],
+    ['.claude/output-styles', '/w/.claude/output-styles/x.md'],
+    ['.cshrc', '/Users/u/.cshrc'],
+    ['.tcshrc', '/Users/u/.tcshrc'],
+    ['.kshrc', '/Users/u/.kshrc'],
+    ['.mkshrc', '/Users/u/.mkshrc'],
+    ['.login', '/Users/u/.login'],
+    ['.logout', '/Users/u/.logout'],
+    ['.aws/config', '/Users/u/.aws/config'],
+    ['.kube/config', '/Users/u/.kube/config'],
+    ['.docker/config.json', '/Users/u/.docker/config.json'],
+    ['.config/gh', '/Users/u/.config/gh/hosts.yml'],
+    ['.tmux.conf', '/Users/u/.tmux.conf'],
+  ];
+  for (const [name, path] of AUTO_RUN_FILES) {
+    test(`#618/AC-11: ${name} is terminal-only for a file write and for a Bash mention`, () => {
+      assert.equal(isTerminalOnly('Write', { file_path: path, content: 'x' }), true, `Write ${path}`);
+      assert.equal(isTerminalOnly('Edit', { file_path: path, old_string: 'a', new_string: 'b' }), true, `Edit ${path}`);
+      assert.equal(isTerminalOnly('NotebookEdit', { notebook_path: path }), true, `NotebookEdit ${path}`);
+      assert.equal(bash(`echo x >> ${path}`), true, `Bash ${path}`);
+      assert.equal(bash(`cp /tmp/p ${name.startsWith('~') ? name : `~/${name}`}`), true, `Bash cp ${name}`);
+    });
+  }
+
+  test('#618/AC-11: look-alikes of the new auto-run files stay allowable', () => {
+    for (const p of ['/w/src/login.ts', '/w/docs/rules.md', '/w/src/claude.json.ts', '/w/docs/output-styles.md', '/w/src/ghost.ts']) assert.equal(isTerminalOnly('Write', { file_path: p, content: 'x' }), false, p);
+  });
+
+  test('#618/AC-11: an unquoted glob or brace in a path starting with ~, . or / is terminal-only in Bash', () => {
+    const cases = [
+      'echo x >> ~/.zsh?c', 'cp p .git/hook?/pre-commit', 'cp p .git/hoo*/pre-commit', 'echo x >> ~/.z{sh,}rc', 'echo x>>~/.z{sh,}rc',
+      'cp p ./.git/hooks/pre-comm[i]t', 'cat /etc/z*', 'cp p ~/".zsh"?c', 'cp p ~/.{zshrc,bashrc}', 'cp p ./a/*.sh', 'dd of=~/.zsh?c', 'cp p "~"/.zsh?c', 'echo x | tee ~/.z*rc',
+    ];
+    for (const c of cases) assert.equal(bash(c), true, c);
+  });
+
+  test('#618/AC-11: quoted globs, relative globs and ordinary calls stay allowable', () => {
+    for (const c of ['ls src/*.ts', 'git status', 'echo "~/.zsh?c"', "echo '/tmp/*'", 'ls \\./a\\*', 'grep -rn "a?" src', 'curl https://example.dev/a?b=c', 'echo ${HOME}/x', 'ls src/{a,b}.ts']) assert.equal(bash(c), false, c);
+  });
+
+  test('#618/AC-11: a glob outside Bash is no concern of this check', () => {
+    assert.equal(isTerminalOnly('Write', { file_path: '/w/src/notes-*.md', content: 'x' }), false);
+  });
+});
