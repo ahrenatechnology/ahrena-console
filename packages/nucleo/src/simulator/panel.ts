@@ -35,7 +35,7 @@ function syntheticAccount(n: string, label: string, color: string, organizationT
   const organizationUuid = `00000000-0000-4000-8000-00000000${n}b1`;
   return { accountUuid, organizationUuid, id: claudeAccountId(accountUuid, organizationUuid), label, color, organizationType, source };
 }
-// Brand colors (packages/marca): rose and gray, which do not get mixed up with the statuses.
+// Brand colors (packages/marca): rose and gray, which do not get mixed up with the statuses (#699).
 export const PANEL_ACCOUNTS = {
   team: syntheticAccount('0e', 'equipe', paleta.rose['500'], 'claude_team', 'env'),
   client: syntheticAccount('0c', 'cliente-exemplo', paleta.gray['200'], 'claude_enterprise', 'config'),

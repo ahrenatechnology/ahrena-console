@@ -139,7 +139,7 @@ export class Accounts {
     return resolveStoredColor(this.storedColor(id), othersOf(id));
   }
 
-  /** The color an account stores: the label file's, then the port's. */
+  /** The color an account stores: the label file's, then the port's (#699). */
   private storedColor(id: string): string | null {
     const a = this.fromPort.get(id);
     return this.configured.get(id)?.color ?? (a?.color && HEX.test(a.color) ? a.color : null);
