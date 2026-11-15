@@ -49,6 +49,11 @@ export interface StartOptions {
   replace?: boolean;
   /** Extra options for the API (`src/api/cli.ts`). */
   apiArgs?: string[];
+  /**
+   * The descriptor of the window credential channel (#619): handed to a core this call STARTS as its fd 3, never to an adopted one. This
+   * call closes its own copy as soon as the core is spawned or an adoption is decided. The credential never travels as an argument.
+   */
+  windowChannelFd?: number;
   log?: (m: string) => void;
   timeoutMs?: number;
 }
@@ -65,7 +70,54 @@ export const runningOutput = (t: Lock, extra: Partial<StartOutput> = {}): StartO
   ...extra,
 });
 
+/** The fd the spawned core sees the window channel on, and the option that says so. */
+const CHILD_WINDOW_CHANNEL_FD = 3;
+
+/** The arguments and stdio of the core's process. The window channel is the fourth stdio entry, only when there is one. */
+export function coreSpawn(
+  o: { api: string; port: number; installation: Installation; dir: string; parent: number | null; apiArgs?: string[]; windowChannelFd?: number },
+  out: number,
+): { args: string[]; stdio: Array<'ignore' | number> } {
+  const extra = o.apiArgs ?? [];
+  if (extra.some((a) => a === '--window-channel' || a.startsWith('--window-channel='))) throw new Error('--window-channel is not an API option of start');
+  const channel = o.windowChannelFd;
+  return {
+    args: [
+      '--disable-warning=ExperimentalWarning',
+      o.api,
+      '--port',
+      String(o.port),
+      '--installation',
+      o.installation,
+      '--data-dir',
+      o.dir,
+      ...(o.parent !== null ? ['--parent', String(o.parent)] : []),
+      ...(channel !== undefined ? ['--window-channel', String(CHILD_WINDOW_CHANNEL_FD)] : []),
+      ...extra,
+    ],
+    stdio: channel !== undefined ? ['ignore', out, out, channel] : ['ignore', out, out],
+  };
+}
+
 export async function startOrAdopt(o: StartOptions): Promise<StartOutput> {
+  let channelOpen = o.windowChannelFd !== undefined;
+  const closeChannel = (): void => {
+    if (!channelOpen || o.windowChannelFd === undefined) return;
+    channelOpen = false;
+    try {
+      closeSync(o.windowChannelFd);
+    } catch {
+      // Already closed: nothing to release.
+    }
+  };
+  try {
+    return await startOrAdoptInner(o, closeChannel);
+  } finally {
+    closeChannel();
+  }
+}
+
+async function startOrAdoptInner(o: StartOptions, closeChannel: () => void): Promise<StartOutput> {
   const installation = o.installation ?? DEFAULT_INSTALLATION;
   const dir = o.dir ?? resolveDataDir({ installation });
   const parent = o.parent ?? null;
@@ -86,6 +138,7 @@ export async function startOrAdopt(o: StartOptions): Promise<StartOutput> {
     throw e;
   }
   if (plan.action === 'adopt') {
+    closeChannel();
     return adopted(runningOutput(plan.lock, { started: false, commit: plan.view.commit, ...(plan.warning ? { warning: plan.warning } : {}) }));
   }
 
@@ -94,24 +147,14 @@ export async function startOrAdopt(o: StartOptions): Promise<StartOutput> {
   const logFile = join(dir, 'nucleo.log');
   const out = openSync(logFile, 'a', 0o600);
   const api = join(dirname(fileURLToPath(import.meta.url)), '..', 'api', 'cli.ts');
-  const args = [
-    '--disable-warning=ExperimentalWarning',
-    api,
-    '--port',
-    String(o.port),
-    '--installation',
-    installation,
-    '--data-dir',
-    dir,
-    ...(parent !== null ? ['--parent', String(parent)] : []),
-    ...(o.apiArgs ?? []),
-  ];
-  const child = spawn(process.execPath, args, { detached: true, stdio: ['ignore', out, out] });
+  const { args, stdio } = coreSpawn({ api, port: o.port, installation, dir, parent, apiArgs: o.apiArgs, windowChannelFd: o.windowChannelFd }, out);
+  const child = spawn(process.execPath, args, { detached: true, stdio });
   let exitCode: number | null = null;
   child.on('exit', (c) => (exitCode = c ?? 1));
   child.unref();
-  // The child has its own copy of the log's descriptor.
+  // The child has its own copy of the log's descriptor and of the channel.
   closeSync(out);
+  closeChannel();
 
   const end = Date.now() + (o.timeoutMs ?? 60_000);
   while (Date.now() < end) {

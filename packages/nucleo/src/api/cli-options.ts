@@ -5,6 +5,7 @@
 // option is an error.
 
 import { parseArgs } from 'node:util';
+import { parseWindowChannelFd } from '../permissions/window-channel.ts';
 
 export const HELP = `Usage: npm run api -- [options]
 
@@ -62,6 +63,9 @@ export const HELP = `Usage: npm run api -- [options]
                          of this Mac that your tunnel forwards to 4720 over there. Without a file,
                          only this machine. Re-read every 30 s and before a reconnect (#244);
                          --demo does not read it
+  --window-channel <fd>  The descriptor (3 or more) of the channel on which the desktop app hands over its window
+                         credential (#619). Only the owner's \`start\` passes it, to a core it starts; the
+                         credential itself is never an argument, an environment variable or a file
   --help
 
 GitHub (decision 0011): the console connects by itself, with the OAuth device flow, and keeps the
@@ -105,6 +109,8 @@ export interface ApiCliOptions {
   demoGithub: string | undefined;
   /** --demo-project: `selected` or `none`. */
   demoProject: string | undefined;
+  /** --window-channel: the inherited descriptor of the window credential channel (#619), or undefined. */
+  windowChannel: number | undefined;
   help: boolean;
 }
 
@@ -131,11 +137,13 @@ export function parseApiOptions(args: string[]): ApiCliOptions {
       machines: { type: 'string' },
       'demo-github': { type: 'string' },
       'demo-project': { type: 'string' },
+      'window-channel': { type: 'string' },
       help: { type: 'boolean', default: false },
     },
   });
   return {
     port: o.port,
+    windowChannel: parseWindowChannelFd(o['window-channel']),
     installation: o.installation,
     dataDir: o['data-dir'],
     db: o.db,

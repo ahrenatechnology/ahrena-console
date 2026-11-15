@@ -23,6 +23,9 @@ import { fileURLToPath } from 'node:url';
 import { HELP, parseApiOptions } from './cli-options.ts';
 import { openPermissionDeps } from '../permissions/adapters/deps.ts';
 import { sweepOnStart } from '../permissions/expire-due.ts';
+import { openWindowChannel } from '../permissions/adapters/window-channel-fd.ts';
+import { UnavailablePeerVerifier } from '../permissions/adapters/unavailable-peer-verifier.ts';
+import { createWindowCredentialHolder } from '../permissions/window-credential.ts';
 import { openSqliteStorage } from '../adapters/sqlite/sqlite-storage.ts';
 import { HookDecisionCapture } from '../decisions/capture-hooks.ts';
 import { SqliteDecisionStore } from '../decisions/sqlite.ts';
@@ -807,15 +810,20 @@ runtimeStore.recoverDisconnected();
 const permissionDeps = openPermissionDeps(sqlite.db, dataDir, log);
 const restartedRequests = sweepOnStart(permissionDeps);
 if (restartedRequests.length > 0) log(`permission requests closed by the restart: ${restartedRequests.length}`);
+// The window credential (#619): in memory, accepted only over the inherited channel from the app that started this core. Layer 1 wires
+// the channel with a verifier that always answers `unavailable` (the native peer check is layer 2, the app's side layer 3, the Controle
+// switch layer 4), so no credential is ever held and the capability stays off.
+const windowCredential = createWindowCredentialHolder();
+if (o.windowChannel !== undefined) openWindowChannel({ fd: o.windowChannel, verifier: new UnavailablePeerVerifier(), holder: windowCredential, log });
 let ownerToken: string | null = null;
 // #661 the observer: the no-op one unless AHRENA_CONSOLE_OTEL_EXPORTER is configured (src/observability).
 const observability = await createObservability(process.env, API_VERSION);
 const api: LocalApi = await startLocalApi({
   observer: observability.observer,
   ownerToken: () => ownerToken,
-  // The permission routes (decision 0025, #618): off, with no window credential, until the desktop app can hand one over (#619): the hook
-  // routes answer 503 off and the answer route 403 window_only. (#618)
-  permissions: { deps: permissionDeps, enabled: () => false, windowCredential: () => null },
+  // The permission routes (decision 0025, #618): off until the Controle switch exists (#619, layer 4); the window credential is the holder's, empty while the verifier is layer 1's.
+  // The hook routes answer 503 off and the answer route 403 window_only. (#618)
+  permissions: { deps: permissionDeps, enabled: () => false, windowCredential: () => windowCredential.current() },
   runtime: new ManagedRuntime(storage, runtimeStore),
   listenOn: reservation,
   panelBuilder,
