@@ -111,6 +111,11 @@
         "layer": "domain",
         "evidence": "the data model of sessions, agents, events and tokens; imports only identity.ts"
       },
+      "observability": {
+        "layer": "application",
+        "evidence": "the observability port and its composition: setup.ts and otel-observer.ts work through injected loaders, exporters and log (no node:fs, node:http or node:sqlite import in any file)",
+        "mixed": "port.ts and masking.ts are pure; otel-observer.ts is the one file that imports @opentelemetry/* and is loaded only by setup.ts"
+      },
       "owner": {
         "layer": "edge",
         "evidence": "the core process: lock file, installation, start guard, probe and CLI (6 of 13 files import node:fs, 5 node:http or node:net)",
