@@ -113,11 +113,18 @@ export function sampleOf(template: string): string {
 //     each other hole written as the wildcard `{param}`;
 //   - prefixes the code tests a path against (`startsWith('/api/new/')`, `startsWith(`${X_ROUTE}/`)`),
 //     which must begin some declared path.
+// Each occurrence of a route string or constant is classified: a prefix use (the argument of `startsWith` or
+// `under`, the head of a template or a `+` chain, part of a `new RegExp(...)` argument) may be the start of a
+// declared path; any other use (`=== X`, `case X:`, `.has(X)`, an argument, a list element) names the route
+// itself, so it must be a declared path. A constant's declaration and the import and re-export lists are no
+// use.
 // What it cannot see (the blind spots, held by the real-server probe only where a declared route
 // exercises them): a dispatch that compares split path segments (`segments[1] === 'brand-new'`), a
 // `new RegExp(...)` built at runtime, a route assembled by a function call or a spread, a constant
-// that is not an upper-case `const` literal, and a route kept in a data file or another folder. A new
-// route written in one of those shapes is not reported here; write it as a constant or a literal. A
+// that is not an upper-case `const` literal, a constant used whole only in a file the scan does not read,
+// a constant declared and never used, a prefix use that really is a whole route (`X + ''`,
+// `${X}${suffix}`), and a route kept in a data file or another folder. A new route written in one of
+// those shapes is not reported here; write it as a constant or a literal. A
 // `/ui/...` path built from a template or a chain is not read either: the interface answers any
 // `/ui/<path>` with its shell (client routing), so such a path is a link, not a route.
 
@@ -137,8 +144,10 @@ const PARAM = '{param}';
 export type RouteConstants = { [name: string]: string[] };
 
 export interface RouteLiterals {
-  /** Path strings such as `'/api/wall'`, without a template hole. */
+  /** Path strings such as `'/api/wall'`, without a template hole, that the code uses as a whole route (compared, matched, looked up, passed on). */
   strings: string[];
+  /** Path strings the code uses only as the start of a longer path (`startsWith('/api/panel')`, `${PANEL_ROUTE}/x`, `'/api/panel' + id`, or inside a `new RegExp`), without a trailing slash. */
+  prefixStrings: string[];
   /** Whole paths built from a route constant, a template literal or a `+` chain, each hole written `{param}`. */
   resolved: string[];
   /** Prefixes the code tests a path against, such as `startsWith('/api/brand-new/')`, with their trailing slash. */
@@ -183,10 +192,28 @@ export function routeConstantsOf(sources: readonly string[]): RouteConstants {
   return constants;
 }
 
+const IMPORT_OR_REEXPORT = /^[ \t]*(?:import\s[^;]*;|export\s*(?:type\s*)?\{[^}]*\}(?:\s*from\s*['"][^'"]*['"])?\s*;?)/gm;
+const DECLARATION_HEAD = /\bconst\s+[A-Z][A-Z0-9_]*\s*(?::\s*string\s*)?=\s*$/;
+const NAME_DECLARATION_HEAD = /\bconst\s+$/;
+const PREFIX_CALL = /(?:startsWith|under)\(\s*(?:`\$\{\s*)?$/;
+const REGEXP_CALL = /new RegExp\([^)]*$/;
+
+/**
+ * Whether one occurrence of a route (a string literal or a constant's name) is a use as the start of a longer
+ * path, from the text just before and after it: the argument of `startsWith` or `under`, the head of a `+` chain
+ * or of a template (`${NAME}/x`, `${NAME}${id}`), or part of a `new RegExp(...)` argument. Any other use
+ * (`=== X`, `case X:`, `.has(X)`, an argument, an element of a list) names the route itself.
+ */
+function usedAsPrefix(before: string, after: string): boolean {
+  return PREFIX_CALL.test(before) || REGEXP_CALL.test(before) || /^\s*\+/.test(after) || (/\$\{\s*$/.test(before) && /^\s*\}\s*(?:\/|\$\{)/.test(after));
+}
+
 /** The routes a TypeScript source names: its path strings, resolved paths, prefixes and anchored route patterns. */
 export function routeLiteralsOf(source: string, constants: RouteConstants = {}): RouteLiterals {
   const code = withoutComments(source);
-  const strings = [...code.matchAll(ROUTE_STRING)].map((m) => m[2]!);
+  const body = code.replace(IMPORT_OR_REEXPORT, '');
+  const strings = new Set<string>();
+  const prefixStrings = new Set<string>();
   const patterns = [...code.matchAll(ROUTE_REGEXP)].map((m) => new RegExp(m[1]!, m[2]));
   const prefixes = new Set([...code.matchAll(PREFIX_STRING)].map((m) => m[2]!));
   const resolved = new Set<string>();
@@ -196,15 +223,28 @@ export function routeLiteralsOf(source: string, constants: RouteConstants = {}):
     if (clean.endsWith('/')) prefixes.add(clean);
     else resolved.add(clean);
   };
+  const record = (path: string, before: string, after: string): void => void (usedAsPrefix(before, after) ? prefixStrings : strings).add(path);
+  for (const m of body.matchAll(ROUTE_STRING)) {
+    const before = body.slice(Math.max(0, m.index - 120), m.index);
+    // The initializer of a route constant is its declaration: the constant's uses are read below, wherever they are.
+    const declares = DECLARATION_HEAD.exec(before)?.[0].match(/const\s+([A-Z][A-Z0-9_]*)/)?.[1];
+    if (declares === undefined || constants[declares] === undefined) record(m[2]!, before, body.slice(m.index + m[0].length, m.index + m[0].length + 24));
+  }
   for (const m of code.matchAll(TEMPLATE)) if (m[1]!.includes('${')) for (const path of expand(m[1]!, constants)) add(path);
   for (const m of code.matchAll(CHAIN)) {
     const pieces = m[0].split(/\s*\+\s*/).map((piece) => (/^['"`]/.test(piece) ? expand(piece.slice(1, -1), constants) : (constants[piece] ?? [PARAM])));
     for (const path of pieces.reduce<string[]>((acc, values) => acc.flatMap((head) => values.map((v) => head + v)), [''])) add(path);
   }
   for (const [name, values] of Object.entries(constants)) {
-    if (new RegExp(String.raw`(?<![\w$.])${name}(?![\w$])`).test(code)) strings.push(...values.map(stripQuery).filter((v) => !v.includes(PARAM) && !v.endsWith('/')));
+    const wholes = values.map(stripQuery).filter((v) => !v.includes(PARAM) && !v.endsWith('/'));
+    for (const m of body.matchAll(new RegExp(String.raw`(?<![\w$.])${name}(?![\w$])`, 'g'))) {
+      const before = body.slice(Math.max(0, m.index - 120), m.index);
+      if (NAME_DECLARATION_HEAD.test(before)) continue;
+      for (const path of wholes) record(path, before, body.slice(m.index + name.length, m.index + name.length + 24));
+    }
   }
-  return { strings: [...new Set(strings)].sort(), resolved: [...resolved].sort(), prefixes: [...prefixes].sort(), patterns };
+  const sorted = (set: Set<string>): string[] => [...set].sort();
+  return { strings: sorted(strings), prefixStrings: sorted(prefixStrings), resolved: sorted(resolved), prefixes: sorted(prefixes), patterns };
 }
 
 /** The route-serving sources of the core: the API folder (the CLI aside) and the three modules the server mounts. */
@@ -226,17 +266,18 @@ function covers(found: string, declared: string, prefix: boolean): boolean {
 }
 
 /**
- * The routes the code names that no declared template covers: a string that is no declared path and
- * the start of none, a resolved path (template, constant or `+` chain) no declared path equals, a prefix
+ * The routes the code names that no declared template covers: a string used as a whole route that is no
+ * declared path, a string used only as a prefix that is no declared path and the start of none, a resolved path (template, constant or `+` chain) no declared path equals, a prefix
  * no declared path begins with, and a pattern no declared path (with its parameters filled) matches.
  */
 export function undeclaredInCode(found: RouteLiterals, declaredPaths: readonly string[]): string[] {
   const samples = declaredPaths.map(sampleOf);
-  const missingStrings = found.strings.filter((s) => !declaredPaths.some((p) => p === s || p.startsWith(`${s}/`)));
+  const missingStrings = found.strings.filter((s) => !declaredPaths.includes(s));
+  const missingPrefixStrings = found.prefixStrings.filter((s) => !declaredPaths.some((p) => p === s || p.startsWith(`${s}/`)));
   const missingResolved = found.resolved.filter((r) => !declaredPaths.some((p) => covers(r, p, false)));
   const missingPrefixes = found.prefixes.filter((r) => !declaredPaths.some((p) => covers(r, p, true) && segmentsOf(p).length > segmentsOf(r).length));
   const missingPatterns = found.patterns.filter((re) => !samples.some((p) => re.test(p))).map((re) => re.source);
-  return [...missingStrings, ...missingResolved, ...missingPrefixes, ...missingPatterns];
+  return [...missingStrings, ...missingPrefixStrings, ...missingResolved, ...missingPrefixes, ...missingPatterns];
 }
 
 // ---- The responses -------------------------------------------------------------------------------
@@ -260,14 +301,27 @@ export function responseProblems(spec: Spec, method: string, path: string, statu
 // ---- The ratchet ---------------------------------------------------------------------------------
 
 const SUCCESS = /^[23]\d\d$/;
-const PLACEHOLDER_KEYS = new Set(['type', 'description']);
+const COMPOSITION_KEYS = ['oneOf', 'anyOf', 'allOf'] as const;
 
-/** A bare `{ type: object }` (or `{}`): valid, and says nothing about the shape. */
-const isPlaceholder = (schema: Schema | undefined): boolean => schema === undefined || (Object.keys(schema).every((k) => PLACEHOLDER_KEYS.has(k)) && (schema.type === undefined || schema.type === 'object'));
+const nonEmptyRecord = (v: unknown): v is { [key: string]: unknown } => isRecord(v) && Object.keys(v).length > 0;
 
 /**
- * Whether an operation declares a real response: a 2xx or 3xx answer with a JSON schema that says more than
- * `object`, a text answer typed as a string (the interface's files, an event stream), or a redirect that names
+ * A JSON schema says something only when, annotations aside (title, description, examples, ...), it names a
+ * `$ref`, at least one property, the items of an array (themselves non-empty), a composition (`oneOf`, `anyOf`,
+ * `allOf`), an `enum` or a `const`. A bare `type` (object, array, a union with null), `additionalProperties: true`
+ * and `properties: {}` allow any shape, so they are placeholders.
+ */
+function isRealSchema(schema: Schema | undefined): boolean {
+  if (schema === undefined) return false;
+  if (typeof schema.$ref === 'string') return true;
+  if (nonEmptyRecord(schema.properties)) return true;
+  if (nonEmptyRecord(schema.items)) return true;
+  if (COMPOSITION_KEYS.some((k) => Array.isArray(schema[k]) && schema[k].length > 0)) return true;
+  return (Array.isArray(schema.enum) && schema.enum.length > 0) || 'const' in schema;
+}
+
+/**
+ * Whether an operation declares a real response: a 2xx or 3xx answer with a JSON schema that names a shape (see `isRealSchema`), a text answer typed as a string (the interface's files, an event stream), or a redirect that names
  * its `Location`.
  */
 export function hasRealResponseSchema(operation: OperationObject): boolean {
@@ -275,7 +329,7 @@ export function hasRealResponseSchema(operation: OperationObject): boolean {
     .filter(([status]) => SUCCESS.test(status))
     .some(([status, response]) => {
       if (status.startsWith('3') && response.headers?.Location !== undefined) return true;
-      return Object.entries(response.content ?? {}).some(([media, body]) => (media === 'application/json' ? !isPlaceholder(body.schema) : body.schema?.type === 'string'));
+      return Object.entries(response.content ?? {}).some(([media, body]) => (media === 'application/json' ? isRealSchema(body.schema) : body.schema?.type === 'string'));
     });
 }
 

@@ -123,8 +123,8 @@ describe('#662/AC-1 the real server serves every declared operation', () => {
   });
 
   test('#662/AC-1 Given a planted path under a prefix a module serves, When called, Then the probe reports it as unserved', async () => {
-    for (const path of ['/api/docker/planted', '/api/agent-config/planted', '/api/connectors/planted', '/api/ports/planted', '/api/machines/{machineId}/planted']) assert.equal(await isServed(server, 'GET', path), false, `GET ${path}`);
-    for (const path of ['/api/app-update/planted', '/api/framework-install/{owner}/{repo}/planted', '/api/docker/planted']) assert.equal(await isServed(server, 'POST', path), false, `POST ${path}`);
+    for (const path of ['/api/docker/planted', '/api/agent-config/planted', '/api/connectors/planted', '/api/ports/planted', '/api/machines/{machineId}/planted', '/api/runtime/planted']) assert.equal(await isServed(server, 'GET', path), false, `GET ${path}`);
+    for (const path of ['/api/app-update/planted', '/api/framework-install/{owner}/{repo}/planted', '/api/docker/planted', '/api/runtime/planted']) assert.equal(await isServed(server, 'POST', path), false, `POST ${path}`);
   });
 
   test('#662/AC-1 Given a declared path asked with a method the spec does not declare for it, When called, Then the probe reports it as unserved', async () => {
@@ -137,6 +137,8 @@ describe('#662/AC-1 the real server serves every declared operation', () => {
     assert.equal(await isServed(server, 'GET', '/api/overview'), true);
     assert.equal(await isServed(server, 'GET', '/api/sessions/{sessionId}'), true);
     assert.equal(await isServed(server, 'POST', '/api/hooks'), true);
+    assert.equal(await isServed(server, 'GET', '/api/runtime'), true);
+    assert.equal(await isServed(server, 'POST', '/api/runtime/commands'), true);
   });
 });
 
@@ -181,6 +183,33 @@ describe('#662/AC-1 the code names no route the spec does not declare', () => {
     const lit = routeLiteralsOf("if (url.pathname.startsWith('/api/brand-new/')) return handler(req, res);");
     assert.deepEqual(undeclaredInCode(lit, declaredPaths), ['/api/brand-new/']);
     assert.deepEqual(undeclaredInCode(routeLiteralsOf('if (p.startsWith(`${AGENT_CONFIG_ROUTE}/`)) return h();', constants), declaredPaths), []);
+  });
+
+  test('#662/AC-1 Given a planted exact route that is only the start of a declared path, When read, Then the detector reports it (a comparison, a case, a set lookup, a constant used whole)', () => {
+    assert.deepEqual(undeclaredInCode(routeLiteralsOf("if (p === '/api/panel') return h();"), declaredPaths), ['/api/panel']);
+    assert.deepEqual(undeclaredInCode(routeLiteralsOf("switch (p) { case '/api/terminals': return h(); }"), declaredPaths), ['/api/terminals']);
+    assert.deepEqual(undeclaredInCode(routeLiteralsOf("const ROUTES = new Set(['/api/panel']); if (ROUTES.has(p)) return h();"), declaredPaths), ['/api/panel']);
+    const source = "const PANEL_ROUTE = '/api/panel'; if (url.pathname === PANEL_ROUTE) return h();";
+    const panel = routeConstantsOf([source]);
+    assert.deepEqual(undeclaredInCode(routeLiteralsOf(source, panel), declaredPaths), ['/api/panel']);
+    assert.deepEqual(undeclaredInCode(routeLiteralsOf("import { PANEL_ROUTE } from './server.ts';\nconst t = new Set([PANEL_ROUTE]);", panel), declaredPaths), ['/api/panel']);
+  });
+
+  test('#662/AC-1 Given a route used only as the start of a declared path, When read, Then the detector does not report it (startsWith, under, a template, a chain, a RegExp)', () => {
+    const panel = routeConstantsOf(["export const PANEL_ROUTE = '/api/panel';"]);
+    const uses = [
+      "if (p.startsWith('/api/panel')) return h();",
+      'if (under(PANEL_ROUTE)) return h();',
+      'if (p.startsWith(PANEL_ROUTE)) return h();',
+      'if (p.startsWith(`${PANEL_ROUTE}/`)) return h();',
+      'const u = `${PANEL_ROUTE}/${id}`;',
+      "const u = PANEL_ROUTE + '/' + id;",
+      "const u = '/api/panel' + '/' + id;",
+      'const re = new RegExp(`^${PANEL_ROUTE}/[a-z]+$`);',
+      "import { PANEL_ROUTE } from './server.ts';\nexport { PANEL_ROUTE } from './server.ts';",
+    ];
+    for (const use of uses) assert.deepEqual(undeclaredInCode(routeLiteralsOf(use, panel), declaredPaths), [], use);
+    assert.deepEqual(undeclaredInCode(routeLiteralsOf("if (p.startsWith('/api/brand-new')) return h();"), declaredPaths), ['/api/brand-new']);
   });
 
   test('#662/AC-1 a declared path built from a constant, a template or a concatenation is not reported', () => {

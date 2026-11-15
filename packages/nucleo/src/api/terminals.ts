@@ -25,8 +25,11 @@ const WRITE_RAW_PATH = /^\/api\/terminals\/(?:pts-\d{1,6}|ttys\d{1,4})\/actions\
 const ACTION_ROUTE = /^\/api\/terminals\/([^/]+)\/actions\/([^/]+)$/;
 const MAX_BODY = 1024;
 
+/** The write gate's group: the terminals root and everything under it (the root itself serves nothing). */
+const TERMINALS_GROUP = /^\/api\/terminals(?:\/|$)/;
+
 export function isTerminalsRoute(pathname: string): boolean {
-  return pathname === '/api/terminals' || pathname.startsWith('/api/terminals/');
+  return TERMINALS_GROUP.test(pathname);
 }
 
 /** Same-origin gate of the writes; no Origin passes only when `acceptNoOrigin`. */

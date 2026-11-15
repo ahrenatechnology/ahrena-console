@@ -28,6 +28,8 @@ import { DockerService } from '../../src/docker/service.ts';
 import { GithubCache, MemoryCacheStore } from '../../src/github/cache.ts';
 import { GithubCallQueue } from '../../src/github/call-queue.ts';
 import { GithubConnection } from '../../src/github/connection/connection.ts';
+import { ManagedRuntime } from '../../src/runtime/service.ts';
+import { SqliteRuntimeStore } from '../../src/runtime/sqlite.ts';
 import { Messaging } from '../../src/messaging/service.ts';
 import { SessionOrders } from '../../src/messaging/orders.ts';
 import { serverWithoutCore } from '../../src/mcp/index.ts';
@@ -107,6 +109,7 @@ async function wiring(dir: string): Promise<{ stands: Partial<ApiOptions>; stora
   const executor = new ToolsExecutor({ service: toolsHost, logFile: join(dir, 'tools.log'), spawn: fakeSpawn().spawn, killGroup: () => {}, log: () => {} });
   const stands: Partial<ApiOptions> = {
     telemetry,
+    runtime: new ManagedRuntime(storage, new SqliteRuntimeStore(storage.db, changes)),
     reconnect: machineConnection.legacy,
     tools: executor,
     mcp: serverWithoutCore('the contract probe'),

@@ -44,6 +44,15 @@ describe('#662 the response-schema ratchet', () => {
     const answer = (content: NonNullable<OperationObject['responses']>[string]['content'], headers?: Record<string, unknown>, status = '200'): OperationObject => ({ responses: { [status]: { description: 'd', content, headers } } });
     assert.equal(hasRealResponseSchema(answer({ 'application/json': { schema: { type: 'object' } } })), false);
     assert.equal(hasRealResponseSchema(answer({ 'application/json': { schema: {} } })), false);
+    assert.equal(hasRealResponseSchema(answer({ 'application/json': { schema: { type: 'array' } } })), false);
+    assert.equal(hasRealResponseSchema(answer({ 'application/json': { schema: { type: 'array', items: {} } } })), false);
+    assert.equal(hasRealResponseSchema(answer({ 'application/json': { schema: { type: 'object', additionalProperties: true } } })), false);
+    assert.equal(hasRealResponseSchema(answer({ 'application/json': { schema: { type: 'object', properties: {} } } })), false);
+    assert.equal(hasRealResponseSchema(answer({ 'application/json': { schema: { type: ['object', 'null'] } } })), false);
+    assert.equal(hasRealResponseSchema(answer({ 'application/json': { schema: { type: 'object', description: 'anything', title: 'Any', examples: [{}] } } })), false);
+    assert.equal(hasRealResponseSchema(answer({ 'application/json': { schema: { oneOf: [{ type: 'string' }, { type: 'null' }] } } })), true);
+    assert.equal(hasRealResponseSchema(answer({ 'application/json': { schema: { enum: ['a', 'b'] } } })), true);
+    assert.equal(hasRealResponseSchema(answer({ 'application/json': { schema: { const: 'ok' } } })), true);
     assert.equal(hasRealResponseSchema(answer({ 'application/json': { schema: { type: 'object', required: ['a'], properties: { a: { type: 'string' } } } } })), true);
     assert.equal(hasRealResponseSchema(answer({ 'application/json': { schema: { $ref: '#/components/schemas/X' } } })), true);
     assert.equal(hasRealResponseSchema(answer({ 'application/json': { schema: { type: 'array', items: { type: 'string' } } } })), true);
