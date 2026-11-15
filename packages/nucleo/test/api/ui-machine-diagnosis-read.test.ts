@@ -25,7 +25,7 @@ const diagnosis = (over: Record<string, unknown> = {}) => ({
 });
 const signal = new AbortController().signal;
 const fail = (status: number, body: unknown) => new ReadError(`O núcleo respondeu ${status}`, { status, route: '/api/diagnosis', body });
-/** What the reader gives for a read that answers (or throws) this. */
+/** What the reader gives for a read that answers (or throws) this (#566). */
 const run = (answer: unknown, alert = ALERT, machine = 'local') =>
   reader.diagnosisReader({ read: async () => { if (answer instanceof Error) throw answer; return answer; } }, machine)(alert, { signal });
 
