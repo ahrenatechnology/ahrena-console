@@ -706,24 +706,62 @@ describe('the floor over-matches the #654 items (decision 0025 amendment, Deskto
     allFalse(['cp a b', 'rsync a b', 'git checkout main', 'git restore x', 'tar cf a.tar x', 'tar -tvf a.tar', 'tar -czf a.tgz x', 'zip a.zip x']);
   });
 
-  test('#654: each new scan is linear on 64 KiB', () => {
-    // The ratio method of the rm probe (#691): the best of three runs, and the full size under 3x the half size plus 50 ms.
-    const units = ['env ', '$(at ', '\\x', 'find -exec ', 'xargs ', 'cp -r ', 'tar x', 'git --git-dir ', '.claude/', 'cd $', '=.git/', 'git checkout ', 'git remote ', 'print -', 'nohup env time ', 'a{', 'git_pager=', 'unzip ', 'patch ', 'git_pager+=', '%5b', 'print -r ', 'git checkout x -- '];
-    const best = (unit: string, size: number): number => {
-      const command = unit.repeat(Math.floor(size / unit.length));
-      let min = Infinity;
-      for (let run = 0; run < 3; run++) {
-        const start = performance.now();
-        bash(command);
-        bash(`echo x | ${command}`);
-        min = Math.min(min, performance.now() - start);
-      }
-      return min;
+  test('#654/AC-11: a tree-ish after checkout counts without a --, and the value of -b, -B and --orphan is no word', () => {
+    allTrue(['git checkout origin/main src', 'git checkout -f origin/main x', 'git checkout HEAD~1 x', 'git checkout main x y', 'git -C x checkout origin/main src']);
+    allFalse(['git checkout main', 'git checkout -b x', 'git checkout -B x', 'git checkout --orphan x', 'git checkout -b x origin/main', 'git checkout -f main', 'git checkout -', 'git restore x', 'git restore x y', 'git checkout -- x']);
+  });
+
+  test('#654/AC-11: an s in a cluster of short options is --source, over-matching -S', () => {
+    allTrue(['git restore -Ws HEAD~1 x', 'git restore -WsHEAD~1 x', 'git restore -sW HEAD~1 x', 'git restore -S x', 'git checkout -fs HEAD~1 x']);
+    allFalse(['git restore -W x', 'git restore --staged x', 'git checkout -f main']);
+  });
+
+  test('#654/AC-11: --pathspec-from-file after checkout or restore is a bulk pathspec, in both spellings', () => {
+    allTrue(['git restore --pathspec-from-file=l', 'git checkout --pathspec-from-file=l', 'git checkout origin/main --pathspec-from-file l', 'git restore --pathspec-from-file l', 'git restore --pathspec-from-file=l --pathspec-file-nul']);
+    allFalse(['git log --pathspec-from-file=l', 'git status']);
+  });
+
+  test('#654/AC-11: bsdtar and gtar extract like tar', () => {
+    allTrue(['bsdtar xf a.tar', 'bsdtar -xf a.tar', 'gtar xzf a.tgz', 'gtar -xf a.tar', 'gtar --extract -f a.tar', 'bsdtar --get -f a.tar', '/usr/bin/gtar xf a.tar']);
+    allFalse(['bsdtar cf a.tar x', 'gtar -tvf a.tar', 'gtar -czf a.tgz x']);
+  });
+
+  test('#654: each new scan is linear on 64 KiB, in repeated units and in one long token', () => {
+    // The ratio method of the rm probe (#691): the full size under 3x the half size plus 50 ms; a try that fails is repeated twice, so one slow run on a busy machine does not fail it.
+    const repeated = ['env ', '$(at ', '\\x', 'find -exec ', 'xargs ', 'cp -r ', 'tar x', 'git --git-dir ', '.claude/', 'cd $', '=.git/', 'git checkout ', 'git remote ', 'print -', 'nohup env time ', 'a{', 'git_pager=', 'unzip ', 'patch ', 'git_pager+=', '%5b', 'print -r ', 'git checkout x -- ', 'git restore -s ', 'git checkout -b ', 'gtar x ', "'"];
+    const inputs: Array<[string, (size: number) => string]> = repeated.map((unit) => [unit, (size) => unit.repeat(Math.floor(size / unit.length))]);
+    // One long token: a prefix, a run of one letter, a character that is no letter, which is the shape a flag regex backtracks on.
+    const oneToken = (label: string, head: string, letter: string, tail = '1'): [string, (size: number) => string] => [label, (size) => `${head}${letter.repeat(size)}${tail}`];
+    inputs.push(
+      oneToken('cp -a…1', 'cp -', 'a'),
+      oneToken('rsync -a…1', 'rsync -', 'a'),
+      oneToken('tar c -x…1', 'tar c -', 'x'),
+      oneToken('gtar -x…1', 'gtar -', 'x'),
+      oneToken('rm -r…1', 'rm -', 'r'),
+      oneToken('print -a…1', 'print -', 'a'),
+      oneToken('git restore -s…1', 'git restore -', 's'),
+      oneToken('git checkout -b…1', 'git checkout -', 'b'),
+      oneToken('quotes…x', '', "'", 'x'),
+      oneToken('quotes…x after rm', 'rm ', "'", 'x'),
+      oneToken('parens in quotes…x', 'git ', '"', 'x'),
+      oneToken('tar x…1', 'tar ', 'x'),
+    );
+    const time = (command: string): number => {
+      const start = performance.now();
+      bash(command);
+      return performance.now() - start;
     };
-    for (const unit of units) {
-      const half = best(unit, 32_768);
-      const full = best(unit, 65_536);
-      assert.ok(full < half * 3 + 50, `${unit}: ${full.toFixed(0)} ms at 64 KiB against ${half.toFixed(0)} ms at 32 KiB`);
+    for (const [label, build] of inputs) {
+      const half = build(32_768);
+      const full = build(65_536);
+      let last = '';
+      let linear = false;
+      for (let attempt = 0; attempt < 3 && !linear; attempt++) {
+        const [a, b] = [time(half), time(full)];
+        linear = b < a * 3 + 50;
+        last = `${label}: ${b.toFixed(0)} ms at 64 KiB against ${a.toFixed(0)} ms at 32 KiB`;
+      }
+      assert.ok(linear, last);
     }
   });
 });

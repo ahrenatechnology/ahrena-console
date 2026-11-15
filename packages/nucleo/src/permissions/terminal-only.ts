@@ -73,7 +73,10 @@ const CITED_PATTERNS: RegExp[] = [/\.ahrena-console/i, /dev\.ahrena\.console/i, 
 /** `/a/./b` and `/a//b` read as `/a/b`, so a path cannot dodge a pattern by spelling (#618/AC-6). */
 const normalizePath = (p: string): string => p.replace(/\\/g, '/').replace(/\/\.(?=\/)/g, '').replace(/\/{2,}/g, '/');
 
-const RECURSIVE_FLAG = /^(?:-[a-zA-Z]*[rR][a-zA-Z]*|--recursive)$/;
+/** A cluster of short options (`-rf`): one dash, then letters only. Two linear scans, where `-[a-z]*r[a-z]*` under anchors backtracks quadratically on one long token (#654). */
+const isShortCluster = (t: string): boolean => /^-[a-zA-Z]+$/.test(t);
+const RECURSIVE_FLAG_LETTER = /[rR]/;
+const isRecursiveFlag = (t: string): boolean => t === '--recursive' || (isShortCluster(t) && RECURSIVE_FLAG_LETTER.test(t));
 const bare = (token: string): string => token.replace(/^["'(]+|["')]+$/g, '');
 const SHELLS = new Set(['sh', 'bash', 'zsh', 'dash', 'ksh', 'fish']);
 const baseName = (token: string): string => token.slice(token.lastIndexOf('/') + 1);
@@ -96,7 +99,7 @@ function spellings(text: string): string[] {
 // `config` rewrites .git/config or ~/.gitconfig without naming the file; `git config --get` over-matches, accepted (#618).
 const RISKY_GIT_SUBCOMMANDS = new Set(['push', 'reset', 'clean', 'config']);
 
-const RECURSIVE_OR_ARCHIVE_FLAG = /^(?:-[a-zA-Z]*[rRa][a-zA-Z]*|--recursive|--archive)$/;
+const isRecursiveOrArchiveFlag = (t: string): boolean => t === '--recursive' || t === '--archive' || (isShortCluster(t) && /[rRa]/.test(t));
 const FIND_RUNNING_FLAGS = new Set(['-exec', '-execdir', '-ok', '-okdir', '-delete', '-fls']);
 /** Git subcommands whose second word registers or starts something that runs later: `remote add`, `lfs install`, `maintenance start` (#654/AC-9). */
 const GIT_SECOND_WORDS: ReadonlyMap<string, string> = new Map([['remote', 'add'], ['lfs', 'install'], ['maintenance', 'start']]);
@@ -115,26 +118,42 @@ function gitRegistersOrApplies(afterGit: string[]): boolean {
 /** A git pathspec that names many files or none: `.`, `./`, magic that starts with `:`, or a glob git expands itself, quoted or not (#654/AC-11). */
 const isBulkPathspec = (t: string): boolean => t === '.' || t === './' || t.startsWith(':') || /[*?[]/.test(t);
 
-/** `git checkout` and `git restore` that bring files without naming them: a bulk pathspec, `--source`, `-s` (also glued: `-sHEAD~1`), `FETCH_HEAD`, or a tree-ish before `--` (`git checkout origin/main -- src`). Over-matches `git checkout -b x -- y`, by design (#654/AC-11, decision 0025 amendment). */
+/** A short-option token (one dash, not `--`) that holds `s`: `-s`, `-sHEAD~1`, `-Ws`, and `-S` once lowercased. Any `s` in a cluster may be `--source`, so it over-matches `restore -S` (#654/AC-11). Linear: two index reads and one `includes`. */
+const holdsSourceOption = (t: string): boolean => t.length > 1 && t[0] === '-' && t[1] !== '-' && t.includes('s');
+/** Options of `git checkout` that take the next word as their value, which is then no tree-ish or path. */
+const CHECKOUT_OPTIONS_WITH_VALUE = new Set(['-b', '-B', '--orphan']);
+
+/** `git checkout` and `git restore` that bring files without naming them: a bulk pathspec, `--pathspec-from-file`, `--source`, any short option holding `s` (`-s`, `-sHEAD~1`, `-Ws`), `FETCH_HEAD`, a tree-ish before `--` (`git checkout origin/main -- src`), or after `checkout` a second word that is no option value (`git checkout origin/main src`). Over-matches `git checkout -b x -- y` (the value of `-b` counts as a name before `--`), `git restore -S x` and `git checkout a b` where both are paths, by design (#654/AC-11, decision 0025 amendment). */
 function gitBringsFilesInBulk(afterGit: string[]): boolean {
-  let restoring = false;
+  let verb = '';
   let namedBeforeSeparator = false;
+  let words = 0;
+  let separated = false;
+  let skipValue = false;
   for (const t of afterGit) {
-    if (t === 'checkout' || t === 'restore') restoring = true;
-    else if (restoring) {
-      if (isBulkPathspec(t) || t.startsWith('-s') || t.startsWith('--source') || t === 'fetch_head') return true;
-      if (t === '--' && namedBeforeSeparator) return true;
-      if (!t.startsWith('-')) namedBeforeSeparator = true;
+    if (verb === '') {
+      if (t === 'checkout' || t === 'restore') verb = t;
+      continue;
     }
+    if (isBulkPathspec(t) || holdsSourceOption(t) || t.startsWith('--source') || t.startsWith('--pathspec-from-file') || t === 'fetch_head') return true;
+    if (t === '--') {
+      if (namedBeforeSeparator) return true;
+      separated = true;
+    } else if (!t.startsWith('-')) {
+      namedBeforeSeparator = true;
+      if (skipValue) skipValue = false;
+      else if (!separated && ++words >= 2 && verb === 'checkout') return true;
+    } else if (!separated && CHECKOUT_OPTIONS_WITH_VALUE.has(t)) skipValue = true;
   }
   return false;
 }
 
-/** `tar` in extract mode: `x` in the old-style cluster right after `tar`, `-x…`, `--extract` or `--get` (#654/AC-11). */
+const TAR_NAMES = ['tar', 'bsdtar', 'gtar'];
+/** `tar`, `bsdtar` or `gtar` in extract mode: `x` in the old-style cluster right after `tar`, `-x…`, `--extract` or `--get` (#654/AC-11). */
 function tarExtracts(afterTar: string[]): boolean {
   const first = afterTar[0] ?? '';
   if (!first.startsWith('-') && first.includes('x')) return true;
-  return afterTar.some((t) => /^-[a-zA-Z]*x[a-zA-Z]*$/.test(t) || t === '--extract' || t === '--get');
+  return afterTar.some((t) => (isShortCluster(t) && t.includes('x')) || t === '--extract' || t === '--get');
 }
 
 /** Verbs that run other commands or bring files in bulk, found by base name: `find -exec|-delete|-fprint*`, any `xargs`, `patch`, `unzip`, `ditto`, recursive `cp` and `rsync`, extracting `tar`. Over-matches `npm version patch`, by design (#654/AC-9, AC-10, AC-11). */
@@ -146,8 +165,8 @@ function runsOrBringsInBulk(tokens: string[]): boolean {
     return at >= 0 ? tokens.slice(at + 1) : undefined;
   };
   if (after('find')?.some((t) => FIND_RUNNING_FLAGS.has(t) || t.startsWith('-fprint'))) return true;
-  if (after('cp')?.some((t) => RECURSIVE_OR_ARCHIVE_FLAG.test(t)) || after('rsync')?.some((t) => RECURSIVE_OR_ARCHIVE_FLAG.test(t))) return true;
-  const tar = after('tar');
+  if (after('cp')?.some(isRecursiveOrArchiveFlag) || after('rsync')?.some(isRecursiveOrArchiveFlag)) return true;
+  const tar = TAR_NAMES.map(after).find((rest) => rest !== undefined);
   return tar !== undefined && tarExtracts(tar);
 }
 
@@ -155,7 +174,7 @@ function runsOrBringsInBulk(tokens: string[]): boolean {
 function hasRiskyVerb(segment: string): boolean {
   const tokens = tokensOf(segment);
   const rm = tokens.findIndex((t) => baseName(t) === 'rm');
-  if (rm >= 0 && tokens.slice(rm + 1).some((t) => RECURSIVE_FLAG.test(t))) return true;
+  if (rm >= 0 && tokens.slice(rm + 1).some(isRecursiveFlag)) return true;
   if (runsOrBringsInBulk(tokens)) return true;
   const git = tokens.findIndex((t) => baseName(t) === 'git');
   if (git < 0) return false;
