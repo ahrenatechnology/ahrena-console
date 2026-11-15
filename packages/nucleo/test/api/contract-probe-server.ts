@@ -128,7 +128,7 @@ async function wiring(dir: string): Promise<{ stands: Partial<ApiOptions>; stora
     githubSync: { status: () => ({ active: false, pausedUntil: null, steps: [] }) },
     connection,
     // The permission routes (#618) over the in-memory doubles, the capability off: a hook route answers 503 `off`, the list `available: false`.
-    permissions: { deps: harness(), enabled: () => false, windowCredential: () => null },
+    permissions: { deps: harness(), enabled: () => false, setEnabled: () => {}, windowCredential: () => null },
   };
   return { stands, storage };
 }

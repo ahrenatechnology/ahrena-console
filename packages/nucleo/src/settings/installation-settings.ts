@@ -1,8 +1,8 @@
 /*
  * The installation's settings (#241, decision 0011 §8): what one installation chose, none of it a
- * secret. Five keys and nothing else: the active GitHub login (the vault account), the credential
+ * secret. Six keys and nothing else: the active GitHub login (the vault account), the credential
  * source, the Project of the kanban, (#594) the owners the core opens work sessions for and (#477) how
- * many executions run at once. Each
+ * many executions run at once and (#619) whether permission requests can be answered from the Console. Each
  * value is validated on write, so a credential cannot land here by mistake (a token is not a login,
  * and there is no key for one).
  */
@@ -28,11 +28,13 @@ export interface InstallationSettingValues {
   'work.trustedOwners': string[];
   /** #477 how many executions of the work board run at once; stored, it replaces the default (2). */
   'work.executionLimit': number;
+  /** #619 whether a permission request can be answered from the Console; absent it is on (with a live window credential the capability is on). */
+  'permissions.answerFromConsole': boolean;
 }
 
 export type InstallationSettingKey = keyof InstallationSettingValues;
 
-export const INSTALLATION_SETTING_KEYS: readonly InstallationSettingKey[] = ['github.login', 'github.source', 'project.selection', 'work.trustedOwners', 'work.executionLimit'];
+export const INSTALLATION_SETTING_KEYS: readonly InstallationSettingKey[] = ['github.login', 'github.source', 'project.selection', 'work.trustedOwners', 'work.executionLimit', 'permissions.answerFromConsole'];
 
 export interface InstallationSettings {
   get<K extends InstallationSettingKey>(key: K): InstallationSettingValues[K] | null;
@@ -82,6 +84,7 @@ const VALIDATORS: { [K in InstallationSettingKey]: (v: unknown) => v is Installa
   'project.selection': isProjectSelection,
   'work.trustedOwners': isTrustedOwners,
   'work.executionLimit': isExecutionLimit,
+  'permissions.answerFromConsole': (v): v is boolean => typeof v === 'boolean',
 };
 
 function assertKey(key: string): asserts key is InstallationSettingKey {
@@ -168,4 +171,12 @@ export class SqliteInstallationSettings implements InstallationSettings {
     assertKey(key);
     return this.db.prepare('SELECT 1 FROM installation_settings WHERE key = ?').get(key) !== undefined;
   }
+}
+
+/** #619 the Controle switch over the installation setting: read at each use so a change applies at once; nothing stored reads as on. */
+export function answerFromConsoleSwitch(settings: InstallationSettings): { enabled: () => boolean; setEnabled: (value: boolean) => void } {
+  return {
+    enabled: () => settings.get('permissions.answerFromConsole') ?? true,
+    setEnabled: (value) => settings.set('permissions.answerFromConsole', value),
+  };
 }

@@ -313,7 +313,56 @@ describe('operation 5: POST …/:rid/answer (#618/AC-8)', () => {
     ));
 });
 
-describe('the AhrenaRemote signature opens none of the five routes (#618/AC-5, #618/AC-8)', () => {
+const SWITCH = '/api/permissions/answer-from-console';
+
+describe('operation 6: GET /api/permissions/answer-from-console (#619/AC-4)', () => {
+  test('#619/AC-4: 200 { enabled, available } and nothing else, from a bearer client and from the /ui', () =>
+    withFixture(async (f) => {
+      for (const headers of [{}, { origin: f.api.url }]) {
+        const r = await f.call('GET', SWITCH, { headers });
+        assert.equal(r.status, 200);
+        assert.deepEqual(r.json, { enabled: true, available: true });
+      }
+      f.set({ enabled: false, credential: null });
+      assert.deepEqual((await f.call('GET', SWITCH)).json, { enabled: false, available: false });
+    }));
+
+  test('#619/AC-4: another origin or another site is 403, and no bearer is 403', () =>
+    withFixture(async (f) => {
+      for (const headers of [{ origin: 'http://evil.example' }, { 'sec-fetch-site': 'cross-site' }, { origin: f.api.url, 'sec-fetch-site': 'same-site' }]) {
+        const r = await f.call('GET', SWITCH, { headers });
+        assert.equal(r.status, 403, JSON.stringify(headers));
+      }
+      assert.equal((await f.call('GET', SWITCH, { bearer: false })).status, 403);
+    }));
+});
+
+describe('operation 7: PUT /api/permissions/answer-from-console (#619/AC-4)', () => {
+  test('#619/AC-4: off with the bearer is 200 with the new state, on without the window is 403 window_only, on from the window is 200', () =>
+    withFixture(async (f) => {
+      const off = await f.call('PUT', SWITCH, { body: { enabled: false } });
+      assert.equal(off.status, 200);
+      assert.deepEqual(off.json, { enabled: false, available: true });
+      const refused = await f.call('PUT', SWITCH, { body: { enabled: true }, headers: { origin: f.api.url } });
+      assert.equal(refused.status, 403);
+      assert.deepEqual(refused.json, { error: 'window_only' });
+      const on = await f.call('PUT', SWITCH, { body: { enabled: true }, headers: { origin: f.api.url, 'ahrena-window': WINDOW_CREDENTIAL } });
+      assert.equal(on.status, 200);
+      assert.deepEqual(on.json, { enabled: true, available: true });
+    }));
+
+  test('#619/AC-4: a body that is not { enabled: boolean } is 400, over 256 bytes 413, not JSON 415, another origin 403, POST 405', () =>
+    withFixture(async (f) => {
+      assert.deepEqual((await f.call('PUT', SWITCH, { body: { enabled: 'yes' } })).json, { error: 'invalid_request' });
+      assert.equal((await f.call('PUT', SWITCH, { raw: JSON.stringify({ enabled: false, pad: 'x'.repeat(300) }) })).status, 413);
+      assert.equal((await f.call('PUT', SWITCH, { raw: '{}', headers: { 'content-type': 'text/plain' } })).status, 415);
+      assert.equal((await f.call('PUT', SWITCH, { body: { enabled: false }, headers: { origin: 'http://evil.example' } })).status, 403);
+      assert.equal((await f.call('POST', SWITCH, { body: { enabled: false } })).status, 405);
+      assert.deepEqual((await f.call('GET', SWITCH)).json, { enabled: true, available: true });
+    }));
+});
+
+describe('the AhrenaRemote signature opens none of the routes (#618/AC-5, #618/AC-8, #619)', () => {
   test('#618/AC-5: no operation is on the closed list of remote routes, and a valid signed request gets credential-route', async () => {
     const targets: Array<[string, string]> = [
       ['POST', reqPath(SID)],
@@ -321,15 +370,17 @@ describe('the AhrenaRemote signature opens none of the five routes (#618/AC-5, #
       ['POST', reqPath(SID, 'rq-1', '/withdraw')],
       ['GET', reqPath(SID)],
       ['POST', reqPath(SID, 'rq-1', '/answer')],
+      ['GET', '/api/permissions/answer-from-console'],
+      ['PUT', '/api/permissions/answer-from-console'],
     ];
     for (const [method, target] of targets) assert.equal(remoteRouteFor(method, target), null, `${method} ${target}`);
     const { harness } = await import('../permissions/fakes.ts');
     const deps = harness();
-    const f = await remoteFixture({ api: { permissions: { deps, enabled: () => true, windowCredential: () => WINDOW_CREDENTIAL } } });
+    const f = await remoteFixture({ api: { permissions: { deps, enabled: () => true, setEnabled: () => {}, windowCredential: () => WINDOW_CREDENTIAL } } });
     try {
       const credential = await f.mint();
       for (const [method, target] of targets) {
-        const r = await f.signed(credential, method, target, { body: method === 'POST' ? '{}' : undefined });
+        const r = await f.signed(credential, method, target, { body: method === 'POST' || method === 'PUT' ? '{}' : undefined });
         assert.equal(r.status, 403, `${method} ${target}`);
         assert.equal(r.json?.reason, 'credential-route', `${method} ${target}`);
       }

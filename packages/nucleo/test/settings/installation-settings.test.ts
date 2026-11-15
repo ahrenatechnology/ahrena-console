@@ -9,6 +9,7 @@ import { after, before, describe, test } from 'node:test';
 import { MIGRATIONS, migrate, schemaVersion } from '../../src/adapters/sqlite/migrations.ts';
 import { openSqliteStorage } from '../../src/index.ts';
 import {
+  answerFromConsoleSwitch,
   INSTALLATION_SETTING_KEYS,
   MemoryInstallationSettings,
   SqliteInstallationSettings,
@@ -74,6 +75,23 @@ function contract(name: string, make: () => InstallationSettings) {
       assert.equal(s.has('work.executionLimit'), false);
     });
 
+    test('#619/AC-4 permissions.answerFromConsole stores a boolean; nothing stored reads null and the switch reads it as on', () => {
+      const s = make();
+      assert.equal(s.get('permissions.answerFromConsole'), null);
+      assert.equal(answerFromConsoleSwitch(s).enabled(), true);
+      answerFromConsoleSwitch(s).setEnabled(false);
+      assert.equal(s.get('permissions.answerFromConsole'), false);
+      assert.equal(answerFromConsoleSwitch(s).enabled(), false);
+      answerFromConsoleSwitch(s).setEnabled(true);
+      assert.equal(answerFromConsoleSwitch(s).enabled(), true);
+    });
+
+    test('#619/AC-4 permissions.answerFromConsole refuses what is not a boolean', () => {
+      const s = make();
+      for (const value of [0, 1, 'true', 'false', null, [true], {}]) assert.throws(() => s.set('permissions.answerFromConsole', value as never), /invalid value for permissions.answerFromConsole/, JSON.stringify(value));
+      assert.equal(s.has('permissions.answerFromConsole'), false);
+    });
+
     test('delete removes the key; deleting a missing key is fine', () => {
       const s = make();
       s.set('github.login', 'octo-cat');
@@ -84,7 +102,7 @@ function contract(name: string, make: () => InstallationSettings) {
 
     test('only the known keys exist: anything else is refused', () => {
       const s = make();
-      assert.deepEqual([...INSTALLATION_SETTING_KEYS], ['github.login', 'github.source', 'project.selection', 'work.trustedOwners', 'work.executionLimit']);
+      assert.deepEqual([...INSTALLATION_SETTING_KEYS], ['github.login', 'github.source', 'project.selection', 'work.trustedOwners', 'work.executionLimit', 'permissions.answerFromConsole']);
       assert.throws(() => s.set('github.token' as never, 'x' as never));
       assert.throws(() => s.get('github.credential' as never));
       assert.throws(() => s.set('github.source', 'keychain' as never));

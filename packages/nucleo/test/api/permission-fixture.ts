@@ -10,6 +10,8 @@ import { digestOf } from '../../src/permissions/digest.ts';
 import { OWNER_TOKEN } from '../owner-http.ts';
 import type { PermissionDeps } from '../../src/permissions/ports.ts';
 import { harness, settle, type Harness } from '../permissions/fakes.ts';
+import { answerFromConsoleSwitch, type InstallationSettings } from '../../src/settings/installation-settings.ts';
+import type { WindowCredentialHolder } from '../../src/permissions/window-credential.ts';
 
 export const WINDOW_CREDENTIAL = 'w1ndow-'.concat('c'.repeat(57));
 export const SID = 'S1';
@@ -62,7 +64,19 @@ export interface PermissionFixture {
 
 export const reqPath = (sid: string, rid = '', tail = ''): string => `/api/sessions/${sid}/permission-requests${rid === '' ? '' : `/${rid}`}${tail}`;
 
-export async function permissionFixture(over: { enabled?: boolean; credential?: string | null; sweepEveryMs?: number; permissions?: boolean; deps?: (db: SqliteStorage['db']) => PermissionDeps } = {}): Promise<PermissionFixture> {
+export interface FixtureOptions {
+  enabled?: boolean;
+  credential?: string | null;
+  sweepEveryMs?: number;
+  permissions?: boolean;
+  deps?: (db: SqliteStorage['db']) => PermissionDeps;
+  /** The switch is the installation setting, wired as the core's production wiring does; absent, it is a flag of the test. (#619) */
+  settings?: InstallationSettings;
+  /** The credential is this holder's (fed by the channel reader), not a constant of the test. (#619) */
+  holder?: WindowCredentialHolder;
+}
+
+export async function permissionFixture(over: FixtureOptions = {}): Promise<PermissionFixture> {
   const storage = openSqliteStorage({ path: ':memory:' });
   const accounts = new Accounts({ storage, file: null });
   const panelBuilder = new MontadorDoPainel({ storage, contas: accounts, desktop: null, trabalho: null, agora: () => NOW });
@@ -79,7 +93,16 @@ export async function permissionFixture(over: { enabled?: boolean; credential?: 
     changes,
     fleet: new FleetReader({ storage, accounts, now: () => NOW, timeZone: 'UTC' }),
     detail: new LeiturasDoDetalhe({ storage, montador: panelBuilder, agora: () => NOW }),
-    ...(over.permissions === false ? {} : { permissions: { deps, enabled: () => state.enabled, windowCredential: () => state.credential, sweepEveryMs: over.sweepEveryMs ?? 3_600_000 } }),
+    ...(over.permissions === false
+      ? {}
+      : {
+          permissions: {
+            deps,
+            ...(over.settings ? answerFromConsoleSwitch(over.settings) : { enabled: () => state.enabled, setEnabled: (value: boolean) => void (state.enabled = value) }),
+            windowCredential: () => (over.holder ? over.holder.current() : state.credential),
+            sweepEveryMs: over.sweepEveryMs ?? 3_600_000,
+          },
+        }),
   });
 
   const call = (method: string, path: string, options: CallOptions = {}): Promise<Reply> =>

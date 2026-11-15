@@ -1,14 +1,35 @@
 # Permission requests contract (#618)
 
-The routes between the plugin's `PermissionRequest` hook, the core and the `/ui`. Authored first (decision [0025](../decisoes/0025-permission-requests-from-the-console.md), `contract-first`): `packages/nucleo/src/api/permissions.ts` is validated against this file, and `packages/nucleo/test/api/permission-requests-contract.test.ts` exercises every operation below. The domain, the use cases and the SQLite adapter are `packages/nucleo/src/permissions/`.
+The routes between the plugin's `PermissionRequest` hook, the core and the `/ui`. Authored first (decision [0025](../decisoes/0025-permission-requests-from-the-console.md), `contract-first`): `packages/nucleo/src/api/permissions.ts` is validated against this file, and `packages/nucleo/test/api/permission-requests-contract.test.ts` exercises every operation below, and `permission-window-scenarios.test.ts` holds the acceptance scenarios of the window credential and the switch (#619/AC-1 to AC-6). The domain, the use cases and the SQLite adapter are `packages/nucleo/src/permissions/`.
 
-The operations below are also declared in [`core-api.openapi.json`](core-api.openapi.json) (tag `Permissions`: `registerPermissionRequest`, `getPermissionDecision`, `withdrawPermissionRequest`, `listPermissionRequests`, `answerPermissionRequest`, with the `Permission*` schemas), and `pendingPermissions` is described on `getAttention` and `getSession`; the change event is [`events/permission.changed.v1.schema.json`](events/permission.changed.v1.schema.json). The two files are kept in step: a change to an operation here is a change to its entry there, and the parity test (`packages/nucleo/test/api/contract-parity.test.ts`) fails on a route one declares and the other does not.
+The operations below are also declared in [`core-api.openapi.json`](core-api.openapi.json) (tag `Permissions`: `registerPermissionRequest`, `getPermissionDecision`, `withdrawPermissionRequest`, `listPermissionRequests`, `answerPermissionRequest`, `getPermissionSwitch`, `setPermissionSwitch`, with the `Permission*` schemas), and `pendingPermissions` is described on `getAttention` and `getSession`; the change event is [`events/permission.changed.v1.schema.json`](events/permission.changed.v1.schema.json). The two files are kept in step: a change to an operation here is a change to its entry there, and the parity test (`packages/nucleo/test/api/contract-parity.test.ts`) fails on a route one declares and the other does not.
 
 Every route needs the owner bearer (`Authorization: Bearer <owner token>`, #302). A request without it never reaches the handler (403). Errors reach the caller as `{ "error": "<code>" }`, a closed code and never the text of an exception, a dependency or the request.
 
 ## When the capability is off
 
-The capability is off while the core runs without a window credential (a core the desktop app did not start) or while the switch is off. Until the window credential exists in the app (#619) a core always starts off.
+The capability is on when the core holds a live window credential and the Controle switch is on; the switch is on when nothing is stored (#619). It is off while the core runs without a window credential (a core the desktop app did not start, an adopted one, a peer the native check refused) or while the switch is off.
+
+## The window credential and the switch (#619)
+
+- The credential is 256 random bits the desktop app issues in memory and hands to the core it started, over an inherited Unix socket (`--window-channel <fd>`), one line of 64 lowercase hex characters per credential; a new line replaces the previous one (rotation), and the end of the stream or an error revokes it. Before each line the core checks the process at the other end natively (its code hash against the installed app's, at the constant path `/Applications/Ahrena Console.app/Contents/MacOS/<exe>`); on `mismatch` or `unavailable` it holds no credential and closes the channel. No credential is accepted through an argument, an environment variable or a file, and it is never written to disk, a log, a URL, a page or a GET response.
+- The switch is the installation setting `permissions.answerFromConsole` (a boolean, absent is on). It persists across restarts. Off, the core refuses registration (`503 off`) and the answer (`403 window_only`).
+
+### 6. Switch state (`/ui`)
+
+`GET /api/permissions/answer-from-console`
+
+- Caller: the `/ui` (a same-origin `GET` with the bearer) or any bearer client. `403` for another `Origin`, a `Sec-Fetch-Site` of `cross-site` or `same-site`, or no owner bearer.
+- `200 { "enabled": boolean, "available": boolean }` and nothing else. `enabled` is the setting; `available` is a live window credential. The credential is never in the answer.
+
+### 7. Set the switch (`/ui`)
+
+`PUT /api/permissions/answer-from-console`
+
+- Body (`application/json`, at most 256 bytes): `{ "enabled": boolean }` and nothing else (`400 { "error": "invalid_request" }`; `413 too_large`; `415 use application/json`).
+- Turning it **off**: the owner bearer, from a plain client or from the `/ui` (same-origin `PUT` of the exact raw path with JSON and a declared length).
+- Turning it **on**: also the `Origin` of the `/ui` window and `Ahrena-Window: <window credential>`; otherwise `403 { "error": "window_only" }`. What the person turned off, an agent holding only the owner token cannot turn on.
+- `200 { "enabled": boolean, "available": boolean }` after storing. `403` when the origin or owner proof fails.
 
 | Operation | Answer while off |
 | --- | --- |
@@ -85,11 +106,11 @@ Each hook event the receiver stores is also read by the permission use case `set
 
 - `GET /api/attention` carries `pendingPermissions` and `GET /api/sessions/:id` carries it too, **only when the permission routes are wired** (a core without them keeps the old shape): `[ { "session", "requestId", "tool", "terminalOnly", "requestedAt", "expiresAt" } ]` for the requests still pending. No summary and no folder: both routes are open to the `AhrenaRemote` proof (decision 0020), the list route is not.
 - `GET /api/changes` records `{ "type": "permission", "key": "<requestId>", "sessionId" }` on every opening and every change of state. The type is screen-only: the MCP `wait_for_changes` does not expose it.
-- Not open to `AhrenaRemote`: none of the five operations is on the closed list of routes (decision 0020), so a signed remote request gets `403`.
+- Not open to `AhrenaRemote`: none of the operations is on the closed list of routes (decision 0020), so a signed remote request gets `403`.
 
 ## Audit
 
-`<dataDir>/permission-audit.jsonl` records the registration, the answer, the delivery, the closing and every refusal, including those the API makes (`window_only`, `forbidden_origin`, `hook_only`; the `off` answer is the capability's state, not a refusal of a request, and is not audited), never the tool input, the summary or a reason in clear, nor the window credential or the bearer.
+`<dataDir>/permission-audit.jsonl` records the registration, the answer, the delivery, the closing and every refusal, including those the API makes (`window_only`, `forbidden_origin`, `hook_only`, and the same on the switch route; the `off` answer is the capability's state, not a refusal of a request, and is not audited), never the tool input, the summary or a reason in clear, nor the window credential or the bearer.
 
 ## Expiry
 

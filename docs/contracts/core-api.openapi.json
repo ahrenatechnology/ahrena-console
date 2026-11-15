@@ -5596,6 +5596,119 @@
           }
         }
       }
+    },
+    "/api/permissions/answer-from-console": {
+      "get": {
+        "operationId": "getPermissionSwitch",
+        "tags": [
+          "Permissions"
+        ],
+        "summary": "The state of the Controle switch for answering permission requests from the Console",
+        "description": "Caller: the /ui or any bearer client. Booleans only: `enabled` is the installation setting `permissions.answerFromConsole` (on when nothing is stored) and `available` says whether this core holds a live window credential (a core the desktop app did not start never does). The capability is on when both are true. The window credential itself is never in any GET response.",
+        "responses": {
+          "200": {
+            "description": "The state of the switch.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PermissionSwitchState"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`Origin` other than the core's own, or `Sec-Fetch-Site` of `cross-site` or `same-site`, or no owner proof.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PermissionRefusal"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "operationId": "setPermissionSwitch",
+        "tags": [
+          "Permissions"
+        ],
+        "summary": "Turns the Controle switch off or on",
+        "description": "Turning it off needs the owner bearer, from a plain client or from the /ui (same-origin `PUT` of the exact raw path, JSON, a declared `Content-Length` of at most 256 bytes). Turning it on needs also the `Ahrena-Window` credential and the `Origin` of the /ui window: what the person turned off, an agent holding only the owner token cannot turn on. The body carries only `enabled`. Not open to the AhrenaRemote proof.",
+        "parameters": [
+          {
+            "name": "Ahrena-Window",
+            "in": "header",
+            "required": false,
+            "description": "The window credential the desktop app holds. Required to turn the switch on, not to turn it off. Never in a URL or a body.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PermissionSwitchBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Stored; the new state.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PermissionSwitchState"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`invalid_request`: not a JSON object with a boolean `enabled` and nothing else.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PermissionRefusal"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The origin or owner proof failed, or `window_only` (turning it on without the live window credential or the /ui origin).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PermissionRefusal"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "The body is over 256 bytes (`too_large`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PermissionRefusal"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "The content type is not JSON (`use application/json`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PermissionRefusal"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -7080,6 +7193,36 @@
             "items": {
               "$ref": "#/components/schemas/PermissionRequestItem"
             }
+          }
+        }
+      },
+      "PermissionSwitchState": {
+        "type": "object",
+        "required": [
+          "enabled",
+          "available"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "description": "The switch on the Controle screen."
+          },
+          "available": {
+            "type": "boolean",
+            "description": "This core holds a live window credential."
+          }
+        }
+      },
+      "PermissionSwitchBody": {
+        "type": "object",
+        "required": [
+          "enabled"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "type": "boolean"
           }
         }
       }

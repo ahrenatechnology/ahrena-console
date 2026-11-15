@@ -41,7 +41,7 @@ import { GITHUB_CALL_LIMIT, GithubCallQueue } from '../github/call-queue.ts';
 import { InstallationRepositoryTrust } from '../github/trusted-owners.ts';
 import { chooseVault, GithubConnection, GithubNotConnectedError } from '../github/connection/index.ts';
 import { parseProjectEnv, PROJECT_ENV } from '../github/project-selection.ts';
-import { SqliteInstallationSettings } from '../settings/installation-settings.ts';
+import { answerFromConsoleSwitch, SqliteInstallationSettings } from '../settings/installation-settings.ts';
 import { executionLimitOf } from '../github/work-execution.ts';
 import { SqliteWorkQueue } from '../github/work-queue-store.ts';
 import { WorkQueuePuller } from './work-queue-puller.ts';
@@ -813,9 +813,8 @@ runtimeStore.recoverDisconnected();
 const permissionDeps = openPermissionDeps(sqlite.db, dataDir, log);
 const restartedRequests = sweepOnStart(permissionDeps);
 if (restartedRequests.length > 0) log(`permission requests closed by the restart: ${restartedRequests.length}`);
-/* The window credential (#619): in memory, accepted only over the inherited channel from the app that started this core. Layer 2 wires
-   the native peer check (NativePeerVerifier) into the channel; production keeps the capability off (`enabled: () => false`) until
-   layer 4 turns it on, the app's side being layer 3. */
+/* The window credential (#619): in memory, accepted only over the inherited channel from the app that started this core, the peer
+   checked natively (NativePeerVerifier). The capability is on whenever the credential is live, unless the Controle switch is off (#619). */
 const windowCredential = createWindowCredentialHolder();
 if (o.windowChannel !== undefined) {
   // Without a reopened descriptor there is no channel and no credential: the capability stays unavailable (#619).
@@ -828,9 +827,9 @@ const observability = await createObservability(process.env, API_VERSION);
 const api: LocalApi = await startLocalApi({
   observer: observability.observer,
   ownerToken: () => ownerToken,
-  // The permission routes (decision 0025, #618): off until the Controle switch exists (#619, layer 4); the window credential is the holder's, empty while the verifier is layer 1's.
-  // The hook routes answer 503 off and the answer route 403 window_only. (#618)
-  permissions: { deps: permissionDeps, enabled: () => false, windowCredential: () => windowCredential.current() },
+  // The permission routes (decision 0025, #618): on by default with a live window credential, the Controle switch (installation setting
+  // `permissions.answerFromConsole`) turns them off and on (#619). Without the credential the hook routes answer 503 off and the answer route 403 window_only.
+  permissions: { deps: permissionDeps, ...answerFromConsoleSwitch(settings), windowCredential: () => windowCredential.current() },
   runtime: new ManagedRuntime(storage, runtimeStore),
   listenOn: reservation,
   panelBuilder,

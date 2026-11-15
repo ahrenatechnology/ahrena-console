@@ -34,8 +34,10 @@ import { fromAnotherSite, fromOwnUi } from './same-origin.ts';
 export interface PermissionsOptions {
   /** The use cases' ports: the SQLite repository, the audit file, the clock, the notifier. (#618) */
   deps: PermissionDeps;
-  /** The switch on the Controle screen. Production: `() => false` until the window credential exists in the app (#619). (#618) */
+  /** The switch on the Controle screen: the installation setting `permissions.answerFromConsole`, on when nothing is stored. The capability is on when this and a live window credential hold. (#619) */
   enabled: () => boolean;
+  /** Stores the switch (#619). Turning it on takes the window credential, turning it off the owner proof. */
+  setEnabled: (value: boolean) => void;
   /** The window credential, in memory only; `null` when this core was not started by the app. Never persisted, never logged. (#618) */
   windowCredential: () => string | null;
   /** How often the expiry sweep runs. Default 30 s. (#618) */
@@ -65,7 +67,19 @@ export function permissionAnswerFromSameOrigin(req: IncomingMessage, port: numbe
   return typeof length === 'string' && /^\d{1,6}$/.test(length) && Number(length) <= MAX_ANSWER_BYTES;
 }
 
-type Operation = 'register' | 'decision' | 'withdraw' | 'list' | 'answer';
+type Operation = 'register' | 'decision' | 'withdraw' | 'list' | 'answer' | 'switch';
+
+/** The Controle switch: `GET` reads `{ enabled, available }`, `PUT { enabled }` sets it (#619). */
+export const PERMISSION_SWITCH_ROUTE = '/api/permissions/answer-from-console';
+const MAX_SWITCH_BYTES = 256;
+
+/** The /ui window's write of the switch: `PUT` on the exact raw path with `Origin` exactly `http://<Host>`, JSON and a declared length of at most 256 bytes. (#619) */
+export function permissionSwitchWriteFromSameOrigin(req: IncomingMessage, port: number): boolean {
+  if (req.method !== 'PUT' || req.url !== PERMISSION_SWITCH_ROUTE || !fromOwnUi(req, port) || fromAnotherSite(req)) return false;
+  if (!/^application\/json\s*(;|$)/i.test(req.headers['content-type'] ?? '')) return false;
+  const length = req.headers['content-length'];
+  return typeof length === 'string' && /^\d{1,6}$/.test(length) && Number(length) <= MAX_SWITCH_BYTES;
+}
 
 interface Parsed {
   operation: Operation | null;
@@ -84,6 +98,7 @@ function safeDecode(text: string): string | null {
 }
 
 function parse(req: IncomingMessage, url: URL): Parsed {
+  if (url.pathname === PERMISSION_SWITCH_ROUTE) return { operation: req.method === 'GET' || req.method === 'PUT' ? 'switch' : null, sessionId: null, requestId: null };
   const m = PERMISSION_ROUTE.exec(url.pathname);
   if (!m) return { operation: null, sessionId: null, requestId: null };
   const sessionId = safeDecode(m[1]!);
@@ -223,7 +238,7 @@ export function hookEventOf(raw: unknown): HookEvent | null {
 }
 
 export interface Permissions {
-  /** `true` for a path of the permission routes. (#618) */
+  /** `true` for a path of the permission routes, the Controle switch's included (#619). (#618) */
   matches(pathname: string): boolean;
   /** Handles one request of the permission routes, after the owner proof and the same-origin chain. (#618) */
   handle(req: IncomingMessage, res: ServerResponse, url: URL): Promise<void>;
@@ -292,7 +307,7 @@ export function createPermissions(options: PermissionsOptions, ctx: PermissionsC
 
   function gate(req: IncomingMessage, url: URL): { status: number; code: string } | null {
     const parsed = parse(req, url);
-    if (parsed.operation === null) return PERMISSION_ROUTE.test(url.pathname) ? { status: 405, code: 'method_not_allowed' } : null;
+    if (parsed.operation === null) return PERMISSION_ROUTE.test(url.pathname) || url.pathname === PERMISSION_SWITCH_ROUTE ? { status: 405, code: 'method_not_allowed' } : null;
     const refuse = (status: number, code: string) => {
       audit(parsed.operation!, parsed, code);
       return { status, code };
@@ -304,7 +319,8 @@ export function createPermissions(options: PermissionsOptions, ctx: PermissionsC
       if (!capability() || !windowProven(req, options.windowCredential())) return refuse(403, 'window_only');
       return null;
     }
-    if (parsed.operation === 'list') {
+    if (parsed.operation === 'list' || parsed.operation === 'switch') {
+      // (#619) The switch reads and turns off like the list is read: the bearer, or the /ui window. Turning it on takes the window credential too, in the handler.
       const fromUi = req.headers.origin !== undefined && fromOwnUi(req, port);
       if (!(allowedLocalRequest(req, port) || fromUi) || fromAnotherSite(req)) return refuse(403, 'forbidden_origin');
       return null;
@@ -405,12 +421,36 @@ export function createPermissions(options: PermissionsOptions, ctx: PermissionsC
     send(res, 200, { ok: true });
   }
 
+  /** The switch's state: booleans only, `available` being a live window credential (#619). */
+  const switchState = (): { enabled: boolean; available: boolean } => ({ enabled: options.enabled(), available: (options.windowCredential()?.length ?? 0) >= MIN_CREDENTIAL_CHARS });
+
+  async function switchRoute(req: IncomingMessage, res: ServerResponse, parsed: Parsed): Promise<void> {
+    if (req.method === 'GET') return send(res, 200, switchState());
+    const read = await jsonBody(req, MAX_SWITCH_BYTES, (status, code) => refuse(res, parsed, status, code));
+    if (!read.ok) return;
+    const { enabled, ...rest } = read.body;
+    if (Object.keys(rest).length > 0 || typeof enabled !== 'boolean') return refuse(res, parsed, 400, 'invalid_request');
+    // (#619) What the person turned off, an agent with only the owner token cannot turn on: on takes the window (when in doubt, only the Desktop).
+    if (enabled && !(fromOwnUi(req, ctx.port()) && windowProven(req, options.windowCredential()))) return refuse(res, parsed, 403, 'window_only');
+    options.setEnabled(enabled);
+    ctx.log(`permission switch set enabled=${enabled}`);
+    send(res, 200, switchState());
+  }
+
   async function handle(req: IncomingMessage, res: ServerResponse, url: URL): Promise<void> {
     const parsed = parse(req, url);
     const { operation, sessionId, requestId } = parsed;
     if (operation === null) {
       req.resume();
       return send(res, 405, { error: 'method_not_allowed' });
+    }
+    if (operation === 'switch') {
+      try {
+        return await switchRoute(req, res, parsed);
+      } catch (error) {
+        req.resume();
+        return fault(res, parsed, error);
+      }
     }
     if (sessionId === null || !SESSION_ID.test(sessionId)) {
       req.resume();
@@ -434,6 +474,8 @@ export function createPermissions(options: PermissionsOptions, ctx: PermissionsC
           return send(res, 200, listRequests(deps, { sessionId, unavailableReason: capability() ? null : 'off' }));
         case 'answer':
           return await answer(req, res, parsed, sessionId, requestId!);
+        case 'switch':
+          return await switchRoute(req, res, parsed);
         default: {
           const unreachable: never = operation;
           void unreachable;
@@ -448,7 +490,7 @@ export function createPermissions(options: PermissionsOptions, ctx: PermissionsC
   }
 
   return {
-    matches: (pathname) => PERMISSION_ROUTE.test(pathname),
+    matches: (pathname) => PERMISSION_ROUTE.test(pathname) || pathname === PERMISSION_SWITCH_ROUTE,
     handle,
     gate,
     pending: (sessionId = null) => pendingPermissions(deps, sessionId),
