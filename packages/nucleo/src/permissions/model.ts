@@ -8,7 +8,7 @@
 // again (`core_restarted`). An answered request that was not yet delivered can still be closed by any of them. (#618)
 //
 // What the request keeps of the call is its digest and a summary already masked. The raw tool input is never kept. (#618)
-import { digestOf } from './digest.ts';
+import { assertWithinDepth, digestOf } from './digest.ts';
 import { PermissionRefusal, REFUSAL_CODES, type RefusalCode } from './refusal.ts';
 export { PermissionRefusal, REFUSAL_CODES, type RefusalCode };
 import { summarizeCall } from './summary.ts';
@@ -87,6 +87,8 @@ export class PermissionRequest {
 
   /** Opens a request from a hook payload. The tool input is read for the digest, the summary and the policy, and dropped. (#618) */
   static async open(p: { id: string; sessionId: string; toolName: string; toolInput: unknown; cwd: string; permissionMode: string | null; now: number }): Promise<PermissionRequest> {
+    // The depth ceiling comes before anything walks the input (#618/AC-1): the digest envelope is level 1, the input level 2.
+    assertWithinDepth(p.toolInput, 2);
     const { summary, truncated, masked } = summarizeCall(p.toolName, p.toolInput);
     return new PermissionRequest({
       id: p.id,

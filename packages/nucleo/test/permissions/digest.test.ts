@@ -5,6 +5,8 @@ import { readFileSync } from 'node:fs';
 import { describe, test } from 'node:test';
 import { MAX_CANONICAL_DEPTH, canonicalJson, digestOf } from '../../src/permissions/digest.ts';
 import { PermissionRefusal, PermissionRequest } from '../../src/permissions/model.ts';
+import { summarizeCall } from '../../src/permissions/summary.ts';
+import { isTerminalOnly } from '../../src/permissions/terminal-only.ts';
 
 interface Vector {
   name: string;
@@ -68,5 +70,17 @@ describe('digestOf (#618/AC-1)', () => {
     const nest = (levels: number): unknown => (levels === 0 ? 1 : [nest(levels - 1)]);
     assert.doesNotThrow(() => canonicalJson(nest(MAX_CANONICAL_DEPTH)));
     assert.throws(() => canonicalJson(nest(MAX_CANONICAL_DEPTH + 1)), PermissionRefusal);
+  });
+
+  test('#618/AC-1: every entry that reads a tool input refuses a deep nesting before it walks it, so no stack size decides', () => {
+    const isRefusal = (e: unknown) => e instanceof PermissionRefusal && e.code === 'input_too_deep';
+    let deepObject: unknown = {};
+    for (let i = 0; i < 10_000; i++) deepObject = { a: deepObject };
+    const deepArray = JSON.parse('['.repeat(10_000) + ']'.repeat(10_000)) as unknown;
+    for (const v of [deepArray, deepObject]) {
+      assert.throws(() => summarizeCall('X', v), isRefusal);
+      assert.throws(() => summarizeCall('Task', { nested: v }), isRefusal);
+      assert.equal(isTerminalOnly('Task', { nested: v }), true);
+    }
   });
 });

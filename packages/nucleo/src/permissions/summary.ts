@@ -1,5 +1,6 @@
 // What the person approves, as a short text with the secrets masked (decision 0025, "Modelo de ameaça", #618/AC-7).
-// Redacted here, before anything is kept: the raw tool input is never stored or logged (#617); pure, no import (#618).
+// Redacted here, before anything is kept: the raw tool input is never stored or logged (#617); pure, imports only the depth check of the digest (#618).
+import { assertWithinDepth } from './digest.ts';
 
 /** What replaces a secret (#618/AC-7). */
 export const MASK = '••••';
@@ -152,6 +153,7 @@ function describeCall(toolName: string, input: unknown, cuts: Cuts): string {
 
 /** The text the person reads to decide: read up to a ceiling, masked, then cut, so a cut never leaves half a secret; `truncated` tells the screen to mark a cut one (#618/AC-7). */
 export function summarizeCall(toolName: string, toolInput: unknown): { summary: string; truncated: boolean; masked: boolean } {
+  assertWithinDepth(toolInput, 2);
   const cuts: Cuts = { truncated: false, masked: false };
   const summary = cut(redact(describeCall(toolName, toolInput, cuts), cuts), MAX_SUMMARY_CHARS, cuts);
   return { summary, truncated: cuts.truncated, masked: cuts.masked };

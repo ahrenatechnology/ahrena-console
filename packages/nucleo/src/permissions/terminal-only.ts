@@ -3,7 +3,7 @@
 // The check is by text, a floor and not the defence (`$HOME/.ahr*` slips past it): the defence is the window credential (#619).
 // The data folders of the other instances in the instance registry are added to the citing check by a later layer (#618).
 
-import { MAX_CANONICAL_DEPTH } from './digest.ts';
+import { exceedsDepth } from './digest.ts';
 
 // `sh -c "$(curl …)"` and a shell or `source` fed by process substitution `<(curl …)` (#618/AC-6).
 const COMMAND_PATTERNS: RegExp[] = [/\bsudo\b/, /\b(?:ba|z|da|k)?sh\s+-c\s+["']?\$\(\s*(?:curl|wget)\b/, /\b(?:(?:ba|z|da|k)?sh|fish|source)\s+<\(\s*(?:curl|wget)\b/, /(?:^|[\s;&|])\.\s+<\(\s*(?:curl|wget)\b/];
@@ -75,12 +75,14 @@ function commandIsTerminalOnly(rawCommand: string): boolean {
   return forms.some((form) => form.split(/[|;&\n]+/).some(hasRiskyVerb));
 }
 
-/** Every string anywhere in the input, to the same depth the digest accepts; `false` when it nests deeper (#618/AC-6, INP-9). The input is level 2 of the digest envelope. */
-function collectStrings(value: unknown, depth: number, out: string[]): boolean {
-  if (typeof value === 'string') out.push(value);
-  else if (value !== null && typeof value === 'object') {
-    if (depth > MAX_CANONICAL_DEPTH) return false;
-    for (const v of Object.values(value)) if (!collectStrings(v, depth + 1, out)) return false;
+/** Every string anywhere in the input, to the same depth the digest accepts; `false` when it nests deeper (#618/AC-6, INP-9). The input is level 2 of the digest envelope. Read with an explicit stack, after the depth check. */
+function collectStrings(value: unknown, out: string[]): boolean {
+  if (exceedsDepth(value, 2)) return false;
+  const pending: unknown[] = [value];
+  while (pending.length > 0) {
+    const v = pending.pop();
+    if (typeof v === 'string') out.push(v);
+    else if (v !== null && typeof v === 'object') pending.push(...Object.values(v));
   }
   return true;
 }
@@ -92,7 +94,7 @@ export function isTerminalOnly(toolName: string, toolInput: unknown): boolean {
   if (toolName === 'Bash' && typeof command !== 'string') return true;
 
   const strings: string[] = [];
-  if (!collectStrings(toolInput, 2, strings)) return true;
+  if (!collectStrings(toolInput, strings)) return true;
   const cites = (form: string) => CITED_PATTERNS.some((re) => re.test(form)) || PROTECTED_PATH_PATTERNS.some((re) => re.test(form));
   if (strings.some((text) => spellings(text).some(cites))) return true;
   return typeof command === 'string' && commandIsTerminalOnly(command);
