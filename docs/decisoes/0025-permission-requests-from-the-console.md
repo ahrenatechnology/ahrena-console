@@ -87,7 +87,7 @@ sequenceDiagram
 
 - **Permitir uma vez:** `allow` **sem** `updatedPermissions` e **sem** `updatedInput`. Nenhuma regra é gravada.
 - **Negar:** `deny` com `message` "Negado por você, pelo Ahrena Console" e o motivo, se houver.
-- **Só o Desktop/terminal libera** (`terminalOnly`): `rm -r…`, `git push --force…`, `git reset --hard`, `git clean -f…`, `sudo`, `curl … | sh`; escrita em `.claude/settings*.json`, `.claude/hooks/`, `.mcp.json`, `.env*`, `~/.ssh/`, `~/.ahrena-console/`; e **qualquer chamada (Bash, Read, Grep, Glob, Edit, Write, NotebookEdit) cujo comando ou caminho cite `.ahrena-console`, a pasta de dados de qualquer instância do registro (inclusive `~/Library/Application Support/dev.ahrena.console`) ou a pasta de plugins `~/.claude/plugins/`** (ver "o próprio agente" no modelo de ameaça). O Console pode negar, nunca permitir: o núcleo recusa (`422`) e o hook recusa de novo.
+- **Só o Desktop/terminal libera** (`terminalOnly`): `rm -r…`, `git push --force…`, `git reset --hard`, `git clean -f…`, `sudo`, `curl … | sh`; escrita em `.claude/settings*.json`, `.claude/hooks/`, `.mcp.json`, `.env*`, `~/.ssh/`, `~/.ahrena-console/`; e **qualquer chamada (Bash, Read, Grep, Glob, Edit, Write, NotebookEdit) cujo comando ou caminho cite `.ahrena-console`, a pasta de dados de qualquer instância do registro (inclusive `~/Library/Application Support/dev.ahrena.console`) ou a pasta de plugins `~/.claude/plugins/`** (ver "o próprio agente" no modelo de ameaça). O Console pode negar, nunca permitir: o núcleo recusa (`422`) e o hook recusa de novo. Na dúvida, o piso sobre-casa (ver "Emenda: o piso sobre-casa na dúvida").
 - **"Sempre permitir" (`permission_suggestions`):** fora do #60, em [#615](https://github.com/ahrenatechnology/ahrena-console/issues/615). Ver "Alternativas rejeitadas".
 - **Sessão sem o plugin, núcleo de outra versão, capacidade desligada ou sessão Codex:** a `/ui` mostra "indisponível" e nenhum botão. Nada é simulado por texto. O adaptador Codex fica no épico [#376](https://github.com/ahrenatechnology/ahrena-console/issues/376).
 
@@ -147,3 +147,16 @@ Fora do modelo, como já estão para o próprio cartão do Desktop: um agente qu
 - **Provado (2026-11-14):** disparo na aba Code e paralelo com o cartão, nos dois sentidos (hook primeiro; Desktop primeiro), com o hook em `settings.local.json`; disparo do hook registrado pelo plugin no CLI (`-p --plugin-dir`) e no terminal interativo; no terminal interativo, diálogo aberto enquanto o hook espera e fechado quando o hook nega; payload sem `tool_use_id`; worktree lendo a configuração do checkout principal.
 - **A confirmar em #620:** o hook registrado pelo plugin no Claude Desktop real, ponta a ponta, inclusive com duas chamadas paralelas pedindo permissão na mesma sessão (dois disparos, dois pedidos, pareamento certo); o sinal que distingue Desktop e terminal interativo de `-p`/SDK; e se um `allow` do hook responde a um diálogo aberto por regra `ask` gerenciada.
 - **Não provado:** o comportamento sob `allowManagedHooksOnly`.
+
+## Emenda: o piso sobre-casa na dúvida
+
+- **Data:** 2026-11-14. **Issue:** [#618](https://github.com/ahrenatechnology/ahrena-console/issues/618) (AC-9). **Decisão do Fernando:** "Na dúvida, só Desktop", depois de três rodadas do Argos na camada de domínio do #618 acharem, cada uma, uma grafia nova que escapava do piso `terminalOnly`.
+- **Regra:** o piso `terminalOnly` erra para o lado de casar demais. Uma chamada que talvez seja de risco é `terminalOnly`; o Console ainda pode negá-la, só não pode permiti-la. Casar demais é seguro; casar de menos não.
+- **O que isso fixa:**
+  1. Todo Bash em que `push`, `reset` ou `clean` venha depois de `git` é `terminalOnly`, quaisquer que sejam as flags (inclusive flags curtas agrupadas, como `-fu` e `-uf`).
+  2. Todo caminho ou texto que contenha `.env` é `terminalOnly` (inclusive `.envrc`, `.env-production`, `.env_prod`).
+  3. Texto entre aspas é lido como palavras soltas: aspas nunca escondem uma palavra do tokenizador (`git -C "/a b" push --force` casa).
+  4. Um Bash que escreve num arquivo protegido é `terminalOnly`, como "Por tipo de chamada" já diz para escrita.
+  5. No resumo, credenciais entre aspas e com espaço também são mascaradas (`curl -u "admin:s3 cret"`).
+- **Não muda:** o piso continua piso, não a defesa (a defesa é a credencial da janela, #619); nenhuma outra decisão desta 0025 é reaberta.
+
