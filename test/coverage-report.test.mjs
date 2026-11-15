@@ -1,4 +1,4 @@
-// Unit tests for scripts/coverage-report.mjs (issue 659).
+// Unit tests for scripts/coverage-report.mjs (#659).
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { layerOf, mergeCoverage, parseDiff, parseLcov, summarize, toLcov, toMarkdown } from '../scripts/coverage-report.mjs'

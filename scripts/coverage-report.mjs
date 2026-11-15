@@ -1,9 +1,11 @@
 #!/usr/bin/env node
-// Sums the lcov files of the core shards and reports line coverage three ways: of the lines the PR
-// changed (diff), of everything (total) and of each layer in docs/architecture/layers.json (#659).
-// It only publishes: nothing here fails on a threshold (the scorecard check does, #666).
-//
-//   node scripts/coverage-report.mjs --lcov <dir-or-file>... [--base <sha>] [--out <dir>]
+/*
+ * Sums the lcov files of the core shards and reports line coverage three ways: of the lines the PR
+ * changed (diff), of everything (total) and of each layer in docs/architecture/layers.json (#659).
+ * It only publishes: nothing here fails on a threshold (the scorecard check does, #666).
+ *
+ *   node scripts/coverage-report.mjs --lcov <dir-or-file>... [--base <sha>] [--out <dir>]
+ */
 import { execFileSync } from 'node:child_process'
 import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs'
 import { join, relative, resolve, sep } from 'node:path'
@@ -20,9 +22,9 @@ export function parseLcov(text, root = ROOT, prefix = 'packages/nucleo/') {
     if (line.startsWith('SF:')) {
       const path = line.slice(3)
       let rel = (path.startsWith('/') ? relative(root, path) : path).split(sep).join('/')
-      // Shards ran on other runners: keep what follows the repo root, found by the packages/ folder.
-      if (rel.startsWith('..')) rel = rel.slice(rel.indexOf('packages/'))
-      // node --test writes paths relative to the folder it ran in (packages/nucleo).
+      // Shards ran on other runners: keep what follows the repo root, found by packages/ (#659).
+      if (rel.startsWith('..') && rel.includes('packages/')) rel = rel.slice(rel.indexOf('packages/'))
+      // node --test writes paths relative to its folder, packages/nucleo (#659).
       else if (!path.startsWith('/') && !rel.startsWith('packages/')) rel = prefix + rel
       current = files.get(rel) ?? new Map()
       files.set(rel, current)
@@ -64,7 +66,7 @@ export function parseDiff(text) {
   const added = new Map()
   let file = null
   for (const line of text.split('\n')) {
-    if (line.startsWith('+++ ')) {
+    if (line.startsWith('+++ b/') || line === '+++ /dev/null') {
       file = line === '+++ /dev/null' ? null : line.slice(6)
       if (file) added.set(file, new Set())
     } else if (line.startsWith('@@') && file) {
