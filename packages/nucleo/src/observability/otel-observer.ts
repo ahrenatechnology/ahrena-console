@@ -1,8 +1,9 @@
 /* The OpenTelemetry adapter behind the observability port (#661). Loaded by `import()` from setup.ts and only when
    AHRENA_CONSOLE_OTEL_EXPORTER is configured: this is the one file in the core that imports @opentelemetry/*.
-   Exits: a span (name, method, route, status code, exception type) and a log record (event.name, method, route,
-   status code, correlation id, exception type, error code). The error's text and its stack stay out of both
-   (layer-exposure rule); the response carries the correlation id instead. A failed export writes one line per
+   Exits: a span (name, method, route, status code, exception.type, exception.message, exception.stacktrace: OTL-3)
+   and a log record (event.name, method, route, status code, correlation id, error code, exception.type,
+   exception.message, exception.stacktrace: LOG-5). Product decision of #661: the stack is recorded on the span and in
+   the log, both through the masking, and never returned to the user; the response carries the correlation id. A failed export writes one line per
    failure streak to the internal log: the signal, AHRENA_CONSOLE_OTEL_ENDPOINT and the error type, never its text. */
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { ROOT_CONTEXT, SpanKind, SpanStatusCode, trace, type Context, type Span } from '@opentelemetry/api';
@@ -82,18 +83,29 @@ function reportingLogExporter(inner: LogRecordExporter, observe: (result: Export
 
 interface Failure {
   readonly type: string;
+  readonly message: string | null;
+  readonly stacktrace: string | null;
   readonly code: string | null;
 }
 
-/** The named fields of a failure (#661): its type and its provider code, never its text or its stack. */
+/** The named fields of a failure (#661): type, message, stack and provider code; the error object itself never leaves. */
 function describeFailure(error: unknown): Failure {
-  const type = error instanceof Error ? error.name : typeof error;
+  const isError = error instanceof Error;
+  const type = isError ? error.name : typeof error;
   const code = typeof error === 'object' && error !== null && 'code' in error && typeof error.code === 'string' && ERROR_CODE.test(error.code) ? error.code : null;
-  return { type, code };
+  return { type, message: isError ? error.message : null, stacktrace: isError ? (error.stack ?? null) : null, code };
+}
+
+/** The exception attributes (OTL-3, LOG-5), through the masking. */
+function exceptionAttributes(failure: Failure): Record<string, AttributeValue> {
+  const attributes: Record<string, AttributeValue> = { 'exception.type': failure.type };
+  if (failure.message !== null) attributes['exception.message'] = failure.message;
+  if (failure.stacktrace !== null) attributes['exception.stacktrace'] = failure.stacktrace;
+  return maskAttributes(attributes);
 }
 
 function markFailed(span: Span, failure: Failure): void {
-  span.addEvent('exception', { 'exception.type': failure.type });
+  span.addEvent('exception', exceptionAttributes(failure));
   span.setStatus({ code: SpanStatusCode.ERROR });
 }
 
@@ -132,7 +144,7 @@ export async function createOtelObserver(options: OtelObserverOptions): Promise<
       'correlation.id': correlationId,
     };
     if (status !== null) attributes['http.response.status_code'] = status;
-    if (failure) attributes['exception.type'] = failure.type;
+    if (failure) Object.assign(attributes, exceptionAttributes(failure));
     if (failure?.code) attributes['error.code'] = failure.code;
     logger.emit({
       eventName: REQUEST_EVENT,

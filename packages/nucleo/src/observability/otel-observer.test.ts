@@ -61,10 +61,9 @@ describe('createOtelObserver', () => {
     assert.deepEqual(record!.body, { method: 'GET', route: '/api/history' });
   });
 
-  test('a failure carries exception.type and error.code and never the message or the stack', async () => {
+  test('a failure records exception.type, exception.message and exception.stacktrace on the span and the log, masked, with error.code', async () => {
     const { spans, logs, observability } = await build();
-    const secret = 'SELECT * FROM history WHERE password = hunter2';
-    const error = Object.assign(new TypeError(secret), { code: 'SQLITE_BUSY' });
+    const error = Object.assign(new TypeError('disk exploded'), { code: 'SQLITE_BUSY' });
     await observability.observer.entry(ENTRY, async (scope) => {
       scope.fail(error);
       scope.respond(500);
@@ -73,25 +72,47 @@ describe('createOtelObserver', () => {
     const [record] = logs.getFinishedLogRecords();
     assert.equal(record!.attributes['exception.type'], 'TypeError');
     assert.equal(record!.attributes['error.code'], 'SQLITE_BUSY');
-    assert.equal(span.events[0]!.attributes?.['exception.type'], 'TypeError');
-    for (const exported of [JSON.stringify(span.events), JSON.stringify(record!.attributes), JSON.stringify(record!.body)]) {
-      assert.ok(!exported.includes('hunter2'));
-      assert.ok(!exported.includes('exception.message'));
-      assert.ok(!exported.includes('exception.stacktrace'));
-    }
+    assert.equal(record!.attributes['exception.message'], 'disk exploded');
+    assert.equal(record!.attributes['exception.stacktrace'], error.stack);
+    const event = span.events[0]!;
+    assert.equal(event.name, 'exception');
+    assert.equal(event.attributes?.['exception.type'], 'TypeError');
+    assert.equal(event.attributes?.['exception.message'], 'disk exploded');
+    assert.equal(event.attributes?.['exception.stacktrace'], error.stack);
+    assert.equal(span.status.message, undefined);
   });
 
-  test('a throw inside an adapter is recorded with its type and rethrown', async () => {
+  test('a failure with no stack records the type and the message without a stacktrace', async () => {
     const { spans, observability } = await build();
+    await observability.observer.entry(ENTRY, async (scope) => {
+      scope.fail('plain string');
+      scope.respond(500);
+    });
+    const event = spans.getFinishedSpans()[0]!.events[0]!;
+    assert.equal(event.attributes?.['exception.type'], 'string');
+    assert.equal(event.attributes?.['exception.stacktrace'], undefined);
+  });
+
+  test('a throw inside an adapter is recorded with type, message and stacktrace and rethrown', async () => {
+    const { spans, observability } = await build();
+    const error = new RangeError('private detail');
     await assert.rejects(
       observability.observer.entry(ENTRY, async () => {
-        await observability.observer.adapter({ name: 'history.read' }, async () => { throw new RangeError('private detail'); });
+        await observability.observer.adapter({ name: 'history.read' }, async () => { throw error; });
       }),
       RangeError,
     );
     const adapter = spans.getFinishedSpans().find((s) => s.name === 'history.read')!;
     assert.equal(adapter.events[0]!.attributes?.['exception.type'], 'RangeError');
-    assert.ok(!JSON.stringify(adapter.events).includes('private detail'));
+    assert.equal(adapter.events[0]!.attributes?.['exception.message'], 'private detail');
+    assert.equal(adapter.events[0]!.attributes?.['exception.stacktrace'], error.stack);
+  });
+
+  test('the exception attributes go through the masking: a key that names a secret leaves as [redacted]', async () => {
+    const { maskAttributes, REDACTED } = await import('./masking.ts');
+    const masked = maskAttributes({ 'exception.type': 'Error', 'exception.message': 'm', 'exception.stacktrace': 's', 'auth.token': 'x' });
+    assert.equal(masked['exception.message'], 'm');
+    assert.equal(masked['auth.token'], REDACTED);
   });
 });
 

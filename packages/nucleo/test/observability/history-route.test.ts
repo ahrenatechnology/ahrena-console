@@ -49,6 +49,7 @@ async function start({ failing = false, observed = true } = {}) {
   const logs = new InMemoryLogRecordExporter();
   const observability = await createObservability(
     { AHRENA_CONSOLE_OTEL_EXPORTER: 'otlp', AHRENA_CONSOLE_ENVIRONMENT: 'test' },
+    API_VERSION,
     { exporters: { spans, logs } },
   );
   const api = await startLocalApi({ ownerToken: () => OWNER_TOKEN, panelBuilder, hooks: { storage }, port: 0, log: (line) => lines.push(line), history, ...(observed ? { observer: observability.observer } : {}) });
@@ -117,7 +118,7 @@ describe('GET /api/history observed', () => {
     }
   });
 
-  test('#661/AC-1 an unexpected adapter failure marks both spans as errors and gives the caller a generic error with a correlation id, no text, no stack', async () => {
+  test('#661/AC-1 an unexpected adapter failure records message and stack on both spans and the log, and gives the caller a generic error with a correlation id, no text, no stack', async () => {
     const t = await start({ failing: true });
     try {
       const response = await t.get();
@@ -136,8 +137,8 @@ describe('GET /api/history observed', () => {
         const exception = span.events.find((e) => e.name === 'exception');
         assert.ok(exception, `${span.name} records the exception`);
         assert.equal(exception.attributes?.['exception.type'], 'Error');
-        assert.equal(exception.attributes?.['exception.message'], undefined);
-        assert.equal(exception.attributes?.['exception.stacktrace'], undefined);
+        assert.equal(exception.attributes?.['exception.message'], UNEXPECTED);
+        assert.match(String(exception.attributes?.['exception.stacktrace']), /^Error: disk exploded[\s\S]* at /);
         assert.equal(span.status.message, undefined);
       }
       const [record] = t.logs.getFinishedLogRecords();
@@ -147,9 +148,8 @@ describe('GET /api/history observed', () => {
       assert.equal(record!.attributes['exception.type'], 'Error');
       assert.equal(record!.attributes['error.code'], 'SQLITE_BUSY');
       assert.equal(record!.attributes['correlation.id'], root.spanContext().traceId);
-      assert.ok(!JSON.stringify(record!.attributes).includes('disk exploded'));
-      assert.equal(record!.attributes['exception.message'], undefined);
-      assert.equal(record!.attributes['exception.stacktrace'], undefined);
+      assert.equal(record!.attributes['exception.message'], UNEXPECTED);
+      assert.match(String(record!.attributes['exception.stacktrace']), /^Error: disk exploded[\s\S]* at /);
     } finally {
       await t.close();
     }

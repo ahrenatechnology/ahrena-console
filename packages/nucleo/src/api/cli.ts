@@ -782,7 +782,7 @@ const runtimeStore = new SqliteRuntimeStore(sqlite.db, changes);
 runtimeStore.recoverDisconnected();
 let ownerToken: string | null = null;
 // #661 the observer: the no-op one unless AHRENA_CONSOLE_OTEL_EXPORTER is configured (src/observability).
-const observability = await createObservability(process.env);
+const observability = await createObservability(process.env, API_VERSION);
 const api: LocalApi = await startLocalApi({
   observer: observability.observer,
   ownerToken: () => ownerToken,

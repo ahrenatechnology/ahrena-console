@@ -16,7 +16,7 @@ describe('createObservability', () => {
   for (const env of [{}, { AHRENA_CONSOLE_OTEL_EXPORTER: 'none' }, { AHRENA_CONSOLE_OTEL_EXPORTER: '' }]) {
     test(`with ${JSON.stringify(env)} it returns the no-op observer and never loads the OpenTelemetry module`, async () => {
       let loads = 0;
-      const { observer, shutdown } = await createObservability(env, { load: async () => { loads++; throw new Error('must not load'); } });
+      const { observer, shutdown } = await createObservability(env, '1.2.3', { load: async () => { loads++; throw new Error('must not load'); } });
       assert.equal(observer, noopObserver);
       assert.equal(loads, 0);
       await shutdown();
@@ -24,13 +24,13 @@ describe('createObservability', () => {
   }
 
   test('an unknown exporter value stops the start, naming the variable', async () => {
-    await assert.rejects(createObservability({ AHRENA_CONSOLE_OTEL_EXPORTER: 'jaeger' }), /AHRENA_CONSOLE_OTEL_EXPORTER/);
+    await assert.rejects(createObservability({ AHRENA_CONSOLE_OTEL_EXPORTER: 'jaeger' }, '1.2.3'), /AHRENA_CONSOLE_OTEL_EXPORTER/);
   });
 
   test('with otlp and the OpenTelemetry packages absent the core still starts: the no-op observer and one log line naming the variable and the error type, no error text', async () => {
     const lines: string[] = [];
     const missing = Object.assign(new Error("Cannot find package '@opentelemetry/api' imported from /Users/someone/private/otel-observer.ts"), { code: 'ERR_MODULE_NOT_FOUND' });
-    const { observer, shutdown } = await createObservability({ AHRENA_CONSOLE_OTEL_EXPORTER: 'otlp' }, { load: async () => { throw missing; }, log: (line) => lines.push(line) });
+    const { observer, shutdown } = await createObservability({ AHRENA_CONSOLE_OTEL_EXPORTER: 'otlp' }, '1.2.3', { load: async () => { throw missing; }, log: (line) => lines.push(line) });
     assert.equal(observer, noopObserver);
     await shutdown();
     assert.equal(lines.length, 1);

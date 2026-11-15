@@ -2,7 +2,6 @@
    no-op observer and the OpenTelemetry adapter is never loaded; with `otlp` it loads the adapter by `import()`.
    AHRENA_CONSOLE_OTEL_EXPORTER: `none` (default) or `otlp`. AHRENA_CONSOLE_OTEL_ENDPOINT: OTLP/HTTP base URL, with `otlp`.
    AHRENA_CONSOLE_ENVIRONMENT: `deployment.environment`, default `local`. */
-import { API_VERSION } from '../api/version.ts';
 import type { OtelObserverOptions } from './otel-observer.ts';
 import { noopObserver, type Observability } from './port.ts';
 
@@ -21,7 +20,7 @@ export interface ObservabilityDeps {
 
 const EXPORTER_VARIABLE = 'AHRENA_CONSOLE_OTEL_EXPORTER';
 
-export async function createObservability(env: ObservabilityEnv, deps: ObservabilityDeps = {}): Promise<Observability> {
+export async function createObservability(env: ObservabilityEnv, version: string, deps: ObservabilityDeps = {}): Promise<Observability> {
   const exporter = env[EXPORTER_VARIABLE] || 'none';
   if (exporter === 'none') return { observer: noopObserver, shutdown: async () => undefined };
   if (exporter !== 'otlp') throw new Error(`${EXPORTER_VARIABLE} must be none or otlp`);
@@ -36,7 +35,7 @@ export async function createObservability(env: ObservabilityEnv, deps: Observabi
     return { observer: noopObserver, shutdown: async () => undefined };
   }
   return adapter.createOtelObserver({
-    version: API_VERSION,
+    version,
     environment: env.AHRENA_CONSOLE_ENVIRONMENT || 'local',
     ...(env.AHRENA_CONSOLE_OTEL_ENDPOINT ? { endpoint: env.AHRENA_CONSOLE_OTEL_ENDPOINT } : {}),
     ...(deps.exporters ? { exporters: deps.exporters } : {}),

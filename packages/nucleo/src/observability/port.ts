@@ -23,7 +23,7 @@ export interface AdapterDescription {
 export interface Scope {
   /** What the caller receives next to a generic error and what the internal log carries (#661): the trace id, or a random id with no exporter. */
   readonly correlationId: string;
-  /** An unexpected failure (#661): the span gets the exception type and the error status; the stack and the text stay out. */
+  /** An unexpected failure (#661): the span and the log record get the exception type, message and stack through the masking, and the span the error status; the caller never receives them. */
   fail(error: unknown): void;
   /** The status the response carries (#661); the request log record reads it. */
   respond(status: number): void;
