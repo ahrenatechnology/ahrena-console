@@ -103,6 +103,7 @@ function summarise(diagnosis: Diagnosis, kept: number, cap: number): { diagnosis
     }
     if (section.items.length > cap) {
       leftOut.push({ sectionId: section.id, dropped: false, shown: cap, total: section.items.length });
+      // Same section, fewer of its own items: the compiler cannot correlate id and items across the SectionOf union (#567).
       sections.push({ ...section, items: section.items.slice(0, cap) } as DiagnosisSection);
       return;
     }
