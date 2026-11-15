@@ -1,6 +1,8 @@
-// #663: every event the core publishes is a CloudEvents 1.0 event that passes the envelope schema and the
-// schema of its type (docs/contracts/events/). The schemas are authored; this test validates the code
-// against them. Each change is shaped like the real call sites that record it.
+/*
+ * #663: every event the core publishes is a CloudEvents 1.0 event that passes the envelope schema and the
+ * schema of its type (docs/contracts/events/). The schemas are authored; this test validates the code
+ * against them. Each change is shaped like the real call sites that record it.
+ */
 
 import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
@@ -20,7 +22,7 @@ const readSchema = (file: string): Schema => JSON.parse(readFileSync(new URL(fil
 const envelopeSchema = (): Schema => readSchema(ENVELOPE_FILE);
 const typeSchemaFile = (type: ChangeType): string => `${type}${TYPE_SCHEMA_SUFFIX}`;
 
-/** One change per type, shaped like the call sites that record it (see the survey in docs/contracts/events.md). */
+/** One change per type, shaped like the call sites that record it (see the survey in docs/contracts/events.md) (#663). */
 const SAMPLES: Record<ChangeType, NewChange> = {
   session: { type: 'session', key: 's1', sessionId: 's1', accountId: 'conta-a' },
   state: { type: 'state', key: 's1', sessionId: 's1', accountId: null },
@@ -39,7 +41,7 @@ const SAMPLES: Record<ChangeType, NewChange> = {
   connector: { type: 'connector', key: 'aws', sessionId: null, accountId: null },
   'app-update': { type: 'app-update', key: 'app', sessionId: null, accountId: null },
 };
-/** The remote machine's needs-you (telemetry/remote.ts) has no session id. */
+/** The remote machine's needs-you (telemetry/remote.ts) has no session id (#663). */
 const REMOTE_NEEDS_YOU: NewChange = { type: 'needs-you', key: 'mac2:s9', sessionId: null, accountId: null };
 
 const newCursor = (): ChangeCursor => new ChangeCursor({ generation: 'g1', batchMs: 0, minIntervalMs: 0, wallClock: () => OCCURRED_AT });
@@ -99,7 +101,7 @@ async function withServer(handler: Parameters<typeof createServer>[1], run: (bas
   }
 }
 
-/** Reads the data of the first `changes` SSE message. */
+/** Reads the data of the first `changes` SSE message (#663). */
 async function firstChangesMessage(res: Response): Promise<{ id: string | null; data: { events: unknown[] } }> {
   const reader = res.body!.getReader();
   const decoder = new TextDecoder();

@@ -46,7 +46,7 @@ export interface RecordedChange {
   sessionId: string | null;
   /** The session's account; `null` is "Sem conta" (no account). */
   accountId: string | null;
-  /** When the change occurred (wall clock, ISO 8601 UTC), stamped by `record()`. */
+  /** When the change occurred (wall clock, ISO 8601 UTC), stamped by `record()` (#663). */
   time: string;
 }
 
@@ -120,7 +120,7 @@ export interface ChangeCursorOptions {
   minIntervalMs?: number;
   maxWaiters?: number;
   clock?: Clock;
-  /** Wall clock in epoch milliseconds, for the occurrence time of a change. Default `Date.now`; `clock` stays monotonic. */
+  /** Wall clock in epoch milliseconds, for the occurrence time of a change (#663). Default `Date.now`; `clock` stays monotonic. */
   wallClock?: () => number;
   /** Default: random. Fixed in the tests. */
   generation?: string;

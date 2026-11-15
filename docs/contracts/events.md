@@ -49,3 +49,17 @@ Every event the core publishes is a CloudEvents 1.0 event (framework conditions 
 | `tools` | the machine id | null | null |
 | `connector` | the connector (`aws`) | null | null |
 | `app-update` | `app` | null | null |
+
+## Named exception to EVT-1: screen-invalidation signals
+
+EVT-1 asks the subject to be the identity of the aggregate root that changed. Five change types are screen-invalidation signals (the cursor already treats them as screen-only and HTTP-only), not domain facts, and for them the subject is the identity of the collection or view the signal invalidates, not a root instance. This is an accepted, named exception (#663), limited to these exact values:
+
+| Change type | Subject values that are a view, not a root | Subject values that stay a root identity |
+| --- | --- | --- |
+| `repos` | `list`, `delivery` | `<owner>/<repo>` |
+| `adrs` | `list` | `<owner>/<repo>` |
+| `connections` | `github` | none |
+| `connector` | `aws` | none |
+| `app-update` | `app` | none |
+
+The per-instance values (`<owner>/<repo>`, `<machine>:<alert>`, session and account ids) are root identities and satisfy EVT-1. When one of these signals becomes a domain fact, it gets a new versioned type (`.v2` or a new name) with a root id as subject; the signal's type and its subject values stay as they are.

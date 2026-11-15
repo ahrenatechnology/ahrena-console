@@ -1,7 +1,9 @@
-// The change cursor's publication as CloudEvents 1.0 (issue 663; framework conditions EVT-1 and EVT-2).
-// A pure mapper: one recorded change becomes one event. The contract is authored under
-// docs/contracts/events/ (the envelope schema and one schema per type); this code is validated against it
-// by test/changes/cloud-events.test.ts. A breaking change to `data` is a new `.v2` type and schema file.
+/*
+ * The change cursor's publication as CloudEvents 1.0 (#663; framework conditions EVT-1 and EVT-2).
+ * A pure mapper: one recorded change becomes one event. The contract is authored under
+ * docs/contracts/events/ (the envelope schema and one schema per type); this code is validated against it
+ * by test/changes/cloud-events.test.ts. A breaking change to `data` is a new `.v2` type and schema file.
+ */
 
 import type { ChangeType, RecordedChange } from './cursor.ts';
 
@@ -11,13 +13,13 @@ const SCHEMA_BASE = 'https://github.com/ahrenatechnology/ahrena-console/blob/mai
 
 export interface CloudEvent {
   specversion: '1.0';
-  /** The change's cursor, `<generation>.<seq>`: unique per core start. */
+  /** The change's cursor, `<generation>.<seq>`: unique per core start (#663). */
   id: string;
   source: typeof CLOUD_EVENT_SOURCE;
   type: string;
-  /** The identity of the root that changed (the change's key). */
+  /** The identity of the root that changed (the change's key) (#663). */
   subject: string;
-  /** When the change occurred, ISO 8601 UTC. */
+  /** When the change occurred, ISO 8601 UTC (#663). */
   time: string;
   datacontenttype: 'application/json';
   dataschema: string;

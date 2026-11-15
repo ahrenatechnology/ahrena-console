@@ -1,7 +1,9 @@
-// A small, dependency-free validator for the JSON Schema subset the event contracts use
-// (docs/contracts/events/): type (one or a list, with null), const, enum, required, properties,
-// additionalProperties false, pattern, minLength and format date-time. Anything else in a schema is
-// refused loudly, so a contract cannot silently use a keyword this helper does not check.
+/*
+ * A small, dependency-free validator for the JSON Schema subset the event contracts use (#663;
+ * docs/contracts/events/): type (one or a list, with null), const, enum, required, properties,
+ * additionalProperties false, pattern, minLength and format date-time. Anything else in a schema is
+ * refused loudly, so a contract cannot silently use a keyword this helper does not check.
+ */
 
 type Json = null | boolean | number | string | Json[] | { [k: string]: Json };
 type Schema = { [k: string]: Json };

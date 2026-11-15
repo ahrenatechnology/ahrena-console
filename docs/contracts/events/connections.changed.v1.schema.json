@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/ahrenatechnology/ahrena-console/blob/main/docs/contracts/events/connections.changed.v1.schema.json",
   "title": "connections.changed.v1 data",
-  "description": "A connection changed. Subject: the connection (`github`).",
+  "description": "A connection changed. Subject: `github` names the connections view the signal invalidates, not an aggregate root (named exception to EVT-1, see docs/contracts/events.md; a domain fact would be a new versioned type with a root id as subject, #663).",
   "type": "object",
   "required": [
     "sessionId",
