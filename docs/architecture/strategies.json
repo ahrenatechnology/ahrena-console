@@ -2,9 +2,9 @@
   "note": "issue 657 (CON-1): one strategy per problem, kept once chosen. Derived from the code as of this issue; see docs/decisoes/0026-result-and-route-error-format.md. test/architecture-registers.test.mjs checks that the eight problems are present and each reference exists.",
   "problems": {
     "result": {
-      "decision": "An expected failure is returned as { ok: true, ...value } | { ok: false, reason: <english_code>, ...detail }; throw only for a broken invariant (decision 0026). No shared type yet: each function declares its own union.",
-      "reference": "packages/nucleo/src/api/work-issue-steps.ts",
-      "ratchet": "new code; legacy shapes (param, error, why) are migrated in a separate issue",
+      "decision": "An expected failure is returned as { ok: true, ...value } | { ok: false, reason: <english_code>, ...detail }; throw only for a broken invariant (decision 0026). Reference: DeliveryResult in messaging/ports.ts, produced by messaging/adapters/socket-inbox.ts. No shared type yet: each function declares its own union.",
+      "reference": "packages/nucleo/src/messaging/ports.ts",
+      "ratchet": "new code; legacy shapes (param in api/work-issue-steps.ts, bare { ok: false } and retryAfterMs in messaging/model.ts, error, why) are migrated in a separate issue",
       "condition": "ERR-1"
     },
     "error-format": {

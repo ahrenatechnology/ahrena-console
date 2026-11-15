@@ -51,7 +51,7 @@
       "mode": "upsert-with-history",
       "createdIn": "packages/nucleo/src/adapters/sqlite/migrations.ts",
       "history": "session_plan_history",
-      "note": "current plan per session; each earlier run is in session_plan_history"
+      "note": "current plan per session, overwritten in place by ON CONFLICT (session_id) DO UPDATE; plan/recording.ts writes each plan run (closed and open) to session_plan_history on every change, so a run is kept but the intermediate step changes inside one run are not; rebuildPlan deletes the history and rewrites it from the append-only events"
     },
     "session_plan_history": {
       "mode": "upsert",
@@ -66,10 +66,10 @@
       "legacy": true
     },
     "decisions": {
-      "mode": "upsert-with-history",
+      "mode": "upsert",
       "createdIn": "packages/nucleo/src/decisions/migration.ts",
-      "history": "decisions.supersedes and decisions.superseded_by",
-      "note": "rows are updated by id, but a replaced decision stays as its own row linked by supersedes and superseded_by"
+      "note": "decisions/sqlite.ts writes ON CONFLICT (id) DO UPDATE SET choice = excluded.choice, ...: an in-place edit drops the prior values. Supersession (supersedes and superseded_by) keeps a chain of rows only when a new decision replaces one; edits in place are not historized",
+      "legacy": true
     },
     "session_links": {
       "mode": "upsert",

@@ -1,8 +1,6 @@
 // Guard for issue 657 (STR-4): the layer map covers everything directly under packages/*/src.
 // Fails when a folder or top-level file is missing from docs/architecture/layers.json, when the map
 // names an entry that no longer exists, and when a layer is not one of the four.
-//
-// Run with: node --test --test-concurrency=1 test/architecture-layers.test.mjs
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { existsSync, readdirSync, readFileSync } from 'node:fs'

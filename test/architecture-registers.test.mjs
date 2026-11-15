@@ -1,7 +1,6 @@
 // Guard for issue 657 (CON-1, PER-1): the strategy register has one row per problem with a reference
 // that exists, and the table-modes register covers every SQLite table the sources create.
-//
-// Run with: node --test --test-concurrency=1 test/architecture-registers.test.mjs
+
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
@@ -17,6 +16,10 @@ const readJson = (name) => {
   const file = join(DIR, name)
   return existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) : null
 }
+
+// Files whose text only imitates a transcript: the demo mentions `create table` inside fake tool output,
+// which no database ever runs, so the scan skips them.
+const FAKE_SQL_TEXT = ['packages/nucleo/src/simulator/detail.ts']
 
 function sourceFiles(dir, out = []) {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
@@ -41,9 +44,10 @@ export function createdTables(root = ROOT) {
     for (const file of sourceFiles(src)) {
       const text = readFileSync(file, 'utf8')
       const rel = relative(root, file)
-      for (const m of text.matchAll(/CREATE TABLE (?:IF NOT EXISTS )?([a-z_]+)/g)) created.set(m[1], [...(created.get(m[1]) ?? []), rel])
-      for (const m of text.matchAll(/DROP TABLE (?:IF EXISTS )?([a-z_]+)/g)) dropped.add(m[1])
-      for (const m of text.matchAll(/ALTER TABLE ([a-z_]+) RENAME TO ([a-z_]+)/g)) renames.push([m[1], m[2]])
+      if (FAKE_SQL_TEXT.includes(rel)) continue
+      for (const m of text.matchAll(/CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?["`]?([A-Za-z0-9_]+)/gi)) created.set(m[1], [...(created.get(m[1]) ?? []), rel])
+      for (const m of text.matchAll(/DROP\s+TABLE\s+(?:IF\s+EXISTS\s+)?["`]?([A-Za-z0-9_]+)/gi)) dropped.add(m[1])
+      for (const m of text.matchAll(/ALTER\s+TABLE\s+["`]?([A-Za-z0-9_]+)["`]?\s+RENAME\s+TO\s+["`]?([A-Za-z0-9_]+)/gi)) renames.push([m[1], m[2]])
     }
   }
   const final = new Map(created)
@@ -110,4 +114,13 @@ test('issue 657/AC-3: the table scan sees a rebuilt table under its final name a
   const names = [...createdTables().keys()]
   assert.ok(names.includes('context_meters') && names.includes('decisions'))
   assert.ok(!names.some((n) => n.endsWith('_new')) && !names.includes('reprocessamentos'))
+})
+
+test('issue 657/AC-3: the table scan reads lowercase and quoted names', async () => {
+  const { mkdtempSync, mkdirSync, writeFileSync } = await import('node:fs')
+  const { tmpdir } = await import('node:os')
+  const root = mkdtempSync(join(tmpdir(), 'tables-'))
+  mkdirSync(join(root, 'packages', 'p', 'src'), { recursive: true })
+  writeFileSync(join(root, 'packages', 'p', 'src', 'm.ts'), 'db.exec(`create table if not exists "quoted_one" (id TEXT)`); db.exec(`CREATE  TABLE Plain2 (id TEXT)`)')
+  assert.deepEqual([...createdTables(root).keys()].sort(), ['Plain2', 'quoted_one'])
 })
