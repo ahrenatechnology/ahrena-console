@@ -805,8 +805,9 @@ export async function mount(area, ctx) {
         const row = active.closest?.('[data-alert]')?.getAttribute('data-alert');
         const section = active.closest?.('[data-section]')?.getAttribute('data-section');
         if (row) {
-          alertRow = `[data-alert="${row}"]`;
-          key = `${alertRow}${section ? ` [data-section="${section}"]` : ''} [data-dg-action="${active.getAttribute('data-dg-action')}"]`;
+          // An alert id carries a mount path (`volume-full:<mount>`): it goes into the selector escaped.
+          alertRow = `[data-alert="${CSS.escape(row)}"]`;
+          key = `${alertRow}${section ? ` [data-section="${CSS.escape(section)}"]` : ''} [data-dg-action="${active.getAttribute('data-dg-action')}"]`;
         }
       }
     }

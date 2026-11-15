@@ -76,7 +76,9 @@ export class ElementoFalso extends NoFalso {
     return false;
   }
   closest(seletor: string): ElementoFalso | null {
-    for (let n: ElementoFalso | null = this; n; n = n.parentNode) if (casaSimples(n, seletor.trim())) return n;
+    const [simples, ...resto] = partesDoSeletor(seletor);
+    if (resto.length) throw new SyntaxError('closest: only a simple selector');
+    for (let n: ElementoFalso | null = this; n; n = n.parentNode) if (casaSimples(n, simples ?? '')) return n;
     return null;
   }
   setAttribute(k: string, v: unknown): void {
@@ -207,7 +209,7 @@ export class ElementoFalso extends NoFalso {
     this.dispatchEvent({ type: 'click' });
   }
   querySelectorAll(seletor: string): ElementoFalso[] {
-    const partes = seletor.trim().split(/\s+/);
+    const partes = partesDoSeletor(seletor);
     const achados: ElementoFalso[] = [];
     const visitar = (no: ElementoFalso) => {
       for (const filho of no.children) {
@@ -223,13 +225,45 @@ export class ElementoFalso extends NoFalso {
   }
 }
 
+/** Like the browser: a quoted attribute value ends at the first unescaped quote, and what is left over is a SyntaxError. */
+function partesDoSeletor(seletor: string): string[] {
+  const achados = [...seletor.matchAll(/(?:\[[\w-]+(?:="(?:[^"\\]|\\.)*")?\]|\\.|[^\s\[\\])+/g)];
+  // Anything between two tokens that is not whitespace is something the grammar does not accept.
+  let fim = 0;
+  for (const t of achados) {
+    if (seletor.slice(fim, t.index).trim()) throw new SyntaxError(`'${seletor}' is not a valid selector`);
+    fim = t.index + t[0].length;
+  }
+  if (seletor.slice(fim).trim()) throw new SyntaxError(`'${seletor}' is not a valid selector`);
+  const partes = achados.map((t) => t[0]);
+  return partes;
+}
+
+/** The value of a quoted attribute with its CSS escapes undone (`\\"` is `"`, `\\\\` is `\`, `\\2f ` is `/`). */
+function desescapar(v: string): string {
+  return v.replace(/\\([0-9a-f]{1,6}) ?|\\(.)/gi, (_, hex?: string, c?: string) => (hex ? String.fromCodePoint(parseInt(hex, 16)) : c!));
+}
+
+/** `CSS.escape` as the CSSOM spec defines it, which Node does not have. */
+function cssEscape(valor: unknown): string {
+  const s = String(valor);
+  return Array.from(s, (ch, i) => {
+    const c = ch.codePointAt(0)!;
+    if (c === 0) return '\uFFFD';
+    if ((c >= 1 && c <= 0x1f) || c === 0x7f || (i === 0 && c >= 0x30 && c <= 0x39) || (i === 1 && c >= 0x30 && c <= 0x39 && s[0] === '-')) return `\\${c.toString(16)} `;
+    if (i === 0 && c === 0x2d && s.length === 1) return `\\${ch}`;
+    if (c >= 0x80 || c === 0x2d || c === 0x5f || (c >= 0x30 && c <= 0x39) || (c >= 0x41 && c <= 0x5a) || (c >= 0x61 && c <= 0x7a)) return ch;
+    return `\\${ch}`;
+  }).join('');
+}
+
 function casaSimples(no: ElementoFalso, simples: string): boolean {
   const tag = /^[a-z][a-z0-9-]*/i.exec(simples)?.[0];
   if (tag && no.tagName !== tag.toUpperCase()) return false;
   for (const [, c] of simples.matchAll(/\.([\w-]+)/g)) if (!no.classList.contains(c!)) return false;
-  for (const [, k, v] of simples.matchAll(/\[([\w-]+)(?:="([^"]*)")?\]/g)) {
+  for (const [, k, v] of simples.matchAll(/\[([\w-]+)(?:="((?:[^"\\]|\\.)*)")?\]/g)) {
     if (!no.hasAttribute(k!)) return false;
-    if (v !== undefined && no.getAttribute(k!) !== v) return false;
+    if (v !== undefined && no.getAttribute(k!) !== desescapar(v)) return false;
   }
   return true;
 }
@@ -282,7 +316,7 @@ export const documentoFalso = {
 
 /** Põe o DOM falso no global (`document`, `Node` e `Element`), como o navegador. */
 export function instalarDomFalso(): void {
-  Object.assign(globalThis, { document: documentoFalso, Node: NoFalso, Element: ElementoFalso });
+  Object.assign(globalThis, { document: documentoFalso, Node: NoFalso, Element: ElementoFalso, CSS: { escape: cssEscape } });
 }
 
 /** Todo o texto de um nó, um pedaço por nó de texto, com espaços normalizados. */

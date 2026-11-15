@@ -621,6 +621,29 @@ describe('the machine screen drives the panels (issue 566)', () => {
     assert.equal(after.closest('[data-alert]')!.getAttribute('data-alert'), 'memory-high');
   });
 
+  test('a repaint keeps the focus when the alert id carries a quote and a backslash (a mount named so)', async () => {
+    const odd = alert('volume-full:/Volumes/Da"ta\\x', 'volume-full', 'error', 60);
+    const m = mount({ alerts: [odd], diagnosis: [answerMemory] });
+    await m.ready;
+    const rowFor = () => m.area.querySelectorAll('li').find((li) => li.getAttribute('data-alert') === odd.id)!;
+    const toggle = rowFor().querySelector('[data-dg-action="toggle"]')!;
+    toggle.focus();
+    const rejections: unknown[] = [];
+    const onRejection = (e: unknown) => void rejections.push(e);
+    process.on('unhandledRejection', onRejection);
+    try {
+      await m.reread();
+      await new Promise((r) => setTimeout(r, 20));
+    } finally {
+      process.off('unhandledRejection', onRejection);
+    }
+    assert.deepEqual(rejections, [], 'the repaint throws nothing');
+    const after = documentoFalso.activeElement;
+    assert.ok(after && after !== toggle, 'the button was rebuilt');
+    assert.equal(after.getAttribute('data-dg-action'), 'toggle');
+    assert.equal(after.closest('[data-alert]')!.getAttribute('data-alert'), odd.id);
+  });
+
   test('#566/AC-5 a screen with no saturation alert reads no diagnosis and draws no panel', async () => {
     const m = mount({ alerts: [PORT_EXPOSED] });
     await m.ready;
