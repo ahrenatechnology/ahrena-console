@@ -131,7 +131,8 @@ describe('isTerminalOnly (#618/AC-6)', () => {
   test('#618/AC-6: a download piped into a shell is caught through later segments and process substitution', () => {
     const cases = ['curl x | tee y | sh', 'curl -s x | tee y | sudo bash', 'wget -qO- x | cat | env zsh', 'bash <(curl -s x)', 'sh <(wget -qO- x)', 'source <(curl -s x)', '. <(curl -s x)', 'zsh <(curl x)'];
     for (const c of cases) assert.equal(bash(c), true, c);
-    for (const c of ['curl x | tee y', 'curl x | jq .a', 'echo hi | sh', 'cat <(curl -s x)']) assert.equal(bash(c), false, c);
+    // `echo hi | sh` is terminal-only since #654 round 2: a program read from a pipe cannot be read (over-match accepted).
+    for (const c of ['curl x | tee y', 'curl x | jq .a', 'cat <(curl -s x)']) assert.equal(bash(c), false, c);
   });
 
   test('#618/AC-6: a 64 KiB adversarial command is scanned in linear time', () => {
@@ -868,7 +869,7 @@ describe('the floor over-matches the #654 items (decision 0025 amendment, Deskto
 
   test('#654: each new scan is linear on 64 KiB, in repeated units and in one long token', () => {
     // The ratio method of the rm probe (#691): the full size under 3x the half size plus 50 ms; a try that fails is repeated twice, so one slow run on a busy machine does not fail it.
-    const repeated = ['env ', '$(at ', '\\x', 'find -exec ', 'xargs ', 'cp -r ', 'tar x', 'git --git-dir ', '.claude/', 'cd $', '=.git/', 'git checkout ', 'git remote ', 'print -', 'nohup env time ', 'a{', 'git_pager=', 'unzip ', 'patch ', 'git_pager+=', '%5b', 'print -r ', 'git checkout x -- ', 'git restore -s ', 'git checkout -b ', 'gtar x ', "'", 'sh -', 'cd -a ', 'node -', 'python ', 'git fetch ', 'git branch ', 'git stash ', 'env -', 'f() ', 'case ', 'scp -', 'wget -', 'fd -', '~', 'awk ', 'p=a? $'];
+    const repeated = ['env ', '$(at ', '\\x', 'find -exec ', 'xargs ', 'cp -r ', 'tar x', 'git --git-dir ', '.claude/', 'cd $', '=.git/', 'git checkout ', 'git remote ', 'print -', 'nohup env time ', 'a{', 'git_pager=', 'unzip ', 'patch ', 'git_pager+=', '%5b', 'print -r ', 'git checkout x -- ', 'git restore -s ', 'git checkout -b ', 'gtar x ', "'", 'sh -', 'cd -a ', 'node -', 'python ', 'git fetch ', 'git branch ', 'git stash ', 'env -', 'f() ', 'case ', 'scp -', 'wget -', 'fd -', '~', 'awk ', 'p=a? $', '| ', 'awk system ', 'builtin ', 'npx @a@', 'cd +', 'git branch -m '];
     const inputs: Array<[string, (size: number) => string]> = repeated.map((unit) => [unit, (size) => unit.repeat(Math.floor(size / unit.length))]);
     // One long token (#654): a prefix, a run of one letter, a character that is no letter, which is the shape a flag regex backtracks on.
     const oneToken = (label: string, head: string, letter: string, tail = '1'): [string, (size: number) => string] => [label, (size) => `${head}${letter.repeat(size)}${tail}`];
@@ -893,6 +894,11 @@ describe('the floor over-matches the #654 items (decision 0025 amendment, Deskto
       oneToken('node -…1', 'node -', 'a'),
       oneToken('wget -…1', 'wget -', 'a'),
       oneToken('git branch -…1', 'git branch -', 'a'),
+      oneToken('tcsh --…1', 'tcsh --', 'c'),
+      oneToken('pipe to node -…1', 'echo x | node -', 'a'),
+      oneToken('awk | …1', 'awk ', '|'),
+      oneToken('claude@…1', 'npx claude', '@'),
+      oneToken('cd ~…1', 'cd ~', '1'),
     );
     const time = (command: string): number => {
       const start = performance.now();
@@ -911,5 +917,49 @@ describe('the floor over-matches the #654 items (decision 0025 amendment, Deskto
       }
       assert.ok(linear, last);
     }
+  });
+});
+
+describe('Janus findings on 47b3dde: shells, pipes, awk, wrappers, claude versions, cd targets, forced refs (#654, round 2)', () => {
+  const allTrue = (cases: string[]) => {
+    for (const c of cases) assert.equal(bash(c), true, c);
+  };
+  const allFalse = (cases: string[]) => {
+    for (const c of cases) assert.equal(bash(c), false, c);
+  };
+
+  test('#654/AC-1: csh and tcsh are shells, and --command (abbreviated too) is a shell string', () => {
+    allTrue(["tcsh -c 'at now'", "csh -c 'at now'", "fish --command 'at now'", "fish --comm 'at now'", "fish --command='at now'"]);
+    allFalse(['fish --version', "fish --co 'x'", 'csh script']);
+  });
+
+  test('#654/AC-1: a program read from a pipe is terminal-only', () => {
+    allTrue(['echo x | python3', 'echo x | node', "echo 'at now' | sh", 'cat f | bash', 'cat f | env bash', 'cat f | eval', 'cat f | source', 'cat f | nohup zsh', 'cat f | tcsh']);
+    allFalse(['echo x | grep y', 'git log | head', 'cat f | wc -l', 'bash script.sh', 'node app.js']);
+  });
+
+  test('#654/AC-1: awk with system, a pipe, getline or > anywhere in the command is terminal-only', () => {
+    allTrue(['awk \'BEGIN{system ("at now")}\'', 'awk \'BEGIN{print "at now" | "sh"}\'', 'awk \'BEGIN{"at now" | getline}\'', "awk 'BEGIN{system(\"x\")}'", "gawk '{print}' f > out", "awk '{ getline l; print l }' f"]);
+    allFalse(["awk '{print}' f", 'awk -f prog.awk data']);
+  });
+
+  test('#654/AC-1: builtin, noglob and nocorrect are wrappers', () => {
+    allTrue(["builtin eval 'at now'", 'builtin source x.sh', 'noglob eval x', 'nocorrect at now', 'builtin at now']);
+    allFalse(['builtin echo hi', 'noglob echo hi']);
+  });
+
+  test('#654/AC-7: a version suffix after the claude package name does not hide the tool', () => {
+    allTrue(['npx @anthropic-ai/claude-code@latest mcp add x y', 'npx -y @anthropic-ai/claude-code@1.0.0 plugin install x', 'claude@1.2 mcp add x']);
+    allFalse(['npx @anthropic-ai/claude-code@latest --version', 'npx cowsay@1.0.0 hi']);
+  });
+
+  test('#654, item 10: cd or pushd to ~, ~/, +N or ~N goes where the text does not show', () => {
+    allTrue(['cd ~', 'cd ~/', 'pushd +1', 'cd +1', 'cd ~1', 'pushd ~', 'cd -P ~']);
+    allFalse(['cd src', 'cd /w/src', 'pushd /w/src', 'echo ~x']);
+  });
+
+  test('#654/AC-9, item 14: a forced ref overwrite is terminal-only: branch -M, -C, --move, --copy', () => {
+    allTrue(['git branch -M x main', 'git branch -C x main', 'git branch --move x main', 'git branch --copy x main', 'git branch -m x y', 'git branch -c x y']);
+    allFalse(['git branch', 'git branch -a', 'git branch --list', 'git branch --show-current']);
   });
 });
