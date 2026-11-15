@@ -167,7 +167,7 @@ function dockerSection(section, wide) {
 }
 
 function cachesSection(section, wide, now) {
-  const rows = cacheRows(section.items, now).map((c) => el('tr', {}, el('td', {}, c.title, el('small', { class: 'mono' }, c.path)), td(bytes(c.bytes), 'mono tm-dg-r tm-dg-by')));
+  const rows = cacheRows(section.items, now, section.worktrees).map((c) => el('tr', {}, el('td', {}, c.title, el('small', { class: 'mono' }, c.path)), td(bytes(c.bytes), 'mono tm-dg-r tm-dg-by')));
   const [headIcon, title] = TITLES['known-caches'];
   return sectionBox('known-caches', 'ok', wide, sectionHead(headIcon, title()), dataTable(['Cache', 'Tamanho'], rows, 1), partialNote(section));
 }

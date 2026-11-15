@@ -2,7 +2,7 @@
 docs/wireframes/index.html, chapter "Saturou, entendi, resolvi", approved by the design owner on 2026-11-14. It mounts
 the machine screen on the fake DOM with the simulator's telemetry, swaps in the open alerts per test, and answers
 GET /api/diagnosis here, shaped like docs/contracts/diagnosis.md (issue 565). No network, no process runs.
-The scenarios the state layer turns green run as tests; the one left as a `todo` waits for the contract layer (the 501 mapping). */
+Every scenario runs as a test (the contract layer, #566, turns the last one green); the page-level accessibility check is at the end. */
 import assert from 'node:assert/strict';
 import { after, afterEach, before, describe, test } from 'node:test';
 import { openSqliteStorage, type SqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
@@ -25,8 +25,6 @@ const screen = await import(
   // @ts-expect-error: idem
   '../../ui/screens/machine.js'
 );
-
-const TODO = { todo: 'issue 566: the 501 of GET /api/diagnosis becomes the old-core state in the contract layer' };
 
 const NOW = Date.now();
 const WS = { id: 'ws-example', label: 'Workstation', port: 14720 };
@@ -201,7 +199,7 @@ describe('the diagnosis next to a saturation alert (issue 566)', () => {
     assert.doesNotMatch(texto(panel(m.area)), /Não deu para diagnosticar/);
   });
 
-  test('#566/AC-3 the Workstation with an old core (501 diagnosis-unsupported) says it does not diagnose yet, with no retry', TODO, async () => {
+  test('#566/AC-3 the Workstation with an old core (501 diagnosis-unsupported) says it does not diagnose yet, with no retry', async () => {
     const m = mount({ machine: WS.id, alerts: [LOAD_HIGH], diagnosis: [fails(501, { error: 'diagnosis-unsupported' })] });
     await m.ready;
     await until(() => /ainda não faz diagnóstico/.test(texto(panel(m.area))));
@@ -245,5 +243,138 @@ describe('the diagnosis next to a saturation alert (issue 566)', () => {
     await withAlert.ready;
     await until(() => withAlert.diagnosisReads().length === 1);
     assert.ok(panel(withAlert.area));
+  });
+
+  test('#566/AC-3 a 404 alert-not-open says "Este alerta já fechou", calm and with no retry, and the alert stays', async () => {
+    const m = mount({ alerts: [SWAP_HIGH], diagnosis: [fails(404, { error: 'alert not open', reason: 'alert-not-open' })] });
+    await m.ready;
+    await until(() => /Este alerta já fechou/.test(texto(panel(m.area))));
+    const p = panel(m.area);
+    assert.doesNotMatch(texto(p), /Não deu para diagnosticar/, 'a closed alert is not a failure');
+    assert.equal(buttonNamed(p, 'Tentar de novo'), null, 'asking again would give the same answer');
+    assert.equal(p!.getAttribute('data-dg-state'), 'closed');
+    assert.match(texto(m.area), /O swap passou de 90%/, 'the alert row stays until the next telemetry read');
+  });
+
+  test('#566/AC-3 a 404 unknown-machine is a failure with "Tentar de novo"', async () => {
+    const m = mount({ alerts: [SWAP_HIGH], diagnosis: [fails(404, { error: 'unknown machine', reason: 'unknown-machine' })] });
+    await m.ready;
+    await until(() => /Não deu para diagnosticar/.test(texto(panel(m.area))));
+    assert.ok(buttonNamed(panel(m.area), 'Tentar de novo'));
+    assert.match(texto(panel(m.area)), /erro 404/);
+  });
+
+  test('#566/AC-3 a 502 from the Workstation says the Workstation did not answer, with "Tentar de novo" which asks again', async () => {
+    const m = mount({ machine: WS.id, alerts: [LOAD_HIGH], diagnosis: [fails(502, { error: 'unreachable', reason: 'unreachable' }), ok((u) => ({ ...memoryDiagnosis(WS.id, 'load-high'), alertId: u.searchParams.get('alert') }))] });
+    await m.ready;
+    await until(() => /Não deu para diagnosticar/.test(texto(panel(m.area))));
+    const text = texto(panel(m.area));
+    assert.match(text, /A Workstation não respondeu ao pedido de diagnóstico/);
+    assert.match(text, /erro 502 do núcleo daqui/);
+    buttonNamed(panel(m.area), 'Tentar de novo')!.click();
+    await until(() => /qemu-system-aarch64/.test(texto(panel(m.area))));
+    assert.equal(m.diagnosisReads().length, 2);
+  });
+
+  test('#566/AC-3 an answer that is not a diagnosis is a failure, never a half-drawn panel', async () => {
+    const m = mount({ alerts: [SWAP_HIGH], diagnosis: [ok(() => ({ hello: 'world' }))] });
+    await m.ready;
+    await until(() => /Não deu para diagnosticar/.test(texto(panel(m.area))));
+    assert.ok(buttonNamed(panel(m.area), 'Tentar de novo'));
+  });
+
+  const DISK_ANSWER = (worktrees: unknown): DiagnosisAnswer => ok((u) => ({
+    machine: WS.id,
+    alertId: u.searchParams.get('alert'),
+    kind: 'volume-full',
+    takenAt: iso(5000),
+    sections: [
+      { id: 'largest-folders', status: 'ok', items: [{ path: '/home/ubuntu/.cache', bytes: 31.4 * GB }] },
+      {
+        id: 'known-caches',
+        status: 'ok',
+        items: [
+          { id: 'worktree', path: '/home/ubuntu/Workspace/a', bytes: 2 * GB, lastUsedAt: iso(20 * 86_400_000), hasUncommitted: false, hasUnpushed: false, actionId: null },
+          { id: 'worktree', path: '/home/ubuntu/Workspace/b', bytes: 3 * GB, lastUsedAt: iso(40 * 86_400_000), hasUncommitted: false, hasUnpushed: false, actionId: null },
+        ],
+        ...(worktrees === undefined ? {} : { worktrees }),
+      },
+    ],
+  }));
+
+  test('#566/AC-2 the worktree line is worded from what the core served: its age limit and its shared root', async () => {
+    const m = mount({ machine: WS.id, alerts: [VOLUME_FULL], diagnosis: [DISK_ANSWER({ oldAfterDays: 14, root: '~/Workspace' })] });
+    await m.ready;
+    await until(() => /Worktrees antigas/.test(texto(panel(m.area))));
+    assert.match(texto(panel(m.area)), /2 sem uso há mais de 14 dias, em ~\/Workspace/);
+  });
+
+  test('#566/AC-2 a remote that serves no worktrees field still gets a worktree line, from the items', async () => {
+    const m = mount({ machine: WS.id, alerts: [VOLUME_FULL], diagnosis: [DISK_ANSWER(undefined)] });
+    await m.ready;
+    await until(() => /Worktrees antigas/.test(texto(panel(m.area))));
+    assert.match(texto(panel(m.area)), /2 sem uso há mais de 20 dias, em \/home\/ubuntu\/Workspace/);
+  });
+
+  // ---------- the page-level accessibility check, over the machine screen assembled (#566) ----------
+
+  const nameOf = (n: ElementoFalso) => (n.getAttribute('aria-label') ?? texto(n)).trim();
+  const nodes = (area: ElementoFalso, selector: string) => area.querySelectorAll(selector);
+
+  /** What only the composed screen can show: landmarks and headings, names, ids, focus order, live regions (#566). */
+  function assertAccessibleScreen(area: ElementoFalso, { state }: { state: string }) {
+    assert.equal(area.tagName, 'MAIN', 'the screen is drawn inside the main landmark');
+    assert.equal(nodes(area, 'h1').length, 1, 'one page heading');
+    assert.ok(nodes(area, 'h2').every((h) => texto(h).trim() !== ''), 'every card heading has text');
+    assert.ok(nodes(area, 'h1').every((h) => nameOf(h) !== ''));
+
+    const buttons = nodes(area, 'button');
+    for (const b of buttons) {
+      assert.notEqual(nameOf(b), '', 'every button has an accessible name');
+      assert.equal(b.getAttribute('type'), 'button', `${nameOf(b)} is a plain button`);
+    }
+    const ids = nodes(area, '[id]').map((n) => n.getAttribute('id')!);
+    assert.equal(new Set(ids).size, ids.length, 'ids are unique on the composed page');
+    for (const c of nodes(area, '[aria-controls]')) assert.ok(ids.includes(c.getAttribute('aria-controls')!), 'aria-controls points at a node of the page');
+    for (const n of nodes(area, '[tabindex]')) assert.ok(Number(n.getAttribute('tabindex')) <= 0, 'no positive tabindex: focus follows the document');
+    for (const r of nodes(area, '[role="region"]')) assert.notEqual(nameOf(r), '', 'a region is named');
+
+    const p = panel(area)!;
+    assert.ok(p, 'the diagnosis panel is on the page');
+    for (const th of nodes(p, 'th')) assert.equal(th.getAttribute('scope'), 'col', 'a table header of the panel says what it heads');
+    assert.equal(p.getAttribute('data-dg-state'), state);
+    const toggle = area.querySelector('[data-dg-action="toggle"]')!;
+    assert.equal(toggle.getAttribute('aria-expanded'), 'true');
+    assert.equal(toggle.getAttribute('aria-controls'), p.getAttribute('id'), 'the toggle names the panel it opens');
+    // Focus order: the toggle of the alert comes before every control inside its panel, so a keyboard user meets the button first. (#566)
+    const order = buttons.indexOf(toggle);
+    for (const b of nodes(p, 'button')) assert.ok(buttons.indexOf(b) > order, `${nameOf(b)} comes after the toggle`);
+    return { p, buttons };
+  }
+
+  test('#566/AC-3 the machine screen with the diagnosis open meets the page-level accessibility checks in every state', async () => {
+    const gate = deferred();
+    const m = mount({ alerts: [SWAP_HIGH], diagnosis: [() => gate.promise, ok(() => memoryDiagnosis('local', 'swap-high'))] });
+    await m.ready;
+
+    await until(() => /Carregando diagnóstico/.test(texto(panel(m.area))));
+    const loading = assertAccessibleScreen(m.area, { state: 'loading' });
+    assert.equal(loading.p.getAttribute('role'), 'status', 'loading is announced politely');
+    assert.equal(loading.p.getAttribute('aria-busy'), 'true');
+
+    gate.reject(new ReadError('O núcleo respondeu 500', { status: 500, body: { error: 'x' } }));
+    await until(() => /Não deu para diagnosticar/.test(texto(panel(m.area))));
+    const failed = assertAccessibleScreen(m.area, { state: 'failed' });
+    assert.equal(failed.p.getAttribute('role'), 'alert', 'a failure is announced at once');
+    const retry = failed.p.querySelector('[data-dg-action="retry"]')!;
+    assert.equal(nameOf(retry), 'Tentar de novo', 'the retry button is named by its text, not by its icon');
+    assert.ok(nodes(retry, 'svg').every((s) => s.getAttribute('aria-hidden') === 'true'), 'the icon inside it is hidden from readers');
+
+    retry.click();
+    await until(() => /qemu-system-aarch64/.test(texto(panel(m.area))));
+    const ready = assertAccessibleScreen(m.area, { state: 'ready' });
+    assert.equal(ready.p.getAttribute('role'), 'region');
+    assert.equal(ready.p.getAttribute('aria-label'), 'Diagnóstico do alerta O swap passou de 90%');
+    assert.ok(ready.p.querySelector('table'), 'the processes come as a table with headers');
   });
 });

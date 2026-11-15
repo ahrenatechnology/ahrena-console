@@ -109,21 +109,28 @@ function commonParent(paths) {
   return joined || (String(paths[0] ?? '').startsWith('/') ? '/' : '');
 }
 
-/** "9 sem uso há mais de 14 dias, em ~/Workspace" (566-6): the number, the whole days the least idle one has been unused, the folder (issue 566). */
-function worktreeLine(trees, now) {
+/**
+ * "9 sem uso há mais de 14 dias, em ~/Workspace" (566-6): the number, the age limit and the folder the core served in
+ * `worktrees` (`{ oldAfterDays, root }`); `root` is `null` when there is no shared folder to name. A field the core did not
+ * send (an old remote) comes from the items instead: the whole days the least idle one has been unused, and the folder
+ * that holds every path (issue 566).
+ */
+function worktreeLine(trees, now, served) {
   const ages = trees.map((t) => (now - new Date(t?.lastUsedAt ?? NaN).getTime()) / DAY_MS).filter(Number.isFinite);
-  const days = ages.length === trees.length ? Math.floor(Math.min(...ages)) : 0;
-  const root = commonParent(trees.map((t) => t.path));
-  const where = root ? `, em ${root}` : '';
+  const guessed = ages.length === trees.length ? Math.floor(Math.min(...ages)) : 0;
+  const limit = Number.isInteger(served?.oldAfterDays) && served.oldAfterDays >= 1 ? served.oldAfterDays : null;
+  const days = limit ?? guessed;
+  const folder = served?.root === null || typeof served?.root === 'string' ? (served.root ?? '') : commonParent(trees.map((t) => t.path));
+  const where = folder ? `, em ${folder}` : '';
   return days >= 1 ? `${trees.length} sem uso há mais de ${plural(days, 'dia', 'dias')}${where}` : `${plural(trees.length, 'worktree', 'worktrees')}${where}`;
 }
 
-/** The rows of "Caches conhecidos": one per cache, and every old worktree folded into one row with its number, idle time and size. */
-export function cacheRows(items, now = Date.now()) {
+/** The rows of "Caches conhecidos": one per cache, and every old worktree folded into one row with its number, idle time and size; `worktrees` is what the section served (issue 566). */
+export function cacheRows(items, now = Date.now(), worktrees = undefined) {
   const list = Array.isArray(items) ? items : [];
   const rows = list.filter((i) => i?.id !== 'worktree').map((i) => ({ title: CACHE_TITLES[i.actionId] ?? String(i.id), path: String(i.path ?? ''), bytes: i.bytes }));
   const trees = list.filter((i) => i?.id === 'worktree');
-  if (trees.length) rows.push({ title: 'Worktrees antigas', path: worktreeLine(trees, now), bytes: trees.reduce((sum, t) => sum + (Number.isFinite(t.bytes) ? t.bytes : 0), 0) });
+  if (trees.length) rows.push({ title: 'Worktrees antigas', path: worktreeLine(trees, now, worktrees), bytes: trees.reduce((sum, t) => sum + (Number.isFinite(t.bytes) ? t.bytes : 0), 0) });
   return rows;
 }
 

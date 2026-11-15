@@ -131,6 +131,18 @@ describe('the format, with no DOM', () => {
     assert.equal(format.cacheRows([{ id: 'worktree', path: '~/Workspace/x/a', bytes: 1, actionId: null }, { id: 'worktree', path: '~/Workspace/x/b', bytes: 1, lastUsedAt: 'nope', actionId: null }], NOW)[0].path, '2 worktrees, em ~/Workspace/x');
   });
 
+  test('the worktree line takes the age limit and the shared root the core served, and each one falls back alone when it is absent (#566)', () => {
+    const trees = [{ id: 'worktree', path: '/home/u/Workspace/a', bytes: 1, lastUsedAt: '2026-11-12T00:00:00.000Z', actionId: null }];
+    const line = (served?: unknown) => format.cacheRows(trees, NOW, served)[0].path;
+    assert.equal(line({ oldAfterDays: 14, root: '~/Workspace' }), '1 sem uso há mais de 14 dias, em ~/Workspace');
+    assert.equal(line({ oldAfterDays: 1, root: '~/Workspace' }), '1 sem uso há mais de 1 dia, em ~/Workspace', 'one day is singular');
+    assert.equal(line({ oldAfterDays: 14, root: null }), '1 sem uso há mais de 14 dias', 'no shared root to name: no folder');
+    assert.equal(line({ root: '~/Workspace' }), '1 sem uso há mais de 2 dias, em ~/Workspace', 'no age limit: the items give the days');
+    assert.equal(line({ oldAfterDays: 14 }), '1 sem uso há mais de 14 dias, em /home/u/Workspace', 'no root field: the items give the folder');
+    assert.equal(line({ oldAfterDays: 0, root: 7 }), '1 sem uso há mais de 2 dias, em /home/u/Workspace', 'a field that is not valid counts as absent');
+    assert.equal(line(undefined), '1 sem uso há mais de 2 dias, em /home/u/Workspace', 'an old remote serves no worktrees');
+  });
+
   test('the folder section names the mount that the alert id carries', () => {
     assert.equal(format.mountOf('volume-full:/'), '/');
     assert.equal(format.mountOf('volume-full:/Volumes/Data'), '/Volumes/Data');
