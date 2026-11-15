@@ -1,6 +1,6 @@
 /*
  * "Delegar ao Claude" (#567, epic #563): hand an open saturation alert to a new Claude session. The use cases
- * are src/delegation (preview, then open); this file is the HTTP edge. The contract is docs/contracts/delegations.md.
+ * are src/delegation (preview, then open); this file is the HTTP edge. The contract is docs/contracts/core-api.openapi.json (#662).
  *
  * | Operation                                                  | Answer                                                              |
  * | ---------------------------------------------------------- | ------------------------------------------------------------------- |

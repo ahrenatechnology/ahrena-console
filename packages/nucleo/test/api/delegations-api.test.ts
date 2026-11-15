@@ -4,7 +4,7 @@
  * launcher with its files in a temp folder. Doubles only at the edges: the section collector, the remote
  * núcleo's tunnel read, the process runner (no terminal, pbcopy or ssh ever starts) and `openInDesktop`.
  * One scenario per criterion and per error case, named by its token; the contract test at the end checks
- * that the statuses and reasons the authored contract (docs/contracts/delegations.md) declares are exactly
+ * that the statuses and reasons the authored contract (docs/contracts/core-api.openapi.json, #662) declares are exactly
  * the ones the route answered.
  */
 import assert from 'node:assert/strict';
@@ -27,6 +27,7 @@ import { AlertTracker } from '../../src/telemetry/alerts.ts';
 import type { Alert, AlertKind } from '../../src/telemetry/model.ts';
 import type { RemoteGet } from '../../src/telemetry/ports.ts';
 import { OWNER_TOKEN, ownerFetch as fetch } from '../owner-http.ts';
+import { assertAnswersTheSpec, declaredOperations, readSpec } from './openapi-spec.ts';
 
 const NOW = '2026-11-14T12:00:00.000Z';
 const LATER = '2026-11-14T12:00:30.000Z';
@@ -137,6 +138,10 @@ async function boot(options: BootOptions = {}) {
     const text = await r.text();
     const body: unknown = text === '' ? null : JSON.parse(text);
     record(r, body);
+    // #662: every answer of an operation the spec declares, errors included, conforms to the authored contract.
+    const pathname = path.split('?')[0]!;
+    const method = init.method ?? 'GET';
+    if ((pathname === '/api/delegations/preview' && method === 'GET') || (pathname === '/api/delegations' && method === 'POST')) assertAnswersTheSpec(method, pathname, r.status, body ?? {});
     return { status: r.status, body: body as Answer, text };
   };
   return {
@@ -625,21 +630,23 @@ describe('#567 POST /api/delegations: the request itself', () => {
 });
 
 describe('#567 the authored contract', () => {
-  test('#567/AC-6 every status docs/contracts/delegations.md declares is answered by the routes, and they answer no other', () => {
-    const doc = readFileSync(new URL('../../../../docs/contracts/delegations.md', import.meta.url), 'utf8');
-    const declared = [...new Set([...doc.matchAll(/^\| `(\d{3})` \|/gm)].map((m) => Number(m[1])))].sort();
-    assert.ok(declared.length > 0, 'the contract declares no status');
+  const spec = readSpec();
+  const delegationOperations = declaredOperations(spec).filter((o) => o.path.startsWith('/api/delegations'));
+
+  test('#567/AC-6 every status the spec declares for the delegation operations is answered by the routes, and they answer no other', () => {
+    assert.equal(delegationOperations.length, 2);
+    const declared = [...new Set(delegationOperations.flatMap((o) => Object.keys(o.operation.responses ?? {}).map(Number)))].sort();
     assert.deepEqual([...answered].sort(), declared);
   });
 
-  test('#567/AC-8 every reason the routes answered is named in the contract', () => {
-    const doc = readFileSync(new URL('../../../../docs/contracts/delegations.md', import.meta.url), 'utf8');
+  test('#567/AC-8 every reason the routes answered is named in the spec', () => {
+    const text = JSON.stringify(delegationOperations.map((o) => o.operation)) + JSON.stringify((spec as { components?: { schemas?: { DelegationRefusal?: unknown } } }).components?.schemas?.DelegationRefusal);
     assert.ok(reasons.size > 0);
-    for (const reason of reasons) assert.ok(doc.includes(`\`${reason}\``), reason);
+    for (const reason of reasons) assert.ok(text.includes(`"${reason}"`), reason);
   });
 
-  test('#567/AC-4 the contract names the data block the prompt wraps its data in', () => {
-    const doc = readFileSync(new URL('../../../../docs/contracts/delegations.md', import.meta.url), 'utf8');
-    assert.ok(doc.includes(DATA_OPEN) && doc.includes(DATA_CLOSE));
+  test('#567/AC-4 the spec names the data block the prompt wraps its data in', () => {
+    const text = JSON.stringify(delegationOperations.map((o) => o.operation));
+    assert.ok(text.includes(DATA_OPEN) && text.includes(DATA_CLOSE));
   });
 });

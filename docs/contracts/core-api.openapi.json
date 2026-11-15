@@ -90,6 +90,10 @@
       "description": "The read-only diagnosis of a saturation alert."
     },
     {
+      "name": "Delegations",
+      "description": "Handing an open saturation alert to a new Claude session."
+    },
+    {
       "name": "Messaging",
       "description": "Messages and orders to a live session."
     },
@@ -4982,6 +4986,231 @@
           }
         }
       }
+    },
+    "/api/delegations/preview": {
+      "get": {
+        "operationId": "getDelegationPreview",
+        "tags": [
+          "Delegations"
+        ],
+        "summary": "The prompt that handing an open saturation alert to a new Claude session will send",
+        "description": "Handing an open saturation alert to a new Claude session (epic #563; wireframe screen 566-17, gaps D7 and D8): this preview, then `POST /api/delegations`. The prompt is built from the open alert and its diagnosis (the same read as `GET /api/diagnosis`, a remote machine's through its tunnel); a diagnosis that cannot be read, or an alert whose kind has no diagnosis, is not an error: the prompt says there is none. The preview is held in memory, one per machine and alert (the last one), for 10 minutes and at most 50 at a time. The prompt is fixed pt-BR text and exactly one data block, `<console-data>` ... `</console-data>`, holding the alert and the diagnosis as JSON with `<` and `>` written as `\\u003c` and `\\u003e`, so the closing tag cannot occur inside it; the fixed text says the block is data, not instructions, and that killing a process or deleting data waits for the person's ok in that session. Too long for the address: items per list section, then the alert's `detail`, then whole sections, then the alert's message are cut, in that order, until `size` is at most 12 000; the fixed text names every cut. The core never runs the prompt, never kills a process and never deletes data.",
+        "parameters": [
+          {
+            "name": "machine",
+            "in": "query",
+            "required": true,
+            "description": "A machine id (`local`, or a remote machine of machines.json), exactly once, as in `GET /api/diagnosis`.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "alert",
+            "in": "query",
+            "required": true,
+            "description": "The id of an alert open on that machine, URL-encoded, at most 200 characters, exactly once, as in `GET /api/diagnosis`.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The preview.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DelegationPreview"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`machine` or `alert` missing, repeated, empty, too long or not valid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`reason` is `unknown-machine`, or `alert-not-open`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DelegationRefusal"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "A method other than GET.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "Stable `delegation-unsupported`: this core has no delegation wired (the demo).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DelegationUnsupported"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/delegations": {
+      "post": {
+        "operationId": "openDelegation",
+        "tags": [
+          "Delegations"
+        ],
+        "summary": "Opens a new Claude session for an open saturation alert, with the prompt the preview held",
+        "description": "`Content-Type: application/json`, no query string. The prompt that is sent is the one the last preview of that machine and alert held, never a rebuilt one: when no preview is held (never taken, expired, or replaced by a newer preview with another `takenAt`) or its `takenAt` is not the one in the body, the answer is 409 and nothing opens. The alert must still be open when the POST arrives. A preview stays held after it opened a session, until it expires or is replaced: the same POST again opens the same prompt again. What each `via` does: `desktop` opens `claude://code/new?folder=<folder>&q=<prompt>` through the Claude Desktop (`open`, the address as one argument; `<folder>` is the home folder of the user the core runs as; only on macOS with the Claude Desktop), and the Desktop pre-fills the composer for the person to send. `terminal` (this machine) puts the prompt on the Mac clipboard (`pbcopy`, the text on stdin), opens a Terminal window in the home folder that prints the prompt (every terminal control character shown as `\\uXXXX`) and starts `claude` with no prompt: the person pastes and sends, because `claude` has no pre-fill flag and `claude \"<prompt>\"` would send it. `ssh` (the Workstation) first runs a pre-flight, `ssh -o BatchMode=yes -o ConnectTimeout=5 ahrena-workstation true`; if it passes, the same clipboard handoff opens a Terminal window that runs `ssh -t ahrena-workstation claude`, so the session runs on the Workstation, in its home folder, with no prompt. The SSH host is fixed (`ahrena-workstation`): nothing in the request chooses it. Nothing is run through a shell string: every program starts with an argument list, and the prompt lives only on the clipboard, in a private (0600) file the Terminal window prints and removes, and in the memory of the core. The answers carry a pt-BR `error` and a stable `reason`, never a dependency's own text. The core never runs the prompt, never kills a process and never deletes data.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DelegationOpenRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The session opened; `opened` is the `via` that was opened.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DelegationOpened"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "A body field is missing or invalid (`machine`, `alertId`, `takenAt`, `via`), or a `via` the machine does not take; the `error` says which `via`s it takes.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "A query string on the POST.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`reason` is `unknown-machine`, or `alert-not-open` (the alert closed since the preview).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DelegationRefusal"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "A method other than POST.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`reason` is `diagnosis-changed`: no preview is held for that machine and alert, it expired, or its `takenAt` is not the one sent. The screen asks for the preview again.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DelegationRefusal"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "The body is larger than the limit.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "`Content-Type` is not `application/json`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`reason` is `too-large`: the held prompt no longer fits the Desktop address (`via` `desktop` only).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DelegationRefusal"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "No way to open here (no Claude Desktop, no terminal the core can open, or not macOS): `error` only, the screen holds the prompt from the preview. Or the stable `delegation-unsupported` when this core has no delegation wired.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/Error"
+                    },
+                    {
+                      "$ref": "#/components/schemas/DelegationUnsupported"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "`reason` is `ssh-unreachable` or `ssh-timeout` (the pre-flight failed; the screen offers to copy the prompt), or `open-failed` (opening threw).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DelegationRefusal"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -6050,6 +6279,135 @@
           }
         },
         "additionalProperties": false
+      },
+      "DelegationPreview": {
+        "type": "object",
+        "description": "The prompt a delegation will send, as the person will see it.",
+        "required": [
+          "prompt",
+          "size",
+          "truncated",
+          "takenAt"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "description": "The exact text a delegation will send."
+          },
+          "size": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "`encodeURIComponent(prompt).length`, which is what the Desktop address budget (12 000) measures."
+          },
+          "truncated": {
+            "type": "boolean",
+            "description": "`true` when the diagnosis was summarised to fit the address budget; the prompt then names what was left out."
+          },
+          "takenAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "The diagnosis moment (the diagnosis' own `takenAt`), or the current instant when there is no diagnosis. The POST carries it back."
+          }
+        }
+      },
+      "DelegationOpenRequest": {
+        "type": "object",
+        "description": "What the screen sends to open the session.",
+        "required": [
+          "machine",
+          "alertId",
+          "via",
+          "takenAt"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "machine": {
+            "type": "string",
+            "description": "A machine id, as in `GET /api/diagnosis`."
+          },
+          "alertId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "description": "The id of an alert open on that machine."
+          },
+          "via": {
+            "type": "string",
+            "enum": [
+              "desktop",
+              "terminal",
+              "ssh"
+            ],
+            "description": "How to open. `local` takes `desktop` or `terminal`; any other machine (the Workstation, through its tunnel) takes `ssh` only. Another `via` is a 400."
+          },
+          "takenAt": {
+            "type": "string",
+            "maxLength": 64,
+            "description": "The `takenAt` the preview answered (an ISO instant)."
+          }
+        }
+      },
+      "DelegationOpened": {
+        "type": "object",
+        "description": "The session opened.",
+        "required": [
+          "ok",
+          "opened"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "ok": {
+            "const": true
+          },
+          "opened": {
+            "type": "string",
+            "enum": [
+              "desktop",
+              "terminal",
+              "ssh"
+            ],
+            "description": "The `via` that was opened."
+          }
+        }
+      },
+      "DelegationRefusal": {
+        "type": "object",
+        "description": "A refusal with a stable `reason`; `error` is a message for a person in pt-BR, never a dependency's own text (no ssh stderr, no error message, no prompt).",
+        "required": [
+          "error",
+          "reason"
+        ],
+        "properties": {
+          "error": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "unknown-machine",
+              "alert-not-open",
+              "diagnosis-changed",
+              "too-large",
+              "ssh-unreachable",
+              "ssh-timeout",
+              "open-failed"
+            ]
+          }
+        }
+      },
+      "DelegationUnsupported": {
+        "type": "object",
+        "description": "Stable: this core has no delegation wired (the demo).",
+        "required": [
+          "error"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "error": {
+            "const": "delegation-unsupported"
+          }
+        }
       }
     }
   }
