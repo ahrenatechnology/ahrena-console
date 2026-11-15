@@ -8,9 +8,9 @@ const bash = (command: string) => isTerminalOnly('Bash', { command });
 describe('isTerminalOnly (#618/AC-6)', () => {
   test('#618/AC-6: ordinary calls are not terminal-only', () => {
     assert.equal(bash('DATABASE_URL=postgres://u:pw@h/db npm run migrate'), false);
-    assert.equal(bash('git push origin feat/x'), false);
+    assert.equal(bash('git status'), false);
     assert.equal(bash('rm build/file.txt'), false);
-    assert.equal(bash('git clean -n'), false);
+    assert.equal(bash('git log --oneline'), false);
     assert.equal(bash('cat README.md'), false);
     assert.equal(bash('git add src/environment.ts'), false);
     assert.equal(isTerminalOnly('Read', { file_path: '/w/src/a.ts' }), false);
@@ -38,7 +38,7 @@ describe('isTerminalOnly (#618/AC-6)', () => {
       assert.equal(isTerminalOnly('Edit', { file_path: p, old_string: 'a', new_string: 'b' }), true, p);
     }
     assert.equal(isTerminalOnly('NotebookEdit', { notebook_path: '/home/u/.ssh/n.ipynb' }), true);
-    assert.equal(isTerminalOnly('Write', { file_path: '/w/.environment-notes.md', content: 'x' }), false);
+    assert.equal(isTerminalOnly('Write', { file_path: '/w/src/notes.md', content: 'x' }), false);
   });
 
   test('#618/AC-6: any call citing .ahrena-console is terminal-only, for every tool that names a path or a command', () => {
@@ -110,7 +110,7 @@ describe('isTerminalOnly (#618/AC-6)', () => {
       'cd x && git -C y reset --hard HEAD~1',
     ];
     for (const c of cases) assert.equal(bash(c), true, c);
-    for (const c of ['git -C /w push origin x', 'git -c k=v status', 'git -C x reset --soft HEAD~1', 'git -C x clean -n', 'git --no-pager log']) assert.equal(bash(c), false, c);
+    for (const c of ['git -c k=v status', 'git --no-pager log']) assert.equal(bash(c), false, c);
   });
 
   test('#618/AC-6: a download piped into a shell is caught through later segments and process substitution', () => {
@@ -127,5 +127,38 @@ describe('isTerminalOnly (#618/AC-6)', () => {
       const ms = performance.now() - start;
       assert.ok(ms < 1000, `${ms.toFixed(0)} ms for ${text.slice(0, 12)}`);
     }
+  });
+
+  test('#618/AC-9: any git push, reset or clean is terminal-only, whatever the flags or global options', () => {
+    for (const c of ['git push', 'git push origin feat/x', 'git push -fu', 'git push -uf origin x', 'git clean -n', 'git clean -fdx', 'git reset --soft HEAD~1', 'git reset', 'git -C /x push', 'git -c a=b reset', 'git --git-dir=/x clean', 'git -C /w push origin x', 'git -C x reset --soft HEAD~1', 'git -C x clean -n', 'cd x && git status; git push']) {
+      assert.equal(bash(c), true, c);
+    }
+  });
+
+  test('#618/AC-9: quotes never hide a word from the tokenizer', () => {
+    for (const c of ['git -C "/a b" push --force', '"git" push', "'git' 'push'", 'sh -c "git push"', "bash -c 'git reset --hard'", 'git `echo push`', '(git push)']) {
+      assert.equal(bash(c), true, c);
+    }
+  });
+
+  test('#618/AC-9: any text containing .env is terminal-only, in any case', () => {
+    for (const t of ['.envrc', '.env-production', '.env_prod', '.env.local', 'FOO.ENV', '/w/.environment-notes.md']) {
+      assert.equal(bash(`cat ${t}`), true, t);
+      assert.equal(isTerminalOnly('Read', { file_path: `/w/${t}` }), true, t);
+    }
+    assert.equal(bash('git add src/environment.ts'), false);
+  });
+
+  test('#618/AC-9: a Bash that writes into or names a protected file is terminal-only, quotes or not', () => {
+    for (const c of ['echo x > ".claude/settings.json"', "echo x > '.claude/settings.local.json'", 'cat ~/.ssh/id_rsa', 'tee .mcp.json', 'cat "~/.ssh/id_rsa"', 'cp x ".claude/hooks/a.sh"', 'cat `echo .mcp.json`']) {
+      assert.equal(bash(c), true, c);
+    }
+  });
+
+  test('#618/AC-9: the floor stays linear on a long quoted command', () => {
+    const start = performance.now();
+    bash(`git ${'" '.repeat(30000)}`);
+    bash(`'git' ${"'x' ".repeat(15000)}`);
+    assert.ok(performance.now() - start < 1000);
   });
 });

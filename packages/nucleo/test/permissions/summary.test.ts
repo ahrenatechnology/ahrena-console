@@ -137,4 +137,19 @@ describe('redactSecrets (#618/AC-7)', () => {
       assert.ok(ms < 1000, `${ms.toFixed(0)} ms for ${text.slice(0, 12)}`);
     }
   });
+
+  test('#618/AC-9: a credential inside quotes that contain spaces is masked, with no fragment left', () => {
+    const cases: [string, string[]][] = [
+      ['curl -u "admin:s3 cret" https://h', ['s3', 'cret']],
+      ["curl --user 'admin:s3 cret' https://h", ['s3', 'cret']],
+      ['curl --user="admin:s3 cret more" https://h', ['s3', 'cret', 'more']],
+      ['curl -u "admin:s3 cret', ['s3', 'cret']],
+      ['PASSWORD="a b c" run', ['a b', ' c"']],
+      ["export API_TOKEN='tok en 9' && run", ['tok', 'en 9']],
+    ];
+    for (const [text, fragments] of cases) {
+      const out = summarize('Bash', { command: text });
+      for (const f of fragments) assert.ok(!out.includes(f), `${text} -> ${out}`);
+    }
+  });
 });

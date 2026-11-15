@@ -10,7 +10,7 @@ const COMMAND_PATTERNS: RegExp[] = [/\bsudo\b/, /\b(?:ba|z|da|k)?sh\s+-c\s+["']?
 const PROTECTED_PATH_PATTERNS: RegExp[] = [
   /(?:^|[^A-Za-z0-9_.-])\.claude\/(?:settings[^/\s]*\.json|hooks\/)/i,
   /(?:^|[^A-Za-z0-9_.-])\.mcp\.json(?![A-Za-z0-9_-])/i,
-  /(?:^|[^A-Za-z0-9_.-])\.env(?![A-Za-z0-9_-])/i,
+  /\.env/i,
   /(?:^|[^A-Za-z0-9_.-])\.ssh\//i,
 ];
 
@@ -23,38 +23,22 @@ const PATH_FIELDS = ['file_path', 'notebook_path', 'path', 'pattern'] as const;
 const normalizePath = (p: string): string => p.replace(/\\/g, '/').replace(/\/\.(?=\/)/g, '').replace(/\/{2,}/g, '/');
 
 const RECURSIVE_FLAG = /^(?:-[a-zA-Z]*[rR][a-zA-Z]*|--recursive)$/;
-const FORCE_PUSH = /^(?:--force(?:-with-lease)?(?:=.*)?|-f|\+\S.*)$/;
-const FORCE_CLEAN = /^(?:-[a-zA-Z]*f[a-zA-Z]*|--force)$/;
 const bare = (token: string): string => token.replace(/^["'(]+|["')]+$/g, '');
 const SHELLS = new Set(['sh', 'bash', 'zsh', 'dash', 'ksh', 'fish']);
 const baseName = (token: string): string => token.slice(token.lastIndexOf('/') + 1);
 
-/** Git options that take the next word as their argument; any other leading `-…` is skipped alone, the safe side (#618/AC-6). */
-const GIT_OPTIONS_WITH_ARGUMENT = new Set(['-C', '-c', '--git-dir', '--work-tree', '--namespace', '--exec-path', '--super-prefix', '--config-env']);
+/** Quotes never hide a word: they read as spaces, so `"git" 'push'` is `git push` (#618/AC-9). */
+const stripQuotes = (text: string): string => text.replace(/["'`]/g, ' ');
 
-/** The git subcommand and where its words start, after the global options (`-C x`, `-c k=v`, `--git-dir …`) (#618/AC-6). */
-function gitCall(tokens: string[], at: number): { sub: string; from: number } | null {
-  let i = at + 1;
-  while (i < tokens.length && (tokens[i] ?? '').startsWith('-')) i += GIT_OPTIONS_WITH_ARGUMENT.has(tokens[i] ?? '') ? 2 : 1;
-  const sub = tokens[i];
-  return sub === undefined ? null : { sub, from: i + 1 };
-}
+const RISKY_GIT_SUBCOMMANDS = new Set(['push', 'reset', 'clean']);
 
-/** A tokenised scan, one pass per command segment, so the cost is linear in the command: each git call reads up to the next one (#618/AC-6, 64 KiB bound in 0025). */
+/** A tokenised scan, one pass per command segment (linear in the command, 64 KiB bound in 0025): recursive `rm`, and any `push`, `reset` or `clean` after a `git` word, whatever the flags or global options (#618/AC-9). */
 function hasRiskyVerb(segment: string): boolean {
   const tokens = segment.split(/\s+/).filter(Boolean).map(bare);
   const rm = tokens.findIndex((t) => baseName(t) === 'rm');
   if (rm >= 0 && tokens.slice(rm + 1).some((t) => RECURSIVE_FLAG.test(t))) return true;
-  const gits = tokens.flatMap((t, i) => (baseName(t) === 'git' ? [i] : []));
-  for (const [n, at] of gits.entries()) {
-    const call = gitCall(tokens, at);
-    if (call === null) continue;
-    const rest = tokens.slice(call.from, gits[n + 1] ?? tokens.length);
-    if (call.sub === 'push' && rest.some((t) => FORCE_PUSH.test(t))) return true;
-    if (call.sub === 'clean' && rest.some((t) => FORCE_CLEAN.test(t))) return true;
-    if (call.sub === 'reset' && rest.includes('--hard')) return true;
-  }
-  return false;
+  const git = tokens.findIndex((t) => baseName(t) === 'git');
+  return git >= 0 && tokens.slice(git + 1).some((t) => RISKY_GIT_SUBCOMMANDS.has(t));
 }
 
 /** `curl x | sh`: a segment with a download followed, in any later segment of the line, by a shell (#618/AC-6). */
@@ -76,7 +60,8 @@ function isShellSegment(part: string): boolean {
   return first >= 0 && SHELLS.has(baseName(tokens[first] ?? ''));
 }
 
-function commandIsTerminalOnly(command: string): boolean {
+function commandIsTerminalOnly(rawCommand: string): boolean {
+  const command = stripQuotes(rawCommand);
   if (COMMAND_PATTERNS.some((re) => re.test(command))) return true;
   if (command.split('\n').some(pipesDownloadIntoShell)) return true;
   return command.split(/[|;&\n]+/).some(hasRiskyVerb);
@@ -94,5 +79,6 @@ export function isTerminalOnly(toolName: string, toolInput: unknown): boolean {
   const cited = commandText === null ? paths : [...paths, commandText];
   if (cited.some((text) => CITED_PATTERNS.some((re) => re.test(text)))) return true;
   if (typeof command === 'string' && commandIsTerminalOnly(command)) return true;
-  return cited.some((text) => PROTECTED_PATH_PATTERNS.some((re) => re.test(text)));
+  const unquoted = cited.map(stripQuotes);
+  return [...cited, ...unquoted].some((text) => PROTECTED_PATH_PATTERNS.some((re) => re.test(text)));
 }
