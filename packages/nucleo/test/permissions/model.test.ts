@@ -50,6 +50,11 @@ describe('opening a request (#618/AC-1, AC-7)', () => {
     for (const v of Object.values(r)) assert.notEqual(typeof v === 'object' && v !== null, true, 'no object kept, so no raw toolInput');
   });
 
+  test('#618/AC-7: the request says whether its summary was cut, for the screen to mark it', async () => {
+    assert.equal((await open()).summaryTruncated, false);
+    assert.equal((await open({ toolInput: { command: `echo ${'a'.repeat(3000)}` } })).summaryTruncated, true);
+  });
+
   test('#618/AC-6: rm -rf and any call citing .ahrena-console open as terminalOnly', async () => {
     assert.equal((await open({ toolInput: { command: 'rm -rf build' } })).terminalOnly, true);
     assert.equal((await open({ toolName: 'Read', toolInput: { file_path: '/Users/u/.ahrena-console/nucleo.json' } })).terminalOnly, true);

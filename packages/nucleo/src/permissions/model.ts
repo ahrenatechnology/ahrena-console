@@ -11,7 +11,7 @@
 import { digestOf } from './digest.ts';
 import { PermissionRefusal, REFUSAL_CODES, type RefusalCode } from './refusal.ts';
 export { PermissionRefusal, REFUSAL_CODES, type RefusalCode };
-import { summarize } from './summary.ts';
+import { summarizeCall } from './summary.ts';
 import { isTerminalOnly } from './terminal-only.ts';
 
 /** The life of a request. `delivered` means handed to the hook process, not applied by the session. */
@@ -55,6 +55,8 @@ export class PermissionRequest {
   readonly digest: string;
   /** The text the person reads, with the secrets already masked. (#618) */
   readonly summary: string;
+  /** The summary was cut, so the screen marks it as such. (#618) */
+  readonly summaryTruncated: boolean;
   readonly cwd: string;
   readonly permissionMode: string | null;
   /** Only the person at the terminal allows this call; the Console can only deny it. (#618) */
@@ -69,12 +71,13 @@ export class PermissionRequest {
   private _settledAt: number | null = null;
   private _settledBy: Settler | null = null;
 
-  private constructor(p: Pick<PermissionRequest, 'id' | 'sessionId' | 'toolName' | 'digest' | 'summary' | 'cwd' | 'permissionMode' | 'terminalOnly' | 'createdAt' | 'expiresAt'>) {
+  private constructor(p: Pick<PermissionRequest, 'id' | 'sessionId' | 'toolName' | 'digest' | 'summary' | 'summaryTruncated' | 'cwd' | 'permissionMode' | 'terminalOnly' | 'createdAt' | 'expiresAt'>) {
     this.id = p.id;
     this.sessionId = p.sessionId;
     this.toolName = p.toolName;
     this.digest = p.digest;
     this.summary = p.summary;
+    this.summaryTruncated = p.summaryTruncated;
     this.cwd = p.cwd;
     this.permissionMode = p.permissionMode;
     this.terminalOnly = p.terminalOnly;
@@ -84,12 +87,14 @@ export class PermissionRequest {
 
   /** Opens a request from a hook payload. The tool input is read for the digest, the summary and the policy, and dropped. (#618) */
   static async open(p: { id: string; sessionId: string; toolName: string; toolInput: unknown; cwd: string; permissionMode: string | null; now: number }): Promise<PermissionRequest> {
+    const { summary, truncated } = summarizeCall(p.toolName, p.toolInput);
     return new PermissionRequest({
       id: p.id,
       sessionId: p.sessionId,
       toolName: p.toolName,
       digest: await digestOf({ sessionId: p.sessionId, toolName: p.toolName, toolInput: p.toolInput, cwd: p.cwd }),
-      summary: summarize(p.toolName, p.toolInput),
+      summary,
+      summaryTruncated: truncated,
       cwd: p.cwd,
       permissionMode: p.permissionMode,
       terminalOnly: isTerminalOnly(p.toolName, p.toolInput),
