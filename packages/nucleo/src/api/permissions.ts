@@ -151,21 +151,21 @@ function readBody(req: IncomingMessage, limit: number): Promise<string | null> {
 
 type JsonBody = { ok: true; body: Record<string, unknown> } | { ok: false };
 
-async function jsonBody(req: IncomingMessage, res: ServerResponse, limit: number): Promise<JsonBody> {
+async function jsonBody(req: IncomingMessage, limit: number, refuse: (status: number, code: string) => void): Promise<JsonBody> {
   if (!/^application\/json\s*(;|$)/i.test(req.headers['content-type'] ?? '')) {
     req.resume();
-    send(res, 415, { error: 'use application/json' });
+    refuse(415, 'use application/json');
     return { ok: false };
   }
   const declared = Number(req.headers['content-length']);
   if (declared > limit) {
     req.resume();
-    send(res, 413, { error: 'too_large' });
+    refuse(413, 'too_large');
     return { ok: false };
   }
   const raw = await readBody(req, limit);
   if (raw === null) {
-    send(res, 413, { error: 'too_large' });
+    refuse(413, 'too_large');
     return { ok: false };
   }
   try {
@@ -174,7 +174,7 @@ async function jsonBody(req: IncomingMessage, res: ServerResponse, limit: number
   } catch {
     // falls through to the generic answer (#618)
   }
-  send(res, 400, { error: 'invalid_request' });
+  refuse(400, 'invalid_request');
   return { ok: false };
 }
 
@@ -314,23 +314,29 @@ export function createPermissions(options: PermissionsOptions, ctx: PermissionsC
     return null;
   }
 
+  /** A refusal of the routes themselves once the operation is known: audited, then sent as `{ error: code }` (decision 0025, #618). */
+  function refuse(res: ServerResponse, parsed: Parsed, status: number, code: string): void {
+    audit(parsed.operation!, parsed, code);
+    send(res, status, { error: code });
+  }
+
   function refused(res: ServerResponse, error: unknown, parsed: Parsed): void {
     const mapped = refusalOf(error);
     if (mapped === null) return fault(res, parsed, error);
     send(res, mapped.status, { error: mapped.code });
   }
 
-  async function register(req: IncomingMessage, res: ServerResponse, sessionId: string): Promise<void> {
+  async function register(req: IncomingMessage, res: ServerResponse, parsed: Parsed, sessionId: string): Promise<void> {
     if (!capability()) {
       req.resume();
       return send(res, 503, { error: 'off' });
     }
-    const read = await jsonBody(req, res, MAX_REGISTER_BYTES);
+    const read = await jsonBody(req, MAX_REGISTER_BYTES, (status, code) => refuse(res, parsed, status, code));
     if (!read.ok) return;
     const { toolName, toolInput, cwd, permissionMode, digest } = read.body;
     const mode = permissionMode === undefined || permissionMode === null ? null : text(permissionMode, 64);
     if (text(toolName, 128) === null || toolInput === undefined || text(cwd, 1024) === null || (permissionMode !== undefined && permissionMode !== null && mode === null) || typeof digest !== 'string' || !DIGEST.test(digest)) {
-      return send(res, 400, { error: 'invalid_request' });
+      return refuse(res, parsed, 400, 'invalid_request');
     }
     // (#618) Whatever overdue is closed here, where a request enters: no wait for the timer (cheap: one read of the open ones).
     expireDue(deps);
@@ -351,10 +357,10 @@ export function createPermissions(options: PermissionsOptions, ctx: PermissionsC
     });
   }
 
-  async function decision(req: IncomingMessage, res: ServerResponse, url: URL, sessionId: string, requestId: string): Promise<void> {
+  async function decision(req: IncomingMessage, res: ServerResponse, parsed: Parsed, url: URL, sessionId: string, requestId: string): Promise<void> {
     if (!capability()) return send(res, 503, { error: 'off' });
     const waitMs = waitOf(url);
-    if (waitMs === null) return send(res, 400, { error: 'invalid_request' });
+    if (waitMs === null) return refuse(res, parsed, 400, 'invalid_request');
     // (#618) The hook leaving. While it waits, no read delivers: the delivery is the one synchronous read that finds an answer, and it
     // happens only while the connection is still open, so a hook that disconnected is never handed a decision it cannot apply. (#618)
     let left = false;
@@ -388,13 +394,13 @@ export function createPermissions(options: PermissionsOptions, ctx: PermissionsC
     }
   }
 
-  async function answer(req: IncomingMessage, res: ServerResponse, sessionId: string, requestId: string): Promise<void> {
-    const read = await jsonBody(req, res, MAX_ANSWER_BYTES);
+  async function answer(req: IncomingMessage, res: ServerResponse, parsed: Parsed, sessionId: string, requestId: string): Promise<void> {
+    const read = await jsonBody(req, MAX_ANSWER_BYTES, (status, code) => refuse(res, parsed, status, code));
     if (!read.ok) return;
     const { decision: choice, reason, ...rest } = read.body;
     // (#618) Only `decision` and `reason`: an answer that names a session, a request or a digest of its own is refused, the stored ones decide.
-    if (Object.keys(rest).length > 0 || (reason !== undefined && typeof reason !== 'string') || typeof choice !== 'string') return send(res, 400, { error: 'invalid_request' });
-    if (!isDecision(choice)) return send(res, 400, { error: 'invalid_decision' });
+    if (Object.keys(rest).length > 0 || (reason !== undefined && typeof reason !== 'string') || typeof choice !== 'string') return refuse(res, parsed, 400, 'invalid_request');
+    if (!isDecision(choice)) return refuse(res, parsed, 400, 'invalid_decision');
     answerRequest(deps, { sessionId, requestId, decision: choice, reason, answeredBy: 'owner', channel: 'ui' });
     send(res, 200, { ok: true });
   }
@@ -408,18 +414,18 @@ export function createPermissions(options: PermissionsOptions, ctx: PermissionsC
     }
     if (sessionId === null || !SESSION_ID.test(sessionId)) {
       req.resume();
-      return send(res, 400, { error: 'invalid_session_id' });
+      return refuse(res, parsed, 400, 'invalid_session_id');
     }
     if (operation !== 'register' && operation !== 'list' && (requestId === null || !REQUEST_ID.test(requestId))) {
       req.resume();
-      return send(res, 400, { error: 'invalid_request' });
+      return refuse(res, parsed, 400, 'invalid_request');
     }
     try {
       switch (operation) {
         case 'register':
-          return await register(req, res, sessionId);
+          return await register(req, res, parsed, sessionId);
         case 'decision':
-          return await decision(req, res, url, sessionId, requestId!);
+          return await decision(req, res, parsed, url, sessionId, requestId!);
         case 'withdraw':
           if (!capability()) return send(res, 503, { error: 'off' });
           withdrawRequest(deps, { sessionId, requestId: requestId! });
@@ -427,7 +433,7 @@ export function createPermissions(options: PermissionsOptions, ctx: PermissionsC
         case 'list':
           return send(res, 200, listRequests(deps, { sessionId, unavailableReason: capability() ? null : 'off' }));
         case 'answer':
-          return await answer(req, res, sessionId, requestId!);
+          return await answer(req, res, parsed, sessionId, requestId!);
         default: {
           const unreachable: never = operation;
           void unreachable;

@@ -889,7 +889,7 @@
           "Sessions"
         ],
         "summary": "The session Detail",
-        "description": "The session Detail. When the permission routes are wired the answer also carries `pendingPermissions`, an array of `PendingPermission` for this session; a core without them keeps the old shape.",
+        "description": "The session Detail. When the permission routes are wired the answer also carries `pendingPermissions`, an array of the requests still pending for this session (session, requestId, tool, terminalOnly, requestedAt, expiresAt; no summary and no folder); a core without them keeps the old shape.",
         "parameters": [
           {
             "$ref": "#/components/parameters/sessionId"
@@ -1343,7 +1343,7 @@
           "Analytics"
         ],
         "summary": "Who needs you, across all accounts and machines",
-        "description": "Who needs you, across all accounts and machines. When the permission routes are wired the answer also carries `pendingPermissions`, an array of `PendingPermission` (the requests still pending: session, requestId, tool, terminalOnly, requestedAt, expiresAt; no summary and no folder); a core without them keeps the old shape.",
+        "description": "Who needs you, across all accounts and machines. When the permission routes are wired the answer also carries `pendingPermissions`, an array of the requests still pending (session, requestId, tool, terminalOnly, requestedAt, expiresAt; no summary and no folder); a core without them keeps the old shape.",
         "responses": {
           "200": {
             "description": "The answer.",
@@ -6722,40 +6722,6 @@
             "items": {
               "$ref": "#/components/schemas/PermissionRequestItem"
             }
-          }
-        }
-      },
-      "PendingPermission": {
-        "type": "object",
-        "description": "A request still pending: ids and flags only, no summary and no folder (the routes that carry it are open to the AhrenaRemote proof).",
-        "required": [
-          "session",
-          "requestId",
-          "tool",
-          "terminalOnly",
-          "requestedAt",
-          "expiresAt"
-        ],
-        "properties": {
-          "session": {
-            "type": "string"
-          },
-          "requestId": {
-            "type": "string"
-          },
-          "tool": {
-            "type": "string"
-          },
-          "terminalOnly": {
-            "type": "boolean"
-          },
-          "requestedAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "expiresAt": {
-            "type": "string",
-            "format": "date-time"
           }
         }
       }

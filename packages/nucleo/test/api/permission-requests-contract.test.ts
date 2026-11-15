@@ -248,6 +248,10 @@ describe('operation 5: POST …/:rid/answer (#618/AC-8)', () => {
         const r = await f.answer(SID, d.rid, null, { raw: body });
         assert.equal(r.status, 400, body);
       }
+      // (#618) Every refusal of the answer route is audited (decision 0025): the unknown decision and a malformed body too.
+      const refusals = f.deps.audit.records.filter((r) => r.event === 'refused' && r.operation === 'answer');
+      assert.ok(refusals.some((r) => r.code === 'invalid_decision' && r.requestId === d.rid && r.sessionId === SID), 'invalid_decision is audited');
+      assert.ok(refusals.some((r) => r.code === 'invalid_request' && r.requestId === d.rid && r.sessionId === SID), 'invalid_request is audited');
     }));
 
   test('#618/AC-8: the three proofs: no or wrong window credential is 403 window_only, a failed same-origin proof is 403 forbidden_origin', () =>
