@@ -18,7 +18,7 @@ import { readFile, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { accountSourceRank, claudeAccountId, type AccountSource, type ProviderAccount, type Session } from '../model.ts';
-import { ACCOUNT_COLORS } from '../profiles/colors.ts';
+import { ACCOUNT_COLORS, resolveStoredColor } from '../profiles/colors.ts';
 import type { StoragePort } from '../storage-port.ts';
 import type { DesktopSession } from './desktop-index.ts';
 import type { PanelAccount } from './types.ts';
@@ -123,13 +123,21 @@ export class Accounts {
     return this.build(id, 'profile');
   }
 
+  /** The colors the other accounts hold, the configured one first, as `build` reads them. */
+  private otherColors(id: string): (string | null)[] {
+    const ids = new Set([...this.fromPort.keys(), ...this.configured.keys()]);
+    ids.delete(id);
+    return [...ids].map((o) => this.configured.get(o)?.color ?? this.fromPort.get(o)?.color ?? null);
+  }
+
   /** The account's label and color: the label file, then the port's account, then "conta N". */
   private build(id: string, source: AccountSource): PanelAccount {
     if (!this.order.includes(id)) this.order.push(id);
     const i = this.order.indexOf(id);
     const a = this.fromPort.get(id);
     const c = this.configured.get(id);
-    const color = c?.color ?? (a?.color && HEX.test(a.color) ? a.color : null) ?? ACCOUNT_COLORS[i % ACCOUNT_COLORS.length];
+    const stored = c?.color ?? (a?.color && HEX.test(a.color) ? a.color : null);
+    const color = resolveStoredColor(stored, this.otherColors(id)) ?? ACCOUNT_COLORS[i % ACCOUNT_COLORS.length];
     return { id, identity: a?.identity ?? null, confidence: a?.confidence ?? 'unknown', label: c?.label ?? a?.label ?? orgLabel(a?.organizationName) ?? `conta ${i + 1}`, color, source };
   }
 }

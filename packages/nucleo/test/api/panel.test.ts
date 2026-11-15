@@ -244,7 +244,7 @@ describe('conta da sessão (decisão 0006)', () => {
 
   test('vale a fonte de menor ordem: ambiente, porta (config), Desktop só com uma pasta; sem fonte, "Sem conta"', async () => {
     const arquivo = join(dir, 'contas.json');
-    writeFileSync(arquivo, JSON.stringify({ [`${UUID_B}/${ORG_B}`]: { rotulo: 'cliente', cor: '#1baf7a' } }));
+    writeFileSync(arquivo, JSON.stringify({ [`${UUID_B}/${ORG_B}`]: { rotulo: 'cliente', cor: '#a6a6aa' } }));
     const storage = openSqliteStorage({ path: ':memory:' });
     await storage.putAccount({
       id: `${UUID_A}/${ORG_A}`, accountUuid: UUID_A, organizationUuid: ORG_A, organizationName: null, organizationType: null,
@@ -255,7 +255,7 @@ describe('conta da sessão (decisão 0006)', () => {
     const s = (over: Partial<{ accountId: string | null; accountSource: 'config' | 'env' | null }> = {}) => ({ id: 's1', accountId: null, accountSource: null, ...over });
     const desktop = (escopos: string[]) => ({ localId: 'local_x', cliSessionId: 's1', title: null, branch: null, cwd: null, parentLocalId: null, archived: false, accounts: escopos });
     assert.equal(contas.ofSession(s(), desktop([`${UUID_A}/${ORG_A}`, `${UUID_B}/${ORG_B}`])), null, 'duas pastas: a pasta não diz a conta');
-    assert.deepEqual(contas.ofSession(s(), desktop([`${UUID_B}/${ORG_B}`])), { id: `${UUID_B}/${ORG_B}`, label: 'cliente', color: '#1baf7a', source: 'desktop', identity: null, confidence: 'unknown' });
+    assert.deepEqual(contas.ofSession(s(), desktop([`${UUID_B}/${ORG_B}`])), { id: `${UUID_B}/${ORG_B}`, label: 'cliente', color: '#a6a6aa', source: 'desktop', identity: null, confidence: 'unknown' });
     const daPorta = contas.ofSession(s({ accountId: `${UUID_A}/${ORG_A}`, accountSource: 'config' }), desktop([`${UUID_B}/${ORG_B}`]));
     assert.deepEqual(daPorta && [daPorta.label, daPorta.color, daPorta.source], ['equipe', '#df285d', 'config'], 'config vence desktop');
     contas.reportEnv('s1', UUID_B, ORG_B);

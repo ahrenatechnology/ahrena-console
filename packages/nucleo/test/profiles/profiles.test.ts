@@ -7,6 +7,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, test } from 'node:test';
 import { openSqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
 import { Accounts, ACCOUNT_COLORS } from '../../src/api/accounts.ts';
+import { paleta } from '../../../marca/gerado/marca.ts';
 import { accountFromClaudeJson, freeColor, discoverFolders, Profiles } from '../../src/profiles/index.ts';
 
 const UUID_A = '00000000-0000-4000-8000-00000000000a';
@@ -158,12 +159,12 @@ describe('Profiles in the port', () => {
     const storage = openSqliteStorage({ path: ':memory:' });
     await new Profiles({ storage, home, file: null, now: () => T0 }).sync();
     const arquivo = join(home, 'contas.json');
-    writeFileSync(arquivo, JSON.stringify({ [`${UUID_B}/${ORG_B}`]: { rotulo: 'cliente', cor: '#1baf7a' } }));
+    writeFileSync(arquivo, JSON.stringify({ [`${UUID_B}/${ORG_B}`]: { rotulo: 'cliente', cor: ACCOUNT_COLORS[2] } }));
     const contas = new Accounts({ storage, file: arquivo });
     await contas.refresh();
     const sessao = (accountId: string) => ({ id: 's', accountId, accountSource: 'config' as const });
     assert.deepEqual(contas.ofSession(sessao(`${UUID_A}/${ORG_A}`), null), { id: `${UUID_A}/${ORG_A}`, label: 'Equipe Exemplo', color: ACCOUNT_COLORS[0], source: 'config', identity: (await storage.getAccount(`${UUID_A}/${ORG_A}`))?.identity, confidence: 'unknown' });
-    assert.deepEqual(contas.ofSession(sessao(`${UUID_B}/${ORG_B}`), null), { id: `${UUID_B}/${ORG_B}`, label: 'cliente', color: '#1baf7a', source: 'config', identity: (await storage.getAccount(`${UUID_B}/${ORG_B}`))?.identity, confidence: 'unknown' });
+    assert.deepEqual(contas.ofSession(sessao(`${UUID_B}/${ORG_B}`), null), { id: `${UUID_B}/${ORG_B}`, label: 'cliente', color: ACCOUNT_COLORS[2], source: 'config', identity: (await storage.getAccount(`${UUID_B}/${ORG_B}`))?.identity, confidence: 'unknown' });
     await storage.close();
   });
 
@@ -234,6 +235,39 @@ describe('Profiles in the port', () => {
     await perfis.sync();
     await perfis.accountForFolder(join(home, '.claude-x'));
     assert.equal(gravacoes, 1);
+    await storage.close();
+  });
+
+  test('#699/AC-1: account colors are rose, yellow and gray from the palette, and freeColor spreads among the three', () => {
+    assert.deepEqual([...ACCOUNT_COLORS], [paleta.rose['500'], paleta.yellow['500'], paleta.gray['200']]);
+    assert.equal(freeColor([ACCOUNT_COLORS[0], ACCOUNT_COLORS[1]]), ACCOUNT_COLORS[2]);
+    assert.equal(freeColor([ACCOUNT_COLORS[0], ACCOUNT_COLORS[1], ACCOUNT_COLORS[2], ACCOUNT_COLORS[1], ACCOUNT_COLORS[0]]), ACCOUNT_COLORS[2]);
+  });
+
+  test('#699/AC-2: an account stored with the retired green leaves the core with the least repeated color, in SQLite and in the label file', async () => {
+    const RETIRED = '#1baf7a';
+    mkdirSync(join(home, '.claude'));
+    writeFileSync(join(home, '.claude.json'), claudeJson(UUID_A, ORG_A, { organizationName: 'Equipe Exemplo' }));
+    pasta('.claude-cliente', claudeJson(UUID_B, ORG_B, { organizationName: 'Cliente Exemplo' }));
+    const storage = openSqliteStorage({ path: ':memory:' });
+    await new Profiles({ storage, home, file: null, now: () => T0 }).sync();
+    const stored = await storage.getAccount(`${UUID_A}/${ORG_A}`);
+    assert.ok(stored);
+    await storage.putAccount({ ...stored, color: RETIRED });
+    const sessao = (accountId: string) => ({ id: 's', accountId, accountSource: 'config' as const });
+
+    const fromSqlite = new Accounts({ storage, file: null });
+    await fromSqlite.refresh();
+    const a = fromSqlite.ofSession(sessao(`${UUID_A}/${ORG_A}`), null);
+    assert.ok(a && ACCOUNT_COLORS.includes(a.color) && a.color !== RETIRED);
+    assert.equal(a.color, freeColor([ACCOUNT_COLORS[1]]), 'the least repeated over the other accounts');
+
+    const arquivo = join(home, 'contas.json');
+    writeFileSync(arquivo, JSON.stringify({ [`${UUID_B}/${ORG_B}`]: { rotulo: 'cliente', cor: RETIRED } }));
+    const fromFile = new Accounts({ storage, file: arquivo });
+    await fromFile.refresh();
+    const b = fromFile.ofSession(sessao(`${UUID_B}/${ORG_B}`), null);
+    assert.ok(b && ACCOUNT_COLORS.includes(b.color) && b.color !== RETIRED);
     await storage.close();
   });
 
