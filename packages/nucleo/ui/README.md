@@ -184,3 +184,13 @@ Sessões, Mural ao vivo, Kanban (as duas visões), Feed, Histórico e Dashboard 
 ## As URLs antigas
 
 As URLs da /ui eram em pt-BR até a decisão 0009 (issue 173) e ficaram abrindo como alias até a fase 6. Agora uma URL antiga (`/ui/sessoes/<id>`, `/ui/telas/<arquivo>`) é uma URL desconhecida: a moldura mostra "Página não encontrada", e um arquivo antigo dá 404.
+
+## Voice lint
+
+The pt-BR text of the screens follows `docs/brand/voice-rules.json` (guide: `docs/brand/voice.md`). Run the lint with:
+
+```sh
+node --test --test-concurrency=1 test/voice-lint.test.mjs
+```
+
+It is a ratchet: a new violation fails, and a violation fixed must leave `test/voice-lint.baseline.json` (`VOICE_LINT_SHRINK=1` removes it).
