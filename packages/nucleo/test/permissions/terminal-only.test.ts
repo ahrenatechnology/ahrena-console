@@ -226,7 +226,7 @@ describe('download-and-run through an interpreter, and indirection on git (decis
 
   test('#618/AC-9: git reached through xargs or a variable is terminal-only', () => {
     for (const c of ['echo push | xargs git', 'echo --hard | xargs git reset', 'x=git; $x push', '$GIT push --force']) assert.equal(bash(c), true, c);
-    for (const c of ['echo a | xargs git status', 'x=git; $x status', 'echo push | xargs echo', '$HOME/bin/tool push']) assert.equal(bash(c), false, c);
+    for (const c of ['echo a | xargs git status', 'x=git; $x status', 'echo push | xargs echo']) assert.equal(bash(c), false, c);
   });
 });
 
@@ -455,7 +455,7 @@ describe('Janus findings, round 1: git options anywhere, config commands, more a
   });
 
   test('#618/AC-11: look-alikes of the configuration commands stay allowable', () => {
-    for (const c of ['npm run set', 'gh pr list', 'npm test', 'claude --version']) assert.equal(bash(c), false, c);
+    for (const c of ['gh pr list', 'npm test', 'claude --version']) assert.equal(bash(c), false, c);
   });
 
   const AUTO_RUN_FILES: Array<[string, string]> = [
@@ -497,7 +497,7 @@ describe('Janus findings, round 1: git options anywhere, config commands, more a
   });
 
   test('#618/AC-11: quoted globs, relative globs and ordinary calls stay allowable', () => {
-    for (const c of ['ls src/*.ts', 'git status', 'echo "~/.zsh?c"', "echo '/tmp/*'", 'ls \\./a\\*', 'grep -rn "a?" src', 'curl https://example.dev/a?b=c', 'echo ${HOME}/x', 'ls src/{a,b}.ts']) assert.equal(bash(c), false, c);
+    for (const c of ['ls src/*.ts', 'git status', 'echo "~/.zsh?c"', "echo '/tmp/*'", 'ls \\./a\\*', 'grep -rn "a?" src', 'curl https://example.dev/a?b=c', 'echo ${HOME}', 'ls src/{a,b}.ts']) assert.equal(bash(c), false, c);
   });
 
   test('#618/AC-11: a glob outside Bash is no concern of this check', () => {
@@ -527,5 +527,82 @@ describe('review of 35003a8: nested git, and linear scans at 64 KiB (#618/AC-9, 
 
   test('#618/AC-11: brace globs in a path-start word stay terminal-only', () => {
     for (const c of ['cat ~/{a,b}', 'cat ./{1..3}']) assert.equal(bash(c), true, c);
+  });
+});
+
+describe('Janus findings, round 2: git globals, tool config, split paths, escapes (#618/AC-6, AC-9, AC-11, INP-9)', () => {
+  test('#618/AC-9: a git global option with a separate value cannot make its value the subcommand', () => {
+    const cases = ['git --attr-source log -c core.hooksPath=/tmp/h commit -qm x', 'git --super-prefix log -c core.hooksPath=/tmp/h commit -qm x'];
+    for (const c of cases) assert.equal(bash(c), true, c);
+  });
+
+  test('#618/AC-9: an unknown long option before the subcommand is terminal-only, a known one is not', () => {
+    for (const c of ['git --future-option log -c core.hooksPath=/tmp/h commit -qm x', 'git --x log']) assert.equal(bash(c), true, c);
+    for (const c of ['git --no-pager log -c', 'git --paginate show -c HEAD', 'git --git-dir=.git status', 'git -C . status']) assert.equal(bash(c), false, c);
+  });
+
+  test('#618/AC-9: the -c exemption has limits: plain reads stay allowable', () => {
+    for (const c of ['git commit -c HEAD', 'git log -c', 'git show -c HEAD', 'git diff -c']) assert.equal(bash(c), false, c);
+  });
+
+  test('#618/AC-11: package manager config writes by any spelling are terminal-only', () => {
+    const cases = ['npm c set script-shell /tmp/evil.sh', 'pnpm c set x y', 'npm --location user set script-shell /tmp/evil.sh', 'npm conf set x y', 'npm config --location user delete x', 'yarn conf edit', 'claude --settings /tmp/s.json mcp add x', 'claude --verbose config set a b', 'gh --repo a/b alias set x y', 'gh -R a/b config set pager /tmp/evil'];
+    for (const c of cases) assert.equal(bash(c), true, c);
+    for (const c of ['npm run build', 'npm install', 'pnpm test', 'yarn build', 'gh pr list']) assert.equal(bash(c), false, c);
+  });
+
+  test('#618/AC-11: tool config commands are terminal-only anywhere in the segment', () => {
+    const cases = ['aws configure set credential_process /tmp/evil', 'aws --profile p configure set x y', 'kubectl config set-credentials u --exec-command=/tmp/evil', 'kubectl --kubeconfig k config view', 'gh config set pager /tmp/evil', 'pip config set global.index-url http://x', 'pip3 --quiet config set a b'];
+    for (const c of cases) assert.equal(bash(c), true, c);
+    for (const c of ['aws s3 ls', 'kubectl get pods', 'pip install requests', 'pip3 list']) assert.equal(bash(c), false, c);
+  });
+
+  test('#618/AC-11: a directory word of an auto-run folder is terminal-only, the name comes in a later word', () => {
+    const cases = [
+      'cd .claude && tee settings.local.json < /tmp/s',
+      'cd .git && cp /tmp/h hooks/pre-commit',
+      'cd ~/.aws && cp /tmp/c config',
+      'cd .github && tee workflows/x.yml',
+      'cd .claude && cp /tmp/a rules/x.md',
+      'cd $HOME/.kube/ && cp /tmp/c config',
+      'cd .docker && tee config.json',
+      'cd .config/gh && tee hosts.yml',
+      'cd .config/fish && tee config.fish',
+      'cd .config && cd git && tee config',
+      'cd ./.CLAUDE/ && tee settings.json',
+    ];
+    for (const c of cases) assert.equal(bash(c), true, c);
+    for (const c of ['cd src && ls', 'git clone https://h/x.git', 'ls mygit', 'cat .gitignore']) assert.equal(bash(c), false, c);
+  });
+
+  test('#618/AC-11: a glob word that starts with { or $, or holds .. or $, is terminal-only', () => {
+    const cases = ['tee {.claude,z}/settings.local.json < /tmp/s', 'tee $HOME/.cla*e/settings.local.json < /tmp/s', 'cp /tmp/h src/../.git/hoo*/pre-commit', 'cat a/../b?', 'cat x$y[1]'];
+    for (const c of cases) assert.equal(bash(c), true, c);
+    for (const c of ['ls src/*.ts', 'ls src/{a,b}.ts']) assert.equal(bash(c), false, c);
+  });
+
+  test('#618/AC-11: ANSI-C quoting is terminal-only', () => {
+    const cases = ["tee $'\\x2eclaude/settings.local.json' < /tmp/s", "cp /tmp/h $'\\056git/hooks/pre-commit'", "echo $'a'"];
+    for (const c of cases) assert.equal(bash(c), true, c);
+  });
+
+  test('#618/AC-11: a word that joins an expansion with / is terminal-only', () => {
+    const cases = ['d=.cla; tee ${d}ude/settings.local.json', 'tee $d/settings.local.json', 'cp /tmp/x $(echo .git)/hooks/pre-commit', 'cp /tmp/x /w/$(echo .git)/hooks/pre-commit'];
+    for (const c of cases) assert.equal(bash(c), true, c);
+    for (const c of ['echo $HOME', 'echo "$(date)"', 'ls src']) assert.equal(bash(c), false, c);
+  });
+
+  test('#618/AC-11: what the round 2 floor over-matches by design stays terminal-only (decision 0025 amendment)', () => {
+    for (const c of ['$HOME/bin/tool push', 'echo ${HOME}/x', 'npm run set', 'cat $HOME/notes.txt', 'ls ~/.config', 'ls /w/.git', 'echo "git config"', 'gh pr list --json config']) assert.equal(bash(c), true, c);
+  });
+
+  test('#618/INP-9: each new scan finishes well under one second on 64 KiB', () => {
+    const units = ['--x ', 'npm c ', 'npm ', 'claude ', 'gh ', 'aws ', 'pip ', 'cd .claude ', '.config/', '$', '$(', '${', "$'", '{a,b}', 'git --x ', 'git -c ', '../', '~/ ', '$HOME/', ')/', '/$('];
+    for (const unit of units) {
+      const command = unit.repeat(Math.floor(65536 / unit.length));
+      const started = Date.now();
+      bash(command);
+      assert.ok(Date.now() - started < 1000, `${unit} took ${Date.now() - started} ms`);
+    }
   });
 });

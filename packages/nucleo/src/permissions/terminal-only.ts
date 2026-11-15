@@ -131,18 +131,37 @@ function mutatesPackageJson(form: string): boolean {
   return tokens.some((t, i) => t === 'set-script' || (t === 'pkg' && PACKAGE_JSON_EDITS.has(tokens[i + 1] ?? '')) || (t === 'config' && CONFIG_EDITS.has(tokens[i + 1] ?? '')));
 }
 
-/** The first word after a command that is no option: `npm --global set`, `claude mcp`. */
-const subcommandAfter = (tokens: string[], at: number): string => tokens.slice(at + 1).find((t) => !t.startsWith('-')) ?? '';
+/** Words that open a package manager's own config command: `npm c set`, `npm conf delete`, `npm config edit` (#618/AC-11). */
+const CONFIG_WORDS = new Set(['c', 'config', 'conf']);
+/** Tools whose config command rewrites a file that runs or authenticates later: the word to find after the tool, anywhere in the segment (#618/AC-11). */
+const TOOL_CONFIG_WORDS: ReadonlyMap<string, ReadonlySet<string>> = new Map([
+  ['claude', new Set(['mcp', 'config'])],
+  ['gh', new Set(['alias', 'config'])],
+  ['aws', new Set(['configure'])],
+  ['kubectl', new Set(['config'])],
+  ['pip', new Set(['config'])],
+  ['pip3', new Set(['config'])],
+]);
 
-/** `npm set` (also pnpm, yarn, bun) writes the user's `.npmrc`; `claude mcp` and `claude config` change what the next agent run loads; `gh alias` plants commands. Over-matches by design: reads included (#618/AC-11, decision 0025 amendment). */
-function changesToolConfig(form: string): boolean {
-  const tokens = tokensOf(form);
-  return tokens.some((t, i) => {
+/** One pass over the tokens of a segment, each read once (linear): the manager or tool word, then a later word that edits its config, whatever options sit between (#618/AC-11). */
+function segmentChangesToolConfig(tokens: string[]): boolean {
+  let manager = false;
+  let managerConfig = false;
+  const seen = new Set<string>();
+  for (const t of tokens) {
+    if (manager && (t === 'set' || (managerConfig && CONFIG_EDITS.has(t)))) return true;
+    if (manager && CONFIG_WORDS.has(t)) managerConfig = true;
+    for (const tool of seen) if (TOOL_CONFIG_WORDS.get(tool)?.has(t)) return true;
     const name = baseName(t);
-    if (PACKAGE_MANAGERS.has(name)) return subcommandAfter(tokens, i) === 'set';
-    if (name === 'claude') return ['mcp', 'config'].includes(subcommandAfter(tokens, i));
-    return name === 'gh' && subcommandAfter(tokens, i) === 'alias';
-  });
+    if (PACKAGE_MANAGERS.has(name)) manager = true;
+    else if (TOOL_CONFIG_WORDS.has(name)) seen.add(name);
+  }
+  return false;
+}
+
+/** `npm set` and `npm c set|delete|edit` (also pnpm, yarn, bun) write the user's `.npmrc`; `claude mcp|config` change what the next agent run loads; `gh alias|config` plant commands; `aws configure`, `kubectl config` and `pip config` write credentials and endpoints. Within a segment, with any option between. Over-matches by design: reads included (#618/AC-11, decision 0025 amendment). */
+function changesToolConfig(form: string): boolean {
+  return form.split(/[|;&\n]+/).some((segment) => segmentChangesToolConfig(tokensOf(segment)));
 }
 
 /** Schedulers and login items registered by command, and git configuration injected by environment (#618/AC-11). */
@@ -162,7 +181,9 @@ function startsWithAt(segment: string): boolean {
   return name === 'at' || name === 'batch';
 }
 
-const GIT_OPTIONS_WITH_VALUE = new Set(['-C', '--git-dir', '--work-tree', '--namespace', '--exec-path']);
+const GIT_OPTIONS_WITH_VALUE = new Set(['-C', '--git-dir', '--work-tree', '--namespace', '--exec-path', '--attr-source', '--super-prefix']);
+/** The git global options that take no value. A long option before the subcommand that is in neither set nor spelled `--x=v` may take a separate value, so the subcommand cannot be told: terminal-only (#618/AC-9, decision 0025 amendment). */
+const GIT_OPTIONS_WITHOUT_VALUE = new Set(['--version', '--help', '--html-path', '--man-path', '--info-path', '--paginate', '--no-pager', '--no-replace-objects', '--bare', '--no-optional-locks', '--no-lazy-fetch', '--literal-pathspecs', '--glob-pathspecs', '--noglob-pathspecs', '--icase-pathspecs', '--no-advice']);
 /** Subcommands where `-c` is no configuration: `commit -c <commit>` reuses a message, `log`, `diff` and `show` take it as combined diff (#618/AC-9). */
 const GIT_SUBCOMMANDS_WITH_PLAIN_C = new Set(['commit', 'log', 'diff', 'show']);
 
@@ -182,6 +203,7 @@ function gitSegmentInjectsConfig(tokens: string[]): boolean {
     const plainC = o.startsWith('-c') && !o.startsWith('--');
     if (o.startsWith('--config') || o.startsWith('--template')) return true;
     if (plainC && (subcommand === undefined || !GIT_SUBCOMMANDS_WITH_PLAIN_C.has(subcommand))) return true;
+    if (subcommand === undefined && o.startsWith('--') && !o.includes('=') && !GIT_OPTIONS_WITH_VALUE.has(o) && !GIT_OPTIONS_WITHOUT_VALUE.has(o)) return true;
     if (GIT_OPTIONS_WITH_VALUE.has(o) && subcommand === undefined) i++;
     else if (subcommand === undefined && !o.startsWith('-')) subcommand = o;
   }
@@ -252,12 +274,29 @@ function expandsPathByGlob(command: string): boolean {
   return shellWords(command).some(({ plain, masked }) => {
     if (!hasUnquotedGlob(masked)) return false;
     const eq = plain.indexOf('=');
-    return PATH_START.test(plain) || (eq >= 0 && PATH_START.test(plain.slice(eq + 1)));
+    return PATH_START.test(plain) || (eq >= 0 && PATH_START.test(plain.slice(eq + 1))) || /^[{$]/.test(plain) || plain.includes('..') || plain.includes('$');
   });
 }
 
+/** A word of a command that is only the directory of an auto-run folder, with any prefix (`~/`, `$HOME/`, `./`, a path) and a trailing `/`: the file comes in a later word (`cd .claude && tee settings.local.json`). Over-matches `ls ~/.config` (#618/AC-11, decision 0025 amendment). */
+const AUTO_RUN_DIRECTORIES = ['.claude', '.git', '.github', '.aws', '.kube', '.docker', '.config', '.config/gh', '.config/fish', '.config/git', '.config/systemd', '.config/autostart'];
+function namesAutoRunDirectory(text: string): boolean {
+  return text.split(/[\s;|&()<>]+/).some((word) => {
+    const w = word.replace(/\/+$/, '').toLowerCase();
+    return AUTO_RUN_DIRECTORIES.some((dir) => w === dir || w.endsWith(`/${dir}`));
+  });
+}
+
+/** An expansion joined to a path: a word with `$` and `/`, or `$(…)` next to a `/`. The text it expands to is unknown, so it could rebuild a floor path (`d=.cla; tee ${d}ude/settings.local.json`). Over-matches `cat $HOME/x` (#618/AC-11, decision 0025 amendment). */
+function joinsExpansionWithSlash(command: string): boolean {
+  if (command.includes('$(') && (command.includes(')/') || command.includes('/$('))) return true;
+  return shellWords(command).some(({ plain }) => plain.includes('$') && plain.includes('/'));
+}
+
 function commandIsTerminalOnly(rawCommand: string): boolean {
-  if (spellings(rawCommand).some(gitInjectsConfig) || expandsPathByGlob(rawCommand)) return true;
+  // `$'\x2e…'` spells any character by code, so no text scan can read it: any ANSI-C quote is terminal-only (#618/AC-11).
+  if (rawCommand.includes("$'")) return true;
+  if (spellings(rawCommand).some((form) => gitInjectsConfig(form) || namesAutoRunDirectory(form)) || expandsPathByGlob(rawCommand) || joinsExpansionWithSlash(rawCommand)) return true;
   // Command names are compared whatever the case, as the macOS disk is: `Git push`, `RM -rf` (#618/AC-11).
   const forms = spellings(rawCommand.toLowerCase());
   if (forms.some((form) => COMMAND_PATTERNS.some((re) => re.test(form)))) return true;
