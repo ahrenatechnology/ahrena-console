@@ -3,7 +3,7 @@
 // draws one state from a plain object, and the buttons call the handlers the state layer gives (`onRetry`,
 // `onReread`, `onMore`, and the toggle's `onToggle`). Everything that comes from the machine goes in as text.
 //
-//   diagnosisPanel({ state, alert, diagnosis, failure, remote, context, expanded, now }, { onRetry, onReread, onMore })
+//   diagnosisPanel({ state, alert, diagnosis, failure, remote, label, context, expanded, now }, { onRetry, onReread, onMore })
 //
 // `state` is `loading`, `ready`, `failed`, `closed` (404: the alert already closed) or `unsupported` (501). The Resolver
 // block has its header and the probable cause only; the groups of the next stories get the empty
@@ -33,8 +33,6 @@ import {
 export const diagnosisPanelId = (alertId) => `dg-${alertId}`;
 
 const asList = (items) => (Array.isArray(items) ? items : []);
-
-// ---------- pieces ----------
 
 /** The "Ver diagnóstico" / "Diagnóstico" button on the alert row (566-4, 1). */
 export function diagnosisToggle({ open, controls, onToggle }) {
@@ -79,9 +77,7 @@ const moreButton = (id, total, expanded, onMore) =>
     moreLabel(id, total, expanded),
   );
 
-const partialNote = (section) => (section.partial?.reason ? el('small', { class: 'tm-muted tm-dg-partial' }, `Leitura parcial. ${section.partial.reason}`) : null);
-
-// ---------- the sections ----------
+const partialNote = (section) => (section.partial?.reason ? el('small', { class: 'tm-muted tm-dg-partial' }, section.partial.reason) : null);
 
 const TITLES = {
   'processes-by-rss': ['memory-stick', () => ['Processos por memória']],
@@ -93,7 +89,7 @@ const TITLES = {
   journal: ['scroll-text', () => ['Journal do systemd', monoText('journalctl --disk-usage')]],
 };
 
-const BADGES = { timeout: ['b-waiting', 'Tempo esgotado', 'hourglass', 'A leitura passou do tempo e foi cortada. As outras seções chegaram.'], unavailable: ['b-abandoned', 'Indisponível', 'slash', 'Esta leitura não está disponível agora. As outras seções chegaram.'] };
+const BADGES = { timeout: ['b-waiting', 'Tempo esgotado', 'hourglass', 'A leitura passou de 10 s e foi cortada. As outras seções chegaram.'], unavailable: ['b-abandoned', 'Indisponível', 'slash', 'As outras seções chegaram.'] };
 
 function unavailableSection(section, mount, wide) {
   const [tone, label, iconName, fallback] = BADGES[section.status] ?? BADGES.unavailable;
@@ -198,8 +194,6 @@ function section(s, ctx, wide) {
   }
 }
 
-// ---------- the Resolver, as far as this story goes (the cause) ----------
-
 function causePart(p) {
   if (p.mono) return el('span', { class: 'mono' }, p.text);
   if (p.bold) return el('b', {}, p.text);
@@ -218,10 +212,7 @@ export function resolverBlock(cause) {
   );
 }
 
-// ---------- the states ----------
-
 const LOADING_LINE = { memory: 'lendo os processos por memória e por CPU e o swap', load: 'lendo os processos por CPU', disk: 'lendo as pastas, o Docker, os caches e o journal' };
-// The skeleton blocks, as many rows as the ready panel has: the lists in the columns, then what sits below them.
 const SKELETON = { memory: { cols: [5, 5], below: [1] }, load: { cols: [5], below: [] }, disk: { cols: [4, 4, 3, 1], below: [] } };
 
 const skeleton = (rows) => el('div', { class: 'tm-dg-sec tm-dg-skel', 'aria-hidden': 'true' }, ...Array.from({ length: rows }, (_, i) => el('i', { class: `tm-dg-w${i % 5}` })));
@@ -245,7 +236,6 @@ export function diagnosisReady(alert, diagnosis, { context = {}, expanded = new 
   const ctx = { mount: mountOf(diagnosis.alertId ?? alert.id), expanded: expanded instanceof Set ? expanded : new Set(expanded), onMore };
   const present = sectionsFor(alert.kind, diagnosis);
   const group = groupOf(alert.kind);
-  // In memory the swap sits below the two lists; on disk an odd last section takes the whole width.
   const inCols = group === 'memory' ? present.filter((s) => s.id !== 'swap') : present;
   const below = group === 'memory' ? present.filter((s) => s.id === 'swap') : [];
   const lonely = group === 'disk' && inCols.length % 2 === 1;
@@ -289,18 +279,18 @@ function calm(state, alert, iconName, title, text, cls = '') {
 export const diagnosisClosed = (alert) => calm('closed', alert, 'check-circle-2', 'Este alerta já fechou', 'O alerta fechou enquanto o diagnóstico era lido. A lista se atualiza na próxima leitura, em até 30 s.');
 
 /** 566-9, 501: the núcleo does not diagnose. Calm, no retry; the way out is to update the núcleo there. */
-export function diagnosisUnsupported(alert, { remote = true } = {}) {
+export function diagnosisUnsupported(alert, { remote = true, label = 'Workstation' } = {}) {
   if (remote) {
     return calm(
       'unsupported',
       alert,
       'git-compare',
-      'O núcleo da Workstation ainda não faz diagnóstico',
+      `O núcleo da ${label} ainda não faz diagnóstico`,
       'Ele é mais antigo que o deste app e não conhece a rota. O alerta continua valendo. Atualize o núcleo de lá pelo aviso da linha Versão do card Conexão e o diagnóstico passa a aparecer aqui.',
       'tm-dg-old',
     );
   }
-  return calm('unsupported', alert, 'git-compare', 'Esta máquina ainda não faz diagnóstico', 'O núcleo daqui não sabe diagnosticar este sistema. O alerta continua valendo.', 'tm-dg-old');
+  return calm('unsupported', alert, 'git-compare', 'O núcleo desta máquina ainda não faz diagnóstico', 'O alerta continua valendo.', 'tm-dg-old');
 }
 
 /** One state of the panel from a plain object; `null` for a kind with no diagnosis or a state with nothing to draw. */
@@ -317,7 +307,7 @@ export function diagnosisPanel(v, handlers = {}) {
     case 'closed':
       return diagnosisClosed(alert);
     case 'unsupported':
-      return diagnosisUnsupported(alert, { remote: v.remote !== false });
+      return diagnosisUnsupported(alert, { remote: v.remote !== false, label: v.label });
     default:
       return null;
   }

@@ -142,8 +142,8 @@ describe('the format, with no DOM', () => {
     assert.equal(ws.code, 'GET /api/diagnosis · erro 502 do núcleo daqui');
     assert.equal(format.failureText({ status: 502, remote: false }).code, 'GET /api/diagnosis · erro 502');
     const slow = format.failureText({ status: null, timedOut: true, remote: false });
-    assert.match(slow.reason, /passou de 20 s/);
-    assert.equal(slow.code, 'GET /api/diagnosis · sem resposta em 20 s');
+    assert.equal(slow.reason, 'A rota de diagnóstico não respondeu. O alerta continua aberto: só o diagnóstico não veio.');
+    assert.equal(slow.code, 'GET /api/diagnosis · sem resposta');
     assert.equal(format.failureText({ status: null, remote: false }).code, 'GET /api/diagnosis · sem resposta');
     assert.equal(format.READ_CEILING_MS, 20_000);
   });
@@ -163,12 +163,23 @@ describe('the probable cause rule (Q12), with no DOM', () => {
 
   test('memory: exactly 40% is obvious, just under is not, and not obvious says so and the note says the cause is not obvious', () => {
     const at = (usedGb: number) => format.probableCause(memoryDiagnosis(), { memoryUsedBytes: usedGb * GB });
-    assert.equal(at(32.5).obvious, true); // 13,0 of 32,5 is 40%
+    assert.equal(at(32.5).obvious, true);
     const wide = at(32.6);
     assert.equal(wide.obvious, false);
     assert.match(text(wide) as string, /^não há uma óbvia\./);
     assert.match(text(wide) as string, /somam só 13,0 dos 32,6 GB em uso/);
-    assert.match(wide.note, /^A causa não é óbvia\./);
+    assert.equal(wide.note, 'A causa não é óbvia.');
+  });
+
+  test('memory and load: the boundaries are the exported shares, not literals', () => {
+    assert.equal(format.MEMORY_SHARE, 0.4);
+    assert.equal(format.LOAD_SHARE, 0.5);
+    const sum = 13 * GB;
+    assert.equal(format.probableCause(memoryDiagnosis(), { memoryUsedBytes: sum / format.MEMORY_SHARE }).obvious, true);
+    assert.equal(format.probableCause(memoryDiagnosis(), { memoryUsedBytes: (sum / format.MEMORY_SHARE) * 1.001 }).obvious, false);
+    const cores = 7.64;
+    assert.equal(format.probableCause(loadDiagnosis(), { load: cores / format.LOAD_SHARE }).obvious, true);
+    assert.equal(format.probableCause(loadDiagnosis(), { load: (cores / format.LOAD_SHARE) * 1.001 }).obvious, false);
   });
 
   test('memory: with one process only, the one is the sum; without the RSS section or the used memory, there is no cause to state', () => {
@@ -180,12 +191,12 @@ describe('the probable cause rule (Q12), with no DOM', () => {
   });
 
   test('load: the three biggest by CPU explaining half of the load or more is obvious; below, it says the cause is not obvious and Delegar would lead', () => {
-    const wsLoad = loadDiagnosis(); // 3,12 + 2,88 + 1,64 = 7,64 cores
+    const wsLoad = loadDiagnosis();
     const not = format.probableCause(wsLoad, { load: 24.6 });
     assert.equal(not.obvious, false);
     assert.match(text(not) as string, /^não há uma óbvia\. node \(312%\), java \(288%\) e python3 \(164%\) somam 7,6 núcleos dos 24,6 de carga/);
-    assert.match(not.note, /^A causa não é óbvia\./);
-    const yes = format.probableCause(wsLoad, { load: 15.28 }); // exactly half
+    assert.equal(not.note, 'A causa não é óbvia.');
+    const yes = format.probableCause(wsLoad, { load: 15.28 });
     assert.equal(yes.obvious, true);
     assert.match(text(yes) as string, /somam 7,6 núcleos dos 15,3 de carga/);
     assert.equal(format.probableCause(wsLoad, {}), null);
@@ -203,6 +214,15 @@ describe('the probable cause rule (Q12), with no DOM', () => {
     const c = format.probableCause(diagnosis('volume-full', sections, 'volume-full:/'), { volume });
     assert.equal(c.obvious, true);
     assert.equal(text(c), 'o / está em 86% (146 GB de 170 GB). O que se refaz sozinho soma 14,3 GB e leva o volume a cerca de 77%, abaixo dos 85%.');
+    assert.equal(c.note, 'Os tamanhos são os do diagnóstico acima; a prévia lê de novo antes de rodar.');
+  });
+
+  test('disk: a level that rounds to 85% but is under it is said as 84%, never "cerca de 85%, abaixo dos 85%" (issue 566, review round 1)', () => {
+    const volume = { mount: '/', usedBytes: 900 * DEC_GB, totalBytes: 1000 * DEC_GB };
+    const caches = [{ id: 'npm', path: '~/.npm', bytes: 53 * DEC_GB, actionId: 'npm-cache' }];
+    const c = format.probableCause(diagnosis('volume-full', [ok('known-caches', caches)], 'volume-full:/'), { volume });
+    assert.equal(c.obvious, true);
+    assert.match(text(c) as string, /leva o volume a cerca de 84%, abaixo dos 85%\./);
   });
 
   test('disk: when they do not bring it under 85%, it says how much is missing and that the caches are not enough; a Docker that did not come is said', () => {
@@ -211,7 +231,7 @@ describe('the probable cause rule (Q12), with no DOM', () => {
     const c = format.probableCause(diagnosis('volume-full', [down('docker-df', 'unavailable'), ok('known-caches', caches)], 'volume-full:/'), { volume });
     assert.equal(c.obvious, false);
     assert.equal(text(c), 'o / está em 91% (556 GB de 612 GB). Os caches que se refazem somam 22,1 GB. Para sair dos 85% faltam 35,8 GB: só os caches não bastam.');
-    assert.equal(c.note, 'A leitura do Docker não veio: o que ele guarda não entrou na conta.');
+    assert.equal(c.note, 'O Docker não respondeu: o que ele guarda não entrou na conta.');
   });
 
   test('disk: worktrees are user data and never count as a cleanup; without the caches section or the volume there is no cause', () => {
@@ -432,7 +452,7 @@ describe('ready, disk (566-6)', () => {
     const timeout = sec(p, 'largest-folders') as ElementoFalso;
     assert.equal(timeout.getAttribute('data-status'), 'timeout');
     assert.match(texto(timeout), /Tempo esgotado/);
-    assert.match(texto(timeout), /A leitura passou do tempo e foi cortada\. As outras seções chegaram\./);
+    assert.match(texto(timeout), /A leitura passou de 10 s e foi cortada\. As outras seções chegaram\./);
     assert.ok(timeout.querySelector('.b-waiting'));
     const gone = sec(p, 'docker-df') as ElementoFalso;
     assert.equal(gone.getAttribute('data-status'), 'unavailable');
@@ -454,14 +474,24 @@ describe('ready, disk (566-6)', () => {
 
   test('a section that came ok but only in part says so', () => {
     const d = diagnosis('volume-full', [ok('largest-folders', FOLDERS, { partial: { reason: 'one folder was not readable' } })], 'volume-full:/');
-    assert.match(texto(sec(disk(d), 'largest-folders')), /Leitura parcial\. one folder was not readable/);
+    const text = texto(sec(disk(d), 'largest-folders'));
+    assert.match(text, /one folder was not readable/);
+    assert.doesNotMatch(text, /Leitura parcial/);
+  });
+
+  test('a section down with no reason from the núcleo falls back to the drawn lines only (566-6)', () => {
+    const d = diagnosis('volume-full', [down('largest-folders', 'timeout'), down('docker-df', 'unavailable'), ok('known-caches', CACHES)], 'volume-full:/');
+    const p = disk(d);
+    assert.match(texto(sec(p, 'largest-folders')), /A leitura passou de 10 s e foi cortada\. As outras seções chegaram\./);
+    assert.match(texto(sec(p, 'docker-df')), /As outras seções chegaram\./);
+    assert.doesNotMatch(texto(sec(p, 'docker-df')), /não está disponível agora/);
   });
 
   test('the Resolver says the caches are not enough when they are not (566-6, Mac)', () => {
     const mac = diagnosis('volume-full', [down('docker-df', 'unavailable'), ok('known-caches', [{ id: 'x', path: '~/DerivedData', bytes: 22.1 * DEC_GB, actionId: 'xcode-derived-data' }])], 'volume-full:/');
     const p = disk(mac, { context: { volume: { mount: '/', usedBytes: 556 * DEC_GB, totalBytes: 612 * DEC_GB } } });
     assert.match(texto(p.querySelector('.tm-rs-cause')), /só os caches não bastam\./);
-    assert.match(texto(p.querySelector('[data-part="resolver"]')), /A leitura do Docker não veio/);
+    assert.match(texto(p.querySelector('[data-part="resolver"]')), /O Docker não respondeu: o que ele guarda não entrou na conta\./);
   });
 });
 
@@ -501,7 +531,8 @@ describe('failed (566-8)', () => {
 
   test('the 20 s ceiling reads as a failure with the same retry', () => {
     const p = failed({ status: null, timedOut: true, remote: false });
-    assert.match(texto(p), /passou de 20 s/);
+    assert.match(texto(p), /Não deu para diagnosticar/);
+    assert.match(texto(p), /GET \/api\/diagnosis · sem resposta/);
     assert.ok(action(p, 'retry'));
   });
 
@@ -538,10 +569,15 @@ describe('the old core (566-9, 501)', () => {
     assert.doesNotMatch(texto(p), /Tentar de novo|Não deu para diagnosticar|Delegar/);
   });
 
+  test('a remote machine is named by its label, as the Workstation is', () => {
+    assert.match(texto(render('unsupported', { remote: true, label: 'Estação' })), /O núcleo da Estação ainda não faz diagnóstico/);
+  });
+
   test('this machine whose core cannot diagnose says so without sending the person to a Workstation', () => {
     const p = render('unsupported', { remote: false });
-    assert.match(texto(p), /Esta máquina ainda não faz diagnóstico/);
-    assert.doesNotMatch(texto(p), /Workstation/);
+    assert.match(texto(p), /O núcleo desta máquina ainda não faz diagnóstico/);
+    assert.match(texto(p), /O alerta continua valendo\./);
+    assert.doesNotMatch(texto(p), /Workstation|de lá|O núcleo daqui/);
     assert.equal(buttons(p).length, 0);
   });
 });

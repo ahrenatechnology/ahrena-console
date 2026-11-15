@@ -20,7 +20,6 @@ export const READ_CEILING_MS = 20_000;
 export const CLOSED_ROWS = 5;
 export const OPEN_ROWS = 10;
 
-/** The section ids of each kind, in the order the screen draws them (the contract's table). */
 const SECTION_ORDER = {
   'load-high': ['processes-by-cpu'],
   'memory-high': ['processes-by-rss', 'processes-by-cpu', 'swap'],
@@ -49,8 +48,6 @@ export function mountOf(alertId) {
   return i < 0 ? '' : alertId.slice(i + 1);
 }
 
-// ---------- lists ----------
-
 /** `{ items, total, canExpand }`: 5 rows, or up to 10 when open; nothing to open when there are 5 or fewer. */
 export function visibleItems(items, expanded) {
   const list = Array.isArray(items) ? items : [];
@@ -63,8 +60,6 @@ export function moreLabel(sectionId, total, expanded) {
   if (expanded) return 'Mostrar menos';
   return `Mostrar ${sectionId === 'largest-folders' ? 'as' : 'os'} ${total}`;
 }
-
-// ---------- numbers ----------
 
 const fixed = (digits) => new Intl.NumberFormat('pt-BR', { minimumFractionDigits: digits, maximumFractionDigits: digits });
 const f0 = fixed(0);
@@ -110,8 +105,6 @@ export function cacheRows(items) {
   return rows;
 }
 
-// ---------- the read line ----------
-
 const clock = (t) => `${String(t.getHours()).padStart(2, '0')}:${String(t.getMinutes()).padStart(2, '0')}`;
 
 /** "lido às 14:32 · há 12 s", from the diagnosis' `takenAt`; empty when it is not a date (Q5). */
@@ -119,8 +112,6 @@ export function readLine(takenAt, now = Date.now()) {
   const t = new Date(takenAt ?? NaN);
   return Number.isFinite(t.getTime()) ? `lido às ${clock(t)} · ${ago(t.toISOString(), now)}` : '';
 }
-
-// ---------- the Memória card ----------
 
 const MEMORY_KINDS = ['memory-high', 'swap-high'];
 const TONE_OF_LEVEL = { error: 'bad', warning: 'warn' };
@@ -136,15 +127,12 @@ export function memoryTone(alerts) {
   return tone;
 }
 
-// ---------- what a failure says (566-8) ----------
-
 const ROUTE = 'GET /api/diagnosis';
 const ROUTE_FAILED = 'A rota de diagnóstico não respondeu. O alerta continua aberto: só o diagnóstico não veio.';
 const WORKSTATION_FAILED = 'A Workstation não respondeu ao pedido de diagnóstico. O túnel ou o núcleo de lá pode ter caído; o alerta e os números são da última leitura.';
 
 /** `{ reason, code }`: a sentence for the person and the status line in mono; never a response body. */
-export function failureText({ status = null, remote = false, timedOut = false } = {}) {
-  if (timedOut) return { reason: `O diagnóstico passou de ${READ_CEILING_MS / 1000} s sem resposta. O alerta continua aberto: só o diagnóstico não veio.`, code: `${ROUTE} · sem resposta em ${READ_CEILING_MS / 1000} s` };
+export function failureText({ status = null, remote = false } = {}) {
   if (Number.isInteger(status)) {
     const viaThisCore = status === 502 && remote;
     return { reason: viaThisCore ? WORKSTATION_FAILED : ROUTE_FAILED, code: `${ROUTE} · erro ${status}${viaThisCore ? ' do núcleo daqui' : ''}` };
@@ -152,13 +140,13 @@ export function failureText({ status = null, remote = false, timedOut = false } 
   return { reason: ROUTE_FAILED, code: `${ROUTE} · sem resposta` };
 }
 
-// ---------- the probable cause (Q12) ----------
-
 /** The two biggest by RSS at this share of the memory in use make the cause obvious. */
 export const MEMORY_SHARE = 0.4;
 /** The three biggest by CPU at this share of the load make it obvious. */
 export const LOAD_SHARE = 0.5;
 export const LOAD_TOP = 3;
+
+const DOCKER_MISSING = 'O Docker não respondeu: o que ele guarda não entrou na conta.';
 
 const t = (text) => ({ text });
 const mono = (text) => ({ text, mono: true });
@@ -182,12 +170,12 @@ function memoryCause(diagnosis, context) {
   const used = context?.memoryUsedBytes;
   if (!items.length || !positive(used)) return null;
   const sum = items.reduce((s, p) => s + (Number.isFinite(p.rssBytes) ? p.rssBytes : 0), 0);
-  const obvious = Math.round(sum) * 5 >= Math.round(used) * 2; // sum / used >= MEMORY_SHARE, in whole bytes
+  const obvious = Math.round(sum * 100) >= Math.round(used * MEMORY_SHARE * 100);
   const [a, b] = items;
   const total = [bold(gbNumber(sum)), t(` dos ${gbNumber(used)} GB em uso`)];
   if (!obvious) {
     const who = b ? [mono(a.name), t(' e '), mono(b.name), t(' somam só ')] : [mono(a.name), t(' soma só ')];
-    return { obvious, parts: [t('não há uma óbvia. '), ...who, ...total, t('.')], note: 'A causa não é óbvia. A memória está espalhada em muitos processos.' };
+    return { obvious, parts: [t('não há uma óbvia. '), ...who, ...total, t('.')], note: 'A causa não é óbvia.' };
   }
   const swap = diagnosis.kind === 'swap-high' ? (b ? ' e empurram a máquina para o swap' : ' e empurra a máquina para o swap') : '';
   const first = [mono(a.name), t(' segura '), bold(gbText(a.rssBytes)), t(` e ${cpuText(a.cpuPct)} de CPU`)];
@@ -201,10 +189,10 @@ function loadCause(diagnosis, context) {
   if (!items.length || !positive(load)) return null;
   const pct = items.reduce((s, p) => s + (Number.isFinite(p.cpuPct) ? p.cpuPct : 0), 0);
   const cores = pct / 100;
-  const obvious = Math.round(pct * 100) >= Math.round(load * 100 * 50); // cores / load >= LOAD_SHARE, in hundredths of a percent
+  const obvious = Math.round(pct * 100) >= Math.round(load * LOAD_SHARE * 10000);
   const named = listOf(items.map((p) => [mono(p.name), t(` (${cpuText(p.cpuPct)})`)]));
   const sum = [t(' somam '), bold(`${decimal(cores)} ${cores < 2 ? 'núcleo' : 'núcleos'}`), t(` dos ${decimal(load)} de carga`)];
-  if (!obvious) return { obvious, parts: [t('não há uma óbvia. '), ...named, ...sum, t(': o resto está espalhado em muitos processos.')], note: 'A causa não é óbvia. Parar os maiores ajuda pouco e não resolve.' };
+  if (!obvious) return { obvious, parts: [t('não há uma óbvia. '), ...named, ...sum, t(': o resto está espalhado em muitos processos pequenos.')], note: 'A causa não é óbvia.' };
   return { obvious, parts: [...named, ...sum, t(' e explicam a maior parte dela.')], note: 'Uma leitura dos processos acima, não uma certeza: o console aponta o que mais pesa.' };
 }
 
@@ -219,16 +207,16 @@ function diskCause(diagnosis, context) {
   const docker = sectionOf(diagnosis, 'docker-df');
   const dockerMissing = docker && docker.status !== 'ok';
   if (obvious) {
-    const after = Math.round(((v.usedBytes - safe) / v.totalBytes) * 100);
+    const after = Math.floor(((v.usedBytes - safe) / v.totalBytes) * 100);
     return {
       obvious,
       parts: [...head, t('O que se refaz sozinho soma '), bold(bytes(safe)), t(` e leva o volume a cerca de ${after}%, abaixo dos ${VOLUME_FULL_PCT}%.`)],
-      note: dockerMissing ? 'A leitura do Docker não veio: o que ele guarda não entrou na conta.' : 'Uma leitura das pastas e dos caches acima, não uma certeza.',
+      note: dockerMissing ? DOCKER_MISSING : 'Os tamanhos são os do diagnóstico acima; a prévia lê de novo antes de rodar.',
     };
   }
   const missing = bytes(v.usedBytes - limit);
   const body = safe > 0 ? [t('Os caches que se refazem somam '), bold(bytes(safe)), t(`. Para sair dos ${VOLUME_FULL_PCT}% faltam ${missing}: só os caches não bastam.`)] : [t(`Nenhum cache que se refaz sozinho foi achado. Para sair dos ${VOLUME_FULL_PCT}% faltam ${missing}.`)];
-  return { obvious, parts: [...head, ...body], note: dockerMissing ? 'A leitura do Docker não veio: o que ele guarda não entrou na conta.' : 'A causa não é óbvia: o que sobra é trabalho seu ou não basta.' };
+  return { obvious, parts: [...head, ...body], note: dockerMissing ? DOCKER_MISSING : 'A causa não é óbvia.' };
 }
 
 /**
