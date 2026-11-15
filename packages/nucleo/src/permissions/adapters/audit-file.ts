@@ -18,8 +18,11 @@ const MAX_FIELD_CHARS = 128;
 /** A text field of the record, cut: ids and names come from callers, so they are data. (#618) */
 const text = (value: unknown): string | undefined => (typeof value === 'string' ? value.slice(0, MAX_FIELD_CHARS) : undefined);
 
-/** Which record a lost line was: its event and request id, cut as the line cuts them, and nothing else of it. (#618) */
-const whichRecord = (record: PermissionAuditRecord): string => ` event=${text(record.event) ?? '-'} requestId=${text(record.requestId) ?? '-'}`;
+/** A value of the log line as an encoded field: `JSON.stringify` escapes every control character, so a caller's id cannot start a line. (#618) */
+const field = (value: unknown): string => JSON.stringify(text(value) ?? '-').replace(/[\u007f\u2028\u2029]/g, (c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, '0')}`);
+
+/** Which record a lost line was: its event and request id, cut as the line cuts them and encoded, and nothing else of it. (#618) */
+const whichRecord = (record: PermissionAuditRecord): string => ` event=${field(record.event)} requestId=${field(record.requestId)}`;
 
 const codeOf = (error: unknown): string => (error as NodeJS.ErrnoException).code ?? 'error';
 
