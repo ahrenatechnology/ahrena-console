@@ -35,6 +35,9 @@ export const EXPIRY_MS = 9 * 60_000 + 30_000;
 /** The reason of a `deny`, in characters. */
 export const MAX_REASON_CHARS = 500;
 
+/** The tools that run nothing at approval: a mask or a cut on their summary hides no code (#618/AC-10). */
+const NON_EXECUTING_TOOLS: ReadonlySet<string> = new Set(['Edit', 'Write', 'NotebookEdit', 'Read', 'Grep', 'Glob', 'WebFetch']);
+
 const GONE_STATES: readonly RequestState[] = ['expired', 'withdrawn', 'answered_elsewhere', 'core_restarted'];
 const LINE_BREAK = /[\r\n\u0085\u2028\u2029]/;
 
@@ -99,8 +102,9 @@ export class PermissionRequest {
       summaryTruncated: truncated,
       cwd: p.cwd,
       permissionMode: p.permissionMode,
-      // A Bash call whose summary a mask acted on is terminalOnly: a mask must never hide code that runs (#618/AC-10).
-      terminalOnly: isTerminalOnly(p.toolName, p.toolInput) || (p.toolName === 'Bash' && masked),
+      // A call that runs something at approval (every tool outside the non-executing set) is terminalOnly when a mask acted
+      // on its summary or the summary was cut: a mask or a cut must never hide code that runs (#618/AC-10).
+      terminalOnly: isTerminalOnly(p.toolName, p.toolInput) || ((masked || truncated) && !NON_EXECUTING_TOOLS.has(p.toolName)),
       createdAt: p.now,
       expiresAt: p.now + EXPIRY_MS,
     });

@@ -227,3 +227,14 @@ describe('download-and-run through an interpreter, and indirection on git (decis
     for (const c of ['echo a | xargs git status', 'x=git; $x status', 'echo push | xargs echo', '$HOME/bin/tool push']) assert.equal(bash(c), false, c);
   });
 });
+
+describe('a very wide input (#618/AC-6, INP-9)', () => {
+  test('#618/AC-6: a container of 300,000 elements is read without a RangeError', () => {
+    const wide = Array.from({ length: 300_000 }, () => 'a');
+    assert.doesNotThrow(() => isTerminalOnly('mcp__x__y', { items: wide }));
+    assert.equal(isTerminalOnly('mcp__x__y', { items: wide }), false);
+    const record = Object.fromEntries(Array.from({ length: 300_000 }, (_, i) => [`k${i}`, 'a']));
+    assert.doesNotThrow(() => isTerminalOnly('mcp__x__y', record));
+  });
+});
+

@@ -72,7 +72,8 @@ export function redactWithReport(text: string, atCut = false): { text: string; m
   for (const [re, to] of MASKS) out = apply(re, to, out);
   if (DECLINED.some((re) => re.test(out))) masked = true;
   // One rule reading the output of another (`Authorization: Bearer ••••`) can leave two masks in a row (#618/AC-7).
-  return { text: out.replace(new RegExp(`${MASK}(?:\\s${MASK})+`, 'g'), MASK), masked };
+  // Only when a mask acted: a mask already in the input is the person's text and loses nothing (#618/AC-10).
+  return { text: masked ? out.replace(new RegExp(`${MASK}(?:\\s${MASK})+`, 'g'), MASK) : out, masked };
 }
 
 /** Masks what looks like a secret in `text`, whatever the tool. */

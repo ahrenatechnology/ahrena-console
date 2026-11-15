@@ -82,7 +82,10 @@ function collectStrings(value: unknown, out: string[]): boolean {
   while (pending.length > 0) {
     const v = pending.pop();
     if (typeof v === 'string') out.push(v);
-    else if (v !== null && typeof v === 'object') pending.push(...Object.values(v));
+    else if (v !== null && typeof v === 'object') {
+      // A loop, not a spread: a spread of a wide container overflows the call stack (#618/AC-6, INP-9).
+      for (const child of Object.values(v)) pending.push(child);
+    }
   }
   return true;
 }

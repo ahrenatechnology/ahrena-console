@@ -283,3 +283,21 @@ describe('one value class for every mask, a complete PEM only (decision 0025 ame
     assert.equal(summarize('Bash', { command: 'a\u{E0041}b' }), 'a\\u{e0041}b');
   });
 });
+
+describe('a mask already in the input (#618/AC-10)', () => {
+  test('#618/AC-10: a literal mask in the input is not a mask that acted', () => {
+    assert.equal(summarizeCall('Bash', { command: 'sh ./••••' }).masked, false);
+  });
+
+  test('#618/AC-10: consecutive literal masks lose no line when no mask acted', () => {
+    const command = `echo ok\n${MASK}\n${MASK}`;
+    const r = summarizeCall('Bash', { command });
+    assert.equal(r.masked, false);
+    assert.equal(r.summary, command);
+  });
+
+  test('#618/AC-7: two masks in a row still collapse into one when a mask acted', () => {
+    assert.equal(summarize('Bash', { command: 'curl -H "Authorization: Bearer abcdef123"' }).includes(`${MASK} ${MASK}`), false);
+  });
+});
+
