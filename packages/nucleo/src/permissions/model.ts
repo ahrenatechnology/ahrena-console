@@ -102,7 +102,7 @@ export class PermissionRequest {
       summaryTruncated: truncated,
       cwd: p.cwd,
       permissionMode: p.permissionMode,
-      // A call that runs something at approval (every tool outside the non-executing set) is terminalOnly when a mask acted
+      // A call that runs something at approval (every tool outside the non-executing set) is terminalOnly when a mask acted (#618/AC-10)
       // on its summary or the summary was cut: a mask or a cut must never hide code that runs (#618/AC-10).
       terminalOnly: isTerminalOnly(p.toolName, p.toolInput) || ((masked || truncated) && !NON_EXECUTING_TOOLS.has(p.toolName)),
       createdAt: p.now,

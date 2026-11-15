@@ -28,7 +28,7 @@ const SHELLS = new Set(['sh', 'bash', 'zsh', 'dash', 'ksh', 'fish']);
 const baseName = (token: string): string => token.slice(token.lastIndexOf('/') + 1);
 
 /** Words end at whitespace and at every wrapper a shell opens or closes around one: `$(git push)`, `` `git push` ``, `{ git push; }`, `git push>/dev/null` (#618/AC-9). */
-const tokensOf = (text: string): string[] => text.split(/[\s()$`{}<>]+/).filter(Boolean).map(bare);
+const tokensOf = (text: string): string[] => text.split(/[\s()$`{}<>|;&]+/).filter(Boolean).map(bare);
 
 /** Quotes never hide a word: they read as spaces, so `"git" 'push'` is `git push` (#618/AC-9). */
 const stripQuotes = (text: string): string => text.replace(/["'`]/g, ' ');
