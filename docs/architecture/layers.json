@@ -58,8 +58,9 @@
         "mixed": "sqlite.ts and migration.ts import node:sqlite (edge) and capture-transcript.ts imports node:fs/promises (edge); capture-hooks.ts reads hook payloads handed to it and does no IO of its own"
       },
       "delegation": {
-        "layer": "domain",
-        "evidence": "the delegation prompt and its URL budget (model, prompt); pure text building over the diagnosis and telemetry models, no node: import in either file"
+        "layer": "application",
+        "evidence": "delegate.ts holds the preview and delegate use cases over injected dependencies (alerts, diagnosis reader, preview store, launcher, clock); 0 of 4 files import node: IO, and the only imports from outside the folder are types from ../diagnosis and ../telemetry plus one constant from ../telemetry/model.ts",
+        "mixed": "model.ts and prompt.ts are pure domain (the vias, the URL budget, the prompt builder); preview-store.ts is the bounded in-memory store behind the PreviewStore port, with the clock passed as a parameter"
       },
       "dev-console": {
         "layer": "application",

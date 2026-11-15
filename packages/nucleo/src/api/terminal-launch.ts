@@ -73,7 +73,7 @@ export interface TerminalRequest {
 const MAX_PROMPT = 20_000;
 
 /** #507 The prompt a terminal can carry as one argument; throws otherwise. */
-function checkPrompt(prompt: string): string {
+export function checkPrompt(prompt: string): string {
   if (prompt.length === 0 || prompt.length > MAX_PROMPT || prompt.includes('\0') || prompt.startsWith('-')) throw new Error('unusable prompt');
   return prompt;
 }
@@ -90,17 +90,26 @@ export type TerminalFocuser = (p: LiveProcess) => Promise<FocusResult>;
 
 /** How a program runs: always a file and a list of arguments. */
 export interface ProcessRunner {
-  /** Runs to the end and gives its stdout. */
-  run(file: string, args: readonly string[], opts?: { env?: NodeJS.ProcessEnv; timeoutMs?: number }): Promise<string>;
+  /**
+   * Runs to the end and gives its stdout. `input` (#567) is written to the program's stdin and closed: how a
+   * text reaches `pbcopy` without being an argument or part of a shell string.
+   */
+  run(file: string, args: readonly string[], opts?: { env?: NodeJS.ProcessEnv; timeoutMs?: number; input?: string }): Promise<string>;
   /** Starts a program that outlives the request (a terminal window), detached. */
   spawnDetached(file: string, args: readonly string[], opts?: { cwd?: string }): Promise<void>;
 }
 
 export const systemRunner: ProcessRunner = {
   run: (file, args, opts = {}) =>
-    new Promise((resolve, reject) =>
-      execFile(file, [...args], { env: opts.env ?? process.env, timeout: opts.timeoutMs ?? 5_000, encoding: 'utf8' }, (err, stdout) => (err ? reject(err) : resolve(stdout))),
-    ),
+    new Promise((resolve, reject) => {
+      const child = execFile(file, [...args], { env: opts.env ?? process.env, timeout: opts.timeoutMs ?? 5_000, encoding: 'utf8' }, (err, stdout) => (err ? reject(err) : resolve(stdout)));
+      if (opts.input !== undefined) {
+        child.stdin?.on('error', () => {
+          // #567 the program closed its stdin early: execFile's callback reports how it ended
+        });
+        child.stdin?.end(opts.input);
+      }
+    }),
   spawnDetached: (file, args, opts = {}) =>
     new Promise((resolve, reject) => {
       const child = spawn(file, [...args], { cwd: opts.cwd, detached: true, stdio: 'ignore' });
@@ -175,8 +184,8 @@ export function commandFileContent(cwd: string, sessionId: string | null, prompt
   return ['#!/bin/sh', 'rm -f -- "$0"', `cd -- ${shellQuote(cwd)} || exit 1`, ...start, ''].join('\n');
 }
 
-const COMMAND_FILE = /^(resume|new)-[0-9a-f-]{36}\.(command|prompt)$/;
-const HOUR = 3_600_000;
+const COMMAND_FILE = /^(resume|new|handoff)-[0-9a-f-]{36}\.(command|prompt)$/;
+export const HOUR = 3_600_000;
 
 export interface TerminalOpenerOptions {
   /** The folder the `.command` files go in (macOS); the núcleo owns it. */
@@ -190,14 +199,14 @@ export interface TerminalOpenerOptions {
 }
 
 /** The private folder: created 0700, and refused when it is a link or not a folder. */
-async function privateDir(dir: string): Promise<void> {
+export async function privateDir(dir: string): Promise<void> {
   await mkdir(dir, { recursive: true, mode: 0o700 });
   const s = await lstat(dir);
   if (s.isSymbolicLink() || !s.isDirectory()) throw new Error('the resume folder is not a plain folder');
   await chmod(dir, 0o700);
 }
 
-async function removeOld(dir: string, now: number, maxAgeMs: number): Promise<void> {
+export async function removeOld(dir: string, now: number, maxAgeMs: number): Promise<void> {
   for (const name of await readdir(dir).catch(() => [] as string[])) {
     if (!COMMAND_FILE.test(name)) continue;
     const path = join(dir, name);
