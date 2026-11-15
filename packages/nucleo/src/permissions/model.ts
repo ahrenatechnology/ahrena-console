@@ -71,6 +71,7 @@ export class PermissionRequest {
   private _reason: string | null = null;
   private _answeredBy: string | null = null;
   private _channel: Channel | null = null;
+  private _answeredAt: number | null = null;
   private _settledAt: number | null = null;
   private _settledBy: Settler | null = null;
 
@@ -104,8 +105,8 @@ export class PermissionRequest {
       permissionMode: p.permissionMode,
       // A call that runs something at approval (every tool outside the non-executing set) is terminalOnly when a mask acted (#618/AC-10)
       // on its summary or the summary was cut: a mask or a cut must never hide code that runs (#618/AC-10).
-      // A WebFetch whose URL was cut: the person did not read where it goes (#618/AC-11).
-      terminalOnly: isTerminalOnly(p.toolName, p.toolInput) || ((masked || truncated) && !NON_EXECUTING_TOOLS.has(p.toolName)) || (truncated && p.toolName === 'WebFetch'),
+      // A WebFetch whose URL was cut or masked: the person did not read where it goes (#618/AC-11).
+      terminalOnly: isTerminalOnly(p.toolName, p.toolInput) || ((masked || truncated) && (!NON_EXECUTING_TOOLS.has(p.toolName) || p.toolName === 'WebFetch')),
       createdAt: p.now,
       expiresAt: p.now + EXPIRY_MS,
     });
@@ -125,6 +126,10 @@ export class PermissionRequest {
   }
   get channel(): Channel | null {
     return this._channel;
+  }
+  /** When the owner answered, from the clock the caller passed in; `null` until then. Kept through the delivery. (#618) */
+  get answeredAt(): number | null {
+    return this._answeredAt;
   }
   get settledAt(): number | null {
     return this._settledAt;
@@ -151,6 +156,7 @@ export class PermissionRequest {
     this._reason = kept;
     this._answeredBy = answeredBy;
     this._channel = channel;
+    this._answeredAt = now;
   }
 
   /** The hook process takes the answer. Once: a second delivery is refused. (#618) */

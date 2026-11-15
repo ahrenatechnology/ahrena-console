@@ -27,7 +27,7 @@ describe('waitForDecision (#618/AC-2, AC-3)', () => {
     const stored = h.repository.find('S1', 'rq-1');
     const first = await wait(h);
     assert.deepEqual(first, { kind: 'decision', requestId: 'rq-1', digest: stored?.digest, decision: 'deny', reason: 'not now', answeredBy: 'owner', channel: 'ui' });
-    assert.equal(stored?.state, 'delivered');
+    assert.equal(h.repository.find('S1', 'rq-1')?.state, 'delivered');
     await assert.rejects(wait(h), refusal('already_delivered'));
   });
 

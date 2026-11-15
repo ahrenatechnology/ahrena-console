@@ -16,19 +16,37 @@ const PROTECTED_PATH_PATTERNS: RegExp[] = [
   /(?:^|[^A-Za-z0-9_.-])\.ssh(?:\/|$|[^A-Za-z0-9_-])/i,
 ];
 
-/** Files that run by themselves later (a git hook, a build or install script, a CI workflow, a shell start-up file, a login agent): a Write, Edit or NotebookEdit into one is terminal-only (#618/AC-11). Matched on the path, case-insensitive, anywhere in the tree: it over-matches by design (decision 0025 amendment, item 7). */
+// A path or a word of a command starts after the start of the text, a space, a quote, `=`, a redirection, a separator, `/` or `~` (#618/AC-11).
+const A = '(?:^|[\\s"\'=<>:;|&(,{/~])';
+// A name ends where a longer name would start (#618/AC-11).
+const END = '(?![A-Za-z0-9_-])';
+
+/** Files that run by themselves later, or that change what the next agent run does (a git hook or config, a build or install script, a CI workflow, a shell, system or login start-up file, a scheduler, a package manager config, an instruction file). A call that names one is terminal-only, whatever the tool and however the path is spelled in a command, case-insensitive, anywhere in the tree. It over-matches by design, reads included: when in doubt, Desktop only (decision 0025 amendment, item 7; #618/AC-11). */
 const AUTO_RUN_PATH_PATTERNS: RegExp[] = [
-  /(?:^|\/)\.git\/hooks(?:\/|$)/i,
-  /(?:^|\/)package\.json$/i,
-  /(?:^|\/)(?:gnumakefile|makefile)$|\.mk$/i,
-  /(?:^|\/)\.github\/workflows(?:\/|$)/i,
-  /(?:^|\/)\.(?:zshrc|bashrc|bash_profile|bash_login|bash_logout|profile|zprofile|zshenv|zlogin|zlogout)[^/]*$/i,
-  /(?:^|\/)\.config\/fish(?:\/|$)/i,
-  /(?:^|\/)\.husky(?:\/|$)/i,
+  new RegExp(`${A}\\.git/(?:hooks|config)${END}`, 'i'),
+  new RegExp(`${A}\\.gitconfig${END}`, 'i'),
+  new RegExp(`${A}package\\.json${END}`, 'i'),
+  new RegExp(`${A}(?:gnumakefile|makefile)${END}|\\.mk${END}`, 'i'),
+  new RegExp(`${A}\\.github/workflows${END}`, 'i'),
+  new RegExp(`${A}\\.(?:zshrc|bashrc|bash_profile|bash_login|bash_logout|bash_aliases|profile|zprofile|zshenv|zlogin|zlogout)${END}`, 'i'),
+  new RegExp(`${A}\\.config/(?:fish|git|systemd|autostart)${END}`, 'i'),
+  new RegExp(`${A}\\.husky${END}`, 'i'),
   /launch(?:agents|daemons)/i,
+  new RegExp(`${A}\\.npmrc${END}|${A}\\.yarnrc(?:\\.ya?ml)?${END}`, 'i'),
+  new RegExp(`${A}\\.pre-commit-config\\.ya?ml${END}|${A}\\.?lefthook(?:-local)?\\.(?:ya?ml|json|toml)${END}`, 'i'),
+  new RegExp(`${A}\\.vscode/tasks\\.json${END}`, 'i'),
+  // System start-up files and schedulers: the dotless ones too (#618/AC-11).
+  new RegExp(`${A}/?etc/(?:z(?:shrc|profile|shenv|login|logout|sh)|bash\\.bashrc|bashrc|profile|environment|rc\\.local|rc\\d?\\.d|init\\.d|sudoers|cron|systemd|paths|launchd)`, 'i'),
+  new RegExp(`${A}/?var/spool/cron`, 'i'),
+  new RegExp(`${A}crontab${END}`, 'i'),
+  // What the next agent run reads as its commands, agents, skills and instructions (#618/AC-11).
+  new RegExp(`${A}\\.claude/(?:commands|agents|skills)${END}`, 'i'),
+  new RegExp(`${A}(?:claude|agents)\\.md${END}`, 'i'),
 ];
-/** The tools that write a file, and the input fields that name its path. */
-const FILE_WRITING_TOOLS: ReadonlySet<string> = new Set(['Write', 'Edit', 'NotebookEdit']);
+/** The tools that only read: a path in their input is no write (#618/AC-11). */
+const READ_ONLY_TOOLS: ReadonlySet<string> = new Set(['Read', 'Grep', 'Glob', 'WebFetch']);
+/** The tools that write a file named by one path field: their body is content, not a path (#618/AC-11). */
+const FILE_WRITING_TOOLS: ReadonlySet<string> = new Set(['Write', 'Edit', 'MultiEdit', 'NotebookEdit']);
 const PATH_FIELDS = ['file_path', 'notebook_path', 'path'] as const;
 
 /** What the agent could read the owner token from, or swap the hook through: cited anywhere in a command or a path (#618/AC-6). */
@@ -83,11 +101,21 @@ function reachesGitIndirectly(form: string): boolean {
   return form.split(/[|;&\n]+/).some((segment) => /^[\s({]*\$\{?[A-Za-z_][A-Za-z0-9_]*\}?\s/.test(segment) && tokensOf(segment).some((t) => RISKY_GIT_SUBCOMMANDS.has(t)));
 }
 
+const PACKAGE_MANAGERS = new Set(['npm', 'pnpm', 'yarn', 'bun']);
+const PACKAGE_JSON_EDITS = new Set(['set', 'delete', 'fix']);
+
+/** `npm pkg set|delete|fix` and `npm set-script`, with any manager and any option between: they rewrite `package.json` without naming it (#618/AC-11). */
+function mutatesPackageJson(form: string): boolean {
+  const tokens = tokensOf(form);
+  if (!tokens.some((t) => PACKAGE_MANAGERS.has(baseName(t)))) return false;
+  return tokens.some((t, i) => t === 'set-script' || (t === 'pkg' && PACKAGE_JSON_EDITS.has(tokens[i + 1] ?? '')));
+}
+
 function commandIsTerminalOnly(rawCommand: string): boolean {
   // Command names are compared whatever the case, as the macOS disk is: `Git push`, `RM -rf` (#618/AC-11).
   const forms = spellings(rawCommand.toLowerCase());
   if (forms.some((form) => COMMAND_PATTERNS.some((re) => re.test(form)))) return true;
-  if (forms.some(downloadsAndRuns) || forms.some(reachesGitIndirectly)) return true;
+  if (forms.some(downloadsAndRuns) || forms.some(reachesGitIndirectly) || forms.some(mutatesPackageJson)) return true;
   return forms.some((form) => form.split(/[|;&\n]+/).some(hasRiskyVerb));
 }
 
@@ -116,14 +144,13 @@ export function isTerminalOnly(toolName: string, toolInput: unknown): boolean {
   if (!collectStrings(toolInput, strings)) return true;
   const cites = (form: string) => CITED_PATTERNS.some((re) => re.test(form)) || PROTECTED_PATH_PATTERNS.some((re) => re.test(form));
   if (strings.some((text) => spellings(text).some(cites))) return true;
-  if (FILE_WRITING_TOOLS.has(toolName) && writesAutoRunFile(toolInput as Record<string, unknown>)) return true;
+  if (touchesAutoRunFile(toolName, toolInput as Record<string, unknown>, strings)) return true;
   return typeof command === 'string' && commandIsTerminalOnly(command);
 }
 
-/** A path field of a file-writing call that names a file that runs by itself (#618/AC-11). Only the path: a body that names `package.json` is not a write to it. */
-function writesAutoRunFile(input: Record<string, unknown>): boolean {
-  return PATH_FIELDS.some((field) => {
-    const path = input[field];
-    return typeof path === 'string' && spellings(path).some((form) => AUTO_RUN_PATH_PATTERNS.some((re) => re.test(form)));
-  });
+/** What a call outside the read-only set names that runs by itself: the path field of a file-writing tool, the command of Bash, every string of any other tool, since its path fields are unknown (#618/AC-11). Only a path, never a body: a Write whose content names `package.json` is not a write to it. */
+function touchesAutoRunFile(toolName: string, input: Record<string, unknown>, strings: string[]): boolean {
+  if (READ_ONLY_TOOLS.has(toolName)) return false;
+  const named = FILE_WRITING_TOOLS.has(toolName) ? PATH_FIELDS.map((field) => input[field]).filter((v): v is string => typeof v === 'string') : toolName === 'Bash' ? [input['command']].filter((v): v is string => typeof v === 'string') : strings;
+  return named.some((text) => spellings(text).some((form) => AUTO_RUN_PATH_PATTERNS.some((re) => re.test(form))));
 }

@@ -41,6 +41,7 @@ describe('opening a request (#618/AC-1, AC-7)', () => {
     assert.equal(r.decision, null);
     assert.equal(r.reason, null);
     assert.equal(r.settledAt, null);
+    assert.equal(r.answeredAt, null);
   });
 
   test('#618/AC-7: the summary has the secret masked and the raw input is nowhere on the aggregate', async () => {
@@ -73,6 +74,15 @@ describe('answering (#618/AC-1, AC-2, AC-6)', () => {
     assert.equal(r.channel, 'ui');
     assert.equal(r.reason, null);
     assert.equal(r.settledAt, null);
+  });
+
+  test('#618/AC-7: the answer records the time it was given, from the clock passed in, and a refusal records none', async () => {
+    const r = await open();
+    r.answer({ decision: 'deny', reason: 'x', answeredBy: 'fernando', channel: 'ui', now: T + 1_234 });
+    assert.equal(r.answeredAt, T + 1_234);
+    const refused = await open({ toolInput: { command: 'rm -rf build' } });
+    assert.throws(() => refused.answer({ decision: 'allow', answeredBy: 'fernando', channel: 'ui', now: T + 5 }));
+    assert.equal(refused.answeredAt, null);
   });
 
   test('#618/AC-1: deny keeps a one-line reason', async () => {
@@ -362,6 +372,14 @@ describe('a call that runs at approval is terminalOnly when a mask acted or the 
     const whole = await open({ toolName: 'WebFetch', toolInput: { url: 'https://example.dev/docs', prompt: 'p' } });
     assert.equal(whole.summaryTruncated, false);
     assert.equal(whole.terminalOnly, false);
+  });
+
+  test('#618/AC-11: a WebFetch whose URL was masked in the summary is terminalOnly, as a cut one is', async () => {
+    const query = await open({ toolName: 'WebFetch', toolInput: { url: 'https://evil.example/?token=abcdef123456', prompt: 'p' } });
+    assert.equal(query.summaryTruncated, false);
+    assert.equal(query.terminalOnly, true);
+    const userinfo = await open({ toolName: 'WebFetch', toolInput: { url: 'https://u:p@evil.example/x', prompt: 'p' } });
+    assert.equal(userinfo.terminalOnly, true);
   });
 
   test('#618/AC-10: a tool that runs nothing and is neither masked nor cut stays as it was', async () => {

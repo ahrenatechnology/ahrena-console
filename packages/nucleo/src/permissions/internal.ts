@@ -1,11 +1,11 @@
-// What the use cases share: finding a request of a session, settling an overdue one, and writing what happened to the
+// What the use cases share: finding a request of a session, settling an overdue one, and writing what happened to the (#618)
 // audit and the change feed. Nothing here is exported by the package. (#618, layer 2)
 import { createHash } from 'node:crypto';
 import { DigestMismatch, PermissionNotFound } from './errors.ts';
 import { PermissionRefusal, type PermissionRequest } from './model.ts';
 import type { PermissionDeps } from './ports.ts';
 
-/** The id of a caller is data: it is cut before it reaches the audit. */
+/** The id of a caller is data: it is cut before it reaches the audit. (#618) */
 const clip = (text: string): string => text.slice(0, 128);
 
 /** SHA-256 hex of a reason: the only form in which a reason reaches the audit (#618/AC-7). */
@@ -18,7 +18,7 @@ export function mustFind(deps: PermissionDeps, sessionId: string, requestId: str
   return request;
 }
 
-/** Saves a request that changed, and tells the audit and the change feed what became of it. */
+/** Saves a request that changed, and tells the audit and the change feed what became of it. (#618) */
 export function recordChange(deps: PermissionDeps, request: PermissionRequest, event: 'registered' | 'answered' | 'delivered' | 'closed'): void {
   deps.repository.save(request);
   const base = { at: deps.clock.now(), event, requestId: request.id, sessionId: request.sessionId, digest: request.digest, state: request.state };
@@ -39,7 +39,7 @@ export function recordChange(deps: PermissionDeps, request: PermissionRequest, e
   deps.notifier.publish({ sessionId: request.sessionId, requestId: request.id, state: request.state });
 }
 
-/** An open request whose deadline passed is settled as expired, wherever it is first seen; returns whether it was. */
+/** An open request whose deadline passed is settled as expired, wherever it is first seen; returns whether it was. (#618) */
 export function expireIfDue(deps: PermissionDeps, request: PermissionRequest): boolean {
   if (!request.isOpen || deps.clock.now() < request.expiresAt) return false;
   request.expire(deps.clock.now());

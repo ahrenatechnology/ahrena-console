@@ -1,10 +1,10 @@
-// The long poll of the hook: waits for the owner's answer, delivers it once, and says "still pending" at the deadline
+// The long poll of the hook: waits for the owner's answer, delivers it once, and says "still pending" at the deadline (#618)
 // of the slice. It waits on the clock's timer and the notifier, so a test never waits for real (decision 0025, #618/AC-2, AC-3).
 import { expireIfDue, mustFind, recordChange, refusingAsync } from './internal.ts';
 import type { Channel, Decision } from './model.ts';
 import type { PermissionDeps } from './ports.ts';
 
-/** The longest one slice of the long poll waits (decision 0025: `wait=25`). */
+/** The longest one slice of the long poll waits (decision 0025: `wait=25`). (#618) */
 export const MAX_WAIT_MS = 25_000;
 
 export type WaitOutcome =
@@ -24,7 +24,7 @@ export function waitForDecision(deps: PermissionDeps, input: { sessionId: string
         await changeOrTimeout(deps, request.id, Math.min(deadline, request.expiresAt) - now);
         continue;
       }
-      // Answered: delivered now, once. Delivered, or closed without a delivery: the aggregate refuses (409 or 410).
+      // Answered: delivered now, once. Delivered, or closed without a delivery: the aggregate refuses (409 or 410). (#618)
       request.deliver(now);
       recordChange(deps, request, 'delivered');
       const { decision, answeredBy, channel } = request;
@@ -34,7 +34,7 @@ export function waitForDecision(deps: PermissionDeps, input: { sessionId: string
   });
 }
 
-/** Resolves on the first change of the request or when the time runs out, and leaves neither a timer nor a listener behind. */
+/** Resolves on the first change of the request or when the time runs out, and leaves neither a timer nor a listener behind. (#618) */
 async function changeOrTimeout(deps: PermissionDeps, requestId: string, ms: number): Promise<void> {
   const timer = deps.clock.timer(ms);
   let stop: () => void = () => {};

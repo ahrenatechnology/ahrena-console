@@ -15,7 +15,7 @@ export interface AnswerRequestInput {
 export function answerRequest(deps: PermissionDeps, input: AnswerRequestInput): void {
   refusing(deps, 'answer', input.sessionId, input.requestId, () => {
     const request = mustFind(deps, input.sessionId, input.requestId);
-    // An overdue request is settled before it is refused, so what the screen reads next is `expired`, not `pending`.
+    // An overdue request is settled before it is refused, so what the screen reads next is `expired`, not `pending`. (#618)
     if (expireIfDue(deps, request)) throw new PermissionRefusal('gone');
     request.answer({ decision: input.decision, reason: input.reason, answeredBy: input.answeredBy, channel: input.channel, now: deps.clock.now() });
     recordChange(deps, request, 'answered');

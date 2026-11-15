@@ -177,6 +177,28 @@ describe('expireDue and sweepOnStart (#618/AC-3)', () => {
   });
 });
 
+describe('load, call, save with nothing awaited between (#618/AC-4)', () => {
+  test('#618/AC-4: a delivery that lands while the event digest is computed is not overwritten by the close', async () => {
+    const h = harness({ copies: true });
+    const id = await register(h);
+    answerRequest(h, { sessionId: 'S1', requestId: id, decision: 'allow', answeredBy: 'owner', channel: 'ui' });
+    const closing = settleFromHookEvent(h, post('tu-9'));
+    const delivered = waitForDecision(h, { sessionId: 'S1', requestId: id, waitMs: 0 });
+    await Promise.all([closing, delivered]);
+    assert.equal(state(h, id), 'delivered');
+    assert.deepEqual(await closing, { closed: [] });
+  });
+
+  test('#618/AC-4: the same events against a repository that returns copies close and pair as they do against shared objects', async () => {
+    const h = harness({ copies: true });
+    const id = await register(h);
+    await settleFromHookEvent(h, pre('tu-1'));
+    assert.equal(h.repository.toolUseOf(id), 'tu-1');
+    assert.deepEqual(await settleFromHookEvent(h, post('tu-1')), { closed: [id] });
+    assert.equal(state(h, id), 'answered_elsewhere');
+  });
+});
+
 describe('listRequests (#618/AC-7)', () => {
   test('#618/AC-7: it lists the pending and the recently closed in the shape the /ui reads, redacted, with no tool input', async () => {
     const h = harness();
@@ -197,6 +219,7 @@ describe('listRequests (#618/AC-7)', () => {
           terminalOnly: true,
           decision: null,
           reason: null,
+          answeredAt: null,
         },
       ],
     });
@@ -211,6 +234,33 @@ describe('listRequests (#618/AC-7)', () => {
     const { requests } = listRequests(h, { sessionId: 'S1', unavailableReason: null });
     assert.equal(requests.length, 1);
     assert.deepEqual([requests[0]?.state, requests[0]?.decision, requests[0]?.reason], ['answered', 'deny', 'later']);
+  });
+
+  test('#618/AC-7: answeredAt is the time the owner answered, kept after the delivery; none while pending or after a deadline', async () => {
+    const h = harness();
+    const id = await register(h);
+    const idle = await register(h, { toolInput: { command: 'ls' } });
+    await h.clock.advance(5_000);
+    answerRequest(h, { sessionId: 'S1', requestId: id, decision: 'allow', answeredBy: 'owner', channel: 'ui' });
+    const at = new Date(T0 + 5_000).toISOString();
+    await h.clock.advance(1_000);
+    const listed = () => Object.fromEntries(listRequests(h, { sessionId: 'S1', unavailableReason: null }).requests.map((r) => [r.id, r.answeredAt]));
+    assert.deepEqual(listed(), { [id]: at, [idle]: null });
+    await waitForDecision(h, { sessionId: 'S1', requestId: id, waitMs: 0 });
+    assert.equal(listed()[id], at);
+    await h.clock.advance(9 * 60_000);
+    assert.equal(listed()[idle], null);
+  });
+
+  test('#618/AC-7: a request closed as answered_elsewhere carries the time the Console learned it, the Console cannot know the Desktop answer time', async () => {
+    const h = harness();
+    const id = await register(h);
+    await h.clock.advance(7_000);
+    await settleFromHookEvent(h, { name: 'Stop', sessionId: 'S1' });
+    const [r] = listRequests(h, { sessionId: 'S1', unavailableReason: null }).requests;
+    assert.equal(r?.state, 'answered_elsewhere');
+    assert.equal(r?.answeredAt, new Date(T0 + 7_000).toISOString());
+    assert.equal(r?.id, id);
   });
 
   test('#618/AC-7: a request closed over 10 minutes ago is dropped; a pending one stays; the order is oldest first', async () => {

