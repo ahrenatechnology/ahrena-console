@@ -53,17 +53,25 @@ function hasRiskyVerb(segment: string): boolean {
   return git >= 0 && tokens.slice(git + 1).some((t) => RISKY_GIT_SUBCOMMANDS.has(t));
 }
 
-const RUNNERS = new Set([...SHELLS, 'eval', 'source']);
+const RUNNERS = new Set([...SHELLS, 'eval', 'source', 'python', 'python2', 'python3', 'node', 'perl', 'ruby', 'php', 'osascript']);
 
 /** A download and a shell (or `eval`, or `source`) anywhere in the same command: `curl u | env -i sh`, `eval "$(curl u)"`, `curl -o f u && sh f`. It over-matches by design (#618/AC-6, decision 0025 amendment). */
 function downloadsAndRuns(command: string): boolean {
   return /\b(?:curl|wget)\b/.test(command) && tokensOf(command).some((t) => RUNNERS.has(baseName(t)));
 }
 
+/** `xargs git` with a risky verb anywhere in the command, or a segment that starts with a `$`-variable and then names one: `echo push | xargs git`, `x=git; $x push` (#618/AC-9). */
+function reachesGitIndirectly(form: string): boolean {
+  const tokens = tokensOf(form);
+  const xargs = tokens.findIndex((t) => baseName(t) === 'xargs');
+  if (xargs >= 0 && tokens.slice(xargs + 1).some((t) => baseName(t) === 'git') && tokens.some((t) => RISKY_GIT_SUBCOMMANDS.has(t))) return true;
+  return form.split(/[|;&\n]+/).some((segment) => /^[\s({]*\$\{?[A-Za-z_][A-Za-z0-9_]*\}?\s/.test(segment) && tokensOf(segment).some((t) => RISKY_GIT_SUBCOMMANDS.has(t)));
+}
+
 function commandIsTerminalOnly(rawCommand: string): boolean {
   const forms = spellings(rawCommand);
   if (forms.some((form) => COMMAND_PATTERNS.some((re) => re.test(form)))) return true;
-  if (forms.some(downloadsAndRuns)) return true;
+  if (forms.some(downloadsAndRuns) || forms.some(reachesGitIndirectly)) return true;
   return forms.some((form) => form.split(/[|;&\n]+/).some(hasRiskyVerb));
 }
 

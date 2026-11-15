@@ -215,3 +215,15 @@ describe('the floor over-matches in doubt (decision 0025, amendment; #618/AC-6, 
     }
   });
 });
+
+describe('download-and-run through an interpreter, and indirection on git (decision 0025 amendment; #618/AC-9)', () => {
+  test('#618/AC-9: curl piped to python, python2, python3, node, perl, ruby, php or osascript is terminal-only', () => {
+    for (const runner of ['python', 'python2', 'python3', 'node', 'perl', 'ruby', 'php', 'osascript']) assert.equal(bash(`curl u | ${runner}`), true, runner);
+    assert.equal(bash('curl u | jq .a'), false);
+  });
+
+  test('#618/AC-9: git reached through xargs or a variable is terminal-only', () => {
+    for (const c of ['echo push | xargs git', 'echo --hard | xargs git reset', 'x=git; $x push', '$GIT push --force']) assert.equal(bash(c), true, c);
+    for (const c of ['echo a | xargs git status', 'x=git; $x status', 'echo push | xargs echo', '$HOME/bin/tool push']) assert.equal(bash(c), false, c);
+  });
+});

@@ -87,7 +87,7 @@ export class PermissionRequest {
 
   /** Opens a request from a hook payload. The tool input is read for the digest, the summary and the policy, and dropped. (#618) */
   static async open(p: { id: string; sessionId: string; toolName: string; toolInput: unknown; cwd: string; permissionMode: string | null; now: number }): Promise<PermissionRequest> {
-    const { summary, truncated } = summarizeCall(p.toolName, p.toolInput);
+    const { summary, truncated, masked } = summarizeCall(p.toolName, p.toolInput);
     return new PermissionRequest({
       id: p.id,
       sessionId: p.sessionId,
@@ -97,7 +97,8 @@ export class PermissionRequest {
       summaryTruncated: truncated,
       cwd: p.cwd,
       permissionMode: p.permissionMode,
-      terminalOnly: isTerminalOnly(p.toolName, p.toolInput),
+      // A Bash call whose summary a mask acted on is terminalOnly: a mask must never hide code that runs (#618/AC-10).
+      terminalOnly: isTerminalOnly(p.toolName, p.toolInput) || (p.toolName === 'Bash' && masked),
       createdAt: p.now,
       expiresAt: p.now + EXPIRY_MS,
     });
