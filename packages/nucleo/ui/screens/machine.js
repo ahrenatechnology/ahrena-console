@@ -763,7 +763,7 @@ export async function mount(area, ctx) {
     const connection = condition.row ?? null;
     docker.refresh();
     const dockerNode = docker.node();
-    // The panels live in the body: with no body (a remote with no reading that is not connected) there is no read, and the entries stay as they were.
+    // The panels live in the body: with no body (a remote with no reading that is not connected) there is no read, and the entries stay as they were. (issue 566)
     const drawsBody = Boolean(data.reading) || local || remoteCondition(machine) === null;
     if (drawsBody) diagnosis.sync(data.alerts);
     const diagnosisParts = {
@@ -807,7 +807,7 @@ export async function mount(area, ctx) {
         const row = active.closest?.('[data-alert]')?.getAttribute('data-alert');
         const section = active.closest?.('[data-section]')?.getAttribute('data-section');
         if (row) {
-          // An alert id carries a mount path (`volume-full:<mount>`): it goes into the selector escaped.
+          // An alert id carries a mount path (`volume-full:<mount>`): it goes into the selector escaped. (issue 566)
           alertRow = `[data-alert="${CSS.escape(row)}"]`;
           key = `${alertRow}${section ? ` [data-section="${CSS.escape(section)}"]` : ''} [data-dg-action="${active.getAttribute('data-dg-action')}"]`;
         }
@@ -816,7 +816,7 @@ export async function mount(area, ctx) {
     area.replaceChildren(...nodes);
     if (!key) return;
     // Reconectar becomes Cancelar (and back): the focus goes to the band's first button.
-    // The button that went away (Tentar de novo becomes the loading panel): the focus goes to the alert's own toggle.
+    // The button that went away (Tentar de novo becomes the loading panel): the focus goes to the alert's own toggle. (issue 566)
     const target = area.querySelector(key) ?? (key.startsWith('[data-rc-action') ? area.querySelector('[data-rc-action]') : alertRow ? area.querySelector(`${alertRow} [data-dg-action="toggle"]`) : null);
     target?.focus();
   }

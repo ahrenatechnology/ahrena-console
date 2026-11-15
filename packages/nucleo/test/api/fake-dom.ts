@@ -233,12 +233,12 @@ const COMPOUND = String.raw`(?:\[\s*[\w-]+\s*(?:[~|^$*]?=\s*(?:"(?:[^"\\]|\\.)*"
 
 /**
  * A selector list as the browser reads it: one array per comma-separated item, each a sequence of compound selectors
- * and `>`. A quoted attribute value ends at the first unescaped quote; whatever the grammar does not accept is a SyntaxError.
+ * and `>`. A quoted attribute value ends at the first unescaped quote; whatever the grammar does not accept is a SyntaxError. (#566)
  */
 function selectorList(selector: string): string[][] {
   const invalid = () => new SyntaxError(`'${selector}' is not a valid selector`);
   const tokens = [...selector.matchAll(new RegExp(`${COMPOUND}|[,>]`, 'g'))];
-  // Anything between two tokens that is not whitespace is something the grammar does not accept.
+  // Anything between two tokens that is not whitespace is something the grammar does not accept. (#566)
   let end = 0;
   for (const t of tokens) {
     if (selector.slice(end, t.index).trim()) throw invalid();
@@ -257,12 +257,12 @@ function selectorList(selector: string): string[][] {
   return list;
 }
 
-/** A name or a quoted attribute value with its CSS escapes undone (`\\"` is `"`, `\\\\` is `\`, `\\2f ` is `/`). */
+/** A name or a quoted attribute value with its CSS escapes undone (`\\"` is `"`, `\\\\` is `\`, `\\2f ` is `/`). (#566) */
 function cssUnescape(value: string): string {
   return value.replace(/\\([0-9a-f]{1,6}) ?|\\(.)/gi, (_, hex?: string, c?: string) => (hex ? String.fromCodePoint(parseInt(hex, 16)) : c!));
 }
 
-/** `CSS.escape` as the CSSOM spec defines it, which Node does not have. */
+/** `CSS.escape` as the CSSOM spec defines it, which Node does not have. (#566) */
 function cssEscape(value: unknown): string {
   const s = String(value);
   return Array.from(s, (ch, i) => {
@@ -276,7 +276,7 @@ function cssEscape(value: unknown): string {
 }
 
 function casaSimples(no: ElementoFalso, simple: string): boolean {
-  // The class, id and tag are read outside the `[...]` blocks: an attribute value is not a class or an id.
+  // The class, id and tag are read outside the `[...]` blocks: an attribute value is not a class or an id. (#566)
   const bare = simple.replace(new RegExp(ATTRIBUTE, 'g'), '');
   const tag = /^(?:[a-z][a-z0-9-]*|\*)/i.exec(bare)?.[0];
   if (tag && tag !== '*' && no.tagName !== tag.toUpperCase()) return false;
@@ -291,7 +291,7 @@ function casaSimples(no: ElementoFalso, simple: string): boolean {
     if (op === '') {
       if (actual !== expected) return false;
     } else if (!expected) {
-      return false; // `^=`, `$=`, `*=` and `~=` with an empty value match nothing
+      return false; // `^=`, `$=`, `*=` and `~=` with an empty value match nothing (#566)
     } else if (op === '^') {
       if (!actual.startsWith(expected)) return false;
     } else if (op === '$') {

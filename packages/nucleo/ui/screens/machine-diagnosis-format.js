@@ -135,7 +135,7 @@ export function readLine(takenAt, now = Date.now()) {
   return Number.isFinite(t.getTime()) ? `lido às ${clock(t)} · ${ago(t.toISOString(), now)}` : '';
 }
 
-// `memoryTone` lives in machine-format.js, where the Memória card takes it (a file that imports this one could not be imported back).
+// `memoryTone` lives in machine-format.js, where the Memória card takes it (a file that imports this one could not be imported back). (issue 566)
 export { memoryTone } from './machine-format.js';
 
 const ROUTE = 'GET /api/diagnosis';

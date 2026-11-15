@@ -34,7 +34,7 @@ const NOW = Date.now();
 const GB = 1024 ** 3;
 const iso = (msAgo: number) => new Date(NOW - msAgo).toISOString();
 const WS = { id: 'ws-example', label: 'Workstation', port: 14720 };
-/** A configured remote that never answered: no reading stored, the core there does not respond. */
+/** A configured remote that never answered: no reading stored, the core there does not respond. (#566) */
 const DOWN = { id: 'ws-down', label: 'Workstation parada', port: 14721 };
 
 const alert = (id: string, kind: Alert['kind'], level: Alert['level'], minutesAgo = 12): Alert => ({ id, kind, level, message: `message of ${id}`, detail: null, since: iso(minutesAgo * 60_000) });
@@ -57,7 +57,7 @@ const memoryDiagnosis = (alertId: string) => ({
   ],
 });
 
-// ---------- the state logic, with no DOM ----------
+// ---------- the state logic, with no DOM ---------- (#566)
 
 type Outcome = { state: string; diagnosis?: unknown; failure?: { status: number | null } };
 interface Call {
@@ -66,7 +66,7 @@ interface Call {
   resolve: (o: Outcome) => void;
   reject: (e: unknown) => void;
 }
-/** A reader the test settles by hand; every call is kept. */
+/** A reader the test settles by hand; every call is kept. (#566) */
 function gatedReader() {
   const calls: Call[] = [];
   const read = (a: Alert, { signal }: { signal: AbortSignal }) =>
@@ -355,7 +355,7 @@ describe('the Memória card takes the tone of the alert (statCards)', () => {
   });
 });
 
-// ---------- the mounted screen ----------
+// ---------- the mounted screen ---------- (#566)
 
 let storage: SqliteStorage;
 let service: TelemetryService;
@@ -381,7 +381,7 @@ interface Mounted {
   diagnosisReads: () => URL[];
   signals: AbortSignal[];
   ready: Promise<unknown>;
-  /** A telemetry re-read (the 30 s one, or a change): `onRestart` runs `draw()`. */
+  /** A telemetry re-read (the 30 s one, or a change): `onRestart` runs `draw()`. (#566) */
   reread: () => Promise<void>;
   setAlerts: (alerts: Alert[]) => void;
   leave: () => void;

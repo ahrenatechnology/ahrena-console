@@ -79,7 +79,7 @@ export function createDiagnosisState({ read, onChange = () => {}, signal = null,
     clearTimeout(e.timer);
     e.timer = null;
     e.controller = null;
-    e.token += 1; // one answer per read: whatever comes after (the abort, a late body) is dropped
+    e.token += 1; // one answer per read: whatever comes after (the abort, a late body) is dropped (issue 566)
     e.state = outcome.state;
     e.diagnosis = outcome.state === 'ready' ? (outcome.diagnosis ?? null) : null;
     e.failure = outcome.state === 'failed' ? (outcome.failure ?? { status: null }) : null;
@@ -137,7 +137,7 @@ export function createDiagnosisState({ read, onChange = () => {}, signal = null,
   }
 
   return {
-    /** The alerts on screen now: new ones are added closed, the first of them opening if nothing was on screen; gone ones go. No repaint: the screen is painting. */
+    /** The alerts on screen now: new ones are added closed, the first of them opening if nothing was on screen; gone ones go. No repaint: the screen is painting. (issue 566) */
     sync(alerts) {
       if (stopped) return;
       const now = saturationAlerts(alerts);
@@ -159,13 +159,13 @@ export function createDiagnosisState({ read, onChange = () => {}, signal = null,
       if (chosen) open(entries.get(chosen.id));
     },
 
-    /** What to draw for one alert: `{ open, state, diagnosis, failure, expanded }`; `null` for an alert with no panel. */
+    /** What to draw for one alert: `{ open, state, diagnosis, failure, expanded }`; `null` for an alert with no panel. (issue 566) */
     view(alertId) {
       const e = entries.get(alertId);
       return e ? { open: e.open, state: e.state, diagnosis: e.diagnosis, failure: e.failure, expanded: e.expanded } : null;
     },
 
-    /** "Ver diagnóstico" and "Diagnóstico": opens (one read) or closes (aborts, forgets). */
+    /** "Ver diagnóstico" and "Diagnóstico": opens (one read) or closes (aborts, forgets). (issue 566) */
     toggle(alertId) {
       const e = entries.get(alertId);
       if (stopped || !e) return;
@@ -174,15 +174,15 @@ export function createDiagnosisState({ read, onChange = () => {}, signal = null,
       onChange();
     },
 
-    /** "Tentar de novo" on a failure: one read more; nothing while one is in flight. */
+    /** "Tentar de novo" on a failure: one read more; nothing while one is in flight. (issue 566) */
     retry,
 
-    /** "Ler de novo" on a diagnosis: the same, one read more. */
+    /** "Ler de novo" on a diagnosis: the same, one read more. (issue 566) */
     reread(alertId) {
       retry(alertId);
     },
 
-    /** "Mostrar os 10" / "Mostrar menos" of one section of one alert. */
+    /** "Mostrar os 10" / "Mostrar menos" of one section of one alert. (issue 566) */
     more(alertId, sectionId) {
       const e = entries.get(alertId);
       if (stopped || !e) return;
