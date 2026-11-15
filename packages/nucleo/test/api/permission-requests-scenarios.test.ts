@@ -8,6 +8,7 @@ import { join } from 'node:path';
 import { describe, test } from 'node:test';
 import { CHANGE_TYPES } from '../../src/changes/cursor.ts';
 import { MCP_CHANGE_TYPES } from '../../src/changes/mcp.ts';
+import { answerRequest } from '../../src/permissions/answer-request.ts';
 import { sweepOnStart } from '../../src/permissions/expire-due.ts';
 import { openPermissionDeps } from '../../src/permissions/adapters/deps.ts';
 import { OWNER_TOKEN } from '../owner-http.ts';
@@ -95,6 +96,29 @@ describe('the whole path of a request (#618/AC-1, AC-2, AC-5, AC-7)', () => {
       assert.equal(next.status, 200);
       assert.equal(stateOf(f, rid), 'delivered');
     }));
+});
+
+describe('delivery is refused while the capability is off (#618/AC-2)', () => {
+  const cases: Array<[string, { enabled?: boolean; credential?: string | null }]> = [
+    ['the capability is turned off', { enabled: false }],
+    ['the window credential is absent', { credential: null }],
+  ];
+  for (const [label, off] of cases) {
+    test(`#618/AC-2: Given a hook long-polling, When ${label} while it waits and the owner has answered, Then the hook gets 503 off and the request stays answered`, () =>
+      given(async (f) => {
+        const { rid } = await f.register();
+        const waiting = f.call('GET', reqPath(SID, rid, '/decision?wait=25'));
+        await until(() => f.deps.notifier.listening > 0);
+        f.set(off);
+        answerRequest(f.deps, { sessionId: SID, requestId: rid, decision: 'allow', reason: undefined, answeredBy: 'owner', channel: 'ui' });
+        const reply = await waiting;
+        assert.equal(reply.status, 503);
+        assert.deepEqual(reply.json, { error: 'off' });
+        assert.equal(stateOf(f, rid), 'answered', 'not delivered while off');
+        f.set({ enabled: true, credential: WINDOW_CREDENTIAL });
+        assert.equal((await f.call('GET', reqPath(SID, rid, '/decision'))).status, 200, 'delivered once the capability is back');
+      }));
+  }
 });
 
 describe('an answer of another session or call is refused (#618/AC-1)', () => {

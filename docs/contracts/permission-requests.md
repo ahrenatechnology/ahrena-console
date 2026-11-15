@@ -16,6 +16,8 @@ The capability is off while the core runs without a window credential (a core th
 | `GET …/permission-requests` | `200 { "available": false, "reason": "off", "requests": [] }` |
 | `POST …/answer` | `403 { "error": "window_only" }` |
 
+When in doubt, only the Desktop: off means off. The hook's decision route checks the capability (the switch and the window credential) when the wait starts, at each read of the wait, and right before the read that delivers. A decision the owner gave is never delivered while off: the hook gets `503 { "error": "off" }` and exits without stdout, so the Desktop card decides. The request stays `answered`, not delivered; if the core restarts it is closed as `core_restarted`, as always.
+
 ## Operations
 
 ### 1. Register (hook)

@@ -19,6 +19,7 @@ import type { ChangeCursor } from '../changes/cursor.ts';
 import { send, allowedLocalRequest } from '../ingest/hooks/receiver.ts';
 import { answerRequest } from '../permissions/answer-request.ts';
 import { DigestMismatch, PermissionNotFound } from '../permissions/errors.ts';
+import { DECISIONS, type Decision } from '../permissions/model.ts';
 import { expireDue } from '../permissions/expire-due.ts';
 import { listRequests } from '../permissions/list-requests.ts';
 import type { PermissionAuditRecord, PermissionChange, PermissionChangeNotifier, PermissionDeps, Timer } from '../permissions/ports.ts';
@@ -71,6 +72,8 @@ interface Parsed {
   sessionId: string | null;
   requestId: string | null;
 }
+
+const isDecision = (value: string): value is Decision => (DECISIONS as readonly string[]).includes(value);
 
 function safeDecode(text: string): string | null {
   try {
@@ -366,6 +369,9 @@ export function createPermissions(options: PermissionsOptions, ctx: PermissionsC
     const deadline = deps.clock.now() + waitMs;
     for (;;) {
       if (left) return;
+      // (#618) Off means off, at each read and right before the read that delivers (when in doubt, only the Desktop): an answered
+      // request stays answered, undelivered, and the hook exits without stdout. `capability()` holds the window credential too. (#618)
+      if (!capability()) return send(res, 503, { error: 'off' });
       const outcome = await waitForDecision(deps, { sessionId, requestId, waitMs: 0 });
       if (outcome.kind === 'decision') {
         const { requestId: id, digest, decision: answer, reason, answeredBy, channel } = outcome;
@@ -388,7 +394,8 @@ export function createPermissions(options: PermissionsOptions, ctx: PermissionsC
     const { decision: choice, reason, ...rest } = read.body;
     // (#618) Only `decision` and `reason`: an answer that names a session, a request or a digest of its own is refused, the stored ones decide.
     if (Object.keys(rest).length > 0 || (reason !== undefined && typeof reason !== 'string') || typeof choice !== 'string') return send(res, 400, { error: 'invalid_request' });
-    answerRequest(deps, { sessionId, requestId, decision: choice as 'allow' | 'deny', reason, answeredBy: 'owner', channel: 'ui' });
+    if (!isDecision(choice)) return send(res, 400, { error: 'invalid_decision' });
+    answerRequest(deps, { sessionId, requestId, decision: choice, reason, answeredBy: 'owner', channel: 'ui' });
     send(res, 200, { ok: true });
   }
 
@@ -421,6 +428,12 @@ export function createPermissions(options: PermissionsOptions, ctx: PermissionsC
           return send(res, 200, listRequests(deps, { sessionId, unavailableReason: capability() ? null : 'off' }));
         case 'answer':
           return await answer(req, res, sessionId, requestId!);
+        default: {
+          const unreachable: never = operation;
+          void unreachable;
+          req.resume();
+          return send(res, 405, { error: 'method_not_allowed' });
+        }
       }
     } catch (error) {
       req.resume();
