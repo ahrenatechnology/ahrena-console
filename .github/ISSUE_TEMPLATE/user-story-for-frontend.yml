@@ -1,0 +1,300 @@
+# Installed by Ahrena: ahrena-contributing, skills/installing-issue-forms.
+# Adapted from the predecessor framework's forms. The sections map to the
+# issue-quality rule, and `Acceptance criteria` is what the traceability check reads.
+name: "Frontend User Story"
+description: "Template for creating detailed frontend user stories with acceptance criteria, UI/UX specs, and metrics"
+title: "{{ brief feature summary }}"
+type: User Story
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Fill in the fields below to register a frontend user story with full specs (aligned to fe-user-story template).
+
+  - type: markdown
+    attributes:
+      value: "## Objective (User Story)"
+
+  - type: input
+    id: user-role
+    attributes:
+      label: "As a (user role / persona)"
+      description: Who is the user/persona?
+      placeholder: e.g. Controller Analyst
+    validations:
+      required: true
+
+  - type: input
+    id: specific-objective
+    attributes:
+      label: "I want (specific objective)"
+      description: What does the persona want?
+      placeholder: e.g. a daily trial balance view with AI insights
+    validations:
+      required: true
+
+  - type: input
+    id: benefit-and-value
+    attributes:
+      label: "So that (benefit and value)"
+      description: What is the benefit or value for the business?
+      placeholder: e.g. I can detect accounting discrepancies without opening spreadsheets
+    validations:
+      required: true
+
+  - type: markdown
+    attributes:
+      value: "## Acceptance Criteria"
+
+  - type: textarea
+    id: happy-path
+    attributes:
+      label: "Happy Path Scenario"
+      description: Success scenario in Gherkin format
+      value: |
+        ```gherkin
+        Scenario: {success_scenario_name}
+          Given {pre_condition}
+          And {additional_pre_condition}
+          When {action}
+          Then {expected_result}
+          And {additional_result}
+          And {result_details}:
+            | field  | value  |
+            | field1 | value1 |
+            | field2 | value2 |
+        ```
+    validations:
+      required: true
+
+  - type: textarea
+    id: corner-cases
+    attributes:
+      label: "Corner Cases"
+      description: Edge case scenarios in Gherkin format
+      value: |
+        ```gherkin
+        Scenario: {edge_case_name}
+          Given {pre_condition}
+          When {action}
+          Then {expected_result}
+          And error code {error_code}
+          And reason {error_reason}
+        ```
+    validations:
+      required: false
+
+  - type: textarea
+    id: error-cases
+    attributes:
+      label: "Error Cases"
+      description: System error scenarios in Gherkin format
+      value: |
+        ```gherkin
+        Scenario: {error_scenario_name}
+          Given {error_pre_condition}
+          When {error_action}
+          Then the system should return {error_expected}
+          And error code {error_code}
+          And reason {error_reason}
+        ```
+    validations:
+      required: false
+
+  - type: markdown
+    attributes:
+      value: "## Domain Entities and Schemas"
+
+  - type: textarea
+    id: acceptance_criteria
+    attributes:
+      label: "Acceptance criteria"
+      description: "Number the scenarios above, one line each: AC-1, AC-2 and upward, never renumbered. A test names the one it covers as #<issue>/AC-<n>."
+      value: |
+        - AC-1: <happy path scenario, in one line>
+        - AC-2: <corner case>
+        - AC-3: <error case>
+    validations:
+      required: true
+
+  - type: textarea
+    id: outcome_metrics
+    attributes:
+      label: "Métricas de resultado"
+      description: "Quais métricas medem o resultado desta história. Uma por linha: nome, tipo (contador, taxa, tempo, gauge), unidade e o que é sucesso (limite). O PR que entrega a história emite essas métricas."
+      value: |
+        - Nome: <nome da métrica> | Tipo: <contador, taxa, tempo ou gauge> | Unidade: <unidade> | Sucesso: <limite que conta como sucesso>
+    validations:
+      required: true
+
+  - type: textarea
+    id: left_to_other_issues
+    attributes:
+      label: "Left to other issues"
+      description: "Decisions already made, work blocked elsewhere, and parts another issue owns, each by number."
+    validations:
+      required: false
+
+  - type: textarea
+    id: domain-entities
+    attributes:
+      label: "Domain Entities"
+      description: Entities and fields (Screen Field (pt-BR), Backend Field, Type, Description)
+      value: |
+        ### Entity: {Entity_Name}
+
+        | Screen Field (pt-BR) | Backend Field | Type  | Description  |
+        |---------------|------------------|-------|--------------|
+        | field1        | field1           | type1 | description1 |
+        | field2        | field2           | type2 | description2 |
+        | field3        | field3           | type3 | description3 |
+    validations:
+      required: false
+
+  - type: markdown
+    attributes:
+      value: "## Metrics"
+
+  - type: textarea
+    id: business-metrics
+    attributes:
+      label: "Business Metrics"
+      description: Business metrics
+      value: |
+        - {business_metric_1}
+        - {business_metric_2}
+        - {business_metric_3}
+    validations:
+      required: false
+
+  - type: textarea
+    id: performance-metrics
+    attributes:
+      label: "Performance Metrics"
+      description: Performance metrics
+      value: |
+        - {performance_metric_1}
+        - {performance_metric_2}
+        - {performance_metric_3}
+    validations:
+      required: false
+
+  - type: textarea
+    id: ui-ux-metrics
+    attributes:
+      label: "UI/UX Metrics"
+      description: Interface and experience metrics
+      value: |
+        - {ui_ux_metric_1}
+        - {ui_ux_metric_2}
+    validations:
+      required: false
+
+  - type: textarea
+    id: sli-slo
+    attributes:
+      label: "SLIs / SLOs"
+      description: Service Level Indicators and Objectives
+      value: |
+        - {sli_slo_item_1}
+        - {sli_slo_item_2}
+    validations:
+      required: false
+
+  - type: markdown
+    attributes:
+      value: "## Sequence Diagram"
+
+  - type: textarea
+    id: sequence-diagram
+    attributes:
+      label: "Sequence Diagram"
+      description: Mermaid code for the sequence diagram (User, UI, AI, BE)
+      value: |
+        ```mermaid
+        %%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#333333', 'primaryTextColor': '#17171b', 'primaryBorderColor': '#1a1a1a', 'lineColor': '#1a1a1a', 'fontFamily': 'arial', 'noteBkgColor': '#4f186d', 'noteTextColor': '#dbd0e1', 'actorBkg': '#e07400', 'actorTextColor': '#17171b' }}}%%
+        sequenceDiagram
+            participant User
+            participant UI
+            participant AI
+            participant BE
+
+            User->>UI: {user_action}
+            UI->>AI: {ui_to_ai_operation}
+            AI-->>UI: {ai_response}
+            UI->>BE: {ui_to_be_operation}
+            BE-->>UI: {be_response}
+            UI-->>User: {ui_to_user_result}
+        ```
+    validations:
+      required: false
+
+  - type: markdown
+    attributes:
+      value: "## Flowchart (User Journey)"
+
+  - type: textarea
+    id: flowchart
+    attributes:
+      label: "Flowchart"
+      description: Mermaid code for the flow (flowchart TD)
+      value: |
+        ```mermaid
+        flowchart TD
+            A[Start] --> B[Step 1]
+            B --> C{Decision?}
+            C -->|Yes| D[Step if yes]
+            C -->|No| E[Step if no]
+            D --> F[End]
+            E --> F
+        ```
+    validations:
+      required: false
+
+  - type: markdown
+    attributes:
+      value: "## Use Cases"
+
+  - type: textarea
+    id: use-cases
+    attributes:
+      label: "Use Cases"
+      description: Scenario, challenge, solution and benefit
+      value: |
+        ### {Use_Case_Title}
+
+        **Scenario:** {scenario_description}
+        **Challenge:** {challenge_description}
+        **Solution:** {solution_description}
+        **Benefit:** {benefit_description}
+    validations:
+      required: false
+
+  - type: markdown
+    attributes:
+      value: "## Mockup / Prototype"
+
+  - type: textarea
+    id: mockup
+    attributes:
+      label: "Mockup or prototype code"
+      description: Code (e.g. React/Tailwind), image or link to prototype
+      placeholder: Paste component code, image or Miro/Figma prototype link...
+    validations:
+      required: false
+
+  - type: markdown
+    attributes:
+      value: "## References"
+
+  - type: textarea
+    id: references
+    attributes:
+      label: "References"
+      description: Links to relevant documentation
+      value: |
+        - [Product documentation](https://docs.example.com/)
+        - {additional_reference}
+    validations:
+      required: false

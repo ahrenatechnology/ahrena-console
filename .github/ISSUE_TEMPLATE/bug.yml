@@ -1,0 +1,110 @@
+# Installed by Ahrena: ahrena-contributing, skills/installing-issue-forms.
+# Adapted from the predecessor framework's forms. The sections map to the
+# issue-quality rule, and `Acceptance criteria` is what the traceability check reads.
+name: "Bug 🐞"
+description: "Report a defect: code, behavior, or documentation that does not match the declared specification"
+title: "{{ brief bug summary }}"
+type: Bug
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this template for defects: code, behavior, or documentation that does not match the declared specification.
+        Per Ahrena's `issue-quality` rule, every issue states why, what and how — for bugs, Why is the impact, What is the observable defect, How is the verification path.
+
+  - type: textarea
+    id: why
+    attributes:
+      label: "Why (impact)"
+      description: "Who is affected and what is the consequence? Link to incident, customer report, or failing test if applicable."
+      placeholder: "e.g. Payment confirmation emails dropped for ~2% of orders since 2026-05-09; customers re-submit payment thinking it failed."
+      value: |
+        Who is affected and what breaks?
+    validations:
+      required: true
+
+  - type: textarea
+    id: what
+    attributes:
+      label: "What (observable defect)"
+      description: "Describe what is happening vs. what should happen. Include exact error messages, log lines, or screenshots."
+      placeholder: |
+        Expected: 200 OK with confirmation_id in response.
+        Actual: 500 Internal Server Error; log line "NoneType has no attribute 'send'".
+      value: |
+        Expected behavior:
+
+        Actual behavior:
+    validations:
+      required: true
+
+  - type: textarea
+    id: how
+    attributes:
+      label: "How (reproduction + verification path)"
+      description: "Minimum steps to reproduce; environment (prod/staging/local); commit SHA if known; how a fix will be verified."
+      placeholder: |
+        Steps to reproduce:
+        1. POST /v1/payments with valid body
+        2. Wait 2s
+        3. Observe 500
+
+        Environment: production, commit abc1234, region us-east-1
+        Verification: integration test in tests/payments/test_confirmation_email.py
+      value: |
+        Steps to reproduce:
+        1.
+        2.
+        3.
+
+        Environment:
+
+        Verification:
+    validations:
+      required: true
+
+  - type: dropdown
+    id: severity
+    attributes:
+      label: "Severity"
+      description: "Select the dominant severity (a label may be applied accordingly per future governance)."
+      options:
+        - "blocker — blocks release, no workaround"
+        - "critical — broken core flow, workaround exists but painful"
+        - "major — broken non-core flow or degraded UX"
+        - "minor — visual/typo/edge case"
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance_criteria
+    attributes:
+      label: "Acceptance criteria"
+      description: "One observable behaviour per line, numbered AC-1 upward and never renumbered, so a test can name it as #<issue>/AC-<n>. End a criterion no test can decide with (checked by review)."
+      value: |
+        - AC-1: Given <the reproduction>, when <its action>, then <the expected behaviour>.
+        - AC-2: A regression test reproduces the defect, fails before the fix and passes after.
+    validations:
+      required: true
+
+  - type: textarea
+    id: left_to_other_issues
+    attributes:
+      label: "Left to other issues"
+      description: "Decisions already made, work blocked elsewhere, and parts another issue owns, each by number."
+    validations:
+      required: false
+
+  - type: textarea
+    id: additional_context
+    attributes:
+      label: "Additional Context"
+      description: "Screenshots, links, related issues, logs, or any other relevant context."
+    validations:
+      required: false
+
+  - type: markdown
+    attributes:
+      value: |
+        > To track progress, follow this issue right here on GitHub.
