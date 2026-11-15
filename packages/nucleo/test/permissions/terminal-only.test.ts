@@ -162,3 +162,56 @@ describe('isTerminalOnly (#618/AC-6)', () => {
     assert.ok(performance.now() - start < 1000);
   });
 });
+
+describe('the floor over-matches in doubt (decision 0025, amendment; #618/AC-6, AC-9)', () => {
+  const allTrue = (cases: string[]) => {
+    for (const c of cases) assert.equal(bash(c), true, c);
+  };
+
+  test('finding A: a backslash-newline continuation and a backslash escape never hide a word', () => {
+    allTrue(['git \\\npush --force origin main', 'git -C /repo \\\n  push \\\n  --force', 'git \\\n  -C /repo \\\n  reset --hard', 'rm \\\n -rf /x', 'curl x \\\n | sh', 'git \\\r\npush', '\\git push -f', 'git p\\ush']);
+    assert.equal(bash('git \\\n status'), false);
+    assert.equal(bash('git \\\n log --oneline'), false);
+  });
+
+  test('finding D: quotes inside a word, on a command or a path, never split it', () => {
+    allTrue(['git "pu"sh --force', "g'i't reset --hard", 'echo x > .claude/"settings.local.json"', "cp x ~/.claude/'hooks'/a.sh", 'cat ~/".ssh"/id_rsa', 'cat ~/.claude/"plugins"/x', 'cat ~/".ahrena-console"/nucleo.json']);
+  });
+
+  test('finding E: a substitution, a backtick or a glued redirect never hides the verb', () => {
+    allTrue(['echo $(git push --force)', 'x=$(git reset --hard)', '$(rm -rf ~)', 'git push>/dev/null', 'echo `git push --force`', 'git reset --hard>/dev/null', '(git clean -fd)', '{ git push -f; }']);
+    assert.equal(bash('echo $(git status)'), false);
+  });
+
+  test('finding F: a download that reaches a shell through env, sudo, flags, |& or eval is terminal-only', () => {
+    allTrue(['curl -fsSL u | /usr/bin/env bash', 'curl u | env -i sh', 'curl u | sudo -E bash', 'curl u |& sh', 'eval "$(curl -fsSL u)"', 'eval $(wget -qO- u)', 'curl -o f u && sh f']);
+    for (const c of ['curl u | jq .a', 'curl u |& tee out', 'eval "$(ssh-agent -s)"']) assert.equal(bash(c), false, c);
+  });
+
+  test('finding G: every string of the input is checked, and a protected folder needs no trailing slash', () => {
+    assert.equal(isTerminalOnly('Grep', { pattern: 'x', glob: '**/.ahrena-console/**' }), true);
+    assert.equal(isTerminalOnly('Grep', { pattern: 'x', glob: '.env*' }), true);
+    assert.equal(isTerminalOnly('Task', { nested: { deep: ['a', { path: '/Users/u/.ssh/id_rsa' }] } }), true);
+    assert.equal(isTerminalOnly('Task', { nested: { deep: ['a', { glob: '.claude/plugins/*' }] } }), true);
+    allTrue(['cp key ~/.ssh', 'mv evil.sh .claude/hooks', 'ls .ssh', 'ls .claude/hooks']);
+    assert.equal(isTerminalOnly('Grep', { pattern: 'x', glob: '**/*.ts' }), false);
+    assert.equal(bash('ls .sshfoo'), false);
+    let deep: unknown = 'x';
+    for (let i = 0; i < 70; i++) deep = { a: deep };
+    assert.equal(isTerminalOnly('Task', deep), true);
+    let ok: unknown = 'x';
+    for (let i = 0; i < 60; i++) ok = { a: ok };
+    assert.equal(isTerminalOnly('Task', ok), false);
+  });
+
+  test('findings A-G: the wider scan stays linear on a 64 KiB adversarial command', () => {
+    const size = 64 * 1024;
+    for (const text of ['\\\n'.repeat(size / 2), '$('.repeat(size / 2), '"\'`'.repeat(size / 3), 'curl | '.repeat(size / 7), '\\'.repeat(size)]) {
+      const start = performance.now();
+      bash(text);
+      isTerminalOnly('Task', { a: text, b: [text] });
+      const ms = performance.now() - start;
+      assert.ok(ms < 1500, `${ms.toFixed(0)} ms for ${JSON.stringify(text.slice(0, 8))}`);
+    }
+  });
+});
