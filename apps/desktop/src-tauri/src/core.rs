@@ -314,16 +314,17 @@ pub enum GrantDecision {
     Keep,
     /// The app started this core and issued a credential: the new grant replaces any previous one.
     Replace,
-    /// An adopted core the app holds no grant for, not restarted before: stop it and start it again with a fresh channel.
+    /// The core was not started by the app in this run and the run's restart is unspent: stop it and start it again with a fresh channel.
     Restart,
-    /// Hold no grant: no core answers, the core is another one with its restart already spent, or it has no pid to tell it by.
+    /// Hold no grant: no core answers, the core has no pid to tell it by, or the run's restart is already spent.
     None,
 }
 
 /// A loop turn of `follow` is not one core lifetime: `watch_core` also returns on a hiccup while the same core is up, so the grant is
 /// kept across turns while the next start reports the same core (`previous`, by pid and port), and dropped when it is another core or
-/// none answers. An adopted core the app holds no grant for is restarted once per pid (`restarted`), never in a loop (#619).
-pub fn decide_grant(previous: Option<&Core>, outcome: &Outcome, issued: bool, restarted: &[u32]) -> GrantDecision {
+/// none answers. Decision 0025 restarts only a core the app did not start in this run: that happens at most once per run
+/// (`restart_spent`, set by the first core the app starts or the first restart it attempts), never in a loop (#619).
+pub fn decide_grant(previous: Option<&Core>, outcome: &Outcome, issued: bool, restart_spent: bool) -> GrantDecision {
     let Some(core) = &outcome.core else { return GrantDecision::None };
     if issued {
         return GrantDecision::Replace;
@@ -334,17 +335,17 @@ pub fn decide_grant(previous: Option<&Core>, outcome: &Outcome, issued: bool, re
     if previous == Some(core) {
         return GrantDecision::Keep;
     }
-    match core.pid {
-        Some(pid) if !restarted.contains(&pid) => GrantDecision::Restart,
-        _ => GrantDecision::None,
+    if !restart_spent && core.pid.is_some() {
+        return GrantDecision::Restart;
     }
+    GrantDecision::None
 }
 
-/// The core the app holds a window credential for, with its grant, and the pids whose restart is spent (#619).
+/// The core the app holds a window credential for, with its grant, and whether the run's one restart is spent (#619).
 #[derive(Default)]
 pub struct Holding {
     held: Option<(Core, Grant)>,
-    restarted: Vec<u32>,
+    restart_spent: bool,
 }
 
 impl Holding {
@@ -353,22 +354,26 @@ impl Holding {
         self.held.as_ref().map(|(_, grant)| grant)
     }
 
+    /// Spends the run's restart when the app started a core (whatever the grant) or is about to restart one (#619).
+    fn note(&mut self, outcome: &Outcome, decision: &GrantDecision) {
+        if outcome.started || *decision == GrantDecision::Restart {
+            self.restart_spent = true;
+        }
+    }
+
     /// Starts (or adopts) the app's core and settles the grant: kept for the same core, replaced for a core this call started, none
-    /// otherwise. Adopting a core the app holds no grant for restarts it once, because an adopted core cannot receive a credential
-    /// (decision 0025): restarting closes open requests as `core_restarted` and rotates the owner token, as 0025 accepts (#619).
+    /// otherwise. Adopting a core the app did not start in this run restarts it once per run, because an adopted core cannot receive
+    /// a credential (decision 0025): restarting closes open requests as `core_restarted` and rotates the owner token, as 0025
+    /// accepts. A core the app started without getting a grant is never restarted later (#619).
     pub fn start(&mut self, core: &Path, data_dir: Option<&Path>) -> Outcome {
         let (mut outcome, mut grant) = start_own_core(core, data_dir);
-        let mut decision = decide_grant(self.held.as_ref().map(|(c, _)| c), &outcome, grant.is_some(), &self.restarted);
+        let mut decision = decide_grant(self.held.as_ref().map(|(c, _)| c), &outcome, grant.is_some(), self.restart_spent);
+        self.note(&outcome, &decision);
         if decision == GrantDecision::Restart {
             // Spent whatever the result: a failed stop or a second adoption gives up, it never loops.
-            self.restarted.extend(outcome.core.as_ref().and_then(|c| c.pid));
             if stop_own_core(core, data_dir) {
                 (outcome, grant) = start_own_core(core, data_dir);
-                self.restarted.extend(outcome.core.as_ref().filter(|_| !outcome.started).and_then(|c| c.pid));
-                decision = decide_grant(None, &outcome, grant.is_some(), &[]);
-                if decision == GrantDecision::Restart {
-                    decision = GrantDecision::None;
-                }
+                decision = decide_grant(None, &outcome, grant.is_some(), true);
             } else {
                 decision = GrantDecision::None;
             }
@@ -628,43 +633,56 @@ mod tests {
     #[test]
     fn a_core_the_app_started_replaces_the_grant() {
         let started = Outcome::up(Core { port: 4721, pid: Some(10) }, true);
-        assert_eq!(decide_grant(None, &started, true, &[]), GrantDecision::Replace);
+        assert_eq!(decide_grant(None, &started, true, true), GrantDecision::Replace);
         let previous = Core { port: 4720, pid: Some(9) };
-        assert_eq!(decide_grant(Some(&previous), &started, true, &[]), GrantDecision::Replace);
+        assert_eq!(decide_grant(Some(&previous), &started, true, true), GrantDecision::Replace);
     }
 
     #[test]
     fn a_turn_that_ends_against_the_same_core_keeps_its_grant() {
         let previous = Core { port: 4720, pid: Some(9) };
-        assert_eq!(decide_grant(Some(&previous), &adopted(4720, 9), false, &[]), GrantDecision::Keep);
-        // Even after a restart was spent on that pid: the same core never restarts.
-        assert_eq!(decide_grant(Some(&previous), &adopted(4720, 9), false, &[9]), GrantDecision::Keep);
+        assert_eq!(decide_grant(Some(&previous), &adopted(4720, 9), false, true), GrantDecision::Keep);
+        assert_eq!(decide_grant(Some(&previous), &adopted(4720, 9), false, false), GrantDecision::Keep);
     }
 
     #[test]
-    fn a_different_core_on_the_same_port_or_pid_is_not_the_held_one() {
+    fn a_different_core_than_the_held_one_never_restarts_once_the_app_started_a_core() {
         let previous = Core { port: 4720, pid: Some(9) };
-        assert_eq!(decide_grant(Some(&previous), &adopted(4720, 10), false, &[]), GrantDecision::Restart, "another pid on the port");
-        assert_eq!(decide_grant(Some(&previous), &adopted(4799, 9), false, &[]), GrantDecision::Restart, "the pid on another port");
+        assert_eq!(decide_grant(Some(&previous), &adopted(4720, 10), false, true), GrantDecision::None, "another pid on the port");
+        assert_eq!(decide_grant(Some(&previous), &adopted(4799, 9), false, true), GrantDecision::None, "the pid on another port");
     }
 
     #[test]
-    fn an_adopted_core_the_app_holds_no_grant_for_is_restarted_once() {
-        assert_eq!(decide_grant(None, &adopted(4720, 9), false, &[]), GrantDecision::Restart);
-        assert_eq!(decide_grant(None, &adopted(4720, 9), false, &[9]), GrantDecision::None, "once per pid");
-        assert_eq!(decide_grant(None, &adopted(4720, 9), false, &[3, 9]), GrantDecision::None);
-        assert_eq!(decide_grant(None, &adopted(4720, 11), false, &[9]), GrantDecision::Restart, "another pid has its own restart");
+    fn the_first_adoption_of_the_run_is_restarted_and_a_later_one_is_not() {
+        assert_eq!(decide_grant(None, &adopted(4720, 9), false, false), GrantDecision::Restart, "the first adoption at open");
+        assert_eq!(decide_grant(None, &adopted(4720, 11), false, true), GrantDecision::None, "another pid later in the run");
+        assert_eq!(decide_grant(None, &adopted(4720, 9), false, true), GrantDecision::None, "the same pid after the restart was spent");
     }
 
     #[test]
-    fn nothing_is_restarted_without_a_pid_or_a_core_and_a_started_core_without_a_credential_gets_none() {
-        let demo = Outcome::up(Core { port: 4797, pid: None }, false);
-        assert_eq!(decide_grant(None, &demo, false, &[]), GrantDecision::None);
-        assert_eq!(decide_grant(None, &Outcome::stopped("x"), false, &[]), GrantDecision::None);
-        let previous = Core { port: 4720, pid: Some(9) };
-        assert_eq!(decide_grant(Some(&previous), &Outcome::stopped("x"), false, &[]), GrantDecision::None, "no core answers: the grant is dropped");
+    fn a_started_core_without_a_credential_is_not_restarted_when_the_next_turn_adopts_it() {
         let started = Outcome::up(Core { port: 4721, pid: Some(10) }, true);
-        assert_eq!(decide_grant(None, &started, false, &[]), GrantDecision::None, "the credential could not be written");
+        assert_eq!(decide_grant(None, &started, false, false), GrantDecision::None, "the credential could not be written");
+        // Holding::start records the start as the run's restart: the next turn adopts the same pid with nothing held.
+        let mut holding = Holding::default();
+        holding.note(&started, &GrantDecision::None);
+        assert_eq!(decide_grant(None, &adopted(4721, 10), false, holding.restart_spent), GrantDecision::None);
+    }
+
+    #[test]
+    fn a_restart_attempt_spends_the_runs_restart() {
+        let mut holding = Holding::default();
+        holding.note(&adopted(4720, 9), &GrantDecision::Restart);
+        assert!(holding.restart_spent);
+    }
+
+    #[test]
+    fn nothing_is_restarted_without_a_pid_or_a_core() {
+        let demo = Outcome::up(Core { port: 4797, pid: None }, false);
+        assert_eq!(decide_grant(None, &demo, false, false), GrantDecision::None);
+        assert_eq!(decide_grant(None, &Outcome::stopped("x"), false, false), GrantDecision::None);
+        let previous = Core { port: 4720, pid: Some(9) };
+        assert_eq!(decide_grant(Some(&previous), &Outcome::stopped("x"), false, true), GrantDecision::None, "no core answers: the grant is dropped");
     }
 
     #[test]

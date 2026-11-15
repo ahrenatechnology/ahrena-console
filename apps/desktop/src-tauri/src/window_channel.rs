@@ -95,6 +95,8 @@ impl ChildEnd {
 /// right after creating the pair, not atomically with it, so a child spawned by another thread in that instant could inherit the app's
 /// end. That is acceptable (#619): such a child would be the peer's last owner of that end and the one writing on it, so the core
 /// would check that child's cdhash against the installed app's and refuse; and the children the app spawns are trusted binaries.
+/// A stray child that only holds the app's end delays the revocation-by-close until it exits, because the core sees EOF only when the
+/// last holder of that end is gone (#619).
 pub fn open() -> io::Result<(UnixStream, ChildEnd)> {
     let (app, child) = UnixStream::pair()?;
     Ok((app, ChildEnd(OwnedFd::from(child))))
