@@ -88,7 +88,7 @@ async function boot(options: BootOptions = {}) {
   };
 }
 
-type Body = { machine: string; alertId: string; kind: string; takenAt: string; sections: Array<{ id: string; status: string; items: Array<Record<string, unknown>>; reason?: string; partial?: unknown }> };
+type Body = { machine: string; alertId: string; kind: string; takenAt: string; sections: Array<{ id: string; status: string; items: Array<Record<string, unknown>>; reason?: string; partial?: unknown; worktrees?: unknown }> };
 const ok = (r: Response) => r.json() as Promise<Body>;
 
 /** A fake Workstation núcleo: records the paths it was asked and answers as scripted. */
@@ -300,6 +300,21 @@ describe('#565 GET /api/diagnosis: this machine', () => {
         }
       }
       assert.deepEqual([...seen].sort(), [...SECTION_IDS].sort());
+    } finally {
+      await close();
+    }
+  });
+
+  test('#566 Given the known-caches section came with the worktrees facts, When asked, Then the section carries them and its items keep their keys', async () => {
+    const worktrees = { oldAfterDays: 14, root: '~/Workspace' };
+    const { tracker, get, close } = await boot({ collect: async (id) => (id === 'known-caches' ? { items: SECTION_DATA[id], worktrees } : SECTION_DATA[id]) });
+    try {
+      tracker.update('local', [alert('volume-full:/', 'volume-full')]);
+      const d = await ok(await get('?machine=local&alert=volume-full%3A%2F'));
+      const caches = d.sections.find((s) => s.id === 'known-caches')!;
+      assert.deepEqual(caches.worktrees, worktrees);
+      assert.equal(caches.items.length, 3);
+      assert.ok(d.sections.filter((s) => s.id !== 'known-caches').every((s) => !('worktrees' in s)));
     } finally {
       await close();
     }
@@ -521,6 +536,41 @@ describe('#565 GET /api/diagnosis: the Workstation, through the tunnel', () => {
     assert.equal(a.status, 200);
     assert.deepEqual(a.body.sections[0], { id: 'largest-folders', status: 'ok', items: [{ path: '/var/lib', bytes: 900 }] });
     assert.deepEqual(a.body.sections[1], { id: 'docker-df', status: 'timeout', items: [] });
+  });
+
+  const cachesWith = (extra: Record<string, unknown>) => withSection(2, { id: 'known-caches', status: 'ok', items: [{ id: 'npm', path: '/home/u/.npm', bytes: 50, actionId: 'npm-cache' }], ...extra });
+
+  test('#566 Given the Workstation core answers the worktrees facts, When asked, Then the Mac keeps them on the section', async () => {
+    const a = await askWorkstation(cachesWith({ worktrees: { oldAfterDays: 14, root: '~/Workspace' } }));
+    assert.equal(a.status, 200);
+    assert.deepEqual(a.body.sections[2]!.worktrees, { oldAfterDays: 14, root: '~/Workspace' });
+    const none = await askWorkstation(cachesWith({ worktrees: { oldAfterDays: 14, root: null } }));
+    assert.deepEqual(none.body.sections[2]!.worktrees, { oldAfterDays: 14, root: null });
+  });
+
+  test('#566 Given an old Workstation core answers known-caches without the worktrees facts, When asked, Then 200 and the section has none', async () => {
+    const a = await askWorkstation(diagnosisBody());
+    assert.equal(a.status, 200);
+    assert.ok(!('worktrees' in a.body.sections[2]!));
+  });
+
+  test('#566 Given the Workstation core answers worktrees facts that are malformed or carry an extra key, When asked, Then the facts are rebuilt or dropped, never passed through', async () => {
+    const extra = await askWorkstation(cachesWith({ worktrees: { oldAfterDays: 14, root: '~/Workspace', secret: 'x' } }));
+    assert.deepEqual(extra.body.sections[2]!.worktrees, { oldAfterDays: 14, root: '~/Workspace' });
+    for (const bad of [{ oldAfterDays: '14', root: null }, { oldAfterDays: 0, root: null }, { oldAfterDays: 14, root: 3 }, { oldAfterDays: 14 }, 'x', null, []]) {
+      const a = await askWorkstation(cachesWith({ worktrees: bad }));
+      assert.equal(a.status, 200);
+      assert.ok(!('worktrees' in a.body.sections[2]!), JSON.stringify(bad));
+    }
+  });
+
+  test('#566 Given the Workstation core answers worktrees facts on a section that is not known-caches or not ok, When asked, Then they do not come back', async () => {
+    const facts = { oldAfterDays: 14, root: null };
+    const folders = await askWorkstation(withSection(0, { id: 'largest-folders', status: 'ok', items: [{ path: '/var/lib', bytes: 900 }], worktrees: facts }));
+    assert.ok(!('worktrees' in folders.body.sections[0]!));
+    const down = await askWorkstation(cachesWith({ status: 'unavailable', items: [], worktrees: facts }));
+    assert.equal(down.status, 200);
+    assert.ok(!('worktrees' in down.body.sections[2]!));
   });
 
   test('#565/AC-5 Given the Workstation core answers a takenAt that is not a date, When asked, Then 502 bad-response', async () => {

@@ -45,6 +45,7 @@ import {
   type SectionStatus,
   type SwapItem,
   type WorktreeItem,
+  type WorktreesInfo,
 } from '../diagnosis/model.ts';
 import { LOCAL_MACHINE_ID, MACHINE_ID, type AlertKind } from '../telemetry/model.ts';
 import type { RemoteGet } from '../telemetry/ports.ts';
@@ -179,6 +180,12 @@ function readCache(v: unknown): CacheItem | WorktreeItem | null {
   if (!isCacheActionId(v.actionId)) return null;
   return { id: v.id, path: v.path, bytes: v.bytes, actionId: v.actionId };
 }
+/** The worktrees facts of an `ok` `known-caches` section, rebuilt from the two documented fields; `null` when absent or malformed, because the screen does not need them to draw the section (#566). */
+function readWorktrees(v: unknown): WorktreesInfo | null {
+  if (!isRecord(v) || !isNumber(v.oldAfterDays) || !Number.isInteger(v.oldAfterDays) || v.oldAfterDays < 1) return null;
+  if (v.root !== null && !isString(v.root)) return null;
+  return { oldAfterDays: v.oldAfterDays, root: v.root };
+}
 function readJournal(v: unknown): JournalItem | null {
   if (!isRecord(v) || !isNumber(v.bytes)) return null;
   return { bytes: v.bytes };
@@ -215,6 +222,10 @@ function readSection<K extends SectionId>(id: K, status: SectionStatus, s: Recor
   const section: SectionOf<K> = { id, status, items } as SectionOf<K>;
   if (status !== 'ok' && typeof s.reason === 'string') section.reason = capReason(s.reason);
   if (status === 'ok' && isRecord(s.partial) && typeof s.partial.reason === 'string') section.partial = { reason: capReason(s.partial.reason) };
+  if (status === 'ok' && id === 'known-caches') {
+    const worktrees = readWorktrees(s.worktrees);
+    if (worktrees) section.worktrees = worktrees;
+  }
   return section;
 }
 

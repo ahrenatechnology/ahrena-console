@@ -25,8 +25,15 @@ The read behind the diagnosis of a saturation alert (epic #563; wireframe screen
 }
 ```
 
+A `known-caches` section that is `ok` also carries `worktrees` (#566):
+
+```json
+{ "id": "known-caches", "status": "ok", "items": [], "worktrees": { "oldAfterDays": 14, "root": "~/Workspace" } }
+```
+
 - `kind` is the alert's kind: `load-high`, `memory-high`, `swap-high` or `volume-full`.
 - A section is `{ id, status, items }` plus `reason` (a short text, at most 120 characters) when `status` is not `ok`, and `partial` (`{ reason }`) when the section is `ok` but was read only in part.
+- `worktrees` (#566) is `{ oldAfterDays, root }`, only on a `known-caches` section that is `ok`, so the screen words "sem uso há mais de 14 dias, em ~/Workspace" from what the core served and guesses neither. `oldAfterDays` is the age limit in whole days after which a worktree counts as old. `root` is the longest folder that is a parent of every worktree root the core searched, cut at a folder boundary, with this core's home folder written as `~` (`~/Workspace`); it is `null` when no root was searched or the roots share nothing but the filesystem root. The field is optional for a consumer: a núcleo older than #566 does not send it, and a remote answer whose `worktrees` is malformed comes through without it, never as `bad-response`.
 - `status` is `ok`, `unavailable` (the tool is missing or failed) or `timeout` (the collection passed its limit). An `unavailable` or `timeout` section has no items and never fails the others.
 
 ### Sections
