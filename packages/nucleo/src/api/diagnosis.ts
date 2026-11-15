@@ -16,6 +16,8 @@
  * against the alerts the tracker holds open (the use case, src/diagnosis/diagnose.ts, takes the mount from
  * the open alert). The query is decoded once, by `URLSearchParams`.
  *
+ * The local-or-remote reading is `createDiagnosisReader`, which the delegation (api/delegations.ts, #567) reuses.
+ *
  * A remote machine is asked the same route through its tunnel port, as `machine=local` and the id of the
  * open alert encoded again for the wire; its answer is re-projected before it is returned, as the machine
  * asked for.
@@ -72,66 +74,103 @@ export function respondDiagnosisUnsupported(res: ServerResponse): void {
   send(res, 501, UNSUPPORTED);
 }
 
-type Query = { machine: string; alertId: string } | string;
+export type DiagnosisQuery = { machine: string; alertId: string } | string;
 
-/** `machine` and `alert` exactly once each; the error message when one is missing or invalid. */
-function readQuery(params: URLSearchParams): Query {
+/** `machine` and `alert` exactly once each; the error message when one is missing or invalid. Shared with the delegation preview (#567). */
+export function readDiagnosisQuery(params: URLSearchParams): DiagnosisQuery {
   const machines = params.getAll('machine');
   const machine = machines[0];
   if (machines.length !== 1 || machine === undefined || !MACHINE_ID.test(machine)) return 'machine inválida: informe uma vez, com letras minúsculas, números e hífen';
   const alert = params.getAll('alert');
   const alertId = alert[0] ?? '';
-  if (alert.length !== 1 || alertId === '' || alertId.length > ALERT_ID_MAX || /[\u0000-\u001f\u007f]/.test(alertId)) return `alert inválido: informe uma vez o id de um alerta aberto, com até ${ALERT_ID_MAX} caracteres`;
+  if (alert.length !== 1 || !isAlertIdParam(alertId)) return `alert inválido: informe uma vez o id de um alerta aberto, com até ${ALERT_ID_MAX} caracteres`;
   return { machine, alertId };
 }
 
-export function createDiagnosisRoute(o: DiagnosisRouteOptions): DiagnosisRoute {
+/** Whether `alertId` is an id the diagnosis query accepts; the delegation body follows the same rule (#567). */
+export function isAlertIdParam(alertId: unknown): alertId is string {
+  return typeof alertId === 'string' && alertId !== '' && alertId.length <= ALERT_ID_MAX && !/[\u0000-\u001f\u007f]/.test(alertId);
+}
+
+/** What reading one machine's diagnosis ends in; the route maps each to its status, the delegation port to its answer (#567). */
+export type DiagnosisReading =
+  | { kind: 'ok'; diagnosis: Diagnosis }
+  | { kind: 'unknown-machine' }
+  | { kind: 'alert-not-open' }
+  | { kind: 'not-diagnosable' }
+  | { kind: 'unsupported' }
+  | { kind: 'unreachable' }
+  | { kind: 'bad-response' };
+
+export type DiagnosisReader = (machine: string, alertId: string) => Promise<DiagnosisReading>;
+
+/** The local diagnosis, or the remote machine's through its tunnel: one reader for the route and for the delegation (#567). */
+export function createDiagnosisReader(o: DiagnosisRouteOptions): DiagnosisReader {
   const log = o.log ?? (() => {});
   const local = o.local;
 
-  async function diagnoseHere(res: ServerResponse, machine: string, alertId: string): Promise<void> {
-    if (!local) return respondDiagnosisUnsupported(res);
-    const r = await diagnose({ machine, alertId }, { ...local, alerts: o.alerts, isKnownMachine: (id) => id === LOCAL_MACHINE_ID });
-    if (r.kind === 'ok') return send(res, 200, r.diagnosis);
-    if (r.kind === 'unknown-machine') return unknownMachine(res, machine);
-    if (r.kind === 'alert-not-open') return alertNotOpen(res);
-    return notDiagnosable(res);
+  async function readHere(machine: string, alertId: string): Promise<DiagnosisReading> {
+    if (!local) return { kind: 'unsupported' };
+    return diagnose({ machine, alertId }, { ...local, alerts: o.alerts, isKnownMachine: (id) => id === LOCAL_MACHINE_ID });
   }
 
-  async function diagnoseThere(res: ServerResponse, machine: string, port: number, remote: NonNullable<DiagnosisRouteOptions['remote']>, alertId: string): Promise<void> {
+  async function readThere(machine: string, port: number, remote: NonNullable<DiagnosisRouteOptions['remote']>, alertId: string): Promise<DiagnosisReading> {
     // The Mac validates against what it tracks for the machine, and sends the id of that open alert, never the query's text.
     const open = o.alerts.active(machine).find((a) => a.id === alertId);
-    if (!open) return alertNotOpen(res);
-    if (!isDiagnosable(open.kind)) return notDiagnosable(res);
+    if (!open) return { kind: 'alert-not-open' };
+    if (!isDiagnosable(open.kind)) return { kind: 'not-diagnosable' };
     const r = await remote.get(port, `${DIAGNOSIS_ROUTE}?machine=${LOCAL_MACHINE_ID}&alert=${encodeURIComponent(open.id)}`);
     if (r.kind === 'unreachable') {
       log(`diagnosis: ${machine} did not answer: ${r.reason}`);
-      return send(res, 502, { error: 'a máquina não respondeu', reason: 'unreachable' });
+      return { kind: 'unreachable' };
     }
     const body = r.body;
     if (r.status === 200) {
       const remoteDiagnosis = readDiagnosis(body, open.id, open.kind);
-      if (remoteDiagnosis) return send(res, 200, { machine, alertId: open.id, kind: open.kind, ...remoteDiagnosis } satisfies Diagnosis);
+      if (remoteDiagnosis) return { kind: 'ok', diagnosis: { machine, alertId: open.id, kind: open.kind, ...remoteDiagnosis } satisfies Diagnosis };
     } else if (r.status === 501 && isRecord(body) && body.error === UNSUPPORTED.error) {
-      return respondDiagnosisUnsupported(res);
+      return { kind: 'unsupported' };
     } else if (r.status === 404 || r.status === 405) {
       // A núcleo that has the route says why in `reason`; one that has not answers its own 404 (or 405): an old núcleo.
-      if (r.status === 404 && isRecord(body) && body.reason === 'alert-not-open') return alertNotOpen(res);
-      return respondDiagnosisUnsupported(res);
+      if (r.status === 404 && isRecord(body) && body.reason === 'alert-not-open') return { kind: 'alert-not-open' };
+      return { kind: 'unsupported' };
     }
     log(`diagnosis: ${machine} answered ${r.status}, not a diagnosis`);
-    return send(res, 502, { error: 'resposta inesperada da máquina', reason: 'bad-response' });
+    return { kind: 'bad-response' };
   }
 
+  return async (machine, alertId) => {
+    if (machine === LOCAL_MACHINE_ID) return readHere(machine, alertId);
+    const port = o.remote?.port(machine);
+    if (!o.remote || port === undefined) return { kind: 'unknown-machine' };
+    return readThere(machine, port, o.remote, alertId);
+  };
+}
+
+export function createDiagnosisRoute(o: DiagnosisRouteOptions): DiagnosisRoute {
+  const read = createDiagnosisReader(o);
   return async (req, res, url) => {
     req.resume();
     if (req.method !== 'GET') return send(res, 405, { error: 'use GET' });
-    const query = readQuery(url.searchParams);
+    const query = readDiagnosisQuery(url.searchParams);
     if (typeof query === 'string') return send(res, 400, { error: query });
-    if (query.machine === LOCAL_MACHINE_ID) return diagnoseHere(res, query.machine, query.alertId);
-    const port = o.remote?.port(query.machine);
-    if (!o.remote || port === undefined) return unknownMachine(res, query.machine);
-    return diagnoseThere(res, query.machine, port, o.remote, query.alertId);
+    const r = await read(query.machine, query.alertId);
+    switch (r.kind) {
+      case 'ok':
+        return send(res, 200, r.diagnosis);
+      case 'unknown-machine':
+        return unknownMachine(res, query.machine);
+      case 'alert-not-open':
+        return alertNotOpen(res);
+      case 'not-diagnosable':
+        return notDiagnosable(res);
+      case 'unsupported':
+        return respondDiagnosisUnsupported(res);
+      case 'unreachable':
+        return send(res, 502, { error: 'a máquina não respondeu', reason: 'unreachable' });
+      case 'bad-response':
+        return send(res, 502, { error: 'resposta inesperada da máquina', reason: 'bad-response' });
+    }
   };
 }
 

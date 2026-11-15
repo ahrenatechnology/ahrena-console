@@ -17,7 +17,7 @@ import { SqliteRuntimeStore } from '../runtime/sqlite.ts';
 import { execFile, execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, realpathSync, rmSync } from 'node:fs';
 import type { AddressInfo } from 'node:net';
-import { tmpdir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { HELP, parseApiOptions } from './cli-options.ts';
@@ -149,7 +149,11 @@ import { ancestorsWith, listPortsWith, PortReleaser } from '../ports/release.ts'
 import { systemRunner } from '../telemetry/adapters/system.ts';
 import { createCloudsRoute } from './clouds.ts';
 import { createDockerRoute } from './docker.ts';
-import { createDiagnosisRoute } from './diagnosis.ts';
+import { createDiagnosisReader, createDiagnosisRoute, type DiagnosisRouteOptions } from './diagnosis.ts';
+import { createDelegationsRoute, delegationDiagnosis } from './delegations.ts';
+import { createDelegationLauncher } from './delegation-launch.ts';
+import { createPreviewStore } from '../delegation/preview-store.ts';
+import { LOCAL_MACHINE_ID } from '../telemetry/model.ts';
 import { knownFolders } from './new-session.ts';
 import { diagnosisCollectorFor, systemDiagnosisDeps, worktreeRootsOf } from '../diagnosis/adapters/system.ts';
 import { LARGEST_FOLDERS_BUDGET_MS } from '../diagnosis/adapters/common.ts';
@@ -753,13 +757,30 @@ const docker =
     : null;
 // The diagnosis of an open saturation alert (#565): this machine's collectors (read-only, fixed commands) and the remote machines' through their tunnel port. Not in --demo, where the readings are synthetic.
 const diagnosisCollector = demo ? null : diagnosisCollectorFor(process.platform, systemDiagnosisDeps(async () => worktreeRootsOf((await knownFolders(storage)).map((f) => f.path)), log));
-const diagnosis = createDiagnosisRoute({
+const diagnosisOptions: DiagnosisRouteOptions = {
   alerts: alertTracker,
   local: diagnosisCollector ? { collect: diagnosisCollector, platform: process.platform === 'darwin' ? 'darwin' : 'linux', log, now: () => new Date().toISOString(), sectionTimeoutMs: LARGEST_FOLDERS_BUDGET_MS + 3_000 } : null,
   // The remote núcleo answers once its own sections end (at most the section timeout), so the tunnel read waits a little longer.
   remote: { port: (id) => remoteMachines?.get(id)?.port, get: loopbackGet({ timeoutMs: LARGEST_FOLDERS_BUDGET_MS + 15_000, proof: remoteProofs }) },
   log,
-});
+};
+const diagnosis = createDiagnosisRoute(diagnosisOptions);
+// #567 "Delegar ao Claude": the prompt of an open alert and its diagnosis (the same reader as the route above), opened in the Claude Desktop, a terminal on this Mac
+// #567 or over SSH on the Workstation. The handoff files go in a private folder of the data folder, next to the terminal opener's. Not in --demo, where the diagnosis is not.
+const delegations = demo
+  ? null
+  : createDelegationsRoute(
+      {
+        alerts: alertTracker,
+        isKnownMachine: (id) => id === LOCAL_MACHINE_ID || remoteMachines?.get(id) !== undefined,
+        diagnosis: delegationDiagnosis(createDiagnosisReader(diagnosisOptions)),
+        launcher: createDelegationLauncher({ dir: join(dataDir, 'delegation-handoff'), openInDesktop }),
+        previews: createPreviewStore(),
+        localFolder: homedir,
+        now: () => new Date().toISOString(),
+      },
+      log,
+    );
 // The desktop app's update notice (#330): the app reports what it found; the /ui reads it. Not in --demo.
 const appUpdate = demo ? null : createAppUpdateRoute(new AppUpdateState(changes));
 
@@ -842,6 +863,7 @@ const api: LocalApi = await startLocalApi({
   agentConfig,
   telemetry: telemetryService,
   diagnosis,
+  delegations,
   machineReader: new MachineReader({ get: loopbackGet({ timeoutMs: MACHINE_READ_ADAPTER_TIMEOUT_MS, proof: remoteProofs }), machines: () => remoteMachines?.list() ?? [], connectionOf: (id) => machineConnection?.status(id) ?? null }),
   reconnect: machineConnection?.legacy ?? reconnectRunner,
   machineConnection: machineConnection ? createConnectionRoute(machineConnection) : null,

@@ -49,6 +49,7 @@ import type { ManagedRuntime } from '../runtime/service.ts';
 // | `GET /api/machines`           | The machines: this one and the remote ones, with state and alerts (api/telemetry.ts, #175) |
 // | `GET /api/telemetry`          | One machine's telemetry: current reading, series and alerts (`?machine=`, `?hours=1|12`; #175) |
 // | `GET /api/diagnosis`        | What consumes the resource an open saturation alert names, read-only; a remote machine's through its tunnel (`?machine=`, `?alert=`; api/diagnosis.ts, src/diagnosis, #565) |
+// | `GET /api/delegations/preview` and `POST /api/delegations` | Hand an open alert to a new Claude session: the prompt as it will be sent, then opening it in the Claude Desktop, a terminal, or over SSH on the Workstation (`?machine=`, `?alert=`; `{ machine, alertId, via, takenAt }`; api/delegations.ts, src/delegation, #567) |
 // | `POST /api/machines/<id>/reconnect` and `DELETE` | Reconnect a remote machine with the command of machines.json, and Cancel (api/telemetry.ts, #244) |
 // | `GET /api/sessions/<id>/messaging`, `POST /api/sessions/<id>/messages` and `GET /api/sessions/<id>/messages/<messageId>` | Send a message a person typed in the /ui to the session's live process, through Claude Code's cross-session inbox, and read its state (api/messaging.ts, src/messaging, #61) |
 // | `POST /api/terminals/<id>/actions/<action>` | Interrupt a terminal's foreground command or end its session, by ids (api/terminals.ts, #350) |
@@ -136,6 +137,7 @@ import { FRAMEWORK_INSTALL_ROUTE, frameworkInstallWriteFromSameOrigin, type Fram
 import { ADRS_ROUTE, PDRS_ROUTE, type DecisionsRoute } from './adrs.ts';
 import { DEV_CONSOLE_ROUTE, respondDevConsole, type DevConsole } from './dev-console.ts';
 import { DIAGNOSIS_ROUTE, respondDiagnosisUnsupported, type DiagnosisRoute } from './diagnosis.ts';
+import { DELEGATIONS_PREVIEW_ROUTE, DELEGATIONS_ROUTE, respondDelegationsUnsupported, type DelegationsRoute } from './delegations.ts';
 import { isTelemetryRoute, reconnectFromSameOrigin, RECONNECT_ROUTE, respondReconnect, respondTelemetry } from './telemetry.ts';
 import type { ReconnectControl } from '../telemetry/reconnect.ts';
 import type { TelemetryService } from '../telemetry/service.ts';
@@ -261,6 +263,8 @@ export interface ApiOptions {
   machineReader?: MachineReader | null;
   /** The diagnosis of an open alert (#565, api/diagnosis.ts); without it, `GET /api/diagnosis` gives 501 `diagnosis-unsupported`. */
   diagnosis?: DiagnosisRoute | null;
+  /** The delegation of an open alert to a Claude session (#567, api/delegations.ts); without it, both routes give 501 `delegation-unsupported`. */
+  delegations?: DelegationsRoute | null;
   /** The reconnect of the remote machines (#244); without it, `POST /api/machines/<id>/reconnect` gives 404 or 409. */
   reconnect?: ReconnectControl | null;
   /** Sending a message to a live session (api/messaging.ts, #61); without it, those routes give 404. */
@@ -354,6 +358,9 @@ const MAX_BODY = 4096;
 
 /** Our own `/ui` reading: a same-origin `GET`. */
 const sameOriginRead = (req: IncomingMessage, port: number): boolean => req.method === 'GET' && fromOwnUi(req, port);
+
+/** #567 "Delegar ao Claude": only `POST /api/delegations`, the exact raw path, from the same origin. */
+const sameOriginDelegations = (req: IncomingMessage, port: number): boolean => req.method === 'POST' && req.url === DELEGATIONS_ROUTE && fromOwnUi(req, port);
 
 /**
  * The Detail's "Abrir no Claude Desktop": only `POST /open/<local_…>` from the same origin, with the raw URL exactly like that (no query, no `..`). The rest of decision 0003
@@ -625,7 +632,7 @@ export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
       req.resume();
       return send(res, 403, { error: 'forbidden' });
     }
-    if (!allowedLocalRequest(req, port) && !sameOriginRead(req, port) && !sameOriginOpen(req, port) && !sameOriginSessionOpen(req, port) && !sameOriginNewSession(req, port) && !sameOriginWorkPlan(req, port) && !sameOriginWorkRun(req, port) && !sameOriginWorkQueue(req, port) && !sameOriginWorkIssueWrite(req, port) && !mesmaOrigemMovendo(req, port) && !sameOriginDecision(req, port) && !agentConfigWriteFromSameOrigin(req, port) && !frameworkInstallWriteFromSameOrigin(req, port) && !reconnectFromSameOrigin(req, port) && !messagesWriteFromSameOrigin(req, port) && !transcriptionWriteFromSameOrigin(req, port) && !cloudsWriteFromSameOrigin(req, port) && !connectionWriteFromSameOrigin(req, port) && !coreUpdateWriteFromSameOrigin(req, port) && !ownerProofRetryFromSameOrigin(req, port) && !ordersWriteFromSameOrigin(req, port) && !appUpdateWriteFromSameOrigin(req, port)) return send(res, 403, { error: 'origem não permitida' });
+    if (!allowedLocalRequest(req, port) && !sameOriginRead(req, port) && !sameOriginOpen(req, port) && !sameOriginSessionOpen(req, port) && !sameOriginNewSession(req, port) && !sameOriginWorkPlan(req, port) && !sameOriginDelegations(req, port) && !sameOriginWorkRun(req, port) && !sameOriginWorkQueue(req, port) && !sameOriginWorkIssueWrite(req, port) && !mesmaOrigemMovendo(req, port) && !sameOriginDecision(req, port) && !agentConfigWriteFromSameOrigin(req, port) && !frameworkInstallWriteFromSameOrigin(req, port) && !reconnectFromSameOrigin(req, port) && !messagesWriteFromSameOrigin(req, port) && !transcriptionWriteFromSameOrigin(req, port) && !cloudsWriteFromSameOrigin(req, port) && !connectionWriteFromSameOrigin(req, port) && !coreUpdateWriteFromSameOrigin(req, port) && !ownerProofRetryFromSameOrigin(req, port) && !ordersWriteFromSameOrigin(req, port) && !appUpdateWriteFromSameOrigin(req, port)) return send(res, 403, { error: 'origem não permitida' });
     // The Project list spends GitHub quota and the connection status is the /ui's: another site's page
     // never gets either, connected or not (#241 review 2).
     // #465 the work board reads the Project the same way.
@@ -653,6 +660,7 @@ export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
     if (url.pathname === WORK_ISSUE_OPTIONS_ROUTE) return workIssueOptions(req, res, url);
     if (url.pathname === WORK_ISSUE_ROUTE) return workIssueRoute(req, res, url);
     if (url.pathname === WORK_PLAN_ROUTE) return workPlan(req, res);
+    if (url.pathname === DELEGATIONS_ROUTE) return opts.delegations ? opts.delegations(req, res, url) : respondDelegationsUnsupported(req, res);
     if (url.pathname === WORK_RUN_ROUTE) return workRun(req, res);
     if (url.pathname === WORK_QUEUE_ROUTE || url.pathname === WORK_QUEUE_ORDER_ROUTE || url.pathname === WORK_QUEUE_RETRY_ROUTE) return workQueue(req, res);
     if (opts.agentConfig && (url.pathname === AGENT_CONFIG_ROUTE || url.pathname.startsWith(`${AGENT_CONFIG_ROUTE}/`))) return opts.agentConfig(req, res, url);
@@ -693,6 +701,7 @@ export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
     if (opts.agentInstructions && url.pathname.startsWith(`${AGENT_INSTRUCTIONS_ROUTE}/`)) return opts.agentInstructions(res, url);
     if (opts.decisions && [ADRS_ROUTE, PDRS_ROUTE].some((r) => url.pathname === r || url.pathname.startsWith(`${r}/`))) return opts.decisions(res, url);
     if (url.pathname === DEV_CONSOLE_ROUTE && opts.devConsole) return respondDevConsole(res, url, opts.devConsole);
+    if (url.pathname === DELEGATIONS_PREVIEW_ROUTE) return opts.delegations ? opts.delegations(req, res, url) : respondDelegationsUnsupported(req, res);
     if (url.pathname === DIAGNOSIS_ROUTE) return opts.diagnosis ? opts.diagnosis(req, res, url) : respondDiagnosisUnsupported(res);
     if (isTelemetryRoute(url.pathname)) return respondTelemetry(res, url, opts.telemetry);
     if (isToolsRoute(url.pathname)) return respondTools(res, url, opts.tools);
