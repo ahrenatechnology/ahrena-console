@@ -141,7 +141,7 @@
       "mode": "upsert-with-history",
       "createdIn": "packages/nucleo/src/permissions/adapters/migration.ts",
       "history": "permission-audit.jsonl",
-      "note": "one row per request, updated forward only (pending, answered, then a settled state) inside one BEGIN IMMEDIATE transaction; every step is a line of the audit file permission-audit.jsonl (a file in the data folder, not a table), and a deny reason is nulled in the row once the request settled more than 10 minutes ago"
+      "note": "one row per request, updated forward only (pending, answered, then a settled state) inside one BEGIN IMMEDIATE transaction; every step is a line of the audit file permission-audit.jsonl (a file in the data folder, not a table), and a deny reason is nulled in the row at the first listing, expiry sweep or core start after the request settled more than 10 minutes ago"
     }
   }
 }

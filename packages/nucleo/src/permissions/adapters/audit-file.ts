@@ -18,6 +18,9 @@ const MAX_FIELD_CHARS = 128;
 /** A text field of the record, cut: ids and names come from callers, so they are data. (#618) */
 const text = (value: unknown): string | undefined => (typeof value === 'string' ? value.slice(0, MAX_FIELD_CHARS) : undefined);
 
+/** Which record a lost line was: its event and request id, cut as the line cuts them, and nothing else of it. (#618) */
+const whichRecord = (record: PermissionAuditRecord): string => ` event=${text(record.event) ?? '-'} requestId=${text(record.requestId) ?? '-'}`;
+
 const codeOf = (error: unknown): string => (error as NodeJS.ErrnoException).code ?? 'error';
 
 export class PermissionAuditFile implements PermissionAudit {
@@ -36,7 +39,7 @@ export class PermissionAuditFile implements PermissionAudit {
       chmodSync(this.dataDir, 0o700);
       appendThroughDescriptor(join(this.dataDir, PERMISSION_AUDIT_FILE), `${JSON.stringify(this.lineOf(record))}\n`);
     } catch (e) {
-      this.log(`permission audit: could not write (${codeOf(e)})`);
+      this.log(`permission audit: could not write (${codeOf(e)})${whichRecord(record)}`);
     }
   }
 
@@ -54,7 +57,7 @@ export class PermissionAuditFile implements PermissionAudit {
       decision: text(record.decision),
       answeredBy: text(record.answeredBy),
       channel: text(record.channel),
-      reasonHmac: this.reasonHmac(record.reason),
+      reasonHmac: this.reasonHmac(record),
       settledBy: text(record.settledBy),
       operation: text(record.operation),
       code: text(record.code),
@@ -62,13 +65,14 @@ export class PermissionAuditFile implements PermissionAudit {
   }
 
   /** `undefined` when the record has no reason field (or no key), `null` for a deny with no reason, else the keyed hash. (#618) */
-  private reasonHmac(reason: string | null | undefined): string | null | undefined {
+  private reasonHmac(record: PermissionAuditRecord): string | null | undefined {
+    const reason = record.reason;
     if (reason === undefined) return undefined;
     if (reason === null) return null;
     try {
       return createHmac('sha256', this.keyOfFolder()).update(reason).digest('hex');
     } catch (e) {
-      this.log(`permission audit: the reason key is unusable (${codeOf(e)})`);
+      this.log(`permission audit: the reason key is unusable (${codeOf(e)})${whichRecord(record)}`);
       return undefined;
     }
   }

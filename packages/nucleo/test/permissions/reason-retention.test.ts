@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
 import { openPermissionDeps } from '../../src/permissions/adapters/deps.ts';
 import { SqlitePermissionRepository } from '../../src/permissions/adapters/sqlite-repository.ts';
-import { sweepOnStart } from '../../src/permissions/expire-due.ts';
+import { expireDue, sweepOnStart } from '../../src/permissions/expire-due.ts';
 import { listRequests, RECENT_MS } from '../../src/permissions/list-requests.ts';
 import type { PermissionRequest } from '../../src/permissions/model.ts';
 import { answerWith, openDatabase, openRequest, tempDir } from './oltp-fixtures.ts';
@@ -13,7 +13,7 @@ import { answerWith, openDatabase, openRequest, tempDir } from './oltp-fixtures.
 const rawReason = (db: DatabaseSync, id: string): unknown => db.prepare('SELECT reason FROM permission_requests WHERE id = ?').get(id)?.reason;
 const MINUTE = 60_000;
 
-/** A deny with a reason, delivered `minutesAgo` minutes ago, saved through the repository. */
+/** A deny with a reason, delivered `minutesAgo` minutes ago, saved through the repository. (#618) */
 async function deliveredDeny(repository: SqlitePermissionRepository, id: string, minutesAgo: number): Promise<PermissionRequest> {
   const at = Date.now() - minutesAgo * MINUTE;
   const request = answerWith(await openRequest({ id, now: at - 1_000 }), 'deny', `reason of ${id}`, at - 500);
@@ -89,5 +89,19 @@ describe('the deny reason does not outlive the /ui window (#618/AC-7)', () => {
     assert.equal(read?.reason, null);
     assert.equal(read?.settledAt, old.settledAt);
     assert.equal(read?.digest, old.digest);
+  });
+
+  test('the expiry sweep nulls the reasons settled before the window, with no listing and no restart', async () => {
+    const dataDir = tempDir();
+    const db = openDatabase(join(dataDir, 'core.sqlite'));
+    const deps = openPermissionDeps(db, dataDir);
+    const repository = new SqlitePermissionRepository(db);
+    await deliveredDeny(repository, 'old', 11);
+    await deliveredDeny(repository, 'recent', 9);
+
+    expireDue(deps);
+
+    assert.equal(rawReason(db, 'old'), null);
+    assert.equal(rawReason(db, 'recent'), 'reason of recent');
   });
 });

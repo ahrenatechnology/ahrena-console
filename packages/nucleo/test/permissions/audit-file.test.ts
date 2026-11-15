@@ -47,7 +47,7 @@ describe('the file and its folder (#618/AC-7)', () => {
     assert.equal(readFileSync(target, 'utf8'), 'victim content');
     assert.equal(mode(target), 0o644);
     assert.equal(logged.length, 1);
-    assert.match(logged[0]!, /permission audit: could not write \(\w+\)/);
+    assert.match(logged[0]!, /permission audit: could not write \(\w+\) event=answered requestId=rq-1$/);
     assert.doesNotMatch(logged[0]!, /victim|top secret words/);
   });
 
@@ -60,7 +60,7 @@ describe('the file and its folder (#618/AC-7)', () => {
     new PermissionAuditFile(dataDir, (m) => logged.push(m)).append(answered('top secret words'));
     assert.equal(readFileSync(file, 'utf8'), '');
     assert.equal(logged.length, 1);
-    assert.match(logged[0]!, /permission audit: could not write \(ERR_AUDIT_MODE\)/);
+    assert.match(logged[0]!, /permission audit: could not write \(ERR_AUDIT_MODE\) event=answered requestId=rq-1$/);
   });
 
   test('a write that fails is logged by its code and never thrown, and the log holds neither the reason nor the path', () => {
@@ -69,7 +69,7 @@ describe('the file and its folder (#618/AC-7)', () => {
     const logged: string[] = [];
     assert.doesNotThrow(() => new PermissionAuditFile(dataDir, (m) => logged.push(m)).append(answered('top secret words')));
     assert.equal(logged.length, 1);
-    assert.match(logged[0]!, /permission audit: could not write \(\w+\)/);
+    assert.match(logged[0]!, /permission audit: could not write \(\w+\) event=answered requestId=rq-1$/);
     assert.doesNotMatch(logged[0]!, /top secret words|a-file/);
   });
 });
@@ -173,7 +173,7 @@ describe('the keyed hash of the reason (#618/AC-7)', () => {
     new PermissionAuditFile(dataDir, (m) => logged.push(m)).append(answered('words'));
     assert.equal(keyOf(dataDir).toString(), 'short');
     assert.equal(logged.length, 1);
-    assert.match(logged[0]!, /permission audit: the reason key is unusable/);
+    assert.match(logged[0]!, /permission audit: the reason key is unusable \(ERR_KEY_SIZE\) event=answered requestId=rq-1$/);
     assert.doesNotMatch(logged[0]!, /short|words/);
     const [line] = lines(dataDir);
     assert.equal('reasonHmac' in line!, false);
@@ -188,7 +188,7 @@ describe('the keyed hash of the reason (#618/AC-7)', () => {
     const logged: string[] = [];
     new PermissionAuditFile(dataDir, (m) => logged.push(m)).append(answered('words'));
     assert.equal(logged.length, 1);
-    assert.match(logged[0]!, /permission audit: the reason key is unusable \(\w+\)/);
+    assert.match(logged[0]!, /permission audit: the reason key is unusable \(\w+\) event=answered requestId=rq-1$/);
     assert.doesNotMatch(logged[0]!, /real\.key|words/);
     assert.equal('reasonHmac' in lines(dataDir)[0]!, false);
   });
@@ -201,7 +201,7 @@ describe('the keyed hash of the reason (#618/AC-7)', () => {
     const logged: string[] = [];
     new PermissionAuditFile(dataDir, (m) => logged.push(m)).append(answered('words'));
     assert.equal(logged.length, 1);
-    assert.match(logged[0]!, /the reason key is unusable \(ERR_KEY_MODE\)/);
+    assert.match(logged[0]!, /the reason key is unusable \(ERR_KEY_MODE\) event=answered requestId=rq-1$/);
     assert.equal('reasonHmac' in lines(dataDir)[0]!, false);
     assert.equal(mode(keyFile), 0o644, 'the file is left as it was');
   });

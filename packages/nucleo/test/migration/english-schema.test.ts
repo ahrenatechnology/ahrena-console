@@ -80,7 +80,7 @@ describe('#173 phase 5: English schema migration over a version 9 database', () 
   test('every table keeps its rows, the GitHub cache included', () => {
     const kept = Object.fromEntries(Object.entries(countsBefore).map(([t, n]) => [RENAMED_TABLES[t] ?? t, n]));
     const after = rowCounts(store.db);
-    // Every table the old database had keeps its count; a table a later migration adds is born empty, whichever it is.
+    // Every table the old database had keeps its count; a table a later migration adds is born empty, whichever it is. (#618)
     assert.deepEqual(Object.fromEntries(Object.keys(kept).map((t) => [t, after[t]])), kept);
     for (const [t, n] of Object.entries(after)) if (!(t in kept)) assert.equal(n, 0, `${t} is born empty`);
     for (const n of Object.values(countsBefore)) assert.ok(n > 0, 'the old database has rows in every table');
