@@ -2,6 +2,8 @@
 
 The routes between the plugin's `PermissionRequest` hook, the core and the `/ui`. Authored first (decision [0025](../decisoes/0025-permission-requests-from-the-console.md), `contract-first`): `packages/nucleo/src/api/permissions.ts` is validated against this file, and `packages/nucleo/test/api/permission-requests-contract.test.ts` exercises every operation below. The domain, the use cases and the SQLite adapter are `packages/nucleo/src/permissions/`.
 
+The operations below are also declared in [`core-api.openapi.json`](core-api.openapi.json) (tag `Permissions`: `registerPermissionRequest`, `getPermissionDecision`, `withdrawPermissionRequest`, `listPermissionRequests`, `answerPermissionRequest`, with the `Permission*` schemas), and `pendingPermissions` is described on `getAttention` and `getSession`; the change event is [`events/permission.changed.v1.schema.json`](events/permission.changed.v1.schema.json). The two files are kept in step: a change to an operation here is a change to its entry there, and the parity test (`packages/nucleo/test/api/contract-parity.test.ts`) fails on a route one declares and the other does not.
+
 Every route needs the owner bearer (`Authorization: Bearer <owner token>`, #302). A request without it never reaches the handler (403). Errors reach the caller as `{ "error": "<code>" }`, a closed code and never the text of an exception, a dependency or the request.
 
 ## When the capability is off

@@ -46,6 +46,7 @@ import { ToolsExecutor, type ToolsHost } from '../../src/tools/executor.ts';
 import { OWNER_TOKEN, ownerFetch } from '../owner-http.ts';
 import { fakeRunner, fakeSpawn } from '../tools/doubles.ts';
 import { startDemoApi, type DemoApi } from './demo-api.ts';
+import { harness } from '../permissions/fakes.ts';
 
 export interface ContractProbeServer {
   /** The base address, `http://127.0.0.1:<port>`. */
@@ -126,6 +127,8 @@ async function wiring(dir: string): Promise<{ stands: Partial<ApiOptions>; stora
     devConsole: { overview: async () => ({ generatedAt: '2026-11-14T12:00:00.000Z', readAt: null, stale: false, staleReason: null, contexts: [], mergeQueue: [] }), view: async () => null },
     githubSync: { status: () => ({ active: false, pausedUntil: null, steps: [] }) },
     connection,
+    // The permission routes (#618) over the in-memory doubles, the capability off: a hook route answers 503 `off`, the list `available: false`.
+    permissions: { deps: harness(), enabled: () => false, windowCredential: () => null },
   };
   return { stands, storage };
 }
