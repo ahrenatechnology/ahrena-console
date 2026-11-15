@@ -783,7 +783,8 @@ const follower =
 const runtimeStore = new SqliteRuntimeStore(sqlite.db, changes);
 runtimeStore.recoverDisconnected();
 // A permission request open before this start is never delivered after it (decision 0025, "Reinício", #618/AC-3).
-const restartedRequests = sweepOnStart(openPermissionDeps(sqlite.db, dataDir, log));
+const permissionDeps = openPermissionDeps(sqlite.db, dataDir, log);
+const restartedRequests = sweepOnStart(permissionDeps);
 if (restartedRequests.length > 0) log(`permission requests closed by the restart: ${restartedRequests.length}`);
 let ownerToken: string | null = null;
 // #661 the observer: the no-op one unless AHRENA_CONSOLE_OTEL_EXPORTER is configured (src/observability).
@@ -791,6 +792,9 @@ const observability = await createObservability(process.env, API_VERSION);
 const api: LocalApi = await startLocalApi({
   observer: observability.observer,
   ownerToken: () => ownerToken,
+  // The permission routes (decision 0025, #618): off, with no window credential, until the desktop app can hand one over (#619): the hook
+  // routes answer 503 off and the answer route 403 window_only.
+  permissions: { deps: permissionDeps, enabled: () => false, windowCredential: () => null },
   runtime: new ManagedRuntime(storage, runtimeStore),
   listenOn: reservation,
   panelBuilder,

@@ -39,6 +39,7 @@ Every event the core publishes is a CloudEvents 1.0 event (framework conditions 
 | --- | --- | --- | --- |
 | `session`, `state`, `plan`, `activity` | the session id | string | string or null |
 | `decision` | the decision id | string | string or null |
+| `permission` | the permission request id | string | string or null |
 | `needs-you` | the session id, or `<machine>:<session>` from a remote machine | string, null from a remote machine | string or null |
 | `account` | the account id | null | string |
 | `repos` | `list`, `delivery` or `<owner>/<repo>` | null | null |

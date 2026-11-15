@@ -29,9 +29,9 @@ import {
 
 export const WAIT_FOR_CHANGES = 'wait_for_changes';
 
-/** The types MCP exposes: all but the screen-only ones (the GitHub screens' `repos`, `agent-instructions`, `framework-install`, `adrs`, the /ui's `connections` (#241) and `connector` (#277), the Tools screen's `tools`, and the Feed/Conversa `activity` (#414)). */
-type ScreenOnlyType = 'repos' | 'agent-instructions' | 'framework-install' | 'adrs' | 'connections' | 'tools' | 'connector' | 'app-update' | 'activity';
-const SCREEN_ONLY_TYPES = new Set<ChangeType>(['repos', 'agent-instructions', 'framework-install', 'adrs', 'connections', 'tools', 'connector', 'app-update', 'activity'] satisfies ScreenOnlyType[]);
+/** The types MCP exposes: all but the screen-only ones (the GitHub screens' `repos`, `agent-instructions`, `framework-install`, `adrs`, the /ui's `connections` (#241) and `connector` (#277), the Tools screen's `tools`, the Feed/Conversa `activity` (#414), and the permission requests' `permission` (#618)). */
+type ScreenOnlyType = 'repos' | 'agent-instructions' | 'framework-install' | 'adrs' | 'connections' | 'tools' | 'connector' | 'app-update' | 'activity' | 'permission';
+const SCREEN_ONLY_TYPES = new Set<ChangeType>(['repos', 'agent-instructions', 'framework-install', 'adrs', 'connections', 'tools', 'connector', 'app-update', 'activity', 'permission'] satisfies ScreenOnlyType[]);
 export const MCP_CHANGE_TYPES = CHANGE_TYPES.filter((t): t is Exclude<ChangeType, ScreenOnlyType> => !SCREEN_ONLY_TYPES.has(t));
 export type McpChangeType = (typeof MCP_CHANGE_TYPES)[number];
 

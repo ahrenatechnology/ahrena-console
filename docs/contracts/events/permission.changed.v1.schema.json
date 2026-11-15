@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ahrenatechnology/ahrena-console/blob/main/docs/contracts/events/permission.changed.v1.schema.json",
+  "title": "permission.changed.v1 data",
+  "description": "A permission request of a session opened or changed state. Subject: the request id.",
+  "type": "object",
+  "required": [
+    "sessionId",
+    "accountId"
+  ],
+  "properties": {
+    "sessionId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "accountId": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "additionalProperties": false
+}

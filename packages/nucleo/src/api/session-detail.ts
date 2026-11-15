@@ -304,7 +304,7 @@ export class LeiturasDoDetalhe {
   }
 
   /** Responde uma rota do Detalhe; o servidor só a registra. */
-  async responder(res: ServerResponse, id: string, aba: string | null, url: URL, agentId: string | null = null): Promise<void> {
+  async responder(res: ServerResponse, id: string, aba: string | null, url: URL, agentId: string | null = null, headExtra: (() => Record<string, unknown>) | null = null): Promise<void> {
     if (agentId !== null) return this.respondAgent(res, id, agentId);
     if (!ID.test(id)) return send(res, 400, { error: 'id de sessão inválido' });
     const session = await this.storage.getSession(id);
@@ -312,7 +312,8 @@ export class LeiturasDoDetalhe {
     if (aba === 'agents') return send(res, 200, await this.agentes(session));
     if (aba === 'conversation') return send(res, 200, await this.conversation(session, url.searchParams.get('agent'), url.searchParams.get('limit'), url.searchParams.get('after')));
     if (aba === 'events') return send(res, 200, await this.eventos(session, url.searchParams));
-    send(res, 200, await this.cabeca(session));
+    // `headExtra`: what another context adds to the header only (the pending permission requests, #618).
+    send(res, 200, headExtra ? { ...(await this.cabeca(session)), ...headExtra() } : await this.cabeca(session));
   }
 
   /** The agent view route; its errors carry a `code`, the contract (docs/contracts/agent-view.md, #529). */

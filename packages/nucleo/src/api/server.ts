@@ -39,6 +39,7 @@ import type { ManagedRuntime } from '../runtime/service.ts';
 // | `GET /api/sessions/<id>` and `/agents`, `/conversation`, `/events` | The session Detail in the /ui (api/session-detail.ts, #29 and #30) |
 // | `GET /api/sessions/<id>/agents/<agent>` | One agent's view (api/session-detail.ts, api/agent-view.ts, #529) |
 // | `GET /api/new-session/folders` and `POST /api/new-session` | "Nova sessão": the folders it can start in, and a new session in one of them, in the Claude Desktop or a terminal (api/new-session.ts) |
+// | `POST`/`GET /api/sessions/<id>/permission-requests` and `…/<rid>/decision`, `/withdraw`, `/answer` | The permission requests of the hook `PermissionRequest`: register, long poll, withdraw (the hook), list and answer (the /ui window, three proofs); without `permissions` they give 405 or 404 (api/permissions.ts, docs/contracts/permission-requests.md, #618) |
 // | `POST /api/sessions/<id>/open` | Opens the session where it runs: Claude Desktop, a terminal resuming it, or its live terminal brought forward; the núcleo picks the target (api/session-open-route.ts, #285) |
 // | `GET /api/decisions`, `GET /api/sessions/<id>/decisions` and `POST /api/decisions/<id>/promote` | The /ui's Decisions page and tab and the "Promover a registro" (api/decisions-ui.ts, #103) |
 // | `GET /api/repos` and `/api/repos/<owner>/<repo>` | GitHub repositories and metrics (`?period=`, `?refresh=1`; api/repos.ts, #104, #105) |
@@ -142,6 +143,7 @@ import type { TelemetryService } from '../telemetry/service.ts';
 import { MESSAGING_ROUTE, messagesWriteFromSameOrigin, type MessagingRoute } from './messaging.ts';
 import { TRANSCRIPTION_ROUTE, transcriptionWriteFromSameOrigin, type TranscriptionRoute } from './transcription.ts';
 import { ORDERS_ROUTE, ordersWriteFromSameOrigin, type OrdersRoute } from './orders.ts';
+import { createPermissions, permissionAnswerFromSameOrigin, type PermissionsOptions } from './permissions.ts';
 import { isTerminalsRoute, respondTerminalsWrite, terminalsWriteAllowed } from './terminals.ts';
 import type { TerminalControl } from '../telemetry/terminal-actions.ts';
 import { isToolsRoute, isToolsWrite, respondTools, respondToolsWrite, toolsWriteAllowed } from './tools.ts';
@@ -269,6 +271,11 @@ export interface ApiOptions {
   transcription?: TranscriptionRoute | null;
   /** The /ui's orders to a session, carried by the panel mod (api/orders.ts, #61); without it, those routes give 404. */
   orders?: OrdersRoute;
+  /**
+   * The permission requests (decision 0025, #618; api/permissions.ts): the routes, the sweep of the overdue ones and the `pendingPermissions` of
+   * `GET /api/attention` and of the session Detail. Without it none of them exist and the two surfaces keep their shape.
+   */
+  permissions?: PermissionsOptions | null;
   /** The Tools screen (#280, decision 0014): the executor (or only the service, read-only); without it, `/api/tools` gives 404. */
   tools?: ToolsControl | null;
   /** The terminal sessions' actions (#350): `POST /api/terminals/<id>/actions/<action>`; without it, 404. */
@@ -445,7 +452,27 @@ function readBody(req: IncomingMessage): Promise<string | null> {
 export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
   const log = opts.log ?? ((m: string) => console.error(`[ahrena-console api] ${m}`));
   const observer = opts.observer ?? noopObserver;
-  const hooks = createHookRoute(opts.hooks);
+  const permissions = opts.permissions
+    ? createPermissions(opts.permissions, {
+        port: () => port,
+        changes: opts.changes,
+        accountOf: async (id) => (await opts.panelBuilder.storage.getSession(id))?.accountId ?? null,
+        log,
+      })
+    : null;
+  // A hook event is also read by the permission use cases, from the payload as the hook sent it (the stored one is cut): a settle
+  // never throws and never keeps the other consumers waiting.
+  const hooks = createHookRoute(
+    permissions
+      ? {
+          ...opts.hooks,
+          onEvent: async (result, raw) => {
+            await permissions.settle(raw);
+            await opts.hooks.onEvent?.(result, raw);
+          },
+        }
+      : opts.hooks,
+  );
   const mcp = opts.mcp ? createMcpRoute(opts.mcp) : null;
   const projectRoute = criarRotaDoProjeto(opts.project ?? { kanban: null, fonte: 'github', log });
   const workBoardRoute = createWorkBoardRoute(opts.work ?? { service: null });
@@ -612,6 +639,14 @@ export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
       }
       return opts.docker.route(req, res, url);
     }
+    // The permission routes check their own proofs (hook only, the window's answer, the list) before the chain below, and audit what they refuse.
+    if (permissions?.matches(url.pathname)) {
+      const refusal = permissions.gate(req, url);
+      if (refusal) {
+        req.resume();
+        return send(res, refusal.status, { error: refusal.code });
+      }
+    }
     // #241: the six writes only the /ui itself makes, checked before anything else.
     if (STRICT_WRITE_ROUTES.has(url.pathname)) {
       const refusal = strictWriteRefusal(req, port, url.pathname);
@@ -625,12 +660,13 @@ export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
       req.resume();
       return send(res, 403, { error: 'forbidden' });
     }
-    if (!allowedLocalRequest(req, port) && !sameOriginRead(req, port) && !sameOriginOpen(req, port) && !sameOriginSessionOpen(req, port) && !sameOriginNewSession(req, port) && !sameOriginWorkPlan(req, port) && !sameOriginWorkRun(req, port) && !sameOriginWorkQueue(req, port) && !sameOriginWorkIssueWrite(req, port) && !mesmaOrigemMovendo(req, port) && !sameOriginDecision(req, port) && !agentConfigWriteFromSameOrigin(req, port) && !frameworkInstallWriteFromSameOrigin(req, port) && !reconnectFromSameOrigin(req, port) && !messagesWriteFromSameOrigin(req, port) && !transcriptionWriteFromSameOrigin(req, port) && !cloudsWriteFromSameOrigin(req, port) && !connectionWriteFromSameOrigin(req, port) && !coreUpdateWriteFromSameOrigin(req, port) && !ownerProofRetryFromSameOrigin(req, port) && !ordersWriteFromSameOrigin(req, port) && !appUpdateWriteFromSameOrigin(req, port)) return send(res, 403, { error: 'origem não permitida' });
+    if (!allowedLocalRequest(req, port) && !sameOriginRead(req, port) && !sameOriginOpen(req, port) && !sameOriginSessionOpen(req, port) && !sameOriginNewSession(req, port) && !sameOriginWorkPlan(req, port) && !sameOriginWorkRun(req, port) && !sameOriginWorkQueue(req, port) && !sameOriginWorkIssueWrite(req, port) && !mesmaOrigemMovendo(req, port) && !sameOriginDecision(req, port) && !agentConfigWriteFromSameOrigin(req, port) && !frameworkInstallWriteFromSameOrigin(req, port) && !reconnectFromSameOrigin(req, port) && !messagesWriteFromSameOrigin(req, port) && !transcriptionWriteFromSameOrigin(req, port) && !cloudsWriteFromSameOrigin(req, port) && !connectionWriteFromSameOrigin(req, port) && !coreUpdateWriteFromSameOrigin(req, port) && !ownerProofRetryFromSameOrigin(req, port) && !ordersWriteFromSameOrigin(req, port) && !appUpdateWriteFromSameOrigin(req, port) && !permissionAnswerFromSameOrigin(req, port)) return send(res, 403, { error: 'origem não permitida' });
     // The Project list spends GitHub quota and the connection status is the /ui's: another site's page
     // never gets either, connected or not (#241 review 2).
     // #465 the work board reads the Project the same way.
     if ((url.pathname === PROJECT_OPTIONS_ROUTE || url.pathname === CONNECTIONS_ROUTE || url.pathname === WORK_BOARD_ROUTE || url.pathname === WORK_ISSUE_ROUTE || url.pathname === WORK_ISSUE_COMMENTS_ROUTE || url.pathname === WORK_ISSUE_STEPS_ROUTE || url.pathname === WORK_ISSUE_STEPS_ORDER_ROUTE) && fromAnotherSite(req)) return send(res, 403, { error: 'forbidden' });
     if (opts.githubConnected && isGithubScreenRoute(url.pathname) && !(await opts.githubConnected())) return send(res, 409, { error: 'github-not-connected' });
+    if (permissions?.matches(url.pathname)) return permissions.handle(req, res, url);
     if (url.pathname.startsWith(HOOKS_PATH)) return hooks(req, res);
     if (req.method === 'GET' && (await machineSessions(res, url))) return;
     const openMatch = OPEN.exec(url.pathname);
@@ -680,7 +716,10 @@ export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
     if (url.pathname === STREAM_ROUTE && opts.changes) return serveStream(req, res, url, opts.changes);
     if (url.pathname === WALL_ROUTE) return responderMural(res, wall, url.searchParams.has('parkedLimit') ? Number(url.searchParams.get('parkedLimit')) : undefined);
     if (url.pathname === EVENTS_ROUTE && opts.events) return responderEventos(res, url, opts.events);
-    if (url.pathname === ATTENTION_ROUTE && opts.fleet) return send(res, 200, await montarAtencao(opts.fleet, opts.changes?.current ?? null, remotes(), openDescriber));
+    if (url.pathname === ATTENTION_ROUTE && opts.fleet) {
+      const attention = await montarAtencao(opts.fleet, opts.changes?.current ?? null, remotes(), openDescriber);
+      return send(res, 200, permissions ? { ...attention, pendingPermissions: permissions.pending() } : attention);
+    }
     if (url.pathname === DASHBOARD_ROUTE && opts.fleet) return send(res, 200, await montarDashboard(opts.fleet));
     if (opts.analytics && RotaAnalytics.atende(url.pathname)) {
       const r = await opts.analytics.responder(url);
@@ -710,7 +749,10 @@ export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
     const d = DECISION_LIST.exec(url.pathname);
     if (d) return decisionList(res, decodeURIComponent(d[1]!), url);
     const det = opts.detail && DETAIL_ROUTE.exec(url.pathname);
-    if (det) return opts.detail!.responder(res, decodeSegment(det[1]), det[2] ?? null, url, det[3] === undefined ? null : decodeSegment(det[3]));
+    if (det) {
+      const sessionId = decodeSegment(det[1]);
+      return opts.detail!.responder(res, sessionId, det[2] ?? null, url, det[3] === undefined ? null : decodeSegment(det[3]), permissions ? () => ({ pendingPermissions: permissions.pending(sessionId) }) : null);
+    }
     send(res, 404, { error: 'não encontrado' });
   }
 
@@ -723,8 +765,10 @@ export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
 
   return new Promise((resolve, reject) => {
     server.once('error', reject);
+    let stopSweep: () => void = () => {};
     const listening = () => {
       server.off('error', reject);
+      stopSweep = permissions?.startSweep() ?? stopSweep;
       const { address, port: bound } = server.address() as AddressInfo;
       port = bound;
       resolve({
@@ -732,6 +776,7 @@ export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
         url: `http://${address}:${bound}`,
         close: () =>
           new Promise<void>((done, fail) => {
+            stopSweep();
             opts.changes?.close();
             server.close((err) => (err ? fail(err) : done()));
             server.closeAllConnections();
