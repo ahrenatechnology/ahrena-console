@@ -17,7 +17,7 @@ function setup(verdicts: PeerVerdict | PeerVerdict[] | (() => Promise<PeerVerdic
     verify: async (fd) => {
       seen.push(fd);
       if (typeof verdicts === 'function') return verdicts();
-      if (typeof verdicts === 'string') return verdicts;
+      if (typeof verdicts === 'string' || !Array.isArray(verdicts)) return verdicts;
       return verdicts[Math.min(i++, verdicts.length - 1)] as PeerVerdict;
     },
   };
@@ -76,12 +76,21 @@ test('a peer that mismatches gets no credential and the channel is closed', asyn
 });
 
 test('a verifier that is unavailable gets no credential and the channel is closed', async () => {
-  const { stream, holder, logs, reader } = setup('unavailable');
+  const { stream, holder, logs, reader } = setup({ unavailable: 'exit' });
   stream.write(`${A}\n`);
   await reader.done;
   assert.equal(holder.current(), null);
   assert.ok(stream.destroyed);
-  assert.ok(logs.includes('window channel refused peer=unavailable'));
+  assert.ok(logs.includes('window channel refused peer=unavailable reason=exit'));
+});
+
+test('every closed cause of unavailable is logged as its code and nothing else (#619)', async () => {
+  for (const reason of ['spawn', 'timeout', 'signal', 'exit', 'platform'] as const) {
+    const { stream, logs, reader } = setup({ unavailable: reason });
+    stream.write(`${A}\n`);
+    await reader.done;
+    assert.ok(logs.includes(`window channel refused peer=unavailable reason=${reason}`));
+  }
 });
 
 test('a verifier that throws counts as unavailable', async () => {
@@ -91,7 +100,7 @@ test('a verifier that throws counts as unavailable', async () => {
   stream.write(`${A}\n`);
   await reader.done;
   assert.equal(holder.current(), null);
-  assert.ok(logs.includes('window channel refused peer=unavailable'));
+  assert.ok(logs.includes('window channel refused peer=unavailable reason=spawn'));
   assert.ok(!logs.join('\n').includes('native failure'));
 });
 
