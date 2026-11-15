@@ -39,6 +39,7 @@ mod native_notice;
 mod notifications;
 mod shell_path;
 mod updater;
+mod window_channel;
 mod window_peer;
 
 use std::collections::HashMap;
@@ -190,6 +191,8 @@ fn main() {
 fn follow(app: AppHandle, state: Shared, dir: PathBuf, data_dir: Option<PathBuf>, signals: std::sync::mpsc::Receiver<()>, mut open_at_launch: bool) {
     loop {
         owner_auth::clear();
+        // Closing the previous core's channel (dropping its grant, at the end of the last turn) revoked its credential (#619).
+        window_channel::clear();
         change(&app, &state, |s| {
             s.core = CoreState::Searching;
             s.attention = None;
@@ -200,7 +203,7 @@ fn follow(app: AppHandle, state: Shared, dir: PathBuf, data_dir: Option<PathBuf>
             s.notices.machines.reset();
             s.notices.clouds.reset();
         });
-        let outcome = core::start_own_core(&dir, data_dir.as_deref());
+        let (outcome, grant) = core::start_own_core(&dir, data_dir.as_deref());
         let open = std::mem::take(&mut open_at_launch);
         let core = match outcome.core {
             Some(core) => {
@@ -237,6 +240,10 @@ fn follow(app: AppHandle, state: Shared, dir: PathBuf, data_dir: Option<PathBuf>
                 return;
             }
             continue;
+        }
+        // `grant` stays alive to the end of this turn: the core is the app's for as long as `watch_core` runs (#619).
+        if let Some(grant) = &grant {
+            window_channel::publish(core.port, grant.credential());
         }
         let mut asked = false;
         change(&app, &state, |s| {
@@ -870,6 +877,7 @@ fn open_window(app: &AppHandle, path: Option<&str>) {
         }
     };
     let Some(token) = owner_auth::token(port) else { return };
+    let credential = window_channel::current(port);
     let Ok(url) = format!("http://127.0.0.1:{port}{}", path.unwrap_or("/ui")).parse::<tauri::Url>() else { return };
     if let Some(w) = app.get_webview_window("console") {
         // The port is random: a window still on another port (an old core) is moved to this one.
@@ -885,7 +893,7 @@ fn open_window(app: &AppHandle, path: Option<&str>) {
         .title("Ahrena Console")
         .inner_size(1100.0, 760.0)
         // The /ui tells its own window from a browser tab by this mark (#330): Atualizar only works in the app.
-        .initialization_script(owner_auth::initialization_script(port, &token))
+        .initialization_script(owner_auth::initialization_script(port, &token, credential.as_ref().map(window_channel::WindowCredential::reveal)))
         // A link out of the /ui (github.com/login/device, Revogar no GitHub; #241) opens in the system
         // browser, never inside this window: the window only ever shows this app's core's /ui.
         .on_navigation(move |url| match link_target(url, core_port(&nav_state)) {

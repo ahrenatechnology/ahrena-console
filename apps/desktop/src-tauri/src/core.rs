@@ -21,6 +21,7 @@
 // (~/.ahrena-console/instances/) as it goes.
 
 use std::ffi::OsString;
+use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::Duration;
@@ -29,6 +30,7 @@ use serde::Deserialize;
 
 use crate::http;
 use crate::menu::CoreState;
+use crate::window_channel::{self, Grant};
 
 pub const NO_NODE: &str = "Node não encontrado no PATH do login";
 
@@ -255,29 +257,74 @@ pub fn demo_port() -> Option<u16> {
     env_var("AHRENA_CONSOLE_DEMO_PORT").and_then(|p| p.parse().ok()).filter(|p| *p != 0)
 }
 
+/// The options that hand the owner's `start` the window credential channel (decision 0025, #619).
+pub fn window_channel_args() -> [String; 2] {
+    [window_channel::CHANNEL_OPTION.to_string(), window_channel::CHANNEL_FD.to_string()]
+}
+
+/// Whether a credential is issued for this result of the start: only for a core this app STARTED and that is up (#619).
+fn is_issued_for(outcome: &Outcome) -> bool {
+    outcome.started && outcome.core.is_some() && matches!(outcome.state, CoreState::Up { .. })
+}
+
+/// The credential for this result of the start, written on the app's end of the channel, which the grant then keeps open. For a core
+/// the app did not start, or without a channel, or when the write fails, none exists and the end is closed (dropped) (#619).
+pub fn issue_for(outcome: &Outcome, channel: Option<UnixStream>) -> Option<Grant> {
+    let channel = channel?;
+    if !is_issued_for(outcome) {
+        return None;
+    }
+    window_channel::issue(channel).ok()
+}
+
+/// Runs the owner's `start`, with the channel's far end as its fd 3 when there is one. The app's copy of the far end is closed right
+/// after the spawn (#619).
+fn run_start(mut command: Command, far_end: Option<window_channel::ChildEnd>) -> std::io::Result<std::process::Output> {
+    command.stdout(Stdio::piped());
+    if let Some(end) = &far_end {
+        end.pass_as_fd3(&mut command);
+        command.args(window_channel_args());
+    }
+    let child = command.spawn();
+    drop(far_end);
+    child?.wait_with_output()
+}
+
 /// Starts (or, within its own installation, adopts) the app's core. `data_dir`: the app's data
-/// folder, from Tauri (`~/Library/Application Support/dev.ahrena.console`).
-pub fn start_own_core(core: &Path, data_dir: Option<&Path>) -> Outcome {
+/// folder, from Tauri (`~/Library/Application Support/dev.ahrena.console`). The `Grant` is the
+/// window credential, only for a core this call started: the caller keeps it for as long as that
+/// core is the app's, and dropping it revokes the credential (#619).
+pub fn start_own_core(core: &Path, data_dir: Option<&Path>) -> (Outcome, Option<Grant>) {
     let cli = core.join(OWNER_CLI);
     match choose(demo_port(), find_node(), cli.is_file()) {
         Plan::Watch { port } => {
             let demo = Core { port, pid: None };
-            if demo.answers() {
+            let outcome = if demo.answers() {
                 Outcome::up(demo, false)
             } else {
                 Outcome::stopped(format!("Nada responde como núcleo na porta {port} (AHRENA_CONSOLE_DEMO_PORT)"))
-            }
+            };
+            (outcome, None)
         }
-        Plan::Stopped { reason, no_node } => Outcome { state: CoreState::Stopped { reason, no_node }, core: None, started: false },
+        Plan::Stopped { reason, no_node } => (Outcome { state: CoreState::Stopped { reason, no_node }, core: None, started: false }, None),
         Plan::Start { node } => {
             let mut command = Command::new(node);
             command.args(start_args(&cli, data_dir, std::process::id())).current_dir(core).stdin(Stdio::null()).stderr(Stdio::null());
             for name in FOREIGN_ENV {
                 command.env_remove(name);
             }
-            match command.output() {
-                Ok(out) => read_start(&String::from_utf8_lossy(&out.stdout), data_dir, bundled_version(core).as_deref()),
-                Err(e) => Outcome::stopped(format!("node: {e}")),
+            // Without a channel the core still starts, and the capability stays unavailable.
+            let (app_end, far_end) = match window_channel::open() {
+                Ok((app, far)) => (Some(app), Some(far)),
+                Err(_) => (None, None),
+            };
+            match run_start(command, far_end) {
+                Ok(out) => {
+                    let outcome = read_start(&String::from_utf8_lossy(&out.stdout), data_dir, bundled_version(core).as_deref());
+                    let grant = issue_for(&outcome, app_end);
+                    (outcome, grant)
+                }
+                Err(e) => (Outcome::stopped(format!("node: {e}")), None),
             }
         }
     }
@@ -427,6 +474,44 @@ mod tests {
         let core = Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../../packages/nucleo"));
         assert_eq!(bundled_version(core).as_deref(), Some(env!("CARGO_PKG_VERSION")), "the core follows the app (#261)");
         assert_eq!(bundled_version(Path::new("/nonexistent")), None);
+    }
+
+    #[test]
+    fn only_a_core_the_app_started_and_that_is_up_gets_a_credential() {
+        let up = |started| Outcome::up(Core { port: 4720, pid: Some(9) }, started);
+        assert!(is_issued_for(&up(true)));
+        assert!(!is_issued_for(&up(false)), "an adopted core");
+        let stopped = Outcome { state: CoreState::Stopped { reason: "x".into(), no_node: false }, core: None, started: true };
+        assert!(!is_issued_for(&stopped));
+    }
+
+    #[test]
+    fn the_owner_is_told_the_channel_is_fd_3() {
+        assert_eq!(window_channel_args(), ["--window-channel", "3"]);
+    }
+
+    #[test]
+    fn a_started_core_gets_a_credential_on_the_app_end() {
+        use std::io::Read;
+        let (app, child) = crate::window_channel::open().unwrap();
+        let up = Outcome::up(Core { port: 4720, pid: Some(9) }, true);
+        let grant = issue_for(&up, Some(app)).expect("a started core gets one");
+        let mut line = vec![0u8; 65];
+        child.into_stream().read_exact(&mut line).unwrap();
+        assert_eq!(String::from_utf8(line).unwrap(), format!("{}\n", grant.credential().reveal()));
+    }
+
+    #[test]
+    fn an_adopted_core_gets_none_and_the_app_end_is_closed() {
+        use std::io::Read;
+        for outcome in [Outcome::up(Core { port: 4720, pid: Some(9) }, false), Outcome::stopped("x")] {
+            let (app, child) = crate::window_channel::open().unwrap();
+            assert!(issue_for(&outcome, Some(app)).is_none());
+            let mut rest = Vec::new();
+            child.into_stream().read_to_end(&mut rest).unwrap();
+            assert!(rest.is_empty(), "nothing was written and the end is closed (EOF)");
+        }
+        assert!(issue_for(&Outcome::up(Core { port: 1, pid: None }, true), None).is_none(), "no channel, no credential");
     }
 
     #[test]

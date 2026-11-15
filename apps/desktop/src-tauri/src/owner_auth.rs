@@ -82,10 +82,15 @@ fn read_token(dir: &Path, port: u16, pid: u32) -> Option<String> {
 #[cfg(not(unix))]
 fn read_token(_dir: &Path, _port: u16, _pid: u32) -> Option<String> { None }
 
-/// Runs before any page script, only in the top-level owner UI at the exact expected origin.
-pub fn initialization_script(port: u16, token: &str) -> String {
+/// Runs before any page script, only in the top-level owner UI at the exact expected origin. The window credential (#619), when the app
+/// holds one for this core, is defined under the same guard, non-writable, non-configurable and non-enumerable.
+pub fn initialization_script(port: u16, token: &str, window_credential: Option<&str>) -> String {
     let secret = serde_json::to_string(token).expect("a string serializes");
-    format!("if (window === window.top && location.origin === 'http://127.0.0.1:{port}' && (location.pathname === '/ui' || location.pathname.startsWith('/ui/'))) {{ window.__AHRENA_APP__ = true; Object.defineProperty(window, '__AHRENA_OWNER_TOKEN__', {{ value: {secret}, configurable: false, writable: false }}); }}")
+    let credential = window_credential
+        .map(|c| serde_json::to_string(c).expect("a string serializes"))
+        .map(|c| format!(" Object.defineProperty(window, '__AHRENA_WINDOW_CREDENTIAL__', {{ value: {c}, configurable: false, writable: false, enumerable: false }});"))
+        .unwrap_or_default();
+    format!("if (window === window.top && location.origin === 'http://127.0.0.1:{port}' && (location.pathname === '/ui' || location.pathname.startsWith('/ui/'))) {{ window.__AHRENA_APP__ = true; Object.defineProperty(window, '__AHRENA_OWNER_TOKEN__', {{ value: {secret}, configurable: false, writable: false }});{credential} }}")
 }
 
 #[cfg(all(test, unix))]
@@ -142,11 +147,30 @@ mod tests {
 
     #[test]
     fn bootstrap_is_scoped_to_owner_origin_and_top_level_ui() {
-        let script = initialization_script(4720, &"a".repeat(64));
+        let script = initialization_script(4720, &"a".repeat(64), None);
         assert!(script.contains("window === window.top"));
         assert!(script.contains("location.origin === 'http://127.0.0.1:4720'"));
         assert!(script.contains("location.pathname === '/ui'"));
         assert!(script.contains("location.pathname.startsWith('/ui/')"));
         assert!(!script.contains("localStorage"));
+    }
+
+    #[test]
+    fn the_window_credential_is_injected_under_the_same_guard_and_not_writable() {
+        let credential = "b".repeat(64);
+        let script = initialization_script(4720, &"a".repeat(64), Some(&credential));
+        let guard = script.find("window === window.top").unwrap();
+        let property = script.find("__AHRENA_WINDOW_CREDENTIAL__").unwrap();
+        assert!(guard < property, "the property is defined inside the guard");
+        assert!(script.contains(&format!("\"{credential}\"")));
+        let definition = &script[property..];
+        assert!(definition.contains("writable: false") && definition.contains("configurable: false") && definition.contains("enumerable: false"));
+        assert!(script.contains("__AHRENA_OWNER_TOKEN__"));
+    }
+
+    #[test]
+    fn without_a_credential_the_window_gets_none() {
+        let script = initialization_script(4720, &"a".repeat(64), None);
+        assert!(!script.contains("__AHRENA_WINDOW_CREDENTIAL__"));
     }
 }
