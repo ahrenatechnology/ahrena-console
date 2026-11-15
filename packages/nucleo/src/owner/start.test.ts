@@ -28,6 +28,6 @@ test('the channel cannot arrive through the API options after --', () => {
 
 test('bad API options throw before any plan or open: no data directory, no log file (#619)', async () => {
   const dir = join(tmpdir(), `ahrena-start-guard-${process.pid}-${Date.now()}`);
-  await assert.rejects(startOrAdopt({ port: 0, installation: 'app', dir, parent: null, apiArgs: ['--window-channel', '3'] } as never), /--window-channel/);
+  await assert.rejects(startOrAdopt({ port: 0, installation: 'app', dir, parent: null, apiArgs: ['--window-channel', '3'] }), /--window-channel/);
   assert.equal(existsSync(dir), false);
 });
