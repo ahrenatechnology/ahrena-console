@@ -77,7 +77,21 @@ const normalizePath = (p: string): string => p.replace(/\\/g, '/').replace(/\/\.
 const isShortCluster = (t: string): boolean => /^-[a-zA-Z]+$/.test(t);
 const RECURSIVE_FLAG_LETTER = /[rR]/;
 const isRecursiveFlag = (t: string): boolean => t === '--recursive' || (isShortCluster(t) && RECURSIVE_FLAG_LETTER.test(t));
-const bare = (token: string): string => token.replace(/^["'(]+|["')]+$/g, '');
+/** Trims leading `"'(` and trailing `"')` with two indexes and one slice: linear, where the regex alternation is quadratic on a run of quotes after a letter (INP-9, #654). */
+const bare = (token: string): string => {
+  let start = 0;
+  let end = token.length;
+  while (start < end && (token[start] === '"' || token[start] === "'" || token[start] === '(')) start++;
+  while (end > start && (token[end - 1] === '"' || token[end - 1] === "'" || token[end - 1] === ')')) end--;
+  return token.slice(start, end);
+};
+/** A long option spelled whole or abbreviated, with or without `=value`: git, tar and cp accept a unique prefix. The prefix needs `minLetters` after the dashes, so `--sou` is `--source` and `--s` is not. Linear: one `indexOf`, one `startsWith` (#654/AC-11). */
+const isLongOption = (t: string, full: string, minLetters = 3): boolean => {
+  if (!t.startsWith('--')) return false;
+  const eq = t.indexOf('=');
+  const name = eq < 0 ? t : t.slice(0, eq);
+  return name.length >= 2 + minLetters && full.startsWith(name);
+};
 const SHELLS = new Set(['sh', 'bash', 'zsh', 'dash', 'ksh', 'fish']);
 const baseName = (token: string): string => token.slice(token.lastIndexOf('/') + 1);
 
@@ -99,7 +113,7 @@ function spellings(text: string): string[] {
 // `config` rewrites .git/config or ~/.gitconfig without naming the file; `git config --get` over-matches, accepted (#618).
 const RISKY_GIT_SUBCOMMANDS = new Set(['push', 'reset', 'clean', 'config']);
 
-const isRecursiveOrArchiveFlag = (t: string): boolean => t === '--recursive' || t === '--archive' || (isShortCluster(t) && /[rRa]/.test(t));
+const isRecursiveOrArchiveFlag = (t: string): boolean => isLongOption(t, '--recursive') || isLongOption(t, '--archive') || (isShortCluster(t) && /[rRa]/.test(t));
 const FIND_RUNNING_FLAGS = new Set(['-exec', '-execdir', '-ok', '-okdir', '-delete', '-fls']);
 /** Git subcommands whose second word registers or starts something that runs later: `remote add`, `lfs install`, `maintenance start` (#654/AC-9). */
 const GIT_SECOND_WORDS: ReadonlyMap<string, string> = new Map([['remote', 'add'], ['lfs', 'install'], ['maintenance', 'start']]);
@@ -120,10 +134,10 @@ const isBulkPathspec = (t: string): boolean => t === '.' || t === './' || t.star
 
 /** A short-option token (one dash, not `--`) that holds `s`: `-s`, `-sHEAD~1`, `-Ws`, and `-S` once lowercased. Any `s` in a cluster may be `--source`, so it over-matches `restore -S` (#654/AC-11). Linear: two index reads and one `includes`. */
 const holdsSourceOption = (t: string): boolean => t.length > 1 && t[0] === '-' && t[1] !== '-' && t.includes('s');
-/** Options of `git checkout` that take the next word as their value, which is then no tree-ish or path. */
+/** Options of `git checkout` that take the next word as their value, which is then no tree-ish or path (#654/AC-11). */
 const CHECKOUT_OPTIONS_WITH_VALUE = new Set(['-b', '-B', '--orphan']);
 
-/** `git checkout` and `git restore` that bring files without naming them: a bulk pathspec, `--pathspec-from-file`, `--source`, any short option holding `s` (`-s`, `-sHEAD~1`, `-Ws`), `FETCH_HEAD`, a tree-ish before `--` (`git checkout origin/main -- src`), or after `checkout` a second word that is no option value (`git checkout origin/main src`). Over-matches `git checkout -b x -- y` (the value of `-b` counts as a name before `--`), `git restore -S x` and `git checkout a b` where both are paths, by design (#654/AC-11, decision 0025 amendment). */
+/** `git checkout` and `git restore` that bring files without naming them: a bulk pathspec, `--pathspec-from-file`, `--source`, any short option holding `s` (`-s`, `-sHEAD~1`, `-Ws`), on `checkout` `-p` or `--patch` (any short cluster holding `p`, owner's decision), `FETCH_HEAD`, a tree-ish before `--` (`git checkout origin/main -- src`), or after `checkout` a second word that is no option value (`git checkout origin/main src`). Over-matches `git checkout -b x -- y` (the value of `-b` counts as a name before `--`), `git restore -S x` and `git checkout a b` where both are paths, by design (#654/AC-11, decision 0025 amendment). */
 function gitBringsFilesInBulk(afterGit: string[]): boolean {
   let verb = '';
   let namedBeforeSeparator = false;
@@ -135,7 +149,8 @@ function gitBringsFilesInBulk(afterGit: string[]): boolean {
       if (t === 'checkout' || t === 'restore') verb = t;
       continue;
     }
-    if (isBulkPathspec(t) || holdsSourceOption(t) || t.startsWith('--source') || t.startsWith('--pathspec-from-file') || t === 'fetch_head') return true;
+    if (isBulkPathspec(t) || holdsSourceOption(t) || isLongOption(t, '--source') || isLongOption(t, '--pathspec-from-file', 11) || t === 'fetch_head') return true;
+    if (verb === 'checkout' && (isLongOption(t, '--patch') || (isShortCluster(t) && t.includes('p')))) return true;
     if (t === '--') {
       if (namedBeforeSeparator) return true;
       separated = true;
@@ -153,7 +168,7 @@ const TAR_NAMES = ['tar', 'bsdtar', 'gtar'];
 function tarExtracts(afterTar: string[]): boolean {
   const first = afterTar[0] ?? '';
   if (!first.startsWith('-') && first.includes('x')) return true;
-  return afterTar.some((t) => (isShortCluster(t) && t.includes('x')) || t === '--extract' || t === '--get');
+  return afterTar.some((t) => (isShortCluster(t) && t.includes('x')) || isLongOption(t, '--extract') || t === '--get');
 }
 
 /** Verbs that run other commands or bring files in bulk, found by base name: `find -exec|-delete|-fprint*`, any `xargs`, `patch`, `unzip`, `ditto`, recursive `cp` and `rsync`, extracting `tar`. Over-matches `npm version patch`, by design (#654/AC-9, AC-10, AC-11). */

@@ -726,11 +726,21 @@ describe('the floor over-matches the #654 items (decision 0025 amendment, Deskto
     allFalse(['bsdtar cf a.tar x', 'gtar -tvf a.tar', 'gtar -czf a.tgz x']);
   });
 
+  test('#654/AC-11: an abbreviated long option is the option, from three letters after the dashes, with or without =value', () => {
+    allTrue(['git restore --sou=HEAD~1 src', 'git restore --sou HEAD~1 src', 'git checkout --sourc HEAD~1 x', 'git restore --pathspec-from=list.txt', 'git restore --pathspec-from list.txt', 'tar --extr -f a.tar', 'tar --ext -f a.tar', 'gtar --extra -f a.tar', 'cp --recur a b', 'cp --rec a b', 'cp --arch a b', 'rsync --arch a b', 'rsync --recur a b']);
+    allFalse(['git restore --s x', 'git restore --so x', 'git restore --staged x', 'git restore --worktree x', 'tar --e -f a.tar', 'tar --exclude=x -cf a.tar y', 'cp --r a b', 'cp --reflink=auto a b', 'cp --a a b', 'cp --no-clobber a b']);
+  });
+
+  test('#654/AC-11: git checkout -p or --patch is bulk, owner decision Q1, while a plain checkout stays allowable', () => {
+    allTrue(['git checkout -p HEAD~1', 'git checkout --patch origin/main', 'git checkout -p', 'git checkout --patch', 'git checkout -fp HEAD~1', 'git checkout -pf HEAD~1 x', 'git checkout --pat origin/main']);
+    allFalse(['git checkout main', 'git checkout -b x', 'git restore x', 'git checkout -f main']);
+  });
+
   test('#654: each new scan is linear on 64 KiB, in repeated units and in one long token', () => {
     // The ratio method of the rm probe (#691): the full size under 3x the half size plus 50 ms; a try that fails is repeated twice, so one slow run on a busy machine does not fail it.
     const repeated = ['env ', '$(at ', '\\x', 'find -exec ', 'xargs ', 'cp -r ', 'tar x', 'git --git-dir ', '.claude/', 'cd $', '=.git/', 'git checkout ', 'git remote ', 'print -', 'nohup env time ', 'a{', 'git_pager=', 'unzip ', 'patch ', 'git_pager+=', '%5b', 'print -r ', 'git checkout x -- ', 'git restore -s ', 'git checkout -b ', 'gtar x ', "'"];
     const inputs: Array<[string, (size: number) => string]> = repeated.map((unit) => [unit, (size) => unit.repeat(Math.floor(size / unit.length))]);
-    // One long token: a prefix, a run of one letter, a character that is no letter, which is the shape a flag regex backtracks on.
+    // One long token (#654): a prefix, a run of one letter, a character that is no letter, which is the shape a flag regex backtracks on.
     const oneToken = (label: string, head: string, letter: string, tail = '1'): [string, (size: number) => string] => [label, (size) => `${head}${letter.repeat(size)}${tail}`];
     inputs.push(
       oneToken('cp -a…1', 'cp -', 'a'),
@@ -742,6 +752,8 @@ describe('the floor over-matches the #654 items (decision 0025 amendment, Deskto
       oneToken('git restore -s…1', 'git restore -', 's'),
       oneToken('git checkout -b…1', 'git checkout -', 'b'),
       oneToken('quotes…x', '', "'", 'x'),
+      oneToken('letter then quotes…x', 'a', "'", 'x'),
+      oneToken('letter then quotes…x after rm', 'rm a', "'", 'x'),
       oneToken('quotes…x after rm', 'rm ', "'", 'x'),
       oneToken('parens in quotes…x', 'git ', '"', 'x'),
       oneToken('tar x…1', 'tar ', 'x'),
