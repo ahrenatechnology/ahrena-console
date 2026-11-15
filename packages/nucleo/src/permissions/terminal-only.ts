@@ -319,7 +319,7 @@ function segmentChangesToolConfig(tokens: string[]): boolean {
     for (const tool of seen) if (TOOL_CONFIG_WORDS.get(tool)?.has(t)) return true;
     // Any token named `claude` or `claude-code` is the tool, whoever runs it: `npx @anthropic-ai/claude-code plugin install` (#654/AC-7, item 8).
     const base = baseName(t);
-    // A version after the package name is cut at its `@`, never at index 0 (a scope): `claude-code@latest` is `claude-code`.
+    // A version after the package name is cut at its `@`, never at index 0 (a scope): `claude-code@latest` is `claude-code` (#654/AC-7, item 8).
     const at = base.indexOf('@', 1);
     const unversioned = at < 0 ? base : base.slice(0, at);
     const name = unversioned === 'claude-code' ? 'claude' : unversioned;
