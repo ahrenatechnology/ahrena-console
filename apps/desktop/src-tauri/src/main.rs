@@ -189,10 +189,10 @@ fn main() {
 /// hand); if it only comes up later (no Node, "Procurar de novo"), the console does not show up by
 /// itself.
 fn follow(app: AppHandle, state: Shared, dir: PathBuf, data_dir: Option<PathBuf>, signals: std::sync::mpsc::Receiver<()>, mut open_at_launch: bool) {
+    // The window credential outlives a loop turn while the core does: a turn also ends on a hiccup of the same core (#619).
+    let mut holding = core::Holding::default();
     loop {
         owner_auth::clear();
-        // Closing the previous core's channel (dropping its grant, at the end of the last turn) revoked its credential (#619).
-        window_channel::clear();
         change(&app, &state, |s| {
             s.core = CoreState::Searching;
             s.attention = None;
@@ -203,7 +203,7 @@ fn follow(app: AppHandle, state: Shared, dir: PathBuf, data_dir: Option<PathBuf>
             s.notices.machines.reset();
             s.notices.clouds.reset();
         });
-        let (outcome, grant) = core::start_own_core(&dir, data_dir.as_deref());
+        let outcome = holding.start(&dir, data_dir.as_deref());
         let open = std::mem::take(&mut open_at_launch);
         let core = match outcome.core {
             Some(core) => {
@@ -241,8 +241,8 @@ fn follow(app: AppHandle, state: Shared, dir: PathBuf, data_dir: Option<PathBuf>
             }
             continue;
         }
-        // `grant` stays alive to the end of this turn: the core is the app's for as long as `watch_core` runs (#619).
-        if let Some(grant) = &grant {
+        // `holding` keeps the grant (and its channel open) while this core is the app's, across turns (#619).
+        if let Some(grant) = holding.grant() {
             window_channel::publish(core.port, grant.credential());
         }
         let mut asked = false;

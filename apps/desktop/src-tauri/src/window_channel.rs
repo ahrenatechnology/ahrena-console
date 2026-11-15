@@ -67,13 +67,16 @@ impl ChildEnd {
         UnixStream::from(self.0)
     }
 
-    /// Makes `command`'s child see this end as fd 3. Both ends of the pair are close-on-exec, so no other child inherits either (#619).
-    pub fn pass_as_fd3(&self, command: &mut Command) {
-        let fd = self.0.as_raw_fd();
+    /// Makes `command`'s child see this end as fd 3. The end moves into the command, so the descriptor `pre_exec` duplicates stays open
+    /// until the command is dropped: the caller drops the command right after `spawn()`, which closes the app's copy at once. Both ends
+    /// of the pair are close-on-exec, so no other child inherits either (#619).
+    pub fn pass_as_fd3(self, command: &mut Command) {
+        let end = self.0;
         // SAFETY: the closure runs between fork and exec and only calls `dup2` and `fcntl`, which are async-signal-safe, on a descriptor
-        // that stays open in the parent until after the spawn (#619).
+        // owned by the closure itself (the `OwnedFd` it captured), so it cannot be closed or reused before the closure runs (#619).
         unsafe {
             command.pre_exec(move || {
+                let fd = end.as_raw_fd();
                 if fd == CHANNEL_FD {
                     // `dup2` onto itself does nothing and would leave close-on-exec set.
                     if libc::fcntl(CHANNEL_FD, libc::F_SETFD, 0) == -1 {
@@ -88,7 +91,10 @@ impl ChildEnd {
     }
 }
 
-/// The socketpair: the app's end, and the end for the owner. `UnixStream::pair` makes both close-on-exec (#619).
+/// The socketpair: the app's end, and the end for the owner. `UnixStream::pair` makes both close-on-exec. On macOS std sets `FD_CLOEXEC`
+/// right after creating the pair, not atomically with it, so a child spawned by another thread in that instant could inherit the app's
+/// end. That is acceptable (#619): such a child would be the peer's last owner of that end and the one writing on it, so the core
+/// would check that child's cdhash against the installed app's and refuse; and the children the app spawns are trusted binaries.
 pub fn open() -> io::Result<(UnixStream, ChildEnd)> {
     let (app, child) = UnixStream::pair()?;
     Ok((app, ChildEnd(OwnedFd::from(child))))
@@ -196,7 +202,7 @@ mod tests {
     }
 
     /// Runs `sh -c script` with the channel's far end as fd 3, and returns its stdout.
-    fn run_on_channel(script: &str, child: &ChildEnd) -> std::process::Child {
+    fn run_on_channel(script: &str, child: ChildEnd) -> std::process::Child {
         let mut command = Command::new("/bin/sh");
         command
             .args(["-c", script])
@@ -204,14 +210,16 @@ mod tests {
             .stdout(Stdio::piped())
             .stderr(Stdio::null());
         child.pass_as_fd3(&mut command);
-        command.spawn().unwrap()
+        let spawned = command.spawn().unwrap();
+        // The command owns the far end until it is dropped; dropping it right after the spawn closes the app's copy (#619).
+        drop(command);
+        spawned
     }
 
     #[test]
     fn the_child_reads_the_issued_credential_on_fd_3() {
         let (app, child) = open().unwrap();
-        let process = run_on_channel("head -c 65 <&3", &child);
-        drop(child);
+        let process = run_on_channel("head -c 65 <&3", child);
         let grant = issue(app).unwrap();
         let out = process.wait_with_output().unwrap();
         assert_eq!(
@@ -231,8 +239,7 @@ mod tests {
             .stderr(Stdio::null())
             .spawn()
             .unwrap();
-        let process = run_on_channel("cat <&3", &child);
-        drop(child);
+        let process = run_on_channel("cat <&3", child);
         let grant = issue(app).unwrap();
         let value = grant.credential().reveal().to_string();
         drop(grant);
@@ -250,6 +257,29 @@ mod tests {
         assert_eq!(
             got.expect("EOF never arrived: the app's end leaked into a child"),
             format!("{value}\n")
+        );
+    }
+
+    #[test]
+    fn the_far_end_is_owned_by_the_command_and_closed_with_it() {
+        use std::io::Read;
+        let (mut app, child) = open().unwrap();
+        let mut command = Command::new("/usr/bin/true");
+        child.pass_as_fd3(&mut command);
+        // The only copy of the far end is inside the command: the app's end sees no EOF while it lives, and EOF once it is dropped.
+        app.set_read_timeout(Some(Duration::from_secs(10))).unwrap();
+        app.set_nonblocking(true).unwrap();
+        let mut byte = [0u8; 1];
+        let err = app.read(&mut byte).unwrap_err();
+        assert_eq!(err.kind(), io::ErrorKind::WouldBlock, "{err:?}");
+        app.set_nonblocking(false).unwrap();
+        let mut process = command.spawn().unwrap();
+        drop(command);
+        let _ = process.wait();
+        assert_eq!(
+            app.read(&mut byte).unwrap(),
+            0,
+            "EOF: no copy of the far end is left in the app"
         );
     }
 
