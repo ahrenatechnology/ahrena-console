@@ -37,9 +37,11 @@ const AUTO_RUN_PATH_PATTERNS: ReadonlyArray<{ test(text: string): boolean }> = [
   new RegExp(`${A}package\\.json${END}`, 'i'),
   new RegExp(`${A}(?:gnumakefile|makefile)${END}|\\.mk${END}`, 'i'),
   new RegExp(`${A}\\.github/workflows${END}`, 'i'),
-  new RegExp(`${A}\\.(?:zshrc|bashrc|bash_profile|bash_login|bash_logout|bash_aliases|profile|zprofile|zshenv|zlogin|zlogout)${END}`, 'i'),
+  new RegExp(`${A}\\.(?:zshrc|bashrc|bash_profile|bash_login|bash_logout|bash_aliases|profile|zprofile|zshenv|zlogin|zlogout|cshrc|tcshrc|kshrc|mkshrc|login|logout)${END}`, 'i'),
   new RegExp(`${A}\\.config/(?:fish|git|systemd|autostart)${END}`, 'i'),
   new RegExp(`${A}\\.husky${END}`, 'i'),
+  // Cloud, cluster, container and GitHub CLI configs, and the terminal multiplexer start-up (#618/AC-11).
+  new RegExp(`${A}\\.(?:aws|kube)/config${END}|${A}\\.docker/config\\.json${END}|${A}\\.config/gh${END}|${A}\\.tmux\\.conf${END}`, 'i'),
   /launch(?:agents|daemons)/i,
   new RegExp(`${A}\\.npmrc${END}|${A}\\.yarnrc(?:\\.ya?ml)?${END}`, 'i'),
   // Build and install scripts run by the next build or install, and the package manager configs that steer them (#618/AC-11).
@@ -54,7 +56,8 @@ const AUTO_RUN_PATH_PATTERNS: ReadonlyArray<{ test(text: string): boolean }> = [
   new RegExp(`${A}/?var/spool/cron`, 'i'),
   new RegExp(`${A}crontab${END}`, 'i'),
   // What the next agent run reads as its commands, agents, skills and instructions (#618/AC-11).
-  new RegExp(`${A}\\.claude/(?:commands|agents|skills)${END}`, 'i'),
+  new RegExp(`${A}\\.claude/(?:commands|agents|skills|rules|output-styles)${END}`, 'i'),
+  new RegExp(`${A}\\.claude\\.json${END}`, 'i'),
   new RegExp(`${A}(?:claude|agents)(?:\\.local)?\\.md${END}`, 'i'),
 ];
 /** The tools that only read: a path in their input is no write (#618/AC-11). */
@@ -128,6 +131,20 @@ function mutatesPackageJson(form: string): boolean {
   return tokens.some((t, i) => t === 'set-script' || (t === 'pkg' && PACKAGE_JSON_EDITS.has(tokens[i + 1] ?? '')) || (t === 'config' && CONFIG_EDITS.has(tokens[i + 1] ?? '')));
 }
 
+/** The first word after a command that is no option: `npm --global set`, `claude mcp`. */
+const subcommandAfter = (tokens: string[], at: number): string => tokens.slice(at + 1).find((t) => !t.startsWith('-')) ?? '';
+
+/** `npm set` (also pnpm, yarn, bun) writes the user's `.npmrc`; `claude mcp` and `claude config` change what the next agent run loads; `gh alias` plants commands. Over-matches by design: reads included (#618/AC-11, decision 0025 amendment). */
+function changesToolConfig(form: string): boolean {
+  const tokens = tokensOf(form);
+  return tokens.some((t, i) => {
+    const name = baseName(t);
+    if (PACKAGE_MANAGERS.has(name)) return subcommandAfter(tokens, i) === 'set';
+    if (name === 'claude') return ['mcp', 'config'].includes(subcommandAfter(tokens, i));
+    return name === 'gh' && subcommandAfter(tokens, i) === 'alias';
+  });
+}
+
 /** Schedulers and login items registered by command, and git configuration injected by environment (#618/AC-11). */
 const SCHEDULER_PATTERNS: RegExp[] = [
   new RegExp(`${A}(?:launchctl|systemctl|systemd-run)${END}`),
@@ -137,35 +154,85 @@ const SCHEDULER_PATTERNS: RegExp[] = [
 /** `at` and `batch` count only in command position (first word of a segment, after env assignments), never as a word of prose (#618/AC-11). */
 const AT_IN_COMMAND_POSITION = /^[\s({]*(?:[a-z_][a-z0-9_]*=\S*\s+)*(?:\S*\/)?(?:at|batch)(?=\s|$)/;
 
-/** `git -c k=v` and `git --config-env` among the options before the subcommand, on every `git` word; `-C dir` is skipped. Case matters here (`-C` is not `-c`), so it reads the raw spelling (#618/AC-11). */
-function gitInjectsConfig(form: string): boolean {
-  const tokens = tokensOf(form);
-  // One pass: each token is read by at most one option scan, so the cost is linear in the command (#618/AC-11).
-  let at = 0;
-  while (at < tokens.length) {
-    if (baseName(tokens[at] ?? '').toLowerCase() !== 'git') {
-      at++;
-      continue;
-    }
-    let i = at + 1;
-    for (; i < tokens.length; i++) {
-      const o = tokens[i] ?? '';
-      if (o === '-c' || o.startsWith('--config-env')) return true;
-      if (o === '-C' || o === '--git-dir' || o === '--work-tree' || o === '--namespace' || o === '--exec-path') i++;
-      else if (!o.startsWith('-')) break;
-    }
-    at = i;
+const GIT_OPTIONS_WITH_VALUE = new Set(['-C', '--git-dir', '--work-tree', '--namespace', '--exec-path']);
+/** Subcommands where `-c` is no configuration: `commit -c <commit>` reuses a message, `log`, `diff` and `show` take it as combined diff (#618/AC-9). */
+const GIT_SUBCOMMANDS_WITH_PLAIN_C = new Set(['commit', 'log', 'diff', 'show']);
+
+/** A git option that injects configuration or a template, on any token after a `git` word of the segment, not only before the subcommand: `git clone -c k=v`, `git init --template=d`, `-ck=v`. Case matters (`-C` is not `-c`), so it reads the raw spelling. After the subcommand, `-c` is let through only for the subcommands that read it otherwise; any other subcommand, an alias included, over-matches (#618/AC-9, decision 0025 amendment). */
+function gitSegmentInjectsConfig(tokens: string[]): boolean {
+  let subcommand: string | undefined;
+  for (let i = 0; i < tokens.length; i++) {
+    const o = tokens[i] ?? '';
+    const plainC = o.startsWith('-c') && !o.startsWith('--');
+    if (o.startsWith('--config') || o.startsWith('--template')) return true;
+    if (plainC && (subcommand === undefined || !GIT_SUBCOMMANDS_WITH_PLAIN_C.has(subcommand))) return true;
+    if (GIT_OPTIONS_WITH_VALUE.has(o) && subcommand === undefined) i++;
+    else if (subcommand === undefined && !o.startsWith('-')) subcommand = o;
   }
   return false;
 }
 
+function gitInjectsConfig(form: string): boolean {
+  // One pass per segment, each token read once: linear in the command (#618/AC-9).
+  return form.split(/[|;&\n]+/).some((segment) => {
+    const tokens = tokensOf(segment);
+    const git = tokens.findIndex((t) => baseName(t).toLowerCase() === 'git');
+    return git >= 0 && gitSegmentInjectsConfig(tokens.slice(git + 1));
+  });
+}
+
+/** Words of a command as the shell would split them, with each character marked quoted or not: quotes and backslashes are dropped, a quoted or escaped character reads as `q` in `masked`. Redirections and separators split words (#618/AC-11). */
+function shellWords(command: string): Array<{ plain: string; masked: string }> {
+  const words: Array<{ plain: string; masked: string }> = [];
+  let plain = '';
+  let masked = '';
+  let quote = '';
+  const flush = () => {
+    if (plain) words.push({ plain, masked });
+    plain = '';
+    masked = '';
+  };
+  for (let i = 0; i < command.length; i++) {
+    const c = command[i] ?? '';
+    if (quote) {
+      if (c === quote) quote = '';
+      else {
+        plain += c;
+        masked += 'q';
+      }
+    } else if (c === '"' || c === "'") quote = c;
+    else if (c === '\\') {
+      plain += command[++i] ?? '';
+      masked += 'q';
+    } else if (/[\s;|&()<>]/.test(c)) flush();
+    else {
+      plain += c;
+      masked += c;
+    }
+  }
+  flush();
+  return words;
+}
+
+const UNQUOTED_GLOB = /[*?[]|\{[^}]*(?:,|\.\.)[^}]*\}/;
+const PATH_START = /^[~./]/;
+
+/** An unquoted `*`, `?`, `[` or `{a,b}` in a word that starts with `~`, `.` or `/` (or after an `=`): it could expand to a floor path, so it is terminal-only. Over-matches `./scripts/*.sh` and `/tmp/*.log`; `src/*.ts` stays allowable (#618/AC-11, decision 0025 amendment). */
+function expandsPathByGlob(command: string): boolean {
+  return shellWords(command).some(({ plain, masked }) => {
+    if (!UNQUOTED_GLOB.test(masked)) return false;
+    const eq = plain.indexOf('=');
+    return PATH_START.test(plain) || (eq >= 0 && PATH_START.test(plain.slice(eq + 1)));
+  });
+}
+
 function commandIsTerminalOnly(rawCommand: string): boolean {
-  if (spellings(rawCommand).some(gitInjectsConfig)) return true;
+  if (spellings(rawCommand).some(gitInjectsConfig) || expandsPathByGlob(rawCommand)) return true;
   // Command names are compared whatever the case, as the macOS disk is: `Git push`, `RM -rf` (#618/AC-11).
   const forms = spellings(rawCommand.toLowerCase());
   if (forms.some((form) => COMMAND_PATTERNS.some((re) => re.test(form)))) return true;
   if (forms.some((form) => SCHEDULER_PATTERNS.some((re) => re.test(form)) || form.split(/[|;&\n]+/).some((segment) => AT_IN_COMMAND_POSITION.test(segment)))) return true;
-  if (forms.some(downloadsAndRuns) || forms.some(reachesGitIndirectly) || forms.some(mutatesPackageJson)) return true;
+  if (forms.some(downloadsAndRuns) || forms.some(reachesGitIndirectly) || forms.some(mutatesPackageJson) || forms.some(changesToolConfig)) return true;
   return forms.some((form) => form.split(/[|;&\n]+/).some(hasRiskyVerb));
 }
 
