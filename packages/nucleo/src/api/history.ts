@@ -25,14 +25,16 @@ export async function responderHistorico(res: ServerResponse, url: URL, historic
 
 /**
  * #661 the route observed end to end: a root span for the request, a child span for the adapter read and a log record
- * on the same trace. An unexpected failure answers the generic error and the correlation id, never the error's text.
+ * on the same trace. An unexpected failure answers the generic error and the correlation id, never the error's text,
+ * and leaves one server log line with the operation, the exception type and that correlation id.
  */
-export function respondHistoryObserved(observer: Observer, req: IncomingMessage, res: ServerResponse, url: URL, historico: SessionHistory | null | undefined): Promise<void> {
+export function respondHistoryObserved(observer: Observer, req: IncomingMessage, res: ServerResponse, url: URL, history: SessionHistory | null | undefined, log: (message: string) => void): Promise<void> {
   return observer.entry({ name: `GET ${HISTORY_ROUTE}`, method: req.method ?? 'GET', route: HISTORY_ROUTE }, async (scope) => {
     try {
-      await responderHistorico(res, url, historico, observer);
+      await responderHistorico(res, url, history, observer);
     } catch (error) {
       scope.fail(error);
+      log(`GET ${HISTORY_ROUTE} failed: ${error instanceof Error ? error.name : typeof error}, correlation ${scope.correlationId}`);
       if (!res.headersSent) send(res, 500, { error: 'erro interno', correlationId: scope.correlationId });
     }
     scope.respond(res.statusCode);

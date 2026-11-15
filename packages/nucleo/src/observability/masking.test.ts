@@ -1,7 +1,7 @@
 // LOG-1 (#661): the observer masks sensitive keys before export.
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
-import { maskAttributes, REDACTED } from '../../src/observability/masking.ts';
+import { maskAttributes, REDACTED } from './masking.ts';
 
 describe('maskAttributes', () => {
   test('a key that names a secret or a personal datum leaves redacted, the others untouched', () => {

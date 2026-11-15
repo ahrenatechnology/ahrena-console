@@ -1,5 +1,5 @@
-// #661: `GET /api/history` end to end through the observer, with in-memory exporters installed at the composition
-// root: a root span for the route, a child span for the adapter read, a log record correlated to both.
+/* #661: `GET /api/history` end to end through the observer, with in-memory exporters installed at the composition
+   root: a root span for the route, a child span for the adapter read, a log record correlated to both. */
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import { InMemorySpanExporter } from '@opentelemetry/sdk-trace-base';
@@ -20,7 +20,7 @@ import { OWNER_TOKEN, ownerFetch as fetch } from '../owner-http.ts';
 const NOW = Date.parse(T0);
 const UNEXPECTED = 'disk exploded at /Users/someone/private/nucleo.sqlite';
 
-/** An adapter read that fails unexpectedly, with a provider code, a text and a stack a caller must never see. */
+/** An adapter read that fails unexpectedly (#661), with a provider code, a text and a stack a caller must never see. */
 class FailingHistory extends SessionHistory {
   override async page(): Promise<never> {
     throw Object.assign(new Error(UNEXPECTED), { code: 'SQLITE_BUSY' });
@@ -37,6 +37,7 @@ async function eventually<T>(read: () => T | undefined, what: string): Promise<T
 }
 
 async function start({ failing = false, observed = true } = {}) {
+  const lines: string[] = [];
   const storage = openSqliteStorage({ path: ':memory:' });
   const decisions = new SqliteDecisionStore(storage.db);
   await seedPanelScenario(storage, 'p4', NOW);
@@ -50,10 +51,11 @@ async function start({ failing = false, observed = true } = {}) {
     { AHRENA_CONSOLE_OTEL_EXPORTER: 'otlp', AHRENA_CONSOLE_ENVIRONMENT: 'test' },
     { exporters: { spans, logs } },
   );
-  const api = await startLocalApi({ ownerToken: () => OWNER_TOKEN, panelBuilder, hooks: { storage }, port: 0, log: () => {}, history, ...(observed ? { observer: observability.observer } : {}) });
+  const api = await startLocalApi({ ownerToken: () => OWNER_TOKEN, panelBuilder, hooks: { storage }, port: 0, log: (line) => lines.push(line), history, ...(observed ? { observer: observability.observer } : {}) });
   return {
     spans,
     logs,
+    lines,
     get: (query = '') => fetch(`${api.url}/api/history${query}`),
     close: async () => {
       await api.close();
@@ -148,6 +150,23 @@ describe('GET /api/history observed', () => {
       assert.ok(!JSON.stringify(record!.attributes).includes('disk exploded'));
       assert.equal(record!.attributes['exception.message'], undefined);
       assert.equal(record!.attributes['exception.stacktrace'], undefined);
+    } finally {
+      await t.close();
+    }
+  });
+
+  test('#661/AC-1 a failing read with no observer wired still leaves one server log line naming the operation, the exception type and the correlation id of the 500 body, with no error text', async () => {
+    const t = await start({ failing: true, observed: false });
+    try {
+      const response = await t.get();
+      assert.equal(response.status, 500);
+      const body: unknown = await response.json();
+      assert.ok(typeof body === 'object' && body !== null && 'correlationId' in body && typeof body.correlationId === 'string');
+      const line = t.lines.find((l) => l.includes('GET /api/history'));
+      assert.ok(line, `lines: ${t.lines.join(' | ')}`);
+      assert.ok(line.includes(body.correlationId), 'the line carries the correlation id of the response');
+      assert.ok(line.includes('Error'), 'the line carries the exception type');
+      for (const leak of [UNEXPECTED, 'disk exploded', '/Users/', ' at ', '.ts:']) assert.ok(!line.includes(leak), `the line holds ${leak}`);
     } finally {
       await t.close();
     }

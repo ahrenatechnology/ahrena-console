@@ -1,9 +1,8 @@
-// The OpenTelemetry adapter behind the observability port (#661). Loaded by `import()` from setup.ts and only when
-// AHRENA_CONSOLE_OTEL_EXPORTER is configured: this is the one file in the core that imports @opentelemetry/*.
-//
-// Exits: a span (name, method, route, status code, exception type) and a log record (event.name, method, route,
-// status code, correlation id, exception type, error code). The error's text and its stack stay out of both
-// (ahrena-engineering-security rules/layer-exposure.md); the response carries the correlation id instead.
+/* The OpenTelemetry adapter behind the observability port (#661). Loaded by `import()` from setup.ts and only when
+   AHRENA_CONSOLE_OTEL_EXPORTER is configured: this is the one file in the core that imports @opentelemetry/*.
+   Exits: a span (name, method, route, status code, exception type) and a log record (event.name, method, route,
+   status code, correlation id, exception type, error code). The error's text and its stack stay out of both
+   (layer-exposure rule); the response carries the correlation id instead. */
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { ROOT_CONTEXT, SpanKind, SpanStatusCode, trace, type Context, type Span } from '@opentelemetry/api';
 import { SeverityNumber } from '@opentelemetry/api-logs';
@@ -22,9 +21,9 @@ const ERROR_CODE = /^[A-Z][A-Z0-9_]{1,63}$/;
 export interface OtelObserverOptions {
   readonly version: string;
   readonly environment: string;
-  /** OTLP/HTTP base URL; absent, the exporters' own default. Ignored when `exporters` is given. */
+  /** OTLP/HTTP base URL (#661); absent, the exporters' own default. Ignored when `exporters` is given. */
   readonly endpoint?: string;
-  /** Exporters installed by the composition root (tests install in-memory ones); absent, OTLP/HTTP. */
+  /** Exporters installed by the composition root (#661; tests install in-memory ones); absent, OTLP/HTTP. */
   readonly exporters?: { readonly spans: SpanExporter; readonly logs: LogRecordExporter };
 }
 
@@ -33,7 +32,7 @@ interface Failure {
   readonly code: string | null;
 }
 
-/** The named fields of a failure: its type and its provider code, never its text or its stack. */
+/** The named fields of a failure (#661): its type and its provider code, never its text or its stack. */
 function describeFailure(error: unknown): Failure {
   const type = error instanceof Error ? error.name : typeof error;
   const code = typeof error === 'object' && error !== null && 'code' in error && typeof error.code === 'string' && ERROR_CODE.test(error.code) ? error.code : null;
@@ -63,7 +62,7 @@ export async function createOtelObserver(options: OtelObserverOptions): Promise<
   const loggerProvider = new LoggerProvider({ resource, processors: [exporters.simple ? new SimpleLogRecordProcessor({ exporter: exporters.logs }) : new BatchLogRecordProcessor({ exporter: exporters.logs })] });
   const tracer = tracerProvider.getTracer(SCOPE_NAME, options.version);
   const logger = loggerProvider.getLogger(SCOPE_NAME, options.version);
-  // The active context is this observer's own: no global context manager is installed by loading the SDK.
+  /* The active context is this observer's own: no global context manager is installed by loading the SDK (#661). */
   const active = new AsyncLocalStorage<Context>();
 
   function emitRequestLog(context: Context, description: EntryDescription, status: number | null, correlationId: string, failure: Failure | null): void {

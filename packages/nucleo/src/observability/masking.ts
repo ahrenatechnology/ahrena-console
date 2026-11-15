@@ -1,5 +1,5 @@
-// LOG-1 (#661): the observer masks before it exports. An attribute whose key names a secret or a personal datum
-// leaves as `[redacted]`; the keys the code writes are named fields, so this is the second lock, not the first.
+/* LOG-1 (#661): the observer masks before it exports. An attribute whose key names a secret or a personal datum
+   leaves as `[redacted]`; the keys the code writes are named fields, so this is the second lock, not the first. */
 
 export const REDACTED = '[redacted]';
 

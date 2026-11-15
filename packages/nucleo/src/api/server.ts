@@ -687,7 +687,7 @@ export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
       return send(res, r.status, r.corpo);
     }
     if (url.pathname === SESSIONS_ROUTE && opts.sessions) return responderSessoes(res, url, opts.sessions);
-    if (url.pathname === HISTORY_ROUTE) return respondHistoryObserved(observer, req, res, url, opts.history);
+    if (url.pathname === HISTORY_ROUTE) return respondHistoryObserved(observer, req, res, url, opts.history, log);
     if (url.pathname === KANBAN_ROUTE && opts.kanban) return responderKanban(res, url, opts.kanban);
     if (opts.repos && (url.pathname === REPOS_ROUTE || url.pathname.startsWith(`${REPOS_ROUTE}/`))) return opts.repos(res, url);
     if (opts.agentInstructions && url.pathname.startsWith(`${AGENT_INSTRUCTIONS_ROUTE}/`)) return opts.agentInstructions(res, url);
