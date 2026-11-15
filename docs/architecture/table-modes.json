@@ -1,0 +1,141 @@
+{
+  "note": "issue 657 (PER-1): the mode of every SQLite table the sources create, as the code does it today. `upsert` means upsert with no history: it is the truth for most tables and is flagged legacy under the ratchet (new tables are append-only or upsert-with-history; migrating the legacy ones is a separate issue). test/architecture-registers.test.mjs checks the register against every CREATE TABLE under packages/*/src.",
+  "modes": [
+    "append-only",
+    "upsert-with-history",
+    "upsert"
+  ],
+  "tables": {
+    "reprocessings": {
+      "mode": "upsert",
+      "createdIn": "packages/nucleo/src/adapters/sqlite/migrations.ts",
+      "note": "one row per finished reprocessing; INSERT OR REPLACE rewrites done_at",
+      "legacy": true
+    },
+    "sessions": {
+      "mode": "upsert",
+      "createdIn": "packages/nucleo/src/adapters/sqlite/migrations.ts",
+      "note": "ON CONFLICT (id) DO UPDATE; previous values are not kept",
+      "legacy": true
+    },
+    "agents": {
+      "mode": "upsert",
+      "createdIn": "packages/nucleo/src/adapters/sqlite/migrations.ts",
+      "note": "ON CONFLICT (id) DO UPDATE; previous values are not kept",
+      "legacy": true
+    },
+    "events": {
+      "mode": "append-only",
+      "createdIn": "packages/nucleo/src/adapters/sqlite/migrations.ts",
+      "note": "ON CONFLICT (id) DO NOTHING; the one exception is setEventText, which rewrites data.text to backfill a transcript text"
+    },
+    "token_usage": {
+      "mode": "upsert",
+      "createdIn": "packages/nucleo/src/adapters/sqlite/migrations.ts",
+      "note": "INSERT OR REPLACE per session, model and speed; previous totals are not kept",
+      "legacy": true
+    },
+    "model_pricing": {
+      "mode": "upsert",
+      "createdIn": "packages/nucleo/src/adapters/sqlite/migrations.ts",
+      "note": "INSERT OR REPLACE by pattern, and a delete; previous prices are not kept",
+      "legacy": true
+    },
+    "accounts": {
+      "mode": "upsert",
+      "createdIn": "packages/nucleo/src/adapters/sqlite/migrations.ts",
+      "note": "ON CONFLICT (id) DO UPDATE; previous values are not kept",
+      "legacy": true
+    },
+    "session_plans": {
+      "mode": "upsert-with-history",
+      "createdIn": "packages/nucleo/src/adapters/sqlite/migrations.ts",
+      "history": "session_plan_history",
+      "note": "current plan per session; each earlier run is in session_plan_history"
+    },
+    "session_plan_history": {
+      "mode": "upsert",
+      "createdIn": "packages/nucleo/src/adapters/sqlite/migrations.ts",
+      "note": "the history of session_plans, but written by INSERT OR REPLACE on (session_id, seq) and deleted per session on reimport, so it is not append-only",
+      "legacy": true
+    },
+    "context_meters": {
+      "mode": "upsert",
+      "createdIn": "packages/nucleo/src/context/migration.ts",
+      "note": "ON CONFLICT (session_id, agent_key) DO UPDATE; the latest reading only",
+      "legacy": true
+    },
+    "decisions": {
+      "mode": "upsert-with-history",
+      "createdIn": "packages/nucleo/src/decisions/migration.ts",
+      "history": "decisions.supersedes and decisions.superseded_by",
+      "note": "rows are updated by id, but a replaced decision stays as its own row linked by supersedes and superseded_by"
+    },
+    "session_links": {
+      "mode": "upsert",
+      "createdIn": "packages/nucleo/src/decisions/migration.ts",
+      "note": "ON CONFLICT (session_id) DO UPDATE; previous parent is not kept",
+      "legacy": true
+    },
+    "telemetry_samples": {
+      "mode": "upsert",
+      "createdIn": "packages/nucleo/src/telemetry/migration.ts",
+      "note": "samples keyed by (machine_id, taken_at), written by INSERT OR REPLACE and pruned by DELETE: append-like in use, not by contract",
+      "legacy": true
+    },
+    "installation_settings": {
+      "mode": "upsert",
+      "createdIn": "packages/nucleo/src/settings/migration.ts",
+      "note": "ON CONFLICT (key) DO UPDATE and a delete; previous values are not kept",
+      "legacy": true
+    },
+    "tool_checks": {
+      "mode": "upsert",
+      "createdIn": "packages/nucleo/src/tools/migration.ts",
+      "note": "a machine snapshot: DELETE by machine then INSERT; previous checks are not kept",
+      "legacy": true
+    },
+    "runtime_runs": {
+      "mode": "upsert",
+      "createdIn": "packages/nucleo/src/runtime/migration.ts",
+      "note": "a state machine updated in place (state, turn_id); no transition history",
+      "legacy": true
+    },
+    "runtime_requests": {
+      "mode": "upsert",
+      "createdIn": "packages/nucleo/src/runtime/migration.ts",
+      "note": "a state machine updated in place (pending, claimed, invalidated); no transition history",
+      "legacy": true
+    },
+    "work_board_columns": {
+      "mode": "upsert",
+      "createdIn": "packages/nucleo/src/github/work-board-history.ts",
+      "note": "despite the name, only the current column and since when per item; ON CONFLICT DO UPDATE",
+      "legacy": true
+    },
+    "github_cache": {
+      "mode": "upsert",
+      "createdIn": "packages/nucleo/src/github/sqlite-cache.ts",
+      "note": "a cache: ON CONFLICT (key) DO UPDATE and deletes; losing a row is harmless",
+      "legacy": true
+    },
+    "work_execution_runs": {
+      "mode": "upsert",
+      "createdIn": "packages/nucleo/src/github/work-execution-runs.ts",
+      "note": "the last run per item_key; ON CONFLICT DO UPDATE",
+      "legacy": true
+    },
+    "work_queue": {
+      "mode": "upsert",
+      "createdIn": "packages/nucleo/src/github/work-queue-store.ts",
+      "note": "a mutable queue: rows are inserted, updated (position, target, failure) and deleted",
+      "legacy": true
+    },
+    "work_plan_runs": {
+      "mode": "upsert",
+      "createdIn": "packages/nucleo/src/github/work-plan-runs.ts",
+      "note": "the last run per item_key; ON CONFLICT DO UPDATE",
+      "legacy": true
+    }
+  }
+}
