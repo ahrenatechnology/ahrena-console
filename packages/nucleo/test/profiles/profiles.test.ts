@@ -162,9 +162,9 @@ describe('Profiles in the port', () => {
     writeFileSync(arquivo, JSON.stringify({ [`${UUID_B}/${ORG_B}`]: { rotulo: 'cliente', cor: ACCOUNT_COLORS[2] } }));
     const contas = new Accounts({ storage, file: arquivo });
     await contas.refresh();
-    const sessao = (accountId: string) => ({ id: 's', accountId, accountSource: 'config' as const });
-    assert.deepEqual(contas.ofSession(sessao(`${UUID_A}/${ORG_A}`), null), { id: `${UUID_A}/${ORG_A}`, label: 'Equipe Exemplo', color: ACCOUNT_COLORS[0], source: 'config', identity: (await storage.getAccount(`${UUID_A}/${ORG_A}`))?.identity, confidence: 'unknown' });
-    assert.deepEqual(contas.ofSession(sessao(`${UUID_B}/${ORG_B}`), null), { id: `${UUID_B}/${ORG_B}`, label: 'cliente', color: ACCOUNT_COLORS[2], source: 'config', identity: (await storage.getAccount(`${UUID_B}/${ORG_B}`))?.identity, confidence: 'unknown' });
+    const sessionOf = (accountId: string) => ({ id: 's', accountId, accountSource: 'config' as const });
+    assert.deepEqual(contas.ofSession(sessionOf(`${UUID_A}/${ORG_A}`), null), { id: `${UUID_A}/${ORG_A}`, label: 'Equipe Exemplo', color: ACCOUNT_COLORS[0], source: 'config', identity: (await storage.getAccount(`${UUID_A}/${ORG_A}`))?.identity, confidence: 'unknown' });
+    assert.deepEqual(contas.ofSession(sessionOf(`${UUID_B}/${ORG_B}`), null), { id: `${UUID_B}/${ORG_B}`, label: 'cliente', color: ACCOUNT_COLORS[2], source: 'config', identity: (await storage.getAccount(`${UUID_B}/${ORG_B}`))?.identity, confidence: 'unknown' });
     await storage.close();
   });
 
@@ -192,12 +192,12 @@ describe('Profiles in the port', () => {
     writeFileSync(arquivo, JSON.stringify({ [`${UUID_B}/${ORG_B}`]: { rotulo: 'cliente' } }));
     const contas = new Accounts({ storage, file: arquivo });
     await contas.refresh();
-    const sessao = (accountId: string) => ({ id: 's', accountId, accountSource: 'config' as const });
-    const a = contas.ofSession(sessao(`${UUID_A}/${ORG_A}`), null);
+    const sessionOf = (accountId: string) => ({ id: 's', accountId, accountSource: 'config' as const });
+    const a = contas.ofSession(sessionOf(`${UUID_A}/${ORG_A}`), null);
     assert.equal(a?.label, 'conta pessoal');
     assert.ok(!JSON.stringify(a).includes('@'));
     // O contas.json continua por cima.
-    assert.equal(contas.ofSession(sessao(`${UUID_B}/${ORG_B}`), null)?.label, 'cliente');
+    assert.equal(contas.ofSession(sessionOf(`${UUID_B}/${ORG_B}`), null)?.label, 'cliente');
     await storage.close();
   });
 
@@ -254,21 +254,38 @@ describe('Profiles in the port', () => {
     const stored = await storage.getAccount(`${UUID_A}/${ORG_A}`);
     assert.ok(stored);
     await storage.putAccount({ ...stored, color: RETIRED });
-    const sessao = (accountId: string) => ({ id: 's', accountId, accountSource: 'config' as const });
+    const sessionOf = (accountId: string) => ({ id: 's', accountId, accountSource: 'config' as const });
 
     const fromSqlite = new Accounts({ storage, file: null });
     await fromSqlite.refresh();
-    const a = fromSqlite.ofSession(sessao(`${UUID_A}/${ORG_A}`), null);
+    const a = fromSqlite.ofSession(sessionOf(`${UUID_A}/${ORG_A}`), null);
     assert.ok(a && ACCOUNT_COLORS.includes(a.color) && a.color !== RETIRED);
     assert.equal(a.color, freeColor([ACCOUNT_COLORS[1]]), 'the least repeated over the other accounts');
 
-    const arquivo = join(home, 'contas.json');
-    writeFileSync(arquivo, JSON.stringify({ [`${UUID_B}/${ORG_B}`]: { rotulo: 'cliente', cor: RETIRED } }));
-    const fromFile = new Accounts({ storage, file: arquivo });
+    const labelFile = join(home, 'contas.json');
+    writeFileSync(labelFile, JSON.stringify({ [`${UUID_B}/${ORG_B}`]: { rotulo: 'cliente', cor: RETIRED } }));
+    const fromFile = new Accounts({ storage, file: labelFile });
     await fromFile.refresh();
-    const b = fromFile.ofSession(sessao(`${UUID_B}/${ORG_B}`), null);
+    const b = fromFile.ofSession(sessionOf(`${UUID_B}/${ORG_B}`), null);
     assert.ok(b && ACCOUNT_COLORS.includes(b.color) && b.color !== RETIRED);
     await storage.close();
+  });
+
+  test('#699/AC-2: two accounts that both store the retired green get different colors, stable across reads', async () => {
+    const RETIRED = '#1baf7a';
+    const ids = [`${UUID_A}/${ORG_A}`, `${UUID_B}/${ORG_B}`, `${UUID_C}/${ORG_C}`];
+    const labelFile = join(home, 'contas.json');
+    writeFileSync(labelFile, JSON.stringify({
+      [ids[0]]: { rotulo: 'a', cor: RETIRED }, [ids[1]]: { rotulo: 'b', cor: RETIRED }, [ids[2]]: { rotulo: 'c', cor: ACCOUNT_COLORS[0] },
+    }));
+    const accounts = new Accounts({ storage: null, file: labelFile, intervalMs: 0 });
+    await accounts.refresh();
+    const read = () => ids.map((id) => accounts.ofSession({ id: 's', accountId: id, accountSource: 'config' as const }, null)?.color);
+    const first = read();
+    assert.equal(first[2], ACCOUNT_COLORS[0]);
+    assert.deepEqual([first[0], first[1]].sort(), [ACCOUNT_COLORS[1], ACCOUNT_COLORS[2]].sort(), 'the two spread over yellow and gray');
+    assert.deepEqual(read(), first, 'the same account reads the same color again');
+    assert.deepEqual(ids.slice().reverse().map((id) => accounts.ofSession({ id: 's', accountId: id, accountSource: 'config' as const }, null)?.color).reverse(), first, 'whatever the order of the reads');
   });
 
   test('new account color: the first one no account uses', async () => {

@@ -14,7 +14,7 @@ export function freeColor(used: readonly (string | null)[]): string {
   return best;
 }
 
-/** The green accounts used to get; accounts that still carry it are given a current color when read. */
+/** The green accounts used to get; accounts that still carry it are given a current color when read (#699). */
 const RETIRED_ACCOUNT_COLOR = '#1baf7a';
 
 /** A stored color as it leaves the core: the retired green becomes what `freeColor` gives over the other accounts' colors. */

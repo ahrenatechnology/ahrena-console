@@ -123,11 +123,26 @@ export class Accounts {
     return this.build(id, 'profile');
   }
 
-  /** The colors the other accounts hold, the configured one first, as `build` reads them. */
-  private otherColors(id: string): (string | null)[] {
-    const ids = new Set([...this.fromPort.keys(), ...this.configured.keys()]);
-    ids.delete(id);
-    return [...ids].map((o) => this.configured.get(o)?.color ?? this.fromPort.get(o)?.color ?? null);
+  /**
+   * The color an account leaves the core with. Retired colors are resolved in id order, each resolved color
+   * counting for the next account, so accounts that still store the same color spread like `freeColor` and read
+   * the same on every read (#699).
+   */
+  private colorOf(id: string): string | null {
+    const ids = [...new Set([...this.fromPort.keys(), ...this.configured.keys()])].sort();
+    const colors = new Map<string, string | null>(ids.map((o) => [o, this.storedColor(o)]));
+    const othersOf = (o: string): (string | null)[] => [...colors].filter(([k]) => k !== o).map(([, c]) => c);
+    for (const o of ids) {
+      if (o === id) break;
+      colors.set(o, resolveStoredColor(colors.get(o), othersOf(o)));
+    }
+    return resolveStoredColor(this.storedColor(id), othersOf(id));
+  }
+
+  /** The color an account stores: the label file's, then the port's. */
+  private storedColor(id: string): string | null {
+    const a = this.fromPort.get(id);
+    return this.configured.get(id)?.color ?? (a?.color && HEX.test(a.color) ? a.color : null);
   }
 
   /** The account's label and color: the label file, then the port's account, then "conta N". */
@@ -136,8 +151,7 @@ export class Accounts {
     const i = this.order.indexOf(id);
     const a = this.fromPort.get(id);
     const c = this.configured.get(id);
-    const stored = c?.color ?? (a?.color && HEX.test(a.color) ? a.color : null);
-    const color = resolveStoredColor(stored, this.otherColors(id)) ?? ACCOUNT_COLORS[i % ACCOUNT_COLORS.length];
+    const color = this.colorOf(id) ?? ACCOUNT_COLORS[i % ACCOUNT_COLORS.length];
     return { id, identity: a?.identity ?? null, confidence: a?.confidence ?? 'unknown', label: c?.label ?? a?.label ?? orgLabel(a?.organizationName) ?? `conta ${i + 1}`, color, source };
   }
 }
