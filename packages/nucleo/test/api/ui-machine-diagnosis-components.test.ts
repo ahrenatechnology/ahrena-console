@@ -119,14 +119,16 @@ describe('the format, with no DOM', () => {
   });
 
   test('the known caches name their cleanup, and the old worktrees are one row with their number and size', () => {
-    const rowsOf = format.cacheRows(CACHES);
+    const rowsOf = format.cacheRows(CACHES, NOW);
     assert.deepEqual(rowsOf, [
       { title: 'npm', path: '~/.npm', bytes: 3.8 * DEC_GB },
       { title: 'pip', path: '~/.cache/pip', bytes: 1.1 * DEC_GB },
-      { title: 'Worktrees antigas', path: '2 worktrees', bytes: 14.2 * DEC_GB },
+      { title: 'Worktrees antigas', path: '2 sem uso há mais de 43 dias, em ~/Workspace', bytes: 14.2 * DEC_GB },
     ]);
     assert.equal(format.cacheRows([{ id: 'xcode', path: '~/DerivedData', bytes: 1, actionId: 'xcode-derived-data' }])[0].title, 'Xcode DerivedData');
-    assert.equal(format.cacheRows([{ id: 'worktree', path: '/w', bytes: 1, actionId: null }])[0].path, '1 worktree');
+    assert.equal(format.cacheRows([{ id: 'worktree', path: '/w', bytes: 1, lastUsedAt: '2026-11-12T00:00:00.000Z', actionId: null }], NOW)[0].path, '1 sem uso há mais de 2 dias, em /');
+    // no readable lastUsedAt: only the number and the folder, never an invented age
+    assert.equal(format.cacheRows([{ id: 'worktree', path: '~/Workspace/x/a', bytes: 1, actionId: null }, { id: 'worktree', path: '~/Workspace/x/b', bytes: 1, lastUsedAt: 'nope', actionId: null }], NOW)[0].path, '2 worktrees, em ~/Workspace/x');
   });
 
   test('the folder section names the mount that the alert id carries', () => {
@@ -155,7 +157,9 @@ describe('the probable cause rule (Q12), with no DOM', () => {
   test('memory: the two biggest by RSS at 40% or more of what is used make the cause obvious, and it says "empurram para o swap" only for swap-high', () => {
     const c = format.probableCause(memoryDiagnosis('swap-high'), { memoryUsedBytes: 30.5 * GB });
     assert.equal(c.obvious, true);
-    assert.equal(text(c), 'qemu-system-aarch64 segura 9,8 GB e 102% de CPU, e next-server mais 3,2 GB a 56%. Os dois somam 13,0 dos 30,5 GB em uso e empurram a máquina para o swap.');
+    assert.equal(text(c), 'qemu-system-aarch64 segura 9,8 GB e 102% de CPU, e next-server mais 3,2 GB a 56%. Os dois somam 13,0 dos 30,5 GB em uso e empurram o Mac para o swap.');
+    const remote = format.probableCause(memoryDiagnosis('swap-high'), { memoryUsedBytes: 30.5 * GB, machine: 'a Workstation' });
+    assert.match(text(remote) as string, /e empurram a Workstation para o swap\.$/);
     assert.equal(c.note, 'Uma leitura dos processos acima, não uma certeza: o console aponta o que mais pesa.');
     assert.doesNotMatch(text(format.probableCause(memoryDiagnosis('memory-high'), { memoryUsedBytes: 30.5 * GB })) as string, /swap/);
     assert.ok(c.parts.some((p: { text: string; mono?: boolean }) => p.text === 'qemu-system-aarch64' && p.mono === true), 'a process name is mono');
@@ -437,14 +441,14 @@ describe('ready, disk (566-6)', () => {
     const p = disk();
     const caches = sec(p, 'known-caches') as ElementoFalso;
     assert.deepEqual(caches.querySelectorAll('thead th').map((h) => texto(h)), ['Cache', 'Tamanho']);
-    assert.deepEqual(rows(caches).map((r) => texto(r)), ['npm ~/.npm 3,8 GB', 'pip ~/.cache/pip 1,1 GB', 'Worktrees antigas 2 worktrees 14,2 GB']);
+    assert.deepEqual(rows(caches).map((r) => texto(r)), ['npm ~/.npm 3,8 GB', 'pip ~/.cache/pip 1,1 GB', 'Worktrees antigas 2 sem uso há mais de 43 dias, em ~/Workspace 14,2 GB']);
     assert.equal(texto(rows(sec(p, 'journal')!)[0]!), 'Em uso pelos journals 4 GB');
   });
 
   test('a section that timed out or is unavailable keeps its place with a badge and one line, the others stay, and there is no retry per section (Q9)', () => {
     const d = diagnosis(
       'volume-full',
-      [down('largest-folders', 'timeout'), down('docker-df', 'unavailable', 'docker: command not found'), ok('known-caches', CACHES)],
+      [down('largest-folders', 'timeout', 'du measured no folder'), down('docker-df', 'unavailable', 'docker: command not found'), ok('known-caches', CACHES)],
       'volume-full:/',
     );
     const p = disk(d);
@@ -453,11 +457,15 @@ describe('ready, disk (566-6)', () => {
     assert.equal(timeout.getAttribute('data-status'), 'timeout');
     assert.match(texto(timeout), /Tempo esgotado/);
     assert.match(texto(timeout), /A leitura passou de 10 s e foi cortada\. As outras seções chegaram\./);
+    assert.equal(texto(timeout.querySelector('.tm-dg-code')), 'du measured no folder');
     assert.ok(timeout.querySelector('.b-waiting'));
     const gone = sec(p, 'docker-df') as ElementoFalso;
     assert.equal(gone.getAttribute('data-status'), 'unavailable');
     assert.match(texto(gone), /Indisponível/);
-    assert.match(texto(gone), /docker: command not found/);
+    assert.equal(texto(gone.querySelector('.tm-dg-line')), 'O Docker não respondeu.');
+    assert.equal(texto(gone.querySelector('.tm-dg-code')), 'docker: command not found');
+    assert.ok(gone.querySelector('.tm-dg-code')!.classList.contains('mono'));
+    assert.doesNotMatch(texto(timeout.querySelector('.tm-dg-line')), /du measured/);
     assert.ok(gone.querySelector('.b-abandoned'));
     assert.equal(gone.querySelectorAll('table').length, 0);
     assert.equal(timeout.querySelectorAll('button').length, 0);
@@ -475,15 +483,20 @@ describe('ready, disk (566-6)', () => {
   test('a section that came ok but only in part says so', () => {
     const d = diagnosis('volume-full', [ok('largest-folders', FOLDERS, { partial: { reason: 'one folder was not readable' } })], 'volume-full:/');
     const text = texto(sec(disk(d), 'largest-folders'));
-    assert.match(text, /one folder was not readable/);
-    assert.doesNotMatch(text, /Leitura parcial/);
+    assert.match(text, /Só parte desta seção foi lida\./);
+    assert.equal(texto(sec(disk(d), 'largest-folders')!.querySelector('.tm-dg-partial .tm-dg-code')), 'one folder was not readable');
   });
 
   test('a section down with no reason from the núcleo falls back to the drawn lines only (566-6)', () => {
     const d = diagnosis('volume-full', [down('largest-folders', 'timeout'), down('docker-df', 'unavailable'), ok('known-caches', CACHES)], 'volume-full:/');
     const p = disk(d);
     assert.match(texto(sec(p, 'largest-folders')), /A leitura passou de 10 s e foi cortada\. As outras seções chegaram\./);
-    assert.match(texto(sec(p, 'docker-df')), /As outras seções chegaram\./);
+    assert.match(texto(sec(p, 'docker-df')), /O Docker não respondeu\./);
+    assert.equal(sec(p, 'docker-df')!.querySelector('.tm-dg-code'), null, 'no reason from the núcleo, no code line');
+    const swapGone = diagnosis('swap-high', [down('swap', 'unavailable', 'swap not reported by /proc/meminfo')]);
+    const q = render('ready', { diagnosis: swapGone });
+    assert.match(texto(sec(q, 'swap')), /As outras seções chegaram\./);
+    assert.doesNotMatch(texto(sec(q, 'swap')!.querySelector('.tm-dg-line')), /swap not reported/);
     assert.doesNotMatch(texto(sec(p, 'docker-df')), /não está disponível agora/);
   });
 

@@ -96,12 +96,34 @@ export const dockerTypeLabel = (type) => DOCKER_TYPES[String(type).toLowerCase()
 const CACHE_TITLES = { 'npm-cache': 'npm', 'pip-cache': 'pip', 'xcode-derived-data': 'Xcode DerivedData' };
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 
-/** The rows of "Caches conhecidos": one per cache, and every old worktree folded into one row with its number and size. */
-export function cacheRows(items) {
+const DAY_MS = 86_400_000;
+
+/** The folder that holds every path: the longest shared parent, "" when they share none ("~/Workspace/a" and ".../b" give "~/Workspace"). */
+function commonParent(paths) {
+  const parents = paths.map((p) => String(p ?? '').split('/').slice(0, -1));
+  const shared = parents.reduce((acc, parts) => {
+    const n = acc.findIndex((seg, i) => parts[i] !== seg);
+    return n < 0 ? acc : acc.slice(0, n);
+  }, parents[0] ?? []);
+  const joined = shared.join('/');
+  return joined || (String(paths[0] ?? '').startsWith('/') ? '/' : '');
+}
+
+/** "9 sem uso há mais de 14 dias, em ~/Workspace" (566-6): the number, the whole days the least idle one has been unused, the folder. */
+function worktreeLine(trees, now) {
+  const ages = trees.map((t) => (now - new Date(t?.lastUsedAt ?? NaN).getTime()) / DAY_MS).filter(Number.isFinite);
+  const days = ages.length === trees.length ? Math.floor(Math.min(...ages)) : 0;
+  const root = commonParent(trees.map((t) => t.path));
+  const where = root ? `, em ${root}` : '';
+  return days >= 1 ? `${trees.length} sem uso há mais de ${plural(days, 'dia', 'dias')}${where}` : `${plural(trees.length, 'worktree', 'worktrees')}${where}`;
+}
+
+/** The rows of "Caches conhecidos": one per cache, and every old worktree folded into one row with its number, idle time and size. */
+export function cacheRows(items, now = Date.now()) {
   const list = Array.isArray(items) ? items : [];
   const rows = list.filter((i) => i?.id !== 'worktree').map((i) => ({ title: CACHE_TITLES[i.actionId] ?? String(i.id), path: String(i.path ?? ''), bytes: i.bytes }));
   const trees = list.filter((i) => i?.id === 'worktree');
-  if (trees.length) rows.push({ title: 'Worktrees antigas', path: plural(trees.length, 'worktree', 'worktrees'), bytes: trees.reduce((sum, t) => sum + (Number.isFinite(t.bytes) ? t.bytes : 0), 0) });
+  if (trees.length) rows.push({ title: 'Worktrees antigas', path: worktreeLine(trees, now), bytes: trees.reduce((sum, t) => sum + (Number.isFinite(t.bytes) ? t.bytes : 0), 0) });
   return rows;
 }
 
@@ -146,6 +168,19 @@ export const MEMORY_SHARE = 0.4;
 export const LOAD_SHARE = 0.5;
 export const LOAD_TOP = 3;
 
+/** How the cause names this machine when the screen does not say otherwise: the drawn screen is the Mac's (566-5). */
+const MACHINE_HERE = 'o Mac';
+
+/** What the screen says of a section that did not come, from its `status` and `id` (wireframe D4); the núcleo's `reason` is never the sentence. */
+export function unavailableText(section) {
+  if (section?.status === 'timeout') return 'A leitura passou de 10 s e foi cortada. As outras seções chegaram.';
+  if (section?.id === 'docker-df') return 'O Docker não respondeu.';
+  return 'As outras seções chegaram.';
+}
+
+/** The line under a section that came only in part; the núcleo's `partial.reason` goes beside it as code. */
+export const PARTIAL_LINE = 'Só parte desta seção foi lida.';
+
 const DOCKER_MISSING = 'O Docker não respondeu: o que ele guarda não entrou na conta.';
 
 const t = (text) => ({ text });
@@ -177,7 +212,8 @@ function memoryCause(diagnosis, context) {
     const who = b ? [mono(a.name), t(' e '), mono(b.name), t(' somam só ')] : [mono(a.name), t(' soma só ')];
     return { obvious, parts: [t('não há uma óbvia. '), ...who, ...total, t('.')], note: 'A causa não é óbvia.' };
   }
-  const swap = diagnosis.kind === 'swap-high' ? (b ? ' e empurram a máquina para o swap' : ' e empurra a máquina para o swap') : '';
+  const machine = typeof context?.machine === 'string' && context.machine ? context.machine : MACHINE_HERE;
+  const swap = diagnosis.kind === 'swap-high' ? (b ? ` e empurram ${machine} para o swap` : ` e empurra ${machine} para o swap`) : '';
   const first = [mono(a.name), t(' segura '), bold(gbText(a.rssBytes)), t(` e ${cpuText(a.cpuPct)} de CPU`)];
   const second = b ? [t(', e '), mono(b.name), t(' mais '), bold(gbText(b.rssBytes)), t(` a ${cpuText(b.cpuPct)}`), t('. Os dois somam '), ...total] : [t('. Sozinho, soma '), ...total];
   return { obvious, parts: [...first, ...second, t(`${swap}.`)], note: 'Uma leitura dos processos acima, não uma certeza: o console aponta o que mais pesa.' };

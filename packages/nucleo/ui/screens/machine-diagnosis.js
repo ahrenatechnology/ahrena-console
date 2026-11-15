@@ -26,6 +26,8 @@ import {
   sectionsFor,
   swapLine,
   swapTone,
+  unavailableText,
+  PARTIAL_LINE,
   visibleItems,
 } from './machine-diagnosis-format.js';
 
@@ -77,7 +79,9 @@ const moreButton = (id, total, expanded, onMore) =>
     moreLabel(id, total, expanded),
   );
 
-const partialNote = (section) => (section.partial?.reason ? el('small', { class: 'tm-muted tm-dg-partial' }, section.partial.reason) : null);
+const reasonCode = (reason) => (typeof reason === 'string' && reason ? el('span', { class: 'mono tm-dg-code' }, reason) : null);
+
+const partialNote = (section) => (section.partial?.reason ? el('small', { class: 'tm-muted tm-dg-partial' }, `${PARTIAL_LINE} `, reasonCode(section.partial.reason)) : null);
 
 const TITLES = {
   'processes-by-rss': ['memory-stick', () => ['Processos por memória']],
@@ -89,18 +93,17 @@ const TITLES = {
   journal: ['scroll-text', () => ['Journal do systemd', monoText('journalctl --disk-usage')]],
 };
 
-const BADGES = { timeout: ['b-waiting', 'Tempo esgotado', 'hourglass', 'A leitura passou de 10 s e foi cortada. As outras seções chegaram.'], unavailable: ['b-abandoned', 'Indisponível', 'slash', 'As outras seções chegaram.'] };
+const BADGES = { timeout: ['b-waiting', 'Tempo esgotado', 'hourglass'], unavailable: ['b-abandoned', 'Indisponível', 'slash'] };
 
 function unavailableSection(section, mount, wide) {
-  const [tone, label, iconName, fallback] = BADGES[section.status] ?? BADGES.unavailable;
+  const [tone, label, iconName] = BADGES[section.status] ?? BADGES.unavailable;
   const [headIcon, title] = TITLES[section.id];
-  const reason = typeof section.reason === 'string' && section.reason ? section.reason : fallback;
   return sectionBox(
     section.id,
     section.status,
     wide,
     sectionHead(headIcon, title(mount), el('span', { class: `badge ${tone}` }, el('span', { class: 'p' }), label)),
-    el('div', { class: 'tm-dg-state' }, icon(iconName), el('span', {}, reason)),
+    el('div', { class: 'tm-dg-state' }, icon(iconName), el('div', { class: 'tm-dg-msg' }, el('span', { class: 'tm-dg-line' }, unavailableText(section)), reasonCode(section.reason))),
   );
 }
 
@@ -163,8 +166,8 @@ function dockerSection(section, wide) {
   return sectionBox('docker-df', 'ok', wide, sectionHead(headIcon, title()), dataTable(['Tipo', 'Em uso', 'Recuperável'], rows, 1), partialNote(section));
 }
 
-function cachesSection(section, wide) {
-  const rows = cacheRows(section.items).map((c) => el('tr', {}, el('td', {}, c.title, el('small', { class: 'mono' }, c.path)), td(bytes(c.bytes), 'mono tm-dg-r tm-dg-by')));
+function cachesSection(section, wide, now) {
+  const rows = cacheRows(section.items, now).map((c) => el('tr', {}, el('td', {}, c.title, el('small', { class: 'mono' }, c.path)), td(bytes(c.bytes), 'mono tm-dg-r tm-dg-by')));
   const [headIcon, title] = TITLES['known-caches'];
   return sectionBox('known-caches', 'ok', wide, sectionHead(headIcon, title()), dataTable(['Cache', 'Tamanho'], rows, 1), partialNote(section));
 }
@@ -188,7 +191,7 @@ function section(s, ctx, wide) {
     case 'docker-df':
       return dockerSection(s, wide);
     case 'known-caches':
-      return cachesSection(s, wide);
+      return cachesSection(s, wide, ctx.now);
     default:
       return journalSection(s, wide);
   }
@@ -232,8 +235,8 @@ export function diagnosisLoading(alert) {
 }
 
 /** 566-4 to 566-6: the sections of the alert's kind, the read line, "Ler de novo" and the Resolver. */
-export function diagnosisReady(alert, diagnosis, { context = {}, expanded = new Set(), now = Date.now(), onReread, onMore } = {}) {
-  const ctx = { mount: mountOf(diagnosis.alertId ?? alert.id), expanded: expanded instanceof Set ? expanded : new Set(expanded), onMore };
+export function diagnosisReady(alert, diagnosis, { context = {}, machine, expanded = new Set(), now = Date.now(), onReread, onMore } = {}) {
+  const ctx = { mount: mountOf(diagnosis.alertId ?? alert.id), expanded: expanded instanceof Set ? expanded : new Set(expanded), onMore, now };
   const present = sectionsFor(alert.kind, diagnosis);
   const group = groupOf(alert.kind);
   const inCols = group === 'memory' ? present.filter((s) => s.id !== 'swap') : present;
@@ -254,7 +257,7 @@ export function diagnosisReady(alert, diagnosis, { context = {}, expanded = new 
     ),
     inCols.length ? el('div', { class: `tm-dg-cols${group === 'load' ? ' tm-dg-one' : ''}` }, ...inCols.map((s, i) => section(s, ctx, lonely && i === inCols.length - 1))) : null,
     ...below.map((s) => section(s, ctx, false)),
-    resolverBlock(probableCause({ ...diagnosis, kind: alert.kind }, context)),
+    resolverBlock(probableCause({ ...diagnosis, kind: alert.kind }, { ...context, ...(machine ? { machine } : {}) })),
   );
 }
 
@@ -301,7 +304,7 @@ export function diagnosisPanel(v, handlers = {}) {
     case 'loading':
       return diagnosisLoading(alert);
     case 'ready':
-      return v.diagnosis ? diagnosisReady(alert, v.diagnosis, { context: v.context, expanded: v.expanded, now: v.now, onReread: handlers.onReread, onMore: handlers.onMore }) : null;
+      return v.diagnosis ? diagnosisReady(alert, v.diagnosis, { context: v.context, machine: v.remote ? `a ${v.label || 'Workstation'}` : undefined, expanded: v.expanded, now: v.now, onReread: handlers.onReread, onMore: handlers.onMore }) : null;
     case 'failed':
       return diagnosisFailed(alert, { remote: Boolean(v.remote), ...v.failure }, handlers);
     case 'closed':
