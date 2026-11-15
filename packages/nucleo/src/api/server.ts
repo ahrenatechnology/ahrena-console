@@ -103,7 +103,8 @@ import { isUiPath, respondUi } from './ui.ts';
 import { responderWorkflows } from './workflows.ts';
 import { muralDoPainel, WALL_ROUTE, responderMural } from './wall.ts';
 import { SESSIONS_ROUTE, responderSessoes, type ListaDeSessoes } from './sessions.ts';
-import { HISTORY_ROUTE, responderHistorico } from './history.ts';
+import { HISTORY_ROUTE, respondHistoryObserved } from './history.ts';
+import { noopObserver, type Observer } from '../observability/port.ts';
 import type { SessionHistory } from '../history/reading.ts';
 import { responderKanban, KANBAN_ROUTE, type QuadroKanban } from './kanban.ts';
 import { EVENTS_ROUTE, responderEventos, type FeedDeEventos } from './events.ts';
@@ -204,6 +205,8 @@ export interface ApiOptions {
   localOf?: (sessionId: string) => Promise<string | null> | string | null;
   /** O servidor MCP em `/mcp` (src/mcp). Sem ele, `/mcp` dá 404. */
   mcp?: McpServer;
+  /** #661 the observer at the edge (spans and the request log record); absent, the no-op one. Only `GET /api/history` uses it so far. */
+  observer?: Observer;
   /** The commit of the running code, in `/api/overview`: whoever starts another core compares (src/owner). */
   commit?: string | null;
   /** The change cursor; turns on `GET /api/changes`. */
@@ -441,6 +444,7 @@ function readBody(req: IncomingMessage): Promise<string | null> {
 
 export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
   const log = opts.log ?? ((m: string) => console.error(`[ahrena-console api] ${m}`));
+  const observer = opts.observer ?? noopObserver;
   const hooks = createHookRoute(opts.hooks);
   const mcp = opts.mcp ? createMcpRoute(opts.mcp) : null;
   const projectRoute = criarRotaDoProjeto(opts.project ?? { kanban: null, fonte: 'github', log });
@@ -683,7 +687,7 @@ export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
       return send(res, r.status, r.corpo);
     }
     if (url.pathname === SESSIONS_ROUTE && opts.sessions) return responderSessoes(res, url, opts.sessions);
-    if (url.pathname === HISTORY_ROUTE) return responderHistorico(res, url, opts.history);
+    if (url.pathname === HISTORY_ROUTE) return respondHistoryObserved(observer, req, res, url, opts.history, log);
     if (url.pathname === KANBAN_ROUTE && opts.kanban) return responderKanban(res, url, opts.kanban);
     if (opts.repos && (url.pathname === REPOS_ROUTE || url.pathname.startsWith(`${REPOS_ROUTE}/`))) return opts.repos(res, url);
     if (opts.agentInstructions && url.pathname.startsWith(`${AGENT_INSTRUCTIONS_ROUTE}/`)) return opts.agentInstructions(res, url);

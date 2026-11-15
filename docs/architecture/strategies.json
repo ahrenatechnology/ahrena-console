@@ -1,0 +1,53 @@
+{
+  "note": "issue 657 (CON-1): one strategy per problem, kept once chosen. Derived from the code as of this issue; see docs/decisoes/0026-result-and-route-error-format.md. test/architecture-registers.test.mjs checks that the eight problems are present and each reference exists.",
+  "problems": {
+    "result": {
+      "decision": "An expected failure is returned as { ok: true, ...value } | { ok: false, reason: <english_code>, ...detail }; throw only for a broken invariant (decision 0026). Reference: DeliveryResult in messaging/ports.ts, produced by messaging/adapters/socket-inbox.ts. No shared type yet: each function declares its own union.",
+      "reference": "packages/nucleo/src/messaging/ports.ts",
+      "ratchet": "new code; legacy shapes (param in api/work-issue-steps.ts, bare { ok: false } and retryAfterMs in messaging/model.ts, error, why) are migrated in a separate issue",
+      "condition": "ERR-1"
+    },
+    "error-format": {
+      "decision": "A route answers failure with send(res, status, { error, reason? }): error is the message the person reads (or a stable code), reason is a stable english code; never a stack, never an upstream or raw error (decision 0026).",
+      "reference": "packages/nucleo/src/api/messaging.ts",
+      "ratchet": "new code; the 500 handler in api/server.ts already answers { error } with no detail",
+      "condition": "ERR-1, ERR-3"
+    },
+    "http-client": {
+      "decision": "Outbound HTTP uses the global fetch (Node 24) with AbortSignal.timeout (redirect: error where the host is fixed) and takes the fetch as an injectable option so tests replace it. node:http request stays for the loopback core only.",
+      "reference": "packages/nucleo/src/github/connection/device-flow.ts",
+      "ratchet": "new code; transcription/install.ts calls fetch without a timeout (legacy)",
+      "condition": "CON-1"
+    },
+    "validation": {
+      "decision": "Hand-written guards at the boundary (isText, isIssueKey, parse functions returning a union); no schema library is a dependency of the packages.",
+      "reference": "packages/nucleo/src/api/work-issue-write.ts",
+      "ratchet": "new code; a schema library would be a new decision record",
+      "condition": "CON-1"
+    },
+    "test": {
+      "decision": "node:test with node:assert/strict, run by node --test; package tests are .test.ts beside the folder layout under packages/nucleo/test, repository guards are .mjs under test/.",
+      "reference": "packages/nucleo/test/messaging/model.test.ts",
+      "ratchet": "applies to all code",
+      "condition": "CON-1"
+    },
+    "date-time": {
+      "decision": "Instants are ISO-8601 UTC strings (toISOString) in storage and JSON, epoch milliseconds (Date.now) inside rate and timing logic; the clock is a parameter (now) where a test must control it.",
+      "reference": "packages/nucleo/src/messaging/model.ts",
+      "ratchet": "new code takes now as a parameter; direct new Date() calls in legacy code stay",
+      "condition": "CON-1"
+    },
+    "persistence": {
+      "decision": "Local state lives in SQLite through node:sqlite (synchronous, STRICT tables) behind the storage port; every write runs in one immediateTransaction (BEGIN IMMEDIATE, commit or rollback); append-only by preference, otherwise upsert with history near the entity (table-modes.json).",
+      "reference": "packages/nucleo/src/adapters/sqlite/immediate-transaction.ts",
+      "ratchet": "new tables are append-only or upsert-with-history; upsert tables are flagged legacy",
+      "condition": "PER-1"
+    },
+    "events": {
+      "decision": "Session events are appended once by stable id (ON CONFLICT DO NOTHING) with a monotonic seq; clients follow changes through the cursor (long poll and SSE), resuming by cursor, never by offset.",
+      "reference": "packages/nucleo/src/changes/cursor.ts",
+      "ratchet": "new code",
+      "condition": "CON-1"
+    }
+  }
+}

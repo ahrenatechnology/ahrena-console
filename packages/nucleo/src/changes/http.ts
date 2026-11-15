@@ -3,8 +3,9 @@
 //   GET /api/changes?since=<cursor>&wait=<s>&session=<id>&account=<id>&type=<type>
 //
 // - An empty `since` comes back at once with the current cursor and `reset: true`.
-// - The answer: `{ cursor, changes: [{ type, key, sessionId, accountId, seq }], reset, timedOut }`
-//   (English since #173 phase 2b).
+// - The answer: `{ cursor, changes: [{ type, key, sessionId, accountId, seq, time }], events, reset, timedOut }` (#663)
+//   (English since #173 phase 2b). `events` is the same changes as CloudEvents 1.0 (cloud-event.ts,
+//   docs/contracts/events.md), one per change, in the same order (#663).
 // - `wait` in seconds (default 25, max 110; 0 does not wait).
 // - `session`, `account` and `type` take commas or repetition; `account=no-account` asks for "Sem conta"
 //   (no account).
@@ -13,6 +14,7 @@
 
 import type { ServerResponse } from 'node:http';
 import { send } from '../ingest/hooks/receiver.ts';
+import { toCloudEvent } from './cloud-event.ts';
 import { TooManyWaitersError, DEFAULT_WAIT_MS, CHANGE_TYPES, type ChangeCursor, type ChangeFilters, type ChangeType } from './cursor.ts';
 
 export const CHANGES_ROUTE = '/api/changes';
@@ -64,7 +66,7 @@ export async function serveChanges(
   res.once('close', onClose);
   try {
     const result = await changes.wait(request.cursor, { ...request, signal: gaveUp.signal });
-    if (!res.destroyed && !res.writableEnded) send(res, 200, result);
+    if (!res.destroyed && !res.writableEnded) send(res, 200, { ...result, events: result.changes.map((c) => toCloudEvent(c, changes.generation)) });
   } catch (err) {
     if (!(err instanceof TooManyWaitersError)) throw err;
     res.setHeader('retry-after', '5');

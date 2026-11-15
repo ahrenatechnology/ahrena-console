@@ -8,16 +8,35 @@
 // - Invalid parameter: 400 `{ error }`. With no history wired into the API: 404.
 // Response 200: `{ days: [{ day, sessions: HistoryItem[] }], next }` (src/history/reading.ts).
 
-import type { ServerResponse } from 'node:http';
+import type { IncomingMessage, ServerResponse } from 'node:http';
 import { send } from '../ingest/hooks/receiver.ts';
 import type { SessionHistory } from '../history/reading.ts';
 import { parseHistoryRequest } from '../history/model.ts';
+import { noopObserver, type Observer } from '../observability/port.ts';
 
 export const HISTORY_ROUTE = '/api/history';
 
-export async function responderHistorico(res: ServerResponse, url: URL, historico: SessionHistory | null | undefined): Promise<void> {
+export async function responderHistorico(res: ServerResponse, url: URL, historico: SessionHistory | null | undefined, observer: Observer = noopObserver): Promise<void> {
   if (!historico) return send(res, 404, { error: 'o núcleo subiu sem o histórico' });
   const parsed = parseHistoryRequest(url.searchParams);
   if (!parsed.ok) return send(res, 400, { error: parsed.error });
-  send(res, 200, await historico.page(parsed.request));
+  send(res, 200, await observer.adapter({ name: 'history.read', system: 'sqlite' }, () => historico.page(parsed.request)));
+}
+
+/**
+ * #661 the route observed end to end: a root span for the request, a child span for the adapter read and a log record
+ * on the same trace. An unexpected failure answers the generic error and the correlation id, never the error's text,
+ * and leaves one server log line with the operation, the exception type and that correlation id.
+ */
+export function respondHistoryObserved(observer: Observer, req: IncomingMessage, res: ServerResponse, url: URL, history: SessionHistory | null | undefined, log: (message: string) => void): Promise<void> {
+  return observer.entry({ name: `GET ${HISTORY_ROUTE}`, method: req.method ?? 'GET', route: HISTORY_ROUTE }, async (scope) => {
+    try {
+      await responderHistorico(res, url, history, observer);
+    } catch (error) {
+      scope.fail(error);
+      log(`GET ${HISTORY_ROUTE} failed: ${error instanceof Error ? error.name : typeof error}, correlation ${scope.correlationId}`);
+      if (!res.headersSent) send(res, 500, { error: 'erro interno', correlationId: scope.correlationId });
+    }
+    scope.respond(res.statusCode);
+  });
 }

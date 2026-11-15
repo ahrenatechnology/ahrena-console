@@ -14,6 +14,7 @@
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { send } from '../ingest/hooks/receiver.ts';
+import { toCloudEvent } from './cloud-event.ts';
 import { TooManyWaitersError, type ChangeCursor } from './cursor.ts';
 import { parseChangesRequest } from './http.ts';
 
@@ -59,7 +60,7 @@ export async function serveStream(req: IncomingMessage, res: ServerResponse, url
       if (gaveUp.signal.aborted) break;
       cursor = result.cursor;
       if (result.reset) writeEvent(res, cursor, 'reset', { cursor, reset: true });
-      else if (result.changes.length > 0) writeEvent(res, cursor, 'changes', { cursor, changes: result.changes, reset: false });
+      else if (result.changes.length > 0) writeEvent(res, cursor, 'changes', { cursor, changes: result.changes, events: result.changes.map((c) => toCloudEvent(c, changes.generation)), reset: false });
       else res.write(': keep-alive\n\n'); // timed out with no news: a heartbeat keeps the connection open
     }
   } finally {

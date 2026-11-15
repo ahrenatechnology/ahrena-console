@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ahrenatechnology/ahrena-console/blob/main/docs/contracts/events/repos.changed.v1.schema.json",
+  "title": "repos.changed.v1 data",
+  "description": "The repository list or the metrics of a repository changed. Subject: `<owner>/<repo>` is the repository root identity; `list` and `delivery` are the identity of the view the signal invalidates, not a root (named exception to EVT-1, see docs/contracts/events.md; a domain fact would be a new versioned type with a root id as subject, #663).",
+  "type": "object",
+  "required": [
+    "sessionId",
+    "accountId"
+  ],
+  "properties": {
+    "sessionId": {
+      "type": "null"
+    },
+    "accountId": {
+      "type": "null"
+    }
+  },
+  "additionalProperties": false
+}

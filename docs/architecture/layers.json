@@ -1,0 +1,196 @@
+{
+  "layers": [
+    "domain",
+    "application",
+    "edge",
+    "composition-root"
+  ],
+  "note": "issue 657: one criterion for every entry, the IO the code does itself: direct node:fs, node:http, node:net, node:child_process, node:sqlite or fetch in most of the files = edge; orchestration through injected dependencies or ports = application; no IO and no orchestration = domain. The dominant layer wins and `mixed` records the files that differ. A new entry under packages/*/src must be added here: test/architecture-layers.test.mjs fails without it.",
+  "packages": {
+    "nucleo": {
+      "adapters": {
+        "layer": "edge",
+        "evidence": "adapters/sqlite: the node:sqlite storage adapter, its migrations and transaction helper (4 of 4 files import node:sqlite)"
+      },
+      "adrs": {
+        "layer": "domain",
+        "evidence": "pure parsing and linking of decision records (model, parse, link); no node: import in any file"
+      },
+      "agent-config": {
+        "layer": "edge",
+        "evidence": "reads the Claude and Codex configuration files from disk (6 of 10 files import node:fs)",
+        "mixed": "model.ts, parse.ts and frontmatter.ts are pure; reading.ts, claude.ts, codex.ts, projects.ts, skills.ts do the file reading"
+      },
+      "agent-instructions": {
+        "layer": "domain",
+        "evidence": "model and import resolution of instruction files; no node:fs import (reading goes through a function the caller passes)"
+      },
+      "api": {
+        "layer": "edge",
+        "evidence": "HTTP routes and the server: 48 of 84 files import node:http, 13 import node:fs; routes answer through send(res, status, body)",
+        "mixed": "ports.ts, event-phrase.ts and a few *-route.ts files hold small pure helpers next to the routes"
+      },
+      "app-update": {
+        "layer": "application",
+        "evidence": "a single state file that reads the change feed (imports ../changes) and holds the update state; no IO of its own"
+      },
+      "changes": {
+        "layer": "application",
+        "evidence": "the change feed over the storage port (sources.ts) and its cursor; 4 of 6 files do no IO of their own",
+        "mixed": "http.ts (long poll) and stream.ts (SSE) import node:http and are the edge; cursor.ts is pure"
+      },
+      "clouds": {
+        "layer": "edge",
+        "evidence": "AWS SSO and login connectors that read the AWS config and cache on disk (3 of 5 files import node:fs, 1 node:child_process)"
+      },
+      "context": {
+        "layer": "domain",
+        "evidence": "context window model and measurement (model, measurement, window); no IO",
+        "mixed": "migration.ts holds SQL and recording.ts writes through the storage port"
+      },
+      "cost": {
+        "layer": "domain",
+        "evidence": "price table, floor and aggregation of cost; pure functions, no node: import"
+      },
+      "decisions": {
+        "layer": "application",
+        "evidence": "registry, hub, inference and capture orchestrate over the decisions port (port.ts); 12 files",
+        "mixed": "sqlite.ts and migration.ts import node:sqlite (edge) and capture-transcript.ts imports node:fs/promises (edge); capture-hooks.ts reads hook payloads handed to it and does no IO of its own"
+      },
+      "dev-console": {
+        "layer": "application",
+        "evidence": "service, reader, sessions and contexts compose the work source and the github sources; 1 of 7 files (contexts.ts) reads the disk with node:fs/promises"
+      },
+      "diagnosis": {
+        "layer": "application",
+        "evidence": "diagnose.ts and model.ts decide from facts that adapters/ read through injected readers; only 1 of 8 files (adapters/system.ts) imports node IO",
+        "mixed": "adapters/system.ts imports node:child_process, node:fs and node:os and is the edge; model.ts and diagnose.ts are pure"
+      },
+      "docker": {
+        "layer": "application",
+        "evidence": "inventory, catalog and service over the tools runner (imports ../tools); no direct node: IO"
+      },
+      "framework-install": {
+        "layer": "application",
+        "evidence": "plan, diff, merge and pull-request steps for installing the framework; catalog and model are pure",
+        "mixed": "detect.ts reads the repository from disk (1 of 8 files imports node:fs)"
+      },
+      "github": {
+        "layer": "application",
+        "evidence": "work board, work plan, work queue and work issue services and models over the github sources (43 files; only 8 do direct IO: node:sqlite in 5, node:child_process in 2, node:fs in 1, fetch in 1, with overlaps)",
+        "mixed": "sqlite-cache.ts, work-board-history.ts, work-execution-runs.ts, work-plan-runs.ts and work-queue-store.ts are SQLite adapters; github-source.ts, connection/device-flow.ts and connection/run-command.ts call GitHub or run commands: all edge"
+      },
+      "history": {
+        "layer": "application",
+        "evidence": "history reading composes cost and decisions (imports ../cost, ../decisions); model.ts holds the request parsing"
+      },
+      "identity.ts": {
+        "layer": "domain",
+        "evidence": "provider and account identity types and helpers; its only import is node:crypto (createHash) for a pure digest, no IO"
+      },
+      "index.ts": {
+        "layer": "composition-root",
+        "evidence": "the package barrel: re-exports the model, the storage port and the SQLite adapter, and wires them for the other packages"
+      },
+      "ingest": {
+        "layer": "application",
+        "evidence": "ingestion orchestrates hook events and transcripts into the storage port (hooks/ingest.ts, history/importer.ts); 3 of 11 files do direct IO",
+        "mixed": "hooks/receiver.ts (node:http, node:net), history/follower.ts (node:fs) and history/files.ts (node:fs/promises) are the edge; verdict.ts and usage.ts are pure"
+      },
+      "mcp": {
+        "layer": "application",
+        "evidence": "the MCP protocol and its tools over the fleet client (protocol.ts, tools/, fleet.ts, owner-credentials.ts); 2 of 12 files do direct IO",
+        "mixed": "http.ts (node:http) and stdio.ts (node:readline, node:stream) are the transports and the edge; cli.ts is an entry point"
+      },
+      "messaging": {
+        "layer": "application",
+        "evidence": "service and orders over the ports declared in ports.ts; model.ts holds the rules (rate limit, text check)",
+        "mixed": "adapters/ (sessions-dir, socket-check, socket-inbox, audit-file, transcript-turns) are the edge: they use node:fs and node:net"
+      },
+      "model.ts": {
+        "layer": "domain",
+        "evidence": "the data model of sessions, agents, events and tokens; imports only identity.ts"
+      },
+      "observability": {
+        "layer": "edge",
+        "evidence": "otel-observer.ts imports @opentelemetry/* and node:async_hooks, builds the exporters and writes to the process log: the edge adapter behind the observability port; setup.ts is the composition root that loads it by import() (the other files, port.ts and masking.ts, are pure)",
+        "mixed": "port.ts and masking.ts are pure (domain); setup.ts is the composition root and otel-observer.ts the edge"
+      },
+      "owner": {
+        "layer": "edge",
+        "evidence": "the core process: lock file, installation, start guard, probe and CLI (6 of 13 files import node:fs, 5 node:http or node:net)",
+        "mixed": "start.ts and owner.ts also wire the core together, which is composition work"
+      },
+      "permissions": {
+        "layer": "domain",
+        "evidence": "permission request model, digest, refusal codes and terminal-only rule; no node: import in any file"
+      },
+      "plan": {
+        "layer": "domain",
+        "evidence": "session plan model and extraction from tool output; no IO",
+        "mixed": "recording.ts and history.ts write through the storage port"
+      },
+      "ports": {
+        "layer": "application",
+        "evidence": "release.ts runs lsof or ss and kills a process only through injected CommandRunner and kill dependencies; it imports no node: module; the folder is about network ports, not hexagonal ports"
+      },
+      "pricing.ts": {
+        "layer": "domain",
+        "evidence": "price per model on top of model.ts; pure"
+      },
+      "profiles": {
+        "layer": "edge",
+        "evidence": "reads Claude profile folders from disk (3 of 5 files import node:fs)",
+        "mixed": "colors.ts is pure"
+      },
+      "runtime": {
+        "layer": "application",
+        "evidence": "the managed runtime service, billing policy, contracts and auth probes (service.ts, billing-policy.ts, contracts.ts)",
+        "mixed": "sqlite.ts and migration.ts are the SQLite adapter; billing-diagnostic-cli.ts is a CLI entry"
+      },
+      "settings": {
+        "layer": "edge",
+        "evidence": "installation settings persisted in SQLite (installation-settings.ts imports node:sqlite) and their migration"
+      },
+      "simulator": {
+        "layer": "application",
+        "evidence": "the demo and fake world: scenarios, workflows and fake github that feed the services; 1 of 18 files touches node:fs",
+        "mixed": "fake-github.ts and fake-github-auth.ts are test doubles for an edge; cli.ts is an entry point"
+      },
+      "states": {
+        "layer": "application",
+        "evidence": "the machine state rules and machine (rules.ts, machine.ts) and the inbox that feeds them",
+        "mixed": "probe.ts imports node:child_process and node:fs and is the edge; watcher.ts, inbox.ts, machine.ts and rules.ts do no IO of their own"
+      },
+      "storage-port.ts": {
+        "layer": "application",
+        "evidence": "the storage port: the interface the use cases depend on and the SQLite adapter implements; imports only model types"
+      },
+      "telemetry": {
+        "layer": "application",
+        "evidence": "service, sampler, alerts, series and placement orchestrate machine sampling over ports.ts (29 files; 10 do direct IO: node:fs in 7, node:child_process in 4, node:http, node:net, node:sqlite and fetch in 1 each, with overlaps)",
+        "mixed": "adapters/ (linux, darwin, system, sqlite, loopback-http) and remote.ts are the edge; model.ts, series.ts, alerts.ts are pure"
+      },
+      "tools": {
+        "layer": "edge",
+        "evidence": "tool executor, runner, probes and containers: run commands and fetch versions (5 of 13 files import node:fs, 2 node:child_process or node:http, runner.ts calls fetch)",
+        "mixed": "catalog.ts, plan.ts and store.ts are pure or SQLite"
+      },
+      "transcription": {
+        "layer": "edge",
+        "evidence": "installs and runs whisper: downloads the model with fetch and writes it to disk (both files import node:fs)"
+      },
+      "vendor": {
+        "layer": "edge",
+        "evidence": "vendored third-party smol-toml parser (plain .js files, not authored here); it parses an external format, so it sits at the boundary",
+        "mixed": "not authored code: no layer fits exactly, edge is the closest because it only parses outside input"
+      }
+    },
+    "marca": {
+      "gerar.ts": {
+        "layer": "edge",
+        "evidence": "a script that reads and writes brand asset files (imports node:fs); a Portuguese file name frozen by the legacy list of the English guard"
+      }
+    }
+  }
+}

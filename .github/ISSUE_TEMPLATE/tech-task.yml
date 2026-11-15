@@ -1,0 +1,91 @@
+# Installed by Ahrena: ahrena-contributing, skills/installing-issue-forms.
+# Adapted from the predecessor framework's forms. The sections map to the
+# issue-quality rule, and `Acceptance criteria` is what the traceability check reads.
+name: "Tech Task ♻️"
+description: "Well-defined small task: chore, refactoring, maintenance, documentation fix, CI change"
+title: "{{ brief task summary }}"
+type: Tech Task
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this template for small, well-scoped tasks that do not justify a full feature request, epic, or user story.
+        Per Ahrena's `issue-quality` rule, every issue states why, what done looks like, and what it leaves to other issues.
+
+  - type: textarea
+    id: why
+    attributes:
+      label: "Why"
+      description: "State the motivation. What problem does this solve, what gap does it close, what risk does it remove?"
+      placeholder: "e.g. The tech-task template is referenced by the contribution guide but does not exist, so contributors cannot follow it."
+      value: |
+        Why is this task needed?
+    validations:
+      required: true
+
+  - type: textarea
+    id: what
+    attributes:
+      label: "What"
+      description: "State the objective and scope. What changes? What stays out? Be specific enough that a reviewer can tell when the task is done."
+      placeholder: "e.g. Add tech-task.yml under .github/ISSUE_TEMPLATE/ with Why/What/How sections; do not change existing templates."
+      value: |
+        What needs to change?
+    validations:
+      required: true
+
+  - type: textarea
+    id: how
+    attributes:
+      label: "How"
+      description: "State the implementation approach or definition of done. List concrete steps, files involved, or success criteria."
+      placeholder: "e.g. Create the markdown source under framework/templates/contributing_templates/, then the GitHub Issue Form .yml."
+      value: |
+        How will this be implemented or verified?
+    validations:
+      required: true
+
+  - type: dropdown
+    id: task_type
+    attributes:
+      label: "Task Type"
+      description: "Select the dominant type of this task (a project may map it to its own labels)."
+      options:
+        - "evolvability ♻️ — refactoring, clean code, framework maintenance"
+        - "documentation 📃 — docs improvements or additions"
+        - "ci 🏗️ — CI/CD pipeline enhancements"
+        - "enhancement 🔝 — incremental improvement to existing feature"
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance_criteria
+    attributes:
+      label: "Acceptance criteria"
+      description: "One observable behaviour per line, numbered AC-1 upward and never renumbered, so a test can name it as #<issue>/AC-<n>. End a criterion no test can decide with (checked by review)."
+      value: |
+        - AC-1: 
+    validations:
+      required: true
+
+  - type: textarea
+    id: left_to_other_issues
+    attributes:
+      label: "Left to other issues"
+      description: "Decisions already made, work blocked elsewhere, and parts another issue owns, each by number."
+    validations:
+      required: false
+
+  - type: textarea
+    id: additional_context
+    attributes:
+      label: "Additional Context"
+      description: "Screenshots, links, related issues, or any other relevant context."
+    validations:
+      required: false
+
+  - type: markdown
+    attributes:
+      value: |
+        > To track progress, follow this issue right here on GitHub.

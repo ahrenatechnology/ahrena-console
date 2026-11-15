@@ -46,9 +46,11 @@ export interface RecordedChange {
   sessionId: string | null;
   /** The session's account; `null` is "Sem conta" (no account). */
   accountId: string | null;
+  /** When the change occurred (wall clock, ISO 8601 UTC), stamped by `record()` (#663). */
+  time: string;
 }
 
-export type NewChange = Omit<RecordedChange, 'seq'>;
+export type NewChange = Omit<RecordedChange, 'seq' | 'time'>;
 
 export interface ChangeFilters {
   sessionIds?: readonly string[];
@@ -118,6 +120,8 @@ export interface ChangeCursorOptions {
   minIntervalMs?: number;
   maxWaiters?: number;
   clock?: Clock;
+  /** Wall clock in epoch milliseconds, for the occurrence time of a change (#663). Default `Date.now`; `clock` stays monotonic. */
+  wallClock?: () => number;
   /** Default: random. Fixed in the tests. */
   generation?: string;
 }
@@ -147,6 +151,7 @@ export class ChangeCursor {
   private readonly minIntervalMs: number;
   private readonly maxWaiters: number;
   private readonly clock: Clock;
+  private readonly wallClock: () => number;
   /** Circular queue of the last `capacity` changes, in `seq` order. */
   private readonly queue: RecordedChange[] = [];
   private seq = 0;
@@ -159,6 +164,7 @@ export class ChangeCursor {
     this.minIntervalMs = Math.max(0, options.minIntervalMs ?? DEFAULT_MIN_INTERVAL_MS);
     this.maxWaiters = Math.max(1, options.maxWaiters ?? DEFAULT_MAX_WAITERS);
     this.clock = options.clock ?? systemClock;
+    this.wallClock = options.wallClock ?? Date.now;
   }
 
   /** The current cursor. */
@@ -172,7 +178,7 @@ export class ChangeCursor {
   }
 
   record(change: NewChange): RecordedChange {
-    const recorded = { ...change, seq: ++this.seq };
+    const recorded: RecordedChange = { ...change, seq: ++this.seq, time: new Date(this.wallClock()).toISOString() };
     this.queue.push(recorded);
     if (this.queue.length > this.capacity) this.queue.shift();
     for (const waiter of [...this.waiters]) {

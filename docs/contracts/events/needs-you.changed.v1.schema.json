@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ahrenatechnology/ahrena-console/blob/main/docs/contracts/events/needs-you.changed.v1.schema.json",
+  "title": "needs-you.changed.v1 data",
+  "description": "A session needs the person, or stopped needing them. Subject: the session id, or `<machine>:<session>` for a remote machine (then sessionId is null).",
+  "type": "object",
+  "required": [
+    "sessionId",
+    "accountId"
+  ],
+  "properties": {
+    "sessionId": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "accountId": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "additionalProperties": false
+}

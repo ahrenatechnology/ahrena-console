@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ahrenatechnology/ahrena-console/blob/main/docs/contracts/events/cloudevents-1.0.schema.json",
+  "title": "CloudEvents 1.0 envelope of the core's published events",
+  "type": "object",
+  "required": [
+    "specversion",
+    "id",
+    "source",
+    "type",
+    "subject",
+    "time",
+    "datacontenttype",
+    "dataschema",
+    "data"
+  ],
+  "properties": {
+    "specversion": {
+      "const": "1.0"
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[0-9a-z]+\\.[0-9]+$"
+    },
+    "source": {
+      "const": "/ahrena-console/core"
+    },
+    "type": {
+      "type": "string",
+      "pattern": "^com\\.github\\.ahrenatechnology\\.console\\.core\\.[a-z-]+\\.changed\\.v[0-9]+$"
+    },
+    "subject": {
+      "type": "string",
+      "minLength": 1
+    },
+    "time": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "datacontenttype": {
+      "const": "application/json"
+    },
+    "dataschema": {
+      "type": "string",
+      "pattern": "^https://github\\.com/ahrenatechnology/ahrena-console/blob/main/docs/contracts/events/[a-z-]+\\.changed\\.v[0-9]+\\.schema\\.json$"
+    },
+    "data": {
+      "type": "object"
+    }
+  },
+  "additionalProperties": false
+}
