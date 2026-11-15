@@ -6,7 +6,11 @@ import type { Channel, Decision, PermissionRequest, RequestState, Settler } from
 
 /** Where requests live. The tool input is never stored: the aggregate does not hold it. (#618) */
 export interface PermissionRequestRepository {
-  /** Inserts the request, or updates the one with the same id. (#618) */
+  /**
+   * Inserts the request, or updates the one with the same id, in one transaction. A save that would undo a step another reader
+   * already took (delivering, answering or closing what was already delivered, answered or closed) throws `PermissionRefusal`
+   * (`already_delivered`, `already_answered` or `gone`) and writes nothing, so a decision is delivered once (#618/AC-2).
+   */
   save(request: PermissionRequest): void;
   /** The request with this id *of this session*; another session's id is `null`, as an unknown one is (#618/AC-1). */
   find(sessionId: string, requestId: string): PermissionRequest | null;
@@ -23,8 +27,8 @@ export interface PermissionRequestRepository {
 export type AuditEvent = 'registered' | 'answered' | 'delivered' | 'closed' | 'refused';
 
 /**
- * One line of `permission-audit.jsonl`. By its shape it cannot carry the tool input or the summary, and a reason travels (#618)
- * only as its SHA-256 (#618/AC-7).
+ * One line of `permission-audit.jsonl`. By its shape it cannot carry the tool input or the summary. A `deny` reason travels (#618)
+ * to the adapter in memory only, which writes it as a keyed hash and never in clear (#618/AC-7).
  */
 export interface PermissionAuditRecord {
   at: number;
@@ -38,8 +42,8 @@ export interface PermissionAuditRecord {
   decision?: Decision;
   answeredBy?: string;
   channel?: Channel;
-  /** SHA-256 hex of the reason, `null` when there was none. (#618) */
-  reasonSha256?: string | null;
+  /** The reason of the answer, `null` when there was none: for the adapter to hash under its own key, never to write. (#618) */
+  reason?: string | null;
   settledBy?: Settler;
   /** For a refusal: the operation that was refused and the code it was refused with. (#618) */
   operation?: string;

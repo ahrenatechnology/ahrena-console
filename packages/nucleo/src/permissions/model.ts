@@ -50,6 +50,13 @@ export interface AnswerInput {
   now: number;
 }
 
+export interface RestoredRequest {
+  id: string; sessionId: string; toolName: string; digest: string; summary: string; summaryTruncated: boolean; cwd: string;
+  permissionMode: string | null; terminalOnly: boolean; createdAt: number; expiresAt: number; state: RequestState;
+  decision: Decision | null; reason: string | null; answeredBy: string | null; channel: Channel | null;
+  answeredAt: number | null; settledAt: number | null; settledBy: Settler | null;
+}
+
 /** One permission request. Settles once: delivered, or closed without a delivery. */
 export class PermissionRequest {
   readonly id: string;
@@ -110,6 +117,28 @@ export class PermissionRequest {
       createdAt: p.now,
       expiresAt: p.now + EXPIRY_MS,
     });
+  }
+
+  /**
+   * Rebuilds a request from the fields a store kept, which `open` and the transitions wrote: no rule runs again, since the
+   * stored row is a state the rules already allowed. Only a field outside the model's own lists is refused, so a corrupt row
+   * never becomes an aggregate that reads as one of the model's states. (#618)
+   */
+  static restore(p: RestoredRequest): PermissionRequest {
+    const outside = (list: readonly string[], value: string | null): boolean => value !== null && !list.includes(value);
+    if (outside(REQUEST_STATES, p.state) || outside(DECISIONS, p.decision) || outside(CHANNELS, p.channel) || outside(SETTLERS, p.settledBy)) {
+      throw new Error('a stored request holds a state, decision, channel or settler outside the model');
+    }
+    const request = new PermissionRequest(p);
+    request._state = p.state;
+    request._decision = p.decision;
+    request._reason = p.reason;
+    request._answeredBy = p.answeredBy;
+    request._channel = p.channel;
+    request._answeredAt = p.answeredAt;
+    request._settledAt = p.settledAt;
+    request._settledBy = p.settledBy;
+    return request;
   }
 
   get state(): RequestState {

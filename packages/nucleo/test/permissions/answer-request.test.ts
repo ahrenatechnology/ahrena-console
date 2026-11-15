@@ -1,6 +1,5 @@
 // answerRequest and withdrawRequest against fakes for the ports (#618, layer 2).
 import assert from 'node:assert/strict';
-import { createHash } from 'node:crypto';
 import { describe, test } from 'node:test';
 import { PermissionNotFound } from '../../src/permissions/errors.ts';
 import { PermissionRefusal, type RefusalCode } from '../../src/permissions/model.ts';
@@ -82,14 +81,16 @@ describe('answerRequest (#618/AC-1, AC-2, AC-6, AC-7)', () => {
     assert.equal(rec?.decision, 'deny');
     assert.equal(rec?.answeredBy, 'owner');
     assert.equal(rec?.channel, 'ui');
-    assert.equal(rec?.reasonSha256, createHash('sha256').update('plain words hunter2pw').digest('hex'));
-    assert.doesNotMatch(JSON.stringify(h.audit.records), /plain words|hunter2pw|migrate|summary|toolInput/);
+    // The reason reaches the audit port in memory only; the file adapter keys its hash (#618/AC-7).
+    assert.equal(rec?.reason, 'plain words hunter2pw');
+    assert.equal('reasonSha256' in (rec ?? {}), false);
+    assert.doesNotMatch(JSON.stringify(h.audit.records.filter((r) => r.event !== 'answered')), /plain words|hunter2pw|migrate|summary|toolInput/);
   });
 
-  test('#618/AC-7: an answer with no reason audits a null hash', async () => {
+  test('#618/AC-7: an answer with no reason audits a null reason', async () => {
     const h = await registered();
     answerRequest(h, { ...base, decision: 'allow' });
-    assert.equal(h.audit.records.find((r) => r.event === 'answered')?.reasonSha256, null);
+    assert.equal(h.audit.records.find((r) => r.event === 'answered')?.reason, null);
   });
 });
 

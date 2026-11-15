@@ -21,6 +21,8 @@ import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { HELP, parseApiOptions } from './cli-options.ts';
+import { openPermissionDeps } from '../permissions/adapters/deps.ts';
+import { sweepOnStart } from '../permissions/expire-due.ts';
 import { openSqliteStorage } from '../adapters/sqlite/sqlite-storage.ts';
 import { HookDecisionCapture } from '../decisions/capture-hooks.ts';
 import { SqliteDecisionStore } from '../decisions/sqlite.ts';
@@ -779,6 +781,9 @@ const follower =
 // the one the system assigned stays this core's).
 const runtimeStore = new SqliteRuntimeStore(sqlite.db, changes);
 runtimeStore.recoverDisconnected();
+// A permission request open before this start is never delivered after it (decision 0025, "Reinício", #618/AC-3).
+const restartedRequests = sweepOnStart(openPermissionDeps(sqlite.db, dataDir, log));
+if (restartedRequests.length > 0) log(`permission requests closed by the restart: ${restartedRequests.length}`);
 let ownerToken: string | null = null;
 const api: LocalApi = await startLocalApi({
   ownerToken: () => ownerToken,

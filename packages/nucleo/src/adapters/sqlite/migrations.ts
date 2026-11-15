@@ -12,6 +12,7 @@ import {
   rekeyDecisions,
 } from '../../decisions/migration.ts';
 import { renameLegacyGithubCacheKeys } from '../../github/sqlite-cache.ts';
+import { PERMISSION_REQUESTS_MIGRATION_DESCRIPTION, PERMISSION_REQUESTS_MIGRATION_SQL } from '../../permissions/adapters/migration.ts';
 import { WORK_BOARD_MIGRATION_DESCRIPTION, WORK_BOARD_MIGRATION_SQL } from '../../github/work-board-history.ts';
 import { WORK_EXECUTION_MIGRATION_DESCRIPTION, WORK_EXECUTION_MIGRATION_SQL, WORK_EXECUTION_ORIGIN_MIGRATION_DESCRIPTION, WORK_EXECUTION_ORIGIN_MIGRATION_SQL } from '../../github/work-execution-runs.ts';
 import { WORK_QUEUE_MIGRATION_DESCRIPTION, WORK_QUEUE_MIGRATION_SQL } from '../../github/work-queue-store.ts';
@@ -303,6 +304,7 @@ export const MIGRATIONS: readonly Migration[] = [
   { version: 18, description: WORK_EXECUTION_MIGRATION_DESCRIPTION, sql: WORK_EXECUTION_MIGRATION_SQL },
   { version: 19, description: WORK_QUEUE_MIGRATION_DESCRIPTION, sql: WORK_QUEUE_MIGRATION_SQL },
   { version: 20, description: WORK_EXECUTION_ORIGIN_MIGRATION_DESCRIPTION, sql: WORK_EXECUTION_ORIGIN_MIGRATION_SQL },
+  { version: 21, description: PERMISSION_REQUESTS_MIGRATION_DESCRIPTION, sql: PERMISSION_REQUESTS_MIGRATION_SQL },
 ];
 
 export function schemaVersion(db: DatabaseSync): number {
