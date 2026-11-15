@@ -1,0 +1,52 @@
+# Installed by Ahrena: ahrena-contributing, skills/installing-issue-forms.
+# Adapted from the predecessor framework's forms. The sections map to the
+# issue-quality rule, and `Acceptance criteria` is what the traceability check reads.
+name: "Epic "
+description: Register a new epic for the project
+title: "{{ brief epic summary }}"
+type: Epic
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for contributing with an epic! Please fill out the fields below clearly and objectively.
+
+  - type: textarea
+    id: epic-why-is-this-important
+    attributes:
+      label: Why is this important?
+      description: "What is the impact of this epic?"
+      placeholder: ex. This epic is important because it will help us to track the progress of the stories within it.
+      value: |
+        Why is this important?
+    validations:
+      required: true
+
+  - type: textarea
+    id: epic-what-is-this-about
+    attributes:
+      label: What is this about?
+      description: "Describe the epic in detail"
+      placeholder: ex. This epic is about the user stories within it.
+      value: |
+        What is this about?
+
+  - type: textarea
+    id: acceptance_criteria
+    attributes:
+      label: "Acceptance criteria"
+      description: "The epic's outcome, judged by a person, and its sub-issues closed."
+      value: |
+        - AC-1: <the outcome, as the epic's owner would check it> (checked by review)
+        - AC-2: Every sub-issue is closed. (checked by review)
+    validations:
+      required: true
+
+  - type: textarea
+    id: left_to_other_issues
+    attributes:
+      label: "Left to other issues"
+      description: "Decisions already made, work blocked elsewhere, and parts another issue owns, each by number."
+    validations:
+      required: false

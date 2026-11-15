@@ -1,5 +1,6 @@
 # Repository-wide tests: the root guard (brand tokens, internals in English, decision 0009) and the
-# whole core suite in packages/nucleo/test, sharded.
+# whole core suite, sharded: packages/nucleo/test plus the unit tests beside their code in
+# packages/nucleo/src (#660).
 
 name: repo-tests
 
@@ -30,9 +31,10 @@ jobs:
       - name: Tests
         run: node --test 'test/*.test.mjs'
 
-  # The whole core suite on every PR, split into shards so each job stays short. The proof that a
-  # PR passes the core is this CI, not a local run (#395): locally, run only the touched file with
-  # --test-concurrency=1.
+  # The whole core suite on every PR, split into shards so each job stays short. It is one node
+  # --test run over both globs (test/ and the colocated src/**/*.test.ts), so sharding splits the
+  # whole set (#660). The proof that a PR passes the core is this CI, not a local run (#395):
+  # locally, run only the touched file with --test-concurrency=1.
   nucleo:
     name: nucleo (shard ${{ matrix.shard }}/6)
     runs-on: ubuntu-latest
@@ -55,4 +57,4 @@ jobs:
 
       - name: Core tests
         working-directory: packages/nucleo
-        run: node --test --test-concurrency=2 --disable-warning=ExperimentalWarning --test-shard=${{ matrix.shard }}/6 "test/**/*.test.ts"
+        run: node --test --test-concurrency=2 --disable-warning=ExperimentalWarning --test-shard=${{ matrix.shard }}/6 "test/**/*.test.ts" "src/**/*.test.ts"

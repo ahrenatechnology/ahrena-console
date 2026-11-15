@@ -1,0 +1,4 @@
+# Installed by Ahrena: ahrena-contributing, skills/installing-issue-forms.
+# Blank issues are off so every issue starts from a form. Add contact_links
+# for this repository's own discussion or support channels.
+blank_issues_enabled: false
