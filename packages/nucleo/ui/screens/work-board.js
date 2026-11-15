@@ -1,6 +1,6 @@
 import { el, header, icon } from '../dom.js';
 import { empty } from '../states.js';
-import { connectEmptyFor, connectionChanged, GITHUB_NOT_CONNECTED } from '../github-connect.js';
+import { CONNECT_STATE, CONNECT_UI, connectEmptyFor, connectionChanged, GITHUB_NOT_CONNECTED } from '../github-connect.js';
 import {
   FILTER_FIELDS,
   SWITCH_PROJECT_HREF,
@@ -12,13 +12,17 @@ import {
   githubDownReason,
   levelSwitch,
   noResult,
+  orgWarnings,
+  orgsEmpty,
+  projectResetNote,
   staleBand,
   workBoardError,
   workBoardHeader,
 } from './work-board-parts.js';
 import { createIssueLayer } from './work-board-issue.js';
 import { createRunLayer } from './work-board-run-layer.js';
-import { boardUrl, clearFilters, drill, initialState, loadFailed, loadSucceeded, selectPath, setFilter, setLevel, startLoad } from './work-board-state.js';
+import { createQueueLayer } from './work-board-queue-layer.js';
+import { boardUrl, clearFilters, drill, initialState, loadFailed, loadSucceeded, selectPath, setFilter, setLevel, startLoad, toggleWarnings, warningTarget } from './work-board-state.js';
 
 const STYLE = '/ui/work-board.css';
 const LIVE_WAIT = 1000;
@@ -70,6 +74,9 @@ function focusKey(node) {
   return card ? `link:${card.getAttribute('data-key')}:${node.getAttribute('class') ?? ''}` : null;
 }
 
+// issue 610: a GitHub address opens outside the Console, in a new tab with no link back to it, as the anchors of the screen do.
+const openOutside = (href) => globalThis.open?.(href, '_blank', 'noopener,noreferrer');
+
 const retryAction = (band) => (band.querySelector('button')?.setAttribute('data-action', 'retry'), band);
 
 /** The work board (issues 465 and 466): GET /api/work on the agent lifecycle columns, its slice kept in the URL. */
@@ -83,7 +90,8 @@ export async function mount(area, ctx) {
   let pendingFocus = null;
   const boardCards = () => (state?.data?.columns ?? []).flatMap((c) => c.cards ?? []);
   const execution = createRunLayer({ ctx, area, cards: boardCards, redraw: () => draw(), reread: () => quietRead(), onAsk: () => layer.closeConfirmation() });
-  const layer = createIssueLayer({ ctx, area, cards: boardCards, options: () => state?.data?.options ?? {}, redraw: () => draw(), reread: () => quietRead(), run: execution.seam, onAsk: () => execution.closeConfirmation() });
+  const queueLayer = createQueueLayer({ ctx, area, cards: boardCards, queue: () => state?.data?.queue ?? null, target: () => execution.target(), redraw: () => draw(), reread: () => quietRead() });
+  const layer = createIssueLayer({ ctx, area, cards: boardCards, options: () => state?.data?.options ?? {}, redraw: () => draw(), reread: () => quietRead(), run: execution.seam, queue: queueLayer, onAsk: () => execution.closeConfirmation() });
 
   function follow(s) {
     const target = s.url;
@@ -128,6 +136,8 @@ export async function mount(area, ctx) {
   }
 
   const refresh = () => run(startLoad(state, { refresh: true }));
+  // Reconectar on the stale band opens Conexões and starts the device flow (issue 614).
+  const reconnect = () => ctx.navigate(CONNECT_UI, CONNECT_STATE);
   const filterTo = (param, value) => run(setFilter(state, param, value));
 
   async function copyLink(button) {
@@ -143,8 +153,23 @@ export async function mount(area, ctx) {
 
   function boardHeader(now) {
     const data = state.data;
-    return workBoardHeader({ project: data?.project ?? null, fetchedAt: data?.fetchedAt ?? null, now, stale: state.stale, reading: state.phase === 'loading', busy: state.busy, onRefresh: refresh });
+    // issue 610: over several origins the header counts the organizations; a core with no list, or an empty one, names the one Project.
+    const organizations = data?.organizations?.length ? data.organizations : null;
+    const loading = state.multiOrigin && !data && state.phase === 'loading';
+    return workBoardHeader({ project: data?.project ?? null, organizations, githubDown: state.githubDown, loading, fetchedAt: data?.fetchedAt ?? null, now, stale: state.stale, reading: state.phase === 'loading', busy: state.busy, onRefresh: refresh });
   }
+
+  // issue 610: what the actions of the warning bands and of the empty states do; a link opens GitHub outside the Console.
+  function onWarningAction(action, organization) {
+    const target = warningTarget(action, { organization, organizations: state.organizations });
+    if (target.kind === 'toggle') return run(toggleWarnings(state));
+    if (target.kind === 'read') return refresh();
+    if (target.kind === 'link') return openOutside(target.href);
+    if (target.kind === 'screen') return ctx.navigate(target.to);
+    return null;
+  }
+
+  const warnings = (now) => orgWarnings({ organizations: state.organizations, githubDown: state.githubDown, now, busy: state.busy, expanded: state.warningsExpanded, onAction: onWarningAction });
 
   function levels(off) {
     const options = state.data?.options ?? {};
@@ -163,6 +188,8 @@ export async function mount(area, ctx) {
       filters: state.filters,
       options: state.data?.options ?? {},
       link: state.url === DEFAULT_URL ? null : state.url,
+      origin: state.multiOrigin,
+      organizations: state.organizations,
       disabled: off,
       onFilterChange: filterTo,
       onClear: () => run(clearFilters(state)),
@@ -176,13 +203,14 @@ export async function mount(area, ctx) {
       const { title } = errorMessage(state.error);
       return retryAction(workBoardError({ title: 'Não deu para reler o quadro.', text: `${title} Mostrando a última leitura.`, retryLabel: 'Tentar agora', onRetry: refresh }));
     }
-    if (state.stale) return staleBand({ fetchedAt: state.data.fetchedAt, now, reason: state.staleReason, retryAt: state.retryAt, busy: state.busy, onRetry: refresh });
+    if (state.stale) return staleBand({ fetchedAt: state.data.fetchedAt, now, reason: state.staleReason, retryAt: state.retryAt, busy: state.busy, onRetry: refresh, onReconnect: reconnect });
     return null;
   }
 
   function columns(mode, extra = {}) {
     const data = state.data;
-    return boardColumns({
+    const board = boardColumns({
+      queue: data?.queue ?? null,
       columns: execution.columns(data?.columns ?? null),
       level: state.dataFilters?.level ?? state.filters.level,
       chainMode: state.chainMode,
@@ -192,10 +220,13 @@ export async function mount(area, ctx) {
       doneWindowDays: data?.doneWindowDays ?? undefined,
       stale: state.stale,
       mode,
+      showOrigin: state.multiOrigin && mode === 'cards',
+      staleOrgs: state.staleOrgs,
       onDrill: (card) => run(drill(state, card)),
       renderCard: layer.renderCard,
       ...extra,
     });
+    return mode === 'cards' ? queueLayer.wire(board) : board;
   }
 
   function plainView(code) {
@@ -224,7 +255,9 @@ export async function mount(area, ctx) {
     const { view } = state;
     if (view === 'skeleton') return [boardHeader(now), levels(true), filters(true), columns('skeleton', { columns: null, counts: '…' })];
     if (view === 'failure') return failureView(now);
-    const top = [boardHeader(now), band(now), levels(false)].filter(Boolean);
+    const top = [boardHeader(now), band(now), warnings(now), levels(false)].filter(Boolean);
+    const note = state.resetNote ? projectResetNote(state.resetNote) : null;
+    if (view === 'empty' && state.emptyKind) return [...top, filters(true), orgsEmpty({ kind: state.emptyKind, organizations: state.organizations, busy: state.busy, onAction: onWarningAction }), columns('blank')];
     if (view === 'empty') return [...top, filters(true), emptyProject({ project: state.data.project }), columns('blank')];
     if (view === 'no-result') {
       const result = noResult({
@@ -234,16 +267,19 @@ export async function mount(area, ctx) {
         onClear: () => run(clearFilters(state)),
         onFilterChange: filterTo,
       });
-      return [...top, filters(false), result, columns('blank')];
+      return [...top, filters(false), note, result, columns('blank')].filter(Boolean);
     }
-    return [...top, filters(false), columns('cards')];
+    return [...top, filters(false), note, columns('cards')].filter(Boolean);
   }
 
   function draw() {
     if (!alive) return;
     layer.learn();
     execution.learn();
-    const shown = JSON.stringify([state.view, state.phase, state.busy, state.error, state.filters, state.dataFilters, state.suggestion, state.data, layer.signature(), execution.signature()]);
+    queueLayer.learn();
+    // issue 477: a redraw in the middle of a drag would cancel it; the layer draws again when the card is dropped.
+    if (queueLayer.dragging()) return;
+    const shown = JSON.stringify([state.view, state.phase, state.busy, state.error, state.filters, state.dataFilters, state.suggestion, state.resetNote, state.warningsExpanded, state.data, layer.signature(), execution.signature(), queueLayer.signature()]);
     if (shown === drawn) return;
     drawn = shown;
     const active = globalThis.document?.activeElement;
@@ -253,6 +289,7 @@ export async function mount(area, ctx) {
     restoreFocus(key);
     layer.afterDraw();
     execution.afterDraw();
+    queueLayer.afterDraw();
   }
 
   function restoreFocus(key) {
@@ -276,6 +313,7 @@ export async function mount(area, ctx) {
     alive = false;
     layer.stop();
     execution.stop();
+    queueLayer.stop();
     clearTimeout(liveTimer);
     sheet?.remove();
   };

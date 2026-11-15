@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { describe, test } from 'node:test';
 import {
   createGithubProject,
+  GithubProject,
   GITHUB_TTL,
   GithubCache,
   MemoryCacheStore,
@@ -16,6 +17,7 @@ import {
   type QueryCost,
   type RawProjectItem,
 } from '../../src/index.ts';
+import { GithubGatewayError, GithubHttpError } from '../../src/github/github-source.ts';
 import { clock, replayFetch, REPO, type Recorded } from './helpers.ts';
 
 /** Leitura real do Project 3, gravada por `record-project.ts`. */
@@ -308,5 +310,104 @@ describe('#465 #466 work board signals in the Project read', () => {
       } as RawProjectItem['content'],
     })!;
     assert.deepEqual([pr.pullRequest?.mergedAt, pr.pullRequest?.changesRequested], [null, null]);
+  });
+});
+
+describe('#613 the stale snapshot says why the stored board is old', () => {
+  const value: ProjectBoardValue = { projectId: 'P', fieldId: 'F', field: 'Status', title: 'Board', url: 'u', options: [], items: [] };
+  const OLD = 2 * GITHUB_TTL.project + 1;
+
+  /** #613 a board stored once, then `OLD` ms later: the snapshot is stale; `fail` is what the next read of GitHub throws. */
+  async function oldBoard(fail?: unknown, credentialRefused?: () => boolean) {
+    const now = clock();
+    const cache = new GithubCache({ store: new MemoryCacheStore(), now });
+    let failure: unknown = null;
+    const source = { board: async () => { if (failure) throw failure; return value; }, move: async () => ({ itemId: 'i', statusId: null }) };
+    const project = new GithubProject({ source, cache, project: PROJECT, now, ...(credentialRefused ? { credentialRefused } : {}) });
+    await project.board();
+    now.add(OLD);
+    if (fail) {
+      failure = fail;
+      await project.board();
+    }
+    return { now, cache, project };
+  }
+
+  test('#613/AC-1 a rate-limit pause in progress: the code is rate-limited and carries the instant the pause ends', async () => {
+    const { cache, project } = await oldBoard();
+    cache.pause(10 * 60_000);
+    const snap = await project.snapshot();
+    assert.equal(snap?.stale, true);
+    assert.equal(snap?.staleCode, 'rate-limited');
+    assert.equal(snap?.resumeAt, cache.pausedUntil);
+  });
+
+  test('#613/AC-1 once the pause is over, the code is no longer rate-limited and carries no instant', async () => {
+    const { now, cache, project } = await oldBoard();
+    cache.pause(60_000);
+    now.add(60_001);
+    const snap = await project.snapshot();
+    assert.equal(snap?.staleCode, 'sync-pending');
+    assert.equal(snap?.resumeAt, null);
+  });
+
+  test('#613/AC-1 a recorded rate-limited whose pause is over is sync-pending, with no instant', async () => {
+    const { now, project } = await oldBoard(new RateLimitedError('limit', 60_000));
+    assert.equal((await project.snapshot())?.staleCode, 'rate-limited');
+    now.add(60_001);
+    const snap = await project.snapshot();
+    assert.equal(snap?.staleCode, 'sync-pending');
+    assert.equal(snap?.resumeAt, null);
+  });
+
+  test('#613/AC-1 the pause wins over a failure recorded before it', async () => {
+    const { cache, project } = await oldBoard(new TypeError('fetch failed'));
+    cache.pause(60_000);
+    assert.equal((await project.snapshot())?.staleCode, 'rate-limited');
+  });
+
+  test('#613/AC-2 the last read refused with 401: credential-refused, never sync-pending', async () => {
+    const { project } = await oldBoard(new GithubHttpError('GitHub respondeu 401: Bad credentials', 401));
+    const snap = await project.snapshot();
+    assert.equal(snap?.staleCode, 'credential-refused');
+    assert.equal(snap?.resumeAt, null);
+  });
+
+  test('#613/AC-2 the connection dropped the credential on a data call (issue 612): credential-refused with no failure recorded, and it wins over a pause', async () => {
+    let refused = true;
+    const { cache, project } = await oldBoard(undefined, () => refused);
+    assert.equal((await project.snapshot())?.staleCode, 'credential-refused');
+    cache.pause(60_000);
+    assert.equal((await project.snapshot())?.staleCode, 'credential-refused');
+    refused = false; // #613 reconnected
+    assert.equal((await project.snapshot())?.staleCode, 'rate-limited');
+  });
+
+  test('#613/AC-3 GitHub unreachable (network failure, 502/503/504, 500): github-unavailable', async () => {
+    for (const err of [new TypeError('fetch failed'), new GithubGatewayError('GitHub respondeu 503', 503), new GithubHttpError('GitHub respondeu 500', 500)]) {
+      const { project } = await oldBoard(err);
+      assert.equal((await project.snapshot())?.staleCode, 'github-unavailable', String(err));
+    }
+  });
+
+  test('#613/AC-3 a failure that is neither stays github-error', async () => {
+    const { project } = await oldBoard(new Error('boom'));
+    assert.equal((await project.snapshot())?.staleCode, 'github-error');
+  });
+
+  test('#613/AC-4 sync-pending only when the board is old with no pause, no 401 and no recorded failure', async () => {
+    const { project } = await oldBoard(undefined, () => false);
+    const snap = await project.snapshot();
+    assert.deepEqual([snap?.stale, snap?.staleCode, snap?.resumeAt], [true, 'sync-pending', null]);
+  });
+
+  test('#613/AC-4 a board that is not old has no code, whatever the pause', async () => {
+    const now = clock();
+    const cache = new GithubCache({ store: new MemoryCacheStore(), now });
+    const project = new GithubProject({ source: { board: async () => value, move: async () => ({ itemId: 'i', statusId: null }) }, cache, project: PROJECT, now });
+    await project.board();
+    cache.pause(60_000);
+    const snap = await project.snapshot();
+    assert.deepEqual([snap?.stale, snap?.staleCode, snap?.resumeAt], [false, null, null]);
   });
 });

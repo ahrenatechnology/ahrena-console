@@ -25,10 +25,15 @@ import {
   formatClock,
   levelSwitch,
   noResult,
+  orgWarnings,
+  orgsEmpty,
   parentCard,
+  projectResetNote,
   readLabel,
   sessionText,
   staleBand,
+  staleOrganizations,
+  usualRepos,
   workBoardError,
   workBoardHeader,
   workCard,
@@ -37,7 +42,7 @@ import {
 
 instalarDomFalso();
 
-const FILES = ['screens/work-board-parts.js', 'work-board.css'];
+const FILES = ['screens/work-board-parts.js', 'screens/work-board-queue.js', 'screens/work-board-queue-state.js', 'screens/work-board-queue-layer.js', 'work-board.css'];
 const REPO = 'ahrenatechnology/ahrena-console';
 const NOW = new Date(2026, 10, 13, 23, 12, 40).getTime();
 const ago = (ms: number) => new Date(NOW - ms).toISOString();
@@ -522,40 +527,144 @@ describe('#466/AC-2 the epic and initiative card (466-1)', () => {
 });
 
 describe('#465/AC-4 GitHub down (465-4, ADR-0001)', () => {
-  test('#465/AC-4 the stale band: reason, when the board is from, Tentar agora calls back', () => {
+  test('#465/AC-4 the stale band: when the board is from, the reason, Tentar agora calls back', () => {
     let retried = 0;
     const band = staleBand({ fetchedAt: NOW - 31 * MIN, now: NOW, reason: 'network', onRetry: () => retried++ });
     assert.equal(band.getAttribute('role'), 'status');
-    assert.match(texto(band), /^GitHub indisponível\. Mostrando o quadro de 22:41 \(há 31 min\)\. As sessões e a fila continuam ao vivo\. Motivo: falha de rede ao falar com o GitHub\./);
+    assert.match(texto(band.querySelector('p')!), /^GitHub indisponível\. Mostrando o quadro de 22:41 \(há 31 min\)\. O GitHub não respondeu\. As sessões e a fila continuam ao vivo\.$/);
     buttonNamed(band, /Tentar agora/)!.click();
     assert.equal(retried, 1);
-    const busy = staleBand({ fetchedAt: NOW - MIN, now: NOW, reason: null, busy: true, onRetry: () => {} });
-    assert.doesNotMatch(texto(busy), /Motivo/);
+    const busy = staleBand({ fetchedAt: NOW - MIN, now: NOW, reason: 'network', busy: true, onRetry: () => {} });
     assert.equal(buttonNamed(busy, /Tentar agora/)!.getAttribute('aria-busy'), 'true');
   });
 
   test('#496/AC-2 the stale band says when it tries again, between the board time and the live note', () => {
-    const band = staleBand({ fetchedAt: NOW - 31 * MIN, now: NOW, retryAt: NOW + 2 * MIN });
-    assert.match(texto(band), /^GitHub indisponível\. Mostrando o quadro de 22:41 \(há 31 min\)\. Tentamos de novo em 2 min\. As sessões e a fila continuam ao vivo\./);
-    const withReason = texto(staleBand({ fetchedAt: NOW - 31 * MIN, now: NOW, reason: 'network', retryAt: NOW + 2 * MIN }));
-    assert.match(withReason, /Tentamos de novo em 2 min\. As sessões e a fila continuam ao vivo\. Motivo: falha de rede/);
+    const band = staleBand({ fetchedAt: NOW - 31 * MIN, now: NOW, reason: 'network', retryAt: NOW + 2 * MIN });
+    assert.match(texto(band.querySelector('p')!), /^GitHub indisponível\. Mostrando o quadro de 22:41 \(há 31 min\)\. O GitHub não respondeu\. Tentamos de novo em 2 min\. As sessões e a fila continuam ao vivo\.$/);
   });
 
-  test('#496/AC-2 without a retry time the band has no "Tentamos de novo" line', () => {
-    for (const retryAt of [null, undefined, Number.NaN, Number.POSITIVE_INFINITY, '5' as unknown as number]) {
-      assert.doesNotMatch(texto(staleBand({ fetchedAt: NOW - MIN, now: NOW, retryAt })), /Tentamos de novo/);
+  describe('#614 one band per reason code', () => {
+    const band = (reason: string | null, extra = {}) => staleBand({ fetchedAt: NOW - 31 * MIN, now: NOW, reason, ...extra });
+    const SPEC: [string | null, string, string, string | null, string | null][] = [
+      // #614: code, tone, title, button label, data-action
+      ['rate-limited', 'warn', 'O GitHub limitou as chamadas.', 'Tentar agora', 'retry'],
+      ['credential-refused', 'error', 'O GitHub recusou a credencial do console.', 'Reconectar', 'reconnect'],
+      ['no-scope', 'error', 'A credencial do GitHub não tem a permissão necessária.', 'Reconectar', 'reconnect'],
+      ['github-unavailable', 'error', 'GitHub indisponível.', 'Tentar agora', 'retry'],
+      ['network', 'error', 'GitHub indisponível.', 'Tentar agora', 'retry'],
+      ['github-error', 'error', 'O GitHub respondeu com erro.', 'Tentar agora', 'retry'],
+      ['sync-pending', 'neutral', 'O quadro ainda não foi relido.', 'Atualizar agora', 'retry'],
+    ];
+    for (const [code, tone, title, label, action] of SPEC) {
+      test(`${code}: ${tone}, "${title}", ${label}`, () => {
+        const node = band(code);
+        assert.ok(node.classList.contains('wb-stale-band') && node.classList.contains(`wb-stale-${tone}`));
+        assert.equal(node.getAttribute('data-stale-code'), code);
+        assert.equal(node.getAttribute('role'), 'status');
+        assert.ok(texto(node).startsWith(title), texto(node));
+        assert.ok(texto(node).includes('Mostrando o quadro de 22:41 (há 31 min).'));
+        assert.ok(texto(node.querySelector('p')!).endsWith('As sessões e a fila continuam ao vivo.'));
+        assert.doesNotMatch(texto(node), /Motivo:/);
+        const button = node.querySelector('button')!;
+        assert.equal(button.getAttribute('data-action'), action);
+        assert.equal(texto(button), label);
+        assert.ok(node.querySelector('svg'), 'an icon leads the band');
+        assert.equal(texto(node).includes('GitHub indisponível.'), code === 'github-unavailable' || code === 'network', 'only the codes where GitHub did not answer');
+      });
     }
-  });
 
-  test('#496/AC-2 overdue or under one minute shows 1 min, never zero or negative', () => {
-    for (const retryAt of [NOW + 10_000, NOW, NOW - 5 * MIN]) {
-      assert.match(texto(staleBand({ fetchedAt: NOW - MIN, now: NOW, retryAt })), /Tentamos de novo em 1 min\./);
-    }
-  });
+    test('rate-limited with the pause still running: "Volta às HH:MM (em N min).", no button', () => {
+      const node = band('rate-limited', { retryAt: NOW + 4 * MIN });
+      assert.ok(texto(node).includes(`Volta às ${formatClock(NOW + 4 * MIN)} (em 4 min).`), texto(node));
+      assert.equal(node.querySelector('button'), null);
+      assert.doesNotMatch(texto(node), /O limite já passou/);
+    });
 
-  test('#496/AC-2 the wait rounds to whole minutes', () => {
-    assert.match(texto(staleBand({ fetchedAt: NOW - MIN, now: NOW, retryAt: NOW + 2 * MIN + 20_000 })), /em 2 min\./);
-    assert.match(texto(staleBand({ fetchedAt: NOW - MIN, now: NOW, retryAt: NOW + 2 * MIN + 40_000 })), /em 3 min\./);
+    test('rate-limited with the pause ended (retryAt null or past) says so and offers Tentar agora', () => {
+      for (const retryAt of [null, NOW - MIN, NOW]) {
+        const node = band('rate-limited', { retryAt });
+        assert.ok(texto(node).includes('O limite já passou; relemos na próxima sincronização.'));
+        assert.doesNotMatch(texto(node), /Volta às/);
+        assert.equal(node.querySelector('button')!.getAttribute('data-action'), 'retry');
+      }
+    });
+
+    describe('#614 the band of the issue panel (subject issue) says nothing about the board', () => {
+      const issueBand = (reason: string | null, extra = {}) => staleBand({ fetchedAt: NOW - 31 * MIN, now: NOW, reason, subject: 'issue', ...extra });
+      test('rate-limited without a running pause: the title, the issue time and the live note; no time sentence, no button', () => {
+        for (const retryAt of [null, NOW - MIN]) {
+          const node = issueBand('rate-limited', { retryAt });
+          assert.equal(texto(node), 'O GitHub limitou as chamadas. Mostrando a issue de 22:41 (há 31 min). As sessões e a fila continuam ao vivo.');
+          assert.equal(node.querySelector('button'), null);
+        }
+      });
+      test('rate-limited with a running pause keeps "Volta às" and no button', () => {
+        const node = issueBand('rate-limited', { retryAt: NOW + 4 * MIN });
+        assert.ok(texto(node).includes(`Volta às ${formatClock(NOW + 4 * MIN)} (em 4 min).`));
+        assert.equal(node.querySelector('button'), null);
+      });
+      test('credential-refused and no-scope omit the board sentences and still offer Reconectar', () => {
+        for (const code of ['credential-refused', 'no-scope']) {
+          const node = issueBand(code);
+          assert.doesNotMatch(texto(node), /O quadro só volta|permissão do quadro/);
+          assert.ok(texto(node).includes('Mostrando a issue de 22:41 (há 31 min). As sessões e a fila continuam ao vivo.'), texto(node));
+          assert.equal(node.querySelector('button')!.getAttribute('data-action'), 'reconnect');
+        }
+      });
+      test('no band under subject issue talks about the board in its detail', () => {
+        for (const code of ['rate-limited', 'credential-refused', 'no-scope', 'github-unavailable', 'network', 'github-error', 'sync-pending', null]) {
+          assert.doesNotMatch(texto(issueBand(code).querySelector('p')!).replace(/^O quadro ainda não foi relido\. /, ''), /quadro/, String(code));
+        }
+      });
+    });
+
+    test('Reconectar is the filled button and runs onReconnect; Tentar agora and Atualizar agora run onRetry', () => {
+      let reconnected = 0;
+      let retried = 0;
+      const refused = band('credential-refused', { onReconnect: () => reconnected++, onRetry: () => retried++ });
+      assert.ok(refused.querySelector('button')!.classList.contains('filled'));
+      refused.querySelector('button')!.click();
+      assert.deepEqual([reconnected, retried], [1, 0]);
+      band('sync-pending', { onRetry: () => retried++ }).querySelector('button')!.click();
+      assert.deepEqual([reconnected, retried], [1, 1]);
+    });
+
+    test('a busy retry is disabled and aria-busy; Reconectar is never disabled by it', () => {
+      const retry = band('network', { busy: true }).querySelector('button')!;
+      assert.equal(retry.getAttribute('aria-busy'), 'true');
+      assert.ok(retry.hasAttribute('disabled'));
+      assert.ok(!band('credential-refused', { busy: true }).querySelector('button')!.hasAttribute('disabled'));
+    });
+
+    test('the detail lines: sync-pending and github-unavailable add "em N min" only with a retryAt', () => {
+      assert.ok(texto(band('sync-pending', { retryAt: NOW + 2 * MIN })).includes('ainda não passou por ele; relemos em 2 min.'));
+      assert.ok(texto(band('sync-pending')).includes('ainda não passou por ele.'));
+      assert.ok(texto(band('github-unavailable', { retryAt: NOW + 2 * MIN })).includes('O GitHub não respondeu. Tentamos de novo em 2 min.'));
+      assert.doesNotMatch(texto(band('github-unavailable')), /Tentamos de novo/);
+      for (const retryAt of [null, undefined, Number.NaN, '5' as unknown as number]) assert.doesNotMatch(texto(band('network', { retryAt })), /Tentamos de novo/);
+    });
+
+    test('overdue or under one minute shows 1 min, and the wait rounds to whole minutes', () => {
+      for (const retryAt of [NOW + 10_000, NOW, NOW - 5 * MIN]) assert.match(texto(band('network', { retryAt })), /Tentamos de novo em 1 min\./);
+      assert.match(texto(band('network', { retryAt: NOW + 2 * MIN + 20_000 })), /em 2 min\./);
+      assert.match(texto(band('network', { retryAt: NOW + 2 * MIN + 40_000 })), /em 3 min\./);
+    });
+
+    test('a missing code or one this build does not know (even an inherited name): neutral, no claim about GitHub, Tentar agora, the raw code never shows', () => {
+      for (const code of [null, 'proxy-timeout', 'constructor', 'toString']) {
+        const node = band(code);
+        assert.ok(node.classList.contains('wb-stale-neutral'));
+        assert.ok(texto(node).startsWith('A leitura está desatualizada.'));
+        assert.doesNotMatch(texto(node), /GitHub indisponível|proxy-timeout|constructor|toString|Motivo:/);
+        assert.equal(node.querySelector('button')!.getAttribute('data-action'), 'retry');
+      }
+      assert.equal(band(null).getAttribute('data-stale-code'), null);
+    });
+
+    test('the issue panel wording: "Mostrando a issue de …" with the same title for the same code', () => {
+      const node = staleBand({ fetchedAt: NOW - 31 * MIN, now: NOW, reason: 'no-scope', subject: 'issue' });
+      assert.ok(texto(node).startsWith('A credencial do GitHub não tem a permissão necessária. Mostrando a issue de 22:41'));
+    });
   });
 
   test('#465/AC-4 the stale board fades what comes from GitHub (Status, PR, CI, review); sessions and queue stay live', () => {
@@ -684,5 +793,382 @@ describe('#465/AC-5 English internals, pt-BR on screen (ADR-0009)', () => {
     for (const words of ['Quadro do trabalho', 'Atualizar', 'Nível', 'Iniciativa', 'Limpar filtros', 'Copiar link', 'Planejamento', 'Na fila', 'Em execução', 'Em review', 'Bloqueado', 'Concluído', 'Ver filhos', 'Tentar agora', 'Trocar de Project', 'Nenhuma issue com estes filtros.']) {
       assert.ok(copy.includes(words), `the screen says "${words}"`);
     }
+  });
+});
+
+// #610 (598-1 to 598-4): the components of the work board over every organization, in the fake DOM.
+const proj = (owner: string, number: number, title: string) => ({ owner, number, title });
+const PLATFORM = proj('acme-labs', 3, 'Plataforma');
+const MOBILE = proj('acme-labs', 4, 'Mobile');
+const ROADMAP = proj('northwind', 1, 'Roadmap');
+const SUPPORT = proj('northwind', 2, 'Suporte');
+const EXPERIMENTS = proj('mira-dev', 1, 'Experimentos');
+const org = (login: string, projects: ReturnType<typeof proj>[], over: Card = {}) => ({ login, own: false, state: 'read', readAt: NOW - 40_000, projects, ...over });
+const warned = (login: string, state: string, over: Card = {}) => org(login, [], { state, readAt: null, ...over });
+const ORGS = [org('acme-labs', [PLATFORM, MOBILE]), org('northwind', [ROADMAP, SUPPORT]), org('mira-dev', [EXPERIMENTS], { own: true })];
+const ORG_OPTIONS = {
+  ...OPTIONS,
+  orgs: [{ login: 'acme-labs', own: false, count: 2 }, { login: 'northwind', own: false, count: 2 }, { login: 'mira-dev', own: true, count: 1 }],
+  projects: [...[PLATFORM, MOBILE, ROADMAP, SUPPORT, EXPERIMENTS].map((p) => ({ ...p, count: 1 }))],
+};
+const from = (owner: string, project: ReturnType<typeof proj>) => ({ organization: owner, project });
+const originCard = (n: number, owner: string, project: ReturnType<typeof proj>, over: Card = {}) => card(n, { repo: `${owner}/app`, parent: null, chain: [], origin: from(owner, project), ...over });
+const ORIGIN_COLUMNS = [
+  { id: 'planning', label: 'Planejamento', criterion: '', count: 4, cards: [originCard(509, 'acme-labs', PLATFORM), originCard(499, 'acme-labs', MOBILE), originCard(503, 'northwind', ROADMAP), originCard(511, 'mira-dev', EXPERIMENTS, { repo: 'mira-dev/other' })] },
+];
+const WARNING_ORGS = (kinds: [string, string][]) => kinds.map(([login, state]) => warned(login, state));
+const FIVE = WARNING_ORGS([['globex', 'restricted'], ['initech', 'failed'], ['umbrella-corp', 'saml'], ['hooli', 'failed'], ['pied-piper', 'failed']]);
+
+describe('#610/AC-1 the header counts organizations and Projects (598-1)', () => {
+  test('#610/AC-1 several origins: "3 organizações · 5 Projects", the names with the account as "(você)"', () => {
+    const head = workBoardHeader({ organizations: ORGS, fetchedAt: NOW - 40_000, now: NOW });
+    assert.match(texto(head.querySelector('.wb-orgs-count')), /^3 organizações · 5 Projects$/);
+    assert.match(texto(head), /acme-labs, northwind e mira-dev \(você\)/);
+    assert.match(texto(head), /a coluna vem dos sinais; só a fila é sua/);
+    assert.doesNotMatch(texto(head), /GitHub Project “/);
+  });
+
+  test('#610/AC-1 one organization and one Project: today\'s header names them, nothing counts', () => {
+    const named = workBoardHeader({ organizations: [org('acme-labs', [PLATFORM])], fetchedAt: NOW, now: NOW });
+    assert.match(texto(named), /acme-labs · GitHub Project “Plataforma” · a coluna vem dos sinais/);
+    assert.equal(named.querySelector('.wb-orgs-count'), null);
+    const today = workBoardHeader({ project: { owner: 'acme-labs', number: 3, title: 'Plataforma', primaryRepo: 'acme-labs/app' }, fetchedAt: NOW, now: NOW });
+    assert.match(texto(today), /acme-labs\/app · GitHub Project “Plataforma” · a coluna vem dos sinais/);
+  });
+
+  test('#610/AC-1 the count leaves out an organization with a warning and marks "N com aviso"', () => {
+    const head = workBoardHeader({ organizations: [...ORGS, ...WARNING_ORGS([['globex', 'restricted'], ['initech', 'failed']])], fetchedAt: NOW, now: NOW });
+    assert.match(texto(head.querySelector('.wb-orgs-count')), /^3 organizações · 5 Projects$/);
+    assert.match(texto(head.querySelector('.wb-warn-count')), /^2 com aviso$/);
+    assert.doesNotMatch(texto(head), /globex/);
+  });
+
+  test('#610/AC-1 an organization read before that fails now stays in the count and the names, and is also "1 com aviso"', () => {
+    const stale = org('northwind', [ROADMAP, SUPPORT], { state: 'failed', readAt: NOW - 31 * MIN });
+    const head = workBoardHeader({ organizations: [ORGS[0], stale, ORGS[2]], fetchedAt: NOW, now: NOW });
+    assert.match(texto(head.querySelector('.wb-orgs-count')), /^3 organizações · 5 Projects$/);
+    assert.match(texto(head), /acme-labs, northwind e mira-dev \(você\)/);
+    assert.match(texto(head.querySelector('.wb-warn-count')), /^1 com aviso$/);
+  });
+
+  test('#610/AC-1 singular and zero: "1 organização · 2 Projects", and "0 organizações · 0 Projects" with no Project', () => {
+    const one = workBoardHeader({ organizations: [org('acme-labs', [PLATFORM, MOBILE])], now: NOW });
+    assert.match(texto(one.querySelector('.wb-orgs-count')), /^1 organização · 2 Projects$/);
+    const none = workBoardHeader({ organizations: [org('acme-labs', [])], now: NOW });
+    assert.match(texto(none.querySelector('.wb-orgs-count')), /^0 organizações · 0 Projects$/);
+  });
+
+  test('#610/AC-1 loading shows "… organizações · … Projects"; GitHub down still counts every organization; all with a warning says none was read', () => {
+    const loading = workBoardHeader({ organizations: null, loading: true, reading: true, now: NOW, busy: true });
+    assert.match(texto(loading.querySelector('.wb-orgs-count')), /^… organizações · … Projects$/);
+    const down = workBoardHeader({ organizations: ORGS.map((o) => ({ ...o, state: 'failed' })), githubDown: true, stale: true, fetchedAt: NOW - 31 * MIN, now: NOW });
+    assert.match(texto(down.querySelector('.wb-orgs-count')), /^3 organizações · 5 Projects$/);
+    assert.equal(down.querySelector('.wb-warn-count'), null);
+    const all = workBoardHeader({ organizations: WARNING_ORGS([['globex', 'restricted'], ['initech', 'failed'], ['umbrella-corp', 'saml']]), now: NOW });
+    assert.match(texto(all.querySelector('.wb-orgs-count')), /^Nenhuma organização lida$/);
+    assert.match(texto(all.querySelector('.wb-warn-count')), /^3 com aviso$/);
+  });
+});
+
+describe('#610/AC-1 the card says where it comes from (598-1)', () => {
+  const origin = (n: number) => workCard(originCard(n, 'acme-labs', PLATFORM), { showOrigin: true, now: NOW });
+
+  test('#610/AC-1 the origin line is "organização · Project" and is left out without showOrigin', () => {
+    const withLine = origin(509);
+    assert.match(texto(withLine.querySelector('.wb-origin')), /^acme-labs · Plataforma$/);
+    assert.equal(workCardWithout().querySelector('.wb-origin'), null);
+    function workCardWithout() {
+      return workCard(originCard(509, 'acme-labs', PLATFORM), { now: NOW });
+    }
+    assert.ok(withLine.querySelector('.wb-origin')!.getAttribute('title'), 'the line carries a title');
+  });
+
+  test('#610/AC-1 the repository shows only on a card of another repository than its organization\'s usual one', () => {
+    const board = boardColumns({ columns: ORIGIN_COLUMNS.map((c) => ({ ...c, cards: [...c.cards, originCard(500, 'acme-labs', PLATFORM)] })), showOrigin: true, now: NOW });
+    const byNumber = (n: number) => board.querySelectorAll('article.wb-card').find((c) => texto(c).includes(`#${n}`))!;
+    assert.equal(byNumber(509).querySelector('.wb-repo'), null, 'acme-labs/app is acme-labs\' usual repository');
+    assert.ok(byNumber(503).querySelector('.wb-repo'), 'an organization with a single card has no usual repository: its repository shows');
+    assert.ok(byNumber(511).querySelector('.wb-repo'), 'mira-dev/other is the only one of mira-dev');
+    assert.match(texto(byNumber(511).querySelector('.wb-origin')), /^mira-dev · Experimentos$/);
+  });
+
+  test('#610/AC-1 usualRepos: the repository holding most of an organization\'s cards, only past one card; a tie goes to the first by name', () => {
+    const columns = [{ id: 'planning', cards: [originCard(1, 'acme-labs', PLATFORM, { repo: 'acme-labs/b' }), originCard(2, 'acme-labs', PLATFORM, { repo: 'acme-labs/a' }), originCard(3, 'acme-labs', PLATFORM, { repo: 'acme-labs/b' }), originCard(4, 'northwind', ROADMAP), originCard(5, 'tie', ROADMAP, { repo: 'tie/z' }), originCard(6, 'tie', ROADMAP, { repo: 'tie/y' })] }];
+    assert.deepEqual(usualRepos(columns), { 'acme-labs': 'acme-labs/b', tie: 'tie/y' });
+  });
+
+  test('#610/AC-1 with a chosen Project the board\'s main repository stays the rule', () => {
+    const node = workCard(originCard(509, 'acme-labs', PLATFORM, { repo: 'acme-labs/other' }), { showOrigin: true, primaryRepo: 'acme-labs/app', now: NOW });
+    assert.ok(node.querySelector('.wb-repo'));
+    const same = workCard(originCard(509, 'acme-labs', PLATFORM), { showOrigin: true, primaryRepo: 'acme-labs/app', now: NOW });
+    assert.equal(same.querySelector('.wb-repo'), null);
+  });
+
+  test('#610/AC-3 a card of an organization that failed now is dimmed; the others are not', () => {
+    const board = boardColumns({ columns: ORIGIN_COLUMNS, showOrigin: true, staleOrgs: ['northwind'], now: NOW });
+    const cards = board.querySelectorAll('article.wb-card');
+    assert.deepEqual(cards.filter((c) => c.classList.contains('wb-org-stale')).map((c) => /#(\d+)/.exec(texto(c))![1]), ['503']);
+  });
+});
+
+describe('#610/AC-2 the Organização and Project filters (598-2)', () => {
+  const bar = (over: Card = {}) => filterBar({ filters: { ...NO_FILTERS, org: null, project: null }, options: ORG_OPTIONS, organizations: ORGS, origin: true, ...over });
+  const select = (root: ElementoFalso, param: string) => root.querySelector(`select[data-param="${param}"]`)!;
+
+  test('#610/AC-2 both selects come before the six, "Todas" and "Todos", labelled, with the account as "(você)"', () => {
+    const root = bar();
+    const selects = root.querySelectorAll('select');
+    assert.deepEqual(selects.map((s) => s.getAttribute('data-param')), ['org', 'project', 'initiative', 'epic', 'type', 'label', 'repo', 'status']);
+    assert.deepEqual(root.querySelectorAll('.wb-field-label').slice(0, 2).map(texto), ['Organização', 'Project']);
+    assert.equal(texto(select(root, 'org').querySelector('option')), 'Todas');
+    assert.equal(texto(select(root, 'project').querySelector('option')), 'Todos');
+    assert.deepEqual(select(root, 'org').querySelectorAll('option').map((o) => o.getAttribute('value')), ['', 'acme-labs', 'northwind', 'mira-dev']);
+    assert.match(texto(select(root, 'org')), /mira-dev \(você\) \(1\)/);
+    for (const s of selects) assert.equal(s.closest('label')?.tagName, 'LABEL', 'every select sits in its label');
+    assert.ok(root.querySelector('.wb-fields')!.classList.contains('wb-fields-origin'));
+  });
+
+  test('#610/AC-2 without origin the bar is the six filters of today', () => {
+    const root = filterBar({ filters: NO_FILTERS, options: OPTIONS });
+    assert.equal(select(root, 'org'), null);
+    assert.equal(select(root, 'project'), null);
+    assert.equal(root.querySelectorAll('select').length, 6);
+    assert.ok(!root.querySelector('.wb-fields')!.classList.contains('wb-fields-origin'));
+  });
+
+  test('#610/AC-2 with Todas the Projects are grouped by organization, the value is owner/number; with an organization only its Projects', () => {
+    const all = select(bar(), 'project');
+    const groups = all.querySelectorAll('optgroup');
+    assert.deepEqual(groups.map((g) => g.getAttribute('label')), ['acme-labs', 'northwind', 'mira-dev (você)']);
+    assert.deepEqual(all.querySelectorAll('option').map((o) => o.getAttribute('value')), ['', 'acme-labs/3', 'acme-labs/4', 'northwind/1', 'northwind/2', 'mira-dev/1']);
+    const narrow = select(bar({ filters: { ...NO_FILTERS, org: 'acme-labs', project: null } }), 'project');
+    assert.deepEqual(narrow.querySelectorAll('option').map((o) => o.getAttribute('value')), ['', 'acme-labs/3', 'acme-labs/4']);
+    assert.doesNotMatch(texto(narrow), /Roadmap/);
+  });
+
+  test('#610/AC-2 an organization with a warning and no card is not an option; one that keeps its cards is', () => {
+    const root = bar({ organizations: [...ORGS, warned('globex', 'restricted')], options: { ...ORG_OPTIONS, orgs: [...ORG_OPTIONS.orgs, { login: 'globex', own: false, count: 0 }] } });
+    assert.doesNotMatch(texto(select(root, 'org')), /globex/);
+    const stale = org('northwind', [ROADMAP, SUPPORT], { state: 'failed' });
+    const kept = bar({ organizations: [ORGS[0], stale, ORGS[2]] });
+    assert.match(texto(select(kept, 'org')), /northwind/);
+  });
+
+  test('#610/AC-2 a change calls back with the English param and the value, "Todas" with null', () => {
+    const changes: [string, unknown][] = [];
+    const root = bar({ onFilterChange: (p: string, v: unknown) => changes.push([p, v]) });
+    for (const [param, value] of [['org', 'acme-labs'], ['project', 'acme-labs/3'], ['org', '']] as const) {
+      select(root, param).value = value;
+      select(root, param).dispatchEvent({ type: 'change' });
+    }
+    assert.deepEqual(changes, [['org', 'acme-labs'], ['project', 'acme-labs/3'], ['org', null]]);
+  });
+
+  test('#610/AC-2 the chips of org and Project come first, with the name and the title, each with a named ×', () => {
+    const changes: [string, unknown][] = [];
+    const filters = { ...NO_FILTERS, org: 'acme-labs', project: 'acme-labs/3', type: 'story' };
+    const root = bar({ filters, link: '/ui/work?org=acme-labs&project=acme-labs/3&level=item&type=story', onFilterChange: (p: string, v: unknown) => changes.push([p, v]) });
+    const chips = root.querySelectorAll('.wb-chip');
+    assert.deepEqual(chips.map(texto), ['Organização: acme-labs', 'Project: Plataforma', 'Tipo: História']);
+    assert.deepEqual(chips.map((c) => c.getAttribute('data-param')), ['org', 'project', 'type']);
+    assert.equal(chips[1]!.querySelector('button')!.getAttribute('aria-label'), 'Tirar o filtro Project');
+    chips[0]!.querySelector('button')!.dispatchEvent({ type: 'click' });
+    assert.deepEqual(changes, [['org', null]]);
+    assert.equal(select(root, 'org').value, 'acme-labs');
+    assert.equal(select(root, 'project').value, 'acme-labs/3');
+    assert.deepEqual(filterChips({ org: 'mira-dev', project: 'mira-dev/9' }, ORG_OPTIONS).map((c: { value: string }) => c.value), ['mira-dev (você)', 'mira-dev/9']);
+  });
+
+  test('#610/AC-2 a Project of a read that is no longer an option stays selected, with its value', () => {
+    const root = bar({ filters: { ...NO_FILTERS, org: null, project: 'acme-labs/9' } });
+    assert.equal(select(root, 'project').value, 'acme-labs/9');
+  });
+
+  test('#610/AC-2 loading turns every select off', () => {
+    const root = bar({ disabled: true });
+    assert.ok(root.querySelectorAll('select').every((s) => s.hasAttribute('disabled')));
+    assert.ok(root.classList.contains('wb-off'));
+  });
+
+  test('#610/AC-2 the reset note says which Project went back to Todos and why, as a status', () => {
+    const note = projectResetNote({ project: { owner: 'acme-labs', number: 3, title: 'Plataforma' }, to: 'northwind' });
+    assert.equal(texto(note), 'O Project “Plataforma” é de acme-labs, não de northwind: voltou para Todos.');
+    assert.equal(note.getAttribute('role'), 'status');
+    assert.ok(note.classList.contains('wb-reset-note'));
+  });
+});
+
+describe('#610/AC-3 the organization warnings (598-3)', () => {
+  const bands = (organizations: unknown[], over: Card = {}) => orgWarnings({ organizations, now: NOW, ...over });
+  const names = (root: ElementoFalso | null) => root!.querySelectorAll('button').map(texto);
+
+  test('#610/AC-3 restricted: yellow band with Aprovar (dono) and Pedir acesso that call back with the organization', () => {
+    const actions: [string, string][] = [];
+    const root = bands([...ORGS, warned('globex', 'restricted', { approvalUrl: 'x', requestUrl: 'y' })], { onAction: (k: string, o: { login: string }) => actions.push([k, o.login]) });
+    const band = root!.querySelector('.wb-warn-band')!;
+    assert.match(texto(band), /globex restringe apps OAuth/);
+    assert.deepEqual(names(band), ['Aprovar (dono)', 'Pedir acesso']);
+    assert.ok(band.classList.contains('wb-warn-restricted') && band.classList.contains('wb-warn-attn'));
+    assert.equal(band.getAttribute('role'), 'status');
+    for (const b of band.querySelectorAll('button')) b.dispatchEvent({ type: 'click' });
+    assert.deepEqual(actions, [['approve', 'globex'], ['request', 'globex']]);
+  });
+
+  test('#610/AC-3 SSO: says so and offers Entrar pelo SSO', () => {
+    const actions: string[] = [];
+    const root = bands([warned('umbrella-corp', 'saml')], { onAction: (k: string) => actions.push(k) });
+    assert.match(texto(root), /umbrella-corp exige login pelo SSO/);
+    assert.deepEqual(names(root), ['Entrar pelo SSO']);
+    root!.querySelector('button')!.dispatchEvent({ type: 'click' });
+    assert.deepEqual(actions, ['sso']);
+  });
+
+  test('#610/AC-3 failed with nothing stored: red band as an alert, the reason in pt-BR, Tentar de novo', () => {
+    const actions: string[] = [];
+    const root = bands([warned('initech', 'failed', { reason: 'rate-limited' })], { onAction: (k: string) => actions.push(k) });
+    const band = root!.querySelector('.wb-warn-band')!;
+    assert.match(texto(band), /Não conseguimos ler os Projects de initech.*nada guardado/i);
+    assert.match(texto(band), /Motivo: o GitHub limitou as chamadas/);
+    assert.ok(band.classList.contains('wb-warn-fail'));
+    assert.equal(band.getAttribute('role'), 'alert');
+    assert.deepEqual(names(band), ['Tentar de novo']);
+    band.querySelector('button')!.dispatchEvent({ type: 'click' });
+    assert.deepEqual(actions, ['retry']);
+    assert.doesNotMatch(texto(band), /rate-limited/, 'the raw code never shows');
+  });
+
+  test('#610/AC-3 an organization read before that fails now: "agora", the read time, the cards dimmed', () => {
+    const at = NOW - 31 * MIN;
+    const stale = org('northwind', [ROADMAP, SUPPORT], { state: 'failed', readAt: at });
+    const root = bands([stale]);
+    const text = texto(root);
+    assert.match(text, /Não conseguimos ler os Projects de northwind agora/);
+    assert.ok(text.includes(`última leitura dela, às ${formatClock(at)} (há 31 min), com os cards esmaecidos`));
+    assert.deepEqual(names(root), ['Tentar de novo']);
+    assert.deepEqual(staleOrganizations([ORGS[0], stale, warned('initech', 'failed')]), ['northwind']);
+  });
+
+  test('#610/AC-3 busy turns the retry off and marks it busy', () => {
+    const root = bands([warned('initech', 'failed')], { busy: true });
+    const retry = root!.querySelector('button')!;
+    assert.ok(retry.hasAttribute('disabled'));
+    assert.equal(retry.getAttribute('aria-busy'), 'true');
+  });
+
+  test('#610/AC-3 more than three: three bands, then "Mais N organizações com aviso"', () => {
+    const root = bands([...ORGS, ...FIVE]);
+    assert.ok(root!.classList.contains('wb-warns'));
+    assert.equal(root!.children.filter((c) => c.classList.contains('wb-warn-band')).length, 3);
+    assert.deepEqual(root!.querySelectorAll('.wb-warn-band').map((b) => /(globex|initech|umbrella-corp)/.exec(texto(b))![1]), ['globex', 'initech', 'umbrella-corp']);
+    assert.equal(texto(root!.querySelector('.wb-warns-more')), 'Mais 2 organizações com aviso');
+    assert.equal(bands([...ORGS, ...FIVE.slice(0, 3)])!.querySelector('.wb-warns-more'), null, 'exactly three show no "Mais"');
+    assert.equal(texto(bands([...ORGS, ...FIVE.slice(0, 4)])!.querySelector('.wb-warns-more')), 'Mais 1 organização com aviso');
+  });
+
+  test('#610/AC-3 "Mais N" is a button that asks to expand, collapsed it is not pressed', () => {
+    const asked: unknown[][] = [];
+    const root = bands([...ORGS, ...FIVE], { onAction: (...args: unknown[]) => asked.push(args) });
+    const more = root!.querySelector('.wb-warns-more')!;
+    assert.equal(more.tagName.toLowerCase(), 'button');
+    assert.equal(more.getAttribute('type'), 'button');
+    assert.equal(more.getAttribute('data-action'), 'more');
+    assert.equal(more.getAttribute('aria-expanded'), 'false');
+    more.click();
+    assert.deepEqual(asked, [['more']]);
+  });
+
+  test('#610/AC-3 expanded: every band renders and the toggle offers "Mostrar menos"', () => {
+    const asked: unknown[][] = [];
+    const root = bands([...ORGS, ...FIVE], { expanded: true, onAction: (...args: unknown[]) => asked.push(args) });
+    assert.equal(root!.children.filter((c) => c.classList.contains('wb-warn-band')).length, 5);
+    const toggle = root!.querySelector('.wb-warns-more')!;
+    assert.equal(toggle.getAttribute('aria-expanded'), 'true');
+    assert.equal(toggle.getAttribute('data-action'), 'more');
+    assert.equal(texto(toggle), 'Mostrar menos');
+    toggle.click();
+    assert.deepEqual(asked, [['more']]);
+    assert.equal(bands([...ORGS, ...FIVE.slice(0, 3)], { expanded: true })!.querySelector('.wb-warns-more'), null, 'three or fewer have no toggle even expanded');
+  });
+
+  test('#610/AC-3 the toggle is a named, keyboard-reachable control', () => {
+    for (const expanded of [false, true]) {
+      const toggle = bands([...ORGS, ...FIVE], { expanded })!.querySelector('.wb-warns-more')!;
+      assert.ok(texto(toggle).trim().length > 0, 'it has an accessible name');
+      assert.equal(toggle.hasAttribute('disabled'), false);
+      assert.equal(toggle.hasAttribute('tabindex'), false, 'a native button needs no tabindex');
+      assert.match(toggle.getAttribute('aria-expanded') ?? '', /^(true|false)$/);
+    }
+  });
+
+  test('#610/AC-3 no warning, no component; GitHub down shows none per organization', () => {
+    assert.equal(bands(ORGS), null);
+    assert.equal(bands(ORGS.map((o) => ({ ...o, state: 'failed' })), { githubDown: true }), null);
+  });
+});
+
+describe('#610/AC-1 and AC-3 the states with no card (598-4)', () => {
+  const states = (kind: string, over: Card = {}) => orgsEmpty({ kind, organizations: ORGS, ...over });
+  const labels = (root: ElementoFalso) => root.querySelectorAll('button').map(texto);
+
+  test('#610/AC-1 no issue in any Project read: says what the board shows, leads to GitHub and to the connection', () => {
+    const actions: string[] = [];
+    const root = states('issues', { onAction: (k: string) => actions.push(k) });
+    assert.match(texto(root), /Nenhuma issue nos Projects das suas organizações/);
+    assert.match(texto(root), /Os 5 Projects de acme-labs, northwind e mira-dev \(você\) não têm nenhuma issue/);
+    assert.deepEqual(labels(root), ['Abrir os Projects no GitHub', 'Conceder acesso a outra organização']);
+    for (const b of root.querySelectorAll('button')) b.dispatchEvent({ type: 'click' });
+    assert.deepEqual(actions, ['open-projects', 'connect']);
+    assert.doesNotMatch(texto(root), /Trocar de Project/);
+  });
+
+  test('#610/AC-1 no Project at all: "Nenhum Project para mostrar", GitHub and the connection, no "Trocar de Project"', () => {
+    const root = states('projects', { organizations: [org('acme-labs', [])] });
+    assert.match(texto(root), /Nenhum Project para mostrar/);
+    assert.deepEqual(labels(root), ['Abrir o GitHub', 'Conceder acesso a outra organização']);
+    assert.doesNotMatch(texto(root), /Trocar de Project/);
+  });
+
+  test('#610/AC-3 every organization with a warning: an alert with Tentar agora, busy while it reads', () => {
+    const actions: string[] = [];
+    const root = states('all-failed', { onAction: (k: string) => actions.push(k) });
+    assert.match(texto(root), /Não conseguimos ler nenhuma organização/);
+    assert.deepEqual(labels(root), ['Tentar agora']);
+    root.querySelector('button')!.dispatchEvent({ type: 'click' });
+    assert.deepEqual(actions, ['retry']);
+    assert.equal(root.querySelector('h2')!.tagName, 'H2');
+    const busy = states('all-failed', { busy: true });
+    assert.ok(busy.querySelector('button')!.hasAttribute('disabled'));
+    assert.equal(busy.querySelector('button')!.getAttribute('aria-busy'), 'true');
+  });
+
+  test('#610/AC-1 loading: the columns are skeletons with counts in "…" and the filters are off', () => {
+    const board = boardColumns({ mode: 'skeleton', counts: '…', showOrigin: true, now: NOW });
+    assert.equal(board.getAttribute('aria-busy'), 'true');
+    assert.equal(board.querySelectorAll('article.wb-card').length, 0);
+    const off = filterBar({ filters: NO_FILTERS, options: {}, organizations: [], origin: true, disabled: true });
+    assert.ok(off.querySelectorAll('select').every((s) => s.hasAttribute('disabled')));
+  });
+
+  test('#610 English internals: every new class and data-* token is English, the copy is pt-BR', () => {
+    const roots = [
+      workBoardHeader({ organizations: [...ORGS, ...FIVE], now: NOW }),
+      filterBar({ filters: { ...NO_FILTERS, org: 'acme-labs', project: 'acme-labs/3' }, options: ORG_OPTIONS, organizations: ORGS, origin: true, link: '/ui/work' }),
+      orgWarnings({ organizations: [...ORGS, ...FIVE], now: NOW }),
+      orgsEmpty({ kind: 'issues', organizations: ORGS }),
+      projectResetNote({ project: PLATFORM, to: 'northwind' }),
+      boardColumns({ columns: ORIGIN_COLUMNS, showOrigin: true, staleOrgs: ['northwind'], now: NOW }),
+    ];
+    const names = new Set<string>();
+    for (const root of roots) {
+      for (const node of [root, ...root.querySelectorAll('*')]) {
+        for (const c of (node.getAttribute('class') ?? '').split(/\s+/).filter(Boolean)) if (c.startsWith('wb-')) names.add(c);
+        for (const [name, value] of node.atributos) if (name.startsWith('data-') && name !== 'data-key') (names.add(name), names.add(value));
+      }
+    }
+    for (const name of [...names].filter(Boolean)) {
+      assert.match(name, /^[a-z0-9-]+$/, name);
+      assert.doesNotMatch(name, /organizacao|aviso|origem|cabecalho|filtro|projeto|cartao/i, `${name} reads Portuguese`);
+    }
+    for (const token of ['wb-origin', 'wb-warns', 'wb-warn-band', 'wb-orgs-count', 'wb-reset-note', 'wb-org-stale', 'wb-warns-more']) assert.ok(names.has(token), `${token} is rendered`);
   });
 });

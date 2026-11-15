@@ -24,7 +24,8 @@ import { stat } from 'node:fs/promises';
 import { send } from '../ingest/hooks/receiver.ts';
 import type { StoragePort } from '../storage-port.ts';
 import { isUsableCwd, resumeCommand, SESSION_ID_PATTERN, type SessionOpenDescriber } from './session-open.ts';
-import type { TerminalFocuser, TerminalOpener } from './terminal-launch.ts';
+import { planningKeyOfPrompt } from '../github/work-plan.ts';
+import { PLANNING_TOOL_FLAGS, type TerminalFocuser, type TerminalOpener } from './terminal-launch.ts';
 
 export const SESSION_OPEN_ROUTE = /^\/api\/sessions\/([^/]+)\/open$/;
 /** The raw URL the /ui posts: the UUID and nothing else (decision 0003). */
@@ -44,6 +45,11 @@ export interface SessionOpenRouteOptions {
   /** The session is one a remote machine reported (#176): it is not opened here. */
   isRemote?: (sessionId: string) => boolean;
   isDirectory?: (path: string) => Promise<boolean>;
+  /**
+   * #515 the first prompt of a session, or `null`. A session whose first prompt is a planning one is resumed with the
+   * tool restriction (it still holds the issue's untrusted text); without it, no session is.
+   */
+  firstPromptOf?: (sessionId: string) => Promise<string | null>;
   log?: (message: string) => void;
 }
 
@@ -79,11 +85,13 @@ export function createSessionOpenRoute(o: SessionOpenRouteOptions): SessionOpenR
     const proc = o.describer.liveProcess(sessionId);
     const cwd = session.cwd ?? proc?.cwd ?? null;
     const open = o.describer.describe({ sessionId, cwd, local });
-    const command = resumeCommand(cwd, sessionId);
+    const first = o.firstPromptOf ? await o.firstPromptOf(sessionId) : null;
+    const planning = first !== null && planningKeyOfPrompt(first) !== null;
+    const command = resumeCommand(cwd, sessionId, planning ? PLANNING_TOOL_FLAGS : []);
 
     async function resume() {
       if (!isUsableCwd(cwd) || !(await isDirectory(cwd))) return send(res, 422, { error: 'A pasta da sessão não existe mais', command });
-      const result = o.openTerminal ? await o.openTerminal({ sessionId, cwd }) : 'unsupported';
+      const result = o.openTerminal ? await o.openTerminal(planning ? { sessionId, cwd, planning: true } : { sessionId, cwd }) : 'unsupported';
       if (result === 'unsupported') return send(res, 501, { error: 'Não há um terminal que o console saiba abrir aqui; copie o comando', command });
       log(`session ${sessionId} opened in a terminal`);
       return send(res, 200, { ok: true, opened: 'terminal' satisfies OpenedAs });

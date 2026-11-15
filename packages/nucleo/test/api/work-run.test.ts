@@ -19,6 +19,7 @@ import { WorkIssueNotFoundError } from '../../src/github/work-issue-service.ts';
 import type { WorkIssueResult } from '../../src/github/work-issue-service.ts';
 import { executionPrompt, EXECUTION_SESSION_WINDOW_MS } from '../../src/github/work-execution.ts';
 import { SqliteWorkExecutionRuns } from '../../src/github/work-execution-runs.ts';
+import { SqliteWorkQueue } from '../../src/github/work-queue-store.ts';
 import { session, trustOf } from '../fixtures.ts';
 import { InstallationRepositoryTrust, type RepositoryTrust } from '../../src/github/trusted-owners.ts';
 import { MemoryInstallationSettings } from '../../src/settings/installation-settings.ts';
@@ -251,6 +252,97 @@ describe('#531 POST /api/work/run', () => {
         assert.equal((await post({ ...body, force: true }, {}, blind)).status, 200);
       } finally {
         await blind.close();
+      }
+    });
+  });
+
+  describe('#477/AC-4 the limit is the installation preference', () => {
+    test('#477/AC-4 Given the limit is 3, When 2 cards run, Then the session opens; at 3 it is 409 naming limit 3', async () => {
+      fresh();
+      const three = await startApi({ workRun: { trust: trustOf('acme'), issues: { issue: async () => current as WorkIssueResult }, runs, running: { runningCount: async () => running }, limit: () => 3, git, now: () => clock } });
+      try {
+        running = 2;
+        assert.equal((await post(body, {}, three)).status, 200);
+        storage.db.exec('DELETE FROM work_execution_runs');
+        running = 3;
+        const r = await post(body, {}, three);
+        assert.equal(r.status, 409);
+        const out = await json(r);
+        assert.deepEqual([out.running, out.limit], [3, 3]);
+        assert.match(out.error, /limite é 3/);
+      } finally {
+        await three.close();
+      }
+    });
+
+    test('#477/AC-4 the limit is read at each request: a change applies at once', async () => {
+      fresh();
+      let limit = 2;
+      const live = await startApi({ workRun: { trust: trustOf('acme'), issues: { issue: async () => current as WorkIssueResult }, runs, running: { runningCount: async () => running }, limit: () => limit, git, now: () => clock } });
+      try {
+        running = 2;
+        assert.equal((await post(body, {}, live)).status, 409);
+        limit = 4;
+        assert.equal((await post(body, {}, live)).status, 200);
+      } finally {
+        await live.close();
+      }
+    });
+  });
+
+  describe('#477/AC-2 "Executar plano" on a queued card takes it out of the queue and runs it', () => {
+    const withQueue = (queue: SqliteWorkQueue) => startApi({ workRun: { trust: trustOf('acme'), issues: { issue: async () => current as WorkIssueResult }, runs, running: { runningCount: async () => running }, queue, git, now: () => clock } });
+
+    test('#477/AC-2 Given #412 is 2nd in the queue, When its plan runs, Then the session opens, a run is recorded and the queue is left with the others, renumbered', async () => {
+      fresh();
+      const queue = new SqliteWorkQueue(storage.db);
+      for (const n of [500, 412, 501]) await queue.enqueue(`acme/app#${n}`, 'terminal', new Date(T0).toISOString());
+      const live = await withQueue(queue);
+      try {
+        assert.equal((await post(body, {}, live)).status, 200);
+        assert.equal((await runs.get('acme/app#412'))?.state, 'booting');
+        assert.deepEqual([...(await queue.positions())], [['acme/app#500', 1], ['acme/app#501', 2]]);
+      } finally {
+        await live.close();
+        storage.db.exec('DELETE FROM work_queue');
+      }
+    });
+
+    test('#477/AC-2 when the run is refused (the limit), the item stays in the queue', async () => {
+      fresh();
+      running = 2;
+      const queue = new SqliteWorkQueue(storage.db);
+      await queue.enqueue('acme/app#412', 'terminal', new Date(T0).toISOString());
+      const live = await withQueue(queue);
+      try {
+        assert.equal((await post(body, {}, live)).status, 409);
+        assert.deepEqual([...(await queue.positions())], [['acme/app#412', 1]]);
+      } finally {
+        await live.close();
+        storage.db.exec('DELETE FROM work_queue');
+      }
+    });
+
+    test('#477/AC-2 when the queue cannot be written after the session opened, the answer is still 200 and the run is recorded', async () => {
+      fresh();
+      const live = await startApi({ workRun: { trust: trustOf('acme'), issues: { issue: async () => current as WorkIssueResult }, runs, running: { runningCount: async () => running }, queue: { remove: async () => { throw new Error('database is locked'); } }, git, now: () => clock } });
+      try {
+        assert.equal((await post(body, {}, live)).status, 200);
+        assert.equal((await runs.get('acme/app#412'))?.state, 'booting');
+      } finally {
+        await live.close();
+      }
+    });
+
+    test('#477/AC-2 a card that is not queued runs as before', async () => {
+      fresh();
+      const queue = new SqliteWorkQueue(storage.db);
+      const live = await withQueue(queue);
+      try {
+        assert.equal((await post(body, {}, live)).status, 200);
+        assert.deepEqual(await queue.list(), []);
+      } finally {
+        await live.close();
       }
     });
   });

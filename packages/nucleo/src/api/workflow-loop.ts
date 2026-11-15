@@ -15,6 +15,15 @@
 // fix agent that delegates is not one: it keeps its own PR. (#586)
 // A task that cites two PRs stays in the first and carries the other in `otherRefs`.
 //
+// An orchestrator is the parent of the loops, never a step of one (#588): it leaves the groups and goes to
+// `orchestrators` (in start order), with the ids of the groups it leads, most recent first. (#588)
+// A group is led by the orchestrator that is the parent of its first step (`LoopStep.parentAgentId`); the `none` (#588)
+// group is never a layer. (#588)
+// `totals.layers` counts the groups an orchestrator leads; the orchestrator still counts in `totals.subagents`, and in (#588)
+// no round or change request. (#588)
+// Without an orchestrator the output is the same, with `orchestrators: []` and `layers: 0`. (#588)
+// The agency's build agents (`apollo`, `iris`, `clio`, `hephaestus`, `aglaia`, `daedalus`, `mnemosyne`) count as `dev`. (#588)
+//
 // A round is each Argos call (a `review` step) on the group. A change request is a round whose verdict, read from
 // the last `Verdict: …` line of the reviewer's report (at ingest, from the full text; or `metadata.workflow.verdict`), is
 // not `approve` (`request-changes` and `comment` both count);
@@ -38,6 +47,8 @@ export interface LoopStep {
   state: LoopStepState;
   startedAt: string;
   endedAt: string | null;
+  /** The agent that opened this step, as the session graph has it (#588). */
+  parentAgentId: string | null;
   /** Only on `review` steps; `null` when the message has no readable verdict. */
   verdict: LoopVerdict | null;
   /** The findings a reviewer reported (`3 findings`, `3 achados`), when readable. */
@@ -60,9 +71,24 @@ export interface LoopGroup {
   lastActivityAt: string;
 }
 
+/** The subagent that opens the layers of a story and leads their loops (#588). */
+export interface LoopOrchestrator {
+  agentId: string;
+  agentType: string | null;
+  task: string | null;
+  state: LoopStepState;
+  startedAt: string;
+  endedAt: string | null;
+  /** The agent that opened it: the main agent, or another orchestrator (#588). */
+  parentAgentId: string | null;
+  /** The ids of the groups it leads (`pr:<n>`, `issue:<n>`), most recent first (#588). */
+  groups: string[];
+}
+
 export interface PrLoop {
   groups: LoopGroup[];
-  totals: { prs: number; rounds: number; changeRequests: number; subagents: number; stopped: number };
+  orchestrators: LoopOrchestrator[];
+  totals: { prs: number; rounds: number; changeRequests: number; subagents: number; stopped: number; layers: number };
 }
 
 type Json = Record<string, unknown>;
@@ -74,6 +100,8 @@ const PR_URL = /\/pull\/(\d{1,7})\b/g;
 const ISSUE_REF = /\b(?:issues?|refs?|closes?|fixes?)\s*#(\d{1,7})\b/gi;
 const BARE_REF = /(?<![\w/&])#(\d{1,7})\b/g;
 const ORCHESTRATOR_TYPE = /(^|:)athena$/;
+// The agency's builders and writers: no `workflow.role` is written for them at ingest, so the type says `dev` (#588).
+const BUILD_TYPE = /(^|:)(apollo|iris|clio|hephaestus|aglaia|daedalus|mnemosyne)$/;
 const BRANCH_ISSUE = /(?:^|\/)(\d{1,7})-/;
 
 const nums = (text: string, re: RegExp): number[] => [...text.matchAll(re)].map((m) => Number(m[1]));
@@ -101,12 +129,20 @@ export function refsOf(text: string): TextRefs {
 
 export { verdictOf };
 
+const stateOf = (a: Agent): LoopStepState => (a.status === 'error' ? 'error' : a.status === 'completed' ? 'completed' : 'running');
+
 const byStart = (a: Agent, b: Agent) => a.startedAt.localeCompare(b.startedAt) || a.id.localeCompare(b.id);
 
 /** A subagent's role in the loop; `roleOf` is the session graph's `papelDe`, so both views agree. */
 export function loopRoleOf(role: string): LoopRole {
   if (role === 'dev' || role === 'review' || role === 'fix') return role;
   return 'other';
+}
+
+/** The loop role of a subagent: the session graph's role, and `dev` for an agency build agent that has none (#588). */
+function roleInLoop(a: Agent, roleOf: (a: Agent) => string): LoopRole {
+  const role = loopRoleOf(roleOf(a));
+  return role === 'other' && BUILD_TYPE.test(a.subagentType ?? '') ? 'dev' : role;
 }
 
 interface Linked {
@@ -126,7 +162,7 @@ export function buildPrLoop(session: Session, agents: readonly Agent[], events: 
   const parents = new Set(subs.map((a) => a.parentAgentId));
   // Only an `athena` type, or a parent whose loop role is `other`: a dev, review or fix agent that delegates keeps its PR. (#586)
   const isOrchestrator = (a: Agent) =>
-    ORCHESTRATOR_TYPE.test(a.subagentType ?? '') || (parents.has(a.id) && loopRoleOf(roleOf(a)) === 'other');
+    ORCHESTRATOR_TYPE.test(a.subagentType ?? '') || (parents.has(a.id) && roleInLoop(a, roleOf) === 'other');
   const explicitPrs = new Set(subs.filter((a) => !isOrchestrator(a)).flatMap((a) => refs.get(a.id)!.prs));
 
   const linked: Linked[] = subs.map((agent) => {
@@ -137,7 +173,7 @@ export function buildPrLoop(session: Session, agents: readonly Agent[], events: 
     const prs = orchestrator ? [] : unique([...r.prs, ...bareIsPr]);
     const issues = unique([...r.issues, ...r.bare.filter((n) => orchestrator || !explicitPrs.has(n))]);
     const branch = branchOf(agent);
-    return { agent, role: loopRoleOf(roleOf(agent)), pr: prs[0] ?? null, issue: issues[0] ?? null, otherRefs: prs.slice(1), branch };
+    return { agent, role: roleInLoop(agent, roleOf), pr: prs[0] ?? null, issue: issues[0] ?? null, otherRefs: prs.slice(1), branch };
   });
 
   // Rule 2: the same branch as a subagent that has a PR.
@@ -177,16 +213,18 @@ export function buildPrLoop(session: Session, agents: readonly Agent[], events: 
       role: l.role,
       agentType: a.subagentType,
       task: a.name ?? a.task,
-      state: a.status === 'error' ? 'error' : a.status === 'completed' ? 'completed' : 'running',
+      state: stateOf(a),
       startedAt: a.startedAt,
       endedAt: a.endedAt,
+      parentAgentId: a.parentAgentId,
       verdict,
       findings: l.role === 'review' ? (heard?.findings ?? null) : null,
     };
   };
 
   const buckets = new Map<string, { kind: LoopGroup['kind']; number: number | null; items: Linked[] }>();
-  for (const l of linked) {
+  // An orchestrator is the parent of the loops, not a step in one (#588).
+  for (const l of linked.filter((x) => !isOrchestrator(x.agent))) {
     const [id, kind, number] = l.pr !== null ? [`pr:${l.pr}`, 'pr' as const, l.pr] : l.issue !== null ? [`issue:${l.issue}`, 'issue' as const, l.issue] : ['none', 'none' as const, null];
     const b = buckets.get(id) ?? { kind, number, items: [] };
     b.items.push(l);
@@ -226,15 +264,27 @@ export function buildPrLoop(session: Session, agents: readonly Agent[], events: 
 
   // The most recent first, "none" always last.
   groups.sort((a, b) => (a.kind === 'none' ? 1 : b.kind === 'none' ? -1 : b.lastActivityAt.localeCompare(a.lastActivityAt)));
+  const orchestrators: LoopOrchestrator[] = subs.filter(isOrchestrator).map((a) => ({
+    agentId: a.id,
+    agentType: a.subagentType,
+    task: a.name ?? a.task,
+    state: stateOf(a),
+    startedAt: a.startedAt,
+    endedAt: a.endedAt,
+    parentAgentId: a.parentAgentId,
+    groups: groups.filter((g) => g.kind !== 'none' && g.steps[0]?.parentAgentId === a.id).map((g) => g.id),
+  }));
   const withPr = groups.filter((g) => g.kind !== 'none');
   return {
     groups,
+    orchestrators,
     totals: {
       prs: groups.filter((g) => g.kind === 'pr').length,
       rounds: withPr.reduce((t, g) => t + g.rounds, 0),
       changeRequests: withPr.reduce((t, g) => t + g.changeRequests, 0),
       subagents: subs.length,
       stopped: groups.filter((g) => g.state === 'stopped').length,
+      layers: orchestrators.reduce((t, o) => t + o.groups.length, 0),
     },
   };
 }

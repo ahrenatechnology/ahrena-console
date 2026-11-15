@@ -1,7 +1,6 @@
 // End-to-end skeleton of the orchestrator as parent of the per-PR loops (#587, parent #509); wireframe 587-1 to 587-5
 // in docs/wireframes/index.html, approved by the design owner on 2026-11-14. It drives `buildPrLoop` (the data, #588) and
-// `loopPanel` (the screen, #589) through the fake DOM and asserts what the person reads. Every scenario is a `todo`
-// until #589 turns it green; the assertions are the finished behaviour, not the placeholders of the wireframe.
+// `loopPanel` (the screen, #589) through the fake DOM and asserts what the person reads. The assertions are the finished behaviour.
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import { buildPrLoop } from '../../src/api/workflow-loop.ts';
@@ -14,8 +13,6 @@ instalarDomFalso();
 
 // @ts-expect-error: browser module, plain JavaScript
 const { loopPanel } = await import('../../ui/screens/workflow-loop.js');
-
-const TODO = { todo: 'issue 589: the Workflow tab draws the orchestrator as parent of the per-PR loops' };
 
 const main = agent({ id: 's1:main', sessionId: 's1', type: 'main', name: null });
 function sub(id: string, type: string, start: number, end: number | null, task: string, parent: string, over: Partial<Agent> = {}): Agent {
@@ -48,7 +45,7 @@ const at1 = (text: string, needle: string) => {
 };
 
 describe('the orchestrator as parent of the per-PR loops (issue 509)', () => {
-  test('the Athena row comes before her groups', TODO, () => {
+  test('the Athena row comes before her groups', () => {
     const text = panelText(loopOf(tree, treeEvents));
     assert.match(text, /abriu 2 camadas · 1 PR/);
     assert.ok(at1(text, 'Athena') < at1(text, 'PR #710'));
@@ -56,20 +53,20 @@ describe('the orchestrator as parent of the per-PR loops (issue 509)', () => {
     assert.doesNotMatch(text, /Sem PR(?! ainda)/, 'the orchestrator takes no "no PR" group of its own');
   });
 
-  test('the layers are listed most recent first', TODO, () => {
+  test('the layers are listed most recent first', () => {
     const text = panelText(loopOf(tree, treeEvents));
     assert.ok(at1(text, 'Athena') < at1(text, 'PR #710'), 'the layers sit under the orchestrator');
     assert.ok(at1(text, 'PR #710') < at1(text, 'Issue #702'));
   });
 
-  test('no layer carries a "Camada N" label', TODO, () => {
+  test('no layer carries a "Camada N" label', () => {
     const text = panelText(loopOf(tree, treeEvents));
     assert.match(text, /abriu 2 camadas/, 'the screen draws the orchestrator, so this is not vacuous');
     assert.doesNotMatch(text, /Camada \d/);
   });
 
-  test('the counts: Subagentes 6, Rodadas 2, Pedidos de mudança 1, PRs 1; the orchestrator is not a round', TODO, () => {
-    const loop = loopOf(tree, treeEvents) as unknown as { totals: Record<string, number>; orchestrators: Array<{ agentId: string }> };
+  test('the counts: Subagentes 6, Rodadas 2, Pedidos de mudança 1, PRs 1; the orchestrator is not a round', () => {
+    const loop = loopOf(tree, treeEvents);
     assert.deepEqual(loop.orchestrators.map((o) => o.agentId), [athena.id]);
     assert.equal(loop.totals.layers, 2);
     const text = panelText(loop);
@@ -79,30 +76,34 @@ describe('the orchestrator as parent of the per-PR loops (issue 509)', () => {
     assert.match(text, /Subagentes 6/);
   });
 
-  test('the Athena still planning takes no group from the PR her brief cites', TODO, () => {
+  test('the Athena still planning takes no group from the PR her brief cites', () => {
     const planning = sub('athena', ATHENA_TYPE, 1, null, 'Plan the story; see PR #690 for reference', main.id);
-    const loop = loopOf([main, planning]) as unknown as { groups: unknown[]; orchestrators: Array<{ agentId: string }> };
+    const loop = loopOf([main, planning]);
     assert.deepEqual(loop.orchestrators.map((o) => o.agentId), [planning.id]);
     assert.equal(loop.groups.length, 0);
-    const text = panelText(loop);
+    const panel = loopPanel({ sessionId: 's1', loop: JSON.parse(JSON.stringify(loop)) }, null);
+    const text = texto(panel);
     assert.match(text, /ainda não abriu nenhuma camada/);
-    assert.doesNotMatch(text, /PR #690/);
+    assert.match(text, /Plan the story; see PR #690 for reference/, 'the task line sits under the orchestrator');
+    assert.match(text, /Nenhum grupo “PR #690”/, 'the note says the cited PR takes no group');
+    assert.equal(panel.querySelectorAll('.wfl-group').length, 0, 'no group is drawn');
+    assert.doesNotMatch(panel.querySelectorAll('.wfl-head').map((h) => texto(h)).join('\n'), /PR #690/, 'no group is titled with the cited PR');
     assert.match(text, /Subagentes 1/);
   });
 
-  test('a delegating dev stays in its PR group and is not an orchestrator', TODO, () => {
+  test('a delegating dev stays in its PR group and is not an orchestrator', () => {
     const dev = sub('dev', 'ahrena-engineering-backend:apollo', 2, 9, 'Build layer for PR #710', main.id);
     const helper = sub('helper', 'Explore', 3, 4, 'Read the files of PR #710', dev.id);
-    const loop = loopOf([main, dev, helper]) as unknown as { groups: Array<{ id: string; steps: Array<{ agentId: string }> }>; orchestrators: unknown[] };
+    const loop = loopOf([main, dev, helper]);
     assert.deepEqual(loop.orchestrators, []);
     assert.deepEqual(loop.groups.find((g) => g.id === 'pr:710')?.steps.map((s) => s.agentId), [dev.id, helper.id]);
     assert.doesNotMatch(panelText(loop), /abriu \d+ camadas?/);
   });
 
-  test('a workflow with no orchestrator renders as before', TODO, () => {
+  test('a workflow with no orchestrator renders as before', () => {
     const dev = sub('dev', 'ahrena-engineering-backend:apollo', 2, 9, 'Build layer for PR #710', main.id);
     const argos = sub('argos', 'ahrena-engineering-code-review:argos', 10, 14, 'Review PR #710', main.id);
-    const loop = loopOf([main, dev, argos], [said(argos, 'Verdict: approve', 14)]) as unknown as { orchestrators: unknown[] };
+    const loop = loopOf([main, dev, argos], [said(argos, 'Verdict: approve', 14)]);
     assert.deepEqual(loop.orchestrators, [], 'the field exists and is empty');
     const text = panelText(loop);
     assert.match(text, /PR #710/);

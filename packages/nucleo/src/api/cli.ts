@@ -28,7 +28,7 @@ import { SessionStateMachine } from '../states/machine.ts';
 import { createMcpServer } from '../mcp/index.ts';
 import { GithubCache } from '../github/cache.ts';
 import { GithubBackgroundSync } from '../github/background-sync.ts';
-import { githubSyncSteps } from './github-screens.ts';
+import { githubSyncSteps, workQueueSyncSteps } from './github-screens.ts';
 import { GithubGraphqlSource } from '../github/github-source.ts';
 import { SqliteCacheStore } from '../github/sqlite-cache.ts';
 import { GITHUB_CALL_LIMIT, GithubCallQueue } from '../github/call-queue.ts';
@@ -36,8 +36,11 @@ import { InstallationRepositoryTrust } from '../github/trusted-owners.ts';
 import { chooseVault, GithubConnection, GithubNotConnectedError } from '../github/connection/index.ts';
 import { parseProjectEnv, PROJECT_ENV } from '../github/project-selection.ts';
 import { SqliteInstallationSettings } from '../settings/installation-settings.ts';
-import { EMPTY_WORK_QUEUE } from '../github/work-board.ts';
+import { executionLimitOf } from '../github/work-execution.ts';
+import { SqliteWorkQueue } from '../github/work-queue-store.ts';
+import { WorkQueuePuller } from './work-queue-puller.ts';
 import { WorkBoardService } from '../github/work-board-service.ts';
+import { createWorkBoardProjects, workProjectsSyncSteps } from '../github/work-board-projects.ts';
 import { FleetWorkSessions } from '../github/work-board-sessions.ts';
 import { SqliteWorkColumnHistory } from '../github/work-board-history.ts';
 import { CachedParentLookup } from '../github/work-board-parents.ts';
@@ -145,6 +148,10 @@ import { ancestorsWith, listPortsWith, PortReleaser } from '../ports/release.ts'
 import { systemRunner } from '../telemetry/adapters/system.ts';
 import { createCloudsRoute } from './clouds.ts';
 import { createDockerRoute } from './docker.ts';
+import { createDiagnosisRoute } from './diagnosis.ts';
+import { knownFolders } from './new-session.ts';
+import { diagnosisCollectorFor, systemDiagnosisDeps, worktreeRootsOf } from '../diagnosis/adapters/system.ts';
+import { LARGEST_FOLDERS_BUDGET_MS } from '../diagnosis/adapters/common.ts';
 import { DockerService } from '../docker/service.ts';
 import { systemToolRunner } from '../tools/runner.ts';
 import { AppUpdateState } from '../app-update/state.ts';
@@ -466,25 +473,39 @@ coreGithub = await createCoreGithub({
 });
 const { connection, screens } = coreGithub;
 /*
+ * #598 #609 the Projects of every granted organization and of the account, read for the work board and kept fresh by the
+ * `work-projects` sync step. Not under --demo (the simulator has one Project) nor --no-github (no connection).
+ */
+const workProjects = createWorkBoardProjects({ demo, projectOptions: screens.projectOptions, access: coreGithub.access, connection, cache: githubCache, selection: () => screens.project?.selection() ?? null, log });
+/*
  * #594 one trust source for the board's cards, the issue detail and the Planejar / Executar plano routes: the stored
  * `work.trustedOwners`, else the owner of the Project the board reads (none chosen: nobody is trusted).
  */
-const repositoryTrust = new InstallationRepositoryTrust(settings, () => screens.project?.selection() ?? null);
+const repositoryTrust = new InstallationRepositoryTrust(settings, () => screens.project?.selection() ?? null, () => workProjects?.readOwners() ?? [], () => workProjects?.warnedOwners() ?? []);
 /*
  * #465 #466 the work board (`GET /api/work`): the kanban's Project (the same resolver as /api/project),
  * the live sessions of the fleet, the parents outside the Project through the GitHub cache, the time in
- * column in this database, #507 the planning runs, #531 the execution runs, and no queue until #477. Under --demo, the simulator's Project and its folders
+ * column in this database, #507 the planning runs, #531 the execution runs and #477 the execution queue. Under --demo, the simulator's Project and its folders
  * (only the scenario's session is on an issue branch). Under --no-github, no board (503 off).
  */
 const planRuns = new SqliteWorkPlanRuns(sqlite.db);
 const executionRuns = new SqliteWorkExecutionRuns(sqlite.db);
+/*
+ * #477 the execution queue: one per installation, in this database, so it survives a restart. The concurrent-execution
+ * limit is the installation setting `work.executionLimit` (default 2), read at each use so a change applies at once.
+ */
+const workQueue = new SqliteWorkQueue(sqlite.db);
+let workQueuePuller: WorkQueuePuller | null = null;
+const executionLimit = () => executionLimitOf(settings.get('work.executionLimit'));
 const workBoard =
   screens.project && workSource
     ? new WorkBoardService({
         trust: repositoryTrust,
         project: selectedProjectBoard(screens.project),
+        ...(workProjects ? { projects: workProjects } : {}),
         sessions: new FleetWorkSessions({ fleet: mcp.fleet, ...(demo ? { locate: simulatorWorkBoardLocate } : {}) }),
-        queue: EMPTY_WORK_QUEUE,
+        queue: workQueue,
+        limit: executionLimit,
         history: new SqliteWorkColumnHistory(sqlite.db),
         planRuns,
         executionRuns,
@@ -492,6 +513,12 @@ const workBoard =
         // #496 lazy: the sync is built after this service.
         pausedUntil: () => githubCache.pausedUntil,
         nextScheduledRead: () => githubSync?.nextRunAt('project') ?? null,
+        // #477 lazy: the puller is built after this service. A run it started that expired puts its item back at the top, stopped;
+        // a read that finds room and a queue wakes it (a trigger while a pull runs is that pull).
+        onRunExpired: (run) => workQueuePuller?.runExpired(run) ?? Promise.resolve(),
+        onRead: ({ queue, columns }) => {
+          if (queue.stopped === null && queue.running < queue.limit && columns.some((c) => c.id === 'queued' && c.cards.length > 0)) void workQueuePuller?.trigger();
+        },
         log,
       })
     : null;
@@ -504,10 +531,31 @@ const workIssue =
     : null;
 /* #590 the issue options of a repository (`GET /api/work/issue/options`), through the same GitHub cache; off as the issue detail is. */
 const workIssueOptions = workSource instanceof GithubGraphqlSource ? new WorkIssueOptionsService({ source: workSource, cache: githubCache, log }) : null;
+/*
+ * #477 the queue's puller: opens the session of the first item when the queue is not stopped and the running cards are under
+ * the limit, re-checking trust and the plan at every pull. It needs the board (the count and the columns) and the issue reads,
+ * so it does not exist under --demo or --no-github: no session is opened unattended there. It wakes on a sync step (after the
+ * Project read, and at core start, where the step is due at once), on a board read that finds room, and when "Tentar de novo" is pressed.
+ */
+if (workBoard && workIssue) {
+  workQueuePuller = new WorkQueuePuller({
+    queue: workQueue,
+    issues: workIssue,
+    runs: executionRuns,
+    trust: repositoryTrust,
+    running: workBoard,
+    columns: workBoard,
+    limit: executionLimit,
+    storage,
+    openInDesktop,
+    openTerminal,
+    log,
+  });
+}
 // Decision 0015 (#356): the core reads GitHub on a timer and the GitHub screens answer from the database.
 // Under --no-github there is no connection and no sync.
 githubSync = coreGithub.connected
-  ? new GithubBackgroundSync({ steps: githubSyncSteps(screens, coreGithub.connected), pauseLeftMs: () => githubCache.pauseLeftMs(), log })
+  ? new GithubBackgroundSync({ steps: [...githubSyncSteps(screens, coreGithub.connected), ...workProjectsSyncSteps(workProjects, coreGithub.connected), ...workQueueSyncSteps(workQueuePuller, coreGithub.connected)], pauseLeftMs: () => githubCache.pauseLeftMs(), log })
   : null;
 
 // Machine telemetry (#175, decision 0008): one sample every 30 s, 12 h in the database, and each
@@ -702,6 +750,15 @@ const docker =
         acceptNoOrigin: acceptRemoteActions,
       }
     : null;
+// The diagnosis of an open saturation alert (#565): this machine's collectors (read-only, fixed commands) and the remote machines' through their tunnel port. Not in --demo, where the readings are synthetic.
+const diagnosisCollector = demo ? null : diagnosisCollectorFor(process.platform, systemDiagnosisDeps(async () => worktreeRootsOf((await knownFolders(storage)).map((f) => f.path)), log));
+const diagnosis = createDiagnosisRoute({
+  alerts: alertTracker,
+  local: diagnosisCollector ? { collect: diagnosisCollector, platform: process.platform === 'darwin' ? 'darwin' : 'linux', log, now: () => new Date().toISOString(), sectionTimeoutMs: LARGEST_FOLDERS_BUDGET_MS + 3_000 } : null,
+  // The remote núcleo answers once its own sections end (at most the section timeout), so the tunnel read waits a little longer.
+  remote: { port: (id) => remoteMachines?.get(id)?.port, get: loopbackGet({ timeoutMs: LARGEST_FOLDERS_BUDGET_MS + 15_000, proof: remoteProofs }) },
+  log,
+});
 // The desktop app's update notice (#330): the app reports what it found; the /ui reads it. Not in --demo.
 const appUpdate = demo ? null : createAppUpdateRoute(new AppUpdateState(changes));
 
@@ -759,7 +816,9 @@ const api: LocalApi = await startLocalApi({
   workIssueOptions: { service: workIssueOptions },
   workPlan: { issues: workIssue, runs: planRuns, trust: repositoryTrust },
   // #531 without the board there is nothing to count the limit against: the route answers 503.
-  ...(workBoard ? { workRun: { issues: workIssue, runs: executionRuns, running: workBoard, trust: repositoryTrust } } : {}),
+  ...(workBoard ? { workRun: { issues: workIssue, runs: executionRuns, running: workBoard, trust: repositoryTrust, limit: executionLimit, queue: workQueue } } : {}),
+  // #477 without the board there is no column to refuse the fact columns against: the routes answer 503.
+  ...(workBoard ? { workQueue: { issues: workIssue, queue: workQueue, columns: workBoard, trust: repositoryTrust, ...(workQueuePuller ? { puller: workQueuePuller } : {}) } } : {}),
   connection,
   // --no-github keeps its own off / no-github answers; otherwise 409 github-not-connected before any call.
   githubConnected: coreGithub.connected,
@@ -778,6 +837,7 @@ const api: LocalApi = await startLocalApi({
   devConsole: screens.devConsole,
   agentConfig,
   telemetry: telemetryService,
+  diagnosis,
   machineReader: new MachineReader({ get: loopbackGet({ timeoutMs: MACHINE_READ_ADAPTER_TIMEOUT_MS, proof: remoteProofs }), machines: () => remoteMachines?.list() ?? [], connectionOf: (id) => machineConnection?.status(id) ?? null }),
   reconnect: machineConnection?.legacy ?? reconnectRunner,
   machineConnection: machineConnection ? createConnectionRoute(machineConnection) : null,

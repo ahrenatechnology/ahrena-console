@@ -21,10 +21,12 @@ import {
   setFilter,
   setLevel,
   startLoad,
+  toggleWarnings,
+  warningTarget,
   // @ts-expect-error: browser module, plain JavaScript
 } from '../../ui/screens/work-board-state.js';
 // @ts-expect-error: browser module, plain JavaScript
-import { FILTER_FIELDS, suggestionText } from '../../ui/screens/work-board-parts.js';
+import { FILTER_FIELDS, ORIGIN_FIELDS, suggestionText } from '../../ui/screens/work-board-parts.js';
 
 const REPO = 'ahrenatechnology/ahrena-console';
 const OTHER = 'ahrenatechnology/ahrena-framework';
@@ -78,10 +80,12 @@ function loaded(search: string, body: Json = payload()): Json {
 
 describe('#466/AC-3 the filters live in the URL, in English', () => {
   test('#466/AC-3 a query becomes the seven fields, one value each; unknown params ignored, empty dropped, level defaults to item like the API', () => {
-    assert.deepEqual(filtersFromSearch(''), { level: 'item', initiative: null, epic: null, type: null, label: null, repo: null, status: null });
+    assert.deepEqual(filtersFromSearch(''), { level: 'item', org: null, project: null, initiative: null, epic: null, type: null, label: null, repo: null, status: null });
     assert.equal(filtersFromSearch('').level, DEFAULT_WORK_BOARD_FILTERS.level, 'the same default as GET /api/work');
     assert.deepEqual(filtersFromSearch('?level=epic&initiative=1&epic=&type=bug&label=%20ui%20&repo=ahrena-console&status=in-progress&foo=bar&type=task'), {
       level: 'epic',
+      org: null,
+      project: null,
       initiative: '1',
       epic: null,
       type: 'bug',
@@ -89,7 +93,7 @@ describe('#466/AC-3 the filters live in the URL, in English', () => {
       repo: 'ahrena-console',
       status: 'in-progress',
     });
-    assert.deepEqual(FILTER_PARAMS, FILTER_FIELDS.map((f: Json) => f.param), 'the six filters in the order of the bar');
+    assert.deepEqual(FILTER_PARAMS, [...ORIGIN_FIELDS, ...FILTER_FIELDS].map((f: Json) => f.param), 'the organization, the Project, then the six filters, in the order of the bar');
   });
 
   test('#466/AC-3 the link is canonical: level first, the filters in the order of the bar, as the wireframe link', () => {
@@ -114,7 +118,7 @@ describe('#466/AC-3 the filters live in the URL, in English', () => {
     assert.ok(path.startsWith('/api/work?'), path);
     assert.doesNotMatch(path, /refresh/);
     const parsed = parseWorkBoardFilters(new URL(path, 'http://127.0.0.1').searchParams);
-    assert.deepEqual(parsed, { level: 'item', initiative: 1, epic: 6, type: 'bug', label: 'ui', repo: 'ahrena-console', status: 'in-progress' });
+    assert.deepEqual(parsed, { level: 'item', org: null, project: null, initiative: 1, epic: 6, type: 'bug', label: 'ui', repo: 'ahrena-console', status: 'in-progress' });
     assert.match(apiPath(filters, { refresh: true }), /&refresh=1$/);
   });
 });
@@ -253,7 +257,7 @@ describe('#466/AC-2 levels and drill-down (466-1)', () => {
     const epic = card(6, { level: 'epic', type: 'epic', column: 'blocked' });
     const before = loaded('level=epic&initiative=1&label=ui', payload({ cards: [epic], filters: { ...DEFAULT_WORK_BOARD_FILTERS, level: 'epic' } }));
     const s = drill(before, epic);
-    assert.deepEqual(s.filters, { level: 'item', initiative: '1', epic: `${REPO}#6`, type: null, label: 'ui', repo: null, status: null }, 'with another filter on, the options may hide a same-numbered epic: the key');
+    assert.deepEqual(s.filters, { level: 'item', org: null, project: null, initiative: '1', epic: `${REPO}#6`, type: null, label: 'ui', repo: null, status: null }, 'with another filter on, the options may hide a same-numbered epic: the key');
     assert.equal(s.url, `/ui/work?level=item&initiative=1&epic=${encodeURIComponent(`${REPO}#6`)}&label=ui`);
     assert.equal(parseWorkBoardFilters(new URL(s.api, 'http://127.0.0.1').searchParams).epic, `${REPO}#6`);
     assert.equal(s.navigation, 'push');
@@ -369,7 +373,7 @@ describe('#466/AC-4 the parent chain mode', () => {
   });
 
   test('#466/AC-4 full when any of the six filters is on, as after a drill', () => {
-    for (const param of FILTER_PARAMS) assert.equal(initialState(`level=item&${param}=x`).chainMode, 'full', param);
+    for (const param of FILTER_PARAMS) assert.equal(initialState(`level=item&${param}=${param === 'project' ? 'x/1' : 'x'}`).chainMode, 'full', param);
     const epic = card(6, { level: 'epic', type: 'epic' });
     const drilled = drill(loaded('level=epic', payload({ cards: [epic] })), epic);
     assert.equal(loadSucceeded(drilled, payload(), drilled.request).chainMode, 'full');
@@ -399,8 +403,8 @@ describe('#466/AC-3 the filter with no result (466-3)', () => {
     assert.deepEqual(s.suggestion, { param: 'status', value: 'in-progress', count: 3 });
   });
 
-  test('#502/AC-1 each of the six filters is suggested with its exact count, combined with another filter', () => {
-    const values = { initiative: `${REPO}#1`, epic: `${REPO}#6`, type: 'bug', label: 'ui', repo: 'ahrena-console', status: 'in-progress' };
+  test('#502/AC-1 each of the eight filters is suggested with its exact count, combined with another filter', () => {
+    const values = { org: 'ahrena', project: 'ahrena/3', initiative: `${REPO}#1`, epic: `${REPO}#6`, type: 'bug', label: 'ui', repo: 'ahrena-console', status: 'in-progress' };
     for (const param of FILTER_PARAMS) {
       const other = FILTER_PARAMS.find((p) => p !== param) as string;
       let s = loaded('level=item');
@@ -459,7 +463,239 @@ describe('#465/AC-5 the state module is pure and English (ADR-0009)', () => {
 
   test('#465/AC-5 every key and value of the state is English', () => {
     const s = loaded('level=item&label=ui');
-    assert.deepEqual(Object.keys(s).sort(), ['api', 'busy', 'chainMode', 'data', 'dataFilters', 'error', 'filters', 'navigation', 'phase', 'placed', 'request', 'refresh', 'retryAt', 'stale', 'staleReason', 'suggestion', 'url', 'view'].sort());
+    assert.deepEqual(
+      Object.keys(s).sort(),
+      ['api', 'busy', 'chainMode', 'data', 'dataFilters', 'emptyKind', 'error', 'filters', 'githubDown', 'multiOrigin', 'navigation', 'organizations', 'phase', 'placed', 'request', 'refresh', 'resetNote', 'retryAt', 'stale', 'staleOrgs', 'staleReason', 'suggestion', 'url', 'view', 'warningsExpanded'].sort(),
+    );
     for (const value of [s.phase, s.view, s.chainMode]) assert.match(value, /^[a-z-]+$/);
+  });
+});
+
+const org = (login: string, over: Json = {}): Json => ({ login, own: false, state: 'read', readAt: 1_000, projects: [{ owner: login, number: 1, title: `${login} board` }], ...over });
+const PLATFORM = { owner: 'acme-labs', number: 3, title: 'Plataforma' };
+const ROADMAP = { owner: 'northwind', number: 1, title: 'Roadmap' };
+const ORGS = [org('acme-labs', { projects: [PLATFORM, { owner: 'acme-labs', number: 4, title: 'Mobile' }] }), org('northwind', { projects: [ROADMAP] }), org('mira-dev', { own: true })];
+const multi = (search: string, over: Json = {}): Json => loaded(search, payload({ project: null, organizations: ORGS, options: { ...NO_OPTIONS, orgs: [], projects: [PLATFORM, ROADMAP] }, ...over }));
+
+describe('#610/AC-1 the organization and the Project are filters, first in order', () => {
+  test('#610/AC-1 org and project come first in the link and in GET /api/work, level first, project as owner/number', () => {
+    const filters = filtersFromSearch('status=in-progress&type=bug&project=acme-labs/3&org=acme-labs&level=item');
+    assert.deepEqual(filters.org, 'acme-labs');
+    assert.deepEqual(filters.project, 'acme-labs/3');
+    assert.equal(boardUrl(filters), '/ui/work?level=item&org=acme-labs&project=acme-labs/3&type=bug&status=in-progress');
+    assert.equal(searchFromFilters(filtersFromSearch(searchFromFilters(filters))), searchFromFilters(filters), 'the round trip is stable');
+    const parsed = parseWorkBoardFilters(new URL(apiPath(filters), 'http://127.0.0.1').searchParams);
+    assert.deepEqual(parsed, { level: 'item', org: 'acme-labs', project: 'acme-labs/3', initiative: null, epic: null, type: 'bug', label: null, repo: null, status: 'in-progress' });
+  });
+
+  test('#610/AC-1 a canonical link with the slash is not replaced; an encoded one is read the same', () => {
+    assert.equal(initialState('?level=item&org=acme-labs&project=acme-labs/3').navigation, null);
+    assert.equal(filtersFromSearch('project=acme-labs%2F3').project, 'acme-labs/3');
+  });
+
+  test('#610/AC-1 a malformed project or organization is dropped, never sent: the API would answer 400 bad-filter', () => {
+    for (const bad of ['acme-labs', 'acme-labs/', 'acme-labs/0', 'acme-labs/x', '/3', 'a/b/3', 'acme labs/3', 'acme-labs#3']) {
+      const s = initialState(`?project=${encodeURIComponent(bad)}&org=acme-labs`);
+      assert.equal(s.filters.project, null, bad);
+      assert.doesNotMatch(s.api, /project/, bad);
+      assert.equal(s.navigation, 'replace', `${bad}: the URL is cleaned`);
+      assert.equal(s.url, '/ui/work?level=item&org=acme-labs');
+    }
+    assert.equal(initialState('?org=-bad-').filters.org, null);
+    assert.equal(initialState('?org=a%20b').filters.org, null);
+    const s = loaded('level=item');
+    assert.equal(setFilter(s, 'project', 'not-a-project'), s, 'a malformed project is not set');
+  });
+
+  test('#610/AC-1 the filters AND: org and project narrow with the six, chain mode is full, clearFilters clears them', () => {
+    const s = multi('org=acme-labs&project=acme-labs/3&type=story');
+    assert.equal(s.chainMode, 'full');
+    assert.equal(s.api, '/api/work?level=item&org=acme-labs&project=acme-labs/3&type=story');
+    const cleared = clearFilters(s);
+    assert.equal(cleared.url, '/ui/work?level=item');
+    assert.equal(cleared.filters.org, null);
+    assert.equal(cleared.filters.project, null);
+    assert.equal(cleared.navigation, 'push');
+    assert.equal(loaded('org=acme-labs').chainMode, 'full');
+  });
+
+  test('#610/AC-1 setting project and org pushes the URL and loads', () => {
+    const s = setFilter(multi('level=item'), 'project', 'acme-labs/3');
+    assert.equal(s.url, '/ui/work?level=item&project=acme-labs/3');
+    assert.equal(s.navigation, 'push');
+    assert.equal(s.busy, true);
+    assert.equal(s.resetNote, null);
+    assert.equal(setFilter(s, 'org', 'acme-labs').url, '/ui/work?level=item&org=acme-labs&project=acme-labs/3');
+  });
+});
+
+describe('#610/AC-2 changing the organization resets a Project it does not own, and says why', () => {
+  test('#610/AC-2 an org that does not own the Project drops it and records the note with the Project title from the options', () => {
+    const before = multi('org=acme-labs&project=acme-labs/3');
+    const s = setFilter(before, 'org', 'northwind');
+    assert.equal(s.filters.org, 'northwind');
+    assert.equal(s.filters.project, null);
+    assert.equal(s.url, '/ui/work?level=item&org=northwind');
+    assert.deepEqual(s.resetNote, { project: { owner: 'acme-labs', number: 3, title: 'Plataforma' }, to: 'northwind' });
+    assert.equal(s.navigation, 'push');
+  });
+
+  test('#610/AC-2 without the title in the options, the note names owner/number', () => {
+    const s = setFilter(loaded('org=acme-labs&project=acme-labs/9'), 'org', 'northwind');
+    assert.deepEqual(s.resetNote, { project: { owner: 'acme-labs', number: 9, title: 'acme-labs/9' }, to: 'northwind' });
+  });
+
+  test('#610/AC-2 the owner of the Project keeps it; Todas keeps it; the login compares without case', () => {
+    const before = multi('org=northwind&project=acme-labs/3');
+    assert.equal(setFilter(multi('org=northwind'), 'project', 'acme-labs/3').resetNote, null);
+    assert.equal(setFilter(before, 'org', 'Acme-Labs').filters.project, 'acme-labs/3');
+    assert.equal(setFilter(before, 'org', null).filters.project, 'acme-labs/3');
+    assert.equal(setFilter(before, 'org', null).resetNote, null);
+    assert.equal(setFilter(loaded('level=item'), 'org', 'northwind').resetNote, null, 'no Project, nothing to reset');
+  });
+
+  test('#610/AC-2 the note goes with the next change and stays while the new board loads', () => {
+    const reset = setFilter(multi('org=acme-labs&project=acme-labs/3'), 'org', 'northwind');
+    const answered = loadSucceeded(reset, payload({ project: null, organizations: ORGS }), reset.request);
+    assert.deepEqual(answered.resetNote, reset.resetNote);
+    assert.equal(setFilter(answered, 'type', 'bug').resetNote, null);
+    assert.equal(clearFilters(setFilter(answered, 'type', 'bug')).resetNote, null);
+    assert.equal(setLevel(answered, 'epic').resetNote, null);
+  });
+});
+
+describe('#610/AC-3 more than three warnings: the rest opens', () => {
+  const warned = ['a-org', 'b-org', 'c-org', 'd-org', 'e-org'].map((l) => org(l, { state: 'restricted', readAt: null, projects: [] }));
+  test('#610/AC-3 Mais N toggles expanded and nothing else: no read, no URL change', () => {
+    const s = multi('level=item', { organizations: [...ORGS, ...warned] });
+    assert.equal(s.warningsExpanded, false);
+    const open = toggleWarnings(s);
+    assert.equal(open.warningsExpanded, true);
+    assert.equal(open.navigation, null);
+    assert.equal(open.request, s.request);
+    assert.equal(open.busy, false);
+    assert.equal(open.data, s.data);
+    assert.equal(toggleWarnings(open).warningsExpanded, false);
+  });
+
+  test('#610/AC-3 a new read keeps it open; the toggle never changes the state it is given', () => {
+    const s = deepFreeze(toggleWarnings(multi('level=item', { organizations: [...ORGS, ...warned] })));
+    assert.doesNotThrow(() => toggleWarnings(s));
+    const again = startLoad(s, { refresh: true });
+    assert.equal(loadSucceeded(again, payload({ project: null, organizations: ORGS }), again.request).warningsExpanded, true);
+  });
+
+  test('#610/AC-3 the toggle is the "more" action', () => {
+    assert.deepEqual(warningTarget('more'), { kind: 'toggle' });
+  });
+});
+
+describe('#610/AC-4 what the board is: one origin or many, GitHub down, stale organizations, which empty', () => {
+  test('#610/AC-4 exactly one read organization and one Project with no warning is single-origin: no origin line, no org/project filters', () => {
+    const one = multi('level=item', { organizations: [org('acme-labs', { projects: [PLATFORM] })], project: { ...PLATFORM, url: 'https://github.com/orgs/acme-labs/projects/3' } });
+    assert.equal(one.multiOrigin, false);
+    assert.equal(multi('level=item', { organizations: [org('acme-labs', { projects: [PLATFORM] }), org('northwind', { state: 'saml', readAt: null, projects: [] })] }).multiOrigin, true, 'a warning makes it multi');
+    assert.equal(multi('level=item', { organizations: [org('acme-labs', { projects: [PLATFORM, ROADMAP] })] }).multiOrigin, true, 'two Projects');
+    assert.equal(multi('level=item').multiOrigin, true);
+  });
+
+  test('#610/AC-4 a core with no organizations, or the legacy one Project with an empty list, is single-origin', () => {
+    assert.equal(loaded('level=item').multiOrigin, false);
+    assert.equal(loaded('level=item', payload({ organizations: [] })).multiOrigin, false);
+    assert.equal(loaded('level=item', payload({ project: null, organizations: [] })).multiOrigin, true, 'no Project at all is the multi empty');
+  });
+
+  test('#610/AC-4 while nothing is known the loading is the multi one, unless the link has no organization or Project and the read failed', () => {
+    assert.equal(initialState('level=item').multiOrigin, true);
+    const failed = initialState('level=item');
+    assert.equal(loadFailed(failed, { error: 'no-project', status: 404 }, failed.request).multiOrigin, false);
+    const bad = initialState('level=item&org=acme-labs');
+    assert.equal(loadFailed(bad, { error: 'bad-filter', param: 'org', status: 400 }, bad.request).multiOrigin, true);
+  });
+
+  test('#610/AC-4 githubDown is stale with the github-unavailable reason', () => {
+    assert.equal(multi('level=item', { stale: true, staleReason: 'github-unavailable' }).githubDown, true);
+    assert.equal(multi('level=item', { stale: true, staleReason: 'dado velho' }).githubDown, false);
+    assert.equal(multi('level=item', { stale: false, staleReason: 'github-unavailable' }).githubDown, false);
+    assert.equal(loaded('level=item').githubDown, false);
+  });
+
+  test('#610/AC-4 stale organizations are the ones that failed now and were read before; none when GitHub is down (the board is faded whole)', () => {
+    const north = org('northwind', { state: 'failed', readAt: 500, projects: [ROADMAP] });
+    const never = org('initech', { state: 'failed', readAt: null, projects: [] });
+    assert.deepEqual(multi('level=item', { organizations: [ORGS[0], north, never] }).staleOrgs, ['northwind']);
+    assert.deepEqual(multi('level=item', { organizations: [ORGS[0], north], stale: true, staleReason: 'github-unavailable' }).staleOrgs, []);
+    assert.deepEqual(multi('level=item').staleOrgs, []);
+    assert.deepEqual(loaded('level=item').staleOrgs, []);
+  });
+
+  test('#610/AC-4 the organizations of the read are exposed for the header, the warnings and the filters; none before the first read', () => {
+    assert.deepEqual(multi('level=item').organizations, ORGS);
+    assert.deepEqual(initialState('').organizations, []);
+  });
+
+  test('#610/AC-4 which empty applies: issues, projects or all-failed; none unless the board is empty', () => {
+    const none = { total: 0, matched: 0, cards: [] };
+    assert.equal(multi('level=item', none).emptyKind, 'issues');
+    assert.equal(multi('level=item', { ...none, organizations: [] }).emptyKind, 'projects');
+    assert.equal(multi('level=item', { ...none, organizations: [org('acme-labs', { projects: [] }), org('mira-dev', { own: true, projects: [] })] }).emptyKind, 'projects');
+    const failed = [org('globex', { state: 'restricted', readAt: null, projects: [] }), org('initech', { state: 'failed', readAt: null, projects: [] })];
+    assert.equal(multi('level=item', { ...none, organizations: failed }).emptyKind, 'all-failed');
+    assert.equal(multi('level=item', { ...none, organizations: [ORGS[0], ...failed] }).emptyKind, 'issues', 'one read organization with Projects is not all-failed');
+    assert.equal(multi('level=item').emptyKind, null);
+    assert.equal(multi('level=item&type=bug', none).emptyKind, null, 'filtered with no result is the 466 no-result');
+    assert.equal(loaded('level=item', payload({ cards: [], total: 0 })).emptyKind, null, 'single-origin keeps the empty Project');
+  });
+});
+
+describe('#610/AC-3 the targets of the warning and empty-state actions', () => {
+  const restricted = org('globex', { state: 'restricted', readAt: null, projects: [], approvalUrl: 'https://github.com/organizations/globex/settings/oauth_application_policy', requestUrl: 'https://github.com/settings/connections/applications/abc' });
+  test('#610/AC-3 approve and request open the URLs the organization carries, only when https on github.com', () => {
+    assert.deepEqual(warningTarget('approve', { organization: restricted }), { kind: 'link', href: restricted.approvalUrl });
+    assert.deepEqual(warningTarget('request', { organization: restricted }), { kind: 'link', href: restricted.requestUrl });
+    assert.deepEqual(warningTarget('approve', { organization: { ...restricted, approvalUrl: 'javascript:alert(1)' } }), { kind: 'none' });
+    assert.deepEqual(warningTarget('request', { organization: { ...restricted, requestUrl: 'https://evil.example/x' } }), { kind: 'none' });
+    assert.deepEqual(warningTarget('approve', { organization: org('globex', { state: 'restricted' }) }), { kind: 'none' });
+    assert.deepEqual(warningTarget('approve', {}), { kind: 'none' });
+  });
+
+  test('#610/AC-3 retry reads again; sso opens the organization SSO page on GitHub', () => {
+    assert.deepEqual(warningTarget('retry', { organization: org('initech') }), { kind: 'read' });
+    assert.deepEqual(warningTarget('sso', { organization: org('umbrella-corp', { state: 'saml' }) }), { kind: 'link', href: 'https://github.com/orgs/umbrella-corp/sso' });
+    assert.deepEqual(warningTarget('sso', { organization: { login: 'not a login' } }), { kind: 'none' });
+  });
+
+  test('#610/AC-3 a link the core did not send is none: a missing login or organization never becomes "undefined" or "null" and never throws', () => {
+    const none = { kind: 'none' };
+    assert.deepEqual(warningTarget('sso'), none);
+    assert.deepEqual(warningTarget('sso', {}), none);
+    assert.deepEqual(warningTarget('sso', { organization: null }), none);
+    assert.deepEqual(warningTarget('sso', { organization: {} }), none);
+    assert.deepEqual(warningTarget('sso', { organization: { login: null } }), none);
+    assert.deepEqual(warningTarget('sso', { organization: { login: 42 } }), none);
+    for (const action of ['approve', 'request', 'retry', 'open-projects']) assert.doesNotThrow(() => warningTarget(action, { organization: null, organizations: undefined }));
+    assert.deepEqual(warningTarget('approve', { organization: null }), none);
+    assert.deepEqual(warningTarget('request'), none);
+  });
+
+  test('#610/AC-4 open-projects skips an organization with no login and falls back to GitHub', () => {
+    const GH = { kind: 'link', href: 'https://github.com' };
+    assert.deepEqual(warningTarget('open-projects', { organizations: [org('x', { login: undefined })] }), GH);
+    assert.deepEqual(warningTarget('open-projects', { organizations: [org('x', { login: null })] }), GH);
+    assert.deepEqual(warningTarget('open-projects', { organizations: [org('x', { login: undefined }), org('acme-labs')] }), { kind: 'link', href: 'https://github.com/orgs/acme-labs/projects' });
+  });
+
+  test('#610/AC-4 open-projects, open-github and connect: the Projects of the first organization read, GitHub, and the connections screen', () => {
+    const organizations = [org('acme-labs'), org('mira-dev', { own: true })];
+    assert.deepEqual(warningTarget('open-projects', { organizations }), { kind: 'link', href: 'https://github.com/orgs/acme-labs/projects' });
+    assert.deepEqual(warningTarget('open-projects', { organizations: [org('mira-dev', { own: true })] }), { kind: 'link', href: 'https://github.com/mira-dev?tab=projects' });
+    assert.deepEqual(warningTarget('open-projects', { organizations: [] }), { kind: 'link', href: 'https://github.com' });
+    assert.deepEqual(warningTarget('open-github'), { kind: 'link', href: 'https://github.com' });
+    assert.deepEqual(warningTarget('connect'), { kind: 'screen', to: '/ui/connections' });
+  });
+
+  test('#610/AC-4 an action that is not known has no target', () => {
+    assert.deepEqual(warningTarget('switch-project'), { kind: 'none' });
+    assert.deepEqual(warningTarget(undefined), { kind: 'none' });
   });
 });

@@ -34,7 +34,8 @@ import type { ManagedRuntime } from '../runtime/service.ts';
 // | `POST`, `PATCH` and `DELETE /api/work/issue/steps`, `POST /api/work/issue/steps/order` and `POST /api/work/issue/steps/restore` | The issue's Plan steps, as Plan sub-issues on GitHub: add one, edit its title and body (409 when older than GitHub's), remove it (closed as not planned), restore it (reopened; 409 `not-removed` when it is not removed) and move it (`{ repo, number, step, ... }`, `after` a key or `null` for the top); each answers the issue as GitHub returned it (api/work-issue-steps.ts, #534) |
 // | `POST /api/work/plan`         | "Planejar": a planning-only Athena session for an issue, in its repository's folder, in the Claude Desktop or a terminal (`{ repo, number, target, replan? }`; api/work-plan.ts, #507) |
 // | `POST /api/work/run`          | "Executar plano": the Athena session that executes an issue's plan, in its repository's folder, in the Claude Desktop or a terminal; 409 at 2 cards in Em execução unless `force` (`{ repo, number, target, force? }`; api/work-run.ts, #531) |
-// | `GET /api/work`               | The work board: the Project's issues in the agent lifecycle columns (`?level=`, `?initiative=`, `?epic=`, `?type=`, `?label=`, `?repo=`, `?status=`, `?refresh=1`; api/work-board.ts, #465 #466) |
+// | `POST` and `DELETE /api/work/queue`, `POST /api/work/queue/order`, `POST /api/work/queue/retry` | The execution queue: put an item in line (`{ repo, number, target }`; 422 `no-plan`, 409 `not-plannable` for a card in a fact column, 403 `untrusted-repository`), take it out (`{ repo, number }`) and reorder it (`{ repo, number, after }`, an issue key or `null` for the top); 404 `not-queued`; retry clears the stop of a failed pull and wakes the puller, 200 `{ ok, resumed }` (api/work-queue.ts, #477) |
+// | `GET /api/work`               | The work board: the issues of the Projects of every granted organization and of the account in the agent lifecycle columns (`?level=`, `?org=`, `?project=`, `?initiative=`, `?epic=`, `?type=`, `?label=`, `?repo=`, `?status=`, `?refresh=1`; api/work-board.ts, #465 #466) |
 // | `GET /api/sessions/<id>` and `/agents`, `/conversation`, `/events` | The session Detail in the /ui (api/session-detail.ts, #29 and #30) |
 // | `GET /api/sessions/<id>/agents/<agent>` | One agent's view (api/session-detail.ts, api/agent-view.ts, #529) |
 // | `GET /api/new-session/folders` and `POST /api/new-session` | "Nova sessão": the folders it can start in, and a new session in one of them, in the Claude Desktop or a terminal (api/new-session.ts) |
@@ -47,6 +48,7 @@ import type { ManagedRuntime } from '../runtime/service.ts';
 // | `?machine=` on the lists above and on the Detail | The sessions of every machine, merged, or of one (api/machine-sessions.ts, #243) |
 // | `GET /api/machines`           | The machines: this one and the remote ones, with state and alerts (api/telemetry.ts, #175) |
 // | `GET /api/telemetry`          | One machine's telemetry: current reading, series and alerts (`?machine=`, `?hours=1|12`; #175) |
+// | `GET /api/diagnosis`        | What consumes the resource an open saturation alert names, read-only; a remote machine's through its tunnel (`?machine=`, `?alert=`; api/diagnosis.ts, src/diagnosis, #565) |
 // | `POST /api/machines/<id>/reconnect` and `DELETE` | Reconnect a remote machine with the command of machines.json, and Cancel (api/telemetry.ts, #244) |
 // | `GET /api/sessions/<id>/messaging`, `POST /api/sessions/<id>/messages` and `GET /api/sessions/<id>/messages/<messageId>` | Send a message a person typed in the /ui to the session's live process, through Claude Code's cross-session inbox, and read its state (api/messaging.ts, src/messaging, #61) |
 // | `POST /api/terminals/<id>/actions/<action>` | Interrupt a terminal's foreground command or end its session, by ids (api/terminals.ts, #350) |
@@ -114,6 +116,7 @@ import { createWorkIssueOptionsRoute, WORK_ISSUE_OPTIONS_ROUTE, type WorkIssueOp
 import { createWorkIssueRoute, WORK_ISSUE_COMMENTS_ROUTE, WORK_ISSUE_ROUTE, type WorkIssueRouteOptions } from './work-issue.ts';
 import { createWorkIssueWriteRoute, type WorkIssueWriteRouteOptions } from './work-issue-write.ts';
 import { createWorkPlanRoute, WORK_PLAN_ROUTE, type WorkPlanRouteOptions } from './work-plan.ts';
+import { createWorkQueueRoute, WORK_QUEUE_ORDER_ROUTE, WORK_QUEUE_RETRY_ROUTE, WORK_QUEUE_ROUTE, type WorkQueueRouteOptions } from './work-queue.ts';
 import { createWorkRunRoute, WORK_RUN_ROUTE, type WorkRunRouteOptions } from './work-run.ts';
 import { DETAIL_ROUTE, type LeiturasDoDetalhe } from './session-detail.ts';
 import type { FleetReader } from '../mcp/fleet.ts';
@@ -131,6 +134,7 @@ import { AGENT_INSTRUCTIONS_ROUTE, type AgentInstructionsRoute } from './agent-i
 import { FRAMEWORK_INSTALL_ROUTE, frameworkInstallWriteFromSameOrigin, type FrameworkInstallRoute } from './framework-install.ts';
 import { ADRS_ROUTE, PDRS_ROUTE, type DecisionsRoute } from './adrs.ts';
 import { DEV_CONSOLE_ROUTE, respondDevConsole, type DevConsole } from './dev-console.ts';
+import { DIAGNOSIS_ROUTE, respondDiagnosisUnsupported, type DiagnosisRoute } from './diagnosis.ts';
 import { isTelemetryRoute, reconnectFromSameOrigin, RECONNECT_ROUTE, respondReconnect, respondTelemetry } from './telemetry.ts';
 import type { ReconnectControl } from '../telemetry/reconnect.ts';
 import type { TelemetryService } from '../telemetry/service.ts';
@@ -144,6 +148,7 @@ import { dockerWriteAllowed, isDockerRoute, isDockerWrite, type DockerRoute } fr
 import type { ToolsControl } from '../tools/executor.ts';
 import { fromAnotherSite, fromOwnUi } from './same-origin.ts';
 import { appUpdateWriteFromSameOrigin, isAppUpdateRoute, type AppUpdateRoute } from './app-update.ts';
+import { firstPromptOfSession } from '../github/work-board-sessions.ts';
 import type { GithubBackgroundSync } from '../github/background-sync.ts';
 import { cloudsWriteFromSameOrigin, isCloudsRoute, type CloudsRoute } from './clouds.ts';
 import { isPortsRoute, isPortsWrite, portsWriteAllowed, type PortsRoute } from './ports.ts';
@@ -215,6 +220,8 @@ export interface ApiOptions {
   workPlan?: WorkPlanRouteOptions;
   /** #531 "Executar plano" (`POST /api/work/run`); without it the route answers 503. */
   workRun?: WorkRunRouteOptions;
+  /** #477 the execution queue (`POST` and `DELETE /api/work/queue`, `POST /api/work/queue/order`); without it the routes answer 503. */
+  workQueue?: WorkQueueRouteOptions;
   /** The session Detail reads (`/api/sessions/<id>…`); without them, 404. */
   detail?: LeiturasDoDetalhe;
   /** The activity feed; turns on `GET /api/events` (#94). */
@@ -249,6 +256,8 @@ export interface ApiOptions {
   telemetry?: TelemetryService | null;
   /** #243: reads the remote machines' lists for `?machine=` (api/machine-sessions.ts); without it, only this machine. */
   machineReader?: MachineReader | null;
+  /** The diagnosis of an open alert (#565, api/diagnosis.ts); without it, `GET /api/diagnosis` gives 501 `diagnosis-unsupported`. */
+  diagnosis?: DiagnosisRoute | null;
   /** The reconnect of the remote machines (#244); without it, `POST /api/machines/<id>/reconnect` gives 404 or 409. */
   reconnect?: ReconnectControl | null;
   /** Sending a message to a live session (api/messaging.ts, #61); without it, those routes give 404. */
@@ -373,6 +382,10 @@ const sameOriginWorkIssueWrite = (req: IncomingMessage, port: number): boolean =
 /** #531 "Executar plano": only `POST /api/work/run`, the exact raw path, from the same origin. */
 const sameOriginWorkRun = (req: IncomingMessage, port: number): boolean => req.method === 'POST' && req.url === WORK_RUN_ROUTE && fromOwnUi(req, port);
 
+/** #477 the queue writes: `POST` and `DELETE /api/work/queue`, `POST /api/work/queue/order` and `POST /api/work/queue/retry`, the exact raw path, from the same origin. */
+const sameOriginWorkQueue = (req: IncomingMessage, port: number): boolean =>
+  ((req.url === WORK_QUEUE_ROUTE && (req.method === 'POST' || req.method === 'DELETE')) || ((req.url === WORK_QUEUE_ORDER_ROUTE || req.url === WORK_QUEUE_RETRY_ROUTE) && req.method === 'POST')) && fromOwnUi(req, port);
+
 /** `decodeURIComponent`, or the raw text when it is malformed (the id check then refuses it). */
 function decodeSegment(s: string): string {
   try {
@@ -452,6 +465,7 @@ export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
     openInDesktop: opts.openInDesktop,
     openTerminal: opts.openTerminal,
     focusTerminal: opts.focusTerminal,
+    firstPromptOf: (id) => firstPromptOfSession(opts.panelBuilder.storage, id),
     isRemote: (id) => remotes().some((r) => remoteAttentionItems(r.attention(), r).some((i) => i.session === id)),
     log,
   });
@@ -462,6 +476,7 @@ export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
   const workRun = createWorkRunRoute(
     opts.workRun ? { ...opts.workRun, storage: opts.panelBuilder.storage, openInDesktop: opts.openInDesktop, openTerminal: opts.openTerminal, isThrowaway: opts.isThrowawayFolder, log } : null,
   );
+  const workQueue = createWorkQueueRoute(opts.workQueue ?? null);
   const remoteStore = opts.remoteCredentials === undefined ? new RemoteCredentialStore() : opts.remoteCredentials;
   const remoteVerifier = remoteStore
     ? createRemoteVerifier({
@@ -606,7 +621,7 @@ export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
       req.resume();
       return send(res, 403, { error: 'forbidden' });
     }
-    if (!allowedLocalRequest(req, port) && !sameOriginRead(req, port) && !sameOriginOpen(req, port) && !sameOriginSessionOpen(req, port) && !sameOriginNewSession(req, port) && !sameOriginWorkPlan(req, port) && !sameOriginWorkRun(req, port) && !sameOriginWorkIssueWrite(req, port) && !mesmaOrigemMovendo(req, port) && !sameOriginDecision(req, port) && !agentConfigWriteFromSameOrigin(req, port) && !frameworkInstallWriteFromSameOrigin(req, port) && !reconnectFromSameOrigin(req, port) && !messagesWriteFromSameOrigin(req, port) && !transcriptionWriteFromSameOrigin(req, port) && !cloudsWriteFromSameOrigin(req, port) && !connectionWriteFromSameOrigin(req, port) && !coreUpdateWriteFromSameOrigin(req, port) && !ownerProofRetryFromSameOrigin(req, port) && !ordersWriteFromSameOrigin(req, port) && !appUpdateWriteFromSameOrigin(req, port)) return send(res, 403, { error: 'origem não permitida' });
+    if (!allowedLocalRequest(req, port) && !sameOriginRead(req, port) && !sameOriginOpen(req, port) && !sameOriginSessionOpen(req, port) && !sameOriginNewSession(req, port) && !sameOriginWorkPlan(req, port) && !sameOriginWorkRun(req, port) && !sameOriginWorkQueue(req, port) && !sameOriginWorkIssueWrite(req, port) && !mesmaOrigemMovendo(req, port) && !sameOriginDecision(req, port) && !agentConfigWriteFromSameOrigin(req, port) && !frameworkInstallWriteFromSameOrigin(req, port) && !reconnectFromSameOrigin(req, port) && !messagesWriteFromSameOrigin(req, port) && !transcriptionWriteFromSameOrigin(req, port) && !cloudsWriteFromSameOrigin(req, port) && !connectionWriteFromSameOrigin(req, port) && !coreUpdateWriteFromSameOrigin(req, port) && !ownerProofRetryFromSameOrigin(req, port) && !ordersWriteFromSameOrigin(req, port) && !appUpdateWriteFromSameOrigin(req, port)) return send(res, 403, { error: 'origem não permitida' });
     // The Project list spends GitHub quota and the connection status is the /ui's: another site's page
     // never gets either, connected or not (#241 review 2).
     // #465 the work board reads the Project the same way.
@@ -635,6 +650,7 @@ export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
     if (url.pathname === WORK_ISSUE_ROUTE) return workIssueRoute(req, res, url);
     if (url.pathname === WORK_PLAN_ROUTE) return workPlan(req, res);
     if (url.pathname === WORK_RUN_ROUTE) return workRun(req, res);
+    if (url.pathname === WORK_QUEUE_ROUTE || url.pathname === WORK_QUEUE_ORDER_ROUTE || url.pathname === WORK_QUEUE_RETRY_ROUTE) return workQueue(req, res);
     if (opts.agentConfig && (url.pathname === AGENT_CONFIG_ROUTE || url.pathname.startsWith(`${AGENT_CONFIG_ROUTE}/`))) return opts.agentConfig(req, res, url);
     if (opts.frameworkInstall && url.pathname.startsWith(`${FRAMEWORK_INSTALL_ROUTE}/`)) return opts.frameworkInstall(req, res, url);
     if (opts.machineConnection && isConnectionRoute(url.pathname)) return opts.machineConnection(req, res, url);
@@ -673,6 +689,7 @@ export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
     if (opts.agentInstructions && url.pathname.startsWith(`${AGENT_INSTRUCTIONS_ROUTE}/`)) return opts.agentInstructions(res, url);
     if (opts.decisions && [ADRS_ROUTE, PDRS_ROUTE].some((r) => url.pathname === r || url.pathname.startsWith(`${r}/`))) return opts.decisions(res, url);
     if (url.pathname === DEV_CONSOLE_ROUTE && opts.devConsole) return respondDevConsole(res, url, opts.devConsole);
+    if (url.pathname === DIAGNOSIS_ROUTE) return opts.diagnosis ? opts.diagnosis(req, res, url) : respondDiagnosisUnsupported(res);
     if (isTelemetryRoute(url.pathname)) return respondTelemetry(res, url, opts.telemetry);
     if (isToolsRoute(url.pathname)) return respondTools(res, url, opts.tools);
     if (url.pathname === LOAD_ROUTE) {

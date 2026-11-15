@@ -143,6 +143,11 @@ button.wb-path-step:hover:not(:disabled) { color: var(--text); text-decoration: 
 /* ---------- states ---------- */
 .wb-skeleton { gap: 8px; min-height: 84px; }
 .wb-stale-band p { margin: 0; flex: 1; min-width: 0; }
+/* issue 614: the band's tone per reason; red (wb-stale-error) is the base .error-band. */
+.wb-stale-band.wb-stale-warn { border-color: var(--status-waiting-dot); background: var(--status-waiting-badge); }
+.wb-stale-band.wb-stale-warn > .icon, .wb-stale-band.wb-stale-warn b { color: var(--status-waiting-text); }
+.wb-stale-band.wb-stale-neutral { border-color: var(--border); background: var(--raised); }
+.wb-stale-band.wb-stale-neutral > .icon, .wb-stale-band.wb-stale-neutral b { color: var(--text); }
 .wb-empty, .wb-first-failure { min-height: 0; padding: 26px 20px; }
 .wb-empty-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; }
 .wb-no-result { display: flex; align-items: flex-start; gap: 14px; padding: 16px 20px; }
@@ -151,3 +156,51 @@ button.wb-path-step:hover:not(:disabled) { color: var(--text); text-decoration: 
 .wb-no-result-text h2 { margin: 0; font-size: var(--text-md); font-weight: var(--weight-semibold); }
 .wb-no-result-text p { margin: 0; font-size: 12.5px; color: var(--muted); line-height: 1.5; }
 .wb-no-result-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+
+/* ---------- the execution queue (issue 477, wireframes 477-1 and 477-2) ---------- */
+.wb-limit { display: flex; align-items: center; gap: 6px; min-width: 0; padding: 5px 8px; border-radius: 8px; font-size: 11.5px; background: var(--raised); color: var(--text); }
+.wb-limit b { font-weight: var(--weight-semibold); }
+.wb-limit .icon { flex: none; }
+.wb-limit.wb-full b { color: var(--status-waiting-text); }
+.wb-limit.wb-paused { align-items: flex-start; line-height: 1.35; background: var(--status-error-badge); color: var(--status-error-text); }
+.wb-limit.wb-paused b { color: var(--status-error-text); }
+.wb-limit.wb-paused .icon { margin-top: 1px; }
+.wb-lock { display: none; color: var(--muted); }
+.wb-board.wb-dragging .wb-lock { display: inline-flex; }
+.wb-grip { margin-left: auto; flex: none; display: inline-flex; color: var(--muted); cursor: grab; }
+.wb-grip + .wb-age, .wb-grip + .wb-card-github { margin-left: 0; }
+.wb-card[draggable="true"]:active { cursor: grabbing; }
+.wb-card.wb-drag { opacity: .55; border-color: var(--accent); }
+.wb-board.wb-dragging .wb-col[data-fact] { opacity: .5; }
+.wb-board.wb-dragging .wb-col.wb-refuse { opacity: 1; }
+.wb-col.wb-target { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); background: color-mix(in srgb, var(--accent) 7%, var(--surface)); }
+.wb-col.wb-refuse { border-color: var(--status-error-dot); border-style: dashed; background: color-mix(in srgb, var(--status-error-badge) 40%, var(--surface)); }
+.wb-drop-item { list-style: none; }
+.wb-drop { display: flex; align-items: center; justify-content: center; min-height: 34px; border: 2px dashed var(--accent); border-radius: 10px; font-size: 11.5px; font-weight: var(--weight-semibold); color: var(--accent-text); }
+.wb-refuse-msg { display: flex; align-items: flex-start; gap: 5px; padding: 6px 8px; border-radius: 8px; font-size: 11.5px; font-weight: var(--weight-semibold); line-height: 1.35; color: var(--status-error-text); background: var(--status-error-badge); }
+.wb-refuse-msg .icon { flex: none; margin-top: 1px; }
+.wb-card:has(.wb-queue-note) { box-shadow: inset 3px 0 0 var(--status-error-dot); }
+@media (prefers-reduced-motion: no-preference) { .wb-col { transition: border-color .12s, opacity .12s; } }
+
+/* ---------- every organization (issue 610, wireframes 598-1 to 598-4) ---------- */
+.wb-orgs-count { color: var(--text); font-weight: var(--weight-semibold); }
+.wb-warn-count { display: inline-flex; align-items: center; gap: 4px; color: var(--status-waiting-text); font-weight: var(--weight-semibold); }
+.wb-origin { display: flex; align-items: center; gap: 5px; min-width: 0; font-size: 10.5px; color: var(--muted); white-space: nowrap; }
+.wb-origin .mono { color: var(--text); font-size: 10.5px; }
+.wb-origin-project { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.wb-card.wb-org-stale { opacity: .55; }
+.wb-fields.wb-fields-origin { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.wb-reset-note { margin: 0; display: flex; gap: 6px; align-items: center; font-size: 11.5px; color: var(--status-waiting-text); }
+.wb-warns { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.wb-warn-band { display: flex; align-items: flex-start; gap: 12px; padding: 10px 14px; border-radius: 12px; font-size: 13px; border: 1px solid var(--status-waiting-dot); background: var(--status-waiting-badge); }
+.wb-warn-band > .icon { flex: none; margin-top: 1px; font-size: 18px; color: var(--status-waiting-text); }
+.wb-warn-band p { margin: 0; flex: 1; min-width: 0; }
+.wb-warn-band b { font-weight: var(--weight-semibold); color: var(--status-waiting-text); }
+.wb-warn-band.wb-warn-fail { border-color: var(--status-error-dot); background: var(--status-error-badge); }
+.wb-warn-band.wb-warn-fail > .icon, .wb-warn-band.wb-warn-fail b { color: var(--status-error-text); }
+.wb-warn-why { display: block; margin-top: 2px; font-size: 11.5px; color: var(--muted); }
+.wb-warn-actions { align-self: center; display: flex; flex-wrap: wrap; gap: 6px; }
+.wb-warns-more { align-self: flex-start; display: inline-flex; align-items: center; gap: 4px; padding: 0; border: 0; background: none; font: inherit; font-size: 12px; font-weight: var(--weight-semibold); color: var(--accent-text); cursor: pointer; }
+.wb-orgs-empty { gap: 10px; }
+@media (max-width: 1279px) { .wb-fields.wb-fields-origin { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 760px) { .wb-fields.wb-fields-origin { grid-template-columns: repeat(2, minmax(0, 1fr)); } }

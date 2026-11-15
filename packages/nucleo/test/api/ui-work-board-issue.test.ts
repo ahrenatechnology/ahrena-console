@@ -24,6 +24,8 @@ Object.defineProperty(globalThis, 'navigator', { configurable: true, value: { cl
 // @ts-expect-error: browser module, plain JavaScript
 import { httpReader, httpWriter } from '../../ui/api.js';
 // @ts-expect-error: idem
+import { CONNECT_STATE, CONNECT_UI } from '../../ui/github-connect.js';
+// @ts-expect-error: idem
 import { mount } from '../../ui/screens/work-board.js';
 
 const REPO = 'ahrenatechnology/ahrena-console';
@@ -157,6 +159,7 @@ interface Screen {
   change(): void;
   leave(): void;
   text(): string;
+  navigated: { route: string; state: unknown }[];
 }
 const mounted: Screen[] = [];
 afterEach(() => {
@@ -173,6 +176,7 @@ async function open(core: Core, path = '/ui/work?level=item'): Promise<Screen> {
   const writer = httpWriter({ base: here.origin, fetch: core.fetch });
   const area = new ElementoFalso('main');
   const changes: (() => void)[] = [];
+  const navigated: { route: string; state: unknown }[] = [];
   const leave = new AbortController();
   const ctx = {
     params: {},
@@ -184,7 +188,7 @@ async function open(core: Core, path = '/ui/work?level=item'): Promise<Screen> {
     liveState: () => 'live',
     counter: () => {},
     title: () => {},
-    navigate: () => {},
+    navigate: (route: string, state: unknown) => navigated.push({ route, state }),
   };
   const cleanup = await mount(area, ctx);
   const screen: Screen = {
@@ -192,6 +196,7 @@ async function open(core: Core, path = '/ui/work?level=item'): Promise<Screen> {
     change: () => changes.forEach((f) => f()),
     leave: () => (leave.abort(), typeof cleanup === 'function' && cleanup()),
     text: () => texto(area),
+    navigated,
   };
   mounted.push(screen);
   await until(() => area.querySelectorAll('article.wb-card').length > 0, 'the board is on screen');
@@ -280,6 +285,19 @@ describe('#508/AC-1 clicking a card, outside its buttons, opens the issue detail
     await openPanel(core, s);
     assert.match(texto(s.area.querySelector('.wb-panel .wb-stale-band')), /Mostrando a issue de \d\d:\d\d/);
   });
+
+  for (const code of ['credential-refused', 'no-scope']) {
+    test(`#614 the stale issue panel with ${code}: Reconectar navigates to the GitHub connection`, async () => {
+      const core = new Core();
+      core.issues.set(508, issue(508, { stale: true, staleReason: code }));
+      const s = await open(core);
+      await openPanel(core, s);
+      const band = s.area.querySelector('.wb-panel .wb-stale-band');
+      assert.ok(band, 'the stale band is in the panel');
+      press(buttonIn(band, 'reconnect'), 'Reconectar');
+      assert.deepEqual(s.navigated, [{ route: CONNECT_UI, state: CONNECT_STATE }]);
+    });
+  }
 });
 
 describe('#508/AC-2 Planejar shows on story, task, bug and spike cards without a plan, and confirming it calls POST /api/work/plan', () => {

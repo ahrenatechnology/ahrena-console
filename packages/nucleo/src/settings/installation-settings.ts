@@ -1,7 +1,8 @@
 /*
  * The installation's settings (#241, decision 0011 §8): what one installation chose, none of it a
- * secret. Four keys and nothing else: the active GitHub login (the vault account), the credential
- * source, the Project of the kanban and (#594) the owners the core opens work sessions for. Each
+ * secret. Five keys and nothing else: the active GitHub login (the vault account), the credential
+ * source, the Project of the kanban, (#594) the owners the core opens work sessions for and (#477) how
+ * many executions run at once. Each
  * value is validated on write, so a credential cannot land here by mistake (a token is not a login,
  * and there is no key for one).
  */
@@ -25,11 +26,13 @@ export interface InstallationSettingValues {
   'project.selection': ProjectSelection;
   /** #594 the GitHub owners whose repositories the core opens work sessions for; stored, it replaces the default (the Project's owner). `[]` trusts nobody. */
   'work.trustedOwners': string[];
+  /** #477 how many executions of the work board run at once; stored, it replaces the default (2). */
+  'work.executionLimit': number;
 }
 
 export type InstallationSettingKey = keyof InstallationSettingValues;
 
-export const INSTALLATION_SETTING_KEYS: readonly InstallationSettingKey[] = ['github.login', 'github.source', 'project.selection', 'work.trustedOwners'];
+export const INSTALLATION_SETTING_KEYS: readonly InstallationSettingKey[] = ['github.login', 'github.source', 'project.selection', 'work.trustedOwners', 'work.executionLimit'];
 
 export interface InstallationSettings {
   get<K extends InstallationSettingKey>(key: K): InstallationSettingValues[K] | null;
@@ -49,6 +52,12 @@ export const MAX_TRUSTED_OWNERS = 100;
 export function isTrustedOwners(value: unknown): value is string[] {
   return Array.isArray(value) && value.length <= MAX_TRUSTED_OWNERS && value.every((o) => typeof o === 'string' && GITHUB_OWNER.test(o));
 }
+
+/** #477 the most concurrent executions a limit may allow. */
+export const MAX_EXECUTION_LIMIT = 50;
+
+/** Whether `value` is a whole number from 1 to `MAX_EXECUTION_LIMIT`. */
+export const isExecutionLimit = (value: unknown): value is number => Number.isInteger(value) && (value as number) >= 1 && (value as number) <= MAX_EXECUTION_LIMIT;
 
 /** Whether `value` is a valid Project selection: owner like a login, number 1..999999999, field 1..100 printable chars. */
 export function isProjectSelection(value: unknown): value is ProjectSelection {
@@ -72,6 +81,7 @@ const VALIDATORS: { [K in InstallationSettingKey]: (v: unknown) => v is Installa
   'github.source': (v): v is GithubCredentialSource => v === 'console' || v === 'gh',
   'project.selection': isProjectSelection,
   'work.trustedOwners': isTrustedOwners,
+  'work.executionLimit': isExecutionLimit,
 };
 
 function assertKey(key: string): asserts key is InstallationSettingKey {

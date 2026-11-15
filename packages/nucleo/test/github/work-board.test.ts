@@ -66,6 +66,8 @@ const session = (id: string, n: number, state: WorkSessionLink['state']): WorkSe
 
 const filters = (over: Partial<WorkBoardFilters> = {}): WorkBoardFilters => ({
   level: 'item',
+  org: null,
+  project: null,
   initiative: null,
   epic: null,
   type: null,
@@ -78,6 +80,7 @@ const filters = (over: Partial<WorkBoardFilters> = {}): WorkBoardFilters => ({
 function board(nodes: WorkBoardNode[], over: Partial<WorkBoardInput> = {}): WorkBoardView {
   return buildWorkBoard({
     project: { owner: 'ahrenatechnology', number: 3, title: 'Ahrena Console', url: 'https://github.com/orgs/ahrenatechnology/projects/3' },
+    organizations: [],
     statuses: STATUSES,
     nodes,
     sessions: [],
@@ -172,9 +175,15 @@ describe('work board vocabulary', () => {
     assert.equal(typeSlugOf(null), null);
   });
 
-  test('the empty queue has no positions and says it is not available', async () => {
+  test('the empty queue has no positions, is not stopped and says it is not available', async () => {
     assert.equal(EMPTY_WORK_QUEUE.available, false);
     assert.equal((await EMPTY_WORK_QUEUE.positions()).size, 0);
+    assert.equal(await EMPTY_WORK_QUEUE.stopped(), null);
+  });
+
+  test('#477/AC-4 the queue block carries the limit and the stop it is given, and counts the running cards of the level', () => {
+    const view = board([boardNode(1), boardNode(2)], { sessions: [session('s1', 1, 'working')], queueLimit: 3, queueStopped: { key: k(2), reason: 'boom' } });
+    assert.deepEqual(view.queue, { available: false, running: 1, limit: 3, stopped: { key: k(2), reason: 'boom' } });
   });
 });
 
@@ -426,7 +435,7 @@ describe('ordering, time in column and the done window', () => {
     const view = board([]);
     assert.deepEqual(view.columns.map((c) => [c.id, c.count]), WORK_BOARD_COLUMNS.map((c) => [c.id, 0]));
     assert.deepEqual(view.blockedReasons, WORK_BLOCKED_REASONS.map(({ id, label }) => ({ id, label })));
-    assert.deepEqual(view.queue, { available: false });
+    assert.deepEqual(view.queue, { available: false, running: 0, limit: 2, stopped: null });
     assert.deepEqual(view.levels, [...WORK_LEVELS]);
   });
 });
@@ -514,7 +523,7 @@ describe('filters (#466)', () => {
     assert.deepEqual(parseWorkBoardFilters(new URLSearchParams('')), filters());
     assert.deepEqual(
       parseWorkBoardFilters(new URLSearchParams('level=plan&initiative=1&epic=6&type=bug&label=UI&repo=ahrena-console&status=in-progress')),
-      { level: 'plan', initiative: 1, epic: 6, type: 'bug', label: 'UI', repo: 'ahrena-console', status: 'in-progress' },
+      { level: 'plan', org: null, project: null, initiative: 1, epic: 6, type: 'bug', label: 'UI', repo: 'ahrena-console', status: 'in-progress' },
     );
     assert.deepEqual(parseWorkBoardFilters(new URLSearchParams('label=&repo=')), filters());
   });

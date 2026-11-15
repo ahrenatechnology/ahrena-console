@@ -89,6 +89,9 @@ class FakeQueue implements WorkQueue {
   async positions(): Promise<ReadonlyMap<string, number>> {
     return this.map;
   }
+  async stopped(): Promise<null> {
+    return null;
+  }
 }
 
 const session = (id: string, n: number, state: WorkSessionLink['state']): WorkSessionLink => ({ sessionId: id, key: k(n), state, since: '2026-10-18T11:00:00Z' });
@@ -223,7 +226,7 @@ describe('#465/AC-2 GET /api/work: each column comes from the real signals', () 
       const r = await get(b);
       const c = cardOf(r.json, 502);
       assert.deepEqual([c.column, c.queuePosition], ['queued', 2]);
-      assert.deepEqual(r.json.queue, { available: true });
+      assert.deepEqual(r.json.queue, { available: true, running: 0, limit: 2, stopped: null });
     }));
 
   test('#465/AC-2 Given two sessions linked to #503, Then the card is in the most advanced column and counts 2 sessions', () =>
@@ -405,7 +408,7 @@ describe('#495/AC-1 GET /api/work with GitHub down: a stable English reason code
         await refresh(b, '');
         b.now.add(10 * 60_000);
         const r = await get(b);
-        assert.deepEqual([r.status, r.json.stale, r.json.staleReason], [200, true, 'network']);
+        assert.deepEqual([r.status, r.json.stale, r.json.staleReason], [200, true, 'github-unavailable']); // #613 a stored snapshot folds network into github-unavailable
         assert.ok(!JSON.stringify(r.json).includes('fetch failed'));
       },
       { fromStore: true },
@@ -511,7 +514,7 @@ describe('#465/AC-5 GET /api/work: English internals, pt-BR on screen (decision 
       b.source.items = [issue(1, { type: 'Initiative' }), issue(6, { type: 'Epic', parent: k(1) }), issue(540, { type: 'Bug', parent: k(6), labels: ['UI'], statusId: 'opt-progress' })];
       const r = await get(b, '?level=item&initiative=1&epic=6&type=bug&label=ui&repo=ahrena-console&status=in-progress');
       assert.equal(r.status, 200);
-      assert.deepEqual(r.json.filters, { level: 'item', initiative: 1, epic: 6, type: 'bug', label: 'ui', repo: 'ahrena-console', status: 'in-progress' });
+      assert.deepEqual(r.json.filters, { level: 'item', org: null, project: null, initiative: 1, epic: 6, type: 'bug', label: 'ui', repo: 'ahrena-console', status: 'in-progress' });
       assert.deepEqual(cardsOf(r.json).map((c) => c.number), [540]);
     }));
 

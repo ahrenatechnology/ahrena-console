@@ -62,7 +62,7 @@ describe('the loop of a session, grouped by PR', () => {
   test('a subagent with no PR and no issue goes to "none", last, with no state of its own', () => {
     assert.equal(loop.groups.at(-1)!.id, 'none');
     assert.deepEqual(loop.groups.at(-1)!.steps.map((s) => s.agentId), ['s1:ex']);
-    assert.deepEqual(loop.totals, { prs: 2, rounds: 3, changeRequests: 1, subagents: 7, stopped: 0 });
+    assert.deepEqual(loop.totals, { prs: 2, rounds: 3, changeRequests: 1, subagents: 7, stopped: 0, layers: 0 });
   });
 
   test('the session graph now knows Argos and Erodos by role', () => {
@@ -167,17 +167,20 @@ describe('an orchestrator names no PR group (#586)', () => {
   const athena = (task: string, over: Partial<Agent> = {}) =>
     sub('ath', 'ahrena-engineering-development:athena', 0, 30, task, over);
 
-  test('#586/AC-1: an Athena subagent that cites a PR as a reference falls to the issue it cites', () => {
+  test('#586/AC-1: an Athena subagent that cites a PR as a reference takes no group, whatever it cites (#588)', () => {
     const a = athena('Athena runs issue #467 (see PR #475 as a reference)');
     const loop = buildPrLoop(live, [main, a], [], papelDe);
-    assert.deepEqual(loop.groups.map((g) => g.id), ['issue:467']);
+    assert.deepEqual(loop.groups, []);
+    assert.deepEqual(loop.orchestrators.map((o) => o.agentId), [a.id]);
   });
 
   test('#586/AC-1: a parent of another subagent whose loop role is other is an orchestrator, whatever its type', () => {
     const boss = sub('boss', 'tech-lead', 0, 30, 'Coordinate issue #467, PR #475 is the model');
     const child = sub('kid', 'general-purpose', 1, 5, 'Build the page', { parentAgentId: 's1:boss' });
     const loop = buildPrLoop(live, [main, boss, child], [], papelDe);
-    assert.deepEqual(loop.groups.map((g) => g.id), ['issue:467', 'none']);
+    assert.deepEqual(loop.orchestrators.map((o) => o.agentId), [boss.id]);
+    assert.deepEqual(loop.groups.map((g) => g.id), ['none']);
+    assert.deepEqual(loop.groups[0].steps.map((s) => s.agentId), [child.id]);
   });
 
   test('#586/AC-1: a review agent that delegates to a fix agent keeps its PR group and its round', () => {
@@ -191,17 +194,17 @@ describe('an orchestrator names no PR group (#586)', () => {
     assert.equal(group.rounds, 1);
   });
 
-  test('#586/AC-1: an orchestrator that cites no issue goes to none', () => {
+  test('#586/AC-1: an orchestrator that cites no issue takes no group, not even none (#588)', () => {
     const a = athena('Athena coordinates, PR #475 is the model');
     const loop = buildPrLoop(live, [main, a], [], papelDe);
-    assert.deepEqual(loop.groups.map((g) => g.id), ['none']);
+    assert.deepEqual(loop.groups, []);
   });
 
   test('#586/AC-2: a PR cited by an orchestrator does not turn another subagent\'s bare #N into a PR', () => {
     const boss = athena('Athena runs issue #467, PR #12 is the model');
     const dev = sub('dev', 'general-purpose', 1, 5, 'Build #12', { parentAgentId: 's1:ath' });
     const loop = buildPrLoop(live, [main, boss, dev], [], papelDe);
-    assert.deepEqual(loop.groups.map((g) => g.id).sort(), ['issue:12', 'issue:467']);
+    assert.deepEqual(loop.groups.map((g) => g.id).sort(), ['issue:12']);
     assert.equal(loop.groups.some((g) => g.kind === 'pr'), false);
   });
 
@@ -210,14 +213,123 @@ describe('an orchestrator names no PR group (#586)', () => {
     const dev = sub('dev', 'general-purpose', 1, 5, 'Build #12', { parentAgentId: 's1:ath' });
     const rev = sub('rev', 'argos', 5, 8, 'Review PR #12', { parentAgentId: 's1:ath' });
     const loop = buildPrLoop(live, [main, boss, dev, rev], [], papelDe);
-    assert.deepEqual(loop.groups.map((g) => g.id).sort(), ['issue:467', 'pr:12']);
+    assert.deepEqual(loop.groups.map((g) => g.id).sort(), ['pr:12']);
   });
 
   test('#586/AC-3: the response shape is unchanged in the orchestrator case', () => {
     const boss = athena('Athena runs issue #467, PR #475 is the model');
     const loop = buildPrLoop(live, [main, boss], [], papelDe);
-    assert.deepEqual(Object.keys(loop).sort(), ['groups', 'totals']);
-    assert.deepEqual(Object.keys(loop.totals).sort(), ['changeRequests', 'prs', 'rounds', 'stopped', 'subagents']);
-    assert.deepEqual(Object.keys(loop.groups[0]).sort(), ['changeRequests', 'id', 'issue', 'kind', 'lastActivityAt', 'number', 'otherRefs', 'rounds', 'state', 'steps']);
+    assert.deepEqual(Object.keys(loop).sort(), ['groups', 'orchestrators', 'totals']);
+    assert.deepEqual(Object.keys(loop.totals).sort(), ['changeRequests', 'layers', 'prs', 'rounds', 'stopped', 'subagents']);
+    const dev = sub('dev', 'general-purpose', 1, 5, 'Build PR #475');
+    const [group] = buildPrLoop(live, [main, dev], [], papelDe).groups;
+    assert.deepEqual(Object.keys(group).sort(), ['changeRequests', 'id', 'issue', 'kind', 'lastActivityAt', 'number', 'otherRefs', 'rounds', 'state', 'steps']);
+  });
+});
+
+describe('the orchestrator as parent of the layer groups (#588)', () => {
+  const live = session({ id: 's1', status: 'active' });
+  const ATHENA = 'ahrena-engineering-development:athena';
+  const under = (parent: string) => ({ parentAgentId: parent });
+  const boss = sub('ath', ATHENA, 1, null, 'Run the layers of the story');
+  const apollo702 = sub('apollo702', 'ahrena-engineering-backend:apollo', 2, null, 'Build layer 1 for issue #702', under(boss.id));
+  const dev710 = sub('dev710', 'ahrena-engineering-frontend:iris', 5, 9, 'Build layer 2 for PR #710', under(boss.id));
+  const argos1 = sub('argos1', 'ahrena-engineering-code-review:argos', 10, 14, 'Review PR #710', under(boss.id));
+  const erodos = sub('erodos', 'ahrena-engineering-quality:erodos', 15, 19, 'Fix PR #710', under(boss.id));
+  const argos2 = sub('argos2', 'ahrena-engineering-code-review:argos', 20, null, 'Review PR #710', under(boss.id));
+  const tree = [main, boss, apollo702, dev710, argos1, erodos, argos2];
+  const events = [said(argos1, '3 findings\nVerdict: request-changes', 14)];
+
+  test('#588/AC-1: orchestrators lists the Athena once, outside every group, with her groups most recent first', () => {
+    const loop = buildPrLoop(live, tree, events, papelDe);
+    assert.equal(loop.orchestrators.length, 1);
+    const o = loop.orchestrators[0];
+    assert.deepEqual(
+      [o.agentId, o.agentType, o.task, o.state, o.startedAt, o.endedAt, o.parentAgentId],
+      [boss.id, ATHENA, 'Run the layers of the story', 'running', at(1), null, main.id],
+    );
+    assert.deepEqual(o.groups, ['pr:710', 'issue:702']);
+    assert.deepEqual(loop.groups.map((g) => g.id), ['pr:710', 'issue:702']);
+    assert.equal(loop.groups.some((g) => g.steps.some((s) => s.agentId === boss.id)), false);
+    assert.equal(loop.groups.some((g) => g.kind === 'none'), false);
+  });
+
+  test('#588/AC-1: the layers are counted, the Athena counts as a subagent and not as a round or a change request', () => {
+    const loop = buildPrLoop(live, tree, events, papelDe);
+    assert.equal(loop.totals.layers, 2);
+    assert.equal(loop.totals.subagents, 6);
+    assert.equal(loop.totals.rounds, 2);
+    assert.equal(loop.totals.changeRequests, 1);
+    assert.equal(loop.totals.prs, 1);
+  });
+
+  test('#588/AC-1: a step carries the parent that opened it', () => {
+    const loop = buildPrLoop(live, tree, events, papelDe);
+    const steps = loop.groups.flatMap((g) => g.steps);
+    assert.ok(steps.length > 0);
+    assert.ok(steps.every((s) => s.parentAgentId === boss.id));
+  });
+
+  test('#588/AC-1: an Athena still planning, whose brief cites a PR, has no groups', () => {
+    const planning = sub('ath', ATHENA, 1, null, 'Plan the story; see PR #690 for reference');
+    const loop = buildPrLoop(live, [main, planning], [], papelDe);
+    assert.deepEqual(loop.orchestrators.map((o) => [o.agentId, o.groups]), [[planning.id, []]]);
+    assert.deepEqual(loop.groups, []);
+    assert.equal(loop.totals.layers, 0);
+    assert.equal(loop.totals.subagents, 1);
+  });
+
+  test('#588/AC-1: one orchestrator under another leads its own groups and carries its parent', () => {
+    const inner = sub('inner', ATHENA, 3, null, 'Run layer 3', under(boss.id));
+    const devOfInner = sub('dev720', 'ahrena-engineering-backend:apollo', 4, 8, 'Build PR #720', under(inner.id));
+    const loop = buildPrLoop(live, [main, boss, apollo702, inner, devOfInner], [], papelDe);
+    assert.deepEqual(loop.orchestrators.map((o) => [o.agentId, o.parentAgentId, o.groups]), [
+      [boss.id, main.id, ['issue:702']],
+      [inner.id, boss.id, ['pr:720']],
+    ]);
+    assert.equal(loop.totals.layers, 2);
+  });
+
+  test('#588/AC-1: a delegating apollo with no role metadata is a dev, not an orchestrator, and keeps both steps in its PR', () => {
+    // No `workflow.role` is written at ingest: the build agents count as `dev` by their type (#588).
+    const dev = sub('dev', 'ahrena-engineering-backend:apollo', 2, 9, 'Build layer for PR #710');
+    const helper = sub('helper', 'Explore', 3, 4, 'Read the files of PR #710', under(dev.id));
+    const loop = buildPrLoop(live, [main, dev, helper], [], papelDe);
+    assert.deepEqual(loop.orchestrators, []);
+    const group = loop.groups.find((g) => g.id === 'pr:710')!;
+    assert.deepEqual(group.steps.map((s) => [s.agentId, s.role]), [[dev.id, 'dev'], [helper.id, 'other']]);
+    assert.equal(loop.totals.layers, 0);
+  });
+
+  test('#588/AC-1: every build agent of the agency, with or without a plugin prefix, counts as a dev', () => {
+    for (const type of ['apollo', 'ahrena-engineering-frontend:iris', 'clio', 'hephaestus', 'x:aglaia', 'daedalus', 'mnemosyne']) {
+      const dev = sub('dev', type, 2, 9, 'Build layer for PR #710');
+      const helper = sub('helper', 'Explore', 3, 4, 'Read PR #710', under(dev.id));
+      const loop = buildPrLoop(live, [main, dev, helper], [], papelDe);
+      assert.deepEqual(loop.orchestrators, [], type);
+      assert.equal(loop.groups[0].steps[0].role, 'dev', type);
+    }
+  });
+
+  test('#588/AC-1: an Athena that opens an Apollo that opens a Hephaestus has one orchestrator and one layer group', () => {
+    const lead = sub('ath', ATHENA, 1, null, 'Run the layers of the story');
+    const apollo = sub('apollo', 'ahrena-engineering-backend:apollo', 2, null, 'Build layer for PR #710', under(lead.id));
+    const hephaestus = sub('heph', 'ahrena-engineering-backend:hephaestus', 3, 8, 'Write the tests of PR #710', under(apollo.id));
+    const loop = buildPrLoop(live, [main, lead, apollo, hephaestus], [], papelDe);
+    assert.deepEqual(loop.orchestrators.map((o) => [o.agentId, o.groups]), [[lead.id, ['pr:710']]]);
+    const group = loop.groups.find((g) => g.id === 'pr:710')!;
+    assert.deepEqual(group.steps.map((s) => [s.agentId, s.role]), [[apollo.id, 'dev'], [hephaestus.id, 'dev']]);
+    assert.equal(loop.totals.layers, 1);
+  });
+
+  test('#588/AC-2: without an orchestrator the response is today\'s, plus the empty additive fields', () => {
+    const dev = sub('dev', 'general-purpose', 0, 10, 'Build PR #320');
+    const argos = sub('argos', 'argos', 10, 14, 'Review PR #320');
+    const loop = buildPrLoop(live, [main, dev, argos], [said(argos, 'Verdict: approve', 14)], papelDe);
+    assert.deepEqual(loop.orchestrators, []);
+    assert.equal(loop.totals.layers, 0);
+    assert.deepEqual(loop.totals, { prs: 1, rounds: 1, changeRequests: 0, subagents: 2, stopped: 0, layers: 0 });
+    assert.deepEqual(loop.groups.map((g) => [g.id, g.state, g.rounds, g.steps.map((s) => s.agentId)]), [['pr:320', 'approved', 1, [dev.id, argos.id]]]);
+    assert.deepEqual(loop.groups[0].steps.map((s) => s.parentAgentId), [main.id, main.id]);
   });
 });

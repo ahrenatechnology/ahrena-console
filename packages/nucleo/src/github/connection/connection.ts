@@ -194,6 +194,8 @@ export class GithubConnection {
   private scopes: string[] = [];
   private scopesChecked = false;
   private ghFailed = false;
+  /** #613 GitHub answered 401 for the gh credential: told apart from gh simply not being logged in. */
+  private ghRefused = false;
   private lastError: GithubLastError | null = null;
   private orgs: { checked: boolean; failed: boolean; granted: string[]; pending: string[] } = { checked: false, failed: false, granted: [], pending: [] };
   /** The generation whose org check is running: a recheck of it waits instead of starting another. */
@@ -239,6 +241,11 @@ export class GithubConnection {
     await this.ensureCredential();
     if (this.credential === null) throw new GithubNotConnectedError();
     return this.credential;
+  }
+
+  /** #613 GitHub answered 401 for the credential in use and the person has not reconnected since (no network call). */
+  credentialRefused(): boolean {
+    return this.lastError === 'revoked' || this.ghRefused;
   }
 
   async connected(): Promise<boolean> {
@@ -408,6 +415,7 @@ export class GithubConnection {
         if (stale()) return;
         this.credential = token.trim() || null;
         this.ghFailed = this.credential === null;
+        this.ghRefused = false;
       } catch {
         if (stale()) return;
         this.ghFailed = true;
@@ -463,16 +471,39 @@ export class GithubConnection {
     } catch (err) {
       if (generation !== this.generation || this.credential !== token) return;
       if (err instanceof GithubAuthError && err.status === 401) {
-        this.credential = null;
-        if (source === 'gh') this.ghFailed = true;
-        else this.lastError = 'revoked'; // the login stays: Reconnect replaces the vault entry
-        this.log('github: GitHub rejected the credential (401)');
-        this.onChange();
+        this.dropRejectedCredential(source);
         return;
       }
       this.scopesChecked = false;
       this.log(`github: could not read the scopes (${err instanceof GithubAuthError ? err.code : 'error'})`);
     }
+  }
+
+  /** #612 GitHub answered 401 for the credential in use: it is not served any more, once, with one log line. */
+  private dropRejectedCredential(source: GithubCredentialSource): void {
+    this.credential = null;
+    if (source === 'gh') {
+      this.ghFailed = true;
+      this.ghRefused = true;
+    } else this.lastError = 'revoked'; // #372 the login stays: Reconnect replaces the vault entry
+    this.log('github: GitHub rejected the credential (401)');
+    this.onChange();
+  }
+
+  /**
+   * #612 The one place a 401 on a data call reaches the connection: the `fetch` every GitHub-backed
+   * source uses, answering as `base` does, but a 401 for the credential the connection holds drops it
+   * (as the `/user` check at load does). A 401 for a credential no longer held changes nothing.
+   */
+  watchRejections(base: typeof fetch): typeof fetch {
+    return async (input, init) => {
+      const res = await base(input, init);
+      if (res.status === 401) {
+        const bearer = /^(?:bearer|token) (.+)$/i.exec(new Headers(init?.headers).get('authorization') ?? '')?.[1];
+        if (bearer && bearer === this.credential) this.dropRejectedCredential(this.sourceInfo().source);
+      }
+      return res;
+    };
   }
 
   /**
@@ -660,6 +691,7 @@ export class GithubConnection {
     this.scopes = [];
     this.scopesChecked = false;
     this.ghFailed = false;
+    this.ghRefused = false;
     this.lastError = null;
     this.orgs = { checked: false, failed: false, granted: [], pending: [] };
     this.profileLoad = null;

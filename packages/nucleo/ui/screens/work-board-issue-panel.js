@@ -168,16 +168,16 @@ export function issuePanelFailure({ card, reason = null, now = Date.now(), onRet
 /**
  * The panel (467-1): header (type, number, column and age, "Abrir no GitHub", close), title, parent chain, the planning
  * parts, description, plan, PR with CI and review, details and comments. `parts` is `cardPlanParts(card, handlers)`.
- * A stale read (`issue.stale`) shows the stale band, with "Tentar agora" calling `onRetry`. `onEdit` puts Editar in the header (issue 535).
+ * A stale read (`issue.stale`) shows the stale band, with "Tentar agora" calling `onRetry` and, for a refused credential, "Reconectar" calling `onReconnect` (issue 614). `onEdit` puts Editar in the header (issue 535).
  */
-export function issuePanel({ card, issue, now = Date.now(), parts = null, onRetry = null, onEdit = null, onClose = null }) {
+export function issuePanel({ card, issue, now = Date.now(), parts = null, onRetry = null, onReconnect = null, onEdit = null, onClose = null }) {
   const acts = [parts?.badge, parts?.note, parts?.actions].filter(Boolean);
   const chain = issue.parents?.length
     ? el('p', { class: 'wb-panel-chain' }, `${issue.parents.map((p) => `${ref(p.number)} ${p.title}`).join(' › ')} › `, el('b', {}, ref(issue.number)))
     : null;
   const root = panelShell(
     { card, number: issue.number, url: issue.url, now, onClose, onEdit },
-    issue.stale ? staleBand({ fetchedAt: issue.fetchedAt, now, reason: issue.staleReason, subject: 'issue', onRetry }) : null,
+    issue.stale ? staleBand({ fetchedAt: issue.fetchedAt, now, reason: issue.staleReason, retryAt: issue.retryAt, subject: 'issue', onRetry, onReconnect }) : null,
     el('h2', { class: 'wb-panel-title' }, issue.title),
     chain,
     acts.length ? el('div', { class: 'wb-panel-acts' }, ...acts) : null,

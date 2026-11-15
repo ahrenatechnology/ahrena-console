@@ -18,6 +18,8 @@ import {
   type WorkQueue,
   type WorkSessions,
 } from '../../src/index.ts';
+import { openSqliteStorage } from '../../src/adapters/sqlite/sqlite-storage.ts';
+import { SqliteWorkQueue } from '../../src/github/work-queue-store.ts';
 import { clock, k, node, REPO } from './helpers.ts';
 import { trustOf } from '../fixtures.ts';
 
@@ -59,6 +61,7 @@ function projectBoard(items: ProjectCard[], over: Partial<ProjectBoard> = {}): P
     stale: false,
     staleReason: null,
     staleCode: null,
+    resumeAt: null,
     ...over,
   };
 }
@@ -94,6 +97,9 @@ class FakeQueue implements WorkQueue {
   async positions(): Promise<ReadonlyMap<string, number>> {
     this.reads++;
     return this.map;
+  }
+  async stopped(): Promise<null> {
+    return null;
   }
 }
 
@@ -132,7 +138,7 @@ class FakeParents implements ParentLookup {
   }
 }
 
-function setup({ queue = EMPTY_WORK_QUEUE as WorkQueue, withParents = true } = {}) {
+function setup({ queue = EMPTY_WORK_QUEUE as WorkQueue, withParents = true, limit }: { queue?: WorkQueue; withParents?: boolean; limit?: () => number } = {}) {
   /** #496 the lazy time sources: the cache's pause end and the sync's next read of the Project. */
   const retry = { pausedUntil: 0, nextRead: null as number | null };
   const now = clock();
@@ -141,7 +147,7 @@ function setup({ queue = EMPTY_WORK_QUEUE as WorkQueue, withParents = true } = {
   const sessions = new FakeSessions();
   const history = new MemoryHistory();
   const parents = new FakeParents();
-  const service = new WorkBoardService({ trust: trustOf('ahrenatechnology'), project, sessions, queue, history, parents: withParents ? parents : undefined, now, pausedUntil: () => retry.pausedUntil, nextScheduledRead: () => retry.nextRead, log: (m) => logged.push(m) });
+  const service = new WorkBoardService({ trust: trustOf('ahrenatechnology'), project, sessions, queue, ...(limit ? { limit } : {}), history, parents: withParents ? parents : undefined, now, pausedUntil: () => retry.pausedUntil, nextScheduledRead: () => retry.nextRead, log: (m) => logged.push(m) });
   return { now, project, sessions, history, parents, service, logged, retry };
 }
 
@@ -209,14 +215,14 @@ describe('work board use case', () => {
     project.current = projectBoard([projectCard(1)]);
     queue.map.set(k(1), 1);
     const view = await service.board(filters());
-    assert.deepEqual([cardOf(view, 1).column, view.queue], ['queued', { available: true }]);
+    assert.deepEqual([cardOf(view, 1).column, view.queue], ['queued', { available: true, running: 0, limit: 2, stopped: null }]);
     await service.board(filters());
     assert.deepEqual([sessions.reads, queue.reads], [2, 2]);
   });
 
   test('without the queue the board says it is not available', async () => {
     const { service } = setup();
-    assert.deepEqual((await service.board(filters())).queue, { available: false });
+    assert.deepEqual((await service.board(filters())).queue, { available: false, running: 0, limit: 2, stopped: null });
   });
 });
 
@@ -352,5 +358,113 @@ describe('#496/AC-1 the work board says when the core tries GitHub again', () =>
     retry.pausedUntil = now() + 600_000;
     retry.nextRead = now() + 120_000;
     assert.equal((await service.board(filters())).retryAt, null);
+  });
+});
+
+describe('#477 the execution queue on the board', () => {
+  const AT = '2026-10-18T11:00:00.000Z';
+  const planned = (n: number, over: Partial<ProjectCard> = {}) => projectCard(n, { subIssues: { total: 3, completed: 0 }, ...over });
+  const store = () => new SqliteWorkQueue(openSqliteStorage({ path: ':memory:' }).db);
+
+  test('#477/AC-3 Given #501 queued above #500, Then Na fila lists #501 first with its position', async () => {
+    const queue = store();
+    await queue.enqueue(k(500), 'terminal', AT);
+    await queue.enqueue(k(501), 'desktop', AT);
+    await queue.reorder(k(501), null);
+    const { project, service } = setup({ queue });
+    project.current = projectBoard([planned(500), planned(501)]);
+    const view = await service.board(filters());
+    const queued = view.columns.find((c) => c.id === 'queued')!;
+    assert.deepEqual(queued.cards.map((c) => [c.number, c.queuePosition]), [[501, 1], [500, 2]]);
+  });
+
+  test('#477/AC-4 the board payload carries the queue: available, how many run, the limit and no stop', async () => {
+    const { project, sessions, service } = setup({ queue: store() });
+    project.current = projectBoard([planned(1), planned(2), planned(3)]);
+    sessions.list = [link('s1', 1, 'working'), link('s2', 2, 'working')];
+    assert.deepEqual((await service.board(filters())).queue, { available: true, running: 2, limit: 2, stopped: null });
+  });
+
+  test('#477/AC-4 the limit is the installation preference, read at each board', async () => {
+    let limit = 2;
+    const { project, service } = setup({ queue: store(), limit: () => limit });
+    project.current = projectBoard([planned(1)]);
+    assert.equal((await service.board(filters())).queue.limit, 2);
+    limit = 5;
+    assert.equal((await service.board(filters())).queue.limit, 5);
+  });
+
+  test('#477/AC-4 lowering the limit under the running count stops nothing: the running cards stay running', async () => {
+    const { project, sessions, service } = setup({ queue: store(), limit: () => 1 });
+    project.current = projectBoard([planned(1), planned(2), planned(3)]);
+    sessions.list = [link('s1', 1, 'working'), link('s2', 2, 'working'), link('s3', 3, 'working')];
+    const view = await service.board(filters());
+    assert.deepEqual([view.queue.running, view.queue.limit, view.columns.find((c) => c.id === 'running')!.count], [3, 1, 3]);
+  });
+
+  test('#477/AC-4 the running count is the one of the whole level, not of the filtered view', async () => {
+    const { project, sessions, service } = setup({ queue: store() });
+    project.current = projectBoard([planned(1, { labels: ['ui'] }), planned(2)]);
+    sessions.list = [link('s1', 1, 'working'), link('s2', 2, 'working')];
+    const view = await service.board(filters({ label: 'ui' }));
+    assert.deepEqual([cards(view).length, view.queue.running], [1, 2]);
+    assert.equal(await service.runningCount(), 2);
+  });
+
+  test('#477/AC-6 a stopped queue shows the key and the reason', async () => {
+    const queue = store();
+    await queue.enqueue(k(507), 'terminal', AT);
+    await queue.markFailed(k(507), 'a sessão não subiu', AT);
+    const { project, service } = setup({ queue });
+    project.current = projectBoard([planned(507)]);
+    assert.deepEqual((await service.board(filters())).queue.stopped, { key: k(507), reason: 'a sessão não subiu' });
+  });
+
+  test('#477/AC-2 an item that is closed leaves the queue, and the next one moves up', async () => {
+    const queue = store();
+    for (const n of [500, 501]) await queue.enqueue(k(n), 'terminal', AT);
+    const { project, service } = setup({ queue });
+    project.current = projectBoard([planned(500, { state: 'CLOSED', closedAt: AT }), planned(501)]);
+    const view = await service.board(filters());
+    assert.deepEqual([...(await queue.positions())], [[k(501), 1]]);
+    assert.deepEqual(cards(view).filter((c) => c.column === 'queued').map((c) => [c.number, c.queuePosition]), [[501, 1]]);
+  });
+
+  test('#477/AC-2 an item that lost its plan leaves the queue and goes back to Planejamento', async () => {
+    const queue = store();
+    await queue.enqueue(k(500), 'terminal', AT);
+    const { project, service } = setup({ queue });
+    project.current = projectBoard([projectCard(500, { subIssues: null })]);
+    const view = await service.board(filters());
+    assert.deepEqual(await queue.list(), []);
+    assert.equal(cardOf(view, 500).column, 'planning');
+  });
+
+  test('#477/AC-2 an entry whose issue the board does not hold stays: it may belong to another Project of the same installation', async () => {
+    const queue = store();
+    await queue.enqueue('other/repo#9', 'terminal', AT);
+    const { project, service } = setup({ queue });
+    project.current = projectBoard([planned(1)]);
+    await service.board(filters());
+    assert.deepEqual([...(await queue.positions()).keys()], ['other/repo#9']);
+  });
+
+  test('#477/AC-2 pruning is not a reason to fail the board: when the queue cannot be written the board still answers', async () => {
+    const queue = store();
+    await queue.enqueue(k(500), 'terminal', AT);
+    const broken: WorkQueue & { remove(key: string): Promise<boolean> } = { available: true, positions: () => queue.positions(), stopped: () => queue.stopped(), remove: async () => { throw new Error('disk full'); } };
+    const { project, service, logged } = setup({ queue: broken });
+    project.current = projectBoard([planned(500, { state: 'CLOSED', closedAt: AT })]);
+    assert.equal((await service.board(filters())).total, 1);
+    assert.ok(logged.some((m) => /queue/.test(m) && /disk full/.test(m)));
+  });
+
+  test('#477/AC-5 columnOf answers the column of a card, and null for a card the board does not hold', async () => {
+    const { project, sessions, service } = setup({ queue: store() });
+    project.current = projectBoard([planned(1), planned(2)]);
+    sessions.list = [link('s1', 1, 'working')];
+    assert.equal(await service.columnOf(k(1)), 'running');
+    assert.equal(await service.columnOf(k(2)), 'planning');
+    assert.equal(await service.columnOf(k(3)), null);
   });
 });

@@ -22,7 +22,8 @@ import {
   type Wall,
 } from '../../src/api/index.ts';
 import { SessionOpenDescriber, type LiveProcess, type SessionOpen } from '../../src/api/session-open.ts';
-import type { FocusResult, TerminalRequest } from '../../src/api/terminal-launch.ts';
+import { PLANNING_TOOL_FLAGS, type FocusResult, type TerminalRequest } from '../../src/api/terminal-launch.ts';
+import { planningPrompt } from '../../src/github/work-plan.ts';
 import { FleetReader } from '../../src/mcp/index.ts';
 import { session } from '../fixtures.ts';
 
@@ -32,6 +33,8 @@ const LIVE = '33333333-3333-4333-8333-333333333333';
 const NOCWD = '44444444-4444-4444-8444-444444444444';
 const GONE = '55555555-5555-4555-8555-555555555555';
 const REMOTE = '66666666-6666-4666-8666-666666666666';
+const PLAN = '88888888-8888-4888-8888-888888888888';
+const PLAIN = '99999999-9999-4999-8999-999999999999';
 const UNKNOWN = '77777777-7777-4777-8777-777777777777';
 const LOCAL = 'local_aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 
@@ -98,6 +101,11 @@ describe('#285 open the session where it runs', () => {
     await storage.putSession(session({ id: TERM, cwd: work, ...waiting }));
     await storage.putSession(session({ id: LIVE, cwd: null, ...waiting }));
     await storage.putSession(session({ id: NOCWD, cwd: null, ...waiting }));
+    await storage.putSession(session({ id: PLAN, cwd: work, ...waiting }));
+    await storage.putSession(session({ id: PLAIN, cwd: work, ...waiting }));
+    const prompt = (id: string, text: string) => ({ id: `${id}:p1`, sessionId: id, agentId: null, type: 'UserPromptSubmit', toolName: null, summary: null, data: { prompt: text }, createdAt: recent });
+    await storage.appendEvent(prompt(PLAN, planningPrompt({ repo: 'acme/app', number: 1 })));
+    await storage.appendEvent(prompt(PLAIN, 'just a prompt'));
     await storage.putSession(session({ id: GONE, cwd: join(root, 'removed'), ...waiting }));
     api = await startApi();
     host = new URL(api.url).host;
@@ -161,6 +169,33 @@ describe('#285 open the session where it runs', () => {
       assert.deepEqual(await r.json(), { ok: true, opened: 'terminal' });
       assert.deepEqual(launches.terminal, [{ sessionId: TERM, cwd: work }]);
       assert.deepEqual(launches.desktop, []);
+    });
+
+    test('#515/AC-1 a session whose first prompt is a planning one is resumed with the restriction', async () => {
+      fresh();
+      const r = await post(PLAN);
+      assert.equal(r.status, 200);
+      assert.deepEqual(launches.terminal, [{ sessionId: PLAN, cwd: work, planning: true }]);
+    });
+
+    test('#515/AC-1 a session with another first prompt is resumed exactly as before', async () => {
+      fresh();
+      assert.equal((await post(PLAIN)).status, 200);
+      assert.deepEqual(launches.terminal, [{ sessionId: PLAIN, cwd: work }]);
+    });
+
+    test('#515/AC-1 the copyable command of a planning session carries the flags', async () => {
+      fresh();
+      terminalAnswer = 'unsupported';
+      try {
+        const r = await post(PLAN);
+        assert.equal(r.status, 501);
+        const body = (await r.json()) as { command: string };
+        const flags = PLANNING_TOOL_FLAGS.map((f) => `'${f}'`).join(' ');
+        assert.equal(body.command, `${resume(work, PLAN)} ${flags}`);
+      } finally {
+        terminalAnswer = 'opened';
+      }
     });
 
     test('terminal-live: its process brought forward', async () => {

@@ -5,6 +5,8 @@
  * | Param        | Values                                                         | Default |
  * | ------------ | -------------------------------------------------------------- | ------- |
  * | `level`      | `initiative`, `epic`, `item` or `plan` (`WORK_LEVELS`)         | `item`  |
+ * | `org`        | #609 an organization or account login, case-insensitive         | —       |
+ * | `project`    | #609 `owner/<n>`: one Project (the number as in `.../projects/3`) | —     |
  * | `initiative` | `<n>` or `owner/name#<n>`: the node descends from that initiative | —    |
  * | `epic`       | the same, for an epic                                          | —       |
  * | `type`       | `story`, `task`, `spike`, `bug`, `epic`, `initiative`, `plan`   | —       |
@@ -13,13 +15,25 @@
  * | `status`     | the Project Status slug (`in-progress`), or `no-status`        | —       |
  * | `refresh`    | `1` re-reads GitHub (the cache keeps its 30 s floor, ADR-0001) | —       |
  *
+ * #598 #609 the board spans the Projects of every organization the GitHub connection granted and of the person's account (an
+ * open Project with a Status field): each card says where it comes from (`origin: { organization, project: { owner, number,
+ * title } }`), `organizations[]` lists each owner read (`login`, `own`, `state` `read`|`restricted`|`saml`|`failed`, `readAt`
+ * epoch ms or `null`, `projects[]`, and on a warning a `reason` code with `approvalUrl` and `requestUrl` when the app is
+ * restricted), the person's account last. `project` is the Project asked for by `?project=` or the only one read, else `null`.
+ * `options.orgs` and `options.projects` count what each would show, and `filters` echoes `org` and `project`. A `?project=`
+ * that is not of `?org=` is 200 with an empty set; a malformed one is 400 `bad-filter`. An organization that restricts the app,
+ * sits behind SAML or fails to read is an entry with its state and the others stay; its stored cards stay with its `readAt`.
+ * GitHub is down only when every Project tried fails (#609): the stored cards with `stale`, and with nothing stored the 502 below.
+ *
  * The body is the use case's `WorkBoardView` as it is. Errors: 400 `bad-filter` with `param`, 503
  * `no-project` without a chosen Project, 503 `off` under --no-github, 502 `github-unavailable` with the
  * `reason` when the first read fails and nothing is stored. GitHub down after a read is not an error:
  * 200 with the last data, `stale`, `staleReason` and `retryAt` (ADR-0001). `reason` and `staleReason` are a code,
- * never GitHub's message (that goes to the core log, #495). `staleReason` is `network`, `rate-limited`,
- * `no-scope`, `github-error` or `sync-pending` (the stored board is old and no failure is recorded); a
- * 502 `reason` is only one of the first four and never `sync-pending`. `retryAt` (#496) is epoch ms: with `stale: true`, when the core reads GitHub
+ * never GitHub's message (that goes to the core log, #495). A live read says `network`, `rate-limited`,
+ * `no-scope` or `github-error`; the 502 `reason` is one of these, and never `sync-pending`. Only the stored
+ * board (`fromStore`, #613) also says `credential-refused` (the credential was refused, 401),
+ * `github-unavailable` (GitHub answered 5xx or the last read failed on the network) or `sync-pending` (the
+ * stored board is old with no pause, no 401 and no failure recorded). `retryAt` (#496) is epoch ms: with `stale: true`, when the core reads GitHub
  * again (the end of the rate-limit pause, else the next scheduled read of the Project, now if it is overdue);
  * `null` when not stale or no read is scheduled. With the background sync the GET answers the stored board (ADR-0015).
  */

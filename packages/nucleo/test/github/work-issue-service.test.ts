@@ -52,7 +52,7 @@ const card = (n: number, statusId: string | null): ProjectCard => ({
 const projectBoard = (lanes: { id: string | null; name: string; cards: ProjectCard[] }[]): ProjectBoard => ({
   owner: 'ahrenatechnology', number: 3, title: 'Ahrena Console', url: 'u', field: 'Status',
   lanes: lanes.map((l) => ({ id: l.id, name: l.name, color: 'GRAY', items: l.cards })) as ProjectBoard['lanes'],
-  count: 0, fetchedAt: 0, stale: false, staleReason: null, staleCode: null,
+  count: 0, fetchedAt: 0, stale: false, staleReason: null, staleCode: null, resumeAt: null,
 });
 
 function setup(project?: WorkProjectBoard) {
