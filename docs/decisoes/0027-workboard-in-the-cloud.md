@@ -35,12 +35,21 @@ O objetivo é o modelo de um gerenciador de tarefas como o Linear: um backlog na
 | **A trava** de cada item: quem, de qual máquina, até quando | O cache do que o hub mandou, para ler sem rede |
 | O cursor de mudanças (0002, "tempo real barato") | A tela do console, que passa a ler do hub pelo cache |
 
-O núcleo já fala com o quadro por portas (`WorkProjectBoard`, `WorkQueueStore`, `WorkSessions`). A troca é de adaptador: `WorkProjectBoard` e `WorkQueueStore` ganham uma implementação que lê e escreve no hub; `WorkSessions` continua local. A regra do quadro (`columnOfIssue`, `buildWorkBoard`) não muda de lugar: é pura, e roda no núcleo sobre o que o hub mandou mais as sessões locais.
+O núcleo já fala com o quadro por portas (`WorkProjectBoard`, `WorkQueueStore`, `WorkSessions`), mas **as portas mudam**, não só o adaptador:
+
+- `WorkProjectBoard` devolve hoje um `ProjectBoard` do GitHub (`project.ts`), um Project só. Passa a devolver os itens do backlog do tenant, identificados pelo `itemId` do hub, com o vínculo do GitHub opcional, porque um item pode existir antes da issue e o backlog atravessa organizações.
+- `WorkQueueStore` usa hoje a chave `owner/name#N`. Passa a usar o `itemId`.
+- Nasce uma porta de trava (`WorkClaims`: pegar, renovar, soltar, ler), que não existe hoje.
+- `WorkSessions` continua local e não muda.
+
+O modo local continua com adaptadores SQLite para as três portas: a trava local é trivial (uma máquina só), e o `itemId` local é a própria chave da issue. A regra do quadro (`columnOfIssue`, `buildWorkBoard`) não muda de lugar: é pura, e roda no núcleo sobre o que o hub mandou mais as sessões locais.
 
 ### 2. Multi-tenant e serverless
 
-- **Tenant** é o cliente da Ahrena: uma ou mais organizações do GitHub e as pessoas delas. Toda chave do DynamoDB começa por `T#<tenant>`, e o tenant sai **do token** (pessoa ou máquina) ou **da instalação do GitHub App** (webhook), nunca de um parâmetro do pedido. Um teste de contrato garante que nenhuma consulta cruza tenants, como a 0002 já pedia.
-- **Um GitHub App da Ahrena**, instalado em cada organização cliente. A instalação (`installation_id`) mapeia para um tenant; uma instalação sem tenant é ignorada e registrada.
+- **Tenant** é o cliente da Ahrena: uma ou mais organizações do GitHub e as pessoas delas. Todo **dado do tenant** fica sob uma chave que começa por `T#<tenant>`. Há quatro chaves globais, que só servem para achar o tenant e nunca guardam dado dele: `TOK#` (token, da 0002), `GHI#` (instalação), `GH#` (vínculo de issue) e `GHD#` (entrega de webhook). O tenant sai **do token** (pessoa ou máquina) ou, num webhook, **só do `installation.id`**, nunca de um parâmetro do pedido nem do conteúdo do evento. Um teste de contrato garante que nenhuma consulta cruza tenants, como a 0002 já pedia.
+- **O vínculo `GH#<node_id>` não decide tenant.** O webhook acha o tenant pela instalação e só então usa o vínculo para achar o item. Se o vínculo aponta para outro tenant (um repositório transferido para a organização de outro cliente mantém o `node_id`), o hub descarta o vínculo, registra o caso no log de admin dos dois lados e trata a issue como nova no tenant da instalação.
+- **Um GitHub App da Ahrena**, instalado em cada organização cliente. **Ligar uma instalação a um tenant** só acontece pelo fluxo de instalação do próprio App: o console de um `admin` do tenant abre a página de instalação com um `state` assinado pelo hub, de uso único e com prazo de 10 min, que carrega o tenant; o retorno do GitHub (`setup_url`) traz `installation_id` e `state`. O hub confere a assinatura, confere pela API do GitHub que quem instalou é `admin` da organização, e grava `GHI#<installationId>` com `attribute_not_exists`. Uma instalação já ligada não muda de tenant; mudar exige desinstalar o App (o webhook `installation.deleted` apaga o `GHI#`) e instalar de novo. Uma instalação sem tenant tem os eventos ignorados e registrados.
+- **Permissões do App:** `issues` (leitura e escrita), `pull_requests` e `checks` (leitura), `organization_projects` (leitura e escrita), `members` (leitura, para conferir o `admin` da organização) e `metadata`. O modo de time cobre **Projects de organização**: o GitHub só manda `projects_v2_item` para eles. Projects de conta pessoal continuam no modo local.
 - **Nada ligado parado.** API Gateway HTTP API, Lambda (Node, arm64), DynamoDB sob demanda, SQS, DynamoDB Streams e EventBridge Scheduler. O custo acompanha o uso por tenant.
 - **Limites por tenant**: taxa de pedidos no API Gateway por token e o limite do GitHub, que é por instalação, então um tenant não gasta o do outro.
 
@@ -60,10 +69,14 @@ O núcleo já fala com o quadro por portas (`WorkProjectBoard`, `WorkQueueStore`
 **Como**, sem servidor ligado:
 
 - **Entrada:** webhooks `issues`, `sub_issues`, `milestone`, `pull_request`, `pull_request_review`, `check_suite`, `projects_v2_item`. Uma Lambda confere `X-Hub-Signature-256`, descarta repetidos por `X-GitHub-Delivery` e põe o evento na SQS; outra aplica no DynamoDB e sobe o cursor.
-- **Saída:** cada mudança feita no hub grava um registro de saída; o DynamoDB Stream dispara a Lambda que escreve no GitHub com o token de instalação. Falha vai para nova tentativa e, esgotada, para uma fila de mortos com alerta; o item mostra "não sincronizado".
+- **Saída:** a mudança no item e o registro de saída (`OUT#…`, na partição do próprio item) são gravados **na mesma transação**, que muda uma raiz só: o item. O DynamoDB Stream tem um filtro de evento que deixa passar só inserções de `OUT#`; renovações de trava e histórico não disparam nada. A Lambda do Stream só repassa para uma SQS FIFO com `MessageGroupId` igual ao `itemId` (a ordem vale por item, e um item com erro não segura os outros nem o shard), com `BisectBatchOnFunctionError`, até 5 tentativas, idade máxima de 1 h e uma fila de mortos como destino de falha. A Lambda da SQS escreve no GitHub com o token de instalação, até 5 tentativas com espera crescente; esgotadas, a mensagem vai para a fila de mortos com alerta e o item mostra "não sincronizado". Escrita bem-sucedida apaga o `OUT#` e grava o valor como último sincronizado.
 - **Eco:** toda escrita do hub guarda o que mandou. O webhook que volta com o bot do App como autor e os mesmos valores é reconhecido e descartado, para a mudança não dar a volta.
-- **Conflito:** por campo, vence a mudança mais recente pela hora em que aconteceu (o `updated_at` do evento do GitHub contra o `changedAt` do hub). As duas versões ficam no histórico do item. Campo de texto longo (corpo) não é mesclado: vence a última e a anterior fica no histórico.
-- **Reconciliação** por EventBridge Scheduler a cada 15 min por instalação: lê os itens do Project e as issues por `updatedAt` desde a última passada e corrige o que um webhook perdido deixou. O webhook é o caminho rápido; a reconciliação é a garantia.
+- **Conflito, por campo, com três valores:** para cada campo o item guarda o **último valor sincronizado** (o que hub e GitHub tinham de igual da última vez). Quando chega um valor do GitHub (webhook ou reconciliação), o hub compara os três:
+  - só o GitHub mudou desde o sincronizado: aplica;
+  - só o hub mudou (há `OUT#` pendente ou "não sincronizado" para o campo): **mantém o do hub**, e a saída leva ao GitHub;
+  - os dois mudaram: vence o que **o hub recebeu por último**, pelo relógio do hub (a hora de chegada do webhook contra o `changedAt` da edição no hub), para nunca comparar o relógio do GitHub com o nosso. O perdedor fica no histórico, e o cartão mostra "conflito resolvido" com os dois valores.
+  - Corpo não é mesclado: o mesmo critério vale para o campo inteiro.
+- **Reconciliação** por EventBridge Scheduler a cada 15 min por instalação: lê os itens do Project e as issues por `updatedAt` desde a última passada e passa cada valor pela mesma regra de três valores. **Nunca sobrescreve um campo com saída pendente.** O webhook é o caminho rápido; a reconciliação é a garantia.
 
 **A confirmar:**
 - Um item criado na nuvem precisa de repositório para virar issue. Recomendação: história, tarefa, spike e bug pedem o repositório na criação; iniciativa e épico, que atravessam repositórios, moram num **repositório de planejamento** que o tenant escolhe uma vez.
@@ -75,14 +88,20 @@ A trava é do hub, e só o hub escreve nela. Ela é um conceito do backlog na nu
 
 - **Pegar** (`POST /v1/work/items/{id}/claim`) é uma gravação condicional no DynamoDB: passa só se não há trava ou se a que existe venceu. Dois núcleos que pedem ao mesmo tempo recebem um sim e um `409 claimed`, com quem está travando.
 - **A trava guarda** pessoa (do token), máquina (do token), a sessão quando ela aparecer, `claimedAt`, `expiresAt` e uma versão. Toda renovação e toda liberação mandam a versão; uma versão velha é recusada. Assim um núcleo que voltou de uma queda não derruba a trava que outro pegou depois.
-- **Renovar.** O núcleo renova a cada 60 s enquanto a execução está iniciando (a janela de 10 min de `EXECUTION_SESSION_WINDOW_MS`) ou a sessão ligada está viva. A trava vence 5 min depois da última renovação. A renovação leva só o estado da sessão (`working`, `needs-you`, `idle`), para o time ver o cartão se mexer; nenhum texto da conversa.
+- **Renovar.** O núcleo renova a cada 60 s enquanto a execução está iniciando (a janela de 10 min de `EXECUTION_SESSION_WINDOW_MS`) ou a sessão ligada está viva. A trava vence 5 min depois da última renovação. A renovação leva só o estado da sessão (`working`, `needs-you`, `idle`), para o time ver o cartão se mexer; nenhum texto da conversa. **A renovação é condicional a `version = :v AND expiresAt > :agora`**: uma trava vencida não se renova, mesmo que ninguém a tenha pego ainda. O núcleo que volta depois do vencimento recebe `410 expired` e precisa **pegar de novo**, pela mesma gravação condicional de quem pega pela primeira vez; se outro já pegou, recebe o `409 claimed`.
 - **Liberar.** A trava termina quando:
   - o PR ligado é mergeado ou a issue é fechada, na nuvem ou no GitHub: fim normal, o cartão vai para Concluído;
-  - a pessoa solta no console;
-  - ela vence: o item volta ao **topo** da fila, parado, com o motivo "trava vencida", como o `markFailed` da #477 faz hoje com uma execução que não subiu;
+  - a pessoa que a segura solta no console, de qualquer máquina dela;
+  - ela vence (abaixo);
   - um `admin` do tenant força a liberação, e isso fica no log de admin da 0002.
+- **Vencer.** Um job a cada 1 min lê as travas com `expiresAt` passado pelo índice esparso da seção 6, e para cada uma faz um **apagar condicional à versão que leu**. Se a versão mudou (renovou no último instante, ou alguém pegou), não faz nada. Se apagou, grava no item `requeue` e emite `WorkClaimExpired`.
 - **No GitHub** a trava aparece como **responsável** (a pessoa) e o status **Em execução** no Project, escritos pela saída da seção 3.
-- **Puxar da fila são duas raízes.** A fila do time e o item são agregados diferentes; pegar é a operação que manda. O hub grava a trava e emite `WorkItemClaimed`; a saída da fila acontece em seguida, pelo evento, e não na mesma transação.
+- **Trava e fila são duas raízes**, e a trava manda. Os dois eventos, com a janela e o conserto de cada um:
+
+  | Evento | O que acontece na fila | Janela | Se falhar |
+  | --- | --- | --- | --- |
+  | `WorkItemClaimed` | A entrada do item sai da fila | Segundos (Stream do item) | O puller confere a trava antes de puxar, então uma entrada que sobrou não abre uma segunda execução; o job de 1 min tira da fila entradas de itens travados |
+  | `WorkClaimExpired` | O item volta ao **topo** da fila, parado, com o motivo "trava vencida", como o `markFailed` da #477 faz hoje com uma execução que não subiu | Até 1 min (o job) | A marca `requeue` fica no item até a entrada existir; o job da próxima passada tenta de novo, e a marca sai só quando a entrada foi gravada |
 
 **Forte no hub, aviso no GitHub (recomendação).** O GitHub não tem como travar uma issue: qualquer pessoa com acesso muda responsável e status. Então:
 
@@ -110,15 +129,24 @@ Na tabela única da 0002, sob `T#<tenant>`:
 | --- | --- | --- | --- |
 | Item de trabalho | `T#<tenant>#W#<itemId>` | `META` | tipo, título, corpo, estado, pai, milestone, campos, vínculo com o GitHub (repositório, número, `node_id`), `updatedAt`, `version` |
 | Histórico do item | `T#<tenant>#W#<itemId>` | `H#<changedAt>#<campo>` | valor antes e depois, origem (`hub` ou `github`), quem |
-| Trava | `T#<tenant>#W#<itemId>` | `CLAIM` | pessoa, máquina, sessão, `claimedAt`, `expiresAt`, `version`, estado da sessão |
-| Saída para o GitHub | `T#<tenant>#OUT` | `<changedAt>#<itemId>` | mudança, tentativas, último erro |
-| Vínculo do GitHub | `GH#<node_id>` | `LINK` | tenant e `itemId`, para o webhook achar o item |
-| Instalação | `GHI#<installationId>` | `INST` | tenant, organização |
+| Trava | `T#<tenant>#W#<itemId>` | `CLAIM` | pessoa, máquina, sessão, `claimedAt`, `expiresAt`, `version`, estado da sessão, `claimShard` |
+| Saída para o GitHub | `T#<tenant>#W#<itemId>` | `OUT#<changedAt>#<campo>` | valor, tentativas, último erro |
 | Milestone | `T#<tenant>` | `MS#<título>` | datas, estado, repositórios onde existe |
-| Entrada da fila | `T#<tenant>#Q#<filaId>` | `<posição>#<itemId>` | alvo da execução, `enqueuedAt`, `failedReason` |
+| Entrada da fila | `T#<tenant>#Q#<filaId>` | `<rank>#<itemId>` | alvo da execução, `enqueuedAt`, `failedReason` |
+
+Chaves globais (só acham o tenant, não guardam dado dele):
+
+| Item | PK | SK | Atributos |
+| --- | --- | --- | --- |
+| Instalação | `GHI#<installationId>` | `INST` | tenant, organização, quem instalou, quando |
+| Vínculo do GitHub | `GH#<node_id>` | `LINK` | tenant e `itemId`; conferido contra o tenant da instalação (seção 2) |
 | Entrega de webhook | `GHD#<deliveryId>` | `D` | recebida em (TTL 3 dias, para descartar repetidas) |
 
-O `itemId` é do hub (ULID), e não o número da issue, porque o item pode nascer na nuvem antes de existir no GitHub. GSI1 da 0002 ganha os itens de trabalho (`<updatedAt>#W#<itemId>`), para o delta por cursor. As travas vencidas são achadas por um job de 1 min que lê só as travas ativas (poucas por definição); o TTL do DynamoDB não serve aqui porque apaga com até 48 h de atraso.
+- O `itemId` é do hub (ULID), e não o número da issue, porque o item pode nascer na nuvem antes de existir no GitHub.
+- A saída fica na partição do item, e não numa partição `#OUT` do tenant: assim ela entra na mesma transação do item e não concentra as escritas de um tenant inteiro numa partição.
+- **A fila usa um rank esparso** (texto ordenável com folga entre vizinhos), não posição contígua: mover um item grava só a entrada dele, com um rank entre os dois vizinhos. Quando a folga acaba, uma passada redistribui os ranks daquela fila. A posição 1, 2, 3 que a tela mostra é calculada na leitura.
+- GSI1 da 0002 ganha os itens de trabalho (`<updatedAt>#W#<itemId>`), para o delta por cursor.
+- **GSI3 · travas ativas**, esparso: PK `CLAIMS#<claimShard>` (um de 10, escolhido ao pegar), SK `<expiresAt>#<tenant>#<itemId>`. Só a linha `CLAIM` tem esses atributos, então o índice tem só as travas ativas. O job de 1 min consulta os 10 shards por `expiresAt < agora`, sem `Scan`. A renovação reescreve o SK uma vez por minuto por trava; os 10 shards espalham essa escrita. O TTL do DynamoDB não serve aqui porque apaga com até 48 h de atraso.
 
 ### 7. Quem pode o quê
 
@@ -127,9 +155,11 @@ O `itemId` é do hub (ULID), e não o número da issue, porque o item pode nasce
 | Ver o backlog e o quadro do tenant | Todo `member` |
 | Criar e editar itens, pôr na fila, reordenar | `member` |
 | Pegar um item | `member`, por uma máquina com token válido |
-| Renovar e soltar | Só a máquina que segura a trava (máquina do token e versão) |
-| Forçar a liberação, ligar organizações e repositórios | `admin` |
-| Instalar o GitHub App na organização | Um `owner` da organização no GitHub |
+| Renovar | Só a máquina que segura a trava (máquina do token e versão) |
+| Soltar | A pessoa que segura a trava, de qualquer máquina dela (o notebook pode ter morrido) |
+| Forçar a liberação de outra pessoa | `admin` |
+| Ligar uma organização ao tenant | `admin` do tenant, pelo fluxo de instalação da seção 2 |
+| Instalar o GitHub App na organização | Um `admin` da organização no GitHub, conferido pelo hub |
 
 ## Fases
 
@@ -155,6 +185,7 @@ Cada fase vira uma issue e passa pela Athena.
 
 ## Consequências
 
+- As portas do quadro mudam (seção 1): `WorkProjectBoard` passa a falar de itens do backlog, `WorkQueueStore` passa a usar o `itemId`, e nasce `WorkClaims`. Isso mexe no núcleo antes de qualquer coisa ir para a nuvem, e é a primeira tarefa da fase 2.
 - O Workboard passa a ter dois modos, local e de time, com os mesmos testes de contrato das portas rodando nos dois adaptadores, como a 0002 pede para o armazenamento.
 - O hub da 0002 sai do papel por esta feature, e como serviço multi-tenant da Ahrena. O primeiro deploy precisa só de auth, tenant, cursor e Workboard.
 - O GitHub App da Ahrena vira requisito do modo time, e cada cliente instala na própria organização.

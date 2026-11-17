@@ -1,6 +1,7 @@
 # 0002 · Arquitetura e custo do hub AWS
 
 - **Status:** aceita
+- **Revista em parte por:** [0027](0027-workboard-in-the-cloud.md), que faz do hub um serviço multi-tenant da Ahrena (um deploy para vários clientes, um GitHub App da Ahrena), no lugar de "cada time sobe o hub na própria conta AWS" e de "um deploy normalmente serve um time". O resto desta decisão vale.
 - **Data:** 2026-10-18
 - **Issue:** [#47](https://github.com/ahrenatechnology/ahrena-console/issues/47) (spike 7.1 do [backlog](../backlog-0.0.1.md), épico [#8](https://github.com/ahrenatechnology/ahrena-console/issues/8))
 - **Destrava:** 7.2 a 7.11 (em especial [#48](https://github.com/ahrenatechnology/ahrena-console/issues/48) e [#49](https://github.com/ahrenatechnology/ahrena-console/issues/49))
