@@ -15,9 +15,9 @@ after(() => rmSync(tmp, { recursive: true, force: true }));
 
 const sid = (i: number) => `00000000-0000-4000-8000-${String(i).padStart(12, '0')}`;
 let clock = Date.parse('2026-11-02T12:00:00.000Z');
-const line = (sessionId: string, uuid: string) => {
+const line = (sessionId: string, uuid: string, extra: Record<string, unknown> = {}) => {
   clock += 1000;
-  const entry = { sessionId, type: 'user', uuid, cwd: '/x', isSidechain: false, timestamp: new Date(clock).toISOString(), message: { role: 'user', content: uuid } };
+  const entry = { sessionId, type: 'user', uuid, cwd: '/x', isSidechain: false, timestamp: new Date(clock).toISOString(), message: { role: 'user', content: uuid }, ...extra };
   return JSON.stringify(entry) + '\n';
 };
 
@@ -61,10 +61,14 @@ async function restart(root: string, storage: StoragePort) {
 
 test('AC-2: a restart with the history imported reads only the files that changed', async () => {
   const { root, files } = fixture('changed', 5);
+  // A subagent transcript, so the restart also has to match a marker kept on an agent row.
+  const subDir = join(root, '-p', sid(0), 'subagents');
+  mkdirSync(subDir, { recursive: true });
+  writeFileSync(join(subDir, 'agent-a1.jsonl'), line(sid(0), 'a1-1', { isSidechain: true, agentId: 'a1' }));
   const storage = openSqliteStorage({ path: join(tmp, 'changed.sqlite') });
   try {
     const first = await restart(root, storage);
-    assert.equal(first.report.filesRead, 5);
+    assert.equal(first.report.filesRead, 6);
 
     const untouched = await restart(root, storage);
     assert.equal(untouched.report.filesFound, 0);

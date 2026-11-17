@@ -7,9 +7,10 @@
 //   notices, folders created later sometimes do not notify) and fails if the root does not exist yet.
 //
 // Cost: on start the follower loads the importer's per-file markers from the database in one query,
-// so a restart imports only the files whose size or mtime moved since the last import. The follower keeps each file's size and mtime in memory. A round only runs `stat` (on the
-// notified paths, or on all of them in a scan) and calls the importer only with the files whose
-// `stat` changed. An idle file costs no read and no database query.
+// so a restart imports only the files whose size or mtime moved since the last import. The follower
+// keeps each file's size and mtime in memory. A round only runs `stat` (on the notified paths, or on
+// all of them in a scan) and calls the importer only with the files whose `stat` changed. An idle
+// file costs no read and no database query.
 //
 // Half-written lines, truncated or rewritten files and new subagents are handled by the importer
 // (cursor with a fingerprint) and by discovery; the follower only decides when and what to import.
@@ -181,6 +182,8 @@ export function followTranscripts(options: FollowOptions): TranscriptFollower {
     }
     if (scan) {
       for (const path of known.keys()) if (!seen.has(path)) known.delete(path);
+      // Every file the scan found is now in `known` or about to be imported: the markers are spent.
+      markers = new Map();
     }
     if (changed.length === 0) return emptyReport();
 
