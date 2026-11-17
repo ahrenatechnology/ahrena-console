@@ -54,6 +54,7 @@ import { selectedProjectBoard } from './work-board.ts';
 import { createDemoGithubConnection, parseDemoGithubState } from '../simulator/demo-github-connection.ts';
 import { defaultProjectsRoot } from '../ingest/history/files.ts';
 import { followTranscripts } from '../ingest/history/follower.ts';
+import { startEventsRetention } from '../adapters/sqlite/events-retention.ts';
 import { Profiles } from '../profiles/profiles.ts';
 import { registerClient } from '../owner/clients.ts';
 import { isOlderCommit } from '../owner/commit.ts';
@@ -787,6 +788,7 @@ const delegations = demo
 const appUpdate = demo ? null : createAppUpdateRoute(new AppUpdateState(changes));
 
 let historyReady = false;
+let stopEventsRetention = () => {};
 const follower =
   demo || o.noHistory
     ? null
@@ -968,6 +970,8 @@ if (follower) {
     .then(() => {
       historyReady = true;
       log(`history imported; following ${o.projects ?? '~/.claude/projects'}`);
+      // #708: the events retention starts only now, after the initial import, never at startup.
+      if (!demo) stopEventsRetention = startEventsRetention({ db: sqlite.db, env: process.env, log });
       return reprocessOnce();
     })
     .catch((e) => log(`follower did not start: ${(e as Error).message}`));
@@ -1007,6 +1011,7 @@ async function shutdown() {
   transcription?.close();
   connection.close();
   if (profileTimer) clearInterval(profileTimer);
+  stopEventsRetention();
   stopWatchingParent();
   unregister();
   if (lock && !('conflict' in lock)) releaseLock(lock.token, dataDir);

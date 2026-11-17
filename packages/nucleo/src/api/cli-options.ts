@@ -64,6 +64,12 @@ export const HELP = `Usage: npm run api -- [options]
                          --demo does not read it
   --help
 
+Events retention (#708): events older than AHRENA_CONSOLE_EVENTS_RETENTION_DAYS (default 30, a whole number
+from 1 to 3650) are deleted in small batches, after the initial history import and then once a day. A database
+created by this version gives the freed pages back in steps (incremental auto_vacuum); an older one only reuses
+them, and AHRENA_CONSOLE_EVENTS_FULL_VACUUM=1 runs the one full VACUUM that switches it (it holds the database
+while it runs: use it with the console otherwise idle).
+
 GitHub (decision 0011): the console connects by itself, with the OAuth device flow, and keeps the
 credential in the Keychain (macOS) or the Secret Service (Linux), never in a file. The Ahrena OAuth App is
 built in; AHRENA_CONSOLE_GITHUB_CLIENT_ID overrides it with another app's Client ID (development).
