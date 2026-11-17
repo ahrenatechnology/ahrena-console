@@ -287,6 +287,11 @@ export class SqliteStorage implements StoragePort {
 
   constructor(options: SqliteStorageOptions) {
     this.db = new DatabaseSync(options.path);
+    // A new file is born in incremental auto_vacuum mode (it can only be chosen before the first table), so
+    // the events retention (#708) can give pages back in steps. An existing file keeps its mode.
+    if (options.path !== ':memory:' && (this.db.prepare('SELECT COUNT(*) AS n FROM sqlite_master').get() as { n: number }).n === 0) {
+      this.db.exec('PRAGMA auto_vacuum = INCREMENTAL');
+    }
     if (options.path !== ':memory:') this.db.exec('PRAGMA journal_mode = WAL');
     this.db.exec('PRAGMA busy_timeout = 5000');
     migrate(this.db, options.migrations ?? MIGRATIONS);

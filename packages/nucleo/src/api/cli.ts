@@ -54,6 +54,7 @@ import { selectedProjectBoard } from './work-board.ts';
 import { createDemoGithubConnection, parseDemoGithubState } from '../simulator/demo-github-connection.ts';
 import { defaultProjectsRoot } from '../ingest/history/files.ts';
 import { followTranscripts } from '../ingest/history/follower.ts';
+import { startEventsRetention } from '../adapters/sqlite/events-retention.ts';
 import { Profiles } from '../profiles/profiles.ts';
 import { registerClient } from '../owner/clients.ts';
 import { isOlderCommit } from '../owner/commit.ts';
@@ -787,6 +788,7 @@ const delegations = demo
 const appUpdate = demo ? null : createAppUpdateRoute(new AppUpdateState(changes));
 
 let historyReady = false;
+let stopEventsRetention = () => {};
 const follower =
   demo || o.noHistory
     ? null
@@ -962,15 +964,29 @@ const stopWatcher = demo ? () => {} : machine.start();
 for (const a of samplers) a.start();
 remoteMachines?.start();
 githubSync?.start();
+// #708: the events retention runs in every non-demo core, never on the startup hot path: after the
+// initial import when there is a follower, otherwise (--no-history, or the follower failed) on its own first delay.
+let retentionStarted = false;
+const startRetention = () => {
+  if (retentionStarted) return;
+  retentionStarted = true;
+  stopEventsRetention = startEventsRetention({ db: sqlite.db, env: process.env, log });
+};
 if (follower) {
   follower
     .start()
     .then(() => {
       historyReady = true;
       log(`history imported; following ${o.projects ?? '~/.claude/projects'}`);
+      startRetention();
       return reprocessOnce();
     })
-    .catch((e) => log(`follower did not start: ${(e as Error).message}`));
+    .catch((e) => {
+      log(`follower did not start: ${(e as Error).message}`);
+      startRetention();
+    });
+} else if (!demo) {
+  startRetention();
 }
 
 // Once per database, after the initial import: plans and decisions of the sessions imported before the
@@ -1007,6 +1023,7 @@ async function shutdown() {
   transcription?.close();
   connection.close();
   if (profileTimer) clearInterval(profileTimer);
+  stopEventsRetention();
   stopWatchingParent();
   unregister();
   if (lock && !('conflict' in lock)) releaseLock(lock.token, dataDir);
