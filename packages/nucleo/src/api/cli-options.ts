@@ -45,8 +45,10 @@ export const HELP = `Usage: npm run api -- [options]
                          gh-not-authenticated
   --demo-project <p>     Under --demo, selected (default: the simulator's Project) or none (the
                          kanban asks to choose one)
-  --parent <pid>         Exits when this process goes away (the app or the extension), unless
-                         another client is registered. When adopting, registers the pid as a client
+  --parent <pid>         Once this process (the app or a bridge) and every registered client are
+                         gone, stays up for the idle grace (AHRENA_CONSOLE_IDLE_GRACE_SECONDS,
+                         default 8 h; 0 exits at once), then exits. When adopting, registers the
+                         pid as a client
   --replace              Also replaces a running core of this version on an ancestor commit. A
                          running core of an older version is always stopped and replaced (#220).
                          Other code: only warns

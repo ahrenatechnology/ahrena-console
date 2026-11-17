@@ -9,13 +9,14 @@
 //      the core to answer and adopts it.
 //   3. `claimLock`: with the API already listening, the core creates the lock (exclusive).
 //   4. `watchParent`: with `--parent`, the core exits when the parent and every registered client
-//      are gone.
+//      have been gone for the idle grace (decision 0027, issue #706).
 //
 // The `reason` and `warning` texts stay in Portuguese: they reach the `--json` line (`motivo`,
 // `aviso`) and the desktop app shows them on screen.
 
 import { execFileSync } from 'node:child_process';
 import { liveClients } from './clients.ts';
+import { describeGrace, IdleExit } from './idle-exit.ts';
 import { compareVersions, sleep, probeCore, isPidAlive, type CoreView } from './probe.ts';
 import { createLock, releaseLock, newToken, defaultDir, readLock, removeLock, type Lock } from './lock.ts';
 
@@ -186,26 +187,51 @@ export async function stopCore(t: Lock, o: { dir?: string; timeoutMs?: number } 
 
 export const PARENT_CHECK_INTERVAL_MS = 1000;
 
+export interface WatchParentOptions {
+  parent: number;
+  dir?: string;
+  intervalMs?: number;
+  /**
+   * How long the core stays up once the parent and every client are gone (decision 0027, issue
+   * #706). Default 0: exits at once. The core passes `resolveIdleGraceMs()` (8 h unless
+   * `AHRENA_CONSOLE_IDLE_GRACE_SECONDS` says otherwise).
+   */
+  graceMs?: number;
+  /** Clients registered outside the data folder (src/owner/instance-clients.ts), counted with `clientes/`. */
+  otherClients?: () => number[];
+  /** Called once each time the core becomes idle and the grace starts (for the log line). */
+  onIdle?: (reason: string) => void;
+  onGone: (reason: string) => void;
+  now?: () => number;
+}
+
 /**
  * The `--parent` rule: the core stays up while the parent **or** some registered client lives. When
- * the parent is gone and no client is left alive, calls `onGone` (once). Without `--parent`, nobody
- * watches: a core started by hand in the terminal only exits with `stop` or Ctrl-C.
+ * the parent is gone and no client is left alive, the idle grace starts (decision 0027); a client
+ * that registers during it cancels it, and once it runs out, calls `onGone` (once). Without
+ * `--parent`, nobody watches: a core started by hand in the terminal, or under systemd on the
+ * Workstation, only exits with `stop`, a signal or Ctrl-C.
  *
  * The parent is checked by pid. If it dies and the number is reused by another process before the
  * next round (one second), the core does not notice and stays up: the error is to stay, never to
  * exit for nothing nor to signal the new process. The same holds for registered clients.
  */
-export function watchParent(o: { parent: number; dir?: string; intervalMs?: number; onGone: (reason: string) => void }): () => void {
+export function watchParent(o: WatchParentOptions): () => void {
   const dir = o.dir ?? defaultDir();
+  const now = o.now ?? Date.now;
+  const graceMs = o.graceMs ?? 0;
+  const idle = new IdleExit(graceMs);
+  const reason = `o pai (pid ${o.parent}) sumiu e não há cliente registrado`;
   let notified = false;
+  const inUse = () => isPidAlive(o.parent) || liveClients(dir).length > 0 || (o.otherClients?.().length ?? 0) > 0;
   const timer = setInterval(() => {
-    if (isPidAlive(o.parent)) return;
-    const alive = liveClients(dir);
-    if (alive.length) return;
     if (notified) return;
+    const verdict = idle.observe(inUse(), now());
+    if (verdict === 'idle-started') o.onIdle?.(`${reason}; fica de pé por mais ${describeGrace(graceMs)} esperando um cliente`);
+    if (verdict !== 'expired') return;
     notified = true;
     clearInterval(timer);
-    o.onGone(`o pai (pid ${o.parent}) sumiu e não há cliente registrado`);
+    o.onGone(graceMs > 0 ? `${reason} há ${describeGrace(graceMs)}` : reason);
   }, o.intervalMs ?? PARENT_CHECK_INTERVAL_MS);
   timer.unref();
   return () => clearInterval(timer);

@@ -6,8 +6,8 @@
 // Since #221 (decision 0010) each core listens on a random port and writes itself into the instance
 // registry. The bridge reads the registry on every request and picks a core by the rule in target.ts:
 // its own installation's core, else the oldest live one; with none of its installation live, it may
-// start its own with `--parent` on itself, and that core exits when the bridge and every registered
-// client exit.
+// start its own with `--parent` on itself. That core outlives the bridge: once the bridge and every
+// registered client are gone it waits the idle grace for the next session (decision 0027), then exits.
 
 import { ownerTokenForPort } from './owner-credentials.ts';
 import { parseArgs } from 'node:util';
@@ -31,8 +31,9 @@ Without --port, the bridge reads the instance registry (~/.ahrena-console/instan
 request: the oldest live core of its installation, else the oldest live core of any installation.
 With none of its installation live, mcpb starts its own; dev and app start their own only when no
 core is live at all. The core it starts gets port 0 (or AHRENA_CONSOLE_CORE_PORT /
-AHRENA_CONSOLE_PORT, if set) and --parent on the bridge: it exits when the bridge and every
-registered client exit.
+AHRENA_CONSOLE_PORT, if set) and --parent on the bridge. The bridge registers as a client of the
+core it uses; once the bridge and every registered client are gone, the core stays up for the idle
+grace (AHRENA_CONSOLE_IDLE_GRACE_SECONDS, default 8 h) so the next session finds it, then exits.
 
 Reads JSON-RPC from stdin and answers on stdout, one message per line. Without a core up, the tool
 list answers and every call says how to start one.

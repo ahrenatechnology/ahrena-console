@@ -7,14 +7,14 @@
 import { OWNER_TOKEN } from '../owner-http.ts';
 import assert from 'node:assert/strict';
 import { spawn, type ChildProcess } from 'node:child_process';
-import { existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { createServer, type Server } from 'node:http';
 import { createServer as createNetServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { instanceId, isPidAlive, liveClients, listInstances, readLock, removeInstance, verifyInstance, writeInstance, writeLock, type Installation, type Instance } from '../../src/owner/index.ts';
+import { instanceId, isPidAlive, liveClients, liveInstanceClients, listInstances, readLock, removeInstance, verifyInstance, writeInstance, writeLock, type Installation, type Instance } from '../../src/owner/index.ts';
 import { chooseInstance, shouldStartOwn } from '../../src/mcp/target.ts';
 
 const ROOT = fileURLToPath(new URL('../../', import.meta.url));
@@ -135,6 +135,8 @@ function bridge(...args: string[]): Bridge {
 function bridgeWith(extra: NodeJS.ProcessEnv, ...args: string[]): Bridge {
   const env: NodeJS.ProcessEnv = { ...process.env, HOME: home };
   for (const name of CORE_VARS) delete env[name];
+  // No idle grace unless a test asks for one (decision 0027): the cores a bridge starts inherit it.
+  env.AHRENA_CONSOLE_IDLE_GRACE_SECONDS = '0';
   Object.assign(env, extra);
   const proc = spawn(process.execPath, ['--disable-warning=ExperimentalWarning', MCP_CLI, ...args], { env, stdio: ['pipe', 'pipe', 'pipe'] });
   children.push(proc);
@@ -400,5 +402,117 @@ describe('the MCP stdio bridge and the instance registry', { timeout: 90_000 }, 
     assert.equal((await b.call()).text, 'forced');
     await b.close();
     assert.equal(readLock(consoleDir), null);
+  });
+});
+
+// Issue #706, decision 0027: one core per data folder that outlives the session that started it.
+describe('one core that outlives the session that started it (#706)', { timeout: 90_000 }, () => {
+  /** `core start --json` as the app runs it, with the test's fake HOME and no idle grace. */
+  async function coreStart(...args: string[]): Promise<{ pid: number; started: boolean }> {
+    const env: NodeJS.ProcessEnv = { ...process.env, HOME: home };
+    for (const name of CORE_VARS) delete env[name];
+    env.AHRENA_CONSOLE_IDLE_GRACE_SECONDS = '0';
+    const p = spawn(process.execPath, ['--disable-warning=ExperimentalWarning', CORE_CLI, 'start', ...args, '--json', '--', ...HOOKS_ONLY], { env, stdio: ['ignore', 'pipe', 'ignore'] });
+    children.push(p);
+    let out = '';
+    p.stdout!.on('data', (c) => (out += c));
+    await new Promise((r) => p.once('close', r));
+    return JSON.parse(out) as { pid: number; started: boolean };
+  }
+
+  /** The live core of `installation` in the registry, once it is there. */
+  async function liveCore(installation: Installation, b: Bridge): Promise<Instance> {
+    let own: Instance | undefined;
+    assert.ok(
+      await until(() => {
+        own = listInstances({ home: consoleDir }).find((i) => i.installation === installation);
+        return own !== undefined;
+      }),
+      `no ${installation} core\n${b.stderr()}`,
+    );
+    return own!;
+  }
+
+  test('#706/AC-1 ending the session that started the core does not end it while another bridge is a client, and the next bridge reuses it', async () => {
+    const first = bridge();
+    const core = await liveCore('dev', first);
+    const lock = readLock(consoleDir);
+    assert.ok(lock && lock !== 'invalid');
+    assert.equal(lock.parent, first.proc.pid, 'the first session started it');
+    const second = bridge();
+    assert.equal((await second.call()).isError, false);
+    assert.ok(await until(() => liveClients(consoleDir).includes(second.proc.pid!)), 'the second bridge registered as a client');
+
+    await first.close();
+    await sleep(2500);
+    assert.ok(isPidAlive(core.pid), 'the core outlived the session that started it');
+
+    const third = bridge();
+    const r = await third.call();
+    assert.equal(r.isError, false, r.text);
+    assert.deepEqual(listInstances({ home: consoleDir }).map((i) => i.pid), [core.pid], 'the next bridge reused the running core and started none');
+
+    await second.close();
+    await third.close();
+    assert.ok(await until(() => !isPidAlive(core.pid)), 'with no grace and no client left, it exits');
+  });
+
+  test('#706/AC-1 the app counts as a client: it adopts the core a bridge started, and the core outlives the bridge', async () => {
+    const dataDir = join(home, 'app-data');
+    const b = bridge('--installation', 'app', '--data-dir', dataDir);
+    const core = await liveCore('app', b);
+    const app = idle();
+    const adopted = await coreStart('--installation', 'app', '--data-dir', dataDir, '--parent', String(app.pid));
+    assert.equal(adopted.started, false, 'the app adopted the running core');
+    assert.equal(adopted.pid, core.pid);
+
+    await b.close();
+    await sleep(2500);
+    assert.ok(isPidAlive(core.pid), 'the app keeps the core up after the session ends');
+
+    app.kill('SIGKILL');
+    assert.ok(await until(() => !isPidAlive(core.pid)), 'with the app gone too, it exits');
+  });
+
+  test("#706/AC-1 a bridge on the app's core keeps it up after the app is gone, without writing into the app's folder", async () => {
+    const dataDir = join(home, 'app-data');
+    const app = idle();
+    const appCore = await coreStart('--installation', 'app', '--data-dir', dataDir, '--parent', String(app.pid));
+    assert.equal(appCore.started, true);
+    const b = bridge();
+    const r = await b.call();
+    assert.equal(r.isError, false, r.text);
+    const id = instanceId('app', appCore.pid);
+    assert.ok(await until(() => liveInstanceClients(id, { home: consoleDir }).includes(b.proc.pid!)), 'registered as a client of the app core');
+    assert.deepEqual(liveClients(dataDir), [], 'nothing written into the app data folder');
+
+    app.kill('SIGKILL');
+    await sleep(2500);
+    assert.ok(isPidAlive(appCore.pid), 'the bridge keeps the app core up');
+    assert.deepEqual(listInstances({ home: consoleDir }).map((i) => i.installation), ['app'], 'and starts no dev core next to it');
+
+    await b.close();
+    assert.ok(await until(() => !isPidAlive(appCore.pid)), 'with the bridge gone too, it exits');
+    assert.ok(await until(() => !existsSync(join(consoleDir, 'instance-clients', id))), 'and takes its clients folder with it');
+  });
+
+  test('#706/AC-1 with the idle grace, the next session after a gap with no client reuses the core', async () => {
+    const grace = { AHRENA_CONSOLE_IDLE_GRACE_SECONDS: '6' };
+    const first = bridgeWith(grace);
+    const core = await liveCore('dev', first);
+    await first.close();
+    await sleep(2000);
+    assert.ok(isPidAlive(core.pid), 'no client, but within the grace');
+    assert.match(readFileSync(join(consoleDir, 'nucleo.log'), 'utf8'), /fica de pé por mais 6 s esperando um cliente/);
+
+    const next = bridgeWith(grace);
+    const r = await next.call();
+    assert.equal(r.isError, false, r.text);
+    assert.deepEqual(listInstances({ home: consoleDir }).map((i) => i.pid), [core.pid], 'the same core, not a new one');
+    await sleep(6000);
+    assert.ok(isPidAlive(core.pid), 'a client within the grace cancels it');
+
+    await next.close();
+    assert.ok(await until(() => !isPidAlive(core.pid), 20_000), 'the grace runs out with no client and the core exits');
   });
 });

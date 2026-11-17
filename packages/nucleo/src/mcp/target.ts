@@ -25,6 +25,7 @@
 
 import { resolve } from 'node:path';
 import { registerClient } from '../owner/clients.ts';
+import { registerInstanceClient } from '../owner/instance-clients.ts';
 import type { Installation } from '../owner/installation.ts';
 import { isPidAlive, probeCore } from '../owner/probe.ts';
 import { listInstances, verifyInstance, type Instance } from '../owner/registry.ts';
@@ -114,7 +115,7 @@ export class CoreResolver {
         }
         this.verified.add(instance.id);
       }
-      if (own) this.becomeClient(instance);
+      this.becomeClient(instance);
       return { key: instance.id, port: instance.port, installation: instance.installation };
     }
   }
@@ -160,14 +161,17 @@ export class CoreResolver {
   }
 
   /**
-   * The bridge keeps the core of its own installation up while it runs (the `--parent` rule). Only
-   * for the core of its own data folder: it never writes into a folder it only read in the registry.
+   * The bridge keeps the core it uses up while it runs (the `--parent` rule; decision 0027). The
+   * core of its own data folder gets it in `clientes/` there; any other core (another installation,
+   * or the same one on another `--data-dir`) gets it in the per-user `instance-clients/<id>/`: the
+   * bridge never writes into a folder it only read in the registry.
    */
   private becomeClient(i: Instance): void {
-    if (this.clientOf.has(i.id) || resolve(i.dataDir) !== resolve(this.o.dataDir)) return;
+    if (this.clientOf.has(i.id)) return;
     this.clientOf.add(i.id);
     try {
-      registerClient(this.o.parent, i.dataDir);
+      if (resolve(i.dataDir) === resolve(this.o.dataDir)) registerClient(this.o.parent, i.dataDir);
+      else registerInstanceClient(this.o.parent, i.id, { home: this.o.home });
     } catch (e) {
       this.o.log?.(`could not register as a client of ${i.id}: ${(e as Error).message}`);
     }

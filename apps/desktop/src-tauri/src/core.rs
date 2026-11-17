@@ -16,9 +16,10 @@
 // (`packages/nucleo/package.json`) and refuses an older one, so the window never shows the old /ui.
 // The swap is silent; only a failure reaches the tray, as the stopped state's reason.
 //
-// On exit, the app signals nobody: the core it started has the app as `--parent`, exits within a
-// second of the app being gone, and deletes its own entry in the instance registry
-// (~/.ahrena-console/instances/) as it goes.
+// On exit, the app signals nobody: the core it started has the app as `--parent`. Once the app and
+// every registered client (the MCP bridges) are gone, it waits the idle grace (decision 0027, 8 h by
+// default) so a reopened app or the next Claude session finds it up, then exits and deletes its own
+// entry in the instance registry (~/.ahrena-console/instances/) as it goes.
 
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};

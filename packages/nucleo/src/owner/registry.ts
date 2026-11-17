@@ -35,6 +35,11 @@ export const INSTANCES_DIR_NAME = 'instances';
 
 const ID = /^(app|dev|mcpb)-[1-9]\d*$/;
 
+/** Whether `id` is a well-formed instance id (`<installation>-<pid>`): safe as a file or folder name. */
+export function isInstanceId(id: string): boolean {
+  return ID.test(id);
+}
+
 export function instancesDir(home = consoleHome()): string {
   return join(home, INSTANCES_DIR_NAME);
 }

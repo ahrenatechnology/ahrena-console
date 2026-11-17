@@ -56,6 +56,8 @@ import { defaultProjectsRoot } from '../ingest/history/files.ts';
 import { followTranscripts } from '../ingest/history/follower.ts';
 import { Profiles } from '../profiles/profiles.ts';
 import { registerClient } from '../owner/clients.ts';
+import { resolveIdleGraceMs } from '../owner/idle-exit.ts';
+import { liveInstanceClients, removeInstanceClients } from '../owner/instance-clients.ts';
 import { isOlderCommit } from '../owner/commit.ts';
 import { claimLock, codeWarning, planStart, ReplaceError, watchParent } from '../owner/owner.ts';
 import { waitForCore, isPidAlive, reservePort, releasePort } from '../owner/probe.ts';
@@ -191,6 +193,8 @@ parseProjectEnv(process.env[PROJECT_ENV] ?? '');
 const parent = o.parent === undefined ? null : Number(o.parent);
 if (parent !== null && !(Number.isInteger(parent) && parent > 0)) throw new Error('--parent: a pid');
 if (parent !== null && !isPidAlive(parent)) throw new Error(`--parent: pid ${parent} does not exist`);
+// Decision 0027 (#706): checked before anything starts, so a wrong value stops here.
+const idleGraceMs = resolveIdleGraceMs();
 const useLock = !demo && !o.noLock;
 const commit = checkoutCommit();
 const code = { version: API_VERSION, commit, isOlderCommit };
@@ -929,6 +933,7 @@ const unregister = () => {
   if (!instance) return;
   try {
     removeInstance(instance.id, { pid: process.pid });
+    removeInstanceClients(instance.id);
   } catch (e) {
     log(`registry: ${(e as Error).message}`);
   }
@@ -951,6 +956,11 @@ const stopWatchingParent =
     : watchParent({
         parent,
         dir: dataDir,
+        graceMs: idleGraceMs,
+        // Bridges of another installation that use this core (decision 0027): they register by
+        // instance id in the per-user folder, never in this data folder.
+        otherClients: () => (instance ? liveInstanceClients(instance.id) : []),
+        onIdle: (reason) => log(reason),
         onGone: (reason) => {
           log(`${reason}; saindo`);
           void shutdown();

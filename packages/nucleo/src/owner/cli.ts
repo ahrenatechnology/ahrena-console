@@ -37,8 +37,9 @@ const HELP = `Usage: npm run core -- <command> [options] [-- API options]
                       Support/dev.ahrena.console, mcpb ~/.ahrena-console/installations/mcpb
   --port <n>          For start. Default AHRENA_CONSOLE_CORE_PORT, AHRENA_CONSOLE_PORT or 0 (the
                       system picks a free port, announced in the output). If a core is up, its port wins
-  --parent <pid>      For start: the core exits when this process is gone, unless another client
-                      is registered. When adopting, registers the pid as a client
+  --parent <pid>      For start: once this process and every registered client are gone, the core
+                      stays up for the idle grace (AHRENA_CONSOLE_IDLE_GRACE_SECONDS, default 8 h;
+                      0 exits at once) and then exits. When adopting, registers the pid as a client
   --replace           For start: also replaces the core that is up if it runs an ancestor commit of
                       this version. A core of an older version is always replaced; other code only
                       warns

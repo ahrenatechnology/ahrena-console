@@ -12,6 +12,8 @@ Um núcleo por **instalação**, em porta aleatória (issue #221; decisão [0010
 | [commit.ts](commit.ts) | O commit deste checkout e se outro commit é ancestral dele |
 | [start.ts](start.ts) | `startOrAdopt`: o `start` como função, para o comando e para a ponte do MCP |
 | [clients.ts](clients.ts) | Clientes registrados em `<pasta de dados>/clientes/<pid>` |
+| [instance-clients.ts](instance-clients.ts) | Clientes de um núcleo de outra pasta de dados, em `~/.ahrena-console/instance-clients/<id>/<pid>` (decisão 0027) |
+| [idle-exit.ts](idle-exit.ts) | O prazo ocioso: quanto tempo o núcleo fica de pé sem pai nem cliente (decisão 0027) |
 | [owner.ts](owner.ts) | As regras: `examine`, `planStart` (adotar, recuperar, substituir), `claimLock`, `stopCore`, `watchParent` |
 | [cli.ts](cli.ts) | `npm run core -- status\|start\|stop` |
 
@@ -102,11 +104,12 @@ Parar o velho é SIGTERM e, depois de 10 s, SIGKILL. Se ele não sai (ou se a po
 
 - `--parent <pid>` no núcleo que sobe (na API também `--parent`): ele vigia esse pid a cada segundo.
 - `--parent <pid>` em quem adota: o pid vira **cliente registrado** (`<pasta de dados>/clientes/<pid>`).
-- O núcleo **sai** quando o pai morreu **e** nenhum cliente registrado está vivo. Enquanto houver um, fica. Cliente morto é apagado da pasta.
-- Sem `--parent`, ninguém vigia: o núcleo subido no terminal só sai com `stop`, SIGTERM ou Ctrl-C, mesmo que clientes se registrem.
+- Uma ponte do MCP que usa o núcleo de **outra** pasta de dados (a do checkout no núcleo do app) se registra em `~/.ahrena-console/instance-clients/<id da instância>/<pid>` ([instance-clients.ts](instance-clients.ts)), e o núcleo conta esses junto com `clientes/`. A pasta sai com o núcleo.
+- Quando o pai morreu **e** nenhum cliente registrado está vivo, o núcleo fica de pé pelo **prazo ocioso** ([decisão 0027](../../../../docs/decisoes/0027-single-core-lifecycle.md), [idle-exit.ts](idle-exit.ts)): `AHRENA_CONSOLE_IDLE_GRACE_SECONDS`, 8 h por padrão; `0` é o comportamento de antes, sair na hora. Um cliente que se registra dentro do prazo o cancela. Esgotado o prazo sem cliente, o núcleo **sai**. Cliente morto é apagado da pasta.
+- Sem `--parent`, ninguém vigia: o núcleo subido no terminal (ou sob systemd, na Workstation) só sai com `stop`, SIGTERM ou Ctrl-C, mesmo que clientes se registrem.
 - O pai e os clientes são conferidos pelo pid, a cada segundo. Se um morrer e o número for reaproveitado antes da próxima volta, o núcleo não percebe e fica de pé: o erro possível é ficar, nunca sair à toa nem sinalizar o processo novo.
 
-Exemplo: o app sobe com `--parent <app>`; a extensão adota com `--parent <extensão>`. O app cai: o núcleo fica pela extensão. O Claude Desktop fecha: o núcleo sai e apaga a trava.
+Exemplo: o app sobe com `--parent <app>`; a extensão adota com `--parent <extensão>`. O app cai: o núcleo fica pela extensão. O Claude Desktop fecha: o núcleo espera o prazo ocioso; se nenhuma sessão nem o app voltar nesse tempo, sai e apaga a trava.
 
 ## O comando
 
@@ -138,7 +141,7 @@ Os nomes antigos (`npm run nucleo`, `subir`, `parar`, `--porta`, `--pai`, `--sub
 | Quem | Como |
 | --- | --- |
 | **App de bandeja** (#87, #221) | `node <núcleo>/src/owner/cli.ts start --installation app --data-dir <pasta de dados do app> --port 0 --parent <pid do app> --json`. Lê `porta`, `pid` e `subiu`, e recusa a linha se `installation` não for `app` ou se `dataDir` não for a pasta dele: nunca usa o núcleo de outra instalação. Ao sair, não sinaliza ninguém: o núcleo sai sozinho pelo `--parent` e apaga a entrada do registro ([apps/desktop/README.md](../../../../apps/desktop/README.md)) |
-| **Extensão `.mcpb` e a ponte stdio do MCP** | `npm run mcp -- --installation <i>` (src/mcp/cli.ts) lê o registro a cada pedido: o núcleo da instalação dela, senão o vivo mais antigo. Sem nenhum da instalação dela, a `mcpb` chama `startOrAdopt` (porta `0`, `parent` no próprio pid); `dev` e `app` só quando nenhum núcleo está vivo. A regra está em [src/mcp/README.md](../mcp/README.md). Quando o Desktop fecha, a ponte sai e o núcleo que ela subiu sai junto, se ninguém mais estiver registrado |
+| **Extensão `.mcpb` e a ponte stdio do MCP** | `npm run mcp -- --installation <i>` (src/mcp/cli.ts) lê o registro a cada pedido: o núcleo da instalação dela, senão o vivo mais antigo. Sem nenhum da instalação dela, a `mcpb` chama `startOrAdopt` (porta `0`, `parent` no próprio pid); `dev` e `app` só quando nenhum núcleo está vivo. A regra está em [src/mcp/README.md](../mcp/README.md). Quando o Desktop fecha, a ponte sai; o núcleo que ela subiu espera o prazo ocioso e só então sai, se ninguém mais se registrou |
 | **Terminal** | `npm run core -- start` (segundo plano) ou `npm run api` (primeiro plano), sem `--parent`. `npm run core -- status` e `stop` |
 | **Plugin e hooks** | Hoje ainda usam `AHRENA_CONSOLE_PORT` ou 4720. Na #221 passam a ler o registro e mandar para todos os núcleos vivos (decisão 0010, item 4) |
 

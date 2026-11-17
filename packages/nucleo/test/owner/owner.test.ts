@@ -94,6 +94,8 @@ interface Run {
 function envWithoutCoreVars(): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = { ...process.env, HOME: home };
   for (const name of ['AHRENA_CONSOLE_PORT', 'AHRENA_CONSOLE_CORE_PORT', 'AHRENA_CONSOLE_DB', 'AHRENA_CONSOLE_DATA_DIR', 'AHRENA_CONSOLE_HOME']) delete env[name];
+  // No idle grace unless a test asks for one (decision 0027): most tests watch a core exit when its parent dies.
+  env.AHRENA_CONSOLE_IDLE_GRACE_SECONDS = '0';
   return env;
 }
 
@@ -230,6 +232,40 @@ describe('clients and the parent', () => {
     assert.ok(await until(() => notices.length === 1, 1000));
     await sleep(100);
     assert.equal(notices.length, 1, 'notifies only once');
+    stop();
+  });
+
+  test('#706 with an idle grace, a dead parent with no client waits the grace, and a client that registers during it cancels it', async () => {
+    const dead = await deadPid();
+    const idleNotices: string[] = [];
+    const gone: string[] = [];
+    const stop = watchParent({ parent: dead, dir, intervalMs: 20, graceMs: 400, onIdle: (m) => idleNotices.push(m), onGone: (m) => gone.push(m) });
+    await sleep(200);
+    assert.equal(idleNotices.length, 1, 'the grace started');
+    assert.match(idleNotices[0]!, /sumiu e não há cliente registrado; fica de pé por mais .+ esperando um cliente/);
+    // A new session attaches within the grace: the core stays.
+    registerClient(process.pid, dir);
+    await sleep(600);
+    assert.deepEqual(gone, [], 'a client within the grace cancels it');
+    // It leaves again: a fresh grace, then the exit.
+    rmSync(join(dir, 'clientes'), { recursive: true });
+    await sleep(200);
+    assert.deepEqual(gone, [], 'the new grace has not run out yet');
+    assert.equal(idleNotices.length, 2, 'a second grace started');
+    assert.ok(await until(() => gone.length === 1, 2000));
+    assert.match(gone[0]!, /o pai \(pid \d+\) sumiu e não há cliente registrado há/);
+    stop();
+  });
+
+  test('#706 a client of another installation (instance-clients) keeps the core up like one in clientes/', async () => {
+    const dead = await deadPid();
+    const gone: string[] = [];
+    let others = [process.pid];
+    const stop = watchParent({ parent: dead, dir, intervalMs: 20, otherClients: () => others, onGone: (m) => gone.push(m) });
+    await sleep(150);
+    assert.deepEqual(gone, []);
+    others = [];
+    assert.ok(await until(() => gone.length === 1, 1000));
     stop();
   });
 });
@@ -440,6 +476,38 @@ describe('--parent', { timeout: 60_000 }, () => {
     extension.kill('SIGKILL');
     const s = await a.done;
     assert.equal(s.code, 0);
+    assert.equal(readLock(dir), null);
+  });
+
+  test('#706/AC-1 with the idle grace, the core outlives its parent and the next start adopts it instead of starting another', async () => {
+    const parent = idle();
+    const a = run(API_CLI, ['--port', String(await freePort()), ...HOOKS_ONLY, '--parent', String(parent.pid)], { env: { AHRENA_CONSOLE_IDLE_GRACE_SECONDS: '60' } });
+    const t = await liveLock();
+    let stderr = '';
+    a.proc.stderr!.on('data', (c) => (stderr += c));
+    parent.kill('SIGKILL');
+    // The parent's session is over and nobody is registered: the core waits for the next one.
+    assert.ok(await until(() => /fica de pé por mais 1 min esperando um cliente/.test(stderr), 5000), stderr);
+    assert.equal(a.proc.exitCode, null, 'the core is still up');
+
+    const next = idle();
+    const r = await core('start', '--parent', String(next.pid), '--json', '--', ...HOOKS_ONLY).done;
+    const j = JSON.parse(r.stdout);
+    assert.equal(j.started, false, 'adopted, not started');
+    assert.equal(j.pid, t.pid, 'the same core');
+    assert.deepEqual(liveClients(dir), [next.pid]);
+  });
+
+  test('#706 once the idle grace runs out with no client, the core exits and deletes the lock', async () => {
+    const parent = idle();
+    const a = run(API_CLI, ['--port', String(await freePort()), ...HOOKS_ONLY, '--parent', String(parent.pid)], { env: { AHRENA_CONSOLE_IDLE_GRACE_SECONDS: '2' } });
+    await liveLock();
+    parent.kill('SIGKILL');
+    await sleep(1500);
+    assert.equal(a.proc.exitCode, null, 'still within the grace');
+    const s = await a.done;
+    assert.equal(s.code, 0);
+    assert.match(s.stderr, /o pai \(pid \d+\) sumiu e não há cliente registrado há 2 s; saindo/);
     assert.equal(readLock(dir), null);
   });
 

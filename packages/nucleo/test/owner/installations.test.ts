@@ -86,6 +86,8 @@ afterEach(async () => {
 function testEnv(extra: NodeJS.ProcessEnv = {}): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = { ...process.env, HOME: home };
   for (const name of CORE_VARS) delete env[name];
+  // No idle grace (decision 0027): these tests watch a core exit when its parent dies.
+  env.AHRENA_CONSOLE_IDLE_GRACE_SECONDS = '0';
   return { ...env, ...extra };
 }
 

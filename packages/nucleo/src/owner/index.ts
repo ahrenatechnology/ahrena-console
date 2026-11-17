@@ -20,6 +20,8 @@ export { startOrAdopt, runningOutput, type StartOutput, type StartOptions } from
 export { codeCommit, isOlderCommit } from './commit.ts';
 export { readLock, writeLock, createLock, removeLock, releaseLock, prepareDir, lockFilePath, defaultDir, newToken, LOCK_FILE_NAME, type Lock } from './lock.ts';
 export { registerClient, removeClient, liveClients } from './clients.ts';
+export { registerInstanceClient, liveInstanceClients, removeInstanceClients, INSTANCE_CLIENTS_DIR_NAME } from './instance-clients.ts';
+export { IdleExit, resolveIdleGraceMs, describeGrace, DEFAULT_IDLE_GRACE_MS, IDLE_GRACE_ENV, type IdleVerdict } from './idle-exit.ts';
 export { isPidAlive, probe, probeCore, waitForCore, compareVersions, reservePort, releasePort, CORE_NAME, type CoreView } from './probe.ts';
 export {
   INSTALLATIONS,
