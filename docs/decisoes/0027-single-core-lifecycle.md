@@ -1,6 +1,6 @@
 # 0027 · Um núcleo por pasta de dados que sobrevive à sessão que o abriu: prazo ocioso e clientes de qualquer instalação
 
-- **Status:** aceita (escolha do prazo derivada do código e do incidente de 17/11; **a confirmar na revisão** desta issue)
+- **Status:** aceita
 - **Data:** 2026-11-17
 - **Issue:** [#706](https://github.com/ahrenatechnology/ahrena-console/issues/706), parte 1 de 3 da [#705](https://github.com/ahrenatechnology/ahrena-console/issues/705)
 - **Toca:** [0010](0010-core-per-installation.md) (item 5: quem acha o núcleo; a regra do `--parent`). O resto da 0010 continua valendo: um núcleo por instalação, porta aleatória, registro de instâncias.
@@ -28,7 +28,7 @@ A Workstation roda o núcleo sob systemd (0021, `scripts/remote-core/`), com `sr
    - com `--parent`: o pai morreu, nenhum cliente está vivo, e isso durou o **prazo ocioso** inteiro.
 
    Sem `--parent` nada muda: o núcleo do terminal e o da Workstation só saem pelos dois primeiros.
-2. **O prazo ocioso.** 8 horas por padrão, um dia de trabalho com as pausas dele (almoço, reunião, a tampa fechada). `AHRENA_CONSOLE_IDLE_GRACE_SECONDS` muda o prazo, em segundos inteiros; `0` volta ao comportamento de antes (sair na hora). Um valor inválido para o núcleo antes de abrir o banco. A conta é de [`idle-exit.ts`](../../packages/nucleo/src/owner/idle-exit.ts), uma máquina de estados sem relógio: em uso, ocioso desde *t*, expirado. O núcleo escreve uma linha no log quando o prazo começa ("o pai … sumiu e não há cliente registrado; fica de pé por mais 8 h esperando um cliente") e outra quando sai ("… há 8 h; saindo").
+2. **O prazo ocioso.** 8 horas por padrão, um dia de trabalho com as pausas dele (almoço, reunião). `AHRENA_CONSOLE_IDLE_GRACE_SECONDS` muda o prazo, em segundos inteiros; `0` volta ao comportamento de antes (sair na hora). Com `--parent`, um valor inválido para o núcleo antes de abrir o banco; sem `--parent` a variável nem é lida, e o núcleo do terminal e o da Workstation sobem como antes. A conta é de [`idle-exit.ts`](../../packages/nucleo/src/owner/idle-exit.ts), uma máquina de estados sem relógio: em uso, ocioso desde *t*, expirado. O núcleo escreve uma linha no log quando o prazo começa ("parent … is gone and no client is registered; staying up 8 h longer waiting for a client") e outra quando sai ("… no client has been registered for 8 h; exiting").
 3. **Como as pontes se ligam.** A ponte lê o registro a cada pedido, como na 0010, e se registra **uma vez por instância** como cliente do núcleo que escolheu:
    - núcleo da própria pasta de dados: `<pasta de dados>/clientes/<pid>`, como antes;
    - qualquer outro (o do app, para a ponte do checkout; o da mesma instalação com outro `--data-dir`): `~/.ahrena-console/instance-clients/<id da instância>/<pid>`, na pasta por usuário onde já mora o registro de instâncias. A ponte continua sem escrever numa pasta de dados que só leu no registro; o id é conferido pelo formato do registro (`app|dev|mcpb-<pid>`), nunca vira caminho livre.
@@ -50,6 +50,7 @@ A Workstation roda o núcleo sob systemd (0021, `scripts/remote-core/`), com `sr
 
 - Uma sessão nova dentro de 8 h do fim da anterior acha o núcleo de pé: sem início, sem reimportação. O critério AC-1 da #706 é provado por `test/mcp/bridge.test.ts` (os testes `#706/AC-1`) e `test/owner/owner.test.ts`.
 - Fechar o app não encerra mais o núcleo dele na hora: ele fica pelo prazo ocioso, ou enquanto uma ponte o usar. Quem quer o núcleo fora já roda `npm run core -- stop --installation app`. A atualização do app continua trocando o núcleo de versão mais velha (#220).
+- O prazo conta tempo de relógio, não tempo acordado. Um Mac que dorme mais que o prazo (a tampa fechada a noite toda) acha o prazo vencido ao acordar, e o núcleo sai. A sessão seguinte sobe um núcleo novo, cujo início é barato porque a importação do histórico é incremental (#707).
 - Um núcleo ocioso segue o histórico e recebe os hooks por até 8 h sem ninguém olhando: memória e um pouco de CPU por esse tempo, em troca de não perder eventos entre sessões.
 - A pasta `~/.ahrena-console/instance-clients/` é nova. Um núcleo morto com SIGKILL deixa a pasta dele para trás; ela só tem arquivos de pid e não é lida por mais ninguém.
 - Os testes que observam a saída imediata pelo `--parent` rodam com `AHRENA_CONSOLE_IDLE_GRACE_SECONDS=0`.

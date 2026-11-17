@@ -193,8 +193,9 @@ parseProjectEnv(process.env[PROJECT_ENV] ?? '');
 const parent = o.parent === undefined ? null : Number(o.parent);
 if (parent !== null && !(Number.isInteger(parent) && parent > 0)) throw new Error('--parent: a pid');
 if (parent !== null && !isPidAlive(parent)) throw new Error(`--parent: pid ${parent} does not exist`);
-// Decision 0027 (#706): checked before anything starts, so a wrong value stops here.
-const idleGraceMs = resolveIdleGraceMs();
+// Decision 0027 (#706): checked before anything starts, so a wrong value stops here. Only a core
+// with --parent has a grace: without it (terminal, Workstation) the variable is not read.
+const idleGraceMs = parent === null ? 0 : resolveIdleGraceMs();
 const useLock = !demo && !o.noLock;
 const commit = checkoutCommit();
 const code = { version: API_VERSION, commit, isOlderCommit };
@@ -933,9 +934,13 @@ const unregister = () => {
   if (!instance) return;
   try {
     removeInstance(instance.id, { pid: process.pid });
-    removeInstanceClients(instance.id);
   } catch (e) {
     log(`registry: ${(e as Error).message}`);
+  }
+  try {
+    removeInstanceClients(instance.id);
+  } catch (e) {
+    log(`instance clients: ${(e as Error).message}`);
   }
 };
 if (instance) {
@@ -962,7 +967,8 @@ const stopWatchingParent =
         otherClients: () => (instance ? liveInstanceClients(instance.id) : []),
         onIdle: (reason) => log(reason),
         onGone: (reason) => {
-          log(`${reason}; saindo`);
+          // The grace lines are new and English (decision 0027); the immediate exit keeps its pt-BR line.
+          log(idleGraceMs > 0 ? `${reason}; exiting` : `${reason}; saindo`);
           void shutdown();
         },
       });

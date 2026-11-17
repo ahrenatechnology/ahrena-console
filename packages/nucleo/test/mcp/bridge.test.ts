@@ -503,7 +503,7 @@ describe('one core that outlives the session that started it (#706)', { timeout:
     await first.close();
     await sleep(2000);
     assert.ok(isPidAlive(core.pid), 'no client, but within the grace');
-    assert.match(readFileSync(join(consoleDir, 'nucleo.log'), 'utf8'), /fica de pé por mais 6 s esperando um cliente/);
+    assert.match(readFileSync(join(consoleDir, 'nucleo.log'), 'utf8'), /staying up 6 s longer waiting for a client/);
 
     const next = bridgeWith(grace);
     const r = await next.call();

@@ -242,8 +242,8 @@ describe('clients and the parent', () => {
     const stop = watchParent({ parent: dead, dir, intervalMs: 20, graceMs: 400, onIdle: (m) => idleNotices.push(m), onGone: (m) => gone.push(m) });
     await sleep(200);
     assert.equal(idleNotices.length, 1, 'the grace started');
-    assert.match(idleNotices[0]!, /sumiu e não há cliente registrado; fica de pé por mais .+ esperando um cliente/);
-    // A new session attaches within the grace: the core stays.
+    assert.match(idleNotices[0]!, /is gone and no client is registered; staying up .+ longer waiting for a client/);
+    // A new session attaches within the grace: the core stays (decision 0027).
     registerClient(process.pid, dir);
     await sleep(600);
     assert.deepEqual(gone, [], 'a client within the grace cancels it');
@@ -253,7 +253,7 @@ describe('clients and the parent', () => {
     assert.deepEqual(gone, [], 'the new grace has not run out yet');
     assert.equal(idleNotices.length, 2, 'a second grace started');
     assert.ok(await until(() => gone.length === 1, 2000));
-    assert.match(gone[0]!, /o pai \(pid \d+\) sumiu e não há cliente registrado há/);
+    assert.match(gone[0]!, /parent \(pid \d+\) is gone and no client has been registered for/);
     stop();
   });
 
@@ -487,7 +487,7 @@ describe('--parent', { timeout: 60_000 }, () => {
     a.proc.stderr!.on('data', (c) => (stderr += c));
     parent.kill('SIGKILL');
     // The parent's session is over and nobody is registered: the core waits for the next one.
-    assert.ok(await until(() => /fica de pé por mais 1 min esperando um cliente/.test(stderr), 5000), stderr);
+    assert.ok(await until(() => /staying up 1 min longer waiting for a client/.test(stderr), 5000), stderr);
     assert.equal(a.proc.exitCode, null, 'the core is still up');
 
     const next = idle();
@@ -507,7 +507,7 @@ describe('--parent', { timeout: 60_000 }, () => {
     assert.equal(a.proc.exitCode, null, 'still within the grace');
     const s = await a.done;
     assert.equal(s.code, 0);
-    assert.match(s.stderr, /o pai \(pid \d+\) sumiu e não há cliente registrado há 2 s; saindo/);
+    assert.match(s.stderr, /parent \(pid \d+\) is gone and no client has been registered for 2 s; exiting/);
     assert.equal(readLock(dir), null);
   });
 

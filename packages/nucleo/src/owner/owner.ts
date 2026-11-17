@@ -197,7 +197,7 @@ export interface WatchParentOptions {
    * `AHRENA_CONSOLE_IDLE_GRACE_SECONDS` says otherwise).
    */
   graceMs?: number;
-  /** Clients registered outside the data folder (src/owner/instance-clients.ts), counted with `clientes/`. */
+  /** Clients registered outside the data folder (src/owner/instance-clients.ts), counted with `clientes/` (decision 0027). */
   otherClients?: () => number[];
   /** Called once each time the core becomes idle and the grace starts (for the log line). */
   onIdle?: (reason: string) => void;
@@ -227,11 +227,11 @@ export function watchParent(o: WatchParentOptions): () => void {
   const timer = setInterval(() => {
     if (notified) return;
     const verdict = idle.observe(inUse(), now());
-    if (verdict === 'idle-started') o.onIdle?.(`${reason}; fica de pé por mais ${describeGrace(graceMs)} esperando um cliente`);
+    if (verdict === 'idle-started') o.onIdle?.(`parent (pid ${o.parent}) is gone and no client is registered; staying up ${describeGrace(graceMs)} longer waiting for a client`);
     if (verdict !== 'expired') return;
     notified = true;
     clearInterval(timer);
-    o.onGone(graceMs > 0 ? `${reason} há ${describeGrace(graceMs)}` : reason);
+    o.onGone(graceMs > 0 ? `parent (pid ${o.parent}) is gone and no client has been registered for ${describeGrace(graceMs)}` : reason);
   }, o.intervalMs ?? PARENT_CHECK_INTERVAL_MS);
   timer.unref();
   return () => clearInterval(timer);
