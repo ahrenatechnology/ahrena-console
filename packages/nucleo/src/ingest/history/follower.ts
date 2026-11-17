@@ -6,7 +6,8 @@
 // - a periodic scan, as a fallback: the watch loses events on macOS (FSEvents merges or drops
 //   notices, folders created later sometimes do not notify) and fails if the root does not exist yet.
 //
-// Cost: the follower keeps each file's size and mtime in memory. A round only runs `stat` (on the
+// Cost: on start the follower loads the importer's per-file markers from the database in one query,
+// so a restart imports only the files whose size or mtime moved since the last import. The follower keeps each file's size and mtime in memory. A round only runs `stat` (on the
 // notified paths, or on all of them in a scan) and calls the importer only with the files whose
 // `stat` changed. An idle file costs no read and no database query.
 //
@@ -15,7 +16,7 @@
 
 import { existsSync, watch, type FSWatcher } from 'node:fs';
 import { basename, dirname } from 'node:path';
-import type { StoragePort } from '../../storage-port.ts';
+import type { ImportMarker, StoragePort } from '../../storage-port.ts';
 import { classifyTranscript, defaultProjectsRoot, discoverTranscripts, fileStat, type FileStat, type TranscriptFile } from './files.ts';
 import { importHistory, type ImportOptions, type ImportReport } from './importer.ts';
 
@@ -73,7 +74,7 @@ const emptyReport = (): ImportReport => ({
   filesRewound: 0,
 });
 
-const sameStat = (a: FileStat | undefined, b: FileStat) => a !== undefined && a.size === b.size && a.mtimeMs === b.mtimeMs;
+const sameStat = (a: ImportMarker | undefined, b: FileStat) => a !== undefined && a.size === b.size && a.mtimeMs === b.mtimeMs;
 
 export function followTranscripts(options: FollowOptions): TranscriptFollower {
   const root = options.root ?? defaultProjectsRoot();
@@ -96,6 +97,12 @@ export function followTranscripts(options: FollowOptions): TranscriptFollower {
   /** Rodada em andamento; as rodadas nunca se sobrepõem. */
   let current: Promise<ImportReport> = Promise.resolve(emptyReport());
   const stats = { rounds: 0, scans: 0, filesImported: 0 };
+  /**
+   * What the database says each file looked like at its last import, loaded once per start. A file
+   * whose `stat` still matches is already imported: it joins `known` without the importer loading its
+   * session or opening it, so a restart reads only the files that changed (#707).
+   */
+  let markers: Map<string, ImportMarker> | null = null;
 
   const startWatch = () => {
     if (!useWatch || watcher || !existsSync(root)) return;
@@ -156,6 +163,7 @@ export function followTranscripts(options: FollowOptions): TranscriptFollower {
       }
     }
 
+    if (markers === null) markers = await options.storage.listImportMarkers();
     const changed: TranscriptFile[] = [];
     const seen = new Map<string, FileStat>();
     for (const file of files) {
@@ -165,6 +173,10 @@ export function followTranscripts(options: FollowOptions): TranscriptFollower {
         continue;
       }
       seen.set(file.path, st);
+      if (!known.has(file.path)) {
+        const marker = markers.get(file.relPath);
+        if (marker && sameStat(marker, st)) known.set(file.path, st);
+      }
       if (!sameStat(known.get(file.path), st)) changed.push(file);
     }
     if (scan) {
@@ -224,6 +236,7 @@ export function followTranscripts(options: FollowOptions): TranscriptFollower {
       watcher?.close();
       watcher = null;
       dirty.clear();
+      markers = null;
       await current;
     },
 

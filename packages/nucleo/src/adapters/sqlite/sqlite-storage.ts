@@ -21,6 +21,7 @@ import { validateContextMeter, type ContextMeter } from '../../context/model.ts'
 import {
   pageSize,
   type EventFacets,
+  type ImportMarker,
   type ListEventsQuery,
   type ListRecentEventsQuery,
   type ListSessionsQuery,
@@ -465,6 +466,27 @@ export class SqliteStorage implements StoragePort {
       .prepare('SELECT * FROM agents WHERE session_id = ? ORDER BY started_at, id')
       .all(sessionId)
       .map(toAgent);
+  }
+
+  async listImportMarkers(): Promise<Map<string, ImportMarker>> {
+    const rows = this.db
+      .prepare(
+        `SELECT json_extract(metadata, '$.import.file') AS file, json_extract(metadata, '$.import.size') AS size,
+                json_extract(metadata, '$.import.mtimeMs') AS mtime_ms
+           FROM sessions WHERE json_extract(metadata, '$.import.file') IS NOT NULL
+         UNION ALL
+         SELECT json_extract(metadata, '$.import.file'), json_extract(metadata, '$.import.size'),
+                json_extract(metadata, '$.import.mtimeMs')
+           FROM agents WHERE json_extract(metadata, '$.import.file') IS NOT NULL`,
+      )
+      .all();
+    const out = new Map<string, ImportMarker>();
+    for (const r of rows) {
+      if (typeof r.file === 'string' && typeof r.size === 'number' && typeof r.mtime_ms === 'number') {
+        out.set(r.file, { size: r.size, mtimeMs: r.mtime_ms });
+      }
+    }
+    return out;
   }
 
   private validateEntityScope(sessionId: string, id: string, kind: 'event' | 'agent'): void {

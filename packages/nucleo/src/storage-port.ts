@@ -98,6 +98,12 @@ export interface EventFacets {
   toolNames: string[];
 }
 
+/** Size and mtime a transcript had when it was last imported. */
+export interface ImportMarker {
+  size: number;
+  mtimeMs: number;
+}
+
 export interface StoragePort {
   /** Grava a sessão inteira (cria ou substitui). */
   putSession(session: Session): Promise<void>;
@@ -116,6 +122,12 @@ export interface StoragePort {
   getAgent(id: string): Promise<Agent | null>;
   /** Na ordem em que começaram. */
   listAgents(sessionId: string): Promise<Agent[]>;
+  /**
+   * The history import's per-file markers (`metadata.import` of every session and agent), keyed by
+   * the transcript's path relative to the projects root, in one query. Lets a restart tell which
+   * files changed without loading each session (#707).
+   */
+  listImportMarkers(): Promise<Map<string, ImportMarker>>;
 
   /** Acrescenta o evento. Devolve `false` se o id já existia (o evento não é duplicado nem alterado). */
   appendEvent(event: SessionEvent): Promise<boolean>;
