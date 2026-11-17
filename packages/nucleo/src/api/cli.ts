@@ -964,17 +964,29 @@ const stopWatcher = demo ? () => {} : machine.start();
 for (const a of samplers) a.start();
 remoteMachines?.start();
 githubSync?.start();
+// #708: the events retention runs in every non-demo core, never on the startup hot path: after the
+// initial import when there is a follower, otherwise (--no-history, or the follower failed) on its own first delay.
+let retentionStarted = false;
+const startRetention = () => {
+  if (retentionStarted) return;
+  retentionStarted = true;
+  stopEventsRetention = startEventsRetention({ db: sqlite.db, env: process.env, log });
+};
 if (follower) {
   follower
     .start()
     .then(() => {
       historyReady = true;
       log(`history imported; following ${o.projects ?? '~/.claude/projects'}`);
-      // #708: the events retention starts only now, after the initial import, never at startup.
-      if (!demo) stopEventsRetention = startEventsRetention({ db: sqlite.db, env: process.env, log });
+      startRetention();
       return reprocessOnce();
     })
-    .catch((e) => log(`follower did not start: ${(e as Error).message}`));
+    .catch((e) => {
+      log(`follower did not start: ${(e as Error).message}`);
+      startRetention();
+    });
+} else if (!demo) {
+  startRetention();
 }
 
 // Once per database, after the initial import: plans and decisions of the sessions imported before the

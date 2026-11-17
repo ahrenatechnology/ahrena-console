@@ -81,12 +81,13 @@ describe('events retention', () => {
     await store.close();
   });
 
-  test('a batch never deletes more than its limit', () => {
+  test('a batch never deletes more than its limit', async () => {
     const store = open();
     for (let i = 0; i < 12; i++) insert(store.db, `old-${i}`, 60 * DAY + i);
     insert(store.db, 'new', 0);
     assert.equal(pruneEventsBatch(store.db, new Date(NOW - 30 * DAY).toISOString(), 5), 5);
     assert.equal(ids(store.db).length, 8);
+    await store.close();
   });
 
   test('AC-3: compaction runs after a large delete and gives pages back to the file', async () => {
