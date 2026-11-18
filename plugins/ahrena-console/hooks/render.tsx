@@ -80,7 +80,7 @@ const HOW_TO_START = 'https://github.com/ahrenatechnology/ahrena-console/tree/ma
 const ORANGE = paleta.orange['500']
 const ROSE = paleta.rose['500']
 const YELLOW = paleta.yellow['500']
-// Success is neutral gray with the check glyph, never green (issue 700): the completed status's own color.
+// Success is neutral gray with the check glyph, never green (#700): the completed status's own color.
 const SUCCESS = STATUS_COR.completed.dark.text
 const RED = paleta.red['500']
 const RED_TEXT = STATUS_COR.error.dark.text
@@ -1178,7 +1178,7 @@ function subagentsFooter(outside: PanelSubagent[]): string {
 
 /**
  * O card Subagentes (pnSubs do P1): "N ativos" à direita do cabeçalho, a barra por estado (ativo
- * laranja, concluído cinza com ✓ (issue 700), erro vermelho) e até 3 linhas "glifo tipo · descrição … tempo", os
+ * laranja, concluído cinza com ✓ (#700), erro vermelho) e até 3 linhas "glifo tipo · descrição … tempo", os
  * concluídos também. O pé abre o grafo da sessão (P11). Nunca só o cabeçalho.
  */
 function subagentsCard(c: DrawContext, s: Panel['subagents']) {
