@@ -20,6 +20,11 @@
     "ahrena-engineering-delivery@ahrena": true,
     "ahrena-engineering-backend@ahrena": true,
     "ahrena-engineering-quality@ahrena": true,
-    "ahrena-engineering-security@ahrena": true
+    "ahrena-engineering-security@ahrena": true,
+    "ahrena-engineering-development@ahrena": true,
+    "ahrena-engineering-data@ahrena": true,
+    "ahrena-engineering-database@ahrena": true,
+    "ahrena-engineering-code-review@ahrena": true,
+    "ahrena-engineering-devops@ahrena": true
   }
 }
