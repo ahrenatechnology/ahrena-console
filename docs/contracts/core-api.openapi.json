@@ -6205,6 +6205,71 @@
         },
         "additionalProperties": false
       },
+      "DiagnosisSessionLoadItem": {
+        "type": "object",
+        "description": "The load of one agent session: the processes that descend from it, found by climbing each process's parent chain to a live pid of the core's registry of sessions whose recorded start equals the pid's real start. The command line never comes whole: `rootCommand` is the program and at most two plain words.",
+        "required": [
+          "sessionId",
+          "title",
+          "rootCommand",
+          "cwd",
+          "processCount",
+          "cpuPct"
+        ],
+        "properties": {
+          "sessionId": {
+            "type": "string"
+          },
+          "title": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The title the console knows for the session; null when it knows none."
+          },
+          "rootCommand": {
+            "type": "string",
+            "description": "What the session is running, e.g. `pnpm test`: the command of the child whose subtree carries the most CPU, past the shell wrappers (`zsh -c`)."
+          },
+          "cwd": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The session's folder, as the registry records it."
+          },
+          "processCount": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Processes of the session, its own included."
+          },
+          "cpuPct": {
+            "type": "number",
+            "minimum": 0,
+            "description": "The summed CPU of those processes, one decimal; more than 100 when several cores are in use."
+          }
+        },
+        "additionalProperties": false
+      },
+      "DiagnosisOutsideSession": {
+        "type": "object",
+        "description": "The processes that descend from no live registered session (a pid reused by another process, a dead session, no registered ancestor), as one line apart from the sessions. Never attributed to a guessed session.",
+        "required": [
+          "processCount",
+          "cpuPct"
+        ],
+        "properties": {
+          "processCount": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "cpuPct": {
+            "type": "number",
+            "minimum": 0
+          }
+        },
+        "additionalProperties": false
+      },
       "DiagnosisSwapItem": {
         "type": "object",
         "required": [
@@ -6435,6 +6500,46 @@
             ],
             "properties": {
               "id": {
+                "const": "processes-by-session"
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "ok",
+                  "unavailable",
+                  "timeout"
+                ]
+              },
+              "items": {
+                "type": "array",
+                "description": "Up to 10 sessions, by summed CPU, highest first.",
+                "items": {
+                  "$ref": "#/components/schemas/DiagnosisSessionLoadItem"
+                },
+                "maxItems": 10
+              },
+              "reason": {
+                "type": "string",
+                "maxLength": 120
+              },
+              "partial": {
+                "$ref": "#/components/schemas/DiagnosisPartial"
+              },
+              "outsideSession": {
+                "$ref": "#/components/schemas/DiagnosisOutsideSession"
+              }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": [
+              "id",
+              "status",
+              "items"
+            ],
+            "properties": {
+              "id": {
                 "const": "swap"
               },
               "status": {
@@ -6620,7 +6725,7 @@
       },
       "Diagnosis": {
         "type": "object",
-        "description": "The read-only diagnosis of an open saturation alert: who consumes the resource that saturated. Every collector runs a fixed command of the catalog and nothing in the request reaches a command. Each alert kind gets its own sections, in this order: `load-high` gets processes-by-cpu; `memory-high` and `swap-high` get processes-by-rss, processes-by-cpu and swap; `volume-full` gets largest-folders, docker-df, known-caches, and journal on Linux only.",
+        "description": "The read-only diagnosis of an open saturation alert: who consumes the resource that saturated. Every collector runs a fixed command of the catalog and nothing in the request reaches a command. Each alert kind gets its own sections, in this order: `load-high` gets processes-by-cpu and processes-by-session (which agent session the load belongs to, and the load of what belongs to none); `memory-high` and `swap-high` get processes-by-rss, processes-by-cpu and swap; `volume-full` gets largest-folders, docker-df, known-caches, and journal on Linux only.",
         "required": [
           "machine",
           "alertId",

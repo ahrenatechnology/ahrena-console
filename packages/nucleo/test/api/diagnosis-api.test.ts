@@ -28,6 +28,7 @@ const processes = (n: number) => Array.from({ length: n }, (_, i) => proc(i + 1,
 const SECTION_DATA: Record<SectionId, unknown[]> = {
   'processes-by-rss': processes(15),
   'processes-by-cpu': processes(15),
+  'processes-by-session': Array.from({ length: 12 }, (_, i) => ({ sessionId: `0413a6d2-0000-4000-8000-${String(i).padStart(12, '0')}`, title: i % 2 ? null : `Session ${i}`, rootCommand: 'pnpm test', cwd: '/w/spdx-307', processCount: i + 1, cpuPct: (i * 53) % 97 })),
   swap: [{ usedBytes: 5, totalBytes: 10 }],
   'largest-folders': [{ path: '/var/lib', bytes: 900 }],
   'docker-df': [{ type: 'Images', usedBytes: 800, reclaimableBytes: 300 }],
@@ -150,13 +151,58 @@ describe('#565 GET /api/diagnosis: this machine', () => {
     }
   });
 
-  test('#565/AC-2 Given load-high is open, When asked, Then only up to 10 processes by CPU come back', async () => {
+  test('#565/AC-2 Given load-high is open, When asked, Then up to 10 processes by CPU come back, and since issue 722 the sessions after them', async () => {
     const { tracker, get, close } = await boot();
     try {
       tracker.update('local', [alert('load-high', 'load-high')]);
       const d = await ok(await get('?machine=local&alert=load-high'));
-      assert.deepEqual(d.sections.map((s) => s.id), ['processes-by-cpu']);
+      assert.deepEqual(d.sections.map((s) => s.id), ['processes-by-cpu', 'processes-by-session']);
       assert.equal(d.sections[0]!.items.length, 10);
+    } finally {
+      await close();
+    }
+  });
+
+  test('#720/AC-1 Given load-high is open and a session saturates the CPU, When asked, Then processes-by-session names it with title, root command, folder, 15 processes and 600%, and the outside-session line comes apart', async () => {
+    const session = { sessionId: '0413a6d2-3b1c-4c0e-9d3a-6f1f0a2b7c11', title: 'Fix the flaky suite', rootCommand: 'pnpm test', cwd: '/w/spdx-307', processCount: 15, cpuPct: 600 };
+    const quiet = Array.from({ length: 11 }, (_, i) => ({ ...session, sessionId: `0413a6d2-0000-4000-8000-${String(i).padStart(12, '0')}`, title: null, rootCommand: 'claude', processCount: 1, cpuPct: i }));
+    const collect: Collector = async (id) => (id === 'processes-by-session' ? { items: [...quiet, session], outsideSession: { processCount: 4, cpuPct: 31.5 } } : SECTION_DATA[id]);
+    const { tracker, get, close } = await boot({ collect });
+    try {
+      tracker.update('local', [alert('load-high', 'load-high')]);
+      const d = await ok(await get('?machine=local&alert=load-high'));
+      const section = d.sections.find((s) => s.id === 'processes-by-session')!;
+      assert.equal(section.status, 'ok');
+      assert.equal(section.items.length, 10);
+      assert.deepEqual(section.items[0], session);
+      assert.deepEqual(section.items.map((s) => s.cpuPct), [600, 10, 9, 8, 7, 6, 5, 4, 3, 2]);
+      assert.deepEqual((section as { outsideSession?: unknown }).outsideSession, { processCount: 4, cpuPct: 31.5 });
+    } finally {
+      await close();
+    }
+  });
+
+  test('#720/AC-2 Given no live session is registered, When asked, Then the sessions list is empty and everything is on the outside-session line', async () => {
+    const collect: Collector = async (id) => (id === 'processes-by-session' ? { items: [], outsideSession: { processCount: 16, cpuPct: 630 } } : SECTION_DATA[id]);
+    const { tracker, get, close } = await boot({ collect });
+    try {
+      tracker.update('local', [alert('load-high', 'load-high')]);
+      const section = (await ok(await get('?machine=local&alert=load-high'))).sections.find((s) => s.id === 'processes-by-session')!;
+      assert.deepEqual(section.items, []);
+      assert.deepEqual((section as { outsideSession?: unknown }).outsideSession, { processCount: 16, cpuPct: 630 });
+    } finally {
+      await close();
+    }
+  });
+
+  test('#720/AC-1 Given the registry cannot be read, When asked, Then the section is unavailable with a short reason and the CPU section still comes', async () => {
+    const collect: Collector = async (id) => (id === 'processes-by-session' ? { unavailable: true, reason: 'session registry not readable' } : SECTION_DATA[id]);
+    const { tracker, get, close } = await boot({ collect });
+    try {
+      tracker.update('local', [alert('load-high', 'load-high')]);
+      const d = await ok(await get('?machine=local&alert=load-high'));
+      assert.deepEqual(d.sections.map((s) => [s.id, s.status]), [['processes-by-cpu', 'ok'], ['processes-by-session', 'unavailable']]);
+      assert.equal(d.sections[1]!.reason, 'session registry not readable');
     } finally {
       await close();
     }

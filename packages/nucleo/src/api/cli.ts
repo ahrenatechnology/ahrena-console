@@ -161,6 +161,7 @@ import { createPreviewStore } from '../delegation/preview-store.ts';
 import { LOCAL_MACHINE_ID } from '../telemetry/model.ts';
 import { knownFolders } from './new-session.ts';
 import { diagnosisCollectorFor, systemDiagnosisDeps, worktreeRootsOf } from '../diagnosis/adapters/system.ts';
+import { createSessionSource } from './diagnosis-sessions.ts';
 import { LARGEST_FOLDERS_BUDGET_MS } from '../diagnosis/adapters/common.ts';
 import { DockerService } from '../docker/service.ts';
 import { systemToolRunner } from '../tools/runner.ts';
@@ -764,7 +765,11 @@ const docker =
       }
     : null;
 // The diagnosis of an open saturation alert (#565): this machine's collectors (read-only, fixed commands) and the remote machines' through their tunnel port. Not in --demo, where the readings are synthetic.
-const diagnosisCollector = demo ? null : diagnosisCollectorFor(process.platform, systemDiagnosisDeps(async () => worktreeRootsOf((await knownFolders(storage)).map((f) => f.path)), log));
+// issue 722: `processes-by-session` reads the live `claude` registry (`liveProcesses`, above) and the title each session has in the console.
+const diagnosisSessions = liveProcesses
+  ? createSessionSource({ live: liveProcesses, sessionName: async (id) => (await storage.getSession(id))?.name ?? null, desktopTitle: (id) => desktop?.sessionByCli(id)?.title ?? null })
+  : undefined;
+const diagnosisCollector = demo ? null : diagnosisCollectorFor(process.platform, systemDiagnosisDeps(async () => worktreeRootsOf((await knownFolders(storage)).map((f) => f.path)), log, undefined, diagnosisSessions));
 const diagnosisOptions: DiagnosisRouteOptions = {
   alerts: alertTracker,
   local: diagnosisCollector ? { collect: diagnosisCollector, platform: process.platform === 'darwin' ? 'darwin' : 'linux', log, now: () => new Date().toISOString(), sectionTimeoutMs: LARGEST_FOLDERS_BUDGET_MS + 3_000 } : null,

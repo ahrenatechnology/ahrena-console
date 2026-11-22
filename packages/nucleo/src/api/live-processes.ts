@@ -76,6 +76,11 @@ export class LiveClaudeProcesses implements LiveProcessReader {
     return null;
   }
 
+  /** Every live process the registry lists, in no particular order: the pid answers `kill(pid, 0)`, but its `procStart` is still to be compared with the real start (diagnosis/attribution.ts, issue 722). */
+  listLive(): LiveProcess[] {
+    return [...this.bySession.values()].flat().filter((p) => this.isAlive(p.pid));
+  }
+
   private async scan(): Promise<void> {
     const seen = new Set<string>();
     const dirs = [...new Set(await this.folders())].map((d) => join(d, 'sessions'));

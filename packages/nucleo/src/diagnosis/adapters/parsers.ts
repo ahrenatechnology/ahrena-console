@@ -4,6 +4,7 @@
  */
 
 import { basename } from 'node:path';
+import { normalizeStart, type ProcessSample } from '../attribution.ts';
 import type { DockerDfItem, ProcessItem } from '../model.ts';
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -27,6 +28,23 @@ export function parsePsProcesses(out: string): ProcessItem[] {
     items.push({ pid: Number(m[1]), name: basename(m[5]) || m[5], rssBytes: Number(m[3]) * 1024, cpuPct: Number(m[2]), startedAt });
   }
   return items;
+}
+
+/** The longest command line kept per process: a longer one is cut, it only feeds `rootCommandOf`. */
+const COMMAND_MAX = 2048;
+
+/**
+ * `ps -axo pid=,ppid=,pcpu=,lstart=,args=` run with `TZ=UTC`: one sample per process, the start as `ps` printed it with its
+ * whitespace collapsed (the form of `procStart`), the command line whole (issue 722). A line that is not a process row is skipped.
+ */
+export function parsePsTree(out: string): ProcessSample[] {
+  const samples: ProcessSample[] = [];
+  for (const line of out.split('\n')) {
+    const m = /^\s*(\d+)\s+(\d+)\s+([\d.]+)\s+(\w{3}\s+\w{3}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2}\s+\d{4})\s+(\S.*?)\s*$/.exec(line);
+    if (!m) continue;
+    samples.push({ pid: Number(m[1]), ppid: Number(m[2]), cpuPct: Number(m[3]), start: normalizeStart(m[4]), command: m[5].slice(0, COMMAND_MAX) });
+  }
+  return samples;
 }
 
 const DECIMAL_UNITS: Record<string, number> = { B: 1, KB: 1e3, MB: 1e6, GB: 1e9, TB: 1e12, PB: 1e15 };
