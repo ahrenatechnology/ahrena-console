@@ -15,6 +15,9 @@ const root = mkdtempSync(join(tmpdir(), 'memory-actions-'));
 process.once('exit', () => rmSync(root, { recursive: true, force: true }));
 let n = 0;
 
+// The registry's names of the two accounts the harness registers (#740).
+export const ACCOUNT_A = 'Pessoal';
+export const ACCOUNT_B = 'Trabalho';
 export const LABEL = 'com.github.akitaonrails.ai-memory';
 const planJson = (data: string): string =>
   JSON.stringify({ format: 1, data_dir: data, config_path: join(data, 'config.toml'), fresh: true, service: { action: 'install', manager: 'launchd', path: null }, agents: [{ agent: 'claude-code', found: true, wiring: 'hooks' }], other_agents: [] });
@@ -90,7 +93,7 @@ export function harness(o: Setup = {}): Harness {
     home,
     uid: () => (o.uid === undefined ? 501 : o.uid),
     platform: o.platform ?? 'darwin',
-    accountFolders: async () => state.folders,
+    accountFolders: async () => state.folders.map((dir) => ({ dir, name: dir === a ? ACCOUNT_A : dir === b ? ACCOUNT_B : 'Outra' })),
     files,
     labels: Object.fromEntries(MEMORY_ACTIONS.map((id) => [id, `rótulo ${id}`])) as Record<MemoryActionId, string>,
   });

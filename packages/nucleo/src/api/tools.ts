@@ -81,10 +81,33 @@ export function toolsWriteAllowed(req: IncomingMessage, port: number, acceptNoOr
 // The embedded ai-memory's jobs belong to the local /ui alone: the remote credential neither lists nor cancels them (#740/AC-11).
 const LOCAL_ONLY_TOOL = 'ai-memory';
 
-/** The jobs a remote credential may see: the local-only tool's are dropped from the current job, the queue and the recent list. */
+/**
+ * The jobs a remote credential may see: the local-only tool's are dropped from the current job, the queue and the recent list,
+ * and the batch counts only what is left (#740/ACC-8).
+ */
 export function withoutLocalOnlyJobs(jobs: JobsView<ToolJob>): JobsView<ToolJob> {
   const keep = (job: ToolJob | null | undefined): boolean => !job || job.toolId !== LOCAL_ONLY_TOOL;
-  return { ...jobs, current: keep(jobs.current) ? jobs.current : null, queue: jobs.queue.filter(keep), recent: jobs.recent.filter(keep) };
+  const current = keep(jobs.current) ? jobs.current : null;
+  const queue = jobs.queue.filter(keep);
+  const recent = jobs.recent.filter(keep);
+  return { ...jobs, current, queue, recent, batch: visibleBatch(jobs, { current, queue, recent }) };
+}
+
+/**
+ * The batch as the remote may read it (#740/ACC-8). The batch's ended jobs are the newest ones in `recent`, so they are told apart
+ * only while all of them still fit there (`RECENT_JOBS`); a count that cannot be told is `null`, never the real one with a hidden job inside.
+ */
+function visibleBatch(all: JobsView<ToolJob>, visible: Pick<JobsView<ToolJob>, 'current' | 'queue' | 'recent'>): JobsView<ToolJob>['batch'] {
+  const batch = all.batch;
+  if (!batch) return null;
+  const hiddenCurrent = all.current && !visible.current ? 1 : 0;
+  const hiddenQueued = all.queue.length - visible.queue.length;
+  const batchEnded = all.recent.slice(0, batch.done);
+  const hiddenEnded = batchEnded.length - batchEnded.filter((job) => job.toolId !== LOCAL_ONLY_TOOL).length;
+  // An ended job that already left `recent` could have been the local-only tool's: the count is not told apart (#740/ACC-8).
+  if (batch.done > all.recent.length) return null;
+  const total = batch.total - hiddenCurrent - hiddenQueued - hiddenEnded;
+  return total > 0 ? { total, done: batch.done - hiddenEnded } : null;
 }
 
 function overviewWithoutLocalOnlyJobs(body: ToolsOverview): ToolsOverview {

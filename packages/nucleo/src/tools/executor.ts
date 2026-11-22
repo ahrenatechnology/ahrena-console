@@ -151,6 +151,8 @@ export interface StepRun {
   env?: NodeJS.ProcessEnv;
   /** A step the core does itself, with no process: resolves with the exit code, 0 for success (#740). */
   inline?: (line: (text: string) => void) => Promise<number>;
+  /** The name of the account this step runs for, which the failure line gives: a name from the registry, never a path (#740). */
+  account?: string;
 }
 export type EnqueueResult = { kind: 'queued'; job: ToolJob };
 
@@ -189,6 +191,12 @@ interface MachineJobs {
   idle: (() => void)[];
   /** `checkNow` waits here for the running job to end. */
   afterCurrent: (() => void)[];
+}
+
+/** `Falhou no passo 5 de 5 (conta Trabalho, saída 3).`: the account only for a step that has one, the exit code only when there is one (#740). */
+function failureLine(index: number, total: number, account: string | undefined, code: number | null): string {
+  const where = [account === undefined ? null : `conta ${account}`, code === null ? null : `saída ${code}`].filter((part) => part !== null);
+  return `Falhou no passo ${index + 1} de ${total}${where.length === 0 ? '' : ` (${where.join(', ')})`}.`;
 }
 
 export function toolsLogFile(dataDir: string): string {
@@ -518,7 +526,7 @@ export class ToolsExecutor implements ToolsControl {
         const code = inline ? await inline(line).catch(() => 1) : await this.step(job, resolved[i]!.path ?? argvOf(i)[0]!, argvOf(i).slice(1), runs[i]?.env ?? env, line, quiet);
         if (job.state !== 'running') return;
         if (code !== 0) {
-          if (quiet) line(`Falhou no passo ${i + 1} de ${job.steps.length}${code === null ? '' : ` (saída ${code})`}.`);
+          if (quiet) line(failureLine(i, job.steps.length, runs[i]?.account, code));
           return this.end(job, 'failed', code);
         }
       }

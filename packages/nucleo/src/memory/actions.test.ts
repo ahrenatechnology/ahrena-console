@@ -6,7 +6,7 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, test } from 'node:test';
 import { createMemoryActions, MEMORY_ACTIONS, type MemoryActionId, type MemoryActions, type MemoryNotOffered } from './actions.ts';
-import { BINARY, harness, LABEL, type Harness } from './mocks/actions-harness.ts';
+import { ACCOUNT_A, ACCOUNT_B, BINARY, harness, LABEL, type Harness } from './mocks/actions-harness.ts';
 import { createMemoryActionFiles } from '../tools/memory-config-file.ts';
 
 async function planOf(actions: MemoryActions, id: MemoryActionId) {
@@ -84,7 +84,7 @@ describe('#740/AC-1 the activate plan', () => {
       binaryPath: BINARY,
       home: h.home,
       uid: () => 501,
-      accountFolders: async () => [h.a],
+      accountFolders: async () => [{ dir: h.a, name: ACCOUNT_A }],
       files: createMemoryActionFiles(),
       labels: Object.fromEntries(MEMORY_ACTIONS.map((id) => [id, id])) as Record<MemoryActionId, string>,
     });
@@ -179,8 +179,24 @@ describe('#740/AC-2 #740/AC-3 the steps of activate, in order', () => {
     assert.equal(job.step, 4);
     assert.equal(plan.steps[job.step]!.account, 1);
     assert.equal(plan.accounts[plan.steps[job.step]!.account!]!.dir, h.b);
-    assert.ok(job.output.includes('Falhou no passo 5 de 5 (saída 3).'), job.output.join('|'));
+    assert.ok(job.output.includes(`Falhou no passo 5 de 5 (conta ${ACCOUNT_B}, saída 3).`), job.output.join('|'));
     assert.equal(h.sp.calls.length, 4, 'init, auth enable and both setups ran; nothing after');
+  });
+
+  test('#740/AC-3 Given the setup of the first account fails, When activate runs, Then the failure line names that account by its registry name and no path is in the job', async () => {
+    const h = harness({ exit: (call) => (call.args.includes('setup') ? 6 : 0) });
+    const { job } = await confirmed(h, 'activate');
+    assert.equal(job.step, 3);
+    assert.ok(job.output.includes(`Falhou no passo 4 de 5 (conta ${ACCOUNT_A}, saída 6).`), job.output.join('|'));
+    const shown = JSON.stringify(job);
+    for (const path of [h.a, h.b, h.home]) assert.equal(shown.includes(path), false, 'the job carries no account folder');
+  });
+
+  test('#740/AC-3 Given the uninstall of the second account fails, When deactivate runs, Then the failure line names that account', async () => {
+    const h = harness({ exit: (call) => (call.args.includes('uninstall') && (call.options.env as NodeJS.ProcessEnv).CLAUDE_CONFIG_DIR === h.b ? 5 : 0) });
+    const { job } = await confirmed(h, 'deactivate');
+    assert.equal(job.state, 'failed');
+    assert.ok(job.output.includes(`Falhou no passo 2 de 2 (conta ${ACCOUNT_B}, saída 5).`), job.output.join('|'));
   });
 
   test('#740/AC-3 Given init fails, When activate runs, Then the job fails at step 1 and nothing else runs', async () => {

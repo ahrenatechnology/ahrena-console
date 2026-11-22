@@ -818,7 +818,8 @@ const memoryActions =
           binaryPath: embeddedAiMemoryPath(),
           home: homedir(),
           uid: () => process.getuid?.() ?? null,
-          accountFolders: async () => (await profiles.list()).map((profile) => profile.dir),
+          // (#740) The account's name is its organization's; with none, the empty name makes the failure line say the account's place in the registry.
+          accountFolders: async () => (await profiles.list()).map((profile) => ({ dir: profile.dir, name: profile.account?.organizationName ?? '' })),
           files: createMemoryActionFiles(),
           labels: MEMORY_LABELS,
           log,

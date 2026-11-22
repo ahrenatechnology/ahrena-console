@@ -29,6 +29,12 @@ export interface MemoryPlanStep {
   account: number | null;
 }
 
+/** A Claude account folder of the core's registry and the name the screens give the account: never the path (#740). */
+export interface RegistryAccount {
+  dir: string;
+  name: string;
+}
+
 export interface MemoryPlanAccount {
   /** A local path: for the local screen only (#740). */
   dir: string;
@@ -84,8 +90,8 @@ export interface MemoryActionsOptions {
   home: string;
   uid: () => number | null;
   platform?: NodeJS.Platform;
-  /** The Claude account folders of the core's registry (#740/AC-7). */
-  accountFolders: () => Promise<readonly string[]>;
+  /** The Claude account folders of the core's registry, each with its account's name (#740/AC-7). */
+  accountFolders: () => Promise<readonly RegistryAccount[]>;
   files: MemoryActionFiles;
   /** The pt-BR label of each action, for the job (#740). */
   labels: Record<MemoryActionId, string>;
@@ -113,12 +119,21 @@ const SHOWN = 'ai-memory';
 const DELETES = ['wiki/', 'db/', 'raw/'];
 const KEEPS = ['config.toml', 'access-credentials', 'logs'];
 const CONFIG_FILE = 'config.toml';
+const ACCOUNT_NAME_MAX = 60;
+
+/** The name the failure line gives an account: the registry's, cleaned and capped, or `N` by its place when it has none; never a path (#740). */
+function accountName(name: string, index: number): string {
+  const clean = name.replace(/\p{C}/gu, ' ').replace(/\s+/g, ' ').trim().slice(0, ACCOUNT_NAME_MAX);
+  return clean === '' ? String(index + 1) : clean;
+}
 const DATA_DIR_OPTION = '--data-dir';
 
 /** One step as it runs; `display` is what the job and the plan show (#740). */
 interface Step {
   display: string[];
   account: number | null;
+  /** The registry's name of the account the step runs for: local, for the failure line (#740). */
+  accountName?: string;
   run: { kind: 'command'; argv: string[]; folder: RegisteredAccountFolder | null } | { kind: 'write-config'; configPath: string };
 }
 
@@ -139,9 +154,10 @@ export function createMemoryActions(options: MemoryActionsOptions): MemoryAction
    * `uninstall --apply --yes` cli.rs:1530 and 1550 (the `--purge-data` of cli.rs:1535 is never passed), `reset --confirm` cli.rs:2441-2444.
    */
   /** An ai-memory command, as run and as shown (#740). */
-  const ai = (args: string[], account: number | null, folder: RegisteredAccountFolder | null): Step => ({
+  const ai = (args: string[], account: number | null, folder: RegisteredAccountFolder | null, accountName?: string): Step => ({
     display: [SHOWN, ...args],
     account,
+    ...(accountName === undefined ? {} : { accountName }),
     run: { kind: 'command', argv: [binaryPath ?? '', ...dataDirArgs, ...args], folder },
   });
 
@@ -152,10 +168,16 @@ export function createMemoryActions(options: MemoryActionsOptions): MemoryAction
 
   const plistPath = (): string => join(options.home, ...LAUNCH_AGENTS, `${LAUNCHD_LABEL}.plist`);
 
-  async function registeredFolders(): Promise<RegisteredAccountFolder[]> {
+  /** The registry's accounts whose folder is accepted, once each, with the name the failure line gives (#740). */
+  async function registeredAccounts(): Promise<{ folder: RegisteredAccountFolder; name: string }[]> {
     const registry = await options.accountFolders();
-    const accepted = registry.map((dir) => registeredAccountFolder(dir, registry, files.isDirectory)).filter((folder) => folder !== null);
-    return [...new Set(accepted)];
+    const dirs = registry.map((account) => account.dir);
+    const accepted = new Map<RegisteredAccountFolder, string>();
+    registry.forEach((account, index) => {
+      const folder = registeredAccountFolder(account.dir, dirs, files.isDirectory);
+      if (folder !== null && !accepted.has(folder)) accepted.set(folder, accountName(account.name, index));
+    });
+    return [...accepted].map(([folder, name]) => ({ folder, name }));
   }
 
   /** The state the action needs, or why it is not offered (#740). */
@@ -195,7 +217,8 @@ export function createMemoryActions(options: MemoryActionsOptions): MemoryAction
 
   /** The activate plan: one `setup --plan` read per registered folder, then the steps in order (#740/AC-1). */
   async function activate(): Promise<Building> {
-    const folders = await registeredFolders();
+    const registered = await registeredAccounts();
+    const folders = registered.map((account) => account.folder);
     if (folders.length === 0) return { kind: 'not-offered', reason: 'no-accounts' };
     const accounts: MemoryPlanAccount[] = [];
     let configPath: string | null = null;
@@ -222,15 +245,15 @@ export function createMemoryActions(options: MemoryActionsOptions): MemoryAction
       ai(['init'], null, null),
       { display: ['core', 'write-config', 'embedding_provider=none'], account: null, run: { kind: 'write-config', configPath } },
       ai(['auth', 'enable', '--no-mcp'], null, null),
-      ...folders.map((folder, index) => ai(['setup', '--yes', '--agent', 'claude-code'], index, folder)),
+      ...registered.map(({ folder, name }, index) => ai(['setup', '--yes', '--agent', 'claude-code'], index, folder, name)),
     ];
     return { kind: 'built', built: finish('activate', steps, { accounts, service, dataDir }) };
   }
 
   /** `uninstall --apply --yes`, once per registered account folder, never with `--purge-data` (upstream cli.rs:1530, 1550; uninstall.rs:217 reads CLAUDE_CONFIG_DIR) (#740). */
   async function deactivate(): Promise<Building> {
-    const folders = await registeredFolders();
-    const steps = folders.length === 0 ? [ai(['uninstall', '--apply', '--yes'], null, null)] : folders.map((folder, index) => ai(['uninstall', '--apply', '--yes'], index, folder));
+    const registered = await registeredAccounts();
+    const steps = registered.length === 0 ? [ai(['uninstall', '--apply', '--yes'], null, null)] : registered.map(({ folder, name }, index) => ai(['uninstall', '--apply', '--yes'], index, folder, name));
     return { kind: 'built', built: finish('deactivate', steps, { startNeedsActivation: true }) };
   }
 
@@ -258,7 +281,7 @@ export function createMemoryActions(options: MemoryActionsOptions): MemoryAction
   }
 
   function runOf(step: Step): StepRun {
-    if (step.run.kind === 'command') return { argv: step.run.argv, env: embeddedAiMemoryEnv(options.env, step.run.folder ?? undefined) };
+    if (step.run.kind === 'command') return { argv: step.run.argv, env: embeddedAiMemoryEnv(options.env, step.run.folder ?? undefined), ...(step.accountName === undefined ? {} : { account: step.accountName }) };
     const { configPath } = step.run;
     return {
       inline: async (line) => {

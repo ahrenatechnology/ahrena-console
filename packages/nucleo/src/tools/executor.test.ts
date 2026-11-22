@@ -77,6 +77,14 @@ describe('#740 a job whose steps run differently from how they are shown', () =>
     assert.ok(job.output.includes('Falhou no passo 2 de 3 (saída 7).'), job.output.join('|'));
   });
 
+  test('#740/AC-3 Given a failing step that carries an account name, When the job runs, Then the failure line names the account, the step and the exit code', async () => {
+    const { executor } = boot((call) => call.child.exit(call.args[0] === 'two' ? 7 : 0));
+    executor.enqueue('local', spec({ steps: [['ai-memory', 'one'], ['ai-memory', 'two']], runs: [null, { account: 'Trabalho' }], quiet: true }));
+    await executor.idle('local');
+    const job = executor.jobs('local').recent[0]!;
+    assert.ok(job.output.includes('Falhou no passo 2 de 2 (conta Trabalho, saída 7).'), job.output.join('|'));
+  });
+
   test('#740/AC-2 Given an in-process step that fails, Then the job fails there and the next step does not run', async () => {
     const { executor, sp } = boot((call) => call.child.exit(0));
     executor.enqueue('local', spec({ steps: [['core', 'write'], ['ai-memory', 'next']], runs: [{ inline: async (line) => (line('Não deu para gravar'), 1) }, null], quiet: true }));
