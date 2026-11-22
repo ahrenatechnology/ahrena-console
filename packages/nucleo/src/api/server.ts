@@ -142,6 +142,8 @@ import { DELEGATIONS_PREVIEW_ROUTE, DELEGATIONS_ROUTE, respondDelegationsUnsuppo
 import { isTelemetryRoute, reconnectFromSameOrigin, RECONNECT_ROUTE, respondReconnect, respondTelemetry } from './telemetry.ts';
 import type { ReconnectControl } from '../telemetry/reconnect.ts';
 import type { TelemetryService } from '../telemetry/service.ts';
+import type { CpuGovernor } from '../cpu-governor/governor.ts';
+import { respondCpuGovernor } from './cpu-governor-route.ts';
 import { MESSAGING_ROUTE, messagesWriteFromSameOrigin, type MessagingRoute } from './messaging.ts';
 import { TRANSCRIPTION_ROUTE, transcriptionWriteFromSameOrigin, type TranscriptionRoute } from './transcription.ts';
 import { ORDERS_ROUTE, ordersWriteFromSameOrigin, type OrdersRoute } from './orders.ts';
@@ -160,7 +162,7 @@ import { isPortsRoute, isPortsWrite, portsWriteAllowed, type PortsRoute } from '
 import { connectionWriteFromSameOrigin, isConnectionRoute, type ConnectionRoute } from './connection.ts';
 import { coreUpdateWriteFromSameOrigin, isCoreUpdateRoute, type CoreUpdateRoute } from './core-update.ts';
 import { isOwnerProofRetryRoute, ownerProofRetryFromSameOrigin, respondOwnerProofRetry, type OwnerProofRetry } from './owner-proof-retry.ts';
-import { CONNECTIONS_ROUTE, PROJECT_SELECTION_ROUTE, respondConnections, respondProjectSelection, STRICT_WRITE_ROUTES, strictWriteRefusal, type ProjectSelectionTarget } from './connections-route.ts';
+import { CPU_GOVERNOR_ROUTE, CONNECTIONS_ROUTE, PROJECT_SELECTION_ROUTE, respondConnections, respondProjectSelection, STRICT_WRITE_ROUTES, strictWriteRefusal, type ProjectSelectionTarget } from './connections-route.ts';
 import type { GithubConnection } from '../github/connection/connection.ts';
 
 export { API_VERSION };
@@ -304,6 +306,8 @@ export interface ApiOptions {
   connection?: GithubConnection | null;
   /** Where `POST /api/project/selection` stores the chosen Project (#241); without it, 503 `off`. */
   projectSelection?: ProjectSelectionTarget | null;
+  /** The CPU governor (#723); without it `PUT /api/cpu-governor` answers 503. */
+  cpuGovernor?: CpuGovernor | null;
   /**
    * #241: whether GitHub is connected (the connection's `connected()`, no network). When given and false,
    * every GitHub-backed screen route answers 409 `github-not-connected` before any GitHub call. Not
@@ -654,11 +658,12 @@ export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
         return send(res, refusal.status, { error: refusal.code });
       }
     }
-    // #241: the six writes only the /ui itself makes, checked before anything else.
+    // #241, #723: the seven writes only the /ui itself makes, checked before anything else.
     if (STRICT_WRITE_ROUTES.has(url.pathname)) {
       const refusal = strictWriteRefusal(req, port, url.pathname);
       if (refusal) return send(res, refusal.status, refusal.body);
       if (url.pathname === PROJECT_SELECTION_ROUTE) return respondProjectSelection(req, res, opts.projectSelection ?? null);
+      if (url.pathname === CPU_GOVERNOR_ROUTE) return respondCpuGovernor(req, res, opts.cpuGovernor ?? null);
       if (!opts.connection) return send(res, 404, { error: 'not-found' });
       return respondConnections(req, res, url.pathname, opts.connection);
     }

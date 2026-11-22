@@ -9,7 +9,7 @@
  */
 
 import type { Alert, HostInfo } from '../telemetry/model.ts';
-import { LIST_CAP, capReason, isDiagnosable, sectionsFor, type Diagnosis, type PartialMarker, type SectionId, type SectionItems, type SectionOf, type WorktreesInfo } from './model.ts';
+import { LIST_CAP, capReason, isDiagnosable, sectionsFor, type Diagnosis, type OutsideSessionLoad, type PartialMarker, type SectionId, type SectionItems, type SectionOf, type WorktreesInfo } from './model.ts';
 
 export interface CollectContext {
   /** The mount of the open `volume-full:<mount>` alert; null for the other kinds (#565). */
@@ -18,8 +18,8 @@ export interface CollectContext {
   signal: AbortSignal;
 }
 
-/** Items read whole, items with a `partial` marker and, for `known-caches`, the `worktrees` facts (#566), or nothing (`unavailable`) (#565). */
-export type CollectResult<K extends SectionId> = SectionItems[K] | { items: SectionItems[K]; partial?: PartialMarker; worktrees?: WorktreesInfo } | { unavailable: true; reason?: string };
+/** Items read whole, items with a `partial` marker and, for `known-caches`, the `worktrees` facts (#566) and, for `processes-by-session`, the `outsideSession` line (#722), or nothing (`unavailable`) (#565). */
+export type CollectResult<K extends SectionId> = SectionItems[K] | { items: SectionItems[K]; partial?: PartialMarker; worktrees?: WorktreesInfo; outsideSession?: OutsideSessionLoad } | { unavailable: true; reason?: string };
 export type SectionCollector = <K extends SectionId>(id: K, context: CollectContext) => Promise<CollectResult<K>>;
 
 export interface DiagnoseDeps {
@@ -68,6 +68,7 @@ async function collectSection<K extends SectionId>(id: K, machine: string, conte
     const section: SectionOf<K> = { id, status: 'ok', items: shape(id, result.items) } as SectionOf<K>;
     if (result.partial) section.partial = { reason: capReason(result.partial.reason) };
     if (result.worktrees) section.worktrees = result.worktrees;
+    if (result.outsideSession) section.outsideSession = result.outsideSession;
     return section;
   } catch (err) {
     deps.log(`diagnosis section ${id} failed on ${machine}: ${err}`);
@@ -91,6 +92,7 @@ type Shapers = { [K in SectionId]?: (items: SectionItems[K]) => SectionItems[K] 
 const SHAPERS: Shapers = {
   'processes-by-rss': rank((p) => p.rssBytes),
   'processes-by-cpu': rank((p) => p.cpuPct),
+  'processes-by-session': rank((s) => s.cpuPct),
   'largest-folders': rank((f) => f.bytes),
 };
 

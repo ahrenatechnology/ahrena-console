@@ -14,17 +14,20 @@
 
 import { join, resolve, sep } from 'node:path';
 import type { CollectContext, CollectResult } from '../diagnose.ts';
-import type { CacheActionId, CacheItem, FolderItem, SectionId, WorktreeItem, WorktreesInfo } from '../model.ts';
+import { LIST_CAP, type CacheActionId, type CacheItem, type FolderItem, type SectionId, type WorktreeItem, type WorktreesInfo } from '../model.ts';
+import { attributeProcesses, loadOf, lstartMatches, outsideLoadOf, treeCpuPct, type ProcessSample, type RegisteredSession, type StartCheck } from '../attribution.ts';
 import { isRealVolume, parseDfP } from '../../telemetry/adapters/common.ts';
 import type { FileReader } from '../../telemetry/ports.ts';
 import { CATALOG, type CatalogEntry, type CatalogId } from './catalog.ts';
-import { parseDockerDf, parseDuSize, parseHeadTree, parseIndexDebug, parseIndexStage, parseJournalUsage, parsePsProcesses } from './parsers.ts';
+import { parseDockerDf, parseDuSize, parseHeadTree, parseIndexDebug, parseIndexStage, parseJournalUsage, parsePsProcesses, parsePsTree } from './parsers.ts';
 
 export interface RunOptions {
   timeoutMs: number;
   maxBytes: number;
   cwd?: string;
   signal: AbortSignal;
+  /* Set from the catalog entry: variables added to the runner's own environment (#722). */
+  env?: Readonly<Record<string, string>>;
   /* Set from the catalog entry: a non-zero exit that printed output is then an answer marked `incomplete`, otherwise a failure (#565). */
   acceptOutputOnFailure?: true;
 }
@@ -52,7 +55,17 @@ export interface DiagnosisFs {
   exists(path: string): Promise<boolean>;
 }
 
+/** The agent sessions of this machine, for `processes-by-session` (#722): the registry of live ones and the title the console knows for one. */
+export interface SessionSource {
+  /** The live registered sessions; the pid answers `kill(pid, 0)`, the start is compared by the attribution. (#722) */
+  registered(): Promise<RegisteredSession[]>;
+  /** The session's title; `null` when the console knows none. (#722) */
+  titleOf(sessionId: string): Promise<string | null>;
+}
+
 export interface DiagnosisDeps {
+  /* Where `processes-by-session` reads the sessions; without it that section is unavailable (#722). */
+  sessions?: SessionSource;
   run: DiagnosisRunner;
   readFile: FileReader;
   fs: DiagnosisFs;
@@ -117,6 +130,12 @@ export const stripControlCharacters = (text: string): string => text.replace(/[\
 /* What `exec` gives back: the output (`incomplete` when the tool exited with an error but printed it), or the section's unavailable answer (#565). */
 type Executed = { stdout: string; incomplete?: true } | { unavailable: true; reason: string };
 
+/* The `code` of a system error (`EACCES`), never its text, which names a path (#722). */
+const errorCode = (err: unknown): string => {
+  const code = (err as { code?: unknown } | null)?.code;
+  return typeof code === 'string' && /^[A-Z0-9_]{1,40}$/.test(code) ? code : 'unknown';
+};
+
 const unavailable = (reason: string): { unavailable: true; reason: string } => ({ unavailable: true, reason });
 
 export abstract class DiagnosisCollector {
@@ -147,6 +166,8 @@ export abstract class DiagnosisCollector {
       case 'processes-by-rss':
       case 'processes-by-cpu':
         return this.processes(signal);
+      case 'processes-by-session':
+        return this.processesBySession(signal);
       case 'swap':
         return this.swap(signal);
       case 'largest-folders':
@@ -168,6 +189,7 @@ export abstract class DiagnosisCollector {
       maxBytes: entry.maxBytes,
       signal,
       ...(cwd ? { cwd } : {}),
+      ...(entry.env ? { env: entry.env } : {}),
       ...(entry.acceptOutputOnFailure ? { acceptOutputOnFailure: true as const } : {}),
     });
     if (r.ok) return r.incomplete ? { stdout: r.stdout, incomplete: true } : { stdout: r.stdout };
@@ -180,6 +202,52 @@ export abstract class DiagnosisCollector {
     if (!('stdout' in r)) return r;
     const items = parsePsProcesses(r.stdout);
     return items.length > 0 ? items : unavailable('ps output not understood');
+  }
+
+  /*
+   * Which session each process belongs to (#722): one `ps` with the parent of every process, the registry of live sessions,
+   * and the pure attribution between them. The most that `LIST_CAP` sessions by CPU get a title asked; the rest of the shaping is the use case's.
+   * A failure is logged by its operation and code, and the section says only that the registry was not readable.
+   */
+  private async processesBySession(signal: AbortSignal): Promise<CollectResult<'processes-by-session'>> {
+    const { sessions } = this.deps;
+    if (!sessions) return unavailable('no session registry on this machine');
+    const r = await this.exec('ps-tree', signal);
+    if (!('stdout' in r)) return r;
+    const samples = parsePsTree(r.stdout);
+    if (samples.length === 0) return unavailable('ps output not understood');
+    let registry: RegisteredSession[];
+    try {
+      registry = await sessions.registered();
+    } catch (err) {
+      this.say(`diagnosis processes-by-session registry read failed: code=${errorCode(err)}`);
+      return unavailable('session registry not readable');
+    }
+    const attribution = attributeProcesses(samples, registry, await this.startCheck(registry, samples));
+    const heaviest = attribution.sessions
+      .map((tree) => ({ tree, cpuPct: treeCpuPct(tree) }))
+      .sort((a, b) => b.cpuPct - a.cpuPct)
+      .slice(0, LIST_CAP);
+    const items = await Promise.all(heaviest.map(async ({ tree }) => loadOf(tree, await this.titleOf(sessions, tree.sessionId))));
+    return { items, outsideSession: outsideLoadOf(attribution) };
+  }
+
+  /**
+   * The check that a registered pid's `procStart` is its real start, for this OS (#722). Here the macOS one: `procStart` is the
+   * lstart text, compared with the sample's. A subclass whose OS writes it another way overrides it (Linux). #723 calls it
+   * before it acts on a session's root pid.
+   */
+  async startCheck(_registry: readonly RegisteredSession[], _samples: readonly ProcessSample[]): Promise<StartCheck> {
+    return lstartMatches;
+  }
+
+  private async titleOf(sessions: SessionSource, sessionId: string): Promise<string | null> {
+    try {
+      return await sessions.titleOf(sessionId);
+    } catch (err) {
+      this.say(`diagnosis processes-by-session title lookup failed: code=${errorCode(err)}`);
+      return null;
+    }
   }
 
   private async largestFolders(mount: string | null, signal: AbortSignal): Promise<CollectResult<'largest-folders'>> {

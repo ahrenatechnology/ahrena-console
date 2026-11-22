@@ -86,6 +86,8 @@ export interface LiveProcess {
   cwd: string | null;
   /** The process start Claude Code wrote, to tell a recycled pid apart; `null` when it wrote none. */
   procStart: string | null;
+  /** The configuration folder whose `sessions/` holds this pid's file (#720/AC-3); absent where a caller builds the process itself. */
+  configDir?: string;
 }
 
 /** The live processes by session id; `refresh` respects the reader's own interval. */

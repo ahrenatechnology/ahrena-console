@@ -8,7 +8,7 @@
  *   exist (`unknown-machine`) or an alert that is not open on it (`alert-not-open`); 422 `not-diagnosable`
  *   for an open alert of a kind that has no diagnosis; 405 for another method.
  * - 501 `{ error: "diagnosis-unsupported" }` when this núcleo cannot diagnose (no collector for its
- *   platform, or the route not wired), and when the remote núcleo asked for a machine says it cannot or
+ *   platform, or the route not wired), and when the remote core asked for a machine says it cannot or
  *   does not have the route (an old núcleo): stable, so the screen tells it from a failure.
  * - 502 `{ error, reason }` when a remote machine does not answer or answers something that is not a diagnosis.
  *
@@ -40,11 +40,13 @@ import {
   type DockerDfItem,
   type FolderItem,
   type JournalItem,
+  type OutsideSessionLoad,
   type ProcessItem,
   type SectionId,
   type SectionItems,
   type SectionOf,
   type SectionStatus,
+  type SessionLoadItem,
   type SwapItem,
   type WorktreeItem,
   type WorktreesInfo,
@@ -197,6 +199,16 @@ function readProcess(v: unknown): ProcessItem | null {
   if (!isRecord(v) || !isNumber(v.pid) || !isString(v.name) || !isNumber(v.rssBytes) || !isNumber(v.cpuPct) || !isString(v.startedAt)) return null;
   return { pid: v.pid, name: v.name, rssBytes: v.rssBytes, cpuPct: v.cpuPct, startedAt: v.startedAt };
 }
+function readSessionLoad(v: unknown): SessionLoadItem | null {
+  if (!isRecord(v) || !isString(v.sessionId) || !(v.title === null || isString(v.title)) || !isString(v.rootCommand) || !(v.cwd === null || isString(v.cwd))) return null;
+  if (!isNumber(v.processCount) || !Number.isInteger(v.processCount) || v.processCount < 0 || !isNumber(v.cpuPct) || v.cpuPct < 0) return null;
+  return { sessionId: v.sessionId, title: v.title, rootCommand: v.rootCommand, cwd: v.cwd, processCount: v.processCount, cpuPct: v.cpuPct };
+}
+/** The outside-session line of a `processes-by-session` section, rebuilt from its two documented fields; `null` when absent or malformed, because the sessions are still a diagnosis without it (#722). */
+function readOutsideSession(v: unknown): OutsideSessionLoad | null {
+  if (!isRecord(v) || !isNumber(v.processCount) || !Number.isInteger(v.processCount) || v.processCount < 0 || !isNumber(v.cpuPct) || v.cpuPct < 0) return null;
+  return { processCount: v.processCount, cpuPct: v.cpuPct };
+}
 function readSwap(v: unknown): SwapItem | null {
   if (!isRecord(v) || !isNumber(v.usedBytes) || !isNumber(v.totalBytes)) return null;
   return { usedBytes: v.usedBytes, totalBytes: v.totalBytes };
@@ -234,6 +246,7 @@ type ItemReaders = { [K in SectionId]: (v: unknown) => SectionItems[K][number] |
 const ITEM_READERS: ItemReaders = {
   'processes-by-rss': readProcess,
   'processes-by-cpu': readProcess,
+  'processes-by-session': readSessionLoad,
   swap: readSwap,
   'largest-folders': readFolder,
   'docker-df': readDockerDf,
@@ -265,10 +278,16 @@ function readSection<K extends SectionId>(id: K, status: SectionStatus, s: Recor
     const worktrees = readWorktrees(s.worktrees);
     if (worktrees) section.worktrees = worktrees;
   }
+  if (status === 'ok' && id === 'processes-by-session') {
+    const outsideSession = readOutsideSession(s.outsideSession);
+    if (outsideSession) section.outsideSession = outsideSession;
+  }
   return section;
 }
 
 const sameIds = (a: readonly string[], b: readonly string[]) => a.length === b.length && a.every((id, i) => id === b[i]);
+/** A core older than #722 answers a `load-high` without `processes-by-session`: that is still a diagnosis, with one section fewer. */
+const withoutSessions = (ids: readonly string[]) => ids.filter((id) => id !== 'processes-by-session');
 
 /**
  * A remote diagnosis, re-projected: only known ids and statuses, the sections of the alert's kind on
@@ -285,6 +304,7 @@ function readDiagnosis(body: unknown, alertId: string, kind: AlertKind): Pick<Di
     sections.push(section);
   }
   const ids = sections.map((s) => s.id);
-  if (!sameIds(ids, sectionsFor(kind, 'darwin')) && !sameIds(ids, sectionsFor(kind, 'linux'))) return null;
+  const expected = [sectionsFor(kind, 'darwin'), sectionsFor(kind, 'linux')].flatMap((list) => [list, withoutSessions(list)]);
+  if (!expected.some((list) => sameIds(ids, list))) return null;
   return { takenAt: body.takenAt, sections };
 }

@@ -10,7 +10,7 @@
 // | `POST /api/connections/github/orgs`        | Checks the organizations again (#336); `{ github }`    |
 // | `POST /api/project/selection`              | `{ owner, number, field? }`; `{ selection, envOverride }` |
 //
-// The six writes are accepted ONLY from the /ui itself (`strictWriteRefusal`): POST, the raw URL exactly
+// The writes (the six below, and PUT /api/cpu-governor, #723) are accepted ONLY from the /ui itself (`strictWriteRefusal`): POST, the raw URL exactly
 // the route (no query), our Host, `Origin` exactly `http://<Host>`, `Content-Type: application/json`, a
 // body of at most 4 KiB, and not a browser saying `Sec-Fetch-Site: cross-site` or `same-site`. Unlike the
 // other writes, a request without `Origin` is refused: connecting is a decision of the person in front of
@@ -30,9 +30,11 @@ export const GITHUB_DISCONNECT_ROUTE = '/api/connections/github/disconnect';
 export const GITHUB_SOURCE_ROUTE = '/api/connections/github/source';
 export const GITHUB_ORGS_ROUTE = '/api/connections/github/orgs';
 export const PROJECT_SELECTION_ROUTE = '/api/project/selection';
+/** The one strict write that is a PUT (#723): turns the CPU governor on or off; answered by api/cpu-governor-route.ts. */
+export const CPU_GOVERNOR_ROUTE = '/api/cpu-governor';
 
 /** The writes that only the /ui itself may make. */
-export const STRICT_WRITE_ROUTES: ReadonlySet<string> = new Set([GITHUB_START_ROUTE, GITHUB_CANCEL_ROUTE, GITHUB_DISCONNECT_ROUTE, GITHUB_SOURCE_ROUTE, GITHUB_ORGS_ROUTE, PROJECT_SELECTION_ROUTE]);
+export const STRICT_WRITE_ROUTES: ReadonlySet<string> = new Set([GITHUB_START_ROUTE, GITHUB_CANCEL_ROUTE, GITHUB_DISCONNECT_ROUTE, GITHUB_SOURCE_ROUTE, GITHUB_ORGS_ROUTE, PROJECT_SELECTION_ROUTE, CPU_GOVERNOR_ROUTE]);
 
 const MAX_BODY = 4096;
 
@@ -44,7 +46,7 @@ export interface Refusal {
 
 /** Why a strict write is refused, or `null` when it comes from the /ui itself (the body size is checked while reading). */
 export function strictWriteRefusal(req: IncomingMessage, port: number, pathname: string): Refusal | null {
-  if (req.method !== 'POST') return { status: 405, body: { error: 'method-not-allowed' } };
+  if (req.method !== (pathname === CPU_GOVERNOR_ROUTE ? 'PUT' : 'POST')) return { status: 405, body: { error: 'method-not-allowed' } };
   const forbidden: Refusal = { status: 403, body: { error: 'forbidden' } };
   if (req.url !== pathname) return forbidden;
   if (!fromOwnUi(req, port)) return forbidden;

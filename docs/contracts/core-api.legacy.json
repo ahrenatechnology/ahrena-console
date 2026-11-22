@@ -61,7 +61,6 @@
     "getSessionOrder",
     "getSessionWorkflow",
     "getSkill",
-    "getTelemetry",
     "getTranscriptionAvailability",
     "getWall",
     "getWorkBoard",

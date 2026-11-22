@@ -9,13 +9,15 @@
  * - A section that did not come carries `status` and a short `reason`, never an empty list pretending to be data.
  * - A section that came but was read only in part (a folder that could not be fully read) is `ok`, with its items
  *   and a `partial` marker with a short reason; an `ok` section whole carries no marker.
+ * - `processes-by-session` (#722, #720) says which agent session the load belongs to: up to `LIST_CAP`
+ *   sessions by summed CPU, and the processes that descend from no session as one `outsideSession` line apart from the list.
  * - An `ok` `known-caches` section also carries `worktrees`, the two facts the screen words its worktree line from
  *   (age limit in days, shared root folder), so the screen never guesses them (#566).
  */
 
 import type { AlertKind, HostInfo } from '../telemetry/model.ts';
 
-export const SECTION_IDS = ['processes-by-rss', 'processes-by-cpu', 'swap', 'largest-folders', 'docker-df', 'known-caches', 'journal'] as const;
+export const SECTION_IDS = ['processes-by-rss', 'processes-by-cpu', 'processes-by-session', 'swap', 'largest-folders', 'docker-df', 'known-caches', 'journal'] as const;
 export type SectionId = (typeof SECTION_IDS)[number];
 
 export const SECTION_STATUSES = ['ok', 'unavailable', 'timeout'] as const;
@@ -36,6 +38,22 @@ export interface ProcessItem {
   rssBytes: number;
   cpuPct: number;
   startedAt: string;
+}
+/** The load of one agent session: the processes that descend from it, their count and summed CPU (#722). */
+export interface SessionLoadItem {
+  sessionId: string;
+  /** The session's title as the console knows it; `null` when it knows none. (#722) */
+  title: string | null;
+  /** What the session is running, short and without arguments: `pnpm test` (see `rootCommandOf`). (#722) */
+  rootCommand: string;
+  cwd: string | null;
+  processCount: number;
+  cpuPct: number;
+}
+/** The processes that descend from no live registered session, as one line (#722). */
+export interface OutsideSessionLoad {
+  processCount: number;
+  cpuPct: number;
 }
 export interface SwapItem {
   usedBytes: number;
@@ -79,6 +97,7 @@ export interface JournalItem {
 export interface SectionItems {
   'processes-by-rss': ProcessItem[];
   'processes-by-cpu': ProcessItem[];
+  'processes-by-session': SessionLoadItem[];
   swap: SwapItem[];
   'largest-folders': FolderItem[];
   'docker-df': DockerDfItem[];
@@ -92,7 +111,7 @@ export interface PartialMarker {
 }
 
 /** A section of one id, with the items of that id; the union over all ids narrows on `id` (#565). */
-export type SectionOf<K extends SectionId> = { [P in K]: { id: P; status: SectionStatus; items: SectionItems[P]; reason?: string; partial?: PartialMarker; worktrees?: WorktreesInfo } }[K];
+export type SectionOf<K extends SectionId> = { [P in K]: { id: P; status: SectionStatus; items: SectionItems[P]; reason?: string; partial?: PartialMarker; worktrees?: WorktreesInfo; outsideSession?: OutsideSessionLoad } }[K];
 export type DiagnosisSection = SectionOf<SectionId>;
 
 export interface Diagnosis {
@@ -104,7 +123,7 @@ export interface Diagnosis {
 }
 
 const SECTIONS_BY_KIND: Partial<Record<AlertKind, readonly SectionId[]>> = {
-  'load-high': ['processes-by-cpu'],
+  'load-high': ['processes-by-cpu', 'processes-by-session'],
   'memory-high': ['processes-by-rss', 'processes-by-cpu', 'swap'],
   'swap-high': ['processes-by-rss', 'processes-by-cpu', 'swap'],
   'volume-full': ['largest-folders', 'docker-df', 'known-caches'],
