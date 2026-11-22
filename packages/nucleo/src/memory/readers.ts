@@ -4,8 +4,8 @@
  * that does not fit is an error that carries a code, never the input.
  */
 
-/** The closed list of reasons a reader refuses (#727, #733). */
-export type MemoryReadCode = 'malformed-version' | 'malformed-plan' | 'unsupported-format' | 'malformed-status' | 'malformed-handoffs' | 'malformed-recent';
+/** The closed list of reasons a reader refuses (#727, #733, #734). */
+export type MemoryReadCode = 'malformed-version' | 'malformed-plan' | 'unsupported-format' | 'malformed-status' | 'malformed-handoffs' | 'malformed-recent' | 'malformed-bridge';
 
 /** Why a reader refused its input; the error holds the code only (#727). */
 export class MemoryReadError extends Error {
@@ -22,11 +22,10 @@ export interface MemoryVersion {
   version: string;
 }
 
-/** The service part of `setup --plan --json` (#727). */
+/** The service part of `setup --plan --json`, without its path (#727, #734/D2). */
 export interface MemoryServicePlan {
   action: string;
   manager: string;
-  path: string | null;
 }
 
 /** One agent of `setup --plan --json` (#727). */
@@ -36,14 +35,25 @@ export interface MemoryAgentPlan {
   wiring: string | null;
 }
 
-/** `setup --plan --json --agent claude-code`, format 1 (#727). */
+/** The shareable part of `setup --plan --json --agent claude-code`, format 1: no path (#727, #734/D2). */
 export interface MemorySetupPlan {
-  data_dir: string;
-  config_path: string;
   fresh: boolean;
   service: MemoryServicePlan;
   agents: MemoryAgentPlan[];
   other_agents: string[];
+}
+
+/** Local paths of the setup plan, for the local screen only; they must never reach MCP, an exporter, the hub or the remote contract (#734/D2). */
+export interface MemorySetupPlanLocal {
+  data_dir: string;
+  config_path: string;
+  service_path: string | null;
+}
+
+/** What `readSetupPlan` returns: the shareable part and the local-only part, held apart (#734/D2). */
+export interface MemorySetupPlanReading {
+  plan: MemorySetupPlan;
+  local: MemorySetupPlanLocal;
 }
 
 const SUPPORTED_PLAN_FORMAT = 1;
@@ -56,26 +66,27 @@ export function readVersion(stdout: string): MemoryVersion {
   return { version: match[1]! };
 }
 
-/** Reprojects a format 1 setup plan; any other format or a malformed one throws (#727). */
-export function readSetupPlan(stdout: string): MemorySetupPlan {
+/** Reprojects a format 1 setup plan, its paths held apart; any other format or a malformed one throws (#727, #734/D2). */
+export function readSetupPlan(stdout: string): MemorySetupPlanReading {
   const check = checks('malformed-plan');
   const plan = check.record(parseJson(stdout, 'malformed-plan'));
   if (plan.format !== SUPPORTED_PLAN_FORMAT) throw new MemoryReadError('unsupported-format');
   const service = check.record(plan.service);
   return {
-    data_dir: check.string(plan.data_dir),
-    config_path: check.string(plan.config_path),
-    fresh: check.boolean(plan.fresh),
-    service: { action: check.string(service.action), manager: check.string(service.manager), path: check.nullableString(service.path) },
-    agents: check.array(plan.agents).map((item) => {
-      const agent = check.record(item);
-      return { agent: check.string(agent.agent), found: check.boolean(agent.found), wiring: check.nullableString(agent.wiring) };
-    }),
-    other_agents: check.array(plan.other_agents).map(check.string),
+    plan: {
+      fresh: check.boolean(plan.fresh),
+      service: { action: check.string(service.action), manager: check.string(service.manager) },
+      agents: check.array(plan.agents).map((item) => {
+        const agent = check.record(item);
+        return { agent: check.string(agent.agent), found: check.boolean(agent.found), wiring: check.nullableString(agent.wiring) };
+      }),
+      other_agents: check.array(plan.other_agents).map(check.string),
+    },
+    local: { data_dir: check.string(plan.data_dir), config_path: check.string(plan.config_path), service_path: check.nullableString(service.path) },
   };
 }
 
-function parseJson(text: string, code: MemoryReadCode): unknown {
+export function parseJson(text: string, code: MemoryReadCode): unknown {
   try {
     return JSON.parse(text);
   } catch {
@@ -83,8 +94,20 @@ function parseJson(text: string, code: MemoryReadCode): unknown {
   }
 }
 
+/** The type checks of one reader (#733, #734). */
+export interface MemoryChecks {
+  record(value: unknown): Record<string, unknown>;
+  array(value: unknown): unknown[];
+  string(value: unknown): string;
+  nullableString(value: unknown): string | null;
+  boolean(value: unknown): boolean;
+  number(value: unknown): number;
+  nullableNumber(value: unknown): number | null;
+  oneOf<T extends string>(value: unknown, allowed: readonly T[]): T;
+}
+
 /** The type checks of one reader; each failure carries that reader's code and never the value (#733). */
-function checks(code: MemoryReadCode) {
+export function checks(code: MemoryReadCode): MemoryChecks {
   const fail = (): never => {
     throw new MemoryReadError(code);
   };
@@ -131,13 +154,24 @@ export interface MemoryStatusReading {
   local: MemoryStatusLocal;
 }
 
-/** One open handoff, without its body (#733/AC-2). */
+/** One open handoff, without its body and without its cwd (#733/AC-2, #734/D1). */
 export interface MemoryHandoff {
   id: string;
   from_agent: string;
   to_agent: string | null;
-  cwd: string | null;
   created_at_ms: number;
+}
+
+/** A handoff's working directory, by handoff id: a local path, for the local screen only (#734/D1). */
+export interface MemoryHandoffLocal {
+  id: string;
+  cwd: string | null;
+}
+
+/** What `readHandoffs` returns: the shareable handoffs and the local-only part, held apart (#734/D1). */
+export interface MemoryHandoffsReading {
+  handoffs: MemoryHandoff[];
+  local: MemoryHandoffLocal[];
 }
 
 /** One recent page, without its snippet (#733/AC-3). */
@@ -182,19 +216,18 @@ export function readStatus(stdout: string): MemoryStatusReading {
   };
 }
 
-/** Reprojects `handoffs --json` to the five listed fields; a handoff's body is never read (#733/AC-2). */
-export function readHandoffs(stdout: string): MemoryHandoff[] {
+/** Reprojects `handoffs --json` to four fields, the cwd held apart; a handoff's body is never read (#733/AC-2, #734/D1). */
+export function readHandoffs(stdout: string): MemoryHandoffsReading {
   const check = checks('malformed-handoffs');
-  return check.array(parseJson(stdout, 'malformed-handoffs')).map((item) => {
+  const rows = check.array(parseJson(stdout, 'malformed-handoffs')).map((item) => {
     const handoff = check.record(item);
+    const id = check.string(handoff.id);
     return {
-      id: check.string(handoff.id),
-      from_agent: check.string(handoff.from_agent),
-      to_agent: check.nullableString(handoff.to_agent),
-      cwd: check.nullableString(handoff.cwd),
-      created_at_ms: check.number(handoff.created_at_ms),
+      handoff: { id, from_agent: check.string(handoff.from_agent), to_agent: check.nullableString(handoff.to_agent), created_at_ms: check.number(handoff.created_at_ms) },
+      local: { id, cwd: check.nullableString(handoff.cwd) },
     };
   });
+  return { handoffs: rows.map((row) => row.handoff), local: rows.map((row) => row.local) };
 }
 
 /** Reprojects `recent --json` to path, title and updated_at; a page's snippet is never read (#733/AC-3). */

@@ -43,7 +43,7 @@ const GLOBAL_ARGS: Record<MemoryGlobalCommand, readonly string[]> = {
 // The workspace is a constant: the core has one (#733).
 const WORKSPACE = 'default';
 // The one caller value: it never starts with a dash, so it cannot read as an option, and it holds no slash or whitespace (#733).
-const PROJECT_FORMAT = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
+export const PROJECT_FORMAT = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
 const NOT_FOUND_WINDOW_BYTES = 4096;
 
 function isProjectCommand(command: MemoryCommand): command is MemoryProjectCommand {
@@ -71,7 +71,7 @@ export type MemoryRunResult =
   | { kind: 'not-found' }
   | { kind: 'failed'; reason: 'spawn' | 'output-too-large' | 'closed' | 'invalid-project' };
 
-type Spawn = (command: string, args: readonly string[], options: SpawnOptions) => ChildProcess;
+export type Spawn = (command: string, args: readonly string[], options: SpawnOptions) => ChildProcess;
 
 /** What the runner needs; the tests inject `spawn`, `killGroup` and `env` (#727). */
 export interface MemoryRunnerOptions {
@@ -104,7 +104,7 @@ export interface MemoryRunner {
 
 const CLOSED: MemoryRunResult = { kind: 'failed', reason: 'closed' };
 
-function defaultKillGroup(pid: number, signal: NodeJS.Signals): void {
+export function defaultKillGroup(pid: number, signal: NodeJS.Signals): void {
   try {
     process.kill(-pid, signal);
   } catch {

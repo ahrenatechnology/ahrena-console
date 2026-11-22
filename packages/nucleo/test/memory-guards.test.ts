@@ -141,6 +141,14 @@ describe('#719/AC-11 nothing from the memory module leaves the machine (#727/AC-
     }
   });
 
+  test('#719/AC-11 #734/D3 nothing under src/mcp imports the memory module: no ai-memory data enters the console MCP in phase 1', () => {
+    const mcpFiles = files(join(TEST_DIR, '..', 'src', 'mcp'), isSource);
+    assert.ok(mcpFiles.length > 3, `the scan found the console MCP sources, not ${mcpFiles.length} files (#734)`);
+    const importing = mcpFiles.filter((path) => [...readFileSync(path, 'utf8').matchAll(SPECIFIER)].some((m) => m[1]!.split('/').includes('memory') || /embedded-ai-memory/.test(m[1]!)));
+    assert.deepEqual(importing.map((p) => relative(REPO_ROOT, p)), []);
+    assert.deepEqual(ALLOWED_IMPORTERS, [], 'the allowlist stays empty in phase 1 (#734)');
+  });
+
   test('#719/AC-11 the scan sees an import of the module (so an empty result means something)', () => {
     const probe = `import { x } from '../memory/memory.ts';`;
     const seen = [...probe.matchAll(SPECIFIER)].some((m) => m[1]!.split('/').includes('memory'));

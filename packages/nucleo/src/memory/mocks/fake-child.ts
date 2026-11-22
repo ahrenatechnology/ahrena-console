@@ -17,7 +17,41 @@ export class FakeChild extends EventEmitter {
   pid = 4242;
   stdout = new PassThrough();
   stderr = new PassThrough();
-  stdin = null;
+  /** What the child reads: the JSON-RPC lines the client writes are captured here (#734). */
+  stdin = new PassThrough();
+  written = '';
+  stdinEnded = false;
+
+  constructor() {
+    super();
+    this.stdin.on('data', (chunk: Buffer) => {
+      this.written += chunk.toString('utf8');
+    });
+    this.stdin.on('finish', () => {
+      this.stdinEnded = true;
+    });
+  }
+
+  /** The JSON-RPC messages written to stdin so far, one per line (#734). */
+  sent(): Record<string, unknown>[] {
+    return this.written
+      .split('\n')
+      .filter(Boolean)
+      .map((line): Record<string, unknown> => {
+        const message: unknown = JSON.parse(line);
+        return typeof message === 'object' && message !== null ? Object.fromEntries(Object.entries(message)) : {};
+      });
+  }
+
+  /** Writes one JSON-RPC line to stdout (#734). */
+  say(message: unknown): void {
+    this.stdout.write(`${JSON.stringify(message)}\n`);
+  }
+
+  /** Writes a raw line to stdout, for a line that is not JSON (#734). */
+  sayRaw(line: string): void {
+    this.stdout.write(`${line}\n`);
+  }
 
   /** Writes to stdout and closes the child with `code` (#727). */
   finish(code: number | null, stdout = '', stderr = ''): void {

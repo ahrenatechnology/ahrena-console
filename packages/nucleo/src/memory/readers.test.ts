@@ -27,15 +27,23 @@ describe('readVersion (#727/AC-3)', () => {
 });
 
 describe('readSetupPlan (#727/AC-3)', () => {
-  test('#727/AC-3 a format 1 plan comes back field by field', () => {
+  test('#727/AC-3 #734/D2 a format 1 plan comes back field by field, with its local paths held apart', () => {
     assert.deepEqual(readSetupPlan(JSON.stringify(PLAN)), {
-      data_dir: PLAN.data_dir,
-      config_path: PLAN.config_path,
-      fresh: true,
-      service: PLAN.service,
-      agents: [{ agent: 'claude-code', found: true, wiring: 'mcp' }],
-      other_agents: ['codex'],
+      plan: {
+        fresh: true,
+        service: { action: 'install', manager: 'launchd' },
+        agents: [{ agent: 'claude-code', found: true, wiring: 'mcp' }],
+        other_agents: ['codex'],
+      },
+      local: { data_dir: PLAN.data_dir, config_path: PLAN.config_path, service_path: PLAN.service.path },
     });
+  });
+
+  test('#727/AC-3 #734/D2 the shareable plan names no path: data_dir, config_path and the service path are only in the local part', () => {
+    const { plan, local } = readSetupPlan(JSON.stringify(PLAN));
+    const text = JSON.stringify(plan);
+    for (const path of [PLAN.data_dir, PLAN.config_path, PLAN.service.path]) assert.equal(text.includes(path), false);
+    assert.deepEqual(Object.keys(local).sort(), ['config_path', 'data_dir', 'service_path']);
   });
 
   test('#727/AC-3 any field outside the list is dropped, at the top and inside each object', () => {
@@ -47,15 +55,15 @@ describe('readSetupPlan (#727/AC-3)', () => {
     };
     const out = readSetupPlan(JSON.stringify(noisy));
     assert.equal(JSON.stringify(out).includes('fake-token-0000-not-real'), false);
-    assert.deepEqual(Object.keys(out).sort(), ['agents', 'config_path', 'data_dir', 'fresh', 'other_agents', 'service']);
-    assert.deepEqual(Object.keys(out.service).sort(), ['action', 'manager', 'path']);
-    assert.deepEqual(Object.keys(out.agents[0]!).sort(), ['agent', 'found', 'wiring']);
+    assert.deepEqual(Object.keys(out.plan).sort(), ['agents', 'fresh', 'other_agents', 'service']);
+    assert.deepEqual(Object.keys(out.plan.service).sort(), ['action', 'manager']);
+    assert.deepEqual(Object.keys(out.plan.agents[0]!).sort(), ['agent', 'found', 'wiring']);
   });
 
   test('#727/AC-3 a service with no path or a null wiring is kept as null', () => {
     const out = readSetupPlan(JSON.stringify({ ...PLAN, service: { action: 'none', manager: 'none', path: null }, agents: [{ agent: 'claude-code', found: false, wiring: null }] }));
-    assert.equal(out.service.path, null);
-    assert.equal(out.agents[0]!.wiring, null);
+    assert.equal(out.local.service_path, null);
+    assert.equal(out.plan.agents[0]!.wiring, null);
   });
 
   for (const format of [0, 2, '1', null, undefined]) {
@@ -201,18 +209,23 @@ describe('readStatus (#733/AC-1, #733/AC-4)', () => {
 });
 
 describe('readHandoffs (#733/AC-2)', () => {
-  test('#733/AC-2 each handoff comes back with the five listed fields and no body', () => {
+  test('#733/AC-2 #734/D1 each handoff comes back with the four listed fields and no body, and cwd in a local part', () => {
     const out = readHandoffs(JSON.stringify(handoffsFixture()));
-    assert.deepEqual(out, [
-      { id: 'h-0001', from_agent: 'claude-code', to_agent: 'codex', cwd: '/Users/someone/work/app', created_at_ms: 1763632800000 },
-      { id: 'h-0002', from_agent: 'codex', to_agent: null, cwd: null, created_at_ms: 1763632900000 },
+    assert.deepEqual(out.handoffs, [
+      { id: 'h-0001', from_agent: 'claude-code', to_agent: 'codex', created_at_ms: 1763632800000 },
+      { id: 'h-0002', from_agent: 'codex', to_agent: null, created_at_ms: 1763632900000 },
     ]);
-    assert.equal(JSON.stringify(out).includes(FAKE_TOKEN), false);
+    assert.deepEqual(out.local, [
+      { id: 'h-0001', cwd: '/Users/someone/work/app' },
+      { id: 'h-0002', cwd: null },
+    ]);
+    assert.equal(JSON.stringify(out.handoffs).includes(FAKE_TOKEN), false);
     assert.equal(JSON.stringify(out).includes('body'), false);
+    assert.equal(JSON.stringify(out.handoffs).includes('/Users/'), false);
   });
 
   test('#733/AC-2 an empty array is an empty list', () => {
-    assert.deepEqual(readHandoffs('[]'), []);
+    assert.deepEqual(readHandoffs('[]'), { handoffs: [], local: [] });
   });
 
   for (const [name, text] of [

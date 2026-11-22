@@ -49,3 +49,66 @@ export function recentFixture(): Record<string, unknown>[] {
     { path: 'notes/todo.md', title: 'Todo', snippet: 'buy milk', updated_at: '2026-11-19T09:00:00Z' },
   ];
 }
+
+/** The session the bridge fixtures speak about (#734). */
+export const FAKE_SESSION_ID = '0c9e1b52-6f1d-4c0a-9a53-2d1f0b7c9e11';
+export const OTHER_SESSION_ID = '5a7d2f90-1b3c-4e68-8f42-7c0d9a1b2e33';
+
+/**
+ * The text of a `memory_handoff_list` result: a handoff as ai-memory 3.5.1 serializes it (flattened), body fields
+ * and noise included, with invented values (#734/AC-2).
+ */
+export function bridgeHandoffFixture(over: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    id: '7b0e3a1c-2d4f-4a6b-8c9d-0e1f2a3b4c5d',
+    workspace_id: '11111111-1111-4111-8111-111111111111',
+    project_id: '22222222-2222-4222-8222-222222222222',
+    from_session_id: FAKE_SESSION_ID,
+    from_agent: 'claude-code',
+    to_agent: 'codex',
+    cwd: '/Users/someone/work/app',
+    owner_user: 'local:someone',
+    summary: `summary with ${FAKE_TOKEN}`,
+    open_questions: ['which database?'],
+    next_steps: ['run the migration'],
+    files_touched: ['src/secret-plan.ts'],
+    state: 'open',
+    created_at: '2026-11-20T10:00:00Z',
+    accepted_by: null,
+    accepted_at: null,
+    accepted_by_session: null,
+    accepted_by_user: null,
+    ...over,
+  };
+}
+
+/** The handoffs of one project: one opened by the session, one accepted by it, one of another session (#734). */
+export function bridgeHandoffsFixture(): Record<string, unknown>[] {
+  return [
+    bridgeHandoffFixture(),
+    bridgeHandoffFixture({
+      id: '8c1f4b2d-3e5a-4b7c-9d0e-1f2a3b4c5d6e',
+      from_session_id: OTHER_SESSION_ID,
+      from_agent: 'codex',
+      to_agent: null,
+      cwd: null,
+      owner_user: null,
+      state: 'accepted',
+      accepted_by: 'claude-code',
+      accepted_at: '2026-11-20T11:00:00Z',
+      accepted_by_session: FAKE_SESSION_ID,
+      accepted_by_user: 'local:someone',
+    }),
+    bridgeHandoffFixture({ id: '9d2a5c3e-4f6b-4c8d-8e1f-2a3b4c5d6e7f', from_session_id: OTHER_SESSION_ID, cwd: '/Users/someone/work/other' }),
+  ];
+}
+
+/** A `tools/call` result the way the bridge forwards it: the JSON as one text block (#734). */
+export function toolResult(payload: unknown): Record<string, unknown> {
+  return { content: [{ type: 'text', text: JSON.stringify(payload, null, 2) }] };
+}
+
+/** The `initialize` result of the bridge (#734). */
+export function initializeResult(): Record<string, unknown> {
+  return { protocolVersion: '2025-06-18', capabilities: { tools: {} }, serverInfo: { name: 'ai-memory', version: '3.5.1' } };
+}

@@ -1,17 +1,29 @@
 // The memory module over the runner: version, setup plan and status, as the core asks for them (#727).
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
-import { fakeSpawn, turn } from './mocks/fake-child.ts';
-import { FAKE_DATA_DIR, FAKE_DB_PATH, FAKE_TOKEN as PLANTED_TOKEN, handoffsFixture, recentFixture, statusFixture } from './mocks/fixtures.ts';
+import { fakeSpawn, turn, type FakeChild } from './mocks/fake-child.ts';
+import {
+  bridgeHandoffsFixture,
+  FAKE_DATA_DIR,
+  FAKE_DB_PATH,
+  FAKE_SESSION_ID,
+  FAKE_TOKEN as PLANTED_TOKEN,
+  handoffsFixture,
+  initializeResult,
+  OTHER_SESSION_ID,
+  recentFixture,
+  statusFixture,
+  toolResult,
+} from './mocks/fixtures.ts';
 import { createMemoryModule } from './memory.ts';
 
 const BINARY = '/Applications/Ahrena Console.app/Contents/Resources/ai-memory/ai-memory';
 const DATA_DIR = '/Users/someone/.ahrena-console/ai-memory';
 
-function moduleWith(binaryPath: string | null = BINARY) {
+function moduleWith(binaryPath: string | null = BINARY, extra: Partial<Parameters<typeof createMemoryModule>[0]> = {}) {
   const doubles = fakeSpawn();
   const lines: string[] = [];
-  const memory = createMemoryModule({ dataDir: DATA_DIR, binaryPath, spawn: doubles.spawn, killGroup: () => {}, env: { PATH: '/usr/bin' }, log: (m) => lines.push(m) });
+  const memory = createMemoryModule({ dataDir: DATA_DIR, binaryPath, spawn: doubles.spawn, killGroup: () => {}, env: { PATH: '/usr/bin' }, log: (m) => lines.push(m), ...extra });
   return { memory, calls: doubles.calls, lines };
 }
 
@@ -45,6 +57,30 @@ describe('memory module (#727/AC-3)', () => {
     const result = await pending;
     assert.equal(result.ok, true);
     if (result.ok) assert.equal('extra' in result.value, false);
+  });
+
+  test('#734/D2 the shareable setup plan carries no path, and setupPlanLocal answers data_dir, config_path and the service path', async () => {
+    const { memory, calls } = moduleWith();
+    const body = JSON.stringify({
+      format: 1,
+      data_dir: DATA_DIR,
+      config_path: `${DATA_DIR}/config.toml`,
+      fresh: false,
+      service: { action: 'none', manager: 'launchd', path: '/Users/someone/Library/LaunchAgents/ai-memory.plist' },
+      agents: [],
+      other_agents: [],
+    });
+    const shared = memory.setupPlan();
+    await turn();
+    calls[0]!.child.finish(0, body);
+    const sharedResult = await shared;
+    assert.equal(sharedResult.ok, true);
+    assert.equal(JSON.stringify(sharedResult).includes('/Users/'), false);
+    const local = memory.setupPlanLocal();
+    await turn();
+    assert.deepEqual(calls[1]!.args, ['--data-dir', DATA_DIR, 'setup', '--plan', '--json', '--agent', 'claude-code']);
+    calls[1]!.child.finish(0, body);
+    assert.deepEqual(await local, { ok: true, value: { data_dir: DATA_DIR, config_path: `${DATA_DIR}/config.toml`, service_path: '/Users/someone/Library/LaunchAgents/ai-memory.plist' } });
   });
 
   test('#727/AC-3 a plan with another format is rejected', async () => {
@@ -131,18 +167,36 @@ describe('memory module refusal log (#727)', () => {
 
 
 describe('memory module, typed reads (#733)', () => {
-  test('#733/AC-1 a running status carries the reprojected value and the local part held apart', async () => {
+  test('#733/AC-1 #734/D2 a running status carries the reprojected value and no local part', async () => {
     const { memory, calls } = moduleWith();
     const pending = memory.status();
     await turn();
     calls[0]!.child.finish(0, JSON.stringify(statusFixture()));
     const result = await pending;
     assert.equal(result.state, 'running');
-    if (result.state !== 'running' || !result.status || !result.local) return assert.fail('a running status carries its value');
+    if (result.state !== 'running' || !result.status) return assert.fail('a running status carries its value');
     assert.equal(result.status.version, '3.5.1');
     assert.equal(result.status.client_auth, 'off');
-    assert.deepEqual(result.local, { data_dir: FAKE_DATA_DIR, db_path: FAKE_DB_PATH });
-    assert.equal(JSON.stringify(result.status).includes(FAKE_DATA_DIR), false);
+    assert.equal('local' in result, false);
+    assert.equal(JSON.stringify(result).includes(FAKE_DATA_DIR), false);
+    assert.equal(JSON.stringify(result).includes(FAKE_DB_PATH), false);
+  });
+
+  test('#734/D2 statusLocal is the one method that answers data_dir and db_path', async () => {
+    const { memory, calls } = moduleWith();
+    const pending = memory.statusLocal();
+    await turn();
+    assert.deepEqual(calls[0]!.args, ['--data-dir', DATA_DIR, 'status', '--json']);
+    calls[0]!.child.finish(0, JSON.stringify(statusFixture()));
+    assert.deepEqual(await pending, { ok: true, value: { data_dir: FAKE_DATA_DIR, db_path: FAKE_DB_PATH } });
+  });
+
+  test('#734/D2 statusLocal of a stopped server is a failed read, not a value', async () => {
+    const { memory, calls } = moduleWith();
+    const pending = memory.statusLocal();
+    await turn();
+    calls[0]!.child.finish(1, '', 'connection refused');
+    assert.deepEqual(await pending, { ok: false, reason: 'exit' });
   });
 
   test('#733/AC-1 a non-zero exit is still "stopped", with no value', async () => {
@@ -171,7 +225,20 @@ describe('memory module, typed reads (#733)', () => {
     const result = await pending;
     assert.equal(result.ok, true);
     assert.equal(JSON.stringify(result).includes(PLANTED_TOKEN), false);
-    if (result.ok) assert.deepEqual(Object.keys(result.value[0]!).sort(), ['created_at_ms', 'cwd', 'from_agent', 'id', 'to_agent']);
+    if (result.ok) assert.deepEqual(Object.keys(result.value[0]!).sort(), ['created_at_ms', 'from_agent', 'id', 'to_agent']);
+  });
+
+  test('#734/D1 handoffs names no cwd, and handoffsLocal is the one method that answers it, by handoff id', async () => {
+    const { memory, calls } = moduleWith();
+    const shared = memory.handoffs('app');
+    await turn();
+    calls[0]!.child.finish(0, JSON.stringify(handoffsFixture()));
+    assert.equal(JSON.stringify(await shared).includes('/Users/'), false);
+    const local = memory.handoffsLocal('app');
+    await turn();
+    assert.deepEqual(calls[1]!.args, ['--data-dir', DATA_DIR, 'handoffs', '--workspace', 'default', '--project', 'app', '--json']);
+    calls[1]!.child.finish(0, JSON.stringify(handoffsFixture()));
+    assert.deepEqual(await local, { ok: true, value: [{ id: 'h-0001', cwd: '/Users/someone/work/app' }, { id: 'h-0002', cwd: null }] });
   });
 
   test('#733/AC-2 a project the server does not know reads as an empty list, for handoffs and for recent', async () => {
@@ -229,5 +296,161 @@ describe('memory module, typed reads (#733)', () => {
     assert.deepEqual(await memory.handoffs('app'), { ok: false, reason: 'unavailable' });
     assert.deepEqual(await memory.recent('app'), { ok: false, reason: 'unavailable' });
     assert.equal(calls.length, 0);
+  });
+});
+
+
+/** Plays the bridge's side: answers initialize, then the tool call with `reply`, then exits 0 (#734). */
+async function playBridge(child: FakeChild, reply: Record<string, unknown>): Promise<void> {
+  await turn();
+  child.say({ jsonrpc: '2.0', id: 1, result: initializeResult() });
+  await turn();
+  await turn();
+  child.say({ jsonrpc: '2.0', id: 2, ...reply });
+  await turn();
+  child.finish(0);
+}
+
+const NOT_FOUND = `session ${FAKE_SESSION_ID} not found in default/app`;
+
+describe('memory module, the bridge reads (#734)', () => {
+  test('#734/AC-2 bridgeHandoffs calls memory_handoff_list for the project and returns the listed fields, with no body field', async () => {
+    const { memory, calls } = moduleWith();
+    const pending = memory.bridgeHandoffs('app');
+    await turn();
+    assert.deepEqual(calls[0]!.args, ['--data-dir', DATA_DIR, 'mcp-bridge', '--no-session-id']);
+    await playBridge(calls[0]!.child, { result: toolResult({ handoffs: bridgeHandoffsFixture() }) });
+    assert.deepEqual(calls[0]!.child.sent()[2], { jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'memory_handoff_list', arguments: { workspace: 'default', project: 'app', limit: 200 } } });
+    const result = await pending;
+    assert.equal(result.ok, true);
+    const text = JSON.stringify(result);
+    for (const planted of ['summary', 'open_questions', 'next_steps', 'files_touched', PLANTED_TOKEN, '/Users/']) assert.equal(text.includes(planted), false, planted);
+    if (result.ok) assert.equal(result.value.length, 3);
+  });
+
+  test('#734/D1 bridgeHandoffsLocal is the one method that answers the handoffs cwd, by handoff id', async () => {
+    const { memory, calls } = moduleWith();
+    const pending = memory.bridgeHandoffsLocal('app');
+    await turn();
+    await playBridge(calls[0]!.child, { result: toolResult({ handoffs: bridgeHandoffsFixture() }) });
+    const result = await pending;
+    assert.deepEqual(result.ok && result.value.map((l) => l.cwd), ['/Users/someone/work/app', null, '/Users/someone/work/other']);
+  });
+
+  test('#734 sessionHandoffs matches the handoffs the session opened and accepted', async () => {
+    const { memory, calls } = moduleWith();
+    const pending = memory.sessionHandoffs('app', FAKE_SESSION_ID);
+    await turn();
+    await playBridge(calls[0]!.child, { result: toolResult({ handoffs: bridgeHandoffsFixture() }) });
+    const result = await pending;
+    assert.equal(result.ok, true);
+    if (result.ok) {
+      assert.deepEqual(result.value.opened.map((h) => h.from_session_id), [FAKE_SESSION_ID]);
+      assert.deepEqual(result.value.accepted.map((h) => h.accepted_by_session), [FAKE_SESSION_ID]);
+    }
+    assert.equal(JSON.stringify(result).includes('/Users/'), false);
+  });
+
+  test('#734/AC-2 a handoff list that does not fit is rejected and logs the tool and the closed code only', async () => {
+    const { memory, calls, lines } = moduleWith();
+    const pending = memory.bridgeHandoffs('app');
+    await turn();
+    await playBridge(calls[0]!.child, { result: toolResult({ handoffs: [{ id: 1, summary: PLANTED_TOKEN }] }) });
+    assert.deepEqual(await pending, { ok: false, reason: 'rejected' });
+    assert.deepEqual(lines, ['memory: memory_handoff_list rejected malformed-bridge']);
+  });
+
+  test('#734/AC-3 a session with observations is captured, and the observations are neither requested in bulk nor returned', async () => {
+    const { memory, calls } = moduleWith();
+    const pending = memory.sessionCaptured('app', FAKE_SESSION_ID);
+    await turn();
+    await playBridge(calls[0]!.child, { result: toolResult({ session: { id: FAKE_SESSION_ID }, observations: [{ body: `prompt ${PLANTED_TOKEN}` }], total: 3 }) });
+    const sent = calls[0]!.child.sent()[2] as { params: { name: string; arguments: Record<string, unknown> } };
+    assert.equal(sent.params.name, 'memory_read_session_observations');
+    assert.deepEqual(sent.params.arguments, { workspace: 'default', project: 'app', session_id: FAKE_SESSION_ID, limit: 1, offset: 1_000_000 });
+    const result = await pending;
+    assert.deepEqual(result, { ok: true, value: true });
+    assert.equal(JSON.stringify(result).includes(PLANTED_TOKEN), false);
+  });
+
+  test('#734/AC-3 a JSON-RPC error -32602 "session X not found in default/<project>" is not captured', async () => {
+    const { memory, calls, lines } = moduleWith();
+    const pending = memory.sessionCaptured('app', FAKE_SESSION_ID);
+    await turn();
+    await playBridge(calls[0]!.child, { error: { code: -32602, message: NOT_FOUND } });
+    assert.deepEqual(await pending, { ok: true, value: false });
+    assert.deepEqual(lines, ['memory: bridge memory_read_session_observations rpc-error -32602']);
+  });
+
+  test('#734/AC-3 a -32602 about something else, or another session, is a failed read, not "not captured"', async () => {
+    for (const message of ['unknown order "x"', `session ${OTHER_SESSION_ID} not found in default/app`, `${NOT_FOUND} extra`, `session ${FAKE_SESSION_ID} not found in default/other`]) {
+      const { memory, calls } = moduleWith();
+      const pending = memory.sessionCaptured('app', FAKE_SESSION_ID);
+      await turn();
+      await playBridge(calls[0]!.child, { error: { code: -32602, message } });
+      assert.deepEqual(await pending, { ok: false, reason: 'failed' }, message);
+    }
+  });
+
+  test('#734/AC-3 any other error, and a tool result flagged as an error, is a failed read', async () => {
+    for (const reply of [{ error: { code: -32603, message: NOT_FOUND } }, { result: { isError: true, content: [{ type: 'text', text: 'denied' }] } }]) {
+      const { memory, calls } = moduleWith();
+      const pending = memory.sessionCaptured('app', FAKE_SESSION_ID);
+      await turn();
+      await playBridge(calls[0]!.child, reply);
+      assert.deepEqual(await pending, { ok: false, reason: 'failed' });
+    }
+  });
+
+  test('#734/AC-3 a bridge that is too slow is a timeout, not "not captured"', async () => {
+    const { memory } = moduleWith(BINARY, { timeoutMs: 10, killGraceMs: 10 });
+    assert.deepEqual(await memory.sessionCaptured('app', FAKE_SESSION_ID), { ok: false, reason: 'timeout' });
+  });
+
+  test('#734/AC-3 a project or a session id that does not fit the format is a failed read and nothing is spawned', async () => {
+    const { memory, calls } = moduleWith();
+    assert.deepEqual(await memory.bridgeHandoffs('--global'), { ok: false, reason: 'failed' });
+    assert.deepEqual(await memory.sessionCaptured('app', '--all'), { ok: false, reason: 'failed' });
+    assert.deepEqual(await memory.sessionCaptured('app', 'a b'), { ok: false, reason: 'failed' });
+    assert.deepEqual(await memory.sessionCaptured('app', ''), { ok: false, reason: 'failed' });
+    assert.deepEqual(await memory.sessionCaptured('a/b', FAKE_SESSION_ID), { ok: false, reason: 'failed' });
+    assert.deepEqual(await memory.sessionHandoffs('app', 'x'.repeat(200)), { ok: false, reason: 'failed' });
+    assert.equal(calls.length, 0);
+  });
+
+  test('#734/AC-1 with no embedded binary the bridge reads report unavailable and spawn nothing', async () => {
+    const { memory, calls } = moduleWith(null);
+    assert.deepEqual(await memory.bridgeHandoffs('app'), { ok: false, reason: 'unavailable' });
+    assert.deepEqual(await memory.bridgeHandoffsLocal('app'), { ok: false, reason: 'unavailable' });
+    assert.deepEqual(await memory.sessionHandoffs('app', FAKE_SESSION_ID), { ok: false, reason: 'unavailable' });
+    assert.deepEqual(await memory.sessionCaptured('app', FAKE_SESSION_ID), { ok: false, reason: 'unavailable' });
+    assert.equal(calls.length, 0);
+  });
+
+  test('#734/AC-1 close ends a running bridge call and refuses the next one', async () => {
+    const { memory, calls } = moduleWith(BINARY, { killGraceMs: 10 });
+    const running = memory.bridgeHandoffs('app');
+    await turn();
+    await memory.close();
+    assert.deepEqual(await running, { ok: false, reason: 'failed' });
+    assert.equal(calls.length, 1);
+    assert.deepEqual(await memory.bridgeHandoffs('app'), { ok: false, reason: 'failed' });
+  });
+
+  test('#734/AC-4 #719/AC-10 a token planted in the environment and in the bridge output reaches no argv, no child env and no result', async () => {
+    const doubles = fakeSpawn();
+    const memory = createMemoryModule({
+      dataDir: DATA_DIR,
+      binaryPath: BINARY,
+      spawn: doubles.spawn,
+      killGroup: () => {},
+      env: { PATH: '/usr/bin', AI_MEMORY_AUTH_TOKEN: PLANTED_TOKEN },
+    });
+    const pending = memory.sessionCaptured('app', FAKE_SESSION_ID);
+    await turn();
+    await playBridge(doubles.calls[0]!.child, { result: toolResult({ observations: [{ body: PLANTED_TOKEN }] }) });
+    const result = await pending;
+    assert.equal(JSON.stringify([doubles.calls[0]!.command, doubles.calls[0]!.args, doubles.calls[0]!.options.env, result]).includes(PLANTED_TOKEN), false);
+    assert.equal('AI_MEMORY_AUTH_TOKEN' in (doubles.calls[0]!.options.env ?? {}), false);
   });
 });
