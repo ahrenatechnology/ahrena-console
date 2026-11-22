@@ -192,6 +192,16 @@ describe('#720/AC-5 a version-like executable roots a session only inside the cc
     assert.deepEqual(r.roots.map((x) => x.pid), [100]);
   });
 
+  test('#720/AC-3 Given a ccd-cli executable replaced while running (the link ends in " (deleted)"), Then the root stays governed', () => {
+    assert.equal(refused(LINUX_COMM, `${CCD_CLI} (deleted)`).targets.length > 0, true);
+    assert.equal(isAgentRoot(100, LINUX_COMM, { configDir: CONFIG, image: `${CCD_CLI} (deleted)` }), true);
+  });
+
+  test('#720/AC-5 Given a " (deleted)" executable outside <config>/remote/ccd-cli/, Then the root is refused', () => {
+    assert.equal(isAgentRoot(100, LINUX_COMM, { configDir: CONFIG, image: '/tmp/2.1.326-3eec682dec28 (deleted)' }), false);
+    assert.equal(isAgentRoot(100, LINUX_COMM, { configDir: CONFIG, image: `${CONFIG}/remote/ccd-cli/ (deleted)` }), false);
+  });
+
   test('#720/AC-5 Given no origin for the root, Then a version comm is refused', () => {
     const t = tree('s1', [100], [proc(100, 1), proc(101, 100)]);
     assert.deepEqual(targetsOf([t], new Set(), new Map([[100, LINUX_COMM]])), []);

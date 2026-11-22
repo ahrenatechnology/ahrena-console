@@ -110,7 +110,7 @@ describe('#720/AC-3 the sample: session trees from the attribution, the nice of 
 describe('#720/AC-3 on Linux the real executable of each registered root is read from /proc, not from comm', () => {
   const CONFIG = '/home/someone/.claude';
   const IMAGE = `${CONFIG}/remote/ccd-cli/2.1.326-3eec682dec28`;
-  const linux = (readImage: (pid: number) => Promise<string | null>, platform: 'darwin' | 'linux' = 'linux') => {
+  const linux = (readImage: (pid: number) => Promise<string | null>, platform: 'darwin' | 'linux' = 'linux', realpath?: (path: string) => Promise<string>) => {
     const exec: Exec = async (file, args) => {
       const key = [file, ...args].join(' ');
       if (key === PS_TREE_CMD) return { ok: true, stdout: PS_TREE };
@@ -118,7 +118,7 @@ describe('#720/AC-3 on Linux the real executable of each registered root is read
       return { ok: true, stdout: '' };
     };
     const registry: RegisteredSession[] = [{ pid: 100, sessionId: 's1', cwd: null, procStart: START, configDir: CONFIG }];
-    return createMachineControl({ exec, platform, registered: async () => registry, startCheck: async () => (entry, real) => entry.procStart === real.start, readImage });
+    return createMachineControl({ exec, platform, registered: async () => registry, startCheck: async () => (entry, real) => entry.procStart === real.start, readImage, realpath });
   };
 
   test('#720/AC-3 Given a Linux root registered in a config folder, Then its origin carries that folder and the executable read for its pid', async () => {
@@ -138,6 +138,17 @@ describe('#720/AC-3 on Linux the real executable of each registered root is read
     const observation = await linux(async () => (read++, IMAGE), 'darwin').sample();
     assert.equal(read, 0);
     assert.deepEqual(observation!.origins.get(100), { configDir: CONFIG });
+  });
+
+  test('#720/AC-3 Given a config folder that is a symlink, Then the origin carries its real path, the one /proc/<pid>/exe resolves under', async () => {
+    const REAL = '/data/claude-home';
+    const observation = await linux(async () => `${REAL}/remote/ccd-cli/2.1.326-3eec682dec28`, 'linux', async (path) => (path === CONFIG ? REAL : path)).sample();
+    assert.deepEqual(observation!.origins.get(100), { configDir: REAL, image: `${REAL}/remote/ccd-cli/2.1.326-3eec682dec28` });
+  });
+
+  test('#720/AC-5 Given a config folder whose real path cannot be read, Then the origin keeps the raw path', async () => {
+    const observation = await linux(async () => IMAGE, 'linux', async () => { throw new Error('ENOENT'); }).sample();
+    assert.deepEqual(observation!.origins.get(100), { configDir: CONFIG, image: IMAGE });
   });
 
   test('#720/AC-5 Given a pid claimed from two config folders, Then it has no origin', async () => {

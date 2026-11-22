@@ -82,10 +82,17 @@ export interface RootOrigin {
   image?: string;
 }
 
-/** #720/AC-3: The real executable sits directly in `<configDir>/remote/ccd-cli/`, both paths absolute and already normalized (no `..`, no `//`). */
+const DELETED_SUFFIX = ' (deleted)';
+
+/**
+ * #720/AC-3: The real executable sits directly in `<configDir>/remote/ccd-cli/`, both paths absolute and already normalized (no `..`, no `//`).
+ * A link the kernel marks ` (deleted)` is a binary replaced while it runs (an auto-update): the session is still the one that was installed
+ * there, so the mark is dropped and the folder is checked as for any other.
+ */
 function inCcdCli(origin: RootOrigin | undefined): boolean {
   if (!origin?.image) return false;
-  const { configDir, image } = origin;
+  const { configDir } = origin;
+  const image = origin.image.endsWith(DELETED_SUFFIX) ? origin.image.slice(0, -DELETED_SUFFIX.length) : origin.image;
   if (!isAbsolute(configDir) || !isAbsolute(image) || normalize(configDir) !== configDir || normalize(image) !== image) return false;
   return basename(image) !== '' && dirname(image) === join(configDir, 'remote', 'ccd-cli');
 }

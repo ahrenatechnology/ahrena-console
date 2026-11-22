@@ -7,7 +7,7 @@
  *   last on its line so a path with spaces stays whole. The governor roots a session when its basename is `claude` or
  *   `codex` (#720/AC-5); the value never goes to a log.
  * - On Linux a Claude Code session's comm is a truncated version, so the real executable of each registered root pid is read
- *   with `readlink /proc/<pid>/exe` (no exec) and handed up with the config folder of the session file (#720/AC-3).
+ *   with `readlink /proc/<pid>/exe` (no exec) and handed up with the real path of the config folder of the session file (#720/AC-3).
  */
 
 import { execFile } from 'node:child_process';
@@ -48,6 +48,8 @@ export interface MachineControlDeps {
   startCheck(registry: readonly RegisteredSession[], samples: readonly ProcessSample[]): Promise<StartCheck>;
   /** #720/AC-3: The real executable of a pid (Linux: `readlink /proc/<pid>/exe`); `null` when it cannot be read. Only called on Linux, for registered roots. */
   readImage?(pid: number): Promise<string | null>;
+  /** #720/AC-3: The real path of a config folder (`fs.realpath`), to compare with the resolved `/proc/<pid>/exe`; a rejection keeps the raw path. Only called on Linux. */
+  realpath?(path: string): Promise<string>;
 }
 
 const isPid = (pid: number): boolean => Number.isInteger(pid) && pid > 0 && pid <= 4_194_304;
@@ -70,9 +72,11 @@ async function originsOf(roots: readonly number[], registry: readonly Registered
   const origins = new Map<number, RootOrigin>();
   for (const pid of roots) {
     const dirs = new Set(registry.filter((e) => e.pid === pid).map((e) => e.configDir));
-    const [configDir] = [...dirs];
-    if (dirs.size !== 1 || configDir === undefined) continue;
-    const image = deps.platform === 'linux' && deps.readImage ? await deps.readImage(pid) : null;
+    const [registered] = [...dirs];
+    if (dirs.size !== 1 || registered === undefined) continue;
+    const linux = deps.platform === 'linux';
+    const configDir = linux && deps.realpath ? await deps.realpath(registered).catch(() => registered) : registered;
+    const image = linux && deps.readImage ? await deps.readImage(pid) : null;
     origins.set(pid, image ? { configDir, image } : { configDir });
   }
   return origins;
