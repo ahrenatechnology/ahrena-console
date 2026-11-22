@@ -34,6 +34,7 @@ import {
   type ToolGroup,
   type ToolSource,
 } from './catalog.ts';
+import { embeddedAiMemoryPath } from './embedded-ai-memory.ts';
 import { readContainers, type ContainersView } from './containers.ts';
 import { compareVersions, readLatest, usesNetwork } from './latest.ts';
 import { LoginPath, which, type IsExecutable } from './login-path.ts';
@@ -153,6 +154,8 @@ export interface ToolsServiceOptions {
   loginPath?: () => Promise<string>;
   realpath?: (path: string) => Promise<string>;
   isExecutable?: IsExecutable;
+  /** The embedded ai-memory's absolute path (#725); the bundle's by default. */
+  embeddedAiMemoryPath?: () => string | null;
   readFile?: (path: string) => Promise<string | null>;
   /** Modification time (epoch ms) of a path, or `null`: the age of the apt lists. */
   mtime?: (path: string) => Promise<number | null>;
@@ -346,7 +349,7 @@ export class ToolsService {
   private async takeSnapshot(): Promise<LocalSnapshot> {
     const path = await this.loginPath();
     const fs = { ...(this.o.realpath ? { realpath: this.o.realpath } : {}), ...(this.o.isExecutable ? { isExecutable: this.o.isExecutable } : {}) };
-    const detections = await probeAll(this.catalog, { platform: this.platform, arch: this.arch, home: this.home, path, run: this.run, ...(this.o.env ? { env: this.o.env } : {}), ...fs });
+    const detections = await probeAll(this.catalog, { platform: this.platform, arch: this.arch, home: this.home, path, run: this.run, embeddedPath: this.o.embeddedAiMemoryPath ?? embeddedAiMemoryPath, ...(this.o.env ? { env: this.o.env } : {}), ...fs });
     const names = new Set<string>(['brew', 'winget', 'apt-get', 'apt-cache']);
     for (const e of this.catalog) for (const s of e.sources) if (s.manager) names.add(s.manager);
     const managers = new Map<string, string | null>();
@@ -368,7 +371,7 @@ export class ToolsService {
 
   /** The source a tool is (or would be) installed from: the detected one, else the install source. */
   private sourceOf(entry: ToolEntry, d: Detection | undefined, snap: LocalSnapshot): ToolSource | null {
-    if (d?.installed || d?.binaryPath) {
+    if (d?.installed || d?.binaryPath || entry.embedded) {
       if (!d.sourceId || d.sourceId === 'manual') return null;
       return sourcesFor(entry, this.platform, this.arch).find((s) => s.id === d.sourceId) ?? null;
     }
@@ -497,10 +500,11 @@ export class ToolsService {
     } else if (d?.probeError === 'shim-not-readable') {
       state = 'manual';
       note = 'no Windows a sonda não lê esta ferramenta (atalho .cmd)';
-    } else if (d?.binaryPath && !installed) {
+    } else if ((d?.binaryPath || entry.embedded) && !installed) {
       state = 'failed';
       note = 'a sonda não leu a versão instalada';
     } else if (!installed) state = 'missing';
+    else if (entry.embedded) state = 'ok';
     else if (sourceId === 'manual' || !source?.latest) state = 'manual';
     else if (latest === null) state = latestError ? 'failed' : 'checking';
     else if (compareVersions(installed, latest) >= 0) state = 'ok';

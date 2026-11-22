@@ -44,6 +44,7 @@ describe('#280 ToolsService.overview without a check', () => {
         ['colima', 'cli', '0.9.1', 'homebrew', 'checking'],
         ['jq', 'cli', '1.8.1', 'homebrew', 'checking'],
         ['rg', 'cli', null, 'homebrew', 'missing'],
+        ['ai-memory', 'cli', null, 'embedded', 'failed'],
         ['node', 'runtime', '24.10.0', 'fnm', 'checking'],
         ['tsc', 'runtime', null, 'npm', 'missing'],
         ['python', 'runtime', null, 'uv', 'missing'],

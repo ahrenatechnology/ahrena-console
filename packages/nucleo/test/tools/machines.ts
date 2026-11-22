@@ -82,6 +82,7 @@ export function macService(o: { links?: Record<string, string>; run?: Record<str
     ...fs,
     now: o.now ?? (() => NOW),
     probeCacheMs: 0,
+    embeddedAiMemoryPath: () => null,
     ...o.extra,
   });
   return { service, run, fetchText, store };
@@ -126,6 +127,7 @@ export function wsService(o: { links?: Record<string, string>; run?: Record<stri
     mtime: async () => NOW - 86_400_000,
     now: () => NOW,
     probeCacheMs: 0,
+    embeddedAiMemoryPath: () => null,
   });
   return { service, run, store };
 }

@@ -19,7 +19,7 @@ export type Arch = 'x64' | 'arm64';
 export type ToolGroup = 'cli' | 'runtime' | 'container' | 'mcp';
 export const ACTION_IDS = ['install', 'update', 'start', 'stop'] as const;
 export type ActionId = (typeof ACTION_IDS)[number];
-export type SourceId = 'homebrew' | 'apt' | 'winget' | 'npm' | 'fnm' | 'uv' | 'pyenv' | 'rustup' | 'native' | 'official';
+export type SourceId = 'homebrew' | 'apt' | 'winget' | 'npm' | 'fnm' | 'uv' | 'pyenv' | 'rustup' | 'native' | 'official' | 'embedded';
 /** A detected install: one of the catalog's sources, or `manual` when none matches. */
 export type DetectedSourceId = SourceId | 'manual';
 export type ContainerRuntimeId = 'colima' | 'docker-engine' | 'docker-rootless' | 'podman' | 'docker-desktop';
@@ -83,6 +83,11 @@ export interface ToolEntry {
   readonly probe: ToolProbe | null;
   /** Filesystem discovery only: never execute this provider, even for --version. */
   readonly passive?: boolean;
+  /**
+   * The binary ships inside the console (#719): the probe runs the bundle's absolute path, never one
+   * found on the PATH, and the entry offers no action: updating the console updates it.
+   */
+  readonly embedded?: boolean;
   /** Only on these platforms; elsewhere the state is `na` with `naNote`. All when absent. */
   readonly platforms?: readonly Platform[];
   readonly note?: string;
@@ -343,6 +348,15 @@ export const CATALOG: readonly ToolEntry[] = [
     group: 'cli',
     probe: { argv: ['rg', '--version'], version: /ripgrep (\d+(?:\.\d+)+)/ },
     sources: [brew('ripgrep'), apt('ripgrep')],
+  },
+  {
+    id: 'ai-memory',
+    label: 'ai-memory',
+    group: 'cli',
+    embedded: true,
+    probe: { argv: ['ai-memory', '--version'], version: /ai-memory (\d+\.\d+\.\d+)/ },
+    note: 'Vem dentro do console: atualizar o console atualiza o ai-memory.',
+    sources: [{ id: 'embedded', label: 'embutido no console', platforms: ALL, binaryUnder: [], latest: null, actions: {} }],
   },
 
   // ---- Runtimes --------------------------------------------------------------------------------
