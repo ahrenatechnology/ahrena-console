@@ -55,7 +55,7 @@ jobs:
 
       # #725: tauri_build checks at compile time that every bundle resource exists, and the ai-memory
       # folder is gitignored (fetched and verified by SHA-256 here, never committed), so it comes first.
-      - name: ai-memory embutido (baixa e confere o SHA-256)
+      - name: Fetch and verify ai-memory (SHA-256)
         working-directory: .
         run: node scripts/fetch-ai-memory.mjs
 

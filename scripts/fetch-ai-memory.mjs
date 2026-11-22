@@ -1,16 +1,6 @@
-// Fetch and verify the pinned ai-memory release for the app bundle (#725, part of #719).
-//
-// Before `tauri build`: downloads ai-memory-macos-<arch>.tar.gz and its .sha256 from the pinned
-// release, compares the tarball's SHA-256 with the published one, and only on a match copies
-// ./ai-memory (executable) and ./LICENSE from the tarball root into a gitignored build folder that
-// tauri.conf.json `bundle.resources` maps into Contents/Resources/ai-memory/. A mismatch, a malformed
-// .sha256 file or a missing member exits non-zero and copies nothing. Nothing of ai-memory is committed.
-//
-// node scripts/fetch-ai-memory.mjs [--arch aarch64|x86_64] [--out <folder>]
-//   --arch  default: the host's (arm64 -> aarch64, x64 -> x86_64)
-//   --out   default: apps/desktop/src-tauri/resources/ai-memory
-//
-// To move the pin, change AI_MEMORY_VERSION; the hash is never stored here, it is read from the release.
+// Fetch the pinned ai-memory release and verify its SHA-256 before the app build (#725).
+// Usage: node scripts/fetch-ai-memory.mjs [--arch aarch64|x86_64] [--out <folder>] (#725)
+// Move the pin by changing AI_MEMORY_VERSION; the hash is read from the release (#725).
 
 import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -25,7 +15,6 @@ const execFileAsync = promisify(execFile);
 export const AI_MEMORY_VERSION = 'v3.5.1';
 const RELEASE_BASE = `https://github.com/akitaonrails/ai-memory/releases/download/${AI_MEMORY_VERSION}`;
 export const ARCHES = ['aarch64', 'x86_64'];
-// The two members taken from the tarball root; nothing else (docs/, hooks/, packaging/) is copied.
 const MEMBERS = ['ai-memory', 'LICENSE'];
 const DEFAULT_OUT = join(dirname(fileURLToPath(import.meta.url)), '..', 'apps', 'desktop', 'src-tauri', 'resources', 'ai-memory');
 
@@ -60,7 +49,6 @@ export async function httpDownload(url) {
   return Buffer.from(await res.arrayBuffer());
 }
 
-/** Extracts the two members into a fresh temp folder, returns it. System tar, fixed argv, no shell. */
 async function extractMembers(tarball, work) {
   const file = join(work, 'release.tar.gz');
   const extracted = join(work, 'extracted');
@@ -87,7 +75,6 @@ export async function run(argv, { download = httpDownload, log = console.log, er
     const found = await readdir(extracted);
     for (const m of MEMBERS) if (!found.includes(m)) throw new Error(`the tarball has no ./${m}`);
 
-    // Everything checked: replace the build folder.
     await rm(out, { recursive: true, force: true });
     await mkdir(out, { recursive: true });
     for (const m of MEMBERS) await copyFile(join(extracted, m), join(out, m));

@@ -1,19 +1,15 @@
-// The ai-memory binary the app bundle carries (#725, #719): the build puts it in
-// Contents/Resources/ai-memory/ai-memory, beside Contents/Resources/packages/nucleo, so the core
-// reaches it by absolute path from its own location. There is no PATH lookup: a binary the user
-// installed elsewhere is never taken for the pinned one.
+// The bundled ai-memory, by absolute path from this module, never by PATH (#725).
 
 import { accessSync, constants, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-// This module is Resources/packages/nucleo/src/tools/embedded-ai-memory.ts: four levels up is Resources/.
-// (The folder and the file name match scripts/fetch-ai-memory.mjs and tauri.conf.json bundle.resources.)
+// Four levels up from this module is Contents/Resources (#725).
 const RESOURCES_FROM_MODULE = ['..', '..', '..', '..'];
 const EMBEDDED_DIR = 'ai-memory';
 const EMBEDDED_BINARY = 'ai-memory';
 
-/** The embedded binary's absolute path, or null when this core does not run from a bundle that has it. */
+/** The embedded binary's absolute path (#725), or null when this core does not run from a bundle that has it. */
 export function embeddedAiMemoryPath(moduleUrl: string = import.meta.url): string | null {
   const moduleDir = fileURLToPath(new URL('.', moduleUrl));
   const binary = join(moduleDir, ...RESOURCES_FROM_MODULE, EMBEDDED_DIR, EMBEDDED_BINARY);
@@ -21,7 +17,13 @@ export function embeddedAiMemoryPath(moduleUrl: string = import.meta.url): strin
     if (!statSync(binary).isFile()) return null;
     accessSync(binary, constants.X_OK);
     return binary;
-  } catch {
-    return null;
+  } catch (error) {
+    if (isAbsentOrUnusable(error)) return null;
+    throw error;
   }
+}
+
+function isAbsentOrUnusable(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null || !('code' in error)) return false;
+  return error.code === 'ENOENT' || error.code === 'ENOTDIR' || error.code === 'EACCES';
 }

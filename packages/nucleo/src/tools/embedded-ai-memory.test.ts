@@ -1,14 +1,12 @@
-// #719/AC-3 (#725): the core resolves the ai-memory binary the app bundle carries, by absolute path
-// from its own location, with no PATH lookup.
+// #719/AC-3 (#725): the core resolves the bundled ai-memory by absolute path, no PATH lookup.
 import assert from 'node:assert/strict';
-import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { isAbsolute, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { describe, test } from 'node:test';
 import { embeddedAiMemoryPath } from './embedded-ai-memory.ts';
 
-/** A bundle laid out as the app's: Resources/packages/nucleo/src/tools/ (the module) and Resources/ai-memory/. */
 function bundle(): { resources: string; moduleUrl: string; done: () => void } {
   const resources = mkdtempSync(join(tmpdir(), 'embedded-ai-memory-'));
   const tools = join(resources, 'packages', 'nucleo', 'src', 'tools');
@@ -63,6 +61,18 @@ describe('embeddedAiMemoryPath', () => {
     } finally {
       process.env.PATH = saved;
       rmSync(onPath, { recursive: true, force: true });
+      b.done();
+    }
+  });
+
+  test('#719/AC-3 an unexpected filesystem error is rethrown, not taken for an absent binary', () => {
+    const b = bundle();
+    try {
+      mkdirSync(join(b.resources, 'ai-memory'));
+      const binary = join(b.resources, 'ai-memory', 'ai-memory');
+      symlinkSync(binary, binary);
+      assert.throws(() => embeddedAiMemoryPath(b.moduleUrl), { code: 'ELOOP' });
+    } finally {
       b.done();
     }
   });
