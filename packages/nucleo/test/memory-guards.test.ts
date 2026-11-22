@@ -163,7 +163,7 @@ describe('#735/AC-3 #719/AC-11 a local path or a personal field of the ai-memory
   const SRC = join(TEST_DIR, '..', 'src');
   // data_dir, db_path, config_path and the service path are local paths; owner_user and accepted_by_user are personal data (#735). The cwd of a handoff is a local path too,
   // but the MCP and the telemetry name `cwd` legitimately for sessions, so two proofs split the surfaces (#735):
-  // - the import scan above is the proof for the MCP and the telemetry (no file of theirs reaches the module that reads the handoffs);
+  // - the import scan above is the proof for the MCP and the telemetry (no file of theirs reaches the module that reads the handoffs) (#735);
   // - the pattern with `cwd` is the proof for the two static surfaces the import scan cannot see, the remote contract (a JSON document) and the observability exporter (#735).
   const LOCAL_FIELDS = /data_dir|db_path|config_path|service_path|owner_user|accepted_by_user/;
   const LOCAL_FIELDS_AND_CWD = new RegExp(`\\bcwd\\b|${LOCAL_FIELDS.source}`);

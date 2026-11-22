@@ -225,7 +225,7 @@ describe('#735 decision 1: the bridge is called only after status confirms the b
       assert.equal(fake.calls.filter((c) => BRIDGE_CALLS.test(c)).length, 0);
     });
 
-    test(`#735 Given a server that is not running or whose status cannot be read, When ${path.split('?')[0]!.replace(FAKE_SESSION_ID, '<id>')} is asked, Then it refuses and the bridge is NOT called`, async () => {
+    test(`#735 #719/AC-6 Given a server that is not running or whose status cannot be read, When ${path.split('?')[0]!.replace(FAKE_SESSION_ID, '<id>')} is asked, Then it refuses and the bridge is NOT called`, async () => {
       for (const state of [{ state: 'stopped' }, { state: 'unavailable' }, { state: 'unknown' }, { state: 'running' }] as const) {
         const fake = fakeReads({ status: async () => state });
         const r = await ask(path, fake);
@@ -235,7 +235,7 @@ describe('#735 decision 1: the bridge is called only after status confirms the b
       }
     });
 
-    test(`#735 Given the bind 127.0.0.1, When ${path.split('?')[0]!.replace(FAKE_SESSION_ID, '<id>')} is asked, Then the bridge is called`, async () => {
+    test(`#735 #719/AC-6 Given the bind 127.0.0.1, When ${path.split('?')[0]!.replace(FAKE_SESSION_ID, '<id>')} is asked, Then the bridge is called`, async () => {
       const r = await ask(path);
       assert.equal(r.status, 200);
       assert.equal(r.calls.filter((c) => BRIDGE_CALLS.test(c)).length >= 1, true);
