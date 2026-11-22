@@ -56,21 +56,45 @@ describe('memory runner (#727/AC-1, #727/AC-2)', () => {
     );
   });
 
-  test('#727/AC-2 the child environment is the core environment without AI_MEMORY_AUTH_TOKEN and AHRENA_CONSOLE_*', async () => {
-    const { runner, calls } = runnerWith({
-      env: { PATH: '/usr/bin', AI_MEMORY_AUTH_TOKEN: FAKE_TOKEN, AHRENA_CONSOLE_CORE_PORT: '1234', AHRENA_CONSOLE_DATA_DIR: '/x', OTHER: 'kept' },
-    });
+  const CREDENTIALS: Record<string, string> = {
+    ANTHROPIC_API_KEY: 'fake-anthropic-key',
+    ANTHROPIC_AUTH_TOKEN: 'fake-anthropic-token',
+    CLAUDE_CODE_OAUTH_TOKEN: 'fake-oauth-token',
+    GH_TOKEN: 'fake-gh-token',
+    GITHUB_TOKEN: 'fake-github-token',
+    AWS_SECRET_ACCESS_KEY: 'fake-aws-secret',
+    AWS_ACCESS_KEY_ID: 'fake-aws-id',
+    AI_MEMORY_AUTH_TOKEN: FAKE_TOKEN,
+    AI_MEMORY_DATA_DIR: '/x/other',
+    AI_MEMORY_SERVER_URL: 'http://127.0.0.1:1',
+    AHRENA_CONSOLE_CORE_PORT: '1234',
+    AHRENA_CONSOLE_DATA_DIR: '/x',
+    OTHER: 'dropped',
+  };
+  const KEPT: Record<string, string> = {
+    PATH: '/usr/bin',
+    HOME: '/Users/someone',
+    TMPDIR: '/tmp/x',
+    LANG: 'en_US.UTF-8',
+    LC_ALL: 'en_US.UTF-8',
+    LC_CTYPE: 'UTF-8',
+    USER: 'someone',
+  };
+
+  test('#727/AC-2 the child environment is built from an allowlist: no credential and no AI_MEMORY_* or AHRENA_CONSOLE_* reaches it', async () => {
+    const { runner, calls } = runnerWith({ env: { ...KEPT, ...CREDENTIALS } });
     const pending = runner.run('version');
     await turn();
     const env = calls[0]!.options.env!;
-    assert.deepEqual(env, { PATH: '/usr/bin', OTHER: 'kept' });
+    for (const key of Object.keys(CREDENTIALS)) assert.equal(key in env, false, `${key} must not reach the child`);
+    assert.deepEqual(env, KEPT);
     calls[0]!.child.finish(0, 'ai-memory 3.5.1');
     await pending;
   });
 
-  test('#727/AC-2 memoryEnv drops the token whatever the case of its name', () => {
-    const env = memoryEnv({ ai_memory_auth_token: FAKE_TOKEN, AI_MEMORY_AUTH_TOKEN: FAKE_TOKEN, KEEP: '1' });
-    assert.deepEqual(env, { KEEP: '1' });
+  test('#727/AC-2 memoryEnv keeps only the allowlist, whatever the case of a credential name', () => {
+    const env = memoryEnv({ ai_memory_auth_token: FAKE_TOKEN, AI_MEMORY_AUTH_TOKEN: FAKE_TOKEN, github_token: 'fake', PATH: '/usr/bin' });
+    assert.deepEqual(env, { PATH: '/usr/bin' });
   });
 
   test('#727/AC-1 an embedded path of null reports unavailable and spawns nothing', async () => {

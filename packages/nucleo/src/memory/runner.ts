@@ -5,8 +5,8 @@
  * - The argv is built only from the constants below plus the `--data-dir` the core fixed; the caller names
  *   a command from a closed list, never an argument.
  * - `spawn(path, args, { shell: false, detached: true, stdio: ['ignore', 'pipe', 'pipe'] })`: its own
- *   process group, standard input closed, the child environment without `AI_MEMORY_AUTH_TOKEN` and
- *   `AHRENA_CONSOLE_*`.
+ *   process group, standard input closed, the child environment built from an allowlist (`memoryEnv`):
+ *   no credential, no `AI_MEMORY_*` and no `AHRENA_CONSOLE_*` reaches it (#727).
  * - Timeout: SIGTERM to the process group and, after the grace period, SIGKILL to the group, even when
  *   the leader closes first, so a descendant that ignores SIGTERM does not outlive the call.
  * - One call at a time, in order.
@@ -31,8 +31,11 @@ const COMMAND_ARGS: Record<MemoryCommand, readonly string[]> = {
 };
 
 const DATA_DIR_OPTION = '--data-dir';
-const TOKEN_VARIABLE = 'AI_MEMORY_AUTH_TOKEN';
-const CONSOLE_PREFIX = 'AHRENA_CONSOLE_';
+
+// The only variables the child receives (#727/AC-2). The repo documents no other variable ai-memory needs, and
+// the core fixes `--data-dir` itself, so no `AI_MEMORY_*` is passed.
+const ENV_ALLOWLIST: ReadonlySet<string> = new Set(['PATH', 'HOME', 'TMPDIR', 'LANG', 'USER']);
+const ENV_ALLOWED_PREFIX = 'LC_';
 
 export const MEMORY_TIMEOUT_MS = 10_000;
 export const MEMORY_KILL_GRACE_MS = 5_000;
@@ -54,7 +57,7 @@ export interface MemoryRunnerOptions {
   binaryPath: string | null;
   /** The ai-memory data folder, fixed by the core (#727). */
   dataDir: string;
-  /** The core's environment, before the token and `AHRENA_CONSOLE_*` are dropped (#727). */
+  /** The core's environment, before `memoryEnv` keeps only the allowlist (#727). */
   env?: NodeJS.ProcessEnv;
   spawn?: Spawn;
   /** Signals a process group; tests record it, nothing real is signaled (#727). */
@@ -75,12 +78,12 @@ export interface MemoryRunner {
   close(): Promise<void>;
 }
 
-/** The core's environment minus `AI_MEMORY_AUTH_TOKEN` (any case) and `AHRENA_CONSOLE_*` (#727/AC-2). */
+/** The allowlisted part of the core's environment: PATH, HOME, TMPDIR, LANG, USER and `LC_*`; nothing else (#727/AC-2). */
 export function memoryEnv(env: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
   const out: NodeJS.ProcessEnv = {};
   for (const [key, value] of Object.entries(env)) {
-    if (key.toUpperCase() === TOKEN_VARIABLE || key.startsWith(CONSOLE_PREFIX)) continue;
-    out[key] = value;
+    if (value === undefined) continue;
+    if (ENV_ALLOWLIST.has(key) || key.startsWith(ENV_ALLOWED_PREFIX)) out[key] = value;
   }
   return out;
 }
