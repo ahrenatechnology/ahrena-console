@@ -349,7 +349,7 @@ export class ToolsService {
   private async takeSnapshot(): Promise<LocalSnapshot> {
     const path = await this.loginPath();
     const fs = { ...(this.o.realpath ? { realpath: this.o.realpath } : {}), ...(this.o.isExecutable ? { isExecutable: this.o.isExecutable } : {}) };
-    const detections = await probeAll(this.catalog, { platform: this.platform, arch: this.arch, home: this.home, path, run: this.run, embeddedPath: this.o.embeddedAiMemoryPath ?? embeddedAiMemoryPath, ...(this.o.env ? { env: this.o.env } : {}), ...fs });
+    const detections = await probeAll(this.catalog, { platform: this.platform, arch: this.arch, home: this.home, path, run: this.run, embeddedPath: this.o.embeddedAiMemoryPath ?? embeddedAiMemoryPath, ...(this.o.log ? { log: this.o.log } : {}), ...(this.o.env ? { env: this.o.env } : {}), ...fs });
     const names = new Set<string>(['brew', 'winget', 'apt-get', 'apt-cache']);
     for (const e of this.catalog) for (const s of e.sources) if (s.manager) names.add(s.manager);
     const managers = new Map<string, string | null>();

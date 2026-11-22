@@ -95,4 +95,32 @@ describe('#719/AC-1 embedded ai-memory probe', () => {
     assert.equal(d.sourceId, 'embedded');
     assert.equal(calls.length, 0);
   });
+
+  test('#719/AC-1 #726/AC-2 a failed embedded path lookup logs the errno code only, never the path or the message', async () => {
+    const { run } = recordingRunner(ok('ai-memory 3.5.1'));
+    const lines: string[] = [];
+    const throwing: ProbeContext = {
+      ...context(run, EMBEDDED),
+      log: (m) => lines.push(m),
+      embeddedPath: () => {
+        throw Object.assign(new Error('too many symbolic links: /Users/example/secret/bundle'), { code: 'ELOOP' });
+      },
+    };
+    await probeTool(entry, throwing);
+    assert.deepEqual(lines, ['tools: embedded ai-memory path not read (ELOOP)']);
+  });
+
+  test('#719/AC-1 #726/AC-2 a failed embedded path lookup without an errno code logs the code error', async () => {
+    const { run } = recordingRunner(ok('ai-memory 3.5.1'));
+    const lines: string[] = [];
+    const throwing: ProbeContext = {
+      ...context(run, EMBEDDED),
+      log: (m) => lines.push(m),
+      embeddedPath: () => {
+        throw new Error('boom /Users/example/x');
+      },
+    };
+    await probeTool(entry, throwing);
+    assert.deepEqual(lines, ['tools: embedded ai-memory path not read (error)']);
+  });
 });

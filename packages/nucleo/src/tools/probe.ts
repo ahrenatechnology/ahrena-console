@@ -43,6 +43,8 @@ export interface ProbeContext {
   npmPrefix?: string | null;
   /** The embedded binary's absolute path (#725), or `null` outside a bundle that has it. */
   embeddedPath?: () => string | null;
+  /** Internal log; receives named fields only (an errno code), never a path, a message or a stack. */
+  log?: (message: string) => void;
 }
 
 export function parseVersion(probe: ToolProbe, output: string): string | null {
@@ -91,8 +93,10 @@ async function probeEmbedded(entry: ToolEntry & { probe: ToolProbe }, ctx: Probe
   let binaryPath: string | null = null;
   try {
     binaryPath = ctx.embeddedPath?.() ?? null;
-  } catch {
-    // The bundle lookup rethrows unexpected errno (ELOOP, EPERM); one tool's failed probe must not fail the overview.
+  } catch (err) {
+    // #726: the bundle lookup rethrows unexpected errno (ELOOP, EPERM); one tool's failed probe must not fail the overview.
+    const code = typeof err === 'object' && err !== null && 'code' in err && typeof err.code === 'string' ? err.code : 'error';
+    ctx.log?.(`tools: embedded ai-memory path not read (${code})`);
   }
   const base = { toolId: entry.id, binaryPath, realPath: binaryPath, sourceId: 'embedded' as const };
   if (!binaryPath) return { ...base, installed: null, probeError: 'probe-failed' };
