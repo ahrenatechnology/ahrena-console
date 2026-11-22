@@ -5,16 +5,15 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, describe, test } from 'node:test';
-import { ToolsExecutor, type JobSpec, type ToolsHost } from '../../src/tools/executor.ts';
-import type { ToolsOverview } from '../../src/tools/service.ts';
-import { fakeSpawn, type SpawnCall } from './doubles.ts';
+import { ToolsExecutor, type JobSpec, type ToolsHost } from './executor.ts';
+import { fakeOverview, fakeSpawn, type SpawnCall } from '../../test/tools/doubles.ts';
 
 const dir = mkdtempSync(join(tmpdir(), 'ahrena-executor-step-runs-'));
 after(() => rmSync(dir, { recursive: true, force: true }));
 let n = 0;
 
 const host = (): ToolsHost => ({
-  overview: async () => ({ version: 1, jobs: { current: null, queue: [], recent: [], batch: null } }) as unknown as ToolsOverview,
+  overview: async () => fakeOverview(),
   check: async () => null,
   actionPlan: async () => ({ kind: 'unknown' }),
   verify: async () => null,
@@ -86,6 +85,7 @@ describe('#740 a job whose steps run differently from how they are shown', () =>
     const job = executor.jobs('local').recent[0]!;
     assert.equal(job.state, 'failed');
     assert.equal(job.exitCode, 1);
+    assert.ok(job.output.includes('Não deu para gravar'), `the failing step's own reason is kept: ${job.output.join('|')}`);
   });
 
   test('#740/AC-5 Given a quiet job, When a process prints a path or a secret, Then neither the job nor tools.log keeps the output', async () => {
@@ -107,8 +107,10 @@ describe('#740 a job whose steps run differently from how they are shown', () =>
     const { executor, sp } = boot(() => {});
     executor.enqueue('local', spec({ steps: [['ai-memory', 'slow'], ['ai-memory', 'after']], timeoutSeconds: 0.05, quiet: true }));
     await executor.idle('local');
-    assert.equal(executor.jobs('local').recent[0]!.state, 'timed-out');
+    const job = executor.jobs('local').recent[0]!;
+    assert.equal(job.state, 'timed-out');
     assert.equal(sp.calls.length, 1);
+    assert.ok(job.output.some((l) => l.startsWith('Passou do tempo limite')), `the executor's timeout line is kept: ${job.output.join('|')}`);
   });
 
   test('#740/AC-4 Given a step with sudo as its real argv, When the job runs, Then it is refused before anything is spawned', async () => {

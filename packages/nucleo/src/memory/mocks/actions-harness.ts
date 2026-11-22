@@ -3,11 +3,10 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { fakeSpawn, type SpawnCall } from '../../../test/tools/doubles.ts';
+import { fakeOverview, fakeSpawn, type SpawnCall } from '../../../test/tools/doubles.ts';
 import { ToolsExecutor, type ToolsHost } from '../../tools/executor.ts';
 import { createMemoryActionFiles } from '../../tools/memory-config-file.ts';
-import type { ToolsOverview } from '../../tools/service.ts';
-import { createMemoryActions, MEMORY_ACTIONS, type MemoryActionFiles, type MemoryActionId } from '../actions.ts';
+import { createMemoryActions, MEMORY_ACTIONS, type MemoryActionFiles, type MemoryActionId, type MemoryActions } from '../actions.ts';
 import type { MemoryStatusState } from '../memory.ts';
 import { readSetupPlan } from '../readers.ts';
 
@@ -29,11 +28,25 @@ export interface Setup {
   platform?: NodeJS.Platform;
   binaryPath?: string | null;
   config?: string;
-  /** The processes never exit: only the timeout ends the job. */
+  /** The processes never exit: only the timeout ends the job (#740). */
   hang?: boolean;
 }
 
-export function harness(o: Setup = {}) {
+export interface Harness {
+  actions: MemoryActions;
+  executor: ToolsExecutor;
+  sp: ReturnType<typeof fakeSpawn>;
+  state: { current: MemoryStatusState; folders: string[] };
+  planned: string[];
+  events: string[];
+  dir: string;
+  home: string;
+  data: string;
+  a: string;
+  b: string;
+}
+
+export function harness(o: Setup = {}): Harness {
   const dir = join(root, `case-${++n}`);
   const home = join(dir, 'home');
   const data = join(dir, 'data');
@@ -47,7 +60,7 @@ export function harness(o: Setup = {}) {
     if (!o.hang) call.child.exit(o.exit?.(call) ?? 0);
   });
   const host: ToolsHost = {
-    overview: async () => ({ version: 1, jobs: { current: null, queue: [], recent: [], batch: null } }) as unknown as ToolsOverview,
+    overview: async () => fakeOverview(),
     check: async () => null,
     actionPlan: async () => ({ kind: 'unknown' }),
     verify: async () => null,
@@ -78,6 +91,4 @@ export function harness(o: Setup = {}) {
   });
   return { actions, executor, sp, state, planned, events, dir, home, data, a, b };
 }
-
-export type Harness = ReturnType<typeof harness>;
 

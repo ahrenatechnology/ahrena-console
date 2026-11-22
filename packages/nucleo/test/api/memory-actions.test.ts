@@ -52,7 +52,7 @@ describe('#740/AC-1 the build scenario: activate, with a core of two accounts', 
     assert.equal(plan.accounts.length, 2);
     assert.deepEqual(plan.service, { action: 'install', manager: 'launchd' });
     assert.deepEqual(plan.steps.map((s) => s.display.slice(0, 3).join(' ')), ['ai-memory setup --yes', 'ai-memory setup --yes', 'core write-config embedding_provider=none', 'ai-memory auth enable', 'ai-memory setup --yes']);
-    assert.match(plan.consent.join(' '), /\[capture\]/);
+    assert.match(plan.consent.join(' '), /\.ai-memory\.toml/);
     assert.match(plan.planDigest, /^[0-9a-f]{16}$/);
     nothingRan(h);
     assert.throws(() => readFileSync(join(h.data, 'config.toml')), 'nothing was written');

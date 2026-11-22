@@ -143,9 +143,9 @@ export interface JobSpec {
 
 /** What one step of a job runs, when it is not just its shown argv (#740). */
 export interface StepRun {
-  /** The argv that is spawned, when the shown one is only for display (a path the job list must not carry). */
+  /** The argv that is spawned, when the shown one is only for display (a path the job list must not carry) (#740). */
   argv?: string[];
-  /** The whole environment of this step, instead of the host's. */
+  /** The whole environment of this step, instead of the host's (#740). */
   env?: NodeJS.ProcessEnv;
   /** A step the core does itself, with no process: resolves with the exit code, 0 for success (#740). */
   inline?: (line: (text: string) => void) => Promise<number>;
@@ -497,8 +497,6 @@ export class ToolsExecutor implements ToolsControl {
         return this.end(job, 'failed', null);
       }
       const env = await this.o.service.processEnv();
-      // A quiet job keeps its own lines (the shown command, the failure) and drops what the processes print (#740).
-      const processLine = quiet ? () => {} : line;
       for (let i = 0; i < job.steps.length; i++) {
         if (job.state !== 'running') return;
         if (i > 0) {
@@ -507,7 +505,7 @@ export class ToolsExecutor implements ToolsControl {
         }
         line(`$ ${job.steps[i]!.join(' ')}`);
         const inline = runs[i]?.inline;
-        const code = inline ? await inline(processLine).catch(() => 1) : await this.step(job, resolved[i]!.path ?? argvOf(i)[0]!, argvOf(i).slice(1), runs[i]?.env ?? env, processLine);
+        const code = inline ? await inline(line).catch(() => 1) : await this.step(job, resolved[i]!.path ?? argvOf(i)[0]!, argvOf(i).slice(1), runs[i]?.env ?? env, line, quiet);
         if (job.state !== 'running') return;
         if (code !== 0) {
           if (quiet) line(`Falhou no passo ${i + 1} de ${job.steps.length}${code === null ? '' : ` (saída ${code})`}.`);
@@ -535,7 +533,7 @@ export class ToolsExecutor implements ToolsControl {
   }
 
   /** One step: resolves with its exit code (`null`: it could not start, or a signal ended it). */
-  private step(job: ToolJob, command: string, args: string[], env: NodeJS.ProcessEnv, line: (text: string) => void): Promise<number | null> {
+  private step(job: ToolJob, command: string, args: string[], env: NodeJS.ProcessEnv, line: (text: string) => void, quiet = false): Promise<number | null> {
     const run = this.running.get(job.id)!;
     return new Promise((resolve) => {
       let child: ChildProcess;
@@ -564,7 +562,9 @@ export class ToolsExecutor implements ToolsControl {
         resolve(code);
       };
       run.release = () => done(null);
-      const readers = [child.stdout, child.stderr].filter((s) => s != null).map((s) => readLines(s, line));
+      // A quiet job drops what the process prints and keeps the executor's own lines: the timeout and the failure to start (#740).
+      const printed = quiet ? () => {} : line;
+      const readers = [child.stdout, child.stderr].filter((s) => s != null).map((s) => readLines(s, printed));
       child.once('error', (err: NodeJS.ErrnoException) => {
         line(`Não deu para iniciar o comando (${err.code ?? 'erro'}).`);
         done(null);

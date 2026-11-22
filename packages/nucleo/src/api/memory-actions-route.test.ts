@@ -96,7 +96,7 @@ describe('#740/AC-1 GET /api/memory/plan', () => {
     assert.equal(view.planDigest, DIGEST);
     assert.equal((view.accounts as unknown[]).length, 1);
     const consent = (view.consent as string[]).join(' ');
-    assert.match(consent, /\[capture\]/);
+    assert.match(consent, /\.ai-memory\.toml/);
     assert.match(consent, /embeddings/);
     assert.deepEqual(calls, ['plan activate']);
   });

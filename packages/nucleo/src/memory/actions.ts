@@ -25,7 +25,7 @@ export type MemoryNotOffered = 'no-binary' | 'state-unknown' | 'already-running'
 /** One step as the person sees it: the command without any path, and the account it runs for (#740). */
 export interface MemoryPlanStep {
   display: string[];
-  /** The index into `accounts`, or null when the step is not per account. */
+  /** The index into `accounts`, or null when the step is not per account (#740). */
   account: number | null;
 }
 
@@ -43,7 +43,7 @@ export interface MemoryActionPlan {
   planDigest: string;
   /** Activate: one entry per registered account folder (#740/AC-1). */
   accounts: MemoryPlanAccount[];
-  /** Activate: the launchd service the plan installs. */
+  /** Activate: the launchd service the plan installs (#740). */
   service: { action: string; manager: string } | null;
   /** Activate: where ai-memory keeps its data, a local path for the local screen only (#740/AC-1). */
   dataDir: string | null;

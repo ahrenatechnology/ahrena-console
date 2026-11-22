@@ -5,8 +5,26 @@ import { EventEmitter } from 'node:events';
 import { PassThrough } from 'node:stream';
 import type { ChildProcess, SpawnOptions } from 'node:child_process';
 import type { FetchText, RunResult, ToolRunner } from '../../src/tools/runner.ts';
+import type { ToolsOverview } from '../../src/tools/service.ts';
 
 export const HOME = '/Users/exemplo';
+
+/** An overview with nothing detected and no job, for a host that only has to answer (#740). */
+export function fakeOverview(): ToolsOverview {
+  return {
+    version: 1,
+    machine: { id: 'local', label: 'Este computador', platform: 'darwin', os: null, arch: 'arm64', host: null },
+    checkedAt: null,
+    nextCheckAt: null,
+    network: 'unknown',
+    managers: { homebrew: { present: false, install: null }, winget: { present: false }, apt: { present: false, listsUpdatedAt: null } },
+    actionsAllowed: true,
+    items: [],
+    containers: { runtime: null, id: null, state: 'missing', readOnly: false, version: null, vm: null, diskUsedBytes: null, dockerContext: null, containers: null, note: null, detected: [], actions: [] },
+    mcp: { statusCheckedAt: null, servers: [] },
+    jobs: { current: null, queue: [], recent: [], batch: null },
+  };
+}
 
 export type Answer = string | Partial<RunResult> | ((argv: readonly string[]) => Partial<RunResult> | string);
 
