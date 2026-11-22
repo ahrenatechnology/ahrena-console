@@ -88,7 +88,12 @@ export function detectSource(entry: ToolEntry, realPath: string, ctx: Pick<Probe
 
 /** The embedded binary runs by the bundle's absolute path; the login PATH is never read for it (#726). */
 async function probeEmbedded(entry: ToolEntry & { probe: ToolProbe }, ctx: ProbeContext): Promise<Detection> {
-  const binaryPath = ctx.embeddedPath?.() ?? null;
+  let binaryPath: string | null = null;
+  try {
+    binaryPath = ctx.embeddedPath?.() ?? null;
+  } catch {
+    // The bundle lookup rethrows unexpected errno (ELOOP, EPERM); one tool's failed probe must not fail the overview.
+  }
   const base = { toolId: entry.id, binaryPath, realPath: binaryPath, sourceId: 'embedded' as const };
   if (!binaryPath) return { ...base, installed: null, probeError: 'probe-failed' };
   const r = await ctx.run([binaryPath, ...entry.probe.argv.slice(1)], { timeoutMs: PROBE_TIMEOUT_MS, env: toolsEnv(ctx.path, ctx.env) }).catch(() => null);

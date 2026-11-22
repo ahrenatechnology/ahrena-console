@@ -371,7 +371,7 @@ export class ToolsService {
 
   /** The source a tool is (or would be) installed from: the detected one, else the install source. */
   private sourceOf(entry: ToolEntry, d: Detection | undefined, snap: LocalSnapshot): ToolSource | null {
-    if (d?.installed || d?.binaryPath || entry.embedded) {
+    if (d && (d.installed || d.binaryPath || entry.embedded)) {
       if (!d.sourceId || d.sourceId === 'manual') return null;
       return sourcesFor(entry, this.platform, this.arch).find((s) => s.id === d.sourceId) ?? null;
     }
@@ -502,7 +502,7 @@ export class ToolsService {
       note = 'no Windows a sonda não lê esta ferramenta (atalho .cmd)';
     } else if ((d?.binaryPath || entry.embedded) && !installed) {
       state = 'failed';
-      note = 'a sonda não leu a versão instalada';
+      note = entry.embedded ? 'o ai-memory embutido neste app não respondeu' : 'a sonda não leu a versão instalada';
     } else if (!installed) state = 'missing';
     else if (entry.embedded) state = 'ok';
     else if (sourceId === 'manual' || !source?.latest) state = 'manual';

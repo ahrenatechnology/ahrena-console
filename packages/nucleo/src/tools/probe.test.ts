@@ -1,5 +1,4 @@
-// The probe of the embedded ai-memory (#726, decision 0014 section 2): the absolute path from the
-// bundle, no shell, 5 s, never the login PATH.
+// The probe of the embedded ai-memory (#726, decision 0014): absolute bundle path, no shell, 5 s, no login PATH.
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import { catalogEntry } from './catalog.ts';
@@ -80,5 +79,20 @@ describe('#719/AC-1 embedded ai-memory probe', () => {
     const { run } = recordingRunner(ok('ai-memory 3.5.1'));
     const { embeddedPath: _unused, ...withoutPath } = context(run, EMBEDDED);
     assert.equal((await probeTool(entry, withoutPath)).probeError, 'probe-failed');
+  });
+
+  test('#719/AC-1 #726/AC-2 an embedded path lookup that throws is a failed probe, not a rejection', async () => {
+    const { run, calls } = recordingRunner(ok('ai-memory 3.5.1'));
+    const throwing: ProbeContext = {
+      ...context(run, EMBEDDED),
+      embeddedPath: () => {
+        throw Object.assign(new Error('too many symbolic links'), { code: 'ELOOP' });
+      },
+    };
+    const d = await probeTool(entry, throwing);
+    assert.equal(d.probeError, 'probe-failed');
+    assert.equal(d.installed, null);
+    assert.equal(d.sourceId, 'embedded');
+    assert.equal(calls.length, 0);
   });
 });

@@ -1,5 +1,4 @@
-// The read-only ai-memory entry (#726, decision 0014 section 1): embedded in the console, so the
-// catalog offers no way to install or update it.
+// The read-only ai-memory entry (#726, decision 0014): embedded in the console, no install or update.
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import { ACTION_IDS, CATALOG, catalogEntry } from './catalog.ts';
