@@ -1,5 +1,5 @@
 // The Claude account folders of the registry with the name the screens give each account, for the memory actions (#740).
-import type { RegistryAccount } from '../memory/actions.ts';
+// The return type is structural: this file imports nothing from src/memory, which the guard of #719/AC-11 keeps closed (#740).
 import type { Accounts } from './accounts.ts';
 
 /**
@@ -9,7 +9,7 @@ import type { Accounts } from './accounts.ts';
 export async function registryAccounts(
   profiles: { list(): Promise<readonly { dir: string; accountId: string | null }[]> },
   accounts: Pick<Accounts, 'ofId'>,
-): Promise<RegistryAccount[]> {
+): Promise<{ dir: string; name: string }[]> {
   const folders = await profiles.list();
   return Promise.all(folders.map(async ({ dir, accountId }) => ({ dir, name: accountId === null ? '' : (await accounts.ofId(accountId)).label })));
 }

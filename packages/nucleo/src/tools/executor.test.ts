@@ -1,4 +1,4 @@
-// #740: a job whose steps run differently from how they are shown (a per-step env, an in-process step, a quiet output), on the Tools
+// (#740) A job whose steps run differently from how they are shown (a per-step env, an in-process step, a quiet output), on the Tools
 // executor's queue, with a fake spawn and a fake host: nothing real runs. (#740)
 import assert from 'node:assert/strict';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
