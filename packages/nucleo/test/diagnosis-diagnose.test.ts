@@ -60,10 +60,10 @@ describe('diagnose', () => {
     assert.deepEqual(swapSection.items, [{ usedBytes: 5, totalBytes: 10 }]);
   });
 
-  test('#565/AC-2 load-high collects only processes-by-cpu', async () => {
+  test('#565/AC-2 load-high collects processes-by-cpu and, since #722, processes-by-session', async () => {
     const asked: string[] = [];
     const r = await diagnose({ machine: 'local', alertId: 'load-high' }, deps([alert('load-high', 'load-high')], async (id) => (asked.push(id), many(3))));
-    assert.deepEqual(asked, ['processes-by-cpu']);
+    assert.deepEqual(asked, ['processes-by-cpu', 'processes-by-session']);
     assert.equal(r.kind, 'ok');
   });
 

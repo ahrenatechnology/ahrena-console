@@ -16,8 +16,9 @@ import { SqliteRuntimeStore } from '../runtime/sqlite.ts';
 
 import { execFile, execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, realpathSync, rmSync } from 'node:fs';
+import { readlink, realpath } from 'node:fs/promises';
 import type { AddressInfo } from 'node:net';
-import { homedir, tmpdir } from 'node:os';
+import { availableParallelism, homedir, loadavg, tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { HELP, parseApiOptions } from './cli-options.ts';
@@ -161,6 +162,11 @@ import { createPreviewStore } from '../delegation/preview-store.ts';
 import { LOCAL_MACHINE_ID } from '../telemetry/model.ts';
 import { knownFolders } from './new-session.ts';
 import { diagnosisCollectorFor, systemDiagnosisDeps, worktreeRootsOf } from '../diagnosis/adapters/system.ts';
+import { DarwinDiagnosisCollector } from '../diagnosis/adapters/darwin.ts';
+import { LinuxDiagnosisCollector } from '../diagnosis/adapters/linux.ts';
+import { CpuGovernor } from '../cpu-governor/governor.ts';
+import { createMachineControl, systemExec } from '../cpu-governor/adapters/system.ts';
+import { createSessionSource } from './diagnosis-sessions.ts';
 import { LARGEST_FOLDERS_BUDGET_MS } from '../diagnosis/adapters/common.ts';
 import { DockerService } from '../docker/service.ts';
 import { systemToolRunner } from '../tools/runner.ts';
@@ -703,7 +709,36 @@ if (demo) {
   });
 }
 const machineEntries = (): MachineEntry[] => [localEntry, ...demoEntries, ...(remoteMachines?.list() ?? [])];
-const telemetryService = samplers.length > 0 || remoteMachines ? new TelemetryService({ store: sampleStore, tracker: alertTracker, machines: machineEntries }) : null;
+// #723 the CPU governor: nice +10 on the descendants of every agent session, `taskpolicy -b` on a Mac under pressure. In memory, on at boot; not in --demo, where there are no real sessions, nor on a platform with no `ps`.
+const GOVERNOR_TICK_MS = 3_000;
+const governorPlatform = process.platform === 'darwin' ? 'darwin' : process.platform === 'linux' ? 'linux' : null;
+const cpuGovernor =
+  demo || !liveProcesses || !governorPlatform
+    ? null
+    : new CpuGovernor({
+        machine: createMachineControl({
+          exec: systemExec,
+          platform: governorPlatform,
+          registered: async () => {
+            await liveProcesses.refresh();
+            return liveProcesses.listLive();
+          },
+          // #720/AC-3: a Linux session's comm is a truncated version; the executable is its /proc link, read without exec.
+          readImage: (pid) => readlink(`/proc/${pid}/exe`).catch(() => null),
+          realpath,
+          startCheck: (registry, samples) => {
+            const deps = systemDiagnosisDeps(async () => [], log);
+            return (governorPlatform === 'darwin' ? new DarwinDiagnosisCollector(deps) : new LinuxDiagnosisCollector(deps)).startCheck(registry, samples);
+          },
+        }),
+        load: () => ({ load1: loadavg()[0] ?? 0, cores: availableParallelism() }),
+        nowMs: () => Date.now(),
+        log,
+        platform: governorPlatform,
+        selfPid: process.pid,
+      });
+cpuGovernor?.start(GOVERNOR_TICK_MS);
+const telemetryService = samplers.length > 0 || remoteMachines ? new TelemetryService({ store: sampleStore, tracker: alertTracker, machines: machineEntries, ...(cpuGovernor ? { cpuGovernor: () => cpuGovernor.state() } : {}) }) : null;
 
 // Sending a message to a live session (#61): the inbox of each profile folder's `sessions/`, the
 // transcript for the confirmation, and the audit in the data folder. Synthetic in the demo.
@@ -764,7 +799,11 @@ const docker =
       }
     : null;
 // The diagnosis of an open saturation alert (#565): this machine's collectors (read-only, fixed commands) and the remote machines' through their tunnel port. Not in --demo, where the readings are synthetic.
-const diagnosisCollector = demo ? null : diagnosisCollectorFor(process.platform, systemDiagnosisDeps(async () => worktreeRootsOf((await knownFolders(storage)).map((f) => f.path)), log));
+// #722: `processes-by-session` reads the live `claude` registry (`liveProcesses`, above) and the title each session has in the console.
+const diagnosisSessions = liveProcesses
+  ? createSessionSource({ live: liveProcesses, sessionName: async (id) => (await storage.getSession(id))?.name ?? null, desktopTitle: (id) => desktop?.sessionByCli(id)?.title ?? null })
+  : undefined;
+const diagnosisCollector = demo ? null : diagnosisCollectorFor(process.platform, systemDiagnosisDeps(async () => worktreeRootsOf((await knownFolders(storage)).map((f) => f.path)), log, undefined, diagnosisSessions));
 const diagnosisOptions: DiagnosisRouteOptions = {
   alerts: alertTracker,
   local: diagnosisCollector ? { collect: diagnosisCollector, platform: process.platform === 'darwin' ? 'darwin' : 'linux', log, now: () => new Date().toISOString(), sectionTimeoutMs: LARGEST_FOLDERS_BUDGET_MS + 3_000 } : null,
@@ -852,6 +891,7 @@ const api: LocalApi = await startLocalApi({
   decisionsUi,
   project: { kanban: null, fonte: demo ? 'demo' : 'github', resolver: screens.project, options: screens.projectOptions, credentialSource: () => connection.credentialSource(), fromStore: githubSync !== null, log },
   projectSelection: screens.project,
+  cpuGovernor,
   work: { service: workBoard, fromStore: githubSync !== null },
   workIssue: { service: workIssue },
   workIssueOptions: { service: workIssueOptions },
@@ -1034,6 +1074,9 @@ async function reprocessOnce() {
 }
 
 async function shutdown() {
+  // #723: the pids it put under `-b` do not stay there when the core ends.
+  cpuGovernor?.stop();
+  await cpuGovernor?.setEnabled(false).catch(() => undefined);
   stopWatcher();
   messaging.close();
   transcription?.close();

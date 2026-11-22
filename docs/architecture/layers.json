@@ -52,6 +52,11 @@
         "layer": "domain",
         "evidence": "price table, floor and aggregation of cost; pure functions, no node: import"
       },
+      "cpu-governor": {
+        "layer": "application",
+        "evidence": "governor.ts runs the loop over the MachineControl port (a double in its test) and holds the governor state; no node: import in it",
+        "mixed": "model.ts is pure domain (the pressure thresholds and which processes are targets); adapters/system.ts imports node:child_process and is the edge"
+      },
       "decisions": {
         "layer": "application",
         "evidence": "registry, hub, inference and capture orchestrate over the decisions port (port.ts); 12 files",
@@ -68,8 +73,8 @@
       },
       "diagnosis": {
         "layer": "application",
-        "evidence": "diagnose.ts and model.ts decide from facts that adapters/ read through injected readers; only 1 of 8 files (adapters/system.ts) imports node IO",
-        "mixed": "adapters/system.ts imports node:child_process, node:fs and node:os and is the edge; model.ts and diagnose.ts are pure"
+        "evidence": "diagnose.ts and model.ts decide from facts that adapters/ read through injected readers; only 1 of 9 files (adapters/system.ts) imports node IO",
+        "mixed": "adapters/system.ts imports node:child_process, node:fs and node:os and is the edge; model.ts, diagnose.ts and attribution.ts (which process belongs to which session) are pure"
       },
       "docker": {
         "layer": "application",

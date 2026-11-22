@@ -28,7 +28,7 @@ describe('LiveClaudeProcesses', () => {
     const alive = new Set([101]);
     const live = new LiveClaudeProcesses({ folders: async () => [one, two], isAlive: (pid) => alive.has(pid) });
     await live.refresh();
-    assert.deepEqual(live.find(A), { pid: 101, sessionId: A, cwd: '/w/a', procStart: 'Tue Oct 20 04:00:34 2026' });
+    assert.deepEqual(live.find(A), { pid: 101, sessionId: A, cwd: '/w/a', procStart: 'Tue Oct 20 04:00:34 2026', configDir: one });
     assert.equal(live.find(B), null, 'the file outlived its process');
     alive.add(202);
     assert.equal(live.find(B)?.pid, 202, 'liveness is checked on each find');

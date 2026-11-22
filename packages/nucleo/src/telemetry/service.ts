@@ -5,6 +5,7 @@
 // whose samples are in the same `TelemetryStore`, under its id. The telemetry of a remote that is
 // down is still served: its newest stored reading, with its age in `lastReadAt`.
 
+import type { GovernorState } from '../cpu-governor/model.ts';
 import type { AlertTracker } from './alerts.ts';
 import {
   LOCAL_MACHINE_ID,
@@ -61,6 +62,8 @@ export interface TelemetryResponse {
   current: TelemetryReading | null;
   series: TelemetrySeries;
   alerts: Alert[];
+  /** The CPU governor of this machine (#723); only on the local machine's answer, and only when a governor runs. */
+  cpuGovernor?: GovernorState;
 }
 
 export interface TelemetryServiceOptions {
@@ -69,6 +72,8 @@ export interface TelemetryServiceOptions {
   /** A list, or a function for the list that follows machines.json live (#244). */
   machines: readonly MachineEntry[] | (() => readonly MachineEntry[]);
   now?: () => number;
+  /** This machine's CPU governor state (#723); without it the answer has no `cpuGovernor`. */
+  cpuGovernor?: () => GovernorState;
 }
 
 export class TelemetryService {
@@ -125,6 +130,7 @@ export class TelemetryService {
       current,
       series: buildSeries(points, from, now),
       alerts: this.o.tracker.active(m.id),
+      ...(m.id === LOCAL_MACHINE_ID && this.o.cpuGovernor ? { cpuGovernor: this.o.cpuGovernor() } : {}),
     };
   }
 }

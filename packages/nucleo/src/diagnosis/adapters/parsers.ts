@@ -4,6 +4,7 @@
  */
 
 import { basename } from 'node:path';
+import { normalizeStart, type ProcessSample } from '../attribution.ts';
 import type { DockerDfItem, ProcessItem } from '../model.ts';
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -27,6 +28,37 @@ export function parsePsProcesses(out: string): ProcessItem[] {
     items.push({ pid: Number(m[1]), name: basename(m[5]) || m[5], rssBytes: Number(m[3]) * 1024, cpuPct: Number(m[2]), startedAt });
   }
   return items;
+}
+
+/** The longest command line kept per process: a longer one is cut, it only feeds `rootCommandOf`. (#722) */
+const COMMAND_MAX = 2048;
+
+/**
+ * `ps -axo pid=,ppid=,pcpu=,lstart=,args=` run with `TZ=UTC`: one sample per process, the start as `ps` printed it with its
+ * whitespace collapsed (the form of `procStart`), the command line whole (#722). A line that is not a process row is skipped.
+ */
+export function parsePsTree(out: string): ProcessSample[] {
+  const samples: ProcessSample[] = [];
+  for (const line of out.split('\n')) {
+    const m = /^\s*(\d+)\s+(\d+)\s+([\d.]+)\s+(\w{3}\s+\w{3}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2}\s+\d{4})\s+(\S.*?)\s*$/.exec(line);
+    if (!m) continue;
+    samples.push({ pid: Number(m[1]), ppid: Number(m[2]), cpuPct: Number(m[3]), start: normalizeStart(m[4]), command: m[5].slice(0, COMMAND_MAX) });
+  }
+  return samples;
+}
+
+/** Field 22 is the 20th after `comm`, counting from field 3 at index 0. (#722) */
+const STAT_STARTTIME_AFTER_COMM = 19;
+
+/**
+ * The start of a process as Linux counts it: field 22 of `/proc/<pid>/stat`, in clock ticks since boot, the form Claude Code
+ * writes in `procStart` there (#722). The `comm` field (2) sits in parentheses and may hold spaces and `)`, so the fields are
+ * counted from the last `)`: field 3 is the first after it, field 22 the 20th. `null` when the text is not a stat line.
+ */
+export function parseProcStatStartTime(stat: string): string | null {
+  const fields = stat.slice(stat.lastIndexOf(')') + 1).trim().split(/\s+/);
+  const ticks = fields[STAT_STARTTIME_AFTER_COMM];
+  return stat.includes(')') && ticks !== undefined && /^\d+$/.test(ticks) ? ticks : null;
 }
 
 const DECIMAL_UNITS: Record<string, number> = { B: 1, KB: 1e3, MB: 1e6, GB: 1e9, TB: 1e12, PB: 1e15 };

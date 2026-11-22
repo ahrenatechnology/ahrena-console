@@ -16,7 +16,7 @@ import { join } from 'node:path';
 import type { SectionCollector } from '../diagnose.ts';
 import type { HostInfo } from '../../telemetry/model.ts';
 import type { FileReader } from '../../telemetry/ports.ts';
-import { stripControlCharacters, type DiagnosisDeps, type DiagnosisFs, type DiagnosisRunner, type RunResult } from './common.ts';
+import { stripControlCharacters, type SessionSource, type DiagnosisDeps, type DiagnosisFs, type DiagnosisRunner, type RunResult } from './common.ts';
 import { DarwinDiagnosisCollector } from './darwin.ts';
 import { LinuxDiagnosisCollector } from './linux.ts';
 
@@ -30,7 +30,7 @@ export const systemRunner: DiagnosisRunner = (command, args, options) =>
         maxBuffer: options.maxBytes,
         signal: options.signal,
         ...(options.cwd ? { cwd: options.cwd } : {}),
-        env: { ...process.env, LC_ALL: 'C', GIT_OPTIONAL_LOCKS: '0' },
+        env: { ...process.env, LC_ALL: 'C', GIT_OPTIONAL_LOCKS: '0', ...options.env },
         windowsHide: true,
       },
       (err, stdout) => {
@@ -89,8 +89,9 @@ export const systemReadFile = (log: (message: string) => void, ops: Pick<FsOpera
 /** `<repo>/.claude/worktrees` for each repository folder the core already knows from the sessions that ran there (`knownFolders`). */
 export const worktreeRootsOf = (repositoryFolders: readonly string[]): string[] => repositoryFolders.map((folder) => join(folder, '.claude', 'worktrees'));
 
-export function systemDiagnosisDeps(worktreeRoots: () => Promise<string[]>, log: (message: string) => void, home: string = homedir()): DiagnosisDeps {
+export function systemDiagnosisDeps(worktreeRoots: () => Promise<string[]>, log: (message: string) => void, home: string = homedir(), sessions?: SessionSource): DiagnosisDeps {
   return {
+    ...(sessions ? { sessions } : {}),
     run: systemRunner,
     readFile: systemReadFile(log),
     fs: systemFs(log),
