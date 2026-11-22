@@ -6,7 +6,7 @@ import { bridgeHandoffsFixture, FAKE_DATA_DIR, FAKE_DB_PATH, FAKE_TOKEN, statusF
 import { readStatus } from '../memory/readers.ts';
 import { handoffView, isLoopbackBind, memoryAlerts, pageView, serverView } from './memory-view.ts';
 
-/** A `status` value as the reader gives it, with the fixture's fields overridden. */
+/** A `status` value as the reader gives it, with the fixture's fields overridden (#735). */
 function reading(over: Record<string, unknown> = {}, providers: { llm?: Record<string, unknown>; embedding?: Record<string, unknown> } = {}) {
   const base = statusFixture() as { providers: { llm: Record<string, unknown>; embedding: Record<string, unknown> } };
   const raw = {

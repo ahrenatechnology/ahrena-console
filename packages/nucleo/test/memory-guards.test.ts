@@ -161,21 +161,24 @@ describe('#719/AC-11 nothing from the memory module leaves the machine (#727/AC-
 
 describe('#735/AC-3 #719/AC-11 a local path or a personal field of the ai-memory never leaves the machine (#735/D3)', () => {
   const SRC = join(TEST_DIR, '..', 'src');
-  // data_dir, db_path, config_path and the service path are local paths; owner_user and accepted_by_user are personal data (#735). The cwd of a handoff is held by the same
-  // rule through the import scan above: no file of an outbound contract reaches the module that reads it (#735).
+  // data_dir, db_path, config_path and the service path are local paths; owner_user and accepted_by_user are personal data (#735). The cwd of a handoff is a local path too,
+  // but the MCP and the telemetry name `cwd` legitimately for sessions, so two proofs split the surfaces (#735):
+  // - the import scan above is the proof for the MCP and the telemetry (no file of theirs reaches the module that reads the handoffs);
+  // - the pattern with `cwd` is the proof for the two static surfaces the import scan cannot see, the remote contract (a JSON document) and the observability exporter (#735).
   const LOCAL_FIELDS = /data_dir|db_path|config_path|service_path|owner_user|accepted_by_user/;
+  const LOCAL_FIELDS_AND_CWD = new RegExp(`\\bcwd\\b|${LOCAL_FIELDS.source}`);
   const ONLY_HERE = (path: string) => path.startsWith(`${MEMORY_DIR}/`) || relative(REPO_ROOT, path) === 'packages/nucleo/src/api/memory-view.ts';
 
-  const OUTBOUND: [string, () => string[]][] = [
-    ['the console MCP, every tool output', () => files(join(SRC, 'mcp'), isSource)],
-    ['the telemetry, every payload', () => files(join(SRC, 'telemetry'), isSource)],
-    ['the observability exporter', () => files(join(SRC, 'observability'), isSource)],
-    ['the remote contract (packages/nucleo/remote-contract.json)', () => [join(TEST_DIR, '..', 'remote-contract.json')]],
-    ['the hub, wherever its code appears', () => files(join(REPO_ROOT, 'packages'), (p) => isSource(p) && /hub/i.test(relative(REPO_ROOT, p)) && !p.includes('/node_modules/'))],
+  const OUTBOUND: [string, () => string[], RegExp][] = [
+    ['the console MCP, every tool output', () => files(join(SRC, 'mcp'), isSource), LOCAL_FIELDS],
+    ['the telemetry, every payload', () => files(join(SRC, 'telemetry'), isSource), LOCAL_FIELDS],
+    ['the observability exporter', () => files(join(SRC, 'observability'), isSource), LOCAL_FIELDS_AND_CWD],
+    ['the remote contract (packages/nucleo/remote-contract.json)', () => [join(TEST_DIR, '..', 'remote-contract.json')], LOCAL_FIELDS_AND_CWD],
+    ['the hub, wherever its code appears', () => files(join(REPO_ROOT, 'packages'), (p) => isSource(p) && /hub/i.test(relative(REPO_ROOT, p)) && !p.includes('/node_modules/')), LOCAL_FIELDS],
   ];
-  for (const [name, list] of OUTBOUND) {
+  for (const [name, list, pattern] of OUTBOUND) {
     test(`#735/AC-3 #719/AC-11 ${name} names none of the local fields`, () => {
-      const found = list().filter((path) => LOCAL_FIELDS.test(readFileSync(path, 'utf8'))).map((p) => relative(REPO_ROOT, p));
+      const found = list().filter((path) => pattern.test(readFileSync(path, 'utf8'))).map((p) => relative(REPO_ROOT, p));
       assert.deepEqual(found, []);
     });
   }
@@ -194,6 +197,12 @@ describe('#735/AC-3 #719/AC-11 a local path or a personal field of the ai-memory
       }
     }
     assert.deepEqual(named, []);
+  });
+
+  test('#735/AC-3 the scan of the static surfaces also sees a cwd (a planted line is reported)', () => {
+    assert.equal(LOCAL_FIELDS_AND_CWD.test('{ "cwd": "/somewhere" }'), true);
+    assert.equal(LOCAL_FIELDS_AND_CWD.test('{ "cwdx": 1 }'), false);
+    assert.equal(LOCAL_FIELDS_AND_CWD.test('const x = { owner_user: 1 }'), true);
   });
 
   test('#735/AC-3 the scan sees a local field (a planted line is reported)', () => {

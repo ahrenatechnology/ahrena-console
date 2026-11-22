@@ -142,7 +142,7 @@ describe('#735/AC-2 GET /api/memory/handoffs and /api/memory/pages', () => {
     for (const planted of ['summary', 'next_steps', 'secret', FAKE_TOKEN]) assert.equal(r.text.includes(planted), false, planted);
   });
 
-  test('#735/AC-2 #719/AC-7 Given a valid project, When the pages are asked, Then the recent pages come back with title, type, date and path, and no snippet', async () => {
+  test('#735/AC-2 #719/AC-7 Given a valid project, When the pages are asked, Then the recent pages come back with title, date and path, and no snippet', async () => {
     const fake = fakeReads({ recent: async () => ({ ok: true, value: [{ path: 'notes/a.md', title: 'A', updated_at: '2026-11-20T09:00:00Z', snippet: `key ${FAKE_TOKEN}` } as never] }) });
     const r = await ask('/api/memory/pages?project=app', fake);
     assert.equal(r.status, 200);
