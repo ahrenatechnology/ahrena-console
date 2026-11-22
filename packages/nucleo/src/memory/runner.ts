@@ -32,8 +32,7 @@ const COMMAND_ARGS: Record<MemoryCommand, readonly string[]> = {
 
 const DATA_DIR_OPTION = '--data-dir';
 
-// The only variables the child receives (#727/AC-2). The repo documents no other variable ai-memory needs, and
-// the core fixes `--data-dir` itself, so no `AI_MEMORY_*` is passed.
+// The only variables the child receives. The repo documents no other variable ai-memory needs, and the core fixes `--data-dir` itself, so no `AI_MEMORY_*` is passed (#727/AC-2).
 const ENV_ALLOWLIST: ReadonlySet<string> = new Set(['PATH', 'HOME', 'TMPDIR', 'LANG', 'USER']);
 const ENV_ALLOWED_PREFIX = 'LC_';
 
