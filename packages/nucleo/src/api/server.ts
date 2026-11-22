@@ -658,7 +658,7 @@ export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
         return send(res, refusal.status, { error: refusal.code });
       }
     }
-    // #241: the six writes only the /ui itself makes, checked before anything else.
+    // #241, #723: the seven writes only the /ui itself makes, checked before anything else.
     if (STRICT_WRITE_ROUTES.has(url.pathname)) {
       const refusal = strictWriteRefusal(req, port, url.pathname);
       if (refusal) return send(res, refusal.status, refusal.body);

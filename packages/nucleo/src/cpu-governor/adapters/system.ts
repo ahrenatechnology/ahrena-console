@@ -36,9 +36,9 @@ export const systemExec: Exec = (file, args) =>
 export interface MachineControlDeps {
   exec: Exec;
   platform: 'darwin' | 'linux';
-  /** The live registered sessions (`<config>/sessions/<pid>.json`). */
+  /** #723: The live registered sessions (`<config>/sessions/<pid>.json`). */
   registered(): Promise<RegisteredSession[]>;
-  /** The collector's check of a registered `procStart` against the real start, for this OS (`DiagnosisCollector.startCheck`). */
+  /** #723: The collector's check of a registered `procStart` against the real start, for this OS (`DiagnosisCollector.startCheck`). */
   startCheck(registry: readonly RegisteredSession[], samples: readonly ProcessSample[]): Promise<StartCheck>;
 }
 

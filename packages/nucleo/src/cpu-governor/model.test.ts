@@ -16,7 +16,7 @@ const HIGH = { load1: 9, cores: CORES };
 const LOW = { load1: 5, cores: CORES };
 const MID = { load1: 7, cores: CORES };
 
-/** Feeds one reading per `stepMs` for `durationMs`, from `from`. */
+/** #723: Feeds one reading per `stepMs` for `durationMs`, from `from`. */
 function run(from: Pressure, load: { load1: number; cores: number }, startMs: number, durationMs: number, stepMs = 3000): { pressure: Pressure; at: number } {
   let pressure = from;
   let at = startMs;

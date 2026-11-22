@@ -14,12 +14,12 @@ const SELF = 9000;
 class FakeMachine implements MachineControl {
   trees: SessionTree[] = [];
   nice = new Map<number, number>();
-  /** The start `inspect` answers, by pid; a pid absent here is gone. */
+  /** #723: The start `inspect` answers, by pid; a pid absent here is gone. */
   starts = new Map<number, string>();
   calls: string[] = [];
   outcome: (op: string, pid: number) => ChangeOutcome = () => 'done';
   sampleCalls = 0;
-  /** When set, `sample` waits for it: a tick that is slow. */
+  /** #723: When set, `sample` waits for it: a tick that is slow. */
   gate: Promise<void> | null = null;
   async sample(): Promise<Observation | null> {
     this.sampleCalls += 1;
@@ -42,7 +42,7 @@ class FakeMachine implements MachineControl {
     this.calls.push(`foreground ${pid}`);
     return this.outcome('foreground', pid);
   }
-  /** One session: the root and its descendants, all at nice 0, all alive with the start they were sampled with. */
+  /** #723: One session: the root and its descendants, all at nice 0, all alive with the start they were sampled with. */
   session(pids: number[]): void {
     const processes = [proc(ROOT, 1), ...pids.map((pid) => proc(pid, ROOT))];
     this.trees = [{ sessionId: 's1', cwd: null, rootPids: [ROOT], processes }];
@@ -198,7 +198,7 @@ describe('#720/AC-4 containing: taskpolicy -b on the descendants, -B on the ones
 });
 
 describe('#720/AC-4 a pid under -b that leaves the sample is still taken out', () => {
-  /** Two descendants under -b, then the sample no longer has 101 in any tree, though the process is alive with the same start. */
+  /** #723: Two descendants under -b, then the sample no longer has 101 in any tree, though the process is alive with the same start. */
   async function containedThenOutOfSample() {
     const ctx = setup();
     ctx.machine.session([101, 102]);

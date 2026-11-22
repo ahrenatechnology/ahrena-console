@@ -25,17 +25,17 @@ export type GovernorMode = 'normal' | 'containing';
 export interface GovernorState {
   enabled: boolean;
   mode: GovernorMode;
-  /** The sessions that have a process under `taskpolicy -b` now; empty in `normal`. */
+  /** #723: The sessions that have a process under `taskpolicy -b` now; empty in `normal`. */
   containedSessions: string[];
-  /** ISO time the governor was last turned on or off, or its mode last changed. */
+  /** #723: ISO time the governor was last turned on or off, or its mode last changed. */
   since: string;
 }
 
 export interface Pressure {
   mode: GovernorMode;
-  /** When the load first went above the cores in this run of readings; `null` when it is not above. */
+  /** #723: When the load first went above the cores in this run of readings; `null` when it is not above. */
   overSince: number | null;
-  /** When the load first went below `RELEASE_BELOW` of the cores in this run; `null` when it is not below. */
+  /** #723: When the load first went below `RELEASE_BELOW` of the cores in this run; `null` when it is not below. */
   underSince: number | null;
 }
 
@@ -72,7 +72,7 @@ export function targetsOf(trees: readonly SessionTree[], protectedPids: Readonly
   for (const tree of trees) {
     const roots = new Set(tree.rootPids);
     const parentOf = new Map(tree.processes.map((p) => [p.pid, p.ppid]));
-    /* The parent only counts while it is in the tree: a pid above it (the core that started the session) shields nothing. */
+    /* #723: The parent only counts while it is in the tree: a pid above it (the core that started the session) shields nothing. */
     const parentInTree = (pid: number): number | undefined => {
       const parent = parentOf.get(pid);
       return parent !== undefined && parentOf.has(parent) ? parent : undefined;

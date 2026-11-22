@@ -1,12 +1,6 @@
 // PUT /api/cpu-governor (#723, epic #720): turns the CPU governor on or off.
-//
-// | Route                  | What                                                                          |
-// | ---------------------- | ----------------------------------------------------------------------------- |
-// | `PUT /api/cpu-governor` | `{ enabled: boolean }`; answers `{ cpuGovernor: { enabled, mode, containedSessions, since } }` |
-//
-// A strict write (`STRICT_WRITE_ROUTES`, connections-route.ts): accepted only from the /ui itself. Turning it off stops it
-// touching new processes and takes `taskpolicy -b` off the pids it set; the nice it raised stays until the process ends.
-// The state is also in `GET /api/telemetry` (`cpuGovernor`). The caller already ran `strictWriteRefusal`.
+// #723: a strict write (STRICT_WRITE_ROUTES, connections-route.ts), accepted only from the /ui itself; the caller already ran `strictWriteRefusal`.
+// #723: turning it off stops it touching new processes and takes `taskpolicy -b` off the pids it set; the nice it raised stays.
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { send } from '../ingest/hooks/receiver.ts';

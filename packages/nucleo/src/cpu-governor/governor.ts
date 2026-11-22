@@ -25,13 +25,13 @@ export interface Observation {
 /** The only commands the governor runs, each with a fixed argv, no shell, no sudo. */
 export interface MachineControl {
   sample(): Promise<Observation | null>;
-  /** The pid's current start in the form of `ProcessSample.start`; `null` when it is gone. */
+  /** #723: The pid's current start in the form of `ProcessSample.start`; `null` when it is gone. */
   inspect(pid: number): Promise<{ start: string } | null>;
-  /** `renice 10 -p <pid>`. */
+  /** #723: `renice 10 -p <pid>`. */
   renice(pid: number): Promise<ChangeOutcome>;
-  /** `taskpolicy -b -p <pid>` (macOS). */
+  /** #723: `taskpolicy -b -p <pid>` (macOS). */
   background(pid: number): Promise<ChangeOutcome>;
-  /** `taskpolicy -B -p <pid>` (macOS). */
+  /** #723: `taskpolicy -B -p <pid>` (macOS). */
   foreground(pid: number): Promise<ChangeOutcome>;
 }
 
@@ -40,13 +40,13 @@ export interface CpuGovernorDeps {
   load(): LoadReading;
   nowMs(): number;
   log(message: string): void;
-  /** `taskpolicy` exists only on darwin: elsewhere the governor only raises the nice. */
+  /** #723: `taskpolicy` exists only on darwin: elsewhere the governor only raises the nice. */
   platform: 'darwin' | 'linux';
-  /** The core's own pid: never a target, nor anything under it. */
+  /** #723: The core's own pid: never a target, nor anything under it. */
   selfPid: number;
 }
 
-/** A change it made that it may undo: the pid, the start it had and its session. */
+/** #723: A change it made that it may undo: the pid, the start it had and its session. */
 interface BackgroundEntry {
   start: string;
   sessionId: string;
@@ -59,14 +59,14 @@ export class CpuGovernor {
   private enabled = true;
   private pressure: Pressure = initialPressure();
   private since: number;
-  /** Pids it reniced or found at nice 10 or more, and pids whose `-b` was tried (also the refused). */
+  /** #723: Pids it reniced or found at nice 10 or more, and pids whose `-b` was tried (also the refused). */
   private readonly settled = new Set<string>();
   private readonly triedBackground = new Set<string>();
-  /** The pids it put under `-b`, which it takes out again. */
+  /** #723: The pids it put under `-b`, which it takes out again. */
   private readonly background = new Map<number, BackgroundEntry>();
   private queue: Promise<unknown> = Promise.resolve();
   private timer: NodeJS.Timeout | null = null;
-  /** A tick the timer started and that has not ended: the timer skips its beat meanwhile, so slow ticks do not pile up. */
+  /** #723: A tick the timer started and that has not ended: the timer skips its beat meanwhile, so slow ticks do not pile up. */
   private ticking = false;
 
   constructor(deps: CpuGovernorDeps) {
@@ -79,7 +79,7 @@ export class CpuGovernor {
     return { enabled: this.enabled, mode: this.pressure.mode, containedSessions: [...sessions].sort(), since: new Date(this.since).toISOString() };
   }
 
-  /** Runs `tick` every `intervalMs`; the timer does not hold the process open. */
+  /** #723: Runs `tick` every `intervalMs`; the timer does not hold the process open. */
   start(intervalMs: number): void {
     if (this.timer) return;
     this.timer = setInterval(() => {
@@ -106,7 +106,7 @@ export class CpuGovernor {
     });
   }
 
-  /** Turning it off takes `-b` off the pids it set (nothing else, no renice) and the mode returns to `normal`. */
+  /** #723: Turning it off takes `-b` off the pids it set (nothing else, no renice) and the mode returns to `normal`. */
   setEnabled(enabled: boolean): Promise<void> {
     return this.serial(async () => {
       if (enabled === this.enabled) return;
@@ -149,7 +149,7 @@ export class CpuGovernor {
     }
   }
 
-  /** Drops what it remembers about pids that are not in the sample any more, except the pids under `-b`, which it must still undo. */
+  /** #723: Drops what it remembers about pids that are not in the sample any more, except the pids under `-b`, which it must still undo. */
   private forget(targets: readonly Target[]): void {
     const live = new Set(targets.map((t) => keyOf(t.pid, t.start)));
     for (const key of this.settled) if (!live.has(key)) this.settled.delete(key);
@@ -157,7 +157,7 @@ export class CpuGovernor {
   }
 
   /**
-   * A pid under `-b` that left every tree stays in `background` (the process may be alive, reparented or detached) until
+   * #723: A pid under `-b` that left every tree stays in `background` (the process may be alive, reparented or detached) until
    * `release` takes it out; only when it is gone or is another process now is its entry dropped, since there is nothing to undo.
    */
   private async pruneBackground(targets: readonly Target[]): Promise<void> {
@@ -169,7 +169,7 @@ export class CpuGovernor {
     }
   }
 
-  /** One change with the start check before it; `skipped` when the pid is gone or reused. */
+  /** #723: One change with the start check before it; `skipped` when the pid is gone or reused. */
   private async change(target: Target, operation: string, run: (pid: number) => Promise<ChangeOutcome>): Promise<ChangeOutcome | 'skipped'> {
     const outcome = await this.verified(target.pid, target.start, run);
     if (outcome !== 'skipped' && outcome !== 'done') this.d.log(`cpu-governor ${operation} ${outcome}: pid=${target.pid}`);
@@ -182,7 +182,7 @@ export class CpuGovernor {
     return run(pid);
   }
 
-  /** `taskpolicy -B` on the pids it put under `-b`, each after its start check. */
+  /** #723: `taskpolicy -B` on the pids it put under `-b`, each after its start check. */
   private async release(): Promise<void> {
     const mine = [...this.background];
     this.background.clear();
