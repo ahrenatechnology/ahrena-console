@@ -136,6 +136,10 @@
     {
       "name": "Permissions",
       "description": "The permission requests of a tool call: the plugin's hook opens one, the owner answers it from the /ui window, the hook reads the decision once (docs/contracts/permission-requests.md)."
+    },
+    {
+      "name": "Memory",
+      "description": "The embedded ai-memory, read only: the server's state, the open handoffs and the recent pages of a project, and one session's capture. Local to this machine."
     }
   ],
   "paths": {
@@ -5896,6 +5900,336 @@
           }
         }
       }
+    },
+    "/api/memory": {
+      "get": {
+        "operationId": "getMemory",
+        "tags": [
+          "Memory"
+        ],
+        "summary": "The embedded ai-memory's state, its bind, auth posture, LLM and embeddings status, its counts and its alerts",
+        "description": "Read only, local to this machine. The state comes from `ai-memory status --json`, reprojected field by field. A server that is stopped, absent or failing answers its state and nothing of the process. No query parameter is accepted (`machine` is a 400 `local-only`). Never available to a remote credential.",
+        "responses": {
+          "200": {
+            "description": "The state. `alerts` carries the bind, auth posture, LLM and embeddings warnings.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemoryServer"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The query is not valid (`invalid-project`, `invalid-session-id`, `invalid-query`) or names a `machine` (`local-only`): the memory is read from this machine only.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemoryRefusal"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The core runs without the memory module (`--demo`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "A method other than GET.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/memory/handoffs": {
+      "get": {
+        "operationId": "getMemoryHandoffs",
+        "tags": [
+          "Memory"
+        ],
+        "summary": "The open handoffs of a project, without their body",
+        "description": "Read only, local to this machine. Never a summary, open question, next step or file list. Read through the ai-memory's mcp-bridge, and only after `status` confirms the bind 127.0.0.1: otherwise 409 with the `bind-not-loopback` alert, or 503 `not-running`, and the bridge is not called.",
+        "parameters": [
+          {
+            "name": "project",
+            "in": "query",
+            "required": true,
+            "description": "The ai-memory project, exactly once: `[A-Za-z0-9][A-Za-z0-9._-]{0,127}`. Anything else is a 400 and nothing is read.",
+            "schema": {
+              "type": "string",
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The open handoffs.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemoryHandoffs"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The query is not valid (`invalid-project`, `invalid-session-id`, `invalid-query`) or names a `machine` (`local-only`): the memory is read from this machine only.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemoryRefusal"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The core runs without the memory module (`--demo`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "A method other than GET.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`status` does not confirm the bind 127.0.0.1: `reason` is `bind-not-loopback` and `alert` is the warning.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemoryRefusal"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The read failed: `reason` is `failed`, `exit`, `timeout` or `rejected`, with no detail of the process.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemoryRefusal"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The server is not running (`not-running`) or the core has no embedded binary (`unavailable`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemoryRefusal"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/memory/pages": {
+      "get": {
+        "operationId": "getMemoryPages",
+        "tags": [
+          "Memory"
+        ],
+        "summary": "The recent pages of a project, without their snippet",
+        "description": "Read only, local to this machine. Read with the ai-memory's CLI: the bridge is not used and the bind is not checked. A project the server does not know is an empty list.",
+        "parameters": [
+          {
+            "name": "project",
+            "in": "query",
+            "required": true,
+            "description": "The ai-memory project, exactly once: `[A-Za-z0-9][A-Za-z0-9._-]{0,127}`. Anything else is a 400 and nothing is read.",
+            "schema": {
+              "type": "string",
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The recent pages.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemoryPages"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The query is not valid (`invalid-project`, `invalid-session-id`, `invalid-query`) or names a `machine` (`local-only`): the memory is read from this machine only.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemoryRefusal"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The core runs without the memory module (`--demo`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "A method other than GET.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The read failed: `reason` is `failed`, `exit`, `timeout` or `rejected`, with no detail of the process.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemoryRefusal"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The core has no embedded binary (`unavailable`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemoryRefusal"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/memory/sessions/{sessionId}": {
+      "get": {
+        "operationId": "getMemorySession",
+        "tags": [
+          "Memory"
+        ],
+        "summary": "Whether a session was captured by the ai-memory, and the handoffs it opened",
+        "description": "Read only, local to this machine. The session id must match `[A-Za-z0-9][A-Za-z0-9._:-]{0,127}`. The handoffs have no body. Read through the ai-memory's mcp-bridge, and only after `status` confirms the bind 127.0.0.1: otherwise 409 with the `bind-not-loopback` alert, or 503 `not-running`, and the bridge is not called.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/sessionId"
+          },
+          {
+            "name": "project",
+            "in": "query",
+            "required": true,
+            "description": "The ai-memory project, exactly once: `[A-Za-z0-9][A-Za-z0-9._-]{0,127}`. Anything else is a 400 and nothing is read.",
+            "schema": {
+              "type": "string",
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The capture and the handoffs the session opened.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemorySession"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The query is not valid (`invalid-project`, `invalid-session-id`, `invalid-query`) or names a `machine` (`local-only`): the memory is read from this machine only.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemoryRefusal"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The core runs without the memory module (`--demo`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "A method other than GET.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`status` does not confirm the bind 127.0.0.1: `reason` is `bind-not-loopback` and `alert` is the warning.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemoryRefusal"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The read failed: `reason` is `failed`, `exit`, `timeout` or `rejected`, with no detail of the process.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemoryRefusal"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The server is not running (`not-running`) or the core has no embedded binary (`unavailable`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemoryRefusal"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -7520,6 +7854,430 @@
             "type": "string",
             "format": "date-time",
             "description": "When the governor was last turned on or off, or its mode last changed."
+          }
+        }
+      },
+      "MemoryAlert": {
+        "type": "object",
+        "description": "A warning the screen shows. `id` is the contract; `text` is a message for a person, in the person's language (not meant to be matched).",
+        "required": [
+          "id",
+          "text"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "enum": [
+              "bind-not-loopback",
+              "auth-none-loopback",
+              "llm-provider-configured",
+              "embeddings-enabled"
+            ]
+          },
+          "text": {
+            "type": "string"
+          }
+        }
+      },
+      "MemoryServer": {
+        "oneOf": [
+          {
+            "type": "object",
+            "description": "A running server: named fields only. `local` holds the two paths of the ai-memory data folder, for the interface of this machine only.",
+            "required": [
+              "state",
+              "version",
+              "bind",
+              "auth_posture",
+              "client_auth",
+              "llm",
+              "embeddings",
+              "capture_mode",
+              "counts",
+              "storage",
+              "alerts"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "state": {
+                "const": "running"
+              },
+              "version": {
+                "type": "string"
+              },
+              "bind": {
+                "type": "string",
+                "description": "The address the server listens on. Only `127.0.0.1:<port>` is the confirmed loopback bind; any other carries the `bind-not-loopback` alert."
+              },
+              "auth_posture": {
+                "type": "string",
+                "description": "The server's authentication posture as `status` states it; `none_loopback` carries the `auth-none-loopback` alert."
+              },
+              "client_auth": {
+                "type": "string",
+                "enum": [
+                  "on",
+                  "off"
+                ]
+              },
+              "llm": {
+                "type": "object",
+                "required": [
+                  "status",
+                  "provider"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "disabled",
+                      "unknown",
+                      "ok",
+                      "error"
+                    ]
+                  },
+                  "provider": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                }
+              },
+              "embeddings": {
+                "type": "object",
+                "required": [
+                  "status"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "disabled",
+                      "unknown",
+                      "ok",
+                      "error"
+                    ]
+                  }
+                }
+              },
+              "capture_mode": {
+                "type": "string",
+                "enum": [
+                  "denylist",
+                  "allowlist"
+                ]
+              },
+              "counts": {
+                "type": "object",
+                "required": [
+                  "sessions",
+                  "pages_latest",
+                  "pages_all",
+                  "observations"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "sessions": {
+                    "type": "integer"
+                  },
+                  "pages_latest": {
+                    "type": "integer"
+                  },
+                  "pages_all": {
+                    "type": "integer"
+                  },
+                  "observations": {
+                    "type": "integer"
+                  }
+                }
+              },
+              "storage": {
+                "type": "object",
+                "required": [
+                  "database_bytes",
+                  "data_dir_free_bytes"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "database_bytes": {
+                    "type": "integer"
+                  },
+                  "data_dir_free_bytes": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  }
+                }
+              },
+              "alerts": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/MemoryAlert"
+                }
+              },
+              "local": {
+                "type": "object",
+                "required": [
+                  "data_dir",
+                  "db_path"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "data_dir": {
+                    "type": "string"
+                  },
+                  "db_path": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          },
+          {
+            "type": "object",
+            "description": "A server that is stopped, absent (no embedded binary) or failing: the state and nothing of the process.",
+            "required": [
+              "state",
+              "alerts"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "state": {
+                "type": "string",
+                "enum": [
+                  "unavailable",
+                  "stopped",
+                  "failed"
+                ]
+              },
+              "alerts": {
+                "type": "array",
+                "maxItems": 0,
+                "items": {
+                  "$ref": "#/components/schemas/MemoryAlert"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "MemoryHandoff": {
+        "type": "object",
+        "description": "One open handoff, without its body. The working directory and the two personal fields are under `local`, for the interface of this machine only.",
+        "required": [
+          "id",
+          "from_session_id",
+          "from_agent",
+          "to_agent",
+          "state",
+          "created_at",
+          "accepted_by",
+          "accepted_at",
+          "accepted_by_session",
+          "local"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "from_session_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "from_agent": {
+            "type": "string"
+          },
+          "to_agent": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "open",
+              "accepted",
+              "expired"
+            ]
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "accepted_by": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "accepted_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "accepted_by_session": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "local": {
+            "type": "object",
+            "required": [
+              "cwd",
+              "owner_user",
+              "accepted_by_user"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "cwd": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "owner_user": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "accepted_by_user": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
+          }
+        }
+      },
+      "MemoryHandoffs": {
+        "type": "object",
+        "required": [
+          "project",
+          "handoffs"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "project": {
+            "type": "string"
+          },
+          "handoffs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MemoryHandoff"
+            }
+          }
+        }
+      },
+      "MemoryPage": {
+        "type": "object",
+        "description": "One recent page: its path, title and date. Never its snippet or its body.",
+        "required": [
+          "path",
+          "title",
+          "updated_at"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "string"
+          }
+        }
+      },
+      "MemoryPages": {
+        "type": "object",
+        "required": [
+          "project",
+          "pages"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "project": {
+            "type": "string"
+          },
+          "pages": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MemoryPage"
+            }
+          }
+        }
+      },
+      "MemorySession": {
+        "type": "object",
+        "description": "Whether the session was captured by the ai-memory, and the handoffs it opened.",
+        "required": [
+          "project",
+          "session_id",
+          "captured",
+          "opened"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "project": {
+            "type": "string"
+          },
+          "session_id": {
+            "type": "string"
+          },
+          "captured": {
+            "type": "boolean"
+          },
+          "opened": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MemoryHandoff"
+            }
+          }
+        }
+      },
+      "MemoryRefusal": {
+        "type": "object",
+        "description": "A refusal of the memory routes: `error` is a message for a person (not matched), `reason` is the contract. The body carries nothing of the process or of the ai-memory's own text.",
+        "required": [
+          "error",
+          "reason"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "error": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "invalid-project",
+              "invalid-session-id",
+              "invalid-query",
+              "local-only",
+              "not-running",
+              "bind-not-loopback",
+              "unavailable",
+              "failed",
+              "exit",
+              "timeout",
+              "rejected"
+            ]
+          },
+          "alert": {
+            "$ref": "#/components/schemas/MemoryAlert"
           }
         }
       }

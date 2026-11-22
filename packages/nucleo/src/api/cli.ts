@@ -155,6 +155,8 @@ import { ancestorsWith, listPortsWith, PortReleaser } from '../ports/release.ts'
 import { systemRunner } from '../telemetry/adapters/system.ts';
 import { createCloudsRoute } from './clouds.ts';
 import { createDockerRoute } from './docker.ts';
+import { createMemoryRoute } from './memory-route.ts';
+import { createMemoryModule } from '../memory/memory.ts';
 import { createDiagnosisReader, createDiagnosisRoute, type DiagnosisRouteOptions } from './diagnosis.ts';
 import { createDelegationsRoute, delegationDiagnosis } from './delegations.ts';
 import { createDelegationLauncher } from './delegation-launch.ts';
@@ -798,6 +800,9 @@ const docker =
         acceptNoOrigin: acceptRemoteActions,
       }
     : null;
+// The embedded ai-memory's read routes (#735): local and read only, over the module of #727 with its own data folder under the core's. Not in --demo, where there is no real server to read.
+const memoryModule = demo ? null : createMemoryModule({ dataDir: resolve(dataDir, 'ai-memory'), log });
+const memory = memoryModule ? createMemoryRoute({ memory: memoryModule }) : null;
 // The diagnosis of an open saturation alert (#565): this machine's collectors (read-only, fixed commands) and the remote machines' through their tunnel port. Not in --demo, where the readings are synthetic.
 // #722: `processes-by-session` reads the live `claude` registry (`liveProcesses`, above) and the title each session has in the console.
 const diagnosisSessions = liveProcesses
@@ -942,6 +947,7 @@ const api: LocalApi = await startLocalApi({
   ports,
   clouds,
   docker,
+  memory,
   appUpdate,
   githubSync,
   load: () => ({
@@ -1090,6 +1096,8 @@ async function shutdown() {
   await Promise.all([...samplers.map((a) => a.stop()), remoteMachines?.stop()]);
   // #280: the jobs run detached, so they would outlive the core; stop them and write their footers first.
   await toolsExecutor?.stopAll().catch(() => undefined);
+  // The memory module ends the call it is running and refuses the rest (#735).
+  await memoryModule?.close().catch(() => undefined);
   await machineConnection?.stopAll().catch(() => undefined);
   await awsConnector?.stop().catch(() => undefined);
   await githubSync?.stop().catch(() => undefined);

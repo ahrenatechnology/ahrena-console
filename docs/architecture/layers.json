@@ -28,7 +28,7 @@
       "api": {
         "layer": "edge",
         "evidence": "HTTP routes and the server: 48 of 84 files import node:http, 13 import node:fs; routes answer through send(res, status, body)",
-        "mixed": "ports.ts, event-phrase.ts and a few *-route.ts files hold small pure helpers next to the routes"
+        "mixed": "ports.ts, event-phrase.ts and a few *-route.ts files hold small pure helpers next to the routes; memory-view.ts (#735) is a pure projection of the memory module's values and memory-route.ts calls the module through its read methods"
       },
       "app-update": {
         "layer": "application",
@@ -115,7 +115,7 @@
       "memory": {
         "layer": "edge",
         "evidence": "the folder exists to run the embedded ai-memory binary as a child process (runner.ts imports node:child_process: no shell, own process group, timeout, close on shutdown) and its readers only parse that outside process's output, the same reason vendor and tools sit at the edge; 1 of 3 files does direct IO",
-        "mixed": "readers.ts is pure parsing (field-by-field reprojection of the CLI's output) and memory.ts is pure composition of the runner and the readers"
+        "mixed": "readers.ts is pure parsing (field-by-field reprojection of the CLI's output) and memory.ts is pure composition of the runner and the readers; mocks/ holds test doubles (the fixtures, the fake child and the fake reads of #735)"
       },
       "messaging": {
         "layer": "application",

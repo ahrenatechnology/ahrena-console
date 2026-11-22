@@ -4,29 +4,38 @@
  * input is dropped, and an input that does not fit is an error that carries a code, never the input.
  */
 
-import { checks, parseJson, type MemoryHandoffLocal } from './readers.ts';
+import { checks, parseJson } from './readers.ts';
 
 const HANDOFF_STATES = ['open', 'accepted', 'expired'] as const;
 
-/** One handoff of the bridge's list, without its body and without its cwd (#734/AC-2, #734/D1). */
+/** One handoff of the bridge's list, without its body, its cwd and the two personal fields (#734/AC-2, #734/D1, #735/D2). */
 export interface MemorySessionHandoff {
   id: string;
   from_session_id: string | null;
   from_agent: string;
   to_agent: string | null;
-  owner_user: string | null;
   state: (typeof HANDOFF_STATES)[number];
   created_at: string;
   accepted_by: string | null;
   accepted_at: string | null;
   accepted_by_session: string | null;
+}
+
+/**
+ * The local part of a bridge handoff, by handoff id: the cwd is a local path and owner_user and accepted_by_user are personal
+ * data, so none of the three may reach MCP, an exporter, the hub or the remote contract (#734/D1, #735/D2).
+ */
+export interface MemorySessionHandoffLocal {
+  id: string;
+  cwd: string | null;
+  owner_user: string | null;
   accepted_by_user: string | null;
 }
 
-/** What `readBridgeHandoffs` returns: the shareable handoffs and the local-only cwd, held apart (#734/D1). */
+/** What `readBridgeHandoffs` returns: the shareable handoffs and the local-only part, held apart (#734/D1, #735/D2). */
 export interface MemoryBridgeHandoffsReading {
   handoffs: MemorySessionHandoff[];
-  local: MemoryHandoffLocal[];
+  local: MemorySessionHandoffLocal[];
 }
 
 /** The handoffs a session opened; the accepted side is #737 (#734). */
@@ -46,15 +55,13 @@ export function readBridgeHandoffs(text: string): MemoryBridgeHandoffsReading {
         from_session_id: check.nullableString(raw.from_session_id),
         from_agent: check.string(raw.from_agent),
         to_agent: check.nullableString(raw.to_agent),
-        owner_user: check.nullableString(raw.owner_user),
         state: check.oneOf(raw.state, HANDOFF_STATES),
         created_at: check.string(raw.created_at),
         accepted_by: check.nullableString(raw.accepted_by),
         accepted_at: check.nullableString(raw.accepted_at),
         accepted_by_session: check.nullableString(raw.accepted_by_session),
-        accepted_by_user: check.nullableString(raw.accepted_by_user),
       },
-      local: { id, cwd: check.nullableString(raw.cwd) },
+      local: { id, cwd: check.nullableString(raw.cwd), owner_user: check.nullableString(raw.owner_user), accepted_by_user: check.nullableString(raw.accepted_by_user) },
     };
   });
   return { handoffs: rows.map((row) => row.handoff), local: rows.map((row) => row.local) };

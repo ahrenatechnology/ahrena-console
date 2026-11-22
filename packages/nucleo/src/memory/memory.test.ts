@@ -191,6 +191,34 @@ describe('memory module, typed reads (#733)', () => {
     assert.deepEqual(await pending, { ok: true, value: { data_dir: FAKE_DATA_DIR, db_path: FAKE_DB_PATH } });
   });
 
+  test('#735 statusWithLocal answers the shareable status and the local part from one run of status', async () => {
+    const { memory, calls } = moduleWith();
+    const pending = memory.statusWithLocal();
+    await turn();
+    calls[0]!.child.finish(0, JSON.stringify(statusFixture()));
+    const result = await pending;
+    assert.equal(calls.length, 1);
+    assert.equal(result.state, 'running');
+    if (result.state !== 'running' || !result.status || !result.local) return assert.fail('a running status carries both parts');
+    assert.equal(result.status.bind, '127.0.0.1:7421');
+    assert.deepEqual(result.local, { data_dir: FAKE_DATA_DIR, db_path: FAKE_DB_PATH });
+    assert.equal(JSON.stringify(result.status).includes(FAKE_DATA_DIR), false);
+  });
+
+  test('#735 statusWithLocal of a stopped, absent or unreadable server carries no value and no path', async () => {
+    const stopped = moduleWith();
+    const pending = stopped.memory.statusWithLocal();
+    await turn();
+    stopped.calls[0]!.child.finish(1, '', `connection refused at ${FAKE_DATA_DIR}`);
+    assert.deepEqual(await pending, { state: 'stopped' });
+    assert.deepEqual(await moduleWith(null).memory.statusWithLocal(), { state: 'unavailable' });
+    const garbled = moduleWith();
+    const reading = garbled.memory.statusWithLocal();
+    await turn();
+    garbled.calls[0]!.child.finish(0, 'not json');
+    assert.deepEqual(await reading, { state: 'running' });
+  });
+
   test('#734/D2 statusLocal of a stopped server is a failed read, not a value', async () => {
     const { memory, calls } = moduleWith();
     const pending = memory.statusLocal();
@@ -346,6 +374,44 @@ describe('memory module, the bridge reads (#734)', () => {
     await playBridge(calls[0]!.child, { result: toolResult({ handoffs: bridgeHandoffsFixture() }) });
     const result = await pending;
     assert.deepEqual(result.ok && result.value.map((l) => l.cwd), ['/Users/someone/work/app', '/Users/someone/work/other']);
+    assert.deepEqual(result.ok && result.value.map((l) => l.owner_user), ['local:someone', 'local:someone']);
+  });
+
+  test('#735/D2 bridgeHandoffs carries no owner_user and no accepted_by_user: they come only out of the Local methods', async () => {
+    const { memory, calls } = moduleWith();
+    const pending = memory.bridgeHandoffs('app');
+    await turn();
+    await playBridge(calls[0]!.child, { result: toolResult({ handoffs: bridgeHandoffsFixture() }) });
+    const text = JSON.stringify(await pending);
+    for (const name of ['owner_user', 'accepted_by_user', 'local:someone']) assert.equal(text.includes(name), false, name);
+  });
+
+  test('#735 bridgeHandoffsWithLocal answers the shareable handoffs and the local part from one bridge call', async () => {
+    const { memory, calls } = moduleWith();
+    const pending = memory.bridgeHandoffsWithLocal('app');
+    await turn();
+    await playBridge(calls[0]!.child, { result: toolResult({ handoffs: bridgeHandoffsFixture() }) });
+    const result = await pending;
+    assert.equal(calls.length, 1);
+    assert.equal(result.ok && result.value.handoffs.length, 2);
+    assert.deepEqual(result.ok && result.value.local.map((l) => l.id), result.ok ? result.value.handoffs.map((h) => h.id) : []);
+    assert.equal(JSON.stringify(result.ok && result.value.handoffs).includes('/Users/'), false);
+  });
+
+  test('#735 sessionHandoffsWithLocal answers the handoffs the session opened and the local part of those only', async () => {
+    const { memory, calls } = moduleWith();
+    const pending = memory.sessionHandoffsWithLocal('app', FAKE_SESSION_ID);
+    await turn();
+    await playBridge(calls[0]!.child, { result: toolResult({ handoffs: bridgeHandoffsFixture() }) });
+    const result = await pending;
+    assert.equal(result.ok && result.value.opened.length, 1);
+    assert.deepEqual(result.ok && result.value.local.map((l) => l.id), ['7b0e3a1c-2d4f-4a6b-8c9d-0e1f2a3b4c5d']);
+  });
+
+  test('#735 sessionHandoffsWithLocal refuses an id outside the formats before the bridge is spawned', async () => {
+    const { memory, calls } = moduleWith();
+    assert.deepEqual(await memory.sessionHandoffsWithLocal('app', '--evil'), { ok: false, reason: 'failed' });
+    assert.equal(calls.length, 0);
   });
 
   test('#719/AC-8 sessionHandoffs lists the handoffs the session opened, matched by from_session_id', async () => {

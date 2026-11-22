@@ -8,7 +8,7 @@
 
 import { embeddedAiMemoryPath } from '../tools/embedded-ai-memory.ts';
 import { createMemoryBridge, type MemoryBridgeResult } from './bridge.ts';
-import { matchSession, readBridgeHandoffs, type MemoryBridgeHandoffsReading, type MemorySessionHandoff, type MemorySessionHandoffs } from './bridge-readers.ts';
+import { matchSession, readBridgeHandoffs, type MemoryBridgeHandoffsReading, type MemorySessionHandoff, type MemorySessionHandoffLocal, type MemorySessionHandoffs } from './bridge-readers.ts';
 import {
   MemoryReadError,
   readHandoffs,
@@ -41,9 +41,16 @@ export interface MemoryModuleOptions extends Omit<MemoryRunnerOptions, 'binaryPa
 
 /** What `status()` answers; a running server carries the shareable value when it fits, never the local part (#733/AC-1, #734/D2). */
 export type MemoryStatusState = { state: 'unavailable' | 'stopped' | 'unknown' } | { state: 'running'; status?: MemoryStatus };
+/** What `statusWithLocal()` answers: the shareable value and the local part of one run of `status`, for a local route only (#735). */
+export type MemoryStatusWithLocalState = { state: 'unavailable' | 'stopped' | 'unknown' } | { state: 'running'; status?: MemoryStatus; local?: MemoryStatusLocal };
+/** The handoffs a session opened and their local part (#735). */
+export interface MemorySessionHandoffsWithLocal {
+  opened: MemorySessionHandoff[];
+  local: MemorySessionHandoffLocal[];
+}
 
 // An id of a session: a UUID or a harness's native id; no leading dash, no slash, no whitespace (#734/AC-3).
-const SESSION_FORMAT = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
+export const SESSION_FORMAT = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 // The workspace is a constant: the core has one (#733).
 const WORKSPACE = 'default';
 // The most open handoffs the bridge's list returns upstream; a project with more is read up to this cap (#734).
@@ -64,6 +71,8 @@ export interface MemoryModule {
   status(): Promise<MemoryStatusState>;
   /** LOCAL ONLY: data_dir and db_path of a running server; never for MCP, an exporter, the hub or the remote contract (#734/D2). */
   statusLocal(): Promise<MemoryRead<MemoryStatusLocal>>;
+  /** LOCAL ONLY: `status()` and `statusLocal()` from one run of `status`; for a local route only (#735). */
+  statusWithLocal(): Promise<MemoryStatusWithLocalState>;
   /** The project's open handoffs, five fields each; a project the server does not know is an empty list (#733/AC-2). */
   handoffs(project: string): Promise<MemoryRead<MemoryHandoff[]>>;
   /** LOCAL ONLY: the cwd of each open handoff, by id (#734/D1). */
@@ -72,10 +81,14 @@ export interface MemoryModule {
   recent(project: string): Promise<MemoryRead<MemoryRecentPage[]>>;
   /** The project's open handoffs through the bridge, without any body field and without cwd (#734/AC-2). */
   bridgeHandoffs(project: string): Promise<MemoryRead<MemorySessionHandoff[]>>;
-  /** LOCAL ONLY: the cwd of each handoff the bridge lists, by id (#734/D1). */
-  bridgeHandoffsLocal(project: string): Promise<MemoryRead<MemoryHandoffLocal[]>>;
+  /** LOCAL ONLY: the cwd, owner_user and accepted_by_user of each handoff the bridge lists, by id (#734/D1, #735/D2). */
+  bridgeHandoffsLocal(project: string): Promise<MemoryRead<MemorySessionHandoffLocal[]>>;
+  /** LOCAL ONLY: `bridgeHandoffs` and `bridgeHandoffsLocal` from one bridge call; for a local route only (#735). */
+  bridgeHandoffsWithLocal(project: string): Promise<MemoryRead<MemoryBridgeHandoffsReading>>;
   /** The handoffs a session opened, matched by `from_session_id` only (#734). */
   sessionHandoffs(project: string, sessionId: string): Promise<MemoryRead<MemorySessionHandoffs>>;
+  /** LOCAL ONLY: `sessionHandoffs` with the local part of those handoffs, from one bridge call; for a local route only (#735). */
+  sessionHandoffsWithLocal(project: string, sessionId: string): Promise<MemoryRead<MemorySessionHandoffsWithLocal>>;
   /** Whether the session was captured; never its observations (#734/AC-3). */
   sessionCaptured(project: string, sessionId: string): Promise<MemoryRead<boolean>>;
   /** The core's shutdown: ends the running call and refuses the rest; wiring it in is the next sub-issue's (#727). */
@@ -129,6 +142,16 @@ export function createMemoryModule(options: MemoryModuleOptions): MemoryModule {
     return reading(HANDOFF_LIST, () => readBridgeHandoffs(result.text));
   }
 
+  /** One run of `status`: the state, and for a running server the value and the local part (#727/AC-3, #735). */
+  async function readState(): Promise<MemoryStatusWithLocalState> {
+    const result = await runner.run('status');
+    if (result.kind === 'unavailable') return { state: 'unavailable' };
+    if (result.kind === 'exit' && result.code !== null) return { state: 'stopped' };
+    if (result.kind !== 'ok') return { state: 'unknown' };
+    const reading = interpret('status', result, readStatus);
+    return reading.ok ? { state: 'running', status: reading.value.status, local: reading.value.local } : { state: 'running' };
+  }
+
   return {
     available: runner.available,
     close: async () => {
@@ -153,14 +176,11 @@ export function createMemoryModule(options: MemoryModuleOptions): MemoryModule {
     },
     recent: (project) => readProject('recent', project, readRecent, []),
     statusLocal: readStatusLocal,
-    async status() {
-      const result = await runner.run('status');
-      if (result.kind === 'unavailable') return { state: 'unavailable' };
-      if (result.kind === 'exit' && result.code !== null) return { state: 'stopped' };
-      if (result.kind !== 'ok') return { state: 'unknown' };
-      const reading = interpret('status', result, readStatus);
-      return reading.ok ? { state: 'running', status: reading.value.status } : { state: 'running' };
+    status: async () => {
+      const state = await readState();
+      return state.state === 'running' ? { state: 'running', ...(state.status ? { status: state.status } : {}) } : state;
     },
+    statusWithLocal: readState,
     bridgeHandoffs: async (project) => {
       const result = await listHandoffs(project);
       return result.ok ? { ok: true, value: result.value.handoffs } : result;
@@ -168,6 +188,14 @@ export function createMemoryModule(options: MemoryModuleOptions): MemoryModule {
     bridgeHandoffsLocal: async (project) => {
       const result = await listHandoffs(project);
       return result.ok ? { ok: true, value: result.value.local } : result;
+    },
+    bridgeHandoffsWithLocal: (project) => listHandoffs(project),
+    sessionHandoffsWithLocal: async (project, sessionId) => {
+      const result = await listHandoffs(project, sessionId);
+      if (!result.ok) return result;
+      const opened = matchSession(result.value.handoffs, sessionId).opened;
+      const ids = new Set(opened.map((handoff) => handoff.id));
+      return { ok: true, value: { opened, local: result.value.local.filter((item) => ids.has(item.id)) } };
     },
     sessionHandoffs: async (project, sessionId) => {
       const result = await listHandoffs(project, sessionId);

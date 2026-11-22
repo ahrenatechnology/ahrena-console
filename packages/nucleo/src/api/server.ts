@@ -60,6 +60,7 @@ import type { ManagedRuntime } from '../runtime/service.ts';
 // | `POST /api/machines/<id>/owner-proof/retry` | "Tentar agora": request the remote owner's proof now and read the machine (api/owner-proof-retry.ts, #388) |
 // | `GET`/`POST /api/ports/release`, and the same under `/api/machines/<id>/` | Release a listening port: SIGTERM, then SIGKILL (api/ports.ts, #286, decision 0016) |
 // | `GET /api/docker`, `GET /api/docker/plan`, `POST /api/docker/actions/<actionId>`, `DELETE /api/docker/jobs/<jobId>` | The Docker actions of a machine (api/docker.ts, src/docker, #288, decision 0017) |
+// | `GET /api/memory`, `GET /api/memory/handoffs`, `GET /api/memory/pages`, `GET /api/memory/sessions/<id>` | The embedded ai-memory, read only and local: never on a remote credential or `?machine=` (api/memory-route.ts) (#735) |
 // | `GET /api/connectors`, `POST`/`DELETE /api/connectors/aws/sessions/<name>/login`, and the same under `/api/machines/<id>/` | The cloud connectors and their logins (api/clouds.ts, #277) |
 // | `GET /api/github/sync` | The GitHub background sync's steps: last run, next run, last error (decision 0015, #356) |
 // | `GET /api/app-update`, `PUT /api/app-update/state` and `POST /api/app-update/actions/check|install|dismiss|ack` | The desktop app's update notice: the app reports, the /ui reads and clicks (api/app-update.ts, #330) |
@@ -152,6 +153,7 @@ import { isTerminalsRoute, respondTerminalsWrite, terminalsWriteAllowed } from '
 import type { TerminalControl } from '../telemetry/terminal-actions.ts';
 import { isToolsRoute, isToolsWrite, respondTools, respondToolsWrite, toolsWriteAllowed } from './tools.ts';
 import { dockerWriteAllowed, isDockerRoute, isDockerWrite, type DockerRoute } from './docker.ts';
+import { isMemoryRoute, respondNoMemory, type MemoryRoute } from './memory-route.ts';
 import type { ToolsControl } from '../tools/executor.ts';
 import { fromAnotherSite, fromOwnUi } from './same-origin.ts';
 import { appUpdateWriteFromSameOrigin, isAppUpdateRoute, type AppUpdateRoute } from './app-update.ts';
@@ -288,6 +290,8 @@ export interface ApiOptions {
   terminals?: TerminalControl | null;
   /** The Docker screen's actions (#288, decision 0017; api/docker.ts): `/api/docker` on the Tools executor's queue; without it, 404. */
   docker?: { route: DockerRoute; acceptNoOrigin: () => boolean } | null;
+  /** The embedded ai-memory's read routes (#735; api/memory-route.ts): local only, read only; without it, `/api/memory` gives 404. */
+  memory?: MemoryRoute | null;
   /** The cloud connectors (#277, decision 0013; api/clouds.ts): `/api/connectors` and the logins; without it, 404. */
   clouds?: CloudsRoute | null;
   /** The port release (#286, decision 0016; api/ports.ts): `/api/ports/release` and the same under `/api/machines/<id>/`; without it, 404. */
@@ -717,6 +721,8 @@ export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
     if (opts.clouds && isCloudsRoute(url.pathname)) return opts.clouds(req, res, url);
     if (opts.ports && isPortsRoute(url.pathname)) return opts.ports.handle(req, res, url);
     if (opts.docker && isDockerRoute(url.pathname)) return opts.docker.route(req, res, url);
+    // The memory routes are the owner's and local: the remote credential's closed list names none, and the route refuses `machine` (#735).
+    if (isMemoryRoute(url.pathname)) return opts.memory ? opts.memory(req, res, url) : respondNoMemory(res);
     if (opts.appUpdate && isAppUpdateRoute(url.pathname)) return opts.appUpdate(req, res, url);
     if (opts.githubSync && url.pathname === GITHUB_SYNC_ROUTE) return req.method === 'GET' ? send(res, 200, opts.githubSync.status()) : send(res, 405, { error: 'use GET' });
     if (req.method !== 'GET') return send(res, 405, { error: 'use GET' });

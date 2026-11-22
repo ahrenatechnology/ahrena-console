@@ -17,6 +17,7 @@ import { createCoreDecisions } from '../../src/api/adrs.ts';
 import { createCoreAgentInstructions } from '../../src/api/agent-instructions.ts';
 import { createCoreFrameworkInstall } from '../../src/api/framework-install.ts';
 import { createDockerRoute } from '../../src/api/docker.ts';
+import { createMemoryRoute } from '../../src/api/memory-route.ts';
 import { createMessagingRoute } from '../../src/api/messaging.ts';
 import { createOrdersRoute } from '../../src/api/orders.ts';
 import { createPortsRoute } from '../../src/api/ports.ts';
@@ -33,6 +34,7 @@ import { SqliteRuntimeStore } from '../../src/runtime/sqlite.ts';
 import { Messaging } from '../../src/messaging/service.ts';
 import { SessionOrders } from '../../src/messaging/orders.ts';
 import { serverWithoutCore } from '../../src/mcp/index.ts';
+import { fakeReads } from '../../src/memory/mocks/fake-reads.ts';
 import { PortReleaser } from '../../src/ports/release.ts';
 import { MemoryInstallationSettings } from '../../src/settings/installation-settings.ts';
 import { MachineConnection } from '../../src/telemetry/connection.ts';
@@ -123,6 +125,8 @@ async function wiring(dir: string): Promise<{ stands: Partial<ApiOptions>; stora
     coreUpdate: createCoreUpdateRoute(updater),
     docker: { route: createDockerRoute({ service: docker, cancel: () => ({ kind: 'unknown' }), acceptNoOriginActions: () => true, remote: null }), acceptNoOrigin: () => true },
     ports: createPortsRoute({ releaser, acceptNoOrigin: () => true, remote: null }),
+    // The memory read routes (#735) over a fake of the module: no process, no binary.
+    memory: createMemoryRoute({ memory: fakeReads().memory }),
     ownerProofRetry: async () => null,
     devConsole: { overview: async () => ({ generatedAt: '2026-11-14T12:00:00.000Z', readAt: null, stale: false, staleReason: null, contexts: [], mergeQueue: [] }), view: async () => null },
     githubSync: { status: () => ({ active: false, pausedUntil: null, steps: [] }) },

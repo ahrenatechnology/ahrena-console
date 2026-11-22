@@ -1,11 +1,11 @@
-// What the bridge's handoff list is reprojected to: the listed fields, with cwd held apart, and the session match (#734).
+// What the bridge's handoff list is reprojected to: the listed fields, with cwd, owner_user and accepted_by_user held apart, and the session match (#734) and (#735).
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import { matchSession, readBridgeHandoffs } from './bridge-readers.ts';
 import { MemoryReadError } from './readers.ts';
 import { bridgeHandoffFixture, bridgeHandoffsFixture, FAKE_SESSION_ID, FAKE_TOKEN, OTHER_SESSION_ID } from './mocks/fixtures.ts';
 
-const SHAREABLE_KEYS = ['accepted_at', 'accepted_by', 'accepted_by_session', 'accepted_by_user', 'created_at', 'from_agent', 'from_session_id', 'id', 'owner_user', 'state', 'to_agent'];
+const SHAREABLE_KEYS = ['accepted_at', 'accepted_by', 'accepted_by_session', 'created_at', 'from_agent', 'from_session_id', 'id', 'state', 'to_agent'];
 
 describe('readBridgeHandoffs (#734/AC-2)', () => {
   test('#734/AC-2 each handoff carries the listed fields and none of the planted body fields', () => {
@@ -39,27 +39,35 @@ describe('readBridgeHandoffs (#734/AC-2)', () => {
       accepted_by_session: FAKE_SESSION_ID,
       accepted_by_user: 'local:someone',
     });
-    const { handoffs } = readBridgeHandoffs(JSON.stringify({ handoffs: [accepted] }));
+    const { handoffs, local } = readBridgeHandoffs(JSON.stringify({ handoffs: [accepted] }));
     assert.deepEqual(handoffs[0], {
       id: '8c1f4b2d-3e5a-4b7c-9d0e-1f2a3b4c5d6e',
       from_session_id: OTHER_SESSION_ID,
       from_agent: 'codex',
       to_agent: null,
-      owner_user: null,
       state: 'accepted',
       created_at: '2026-11-20T10:00:00Z',
       accepted_by: 'claude-code',
       accepted_at: '2026-11-20T11:00:00Z',
       accepted_by_session: FAKE_SESSION_ID,
-      accepted_by_user: 'local:someone',
     });
+    assert.deepEqual(local, [{ id: '8c1f4b2d-3e5a-4b7c-9d0e-1f2a3b4c5d6e', cwd: '/Users/someone/work/app', owner_user: null, accepted_by_user: 'local:someone' }]);
+  });
+
+  test('#735/D2 owner_user and accepted_by_user are personal data: in the local part, by handoff id, and in no shareable handoff', () => {
+    const owned = bridgeHandoffFixture({ owner_user: 'local:someone', accepted_by_user: 'local:another' });
+    const { handoffs, local } = readBridgeHandoffs(JSON.stringify({ handoffs: [owned] }));
+    assert.equal(local[0]?.owner_user, 'local:someone');
+    assert.equal(local[0]?.accepted_by_user, 'local:another');
+    const text = JSON.stringify(handoffs);
+    for (const name of ['owner_user', 'accepted_by_user', 'local:someone', 'local:another']) assert.equal(text.includes(name), false, name);
   });
 
   test('#734/AC-2 #719/AC-11 cwd is in a separately typed local part, by handoff id, and in no shareable handoff', () => {
     const { handoffs, local } = readBridgeHandoffs(JSON.stringify({ handoffs: bridgeHandoffsFixture() }));
     assert.deepEqual(local, [
-      { id: '7b0e3a1c-2d4f-4a6b-8c9d-0e1f2a3b4c5d', cwd: '/Users/someone/work/app' },
-      { id: '9d2a5c3e-4f6b-4c8d-8e1f-2a3b4c5d6e7f', cwd: '/Users/someone/work/other' },
+      { id: '7b0e3a1c-2d4f-4a6b-8c9d-0e1f2a3b4c5d', cwd: '/Users/someone/work/app', owner_user: 'local:someone', accepted_by_user: null },
+      { id: '9d2a5c3e-4f6b-4c8d-8e1f-2a3b4c5d6e7f', cwd: '/Users/someone/work/other', owner_user: 'local:someone', accepted_by_user: null },
     ]);
     assert.equal(JSON.stringify(handoffs).includes('/Users/'), false);
     assert.equal(JSON.stringify(handoffs).includes('cwd'), false);
@@ -78,6 +86,7 @@ describe('readBridgeHandoffs (#734/AC-2)', () => {
     ['a created_at that is a number', JSON.stringify({ handoffs: [bridgeHandoffFixture({ created_at: 5 })] })],
     ['an accepted_by_session that is a number', JSON.stringify({ handoffs: [bridgeHandoffFixture({ accepted_by_session: 5 })] })],
     ['a cwd that is a number', JSON.stringify({ handoffs: [bridgeHandoffFixture({ cwd: 5 })] })],
+    ['an owner_user that is a number', JSON.stringify({ handoffs: [bridgeHandoffFixture({ owner_user: 5 })] })],
   ];
   for (const [name, text] of MALFORMED) {
     test(`#734/AC-2 ${name} is rejected with malformed-bridge, a code and never the input`, () => {
