@@ -37,6 +37,7 @@ describe('#740/AC-1 the consent text of activate', () => {
     assert.match(text, /reposit[óo]rio/i);
     assert.match(text, /nada é baixado|não baixa/i, 'nothing is downloaded');
     assert.match(text, /embeddings/i);
+    assert.match(text, /desligados antes de o serviço iniciar/, 'embeddings go off before the service starts');
   });
 
   test('#740/AC-1 Then it says the listed accounts share a single memory, so what one session captures can be read by the others', () => {

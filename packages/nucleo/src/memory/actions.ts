@@ -135,8 +135,7 @@ export function createMemoryActions(options: MemoryActionsOptions): MemoryAction
   const dataDirArgs = options.dataDir === undefined ? [] : [DATA_DIR_OPTION, options.dataDir];
 
   /*
-   * Every flag below was read in the v3.5.1 sources (#740): `setup --yes` cli.rs:2164-2165, `--agent` cli.rs:2171-2172, `--no-service`
-   * cli.rs:2175-2176, `auth enable --no-mcp` cli.rs:1453 and 1511-1512 (auth_enable.rs:71-73 skips the MCP re-registration with it),
+   * Every flag below was read in the v3.5.1 sources (#740): `setup --yes` cli.rs:2164-2165, `--agent` cli.rs:2171-2172, `auth enable --no-mcp` cli.rs:1453 and 1511-1512 (auth_enable.rs:71-73 skips the MCP re-registration with it),
    * `uninstall --apply --yes` cli.rs:1530 and 1550 (the `--purge-data` of cli.rs:1535 is never passed), `reset --confirm` cli.rs:2441-2444.
    */
   /** An ai-memory command, as run and as shown (#740). */
@@ -194,7 +193,7 @@ export function createMemoryActions(options: MemoryActionsOptions): MemoryAction
     return { plan, steps };
   }
 
-  /** The activate plan: one `setup --plan` read per registered folder, then the four steps in order (#740/AC-1). */
+  /** The activate plan: one `setup --plan` read per registered folder, then the steps in order (#740/AC-1). */
   async function activate(): Promise<Building> {
     const folders = await registeredFolders();
     if (folders.length === 0) return { kind: 'not-offered', reason: 'no-accounts' };
@@ -212,22 +211,18 @@ export function createMemoryActions(options: MemoryActionsOptions): MemoryAction
     }
     // The path comes out of the embedded binary's own plan; it is the config.toml or nothing is written (#740/AC-2).
     if (configPath === null || !isAbsolute(configPath) || basename(configPath) !== CONFIG_FILE) return { kind: 'unreadable', reason: 'rejected' };
-    // Why this order: the service must not start before embeddings are off, because its first boot would download a model (#740).
-    // Nor before auth is on, because it would serve with no authentication on the loopback (#740).
-    // So step 1 wires the agents without the service, steps 2 and 3 fix the configuration, and step 4 installs and starts the service (#740).
-    // At step 4 embeddings are already off and auth is already on (#740).
-    // Checked against ai-memory v3.5.1 crates/ai-memory-cli/src/commands/setup.rs for `setup --yes --no-service` (#740):
-    // `--no-service` plans the service as Skip (setup.rs:273-274) and execute only prints that reason (setup.rs:886), so no unit is installed and no server is started (#740).
-    // The closing self-check (setup.rs:941-943, self_check at 1193-1232) is a GET /healthz (1197, 1239-1245), one `memory_status` call to a server that already answers (1218, 1294-1317) and `doctor::run` (1228; doctor.rs:581) (#740).
-    // None of them starts a server or builds an embedder: doctor.rs names no embedder, and init (setup.rs:857) creates folders and config.toml only (#740).
-    // So nothing loads or downloads embeddings before step 2 writes `embedding_provider = "none"`, and the order stays (#740).
-    const wiring = folders.map((folder, index) => ai(['setup', '--yes', '--no-service', '--agent', 'claude-code'], index, folder));
+    // Why this order (#740): `init` creates the data folder and a config.toml in which `embedding_provider` is only a commented example, and downloads nothing.
+    // Embeddings go off and auth goes on before the first `setup`, because that setup installs and starts the service (#740).
+    // So its first boot downloads no model and serves with authentication, and its closing self-check passes (#740).
+    // Confirmed on the real binary in a temporary folder: `init` exits 0 on its own, and `auth enable --no-mcp` exits 0 with no server running (#740).
+    // Upstream v3.5.1: `init` is the `Command::Init(InitArgs)` subcommand (crates/ai-memory-cli/src/cli.rs:153-155, InitArgs at 2150-2156), run by commands/init.rs:155 (#740).
+    // Without `--force` it leaves an existing config.toml untouched (init.rs:190-193), so running it again is safe; it is passed no flag (#740).
+    // The `setup` of each account is the same idempotent command: the first installs and starts the service, the others wire their folder (#740).
     const steps: Step[] = [
-      ...wiring,
+      ai(['init'], null, null),
       { display: ['core', 'write-config', 'embedding_provider=none'], account: null, run: { kind: 'write-config', configPath } },
       ai(['auth', 'enable', '--no-mcp'], null, null),
-      // The service step names the first account, so that it wires no folder the registry does not hold; it is idempotent for it (#740).
-      ai(['setup', '--yes', '--agent', 'claude-code'], 0, folders[0]!),
+      ...folders.map((folder, index) => ai(['setup', '--yes', '--agent', 'claude-code'], index, folder)),
     ];
     return { kind: 'built', built: finish('activate', steps, { accounts, service, dataDir }) };
   }

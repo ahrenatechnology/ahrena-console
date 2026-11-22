@@ -1,6 +1,6 @@
 // A harness for the memory actions' tests (#740): a real Tools executor over a fake spawn, a fake memory module, and temporary home and
 // data folders. Nothing real runs: no ai-memory, no launchctl, no brew. (#740)
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fakeOverview, fakeSpawn, type SpawnCall } from '../../../test/tools/doubles.ts';
@@ -18,6 +18,9 @@ let n = 0;
 export const LABEL = 'com.github.akitaonrails.ai-memory';
 const planJson = (data: string): string =>
   JSON.stringify({ format: 1, data_dir: data, config_path: join(data, 'config.toml'), fresh: true, service: { action: 'install', manager: 'launchd', path: null }, agents: [{ agent: 'claude-code', found: true, wiring: 'hooks' }], other_agents: [] });
+
+// What ai-memory's own `init` leaves in config.toml: embedding_provider is only a commented example (v3.5.1, confirmed by running it in a temporary folder) (#740).
+const INIT_CONFIG = '# embedding_provider = "local"\n\n[auth]\nenabled = false\n';
 
 export interface Setup {
   state?: MemoryStatusState;
@@ -57,6 +60,8 @@ export function harness(o: Setup = {}): Harness {
   const events: string[] = [];
   const sp = fakeSpawn((call) => {
     events.push(`spawn ${call.args.filter((x) => x !== '--data-dir' && x !== data).join(' ')}`);
+    // The fake `init` creates the config.toml only when there is none, as the real one does without --force (#740).
+    if (call.args.includes('init') && !existsSync(join(data, 'config.toml'))) writeFileSync(join(data, 'config.toml'), INIT_CONFIG);
     if (!o.hang) call.child.exit(o.exit?.(call) ?? 0);
   });
   const host: ToolsHost = {

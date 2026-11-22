@@ -13,7 +13,7 @@ const DIGEST = '0123456789abcdef';
 const plan = (over: Partial<MemoryActionPlan> = {}): MemoryActionPlan => ({
   actionId: 'activate',
   label: 'Ativar a memória',
-  steps: [{ display: ['ai-memory', 'setup', '--yes', '--no-service', '--agent', 'claude-code'], account: 0 }],
+  steps: [{ display: ['ai-memory', 'setup', '--yes', '--agent', 'claude-code'], account: 0 }],
   timeoutSeconds: 180,
   planDigest: DIGEST,
   accounts: [{ dir: '/Users/someone/.claude', setup: { fresh: true, service: { action: 'install', manager: 'launchd' }, agents: [{ agent: 'claude-code', found: true, wiring: 'hooks' }], other_agents: [] } }],

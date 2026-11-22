@@ -29,7 +29,7 @@ async function refusal(h: Harness, id: MemoryActionId): Promise<MemoryNotOffered
 }
 
 describe('#740/AC-1 the activate plan', () => {
-  test('#740/AC-1 Given two registered account folders and ai-memory not active, When the plan is asked, Then it lists one setup --plan per folder, the service, the four steps in order and a planDigest, and nothing is written or run', async () => {
+  test('#740/AC-1 Given two registered account folders and ai-memory not active, When the plan is asked, Then it lists one setup --plan per folder, the service, the steps in order and a planDigest, and nothing is written or run', async () => {
     const h = harness();
     const plan = await planOf(h.actions, 'activate');
     assert.deepEqual(h.planned, [h.a, h.b], 'one setup --plan read per registered folder');
@@ -40,11 +40,11 @@ describe('#740/AC-1 the activate plan', () => {
     assert.deepEqual(
       plan.steps.map((s) => [s.display.join(' '), s.account]),
       [
-        ['ai-memory setup --yes --no-service --agent claude-code', 0],
-        ['ai-memory setup --yes --no-service --agent claude-code', 1],
+        ['ai-memory init', null],
         ['core write-config embedding_provider=none', null],
         ['ai-memory auth enable --no-mcp', null],
         ['ai-memory setup --yes --agent claude-code', 0],
+        ['ai-memory setup --yes --agent claude-code', 1],
       ],
     );
     assert.match(plan.planDigest, /^[0-9a-f]{16}$/);
@@ -92,16 +92,16 @@ describe('#740/AC-1 the activate plan', () => {
   });
 });
 
-describe('#740/AC-2 #740/AC-3 the four steps of activate, in order', () => {
+describe('#740/AC-2 #740/AC-3 the steps of activate, in order', () => {
   test('#740/AC-3 Given a confirmed plan, When the job runs, Then the steps run one at a time, in this order, with fixed argv and no shell', async () => {
     const h = harness({ files: (real, events) => ({ ...real, writeEmbeddingsOff: async () => void events.push('write-config') }) });
     const { result, job } = await confirmed(h, 'activate');
     assert.equal(result.kind, 'queued');
     assert.deepEqual(h.events, [
-      'spawn setup --yes --no-service --agent claude-code',
-      'spawn setup --yes --no-service --agent claude-code',
+      'spawn init',
       'write-config',
       'spawn auth enable --no-mcp',
+      'spawn setup --yes --agent claude-code',
       'spawn setup --yes --agent claude-code',
     ]);
     assert.equal(job.state, 'succeeded');
@@ -117,7 +117,7 @@ describe('#740/AC-2 #740/AC-3 the four steps of activate, in order', () => {
     const h = harness();
     await confirmed(h, 'activate');
     const envs = h.sp.calls.map((c) => c.options.env as NodeJS.ProcessEnv);
-    assert.deepEqual(envs.map((e) => e.CLAUDE_CONFIG_DIR), [h.a, h.b, undefined, h.a], 'the first folder also carries the service step');
+    assert.deepEqual(envs.map((e) => e.CLAUDE_CONFIG_DIR), [undefined, undefined, h.a, h.b], 'init and auth enable carry no account');
     for (const env of envs) {
       assert.deepEqual(Object.keys(env).filter((k) => !['PATH', 'HOME', 'CLAUDE_CONFIG_DIR'].includes(k)), []);
       assert.equal(JSON.stringify(env).includes('fake-secret'), false);
@@ -132,10 +132,19 @@ describe('#740/AC-2 #740/AC-3 the four steps of activate, in order', () => {
     assert.equal(text, '# mine\nllm_provider = "ollama"\nembedding_provider = "none"\n\n[decay]\nhalf_life_days = 30\n');
   });
 
-  test('#740/AC-2 Given no config.toml before the setup, When activate runs, Then the key is written as a top-level key of a file with nothing else', async () => {
+  test('#740/AC-2 Given the config.toml init writes, with embedding_provider only as a commented example, When activate runs, Then the key is a top-level key before the first table and the comment stays', async () => {
     const h = harness();
     await confirmed(h, 'activate');
-    assert.equal(readFileSync(join(h.data, 'config.toml'), 'utf8').trim(), 'embedding_provider = "none"');
+    assert.equal(readFileSync(join(h.data, 'config.toml'), 'utf8'), '# embedding_provider = "local"\n\nembedding_provider = "none"\n\n[auth]\nenabled = false\n');
+  });
+
+  test('#740/AC-2 Given init runs once, When activate has two accounts, Then init is spawned once, with no account folder, and before every setup', async () => {
+    const h = harness();
+    await confirmed(h, 'activate');
+    const inits = h.events.filter((e) => e === 'spawn init');
+    assert.equal(inits.length, 1);
+    assert.equal(h.events.indexOf('spawn init'), 0);
+    assert.equal(h.events.some((e) => e.includes('--no-service')), false, 'no step passes --no-service');
   });
 
   test('#740/AC-3 Given the activate steps, Then auth enable --no-mcp is among them, after embeddings are off and before the service starts', async () => {
@@ -143,8 +152,9 @@ describe('#740/AC-2 #740/AC-3 the four steps of activate, in order', () => {
     const plan = await planOf(h.actions, 'activate');
     const lines = plan.steps.map((s) => s.display.join(' '));
     const auth = lines.indexOf('ai-memory auth enable --no-mcp');
+    assert.ok(lines.indexOf('ai-memory init') < lines.indexOf('core write-config embedding_provider=none'));
     assert.ok(auth > lines.indexOf('core write-config embedding_provider=none'));
-    assert.ok(auth < lines.lastIndexOf('ai-memory setup --yes --agent claude-code'));
+    assert.ok(auth < lines.indexOf('ai-memory setup --yes --agent claude-code'), 'the first setup, which starts the service, runs with auth on');
     assert.equal(lines.filter((l) => l.includes('auth enable')).length, 1);
   });
 
@@ -153,20 +163,41 @@ describe('#740/AC-2 #740/AC-3 the four steps of activate, in order', () => {
     const { job } = await confirmed(h, 'activate');
     assert.equal(job.state, 'failed');
     assert.equal(job.exitCode, 4);
-    assert.equal(job.step, 3);
-    assert.ok(job.output.includes('Falhou no passo 4 de 5 (saída 4).'), job.output.join('|'));
-    assert.equal(h.sp.calls.length, 3, 'the service step never ran');
-    assert.equal(readFileSync(join(h.data, 'config.toml'), 'utf8').trim(), 'embedding_provider = "none"', 'the earlier steps stay');
+    assert.equal(job.step, 2);
+    assert.ok(job.output.includes('Falhou no passo 3 de 5 (saída 4).'), job.output.join('|'));
+    assert.equal(h.sp.calls.length, 2, 'no setup ever ran');
+    assert.match(readFileSync(join(h.data, 'config.toml'), 'utf8'), /^embedding_provider = "none"$/m, 'the earlier steps stay');
     h.state.current = { state: 'stopped' };
     assert.equal((await h.actions.plan('deactivate')).kind, 'plan', 'deactivate stays available');
+  });
+
+  test('#740/AC-3 Given the setup of the second account fails, When activate runs, Then the job stops there and the failing step maps to that account in the plan', async () => {
+    const h = harness({ exit: (call) => (call.args.includes('setup') && (call.options.env as NodeJS.ProcessEnv).CLAUDE_CONFIG_DIR === h.b ? 3 : 0) });
+    const { plan, job } = await confirmed(h, 'activate');
+    assert.equal(job.state, 'failed');
+    assert.equal(job.exitCode, 3);
+    assert.equal(job.step, 4);
+    assert.equal(plan.steps[job.step]!.account, 1);
+    assert.equal(plan.accounts[plan.steps[job.step]!.account!]!.dir, h.b);
+    assert.ok(job.output.includes('Falhou no passo 5 de 5 (saída 3).'), job.output.join('|'));
+    assert.equal(h.sp.calls.length, 4, 'init, auth enable and both setups ran; nothing after');
+  });
+
+  test('#740/AC-3 Given init fails, When activate runs, Then the job fails at step 1 and nothing else runs', async () => {
+    const h = harness({ exit: (call) => (call.args.includes('init') ? 2 : 0) });
+    const { job } = await confirmed(h, 'activate');
+    assert.equal(job.state, 'failed');
+    assert.equal(job.step, 0);
+    assert.equal(h.sp.calls.length, 1);
+    assert.equal(h.events.includes('write-config'), false);
   });
 
   test('#740/AC-3 Given the config write fails, When activate runs, Then the job fails at that step and auth enable never runs', async () => {
     const h = harness({ files: (real) => ({ ...real, writeEmbeddingsOff: async () => Promise.reject(new Error('EACCES /Users/x/secret')) }) });
     const { job } = await confirmed(h, 'activate');
     assert.equal(job.state, 'failed');
-    assert.equal(job.step, 2);
-    assert.equal(h.sp.calls.length, 2);
+    assert.equal(job.step, 1);
+    assert.equal(h.sp.calls.length, 1, 'only init ran');
     assert.equal(JSON.stringify(job).includes('/Users/x/secret'), false, 'the error text does not reach the job');
   });
 

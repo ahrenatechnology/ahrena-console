@@ -43,7 +43,7 @@ const nothingRan = (h: Harness) => {
 };
 
 describe('#740/AC-1 the build scenario: activate, with a core of two accounts', () => {
-  test('#740/AC-1 Given two accounts and ai-memory not active, When the person asks for the activate plan, Then it lists one setup --plan per account, the service, the four steps in order, the consent and a planDigest, and nothing is written', async () => {
+  test('#740/AC-1 Given two accounts and ai-memory not active, When the person asks for the activate plan, Then it lists one setup --plan per account, the service, the steps in order, the consent and a planDigest, and nothing is written', async () => {
     const h = use();
     const r = await get('/api/memory/plan?action=activate');
     assert.equal(r.status, 200);
@@ -51,7 +51,7 @@ describe('#740/AC-1 the build scenario: activate, with a core of two accounts', 
     const plan = r.json!.plan as { accounts: unknown[]; service: unknown; steps: { display: string[] }[]; consent: string[]; planDigest: string };
     assert.equal(plan.accounts.length, 2);
     assert.deepEqual(plan.service, { action: 'install', manager: 'launchd' });
-    assert.deepEqual(plan.steps.map((s) => s.display.slice(0, 3).join(' ')), ['ai-memory setup --yes', 'ai-memory setup --yes', 'core write-config embedding_provider=none', 'ai-memory auth enable', 'ai-memory setup --yes']);
+    assert.deepEqual(plan.steps.map((s) => s.display.slice(0, 3).join(' ')), ['ai-memory init', 'core write-config embedding_provider=none', 'ai-memory auth enable', 'ai-memory setup --yes', 'ai-memory setup --yes']);
     assert.match(plan.consent.join(' '), /\.ai-memory\.toml/);
     assert.match(plan.consent.join(' '), /ignore_paths/);
     assert.match(plan.consent.join(' '), /--apply --capture-mode allowlist/);
@@ -60,7 +60,7 @@ describe('#740/AC-1 the build scenario: activate, with a core of two accounts', 
     assert.throws(() => readFileSync(join(h.data, 'config.toml')), 'nothing was written');
   });
 
-  test('#740/AC-1 #740/AC-2 #740/AC-3 When the person confirms with that planDigest from the core\'s own Origin, Then the four steps run in order, one at a time, and config.toml keeps its other keys', async () => {
+  test('#740/AC-1 #740/AC-2 #740/AC-3 When the person confirms with that planDigest from the core\'s own Origin, Then the steps run in order, one at a time, and config.toml keeps its other keys', async () => {
     const h = use({ config: '# mine\nllm_provider = "ollama"\n[decay]\nhalf_life_days = 30\n' });
     const planned = await get('/api/memory/plan?action=activate');
     const digest = (planned.json!.plan as { planDigest: string }).planDigest;
@@ -70,7 +70,7 @@ describe('#740/AC-1 the build scenario: activate, with a core of two accounts', 
     await h.executor.idle('local');
     assert.deepEqual(
       h.sp.calls.map((c) => c.args.filter((a) => a !== '--data-dir' && a !== h.data).join(' ')),
-      ['setup --yes --no-service --agent claude-code', 'setup --yes --no-service --agent claude-code', 'auth enable --no-mcp', 'setup --yes --agent claude-code'],
+      ['init', 'auth enable --no-mcp', 'setup --yes --agent claude-code', 'setup --yes --agent claude-code'],
     );
     assert.equal(h.sp.maxActive(), 1);
     const config = readFileSync(join(h.data, 'config.toml'), 'utf8');
