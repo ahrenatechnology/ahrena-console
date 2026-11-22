@@ -6,7 +6,7 @@ import { createHash } from 'node:crypto'
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { AI_MEMORY_VERSION, run, tarballUrl } from '../scripts/fetch-ai-memory.mjs'
+import { AI_MEMORY_VERSION, PINNED_SHA256, run, tarballUrl } from '../scripts/fetch-ai-memory.mjs'
 
 const BINARY = '#!/bin/sh\necho fake-binary\n'
 const LICENSE = 'fake licence text\n'
@@ -25,6 +25,7 @@ function fakeTarball(dir) {
 }
 
 const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex')
+const pin = (bytes) => ({ aarch64: sha256(bytes), x86_64: sha256(bytes) })
 
 function release(tarball, shaFile, arch = 'aarch64') {
   const asked = []
@@ -57,7 +58,7 @@ for (const arch of ['aarch64', 'x86_64']) {
     try {
       const tarball = fakeTarball(s.dir)
       const { download, asked } = release(tarball, `${sha256(tarball)}  ai-memory-macos-${arch}.tar.gz\n`, arch)
-      const code = await run(['--arch', arch, '--out', s.out], { download, ...quiet })
+      const code = await run(['--arch', arch, '--out', s.out], { download, pinned: pin(tarball), ...quiet })
       assert.equal(code, 0)
       assert.deepEqual(asked, [tarballUrl(arch), `${tarballUrl(arch)}.sha256`])
       assert.deepEqual(readdirSync(s.out).sort(), ['LICENSE', 'ai-memory'])
@@ -75,7 +76,7 @@ test('#719/AC-1 a hash that differs exits non-zero and copies nothing', async ()
   try {
     const tarball = fakeTarball(s.dir)
     const { download } = release(tarball, `${'0'.repeat(64)}  ai-memory-macos-aarch64.tar.gz\n`)
-    const code = await run(['--arch', 'aarch64', '--out', s.out], { download, ...quiet })
+    const code = await run(['--arch', 'aarch64', '--out', s.out], { download, pinned: pin(tarball), ...quiet })
     assert.notEqual(code, 0)
     assert.equal(existsSync(s.out), false)
   } finally {
@@ -89,7 +90,7 @@ test('#719/AC-1 a malformed .sha256 file exits non-zero and copies nothing', asy
     const tarball = fakeTarball(s.dir)
     for (const bad of ['', 'not a hash\n', `${sha256(tarball).slice(0, 63)}  file\n`]) {
       const { download } = release(tarball, bad)
-      assert.notEqual(await run(['--arch', 'aarch64', '--out', s.out], { download, ...quiet }), 0, JSON.stringify(bad))
+      assert.notEqual(await run(['--arch', 'aarch64', '--out', s.out], { download, pinned: pin(tarball), ...quiet }), 0, JSON.stringify(bad))
       assert.equal(existsSync(s.out), false)
     }
   } finally {
@@ -102,7 +103,7 @@ test('#719/AC-1 the hash is read from the first 64-hex token, in either case', a
   try {
     const tarball = fakeTarball(s.dir)
     const { download } = release(tarball, `${sha256(tarball).toUpperCase()}\n`)
-    assert.equal(await run(['--arch', 'aarch64', '--out', s.out], { download, ...quiet }), 0)
+    assert.equal(await run(['--arch', 'aarch64', '--out', s.out], { download, pinned: pin(tarball), ...quiet }), 0)
   } finally {
     s.done()
   }
@@ -118,7 +119,7 @@ test('#719/AC-1 a tarball without the LICENSE exits non-zero and copies nothing'
     execFileSync('tar', ['-czf', file, '-C', root, './ai-memory'])
     const tarball = readFileSync(file)
     const { download } = release(tarball, `${sha256(tarball)}  x\n`)
-    assert.notEqual(await run(['--arch', 'aarch64', '--out', s.out], { download, ...quiet }), 0)
+    assert.notEqual(await run(['--arch', 'aarch64', '--out', s.out], { download, pinned: pin(tarball), ...quiet }), 0)
     assert.equal(existsSync(s.out), false)
   } finally {
     s.done()
@@ -145,7 +146,7 @@ test('#719/AC-1 a success replaces what an earlier run left in the build folder'
     writeFileSync(join(s.out, 'stale'), 'old')
     const tarball = fakeTarball(s.dir)
     const { download } = release(tarball, `${sha256(tarball)}\n`)
-    assert.equal(await run(['--arch', 'aarch64', '--out', s.out], { download, ...quiet }), 0)
+    assert.equal(await run(['--arch', 'aarch64', '--out', s.out], { download, pinned: pin(tarball), ...quiet }), 0)
     assert.deepEqual(readdirSync(s.out).sort(), ['LICENSE', 'ai-memory'])
   } finally {
     s.done()
@@ -160,4 +161,48 @@ test('#719/AC-1 an unknown arch exits non-zero before any download', async () =>
   }
   assert.notEqual(await run(['--arch', 'riscv'], { download, ...quiet }), 0)
   assert.equal(called, false)
+})
+
+test('#719/AC-1 the default pinned digests are the two reviewed values', () => {
+  assert.deepEqual(PINNED_SHA256, {
+    aarch64: 'fda158379dc03331e5c71ab6b702a9335c7fc41e75dda4a2b1a7d1e8e98aaf04',
+    x86_64: '49ff09af2eb904abf077a4a2a87660cad7800c6d6f4843abcab487f9315577c9',
+  })
+})
+
+test('#719/AC-1 a published .sha256 that agrees with the tarball but differs from the pinned digest exits non-zero and copies nothing', async () => {
+  const s = scratch()
+  try {
+    const tarball = fakeTarball(s.dir)
+    const { download } = release(tarball, `${sha256(tarball)}  ai-memory-macos-aarch64.tar.gz\n`)
+    const pinned = { aarch64: 'a'.repeat(64), x86_64: 'a'.repeat(64) }
+    assert.notEqual(await run(['--arch', 'aarch64', '--out', s.out], { download, pinned, ...quiet }), 0)
+    assert.equal(existsSync(s.out), false)
+  } finally {
+    s.done()
+  }
+})
+
+test('#719/AC-1 a tarball that matches the pinned digest but not the published .sha256 exits non-zero and copies nothing', async () => {
+  const s = scratch()
+  try {
+    const tarball = fakeTarball(s.dir)
+    const { download } = release(tarball, `${'b'.repeat(64)}  ai-memory-macos-aarch64.tar.gz\n`)
+    assert.notEqual(await run(['--arch', 'aarch64', '--out', s.out], { download, pinned: pin(tarball), ...quiet }), 0)
+    assert.equal(existsSync(s.out), false)
+  } finally {
+    s.done()
+  }
+})
+
+test('#719/AC-1 without an injected pin the real digests apply, so a fake tarball is refused', async () => {
+  const s = scratch()
+  try {
+    const tarball = fakeTarball(s.dir)
+    const { download } = release(tarball, `${sha256(tarball)}\n`)
+    assert.notEqual(await run(['--arch', 'aarch64', '--out', s.out], { download, ...quiet }), 0)
+    assert.equal(existsSync(s.out), false)
+  } finally {
+    s.done()
+  }
 })

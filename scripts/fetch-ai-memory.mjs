@@ -1,6 +1,7 @@
 // Fetch the pinned ai-memory release and verify its SHA-256 before the app build (#725).
 // Usage: node scripts/fetch-ai-memory.mjs [--arch aarch64|x86_64] [--out <folder>] (#725)
-// Move the pin by changing AI_MEMORY_VERSION; the hash is read from the release (#725).
+// The tarball must match the SHA-256 pinned in this file AND the release's published .sha256 (#725).
+// Move the pin by changing AI_MEMORY_VERSION and both PINNED_SHA256 literals together.
 
 import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -12,7 +13,12 @@ import { fileURLToPath } from 'node:url';
 
 const execFileAsync = promisify(execFile);
 
+// Bumping AI_MEMORY_VERSION requires updating both PINNED_SHA256 literals (checked against the release's .sha256 files).
 export const AI_MEMORY_VERSION = 'v3.5.1';
+export const PINNED_SHA256 = {
+  aarch64: 'fda158379dc03331e5c71ab6b702a9335c7fc41e75dda4a2b1a7d1e8e98aaf04',
+  x86_64: '49ff09af2eb904abf077a4a2a87660cad7800c6d6f4843abcab487f9315577c9',
+};
 const RELEASE_BASE = `https://github.com/akitaonrails/ai-memory/releases/download/${AI_MEMORY_VERSION}`;
 export const ARCHES = ['aarch64', 'x86_64'];
 const MEMBERS = ['ai-memory', 'LICENSE'];
@@ -59,7 +65,7 @@ async function extractMembers(tarball, work) {
 }
 
 /** Returns the exit code: 0 on success, 1 on any failure (nothing is copied before the hash matched). */
-export async function run(argv, { download = httpDownload, log = console.log, error = console.error } = {}) {
+export async function run(argv, { download = httpDownload, pinned = PINNED_SHA256, log = console.log, error = console.error } = {}) {
   let work;
   try {
     const { arch, out } = parseArgs(argv);
@@ -68,6 +74,7 @@ export async function run(argv, { download = httpDownload, log = console.log, er
     const published = parseSha256((await download(`${url}.sha256`)).toString('utf8'));
     if (!published) throw new Error(`${url}.sha256 holds no SHA-256`);
     const actual = createHash('sha256').update(tarball).digest('hex');
+    if (actual !== pinned[arch]) throw new Error(`SHA-256 mismatch for ${url}: pinned ${pinned[arch]}, got ${actual}`);
     if (actual !== published) throw new Error(`SHA-256 mismatch for ${url}: published ${published}, got ${actual}`);
 
     work = await mkdtemp(join(tmpdir(), 'fetch-ai-memory-'));
