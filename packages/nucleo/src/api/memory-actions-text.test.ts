@@ -33,7 +33,7 @@ describe('#740/AC-1 the consent text of activate', () => {
     assert.match(text, /Por padrão, todos os repositórios são capturados/, 'the default captures every repository');
     assert.ok(text.includes('.ai-memory.toml') && text.includes('[capture] ignore_paths'), 'how to exclude paths: the marker with ignore_paths');
     assert.match(text, /os prompts continuam sendo capturados/, 'prompts still flow');
-    assert.ok(text.includes('ai-memory install-hooks --capture-mode allowlist'), 'how to capture only chosen repositories');
+    assert.ok(text.includes('ai-memory install-hooks --apply --capture-mode allowlist'), 'how to capture only chosen repositories');
     assert.match(text, /reposit[óo]rio/i);
     assert.match(text, /nada é baixado|não baixa/i, 'nothing is downloaded');
     assert.match(text, /embeddings/i);
