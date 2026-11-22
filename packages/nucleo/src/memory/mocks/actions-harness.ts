@@ -33,6 +33,8 @@ export interface Setup {
   files?: (real: MemoryActionFiles, events: string[]) => MemoryActionFiles;
   exit?: (call: SpawnCall) => number;
   uid?: number | null;
+  /** What the fake `launchctl print` probe answers: the agent is loaded in the user's domain (default: not loaded) (#740). */
+  loaded?: boolean;
   platform?: NodeJS.Platform;
   binaryPath?: string | null;
   config?: string;
@@ -46,6 +48,8 @@ export interface Harness {
   sp: ReturnType<typeof fakeSpawn>;
   state: { current: MemoryStatusState; folders: string[] };
   planned: string[];
+  /** The targets the launchd probe was asked about (#740). */
+  probed: string[];
   events: string[];
   dir: string;
   home: string;
@@ -81,6 +85,7 @@ export function harness(o: Setup = {}): Harness {
   const executor = new ToolsExecutor({ service: host, logFile: join(dir, 'tools.log'), spawn: sp.spawn, killGroup: sp.killGroup, cwd: home, killGraceMs: 10, msPerSecond: o.hang ? 1 : 1000, log: () => {} });
   const state = { current: o.state ?? ({ state: 'stopped' } as MemoryStatusState), folders: (o.folders ?? ((x, y) => [x, y]))(a, b) };
   const planned: string[] = [];
+  const probed: string[] = [];
   const real = createMemoryActionFiles();
   const files = o.files ? o.files(real, events) : real;
   const actions = createMemoryActions({
@@ -95,10 +100,11 @@ export function harness(o: Setup = {}): Harness {
     home,
     uid: () => (o.uid === undefined ? 501 : o.uid),
     platform: o.platform ?? 'darwin',
+    launchdLoaded: async (target) => (probed.push(target), o.loaded ?? false),
     accountFolders: async () => o.registry ? o.registry(a, b) : state.folders.map((dir) => ({ dir, name: dir === a ? ACCOUNT_A : dir === b ? ACCOUNT_B : 'Outra' })),
     files,
     labels: Object.fromEntries(MEMORY_ACTIONS.map((id) => [id, `rótulo ${id}`])) as Record<MemoryActionId, string>,
   });
-  return { actions, executor, sp, state, planned, events, dir, home, data, a, b };
+  return { actions, executor, sp, state, planned, probed, events, dir, home, data, a, b };
 }
 

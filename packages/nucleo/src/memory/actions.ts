@@ -89,6 +89,8 @@ export interface MemoryActionsOptions {
   /** The user's home, where the LaunchAgents folder is: injected, never from a request (#740). */
   home: string;
   uid: () => number | null;
+  /** Whether the LaunchAgent is loaded in the user's domain: runs the fixed argv `/bin/launchctl print <target>`, true only on exit 0; this module spawns nothing itself (#740). */
+  launchdLoaded: (target: string) => Promise<boolean>;
   platform?: NodeJS.Platform;
   /** The Claude account folders of the core's registry, each with its account's name (#740/AC-7). */
   accountFolders: () => Promise<readonly RegistryAccount[]>;
@@ -108,7 +110,7 @@ const TOOL_ID = 'ai-memory';
 const MACHINE = 'local';
 // The LaunchAgent label ai-memory installs (upstream src/commands/user_service.rs:33) (#740).
 // The plist it writes under the user's home (user_service.rs:250-253) (#740).
-// `bootout` and `bootstrap` are the calls its own stop and start make (user_service.rs:900, 904) (#740).
+// Upstream stop is `bootout` (user_service.rs:885-905); its start runs `bootout` only when `launchctl print` exits 0 (loaded, user_service.rs:896-901), then `bootstrap` (user_service.rs:904). Start here probes at plan time and does the same (#740).
 const LAUNCHD_LABEL = 'com.github.akitaonrails.ai-memory';
 const LAUNCHCTL = '/bin/launchctl';
 const LAUNCH_AGENTS = ['Library', 'LaunchAgents'] as const;
@@ -257,13 +259,16 @@ export function createMemoryActions(options: MemoryActionsOptions): MemoryAction
     return { kind: 'built', built: finish('deactivate', steps, { startNeedsActivation: true }) };
   }
 
-  function launchd(actionId: 'stop' | 'start'): Building {
+  async function launchd(actionId: 'stop' | 'start'): Promise<Building> {
     const domain = userDomain();
     if (domain === null) return { kind: 'not-offered', reason: 'unsupported-platform' };
-    const stop = actionId === 'stop';
-    const argv = stop ? [LAUNCHCTL, 'bootout', `${domain}/${LAUNCHD_LABEL}`] : [LAUNCHCTL, 'bootstrap', domain, plistPath()];
-    const display = stop ? ['launchctl', 'bootout', `${domain}/${LAUNCHD_LABEL}`] : ['launchctl', 'bootstrap', domain, `~/${[...LAUNCH_AGENTS, `${LAUNCHD_LABEL}.plist`].join('/')}`];
-    return { kind: 'built', built: finish(actionId, [{ display, account: null, run: { kind: 'command', argv, folder: null } }]) };
+    const target = `${domain}/${LAUNCHD_LABEL}`;
+    const bootout: Step = { display: ['launchctl', 'bootout', target], account: null, run: { kind: 'command', argv: [LAUNCHCTL, 'bootout', target], folder: null } };
+    if (actionId === 'stop') return { kind: 'built', built: finish(actionId, [bootout]) };
+    const bootstrap: Step = { display: ['launchctl', 'bootstrap', domain, `~/${[...LAUNCH_AGENTS, `${LAUNCHD_LABEL}.plist`].join('/')}`], account: null, run: { kind: 'command', argv: [LAUNCHCTL, 'bootstrap', domain, plistPath()], folder: null } };
+    // (#740) The plan rebuilds at confirm, so a load state that changed since the plan makes the digest differ: stale.
+    const loaded = await options.launchdLoaded(target);
+    return { kind: 'built', built: finish(actionId, loaded ? [bootout, bootstrap] : [bootstrap]) };
   }
 
   /** `reset --confirm` (upstream src/cli.rs:2441-2444; src/commands/reset.rs:26, 40), offered only with the server stopped (#740/AC-4). */

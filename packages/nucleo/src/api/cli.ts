@@ -819,6 +819,8 @@ const memoryActions =
           binaryPath: embeddedAiMemoryPath(),
           home: homedir(),
           uid: () => process.getuid?.() ?? null,
+          // (#740) The fixed argv `launchctl print <target>`, no shell: loaded only when it exits 0.
+          launchdLoaded: async (target) => (await systemRunner('/bin/launchctl', ['print', target])) !== null,
           // (#740) The name of each account is the registry's label, the one the screens show.
           accountFolders: () => registryAccounts(profiles, accounts),
           files: createMemoryActionFiles(),

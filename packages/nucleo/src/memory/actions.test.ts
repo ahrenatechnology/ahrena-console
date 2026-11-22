@@ -87,6 +87,7 @@ describe('#740/AC-1 the activate plan', () => {
       binaryPath: BINARY,
       home: h.home,
       uid: () => 501,
+      launchdLoaded: async () => false,
       accountFolders: async () => [{ dir: h.a, name: ACCOUNT_A }],
       files: createMemoryActionFiles(),
       labels: Object.fromEntries(MEMORY_ACTIONS.map((id) => [id, id])) as Record<MemoryActionId, string>,
@@ -288,6 +289,29 @@ describe('#740/AC-4 stop, start, deactivate and delete-data', () => {
     assert.deepEqual(plan.steps.map((s) => s.display), [['launchctl', 'bootstrap', 'gui/501', '~/Library/LaunchAgents/' + `${LABEL}.plist`]]);
     assert.equal(h.sp.calls[0]!.command, '/bin/launchctl');
     assert.deepEqual(h.sp.calls[0]!.args, ['bootstrap', 'gui/501', plist]);
+  });
+
+  test('#740/AC-4 Given the agent is still loaded but the server does not answer, When start is confirmed, Then bootout runs before bootstrap, both with a fixed argv', async () => {
+    const h = harness({ state: { state: 'stopped' }, loaded: true });
+    const plist = join(h.home, 'Library', 'LaunchAgents', `${LABEL}.plist`);
+    mkdirSync(join(h.home, 'Library', 'LaunchAgents'), { recursive: true });
+    writeFileSync(plist, '<plist/>');
+    const { plan, job } = await confirmed(h, 'start');
+    assert.deepEqual(h.probed.slice(0, 1), [SERVICE]);
+    assert.deepEqual(plan.steps.map((s) => s.display), [['launchctl', 'bootout', SERVICE], ['launchctl', 'bootstrap', 'gui/501', '~/Library/LaunchAgents/' + `${LABEL}.plist`]]);
+    assert.deepEqual(h.sp.calls.map((c) => [c.command, ...c.args]), [['/bin/launchctl', 'bootout', SERVICE], ['/bin/launchctl', 'bootstrap', 'gui/501', plist]]);
+    assert.equal(h.sp.calls.every((c) => c.options.shell === false), true);
+    assert.equal(job.state, 'succeeded');
+  });
+
+  test('#740/AC-4 Given the agent is not loaded, When start is confirmed, Then only bootstrap runs and the probe asked about the user service', async () => {
+    const h = harness({ state: { state: 'stopped' }, loaded: false });
+    mkdirSync(join(h.home, 'Library', 'LaunchAgents'), { recursive: true });
+    writeFileSync(join(h.home, 'Library', 'LaunchAgents', `${LABEL}.plist`), '<plist/>');
+    const { plan } = await confirmed(h, 'start');
+    assert.deepEqual(h.probed.slice(0, 1), [SERVICE]);
+    assert.deepEqual(plan.steps.map((s) => s.display[1]), ['bootstrap']);
+    assert.deepEqual(h.sp.calls.map((c) => c.args[0]), ['bootstrap']);
   });
 
   test('#740/AC-4 Given the service is not installed, a server that is not in the right state or a platform without launchd, Then stop and start are not offered', async () => {
