@@ -18,7 +18,12 @@ class FakeMachine implements MachineControl {
   starts = new Map<number, string>();
   calls: string[] = [];
   outcome: (op: string, pid: number) => ChangeOutcome = () => 'done';
+  sampleCalls = 0;
+  /** When set, `sample` waits for it: a tick that is slow. */
+  gate: Promise<void> | null = null;
   async sample(): Promise<Observation | null> {
+    this.sampleCalls += 1;
+    if (this.gate) await this.gate;
     return { trees: this.trees, nice: this.nice };
   }
   async inspect(pid: number) {
@@ -189,6 +194,75 @@ describe('#720/AC-4 containing: taskpolicy -b on the descendants, -B on the ones
     for (let i = 0; i < 20; i++) await tick();
     assert.equal(governor.state().mode, 'normal');
     assert.deepEqual(machine.calls, ['renice 101']);
+  });
+});
+
+describe('#720/AC-4 a pid under -b that leaves the sample is still taken out', () => {
+  /** Two descendants under -b, then the sample no longer has 101 in any tree, though the process is alive with the same start. */
+  async function containedThenOutOfSample() {
+    const ctx = setup();
+    ctx.machine.session([101, 102]);
+    ctx.load.load1 = 12;
+    for (let i = 0; i < 12; i++) await ctx.tick();
+    ctx.machine.session([102]);
+    ctx.machine.starts.set(101, START);
+    await ctx.tick();
+    ctx.machine.calls.length = 0;
+    return ctx;
+  }
+
+  test('#720/AC-4 Given a pid under -b that left every tree but is alive, When the load drops, Then taskpolicy -B runs on it', async () => {
+    const { machine, governor, load, tick } = await containedThenOutOfSample();
+    load.load1 = 2;
+    for (let i = 0; i < 45; i++) await tick();
+    assert.equal(governor.state().mode, 'normal');
+    assert.deepEqual(machine.calls.filter((c) => c.startsWith('foreground')), ['foreground 101', 'foreground 102']);
+  });
+
+  test('#720/AC-4 Given a pid under -b that left every tree but is alive, When the governor is turned off, Then taskpolicy -B runs on it', async () => {
+    const { machine, governor } = await containedThenOutOfSample();
+    await governor.setEnabled(false);
+    assert.deepEqual(machine.calls, ['foreground 101', 'foreground 102']);
+  });
+
+  test('#720/AC-4 Given a pid under -b that left every tree and was reused, Then it gets no taskpolicy -B and its entry is dropped', async () => {
+    const { machine, governor, tick } = await containedThenOutOfSample();
+    machine.starts.set(101, 'Sun Nov 22 01:00:00 2026');
+    await tick();
+    await governor.setEnabled(false);
+    assert.deepEqual(machine.calls, ['foreground 102']);
+  });
+
+  test('#720/AC-4 Given a pid under -b that left every tree and died, Then its entry is dropped and the state stops counting its session', async () => {
+    const { machine, governor, tick } = await containedThenOutOfSample();
+    machine.session([]);
+    machine.starts.delete(101);
+    machine.starts.delete(102);
+    await tick();
+    assert.deepEqual(governor.state().containedSessions, []);
+    await governor.setEnabled(false);
+    assert.deepEqual(machine.calls, []);
+  });
+});
+
+describe('#720/AC-3 the loop does not queue a tick while one is in flight', () => {
+  test('#720/AC-3 Given a tick slower than the interval, When the timer fires again, Then no second tick starts until the first ends', async () => {
+    const { machine, governor } = setup();
+    machine.session([101]);
+    let open!: () => void;
+    machine.gate = new Promise<void>((resolve) => (open = resolve));
+    governor.start(5);
+    try {
+      await new Promise((r) => setTimeout(r, 60));
+      assert.equal(machine.sampleCalls, 1);
+      open();
+      await new Promise((r) => setTimeout(r, 2));
+      assert.ok(machine.sampleCalls <= 2, `ticks piled up: ${machine.sampleCalls} samples`);
+      await new Promise((r) => setTimeout(r, 40));
+      assert.ok(machine.sampleCalls >= 2);
+    } finally {
+      governor.stop();
+    }
   });
 });
 

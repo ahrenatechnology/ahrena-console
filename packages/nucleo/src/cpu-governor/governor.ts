@@ -66,6 +66,8 @@ export class CpuGovernor {
   private readonly background = new Map<number, BackgroundEntry>();
   private queue: Promise<unknown> = Promise.resolve();
   private timer: NodeJS.Timeout | null = null;
+  /** A tick the timer started and that has not ended: the timer skips its beat meanwhile, so slow ticks do not pile up. */
+  private ticking = false;
 
   constructor(deps: CpuGovernorDeps) {
     this.d = deps;
@@ -80,7 +82,11 @@ export class CpuGovernor {
   /** Runs `tick` every `intervalMs`; the timer does not hold the process open. */
   start(intervalMs: number): void {
     if (this.timer) return;
-    this.timer = setInterval(() => void this.tick(), intervalMs);
+    this.timer = setInterval(() => {
+      if (this.ticking) return;
+      this.ticking = true;
+      void this.tick().finally(() => (this.ticking = false));
+    }, intervalMs);
     this.timer.unref();
   }
 
@@ -128,6 +134,7 @@ export class CpuGovernor {
 
     const targets = targetsOf(observation.trees, new Set([this.d.selfPid]));
     this.forget(targets);
+    await this.pruneBackground(targets);
     for (const target of targets) {
       const nice = observation.nice.get(target.pid);
       const key = keyOf(target.pid, target.start);
@@ -142,12 +149,24 @@ export class CpuGovernor {
     }
   }
 
-  /** Drops what it remembers about pids that are not in the sample any more (or are another process now). */
+  /** Drops what it remembers about pids that are not in the sample any more, except the pids under `-b`, which it must still undo. */
   private forget(targets: readonly Target[]): void {
     const live = new Set(targets.map((t) => keyOf(t.pid, t.start)));
     for (const key of this.settled) if (!live.has(key)) this.settled.delete(key);
     for (const key of this.triedBackground) if (!live.has(key)) this.triedBackground.delete(key);
-    for (const [pid, set] of this.background) if (!live.has(keyOf(pid, set.start))) this.background.delete(pid);
+  }
+
+  /**
+   * A pid under `-b` that left every tree stays in `background` (the process may be alive, reparented or detached) until
+   * `release` takes it out; only when it is gone or is another process now is its entry dropped, since there is nothing to undo.
+   */
+  private async pruneBackground(targets: readonly Target[]): Promise<void> {
+    const live = new Set(targets.map((t) => keyOf(t.pid, t.start)));
+    for (const [pid, set] of [...this.background]) {
+      if (live.has(keyOf(pid, set.start))) continue;
+      const now = await this.d.machine.inspect(pid);
+      if (!now || normalizeStart(now.start) !== normalizeStart(set.start)) this.background.delete(pid);
+    }
   }
 
   /** One change with the start check before it; `skipped` when the pid is gone or reused. */
