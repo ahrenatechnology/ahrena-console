@@ -26,6 +26,8 @@ export interface MemoryModule {
   version(): Promise<MemoryRead<MemoryVersion>>;
   setupPlan(): Promise<MemoryRead<MemorySetupPlan>>;
   status(): Promise<{ state: MemoryState }>;
+  /** The core's shutdown: ends the running call and refuses the rest; wiring it in is the next sub-issue's (#727). */
+  close(): Promise<void>;
 }
 
 export function createMemoryModule(options: MemoryModuleOptions): MemoryModule {
@@ -37,13 +39,17 @@ export function createMemoryModule(options: MemoryModuleOptions): MemoryModule {
     try {
       return { ok: true, value: reader(result.stdout) };
     } catch (error) {
-      if (error instanceof MemoryReadError) return { ok: false, reason: 'rejected' };
+      if (error instanceof MemoryReadError) {
+        options.log?.(`memory: ${command} rejected ${error.code}`);
+        return { ok: false, reason: 'rejected' };
+      }
       throw error;
     }
   }
 
   return {
     available: runner.available,
+    close: () => runner.close(),
     version: () => read('version', readVersion),
     setupPlan: () => read('setup-plan', readSetupPlan),
     async status() {

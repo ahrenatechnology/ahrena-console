@@ -10,6 +10,9 @@
  * - Timeout: SIGTERM to the process group and, after the grace period, SIGKILL to the group, even when
  *   the leader closes first, so a descendant that ignores SIGTERM does not outlive the call.
  * - One call at a time, in order.
+ * - `close()` (the core's shutdown, decision 0014): the queue is refused, the running group gets SIGTERM and,
+ *   after the grace period, SIGKILL; nothing starts after. Wiring it into the core's shutdown is left to the
+ *   sub-issue that wires the module, nothing imports it yet (#727).
  * - Only stdout is read, bounded. Stderr is drained and dropped: never parsed, logged or returned.
  * - The log line names the command and the result kind, never stderr, an error's text, a path or env (#727).
  */
@@ -41,7 +44,7 @@ export type MemoryRunResult =
   | { kind: 'ok'; stdout: string }
   | { kind: 'exit'; code: number | null }
   | { kind: 'timeout' }
-  | { kind: 'failed'; reason: 'spawn' | 'output-too-large' };
+  | { kind: 'failed'; reason: 'spawn' | 'output-too-large' | 'closed' };
 
 type Spawn = (command: string, args: readonly string[], options: SpawnOptions) => ChildProcess;
 
@@ -68,6 +71,8 @@ export interface MemoryRunner {
   /** False when there is no embedded binary (#727). */
   readonly available: boolean;
   run(command: MemoryCommand): Promise<MemoryRunResult>;
+  /** Refuses queued and future calls and ends the running group; resolves when the queue is empty (#727). */
+  close(): Promise<void>;
 }
 
 /** The core's environment minus `AI_MEMORY_AUTH_TOKEN` (any case) and `AHRENA_CONSOLE_*` (#727/AC-2). */
@@ -79,6 +84,8 @@ export function memoryEnv(env: NodeJS.ProcessEnv = process.env): NodeJS.ProcessE
   }
   return out;
 }
+
+const CLOSED: MemoryRunResult = { kind: 'failed', reason: 'closed' };
 
 function defaultKillGroup(pid: number, signal: NodeJS.Signals): void {
   try {
@@ -100,6 +107,8 @@ export function createMemoryRunner(options: MemoryRunnerOptions): MemoryRunner {
   const log = options.log;
   const childEnv = memoryEnv(options.env);
   let tail: Promise<unknown> = Promise.resolve();
+  let closing = false;
+  let stopRunning: (() => void) | null = null;
 
   function execute(binary: string, command: MemoryCommand): Promise<MemoryRunResult> {
     return new Promise((resolve) => {
@@ -133,6 +142,8 @@ export function createMemoryRunner(options: MemoryRunnerOptions): MemoryRunner {
         if (!keepKiller) killer = null;
         if (result.kind === 'timeout') log?.(`memory: ${command} timeout`);
         if (result.kind === 'failed') log?.(`memory: ${command} failed ${result.reason}`);
+        if (result.kind === 'exit') log?.(`memory: ${command} exit ${result.code ?? 'signal'}`);
+        stopRunning = null;
         resolve(result);
       };
       const terminate = (why: MemoryRunResult): void => {
@@ -146,6 +157,7 @@ export function createMemoryRunner(options: MemoryRunnerOptions): MemoryRunner {
       };
 
       timer = setTimeout(() => terminate({ kind: 'timeout' }), timeoutMs);
+      stopRunning = () => terminate({ kind: 'failed', reason: 'closed' });
       child.stdout?.on('data', (chunk: Buffer) => {
         if (ended) return;
         size += chunk.length;
@@ -167,9 +179,15 @@ export function createMemoryRunner(options: MemoryRunnerOptions): MemoryRunner {
     available: binaryPath !== null,
     run(command) {
       if (binaryPath === null) return Promise.resolve({ kind: 'unavailable' });
-      const result = tail.then(() => execute(binaryPath, command));
+      if (closing) return Promise.resolve(CLOSED);
+      const result = tail.then((): Promise<MemoryRunResult> => (closing ? Promise.resolve(CLOSED) : execute(binaryPath, command)));
       tail = result.catch(() => undefined);
       return result;
+    },
+    async close() {
+      closing = true;
+      stopRunning?.();
+      await tail;
     },
   };
 }

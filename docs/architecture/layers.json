@@ -109,8 +109,8 @@
       },
       "memory": {
         "layer": "edge",
-        "evidence": "runs the embedded ai-memory CLI: 1 of 3 files imports node:child_process (runner.ts, no shell, own process group, timeout)",
-        "mixed": "readers.ts is pure (field-by-field reprojection); memory.ts only composes the runner and the readers"
+        "evidence": "the folder exists to run the embedded ai-memory binary as a child process (runner.ts imports node:child_process: no shell, own process group, timeout, close on shutdown) and its readers only parse that outside process's output, the same reason vendor and tools sit at the edge; 1 of 3 files does direct IO",
+        "mixed": "readers.ts is pure parsing (field-by-field reprojection of the CLI's output) and memory.ts is pure composition of the runner and the readers"
       },
       "messaging": {
         "layer": "application",

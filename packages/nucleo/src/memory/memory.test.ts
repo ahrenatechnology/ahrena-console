@@ -9,8 +9,9 @@ const DATA_DIR = '/Users/someone/.ahrena-console/ai-memory';
 
 function moduleWith(binaryPath: string | null = BINARY) {
   const doubles = fakeSpawn();
-  const memory = createMemoryModule({ dataDir: DATA_DIR, binaryPath, spawn: doubles.spawn, killGroup: () => {}, env: { PATH: '/usr/bin' } });
-  return { memory, calls: doubles.calls };
+  const lines: string[] = [];
+  const memory = createMemoryModule({ dataDir: DATA_DIR, binaryPath, spawn: doubles.spawn, killGroup: () => {}, env: { PATH: '/usr/bin' }, log: (m) => lines.push(m) });
+  return { memory, calls: doubles.calls, lines };
 }
 
 describe('memory module (#727/AC-3)', () => {
@@ -95,3 +96,35 @@ describe('memory module (#727/AC-3)', () => {
     assert.equal(calls.length, 0);
   });
 });
+
+describe('memory module refusal log (#727)', () => {
+  const FAKE_TOKEN = 'fake-token-0000-not-real';
+
+  test('#727 malformed JSON logs the command and the closed code only', async () => {
+    const { memory, calls, lines } = moduleWith();
+    const pending = memory.setupPlan();
+    await turn();
+    calls[0]!.child.finish(0, `{ not json ${FAKE_TOKEN}`);
+    assert.deepEqual(await pending, { ok: false, reason: 'rejected' });
+    assert.deepEqual(lines, ['memory: setup-plan rejected malformed-plan']);
+  });
+
+  test('#727 an unsupported format with a planted token logs the command and the closed code only', async () => {
+    const { memory, calls, lines } = moduleWith();
+    const pending = memory.setupPlan();
+    await turn();
+    calls[0]!.child.finish(0, JSON.stringify({ format: 2, token: FAKE_TOKEN }));
+    await pending;
+    assert.deepEqual(lines, ['memory: setup-plan rejected unsupported-format']);
+  });
+
+  test('#727 a version refusal logs its code', async () => {
+    const { memory, calls, lines } = moduleWith();
+    const pending = memory.version();
+    await turn();
+    calls[0]!.child.finish(0, `nope ${FAKE_TOKEN}`);
+    await pending;
+    assert.deepEqual(lines, ['memory: version rejected malformed-version']);
+  });
+});
+

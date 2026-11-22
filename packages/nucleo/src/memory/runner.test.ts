@@ -104,7 +104,7 @@ describe('memory runner (#727/AC-1, #727/AC-2)', () => {
   });
 
   test('#727/AC-1 stdout past its bound ends the call and kills the group', async () => {
-    const { runner, calls, signals } = runnerWith({ maxStdoutBytes: 10 });
+    const { runner, calls, signals } = runnerWith({ maxStdoutBytes: 10, killGraceMs: 20 });
     const pending = runner.run('version');
     await turn();
     calls[0]!.child.stdout.write('x'.repeat(50));
@@ -265,7 +265,7 @@ describe('memory runner log (#727, OBS-1)', () => {
   });
 
   test('#727 output past the bound logs the command and the reason, with no stdout or stderr', async () => {
-    const { runner, calls, lines } = logged({ maxStdoutBytes: 10 });
+    const { runner, calls, lines } = logged({ maxStdoutBytes: 10, killGraceMs: 20 });
     const pending = runner.run('version');
     await turn();
     calls[0]!.child.stderr.write(`stderr ${FAKE_TOKEN}`);
@@ -285,5 +285,75 @@ describe('memory runner log (#727, OBS-1)', () => {
     calls[0]!.child.finish(0, 'ai-memory 3.5.1', `stderr ${FAKE_TOKEN}`);
     await pending;
     assert.deepEqual(lines, []);
+  });
+});
+
+describe('memory runner exit log (#727)', () => {
+  function logged() {
+    const lines: string[] = [];
+    const setup = runnerWith({ log: (message) => lines.push(message) });
+    return { ...setup, lines };
+  }
+
+  for (const command of ['version', 'setup-plan', 'status'] as const) {
+    test(`#727 a non-zero exit of ${command} logs the command and the code, never stdout, stderr or the data dir`, async () => {
+      const { runner, calls, lines } = logged();
+      const pending = runner.run(command);
+      await turn();
+      calls[0]!.child.finish(3, `out ${FAKE_TOKEN}`, `err ${FAKE_TOKEN} ${DATA_DIR}`);
+      await pending;
+      assert.deepEqual(lines, [`memory: ${command} exit 3`]);
+    });
+  }
+
+  test('#727 an exit with no code logs the command and "signal"', async () => {
+    const { runner, calls, lines } = logged();
+    const pending = runner.run('version');
+    await turn();
+    calls[0]!.child.finish(null);
+    await pending;
+    assert.deepEqual(lines, ['memory: version exit signal']);
+  });
+});
+
+describe('memory runner close (#727, decision 0014: one at a time, in a queue)', () => {
+  test('#727 a queued call after close spawns nothing and resolves as failed closed', async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const { runner, calls } = runnerWith({ killGraceMs: 500 });
+    const running = runner.run('version');
+    const queued = runner.run('status');
+    await turn();
+    assert.equal(calls.length, 1);
+    const closing = runner.close();
+    calls[0]!.child.emit('close', null, 'SIGTERM');
+    assert.deepEqual(await queued, { kind: 'failed', reason: 'closed' });
+    await running;
+    t.mock.timers.tick(500);
+    await closing;
+    assert.equal(calls.length, 1);
+  });
+
+  test('#727 the running call gets SIGTERM and then SIGKILL on its group, and resolves', async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const { runner, calls, signals } = runnerWith({ killGraceMs: 500 });
+    const running = runner.run('version');
+    await turn();
+    const closing = runner.close();
+    assert.deepEqual(signals, [{ pid: 4242, signal: 'SIGTERM' }]);
+    t.mock.timers.tick(500);
+    assert.deepEqual(signals, [
+      { pid: 4242, signal: 'SIGTERM' },
+      { pid: 4242, signal: 'SIGKILL' },
+    ]);
+    assert.deepEqual(await running, { kind: 'failed', reason: 'closed' });
+    await closing;
+    assert.equal(calls.length, 1);
+  });
+
+  test('#727 a call after close spawns nothing', async () => {
+    const { runner, calls } = runnerWith();
+    await runner.close();
+    assert.deepEqual(await runner.run('version'), { kind: 'failed', reason: 'closed' });
+    assert.equal(calls.length, 0);
   });
 });
