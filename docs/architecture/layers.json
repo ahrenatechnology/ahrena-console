@@ -52,6 +52,11 @@
         "layer": "domain",
         "evidence": "price table, floor and aggregation of cost; pure functions, no node: import"
       },
+      "cpu-governor": {
+        "layer": "application",
+        "evidence": "governor.ts runs the loop over the MachineControl port (a double in its test) and holds the governor state; no node: import in it",
+        "mixed": "model.ts is pure domain (the pressure thresholds and which processes are targets); adapters/system.ts imports node:child_process and is the edge"
+      },
       "decisions": {
         "layer": "application",
         "evidence": "registry, hub, inference and capture orchestrate over the decisions port (port.ts); 12 files",

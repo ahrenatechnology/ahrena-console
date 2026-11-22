@@ -1859,6 +1859,54 @@
         }
       }
     },
+    "/api/cpu-governor": {
+      "put": {
+        "operationId": "setCpuGovernor",
+        "tags": [
+          "Machines"
+        ],
+        "summary": "Turns the CPU governor on or off (`{ enabled }`); accepted only from the interface itself",
+        "description": "Turns the CPU governor on or off. Off: it stops touching new processes and runs `taskpolicy -B` only on the pids it put under `-b`; the nice +10 already applied stays until the process ends, because lowering nice needs privilege. It never renices a session's root pid.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "enabled"
+                ],
+                "properties": {
+                  "enabled": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The governor state after the change.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "cpuGovernor"
+                  ],
+                  "properties": {
+                    "cpuGovernor": {
+                      "$ref": "#/components/schemas/CpuGovernorState"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/work": {
       "get": {
         "operationId": "getWorkBoard",
@@ -3338,7 +3386,13 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object"
+                  "type": "object",
+                  "properties": {
+                    "cpuGovernor": {
+                      "$ref": "#/components/schemas/CpuGovernorState",
+                      "description": "This machine's CPU governor state; only on the local machine's answer."
+                    }
+                  }
                 }
               }
             }
@@ -7185,6 +7239,41 @@
             "items": {
               "$ref": "#/components/schemas/PermissionRequestItem"
             }
+          }
+        }
+      },
+      "CpuGovernorState": {
+        "type": "object",
+        "required": [
+          "enabled",
+          "mode",
+          "containedSessions",
+          "since"
+        ],
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "description": "Whether the governor touches processes. On at boot."
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "normal",
+              "containing"
+            ],
+            "description": "`containing`: the 1-minute load stayed above the core count for 30 s and the agent trees are under `taskpolicy -b` (macOS); back to `normal` after 2 min below 80% of the cores."
+          },
+          "containedSessions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The sessions with a process under `taskpolicy -b` now."
+          },
+          "since": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the governor was last turned on or off, or its mode last changed."
           }
         }
       }
