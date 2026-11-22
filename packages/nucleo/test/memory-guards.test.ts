@@ -42,6 +42,13 @@ describe('#719/AC-10 the module never reads the ai-memory token (#727/AC-4)', ()
     }
   });
 
+  test('#719/AC-10 the core wires the memory module with no data dir of its own (#735)', () => {
+    const cli = readFileSync(join(TEST_DIR, '..', 'src', 'api', 'cli.ts'), 'utf8');
+    const call = /createMemoryModule\(([^)]*)\)/.exec(cli);
+    assert.ok(call, 'cli.ts creates the memory module');
+    assert.equal(/dataDir/.test(call[1]!), false, 'cli.ts passes no dataDir to the memory module');
+  });
+
   test('#719/AC-10 no non-test file of the module imports node:fs or reads a file', () => {
     for (const path of memorySources()) {
       const text = readFileSync(path, 'utf8');

@@ -8,7 +8,7 @@ import type { MemorySessionHandoff, MemorySessionHandoffLocal } from '../memory/
 import type { MemoryStatusWithLocalState } from '../memory/memory.ts';
 import type { MemoryRecentPage, MemoryStatus, MemoryStatusLocal } from '../memory/readers.ts';
 
-/** The ids of the alerts, in english; the text is what the person reads (#719/AC-5, AC-6, AC-12). */
+/** The ids of the alerts, in english; the text is what the person reads (#735, #719/AC-5, AC-6, AC-12). */
 export type MemoryAlertId = 'bind-not-loopback' | 'auth-none-loopback' | 'llm-provider-configured' | 'embeddings-enabled';
 
 export interface MemoryAlert {
@@ -27,17 +27,17 @@ const ALERTS: Record<MemoryAlertId, MemoryAlert> = {
 // Only 127.0.0.1 with a port confirms the loopback bind; localhost, ::1 and 0.0.0.0 do not (#735).
 const LOOPBACK_BIND = /^127\.0\.0\.1:\d{1,5}$/;
 
-/** Whether the status's bind is 127.0.0.1 (#719/AC-6). */
+/** Whether the status's bind is 127.0.0.1 (#735, #719/AC-6). */
 export function isLoopbackBind(bind: string): boolean {
   return LOOPBACK_BIND.test(bind);
 }
 
-/** The alert the bridge routes refuse with (#719/AC-6). */
+/** The alert the bridge routes refuse with (#735, #719/AC-6). */
 export function bindAlert(): MemoryAlert {
   return { ...ALERTS['bind-not-loopback'] };
 }
 
-/** The alerts a status carries: a bind that is not 127.0.0.1, no authentication, an LLM provider, embeddings (#719/AC-5, AC-6, AC-12). */
+/** The alerts a status carries: a bind that is not 127.0.0.1, no authentication, an LLM provider, embeddings (#735, #719/AC-5, AC-6, AC-12). */
 export function memoryAlerts(status: MemoryStatus): MemoryAlert[] {
   const ids: MemoryAlertId[] = [];
   if (!isLoopbackBind(status.bind)) ids.push('bind-not-loopback');
@@ -64,7 +64,7 @@ export type MemoryServerView =
       local?: { data_dir: string; db_path: string };
     };
 
-/** `GET /api/memory`: the state, and for a running server its named fields; a server that is not running carries no detail (#719/AC-5). */
+/** `GET /api/memory`: the state, and for a running server its named fields; a server that is not running carries no detail (#735, #719/AC-5). */
 export function serverView(read: MemoryStatusWithLocalState): MemoryServerView {
   if (read.state !== 'running') return { state: read.state === 'unknown' ? 'failed' : read.state, alerts: [] };
   if (!read.status) return { state: 'failed', alerts: [] };
@@ -126,7 +126,7 @@ export function handoffView(handoff: MemorySessionHandoff, local: MemorySessionH
   };
 }
 
-/** One recent page: path, title and date, never the snippet (#719/AC-7). */
+/** One recent page: path, title and date, never the snippet (#735, #719/AC-7). */
 export function pageView(page: MemoryRecentPage): MemoryPageItem {
   return { path: page.path, title: page.title, updated_at: page.updated_at };
 }

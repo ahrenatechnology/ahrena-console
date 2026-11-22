@@ -1,7 +1,7 @@
 /*
  * The stdio JSON-RPC (MCP) client of `ai-memory mcp-bridge --no-session-id` (#734). What it guarantees:
  * - The binary is the embedded one, by absolute path, never a PATH lookup; with none (null) it reports
- *   `unavailable` and spawns nothing. The argv is a constant plus the `--data-dir` the core fixed (#734/AC-1).
+ *   `unavailable` and spawns nothing. The argv is a constant, plus a `--data-dir` only when a test injects one; absent, ai-memory uses its default folder (#734/AC-1, #735).
  * - `spawn(path, args, { shell: false, detached: true, stdio: ['pipe', 'pipe', 'pipe'] })`: its own process group,
  *   and the child environment is the embedded binary's allowlist (`embeddedAiMemoryEnv`): no AI_MEMORY_* variable
  *   and no credential reaches it. The bridge authenticates by itself; the core never reads or passes the token
@@ -46,7 +46,7 @@ export interface MemoryBridge {
   close(): Promise<void>;
 }
 
-// The `--data-dir` option comes first, then the bridge command, in the session-less mode (#734).
+// The optional `--data-dir` (tests only, #735) comes first, then the bridge command, in the session-less mode (#734).
 const BRIDGE_ARGS = ['mcp-bridge', '--no-session-id'] as const;
 const PROTOCOL_VERSION = '2025-06-18';
 const CLIENT_INFO = { name: 'ahrena-console', version: '0' };
@@ -65,7 +65,7 @@ function textOf(result: Message): string {
 
 export function createMemoryBridge(options: MemoryRunnerOptions): MemoryBridge {
   const { binaryPath, dataDir } = options;
-  if (!isAbsolute(dataDir)) throw new TypeError('memory data dir must be absolute');
+  if (dataDir !== undefined && !isAbsolute(dataDir)) throw new TypeError('memory data dir must be absolute');
   if (binaryPath !== null && !isAbsolute(binaryPath)) throw new TypeError('memory binary path must be absolute');
   const spawn = options.spawn ?? nodeSpawn;
   const killGroup = options.killGroup ?? defaultKillGroup;
@@ -82,7 +82,7 @@ export function createMemoryBridge(options: MemoryRunnerOptions): MemoryBridge {
     return new Promise((resolve) => {
       let child: ChildProcess;
       try {
-        child = spawn(binary, ['--data-dir', dataDir, ...BRIDGE_ARGS], { shell: false, detached: true, stdio: ['pipe', 'pipe', 'pipe'], env: childEnv, windowsHide: true });
+        child = spawn(binary, [...(dataDir === undefined ? [] : ['--data-dir', dataDir]), ...BRIDGE_ARGS], { shell: false, detached: true, stdio: ['pipe', 'pipe', 'pipe'], env: childEnv, windowsHide: true });
       } catch {
         log?.(`memory: bridge ${tool} failed spawn`);
         return resolve({ kind: 'failed', reason: 'spawn' });

@@ -28,7 +28,7 @@ function isAbsentOrUnusable(error: unknown): boolean {
   return error.code === 'ENOENT' || error.code === 'ENOTDIR' || error.code === 'EACCES';
 }
 
-// The only variables the embedded binary receives. The repo documents no other variable ai-memory needs, and the core fixes `--data-dir` itself, so no `AI_MEMORY_*` is passed (#727/AC-2, #733/AC-5).
+// The only variables the embedded binary receives. The repo documents no other variable ai-memory needs, and the core passes no `--data-dir` (ai-memory's default folder is used, #735), so no `AI_MEMORY_*` is passed (#727/AC-2, #733/AC-5).
 const ENV_ALLOWLIST: ReadonlySet<string> = new Set(['PATH', 'HOME', 'TMPDIR', 'LANG', 'USER']);
 const ENV_ALLOWED_PREFIX = 'LC_';
 

@@ -800,8 +800,8 @@ const docker =
         acceptNoOrigin: acceptRemoteActions,
       }
     : null;
-// The embedded ai-memory's read routes (#735): local and read only, over the module of #727 with its own data folder under the core's. Not in --demo, where there is no real server to read.
-const memoryModule = demo ? null : createMemoryModule({ dataDir: resolve(dataDir, 'ai-memory'), log });
+// The embedded ai-memory's read routes (#735): local and read only, over the module of #727, which uses ai-memory's default data folder, the one `setup` writes to (no `--data-dir`). Not in --demo, where there is no real server to read.
+const memoryModule = demo ? null : createMemoryModule({ log });
 const memory = memoryModule ? createMemoryRoute({ memory: memoryModule }) : null;
 // The diagnosis of an open saturation alert (#565): this machine's collectors (read-only, fixed commands) and the remote machines' through their tunnel port. Not in --demo, where the readings are synthetic.
 // #722: `processes-by-session` reads the live `claude` registry (`liveProcesses`, above) and the title each session has in the console.

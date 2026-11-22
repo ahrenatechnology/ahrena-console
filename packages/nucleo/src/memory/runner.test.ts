@@ -38,7 +38,7 @@ describe('memory runner (#727/AC-1, #727/AC-2)', () => {
     assert.deepEqual(await pending, { kind: 'ok', stdout: 'ai-memory 3.5.1\n' });
   });
 
-  test('#727/AC-1 each command has its own fixed argv, with the data dir the core fixed', async () => {
+  test('#727/AC-1 each command has its own fixed argv, with an injected data dir (tests only)', async () => {
     const { runner, calls } = runnerWith();
     for (const command of ['version', 'setup-plan', 'status'] as const) {
       const pending = runner.run(command);
@@ -53,6 +53,20 @@ describe('memory runner (#727/AC-1, #727/AC-2)', () => {
         ['--data-dir', DATA_DIR, 'setup', '--plan', '--json', '--agent', 'claude-code'],
         ['--data-dir', DATA_DIR, 'status', '--json'],
       ],
+    );
+  });
+
+  test('#719/AC-10 with no injected data dir the argv carries no --data-dir, so ai-memory uses its default folder (#735)', async () => {
+    const { runner, calls } = runnerWith({ dataDir: undefined });
+    for (const command of ['version', 'setup-plan', 'status'] as const) {
+      const pending = runner.run(command);
+      await turn();
+      calls.at(-1)!.child.finish(0, '{}');
+      await pending;
+    }
+    assert.deepEqual(
+      calls.map((c) => c.args),
+      [['--version'], ['setup', '--plan', '--json', '--agent', 'claude-code'], ['status', '--json']],
     );
   });
 

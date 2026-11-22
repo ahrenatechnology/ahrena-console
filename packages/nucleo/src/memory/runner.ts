@@ -2,7 +2,7 @@
  * The runner of the embedded ai-memory (#727, decisions 0012 and 0014 section 3). What it guarantees:
  * - The binary is the embedded one, by absolute path (`embeddedAiMemoryPath`, #725), never a PATH lookup.
  *   With no binary (null) it reports `unavailable` and spawns nothing.
- * - The argv is built only from the constants below plus the `--data-dir` the core fixed; the caller names
+ * - The argv is built only from the constants below, plus a `--data-dir` only when a test injects one (absent: ai-memory's own default folder, #735); the caller names
  *   a command from a closed list. The one value a caller supplies is the project of `handoffs` and `recent`
  *   (#733): it must match PROJECT_FORMAT (no leading dash, no slash, no whitespace) or nothing is spawned,
  *   and it follows the constant `--project`; the workspace is the constant `default`.
@@ -33,7 +33,7 @@ export type MemoryProjectCommand = 'handoffs' | 'recent';
 /** The commands the core may run on the embedded binary, each with a fixed argv (#727, #733). */
 export type MemoryCommand = MemoryGlobalCommand | MemoryProjectCommand;
 
-// The `--data-dir` option comes first, then the command (#727).
+// The optional `--data-dir` (tests only, #735) comes first, then the command (#727).
 const GLOBAL_ARGS: Record<MemoryGlobalCommand, readonly string[]> = {
   version: ['--version'],
   'setup-plan': ['setup', '--plan', '--json', '--agent', 'claude-code'],
@@ -77,8 +77,8 @@ export type Spawn = (command: string, args: readonly string[], options: SpawnOpt
 export interface MemoryRunnerOptions {
   /** The embedded binary's absolute path, or null when this core has none (#725, #727). */
   binaryPath: string | null;
-  /** The ai-memory data folder, fixed by the core (#727). */
-  dataDir: string;
+  /** Optional, for tests with a temporary folder: absolute, and absent means no `--data-dir`, so ai-memory uses its default folder (#735). */
+  dataDir?: string;
   /** The core's environment, before `embeddedAiMemoryEnv` keeps only the allowlist (#727). */
   env?: NodeJS.ProcessEnv;
   spawn?: Spawn;
@@ -114,8 +114,9 @@ export function defaultKillGroup(pid: number, signal: NodeJS.Signals): void {
 
 export function createMemoryRunner(options: MemoryRunnerOptions): MemoryRunner {
   const { binaryPath, dataDir } = options;
-  if (!isAbsolute(dataDir)) throw new TypeError('memory data dir must be absolute');
+  if (dataDir !== undefined && !isAbsolute(dataDir)) throw new TypeError('memory data dir must be absolute');
   if (binaryPath !== null && !isAbsolute(binaryPath)) throw new TypeError('memory binary path must be absolute');
+  const dataDirArgs = dataDir === undefined ? [] : [DATA_DIR_OPTION, dataDir];
   const spawn: Spawn = options.spawn ?? nodeSpawn;
   const killGroup = options.killGroup ?? defaultKillGroup;
   const timeoutMs = options.timeoutMs ?? MEMORY_TIMEOUT_MS;
@@ -131,7 +132,7 @@ export function createMemoryRunner(options: MemoryRunnerOptions): MemoryRunner {
     return new Promise((resolve) => {
       let child: ChildProcess;
       try {
-        child = spawn(binary, [DATA_DIR_OPTION, dataDir, ...args], {
+        child = spawn(binary, [...dataDirArgs, ...args], {
           shell: false,
           detached: true,
           stdio: ['ignore', 'pipe', 'pipe'],

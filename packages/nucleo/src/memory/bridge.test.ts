@@ -71,6 +71,15 @@ describe('memory bridge, the process (#734/AC-1)', () => {
     assert.equal(calls.length, 0);
   });
 
+  test('#719/AC-10 with no injected data dir the bridge argv carries no --data-dir (#735)', async () => {
+    const { bridge, calls } = bridgeWith({ dataDir: undefined });
+    const pending = bridge.call(TOOL, ARGS);
+    await turn();
+    assert.deepEqual(calls[0]!.args, ['mcp-bridge', '--no-session-id']);
+    calls[0]!.child.finish(1);
+    await pending;
+  });
+
   test('#734/AC-1 a relative binary path or data dir is refused when the bridge is built', () => {
     assert.throws(() => bridgeWith({ binaryPath: 'ai-memory' }), TypeError);
     assert.throws(() => bridgeWith({ dataDir: 'data' }), TypeError);
