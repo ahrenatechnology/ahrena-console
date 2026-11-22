@@ -43,7 +43,7 @@ export interface ProbeContext {
   npmPrefix?: string | null;
   /** The embedded binary's absolute path (#725), or `null` outside a bundle that has it. */
   embeddedPath?: () => string | null;
-  /** Internal log; receives named fields only (an errno code), never a path, a message or a stack. */
+  /** Internal log (#726); receives named fields only (an errno code), never a path, a message or a stack. */
   log?: (message: string) => void;
 }
 

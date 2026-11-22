@@ -354,6 +354,8 @@ export const CATALOG: readonly ToolEntry[] = [
     label: 'ai-memory',
     group: 'cli',
     embedded: true,
+    platforms: ['darwin'],
+    naNote: 'só no macOS',
     probe: { argv: ['ai-memory', '--version'], version: /ai-memory (\d+\.\d+\.\d+)/ },
     note: 'Vem dentro do console: atualizar o console atualiza o ai-memory.',
     sources: [{ id: 'embedded', label: 'embutido no console', platforms: ALL, binaryUnder: [], latest: null, actions: {} }],

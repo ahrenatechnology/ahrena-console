@@ -1,7 +1,7 @@
 // GET /api/tools for the embedded ai-memory (#726): the version, the embedded source, no action.
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
-import { macService } from '../../test/tools/machines.ts';
+import { macService, wsService } from '../../test/tools/machines.ts';
 
 const EMBEDDED = '/Applications/Ahrena Console.app/Contents/Resources/ai-memory/ai-memory';
 
@@ -35,5 +35,13 @@ describe('#719/AC-1 ai-memory in the tools overview', () => {
     const item = (await service.overview())!.items.find((i) => i.id === 'ai-memory')!;
     assert.equal(item.state, 'failed');
     assert.deepEqual(item.actions, []);
+  });
+
+  test('#719/AC-1 #726/AC-2 on Linux ai-memory is not applicable: state na, no action, the embedded binary never spawned', async () => {
+    const { service, run } = wsService();
+    const item = (await service.overview())!.items.find((i) => i.id === 'ai-memory')!;
+    assert.equal(item.state, 'na');
+    assert.deepEqual(item.actions, []);
+    assert.ok(!run.calls.some((a) => a.some((part) => part.includes('ai-memory'))), 'the embedded binary was never spawned');
   });
 });
