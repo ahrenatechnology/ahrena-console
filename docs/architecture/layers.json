@@ -107,6 +107,11 @@
         "evidence": "the MCP protocol and its tools over the fleet client (protocol.ts, tools/, fleet.ts, owner-credentials.ts); 2 of 12 files do direct IO",
         "mixed": "http.ts (node:http) and stdio.ts (node:readline, node:stream) are the transports and the edge; cli.ts is an entry point"
       },
+      "memory": {
+        "layer": "edge",
+        "evidence": "runs the embedded ai-memory CLI: 1 of 3 files imports node:child_process (runner.ts, no shell, own process group, timeout)",
+        "mixed": "readers.ts is pure (field-by-field reprojection); memory.ts only composes the runner and the readers"
+      },
       "messaging": {
         "layer": "application",
         "evidence": "service and orders over the ports declared in ports.ts; model.ts holds the rules (rate limit, text check)",

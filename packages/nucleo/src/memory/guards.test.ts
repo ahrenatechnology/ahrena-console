@@ -86,7 +86,7 @@ describe('#719/AC-10 the module never reads the ai-memory token (#727/AC-4)', ()
 });
 
 describe('#719/AC-11 nothing from the memory module leaves the machine (#727/AC-5)', () => {
-  // The proof is structural. The hub has no code yet (decision 0002) and the one outbound path that
+  // The proof is structural (#727/AC-5). The hub has no code yet (decision 0002) and the one outbound path that
   // exists is the OTLP observer; a payload can carry a field of the module only if the code that
   // builds it can reach the module. So: no module outside memory/ imports it, but the ones listed
   // here. The list is empty today; adding a name to it is a review decision, and it may never hold
