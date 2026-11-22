@@ -1,10 +1,10 @@
 /*
- * The attribution of processes to agent sessions (issue 722, epic 720), pure: a process sample and the
+ * The attribution of processes to agent sessions (#722, #720), pure: a process sample and the
  * registry of live sessions go in, the session trees and the processes outside any session come out.
  */
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
-import { attributeProcesses, loadOf, MAX_CLIMB_DEPTH, outsideLoadOf, rootCommandOf, type ProcessSample, type RegisteredSession } from './attribution.ts';
+import { attributeProcesses, lstartMatches, loadOf, MAX_CLIMB_DEPTH, outsideLoadOf, rootCommandOf, type ProcessSample, type RegisteredSession } from './attribution.ts';
 
 const START = 'Sat Nov 21 22:00:00 2026';
 const sample = (pid: number, ppid: number, command: string, cpuPct = 0, start = START): ProcessSample => ({ pid, ppid, start, command, cpuPct });
@@ -13,7 +13,7 @@ const registered = (pid: number, sessionId: string, over: Partial<RegisteredSess
 const SESSION = '0413a6d2-3b1c-4c0e-9d3a-6f1f0a2b7c11';
 const OTHER = '9c1d2e3f-0a1b-4c2d-8e3f-4a5b6c7d8e9f';
 
-/** claude(100) -> zsh -c(101) -> pnpm test(102) -> vitest(103) -> workers 104..117 (14), 600% in all. */
+/** claude(100) -> zsh -c(101) -> pnpm test(102) -> vitest(103) -> workers 104..117 (14), 600% in all. (#722) */
 function vitestTree(): ProcessSample[] {
   const workers = Array.from({ length: 14 }, (_, i) => sample(104 + i, 103, 'node /work/spdx-307/node_modules/vitest/dist/worker.js', 40));
   return [sample(100, 1, 'claude --resume 0413a6d2', 10), sample(101, 100, '/bin/zsh -c -l eval pnpm test', 0), sample(102, 101, 'node /opt/pnpm/pnpm.cjs test', 10), sample(103, 102, 'node /work/spdx-307/node_modules/vitest/vitest.mjs run', 20), ...workers];
@@ -94,6 +94,35 @@ describe('#720/AC-2 attribution climbs the ppid chain to a live registered pid',
     const tree = attributeProcesses(procs, [registered(100, SESSION)]).sessions[0]!;
     assert.deepEqual(tree.rootPids, [100]);
     assert.deepEqual(tree.processes.map((p) => [p.pid, p.start]), [[100, START], [101, 'Sat Nov 21 22:05:00 2026']]);
+  });
+});
+
+describe('#720/AC-2 the check of a registered start is a per-OS fact the collector supplies', () => {
+  const TICKS = '480890526';
+
+  test('#720/AC-2 Given a Linux procStart in clock ticks and the default (lstart) check, Then the pid is not verified and the process is outside', () => {
+    const a = attributeProcesses([sample(100, 1, 'claude')], [registered(100, SESSION, { procStart: TICKS })]);
+    assert.deepEqual(a.sessions, []);
+    assert.equal(a.outside.length, 1);
+  });
+
+  test('#720/AC-2 Given a check that verifies the ticks of the registered pid, Then the tree is attributed', () => {
+    const verified = (entry: RegisteredSession, real: ProcessSample) => entry.pid === real.pid && entry.procStart === TICKS;
+    const a = attributeProcesses(vitestTree(), [registered(100, SESSION, { procStart: TICKS })], verified);
+    assert.equal(a.sessions[0]!.processes.length, 18);
+    assert.deepEqual(a.outside, []);
+  });
+
+  test('#720/AC-2 Given a check that refuses the pid, Then nothing under it is attributed even when the lstart text would match', () => {
+    const a = attributeProcesses(vitestTree(), [registered(100, SESSION)], () => false);
+    assert.deepEqual(a.sessions, []);
+    assert.equal(a.outside.length, 18);
+  });
+
+  test('#720/AC-2 The lstart check compares the registry start with the sample start, spacing aside, and refuses a missing procStart', () => {
+    assert.equal(lstartMatches(registered(1, SESSION, { procStart: 'Sat Nov 7 08:15:02 2026' }), sample(1, 0, 'x', 0, 'Sat Nov  7 08:15:02 2026')), true);
+    assert.equal(lstartMatches(registered(1, SESSION, { procStart: null }), sample(1, 0, 'x')), false);
+    assert.equal(lstartMatches(registered(1, SESSION, { procStart: TICKS }), sample(1, 0, 'x')), false);
   });
 });
 

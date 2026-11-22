@@ -9,7 +9,7 @@
  * - A section that did not come carries `status` and a short `reason`, never an empty list pretending to be data.
  * - A section that came but was read only in part (a folder that could not be fully read) is `ok`, with its items
  *   and a `partial` marker with a short reason; an `ok` section whole carries no marker.
- * - `processes-by-session` (issue 722, epic 720) says which agent session the load belongs to: up to `LIST_CAP`
+ * - `processes-by-session` (#722, #720) says which agent session the load belongs to: up to `LIST_CAP`
  *   sessions by summed CPU, and the processes that descend from no session as one `outsideSession` line apart from the list.
  * - An `ok` `known-caches` section also carries `worktrees`, the two facts the screen words its worktree line from
  *   (age limit in days, shared root folder), so the screen never guesses them (#566).
@@ -39,18 +39,18 @@ export interface ProcessItem {
   cpuPct: number;
   startedAt: string;
 }
-/** The load of one agent session: the processes that descend from it, their count and summed CPU (issue 722). */
+/** The load of one agent session: the processes that descend from it, their count and summed CPU (#722). */
 export interface SessionLoadItem {
   sessionId: string;
-  /** The session's title as the console knows it; `null` when it knows none. */
+  /** The session's title as the console knows it; `null` when it knows none. (#722) */
   title: string | null;
-  /** What the session is running, short and without arguments: `pnpm test` (see `rootCommandOf`). */
+  /** What the session is running, short and without arguments: `pnpm test` (see `rootCommandOf`). (#722) */
   rootCommand: string;
   cwd: string | null;
   processCount: number;
   cpuPct: number;
 }
-/** The processes that descend from no live registered session, as one line (issue 722). */
+/** The processes that descend from no live registered session, as one line (#722). */
 export interface OutsideSessionLoad {
   processCount: number;
   cpuPct: number;

@@ -151,7 +151,7 @@ describe('#565 GET /api/diagnosis: this machine', () => {
     }
   });
 
-  test('#565/AC-2 Given load-high is open, When asked, Then up to 10 processes by CPU come back, and since issue 722 the sessions after them', async () => {
+  test('#565/AC-2 Given load-high is open, When asked, Then up to 10 processes by CPU come back, and since #722 the sessions after them', async () => {
     const { tracker, get, close } = await boot();
     try {
       tracker.update('local', [alert('load-high', 'load-high')]);

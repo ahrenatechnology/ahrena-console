@@ -765,7 +765,7 @@ const docker =
       }
     : null;
 // The diagnosis of an open saturation alert (#565): this machine's collectors (read-only, fixed commands) and the remote machines' through their tunnel port. Not in --demo, where the readings are synthetic.
-// issue 722: `processes-by-session` reads the live `claude` registry (`liveProcesses`, above) and the title each session has in the console.
+// #722: `processes-by-session` reads the live `claude` registry (`liveProcesses`, above) and the title each session has in the console.
 const diagnosisSessions = liveProcesses
   ? createSessionSource({ live: liveProcesses, sessionName: async (id) => (await storage.getSession(id))?.name ?? null, desktopTitle: (id) => desktop?.sessionByCli(id)?.title ?? null })
   : undefined;

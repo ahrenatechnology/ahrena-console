@@ -8,7 +8,7 @@
  *   exist (`unknown-machine`) or an alert that is not open on it (`alert-not-open`); 422 `not-diagnosable`
  *   for an open alert of a kind that has no diagnosis; 405 for another method.
  * - 501 `{ error: "diagnosis-unsupported" }` when this núcleo cannot diagnose (no collector for its
- *   platform, or the route not wired), and when the remote núcleo asked for a machine says it cannot or
+ *   platform, or the route not wired), and when the remote core asked for a machine says it cannot or
  *   does not have the route (an old núcleo): stable, so the screen tells it from a failure.
  * - 502 `{ error, reason }` when a remote machine does not answer or answers something that is not a diagnosis.
  *
@@ -204,7 +204,7 @@ function readSessionLoad(v: unknown): SessionLoadItem | null {
   if (!isNumber(v.processCount) || !Number.isInteger(v.processCount) || v.processCount < 0 || !isNumber(v.cpuPct) || v.cpuPct < 0) return null;
   return { sessionId: v.sessionId, title: v.title, rootCommand: v.rootCommand, cwd: v.cwd, processCount: v.processCount, cpuPct: v.cpuPct };
 }
-/** The outside-session line of a `processes-by-session` section, rebuilt from its two documented fields; `null` when absent or malformed, because the sessions are still a diagnosis without it (issue 722). */
+/** The outside-session line of a `processes-by-session` section, rebuilt from its two documented fields; `null` when absent or malformed, because the sessions are still a diagnosis without it (#722). */
 function readOutsideSession(v: unknown): OutsideSessionLoad | null {
   if (!isRecord(v) || !isNumber(v.processCount) || !Number.isInteger(v.processCount) || v.processCount < 0 || !isNumber(v.cpuPct) || v.cpuPct < 0) return null;
   return { processCount: v.processCount, cpuPct: v.cpuPct };
@@ -286,7 +286,7 @@ function readSection<K extends SectionId>(id: K, status: SectionStatus, s: Recor
 }
 
 const sameIds = (a: readonly string[], b: readonly string[]) => a.length === b.length && a.every((id, i) => id === b[i]);
-/** A núcleo older than issue 722 answers a `load-high` without `processes-by-session`: that is still a diagnosis, with one section fewer. */
+/** A core older than #722 answers a `load-high` without `processes-by-session`: that is still a diagnosis, with one section fewer. */
 const withoutSessions = (ids: readonly string[]) => ids.filter((id) => id !== 'processes-by-session');
 
 /**

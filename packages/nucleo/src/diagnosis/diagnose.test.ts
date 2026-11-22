@@ -1,4 +1,4 @@
-/* The `processes-by-session` section through the use case (issue 722, epic 720): the alert kind asks for it, and the shaping is the use case's. */
+/* The `processes-by-session` section through the use case (#722, #720): the alert kind asks for it, and the shaping is the use case's. */
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import { diagnose, shape, type CollectContext, type DiagnoseDeps, type SectionCollector } from './diagnose.ts';

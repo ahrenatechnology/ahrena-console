@@ -1,6 +1,6 @@
 /*
- * The remote reading of `processes-by-session` (issue 722, epic 720): a remote núcleo's answer goes through the same
- * shaping as a local one, and an older núcleo that has no such section is still a diagnosis.
+ * The remote reading of `processes-by-session` (#722, #720): a remote core's answer goes through the same
+ * shaping as a local one, and an older core that has no such section is still a diagnosis.
  */
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
@@ -25,7 +25,7 @@ const bySession = (r: DiagnosisReading) => {
 };
 
 describe('a remote diagnosis with processes-by-session', () => {
-  test('#720/AC-1 Given 12 sessions from the remote núcleo, Then 10 come back, ordered by CPU, with the outside line and no key the contract does not name', async () => {
+  test('#720/AC-1 Given 12 sessions from the remote core, Then 10 come back, ordered by CPU, with the outside line and no key the contract does not name', async () => {
     const items = Array.from({ length: 12 }, (_, i) => ({ ...session(i), extra: 'x' }));
     const section = bySession(await read([cpuSection, { id: 'processes-by-session', status: 'ok', items, outsideSession: { processCount: 3, cpuPct: 12.5, leak: 'x' } }]));
     assert.ok(section && section.id === 'processes-by-session');
@@ -35,7 +35,7 @@ describe('a remote diagnosis with processes-by-session', () => {
     assert.deepEqual(section.outsideSession, { processCount: 3, cpuPct: 12.5 });
   });
 
-  test('#720/AC-1 Given an older remote núcleo that sends only processes-by-cpu for load-high, Then it is still a diagnosis', async () => {
+  test('#720/AC-1 Given an older remote core that sends only processes-by-cpu for load-high, Then it is still a diagnosis', async () => {
     const r = await read([cpuSection]);
     assert.equal(r.kind, 'ok');
   });

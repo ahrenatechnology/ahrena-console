@@ -1,4 +1,4 @@
-/* The registry as a list (issue 722, epic 720): the live `claude` processes with the fields attribution reads. */
+/* The registry as a list (#722, #720): the live `claude` processes with the fields attribution reads. */
 import assert from 'node:assert/strict';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';

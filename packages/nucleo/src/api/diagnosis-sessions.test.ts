@@ -1,4 +1,4 @@
-/* Where `processes-by-session` reads the sessions from (issue 722, epic 720): the live registry and the title the console knows. */
+/* Where `processes-by-session` reads the sessions from (#722, #720): the live registry and the title the console knows. */
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import { createSessionSource } from './diagnosis-sessions.ts';

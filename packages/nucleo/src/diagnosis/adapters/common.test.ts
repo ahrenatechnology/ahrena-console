@@ -1,5 +1,5 @@
 /*
- * The `processes-by-session` collector (issue 722, epic 720): the Mac's collector driven with a recording command runner
+ * The `processes-by-session` collector (#722, #720): the Mac's collector driven with a recording command runner
  * and a registry double, so no real tool runs and no real session is read.
  */
 import assert from 'node:assert/strict';
@@ -13,7 +13,7 @@ const SESSION = '0413a6d2-3b1c-4c0e-9d3a-6f1f0a2b7c11';
 const CLAUDE_START = 'Sat Nov 21 21:00:00 2026';
 const CWD = '/Users/dev/work/spdx-307';
 
-/** claude(67562) -> zsh -c -> pnpm test -> vitest -> 11 workers: 15 processes, 600% in all; and a server that descends from no session. */
+/** claude(67562) -> zsh -c -> pnpm test -> vitest -> 11 workers: 15 processes, 600% in all; and a server that descends from no session. (#722) */
 function psTree(): string {
   const row = (pid: number, ppid: number, cpu: number, start: string, command: string) => `${String(pid).padStart(6)} ${String(ppid).padStart(6)} ${cpu.toFixed(1).padStart(6)} ${start} ${command}`;
   const rows = [

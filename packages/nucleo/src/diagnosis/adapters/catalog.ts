@@ -25,7 +25,7 @@ export interface CatalogEntry {
   maxBytes: number;
   /** `du` exits 1 on a folder it cannot read and still prints what it measured; that output is an answer in part, not a failure (#565). Every entry without this flag fails on a non-zero exit. */
   acceptOutputOnFailure?: true;
-  /** Variables added to the runner's own environment (`LC_ALL=C`, `GIT_OPTIONAL_LOCKS=0`); fixed here, never from a request (issue 722). */
+  /** Variables added to the runner's own environment (`LC_ALL=C`, `GIT_OPTIONAL_LOCKS=0`); fixed here, never from a request (#722). */
   env?: Readonly<Record<string, string>>;
 }
 
@@ -35,8 +35,8 @@ export const CATALOG = {
   /** Every process once: pid, CPU%, RSS in KiB, start time, executable; the use case ranks them (#565). */
   ps: { command: 'ps', args: ['-axo', 'pid=,pcpu=,rss=,lstart=,comm='], timeoutMs: 8_000, maxBytes: 4 * MB },
   /**
-   * Every process with its parent, for the attribution to sessions (issue 722): pid, ppid, CPU%, start time and the full command line.
-   * `TZ=UTC` because Claude Code writes `procStart` in UTC and the start is compared as text; the command line stays inside the núcleo,
+   * Every process with its parent, for the attribution to sessions (#722): pid, ppid, CPU%, start time and the full command line.
+   * `TZ=UTC` because Claude Code writes `procStart` in UTC and the start is compared as text; the command line stays inside the core,
    * only the few words of `rootCommandOf` leave it.
    */
   'ps-tree': { command: 'ps', args: ['-axo', 'pid=,ppid=,pcpu=,lstart=,args='], timeoutMs: 8_000, maxBytes: 8 * MB, env: { TZ: 'UTC' } },

@@ -1,4 +1,4 @@
-/* The real runner passes an entry's environment to the command (issue 722, epic 720): `ps` prints the start in UTC. */
+/* The real runner passes an entry's environment to the command (#722, #720): `ps` prints the start in UTC. */
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import { systemRunner } from './system.ts';

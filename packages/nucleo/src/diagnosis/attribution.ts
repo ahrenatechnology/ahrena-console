@@ -1,17 +1,19 @@
 /*
- * Which agent session a process belongs to (issue 722, epic 720). Pure: a sample of the machine's processes and the
+ * Which agent session a process belongs to (#722, #720). Pure: a sample of the machine's processes and the
  * registry of live sessions go in, the session trees and the processes outside any session come out. No command,
  * no file, no clock lives here; the collector that reads the machine is `adapters/common.ts`.
  *
  * - A process belongs to a session when its own pid, or the pid of one of its ancestors (the `ppid` chain, at most
- *   `MAX_CLIMB_DEPTH` hops, a cycle ends it), is in the registry, is in the sample (so it is alive) and its real start
- *   equals the `procStart` the registry holds. A reused pid has another start, so it is never taken for the session.
+ *   `MAX_CLIMB_DEPTH` hops, a cycle ends it), is in the registry, is in the sample (so it is alive) and its `procStart`
+ *   is verified against its real start by the `StartCheck` the collector supplies for its OS (#722). A reused pid has another start, so it is never taken for the session.
  * - The nearest such ancestor wins. A pid the registry lists for two different sessions, a registry entry with no
  *   `procStart` and a pid that is not in the sample all leave the process outside: a session is never guessed.
- * - The start is the text `ps -o lstart=` prints in UTC (`Sat Nov 14 08:15:02 2026`), the form Claude Code writes in
- *   `procStart`; it is compared with its whitespace collapsed, as the terminal opener does (api/terminal-launch.ts).
- * - The next layer (the CPU governor, issue 723) reuses `attributeProcesses`: each `SessionTree` lists its processes with
- *   their own `start`, so it can read the start again and compare before it acts on a pid.
+ * - `ProcessSample.start` has one form on every OS: the text `ps -o lstart=` prints in UTC (`Sat Nov 14 08:15:02 2026`),
+ *   whitespace collapsed. `procStart` does not: macOS Claude Code writes that text (`lstartMatches` compares them, as the
+ *   terminal opener does, api/terminal-launch.ts); Linux Claude Code writes `/proc/<pid>/stat` field 22, in clock ticks.
+ * - For #723 (the CPU governor), before it acts on a session's root pid, call `collector.startCheck(registry, samples)`
+ *   (`DiagnosisCollector`, adapters/common.ts) and `attributeProcesses(samples, registry, check)`, or `check(entry, sample)`
+ *   on the root pid alone; each `SessionTree` lists its processes with their own `start` to re-check a pid the same way.
  */
 
 import type { OutsideSessionLoad, SessionLoadItem } from './model.ts';
@@ -20,9 +22,9 @@ import type { OutsideSessionLoad, SessionLoadItem } from './model.ts';
 export interface ProcessSample {
   pid: number;
   ppid: number;
-  /** The real start, `ps` `lstart` in UTC. */
+  /** The real start, `ps` `lstart` in UTC. (#722) */
   start: string;
-  /** The full command line (`args`); never leaves this layer whole: see `rootCommandOf`. */
+  /** The full command line (`args`); never leaves this layer whole: see `rootCommandOf`. (#722) */
   command: string;
   cpuPct: number;
 }
@@ -32,7 +34,7 @@ export interface RegisteredSession {
   pid: number;
   sessionId: string;
   cwd: string | null;
-  /** The start Claude Code wrote, in the form of `ProcessSample.start`; `null` when it wrote none. */
+  /** The start Claude Code wrote, in the form of `ProcessSample.start`; `null` when it wrote none. (#722) */
   procStart: string | null;
 }
 
@@ -40,15 +42,15 @@ export interface RegisteredSession {
 export interface SessionTree {
   sessionId: string;
   cwd: string | null;
-  /** The registered pids of the session, ascending; a tree is rooted in each. */
+  /** The registered pids of the session, ascending; a tree is rooted in each. (#722) */
   rootPids: number[];
-  /** Ascending by pid, each with its own `start`. */
+  /** Ascending by pid, each with its own `start`. (#722) */
   processes: ProcessSample[];
 }
 
 export interface Attribution {
   sessions: SessionTree[];
-  /** The processes that descend from no session. */
+  /** The processes that descend from no session. (#722) */
   outside: ProcessSample[];
 }
 
@@ -59,7 +61,7 @@ const ROOT_COMMAND_WORDS = 2;
 const WORD_MAX = 24;
 const ROOT_COMMAND_MAX = 80;
 const SHELLS = new Set(['sh', 'bash', 'zsh', 'dash', 'fish', 'ksh']);
-/* A program that only launches a script: `node /opt/pnpm/pnpm.cjs test` is named after the script, `pnpm test`. */
+/* A program that only launches a script: `node /opt/pnpm/pnpm.cjs test` is named after the script, `pnpm test`. (#722) */
 const LAUNCHERS = new Set(['node', 'bun', 'deno', 'python', 'python3', 'ruby', 'tsx']);
 const SCRIPT_EXTENSION = /\.(?:[cm]?js|ts|py|rb)$/;
 
@@ -69,18 +71,28 @@ export const normalizeStart = (start: string): string => start.replace(/\s+/g, '
 const round1 = (n: number): number => Math.round(n * 10) / 10;
 const lastSegment = (path: string): string => path.slice(path.lastIndexOf('/') + 1);
 
+/**
+ * Whether the start a registry entry holds is the real start of its pid (#722). `procStart` has a form per OS: on macOS the
+ * `ps` lstart text, on Linux field 22 of `/proc/<pid>/stat` in clock ticks. Only the collector can read the real one, so it
+ * supplies the check for its OS (`DiagnosisCollector.startCheck`); the attribution stays pure and never parses either form.
+ */
+export type StartCheck = (entry: RegisteredSession, real: ProcessSample) => boolean;
+
+/** macOS: `procStart` is the lstart text, compared with the sample's own start (#722). A missing `procStart` is never a match. */
+export const lstartMatches: StartCheck = (entry, real) => entry.procStart !== null && normalizeStart(entry.procStart) === normalizeStart(real.start);
+
 type Root = RegisteredSession | null | 'ambiguous';
 
-export function attributeProcesses(samples: readonly ProcessSample[], registry: readonly RegisteredSession[]): Attribution {
+export function attributeProcesses(samples: readonly ProcessSample[], registry: readonly RegisteredSession[], startMatches: StartCheck = lstartMatches): Attribution {
   const byPid = new Map(samples.map((p) => [p.pid, p]));
   const registeredAt = new Map<number, RegisteredSession[]>();
   for (const entry of registry) registeredAt.set(entry.pid, [...(registeredAt.get(entry.pid) ?? []), entry]);
 
-  /* The session a pid is the root of: `null` when it is not (no entry, a dead pid, another start), `'ambiguous'` when two sessions claim it. */
+  /* The session a pid is the root of: `null` when it is not (no entry, a dead pid, another start), `'ambiguous'` when two sessions claim it. (#722) */
   const rootOf = (pid: number): Root => {
     const real = byPid.get(pid);
     if (!real) return null;
-    const live = (registeredAt.get(pid) ?? []).filter((e) => e.procStart !== null && normalizeStart(e.procStart) === normalizeStart(real.start));
+    const live = (registeredAt.get(pid) ?? []).filter((e) => startMatches(e, real));
     if (new Set(live.map((e) => e.sessionId)).size > 1) return 'ambiguous';
     return live[0] ?? null;
   };

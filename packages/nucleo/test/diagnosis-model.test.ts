@@ -8,7 +8,7 @@ describe('diagnosis model', () => {
     assert.deepEqual([...SECTION_IDS], ['processes-by-rss', 'processes-by-cpu', 'processes-by-session', 'swap', 'largest-folders', 'docker-df', 'known-caches', 'journal']);
   });
 
-  test('#565/AC-2 load-high gets processes-by-cpu and, since issue 722, processes-by-session', () => {
+  test('#565/AC-2 load-high gets processes-by-cpu and, since #722, processes-by-session', () => {
     assert.deepEqual(sectionsFor('load-high', 'darwin'), ['processes-by-cpu', 'processes-by-session']);
   });
 

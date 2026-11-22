@@ -18,7 +18,7 @@ export interface CollectContext {
   signal: AbortSignal;
 }
 
-/** Items read whole, items with a `partial` marker and, for `known-caches`, the `worktrees` facts (#566) and, for `processes-by-session`, the `outsideSession` line (issue 722), or nothing (`unavailable`) (#565). */
+/** Items read whole, items with a `partial` marker and, for `known-caches`, the `worktrees` facts (#566) and, for `processes-by-session`, the `outsideSession` line (#722), or nothing (`unavailable`) (#565). */
 export type CollectResult<K extends SectionId> = SectionItems[K] | { items: SectionItems[K]; partial?: PartialMarker; worktrees?: WorktreesInfo; outsideSession?: OutsideSessionLoad } | { unavailable: true; reason?: string };
 export type SectionCollector = <K extends SectionId>(id: K, context: CollectContext) => Promise<CollectResult<K>>;
 

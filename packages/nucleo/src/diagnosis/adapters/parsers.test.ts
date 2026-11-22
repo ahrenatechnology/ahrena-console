@@ -1,7 +1,7 @@
-/* The `ps` tree reading of the diagnosis (issue 722, epic 720): pure parsing of what the catalog command prints. */
+/* The `ps` tree reading of the diagnosis (#722, #720): pure parsing of what the catalog command prints. */
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
-import { parsePsTree } from './parsers.ts';
+import { parseProcStatStartTime, parsePsTree } from './parsers.ts';
 
 describe('parsePsTree', () => {
   test('#720/AC-2 Given ps rows with pid, ppid, CPU, the start and the full command, Then each becomes a sample with the start as ps printed it', () => {
@@ -23,5 +23,25 @@ describe('parsePsTree', () => {
 
   test('#720/AC-2 Given a row with no command, Then it is skipped', () => {
     assert.deepEqual(parsePsTree('  12 1 0.0 Sat Nov 21 21:00:00 2026'), []);
+  });
+});
+
+describe('parseProcStatStartTime', () => {
+  /* Fields 3..22 after `comm`: state ppid pgrp session tty tpgid flags minflt cminflt majflt cmajflt utime stime cutime cstime priority nice threads itrealvalue starttime (#722) */
+  const after = (starttime: string) => `S 1 1 1 0 -1 4194560 100 0 0 0 5 3 0 0 20 0 1 0 ${starttime} 123456 789 18446744073709551615`;
+
+  test('#720/AC-2 Given a stat line, Then the start is field 22, the clock ticks Claude Code writes as procStart on Linux', () => {
+    assert.equal(parseProcStatStartTime(`480890 (claude) ${after('480890526')}`), '480890526');
+  });
+
+  test('#720/AC-2 Given a command name with spaces and a closing parenthesis, Then the fields are counted from the last parenthesis', () => {
+    assert.equal(parseProcStatStartTime(`4242 (my ) prog (v2)) ${after('9001')}\n`), '9001');
+  });
+
+  test('#720/AC-2 Given text that is not a stat line or has too few fields, Then there is no start', () => {
+    assert.equal(parseProcStatStartTime(''), null);
+    assert.equal(parseProcStatStartTime('garbage'), null);
+    assert.equal(parseProcStatStartTime('1 (sh) S 1 1'), null);
+    assert.equal(parseProcStatStartTime(`1 (sh) ${after('not-a-number')}`), null);
   });
 });
