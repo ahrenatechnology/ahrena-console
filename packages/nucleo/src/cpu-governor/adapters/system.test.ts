@@ -106,3 +106,50 @@ describe('#720/AC-3 the sample: session trees from the attribution, the nice of 
     assert.deepEqual(calls[0], ['ps', '-o', 'lstart=', '-p', '101']);
   });
 });
+
+describe('#720/AC-3 on Linux the real executable of each registered root is read from /proc, not from comm', () => {
+  const CONFIG = '/home/someone/.claude';
+  const IMAGE = `${CONFIG}/remote/ccd-cli/2.1.326-3eec682dec28`;
+  const linux = (readImage: (pid: number) => Promise<string | null>, platform: 'darwin' | 'linux' = 'linux') => {
+    const exec: Exec = async (file, args) => {
+      const key = [file, ...args].join(' ');
+      if (key === PS_TREE_CMD) return { ok: true, stdout: PS_TREE };
+      if (key === PS_NICE_CMD) return { ok: true, stdout: ['  100   0 2.1.326-3eec682', '  101   0 node', '  200   0 claude-desktop'].join('\n') };
+      return { ok: true, stdout: '' };
+    };
+    const registry: RegisteredSession[] = [{ pid: 100, sessionId: 's1', cwd: null, procStart: START, configDir: CONFIG }];
+    return createMachineControl({ exec, platform, registered: async () => registry, startCheck: async () => (entry, real) => entry.procStart === real.start, readImage });
+  };
+
+  test('#720/AC-3 Given a Linux root registered in a config folder, Then its origin carries that folder and the executable read for its pid', async () => {
+    const asked: number[] = [];
+    const observation = await linux(async (pid) => (asked.push(pid), IMAGE)).sample();
+    assert.deepEqual(observation!.origins.get(100), { configDir: CONFIG, image: IMAGE });
+    assert.deepEqual(asked, [100]);
+  });
+
+  test('#720/AC-5 Given an executable that cannot be read, Then the origin has the folder and no image', async () => {
+    const observation = await linux(async () => null).sample();
+    assert.deepEqual(observation!.origins.get(100), { configDir: CONFIG });
+  });
+
+  test('#720/AC-5 Given a Mac, Then no executable is read from /proc', async () => {
+    let read = 0;
+    const observation = await linux(async () => (read++, IMAGE), 'darwin').sample();
+    assert.equal(read, 0);
+    assert.deepEqual(observation!.origins.get(100), { configDir: CONFIG });
+  });
+
+  test('#720/AC-5 Given a pid claimed from two config folders, Then it has no origin', async () => {
+    const exec: Exec = async (file, args) => {
+      const key = [file, ...args].join(' ');
+      return key === PS_TREE_CMD ? { ok: true, stdout: PS_TREE } : key === PS_NICE_CMD ? { ok: true, stdout: PS_NICE } : { ok: true, stdout: '' };
+    };
+    const registry: RegisteredSession[] = [
+      { pid: 100, sessionId: 's1', cwd: null, procStart: START, configDir: CONFIG },
+      { pid: 100, sessionId: 's1', cwd: null, procStart: START, configDir: '/home/someone/.claude-work' },
+    ];
+    const control = createMachineControl({ exec, platform: 'linux', registered: async () => registry, startCheck: async () => (entry, real) => entry.procStart === real.start, readImage: async () => IMAGE });
+    assert.equal((await control.sample())!.origins.has(100), false);
+  });
+});

@@ -16,6 +16,7 @@ import { SqliteRuntimeStore } from '../runtime/sqlite.ts';
 
 import { execFile, execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, realpathSync, rmSync } from 'node:fs';
+import { readlink } from 'node:fs/promises';
 import type { AddressInfo } from 'node:net';
 import { availableParallelism, homedir, loadavg, tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
@@ -722,6 +723,8 @@ const cpuGovernor =
             await liveProcesses.refresh();
             return liveProcesses.listLive();
           },
+          // #720/AC-3: a Linux session's comm is a truncated version; the executable is its /proc link, read without exec.
+          readImage: (pid) => readlink(`/proc/${pid}/exe`).catch(() => null),
           startCheck: (registry, samples) => {
             const deps = systemDiagnosisDeps(async () => [], log);
             return (governorPlatform === 'darwin' ? new DarwinDiagnosisCollector(deps) : new LinuxDiagnosisCollector(deps)).startCheck(registry, samples);

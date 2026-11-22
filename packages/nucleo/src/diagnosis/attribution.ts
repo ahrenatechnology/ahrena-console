@@ -36,6 +36,8 @@ export interface RegisteredSession {
   cwd: string | null;
   /** The start Claude Code wrote, in the form of `ProcessSample.start`; `null` when it wrote none. (#722) */
   procStart: string | null;
+  /** The configuration folder whose `sessions/` holds the file; the CPU governor checks a Linux root's executable against it. (#720/AC-3) */
+  configDir?: string;
 }
 
 /** Every process that descends from one session, the registered root pids included. */

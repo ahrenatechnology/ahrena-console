@@ -20,7 +20,7 @@ describe('LiveClaudeProcesses.listLive', () => {
     writeFileSync(join(dir, 'sessions', '202.json'), JSON.stringify({ pid: 202, sessionId: B, cwd: '/w/b', procStart: 'Tue Oct 20 05:00:00 2026' }));
     const live = new LiveClaudeProcesses({ folders: () => [dir], isAlive: (pid) => pid === 101 });
     await live.refresh();
-    assert.deepEqual(live.listLive(), [{ pid: 101, sessionId: A, cwd: '/w/a', procStart: 'Tue Oct 20 04:00:34 2026' }]);
+    assert.deepEqual(live.listLive(), [{ pid: 101, sessionId: A, cwd: '/w/a', procStart: 'Tue Oct 20 04:00:34 2026', configDir: dir }]);
   });
 
   test('#720/AC-2 Given no scan yet, Then the list is empty', () => {

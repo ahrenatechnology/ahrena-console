@@ -7,13 +7,15 @@
  *   stays below `RELEASE_BELOW` of the cores for `RELEASE_AFTER_MS`. The load between the two thresholds keeps the mode.
  * - A session's root pid is never a target, even when it is listed in `SessionTree.processes`, and neither is the core itself
  *   or anything that descends from it: the core can have been started from a session.
- * - A root counts only when its pid is above 1 and the argv[0] basename `ps comm` reports is `claude` or `codex`
- *   (`isAgentRoot`, #720/AC-5): the registry file is data a person can write, so a `1.json` or a root running anything else
- *   yields no target, whatever descends from it.
+ * - A root counts only when its pid is above 1 and either the argv[0] basename `ps comm` reports is `claude` or `codex`, or (a
+ *   Linux Claude Code session, whose comm is a truncated version) its real executable sits directly in `<configDir>/remote/ccd-cli/`
+ *   of the config folder whose `sessions/<pid>.json` registered it (`isAgentRoot`, #720/AC-3, #720/AC-5): the registry file is
+ *   data a person can write, so a `1.json` or a root running anything else yields no target, whatever descends from it.
  * - Residual risk, accepted: on macOS `ps comm` is argv[0], not the executable image, so a same-user process that sets its
  *   argv[0] to `claude` or `codex` and has a forged registry entry gets its own descendants governed; pid 1 and the Desktop stay safe.
  */
 
+import { basename, dirname, isAbsolute, join, normalize } from 'node:path/posix';
 import type { SessionTree } from '../diagnosis/attribution.ts';
 
 /** The nice the governor sets; it only raises a process to this value, never lowers one. */
@@ -74,13 +76,29 @@ export interface Target {
 /** #720/AC-5: The argv[0] basenames a session may be rooted in: the segment after the last `/` of `ps comm`, exactly. */
 const AGENT_EXECUTABLES: ReadonlySet<string> = new Set(['claude', 'codex']);
 
+/** #720/AC-3: Where a registered root came from: the config folder of its session file, and (Linux) the real executable read from /proc. */
+export interface RootOrigin {
+  configDir: string;
+  image?: string;
+}
+
+/** #720/AC-3: The real executable sits directly in `<configDir>/remote/ccd-cli/`, both paths absolute and already normalized (no `..`, no `//`). */
+function inCcdCli(origin: RootOrigin | undefined): boolean {
+  if (!origin?.image) return false;
+  const { configDir, image } = origin;
+  if (!isAbsolute(configDir) || !isAbsolute(image) || normalize(configDir) !== configDir || normalize(image) !== image) return false;
+  return basename(image) !== '' && dirname(image) === join(configDir, 'remote', 'ccd-cli');
+}
+
 /**
- * #720/AC-5: Whether a registered pid may root a session: above pid 1 (so never launchd or init) and running a `claude` or
- * `codex` argv[0] by its basename (as `ps comm` reports it), not by a substring of a path or a command line. No `comm` is not a root.
+ * #720/AC-5: Whether a registered pid may root a session: above pid 1 (so never launchd or init) and either running a `claude` or
+ * `codex` argv[0] by its basename (as `ps comm` reports it), not by a substring of a path or a command line, or (#720/AC-3) running
+ * an executable that sits directly in the `remote/ccd-cli/` folder of the config folder that registered it. No `comm` and no origin is not a root.
  */
-export function isAgentRoot(pid: number, executable: string | undefined): boolean {
-  if (!Number.isInteger(pid) || pid <= 1 || executable === undefined) return false;
-  return AGENT_EXECUTABLES.has(executable.slice(executable.lastIndexOf('/') + 1).trim());
+export function isAgentRoot(pid: number, executable: string | undefined, origin?: RootOrigin): boolean {
+  if (!Number.isInteger(pid) || pid <= 1) return false;
+  if (executable !== undefined && AGENT_EXECUTABLES.has(executable.slice(executable.lastIndexOf('/') + 1).trim())) return true;
+  return inCcdCli(origin);
 }
 
 /** A session root the governor refuses: its session, pid and the start it was sampled with. */
@@ -91,11 +109,11 @@ export interface RefusedRoot {
 }
 
 /** The registered roots that are not an agent root: their trees yield no target. */
-export function refusedRoots(trees: readonly SessionTree[], executables: ReadonlyMap<number, string>): RefusedRoot[] {
+export function refusedRoots(trees: readonly SessionTree[], executables: ReadonlyMap<number, string>, origins: ReadonlyMap<number, RootOrigin> = new Map()): RefusedRoot[] {
   const refused: RefusedRoot[] = [];
   for (const tree of trees) {
     for (const pid of tree.rootPids) {
-      if (isAgentRoot(pid, executables.get(pid))) continue;
+      if (isAgentRoot(pid, executables.get(pid), origins.get(pid))) continue;
       refused.push({ sessionId: tree.sessionId, pid, start: tree.processes.find((p) => p.pid === pid)?.start ?? '' });
     }
   }
@@ -106,7 +124,7 @@ export function refusedRoots(trees: readonly SessionTree[], executables: Readonl
  * The descendants of each session, by pid ascending per session; never a root pid, `protectedPids` or what descends from one,
  * and only under a root that is an agent root (`isAgentRoot`): a process whose nearest root is anything else is not a target.
  */
-export function targetsOf(trees: readonly SessionTree[], protectedPids: ReadonlySet<number>, executables: ReadonlyMap<number, string>): Target[] {
+export function targetsOf(trees: readonly SessionTree[], protectedPids: ReadonlySet<number>, executables: ReadonlyMap<number, string>, origins: ReadonlyMap<number, RootOrigin> = new Map()): Target[] {
   const targets: Target[] = [];
   for (const tree of trees) {
     const roots = new Set(tree.rootPids);
@@ -136,7 +154,7 @@ export function targetsOf(trees: readonly SessionTree[], protectedPids: Readonly
     for (const p of tree.processes) {
       if (roots.has(p.pid) || shielded(p.pid)) continue;
       const root = rootOf(p.pid);
-      if (root === undefined || !isAgentRoot(root, executables.get(root))) continue;
+      if (root === undefined || !isAgentRoot(root, executables.get(root), origins.get(root))) continue;
       targets.push({ sessionId: tree.sessionId, pid: p.pid, start: p.start });
     }
   }

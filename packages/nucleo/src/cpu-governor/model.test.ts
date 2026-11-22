@@ -12,6 +12,12 @@ const proc = (pid: number, ppid: number, start = START): ProcessSample => ({ pid
 const tree = (sessionId: string, rootPids: number[], processes: ProcessSample[]): SessionTree => ({ sessionId, cwd: null, rootPids, processes });
 
 const CLAUDE = '/Users/x/Library/Application Support/Claude/claude-code/2.1.326/h/claude.app/Contents/MacOS/claude';
+/** #720/AC-3: A Claude Code session on Linux: comm is the truncated version, the real executable sits in `<config>/remote/ccd-cli/`. */
+const CONFIG = '/home/someone/.claude';
+const LINUX_COMM = '2.1.326-3eec682';
+const CCD_CLI = `${CONFIG}/remote/ccd-cli/2.1.326-3eec682dec28`;
+/** #720/AC-3: A Mac session as registered: comm is the full path of argv[0] under the user's Application Support. */
+const MAC_COMM = '/Users/someone/Library/Application Support/Claude/claude-code/2.1.326/c4434d650cb3/claude.app/Contents/MacOS/claude';
 /** #720/AC-5: Every root pid of the trees below runs a real `claude`, unless a test says otherwise. */
 const claudeAt = (...pids: number[]): Map<number, string> => new Map(pids.map((pid) => [pid, CLAUDE]));
 
@@ -135,5 +141,59 @@ describe('#720/AC-5 only a pid above 1 whose executable is claude or codex roots
   test('#720/AC-5 Given the refused roots of the trees, Then each is named by session, pid and start, and a claude root is not', () => {
     const t = tree('s1', [100, 200], [proc(100, 1), proc(200, 1, 'Sat Nov 21 23:00:00 2026'), proc(201, 200)]);
     assert.deepEqual(refusedRoots([t], new Map([[100, CLAUDE], [200, '/bin/zsh']])), [{ sessionId: 's1', pid: 200, start: 'Sat Nov 21 23:00:00 2026' }]);
+  });
+});
+
+describe('#720/AC-3 a Claude Code session on Linux is rooted by its real executable in <config>/remote/ccd-cli/', () => {
+  const linuxTree = () => tree('s1', [100], [proc(100, 1), proc(101, 100), proc(102, 101)]);
+  const origin = (image: string | undefined, configDir = CONFIG) => new Map([[100, image === undefined ? { configDir } : { configDir, image }]]);
+
+  test('#720/AC-3 Given a Linux root whose comm is a version and whose executable is in <config>/remote/ccd-cli/, Then its descendants are targets', () => {
+    assert.equal(isAgentRoot(100, LINUX_COMM, { configDir: CONFIG, image: CCD_CLI }), true);
+    assert.deepEqual(targetsOf([linuxTree()], new Set(), new Map([[100, LINUX_COMM]]), origin(CCD_CLI)).map((x) => x.pid), [101, 102]);
+    assert.deepEqual(refusedRoots([linuxTree()], new Map([[100, LINUX_COMM]]), origin(CCD_CLI)), []);
+  });
+
+  test('#720/AC-3 Given a Mac root as registered, Then its comm basename claude still roots the session', () => {
+    assert.equal(isAgentRoot(100, MAC_COMM), true);
+    assert.deepEqual(targetsOf([linuxTree()], new Set(), new Map([[100, MAC_COMM]]), origin(undefined)).map((x) => x.pid), [101, 102]);
+  });
+});
+
+describe('#720/AC-5 a version-like executable roots a session only inside the ccd-cli folder of its own config folder', () => {
+  const refused = (comm: string, image: string | undefined, configDir = CONFIG, pid = 100) => {
+    const t = tree('s1', [pid], [proc(pid, 1), proc(pid + 1, pid)]);
+    const origins = new Map([[pid, image === undefined ? { configDir } : { configDir, image }]]);
+    return { targets: targetsOf([t], new Set(), new Map([[pid, comm]]), origins), roots: refusedRoots([t], new Map([[pid, comm]]), origins) };
+  };
+
+  test('#720/AC-5 Given claude-desktop, zsh or a version comm with no executable, Then the root is refused', () => {
+    for (const [comm, image] of [['claude-desktop', '/opt/claude-desktop/claude-desktop'], ['zsh', '/usr/bin/zsh'], [LINUX_COMM, undefined]] as const) {
+      const r = refused(comm, image);
+      assert.deepEqual(r.targets, [], comm);
+      assert.deepEqual(r.roots.map((x) => x.pid), [100], comm);
+    }
+  });
+
+  test('#720/AC-5 Given pid 1 with an executable in the ccd-cli folder, Then the root is refused', () => {
+    assert.equal(isAgentRoot(1, LINUX_COMM, { configDir: CONFIG, image: CCD_CLI }), false);
+    assert.deepEqual(refused(LINUX_COMM, CCD_CLI, CONFIG, 1).targets, []);
+  });
+
+  test('#720/AC-5 Given a version basename outside <config>/remote/ccd-cli/, Then the root is refused', () => {
+    for (const image of ['/tmp/2.1.326-3eec682dec28', `${CONFIG}/remote/2.1.326-3eec682dec28`, `${CONFIG}/remote/ccd-cli/sub/2.1.326-3eec682dec28`, `${CONFIG}/remote/ccd-cli/../x/2.1.326-3eec682dec28`, `${CONFIG}/remote/ccd-cli/`, 'remote/ccd-cli/2.1.326-3eec682dec28', `/home/someone/.claude-other/remote/ccd-cli/2.1.326-3eec682dec28 (deleted)`.replace('-other', '/../x')]) {
+      assert.deepEqual(refused(LINUX_COMM, image).targets, [], image);
+    }
+  });
+
+  test('#720/AC-5 Given a ccd-cli executable of another config folder than the one whose session file named the pid, Then the root is refused', () => {
+    const r = refused(LINUX_COMM, '/home/someone/.claude-work/remote/ccd-cli/2.1.326-3eec682dec28');
+    assert.deepEqual(r.targets, []);
+    assert.deepEqual(r.roots.map((x) => x.pid), [100]);
+  });
+
+  test('#720/AC-5 Given no origin for the root, Then a version comm is refused', () => {
+    const t = tree('s1', [100], [proc(100, 1), proc(101, 100)]);
+    assert.deepEqual(targetsOf([t], new Set(), new Map([[100, LINUX_COMM]])), []);
   });
 });

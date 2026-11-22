@@ -8,7 +8,7 @@
 // mtime changes. Only the fields below are kept; the rest of the JSON is ignored.
 
 import { readdir, readFile, stat } from 'node:fs/promises';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { SESSION_ID_PATTERN, type LiveProcess, type LiveProcessReader } from './session-open.ts';
 
 export interface LiveProcessesOptions {
@@ -97,7 +97,7 @@ export class LiveClaudeProcesses implements LiveProcessReader {
         }
         seen.add(path);
         if (this.files.get(path)?.mtimeMs === mtimeMs) continue;
-        this.files.set(path, { mtimeMs, proc: await read(path, Number(m[1])) });
+        this.files.set(path, { mtimeMs, proc: await read(path, Number(m[1]), dirname(dir)) });
       }
     }
     for (const path of [...this.files.keys()]) if (!seen.has(path)) this.files.delete(path);
@@ -110,12 +110,12 @@ export class LiveClaudeProcesses implements LiveProcessReader {
 }
 
 /** One `<pid>.json`: the pid in the name must be the one inside, and the session id the UUID. */
-async function read(path: string, pidFromName: number): Promise<LiveProcess | null> {
+async function read(path: string, pidFromName: number, configDir: string): Promise<LiveProcess | null> {
   try {
     const o = JSON.parse(await readFile(path, 'utf8')) as Record<string, unknown>;
     const sessionId = str(o.sessionId, 64);
     if (o.pid !== pidFromName || !sessionId || !SESSION_ID_PATTERN.test(sessionId)) return null;
-    return { pid: pidFromName, sessionId, cwd: str(o.cwd, 4096), procStart: str(o.procStart, 64) };
+    return { pid: pidFromName, sessionId, cwd: str(o.cwd, 4096), procStart: str(o.procStart, 64), configDir };
   } catch {
     return null;
   }

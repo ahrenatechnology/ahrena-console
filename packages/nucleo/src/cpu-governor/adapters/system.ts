@@ -4,14 +4,16 @@
  * read for what it means (`denied`, `gone`, `failed`) and only that goes up.
  *
  * - `ps comm=` gives each pid's argv[0] (a full path on macOS, the process name on Linux), not the executable image; it is read
- *   last on its line so a path with spaces stays whole. The governor roots a session only when its basename is `claude` or
+ *   last on its line so a path with spaces stays whole. The governor roots a session when its basename is `claude` or
  *   `codex` (#720/AC-5); the value never goes to a log.
+ * - On Linux a Claude Code session's comm is a truncated version, so the real executable of each registered root pid is read
+ *   with `readlink /proc/<pid>/exe` (no exec) and handed up with the config folder of the session file (#720/AC-3).
  */
 
 import { execFile } from 'node:child_process';
 import { attributeProcesses, normalizeStart, type ProcessSample, type RegisteredSession, type StartCheck } from '../../diagnosis/attribution.ts';
 import { parsePsTree } from '../../diagnosis/adapters/parsers.ts';
-import { NICE_TARGET } from '../model.ts';
+import { NICE_TARGET, type RootOrigin } from '../model.ts';
 import type { ChangeOutcome, MachineControl, Observation } from '../governor.ts';
 
 export type ExecResult = { ok: true; stdout: string } | { ok: false; outcome: ChangeOutcome };
@@ -44,6 +46,8 @@ export interface MachineControlDeps {
   registered(): Promise<RegisteredSession[]>;
   /** #723: The collector's check of a registered `procStart` against the real start, for this OS (`DiagnosisCollector.startCheck`). */
   startCheck(registry: readonly RegisteredSession[], samples: readonly ProcessSample[]): Promise<StartCheck>;
+  /** #720/AC-3: The real executable of a pid (Linux: `readlink /proc/<pid>/exe`); `null` when it cannot be read. Only called on Linux, for registered roots. */
+  readImage?(pid: number): Promise<string | null>;
 }
 
 const isPid = (pid: number): boolean => Number.isInteger(pid) && pid > 0 && pid <= 4_194_304;
@@ -61,6 +65,19 @@ function parseNice(stdout: string): { nice: Map<number, number>; executables: Ma
   return { nice, executables };
 }
 
+/** #720/AC-3: The origin of each registered root pid; a pid whose entries name different config folders has none (it cannot be trusted to either). */
+async function originsOf(roots: readonly number[], registry: readonly RegisteredSession[], deps: MachineControlDeps): Promise<Map<number, RootOrigin>> {
+  const origins = new Map<number, RootOrigin>();
+  for (const pid of roots) {
+    const dirs = new Set(registry.filter((e) => e.pid === pid).map((e) => e.configDir));
+    const [configDir] = [...dirs];
+    if (dirs.size !== 1 || configDir === undefined) continue;
+    const image = deps.platform === 'linux' && deps.readImage ? await deps.readImage(pid) : null;
+    origins.set(pid, image ? { configDir, image } : { configDir });
+  }
+  return origins;
+}
+
 export function createMachineControl(deps: MachineControlDeps): MachineControl {
   const change = async (file: string, args: string[]): Promise<ChangeOutcome> => {
     const r = await deps.exec(file, args);
@@ -74,7 +91,8 @@ export function createMachineControl(deps: MachineControlDeps): MachineControl {
       if (samples.length === 0) return null;
       const registry = await deps.registered();
       const attribution = attributeProcesses(samples, registry, await deps.startCheck(registry, samples));
-      return { trees: attribution.sessions, ...parseNice(nice.stdout) };
+      const roots = [...new Set(attribution.sessions.flatMap((t) => t.rootPids))];
+      return { trees: attribution.sessions, ...parseNice(nice.stdout), origins: await originsOf(roots, registry, deps) };
     },
     async inspect(pid) {
       if (!isPid(pid)) return null;

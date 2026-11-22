@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import type { ProcessSample, SessionTree } from '../diagnosis/attribution.ts';
 import { CpuGovernor, type ChangeOutcome, type MachineControl, type Observation } from './governor.ts';
+import type { RootOrigin } from './model.ts';
 
 const START = 'Sat Nov 21 22:00:00 2026';
 const proc = (pid: number, ppid: number, start = START): ProcessSample => ({ pid, ppid, start, command: 'node x', cpuPct: 1 });
@@ -17,6 +18,8 @@ class FakeMachine implements MachineControl {
   nice = new Map<number, number>();
   /** #720/AC-5: The executable `ps comm` gives, by pid; the root of `session` runs a real claude. */
   executables = new Map<number, string>([[ROOT, CLAUDE]]);
+  /** #720/AC-3: The config folder and real executable of each registered root, by pid. */
+  origins = new Map<number, RootOrigin>();
   /** #723: The start `inspect` answers, by pid; a pid absent here is gone. */
   starts = new Map<number, string>();
   calls: string[] = [];
@@ -27,7 +30,7 @@ class FakeMachine implements MachineControl {
   async sample(): Promise<Observation | null> {
     this.sampleCalls += 1;
     if (this.gate) await this.gate;
-    return { trees: this.trees, nice: this.nice, executables: this.executables };
+    return { trees: this.trees, nice: this.nice, executables: this.executables, origins: this.origins };
   }
   async inspect(pid: number) {
     const start = this.starts.get(pid);
@@ -440,5 +443,29 @@ describe('#720/AC-5 the governor roots a session only in a claude or codex execu
     machine.trees = trees;
     await tick();
     assert.equal(logs.length, 2);
+  });
+});
+
+describe('#720/AC-3 the governor governs a Linux Claude Code session rooted in <config>/remote/ccd-cli/', () => {
+  const CONFIG = '/home/someone/.claude';
+  const CCD_CLI = `${CONFIG}/remote/ccd-cli/2.1.326-3eec682dec28`;
+
+  test('#720/AC-3 Given a Linux root whose comm is a version and whose executable is in ccd-cli, Then its descendants are reniced', async () => {
+    const { machine, tick } = setup({ platform: 'linux' });
+    machine.session([101]);
+    machine.executables = new Map([[ROOT, '2.1.326-3eec682']]);
+    machine.origins = new Map([[ROOT, { configDir: CONFIG, image: CCD_CLI }]]);
+    await tick();
+    assert.deepEqual(machine.calls, ['renice 101']);
+  });
+
+  test('#720/AC-5 Given a ccd-cli executable of another config folder than the session file, Then nothing is touched and the root is logged once by pid', async () => {
+    const { machine, tick, logs } = setup({ platform: 'linux' });
+    machine.session([101]);
+    machine.executables = new Map([[ROOT, '2.1.326-3eec682']]);
+    machine.origins = new Map([[ROOT, { configDir: '/home/someone/.claude-work', image: CCD_CLI }]]);
+    await tick();
+    assert.deepEqual(machine.calls, []);
+    assert.deepEqual(logs, [`cpu-governor root refused: pid=${ROOT}`]);
   });
 });

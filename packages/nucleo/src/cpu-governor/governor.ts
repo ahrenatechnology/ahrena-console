@@ -3,7 +3,8 @@
  * the descendants of an agent session: `renice 10` when their nice is below 10, and in `containing` mode on a Mac also
  * `taskpolicy -b`. Everything it touches goes through `MachineControl`, so the loop is tested with a double.
  *
- * - A session root is only a pid above 1 whose argv[0] basename (`ps comm`) is `claude` or `codex`; any other root is refused (no target in its
+ * - A session root is only a pid above 1 whose argv[0] basename (`ps comm`) is `claude` or `codex`, or (Linux) whose real executable
+ *   sits in `<configDir>/remote/ccd-cli/` of the config folder that registered it (#720/AC-3); any other root is refused (no target in its
  *   tree) and logged once by pid, never by its command or path (#720/AC-5).
  * - It only raises nice (never lowers), never uses sudo, never ends a process (#647), and undoes only what it set itself:
  *   `taskpolicy -B` on the pids it put under `-b`; the nice stays, because lowering it needs privilege.
@@ -14,7 +15,7 @@
  */
 
 import { normalizeStart, type SessionTree } from '../diagnosis/attribution.ts';
-import { initialPressure, nextPressure, NICE_TARGET, refusedRoots, targetsOf, type GovernorState, type LoadReading, type Pressure, type Target } from './model.ts';
+import { initialPressure, nextPressure, NICE_TARGET, refusedRoots, targetsOf, type GovernorState, type LoadReading, type Pressure, type RootOrigin, type Target } from './model.ts';
 
 export type ChangeOutcome = 'done' | 'denied' | 'gone' | 'failed';
 
@@ -24,6 +25,8 @@ export interface Observation {
   nice: ReadonlyMap<number, number>;
   /** #720/AC-5: The argv[0] basename of every pid (`ps comm`), to tell a `claude` or `codex` root from anything else. */
   executables: ReadonlyMap<number, string>;
+  /** #720/AC-3: By registered root pid: the config folder of its session file and, on Linux, its real executable. */
+  origins: ReadonlyMap<number, RootOrigin>;
 }
 
 /** The only commands the governor runs, each with a fixed argv, no shell, no sudo. */
@@ -139,7 +142,7 @@ export class CpuGovernor {
     if (before === 'containing' && this.pressure.mode === 'normal') await this.release();
 
     this.logRefused(observation);
-    const targets = targetsOf(observation.trees, new Set([this.d.selfPid]), observation.executables);
+    const targets = targetsOf(observation.trees, new Set([this.d.selfPid]), observation.executables, observation.origins);
     this.forget(targets);
     await this.pruneBackground(targets);
     for (const target of targets) {
@@ -158,7 +161,7 @@ export class CpuGovernor {
 
   /** #720/AC-5: Logs each refused root once, by pid; an entry that left the sample is forgotten, so it is logged again if it returns. */
   private logRefused(observation: Observation): void {
-    const now = new Map(refusedRoots(observation.trees, observation.executables).map((r) => [keyOf(r.pid, r.start), r.pid]));
+    const now = new Map(refusedRoots(observation.trees, observation.executables, observation.origins).map((r) => [keyOf(r.pid, r.start), r.pid]));
     for (const key of this.refused) if (!now.has(key)) this.refused.delete(key);
     for (const [key, pid] of now) {
       if (this.refused.has(key)) continue;
