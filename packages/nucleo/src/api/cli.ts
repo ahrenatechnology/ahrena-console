@@ -22,6 +22,7 @@ import { availableParallelism, homedir, loadavg, tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { HELP, parseApiOptions } from './cli-options.ts';
+import { launchdLoaded } from '../memory/launchd-probe.ts';
 import { openPermissionDeps } from '../permissions/adapters/deps.ts';
 import { sweepOnStart } from '../permissions/expire-due.ts';
 import { openSqliteStorage } from '../adapters/sqlite/sqlite-storage.ts';
@@ -819,8 +820,8 @@ const memoryActions =
           binaryPath: embeddedAiMemoryPath(),
           home: homedir(),
           uid: () => process.getuid?.() ?? null,
-          // (#740) The fixed argv `launchctl print <target>`, no shell: loaded only when it exits 0.
-          launchdLoaded: async (target) => (await systemRunner('/bin/launchctl', ['print', target])) !== null,
+          // (#740) Loaded only when `launchctl print <target>` exits 0.
+          launchdLoaded,
           // (#740) The name of each account is the registry's label, the one the screens show.
           accountFolders: () => registryAccounts(profiles, accounts),
           files: createMemoryActionFiles(),
