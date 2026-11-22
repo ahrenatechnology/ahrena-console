@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Ahrena Console core API",
-    "version": "1.0.0",
+    "version": "2.0.0",
     "description": "The HTTP API of the Ahrena Console core, on loopback. This file is the contract: it is authored, the code is validated against it (a test proves that the routes served and the routes declared are the same set, and that the agent view and the diagnosis answer what it declares), and a pull request that breaks it needs a new major version. Operations whose response is still the minimal placeholder `{ type: object }` are the debt listed in core-api.legacy.json, which only shrinks.",
     "license": {
       "name": "Apache-2.0",

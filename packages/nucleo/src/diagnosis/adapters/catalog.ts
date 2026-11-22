@@ -36,7 +36,8 @@ export const CATALOG = {
   ps: { command: 'ps', args: ['-axo', 'pid=,pcpu=,rss=,lstart=,comm='], timeoutMs: 8_000, maxBytes: 4 * MB },
   /**
    * Every process with its parent, for the attribution to sessions (#722): pid, ppid, CPU%, start time and the full command line.
-   * `TZ=UTC` because Claude Code writes `procStart` in UTC and the start is compared as text; the command line stays inside the core,
+   * `TZ=UTC` so the start has one form on every machine; on macOS `lstartMatches` compares it as text with `procStart`, on Linux
+   * `procStart` is clock ticks and the Linux adapter checks it against `/proc` instead. The command line stays inside the core,
    * only the few words of `rootCommandOf` leave it.
    */
   'ps-tree': { command: 'ps', args: ['-axo', 'pid=,ppid=,pcpu=,lstart=,args='], timeoutMs: 8_000, maxBytes: 8 * MB, env: { TZ: 'UTC' } },
