@@ -7,6 +7,9 @@ import { join } from 'node:path';
 import { describe, test } from 'node:test';
 import { createMemoryActions, MEMORY_ACTIONS, type MemoryActionId, type MemoryActions, type MemoryNotOffered } from './actions.ts';
 import { ACCOUNT_A, ACCOUNT_B, BINARY, harness, LABEL, type Harness } from './mocks/actions-harness.ts';
+import { Accounts } from '../api/accounts.ts';
+import { registryAccounts } from '../api/memory-account-names.ts';
+import type { ProviderAccount } from '../model.ts';
 import { createMemoryActionFiles } from '../tools/memory-config-file.ts';
 
 async function planOf(actions: MemoryActions, id: MemoryActionId) {
@@ -179,7 +182,7 @@ describe('#740/AC-2 #740/AC-3 the steps of activate, in order', () => {
     assert.equal(job.step, 4);
     assert.equal(plan.steps[job.step]!.account, 1);
     assert.equal(plan.accounts[plan.steps[job.step]!.account!]!.dir, h.b);
-    assert.ok(job.output.includes(`Falhou no passo 5 de 5 (conta ${ACCOUNT_B}, saída 3).`), job.output.join('|'));
+    assert.ok(job.output.includes(`Falhou no passo 5 de 5 (${ACCOUNT_B}, saída 3).`), job.output.join('|'));
     assert.equal(h.sp.calls.length, 4, 'init, auth enable and both setups ran; nothing after');
   });
 
@@ -187,16 +190,34 @@ describe('#740/AC-2 #740/AC-3 the steps of activate, in order', () => {
     const h = harness({ exit: (call) => (call.args.includes('setup') ? 6 : 0) });
     const { job } = await confirmed(h, 'activate');
     assert.equal(job.step, 3);
-    assert.ok(job.output.includes(`Falhou no passo 4 de 5 (conta ${ACCOUNT_A}, saída 6).`), job.output.join('|'));
+    assert.ok(job.output.includes(`Falhou no passo 4 de 5 (${ACCOUNT_A}, saída 6).`), job.output.join('|'));
     const shown = JSON.stringify(job);
     for (const path of [h.a, h.b, h.home]) assert.equal(shown.includes(path), false, 'the job carries no account folder');
+  });
+
+  test('#740/AC-3 Given an account whose registry name is "x@y\'s Organization", When its setup fails, Then neither the failure line nor the job carries an "@" and the line gives the account label', async () => {
+    const personal = { id: 'u/o', organizationName: "x@y's Organization", label: null } as ProviderAccount;
+    const accounts = new Accounts({ storage: { listAccounts: async () => [personal] }, file: null });
+    const registry = (a: string, b: string) => registryAccounts({ list: async () => [{ dir: a, accountId: 'u/o' }, { dir: b, accountId: null }] }, accounts);
+    const h = harness({ registry, exit: (call) => (call.args.includes('setup') ? 6 : 0) });
+    const { job } = await confirmed(h, 'activate');
+    assert.ok(job.output.includes('Falhou no passo 4 de 5 (conta pessoal, saída 6).'), job.output.join('|'));
+    assert.equal(job.output.join('\n').includes('@'), false, 'the failure line has no e-mail');
+    assert.equal(JSON.stringify(job).includes('@'), false, 'the job has no e-mail');
+  });
+
+  test('#740/AC-3 Given a registry name with an "@" or none, When its setup fails, Then the line says "conta N" by the account\'s place', async () => {
+    const h = harness({ registry: async (a, b) => [{ dir: a, name: "x@y's Organization" }, { dir: b, name: '' }], exit: (call) => (call.args.includes('setup') ? 6 : 0) });
+    const { job } = await confirmed(h, 'activate');
+    assert.ok(job.output.includes('Falhou no passo 4 de 5 (conta 1, saída 6).'), job.output.join('|'));
+    assert.equal(JSON.stringify(job).includes('@'), false);
   });
 
   test('#740/AC-3 Given the uninstall of the second account fails, When deactivate runs, Then the failure line names that account', async () => {
     const h = harness({ exit: (call) => (call.args.includes('uninstall') && (call.options.env as NodeJS.ProcessEnv).CLAUDE_CONFIG_DIR === h.b ? 5 : 0) });
     const { job } = await confirmed(h, 'deactivate');
     assert.equal(job.state, 'failed');
-    assert.ok(job.output.includes(`Falhou no passo 2 de 2 (conta ${ACCOUNT_B}, saída 5).`), job.output.join('|'));
+    assert.ok(job.output.includes(`Falhou no passo 2 de 2 (${ACCOUNT_B}, saída 5).`), job.output.join('|'));
   });
 
   test('#740/AC-3 Given init fails, When activate runs, Then the job fails at step 1 and nothing else runs', async () => {

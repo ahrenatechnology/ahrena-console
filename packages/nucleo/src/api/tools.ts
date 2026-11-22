@@ -104,7 +104,8 @@ function visibleBatch(all: JobsView<ToolJob>, visible: Pick<JobsView<ToolJob>, '
   const hiddenQueued = all.queue.length - visible.queue.length;
   const batchEnded = all.recent.slice(0, batch.done);
   const hiddenEnded = batchEnded.length - batchEnded.filter((job) => job.toolId !== LOCAL_ONLY_TOOL).length;
-  // An ended job that already left `recent` could have been the local-only tool's: the count is not told apart (#740/ACC-8).
+  // Accepted behaviour (#740): when `batch.done` is above `recent.length`, an ended job already left `recent` and could have been the local-only tool's,
+  // so the remote's `batch` becomes null instead of a count that might include it (#740).
   if (batch.done > all.recent.length) return null;
   const total = batch.total - hiddenCurrent - hiddenQueued - hiddenEnded;
   return total > 0 ? { total, done: batch.done - hiddenEnded } : null;

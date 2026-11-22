@@ -193,9 +193,9 @@ interface MachineJobs {
   afterCurrent: (() => void)[];
 }
 
-/** `Falhou no passo 5 de 5 (conta Trabalho, saída 3).`: the account only for a step that has one, the exit code only when there is one (#740). */
+/** `Falhou no passo 5 de 5 (conta Trabalho, saída 3).`: the account's label as given, only for a step that has one, the exit code only when there is one (#740). */
 function failureLine(index: number, total: number, account: string | undefined, code: number | null): string {
-  const where = [account === undefined ? null : `conta ${account}`, code === null ? null : `saída ${code}`].filter((part) => part !== null);
+  const where = [account ?? null, code === null ? null : `saída ${code}`].filter((part) => part !== null);
   return `Falhou no passo ${index + 1} de ${total}${where.length === 0 ? '' : ` (${where.join(', ')})`}.`;
 }
 

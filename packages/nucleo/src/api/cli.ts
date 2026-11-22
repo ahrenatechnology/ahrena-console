@@ -87,6 +87,7 @@ import { seedHistory } from '../simulator/history.ts';
 import { demoLocal, seedDetail } from '../simulator/detail.ts';
 import { mountDemoAgentConfig, knownProjects } from '../agent-config/index.ts';
 import { createAgentConfigRoute } from './agent-config.ts';
+import { registryAccounts } from './memory-account-names.ts';
 import { Accounts } from './accounts.ts';
 import { DecisoesDaUi } from './decisions-ui.ts';
 import { QuadroKanban } from './kanban.ts';
@@ -818,8 +819,8 @@ const memoryActions =
           binaryPath: embeddedAiMemoryPath(),
           home: homedir(),
           uid: () => process.getuid?.() ?? null,
-          // (#740) The account's name is its organization's; with none, the empty name makes the failure line say the account's place in the registry.
-          accountFolders: async () => (await profiles.list()).map((profile) => ({ dir: profile.dir, name: profile.account?.organizationName ?? '' })),
+          // (#740) The name of each account is the registry's label, the one the screens show.
+          accountFolders: () => registryAccounts(profiles, accounts),
           files: createMemoryActionFiles(),
           labels: MEMORY_LABELS,
           log,

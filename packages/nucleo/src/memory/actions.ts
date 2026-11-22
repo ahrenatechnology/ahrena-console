@@ -121,10 +121,10 @@ const KEEPS = ['config.toml', 'access-credentials', 'logs'];
 const CONFIG_FILE = 'config.toml';
 const ACCOUNT_NAME_MAX = 60;
 
-/** The name the failure line gives an account: the registry's, cleaned and capped, or `N` by its place when it has none; never a path (#740). */
+/** The name the failure line gives an account: the registry's label, cleaned and capped, or "conta N" by its place when it has none or it carries an e-mail; never a path (#740). */
 function accountName(name: string, index: number): string {
   const clean = name.replace(/\p{C}/gu, ' ').replace(/\s+/g, ' ').trim().slice(0, ACCOUNT_NAME_MAX);
-  return clean === '' ? String(index + 1) : clean;
+  return clean === '' || clean.includes('@') ? `conta ${index + 1}` : clean;
 }
 const DATA_DIR_OPTION = '--data-dir';
 
