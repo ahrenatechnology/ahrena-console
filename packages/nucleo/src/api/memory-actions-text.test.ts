@@ -39,6 +39,11 @@ describe('#740/AC-1 the consent text of activate', () => {
     assert.match(text, /embeddings/i);
   });
 
+  test('#740/AC-1 Then it says the listed accounts share a single memory, so what one session captures can be read by the others', () => {
+    assert.match(text, /compartilham uma única memória/, 'one shared memory');
+    assert.match(text, /o que uma sessão captura pode ser lido pelas outras/, 'readable across sessions');
+  });
+
   test('#740/AC-1 Given no known data folder, Then the text still says where it lives without a path', () => {
     const generic = consentText(null).join('\n');
     assert.match(generic, /pasta de dados do ai-memory/i);

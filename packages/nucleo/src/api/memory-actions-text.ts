@@ -38,6 +38,7 @@ export function consentText(dataDir: string | null): string[] {
   return [
     'O que é capturado: o texto dos seus prompts, as respostas e o uso de ferramentas das sessões do Claude Code das contas listadas passam a ser gravados como memória.',
     `Onde fica: neste computador, ${where}.`,
+    'As contas listadas compartilham uma única memória: o que uma sessão captura pode ser lido pelas outras.',
     'Por padrão, todos os repositórios são capturados. Para tirar da captura o uso de ferramentas em caminhos de um repositório, crie nele o marcador .ai-memory.toml com [capture] ignore_paths (os prompts continuam sendo capturados); para capturar só os repositórios escolhidos, use o modo lista permitida (ai-memory install-hooks --apply --capture-mode allowlist), e só os repositórios com o marcador são capturados.',
     'Nada é baixado: os embeddings ficam desligados, então o primeiro início não baixa nenhum modelo.',
   ];
