@@ -7,9 +7,11 @@
  *   stays below `RELEASE_BELOW` of the cores for `RELEASE_AFTER_MS`. The load between the two thresholds keeps the mode.
  * - A session's root pid is never a target, even when it is listed in `SessionTree.processes`, and neither is the core itself
  *   or anything that descends from it: the core can have been started from a session.
- * - A root counts only when its pid is above 1 and its executable (`ps comm`) has the basename `claude` or `codex`
+ * - A root counts only when its pid is above 1 and the argv[0] basename `ps comm` reports is `claude` or `codex`
  *   (`isAgentRoot`, #720/AC-5): the registry file is data a person can write, so a `1.json` or a root running anything else
  *   yields no target, whatever descends from it.
+ * - Residual risk, accepted: on macOS `ps comm` is argv[0], not the executable image, so a same-user process that sets its
+ *   argv[0] to `claude` or `codex` and has a forged registry entry gets its own descendants governed; pid 1 and the Desktop stay safe.
  */
 
 import type { SessionTree } from '../diagnosis/attribution.ts';
@@ -69,12 +71,12 @@ export interface Target {
   start: string;
 }
 
-/** The executables a session may be rooted in: the segment after the last `/` of `ps comm`, exactly. */
+/** #720/AC-5: The argv[0] basenames a session may be rooted in: the segment after the last `/` of `ps comm`, exactly. */
 const AGENT_EXECUTABLES: ReadonlySet<string> = new Set(['claude', 'codex']);
 
 /**
  * #720/AC-5: Whether a registered pid may root a session: above pid 1 (so never launchd or init) and running a `claude` or
- * `codex` executable by its basename, not by a substring of a path or a command line. No executable is not a root.
+ * `codex` argv[0] by its basename (as `ps comm` reports it), not by a substring of a path or a command line. No `comm` is not a root.
  */
 export function isAgentRoot(pid: number, executable: string | undefined): boolean {
   if (!Number.isInteger(pid) || pid <= 1 || executable === undefined) return false;

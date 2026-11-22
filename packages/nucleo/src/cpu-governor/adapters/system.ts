@@ -3,9 +3,9 @@
  * with a fixed argv through `execFile` (no shell, no sudo). The tools' own text never leaves this file: a failed run is
  * read for what it means (`denied`, `gone`, `failed`) and only that goes up.
  *
- * - `ps comm=` gives each pid's executable (the full path on macOS, the process name on Linux), read last on its line so a
- *   path with spaces stays whole. The governor roots a session only in a `claude` or `codex` executable (#720/AC-5); the
- *   executable never goes to a log.
+ * - `ps comm=` gives each pid's argv[0] (a full path on macOS, the process name on Linux), not the executable image; it is read
+ *   last on its line so a path with spaces stays whole. The governor roots a session only when its basename is `claude` or
+ *   `codex` (#720/AC-5); the value never goes to a log.
  */
 
 import { execFile } from 'node:child_process';
@@ -48,7 +48,7 @@ export interface MachineControlDeps {
 
 const isPid = (pid: number): boolean => Number.isInteger(pid) && pid > 0 && pid <= 4_194_304;
 
-/** `pid nice comm` per line; `comm` is the rest of the line, spaces included. */
+/** #720/AC-5: `pid nice comm` per line; `comm` (argv[0]) is the rest of the line, spaces included. */
 function parseNice(stdout: string): { nice: Map<number, number>; executables: Map<number, string> } {
   const nice = new Map<number, number>();
   const executables = new Map<number, string>();

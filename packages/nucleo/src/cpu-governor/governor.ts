@@ -3,7 +3,7 @@
  * the descendants of an agent session: `renice 10` when their nice is below 10, and in `containing` mode on a Mac also
  * `taskpolicy -b`. Everything it touches goes through `MachineControl`, so the loop is tested with a double.
  *
- * - A session root is only a pid above 1 running a `claude` or `codex` executable; any other root is refused (no target in its
+ * - A session root is only a pid above 1 whose argv[0] basename (`ps comm`) is `claude` or `codex`; any other root is refused (no target in its
  *   tree) and logged once by pid, never by its command or path (#720/AC-5).
  * - It only raises nice (never lowers), never uses sudo, never ends a process (#647), and undoes only what it set itself:
  *   `taskpolicy -B` on the pids it put under `-b`; the nice stays, because lowering it needs privilege.
@@ -22,7 +22,7 @@ export type ChangeOutcome = 'done' | 'denied' | 'gone' | 'failed';
 export interface Observation {
   trees: readonly SessionTree[];
   nice: ReadonlyMap<number, number>;
-  /** #720/AC-5: The executable of every pid (`ps comm`), to tell a `claude` or `codex` root from anything else. */
+  /** #720/AC-5: The argv[0] basename of every pid (`ps comm`), to tell a `claude` or `codex` root from anything else. */
   executables: ReadonlyMap<number, string>;
 }
 
