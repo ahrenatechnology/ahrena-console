@@ -1,6 +1,8 @@
-// The core's memory module, skeleton (#727): what the core reads from the embedded ai-memory, and only
-// through its local CLI (the runner), field by field (the readers). No route, no write action: setup
-// without --plan, serve, start, stop, deactivate and delete are not here (#719).
+/*
+ * The core's memory module, skeleton (#727): what the core reads from the embedded ai-memory, and only
+ * through its local CLI (the runner), field by field (the readers). No route, no write action: setup
+ * without --plan, serve, start, stop, deactivate and delete are not here (#719).
+ */
 
 import { embeddedAiMemoryPath } from '../tools/embedded-ai-memory.ts';
 import { MemoryReadError, readSetupPlan, readVersion, type MemorySetupPlan, type MemoryVersion } from './readers.ts';
@@ -47,7 +49,7 @@ export function createMemoryModule(options: MemoryModuleOptions): MemoryModule {
     async status() {
       const result = await runner.run('status');
       if (result.kind === 'unavailable') return { state: 'unavailable' };
-      if (result.kind === 'exit') return { state: 'stopped' };
+      if (result.kind === 'exit' && result.code !== null) return { state: 'stopped' };
       if (result.kind === 'ok') return { state: 'running' };
       return { state: 'unknown' };
     },

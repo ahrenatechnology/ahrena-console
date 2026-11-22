@@ -4,12 +4,13 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
 import { describe, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { fakeSpawn, turn } from './fake-child.ts';
-import { createMemoryModule } from './memory.ts';
+import { fakeSpawn, turn } from '../src/memory/mocks/fake-child.ts';
+import { createMemoryModule } from '../src/memory/memory.ts';
 
-const MEMORY_DIR = dirname(fileURLToPath(import.meta.url));
-const SRC_DIR = join(MEMORY_DIR, '..');
-const REPO_ROOT = join(SRC_DIR, '..', '..', '..');
+const THIS_FILE = fileURLToPath(import.meta.url);
+const TEST_DIR = dirname(THIS_FILE);
+const MEMORY_DIR = join(TEST_DIR, '..', 'src', 'memory');
+const REPO_ROOT = join(TEST_DIR, '..', '..', '..');
 const FAKE_TOKEN = 'fake-token-0000-not-real';
 
 function files(dir: string, keep: (path: string) => boolean): string[] {
@@ -24,13 +25,16 @@ function files(dir: string, keep: (path: string) => boolean): string[] {
 }
 
 const isSource = (path: string) => /\.(ts|tsx|mts|mjs|js)$/.test(path);
-const isTest = (path: string) => /\.test\.[a-z]+$/.test(path) || /fake-child\.ts$/.test(path);
-const memorySources = () => files(MEMORY_DIR, (p) => isSource(p) && !isTest(p));
+const isTest = (path: string) => /\.test\.[a-z]+$/.test(path) || /\/mocks\//.test(path);
+const memorySources = (): string[] => {
+  const found = files(MEMORY_DIR, (p) => isSource(p) && !isTest(p));
+  assert.ok(found.length >= 3, 'the scan found the module files (#727)');
+  return found;
+};
 
 describe('#719/AC-10 the module never reads the ai-memory token (#727/AC-4)', () => {
   test('#719/AC-10 no non-test file of the module names auth-tokens/ or an auth-token file', () => {
     const sources = memorySources();
-    assert.ok(sources.length >= 3, 'the scan found the module files');
     for (const path of sources) {
       const text = readFileSync(path, 'utf8');
       assert.equal(/auth-tokens?/i.test(text), false, `${relative(MEMORY_DIR, path)} names an auth-token path`);
@@ -86,21 +90,25 @@ describe('#719/AC-10 the module never reads the ai-memory token (#727/AC-4)', ()
 });
 
 describe('#719/AC-11 nothing from the memory module leaves the machine (#727/AC-5)', () => {
-  // The proof is structural (#727/AC-5). The hub has no code yet (decision 0002) and the one outbound path that
-  // exists is the OTLP observer; a payload can carry a field of the module only if the code that
-  // builds it can reach the module. So: no module outside memory/ imports it, but the ones listed
-  // here. The list is empty today; adding a name to it is a review decision, and it may never hold
-  // observability, telemetry, a hub or a remote sender.
+  /*
+   * The proof is structural (#727/AC-5). The hub has no code yet (decision 0002) and the one outbound path that
+   * exists is the OTLP observer; a payload can carry a field of the module only if the code that
+   * builds it can reach the module. So: no module outside memory/ imports it, but the ones listed
+   * here. The list is empty today; adding a name to it is a review decision, and it may never hold
+   * observability, telemetry, a hub or a remote sender.
+   */
   const ALLOWED_IMPORTERS: string[] = [];
   const NEVER_ALLOWED = [/\/observability\//, /\/telemetry\//, /hub/i, /remote/i, /otel/i];
   const SPECIFIER = /(?:\bfrom\s*|\bimport\s*\(\s*|\bimport\s+|\brequire\s*\(\s*)['"]([^'"]+)['"]/g;
 
   function importsOfMemory(): string[] {
     const found: string[] = [];
+    let scanned = 0;
     const roots = [join(REPO_ROOT, 'packages'), join(REPO_ROOT, 'apps')];
     for (const root of roots) {
       for (const path of files(root, (p) => isSource(p) && !p.includes('/node_modules/'))) {
-        if (path.startsWith(`${MEMORY_DIR}/`)) continue;
+        if (path.startsWith(`${MEMORY_DIR}/`) || path === THIS_FILE) continue;
+        scanned += 1;
         const text = readFileSync(path, 'utf8');
         for (const match of text.matchAll(SPECIFIER)) {
           const segments = match[1]!.split('/');
@@ -108,6 +116,7 @@ describe('#719/AC-11 nothing from the memory module leaves the machine (#727/AC-
         }
       }
     }
+    assert.ok(scanned > 100, `the scan found the repository sources, not ${scanned} files (#727)`);
     return [...new Set(found)].sort();
   }
 

@@ -1,7 +1,7 @@
 // The memory module over the runner: version, setup plan and status, as the core asks for them (#727).
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
-import { fakeSpawn, turn } from './fake-child.ts';
+import { fakeSpawn, turn } from './mocks/fake-child.ts';
 import { createMemoryModule } from './memory.ts';
 
 const BINARY = '/Applications/Ahrena Console.app/Contents/Resources/ai-memory/ai-memory';
@@ -60,6 +60,14 @@ describe('memory module (#727/AC-3)', () => {
     assert.deepEqual(calls[0]!.args, ['--data-dir', DATA_DIR, 'status']);
     calls[0]!.child.finish(1, '', 'connection refused');
     assert.deepEqual(await pending, { state: 'stopped' });
+  });
+
+  test('#727/AC-3 a status killed by a signal the runner did not send is "unknown", not "stopped"', async () => {
+    const { memory, calls } = moduleWith();
+    const pending = memory.status();
+    await turn();
+    calls[0]!.child.finish(null);
+    assert.deepEqual(await pending, { state: 'unknown' });
   });
 
   test('#727/AC-3 a status that exits 0 is the state "running"', async () => {

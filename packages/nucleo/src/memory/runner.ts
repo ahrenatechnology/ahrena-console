@@ -1,15 +1,18 @@
-// The runner of the embedded ai-memory (#727, decisions 0012 and 0014 section 3). What it guarantees:
-//
-// - The binary is the embedded one, by absolute path (`embeddedAiMemoryPath`, #725), never a PATH lookup.
-//   With no binary (null) it reports `unavailable` and spawns nothing.
-// - The argv is built only from the constants below plus the `--data-dir` the core fixed; the caller names
-//   a command from a closed list, never an argument.
-// - `spawn(path, args, { shell: false, detached: true, stdio: ['ignore', 'pipe', 'pipe'] })`: its own
-//   process group, standard input closed, the child environment without `AI_MEMORY_AUTH_TOKEN` and
-//   `AHRENA_CONSOLE_*`.
-// - Timeout: SIGTERM to the process group and, after the grace period, SIGKILL to the group.
-// - One call at a time, in order.
-// - Only stdout is read, bounded. Stderr is drained and dropped: never parsed, logged or returned.
+/*
+ * The runner of the embedded ai-memory (#727, decisions 0012 and 0014 section 3). What it guarantees:
+ * - The binary is the embedded one, by absolute path (`embeddedAiMemoryPath`, #725), never a PATH lookup.
+ *   With no binary (null) it reports `unavailable` and spawns nothing.
+ * - The argv is built only from the constants below plus the `--data-dir` the core fixed; the caller names
+ *   a command from a closed list, never an argument.
+ * - `spawn(path, args, { shell: false, detached: true, stdio: ['ignore', 'pipe', 'pipe'] })`: its own
+ *   process group, standard input closed, the child environment without `AI_MEMORY_AUTH_TOKEN` and
+ *   `AHRENA_CONSOLE_*`.
+ * - Timeout: SIGTERM to the process group and, after the grace period, SIGKILL to the group, even when
+ *   the leader closes first, so a descendant that ignores SIGTERM does not outlive the call.
+ * - One call at a time, in order.
+ * - Only stdout is read, bounded. Stderr is drained and dropped: never parsed, logged or returned.
+ * - The log line names the command and the result kind, never stderr, an error's text, a path or env (#727).
+ */
 
 import { spawn as nodeSpawn, type ChildProcess, type SpawnOptions } from 'node:child_process';
 import { isAbsolute } from 'node:path';
@@ -53,6 +56,8 @@ export interface MemoryRunnerOptions {
   spawn?: Spawn;
   /** Signals a process group; tests record it, nothing real is signaled (#727). */
   killGroup?: (pid: number, signal: NodeJS.Signals) => void;
+  /** Internal log; receives the command and the result kind only, never stderr, an error's text, a path or env (#727). */
+  log?: (message: string) => void;
   timeoutMs?: number;
   killGraceMs?: number;
   maxStdoutBytes?: number;
@@ -92,6 +97,7 @@ export function createMemoryRunner(options: MemoryRunnerOptions): MemoryRunner {
   const timeoutMs = options.timeoutMs ?? MEMORY_TIMEOUT_MS;
   const killGraceMs = options.killGraceMs ?? MEMORY_KILL_GRACE_MS;
   const maxStdoutBytes = options.maxStdoutBytes ?? MEMORY_MAX_STDOUT_BYTES;
+  const log = options.log;
   const childEnv = memoryEnv(options.env);
   let tail: Promise<unknown> = Promise.resolve();
 
@@ -107,6 +113,7 @@ export function createMemoryRunner(options: MemoryRunnerOptions): MemoryRunner {
           windowsHide: true,
         });
       } catch {
+        log?.(`memory: ${command} failed spawn`);
         return resolve({ kind: 'failed', reason: 'spawn' });
       }
       const chunks: Buffer[] = [];
@@ -114,11 +121,18 @@ export function createMemoryRunner(options: MemoryRunnerOptions): MemoryRunner {
       let ended: MemoryRunResult | null = null;
       let timer: ReturnType<typeof setTimeout> | null = null;
       let killer: ReturnType<typeof setTimeout> | null = null;
+      let settled = false;
 
-      const settle = (result: MemoryRunResult): void => {
+      // After a terminate the killer stays armed, so SIGKILL reaches the group even when the leader closes first (#727).
+      const settle = (result: MemoryRunResult, keepKiller = false): void => {
+        if (settled) return;
+        settled = true;
         if (timer) clearTimeout(timer);
-        if (killer) clearTimeout(killer);
-        timer = killer = null;
+        timer = null;
+        if (killer && !keepKiller) clearTimeout(killer);
+        if (!keepKiller) killer = null;
+        if (result.kind === 'timeout') log?.(`memory: ${command} timeout`);
+        if (result.kind === 'failed') log?.(`memory: ${command} failed ${result.reason}`);
         resolve(result);
       };
       const terminate = (why: MemoryRunResult): void => {
@@ -140,9 +154,9 @@ export function createMemoryRunner(options: MemoryRunnerOptions): MemoryRunner {
       });
       // Stderr is drained so the child never blocks on it, and dropped (#727).
       child.stderr?.on('data', () => {});
-      child.on('error', () => settle(ended ?? { kind: 'failed', reason: 'spawn' }));
+      child.on('error', () => settle(ended ?? { kind: 'failed', reason: 'spawn' }, ended !== null));
       child.on('close', (code: number | null) => {
-        if (ended) return settle(ended);
+        if (ended) return settle(ended, true);
         if (code === 0) return settle({ kind: 'ok', stdout: Buffer.concat(chunks).toString('utf8') });
         settle({ kind: 'exit', code });
       });

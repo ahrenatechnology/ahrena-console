@@ -1,7 +1,7 @@
 // The memory runner: fixed argv, no shell, closed stdin, bounded stdout, timeout, one at a time (#727).
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
-import { fakeSpawn, turn } from './fake-child.ts';
+import { fakeSpawn, turn } from './mocks/fake-child.ts';
 import { createMemoryRunner, memoryEnv } from './runner.ts';
 
 const BINARY = '/Applications/Ahrena Console.app/Contents/Resources/ai-memory/ai-memory';
@@ -184,7 +184,7 @@ describe('memory runner timeout (#727/AC-1)', () => {
     assert.deepEqual(await pending, { kind: 'timeout' });
   });
 
-  test('#727/AC-1 a child that closes after SIGTERM ends the call as a timeout and no SIGKILL follows', async (t) => {
+  test('#727/AC-1 a child that closes after SIGTERM ends the call as a timeout and SIGKILL still reaches the group after the grace', async (t) => {
     t.mock.timers.enable({ apis: ['setTimeout'] });
     const { runner, calls, signals } = runnerWith({ timeoutMs: 1_000, killGraceMs: 500 });
     const pending = runner.run('version');
@@ -192,8 +192,14 @@ describe('memory runner timeout (#727/AC-1)', () => {
     t.mock.timers.tick(1_000);
     calls[0]!.child.emit('close', null, 'SIGTERM');
     assert.deepEqual(await pending, { kind: 'timeout' });
-    t.mock.timers.tick(5_000);
     assert.deepEqual(signals, [{ pid: 4242, signal: 'SIGTERM' }]);
+    t.mock.timers.tick(499);
+    assert.equal(signals.length, 1);
+    t.mock.timers.tick(1);
+    assert.deepEqual(signals, [
+      { pid: 4242, signal: 'SIGTERM' },
+      { pid: 4242, signal: 'SIGKILL' },
+    ]);
   });
 
   test('#727/AC-1 a call that ends in time clears its timer: no signal is sent', async (t) => {
@@ -205,5 +211,79 @@ describe('memory runner timeout (#727/AC-1)', () => {
     await pending;
     t.mock.timers.tick(10_000);
     assert.deepEqual(signals, []);
+  });
+});
+
+describe('memory runner log (#727, OBS-1)', () => {
+  function logged(extra: Partial<Parameters<typeof createMemoryRunner>[0]> = {}) {
+    const lines: string[] = [];
+    const setup = runnerWith({ log: (message) => lines.push(message), ...extra });
+    return { ...setup, lines };
+  }
+
+  test('#727 a spawn that throws logs the command and the reason, never the error text', async () => {
+    const lines: string[] = [];
+    const runner = createMemoryRunner({
+      binaryPath: BINARY,
+      dataDir: DATA_DIR,
+      log: (message) => lines.push(message),
+      spawn: () => {
+        throw new Error(`boom ${FAKE_TOKEN} ${DATA_DIR}`);
+      },
+    });
+    await runner.run('status');
+    assert.equal(lines.length, 1);
+    assert.match(lines[0]!, /status/);
+    assert.match(lines[0]!, /spawn/);
+    assert.equal(lines.join('\n').includes(FAKE_TOKEN), false);
+    assert.equal(lines.join('\n').includes(DATA_DIR), false);
+  });
+
+  test('#727 a child error event logs the command and the reason, never the error text', async () => {
+    const { runner, calls, lines } = logged();
+    const pending = runner.run('version');
+    await turn();
+    calls[0]!.child.stderr.write(`stderr ${FAKE_TOKEN}`);
+    calls[0]!.child.emit('error', new Error(`ENOENT ${FAKE_TOKEN}`));
+    await pending;
+    assert.equal(lines.length, 1);
+    assert.match(lines[0]!, /version/);
+    assert.equal(lines.join('\n').includes(FAKE_TOKEN), false);
+  });
+
+  test('#727 a timeout logs the command and the kind', async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const { runner, calls, lines } = logged({ timeoutMs: 1_000, killGraceMs: 500 });
+    const pending = runner.run('setup-plan');
+    await turn();
+    t.mock.timers.tick(1_000);
+    calls[0]!.child.emit('close', null, 'SIGTERM');
+    await pending;
+    assert.equal(lines.length, 1);
+    assert.match(lines[0]!, /setup-plan/);
+    assert.match(lines[0]!, /timeout/);
+  });
+
+  test('#727 output past the bound logs the command and the reason, with no stdout or stderr', async () => {
+    const { runner, calls, lines } = logged({ maxStdoutBytes: 10 });
+    const pending = runner.run('version');
+    await turn();
+    calls[0]!.child.stderr.write(`stderr ${FAKE_TOKEN}`);
+    calls[0]!.child.stdout.write(`x${FAKE_TOKEN}`.repeat(10));
+    await turn();
+    calls[0]!.child.emit('close', null, 'SIGTERM');
+    await pending;
+    assert.equal(lines.length, 1);
+    assert.match(lines[0]!, /output-too-large/);
+    assert.equal(lines.join('\n').includes(FAKE_TOKEN), false);
+  });
+
+  test('#727 a successful call logs nothing', async () => {
+    const { runner, calls, lines } = logged();
+    const pending = runner.run('version');
+    await turn();
+    calls[0]!.child.finish(0, 'ai-memory 3.5.1', `stderr ${FAKE_TOKEN}`);
+    await pending;
+    assert.deepEqual(lines, []);
   });
 });

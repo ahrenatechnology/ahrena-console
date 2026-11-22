@@ -1,6 +1,8 @@
-// Field-by-field readers for what the real ai-memory 3.5.1 binary confirmed (#727/AC-3). Each reader
-// builds a new object from the fields it names; anything else in the input is dropped, and an input
-// that does not fit is an error that carries a code, never the input.
+/*
+ * Field-by-field readers for what the real ai-memory 3.5.1 binary confirmed (#727/AC-3). Each reader
+ * builds a new object from the fields it names; anything else in the input is dropped, and an input
+ * that does not fit is an error that carries a code, never the input.
+ */
 
 /** Why a reader refused its input; the error holds the code only (#727). */
 export class MemoryReadError extends Error {
