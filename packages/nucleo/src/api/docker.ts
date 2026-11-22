@@ -32,6 +32,8 @@ import { DOCKER_ACTIONS, PLAN_DIGEST, STACK_NAME, type BlockedReason } from '../
 import { sanitizeDockerView, sanitizeJob, sanitizePlan } from '../docker/remote.ts';
 import type { DockerService } from '../docker/service.ts';
 import { JOB_ID, type CancelJobResult } from '../tools/executor.ts';
+import { openedByRemote } from './owner-auth.ts';
+import { withoutLocalOnlyJobs } from './tools.ts';
 
 export const DOCKER_ROUTE = '/api/docker';
 export const DOCKER_PLAN_ROUTE = '/api/docker/plan';
@@ -129,7 +131,9 @@ export function createDockerRoute(o: DockerRouteOptions): DockerRoute {
       if (path === DOCKER_ROUTE) {
         if (port === undefined) {
           const view = await o.service.view(machine);
-          return view ? send(res, 200, { status: 'ok', ...view }) : send(res, 404, unknownMachine(machine));
+          if (!view) return send(res, 404, unknownMachine(machine));
+          // The embedded ai-memory's jobs stay on the local /ui: a remote credential sees the queue without them (#740/AC-11).
+          return send(res, 200, { status: 'ok', ...view, jobs: openedByRemote(req) ? withoutLocalOnlyJobs(view.jobs) : view.jobs });
         }
         const r = await o.remote!.get(port, DOCKER_ROUTE);
         if (r.kind === 'unreachable') return send(res, 200, { status: 'unreachable', machine, reason: r.reason });

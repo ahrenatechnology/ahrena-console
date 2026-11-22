@@ -81,10 +81,15 @@ export function toolsWriteAllowed(req: IncomingMessage, port: number, acceptNoOr
 // The embedded ai-memory's jobs belong to the local /ui alone: the remote credential neither lists nor cancels them (#740/AC-11).
 const LOCAL_ONLY_TOOL = 'ai-memory';
 
-function withoutLocalOnlyJobs(body: ToolsOverview): ToolsOverview {
+/** The jobs a remote credential may see: the local-only tool's are dropped from the current job, the queue and the recent list. */
+export function withoutLocalOnlyJobs(jobs: JobsView<ToolJob>): JobsView<ToolJob> {
   const keep = (job: ToolJob | null | undefined): boolean => !job || job.toolId !== LOCAL_ONLY_TOOL;
-  const jobs = body.jobs as JobsView<ToolJob>;
-  return { ...body, jobs: { ...jobs, current: keep(jobs.current) ? jobs.current : null, queue: jobs.queue.filter(keep), recent: jobs.recent.filter(keep) } };
+  return { ...jobs, current: keep(jobs.current) ? jobs.current : null, queue: jobs.queue.filter(keep), recent: jobs.recent.filter(keep) };
+}
+
+function overviewWithoutLocalOnlyJobs(body: ToolsOverview): ToolsOverview {
+  // (#740) ToolsOverview types its jobs loosely; the executor fills them as ToolJob, so the narrowing is the executor's own shape.
+  return { ...body, jobs: withoutLocalOnlyJobs(body.jobs as JobsView<ToolJob>) };
 }
 
 export async function respondTools(res: ServerResponse, url: URL, tools: Pick<ToolsControl, 'overview'> | null | undefined, remote = false): Promise<void> {
@@ -93,7 +98,7 @@ export async function respondTools(res: ServerResponse, url: URL, tools: Pick<To
   if (!MACHINE_ID.test(machine)) return send(res, 400, { error: INVALID_MACHINE });
   const body = await tools.overview(machine);
   if (!body) return send(res, 404, { error: `máquina desconhecida: ${machine}` });
-  send(res, 200, remote ? withoutLocalOnlyJobs(body) : body);
+  send(res, 200, remote ? overviewWithoutLocalOnlyJobs(body) : body);
 }
 
 /** A Tools write, reached only after `toolsWriteAllowed`. */

@@ -8,7 +8,9 @@ import type { AddressInfo } from 'node:net';
 import { describe, test } from 'node:test';
 import { OWNER, call, remoteFixture } from '../../test/api/remote-credential-fixture.ts';
 import type { CancelJobResult, ToolJob, ToolsControl } from '../tools/executor.ts';
-import type { ToolsOverview } from '../tools/service.ts';
+import type { JobsView, ToolsOverview } from '../tools/service.ts';
+import { DockerService } from '../docker/service.ts';
+import { createDockerRoute } from './docker.ts';
 import { respondTools } from './tools.ts';
 
 const job = (id: string, toolId: string, state: ToolJob['state'] = 'running'): ToolJob => ({
@@ -25,8 +27,8 @@ function stub() {
   const canceled: string[] = [];
   const all = [job(MEMORY_RUNNING, 'ai-memory'), job(MEMORY_QUEUED, 'ai-memory', 'queued'), job(MEMORY_RECENT, 'ai-memory', 'succeeded'), job(GH_RECENT, 'gh', 'succeeded'), job(GH_QUEUED, 'gh', 'queued')];
   const tools: ToolsControl = {
-    overview: async () =>
-      ({ items: [], jobs: { current: all[0], queue: [all[1], all[4]], recent: [all[2], all[3]], batch: null } }) as unknown as ToolsOverview,
+    // (#740) the overview is a stub: only the jobs the filter reads are filled, so the body is narrowed to the overview's type here.
+    overview: async () => ({ items: [], jobs: { current: all[0], queue: [all[1], all[4]], recent: [all[2], all[3]], batch: null } }) as ToolsOverview,
     cancel: (id): CancelJobResult => {
       canceled.push(id);
       const found = all.find((j) => j.id === id);
@@ -39,8 +41,8 @@ function stub() {
 }
 
 const idsOf = (body: ToolsOverview) => {
-  const { current, queue, recent } = body.jobs as unknown as { current: ToolJob | null; queue: ToolJob[]; recent: ToolJob[] };
-  return [current, ...queue, ...recent].filter((j): j is ToolJob => j !== null).map((j) => j.id);
+  const { current, queue, recent } = body.jobs as JobsView<ToolJob>;
+  return [current, ...queue, ...recent].filter((j): j is ToolJob => j !== null && j !== undefined).map((j) => j.id);
 };
 
 async function overviewOver(remote: boolean): Promise<ToolsOverview> {
@@ -93,6 +95,42 @@ describe('#740/AC-11 the ai-memory jobs and the remote Tools view', () => {
       const r = await call(f.url, `/api/tools/jobs/${MEMORY_QUEUED}`, 'DELETE', { authorization: `Bearer ${OWNER}`, origin: `http://${f.host}`, 'content-type': 'application/json' });
       assert.equal(r.status, 200);
       assert.deepEqual(canceled, [MEMORY_QUEUED]);
+    } finally {
+      await f.close();
+    }
+  });
+
+  test('#740/AC-11 Given ai-memory jobs on the queue, When the remote credential reads /api/docker, Then no ai-memory job is in its jobs and the other jobs are', async () => {
+    const { tools } = stub();
+    const jobs = (await tools.overview('local'))!.jobs as JobsView<ToolJob>;
+    const queue = { jobs: () => jobs, enqueue: () => ({ kind: 'queued' }) } as never;
+    const service = new DockerService({ queue, run: async () => ({ code: 1, stdout: '', stderr: '' }), env: () => ({}), platform: 'darwin', resolve: async () => null, log: () => {} } as never);
+    const route = createDockerRoute({ service, cancel: () => ({ kind: 'unknown' }), acceptNoOriginActions: () => false });
+    const f = await remoteFixture({ api: { tools, docker: { route, acceptNoOrigin: () => false } } });
+    try {
+      const c = await f.mint();
+      const remote = await f.signed(c, 'GET', '/api/docker');
+      assert.equal(remote.status, 200);
+      assert.deepEqual(idsOf({ items: [], jobs: (remote.json as { jobs: JobsView<ToolJob> }).jobs } as ToolsOverview).sort(), [GH_QUEUED, GH_RECENT].sort());
+      const local = await call(f.url, '/api/docker', 'GET', { authorization: `Bearer ${OWNER}` });
+      assert.deepEqual(idsOf({ items: [], jobs: (local.json as { jobs: JobsView<ToolJob> }).jobs } as ToolsOverview).sort(), [MEMORY_RUNNING, MEMORY_QUEUED, MEMORY_RECENT, GH_RECENT, GH_QUEUED].sort(), 'the local /ui still sees every job');
+    } finally {
+      await f.close();
+    }
+  });
+
+  test('#740/AC-11 Given a signed remote request, When it reads /api/tools or cancels through /api/docker/jobs, Then the credential is refused with 403 and nothing is canceled', async () => {
+    const { tools, canceled } = stub();
+    const route = createDockerRoute({ service: null, cancel: (id) => { canceled.push(id); return { kind: 'unknown' }; }, acceptNoOriginActions: () => true });
+    const f = await remoteFixture({ api: { tools, docker: { route, acceptNoOrigin: () => true } } });
+    try {
+      const c = await f.mint();
+      const read = await f.signed(c, 'GET', '/api/tools');
+      assert.equal(read.status, 403);
+      assert.deepEqual((read.json as { reason: string }).reason, 'credential-route');
+      const cancel = await f.signed(c, 'DELETE', `/api/docker/jobs/${MEMORY_RUNNING}`, { headers: { 'content-type': 'application/json' } });
+      assert.equal(cancel.status, 403);
+      assert.deepEqual(canceled, []);
     } finally {
       await f.close();
     }
