@@ -10,10 +10,13 @@ const START = 'Sat Nov 21 22:00:00 2026';
 const proc = (pid: number, ppid: number, start = START): ProcessSample => ({ pid, ppid, start, command: 'node x', cpuPct: 1 });
 const ROOT = 100;
 const SELF = 9000;
+const CLAUDE = '/Users/x/Library/Application Support/Claude/claude-code/2.1.326/h/claude.app/Contents/MacOS/claude';
 
 class FakeMachine implements MachineControl {
   trees: SessionTree[] = [];
   nice = new Map<number, number>();
+  /** #720/AC-5: The executable `ps comm` gives, by pid; the root of `session` runs a real claude. */
+  executables = new Map<number, string>([[ROOT, CLAUDE]]);
   /** #723: The start `inspect` answers, by pid; a pid absent here is gone. */
   starts = new Map<number, string>();
   calls: string[] = [];
@@ -24,7 +27,7 @@ class FakeMachine implements MachineControl {
   async sample(): Promise<Observation | null> {
     this.sampleCalls += 1;
     if (this.gate) await this.gate;
-    return { trees: this.trees, nice: this.nice };
+    return { trees: this.trees, nice: this.nice, executables: this.executables };
   }
   async inspect(pid: number) {
     const start = this.starts.get(pid);
@@ -383,5 +386,59 @@ describe('#720/AC-6 turning the governor off', () => {
     const s = governor.state();
     assert.deepEqual(Object.keys(s).sort(), ['containedSessions', 'enabled', 'mode', 'since']);
     assert.equal(s.since, new Date(clock.now).toISOString());
+  });
+});
+
+describe('#720/AC-5 the governor roots a session only in a claude or codex executable above pid 1', () => {
+  test('#720/AC-5 Given a session rooted in pid 1, When the loop ticks in containing mode, Then no renice and no taskpolicy runs', async () => {
+    const { machine, load, tick } = setup();
+    machine.trees = [{ sessionId: 's1', cwd: null, rootPids: [1], processes: [proc(1, 0), proc(101, 1), proc(102, 101)] }];
+    machine.executables = new Map([[1, CLAUDE]]);
+    for (const p of [1, 101, 102]) {
+      machine.nice.set(p, 0);
+      machine.starts.set(p, START);
+    }
+    load.load1 = 20;
+    for (let i = 0; i < 20; i++) await tick();
+    assert.deepEqual(machine.calls, []);
+  });
+
+  test('#720/AC-5 Given a root that is zsh, When the loop ticks in containing mode, Then nothing in its tree is touched', async () => {
+    const { machine, load, tick } = setup();
+    machine.session([101, 102]);
+    machine.executables = new Map([[ROOT, '/bin/zsh']]);
+    load.load1 = 20;
+    for (let i = 0; i < 20; i++) await tick();
+    assert.deepEqual(machine.calls, []);
+  });
+
+  test('#720/AC-5 Given a root in a real claude executable, Then its descendants are reniced and put under taskpolicy -b as before', async () => {
+    const { machine, load, tick } = setup();
+    machine.session([101]);
+    load.load1 = 20;
+    for (let i = 0; i < 20; i++) await tick();
+    assert.deepEqual(machine.calls, ['renice 101', 'background 101']);
+  });
+
+  test('#720/AC-5 Given a refused root, When the loop ticks twice, Then the refusal is logged once with the pid only', async () => {
+    const { machine, logs, tick } = setup();
+    machine.session([101]);
+    machine.executables = new Map([[ROOT, '/Applications/Claude.app/Contents/MacOS/Claude']]);
+    await tick();
+    await tick();
+    assert.deepEqual(logs, [`cpu-governor root refused: pid=${ROOT}`]);
+  });
+
+  test('#720/AC-5 Given a refused root that leaves the sample and comes back, Then it is logged again', async () => {
+    const { machine, logs, tick } = setup();
+    machine.session([101]);
+    machine.executables = new Map([[ROOT, '/bin/zsh']]);
+    await tick();
+    const trees = machine.trees;
+    machine.trees = [];
+    await tick();
+    machine.trees = trees;
+    await tick();
+    assert.equal(logs.length, 2);
   });
 });

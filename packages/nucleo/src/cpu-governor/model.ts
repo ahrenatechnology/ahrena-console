@@ -5,8 +5,11 @@
  * - The governor puts `nice 10` on every descendant of an agent session, and on a Mac under pressure also runs `taskpolicy -b`
  *   on them. Pressure is the 1-minute load above the core count for `CONTAIN_AFTER_MS` without a break; it ends when the load
  *   stays below `RELEASE_BELOW` of the cores for `RELEASE_AFTER_MS`. The load between the two thresholds keeps the mode.
- * - A session's root pid (`claude` or `codex`) is never a target, even when it is listed in `SessionTree.processes`, and
- *   neither is the core itself or anything that descends from it: the core can have been started from a session.
+ * - A session's root pid is never a target, even when it is listed in `SessionTree.processes`, and neither is the core itself
+ *   or anything that descends from it: the core can have been started from a session.
+ * - A root counts only when its pid is above 1 and its executable (`ps comm`) has the basename `claude` or `codex`
+ *   (`isAgentRoot`, #720/AC-5): the registry file is data a person can write, so a `1.json` or a root running anything else
+ *   yields no target, whatever descends from it.
  */
 
 import type { SessionTree } from '../diagnosis/attribution.ts';
@@ -66,8 +69,42 @@ export interface Target {
   start: string;
 }
 
-/** The descendants of each session, by pid ascending per session; never a root pid, `protectedPids` or what descends from one. */
-export function targetsOf(trees: readonly SessionTree[], protectedPids: ReadonlySet<number>): Target[] {
+/** The executables a session may be rooted in: the segment after the last `/` of `ps comm`, exactly. */
+const AGENT_EXECUTABLES: ReadonlySet<string> = new Set(['claude', 'codex']);
+
+/**
+ * #720/AC-5: Whether a registered pid may root a session: above pid 1 (so never launchd or init) and running a `claude` or
+ * `codex` executable by its basename, not by a substring of a path or a command line. No executable is not a root.
+ */
+export function isAgentRoot(pid: number, executable: string | undefined): boolean {
+  if (!Number.isInteger(pid) || pid <= 1 || executable === undefined) return false;
+  return AGENT_EXECUTABLES.has(executable.slice(executable.lastIndexOf('/') + 1).trim());
+}
+
+/** A session root the governor refuses: its session, pid and the start it was sampled with. */
+export interface RefusedRoot {
+  sessionId: string;
+  pid: number;
+  start: string;
+}
+
+/** The registered roots that are not an agent root: their trees yield no target. */
+export function refusedRoots(trees: readonly SessionTree[], executables: ReadonlyMap<number, string>): RefusedRoot[] {
+  const refused: RefusedRoot[] = [];
+  for (const tree of trees) {
+    for (const pid of tree.rootPids) {
+      if (isAgentRoot(pid, executables.get(pid))) continue;
+      refused.push({ sessionId: tree.sessionId, pid, start: tree.processes.find((p) => p.pid === pid)?.start ?? '' });
+    }
+  }
+  return refused;
+}
+
+/**
+ * The descendants of each session, by pid ascending per session; never a root pid, `protectedPids` or what descends from one,
+ * and only under a root that is an agent root (`isAgentRoot`): a process whose nearest root is anything else is not a target.
+ */
+export function targetsOf(trees: readonly SessionTree[], protectedPids: ReadonlySet<number>, executables: ReadonlyMap<number, string>): Target[] {
   const targets: Target[] = [];
   for (const tree of trees) {
     const roots = new Set(tree.rootPids);
@@ -85,8 +122,19 @@ export function targetsOf(trees: readonly SessionTree[], protectedPids: Readonly
       }
       return false;
     };
+    /* #720/AC-5: The nearest root above a process, climbing its parents; none when the climb ends before a root. */
+    const rootOf = (pid: number): number | undefined => {
+      const seen = new Set<number>();
+      for (let at: number | undefined = pid; at !== undefined && !seen.has(at); at = parentOf.get(at)) {
+        if (roots.has(at)) return at;
+        seen.add(at);
+      }
+      return undefined;
+    };
     for (const p of tree.processes) {
       if (roots.has(p.pid) || shielded(p.pid)) continue;
+      const root = rootOf(p.pid);
+      if (root === undefined || !isAgentRoot(root, executables.get(root))) continue;
       targets.push({ sessionId: tree.sessionId, pid: p.pid, start: p.start });
     }
   }

@@ -9,7 +9,7 @@ import type { RegisteredSession, SessionTree } from '../../diagnosis/attribution
 
 const START = 'Sat Nov 21 22:00:00 2026';
 const PS_TREE = [`  100     1  1.0 ${START} claude --resume abc`, `  101   100  2.0 ${START} node /work/x.js`, `  200     1  0.0 ${START} /Applications/Claude.app/Contents/MacOS/Claude`].join('\n');
-const PS_NICE = ['  100   0', '  101   0', '  200   0'].join('\n');
+const PS_NICE = ['  100   0 /Users/x/Library/Application Support/Claude/claude-code/2.1.326/h/claude.app/Contents/MacOS/claude', '  101   0 /usr/local/bin/node', '  200   0 /Applications/Claude.app/Contents/MacOS/Claude'].join('\n');
 
 function setup(answers: Record<string, ExecResult> = {}, platform: 'darwin' | 'linux' = 'darwin') {
   const calls: string[][] = [];
@@ -24,7 +24,7 @@ function setup(answers: Record<string, ExecResult> = {}, platform: 'darwin' | 'l
 }
 
 const PS_TREE_CMD = 'ps -axo pid=,ppid=,pcpu=,lstart=,args=';
-const PS_NICE_CMD = 'ps -axo pid=,nice=';
+const PS_NICE_CMD = 'ps -axo pid=,nice=,comm=';
 
 describe('#720/AC-5 only renice and taskpolicy, fixed argv, no shell, no sudo', () => {
   test('#720/AC-3 Given renice, Then the argv is the absolute `renice 10 -p <pid>`', async () => {
@@ -83,6 +83,15 @@ describe('#720/AC-3 the sample: session trees from the attribution, the nice of 
     const trees: readonly SessionTree[] = observation!.trees;
     assert.deepEqual(trees.map((t) => [t.sessionId, t.processes.map((p) => p.pid)]), [['s1', [100, 101]]]);
     assert.equal(observation!.nice.get(101), 0);
+  });
+
+  test('#720/AC-5 Given ps comm with a path that holds spaces, Then the executable is the rest of the line and the nice is read before it', async () => {
+    const { control } = setup({ [PS_TREE_CMD]: { ok: true, stdout: PS_TREE }, [PS_NICE_CMD]: { ok: true, stdout: PS_NICE } });
+    const observation = await control.sample();
+    assert.equal(observation!.executables.get(100), '/Users/x/Library/Application Support/Claude/claude-code/2.1.326/h/claude.app/Contents/MacOS/claude');
+    assert.equal(observation!.executables.get(101), '/usr/local/bin/node');
+    assert.equal(observation!.nice.get(100), 0);
+    assert.equal(observation!.nice.size, 3);
   });
 
   test('#720/AC-3 Given ps that answers nothing, Then there is no observation', async () => {

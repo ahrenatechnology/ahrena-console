@@ -3,6 +3,8 @@
  * the descendants of an agent session: `renice 10` when their nice is below 10, and in `containing` mode on a Mac also
  * `taskpolicy -b`. Everything it touches goes through `MachineControl`, so the loop is tested with a double.
  *
+ * - A session root is only a pid above 1 running a `claude` or `codex` executable; any other root is refused (no target in its
+ *   tree) and logged once by pid, never by its command or path (#720/AC-5).
  * - It only raises nice (never lowers), never uses sudo, never ends a process (#647), and undoes only what it set itself:
  *   `taskpolicy -B` on the pids it put under `-b`; the nice stays, because lowering it needs privilege.
  * - Before every change it asks the machine for the pid's current start and skips the pid when it is not the one sampled (a
@@ -12,7 +14,7 @@
  */
 
 import { normalizeStart, type SessionTree } from '../diagnosis/attribution.ts';
-import { initialPressure, nextPressure, NICE_TARGET, targetsOf, type GovernorState, type LoadReading, type Pressure, type Target } from './model.ts';
+import { initialPressure, nextPressure, NICE_TARGET, refusedRoots, targetsOf, type GovernorState, type LoadReading, type Pressure, type Target } from './model.ts';
 
 export type ChangeOutcome = 'done' | 'denied' | 'gone' | 'failed';
 
@@ -20,6 +22,8 @@ export type ChangeOutcome = 'done' | 'denied' | 'gone' | 'failed';
 export interface Observation {
   trees: readonly SessionTree[];
   nice: ReadonlyMap<number, number>;
+  /** #720/AC-5: The executable of every pid (`ps comm`), to tell a `claude` or `codex` root from anything else. */
+  executables: ReadonlyMap<number, string>;
 }
 
 /** The only commands the governor runs, each with a fixed argv, no shell, no sudo. */
@@ -64,6 +68,8 @@ export class CpuGovernor {
   private readonly triedBackground = new Set<string>();
   /** #723: The pids it put under `-b`, which it takes out again. */
   private readonly background = new Map<number, BackgroundEntry>();
+  /** #720/AC-5: The roots already logged as refused, so a refused root is logged once, not on every tick. */
+  private readonly refused = new Set<string>();
   private queue: Promise<unknown> = Promise.resolve();
   private timer: NodeJS.Timeout | null = null;
   /** #723: A tick the timer started and that has not ended: the timer skips its beat meanwhile, so slow ticks do not pile up. */
@@ -132,7 +138,8 @@ export class CpuGovernor {
     if (this.pressure.mode !== before) this.since = now;
     if (before === 'containing' && this.pressure.mode === 'normal') await this.release();
 
-    const targets = targetsOf(observation.trees, new Set([this.d.selfPid]));
+    this.logRefused(observation);
+    const targets = targetsOf(observation.trees, new Set([this.d.selfPid]), observation.executables);
     this.forget(targets);
     await this.pruneBackground(targets);
     for (const target of targets) {
@@ -146,6 +153,17 @@ export class CpuGovernor {
         this.triedBackground.add(key);
         if ((await this.change(target, 'background', (pid) => this.d.machine.background(pid))) === 'done') this.background.set(target.pid, { start: target.start, sessionId: target.sessionId });
       }
+    }
+  }
+
+  /** #720/AC-5: Logs each refused root once, by pid; an entry that left the sample is forgotten, so it is logged again if it returns. */
+  private logRefused(observation: Observation): void {
+    const now = new Map(refusedRoots(observation.trees, observation.executables).map((r) => [keyOf(r.pid, r.start), r.pid]));
+    for (const key of this.refused) if (!now.has(key)) this.refused.delete(key);
+    for (const [key, pid] of now) {
+      if (this.refused.has(key)) continue;
+      this.refused.add(key);
+      this.d.log(`cpu-governor root refused: pid=${pid}`);
     }
   }
 

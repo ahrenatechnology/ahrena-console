@@ -2,6 +2,10 @@
  * What the CPU governor runs on the real machine (#723, epic #720): `ps` to read, `renice` and `taskpolicy` to change, each
  * with a fixed argv through `execFile` (no shell, no sudo). The tools' own text never leaves this file: a failed run is
  * read for what it means (`denied`, `gone`, `failed`) and only that goes up.
+ *
+ * - `ps comm=` gives each pid's executable (the full path on macOS, the process name on Linux), read last on its line so a
+ *   path with spaces stays whole. The governor roots a session only in a `claude` or `codex` executable (#720/AC-5); the
+ *   executable never goes to a log.
  */
 
 import { execFile } from 'node:child_process';
@@ -44,13 +48,17 @@ export interface MachineControlDeps {
 
 const isPid = (pid: number): boolean => Number.isInteger(pid) && pid > 0 && pid <= 4_194_304;
 
-function parseNice(stdout: string): Map<number, number> {
+/** `pid nice comm` per line; `comm` is the rest of the line, spaces included. */
+function parseNice(stdout: string): { nice: Map<number, number>; executables: Map<number, string> } {
   const nice = new Map<number, number>();
+  const executables = new Map<number, string>();
   for (const line of stdout.split('\n')) {
-    const m = /^\s*(\d+)\s+(-?\d+)\s*$/.exec(line);
-    if (m) nice.set(Number(m[1]), Number(m[2]));
+    const m = /^\s*(\d+)\s+(-?\d+)\s+(\S.*?)\s*$/.exec(line);
+    if (!m) continue;
+    nice.set(Number(m[1]), Number(m[2]));
+    executables.set(Number(m[1]), m[3] ?? '');
   }
-  return nice;
+  return { nice, executables };
 }
 
 export function createMachineControl(deps: MachineControlDeps): MachineControl {
@@ -60,13 +68,13 @@ export function createMachineControl(deps: MachineControlDeps): MachineControl {
   };
   return {
     async sample(): Promise<Observation | null> {
-      const [tree, nice] = await Promise.all([deps.exec('ps', ['-axo', 'pid=,ppid=,pcpu=,lstart=,args=']), deps.exec('ps', ['-axo', 'pid=,nice='])]);
+      const [tree, nice] = await Promise.all([deps.exec('ps', ['-axo', 'pid=,ppid=,pcpu=,lstart=,args=']), deps.exec('ps', ['-axo', 'pid=,nice=,comm='])]);
       if (!tree.ok || !nice.ok) return null;
       const samples = parsePsTree(tree.stdout);
       if (samples.length === 0) return null;
       const registry = await deps.registered();
       const attribution = attributeProcesses(samples, registry, await deps.startCheck(registry, samples));
-      return { trees: attribution.sessions, nice: parseNice(nice.stdout) };
+      return { trees: attribution.sessions, ...parseNice(nice.stdout) };
     },
     async inspect(pid) {
       if (!isPid(pid)) return null;
