@@ -8021,7 +8021,7 @@ const cgBodyContaining = (n = {}) => `<div class="cg-mode warn" data-part="mode"
   <div class="cg-sub">desde 14:21 (há 11 min) · a carga de 1 min passou dos 12 núcleos por mais de 30 s</div>
   <div class="cg-list" data-part="contained">${CG_SESSIONS_CONT.filter(s => s.contained).map(s => `<div data-session="${s.id}"><b style="font-weight:500">${s.title}</b><span class="mono c-muted">${s.root}</span><span class="t">desde ${s.contained}</span></div>`).join('')}</div>
   <div class="cg-sub">Elas passam para os núcleos de eficiência do Mac e voltam sozinhas quando a carga ficar abaixo de 80% dos núcleos por 2 min. As outras 3 seguem só com prioridade baixa.</div>`
-const cgBodyOff = (n = {}) => `<div class="cg-mode" data-part="mode">${n.mode ?? ''}${cgChip('power', 'Desligado')}<span class="cg-sub">desde 14:40</span>${cgDepGov()}</div><div class="cg-sub">O núcleo não baixa a prioridade de mais nenhum comando. Os processos que já estão em prioridade baixa continuam assim até terminarem; os comandos novos das sessões nascem com a prioridade normal. Ligue de novo para voltar ao normal.</div>`
+const cgBodyOff = (n = {}) => `<div class="cg-mode" data-part="mode">${n.mode ?? ''}${cgChip('power', 'Desligado')}<span class="cg-sub">desde 14:40</span>${cgDepGov()}</div><div class="cg-sub">O núcleo não baixa a prioridade de mais nenhum comando. Os processos que já estão em prioridade baixa continuam assim até terminarem; os comandos novos das sessões nascem com a prioridade normal. Ligue de novo para o núcleo voltar a conter.</div>`
 const cgCard = (state, { n = {}, extra = '' } = {}) => {
   const [sw, body] = {
     normal: [cgSw(true), cgBodyNormal(n)],
