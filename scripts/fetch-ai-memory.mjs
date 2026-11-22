@@ -1,7 +1,6 @@
 // Fetch the pinned ai-memory release and verify its SHA-256 before the app build (#725).
 // Usage: node scripts/fetch-ai-memory.mjs [--arch aarch64|x86_64] [--out <folder>] (#725)
 // The tarball must match the SHA-256 pinned in this file AND the release's published .sha256 (#725).
-// Move the pin by changing AI_MEMORY_VERSION and both PINNED_SHA256 literals together.
 
 import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -13,7 +12,7 @@ import { fileURLToPath } from 'node:url';
 
 const execFileAsync = promisify(execFile);
 
-// Bumping AI_MEMORY_VERSION requires updating both PINNED_SHA256 literals (checked against the release's .sha256 files).
+// Bumping AI_MEMORY_VERSION requires updating both PINNED_SHA256 literals (checked against the release's .sha256 files) (#725).
 export const AI_MEMORY_VERSION = 'v3.5.1';
 export const PINNED_SHA256 = {
   aarch64: 'fda158379dc03331e5c71ab6b702a9335c7fc41e75dda4a2b1a7d1e8e98aaf04',

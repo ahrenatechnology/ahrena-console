@@ -153,8 +153,9 @@ jobs:
         run: npm ci
 
       # #725: o binário do ai-memory (e a licença dele) viaja dentro do app. Baixa a release fixada da
-      # arquitetura deste alvo, confere o SHA-256 que a release publica e falha se não bater. Nada disso
-      # vai para o repositório; vai para a pasta ignorada que o tauri.conf.json mapeia em Resources.
+      # arquitetura deste alvo, confere o SHA-256 fixado em scripts/fetch-ai-memory.mjs E o .sha256 que a
+      # release publica, e falha se qualquer um dos dois não bater. Nada disso vai para o repositório; vai
+      # para a pasta ignorada que o tauri.conf.json mapeia em Resources.
       - name: Fetch and verify ai-memory (SHA-256)
         env:
           AI_MEMORY_ARCH: ${{ matrix.ai_memory_arch }}
