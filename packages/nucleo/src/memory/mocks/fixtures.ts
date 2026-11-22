@@ -82,23 +82,10 @@ export function bridgeHandoffFixture(over: Record<string, unknown> = {}): Record
   };
 }
 
-/** The handoffs of one project: one opened by the session, one accepted by it, one of another session (#734). */
+/** The handoffs of one project: one opened by the session, one of another session (#734). */
 export function bridgeHandoffsFixture(): Record<string, unknown>[] {
   return [
     bridgeHandoffFixture(),
-    bridgeHandoffFixture({
-      id: '8c1f4b2d-3e5a-4b7c-9d0e-1f2a3b4c5d6e',
-      from_session_id: OTHER_SESSION_ID,
-      from_agent: 'codex',
-      to_agent: null,
-      cwd: null,
-      owner_user: null,
-      state: 'accepted',
-      accepted_by: 'claude-code',
-      accepted_at: '2026-11-20T11:00:00Z',
-      accepted_by_session: FAKE_SESSION_ID,
-      accepted_by_user: 'local:someone',
-    }),
     bridgeHandoffFixture({ id: '9d2a5c3e-4f6b-4c8d-8e1f-2a3b4c5d6e7f', from_session_id: OTHER_SESSION_ID, cwd: '/Users/someone/work/other' }),
   ];
 }

@@ -15,7 +15,7 @@ import {
   statusFixture,
   toolResult,
 } from './mocks/fixtures.ts';
-import { createMemoryModule } from './memory.ts';
+import { createMemoryModule, HANDOFF_LIST_LIMIT } from './memory.ts';
 
 const BINARY = '/Applications/Ahrena Console.app/Contents/Resources/ai-memory/ai-memory';
 const DATA_DIR = '/Users/someone/.ahrena-console/ai-memory';
@@ -325,7 +325,18 @@ describe('memory module, the bridge reads (#734)', () => {
     assert.equal(result.ok, true);
     const text = JSON.stringify(result);
     for (const planted of ['summary', 'open_questions', 'next_steps', 'files_touched', PLANTED_TOKEN, '/Users/']) assert.equal(text.includes(planted), false, planted);
-    if (result.ok) assert.equal(result.value.length, 3);
+    if (result.ok) assert.equal(result.value.length, 2);
+  });
+
+  test('#719/AC-7 the handoff list asks for the upstream cap of 200 open handoffs, no more', async () => {
+    assert.equal(HANDOFF_LIST_LIMIT, 200);
+    const { memory, calls } = moduleWith();
+    const pending = memory.bridgeHandoffs('app');
+    await turn();
+    await playBridge(calls[0]!.child, { result: toolResult({ handoffs: [] }) });
+    await pending;
+    const sent = calls[0]!.child.sent()[2] as { params: { arguments: Record<string, unknown> } };
+    assert.equal(sent.params.arguments.limit, HANDOFF_LIST_LIMIT);
   });
 
   test('#734/D1 bridgeHandoffsLocal is the one method that answers the handoffs cwd, by handoff id', async () => {
@@ -334,10 +345,10 @@ describe('memory module, the bridge reads (#734)', () => {
     await turn();
     await playBridge(calls[0]!.child, { result: toolResult({ handoffs: bridgeHandoffsFixture() }) });
     const result = await pending;
-    assert.deepEqual(result.ok && result.value.map((l) => l.cwd), ['/Users/someone/work/app', null, '/Users/someone/work/other']);
+    assert.deepEqual(result.ok && result.value.map((l) => l.cwd), ['/Users/someone/work/app', '/Users/someone/work/other']);
   });
 
-  test('#734 sessionHandoffs matches the handoffs the session opened and accepted', async () => {
+  test('#719/AC-8 sessionHandoffs lists the handoffs the session opened, matched by from_session_id', async () => {
     const { memory, calls } = moduleWith();
     const pending = memory.sessionHandoffs('app', FAKE_SESSION_ID);
     await turn();
@@ -346,7 +357,7 @@ describe('memory module, the bridge reads (#734)', () => {
     assert.equal(result.ok, true);
     if (result.ok) {
       assert.deepEqual(result.value.opened.map((h) => h.from_session_id), [FAKE_SESSION_ID]);
-      assert.deepEqual(result.value.accepted.map((h) => h.accepted_by_session), [FAKE_SESSION_ID]);
+      assert.deepEqual(Object.keys(result.value), ['opened']);
     }
     assert.equal(JSON.stringify(result).includes('/Users/'), false);
   });

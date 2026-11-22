@@ -29,10 +29,9 @@ export interface MemoryBridgeHandoffsReading {
   local: MemoryHandoffLocal[];
 }
 
-/** The handoffs a session opened and the ones it accepted (#734). */
+/** The handoffs a session opened; the accepted side is #737 (#734). */
 export interface MemorySessionHandoffs {
   opened: MemorySessionHandoff[];
-  accepted: MemorySessionHandoff[];
 }
 
 /** Reprojects the text of a `memory_handoff_list` result; a malformed one throws a code (#734/AC-2). */
@@ -61,10 +60,7 @@ export function readBridgeHandoffs(text: string): MemoryBridgeHandoffsReading {
   return { handoffs: rows.map((row) => row.handoff), local: rows.map((row) => row.local) };
 }
 
-/** The handoffs a session opened (`from_session_id`) and accepted (`accepted_by_session`) (#734). */
+/** The handoffs a session opened, matched by `from_session_id` only (#734/#719/AC-8). */
 export function matchSession(handoffs: readonly MemorySessionHandoff[], sessionId: string): MemorySessionHandoffs {
-  return {
-    opened: handoffs.filter((handoff) => handoff.from_session_id === sessionId),
-    accepted: handoffs.filter((handoff) => handoff.accepted_by_session === sessionId),
-  };
+  return { opened: handoffs.filter((handoff) => handoff.from_session_id === sessionId) };
 }

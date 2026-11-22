@@ -10,7 +10,7 @@ const SHAREABLE_KEYS = ['accepted_at', 'accepted_by', 'accepted_by_session', 'ac
 describe('readBridgeHandoffs (#734/AC-2)', () => {
   test('#734/AC-2 each handoff carries the listed fields and none of the planted body fields', () => {
     const { handoffs } = readBridgeHandoffs(JSON.stringify({ handoffs: bridgeHandoffsFixture() }));
-    assert.equal(handoffs.length, 3);
+    assert.equal(handoffs.length, 2);
     for (const handoff of handoffs) assert.deepEqual(Object.keys(handoff).sort(), SHAREABLE_KEYS);
     const text = JSON.stringify(handoffs);
     for (const planted of ['summary', 'open_questions', 'next_steps', 'files_touched', FAKE_TOKEN, 'secret-plan', 'which database', 'run the migration']) {
@@ -27,8 +27,20 @@ describe('readBridgeHandoffs (#734/AC-2)', () => {
   });
 
   test('#734/AC-2 the accepted fields keep their values and null stays null', () => {
-    const { handoffs } = readBridgeHandoffs(JSON.stringify({ handoffs: bridgeHandoffsFixture() }));
-    assert.deepEqual(handoffs[1], {
+    const accepted = bridgeHandoffFixture({
+      id: '8c1f4b2d-3e5a-4b7c-9d0e-1f2a3b4c5d6e',
+      from_session_id: OTHER_SESSION_ID,
+      from_agent: 'codex',
+      to_agent: null,
+      owner_user: null,
+      state: 'accepted',
+      accepted_by: 'claude-code',
+      accepted_at: '2026-11-20T11:00:00Z',
+      accepted_by_session: FAKE_SESSION_ID,
+      accepted_by_user: 'local:someone',
+    });
+    const { handoffs } = readBridgeHandoffs(JSON.stringify({ handoffs: [accepted] }));
+    assert.deepEqual(handoffs[0], {
       id: '8c1f4b2d-3e5a-4b7c-9d0e-1f2a3b4c5d6e',
       from_session_id: OTHER_SESSION_ID,
       from_agent: 'codex',
@@ -47,7 +59,6 @@ describe('readBridgeHandoffs (#734/AC-2)', () => {
     const { handoffs, local } = readBridgeHandoffs(JSON.stringify({ handoffs: bridgeHandoffsFixture() }));
     assert.deepEqual(local, [
       { id: '7b0e3a1c-2d4f-4a6b-8c9d-0e1f2a3b4c5d', cwd: '/Users/someone/work/app' },
-      { id: '8c1f4b2d-3e5a-4b7c-9d0e-1f2a3b4c5d6e', cwd: null },
       { id: '9d2a5c3e-4f6b-4c8d-8e1f-2a3b4c5d6e7f', cwd: '/Users/someone/work/other' },
     ]);
     assert.equal(JSON.stringify(handoffs).includes('/Users/'), false);
@@ -79,16 +90,16 @@ describe('readBridgeHandoffs (#734/AC-2)', () => {
 });
 
 describe('matchSession (#734)', () => {
-  test('#734 handoffs the session opened are matched by from_session_id and the ones it accepted by accepted_by_session', () => {
+  test('#719/AC-8 the handoffs a session opened are matched by from_session_id only', () => {
     const { handoffs } = readBridgeHandoffs(JSON.stringify({ handoffs: bridgeHandoffsFixture() }));
     const view = matchSession(handoffs, FAKE_SESSION_ID);
+    assert.deepEqual(view, { opened: handoffs.filter((h) => h.from_session_id === FAKE_SESSION_ID) });
     assert.deepEqual(view.opened.map((h) => h.id), ['7b0e3a1c-2d4f-4a6b-8c9d-0e1f2a3b4c5d']);
-    assert.deepEqual(view.accepted.map((h) => h.id), ['8c1f4b2d-3e5a-4b7c-9d0e-1f2a3b4c5d6e']);
   });
 
-  test('#734 a session with no handoff has empty lists, and the other session is matched on its own', () => {
+  test('#719/AC-8 a session with no handoff has empty lists, and the other session is matched on its own', () => {
     const { handoffs } = readBridgeHandoffs(JSON.stringify({ handoffs: bridgeHandoffsFixture() }));
-    assert.deepEqual(matchSession(handoffs, 'unknown-session'), { opened: [], accepted: [] });
-    assert.equal(matchSession(handoffs, OTHER_SESSION_ID).opened.length, 2);
+    assert.deepEqual(matchSession(handoffs, 'unknown-session'), { opened: [] });
+    assert.equal(matchSession(handoffs, OTHER_SESSION_ID).opened.length, 1);
   });
 });

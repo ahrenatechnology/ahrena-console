@@ -46,7 +46,8 @@ export type MemoryStatusState = { state: 'unavailable' | 'stopped' | 'unknown' }
 const SESSION_FORMAT = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 // The workspace is a constant: the core has one (#733).
 const WORKSPACE = 'default';
-const HANDOFF_LIST_LIMIT = 200;
+// The most open handoffs the bridge's list returns upstream; a project with more is read up to this cap (#734).
+export const HANDOFF_LIST_LIMIT = 200;
 // An offset past any session's observations: the answer proves the session exists and carries none of them (#734/AC-3).
 const NO_OBSERVATIONS_OFFSET = 1_000_000;
 const HANDOFF_LIST = 'memory_handoff_list';
@@ -73,7 +74,7 @@ export interface MemoryModule {
   bridgeHandoffs(project: string): Promise<MemoryRead<MemorySessionHandoff[]>>;
   /** LOCAL ONLY: the cwd of each handoff the bridge lists, by id (#734/D1). */
   bridgeHandoffsLocal(project: string): Promise<MemoryRead<MemoryHandoffLocal[]>>;
-  /** The handoffs a session opened (`from_session_id`) and accepted (`accepted_by_session`) (#734). */
+  /** The handoffs a session opened, matched by `from_session_id` only (#734). */
   sessionHandoffs(project: string, sessionId: string): Promise<MemoryRead<MemorySessionHandoffs>>;
   /** Whether the session was captured; never its observations (#734/AC-3). */
   sessionCaptured(project: string, sessionId: string): Promise<MemoryRead<boolean>>;
