@@ -216,6 +216,11 @@ export function createMemoryActions(options: MemoryActionsOptions): MemoryAction
     // Nor before auth is on, because it would serve with no authentication on the loopback (#740).
     // So step 1 wires the agents without the service, steps 2 and 3 fix the configuration, and step 4 installs and starts the service (#740).
     // At step 4 embeddings are already off and auth is already on (#740).
+    // Checked against ai-memory v3.5.1 crates/ai-memory-cli/src/commands/setup.rs for `setup --yes --no-service` (#740):
+    // `--no-service` plans the service as Skip (setup.rs:273-274) and execute only prints that reason (setup.rs:886), so no unit is installed and no server is started (#740).
+    // The closing self-check (setup.rs:941-943, self_check at 1193-1232) is a GET /healthz (1197, 1239-1245), one `memory_status` call to a server that already answers (1218, 1294-1317) and `doctor::run` (1228; doctor.rs:581) (#740).
+    // None of them starts a server or builds an embedder: doctor.rs names no embedder, and init (setup.rs:857) creates folders and config.toml only (#740).
+    // So nothing loads or downloads embeddings before step 2 writes `embedding_provider = "none"`, and the order stays (#740).
     const wiring = folders.map((folder, index) => ai(['setup', '--yes', '--no-service', '--agent', 'claude-code'], index, folder));
     const steps: Step[] = [
       ...wiring,
