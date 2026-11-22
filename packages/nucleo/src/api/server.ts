@@ -88,7 +88,7 @@ import type { ManagedRuntime } from '../runtime/service.ts';
 // The route-specific Origin/Host restrictions below are additional browser defenses, not identity.
 // Only static /ui, /api/overview and /api/hooks/health GETs are anonymous. See ADR0003.
 
-import { authorizeRequest, ownerProofRequired, type OwnerToken } from './owner-auth.ts';
+import { authorizeRequest, openedByRemote, ownerProofRequired, type OwnerToken } from './owner-auth.ts';
 import { createRemoteVerifier, REMOTE_CREDENTIALS_ROUTE, respondIssue } from './remote-auth.ts';
 import { RemoteCredentialStore } from './remote-credentials.ts';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
@@ -628,7 +628,7 @@ export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
         req.resume();
         return send(res, 403, { error: 'origem não permitida' });
       }
-      return respondToolsWrite(req, res, url, opts.tools);
+      return respondToolsWrite(req, res, url, opts.tools, openedByRemote(req));
     }
     // The terminal actions have a gate of their own, as strict as the Tools': no Origin is 403 too.
     if (isTerminalsRoute(url.pathname) && req.method !== 'GET') {
@@ -771,7 +771,7 @@ export function startLocalApi(opts: ApiOptions): Promise<LocalApi> {
     if (url.pathname === DELEGATIONS_PREVIEW_ROUTE) return opts.delegations ? opts.delegations(req, res, url) : respondDelegationsUnsupported(req, res);
     if (url.pathname === DIAGNOSIS_ROUTE) return opts.diagnosis ? opts.diagnosis(req, res, url) : respondDiagnosisUnsupported(res);
     if (isTelemetryRoute(url.pathname)) return respondTelemetry(res, url, opts.telemetry);
-    if (isToolsRoute(url.pathname)) return respondTools(res, url, opts.tools);
+    if (isToolsRoute(url.pathname)) return respondTools(res, url, opts.tools, openedByRemote(req));
     if (url.pathname === LOAD_ROUTE) {
       return send(res, 200, {
         ...counters,

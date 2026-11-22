@@ -33,7 +33,8 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { send } from '../ingest/hooks/receiver.ts';
 import { LOCAL_MACHINE_ID, MACHINE_ID } from '../telemetry/model.ts';
-import { JOB_ID, type ToolsControl } from '../tools/executor.ts';
+import { JOB_ID, type ToolJob, type ToolsControl } from '../tools/executor.ts';
+import type { JobsView, ToolsOverview } from '../tools/service.ts';
 
 export const TOOLS_ROUTE = '/api/tools';
 export const TOOLS_ACTION_ROUTE = /^\/api\/tools\/([^/]+)\/actions\/([^/]+)$/;
@@ -77,17 +78,26 @@ export function toolsWriteAllowed(req: IncomingMessage, port: number, acceptNoOr
   return origin === `http://${host}`;
 }
 
-export async function respondTools(res: ServerResponse, url: URL, tools: Pick<ToolsControl, 'overview'> | null | undefined): Promise<void> {
+// The embedded ai-memory's jobs belong to the local /ui alone: the remote credential neither lists nor cancels them (#740/AC-11).
+const LOCAL_ONLY_TOOL = 'ai-memory';
+
+function withoutLocalOnlyJobs(body: ToolsOverview): ToolsOverview {
+  const keep = (job: ToolJob | null | undefined): boolean => !job || job.toolId !== LOCAL_ONLY_TOOL;
+  const jobs = body.jobs as JobsView<ToolJob>;
+  return { ...body, jobs: { ...jobs, current: keep(jobs.current) ? jobs.current : null, queue: jobs.queue.filter(keep), recent: jobs.recent.filter(keep) } };
+}
+
+export async function respondTools(res: ServerResponse, url: URL, tools: Pick<ToolsControl, 'overview'> | null | undefined, remote = false): Promise<void> {
   if (!tools) return send(res, 404, NO_TOOLS);
   const machine = url.searchParams.get('machine') || LOCAL_MACHINE_ID;
   if (!MACHINE_ID.test(machine)) return send(res, 400, { error: INVALID_MACHINE });
   const body = await tools.overview(machine);
   if (!body) return send(res, 404, { error: `máquina desconhecida: ${machine}` });
-  send(res, 200, body);
+  send(res, 200, remote ? withoutLocalOnlyJobs(body) : body);
 }
 
 /** A Tools write, reached only after `toolsWriteAllowed`. */
-export async function respondToolsWrite(req: IncomingMessage, res: ServerResponse, url: URL, tools: ToolsControl | null | undefined): Promise<void> {
+export async function respondToolsWrite(req: IncomingMessage, res: ServerResponse, url: URL, tools: ToolsControl | null | undefined, remote = false): Promise<void> {
   if (!/^application\/json\b/i.test(req.headers['content-type'] ?? '')) {
     req.resume();
     return send(res, 415, { error: 'use application/json' });
@@ -99,6 +109,8 @@ export async function respondToolsWrite(req: IncomingMessage, res: ServerRespons
   const job = TOOLS_JOB_ROUTE.exec(url.pathname);
   if (job) {
     if (!tools.cancel || !JOB_ID.test(job[1]!)) return send(res, 404, UNKNOWN_JOB);
+    // A remote Cancel of an ai-memory job is answered as an unknown job: the same generic error, nothing of the job (#740/AC-11).
+    if (remote && tools.toolIdOf?.(job[1]!) === LOCAL_ONLY_TOOL) return send(res, 404, UNKNOWN_JOB);
     const r = tools.cancel(job[1]!);
     if (r.kind === 'unknown') return send(res, 404, UNKNOWN_JOB);
     if (r.kind === 'ended') return send(res, 409, { error: 'esta ação já terminou', job: r.job });

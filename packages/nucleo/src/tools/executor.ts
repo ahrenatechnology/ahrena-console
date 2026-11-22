@@ -110,6 +110,8 @@ export interface ToolsControl {
   overview(machine: string): Promise<ToolsOverview | null>;
   act?(machine: string, toolId: string, actionId: string, planDigest: string): Promise<ActResult>;
   cancel?(jobId: string): CancelJobResult;
+  /** The tool a job belongs to, or null when no job has this id: lets a route tell whose job a Cancel names (#740/AC-11). */
+  toolIdOf?(jobId: string): string | null;
   checkNow?(machine: string): Promise<CheckNowResult>;
   /** Verificar conexões: `claude mcp list` (independent of the job queue: it changes nothing on disk). */
   mcpCheckNow?(machine: string): Promise<CheckNowResult>;
@@ -315,6 +317,14 @@ export class ToolsExecutor implements ToolsControl {
     const snapshot = copyJob(job);
     this.pump(machine);
     return { kind: 'queued', job: snapshot };
+  }
+
+  toolIdOf(jobId: string): string | null {
+    for (const m of this.machines.values()) {
+      const job = [m.current, ...m.queue, ...m.recent].find((j) => j?.id === jobId);
+      if (job) return job.toolId;
+    }
+    return null;
   }
 
   cancel(jobId: string): CancelJobResult {
