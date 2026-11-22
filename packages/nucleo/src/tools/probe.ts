@@ -15,6 +15,7 @@ import { dirname, join } from 'node:path';
 import { realpath as fsRealpath } from 'node:fs/promises';
 import { posix, win32 } from 'node:path';
 import { appliesTo, NPM_PREFIX_TOKEN, sourcesFor, type DetectedSourceId, type Platform, type ToolEntry, type ToolProbe } from './catalog.ts';
+import { embeddedAiMemoryEnv } from './embedded-ai-memory.ts';
 import { expandHome, which, type IsExecutable } from './login-path.ts';
 import { PROBE_TIMEOUT_MS, toolsEnv, type ToolRunner } from './runner.ts';
 
@@ -100,7 +101,8 @@ async function probeEmbedded(entry: ToolEntry & { probe: ToolProbe }, ctx: Probe
   }
   const base = { toolId: entry.id, binaryPath, realPath: binaryPath, sourceId: 'embedded' as const };
   if (!binaryPath) return { ...base, installed: null, probeError: 'probe-failed' };
-  const r = await ctx.run([binaryPath, ...entry.probe.argv.slice(1)], { timeoutMs: PROBE_TIMEOUT_MS, env: toolsEnv(ctx.path, ctx.env) }).catch(() => null);
+  // The embedded binary runs with the memory allowlist, not the tools environment (#733).
+  const r = await ctx.run([binaryPath, ...entry.probe.argv.slice(1)], { timeoutMs: PROBE_TIMEOUT_MS, env: embeddedAiMemoryEnv(ctx.env) }).catch(() => null);
   const installed = r ? parseVersion(entry.probe, `${r.stdout}\n${r.stderr}`) : null;
   return { ...base, installed, probeError: installed ? null : !r || (r.code === null && r.error) ? 'probe-failed' : 'no-version' };
 }

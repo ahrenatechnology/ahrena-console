@@ -1,7 +1,8 @@
 // The memory readers: field-by-field reprojection of what the real v3.5.1 binary confirmed (#727/AC-3).
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
-import { MemoryReadError, readSetupPlan, readVersion } from './readers.ts';
+import { FAKE_DATA_DIR, FAKE_DB_PATH, FAKE_TOKEN, handoffsFixture, recentFixture, statusFixture } from './mocks/fixtures.ts';
+import { MemoryReadError, readHandoffs, readRecent, readSetupPlan, readStatus, readVersion } from './readers.ts';
 
 const PLAN = {
   format: 1,
@@ -92,4 +93,168 @@ describe('readSetupPlan (#727/AC-3)', () => {
       assert.equal(error.code, 'malformed-plan');
     }
   });
+});
+
+describe('readStatus (#733/AC-1, #733/AC-4)', () => {
+  test('#733/AC-1 status --json is read into the listed fields only, with the paths held apart', () => {
+    const { status, local } = readStatus(JSON.stringify(statusFixture()));
+    assert.deepEqual(status, {
+      version: '3.5.1',
+      bind: '127.0.0.1:7421',
+      counts: { pages_latest: 12, pages_all: 40, sessions: 3, observations: 250 },
+      storage: { database_bytes: 3276800, data_dir_free_bytes: 52428800000 },
+      providers: { llm: { status: 'ok', provider: 'ollama', model: 'llama3.2' }, embedding: { status: 'disabled' } },
+      capture_mode: 'denylist',
+      auth_posture: 'none_loopback',
+      client_auth: 'off',
+    });
+    assert.deepEqual(local, { data_dir: FAKE_DATA_DIR, db_path: FAKE_DB_PATH });
+  });
+
+  test('#733/AC-1 the shareable part holds no path and none of the dropped fields', () => {
+    const { status } = readStatus(JSON.stringify(statusFixture()));
+    const text = JSON.stringify(status);
+    for (const dropped of [FAKE_DATA_DIR, FAKE_DB_PATH, 'server_url', 'spool', 'recovery', 'derived', 'ingest', 'fix', 'last_call_at', 'wiki_format']) {
+      assert.equal(text.includes(dropped), false, `${dropped} must not be in the status`);
+    }
+  });
+
+  test('#733/AC-1 a null data_dir_free_bytes and null provider and model are kept as null', () => {
+    const raw = statusFixture() as { storage: Record<string, unknown>; providers: { llm: Record<string, unknown> } };
+    raw.storage.data_dir_free_bytes = null;
+    raw.providers.llm = { status: 'unknown', provider: null, model: null };
+    const { status } = readStatus(JSON.stringify(raw));
+    assert.equal(status.storage.data_dir_free_bytes, null);
+    assert.deepEqual(status.providers.llm, { status: 'unknown', provider: null, model: null });
+  });
+
+  test('#733/AC-1 an allowlist capture mode and the other provider states are accepted', () => {
+    const raw = statusFixture() as { capture_mode: string; providers: { embedding: Record<string, unknown> } };
+    raw.capture_mode = 'allowlist';
+    raw.providers.embedding = { status: 'error', provider: 'x', model: 'y', dim: 3 };
+    const { status } = readStatus(JSON.stringify(raw));
+    assert.equal(status.capture_mode, 'allowlist');
+    assert.equal(status.providers.embedding.status, 'error');
+  });
+
+  test('#733/AC-4 client.auth true is "on" and false is "off", as a word and never as the value', () => {
+    for (const [value, word] of [[true, 'on'], [false, 'off']] as const) {
+      const raw = statusFixture() as { client: Record<string, unknown> };
+      raw.client = { ...raw.client, auth: value };
+      assert.equal(readStatus(JSON.stringify(raw)).status.client_auth, word);
+    }
+  });
+
+  test('#733/AC-4 a client.auth that is a string (a token) is a misfit, and the error holds the code only', () => {
+    const raw = statusFixture() as { client: Record<string, unknown> };
+    raw.client = { ...raw.client, auth: FAKE_TOKEN };
+    try {
+      readStatus(JSON.stringify(raw));
+      assert.fail('should throw');
+    } catch (error) {
+      assert.ok(error instanceof MemoryReadError);
+      assert.equal(error.code, 'malformed-status');
+      assert.equal(String(error.message).includes(FAKE_TOKEN), false);
+    }
+  });
+
+  test('#733/AC-4 a token planted at the top level, in client and in auth_posture comes out nowhere', () => {
+    const raw = statusFixture() as { client: Record<string, unknown>; auth_posture: Record<string, unknown> };
+    raw.client = { ...raw.client, token: FAKE_TOKEN, auth_token: FAKE_TOKEN };
+    raw.auth_posture = { ...raw.auth_posture, token: FAKE_TOKEN };
+    const out = readStatus(JSON.stringify({ ...raw, token: FAKE_TOKEN, auth_token: FAKE_TOKEN }));
+    assert.equal(JSON.stringify(out).includes(FAKE_TOKEN), false);
+    assert.equal(/token/i.test(JSON.stringify(out)), false);
+  });
+
+  const DROP = Symbol('drop');
+  for (const [name, path, value] of [
+    ['a version that is not a string', ['version'], 3],
+    ['a missing bind', ['bind'], DROP],
+    ['a count that is not a number', ['counts', 'sessions'], '3'],
+    ['a missing counts', ['counts'], DROP],
+    ['a data_dir_free_bytes that is a string', ['storage', 'data_dir_free_bytes'], '1'],
+    ['a provider status outside the closed list', ['providers', 'llm', 'status'], 'fine'],
+    ['a provider that is a number', ['providers', 'llm', 'provider'], 1],
+    ['a capture mode outside the closed list', ['capture_mode'], 'both'],
+    ['a missing auth_posture', ['auth_posture'], DROP],
+    ['a client.auth that is missing', ['client', 'auth'], DROP],
+    ['a client.auth that is a number', ['client', 'auth'], 1],
+    ['a missing data_dir', ['data_dir'], DROP],
+    ['a db_path that is not a string', ['db_path'], null],
+  ] as const) {
+    test(`#733/AC-1 ${name} is rejected with malformed-status`, () => {
+      const root = statusFixture();
+      const parent = path.slice(0, -1).reduce((node, key) => node[key] as Record<string, unknown>, root);
+      const last = path.at(-1)!;
+      if (value === DROP) delete parent[last];
+      else parent[last] = value;
+      assert.throws(() => readStatus(JSON.stringify(root)), (e) => e instanceof MemoryReadError && e.code === 'malformed-status');
+    });
+  }
+
+  for (const text of ['', '{not json', '[]', '"x"', 'null']) {
+    test(`#733/AC-1 ${JSON.stringify(text)} is rejected with malformed-status`, () => {
+      assert.throws(() => readStatus(text), (e) => e instanceof MemoryReadError && e.code === 'malformed-status');
+    });
+  }
+});
+
+describe('readHandoffs (#733/AC-2)', () => {
+  test('#733/AC-2 each handoff comes back with the five listed fields and no body', () => {
+    const out = readHandoffs(JSON.stringify(handoffsFixture()));
+    assert.deepEqual(out, [
+      { id: 'h-0001', from_agent: 'claude-code', to_agent: 'codex', cwd: '/Users/someone/work/app', created_at_ms: 1763632800000 },
+      { id: 'h-0002', from_agent: 'codex', to_agent: null, cwd: null, created_at_ms: 1763632900000 },
+    ]);
+    assert.equal(JSON.stringify(out).includes(FAKE_TOKEN), false);
+    assert.equal(JSON.stringify(out).includes('body'), false);
+  });
+
+  test('#733/AC-2 an empty array is an empty list', () => {
+    assert.deepEqual(readHandoffs('[]'), []);
+  });
+
+  for (const [name, text] of [
+    ['malformed JSON', '{no'],
+    ['an object instead of an array', '{}'],
+    ['an item that is not an object', '["x"]'],
+    ['an id that is a number', JSON.stringify([{ id: 1, from_agent: 'a', to_agent: null, cwd: null, created_at_ms: 1 }])],
+    ['a missing from_agent', JSON.stringify([{ id: 'x', to_agent: null, cwd: null, created_at_ms: 1 }])],
+    ['a to_agent that is a number', JSON.stringify([{ id: 'x', from_agent: 'a', to_agent: 2, cwd: null, created_at_ms: 1 }])],
+    ['a created_at_ms that is a string', JSON.stringify([{ id: 'x', from_agent: 'a', to_agent: null, cwd: null, created_at_ms: '1' }])],
+  ] as const) {
+    test(`#733/AC-2 ${name} is rejected with malformed-handoffs`, () => {
+      assert.throws(() => readHandoffs(text), (e) => e instanceof MemoryReadError && e.code === 'malformed-handoffs');
+    });
+  }
+});
+
+describe('readRecent (#733/AC-3)', () => {
+  test('#733/AC-3 a planted snippet, workspace, project and unknown field do not appear in the result', () => {
+    const planted = recentFixture().map((page) => ({ ...page, workspace: 'default', project: 'app', surprise: FAKE_TOKEN }));
+    const out = readRecent(JSON.stringify(planted));
+    assert.deepEqual(out, [
+      { path: 'notes/design.md', title: 'Design notes', updated_at: '2026-11-20T09:00:00Z' },
+      { path: 'notes/todo.md', title: 'Todo', updated_at: '2026-11-19T09:00:00Z' },
+    ]);
+    const text = JSON.stringify(out);
+    for (const absent of ['snippet', FAKE_TOKEN, 'buy milk', 'workspace', 'project', 'surprise']) assert.equal(text.includes(absent), false, `${absent} must not appear`);
+  });
+
+  test('#733/AC-3 an empty array is an empty list', () => {
+    assert.deepEqual(readRecent('[]'), []);
+  });
+
+  for (const [name, text] of [
+    ['malformed JSON', 'nope'],
+    ['an object instead of an array', '{}'],
+    ['a page without a path', JSON.stringify([{ title: 't', updated_at: 'u' }])],
+    ['a title that is null', JSON.stringify([{ path: 'p', title: null, updated_at: 'u' }])],
+    ['an updated_at that is a number', JSON.stringify([{ path: 'p', title: 't', updated_at: 5 }])],
+  ] as const) {
+    test(`#733/AC-3 ${name} is rejected with malformed-recent`, () => {
+      assert.throws(() => readRecent(text), (e) => e instanceof MemoryReadError && e.code === 'malformed-recent');
+    });
+  }
 });

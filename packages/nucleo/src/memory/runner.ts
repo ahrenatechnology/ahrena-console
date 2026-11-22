@@ -3,9 +3,11 @@
  * - The binary is the embedded one, by absolute path (`embeddedAiMemoryPath`, #725), never a PATH lookup.
  *   With no binary (null) it reports `unavailable` and spawns nothing.
  * - The argv is built only from the constants below plus the `--data-dir` the core fixed; the caller names
- *   a command from a closed list, never an argument.
+ *   a command from a closed list. The one value a caller supplies is the project of `handoffs` and `recent`
+ *   (#733): it must match PROJECT_FORMAT (no leading dash, no slash, no whitespace) or nothing is spawned,
+ *   and it follows the constant `--project`; the workspace is the constant `default`.
  * - `spawn(path, args, { shell: false, detached: true, stdio: ['ignore', 'pipe', 'pipe'] })`: its own
- *   process group, standard input closed, the child environment built from an allowlist (`memoryEnv`):
+ *   process group, standard input closed, the child environment built from the embedded binary's allowlist (`embeddedAiMemoryEnv`, #733):
  *   no credential, no `AI_MEMORY_*` and no `AHRENA_CONSOLE_*` reaches it (#727).
  * - Timeout: SIGTERM to the process group and, after the grace period, SIGKILL to the group, even when
  *   the leader closes first, so a descendant that ignores SIGTERM does not outlive the call.
@@ -13,28 +15,48 @@
  * - `close()` (the core's shutdown, decision 0014): the queue is refused, the running group gets SIGTERM and,
  *   after the grace period, SIGKILL; nothing starts after. Wiring it into the core's shutdown is left to the
  *   sub-issue that wires the module, nothing imports it yet (#727).
- * - Only stdout is read, bounded. Stderr is drained and dropped: never parsed, logged or returned.
+ * - Only stdout is read, bounded. Stderr is drained and dropped: never logged or returned. The one reading of it
+ *   (#733): for `handoffs` and `recent`, on a non-zero exit, its first 4 KiB is searched for the fixed sentence
+ *   `project '<P>' not found in workspace 'default'`, built from the values the runner passed, and only a
+ *   boolean leaves, as the kind `not-found`.
  * - The log line names the command and the result kind, never stderr, an error's text, a path or env (#727).
  */
 
 import { spawn as nodeSpawn, type ChildProcess, type SpawnOptions } from 'node:child_process';
 import { isAbsolute } from 'node:path';
+import { embeddedAiMemoryEnv } from '../tools/embedded-ai-memory.ts';
 
-/** The commands the core may run on the embedded binary, each with a fixed argv (#727). */
-export type MemoryCommand = 'version' | 'setup-plan' | 'status';
+/** The commands with no caller value (#727, #733). */
+export type MemoryGlobalCommand = 'version' | 'setup-plan' | 'status';
+/** The commands that take a project (#733). */
+export type MemoryProjectCommand = 'handoffs' | 'recent';
+/** The commands the core may run on the embedded binary, each with a fixed argv (#727, #733). */
+export type MemoryCommand = MemoryGlobalCommand | MemoryProjectCommand;
 
 // The `--data-dir` option comes first, then the command (#727).
-const COMMAND_ARGS: Record<MemoryCommand, readonly string[]> = {
+const GLOBAL_ARGS: Record<MemoryGlobalCommand, readonly string[]> = {
   version: ['--version'],
   'setup-plan': ['setup', '--plan', '--json', '--agent', 'claude-code'],
-  status: ['status'],
+  status: ['status', '--json'],
 };
 
-const DATA_DIR_OPTION = '--data-dir';
+// The workspace is a constant: the core has one (#733).
+const WORKSPACE = 'default';
+// The one caller value: it never starts with a dash, so it cannot read as an option, and it holds no slash or whitespace (#733).
+const PROJECT_FORMAT = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
+const NOT_FOUND_WINDOW_BYTES = 4096;
 
-// The only variables the child receives. The repo documents no other variable ai-memory needs, and the core fixes `--data-dir` itself, so no `AI_MEMORY_*` is passed (#727/AC-2).
-const ENV_ALLOWLIST: ReadonlySet<string> = new Set(['PATH', 'HOME', 'TMPDIR', 'LANG', 'USER']);
-const ENV_ALLOWED_PREFIX = 'LC_';
+function isProjectCommand(command: MemoryCommand): command is MemoryProjectCommand {
+  return command === 'handoffs' || command === 'recent';
+}
+
+function argsFor(command: MemoryCommand, project: string | undefined): readonly string[] | null {
+  if (!isProjectCommand(command)) return GLOBAL_ARGS[command];
+  if (project === undefined || !PROJECT_FORMAT.test(project)) return null;
+  return [command, '--workspace', WORKSPACE, '--project', project, '--json'];
+}
+
+const DATA_DIR_OPTION = '--data-dir';
 
 export const MEMORY_TIMEOUT_MS = 10_000;
 export const MEMORY_KILL_GRACE_MS = 5_000;
@@ -46,7 +68,8 @@ export type MemoryRunResult =
   | { kind: 'ok'; stdout: string }
   | { kind: 'exit'; code: number | null }
   | { kind: 'timeout' }
-  | { kind: 'failed'; reason: 'spawn' | 'output-too-large' | 'closed' };
+  | { kind: 'not-found' }
+  | { kind: 'failed'; reason: 'spawn' | 'output-too-large' | 'closed' | 'invalid-project' };
 
 type Spawn = (command: string, args: readonly string[], options: SpawnOptions) => ChildProcess;
 
@@ -56,7 +79,7 @@ export interface MemoryRunnerOptions {
   binaryPath: string | null;
   /** The ai-memory data folder, fixed by the core (#727). */
   dataDir: string;
-  /** The core's environment, before `memoryEnv` keeps only the allowlist (#727). */
+  /** The core's environment, before `embeddedAiMemoryEnv` keeps only the allowlist (#727). */
   env?: NodeJS.ProcessEnv;
   spawn?: Spawn;
   /** Signals a process group; tests record it, nothing real is signaled (#727). */
@@ -72,19 +95,11 @@ export interface MemoryRunnerOptions {
 export interface MemoryRunner {
   /** False when there is no embedded binary (#727). */
   readonly available: boolean;
-  run(command: MemoryCommand): Promise<MemoryRunResult>;
+  run(command: MemoryGlobalCommand): Promise<MemoryRunResult>;
+  /** The project is checked against PROJECT_FORMAT before anything is spawned (#733). */
+  run(command: MemoryProjectCommand, project: string): Promise<MemoryRunResult>;
   /** Refuses queued and future calls and ends the running group; resolves when the queue is empty (#727). */
   close(): Promise<void>;
-}
-
-/** The allowlisted part of the core's environment: PATH, HOME, TMPDIR, LANG, USER and `LC_*`; nothing else (#727/AC-2). */
-export function memoryEnv(env: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
-  const out: NodeJS.ProcessEnv = {};
-  for (const [key, value] of Object.entries(env)) {
-    if (value === undefined) continue;
-    if (ENV_ALLOWLIST.has(key) || key.startsWith(ENV_ALLOWED_PREFIX)) out[key] = value;
-  }
-  return out;
 }
 
 const CLOSED: MemoryRunResult = { kind: 'failed', reason: 'closed' };
@@ -107,16 +122,16 @@ export function createMemoryRunner(options: MemoryRunnerOptions): MemoryRunner {
   const killGraceMs = options.killGraceMs ?? MEMORY_KILL_GRACE_MS;
   const maxStdoutBytes = options.maxStdoutBytes ?? MEMORY_MAX_STDOUT_BYTES;
   const log = options.log;
-  const childEnv = memoryEnv(options.env);
+  const childEnv = embeddedAiMemoryEnv(options.env);
   let tail: Promise<unknown> = Promise.resolve();
   let closing = false;
   let stopRunning: (() => void) | null = null;
 
-  function execute(binary: string, command: MemoryCommand): Promise<MemoryRunResult> {
+  function execute(binary: string, command: MemoryCommand, args: readonly string[], notFoundText: string | null): Promise<MemoryRunResult> {
     return new Promise((resolve) => {
       let child: ChildProcess;
       try {
-        child = spawn(binary, [DATA_DIR_OPTION, dataDir, ...COMMAND_ARGS[command]], {
+        child = spawn(binary, [DATA_DIR_OPTION, dataDir, ...args], {
           shell: false,
           detached: true,
           stdio: ['ignore', 'pipe', 'pipe'],
@@ -128,6 +143,8 @@ export function createMemoryRunner(options: MemoryRunnerOptions): MemoryRunner {
         return resolve({ kind: 'failed', reason: 'spawn' });
       }
       const chunks: Buffer[] = [];
+      const errChunks: Buffer[] = [];
+      let errSize = 0;
       let size = 0;
       let ended: MemoryRunResult | null = null;
       let timer: ReturnType<typeof setTimeout> | null = null;
@@ -143,6 +160,7 @@ export function createMemoryRunner(options: MemoryRunnerOptions): MemoryRunner {
         if (killer && !keepKiller) clearTimeout(killer);
         if (!keepKiller) killer = null;
         if (result.kind === 'timeout') log?.(`memory: ${command} timeout`);
+        if (result.kind === 'not-found') log?.(`memory: ${command} not-found`);
         if (result.kind === 'failed') log?.(`memory: ${command} failed ${result.reason}`);
         if (result.kind === 'exit') log?.(`memory: ${command} exit ${result.code ?? 'signal'}`);
         stopRunning = null;
@@ -166,12 +184,17 @@ export function createMemoryRunner(options: MemoryRunnerOptions): MemoryRunner {
         if (size > maxStdoutBytes) return terminate({ kind: 'failed', reason: 'output-too-large' });
         chunks.push(chunk);
       });
-      // Stderr is drained so the child never blocks on it, and dropped (#727).
-      child.stderr?.on('data', () => {});
+      // Stderr is drained so the child never blocks on it; only its first 4 KiB is kept, and only to look for the not-found sentence (#727, #733).
+      child.stderr?.on('data', (chunk: Buffer) => {
+        if (notFoundText === null || errSize >= NOT_FOUND_WINDOW_BYTES) return;
+        errChunks.push(chunk.subarray(0, NOT_FOUND_WINDOW_BYTES - errSize));
+        errSize += errChunks.at(-1)!.length;
+      });
       child.on('error', () => settle(ended ?? { kind: 'failed', reason: 'spawn' }, ended !== null));
       child.on('close', (code: number | null) => {
         if (ended) return settle(ended, true);
         if (code === 0) return settle({ kind: 'ok', stdout: Buffer.concat(chunks).toString('utf8') });
+        if (code !== null && notFoundText !== null && Buffer.concat(errChunks).toString('utf8').includes(notFoundText)) return settle({ kind: 'not-found' });
         settle({ kind: 'exit', code });
       });
     });
@@ -179,10 +202,16 @@ export function createMemoryRunner(options: MemoryRunnerOptions): MemoryRunner {
 
   return {
     available: binaryPath !== null,
-    run(command) {
+    run(command: MemoryCommand, project?: string): Promise<MemoryRunResult> {
       if (binaryPath === null) return Promise.resolve({ kind: 'unavailable' });
       if (closing) return Promise.resolve(CLOSED);
-      const result = tail.then((): Promise<MemoryRunResult> => (closing ? Promise.resolve(CLOSED) : execute(binaryPath, command)));
+      const args = argsFor(command, project);
+      if (args === null) {
+        log?.(`memory: ${command} failed invalid-project`);
+        return Promise.resolve({ kind: 'failed', reason: 'invalid-project' });
+      }
+      const notFoundText = isProjectCommand(command) ? `project '${project}' not found in workspace '${WORKSPACE}'` : null;
+      const result = tail.then((): Promise<MemoryRunResult> => (closing ? Promise.resolve(CLOSED) : execute(binaryPath, command, args, notFoundText)));
       tail = result.catch(() => undefined);
       return result;
     },

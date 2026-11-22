@@ -1,4 +1,4 @@
-// The bundled ai-memory, by absolute path from this module, never by PATH (#725).
+// The bundled ai-memory: its absolute path from this module, never by PATH (#725), and the environment it runs with (#733).
 
 import { accessSync, constants, statSync } from 'node:fs';
 import { join } from 'node:path';
@@ -26,4 +26,18 @@ export function embeddedAiMemoryPath(moduleUrl: string = import.meta.url): strin
 function isAbsentOrUnusable(error: unknown): boolean {
   if (typeof error !== 'object' || error === null || !('code' in error)) return false;
   return error.code === 'ENOENT' || error.code === 'ENOTDIR' || error.code === 'EACCES';
+}
+
+// The only variables the embedded binary receives. The repo documents no other variable ai-memory needs, and the core fixes `--data-dir` itself, so no `AI_MEMORY_*` is passed (#727/AC-2, #733/AC-5).
+const ENV_ALLOWLIST: ReadonlySet<string> = new Set(['PATH', 'HOME', 'TMPDIR', 'LANG', 'USER']);
+const ENV_ALLOWED_PREFIX = 'LC_';
+
+/** The allowlisted part of an environment, for every run of the embedded binary: PATH, HOME, TMPDIR, LANG, USER and `LC_*`; nothing else (#727/AC-2, #733/AC-5). */
+export function embeddedAiMemoryEnv(env: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
+  const out: NodeJS.ProcessEnv = {};
+  for (const [key, value] of Object.entries(env)) {
+    if (value === undefined) continue;
+    if (ENV_ALLOWLIST.has(key) || key.startsWith(ENV_ALLOWED_PREFIX)) out[key] = value;
+  }
+  return out;
 }

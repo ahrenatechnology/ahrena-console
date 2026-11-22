@@ -1,7 +1,7 @@
 // The probe of the embedded ai-memory (#726, decision 0014): absolute bundle path, no shell, 5 s, no login PATH.
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
-import { catalogEntry } from './catalog.ts';
+import { catalogEntry, type ToolEntry } from './catalog.ts';
 import { probeTool, type ProbeContext } from './probe.ts';
 import { PROBE_TIMEOUT_MS, type RunResult, type ToolRunner } from './runner.ts';
 
@@ -122,5 +122,36 @@ describe('#719/AC-1 embedded ai-memory probe', () => {
     };
     await probeTool(entry, throwing);
     assert.deepEqual(lines, ['tools: embedded ai-memory path not read (error)']);
+  });
+});
+
+describe('#733/AC-5 the embedded probe runs with an allowlisted environment', () => {
+  const FAKE = 'fake-secret-not-real';
+  const PLANTED = ['ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN', 'CLAUDE_CODE_OAUTH_TOKEN', 'GH_TOKEN', 'GITHUB_TOKEN', 'AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY', 'AWS_SESSION_TOKEN', 'AI_MEMORY_AUTH_TOKEN', 'AHRENA_CONSOLE_X'];
+  const KEPT = { PATH: '/usr/bin', HOME: '/Users/example', LANG: 'en_US.UTF-8', LC_ALL: 'en_US.UTF-8' };
+
+  function envSeenBy(target: ToolEntry, binaryPath: string | null): Promise<NodeJS.ProcessEnv | undefined> {
+    let seen: NodeJS.ProcessEnv | undefined;
+    const run = (async (_argv: readonly string[], opts?: { env?: NodeJS.ProcessEnv }) => {
+      seen = opts?.env;
+      return { code: 0, stdout: 'ai-memory 3.5.1', stderr: '', error: null };
+    }) as ToolRunner;
+    const env = { ...KEPT, ...Object.fromEntries(PLANTED.map((key) => [key, FAKE])) };
+    return probeTool(target, { ...context(run, binaryPath), env }).then(() => seen);
+  }
+
+  test('#733/AC-5 ANTHROPIC_*, GH_TOKEN, GITHUB_TOKEN, AWS_*, AI_MEMORY_*, CLAUDE_CODE_OAUTH_TOKEN and AHRENA_CONSOLE_* do not reach the embedded binary, and PATH, HOME, LANG and LC_ALL do', async () => {
+    const seen = await envSeenBy(entry, EMBEDDED);
+    assert.ok(seen, 'the runner was given an env');
+    for (const key of PLANTED) assert.equal(key in seen, false, `${key} must not reach the embedded probe`);
+    assert.deepEqual(seen, KEPT);
+  });
+
+  test('#733/AC-5 the probes of the other tools keep the tools environment', async () => {
+    const node = catalogEntry('node')!;
+    const seen = await envSeenBy(node, null);
+    assert.ok(seen);
+    assert.equal(seen.NONINTERACTIVE, '1');
+    assert.equal('AHRENA_CONSOLE_X' in seen, false);
   });
 });

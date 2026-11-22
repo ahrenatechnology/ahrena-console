@@ -2,6 +2,7 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import { fakeSpawn, turn } from './mocks/fake-child.ts';
+import { FAKE_DATA_DIR, FAKE_DB_PATH, FAKE_TOKEN as PLANTED_TOKEN, handoffsFixture, recentFixture, statusFixture } from './mocks/fixtures.ts';
 import { createMemoryModule } from './memory.ts';
 
 const BINARY = '/Applications/Ahrena Console.app/Contents/Resources/ai-memory/ai-memory';
@@ -58,7 +59,7 @@ describe('memory module (#727/AC-3)', () => {
     const { memory, calls } = moduleWith();
     const pending = memory.status();
     await turn();
-    assert.deepEqual(calls[0]!.args, ['--data-dir', DATA_DIR, 'status']);
+    assert.deepEqual(calls[0]!.args, ['--data-dir', DATA_DIR, 'status', '--json']);
     calls[0]!.child.finish(1, '', 'connection refused');
     assert.deepEqual(await pending, { state: 'stopped' });
   });
@@ -128,3 +129,105 @@ describe('memory module refusal log (#727)', () => {
   });
 });
 
+
+describe('memory module, typed reads (#733)', () => {
+  test('#733/AC-1 a running status carries the reprojected value and the local part held apart', async () => {
+    const { memory, calls } = moduleWith();
+    const pending = memory.status();
+    await turn();
+    calls[0]!.child.finish(0, JSON.stringify(statusFixture()));
+    const result = await pending;
+    assert.equal(result.state, 'running');
+    if (result.state !== 'running' || !result.status || !result.local) return assert.fail('a running status carries its value');
+    assert.equal(result.status.version, '3.5.1');
+    assert.equal(result.status.client_auth, 'off');
+    assert.deepEqual(result.local, { data_dir: FAKE_DATA_DIR, db_path: FAKE_DB_PATH });
+    assert.equal(JSON.stringify(result.status).includes(FAKE_DATA_DIR), false);
+  });
+
+  test('#733/AC-1 a non-zero exit is still "stopped", with no value', async () => {
+    const { memory, calls } = moduleWith();
+    const pending = memory.status();
+    await turn();
+    calls[0]!.child.finish(1, '', 'connection refused');
+    assert.deepEqual(await pending, { state: 'stopped' });
+  });
+
+  test('#733/AC-1 a status that exits 0 but does not fit is "running" with no value, and logs the closed code only', async () => {
+    const { memory, calls, lines } = moduleWith();
+    const pending = memory.status();
+    await turn();
+    calls[0]!.child.finish(0, JSON.stringify({ ...statusFixture(), client: { auth: PLANTED_TOKEN } }));
+    assert.deepEqual(await pending, { state: 'running' });
+    assert.deepEqual(lines, ['memory: status rejected malformed-status']);
+  });
+
+  test('#733/AC-2 handoffs asks for the project and returns the five fields only', async () => {
+    const { memory, calls } = moduleWith();
+    const pending = memory.handoffs('app');
+    await turn();
+    assert.deepEqual(calls[0]!.args, ['--data-dir', DATA_DIR, 'handoffs', '--workspace', 'default', '--project', 'app', '--json']);
+    calls[0]!.child.finish(0, JSON.stringify(handoffsFixture()));
+    const result = await pending;
+    assert.equal(result.ok, true);
+    assert.equal(JSON.stringify(result).includes(PLANTED_TOKEN), false);
+    if (result.ok) assert.deepEqual(Object.keys(result.value[0]!).sort(), ['created_at_ms', 'cwd', 'from_agent', 'id', 'to_agent']);
+  });
+
+  test('#733/AC-2 a project the server does not know reads as an empty list, for handoffs and for recent', async () => {
+    const { memory, calls } = moduleWith();
+    const handoffs = memory.handoffs('ghost');
+    await turn();
+    calls[0]!.child.finish(1, '', "Error: project 'ghost' not found in workspace 'default'");
+    assert.deepEqual(await handoffs, { ok: true, value: [] });
+    const recent = memory.recent('ghost');
+    await turn();
+    calls[1]!.child.finish(1, '', "Error: project 'ghost' not found in workspace 'default'");
+    assert.deepEqual(await recent, { ok: true, value: [] });
+  });
+
+  test('#733/AC-2 any other failure of handoffs is an exit failure, not an empty list', async () => {
+    const { memory, calls } = moduleWith();
+    const pending = memory.handoffs('app');
+    await turn();
+    calls[0]!.child.finish(1, '', 'connection refused');
+    assert.deepEqual(await pending, { ok: false, reason: 'exit' });
+  });
+
+  test('#733/AC-2 an invalid project is a failure and nothing is spawned', async () => {
+    const { memory, calls } = moduleWith();
+    assert.deepEqual(await memory.handoffs('--global'), { ok: false, reason: 'failed' });
+    assert.deepEqual(await memory.recent('a b'), { ok: false, reason: 'failed' });
+    assert.equal(calls.length, 0);
+  });
+
+  test('#733/AC-3 recent returns path, title and updated_at, and the planted snippet is not in the result', async () => {
+    const { memory, calls } = moduleWith();
+    const pending = memory.recent('app');
+    await turn();
+    assert.deepEqual(calls[0]!.args, ['--data-dir', DATA_DIR, 'recent', '--workspace', 'default', '--project', 'app', '--json']);
+    calls[0]!.child.finish(0, JSON.stringify(recentFixture()));
+    const result = await pending;
+    assert.equal(result.ok, true);
+    const text = JSON.stringify(result);
+    assert.equal(text.includes('snippet'), false);
+    assert.equal(text.includes(PLANTED_TOKEN), false);
+    assert.equal(text.includes('buy milk'), false);
+  });
+
+  test('#733/AC-3 a recent that does not fit is rejected and logs the closed code only', async () => {
+    const { memory, calls, lines } = moduleWith();
+    const pending = memory.recent('app');
+    await turn();
+    calls[0]!.child.finish(0, JSON.stringify([{ path: 1, snippet: PLANTED_TOKEN }]));
+    assert.deepEqual(await pending, { ok: false, reason: 'rejected' });
+    assert.deepEqual(lines, ['memory: recent rejected malformed-recent']);
+  });
+
+  test('#733/AC-2 with no embedded binary the new reads report unavailable and spawn nothing', async () => {
+    const { memory, calls } = moduleWith(null);
+    assert.deepEqual(await memory.handoffs('app'), { ok: false, reason: 'unavailable' });
+    assert.deepEqual(await memory.recent('app'), { ok: false, reason: 'unavailable' });
+    assert.equal(calls.length, 0);
+  });
+});

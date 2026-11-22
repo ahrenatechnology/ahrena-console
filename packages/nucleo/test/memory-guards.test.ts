@@ -5,6 +5,7 @@ import { dirname, join, relative } from 'node:path';
 import { describe, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { fakeSpawn, turn } from '../src/memory/mocks/fake-child.ts';
+import { handoffsFixture, recentFixture, statusFixture } from '../src/memory/mocks/fixtures.ts';
 import { createMemoryModule } from '../src/memory/memory.ts';
 
 const THIS_FILE = fileURLToPath(import.meta.url);
@@ -48,7 +49,7 @@ describe('#719/AC-10 the module never reads the ai-memory token (#727/AC-4)', ()
     }
   });
 
-  test('#719/AC-10 a token planted in the environment reaches no argv, no child environment and no output', async () => {
+  test('#719/AC-10 #733/AC-4 a token planted in the environment and the output reaches no argv, no child environment and no output', async () => {
     const doubles = fakeSpawn();
     const memory = createMemoryModule({
       dataDir: '/Users/someone/.ahrena-console/ai-memory',
@@ -71,14 +72,16 @@ describe('#719/AC-10 the module never reads the ai-memory token (#727/AC-4)', ()
     for (const [call, stdout] of [
       [() => memory.version(), 'ai-memory 3.5.1\n'],
       [() => memory.setupPlan(), planWithToken],
-      [() => memory.status(), ''],
+      [() => memory.status(), JSON.stringify({ ...statusFixture(), token: FAKE_TOKEN, client: { auth: false, token: FAKE_TOKEN } })],
+      [() => memory.handoffs('app'), JSON.stringify(handoffsFixture())],
+      [() => memory.recent('app'), JSON.stringify(recentFixture())],
     ] as const) {
       const pending = call();
       await turn();
       doubles.calls.at(-1)!.child.finish(0, stdout, `stderr ${FAKE_TOKEN}`);
       outputs.push(await pending);
     }
-    assert.equal(doubles.calls.length, 3);
+    assert.equal(doubles.calls.length, 5);
     for (const spawned of doubles.calls) {
       const everything = JSON.stringify([spawned.command, spawned.args, spawned.options.env]);
       assert.equal(everything.includes(FAKE_TOKEN), false);
@@ -86,6 +89,7 @@ describe('#719/AC-10 the module never reads the ai-memory token (#727/AC-4)', ()
       assert.equal('AI_MEMORY_AUTH_TOKEN' in (spawned.options.env ?? {}), false);
     }
     assert.equal(JSON.stringify(outputs).includes(FAKE_TOKEN), false);
+    assert.equal(/token/i.test(JSON.stringify(outputs)), false, 'no token field is read (#733/AC-4)');
   });
 });
 

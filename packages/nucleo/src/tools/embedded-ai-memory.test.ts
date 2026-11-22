@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { isAbsolute, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { describe, test } from 'node:test';
-import { embeddedAiMemoryPath } from './embedded-ai-memory.ts';
+import { embeddedAiMemoryEnv, embeddedAiMemoryPath } from './embedded-ai-memory.ts';
 
 function bundle(): { resources: string; moduleUrl: string; done: () => void } {
   const resources = mkdtempSync(join(tmpdir(), 'embedded-ai-memory-'));
@@ -75,5 +75,24 @@ describe('embeddedAiMemoryPath', () => {
     } finally {
       b.done();
     }
+  });
+});
+
+describe('embeddedAiMemoryEnv (#733/AC-5, #727/AC-2)', () => {
+  const FAKE = 'fake-secret-not-real';
+  const PLANTED = ['ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN', 'CLAUDE_CODE_OAUTH_TOKEN', 'GH_TOKEN', 'GITHUB_TOKEN', 'AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY', 'AWS_SESSION_TOKEN', 'AI_MEMORY_AUTH_TOKEN', 'AI_MEMORY_DATA_DIR', 'AHRENA_CONSOLE_CORE_PORT', 'OTHER'];
+
+  test('#733/AC-5 #727/AC-2 keeps PATH, HOME, TMPDIR, LANG, USER and LC_*, and nothing else', () => {
+    const kept = { PATH: '/usr/bin', HOME: '/Users/someone', TMPDIR: '/tmp/x', LANG: 'en_US.UTF-8', LC_ALL: 'en_US.UTF-8', LC_CTYPE: 'UTF-8', USER: 'someone' };
+    const planted = Object.fromEntries(PLANTED.map((key) => [key, FAKE]));
+    assert.deepEqual(embeddedAiMemoryEnv({ ...kept, ...planted }), kept);
+  });
+
+  test('#733/AC-5 #727/AC-2 a credential is dropped whatever the case of its name', () => {
+    assert.deepEqual(embeddedAiMemoryEnv({ ai_memory_auth_token: FAKE, AI_MEMORY_AUTH_TOKEN: FAKE, github_token: FAKE, PATH: '/usr/bin' }), { PATH: '/usr/bin' });
+  });
+
+  test('#733/AC-5 a variable with no value is left out', () => {
+    assert.deepEqual(embeddedAiMemoryEnv({ PATH: undefined, HOME: '/h' }), { HOME: '/h' });
   });
 });

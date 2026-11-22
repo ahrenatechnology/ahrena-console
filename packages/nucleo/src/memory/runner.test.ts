@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import { fakeSpawn, turn } from './mocks/fake-child.ts';
-import { createMemoryRunner, memoryEnv } from './runner.ts';
+import { createMemoryRunner } from './runner.ts';
 
 const BINARY = '/Applications/Ahrena Console.app/Contents/Resources/ai-memory/ai-memory';
 const DATA_DIR = '/Users/someone/.ahrena-console/ai-memory';
@@ -51,7 +51,7 @@ describe('memory runner (#727/AC-1, #727/AC-2)', () => {
       [
         ['--data-dir', DATA_DIR, '--version'],
         ['--data-dir', DATA_DIR, 'setup', '--plan', '--json', '--agent', 'claude-code'],
-        ['--data-dir', DATA_DIR, 'status'],
+        ['--data-dir', DATA_DIR, 'status', '--json'],
       ],
     );
   });
@@ -90,11 +90,6 @@ describe('memory runner (#727/AC-1, #727/AC-2)', () => {
     assert.deepEqual(env, KEPT);
     calls[0]!.child.finish(0, 'ai-memory 3.5.1');
     await pending;
-  });
-
-  test('#727/AC-2 memoryEnv keeps only the allowlist, whatever the case of a credential name', () => {
-    const env = memoryEnv({ ai_memory_auth_token: FAKE_TOKEN, AI_MEMORY_AUTH_TOKEN: FAKE_TOKEN, github_token: 'fake', PATH: '/usr/bin' });
-    assert.deepEqual(env, { PATH: '/usr/bin' });
   });
 
   test('#727/AC-1 an embedded path of null reports unavailable and spawns nothing', async () => {
@@ -379,5 +374,127 @@ describe('memory runner close (#727, decision 0014: one at a time, in a queue)',
     await runner.close();
     assert.deepEqual(await runner.run('version'), { kind: 'failed', reason: 'closed' });
     assert.equal(calls.length, 0);
+  });
+});
+
+describe('memory runner, handoffs and recent (#733/AC-2, #733/AC-3)', () => {
+  const NOT_FOUND = (project: string) => `Error: 404 project '${project}' not found in workspace 'default'\n`;
+
+  test('#733/AC-2 handoffs and recent run with fixed words, the default workspace, the project and --json', async () => {
+    const { runner, calls } = runnerWith();
+    for (const command of ['handoffs', 'recent'] as const) {
+      const pending = runner.run(command, 'my-app_1.2');
+      await turn();
+      calls.at(-1)!.child.finish(0, '[]');
+      assert.deepEqual(await pending, { kind: 'ok', stdout: '[]' });
+    }
+    assert.deepEqual(
+      calls.map((c) => c.args),
+      [
+        ['--data-dir', DATA_DIR, 'handoffs', '--workspace', 'default', '--project', 'my-app_1.2', '--json'],
+        ['--data-dir', DATA_DIR, 'recent', '--workspace', 'default', '--project', 'my-app_1.2', '--json'],
+      ],
+    );
+    assert.equal(calls[0]!.options.shell, false);
+  });
+
+  for (const bad of ['', '-rf', '--global', 'a b', 'a/b', '../x', 'a\nb', 'a;b', "a'b", '$(x)', 'é', 'a'.repeat(129), '.hidden', '_x']) {
+    test(`#733/AC-2 the project ${JSON.stringify(bad)} is refused without spawning, and never logged`, async () => {
+      const lines: string[] = [];
+      const { runner, calls } = runnerWith({ log: (m) => lines.push(m) });
+      assert.deepEqual(await runner.run('handoffs', bad), { kind: 'failed', reason: 'invalid-project' });
+      assert.deepEqual(await runner.run('recent', bad), { kind: 'failed', reason: 'invalid-project' });
+      assert.equal(calls.length, 0);
+      assert.deepEqual(lines, ['memory: handoffs failed invalid-project', 'memory: recent failed invalid-project']);
+    });
+  }
+
+  test('#733/AC-2 a project of 128 characters is accepted', async () => {
+    const { runner, calls } = runnerWith();
+    const pending = runner.run('recent', 'a'.repeat(128));
+    await turn();
+    assert.equal(calls.length, 1);
+    calls[0]!.child.finish(0, '[]');
+    await pending;
+  });
+
+  test('#733/AC-2 a missing project for handoffs is refused without spawning', async () => {
+    const { runner, calls } = runnerWith();
+    assert.deepEqual(await (runner.run as (c: string) => Promise<unknown>)('handoffs'), { kind: 'failed', reason: 'invalid-project' });
+    assert.equal(calls.length, 0);
+  });
+
+  for (const command of ['handoffs', 'recent'] as const) {
+    test(`#733/AC-2 a ${command} exit 1 whose stderr says the project is not found is the kind not-found, with no text`, async () => {
+      const lines: string[] = [];
+      const { runner, calls } = runnerWith({ log: (m) => lines.push(m) });
+      const pending = runner.run(command, 'app');
+      await turn();
+      calls[0]!.child.finish(1, '', NOT_FOUND('app'));
+      assert.deepEqual(await pending, { kind: 'not-found' });
+      assert.deepEqual(lines, [`memory: ${command} not-found`]);
+    });
+  }
+
+  test('#733/AC-2 the same exit with any other stderr is an exit, not a not-found', async () => {
+    const { runner, calls } = runnerWith();
+    for (const stderr of ['', 'connection refused', NOT_FOUND('other'), "project 'app' not found in workspace 'work'", "project 'app' not found"]) {
+      const pending = runner.run('handoffs', 'app');
+      await turn();
+      calls.at(-1)!.child.finish(1, '', stderr);
+      assert.deepEqual(await pending, { kind: 'exit', code: 1 });
+    }
+  });
+
+  test('#733/AC-2 the not-found text on a status or a version call is an exit: only handoffs and recent look', async () => {
+    const { runner, calls } = runnerWith();
+    for (const command of ['status', 'version'] as const) {
+      const pending = runner.run(command);
+      await turn();
+      calls.at(-1)!.child.finish(1, '', NOT_FOUND('app'));
+      assert.deepEqual(await pending, { kind: 'exit', code: 1 });
+    }
+  });
+
+  test('#733/AC-2 a not-found text on a call that exits 0 is an ok, and on a signal is an exit with no code', async () => {
+    const { runner, calls } = runnerWith();
+    const zero = runner.run('handoffs', 'app');
+    await turn();
+    calls[0]!.child.finish(0, '[]', NOT_FOUND('app'));
+    assert.deepEqual(await zero, { kind: 'ok', stdout: '[]' });
+    const signal = runner.run('handoffs', 'app');
+    await turn();
+    calls[1]!.child.finish(null, '', NOT_FOUND('app'));
+    assert.deepEqual(await signal, { kind: 'exit', code: null });
+  });
+
+  test('#733/AC-2 only the first 4 KiB of stderr is looked at', async () => {
+    const { runner, calls } = runnerWith();
+    const pending = runner.run('handoffs', 'app');
+    await turn();
+    calls[0]!.child.finish(1, '', `${'x'.repeat(4096)}${NOT_FOUND('app')}`);
+    assert.deepEqual(await pending, { kind: 'exit', code: 1 });
+  });
+
+  test('#733/AC-2 the project in the not-found pattern is matched as text, never as a pattern', async () => {
+    const { runner, calls } = runnerWith();
+    const pending = runner.run('handoffs', 'a.b');
+    await turn();
+    calls[0]!.child.finish(1, '', NOT_FOUND('aXb'));
+    assert.deepEqual(await pending, { kind: 'exit', code: 1 });
+  });
+
+  test('#733/AC-2 a stderr carrying a planted token reaches no log line and no result, found or not', async () => {
+    const lines: string[] = [];
+    const { runner, calls } = runnerWith({ log: (m) => lines.push(m) });
+    const results: unknown[] = [];
+    for (const stderr of [`boom ${FAKE_TOKEN}`, `${NOT_FOUND('app')}${FAKE_TOKEN}`]) {
+      const pending = runner.run('recent', 'app');
+      await turn();
+      calls.at(-1)!.child.finish(1, '', stderr);
+      results.push(await pending);
+    }
+    assert.equal(JSON.stringify([results, lines]).includes(FAKE_TOKEN), false);
+    assert.deepEqual(results, [{ kind: 'exit', code: 1 }, { kind: 'not-found' }]);
   });
 });
