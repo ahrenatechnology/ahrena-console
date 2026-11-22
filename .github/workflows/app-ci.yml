@@ -10,6 +10,7 @@ on:
       - packages/nucleo/**
       - packages/marca/**
       - .github/workflows/app-ci.yml
+      - scripts/fetch-ai-memory.mjs
   push:
     branches: [main]
     paths:
@@ -17,6 +18,7 @@ on:
       - packages/nucleo/**
       - packages/marca/**
       - .github/workflows/app-ci.yml
+      - scripts/fetch-ai-memory.mjs
 
 permissions:
   contents: read
@@ -51,13 +53,19 @@ jobs:
           cache: npm
           cache-dependency-path: apps/desktop/package-lock.json
 
+      # #725: tauri_build checks at compile time that every bundle resource exists, and the ai-memory
+      # folder is gitignored (fetched and verified by SHA-256 here, never committed), so it comes first.
+      - name: ai-memory embutido (baixa e confere o SHA-256)
+        working-directory: .
+        run: node scripts/fetch-ai-memory.mjs
+
       - name: Testes
         run: cargo test
 
       - name: Clippy
         run: cargo clippy --all-targets -- -D warnings
 
-      # Os recursos do bundle (packages/nucleo e packages/marca/gerado) já estão no repositório.
+      # Os recursos do bundle (packages/nucleo e packages/marca/gerado) já estão no repositório; o ai-memory veio do passo acima.
       - name: Build de debug do .app
         working-directory: apps/desktop
         run: |

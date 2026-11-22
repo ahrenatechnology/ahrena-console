@@ -23,7 +23,8 @@
       "../../../packages/nucleo/ui/": "packages/nucleo/ui/",
       "../../../scripts/remote-core/update-remote-core.mjs": "scripts/remote-core/update-remote-core.mjs",
       "../../../packages/marca/package.json": "packages/marca/package.json",
-      "../../../packages/marca/gerado/": "packages/marca/gerado/"
+      "../../../packages/marca/gerado/": "packages/marca/gerado/",
+      "resources/ai-memory/": "ai-memory/"
     },
     "macOS": {
       "minimumSystemVersion": "13.0",

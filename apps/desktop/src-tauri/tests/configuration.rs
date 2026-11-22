@@ -81,3 +81,14 @@ fn the_public_key_is_text_and_the_updater_artifacts_are_left_to_ci() {
 fn the_app_identifier() {
     assert_eq!(conf()["identifier"], "dev.ahrena.console");
 }
+
+/// #725 (#719): the pinned ai-memory (fetched and verified by scripts/fetch-ai-memory.mjs into a
+/// gitignored folder) lands in Contents/Resources/ai-memory, beside packages/nucleo, where the core's
+/// `embeddedAiMemoryPath` looks for it.
+#[test]
+fn the_embedded_ai_memory_folder_is_mapped_into_the_bundle_resources() {
+    let conf = conf();
+    assert_eq!(conf["bundle"]["resources"]["resources/ai-memory/"], "ai-memory/");
+    let ignore = read("../.gitignore");
+    assert!(ignore.lines().any(|l| l.trim() == "src-tauri/resources/ai-memory/"), "the fetched folder must be gitignored");
+}

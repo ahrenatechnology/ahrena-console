@@ -1,3 +1,6 @@
 node_modules/
 src-tauri/target/
 src-tauri/gen/
+
+# ai-memory fetched and verified at build time (scripts/fetch-ai-memory.mjs, #725): never committed
+src-tauri/resources/ai-memory/

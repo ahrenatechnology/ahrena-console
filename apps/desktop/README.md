@@ -80,6 +80,14 @@ export RUSTUP_HOME=$PWD/.toolchain/rustup CARGO_HOME=$PWD/.toolchain/cargo PATH=
 curl -sSf https://sh.rustup.rs | sh -s -- -y --no-modify-path --profile minimal
 ```
 
+O app leva o ai-memory (versão fixada, v3.5.1) dentro do bundle. Antes de qualquer `cargo` ou `tauri build`, na raiz do repositório, baixe-o e confira o SHA-256 que a release publica; sem isso o `tauri_build` falha por faltar a pasta de recurso. Nada disso é commitado (`src-tauri/resources/ai-memory/` está no `.gitignore`):
+
+```bash
+node scripts/fetch-ai-memory.mjs
+```
+
+Ele pega a arquitetura do seu Mac; `--arch aarch64` ou `--arch x86_64` escolhe a outra. Se o hash não bater, sai com erro e não copia nada. No bundle, o binário fica em `Contents/Resources/ai-memory/ai-memory`, junto com a `LICENSE` da release.
+
 ```bash
 cd apps/desktop && npm install && npm run build
 ```

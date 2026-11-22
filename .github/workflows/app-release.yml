@@ -27,6 +27,7 @@ on:
   pull_request:
     paths:
       - .github/workflows/app-release.yml
+      - scripts/fetch-ai-memory.mjs
       - apps/desktop/src-tauri/tauri.conf.json
 
 permissions:
@@ -53,8 +54,10 @@ jobs:
         include:
           - alvo: aarch64-apple-darwin
             arquitetura: aarch64
+            ai_memory_arch: aarch64
           - alvo: x86_64-apple-darwin
             arquitetura: x64
+            ai_memory_arch: x86_64
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -148,6 +151,14 @@ jobs:
       - name: Dependências do app
         working-directory: apps/desktop
         run: npm ci
+
+      # #725: o binário do ai-memory (e a licença dele) viaja dentro do app. Baixa a release fixada da
+      # arquitetura deste alvo, confere o SHA-256 que a release publica e falha se não bater. Nada disso
+      # vai para o repositório; vai para a pasta ignorada que o tauri.conf.json mapeia em Resources.
+      - name: ai-memory embutido (baixa e confere o SHA-256)
+        env:
+          AI_MEMORY_ARCH: ${{ matrix.ai_memory_arch }}
+        run: node scripts/fetch-ai-memory.mjs --arch "$AI_MEMORY_ARCH"
 
       - name: Build (e release, se for o caso)
         id: tauri
