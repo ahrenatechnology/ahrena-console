@@ -24,7 +24,7 @@
 
 import { spawn as nodeSpawn, type ChildProcess, type SpawnOptions } from 'node:child_process';
 import { isAbsolute } from 'node:path';
-import { embeddedAiMemoryEnv } from '../tools/embedded-ai-memory.ts';
+import { embeddedAiMemoryEnv, type RegisteredAccountFolder } from '../tools/embedded-ai-memory.ts';
 
 /** The commands with no caller value (#727, #733). */
 export type MemoryGlobalCommand = 'version' | 'setup-plan' | 'status';
@@ -98,6 +98,8 @@ export interface MemoryRunner {
   run(command: MemoryGlobalCommand): Promise<MemoryRunResult>;
   /** The project is checked against PROJECT_FORMAT before anything is spawned (#733). */
   run(command: MemoryProjectCommand, project: string): Promise<MemoryRunResult>;
+  /** `setup --plan --json --agent claude-code` for one registered account folder: the only run that adds `CLAUDE_CONFIG_DIR` to the env (#740/AC-1, #740/AC-7). */
+  runSetupPlanFor(folder: RegisteredAccountFolder): Promise<MemoryRunResult>;
   /** Refuses queued and future calls and ends the running group; resolves when the queue is empty (#727). */
   close(): Promise<void>;
 }
@@ -128,7 +130,7 @@ export function createMemoryRunner(options: MemoryRunnerOptions): MemoryRunner {
   let closing = false;
   let stopRunning: (() => void) | null = null;
 
-  function execute(binary: string, command: MemoryCommand, args: readonly string[], notFoundText: string | null): Promise<MemoryRunResult> {
+  function execute(binary: string, command: MemoryCommand, args: readonly string[], notFoundText: string | null, env: NodeJS.ProcessEnv): Promise<MemoryRunResult> {
     return new Promise((resolve) => {
       let child: ChildProcess;
       try {
@@ -136,7 +138,7 @@ export function createMemoryRunner(options: MemoryRunnerOptions): MemoryRunner {
           shell: false,
           detached: true,
           stdio: ['ignore', 'pipe', 'pipe'],
-          env: childEnv,
+          env,
           windowsHide: true,
         });
       } catch {
@@ -201,6 +203,13 @@ export function createMemoryRunner(options: MemoryRunnerOptions): MemoryRunner {
     });
   }
 
+  /** Queues one run behind the others; the env is the child's, decided by the caller (#727, #740). */
+  function queued(binary: string, command: MemoryCommand, args: readonly string[], notFoundText: string | null, env: NodeJS.ProcessEnv): Promise<MemoryRunResult> {
+    const result = tail.then((): Promise<MemoryRunResult> => (closing ? Promise.resolve(CLOSED) : execute(binary, command, args, notFoundText, env)));
+    tail = result.catch(() => undefined);
+    return result;
+  }
+
   return {
     available: binaryPath !== null,
     run(command: MemoryCommand, project?: string): Promise<MemoryRunResult> {
@@ -212,9 +221,12 @@ export function createMemoryRunner(options: MemoryRunnerOptions): MemoryRunner {
         return Promise.resolve({ kind: 'failed', reason: 'invalid-project' });
       }
       const notFoundText = isProjectCommand(command) ? `project '${project}' not found in workspace '${WORKSPACE}'` : null;
-      const result = tail.then((): Promise<MemoryRunResult> => (closing ? Promise.resolve(CLOSED) : execute(binaryPath, command, args, notFoundText)));
-      tail = result.catch(() => undefined);
-      return result;
+      return queued(binaryPath, command, args, notFoundText, childEnv);
+    },
+    runSetupPlanFor(folder: RegisteredAccountFolder): Promise<MemoryRunResult> {
+      if (binaryPath === null) return Promise.resolve({ kind: 'unavailable' });
+      if (closing) return Promise.resolve(CLOSED);
+      return queued(binaryPath, 'setup-plan', GLOBAL_ARGS['setup-plan'], null, embeddedAiMemoryEnv(options.env, folder));
     },
     async close() {
       closing = true;

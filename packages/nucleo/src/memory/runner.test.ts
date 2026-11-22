@@ -2,6 +2,7 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import { fakeSpawn, turn } from './mocks/fake-child.ts';
+import { registeredAccountFolder } from '../tools/embedded-ai-memory.ts';
 import { createMemoryRunner } from './runner.ts';
 
 const BINARY = '/Applications/Ahrena Console.app/Contents/Resources/ai-memory/ai-memory';
@@ -510,5 +511,42 @@ describe('memory runner, handoffs and recent (#733/AC-2, #733/AC-3)', () => {
     }
     assert.equal(JSON.stringify([results, lines]).includes(FAKE_TOKEN), false);
     assert.deepEqual(results, [{ kind: 'exit', code: 1 }, { kind: 'not-found' }]);
+  });
+});
+
+describe('#740/AC-1 #740/AC-7 the setup plan of one registered account folder', () => {
+  const FOLDER = '/Users/someone/.claude-work';
+  const folder = registeredAccountFolder(FOLDER, [FOLDER], () => true)!;
+
+  test('#740/AC-1 Given a registered folder, When its plan is read, Then the fixed argv runs with CLAUDE_CONFIG_DIR set to it and no other variable beyond the allowlist', async () => {
+    const { runner, calls } = runnerWith({ env: { PATH: '/usr/bin', HOME: '/Users/someone', GH_TOKEN: FAKE_TOKEN, CLAUDE_CONFIG_DIR: '/Users/evil/.claude' } });
+    const pending = runner.runSetupPlanFor(folder);
+    await turn();
+    const call = calls[0]!;
+    assert.equal(call.command, BINARY);
+    assert.deepEqual(call.args, ['--data-dir', DATA_DIR, 'setup', '--plan', '--json', '--agent', 'claude-code']);
+    assert.deepEqual(call.options.env, { PATH: '/usr/bin', HOME: '/Users/someone', CLAUDE_CONFIG_DIR: FOLDER });
+    assert.equal(call.options.shell, false);
+    call.child.finish(0, '{}');
+    assert.deepEqual(await pending, { kind: 'ok', stdout: '{}' });
+  });
+
+  test('#740/AC-1 Given a plain read after a folder read, Then the plain one carries no CLAUDE_CONFIG_DIR', async () => {
+    const { runner, calls } = runnerWith({ env: { PATH: '/usr/bin' } });
+    const first = runner.runSetupPlanFor(folder);
+    await turn();
+    calls[0]!.child.finish(0, '{}');
+    await first;
+    const second = runner.run('setup-plan');
+    await turn();
+    assert.equal('CLAUDE_CONFIG_DIR' in (calls[1]!.options.env ?? {}), false);
+    calls[1]!.child.finish(0, '{}');
+    await second;
+  });
+
+  test('#740/AC-1 Given no binary, Then nothing is spawned', async () => {
+    const { runner, calls } = runnerWith({ binaryPath: null });
+    assert.deepEqual(await runner.runSetupPlanFor(folder), { kind: 'unavailable' });
+    assert.equal(calls.length, 0);
   });
 });

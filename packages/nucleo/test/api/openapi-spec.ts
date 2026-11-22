@@ -85,6 +85,7 @@ export const PARAM_SAMPLES: { [name: string]: string } = {
   terminalId: 'pts-1',
   terminalAction: 'interrupt',
   dockerAction: 'clean',
+  memoryAction: 'stop',
   connectionAction: 'start',
   appUpdateAction: 'check',
   sessionName: 'dev',

@@ -139,7 +139,7 @@
     },
     {
       "name": "Memory",
-      "description": "The embedded ai-memory, read only: the server's state, the open handoffs and the recent pages of a project, and one session's capture. Local to this machine."
+      "description": "The embedded ai-memory: the server's state, the open handoffs and the recent pages of a project, one session's capture, and the actions on it (activate, stop, start, deactivate, delete data). Local to this machine."
     }
   ],
   "paths": {
@@ -6230,6 +6230,247 @@
           }
         }
       }
+    },
+    "/api/memory/plan": {
+      "get": {
+        "operationId": "getMemoryActionPlan",
+        "tags": [
+          "Memory"
+        ],
+        "summary": "The plan of a memory action, with its planDigest",
+        "description": "Built from a fresh read; nothing is written or run. `action` is exactly one of the closed catalog. Local to this machine: `machine` is refused.",
+        "parameters": [
+          {
+            "name": "action",
+            "in": "query",
+            "required": true,
+            "description": "The action, exactly once.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "activate",
+                "stop",
+                "start",
+                "deactivate",
+                "delete-data"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The plan.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemoryActionPlanAnswer"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "A parameter that is not valid (`invalid-query`) or a `machine` (`local-only`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemoryActionRefusal"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "An action that is not in the catalog, or the core runs without the memory module (`--demo`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "A method other than GET.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The action is not offered now: `reason` says why (`already-running`, `not-running`, `not-stopped`, `no-accounts`, `not-installed`, `unsupported-platform`, `state-unknown`, `no-binary`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemoryActionRefusal"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "A read the plan needs failed: `reason` is `failed`, `exit`, `timeout` or `rejected`, with no detail of the process.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemoryActionRefusal"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The core has no embedded binary (`unavailable`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemoryActionRefusal"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/memory/actions/{memoryAction}": {
+      "post": {
+        "operationId": "runMemoryAction",
+        "tags": [
+          "Memory"
+        ],
+        "summary": "Confirms a memory action: queues it on the Tools executor",
+        "description": "The body is `{ planDigest, acknowledgeDataLoss? }` and nothing else. The core rebuilds the plan from a fresh read and queues it only when its digest is the one sent. Behind a strict gate: our Host and `Origin` exactly the core's own; no Origin or another one is 403 and nothing runs. Local to this machine.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/memoryAction"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "planDigest"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "planDigest": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{16}$"
+                  },
+                  "acknowledgeDataLoss": {
+                    "type": "boolean",
+                    "description": "Required, and true, for delete-data."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Queued.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemoryActionQueued"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The body is not valid (`invalid-body`), names a `machine` (`local-only`), or delete-data came without its acknowledgment (`acknowledgment-required`, with the plan).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemoryActionRefusal"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`Origin` is not the core's own, or it is missing, or the Host is not ours: nothing ran.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "An action that is not in the catalog, or the core runs without the memory module (`--demo`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "A method other than POST.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The plan changed since it was shown (`stale-plan`, with the new plan) or the action is not offered now. Nothing ran.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemoryActionRefusal"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "The body is too large.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "The body is not `application/json`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "A read the plan needs failed, with no detail of the process.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemoryActionRefusal"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The core has no embedded binary (`unavailable`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemoryActionRefusal"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -6511,6 +6752,22 @@
         "description": "The window credential the desktop app holds, compared in constant time with the one the core keeps in memory. Never in a URL or a body.",
         "schema": {
           "type": "string"
+        }
+      },
+      "memoryAction": {
+        "name": "memoryAction",
+        "in": "path",
+        "required": true,
+        "description": "A memory action of the closed catalog (api/memory-actions-route.ts).",
+        "schema": {
+          "type": "string",
+          "enum": [
+            "activate",
+            "stop",
+            "start",
+            "deactivate",
+            "delete-data"
+          ]
         }
       }
     },
@@ -8278,6 +8535,368 @@
           },
           "alert": {
             "$ref": "#/components/schemas/MemoryAlert"
+          }
+        }
+      },
+      "MemoryActionPlan": {
+        "type": "object",
+        "description": "The plan a dialog shows before anything is written or run. `planDigest` is what the confirm sends back; the steps carry no path. `accounts`, `service`, `dataDir` and `consent` are only on the activate plan; `deletes`, `keeps` and `acknowledgment` only on the delete-data plan. The accounts and `dataDir` name local paths: for the interface of this machine only.",
+        "required": [
+          "actionId",
+          "label",
+          "steps",
+          "timeoutSeconds",
+          "planDigest",
+          "notices"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "actionId": {
+            "type": "string",
+            "enum": [
+              "activate",
+              "stop",
+              "start",
+              "deactivate",
+              "delete-data"
+            ]
+          },
+          "label": {
+            "type": "string"
+          },
+          "steps": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "display",
+                "account"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "display": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "account": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "description": "The index into `accounts` the step runs for, or null."
+                }
+              }
+            }
+          },
+          "timeoutSeconds": {
+            "type": "integer"
+          },
+          "planDigest": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{16}$"
+          },
+          "accounts": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "dir",
+                "setup"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "dir": {
+                  "type": "string"
+                },
+                "setup": {
+                  "type": "object",
+                  "required": [
+                    "fresh",
+                    "service",
+                    "agents",
+                    "other_agents"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "fresh": {
+                      "type": "boolean"
+                    },
+                    "service": {
+                      "type": "object",
+                      "required": [
+                        "action",
+                        "manager"
+                      ],
+                      "additionalProperties": false,
+                      "properties": {
+                        "action": {
+                          "type": "string"
+                        },
+                        "manager": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "agents": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "agent",
+                          "found",
+                          "wiring"
+                        ],
+                        "additionalProperties": false,
+                        "properties": {
+                          "agent": {
+                            "type": "string"
+                          },
+                          "found": {
+                            "type": "boolean"
+                          },
+                          "wiring": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          }
+                        }
+                      }
+                    },
+                    "other_agents": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "service": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "required": [
+              "action",
+              "manager"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "action": {
+                "type": "string"
+              },
+              "manager": {
+                "type": "string"
+              }
+            }
+          },
+          "dataDir": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "consent": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The consent text, in pt-BR: what is captured, where it lives, how to exclude a repository, that nothing is downloaded."
+          },
+          "deletes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "keeps": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "acknowledgment": {
+            "type": "object",
+            "required": [
+              "field",
+              "text"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "field": {
+                "const": "acknowledgeDataLoss"
+              },
+              "text": {
+                "type": "string"
+              }
+            }
+          },
+          "notices": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "MemoryActionPlanAnswer": {
+        "type": "object",
+        "required": [
+          "plan"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "plan": {
+            "$ref": "#/components/schemas/MemoryActionPlan"
+          }
+        }
+      },
+      "MemoryActionJob": {
+        "type": "object",
+        "description": "The job a confirmed action queued on the Tools executor, by named fields: never the process output or the log path.",
+        "required": [
+          "id",
+          "toolId",
+          "actionId",
+          "label",
+          "state",
+          "steps",
+          "step",
+          "phase",
+          "startedAt",
+          "endedAt",
+          "exitCode",
+          "timeoutSeconds"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{12}$"
+          },
+          "toolId": {
+            "const": "ai-memory"
+          },
+          "actionId": {
+            "type": "string",
+            "enum": [
+              "activate",
+              "stop",
+              "start",
+              "deactivate",
+              "delete-data"
+            ]
+          },
+          "label": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "queued",
+              "running",
+              "succeeded",
+              "failed",
+              "timed-out",
+              "canceled"
+            ]
+          },
+          "steps": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "step": {
+            "type": "integer"
+          },
+          "phase": {
+            "type": "string",
+            "enum": [
+              "running",
+              "verifying"
+            ]
+          },
+          "startedAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "endedAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "exitCode": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "timeoutSeconds": {
+            "type": "integer"
+          }
+        }
+      },
+      "MemoryActionQueued": {
+        "type": "object",
+        "required": [
+          "job"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "job": {
+            "$ref": "#/components/schemas/MemoryActionJob"
+          }
+        }
+      },
+      "MemoryActionRefusal": {
+        "type": "object",
+        "description": "A refusal of the memory action routes: `error` is a message for a person (not matched), `reason` is the contract. `plan` is the plan as it is now, on a stale digest or a missing acknowledgment. Nothing ran.",
+        "required": [
+          "error",
+          "reason"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "error": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "invalid-query",
+              "invalid-body",
+              "local-only",
+              "stale-plan",
+              "acknowledgment-required",
+              "no-binary",
+              "state-unknown",
+              "already-running",
+              "not-running",
+              "not-stopped",
+              "no-accounts",
+              "not-installed",
+              "unsupported-platform",
+              "unavailable",
+              "failed",
+              "exit",
+              "timeout",
+              "rejected"
+            ]
+          },
+          "plan": {
+            "$ref": "#/components/schemas/MemoryActionPlan"
           }
         }
       }

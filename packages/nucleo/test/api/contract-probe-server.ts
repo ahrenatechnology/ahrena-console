@@ -17,6 +17,7 @@ import { createCoreDecisions } from '../../src/api/adrs.ts';
 import { createCoreAgentInstructions } from '../../src/api/agent-instructions.ts';
 import { createCoreFrameworkInstall } from '../../src/api/framework-install.ts';
 import { createDockerRoute } from '../../src/api/docker.ts';
+import { createMemoryActionsRoute } from '../../src/api/memory-actions-route.ts';
 import { createMemoryRoute } from '../../src/api/memory-route.ts';
 import { createMessagingRoute } from '../../src/api/messaging.ts';
 import { createOrdersRoute } from '../../src/api/orders.ts';
@@ -127,6 +128,8 @@ async function wiring(dir: string): Promise<{ stands: Partial<ApiOptions>; stora
     ports: createPortsRoute({ releaser, acceptNoOrigin: () => true, remote: null }),
     // The memory read routes (#735) over a fake of the module: no process, no binary.
     memory: createMemoryRoute({ memory: fakeReads().memory }),
+    // The memory actions (#740) over a fake that offers none: no process, no file, no queue.
+    memoryActions: createMemoryActionsRoute({ actions: { plan: async () => ({ kind: 'not-offered', reason: 'not-running' }), act: async () => ({ kind: 'not-offered', reason: 'not-running' }) } }),
     ownerProofRetry: async () => null,
     devConsole: { overview: async () => ({ generatedAt: '2026-11-14T12:00:00.000Z', readAt: null, stale: false, staleReason: null, contexts: [], mergeQueue: [] }), view: async () => null },
     githubSync: { status: () => ({ active: false, pausedUntil: null, steps: [] }) },

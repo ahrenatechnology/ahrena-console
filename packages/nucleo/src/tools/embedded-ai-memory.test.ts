@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { isAbsolute, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { describe, test } from 'node:test';
-import { embeddedAiMemoryEnv, embeddedAiMemoryPath } from './embedded-ai-memory.ts';
+import { embeddedAiMemoryEnv, embeddedAiMemoryPath, registeredAccountFolder } from './embedded-ai-memory.ts';
 
 function bundle(): { resources: string; moduleUrl: string; done: () => void } {
   const resources = mkdtempSync(join(tmpdir(), 'embedded-ai-memory-'));
@@ -94,5 +94,34 @@ describe('embeddedAiMemoryEnv (#733/AC-5, #727/AC-2)', () => {
 
   test('#733/AC-5 a variable with no value is left out', () => {
     assert.deepEqual(embeddedAiMemoryEnv({ PATH: undefined, HOME: '/h' }), { HOME: '/h' });
+  });
+});
+
+describe('#740/AC-7 CLAUDE_CONFIG_DIR is the one variable added, and only from the registry', () => {
+  const REGISTRY = ['/Users/someone/.claude', '/Users/someone/.claude-work'];
+  const exists = (path: string) => REGISTRY.includes(path);
+
+  test('#740/AC-7 Given a folder the registry holds, absolute and existing, Then it is accepted', () => {
+    assert.equal(registeredAccountFolder('/Users/someone/.claude-work', REGISTRY, exists), '/Users/someone/.claude-work');
+  });
+
+  test('#740/AC-7 Given a value the registry does not hold, a relative one, one that does not exist or one that is not normalized, Then it is refused', () => {
+    assert.equal(registeredAccountFolder('/Users/someone/.other', REGISTRY, exists), null, 'not from the registry');
+    assert.equal(registeredAccountFolder('.claude', ['.claude'], () => true), null, 'relative');
+    assert.equal(registeredAccountFolder('/Users/someone/.claude-work', REGISTRY, () => false), null, 'does not exist');
+    assert.equal(registeredAccountFolder('/Users/someone/x/../.claude', ['/Users/someone/x/../.claude'], () => true), null, 'not normalized');
+    assert.equal(registeredAccountFolder('/Users/someone/.claude\0', ['/Users/someone/.claude\0'], () => true), null, 'a NUL byte');
+  });
+
+  test('#740/AC-7 Given a registered folder, Then CLAUDE_CONFIG_DIR is that folder and the rest of the env is the allowlist', () => {
+    const folder = registeredAccountFolder('/Users/someone/.claude', REGISTRY, exists)!;
+    assert.deepEqual(embeddedAiMemoryEnv({ PATH: '/usr/bin', HOME: '/h', GH_TOKEN: 'fake-secret-not-real' }, folder), { PATH: '/usr/bin', HOME: '/h', CLAUDE_CONFIG_DIR: '/Users/someone/.claude' });
+  });
+
+  test('#740/AC-7 Given CLAUDE_CONFIG_DIR in the core environment, Then it never reaches the child, with a folder or without', () => {
+    const planted = { PATH: '/usr/bin', CLAUDE_CONFIG_DIR: '/Users/evil/.claude' };
+    assert.deepEqual(embeddedAiMemoryEnv(planted), { PATH: '/usr/bin' });
+    const folder = registeredAccountFolder('/Users/someone/.claude', REGISTRY, exists)!;
+    assert.equal(embeddedAiMemoryEnv(planted, folder).CLAUDE_CONFIG_DIR, '/Users/someone/.claude');
   });
 });

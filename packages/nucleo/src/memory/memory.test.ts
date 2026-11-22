@@ -15,6 +15,7 @@ import {
   statusFixture,
   toolResult,
 } from './mocks/fixtures.ts';
+import { registeredAccountFolder } from '../tools/embedded-ai-memory.ts';
 import { createMemoryModule, HANDOFF_LIST_LIMIT } from './memory.ts';
 
 const BINARY = '/Applications/Ahrena Console.app/Contents/Resources/ai-memory/ai-memory';
@@ -529,5 +530,38 @@ describe('memory module, the bridge reads (#734)', () => {
     const result = await pending;
     assert.equal(JSON.stringify([doubles.calls[0]!.command, doubles.calls[0]!.args, doubles.calls[0]!.options.env, result]).includes(PLANTED_TOKEN), false);
     assert.equal('AI_MEMORY_AUTH_TOKEN' in (doubles.calls[0]!.options.env ?? {}), false);
+  });
+});
+
+describe('#740/AC-1 the setup plan of a registered account folder', () => {
+  const FOLDER = '/Users/someone/.claude-work';
+  const folder = registeredAccountFolder(FOLDER, [FOLDER], () => true)!;
+  const PLAN = { format: 1, data_dir: DATA_DIR, config_path: `${DATA_DIR}/config.toml`, fresh: true, service: { action: 'install', manager: 'launchd', path: '/Users/someone/Library/LaunchAgents/x.plist' }, agents: [{ agent: 'claude-code', found: true, wiring: 'hooks' }], other_agents: [] };
+
+  test('#740/AC-1 Given a registered folder, When its plan is read, Then the plan and its local part come back reprojected', async () => {
+    const { memory, calls } = moduleWith(BINARY, { env: { PATH: '/usr/bin' } });
+    const pending = memory.setupPlanWithLocalFor(folder);
+    await turn();
+    assert.deepEqual(calls[0]!.options.env, { PATH: '/usr/bin', CLAUDE_CONFIG_DIR: FOLDER });
+    calls[0]!.child.finish(0, JSON.stringify({ ...PLAN, extra: 'dropped' }));
+    const result = await pending;
+    assert.equal(result.ok, true);
+    if (result.ok) {
+      assert.equal(result.value.plan.service.action, 'install');
+      assert.equal(result.value.local.config_path, `${DATA_DIR}/config.toml`);
+      assert.equal('extra' in result.value.plan, false);
+    }
+  });
+
+  test('#740/AC-1 Given a failing run or a malformed plan, Then the read fails with a closed reason', async () => {
+    const { memory, calls } = moduleWith();
+    const failing = memory.setupPlanWithLocalFor(folder);
+    await turn();
+    calls[0]!.child.finish(3);
+    assert.deepEqual(await failing, { ok: false, reason: 'exit' });
+    const malformed = memory.setupPlanWithLocalFor(folder);
+    await turn();
+    calls[1]!.child.finish(0, '{"format":2}');
+    assert.deepEqual(await malformed, { ok: false, reason: 'rejected' });
   });
 });

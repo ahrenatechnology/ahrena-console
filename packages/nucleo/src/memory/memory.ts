@@ -2,11 +2,11 @@
  * The core's memory module (#727, #733, #734): what the core reads from the embedded ai-memory, through its
  * local CLI (the runner) and its `mcp-bridge` stdio channel (the bridge), field by field (the readers). A local
  * path (data_dir, db_path, config_path, a service path, a handoff's cwd) comes out only of a method whose name ends
- * in `Local` (#734/D1, #734/D2). No route, no write action: setup without --plan, serve, start, stop, deactivate and
- * delete are not here (#719).
+ * in `Local` (#734/D1, #734/D2). This module only reads: the actions that change something (setup without --plan, stop, start,
+ * deactivate, delete) are memory/actions.ts's, on the Tools queue, and serve is nobody's (#740, #719).
  */
 
-import { embeddedAiMemoryPath } from '../tools/embedded-ai-memory.ts';
+import { embeddedAiMemoryPath, type RegisteredAccountFolder } from '../tools/embedded-ai-memory.ts';
 import { createMemoryBridge, type MemoryBridgeResult } from './bridge.ts';
 import { matchSession, readBridgeHandoffs, type MemoryBridgeHandoffsReading, type MemorySessionHandoff, type MemorySessionHandoffLocal, type MemorySessionHandoffs } from './bridge-readers.ts';
 import {
@@ -21,6 +21,7 @@ import {
   type MemoryRecentPage,
   type MemorySetupPlan,
   type MemorySetupPlanLocal,
+  type MemorySetupPlanReading,
   type MemoryStatus,
   type MemoryStatusLocal,
   type MemoryVersion,
@@ -68,6 +69,8 @@ export interface MemoryModule {
   setupPlan(): Promise<MemoryRead<MemorySetupPlan>>;
   /** LOCAL ONLY: the plan's data_dir, config_path and service path; never for MCP, an exporter, the hub or the remote contract (#734/D2). */
   setupPlanLocal(): Promise<MemoryRead<MemorySetupPlanLocal>>;
+  /** LOCAL ONLY: the setup plan of one registered Claude account folder, with its local part (config_path); for the local actions route only (#740/AC-1). */
+  setupPlanWithLocalFor(folder: RegisteredAccountFolder): Promise<MemoryRead<MemorySetupPlanReading>>;
   status(): Promise<MemoryStatusState>;
   /** LOCAL ONLY: data_dir and db_path of a running server; never for MCP, an exporter, the hub or the remote contract (#734/D2). */
   statusLocal(): Promise<MemoryRead<MemoryStatusLocal>>;
@@ -166,6 +169,7 @@ export function createMemoryModule(options: MemoryModuleOptions): MemoryModule {
       const result = await read('setup-plan', readSetupPlan);
       return result.ok ? { ok: true, value: result.value.local } : result;
     },
+    setupPlanWithLocalFor: async (folder) => interpret('setup-plan', await runner.runSetupPlanFor(folder), readSetupPlan),
     handoffs: async (project) => {
       const result = await readProject('handoffs', project, readHandoffs, { handoffs: [], local: [] });
       return result.ok ? { ok: true, value: result.value.handoffs } : result;

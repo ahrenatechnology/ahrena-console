@@ -107,9 +107,17 @@ describe('#719/AC-11 nothing from the memory module leaves the machine (#727/AC-
    * builds it can reach the module. So: no module outside memory/ imports it, but the ones listed
    * here. The list is empty today; adding a name to it is a review decision, and it may never hold
    * observability, telemetry, a hub or a remote sender. #735: the three files of the local read routes and the composition root that builds the module
-   * (the routes answer the interface of this machine only); a test file may import the module, it sends nothing.
+   * (the routes answer the interface of this machine only); #740: the local action route and its pt-BR text, and the one file that writes config.toml;
+   * a test file may import the module, it sends nothing.
    */
-  const ALLOWED_IMPORTERS: string[] = ['packages/nucleo/src/api/cli.ts', 'packages/nucleo/src/api/memory-route.ts', 'packages/nucleo/src/api/memory-view.ts'];
+  const ALLOWED_IMPORTERS: string[] = [
+    'packages/nucleo/src/api/cli.ts',
+    'packages/nucleo/src/api/memory-actions-route.ts',
+    'packages/nucleo/src/api/memory-actions-text.ts',
+    'packages/nucleo/src/api/memory-route.ts',
+    'packages/nucleo/src/api/memory-view.ts',
+    'packages/nucleo/src/tools/memory-config-file.ts',
+  ];
   const NEVER_ALLOWED = [/\/observability\//, /\/telemetry\//, /hub/i, /remote/i, /otel/i];
   const SPECIFIER = /(?:\bfrom\s*|\bimport\s*\(\s*|\bimport\s+|\brequire\s*\(\s*)['"]([^'"]+)['"]/g;
 
@@ -228,5 +236,42 @@ describe('#735/AC-5 #719/AC-10 the route files never touch the token either', ()
       assert.equal(/node:fs|readFile|createReadStream|\bfetch\s*\(|^import (?!type).*node:(?:http|https|net|tls)/m.test(text), false, `${relative(REPO_ROOT, path)} reads a file or opens a channel (a type-only import of node:http is not one)`);
       assert.equal(/\blog\s*\(|console\./.test(text), false, `${relative(REPO_ROOT, path)} writes a log line`);
     }
+  });
+});
+
+describe('#740/AC-5 #719/AC-10 the action files never touch the token either', () => {
+  const SRC = join(TEST_DIR, '..', 'src');
+  const TOKEN_NAME = /auth-tokens?|auth-header/i;
+  const ACTION_FILES = ['api/memory-actions-route.ts', 'tools/memory-config-file.ts', 'tools/embedded-ai-memory.ts'].map((name) => join(SRC, name));
+
+  test('#719/AC-10 the route, the config writer and the env builder name no token file', () => {
+    for (const path of ACTION_FILES) assert.equal(TOKEN_NAME.test(readFileSync(path, 'utf8')), false, `${relative(REPO_ROOT, path)} names a token file`);
+  });
+
+  test('#719/AC-10 the route reads no file, opens no channel and writes no log', () => {
+    const text = readFileSync(join(SRC, 'api', 'memory-actions-route.ts'), 'utf8');
+    assert.equal(/node:fs|readFile|createReadStream|\bfetch\s*\(|^import (?!type).*node:(?:http|https|net|tls)/m.test(text), false, 'reads a file or opens a channel');
+    assert.equal(/\blog\s*\(|console\./.test(text), false, 'writes a log line');
+  });
+
+  test('#740/AC-5 the one file that writes in ai-memory\'s data folder opens config.toml and nothing else', () => {
+    const text = readFileSync(join(SRC, 'tools', 'memory-config-file.ts'), 'utf8');
+    assert.equal(/readdir|opendir|glob|createReadStream|\bfetch\s*\(|node:(?:http|https|net|tls)/.test(text), false, 'lists a folder or opens a channel');
+    assert.ok(text.includes("'config.toml'"), 'it names the config file');
+    assert.equal(text.match(/\.toml/g)?.length, text.match(/config\.toml/g)?.length, 'and no other file by name');
+  });
+
+  test('#719/AC-10 the pt-BR text names the credential folder once, as a thing that stays, and does nothing else', () => {
+    const text = readFileSync(join(SRC, 'api', 'memory-actions-text.ts'), 'utf8');
+    const named = text.split('\n').filter((line) => TOKEN_NAME.test(line)).filter((line) => !line.trimStart().startsWith('*') && !line.trimStart().startsWith('//') && !line.trimStart().startsWith('/*'));
+    assert.equal(named.length, 1, 'one line of code names it');
+    assert.match(named[0]!, /'access-credentials': 'auth-tokens\/'/);
+    assert.equal(/node:|import (?!type)|\bfetch\s*\(|\blog\s*\(/.test(text.replace(/^import type .*$/gm, '')), false, 'the text module imports nothing and does nothing');
+  });
+
+  test('#719/AC-10 no process is ever given a token file: the argv built by the actions names none', () => {
+    const text = readFileSync(join(SRC, 'memory', 'actions.ts'), 'utf8');
+    assert.equal(TOKEN_NAME.test(text), false);
+    assert.equal(/--purge-data/.test(text.replace(/\/[*][\s\S]*?[*]\//g, '').replace(/\/\/.*$/gm, '')), false, 'the code never passes --purge-data');
   });
 });

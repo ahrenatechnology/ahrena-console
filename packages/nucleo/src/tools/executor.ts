@@ -135,6 +135,20 @@ export interface JobSpec {
   key?: string;
   /** Runs after the last step exits 0 (the Docker reading is dropped here). */
   after?: () => void | Promise<void>;
+  /** How each step really runs, by index (#740): `steps` is what the job shows, this is what runs. Absent or null: the step as shown. */
+  runs?: (StepRun | null)[];
+  /** The process output of this job is read and dropped, never kept or logged (#740): the memory actions, whose output holds local paths. */
+  quiet?: boolean;
+}
+
+/** What one step of a job runs, when it is not just its shown argv (#740). */
+export interface StepRun {
+  /** The argv that is spawned, when the shown one is only for display (a path the job list must not carry). */
+  argv?: string[];
+  /** The whole environment of this step, instead of the host's. */
+  env?: NodeJS.ProcessEnv;
+  /** A step the core does itself, with no process: resolves with the exit code, 0 for success (#740). */
+  inline?: (line: (text: string) => void) => Promise<number>;
 }
 export type EnqueueResult = { kind: 'queued'; job: ToolJob };
 
@@ -214,6 +228,9 @@ export class ToolsExecutor implements ToolsControl {
   private readonly endNotes = new Map<string, string>();
   private readonly keys = new Map<string, string>();
   private readonly afters = new Map<string, () => void | Promise<void>>();
+  // How each queued or running job's steps really run, and whether its output is dropped (#740).
+  private readonly stepRuns = new Map<string, (StepRun | null)[]>();
+  private readonly quietJobs = new Set<string>();
   private closing = false;
 
   constructor(options: ToolsExecutorOptions) {
@@ -288,6 +305,8 @@ export class ToolsExecutor implements ToolsControl {
     };
     this.keys.set(job.id, key);
     if (spec.after) this.afters.set(job.id, spec.after);
+    if (spec.runs) this.stepRuns.set(job.id, spec.runs);
+    if (spec.quiet) this.quietJobs.add(job.id);
     m.queue.push(job);
     m.batch ??= { total: 0, done: 0 };
     m.batch.total++;
@@ -307,6 +326,7 @@ export class ToolsExecutor implements ToolsControl {
         job!.endedAt = new Date(this.now()).toISOString();
         this.keys.delete(job!.id);
         this.afters.delete(job!.id);
+        this.forgetRuns(job!.id);
         this.remember(m, job!);
         this.o.log?.(`tools (${machine}): job ${jobId} canceled before it started`);
         this.wakeIdle(m);
@@ -382,6 +402,7 @@ export class ToolsExecutor implements ToolsControl {
         job.endedAt = new Date(this.now()).toISOString();
         this.keys.delete(job.id);
         this.afters.delete(job.id);
+        this.forgetRuns(job.id);
         this.remember(m, job);
       }
       const job = m.current;
@@ -394,6 +415,11 @@ export class ToolsExecutor implements ToolsControl {
       this.changed(machine);
     }
     await Promise.all(waits);
+  }
+
+  private forgetRuns(jobId: string): void {
+    this.stepRuns.delete(jobId);
+    this.quietJobs.delete(jobId);
   }
 
   private changed(machine: string): void {
@@ -431,6 +457,7 @@ export class ToolsExecutor implements ToolsControl {
         this.running.delete(job.id);
         this.keys.delete(job.id);
         this.afters.delete(job.id);
+        this.forgetRuns(job.id);
         this.remember(m, job);
         for (const resolve of m.afterCurrent.splice(0)) resolve();
         // The next job (its own change) or, with the queue drained, the batch closed; then this end's change.
@@ -457,8 +484,12 @@ export class ToolsExecutor implements ToolsControl {
     const fd = this.openLog(job);
     const line = (text: string) => this.emit(job, fd, text);
     try {
-      const resolved = await Promise.all(job.steps.map((s) => this.o.service.resolveExecutable(s[0] ?? '').catch(() => ({ path: null, realPath: null }))));
-      const refused = job.steps.findIndex((s, i) => s.length === 0 || isAdminExecutable(s[0]!) || (resolved[i]!.realPath !== null && isAdminExecutable(resolved[i]!.realPath!)));
+      const runs = this.stepRuns.get(job.id) ?? [];
+      const quiet = this.quietJobs.has(job.id);
+      // The argv that runs is the step's own when it has one; the shown one is only for display (#740).
+      const argvOf = (i: number): string[] => runs[i]?.argv ?? job.steps[i]!;
+      const resolved = await Promise.all(job.steps.map((_s, i) => (runs[i]?.inline ? Promise.resolve({ path: null, realPath: null }) : this.o.service.resolveExecutable(argvOf(i)[0] ?? '').catch(() => ({ path: null, realPath: null })))));
+      const refused = job.steps.findIndex((_s, i) => !runs[i]?.inline && (argvOf(i).length === 0 || isAdminExecutable(argvOf(i)[0]!) || (resolved[i]!.realPath !== null && isAdminExecutable(resolved[i]!.realPath!))));
       if (refused >= 0) {
         job.step = refused;
         line(`Recusado: este passo pede administrador e o console não roda comandos com senha. Rode no Terminal: ${job.steps[refused]!.join(' ')}`);
@@ -466,17 +497,22 @@ export class ToolsExecutor implements ToolsControl {
         return this.end(job, 'failed', null);
       }
       const env = await this.o.service.processEnv();
+      // A quiet job keeps its own lines (the shown command, the failure) and drops what the processes print (#740).
+      const processLine = quiet ? () => {} : line;
       for (let i = 0; i < job.steps.length; i++) {
         if (job.state !== 'running') return;
         if (i > 0) {
           job.step = i;
           this.changed(job.machine);
         }
-        const argv = job.steps[i]!;
-        line(`$ ${argv.join(' ')}`);
-        const code = await this.step(job, resolved[i]!.path ?? argv[0]!, argv.slice(1), env, line);
+        line(`$ ${job.steps[i]!.join(' ')}`);
+        const inline = runs[i]?.inline;
+        const code = inline ? await inline(processLine).catch(() => 1) : await this.step(job, resolved[i]!.path ?? argvOf(i)[0]!, argvOf(i).slice(1), runs[i]?.env ?? env, processLine);
         if (job.state !== 'running') return;
-        if (code !== 0) return this.end(job, 'failed', code);
+        if (code !== 0) {
+          if (quiet) line(`Falhou no passo ${i + 1} de ${job.steps.length}${code === null ? '' : ` (saída ${code})`}.`);
+          return this.end(job, 'failed', code);
+        }
       }
       job.exitCode = 0;
       job.phase = 'verifying';

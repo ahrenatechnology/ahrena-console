@@ -155,8 +155,13 @@ import { ancestorsWith, listPortsWith, PortReleaser } from '../ports/release.ts'
 import { systemRunner } from '../telemetry/adapters/system.ts';
 import { createCloudsRoute } from './clouds.ts';
 import { createDockerRoute } from './docker.ts';
+import { createMemoryActionsRoute } from './memory-actions-route.ts';
+import { MEMORY_LABELS } from './memory-actions-text.ts';
 import { createMemoryRoute } from './memory-route.ts';
+import { createMemoryActions } from '../memory/actions.ts';
 import { createMemoryModule } from '../memory/memory.ts';
+import { embeddedAiMemoryPath } from '../tools/embedded-ai-memory.ts';
+import { createMemoryActionFiles } from '../tools/memory-config-file.ts';
 import { createDiagnosisReader, createDiagnosisRoute, type DiagnosisRouteOptions } from './diagnosis.ts';
 import { createDelegationsRoute, delegationDiagnosis } from './delegations.ts';
 import { createDelegationLauncher } from './delegation-launch.ts';
@@ -803,6 +808,23 @@ const docker =
 // The embedded ai-memory's read routes (#735): local and read only, over the module of #727, which uses ai-memory's default data folder, the one `setup` writes to (no `--data-dir`). Not in --demo, where there is no real server to read.
 const memoryModule = demo ? null : createMemoryModule({ log });
 const memory = memoryModule ? createMemoryRoute({ memory: memoryModule }) : null;
+// The memory actions (#740): activate, stop, start, deactivate and delete data, on the Tools executor's queue, behind their own strict gate, local only. The account folders are the registry's (the profiles'), never a request's. Not in --demo.
+const memoryActions =
+  memoryModule && toolsExecutor && profiles
+    ? createMemoryActionsRoute({
+        actions: createMemoryActions({
+          memory: memoryModule,
+          queue: toolsExecutor,
+          binaryPath: embeddedAiMemoryPath(),
+          home: homedir(),
+          uid: () => process.getuid?.() ?? null,
+          accountFolders: async () => (await profiles.list()).map((profile) => profile.dir),
+          files: createMemoryActionFiles(),
+          labels: MEMORY_LABELS,
+          log,
+        }),
+      })
+    : null;
 // The diagnosis of an open saturation alert (#565): this machine's collectors (read-only, fixed commands) and the remote machines' through their tunnel port. Not in --demo, where the readings are synthetic.
 // #722: `processes-by-session` reads the live `claude` registry (`liveProcesses`, above) and the title each session has in the console.
 const diagnosisSessions = liveProcesses
@@ -948,6 +970,7 @@ const api: LocalApi = await startLocalApi({
   clouds,
   docker,
   memory,
+  memoryActions,
   appUpdate,
   githubSync,
   load: () => ({

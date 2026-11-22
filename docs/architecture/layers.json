@@ -115,7 +115,7 @@
       "memory": {
         "layer": "edge",
         "evidence": "the folder exists to run the embedded ai-memory binary as a child process (runner.ts imports node:child_process: no shell, own process group, timeout, close on shutdown) and its readers only parse that outside process's output, the same reason vendor and tools sit at the edge; 1 of 3 files does direct IO",
-        "mixed": "readers.ts is pure parsing (field-by-field reprojection of the CLI's output) and memory.ts is pure composition of the runner and the readers; mocks/ holds test doubles (the fixtures, the fake child and the fake reads of #735)"
+        "mixed": "readers.ts is pure parsing (field-by-field reprojection of the CLI's output) and memory.ts is pure composition of the runner and the readers; actions.ts (#740) is orchestration through injected ports (the memory reads, the Tools queue, the files) and config-toml.ts is a pure text transform, the file side being tools/memory-config-file.ts; mocks/ holds test doubles (the fixtures, the fake child and the fake reads of #735, the actions harness of #740)"
       },
       "messaging": {
         "layer": "application",

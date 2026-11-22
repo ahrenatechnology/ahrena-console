@@ -44,9 +44,10 @@ const PATHS = {
 const TEMPLATES = { state: '/api/memory', handoffs: '/api/memory/handoffs', pages: '/api/memory/pages', session: '/api/memory/sessions/{sessionId}' } as const;
 
 describe('#735 the contract declares the memory read routes', () => {
-  test('#735/AC-1 #735/AC-2 Given the spec, Then it declares the four GET operations and no write under /api/memory', () => {
+  test('#735/AC-1 #735/AC-2 Given the spec, Then it declares the four read operations and, besides them, only the actions of #740 under /api/memory', () => {
     const operations = declaredOperations(readSpec()).filter((o) => o.path.startsWith('/api/memory'));
-    assert.deepEqual(operations.map((o) => routeKey(o.method, o.path)).sort(), Object.values(TEMPLATES).map((t) => `GET ${t}`).sort());
+    const actions = ['GET /api/memory/plan', 'POST /api/memory/actions/{memoryAction}'];
+    assert.deepEqual(operations.map((o) => routeKey(o.method, o.path)).sort(), [...Object.values(TEMPLATES).map((t) => `GET ${t}`), ...actions].sort());
   });
 
   for (const [name, path] of Object.entries(PATHS) as [keyof typeof PATHS, string][]) {
