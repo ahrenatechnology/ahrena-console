@@ -31,14 +31,14 @@ export const NOT_OFFERED_TEXT: Record<MemoryNotOffered, string> = {
 export const ACKNOWLEDGMENT_FIELD = 'acknowledgeDataLoss';
 export const ACKNOWLEDGMENT_TEXT = 'Entendo que os dados apagados não podem ser recuperados.';
 
-// The per-repository marker is the confirmed mechanism: ai-memory v3.5.1 cli.rs:1071 (`project init` creates the marker), 3426-3434 and 3495 (allowlist captures only marked repositories) (#740).
+// The capture policy is upstream's: ai-memory v3.5.1 capture_policy.rs:24-31 (the marker's `[capture] ignore_paths`), 61-66 (the default denylist admits every repository) and cli.rs:3622-3628 (`--capture-mode allowlist` leaves out repositories without a marker) (#740).
 /** The consent shown with the activate plan: what is captured, where it lives, how to exclude a repository and that nothing is downloaded (#740/AC-1, #719/AC-2). */
 export function consentText(dataDir: string | null): string[] {
   const where = dataDir === null ? 'na pasta de dados do ai-memory' : `na pasta de dados do ai-memory (${dataDir})`;
   return [
     'O que é capturado: o texto dos seus prompts, as respostas e o uso de ferramentas das sessões do Claude Code das contas listadas passam a ser gravados como memória.',
     `Onde fica: neste computador, ${where}.`,
-    'Para excluir um repositório da captura, crie nele o marcador .ai-memory.toml (ai-memory project init, dentro do repositório); no modo lista permitida, só os repositórios com o marcador são capturados.',
+    'Por padrão, todos os repositórios são capturados. Para tirar da captura o uso de ferramentas em caminhos de um repositório, crie nele o marcador .ai-memory.toml com [capture] ignore_paths (os prompts continuam sendo capturados); para capturar só os repositórios escolhidos, use o modo lista permitida (ai-memory install-hooks --capture-mode allowlist), e só os repositórios com o marcador são capturados.',
     'Nada é baixado: os embeddings ficam desligados, então o primeiro início não baixa nenhum modelo.',
   ];
 }
